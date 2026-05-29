@@ -1,9 +1,13 @@
-"""HTTP wrappers for the Discord bot's signup-flow callbacks.
+"""Discord bot's HTTP wrapper around the internal signup API.
 
 The bot process must not touch the ORM (overlay-fs / page-cache divergence
 between the bot and Daphne containers means writes from the bot are invisible
 to the backend). Every callback that used to call ``events.discord.handle_*``
 in-process now POSTs here so the backend is the sole writer.
+
+The lower-level transport helpers (``_post``, ``X-Internal-Token`` auth,
+URL/timeout config) live in ``app.internal_client`` — this module just
+contains the bot-side wrappers for the 13 signup-flow endpoints.
 
 Each function mirrors the handler's keyword signature and returns the
 handler's dict (or an empty dict where the handler returns None / on network
@@ -16,7 +20,7 @@ etc.) are unaffected.
 """
 
 from app.internal_client import _post
-from discordbot.schemas import SignupActionResponse
+from events.schemas import SignupActionResponse
 
 
 def _validated(resp, default):
@@ -198,7 +202,7 @@ def get_rank_flow_state(*, event_id, discord_user_id):
     ``SignupActionResponse`` — this endpoint returns rank state, not an
     action). Returns a plain dict so the bot can branch on ``state["error"]``.
     """
-    from discordbot.schemas import RankFlowStateResponse
+    from events.schemas import RankFlowStateResponse
 
     resp = _post(
         "/discord/rank-flow-state/",

@@ -177,7 +177,7 @@ class KettleBot(discord.Client):
                 if selected:
                     from asgiref.sync import sync_to_async
 
-                    from app.internal_client.signup_actions import set_position
+                    from discordbot.internal_client.signup_actions import set_position
 
                     try:
                         pos_int = int(selected[0])
@@ -194,7 +194,7 @@ class KettleBot(discord.Client):
                 event_id = int(custom_id.split(":")[1])
                 from asgiref.sync import sync_to_async
 
-                from app.internal_client.signup_actions import get_rank_flow_state
+                from discordbot.internal_client.signup_actions import get_rank_flow_state
 
                 state = await sync_to_async(
                     get_rank_flow_state, thread_sensitive=False
@@ -234,7 +234,7 @@ class KettleBot(discord.Client):
 
                 from asgiref.sync import sync_to_async
 
-                from app.internal_client.signup_actions import rank_medal_select
+                from discordbot.internal_client.signup_actions import rank_medal_select
 
                 star_values = interaction.data.get("values", [])
                 star = star_values[0] if star_values else "1"

@@ -134,7 +134,7 @@ class SignupButton(ui.Button):
     async def callback(self, interaction: discord.Interaction):
         from asgiref.sync import sync_to_async
 
-        from app.internal_client.signup_actions import signup_button
+        from discordbot.internal_client.signup_actions import signup_button
 
         async with discord_log_context(
             interaction,
@@ -199,7 +199,7 @@ class NotifyButton(ui.Button):
     async def callback(self, interaction: discord.Interaction):
         from asgiref.sync import sync_to_async
 
-        from app.internal_client.signup_actions import notify_button
+        from discordbot.internal_client.signup_actions import notify_button
 
         async with discord_log_context(interaction, custom_id=self.custom_id, event_id=self.event_id) as ctx:
             result = await sync_to_async(notify_button, thread_sensitive=False)(
@@ -235,7 +235,7 @@ class TentativeButton(ui.Button):
     async def callback(self, interaction: discord.Interaction):
         from asgiref.sync import sync_to_async
 
-        from app.internal_client.signup_actions import tentative_button
+        from discordbot.internal_client.signup_actions import tentative_button
 
         async with discord_log_context(interaction, custom_id=self.custom_id, event_id=self.event_id) as ctx:
             result = await sync_to_async(tentative_button, thread_sensitive=False)(
@@ -271,7 +271,7 @@ class DeclineButton(ui.Button):
     async def callback(self, interaction: discord.Interaction):
         from asgiref.sync import sync_to_async
 
-        from app.internal_client.signup_actions import decline_button
+        from discordbot.internal_client.signup_actions import decline_button
 
         async with discord_log_context(interaction, custom_id=self.custom_id, event_id=self.event_id) as ctx:
             result = await sync_to_async(decline_button, thread_sensitive=False)(
@@ -415,7 +415,7 @@ class EventSignupModal(ui.Modal):
     async def on_submit(self, interaction: discord.Interaction):
         from asgiref.sync import sync_to_async
 
-        from app.internal_client.signup_actions import signup_modal_submit
+        from discordbot.internal_client.signup_actions import signup_modal_submit
 
         async with discord_log_context(
             interaction,
@@ -559,7 +559,7 @@ class RankStatusSelect(ui.Select):
     async def callback(self, interaction: discord.Interaction):
         from asgiref.sync import sync_to_async
 
-        from app.internal_client.signup_actions import rank_status_select
+        from discordbot.internal_client.signup_actions import rank_status_select
 
         async with discord_log_context(interaction, custom_id=self.custom_id, event_id=self.event_id) as ctx:
             rank_status = self.values[0]
@@ -652,7 +652,7 @@ class PositionConfirmButton(ui.Button):
     async def callback(self, interaction: discord.Interaction):
         from asgiref.sync import sync_to_async
 
-        from app.internal_client.signup_actions import save_positions
+        from discordbot.internal_client.signup_actions import save_positions
 
         async with discord_log_context(interaction, custom_id=self.custom_id, event_id=self.event_id) as ctx:
             positions = []
@@ -814,7 +814,7 @@ class StarSelect(ui.Select):
     async def callback(self, interaction: discord.Interaction):
         from asgiref.sync import sync_to_async
 
-        from app.internal_client.signup_actions import rank_medal_select
+        from discordbot.internal_client.signup_actions import rank_medal_select
 
         async with discord_log_context(interaction, custom_id=self.custom_id, event_id=self.event_id) as ctx:
             parts = self.custom_id.split(":")
@@ -882,7 +882,7 @@ class BattleCupTierSelect(ui.Select):
     async def callback(self, interaction: discord.Interaction):
         from asgiref.sync import sync_to_async
 
-        from app.internal_client.signup_actions import battle_cup_submit
+        from discordbot.internal_client.signup_actions import battle_cup_submit
 
         async with discord_log_context(interaction, custom_id=self.custom_id, event_id=self.event_id) as ctx:
             tier = self.values[0]
@@ -1015,7 +1015,7 @@ class ScreenshotUploadModal(ui.Modal):
     async def on_submit(self, interaction: discord.Interaction):
         from asgiref.sync import sync_to_async
 
-        from app.internal_client.signup_actions import screenshot_upload
+        from discordbot.internal_client.signup_actions import screenshot_upload
 
         async with discord_log_context(
             interaction,

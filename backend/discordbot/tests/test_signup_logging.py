@@ -11,7 +11,7 @@ bug:
 After the bot-via-internal-API migration (PR #fix/bot-signup-via-internal-api)
 the components callback no longer calls ``handle_signup_button`` in-process —
 it hits ``/api/internal/discord/signup-button/`` over HTTP. In tests we patch
-``app.internal_client.signup_actions.signup_button`` with a shim that runs the
+``discordbot.internal_client.signup_actions.signup_button`` with a shim that runs the
 canonical handler synchronously so log capture + DB assertions still observe
 the same in-process chain the production code now sees across processes.
 """
@@ -39,13 +39,13 @@ def _patch_signup_button_inproc():
 
     Returns an ExitStack so callers can register additional patches and exit
     them together with ``with stack:``. Patching the source module
-    (`app.internal_client.signup_actions`) covers every component file that
+    (`discordbot.internal_client.signup_actions`) covers every component file that
     re-imports the symbol inside its callback.
     """
     stack = ExitStack()
     stack.enter_context(
         patch(
-            "app.internal_client.signup_actions.signup_button",
+            "discordbot.internal_client.signup_actions.signup_button",
             side_effect=lambda **kwargs: handle_signup_button(**kwargs),
         )
     )
