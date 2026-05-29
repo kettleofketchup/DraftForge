@@ -13,6 +13,13 @@ Celery side (consumer):
 
 When Django model fields change, update BOTH the serializer AND this
 schema. The Pydantic ValidationError will catch any mismatch immediately.
+
+This module also owns the RESPONSE schemas for the Discord bot's signup-flow
+internal API (``SignupActionResponse``, ``RankFlowStateResponse``). Those
+shapes are the public contract of the ``handle_*`` functions in
+``events.discord.handlers``, so they belong here rather than in the bot's
+transport package. Request bodies for the same endpoints live in
+``discordbot/schemas.py`` because they validate Discord-button payloads.
 """
 
 from __future__ import annotations
@@ -247,6 +254,74 @@ class SignupInputPatch(BaseModel):
             if p < 1 or p > 5:
                 raise ValueError(f"position {p} out of range 1..5")
         return v
+
+
+# ---------------------------------------------------------------------------
+# Bot-API response schemas — contract of events.discord.handlers.handle_*.
+# Validated client-side in discordbot/internal_client/signup_actions.py and
+# returned by the views in discordbot/internal_signup_views.py.
+# ---------------------------------------------------------------------------
+
+
+class SignupActionResponse(BaseModel):
+    """All bot-facing handler return dicts share this shape.
+
+    Different handlers populate different subsets; consumer code branches on
+    ``action`` and reads only the relevant fields. Used as the union envelope
+    so a single pydantic model can validate every signup-flow response.
+    """
+
+    # Common fields
+    action: Optional[str] = None  # signed_up | needs_modal | needs_screenshot |
+    # needs_rank_details | needs_rank_status | error | tentative | declined |
+    # not_signed_up | already_declined | already_tentative | positions_saved |
+    # position_set
+    status: Optional[str] = None  # SignupStatus value when action == "signed_up"
+    message: Optional[str] = None  # human-readable for error / not_signed_up / etc.
+
+    # signup_modal_submit / signup_button: needs_modal payload
+    game_type: Optional[int] = None
+    prefill: Optional[dict] = None
+    require_steam_id: Optional[bool] = None
+    require_rank_screenshot: Optional[bool] = None
+    require_battlecup_screenshot: Optional[bool] = None
+    min_mmr: Optional[int] = None
+    allow_active_mmr: Optional[bool] = None
+    allow_previous_rank: Optional[bool] = None
+    allow_battlecup_rating: Optional[bool] = None
+
+    # rank_medal_select / battle_cup_submit: needs_screenshot payload
+    screenshot_type: Optional[str] = None
+    medal: Optional[str] = None
+    tier: Optional[str] = None
+
+    # notify_button
+    subscribed: Optional[bool] = None
+
+    # screenshot_upload
+    success: Optional[bool] = None
+    signed_up: Optional[bool] = None
+
+    # save_positions
+    positions: Optional[list[int]] = None
+
+    model_config = {"extra": "ignore"}
+
+
+class RankFlowStateResponse(BaseModel):
+    """Response of /api/internal/discord/rank-flow-state/.
+
+    Used by the legacy pos_confirm flow in bot.py to construct the next
+    RankDetailsView. ``error``/``message`` populated only on lookup failure;
+    otherwise the rank_status + require_screenshot + min_mmr fields drive UI.
+    """
+
+    rank_status: Optional[str] = None  # "active" | "previous" | "never"
+    require_screenshot: bool = False
+    min_mmr: Optional[int] = None
+    error: Optional[str] = None  # set when the lookup fails (e.g. event_not_found / no_org_user)
+    message: Optional[str] = None
+    model_config = {"extra": "ignore"}
 
 
 def _rebuild_forward_refs() -> None:
