@@ -273,7 +273,7 @@ class KettleBot(discord.Client):
 
                 from asgiref.sync import sync_to_async
 
-                from events.discord import handle_rank_medal_select
+                from app.internal_client.signup_actions import rank_medal_select
 
                 star_values = interaction.data.get("values", [])
                 star = star_values[0] if star_values else "1"
@@ -281,7 +281,7 @@ class KettleBot(discord.Client):
                     f"{medal} {star}" if medal != "Immortal" else "Immortal"
                 )
 
-                result = await sync_to_async(handle_rank_medal_select)(
+                result = await sync_to_async(rank_medal_select)(
                     event_id=event_id,
                     discord_user_id=str(interaction.user.id),
                     medal=medal_with_star,
