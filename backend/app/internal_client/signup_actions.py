@@ -174,3 +174,40 @@ def save_positions(*, event_id, discord_user_id, positions):
         ),
         default={"action": "error", "message": "Position service unavailable."},
     )
+
+
+def set_position(*, event_id, discord_user_id, position):
+    """Set a single pos_N=True on the user's Dota profile (legacy per-click flow)."""
+    return _validated(
+        _post(
+            "/discord/set-position/",
+            {
+                "event_id": event_id,
+                "discord_user_id": discord_user_id,
+                "position": int(position),
+            },
+        ),
+        default={"action": "error", "message": "Position service unavailable."},
+    )
+
+
+def get_rank_flow_state(*, event_id, discord_user_id):
+    """Fetch rank_status / require_screenshot / min_mmr for the pos_confirm view.
+
+    Validated against ``RankFlowStateResponse`` (separate from
+    ``SignupActionResponse`` — this endpoint returns rank state, not an
+    action). Returns a plain dict so the bot can branch on ``state["error"]``.
+    """
+    from discordbot.schemas import RankFlowStateResponse
+
+    resp = _post(
+        "/discord/rank-flow-state/",
+        {"event_id": event_id, "discord_user_id": discord_user_id},
+    )
+    if resp is None or not resp.ok:
+        return {"error": "internal_api_unreachable", "message": "Could not fetch state."}
+    try:
+        payload = resp.json()
+    except ValueError:
+        return {"error": "internal_api_unreachable", "message": "Could not fetch state."}
+    return RankFlowStateResponse.model_validate(payload).model_dump()
