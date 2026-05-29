@@ -141,7 +141,7 @@ class SignupButton(ui.Button):
             custom_id=self.custom_id,
             event_id=self.event_id,
         ) as ctx:
-            result = await sync_to_async(signup_button)(
+            result = await sync_to_async(signup_button, thread_sensitive=False)(
                 event_id=self.event_id,
                 discord_user_id=str(interaction.user.id),
                 discord_username=interaction.user.name,
@@ -202,7 +202,7 @@ class NotifyButton(ui.Button):
         from app.internal_client.signup_actions import notify_button
 
         async with discord_log_context(interaction, custom_id=self.custom_id, event_id=self.event_id) as ctx:
-            result = await sync_to_async(notify_button)(
+            result = await sync_to_async(notify_button, thread_sensitive=False)(
                 event_id=self.event_id,
                 discord_user_id=str(interaction.user.id),
             )
@@ -238,7 +238,7 @@ class TentativeButton(ui.Button):
         from app.internal_client.signup_actions import tentative_button
 
         async with discord_log_context(interaction, custom_id=self.custom_id, event_id=self.event_id) as ctx:
-            result = await sync_to_async(tentative_button)(
+            result = await sync_to_async(tentative_button, thread_sensitive=False)(
                 event_id=self.event_id,
                 discord_user_id=str(interaction.user.id),
                 discord_username=interaction.user.name,
@@ -274,7 +274,7 @@ class DeclineButton(ui.Button):
         from app.internal_client.signup_actions import decline_button
 
         async with discord_log_context(interaction, custom_id=self.custom_id, event_id=self.event_id) as ctx:
-            result = await sync_to_async(decline_button)(
+            result = await sync_to_async(decline_button, thread_sensitive=False)(
                 event_id=self.event_id,
                 discord_user_id=str(interaction.user.id),
             )
@@ -438,7 +438,7 @@ class EventSignupModal(ui.Modal):
                 values["deadlock_rank"] = self.rank_input.value
                 values["deadlock_date"] = self.rank_date_input.value
 
-            result = await sync_to_async(signup_modal_submit)(
+            result = await sync_to_async(signup_modal_submit, thread_sensitive=False)(
                 event_id=self.event_id,
                 discord_user_id=str(interaction.user.id),
                 game_type=self.game_type,
@@ -563,7 +563,7 @@ class RankStatusSelect(ui.Select):
 
         async with discord_log_context(interaction, custom_id=self.custom_id, event_id=self.event_id) as ctx:
             rank_status = self.values[0]
-            await sync_to_async(rank_status_select)(
+            await sync_to_async(rank_status_select, thread_sensitive=False)(
                 event_id=self.event_id,
                 discord_user_id=str(interaction.user.id),
                 rank_status=rank_status,
@@ -668,7 +668,7 @@ class PositionConfirmButton(ui.Button):
                 await interaction.response.edit_message(content="❌ Invalid positions.", view=None)
                 return
 
-            result = await sync_to_async(save_positions)(
+            result = await sync_to_async(save_positions, thread_sensitive=False)(
                 event_id=self.event_id,
                 discord_user_id=str(interaction.user.id),
                 positions=positions_int,
@@ -830,7 +830,7 @@ class StarSelect(ui.Select):
             star = self.values[0]
             medal_with_star = f"{medal} {star}" if medal != "Immortal" else "Immortal"
 
-            result = await sync_to_async(rank_medal_select)(
+            result = await sync_to_async(rank_medal_select, thread_sensitive=False)(
                 event_id=self.event_id,
                 discord_user_id=str(interaction.user.id),
                 medal=medal_with_star,
@@ -886,7 +886,7 @@ class BattleCupTierSelect(ui.Select):
 
         async with discord_log_context(interaction, custom_id=self.custom_id, event_id=self.event_id) as ctx:
             tier = self.values[0]
-            result = await sync_to_async(battle_cup_submit)(
+            result = await sync_to_async(battle_cup_submit, thread_sensitive=False)(
                 event_id=self.event_id,
                 discord_user_id=str(interaction.user.id),
                 tier=tier,
@@ -1031,7 +1031,7 @@ class ScreenshotUploadModal(ui.Modal):
             else:
                 attachment_url = ""
 
-            result = await sync_to_async(screenshot_upload)(
+            result = await sync_to_async(screenshot_upload, thread_sensitive=False)(
                 event_id=self.event_id,
                 discord_user_id=str(interaction.user.id),
                 screenshot_type=self.screenshot_type,

@@ -69,6 +69,16 @@ def signup_button(request):
     except ValidationError as exc:
         return _bad_request(exc)
     result = handle_signup_button(**body.model_dump())
+    log.info(
+        "internal_signup_button_processed",
+        system="discord",
+        subsystem="dispatch",
+        tags=["events", "signup"],
+        tags_csv="events,signup",
+        event_id=body.event_id,
+        discord_user_id=body.discord_user_id,
+        action=result.get("action"),
+    )
     return Response(result)
 
 
@@ -84,6 +94,16 @@ def signup_modal_submit(request):
     except ValidationError as exc:
         return _bad_request(exc)
     result = handle_signup_modal_submit(**body.model_dump())
+    log.info(
+        "internal_signup_modal_submit_processed",
+        system="discord",
+        subsystem="dispatch",
+        tags=["events", "signup"],
+        tags_csv="events,signup",
+        event_id=body.event_id,
+        discord_user_id=body.discord_user_id,
+        action=result.get("action"),
+    )
     return Response(result)
 
 
@@ -99,6 +119,16 @@ def rank_status_select(request):
     except ValidationError as exc:
         return _bad_request(exc)
     handle_rank_status_select(**body.model_dump())
+    log.info(
+        "internal_rank_status_select_processed",
+        system="discord",
+        subsystem="dispatch",
+        tags=["events", "signup"],
+        tags_csv="events,signup",
+        event_id=body.event_id,
+        discord_user_id=body.discord_user_id,
+        action=None,
+    )
     return Response({})
 
 
@@ -114,6 +144,16 @@ def rank_medal_select(request):
     except ValidationError as exc:
         return _bad_request(exc)
     result = handle_rank_medal_select(**body.model_dump())
+    log.info(
+        "internal_rank_medal_select_processed",
+        system="discord",
+        subsystem="dispatch",
+        tags=["events", "signup"],
+        tags_csv="events,signup",
+        event_id=body.event_id,
+        discord_user_id=body.discord_user_id,
+        action=result.get("action"),
+    )
     return Response(result)
 
 
@@ -129,6 +169,16 @@ def previous_rank_submit(request):
     except ValidationError as exc:
         return _bad_request(exc)
     result = handle_previous_rank_submit(**body.model_dump())
+    log.info(
+        "internal_previous_rank_submit_processed",
+        system="discord",
+        subsystem="dispatch",
+        tags=["events", "signup"],
+        tags_csv="events,signup",
+        event_id=body.event_id,
+        discord_user_id=body.discord_user_id,
+        action=result.get("action"),
+    )
     return Response(result)
 
 
@@ -144,6 +194,16 @@ def battle_cup_submit(request):
     except ValidationError as exc:
         return _bad_request(exc)
     result = handle_battle_cup_submit(**body.model_dump())
+    log.info(
+        "internal_battle_cup_submit_processed",
+        system="discord",
+        subsystem="dispatch",
+        tags=["events", "signup"],
+        tags_csv="events,signup",
+        event_id=body.event_id,
+        discord_user_id=body.discord_user_id,
+        action=result.get("action"),
+    )
     return Response(result)
 
 
@@ -159,6 +219,16 @@ def screenshot_upload(request):
     except ValidationError as exc:
         return _bad_request(exc)
     result = handle_screenshot_upload(**body.model_dump())
+    log.info(
+        "internal_screenshot_upload_processed",
+        system="discord",
+        subsystem="dispatch",
+        tags=["events", "signup"],
+        tags_csv="events,signup",
+        event_id=body.event_id,
+        discord_user_id=body.discord_user_id,
+        action=result.get("action"),
+    )
     return Response(result)
 
 
@@ -174,6 +244,16 @@ def notify_button(request):
     except ValidationError as exc:
         return _bad_request(exc)
     result = handle_notify_button(**body.model_dump())
+    log.info(
+        "internal_notify_button_processed",
+        system="discord",
+        subsystem="dispatch",
+        tags=["events", "signup"],
+        tags_csv="events,signup",
+        event_id=body.event_id,
+        discord_user_id=body.discord_user_id,
+        action=result.get("action"),
+    )
     return Response(result)
 
 
@@ -189,6 +269,16 @@ def decline_button(request):
     except ValidationError as exc:
         return _bad_request(exc)
     result = handle_decline_button(**body.model_dump())
+    log.info(
+        "internal_decline_button_processed",
+        system="discord",
+        subsystem="dispatch",
+        tags=["events", "signup"],
+        tags_csv="events,signup",
+        event_id=body.event_id,
+        discord_user_id=body.discord_user_id,
+        action=result.get("action"),
+    )
     return Response(result)
 
 
@@ -204,6 +294,16 @@ def tentative_button(request):
     except ValidationError as exc:
         return _bad_request(exc)
     result = handle_tentative_button(**body.model_dump())
+    log.info(
+        "internal_tentative_button_processed",
+        system="discord",
+        subsystem="dispatch",
+        tags=["events", "signup"],
+        tags_csv="events,signup",
+        event_id=body.event_id,
+        discord_user_id=body.discord_user_id,
+        action=result.get("action"),
+    )
     return Response(result)
 
 
@@ -211,43 +311,23 @@ def tentative_button(request):
 @authentication_classes(_auth)
 @permission_classes(_perm)
 def save_positions(request):
-    """Persist Dota positions chosen via PositionConfirmButton.
-
-    Mirrors the ORM block previously inlined in components.py: looks up the
-    OrgUser for (event, discord_user_id) and pushes ``positions`` through
-    ``apply_signup_input`` so the same validation/cache-invalidation runs.
-
-    Body: event_id, discord_user_id, positions (list[int]).
-    """
-    from django.core.exceptions import ValidationError as DjangoValidationError
-
-    from events.discord.handlers import _get_org_user
-    from events.models import Event
-    from events.schemas import SignupInputPatch
-    from events.services import apply_signup_input
+    """Wrap handle_save_positions. Body: event_id, discord_user_id, positions (list[int])."""
+    from events.discord.handlers import handle_save_positions
 
     try:
         body = SavePositionsRequest.model_validate(request.data)
     except ValidationError as exc:
         return _bad_request(exc)
-
-    try:
-        event = Event.objects.select_related("organization").get(pk=body.event_id)
-    except Event.DoesNotExist:
-        return Response({"action": "error", "message": "Event not found."})
-
-    org_user, _user = _get_org_user(event, body.discord_user_id)
-    if not org_user:
-        return Response({"action": "error", "message": "User not found."})
-
-    try:
-        apply_signup_input(
-            org_user=org_user,
-            event=event,
-            patch=SignupInputPatch(positions=body.positions),
-        )
-    except DjangoValidationError as exc:
-        msg = exc.messages[0] if hasattr(exc, "messages") else str(exc)
-        return Response({"action": "error", "message": msg})
-
-    return Response({"action": "positions_saved", "positions": body.positions})
+    result = handle_save_positions(**body.model_dump())
+    log.info(
+        "internal_save_positions_processed",
+        system="discord",
+        subsystem="dispatch",
+        tags=["events", "signup"],
+        tags_csv="events,signup",
+        event_id=body.event_id,
+        discord_user_id=body.discord_user_id,
+        positions=body.positions,
+        action=result.get("action"),
+    )
+    return Response(result)
