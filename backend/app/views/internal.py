@@ -294,6 +294,11 @@ def get_discord_event_state(request, event_id):
         result["signup_message_id"] = signup_msg.message_id
         result["signup_channel_id"] = signup_msg.channel_id
         result["signup_thread_id"] = signup_msg.thread_id
+        # "text" | "forum" — drives explicit edit routing in
+        # events.tasks._send_signup_update_impl. Legacy rows may have ""
+        # (unset); workers fall back to a thread_id-vs-channel_id heuristic
+        # in that case and emit a `legacy_channel_type` warning.
+        result["signup_channel_type"] = signup_msg.channel_type or None
 
     return Response(result)
 

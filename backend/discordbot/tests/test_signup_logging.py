@@ -45,7 +45,7 @@ def _patch_signup_button_inproc():
     stack = ExitStack()
     stack.enter_context(
         patch(
-            "discordbot.internal_client.signup_actions.signup_button",
+            "discordbot.components.signup_button",
             side_effect=lambda **kwargs: handle_signup_button(**kwargs),
         )
     )

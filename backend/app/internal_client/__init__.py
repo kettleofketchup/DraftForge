@@ -14,7 +14,10 @@ import os
 
 import requests
 
+from telemetry.logging import get_logger
+
 logger = logging.getLogger(__name__)
+log = get_logger("app.internal_client")
 
 INTERNAL_API_URL = os.environ.get(
     "INTERNAL_API_URL",
@@ -35,48 +38,79 @@ def _headers():
     }
 
 
-def _post(path, data):
+_LOG_BASE: dict[str, object] = {
+    "system": "internal_client",
+    "subsystem": "http",
+    "tags": ["internal_api", "outbound"],
+    "tags_csv": "internal_api,outbound",
+}
+
+
+def _log_http_error(
+    method: str, path: str, status_code: int, body_excerpt: str
+) -> None:
+    # 4xx: server is healthy, request was rejected as expected business logic
+    # (validation, "not yet parsed", duplicate-locked, etc.). 5xx: actual server
+    # bug. Splitting severity keeps dashboards / alerts honest.
+    log_fn = log.warning if 400 <= status_code < 500 else log.error
+    log_fn(
+        "internal_http_error",
+        http_method=method,
+        http_path=path,
+        http_status_code=status_code,
+        body_excerpt=body_excerpt,
+        **_LOG_BASE,
+    )
+
+
+def _log_network_error(method: str, path: str, exc: BaseException) -> None:
+    log.error(
+        "internal_http_network_error",
+        http_method=method,
+        http_path=path,
+        error_class=type(exc).__name__,
+        error_message=str(exc),
+        exc_info=True,
+        **_LOG_BASE,
+    )
+
+
+def _post(path: str, data: dict) -> requests.Response | None:
     """POST to an internal endpoint. Returns response or None on network error."""
     url = f"{INTERNAL_API_URL}{path}"
     try:
         resp = requests.post(url, json=data, headers=_headers(), timeout=TIMEOUT)
         if not resp.ok:
-            logger.error(
-                "Internal POST %s: %s %s", path, resp.status_code, resp.text[:200]
-            )
+            _log_http_error("POST", path, resp.status_code, resp.text[:200])
         return resp
-    except requests.RequestException:
-        logger.exception("Internal POST %s failed", path)
+    except requests.RequestException as exc:
+        _log_network_error("POST", path, exc)
         return None
 
 
-def _patch(path, data):
+def _patch(path: str, data: dict) -> requests.Response | None:
     """PATCH an internal endpoint. Returns response or None on network error."""
     url = f"{INTERNAL_API_URL}{path}"
     try:
         resp = requests.patch(url, json=data, headers=_headers(), timeout=TIMEOUT)
         if not resp.ok:
-            logger.error(
-                "Internal PATCH %s: %s %s", path, resp.status_code, resp.text[:200]
-            )
+            _log_http_error("PATCH", path, resp.status_code, resp.text[:200])
         return resp
-    except requests.RequestException:
-        logger.exception("Internal PATCH %s failed", path)
+    except requests.RequestException as exc:
+        _log_network_error("PATCH", path, exc)
         return None
 
 
-def _get(path, params=None):
+def _get(path: str, params: dict | None = None) -> requests.Response | None:
     """GET from an internal endpoint. Returns response or None on network error."""
     url = f"{INTERNAL_API_URL}{path}"
     try:
         resp = requests.get(url, params=params, headers=_headers(), timeout=TIMEOUT)
         if not resp.ok:
-            logger.error(
-                "Internal GET %s: %s %s", path, resp.status_code, resp.text[:200]
-            )
+            _log_http_error("GET", path, resp.status_code, resp.text[:200])
         return resp
-    except requests.RequestException:
-        logger.exception("Internal GET %s failed", path)
+    except requests.RequestException as exc:
+        _log_network_error("GET", path, exc)
         return None
 
 
@@ -220,16 +254,16 @@ def transition_event_state(event_pk, new_state):
 # ---- Reads via public API (internal token accepted globally) ----
 
 
-def _api_get(path, params=None):
+def _api_get(path: str, params: dict | None = None) -> requests.Response | None:
     """GET from the public API (not /internal/). Uses same auth token."""
     url = f"{API_BASE_URL}{path}"
     try:
         resp = requests.get(url, params=params, headers=_headers(), timeout=TIMEOUT)
         if not resp.ok:
-            logger.error("API GET %s: %s %s", path, resp.status_code, resp.text[:200])
+            _log_http_error("GET", f"(public){path}", resp.status_code, resp.text[:200])
         return resp
-    except requests.RequestException:
-        logger.exception("API GET %s failed", path)
+    except requests.RequestException as exc:
+        _log_network_error("GET", f"(public){path}", exc)
         return None
 
 
@@ -403,12 +437,22 @@ def update_steam_sync_state(league_id, **fields):
     return resp is not None and resp.ok
 
 
-def store_steam_match(match_data):
-    """Store a match + player stats. Returns response dict or None."""
+def store_steam_match(match_data: dict) -> tuple[dict | None, int | None]:
+    """Store a match + player stats.
+
+    Returns (payload, status_code):
+      - (dict, 2xx)  on success
+      - (None, 422)  when Steam hasn't parsed the match yet
+                     (response: {"error": "match_unparsed", ...})
+      - (None, 4xx/5xx) for other server-side errors
+      - (None, None) when the internal API was unreachable
+    """
     resp = _post("/steam/store-match/", match_data)
-    if resp and resp.ok:
-        return resp.json()
-    return None
+    if resp is None:
+        return None, None
+    if resp.ok:
+        return resp.json(), resp.status_code
+    return None, resp.status_code
 
 
 def update_league_stats(league_id):

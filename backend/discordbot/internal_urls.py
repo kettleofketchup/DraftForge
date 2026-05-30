@@ -81,4 +81,34 @@ urlpatterns: list[URLPattern] = [
         _signup_views.rank_flow_state,
         name="internal_discord_rank_flow_state",
     ),
+    path(
+        "check-site-admin/",
+        _signup_views.check_site_admin_view,
+        name="internal_discord_check_site_admin",
+    ),
+    path(
+        "reaction-signup/",
+        _signup_views.reaction_signup_view,
+        name="internal_discord_reaction_signup",
+    ),
+    path(
+        "reaction-cancel/",
+        _signup_views.reaction_cancel_view,
+        name="internal_discord_reaction_cancel",
+    ),
+    path(
+        "legacy-rsvp/set/",
+        _signup_views.legacy_rsvp_set_view,
+        name="internal_discord_legacy_rsvp_set",
+    ),
+    path(
+        "legacy-rsvp/remove/",
+        _signup_views.legacy_rsvp_remove_view,
+        name="internal_discord_legacy_rsvp_remove",
+    ),
+    path(
+        "legacy-event/create/",
+        _signup_views.legacy_event_create_view,
+        name="internal_discord_legacy_event_create",
+    ),
 ]

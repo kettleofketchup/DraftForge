@@ -15,7 +15,7 @@ transport layer.
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel
 
@@ -49,7 +49,23 @@ class MessageLogSchema(BaseModel):
 
 
 class DiscordEventStateSchema(BaseModel):
-    """Validates: get_discord_event_state() (app/views/internal.py)"""
+    """Validates: get_discord_event_state() (app/views/internal.py).
+
+    Channel-routing fields determine how the embed-edit PATCH is addressed:
+
+    - **text channel** (`signup_channel_type == "text"`): edit at
+      `PATCH /channels/{signup_channel_id}/messages/{signup_message_id}`.
+      `signup_thread_id` is None.
+    - **forum channel** (`signup_channel_type == "forum"`): Discord
+      auto-creates a thread to hold the post; the starter message's
+      effective "channel" for edits IS the thread. Edit at
+      `PATCH /channels/{signup_thread_id}/messages/{signup_message_id}`.
+      `signup_channel_id` is the parent forum channel (kept for context).
+
+    Legacy rows may have `signup_channel_type` unset (empty/None). In that
+    case `_send_signup_update_impl` falls back to the legacy heuristic
+    (`thread_id or channel_id`) and logs a `legacy_channel_type` warning.
+    """
 
     has_discord_event: bool = False
     discord_event_pk: Optional[int] = None
@@ -58,6 +74,7 @@ class DiscordEventStateSchema(BaseModel):
     signup_message_id: Optional[str] = None
     signup_channel_id: Optional[str] = None
     signup_thread_id: Optional[str] = None
+    signup_channel_type: Optional[str] = None  # "text" | "forum" | None (legacy)
     fired_actions: list[str] = []
     has_dms: bool = False
 
@@ -158,4 +175,82 @@ class SetPositionRequest(BaseModel):
 class RankFlowStateRequest(BaseModel):
     event_id: int
     discord_user_id: str
+    model_config = {"extra": "ignore"}
+
+
+# ---------------------------------------------------------------------------
+# Bot-control internal-API request schemas (validated server-side in
+# discordbot/internal_signup_views.py). These cover the legacy ScheduledEvent
+# / RSVP flow and the /event slash command admin check.
+# ---------------------------------------------------------------------------
+
+
+class CheckSiteAdminRequest(BaseModel):
+    discord_user_id: str
+    model_config = {"extra": "ignore"}
+
+
+class ReactionSignupRequest(BaseModel):
+    discord_message_id: str
+    discord_user_id: str
+    model_config = {"extra": "ignore"}
+
+
+class ReactionCancelRequest(BaseModel):
+    discord_message_id: str
+    discord_user_id: str
+    model_config = {"extra": "ignore"}
+
+
+class LegacyRsvpSetRequest(BaseModel):
+    discord_message_id: str
+    discord_user_id: str
+    status: Literal["yes", "maybe", "no"]
+    discord_username: str
+    model_config = {"extra": "ignore"}
+
+
+class LegacyRsvpRemoveRequest(BaseModel):
+    discord_message_id: str
+    discord_user_id: str
+    model_config = {"extra": "ignore"}
+
+
+class LegacyEventCreateRequest(BaseModel):
+    name: str
+    description: str
+    channel_id: str
+    model_config = {"extra": "ignore"}
+
+
+# ---------------------------------------------------------------------------
+# Bot-control internal-API response schemas. Pure transport contracts (not
+# domain output of any shared handler), so they live with the bot.
+# ---------------------------------------------------------------------------
+
+
+class SiteAdminCheckResponse(BaseModel):
+    is_admin: bool = False
+    is_linked: bool = False
+    error: str | None = None
+    model_config = {"extra": "ignore"}
+
+
+class ReactionResponse(BaseModel):
+    success: bool = False
+    detail: str = ""
+    model_config = {"extra": "ignore"}
+
+
+class LegacyRsvpResponse(BaseModel):
+    success: bool = False
+    error: str | None = None
+    event_name: str | None = None
+    model_config = {"extra": "ignore"}
+
+
+class LegacyEventCreateResponse(BaseModel):
+    success: bool = False
+    error: str | None = None
+    event_id: int | None = None
     model_config = {"extra": "ignore"}

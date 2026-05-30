@@ -7,6 +7,8 @@ import os
 
 from dotenv import load_dotenv
 
+from config.installed_apps import MODEL_APPS
+
 load_dotenv()
 
 SECRET_KEY = "celery-worker-not-serving-http"
@@ -30,15 +32,12 @@ RELEASE = _env_bool("RELEASE")
 TEST_DISCORD_USER_ID = os.environ.get("TEST_DISCORD_USER_ID", "243497113906970625")
 
 # Minimal installed apps for task autodiscovery.
-# Django contrib apps required because app.models imports AbstractUser.
+# django.contrib.* required because app.models imports AbstractUser.
 INSTALLED_APPS = [
     "django.contrib.contenttypes",
     "django.contrib.auth",
     "config",
-    "app",
-    "events",
-    "discordbot",
-    "steam",
+    *MODEL_APPS,
 ]
 
 # No database — all tasks use internal HTTP API
