@@ -478,6 +478,87 @@ def tag_rate_panel() -> v2.Panel:
     )
 
 
+# ---- Reliability row ------------------------------------------------------
+
+
+def internal_api_error_rate_panel() -> v2.Panel:
+    return _ts_panel(
+        "Internal API errors (4xx warn / 5xx error) by status",
+        f'sum by (http_method, http_status_code) '
+        f'(rate({SERVICE_FILTER} {SAFE_JSON} '
+        f'| event="internal_http_error" [$__interval]))',
+        legend="{{http_method}} {{http_status_code}}",
+        description=(
+            "Rate of internal_http_error from app.internal_client wrappers. "
+            "4xx are caller/business errors (e.g. match_unparsed 422); 5xx "
+            "indicate real backend bugs. Spike in either is page-worthy if "
+            "sustained."
+        ),
+        err=True,
+    )
+
+
+def internal_api_network_error_rate_panel() -> v2.Panel:
+    return _ts_panel(
+        "Internal API unreachable (network errors)",
+        f'sum by (error_class, http_method) '
+        f'(rate({SERVICE_FILTER} {SAFE_JSON} '
+        f'| event="internal_http_network_error" [$__interval]))',
+        legend="{{error_class}} {{http_method}}",
+        description=(
+            "Network-layer failures from app.internal_client (timeouts, DNS, "
+            "connection refused). Any non-zero rate means workers/bot can't "
+            "reach Daphne — signup writes are degraded."
+        ),
+        err=True,
+    )
+
+
+def internal_api_errors_logs_panel() -> v2.Panel:
+    return _logs_panel(
+        "Internal API errors — recent",
+        f'{SERVICE_FILTER} {SAFE_JSON} '
+        f'| event=~"internal_http_error|internal_http_network_error"',
+        description=(
+            "Tail of internal-API error lines (transport-layer). Inspect "
+            "body_excerpt / error_class / http_path to triage."
+        ),
+        show_labels=True,
+    )
+
+
+def steam_ingest_health_panel() -> v2.Panel:
+    return _ts_panel(
+        "Steam match-store failures by reason",
+        f'sum by (reason) '
+        f'(rate({SERVICE_FILTER} {SAFE_JSON} '
+        f'| event="steam_match_store_failed" [$__interval]))',
+        legend="{{reason}}",
+        description=(
+            "reason=match_unparsed is benign (Steam hasn't finished parsing; "
+            "next sync tick retries). Any other reason "
+            "(internal_api_unreachable, internal_api_status_*) is a real "
+            "ingest failure worth surfacing."
+        ),
+    )
+
+
+def signup_post_routing_warnings_panel() -> v2.Panel:
+    return _logs_panel(
+        "Signup-post routing warnings (forum/legacy)",
+        f'{SERVICE_FILTER} {SAFE_JSON} '
+        f'| event=~"forum_post_missing_thread_id|legacy_channel_type"',
+        description=(
+            "Data-quality signal for DiscordEventMsgSignup rows: "
+            "forum_post_missing_thread_id = forum row without a thread_id; "
+            "legacy_channel_type = row predating the explicit channel_type "
+            "field. Both fall back to the thread_id-vs-channel_id heuristic. "
+            "Use to drive a one-time backfill."
+        ),
+        show_labels=True,
+    )
+
+
 def system_layout(system: str) -> v2.Rows:
     """Per-system layout: logs panel visible, rate breakdown collapsed.
 
@@ -666,6 +747,11 @@ def build_dashboard():
     elements.update(overview_panels())
     elements["overview-signup-pipeline"] = signup_pipeline_panel()
     elements["overview-tag-rate"] = tag_rate_panel()
+    elements["reliability-internal-api-errors"] = internal_api_error_rate_panel()
+    elements["reliability-internal-api-network"] = internal_api_network_error_rate_panel()
+    elements["reliability-internal-api-logs"] = internal_api_errors_logs_panel()
+    elements["reliability-steam-ingest"] = steam_ingest_health_panel()
+    elements["reliability-signup-routing"] = signup_post_routing_warnings_panel()
     for system in SYSTEMS:
         elements.update(system_panels(system))
     elements.update(cache_invalidation_panels())
@@ -686,6 +772,20 @@ def build_dashboard():
             v2.Grid()
             .item(_grid_item("overview-signup-pipeline", x=0, y=0,  w=24, h=12))
             .item(_grid_item("overview-tag-rate",        x=0, y=12, w=24, h=8))
+        )
+    )
+    # Reliability row — internal API health + steam ingest + signup-post routing.
+    rows = rows.row(
+        v2.Row()
+        .title("Reliability — internal API + routing")
+        .collapse(True)
+        .layout(
+            v2.Grid()
+            .item(_grid_item("reliability-internal-api-errors",  x=0,  y=0,  w=12, h=8))
+            .item(_grid_item("reliability-internal-api-network", x=12, y=0,  w=12, h=8))
+            .item(_grid_item("reliability-internal-api-logs",    x=0,  y=8,  w=24, h=10))
+            .item(_grid_item("reliability-steam-ingest",         x=0,  y=18, w=12, h=8))
+            .item(_grid_item("reliability-signup-routing",       x=12, y=18, w=12, h=10))
         )
     )
     for system in SYSTEMS:
