@@ -19,11 +19,15 @@ existing consumers (which key off ``result["action"]``, ``result.get("subscribed
 etc.) are unaffected.
 """
 
+from __future__ import annotations
+
+from typing import Any
+
 from app.internal_client import _post
-from events.schemas import SignupActionResponse
+from events.schemas import RankFlowStateResponse, SignupActionResponse
 
 
-def _validated(resp, default):
+def _validated(resp: Any, default: dict[str, Any]) -> dict[str, Any]:
     """Coerce an internal-API response through ``SignupActionResponse``.
 
     Returns ``default`` (a dict) when the HTTP layer failed or the body isn't
@@ -39,8 +43,13 @@ def _validated(resp, default):
     return SignupActionResponse.model_validate(payload).model_dump()
 
 
-def signup_button(*, event_id, discord_user_id, discord_username=None):
-    payload = {"event_id": event_id, "discord_user_id": discord_user_id}
+def signup_button(
+    *,
+    event_id: int,
+    discord_user_id: str,
+    discord_username: str | None = None,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {"event_id": event_id, "discord_user_id": discord_user_id}
     if discord_username is not None:
         payload["discord_username"] = discord_username
     return _validated(
@@ -49,7 +58,13 @@ def signup_button(*, event_id, discord_user_id, discord_username=None):
     )
 
 
-def signup_modal_submit(*, event_id, discord_user_id, game_type, values):
+def signup_modal_submit(
+    *,
+    event_id: int,
+    discord_user_id: str,
+    game_type: int,
+    values: dict[str, Any] | None,
+) -> dict[str, Any]:
     return _validated(
         _post(
             "/discord/signup-modal-submit/",
@@ -64,7 +79,12 @@ def signup_modal_submit(*, event_id, discord_user_id, game_type, values):
     )
 
 
-def rank_status_select(*, event_id, discord_user_id, rank_status):
+def rank_status_select(
+    *,
+    event_id: int,
+    discord_user_id: str,
+    rank_status: str,
+) -> None:
     """Original handler returns None — preserve that contract."""
     _post(
         "/discord/rank-status-select/",
@@ -77,7 +97,12 @@ def rank_status_select(*, event_id, discord_user_id, rank_status):
     return None
 
 
-def rank_medal_select(*, event_id, discord_user_id, medal):
+def rank_medal_select(
+    *,
+    event_id: int,
+    discord_user_id: str,
+    medal: str,
+) -> dict[str, Any]:
     return _validated(
         _post(
             "/discord/rank-medal-select/",
@@ -91,7 +116,13 @@ def rank_medal_select(*, event_id, discord_user_id, medal):
     )
 
 
-def previous_rank_submit(*, event_id, discord_user_id, medal, date_text=""):
+def previous_rank_submit(
+    *,
+    event_id: int,
+    discord_user_id: str,
+    medal: str,
+    date_text: str = "",
+) -> dict[str, Any]:
     return _validated(
         _post(
             "/discord/previous-rank-submit/",
@@ -106,7 +137,12 @@ def previous_rank_submit(*, event_id, discord_user_id, medal, date_text=""):
     )
 
 
-def battle_cup_submit(*, event_id, discord_user_id, tier):
+def battle_cup_submit(
+    *,
+    event_id: int,
+    discord_user_id: str,
+    tier: str,
+) -> dict[str, Any]:
     return _validated(
         _post(
             "/discord/battle-cup-submit/",
@@ -120,7 +156,13 @@ def battle_cup_submit(*, event_id, discord_user_id, tier):
     )
 
 
-def screenshot_upload(*, event_id, discord_user_id, screenshot_type, attachment_url):
+def screenshot_upload(
+    *,
+    event_id: int,
+    discord_user_id: str,
+    screenshot_type: str,
+    attachment_url: str,
+) -> dict[str, Any]:
     return _validated(
         _post(
             "/discord/screenshot-upload/",
@@ -135,7 +177,11 @@ def screenshot_upload(*, event_id, discord_user_id, screenshot_type, attachment_
     )
 
 
-def notify_button(*, event_id, discord_user_id):
+def notify_button(
+    *,
+    event_id: int,
+    discord_user_id: str,
+) -> dict[str, Any]:
     return _validated(
         _post(
             "/discord/notify-button/",
@@ -145,7 +191,11 @@ def notify_button(*, event_id, discord_user_id):
     )
 
 
-def decline_button(*, event_id, discord_user_id):
+def decline_button(
+    *,
+    event_id: int,
+    discord_user_id: str,
+) -> dict[str, Any]:
     return _validated(
         _post(
             "/discord/decline-button/",
@@ -155,8 +205,13 @@ def decline_button(*, event_id, discord_user_id):
     )
 
 
-def tentative_button(*, event_id, discord_user_id, discord_username=None):
-    payload = {"event_id": event_id, "discord_user_id": discord_user_id}
+def tentative_button(
+    *,
+    event_id: int,
+    discord_user_id: str,
+    discord_username: str | None = None,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {"event_id": event_id, "discord_user_id": discord_user_id}
     if discord_username is not None:
         payload["discord_username"] = discord_username
     return _validated(
@@ -165,7 +220,12 @@ def tentative_button(*, event_id, discord_user_id, discord_username=None):
     )
 
 
-def save_positions(*, event_id, discord_user_id, positions):
+def save_positions(
+    *,
+    event_id: int,
+    discord_user_id: str,
+    positions: list[int],
+) -> dict[str, Any]:
     """Persist Dota position picks. ``positions``: list[int]."""
     return _validated(
         _post(
@@ -180,7 +240,12 @@ def save_positions(*, event_id, discord_user_id, positions):
     )
 
 
-def set_position(*, event_id, discord_user_id, position):
+def set_position(
+    *,
+    event_id: int,
+    discord_user_id: str,
+    position: int,
+) -> dict[str, Any]:
     """Set a single pos_N=True on the user's Dota profile (legacy per-click flow)."""
     return _validated(
         _post(
@@ -195,15 +260,17 @@ def set_position(*, event_id, discord_user_id, position):
     )
 
 
-def get_rank_flow_state(*, event_id, discord_user_id):
+def get_rank_flow_state(
+    *,
+    event_id: int,
+    discord_user_id: str,
+) -> dict[str, Any]:
     """Fetch rank_status / require_screenshot / min_mmr for the pos_confirm view.
 
     Validated against ``RankFlowStateResponse`` (separate from
     ``SignupActionResponse`` — this endpoint returns rank state, not an
     action). Returns a plain dict so the bot can branch on ``state["error"]``.
     """
-    from events.schemas import RankFlowStateResponse
-
     resp = _post(
         "/discord/rank-flow-state/",
         {"event_id": event_id, "discord_user_id": discord_user_id},

@@ -25,6 +25,7 @@ from rest_framework.decorators import (
     authentication_classes,
     permission_classes,
 )
+from rest_framework.request import Request
 from rest_framework.response import Response
 
 from app.auth import InternalServiceAuth, IsInternalService
@@ -42,6 +43,21 @@ from discordbot.schemas import (
     SignupButtonRequest,
     SignupModalSubmitRequest,
     TentativeButtonRequest,
+)
+from events.discord.handlers import (
+    handle_battle_cup_submit,
+    handle_decline_button,
+    handle_get_rank_flow_state,
+    handle_notify_button,
+    handle_previous_rank_submit,
+    handle_rank_medal_select,
+    handle_rank_status_select,
+    handle_save_positions,
+    handle_screenshot_upload,
+    handle_set_position,
+    handle_signup_button,
+    handle_signup_modal_submit,
+    handle_tentative_button,
 )
 from telemetry.logging import get_logger
 
@@ -62,10 +78,8 @@ def _bad_request(exc: ValidationError) -> Response:
 @api_view(["POST"])
 @authentication_classes(_auth)
 @permission_classes(_perm)
-def signup_button(request):
+def signup_button(request: Request) -> Response:
     """Wrap handle_signup_button. Body: event_id, discord_user_id, discord_username?."""
-    from events.discord.handlers import handle_signup_button
-
     try:
         body = SignupButtonRequest.model_validate(request.data)
     except ValidationError as exc:
@@ -87,10 +101,8 @@ def signup_button(request):
 @api_view(["POST"])
 @authentication_classes(_auth)
 @permission_classes(_perm)
-def signup_modal_submit(request):
+def signup_modal_submit(request: Request) -> Response:
     """Wrap handle_signup_modal_submit. Body: event_id, discord_user_id, game_type, values."""
-    from events.discord.handlers import handle_signup_modal_submit
-
     try:
         body = SignupModalSubmitRequest.model_validate(request.data)
     except ValidationError as exc:
@@ -112,10 +124,8 @@ def signup_modal_submit(request):
 @api_view(["POST"])
 @authentication_classes(_auth)
 @permission_classes(_perm)
-def rank_status_select(request):
+def rank_status_select(request: Request) -> Response:
     """Wrap handle_rank_status_select. Returns {} since the handler returns None."""
-    from events.discord.handlers import handle_rank_status_select
-
     try:
         body = RankStatusSelectRequest.model_validate(request.data)
     except ValidationError as exc:
@@ -137,10 +147,8 @@ def rank_status_select(request):
 @api_view(["POST"])
 @authentication_classes(_auth)
 @permission_classes(_perm)
-def rank_medal_select(request):
+def rank_medal_select(request: Request) -> Response:
     """Wrap handle_rank_medal_select. Body: event_id, discord_user_id, medal."""
-    from events.discord.handlers import handle_rank_medal_select
-
     try:
         body = RankMedalSelectRequest.model_validate(request.data)
     except ValidationError as exc:
@@ -162,10 +170,8 @@ def rank_medal_select(request):
 @api_view(["POST"])
 @authentication_classes(_auth)
 @permission_classes(_perm)
-def previous_rank_submit(request):
+def previous_rank_submit(request: Request) -> Response:
     """Wrap handle_previous_rank_submit. Body: event_id, discord_user_id, medal, date_text."""
-    from events.discord.handlers import handle_previous_rank_submit
-
     try:
         body = PreviousRankSubmitRequest.model_validate(request.data)
     except ValidationError as exc:
@@ -187,10 +193,8 @@ def previous_rank_submit(request):
 @api_view(["POST"])
 @authentication_classes(_auth)
 @permission_classes(_perm)
-def battle_cup_submit(request):
+def battle_cup_submit(request: Request) -> Response:
     """Wrap handle_battle_cup_submit. Body: event_id, discord_user_id, tier."""
-    from events.discord.handlers import handle_battle_cup_submit
-
     try:
         body = BattleCupSubmitRequest.model_validate(request.data)
     except ValidationError as exc:
@@ -212,10 +216,8 @@ def battle_cup_submit(request):
 @api_view(["POST"])
 @authentication_classes(_auth)
 @permission_classes(_perm)
-def screenshot_upload(request):
+def screenshot_upload(request: Request) -> Response:
     """Wrap handle_screenshot_upload. Body: event_id, discord_user_id, screenshot_type, attachment_url."""
-    from events.discord.handlers import handle_screenshot_upload
-
     try:
         body = ScreenshotUploadRequest.model_validate(request.data)
     except ValidationError as exc:
@@ -237,10 +239,8 @@ def screenshot_upload(request):
 @api_view(["POST"])
 @authentication_classes(_auth)
 @permission_classes(_perm)
-def notify_button(request):
+def notify_button(request: Request) -> Response:
     """Wrap handle_notify_button. Body: event_id, discord_user_id."""
-    from events.discord.handlers import handle_notify_button
-
     try:
         body = NotifyButtonRequest.model_validate(request.data)
     except ValidationError as exc:
@@ -262,10 +262,8 @@ def notify_button(request):
 @api_view(["POST"])
 @authentication_classes(_auth)
 @permission_classes(_perm)
-def decline_button(request):
+def decline_button(request: Request) -> Response:
     """Wrap handle_decline_button. Body: event_id, discord_user_id."""
-    from events.discord.handlers import handle_decline_button
-
     try:
         body = DeclineButtonRequest.model_validate(request.data)
     except ValidationError as exc:
@@ -287,10 +285,8 @@ def decline_button(request):
 @api_view(["POST"])
 @authentication_classes(_auth)
 @permission_classes(_perm)
-def tentative_button(request):
+def tentative_button(request: Request) -> Response:
     """Wrap handle_tentative_button. Body: event_id, discord_user_id, discord_username?."""
-    from events.discord.handlers import handle_tentative_button
-
     try:
         body = TentativeButtonRequest.model_validate(request.data)
     except ValidationError as exc:
@@ -312,10 +308,8 @@ def tentative_button(request):
 @api_view(["POST"])
 @authentication_classes(_auth)
 @permission_classes(_perm)
-def save_positions(request):
+def save_positions(request: Request) -> Response:
     """Wrap handle_save_positions. Body: event_id, discord_user_id, positions (list[int])."""
-    from events.discord.handlers import handle_save_positions
-
     try:
         body = SavePositionsRequest.model_validate(request.data)
     except ValidationError as exc:
@@ -338,10 +332,8 @@ def save_positions(request):
 @api_view(["POST"])
 @authentication_classes(_auth)
 @permission_classes(_perm)
-def set_position(request):
+def set_position(request: Request) -> Response:
     """Wrap handle_set_position. Body: event_id, discord_user_id, position (1..5)."""
-    from events.discord.handlers import handle_set_position
-
     try:
         body = SetPositionRequest.model_validate(request.data)
     except ValidationError as exc:
@@ -364,14 +356,12 @@ def set_position(request):
 @api_view(["POST"])
 @authentication_classes(_auth)
 @permission_classes(_perm)
-def rank_flow_state(request):
+def rank_flow_state(request: Request) -> Response:
     """Wrap handle_get_rank_flow_state. Body: event_id, discord_user_id.
 
     Returns rank_status / require_screenshot / min_mmr for the pos_confirm
     flow to render the next RankDetailsView.
     """
-    from events.discord.handlers import handle_get_rank_flow_state
-
     try:
         body = RankFlowStateRequest.model_validate(request.data)
     except ValidationError as exc:

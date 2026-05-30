@@ -11,11 +11,11 @@ only the URL table so the route layout matches the package that owns the
 endpoints.
 """
 
-from django.urls import path
+from django.urls import URLPattern, path
 
 from . import internal_signup_views as _signup_views
 
-urlpatterns = [
+urlpatterns: list[URLPattern] = [
     path(
         "signup-button/",
         _signup_views.signup_button,

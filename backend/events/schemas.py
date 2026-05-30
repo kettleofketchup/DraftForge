@@ -272,38 +272,38 @@ class SignupActionResponse(BaseModel):
     """
 
     # Common fields
-    action: Optional[str] = None  # signed_up | needs_modal | needs_screenshot |
+    action: str | None = None  # signed_up | needs_modal | needs_screenshot |
     # needs_rank_details | needs_rank_status | error | tentative | declined |
     # not_signed_up | already_declined | already_tentative | positions_saved |
     # position_set
-    status: Optional[str] = None  # SignupStatus value when action == "signed_up"
-    message: Optional[str] = None  # human-readable for error / not_signed_up / etc.
+    status: str | None = None  # SignupStatus value when action == "signed_up"
+    message: str | None = None  # human-readable for error / not_signed_up / etc.
 
     # signup_modal_submit / signup_button: needs_modal payload
-    game_type: Optional[int] = None
-    prefill: Optional[dict] = None
-    require_steam_id: Optional[bool] = None
-    require_rank_screenshot: Optional[bool] = None
-    require_battlecup_screenshot: Optional[bool] = None
-    min_mmr: Optional[int] = None
-    allow_active_mmr: Optional[bool] = None
-    allow_previous_rank: Optional[bool] = None
-    allow_battlecup_rating: Optional[bool] = None
+    game_type: int | None = None
+    prefill: dict | None = None
+    require_steam_id: bool | None = None
+    require_rank_screenshot: bool | None = None
+    require_battlecup_screenshot: bool | None = None
+    min_mmr: int | None = None
+    allow_active_mmr: bool | None = None
+    allow_previous_rank: bool | None = None
+    allow_battlecup_rating: bool | None = None
 
     # rank_medal_select / battle_cup_submit: needs_screenshot payload
-    screenshot_type: Optional[str] = None
-    medal: Optional[str] = None
-    tier: Optional[str] = None
+    screenshot_type: str | None = None
+    medal: str | None = None
+    tier: str | None = None
 
     # notify_button
-    subscribed: Optional[bool] = None
+    subscribed: bool | None = None
 
     # screenshot_upload
-    success: Optional[bool] = None
-    signed_up: Optional[bool] = None
+    success: bool | None = None
+    signed_up: bool | None = None
 
     # save_positions
-    positions: Optional[list[int]] = None
+    positions: list[int] | None = None
 
     model_config = {"extra": "ignore"}
 
@@ -316,11 +316,11 @@ class RankFlowStateResponse(BaseModel):
     otherwise the rank_status + require_screenshot + min_mmr fields drive UI.
     """
 
-    rank_status: Optional[str] = None  # "active" | "previous" | "never"
+    rank_status: str | None = None  # "active" | "previous" | "never"
     require_screenshot: bool = False
-    min_mmr: Optional[int] = None
-    error: Optional[str] = None  # set when the lookup fails (e.g. event_not_found / no_org_user)
-    message: Optional[str] = None
+    min_mmr: int | None = None
+    error: str | None = None  # set when the lookup fails (e.g. event_not_found / no_org_user)
+    message: str | None = None
     model_config = {"extra": "ignore"}
 
 

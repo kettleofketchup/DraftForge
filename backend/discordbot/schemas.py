@@ -73,7 +73,7 @@ class DiscordEventStateSchema(BaseModel):
 class SignupButtonRequest(BaseModel):
     event_id: int
     discord_user_id: str
-    discord_username: Optional[str] = None
+    discord_username: str | None = None
     model_config = {"extra": "ignore"}
 
 
@@ -137,7 +137,7 @@ class DeclineButtonRequest(BaseModel):
 class TentativeButtonRequest(BaseModel):
     event_id: int
     discord_user_id: str
-    discord_username: Optional[str] = None
+    discord_username: str | None = None
     model_config = {"extra": "ignore"}
 
 
