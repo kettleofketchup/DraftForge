@@ -304,7 +304,7 @@ class PositionConfirmButtonCallbackTest(TestCase):
 
             with mock_patch(
                 "discordbot.components.save_positions",
-                side_effect=lambda **kwargs: handle_save_positions(**kwargs),
+                side_effect=handle_save_positions,
             ), mock_patch(
                 "events.discord.handlers.Event.objects.select_related"
             ) as mock_sr, mock_patch(
