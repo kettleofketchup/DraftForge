@@ -146,7 +146,9 @@ def playwright_headless(c, args=""):
     with c.cd(paths.FRONTEND_PATH):
         # Exclude demo project - demos are run separately via inv demo.* commands
         c.run(
-            f"DOCKER_HOST={docker_host} npx playwright test --project=chromium --project=herodraft {args}".strip()
+            f"DOCKER_HOST={docker_host} npx playwright test "
+            f"--project=chromium --project=herodraft --project=events-sequential "
+            f"{args}".strip()
         )
 
 
@@ -333,7 +335,8 @@ def playwright_cicd(c, args=""):
         c.run(
             f'DOCKER_HOST={docker_host} npx playwright test --grep "@cicd" '
             f"--project=chromium --project=mobile-pixel5 --project=mobile-iphone13 "
-            f"--project=mobile-iphone-se --project=herodraft --no-deps {args}".strip()
+            f"--project=mobile-iphone-se --project=herodraft "
+            f"--project=events-sequential --no-deps {args}".strip()
         )
 
 
@@ -374,6 +377,23 @@ def playwright_cicd_herodraft(c, args=""):
         )
 
 
+@task
+def playwright_cicd_events(c, args=""):
+    """Run @cicd tagged tests for the events-sequential project (sequential).
+
+    The 16-events specs share a single seeded event PK and race across files
+    when run in parallel; events-sequential serializes across files (see
+    frontend/playwright.config.ts events-sequential project).
+    """
+    flush_test_redis(c)
+    docker_host = get_docker_host()
+    with c.cd(paths.FRONTEND_PATH):
+        c.run(
+            f'DOCKER_HOST={docker_host} npx playwright test --grep "@cicd" '
+            f"--project=events-sequential --no-deps {args}".strip()
+        )
+
+
 # Add tasks to playwright collection
 ns_playwright.add_task(playwright_install, "install")
 ns_playwright.add_task(playwright_headless, "headless")
@@ -392,6 +412,7 @@ ns_playwright.add_task(playwright_cicd, "cicd")
 ns_playwright.add_task(playwright_cicd_chromium, "cicd-chromium")
 ns_playwright.add_task(playwright_cicd_mobile, "cicd-mobile")
 ns_playwright.add_task(playwright_cicd_herodraft, "cicd-herodraft")
+ns_playwright.add_task(playwright_cicd_events, "cicd-events")
 
 ns_test.add_collection(ns_playwright, "playwright")
 

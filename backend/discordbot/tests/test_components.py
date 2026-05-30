@@ -264,17 +264,20 @@ class TestMedalSelectRebuildsView(IsolatedAsyncioTestCase):
 
 class PositionConfirmButtonCallbackTest(TestCase):
     """PositionConfirmButton.callback routes the positions write through
-    apply_signup_input (Task 22).
+    apply_signup_input.
 
-    Mocks the DB lookups (Event.objects.get + _get_org_user) so the async
-    callback doesn't try to cross-thread query a TestCase-locked SQLite
-    in-memory connection. The contract this test pins is: "callback collects
-    Select values and forwards them to apply_signup_input as a SignupInputPatch".
+    The callback now calls the internal-API wrapper
+    ``signup_actions.save_positions`` (HTTP). For this test we short-circuit
+    the wrapper to call ``handle_save_positions`` in-process (mirrors the
+    ``_patch_signup_button_inproc`` shim in test_signup_logging.py) so we
+    can still pin the contract: "callback collects Select values and
+    forwards them to apply_signup_input as a SignupInputPatch".
     """
 
     def test_callback_calls_apply_signup_input_with_positions(self):
         async def _test():
             from discordbot.components import PositionConfirmButton, PositionSelectView
+            from events.discord.handlers import handle_save_positions
             from events.schemas import SignupInputPatch
 
             view = PositionSelectView(event_id=42, rank_status="active")
@@ -285,28 +288,27 @@ class PositionConfirmButtonCallbackTest(TestCase):
             view.pos_2._values = ["2"]
             view.pos_3._values = ["3"]
 
-            # Find the confirm button on the view
             button = next(
                 c for c in view.children if isinstance(c, PositionConfirmButton)
             )
 
-            # Mock the discord interaction
             interaction = MagicMock(spec=discord.Interaction)
             interaction.user = MagicMock()
             interaction.user.id = "100000000000000001"
             interaction.response = MagicMock()
             interaction.response.edit_message = AsyncMock()
 
-            # Stand-ins for Event + OrgUser — apply_signup_input is patched, so
-            # only their identity needs to round-trip through the callback.
             fake_event = MagicMock()
             fake_event.pk = 42
             fake_org_user = MagicMock()
 
             with mock_patch(
-                "events.models.Event.objects.select_related"
+                "discordbot.components.save_positions",
+                side_effect=lambda **kwargs: handle_save_positions(**kwargs),
+            ), mock_patch(
+                "events.discord.handlers.Event.objects.select_related"
             ) as mock_sr, mock_patch(
-                "events.discord._get_org_user",
+                "events.discord.handlers._get_org_user",
                 return_value=(fake_org_user, MagicMock()),
             ), mock_patch("events.services.apply_signup_input") as spy:
                 mock_sr.return_value.get.return_value = fake_event

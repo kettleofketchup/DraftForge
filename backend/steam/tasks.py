@@ -272,7 +272,7 @@ def _fetch_and_store_match(api, match_id, match_seq_num, league_id):
     data = result["result"]
 
     # POST to backend for DB storage
-    stored = store_steam_match({
+    stored, status_code = store_steam_match({
         "match_id": data["match_id"],
         "league_id": league_id,
         "radiant_win": data.get("radiant_win", False),
@@ -284,13 +284,24 @@ def _fetch_and_store_match(api, match_id, match_seq_num, league_id):
     })
 
     if stored is None:
-        log.warning(
+        # Reason → log level mapping so dashboards/alerts can distinguish
+        # "Steam still parsing" (benign, retries next tick) from "internal
+        # API down" (page-worthy).
+        if status_code == 422:
+            reason = "match_unparsed"
+        elif status_code is None:
+            reason = "internal_api_unreachable"
+        else:
+            reason = f"internal_api_status_{status_code}"
+        log_fn = log.info if status_code == 422 else log.warning
+        log_fn(
             "steam_match_store_failed",
             system="steam",
             subsystem="sync",
             match_id=match_id,
             league_id=league_id,
-            reason="internal_api_returned_none",
+            reason=reason,
+            status_code=status_code,
         )
         return False
 

@@ -51,7 +51,13 @@ services:
     image: ghcr.io/kettleofketchup/draftforge/backend:latest
     user: "1000:1000"
     entrypoint: ["celery"]
-    command: ["-A", "config.celery_light", "worker", "-l", "info", "--pool=solo"]
+    # gevent --concurrency=20 — every Celery task in this codebase is
+    # I/O-bound (Discord API, Steam API, internal /api/internal/ HTTP).
+    # gevent gives ~20 in-flight HTTP calls at a fraction of the memory of
+    # prefork. prefetch=1 prevents a stuck task from hoarding the queue.
+    # Safe because workers have no DB access (settings_celery.DATABASES = {});
+    # all data work goes through /api/internal/.
+    command: ["-A", "config.celery_light", "worker", "-l", "info", "--pool=gevent", "--concurrency=20", "--prefetch-multiplier=1"]
     env_file: "./docker/.env.prod"
     environment:
       DJANGO_SETTINGS_MODULE: config.settings_celery

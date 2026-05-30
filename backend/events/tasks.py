@@ -138,12 +138,18 @@ def _update_signup_msg(event_id, discord_event_pk, channel_id, post_result):
         "has_posted": True,
         "message_last_updated": datetime.now(tz.utc).isoformat(),
     }
+    # post_result shape tells us forum-vs-text:
+    #   forum: {"id": <thread_id>, "message": {"id": <msg_id>}, ...}
+    #   text:  {"id": <msg_id>}
+    # channel_type is the contract that downstream edit/modify paths read;
+    # always set it explicitly so the worker doesn't have to infer.
     if post_result.get("message"):
         update_data["thread_id"] = post_result["id"]
         update_data["message_id"] = post_result["message"]["id"]
         update_data["channel_type"] = "forum"
     else:
         update_data["message_id"] = post_result.get("id")
+        update_data["channel_type"] = "text"
 
     msg_resp = create_or_update_signup_message(**update_data)
     signup_msg_pk = msg_resp.json().get("id") if msg_resp and msg_resp.ok else None
@@ -632,6 +638,40 @@ def send_signup_update(event_id, interaction_id=None):
     )
 
 
+def _resolve_signup_edit_channel(discord_state, fields: dict) -> str | None:
+    """Pick the Discord channel ID to PATCH for a signup-embed edit.
+
+    Forum posts live inside an auto-created thread whose ID Discord treats
+    as the "channel" for that message; text posts live directly in their
+    channel. Driven explicitly by ``signup_channel_type`` so the worker
+    doesn't have to infer from null-vs-set thread_id.
+
+    ``fields`` is the bookend context dict (already carries event_id, task,
+    system/subsystem) — pass it through so warnings correlate with the
+    surrounding task spans.
+    """
+    channel_type = discord_state.signup_channel_type
+    if channel_type == "forum":
+        if not discord_state.signup_thread_id:
+            log.warning(
+                "forum_post_missing_thread_id",
+                signup_message_id=discord_state.signup_message_id,
+                signup_channel_id=discord_state.signup_channel_id,
+                **fields,
+            )
+            return discord_state.signup_channel_id
+        return discord_state.signup_thread_id
+    if channel_type == "text":
+        return discord_state.signup_channel_id
+    log.warning(
+        "legacy_channel_type",
+        signup_message_id=discord_state.signup_message_id,
+        has_thread_id=bool(discord_state.signup_thread_id),
+        **fields,
+    )
+    return discord_state.signup_thread_id or discord_state.signup_channel_id
+
+
 def _send_signup_update_impl(event_id, interaction_id):
     fields = _celery_bookend_fields("send_signup_update", event_id, interaction_id)
 
@@ -640,7 +680,11 @@ def _send_signup_update_impl(event_id, interaction_id):
         log.warning("signup_update_event_not_found", **fields)
         return f"Failed: event {event_id} not found"
 
-    # Try new model first
+    # Edit-routing recap (matches DiscordEventStateSchema docstring):
+    # - channel_type="text"  -> PATCH /channels/{channel_id}/messages/{message_id}
+    # - channel_type="forum" -> PATCH /channels/{thread_id}/messages/{message_id}
+    # - channel_type=None    -> legacy row; fall back to thread_id or channel_id
+    #   and log so we can backfill via a migration.
     edit_channel_id = None
     message_id = None
     signup_msg = None
@@ -649,7 +693,7 @@ def _send_signup_update_impl(event_id, interaction_id):
     discord_state = get_discord_event_state(event_id)
     if discord_state and discord_state.signup_posted and discord_state.signup_message_id:
         message_id = discord_state.signup_message_id
-        edit_channel_id = discord_state.signup_thread_id or discord_state.signup_channel_id
+        edit_channel_id = _resolve_signup_edit_channel(discord_state, fields)
 
     # Fall back to DiscordMessageLog for pre-migration events
     if not message_id:

@@ -29,14 +29,26 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from app.auth import InternalServiceAuth, IsInternalService
+from discordbot.bot_handlers import (
+    check_site_admin,
+    create_legacy_event,
+    remove_legacy_rsvp,
+    set_legacy_rsvp,
+)
 from discordbot.schemas import (
     BattleCupSubmitRequest,
+    CheckSiteAdminRequest,
     DeclineButtonRequest,
+    LegacyEventCreateRequest,
+    LegacyRsvpRemoveRequest,
+    LegacyRsvpSetRequest,
     NotifyButtonRequest,
     PreviousRankSubmitRequest,
     RankFlowStateRequest,
     RankMedalSelectRequest,
     RankStatusSelectRequest,
+    ReactionCancelRequest,
+    ReactionSignupRequest,
     SavePositionsRequest,
     ScreenshotUploadRequest,
     SetPositionRequest,
@@ -59,6 +71,7 @@ from events.discord.handlers import (
     handle_signup_modal_submit,
     handle_tentative_button,
 )
+from events.discord.reactions import handle_reaction_cancel, handle_reaction_signup
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
@@ -376,5 +389,159 @@ def rank_flow_state(request: Request) -> Response:
         event_id=body.event_id,
         discord_user_id=body.discord_user_id,
         action=result.get("error") or "ok",
+    )
+    return Response(result)
+
+
+# ---------------------------------------------------------------------------
+# Bot-control endpoints: /event admin check, reaction signups/cancels, legacy
+# ScheduledEvent RSVPs, and /event slash-command create. These migrate the
+# remaining ORM call surfaces in ``discordbot/bot.py`` off the bot process.
+# ---------------------------------------------------------------------------
+
+
+@api_view(["POST"])
+@authentication_classes(_auth)
+@permission_classes(_perm)
+def check_site_admin_view(request: Request) -> Response:
+    """Resolve a Discord ID to {is_admin, is_linked} for the /event check."""
+    try:
+        body = CheckSiteAdminRequest.model_validate(request.data)
+    except ValidationError as exc:
+        return _bad_request(exc)
+    result = check_site_admin(**body.model_dump())
+    log.info(
+        "internal_check_site_admin_processed",
+        system="discord",
+        subsystem="dispatch",
+        tags=["bot", "admin"],
+        tags_csv="bot,admin",
+        discord_user_id=body.discord_user_id,
+        is_linked=result.get("is_linked"),
+        is_admin=result.get("is_admin"),
+    )
+    return Response(result)
+
+
+@api_view(["POST"])
+@authentication_classes(_auth)
+@permission_classes(_perm)
+def reaction_signup_view(request: Request) -> Response:
+    """Wrap events.discord.reactions.handle_reaction_signup over HTTP."""
+    try:
+        body = ReactionSignupRequest.model_validate(request.data)
+    except ValidationError as exc:
+        return _bad_request(exc)
+    success, detail = handle_reaction_signup(
+        body.discord_message_id, body.discord_user_id
+    )
+    log.info(
+        "internal_reaction_signup_processed",
+        system="discord",
+        subsystem="dispatch",
+        tags=["events", "reaction"],
+        tags_csv="events,reaction",
+        discord_message_id=body.discord_message_id,
+        discord_user_id=body.discord_user_id,
+        success=success,
+        detail=detail,
+    )
+    return Response({"success": bool(success), "detail": detail or ""})
+
+
+@api_view(["POST"])
+@authentication_classes(_auth)
+@permission_classes(_perm)
+def reaction_cancel_view(request: Request) -> Response:
+    """Wrap events.discord.reactions.handle_reaction_cancel over HTTP."""
+    try:
+        body = ReactionCancelRequest.model_validate(request.data)
+    except ValidationError as exc:
+        return _bad_request(exc)
+    success, detail = handle_reaction_cancel(
+        body.discord_message_id, body.discord_user_id
+    )
+    log.info(
+        "internal_reaction_cancel_processed",
+        system="discord",
+        subsystem="dispatch",
+        tags=["events", "reaction"],
+        tags_csv="events,reaction",
+        discord_message_id=body.discord_message_id,
+        discord_user_id=body.discord_user_id,
+        success=success,
+        detail=detail,
+    )
+    return Response({"success": bool(success), "detail": detail or ""})
+
+
+@api_view(["POST"])
+@authentication_classes(_auth)
+@permission_classes(_perm)
+def legacy_rsvp_set_view(request: Request) -> Response:
+    """Create/update a legacy ScheduledEvent RSVP from a reaction emoji."""
+    try:
+        body = LegacyRsvpSetRequest.model_validate(request.data)
+    except ValidationError as exc:
+        return _bad_request(exc)
+    result = set_legacy_rsvp(**body.model_dump())
+    log.info(
+        "internal_legacy_rsvp_set_processed",
+        system="discord",
+        subsystem="dispatch",
+        tags=["events", "rsvp"],
+        tags_csv="events,rsvp",
+        discord_message_id=body.discord_message_id,
+        discord_user_id=body.discord_user_id,
+        status=body.status,
+        success=result.get("success"),
+        error=result.get("error"),
+    )
+    return Response(result)
+
+
+@api_view(["POST"])
+@authentication_classes(_auth)
+@permission_classes(_perm)
+def legacy_rsvp_remove_view(request: Request) -> Response:
+    """Remove a legacy ScheduledEvent RSVP when the reaction is removed."""
+    try:
+        body = LegacyRsvpRemoveRequest.model_validate(request.data)
+    except ValidationError as exc:
+        return _bad_request(exc)
+    result = remove_legacy_rsvp(**body.model_dump())
+    log.info(
+        "internal_legacy_rsvp_remove_processed",
+        system="discord",
+        subsystem="dispatch",
+        tags=["events", "rsvp"],
+        tags_csv="events,rsvp",
+        discord_message_id=body.discord_message_id,
+        discord_user_id=body.discord_user_id,
+        success=result.get("success"),
+        error=result.get("error"),
+    )
+    return Response(result)
+
+
+@api_view(["POST"])
+@authentication_classes(_auth)
+@permission_classes(_perm)
+def legacy_event_create_view(request: Request) -> Response:
+    """Create a one-shot EventTemplate + ScheduledEvent for /event."""
+    try:
+        body = LegacyEventCreateRequest.model_validate(request.data)
+    except ValidationError as exc:
+        return _bad_request(exc)
+    result = create_legacy_event(**body.model_dump())
+    log.info(
+        "internal_legacy_event_create_processed",
+        system="discord",
+        subsystem="dispatch",
+        tags=["events", "admin"],
+        tags_csv="events,admin",
+        name=body.name,
+        channel_id=body.channel_id,
+        event_id=result.get("event_id"),
     )
     return Response(result)

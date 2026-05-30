@@ -72,7 +72,11 @@ services:
     image: ghcr.io/kettleofketchup/draftforge/backend-dev:latest
     user: "1000:1000"
     entrypoint: ["celery"]
-    command: ["-A", "config.celery_light", "worker", "-l", "info", "--pool=solo"]
+    # Prod/release use --pool=gevent --concurrency=20 once the new image
+    # (with gevent in pyproject) is built. Test+debug stay on prefork=4
+    # until the dev image is rebuilt; both still verify the parallel-worker
+    # scheduling behavior we care about.
+    command: ["-A", "config.celery_light", "worker", "-l", "info", "--pool=prefork", "--concurrency=4", "--prefetch-multiplier=1"]
     volumes:
       - ./backend:/app/backend
     env_file: "./docker/.env.test"
