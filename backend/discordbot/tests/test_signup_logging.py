@@ -1,19 +1,17 @@
-"""Integration tests for the signup-flow log sequence.
+"""Integration tests for the Discord signup-flow log + persistence chain.
 
-These tests would have caught the original "user told ok but no EventSignup row"
-bug:
-  - TransactionTestCase so transaction.on_commit hooks actually fire
-  - setUp creates a CustomUser + OrgUser + complete PlayerDotaProfile so the
-    handler takes the direct-signup path (not needs_modal)
-  - Assert on DB row existence, not just log presence
-  - Assert required log events present (Task 12 adds ordering invariants)
+Pins three invariants of the signup pipeline:
+  - the handler takes the direct-signup path when the OrgUser profile is
+    complete (no needs_modal),
+  - ``transaction.on_commit`` hooks actually fire (hence TransactionTestCase),
+  - the chain produces both an ``EventSignup`` row AND the ordered log
+    sequence the dashboards depend on.
 
-After the bot-via-internal-API migration (PR #fix/bot-signup-via-internal-api)
-the components callback no longer calls ``handle_signup_button`` in-process —
-it hits ``/api/internal/discord/signup-button/`` over HTTP. In tests we patch
-``discordbot.internal_client.signup_actions.signup_button`` with a shim that runs the
-canonical handler synchronously so log capture + DB assertions still observe
-the same in-process chain the production code now sees across processes.
+The bot calls the signup handler through an internal HTTP wrapper
+(``signup_actions.signup_button``). To exercise the full in-process log
+chain without standing up a real HTTP server, ``_patch_signup_button_inproc``
+swaps the wrapper for the canonical handler in the namespace the bot looks
+it up from.
 """
 
 import asyncio
@@ -35,18 +33,20 @@ from org.models_profiles import PlayerDotaProfile
 
 
 def _patch_signup_button_inproc():
-    """Replace the internal-API HTTP wrapper with a direct handler call.
+    """Route ``signup_button`` calls to the in-process handler.
 
-    Returns an ExitStack so callers can register additional patches and exit
-    them together with ``with stack:``. Patching the source module
-    (`discordbot.internal_client.signup_actions`) covers every component file that
-    re-imports the symbol inside its callback.
+    Patches the binding ``discordbot.components`` actually looks up at call
+    time (module-top import), so every callback path that uses the wrapper
+    resolves to ``handle_signup_button`` instead of the HTTP client.
+
+    Returns an ``ExitStack`` so callers can stack additional patches and
+    exit them together with ``with stack:``.
     """
     stack = ExitStack()
     stack.enter_context(
         patch(
             "discordbot.components.signup_button",
-            side_effect=lambda **kwargs: handle_signup_button(**kwargs),
+            side_effect=handle_signup_button,
         )
     )
     return stack
