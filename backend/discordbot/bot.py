@@ -9,13 +9,8 @@ from discord import app_commands
 from django.conf import settings
 
 from discordbot.components import (
-    BattleCupTierSelect,
     DeclineButton,
     NotifyButton,
-    RankDetailsView,
-    RankStatusSelect,
-    ScreenshotUploadButton,
-    ScreenshotUploadPromptView,
     SignupButton,
     TentativeButton,
 )
@@ -27,11 +22,7 @@ from discordbot.internal_client.bot_actions import (
     remove_legacy_rsvp,
     set_legacy_rsvp,
 )
-from discordbot.internal_client.signup_actions import (
-    get_rank_flow_state,
-    rank_medal_select,
-    set_position,
-)
+from discordbot.internal_client.signup_actions import set_position
 
 log = logging.getLogger(__name__)
 
@@ -189,11 +180,14 @@ class KettleBot(discord.Client):
                 event_id = int(custom_id.split(":")[1])
                 button = NotifyButton(event_id)
                 await button.callback(interaction)
-            # Dynamic-view components below: bot sent the View as a response,
-            # so discord.py auto-dispatches via the stored View instance and
-            # we only run as a fallback for view-timeout / bot-restart. Without
-            # this guard, both paths fire and process_rsvp races at the
-            # backend.
+            # Dynamic-view components (pos_confirm, rank_status, rank_star,
+            # bcup_tier, screenshot_upload) are dispatched by discord.py's
+            # stored-View system — each has an overridden ``callback`` in
+            # components.py that runs the canonical handler. Routing them
+            # here too caused a 40060 race: HTTP to internal_client takes
+            # ~200ms, plenty of time for the View dispatch to ACK first.
+            # pos_select_ stays here because the bare ui.Select has no
+            # overridden callback (discord.py's default is a no-op).
             elif custom_id.startswith("pos_select_"):
                 if interaction.response.is_done():
                     return
@@ -211,103 +205,6 @@ class KettleBot(discord.Client):
                             position=pos_int,
                         )
                 await interaction.response.defer()
-            elif custom_id.startswith("pos_confirm:"):
-                if interaction.response.is_done():
-                    return
-                event_id = int(custom_id.split(":")[1])
-                state = await sync_to_async(
-                    get_rank_flow_state, thread_sensitive=False
-                )(
-                    event_id=event_id,
-                    discord_user_id=str(interaction.user.id),
-                )
-                if state.get("error"):
-                    await interaction.response.send_message(
-                        f"❌ {state.get('message', 'Could not load profile.')}",
-                        ephemeral=True,
-                    )
-                    return
-
-                view = RankDetailsView(
-                    event_id,
-                    state["rank_status"],
-                    require_screenshot=state["require_screenshot"],
-                    min_mmr=state["min_mmr"],
-                )
-                labels = {
-                    "active": "\U0001f3c5 **Now select your rank:**",
-                    "previous": "\U0001f4dd **Now select your previous rank:**",
-                    "never": "\U0001f4dd **Now select your Battle Cup tier:**",
-                }
-                await interaction.response.edit_message(
-                    content=labels.get(state["rank_status"], labels["never"]),
-                    view=view,
-                )
-            elif custom_id.startswith("rank_star:"):
-                if interaction.response.is_done():
-                    return
-                # custom_id format: rank_star:{event_id}:{medal}
-                parts = custom_id.split(":")
-                event_id = int(parts[1])
-                medal = parts[2] if len(parts) > 2 else "Herald"
-
-                star_values = interaction.data.get("values", [])
-                star = star_values[0] if star_values else "1"
-                medal_with_star = (
-                    f"{medal} {star}" if medal != "Immortal" else "Immortal"
-                )
-
-                result = await sync_to_async(rank_medal_select)(
-                    event_id=event_id,
-                    discord_user_id=str(interaction.user.id),
-                    medal=medal_with_star,
-                )
-
-                if result.get("action") == "needs_screenshot":
-                    view = ScreenshotUploadPromptView(
-                        event_id, result["screenshot_type"]
-                    )
-                    await interaction.response.edit_message(
-                        content=(
-                            f"\U0001f3c5 Rank set to **{medal_with_star}**\n\n"
-                            "\U0001f4f7 **Upload your screenshot to complete your signup.**\n"
-                            "Press the button below to upload →"
-                        ),
-                        view=view,
-                    )
-                elif result.get("action") == "error":
-                    await interaction.response.edit_message(
-                        content=f"❌ {result['message']}",
-                        view=None,
-                    )
-                else:
-                    await interaction.response.edit_message(
-                        content=f"✅ Rank set to **{medal_with_star}**. You're signed up! Status: **{result.get('status', 'pending')}**",
-                        view=None,
-                    )
-            elif custom_id.startswith("rank_status:"):
-                if interaction.response.is_done():
-                    return
-                event_id = int(custom_id.split(":")[1])
-                select = RankStatusSelect(event_id)
-                select._values = interaction.data.get("values", [])
-                await select.callback(interaction)
-            elif custom_id.startswith("bcup_tier:"):
-                if interaction.response.is_done():
-                    return
-                event_id = int(custom_id.split(":")[1])
-                select = BattleCupTierSelect(event_id)
-                select._values = interaction.data.get("values", [])
-                await select.callback(interaction)
-            elif custom_id.startswith("screenshot_upload:"):
-                if interaction.response.is_done():
-                    return
-                try:
-                    parts = custom_id.split(":")
-                    event_id = int(parts[1])
-                    screenshot_type = parts[2]
-                    button = ScreenshotUploadButton(event_id, screenshot_type)
-                    await button.callback(interaction)
                 except discord.errors.HTTPException:
                     pass  # View already handled it
         # Modal submissions are auto-dispatched by discord.py to Modal.on_submit
