@@ -205,8 +205,6 @@ class KettleBot(discord.Client):
                             position=pos_int,
                         )
                 await interaction.response.defer()
-                except discord.errors.HTTPException:
-                    pass  # View already handled it
         # Modal submissions are auto-dispatched by discord.py to Modal.on_submit
 
     async def _handle_rsvp(
