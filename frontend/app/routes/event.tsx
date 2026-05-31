@@ -841,6 +841,7 @@ function SignupsTab({
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <SecondaryButton color="green" size="sm"
+                      data-testid={`approve-signup-${signup.id}`}
                       onClick={() => setApprovalSignup(signup)}
                       disabled={signupActions.approve.isPending}
                     >
@@ -852,7 +853,9 @@ function SignupsTab({
                 </Tooltip>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <DestructiveButton size="sm" onClick={() => signupActions.demote.mutate(signup.id)} loading={signupActions.demote.isPending} depth={false}>
+                    <DestructiveButton size="sm"
+                      data-testid={`waitlist-signup-${signup.id}`}
+                      onClick={() => signupActions.demote.mutate(signup.id)} loading={signupActions.demote.isPending} depth={false}>
                       <ArrowDownToLine className="h-3.5 w-3.5" />
                       <span className="hidden lg:inline ml-1">Waitlist</span>
                     </DestructiveButton>
@@ -898,6 +901,7 @@ function SignupsTab({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <SecondaryButton color="green" size="sm"
+                    data-testid={`approve-signup-${signup.id}`}
                     onClick={() => setApprovalSignup(signup)}
                     disabled={signupActions.approve.isPending}
                   >
@@ -975,6 +979,7 @@ function SignupsTab({
           return (
             <UserEventStrip
               key={signup.id}
+              data-testid={`event-signup-row-${signup.id}`}
               user={user}
               dotaProfile={stripProfile}
               contextSlot={statusSlot}

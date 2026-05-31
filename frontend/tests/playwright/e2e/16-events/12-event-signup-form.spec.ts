@@ -97,7 +97,7 @@ test.describe('Event Signup Form (@cicd)', () => {
     await page.getByTestId('event-signup-btn').click();
     const modal = page.getByTestId('event-signup-modal');
     await expect(modal).toBeVisible();
-    await modal.getByText("I've never had an MMR").click();
+    await modal.getByTestId('signup-rank-status-never').click();
     await expect(modal.getByTestId('signup-battlecup-tier')).toBeVisible();
     await expect(modal.getByTestId('signup-rank-medal')).toHaveCount(0);
     await expect(modal.getByTestId('signup-rank-star')).toHaveCount(0);
@@ -110,7 +110,7 @@ test.describe('Event Signup Form (@cicd)', () => {
     await page.getByTestId('event-signup-btn').click();
     const modal = page.getByTestId('event-signup-modal');
     await expect(modal).toBeVisible();
-    await modal.getByText('I have an active MMR').click();
+    await modal.getByTestId('signup-rank-status-active').click();
     await modal.getByTestId('signup-rank-medal').click();
     await page.getByRole('option', { name: 'Legend', exact: true }).click();
     await modal.getByTestId('signup-rank-star').click();

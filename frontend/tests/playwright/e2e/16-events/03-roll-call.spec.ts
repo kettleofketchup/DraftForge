@@ -114,7 +114,7 @@ test.describe.serial('Roll Call Flow (@cicd)', () => {
     await page.waitForURL(/\/rollcall\//);
 
     // Confirmed player has the new Remove (cancel) button — verify dialog opens.
-    const removeBtn = page.getByTestId('rollcall-cancel-btn').first();
+    const removeBtn = page.getByTestId(`rollcall-cancel-btn-${signup.id}`);
     await expect(removeBtn).toBeVisible();
     await removeBtn.click();
     await expect(page.getByTestId('rollcall-cancel-summary')).toBeVisible();
@@ -122,7 +122,7 @@ test.describe.serial('Roll Call Flow (@cicd)', () => {
     // Cancel preserves the confirmed state — no API call should fire.
     await page.getByTestId('rollcall-cancel-dialog-cancel').click();
     await expect(page.getByTestId('rollcall-cancel-summary')).toHaveCount(0);
-    await expect(page.getByTestId('rollcall-cancel-btn').first()).toBeVisible();
+    await expect(page.getByTestId(`rollcall-cancel-btn-${signup.id}`)).toBeVisible();
   });
 
   test('roll call page shows correct state for non-roll-call events', async ({

@@ -15,6 +15,11 @@ import {
 
 const API_URL = 'https://localhost/api';
 const USER_EDIT_ORG_NAME = 'User Edit Org';
+// Pin to a specific dedicated user so the test is deterministic instead of
+// depending on whatever happens to be at index 0 in the org's users list.
+// edit_user_alpha is a non-staff member of User Edit Org — perfect target
+// for "non-superuser, non-actor" visibility assertions.
+const TARGET_USERNAME = 'edit_user_alpha';
 let orgPk: number;
 let targetUserPk: number;
 
@@ -24,16 +29,13 @@ test.describe('Scope permissions (@cicd)', () => {
     const orgs = await (await context.request.get(`${API_URL}/organizations/`)).json();
     const orgList = Array.isArray(orgs) ? orgs : orgs.results ?? [];
     const editOrg = orgList.find((o: { name: string }) => o.name === USER_EDIT_ORG_NAME);
+    if (!editOrg) throw new Error(`Org "${USER_EDIT_ORG_NAME}" not found. Run just db::populate::all`);
     orgPk = editOrg.pk;
     const usersResp = await context.request.get(`${API_URL}/organizations/${orgPk}/users/`);
     const users = await usersResp.json();
-    // Pick a target user that is neither the test actor (pk=1020 / org_admin_tester)
-    // nor the global admin (pk=1, who has is_superuser=true and would render the
-    // edit button regardless of scope, defeating the assertion).
-    targetUserPk = users.find(
-      (u: any) =>
-        u.pk !== 1020 && u.pk !== 1 && u.username !== 'org_admin_tester'
-    ).pk;
+    const target = users.find((u: { username?: string }) => u.username === TARGET_USERNAME);
+    if (!target) throw new Error(`Target user "${TARGET_USERNAME}" not in User Edit Org`);
+    targetUserPk = target.pk;
     await context.close();
   });
 
@@ -44,7 +46,7 @@ test.describe('Scope permissions (@cicd)', () => {
     await loginOrgAdmin();
     await visitAndWaitForHydration(page, `/organizations/${orgPk}`);
     await page.locator('[data-testid="org-tab-users"]').click();
-    const card = page.locator('[data-testid^="usercard-"]').first();
+    const card = page.locator(`[data-testid="usercard-${TARGET_USERNAME}"]`);
     await expect(card).toBeVisible({ timeout: 10000 });
     await expect(card.locator('[data-testid="edit-user-btn"]')).toBeVisible();
   });

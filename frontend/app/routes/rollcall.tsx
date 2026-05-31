@@ -547,7 +547,7 @@ function SignupStrip({
       {signup.status === 'confirmed' && (
         <DestructiveButton
           size="sm"
-          data-testid="rollcall-cancel-btn"
+          data-testid={`rollcall-cancel-btn-${signup.id}`}
           onClick={() => onRequestCancel(signup)}
           disabled={signupActions.cancel.isPending}
         >
