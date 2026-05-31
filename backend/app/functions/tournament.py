@@ -35,8 +35,9 @@ from app.serializers import (
     _build_users_dict,
 )
 from backend import settings
+from telemetry.logging import get_logger
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 
 def _serialize_tournament(tournament):
@@ -221,8 +222,12 @@ def create_team_from_captain(request):
         pass  # No draft exists, continue
     if Team.objects.filter(tournament=tournament, captain=user).exists():
         if draft_order == 0:
-            logging.debug(
-                "User is already a captain in this tournament with a draft order"
+            log.debug(
+                "captain_already_registered",
+                system="tournament",
+                subsystem="registration",
+                user_id=user.pk,
+                tournament_id=tournament.pk,
             )
             return Response(
                 _serialize_tournament(tournament),
