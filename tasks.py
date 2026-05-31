@@ -144,12 +144,19 @@ def docker_compose_exec(c, compose_file: Path, service: str, cmd_str: str):
         c.run(cmd, pty=True)
 
 
-def docker_compose_run(c, compose_file: Path, service: str, cmd_str: str):
-    """Run a one-off command in a new container with --rm flag."""
+def docker_compose_run(
+    c, compose_file: Path, service: str, cmd_str: str, entrypoint: str | None = None
+):
+    """Run a one-off command in a new container with --rm flag.
+
+    Pass ``entrypoint=""`` to bypass the image entrypoint (e.g. daphne) so the
+    command runs directly — required for ``python manage.py ...`` one-offs.
+    """
+    entrypoint_flag = f'--entrypoint "{entrypoint}" ' if entrypoint is not None else ""
     with c.cd(paths.PROJECT_PATH):
         cmd = (
             f"docker compose --project-directory {paths.PROJECT_PATH.resolve()} "
-            f"-f {compose_file.resolve()} run --rm {service} {cmd_str}"
+            f"-f {compose_file.resolve()} run --rm {entrypoint_flag}{service} {cmd_str}"
         )
         c.run(cmd, pty=True)
 
@@ -508,7 +515,7 @@ def test_exec(c, service, cmd):
 @task(name="test-run")
 def test_run(c, service="backend", cmd=""):
     """Run a one-off command in test environment. Example: inv test.run --cmd 'python manage.py test app.tests -v 2'"""
-    docker_compose_run(c, paths.DOCKER_COMPOSE_TEST_PATH, service, cmd)
+    docker_compose_run(c, paths.DOCKER_COMPOSE_TEST_PATH, service, cmd, entrypoint="")
 
 
 @task(name="test-upd")
