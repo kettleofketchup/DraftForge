@@ -98,6 +98,7 @@ Beyond `system` and `subsystem`, include relevant entity IDs:
 
 - Backend patterns (structlog config, OTel export, Celery/Daphne logging, middleware): [references/backend.md](references/backend.md)
 - Frontend console logging conventions: [references/frontend.md](references/frontend.md)
+- Querying/parsing logs from the CLI with `gcx` (error breakdown, mixed JSON+plain-text, silence detection, request/trace correlation): [references/grafana-loki.md](references/grafana-loki.md)
 
 ## Grafana Queries
 
@@ -114,3 +115,14 @@ Beyond `system` and `subsystem`, include relevant entity IDs:
 # Filter by draft
 {service_name="backend"} | json | draft_id="42"
 ```
+
+Run these from the CLI with `gcx` (context `draftforge` → kettle.grafana.net). **Pass
+`--agent=false`** or Claude Code's auto agent-mode suppresses the output:
+
+```bash
+gcx logs query '{service_name="backend"} | json | level="error"' --since 24h -o raw --agent=false
+```
+
+The `discord` service mixes structlog JSON with plain-text `discord.py` lines, so `| json`
+drops half of them — use line filters (`|= "ERROR"`) there. Full examples (error breakdown,
+silence detection, request/trace correlation): [references/grafana-loki.md](references/grafana-loki.md).
