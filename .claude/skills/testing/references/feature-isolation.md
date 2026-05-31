@@ -121,7 +121,7 @@ await visitAndWait(page, '/organizations/3/');  // Fragile!
 | League | 6 (steam=17934) | Shuffle Tie |
 | League | 7 (steam=17935) | Events |
 | Users | 1000-1099 | Site-level + roles (admin, staff, regular, claim, org roles, league roles) |
-| Users | 2000-2099 | CSV Import (2000-2004) + User Edit (2050-2052) |
+| Users | 2000-2099 | CSV Import (2000-2004) + User Edit (2050-2058) |
 | Users | 3000-3019 | Tournament 38 real users |
 | Users | 4000-4019 | Shuffle Tie (4 captains + 16 players) |
 | Users | 5000-5020 | Events (admin + 20 players) |

@@ -20,7 +20,15 @@ const USER_EDIT_ORG_NAME = 'User Edit Org';
 
 let orgPk: number;
 
-test.describe('Sequential multi-user edits (@cicd)', () => {
+// Sequential: each test in this file edits one or both shared users
+// (alpha + bravo) and the order matters (an earlier nickname change is
+// asserted against by a later test via getByText). `.serial` keeps these
+// tests in declaration order; using dedicated usernames keeps them from
+// racing with parallel specs in this directory.
+const USER_A_USERNAME = 'edit_user_alpha';
+const USER_B_USERNAME = 'edit_user_bravo';
+
+test.describe.serial('Sequential multi-user edits (@cicd)', () => {
   test.beforeAll(async ({ browser }) => {
     const context = await browser.newContext({ ignoreHTTPSErrors: true });
     const orgsResp = await context.request.get(`${API_URL}/organizations/`);
@@ -40,11 +48,12 @@ test.describe('Sequential multi-user edits (@cicd)', () => {
     await visitAndWaitForHydration(page, `/organizations/${orgPk}`);
     await page.locator('[data-testid="org-tab-users"]').click();
 
-    const userCards = page.locator('[data-testid^="usercard-"]');
-    await expect(userCards.first()).toBeVisible({ timeout: 10000 });
+    const cardA = page.locator(`[data-testid="usercard-${USER_A_USERNAME}"]`);
+    const cardB = page.locator(`[data-testid="usercard-${USER_B_USERNAME}"]`);
+    await expect(cardA).toBeVisible({ timeout: 10000 });
+    await expect(cardB).toBeVisible({ timeout: 10000 });
 
     // Edit user A: nickname + MMR
-    const cardA = userCards.nth(0);
     await openEditModal(page, cardA);
     const newNickA = `SeqA-${Date.now()}`;
     await fillEditField(page, 'nickname', newNickA);
@@ -52,7 +61,6 @@ test.describe('Sequential multi-user edits (@cicd)', () => {
     await saveEditModal(page);
 
     // Edit user B: nickname only
-    const cardB = userCards.nth(1);
     await openEditModal(page, cardB);
     const newNickB = `SeqB-${Date.now()}`;
     await fillEditField(page, 'nickname', newNickB);
@@ -61,17 +69,16 @@ test.describe('Sequential multi-user edits (@cicd)', () => {
     // Reload and verify both persist
     await page.reload();
     await page.locator('[data-testid="org-tab-users"]').click();
-    await expect(page.getByText(newNickA).first()).toBeVisible({ timeout: 5000 });
-    await expect(page.getByText(newNickB).first()).toBeVisible({ timeout: 5000 });
+    await expect(cardA.getByText(newNickA).first()).toBeVisible({ timeout: 5000 });
+    await expect(cardB.getByText(newNickB).first()).toBeVisible({ timeout: 5000 });
   });
 
   test('@cicd PATCH body contains only dirty fields', async ({ page }) => {
     await visitAndWaitForHydration(page, `/organizations/${orgPk}`);
     await page.locator('[data-testid="org-tab-users"]').click();
-    const userCards = page.locator('[data-testid^="usercard-"]');
-    await expect(userCards.first()).toBeVisible({ timeout: 10000 });
+    const card = page.locator(`[data-testid="usercard-${USER_A_USERNAME}"]`);
+    await expect(card).toBeVisible({ timeout: 10000 });
 
-    const card = userCards.first();
     await openEditModal(page, card);
 
     const patchPromise = page.waitForRequest(
@@ -92,7 +99,7 @@ test.describe('Sequential multi-user edits (@cicd)', () => {
   test('@cicd save with no changes does not fire a PATCH', async ({ page }) => {
     await visitAndWaitForHydration(page, `/organizations/${orgPk}`);
     await page.locator('[data-testid="org-tab-users"]').click();
-    const card = page.locator('[data-testid^="usercard-"]').first();
+    const card = page.locator(`[data-testid="usercard-${USER_A_USERNAME}"]`);
     await expect(card).toBeVisible({ timeout: 10000 });
 
     await openEditModal(page, card);

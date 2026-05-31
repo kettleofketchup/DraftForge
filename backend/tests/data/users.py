@@ -464,9 +464,24 @@ CSV_IMPORT_USERS: list[TestUser] = [
 ]
 
 # =============================================================================
-# User Edit Test Users (pk=2050-2052)
-# These users are members of the User Edit Org/League/Tournament.
-# User edit E2E tests modify their fields (MMR, nickname, etc.)
+# User Edit Test Users (pk=2050-2058)
+# Members of the User Edit Org / League / Tournament.
+#
+# Independent specs each own a dedicated user (so they can run in parallel
+# without read-modify-write races on the same record). Sequential specs
+# share alpha/bravo/charlie.
+#
+# pk   | username                  | owner
+# -----|---------------------------|-----------------------------------
+# 2050 | edit_user_alpha           | sequential specs (05, 07)
+# 2051 | edit_user_bravo           | sequential specs (07 needs A+B)
+# 2052 | edit_user_charlie         | sequential reserve
+# 2053 | edit_user_org             | 01-org-edit
+# 2054 | edit_user_tournament      | 02-tournament-edit
+# 2055 | edit_user_league          | 03-league-edit
+# 2056 | edit_user_mmr             | 04-org-mmr-edit
+# 2057 | edit_user_positions       | 08-position-persistence
+# 2058 | edit_user_cache           | 10-cache-merge
 # =============================================================================
 
 USER_EDIT_USERS: list[TestUser] = [
@@ -493,6 +508,54 @@ USER_EDIT_USERS: list[TestUser] = [
         discord_id="400000000000000003",
         steam_id_64=76561198900000003,
         mmr=5200,
+    ),
+    TestUser(
+        pk=2053,
+        username="edit_user_org",
+        nickname="Edit Org",
+        discord_id="400000000000000004",
+        steam_id_64=76561198900000004,
+        mmr=3100,
+    ),
+    TestUser(
+        pk=2054,
+        username="edit_user_tournament",
+        nickname="Edit Tournament",
+        discord_id="400000000000000005",
+        steam_id_64=76561198900000005,
+        mmr=3200,
+    ),
+    TestUser(
+        pk=2055,
+        username="edit_user_league",
+        nickname="Edit League",
+        discord_id="400000000000000006",
+        steam_id_64=76561198900000006,
+        mmr=3300,
+    ),
+    TestUser(
+        pk=2056,
+        username="edit_user_mmr",
+        nickname="Edit MMR",
+        discord_id="400000000000000007",
+        steam_id_64=76561198900000007,
+        mmr=3400,
+    ),
+    TestUser(
+        pk=2057,
+        username="edit_user_positions",
+        nickname="Edit Positions",
+        discord_id="400000000000000008",
+        steam_id_64=76561198900000008,
+        mmr=3500,
+    ),
+    TestUser(
+        pk=2058,
+        username="edit_user_cache",
+        nickname="Edit Cache",
+        discord_id="400000000000000009",
+        steam_id_64=76561198900000009,
+        mmr=3600,
     ),
 ]
 
