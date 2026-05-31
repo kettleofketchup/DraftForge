@@ -856,12 +856,17 @@ def get_tournament_for_task(request, tournament_id):
 @authentication_classes(_auth)
 @permission_classes(_perm)
 def get_tournament_participants(request, tournament_id):
-    """Get tournament participants with Discord IDs (for DM sending)."""
+    """Get tournament participants with Discord IDs (for DM sending).
+
+    Returns the full tournament membership pool (``Tournament.users``) —
+    captains and undrafted participants alike — not just drafted team
+    members. At draft-start time nobody is on a team roster yet.
+    """
     from app.models import CustomUser
 
     users = (
         CustomUser.objects.filter(
-            teams_as_member__tournament_id=tournament_id,
+            tournaments=tournament_id,
             discordId__isnull=False,
         )
         .exclude(discordId="")
