@@ -1,3 +1,4 @@
+import shlex
 from pathlib import Path
 
 import semver
@@ -152,7 +153,9 @@ def docker_compose_run(
     Pass ``entrypoint=""`` to bypass the image entrypoint (e.g. daphne) so the
     command runs directly — required for ``python manage.py ...`` one-offs.
     """
-    entrypoint_flag = f'--entrypoint "{entrypoint}" ' if entrypoint is not None else ""
+    entrypoint_flag = (
+        f"--entrypoint {shlex.quote(entrypoint)} " if entrypoint is not None else ""
+    )
     with c.cd(paths.PROJECT_PATH):
         cmd = (
             f"docker compose --project-directory {paths.PROJECT_PATH.resolve()} "
