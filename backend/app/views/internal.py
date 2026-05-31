@@ -859,8 +859,9 @@ def get_tournament_participants(request, tournament_id):
     """Get tournament participants with Discord IDs (for DM sending).
 
     Returns the full tournament membership pool (``Tournament.users``) —
-    captains and undrafted participants alike — not just drafted team
-    members. At draft-start time nobody is on a team roster yet.
+    captains and undrafted participants alike. A roster-based query
+    (``Team.members``) would miss the undrafted pool: at draft-start time
+    only captains have been seeded onto team rosters.
     """
     from app.models import CustomUser
 
