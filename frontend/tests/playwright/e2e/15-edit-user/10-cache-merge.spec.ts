@@ -28,9 +28,12 @@ import {
 
 const API_URL = 'https://localhost/api';
 const USER_EDIT_ORG_NAME = 'User Edit Org';
+// Dedicated user for this spec — see USER_EDIT_USERS in
+// backend/tests/data/users.py. Looked up by username so parallel specs
+// in 15-edit-user/ don't race on the same record.
+const TARGET_USERNAME = 'edit_user_cache';
 let orgPk: number;
 let targetUserPk: number;
-let targetUsername: string;
 
 test.describe('User cache merge after org PATCH (@cicd)', () => {
   test.beforeAll(async ({ browser }) => {
@@ -38,18 +41,17 @@ test.describe('User cache merge after org PATCH (@cicd)', () => {
     const orgs = await (await context.request.get(`${API_URL}/organizations/`)).json();
     const orgList = Array.isArray(orgs) ? orgs : orgs.results ?? [];
     const editOrg = orgList.find((o: { name: string }) => o.name === USER_EDIT_ORG_NAME);
+    if (!editOrg) throw new Error(`Org "${USER_EDIT_ORG_NAME}" not found.`);
     orgPk = editOrg.pk;
     const usersResp = await context.request.get(`${API_URL}/organizations/${orgPk}/users/`);
     const users = await usersResp.json();
-    // Skip the global superuser (pk=1) and the org-admin actor (pk=1020) —
-    // see 09-scope-permissions.spec.ts for the same filter pattern.
     const target = users.find(
-      (u: { pk: number; username?: string }) =>
-        u.pk !== 1 && u.pk !== 1020 && u.username && u.username !== 'org_admin_tester',
+      (u: { username?: string }) => u.username === TARGET_USERNAME,
     );
-    if (!target) throw new Error('No suitable target user in User Edit Org');
+    if (!target) {
+      throw new Error(`Target user "${TARGET_USERNAME}" not in User Edit Org. Run just db::populate::all`);
+    }
     targetUserPk = target.pk;
-    targetUsername = target.username;
     await context.close();
   });
 
@@ -64,7 +66,7 @@ test.describe('User cache merge after org PATCH (@cicd)', () => {
     //    still has the username field.
     await visitAndWaitForHydration(page, `/user/${targetUserPk}`);
     await expect(
-      page.getByText(targetUsername, { exact: true }).first(),
+      page.getByText(TARGET_USERNAME, { exact: true }).first(),
     ).toBeVisible({ timeout: 10000 });
 
     // 2. Switch to the org page and edit the user. The org PATCH endpoint
@@ -73,7 +75,7 @@ test.describe('User cache merge after org PATCH (@cicd)', () => {
     //    those fields.
     await visitAndWaitForHydration(page, `/organizations/${orgPk}`);
     await page.locator('[data-testid="org-tab-users"]').click();
-    const card = page.locator(`[data-testid="usercard-${targetUsername}"]`);
+    const card = page.locator(`[data-testid="usercard-${TARGET_USERNAME}"]`);
     await expect(card).toBeVisible({ timeout: 10000 });
     await openEditModal(page, card);
     await fillEditField(page, 'nickname', `MergeTest-${Date.now()}`);
@@ -84,7 +86,7 @@ test.describe('User cache merge after org PATCH (@cicd)', () => {
     //    rather than replacing it.
     await visitAndWaitForHydration(page, `/user/${targetUserPk}`);
     await expect(
-      page.getByText(targetUsername, { exact: true }).first(),
+      page.getByText(TARGET_USERNAME, { exact: true }).first(),
     ).toBeVisible({ timeout: 5000 });
   });
 });

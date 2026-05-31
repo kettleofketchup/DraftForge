@@ -53,25 +53,23 @@ test.describe('Edit User on Tournament Page (@cicd)', () => {
     await loginAdmin();
   });
 
+  // Dedicated user — see USER_EDIT_USERS in backend/tests/data/users.py.
+  const TARGET_USERNAME = 'edit_user_tournament';
+
   test('@cicd smoke: edit user nickname via tournament player card', async ({ page }) => {
     await visitAndWaitForHydration(page, `/tournament/${tournamentPk}`);
     await expect(page.locator('[data-testid="tournamentDetailPage"]')).toBeVisible({ timeout: 15000 });
 
-    // Players tab is the default — wait for user cards
-    const firstUserCard = page.locator('[data-testid^="usercard-"]').first();
-    await expect(firstUserCard).toBeVisible({ timeout: 10000 });
+    const targetCard = page.locator(`[data-testid="usercard-${TARGET_USERNAME}"]`);
+    await expect(targetCard).toBeVisible({ timeout: 10000 });
 
-    // Open edit modal and read original nickname
-    await openEditModal(page, firstUserCard);
+    await openEditModal(page, targetCard);
     const originalNickname = await readEditField(page, 'nickname');
     const newNickname = originalNickname === 'TestNick' ? 'TestNickAlt' : 'TestNick';
 
     await fillEditField(page, 'nickname', newNickname);
-    // saveEditModal waits for PATCH 200 and closes the dialog
     await saveEditModal(page);
 
-    // Restore original value
-    const userCardAfter = page.locator('[data-testid^="usercard-"]').first();
-    await restoreUserField(page, userCardAfter, 'nickname', originalNickname);
+    await restoreUserField(page, targetCard, 'nickname', originalNickname);
   });
 });
