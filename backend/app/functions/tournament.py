@@ -220,7 +220,7 @@ def create_team_from_captain(request):
     except Draft.DoesNotExist:
         pass  # No draft exists, continue
     if Team.objects.filter(tournament=tournament, captain=user).exists():
-        if draft_order is 0:
+        if draft_order == 0:
             logging.debug(
                 "User is already a captain in this tournament with a draft order"
             )
