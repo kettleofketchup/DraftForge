@@ -172,6 +172,93 @@ await page.getByText('Events Test League').click();
 2. Use naming convention: `{feature}-{element}-{qualifier}` (e.g., `event-league-select`, `event-frequency-option-weekly`)
 3. For dynamic list items: `{feature}-{element}-{id}` (e.g., `event-league-option-7`, `event-day-option-3`)
 
+### Per-row testids for mutable lists
+
+**Every row in a list that the test may mutate MUST carry a unique
+`{feature}-{entity}-${id}` testid, and every action button inside the
+row gets its own `{action}-{entity}-${id}` testid.**
+
+Without this, specs end up doing `page.locator('[data-testid^="X-"]').first()`
+and racing on whichever row is at index 0. Two specs running in parallel
+on the same fixture mutate the same record. One verifies its own write
+and sees the other spec's value → "element not found" flake.
+
+Example (`frontend/app/routes/event.tsx` — signup admin actions):
+
+```tsx
+{signups.map((signup) => (
+  <UserEventStrip
+    data-testid={`event-signup-row-${signup.id}`}     // per-row container
+    actionSlot={
+      <>
+        <SecondaryButton
+          data-testid={`approve-signup-${signup.id}`}  // per-row action
+          onClick={() => setApprovalSignup(signup)}
+        >Approve</SecondaryButton>
+        <DestructiveButton
+          data-testid={`waitlist-signup-${signup.id}`} // per-row action
+          onClick={() => signupActions.demote.mutate(signup.id)}
+        >Waitlist</DestructiveButton>
+      </>
+    }
+  />
+))}
+```
+
+Spec consumes it by capturing the id from the API setup response, not
+by selecting on order:
+
+```typescript
+const rsvpResp = await postWithCsrf(context, `${API_URL}/events/${event.id}/signup/`, {
+  intent: 'rsvp',
+});
+const signup = await rsvpResp.json();          // ← capture id from setup
+
+await page.getByTestId(`event-tab-signups`).click();
+await expect(page.getByTestId(`event-signup-row-${signup.id}`)).toBeVisible();
+await page.getByTestId(`approve-signup-${signup.id}`).click();   // never .first()
+```
+
+### Anti-pattern: `.first()` / `.nth()` on mutable selectors
+
+`.first()` on a card/row/button locator is a code smell anywhere the
+selected element is going to be **mutated**. It also breaks silently
+when feature isolation later adds more rows to the same fixture — the
+test starts checking a different record without complaining.
+
+```typescript
+// WRONG — races with every other spec editing the same org
+const firstCard = page.locator('[data-testid^="usercard-"]').first();
+await openEditModal(page, firstCard);
+await fillEditField(page, 'nickname', 'TestNick');
+
+// CORRECT — dedicated user, scoped assertion
+const card = page.locator(`[data-testid="usercard-${TARGET_USERNAME}"]`);
+await openEditModal(page, card);
+await fillEditField(page, 'nickname', 'TestNick');
+await expect(card.getByText('TestNick').first()).toBeVisible();
+//                          ↑ first() OK here — scoped to one card
+```
+
+`.first()` is fine when it's truly the only element that could match
+(a singleton dropzone label, a single navigation link, a tab) — visibility
+assertions inside an already-scoped row, single-element-in-DOM filters.
+
+### Audit grep — find rule violations quickly
+
+```bash
+# Specs that mutate AND pick a card/row by .first() or .nth() — race candidates
+find frontend/tests/playwright/e2e -name "*.spec.ts" | while read f; do
+  if grep -qE "saveEditModal|fillEditField|\"Save Changes\"|patchWithCsrf|postWithCsrf" "$f"; then
+    grep -nE "\.(first|nth)\([0-9]*\)" "$f" | grep -ivE "// |page\.getByText"
+  fi
+done
+
+# Interaction via text/role instead of data-testid
+grep -rnE "getByText\([^)]+\)\.click\(\)|getByRole\(['\"](combobox|textbox|checkbox|radio)['\"]" \
+  frontend/tests/playwright/e2e/
+```
+
 ## CSRF Token Handling
 
 DRF's `SessionAuthentication` enforces CSRF on POST/PATCH/DELETE requests. Use the CSRF helpers from event fixtures:
