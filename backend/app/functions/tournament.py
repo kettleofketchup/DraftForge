@@ -1,5 +1,4 @@
 import json
-import logging
 
 import requests
 from django.contrib.auth import login
@@ -101,8 +100,13 @@ def pick_player_for_round(request):
 
     if not (is_tournament_staff or is_captain_for_round):
         log.warning(
-            f"User {request.user.username} attempted to pick for round {draft_round_pk} "
-            f"but is not tournament staff or captain (captain is {draft_round.captain.username})"
+            "pick_unauthorized",
+            system="tournament",
+            subsystem="draft",
+            user_id=request.user.pk,
+            username=request.user.username,
+            draft_round_id=draft_round_pk,
+            captain_username=draft_round.captain.username,
         )
         return Response(
             {
@@ -120,8 +124,12 @@ def pick_player_for_round(request):
     try:
         draft_round.pick_player(user)
     except Exception as e:
-        logging.error(
-            f"Error picking player for draft round {draft_round_pk}: {str(e)}"
+        log.error(
+            "pick_failed",
+            system="tournament",
+            subsystem="draft",
+            draft_round_id=draft_round_pk,
+            error=str(e),
         )
         return Response({"error": f"Failed to pick player. {str(e)}"}, status=500)
 
@@ -299,10 +307,20 @@ def generate_draft_rounds(request):
     try:
         draft = tournament.draft
     except Draft.DoesNotExist:
-        log.debug(f"Draft doesn't exist for {tournament.pk}, creating new one")
+        log.debug(
+            "draft_created",
+            system="tournament",
+            subsystem="draft",
+            tournament_id=tournament.pk,
+        )
         draft = Draft.objects.create(tournament=tournament)
 
-    logging.debug(f"Initialization draft for tournament {tournament.name}")
+    log.debug(
+        "draft_initializing",
+        system="tournament",
+        subsystem="draft",
+        tournament_id=tournament.pk,
+    )
 
     # Remove all existing teams — draft init starts fresh.
     # Save captain info so we can recreate valid teams.
@@ -387,10 +405,20 @@ def rebuild_team(request):
     try:
         draft = tournament.draft
         if not draft:
-            logging.debug(f"Draft doesn't exist for {tournament.pk}, creating new one")
+            log.debug(
+                "draft_created",
+                system="tournament",
+                subsystem="draft",
+                tournament_id=tournament.pk,
+            )
             draft = Draft.objects.create(tournament=tournament)
     except Draft.DoesNotExist:
-        logging.debug(f"Draft doesn't exist for {tournament.pk}, creating new one")
+        log.debug(
+            "draft_created",
+            system="tournament",
+            subsystem="draft",
+            tournament_id=tournament.pk,
+        )
         draft = Draft.objects.create(tournament=tournament)
 
     # Validate: tournament must have captains assigned to teams
@@ -410,16 +438,33 @@ def rebuild_team(request):
 
     # Build rounds if they don't exist
     if will_build_rounds:
-        logging.debug("Draft rounds do not exist, building them now")
+        log.debug(
+            "draft_rounds_building",
+            system="tournament",
+            subsystem="draft",
+            tournament_id=tournament.pk,
+            draft_id=draft.pk,
+        )
         draft.build_rounds()
     else:
-        logging.debug(f"Draft already exists for tournament {tournament.name}")
+        log.debug(
+            "draft_rounds_exist",
+            system="tournament",
+            subsystem="draft",
+            tournament_id=tournament.pk,
+            draft_id=draft.pk,
+        )
 
     draft.save()
     tournament.draft = draft
     tournament = Tournament.objects.get(pk=tournament_pk)
     data = _serialize_tournament(tournament)
-    log.debug(data)
+    log.debug(
+        "tournament_rebuilt",
+        system="tournament",
+        subsystem="draft",
+        tournament_id=tournament.pk,
+    )
 
     # Invalidate specific objects after rebuilding teams
     invalidate_obj(draft)
@@ -536,7 +581,14 @@ def undo_last_pick(request):
     team = last_round_with_choice.team
 
     log.info(
-        f"Undoing pick: {player.username} from team {team.name if team else 'unknown'}"
+        "pick_undone",
+        system="tournament",
+        subsystem="draft",
+        draft_id=draft.pk,
+        player_id=player.pk,
+        player_username=player.username,
+        team_id=team.pk if team else None,
+        team_name=team.name if team else None,
     )
 
     # Remove player from team
