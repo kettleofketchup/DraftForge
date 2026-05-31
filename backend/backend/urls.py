@@ -497,6 +497,11 @@ urlpatterns += [
     ),
 ]
 
+# Internal API — Discord bot signup-flow callbacks (bot → backend HTTP wrappers)
+urlpatterns += [
+    path("api/internal/discord/", include("discordbot.internal_urls")),
+]
+
 # Internal API — Steam sync endpoints
 from steam.views_internal import (
     recalculate_mmr,

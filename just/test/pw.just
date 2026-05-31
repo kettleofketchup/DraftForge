@@ -78,6 +78,10 @@ cicd-mobile *args:
 cicd-herodraft *args:
     {{inv}} test.playwright.cicd-herodraft {{ if args != "" { "--args='" + args + "'" } else { "" } }}
 
+[group('test::pw')]
+cicd-events *args:
+    {{inv}} test.playwright.cicd-events {{ if args != "" { "--args='" + args + "'" } else { "" } }}
+
 # Run the headless suite while streaming backend logs + health probes to
 # frontend/test-results/run-logs/ for diagnosing transient first-attempt
 # timeouts. Combine with playwright's `trace: 'retain-on-failure'` and the

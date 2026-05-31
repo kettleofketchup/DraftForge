@@ -6,22 +6,16 @@ import {
   rejectClaimRequest,
   type ProfileClaimRequest,
 } from '~/components/api/api';
-import { ConfirmButton, CancelButton } from '~/components/ui/buttons';
-import { ConfirmDialog } from '~/components/ui/dialogs/ConfirmDialog';
+import { ConfirmDialog } from '~/components/ui/dialogs';
 import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { Badge } from '~/components/ui/badge';
 import { MobileNavDropdown } from '~/components/ui/mobile-nav-dropdown';
-import {
-  AlertDialog,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '~/components/ui/alert-dialog';
+import { getLogger } from '~/lib/logger';
 import { ClaimCard } from './ClaimCard';
+
+const log = getLogger('ClaimsTab');
 
 interface Props {
   organizationId: number;
@@ -55,7 +49,7 @@ export const ClaimsTab: React.FC<Props> = ({ organizationId }) => {
       setClaims(data);
     } catch (err) {
       setError('Failed to load claim requests');
-      console.error('Error fetching claims:', err);
+      log.error('fetch claims failed', { err });
     } finally {
       setIsLoading(false);
     }
@@ -73,7 +67,7 @@ export const ClaimsTab: React.FC<Props> = ({ organizationId }) => {
       await approveClaimRequest(approvingClaim.id);
       fetchClaims();
     } catch (err) {
-      console.error('Error approving claim:', err);
+      log.error('approve claim failed', { err });
       setError('Failed to approve claim request');
     } finally {
       setIsApproving(false);
@@ -89,7 +83,7 @@ export const ClaimsTab: React.FC<Props> = ({ organizationId }) => {
       await rejectClaimRequest(rejectingClaim.id, rejectionReason);
       fetchClaims();
     } catch (err) {
-      console.error('Error rejecting claim:', err);
+      log.error('reject claim failed', { err });
       setError('Failed to reject claim request');
     } finally {
       setIsRejecting(false);
@@ -188,51 +182,40 @@ export const ClaimsTab: React.FC<Props> = ({ organizationId }) => {
       />
 
       {/* Rejection dialog with reason input */}
-      <AlertDialog
+      <ConfirmDialog
         open={!!rejectingClaim}
         onOpenChange={(open) => !open && setRejectingClaim(null)}
-      >
-        <AlertDialogContent className="bg-red-950/95 border-red-800">
-          <AlertDialogHeader>
-            <AlertDialogTitle>Reject Claim Request</AlertDialogTitle>
-            <AlertDialogDescription className="text-slate-300">
-              Reject the claim request from{' '}
-              <strong>{rejectingClaim?.claimer_username}</strong> for{' '}
-              <strong>
-                {rejectingClaim?.target_nickname ||
-                  `Steam ID ${rejectingClaim?.target_steamid}`}
-              </strong>
-              .
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className="py-4">
-            <Label htmlFor="rejection-reason" className="text-slate-300">
-              Reason (optional)
-            </Label>
+        title="Reject Claim Request"
+        description={
+          <>
+            Reject the claim request from{' '}
+            <strong>{rejectingClaim?.claimer_username}</strong> for{' '}
+            <strong>
+              {rejectingClaim?.target_nickname ||
+                `Steam ID ${rejectingClaim?.target_steamid}`}
+            </strong>
+            .
+          </>
+        }
+        confirmLabel="Reject"
+        variant="destructive"
+        isLoading={isRejecting}
+        onConfirm={handleReject}
+        confirmTestId="confirm-reject-claim"
+        bodyContent={
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="rejection-reason">Reason (optional)</Label>
             <Input
               id="rejection-reason"
               placeholder="Enter a reason for rejection..."
               value={rejectionReason}
               onChange={(e) => setRejectionReason(e.target.value)}
-              className="mt-2"
+              disabled={isRejecting}
               data-testid="rejection-reason-input"
             />
           </div>
-          <AlertDialogFooter className="flex-col-reverse sm:flex-row gap-3">
-            <CancelButton onClick={() => setRejectingClaim(null)} disabled={isRejecting}>
-              Cancel
-            </CancelButton>
-            <ConfirmButton
-              onClick={handleReject}
-              loading={isRejecting}
-              variant="destructive"
-              data-testid="confirm-reject-claim"
-            >
-              Reject
-            </ConfirmButton>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        }
+      />
     </div>
   );
 };

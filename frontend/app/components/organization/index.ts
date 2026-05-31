@@ -2,6 +2,7 @@ export { OrganizationSchema, CreateOrganizationSchema, EditOrganizationSchema } 
 export type { OrganizationType, OrganizationsType, CreateOrganizationInput, EditOrganizationInput } from './schemas';
 export { useOrganizations } from './hooks/useOrganizations';
 export { useOrganization } from './hooks/useOrganization';
+export { DeleteOrganizationDangerZone } from './DeleteOrganizationDangerZone';
 export { OrganizationCard } from './OrganizationCard';
 export { OrganizationPopover } from './OrganizationPopover';
 export { CreateOrganizationModal } from './forms/CreateOrganizationModal';

@@ -26,7 +26,11 @@ const API_URL = 'https://localhost/api';
 
 let eventInfo: EventInfo;
 
-test.describe('Roll Call Flow (@cicd)', () => {
+// Tests in this file share a single `eventInfo` and mutate event state
+// (signups_open → roll_call → finished). With CI's `fullyParallel: true`
+// + `--workers=2`, parallel tests would race on the same event PK and
+// flake the "Start Roll Call" button visibility. Force serial execution.
+test.describe.serial('Roll Call Flow (@cicd)', () => {
   test.beforeAll(async ({ browser }) => {
     const context = await browser.newContext({ ignoreHTTPSErrors: true });
     eventInfo = await getEventsTestData(context);
@@ -82,6 +86,43 @@ test.describe('Roll Call Flow (@cicd)', () => {
 
     // Step 6: Should see the approved player in "Awaiting Confirmation" section
     await expect(page.getByTestId('rollcall-awaiting-section')).toBeVisible();
+  });
+
+  test('removing a confirmed player opens a confirmation dialog', async ({
+    context,
+    page,
+  }) => {
+    await loginEventPlayer(context);
+    const rsvpResp = await postWithCsrf(context, `${API_URL}/events/${eventInfo.pk}/signup/`, { intent: 'rsvp' });
+    expect(rsvpResp.ok()).toBeTruthy();
+
+    await loginEventAdmin(context);
+    const signupsResp = await context.request.get(`${API_URL}/events/signups/?event=${eventInfo.pk}`);
+    const signups = await signupsResp.json();
+    const signup = signups[0];
+    if (signup.status === 'rsvp' || signup.status === 'pending_approval') {
+      const approveResp = await postWithCsrf(context, `${API_URL}/events/signups/${signup.id}/approve/`);
+      expect(approveResp.ok()).toBeTruthy();
+    }
+    const confirmResp = await postWithCsrf(context, `${API_URL}/events/signups/${signup.id}/confirm/`);
+    expect(confirmResp.ok()).toBeTruthy();
+
+    await visitAndWaitForHydration(page, `/events/${eventInfo.pk}`);
+    await page.getByTestId('event-start-rollcall-btn').click();
+    const startConfirm = page.getByRole('alertdialog');
+    await startConfirm.getByRole('button', { name: /start roll call/i }).click();
+    await page.waitForURL(/\/rollcall\//);
+
+    // Confirmed player has the new Remove (cancel) button — verify dialog opens.
+    const removeBtn = page.getByTestId(`rollcall-cancel-btn-${signup.id}`);
+    await expect(removeBtn).toBeVisible();
+    await removeBtn.click();
+    await expect(page.getByTestId('rollcall-cancel-summary')).toBeVisible();
+
+    // Cancel preserves the confirmed state — no API call should fire.
+    await page.getByTestId('rollcall-cancel-dialog-cancel').click();
+    await expect(page.getByTestId('rollcall-cancel-summary')).toHaveCount(0);
+    await expect(page.getByTestId(`rollcall-cancel-btn-${signup.id}`)).toBeVisible();
   });
 
   test('roll call page shows correct state for non-roll-call events', async ({

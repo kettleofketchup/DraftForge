@@ -27,7 +27,14 @@ const USER_EDIT_LEAGUE_NAME = 'User Edit League';
 let orgPk: number;
 let leaguePk: number;
 
-test.describe('Cross-Context Cache Invalidation (@cicd)', () => {
+// Sequential: this spec edits a user on the league page and then asserts
+// the new value is visible on the org page. Any parallel write on the
+// same user would invalidate the read. `.serial` forces tests within this
+// file to run in order; we also share `edit_user_alpha` with spec
+// 07-sequential-multi-user (which is also `.serial`) — see USER_EDIT_USERS.
+const TARGET_USERNAME = 'edit_user_alpha';
+
+test.describe.serial('Cross-Context Cache Invalidation (@cicd)', () => {
   test.beforeAll(async ({ browser }) => {
     const context = await browser.newContext({ ignoreHTTPSErrors: true });
 
@@ -63,10 +70,10 @@ test.describe('Cross-Context Cache Invalidation (@cicd)', () => {
     await expect(usersTab).toBeVisible({ timeout: 5000 });
     await usersTab.click();
 
-    const firstUserCard = page.locator('[data-testid^="usercard-"]').first();
-    await expect(firstUserCard).toBeVisible({ timeout: 10000 });
+    const leagueCard = page.locator(`[data-testid="usercard-${TARGET_USERNAME}"]`);
+    await expect(leagueCard).toBeVisible({ timeout: 10000 });
 
-    await openEditModal(page, firstUserCard);
+    await openEditModal(page, leagueCard);
     const originalNickname = await readEditField(page, 'nickname');
     const crossContextNick = originalNickname === 'CrossCtx' ? 'CrossCtxAlt' : 'CrossCtx';
 
@@ -81,11 +88,11 @@ test.describe('Cross-Context Cache Invalidation (@cicd)', () => {
     await expect(orgUsersTab).toBeVisible({ timeout: 5000 });
     await orgUsersTab.click();
 
-    const orgUserCard = page.locator('[data-testid^="usercard-"]').first();
+    const orgUserCard = page.locator(`[data-testid="usercard-${TARGET_USERNAME}"]`);
     await expect(orgUserCard).toBeVisible({ timeout: 10000 });
 
     // The new nickname should be visible on the org page (cacheops invalidated)
-    await expect(page.getByText(crossContextNick).first()).toBeVisible({ timeout: 10000 });
+    await expect(orgUserCard.getByText(crossContextNick).first()).toBeVisible({ timeout: 10000 });
 
     // 3. Restore original value from the org page
     await restoreUserField(page, orgUserCard, 'nickname', originalNickname);

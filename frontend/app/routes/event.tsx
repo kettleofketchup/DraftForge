@@ -833,6 +833,11 @@ function SignupsTab({
       {signups.map((signup, index) => {
         const user = userMap.get(signup.user);
         const position = signup.waitlist_position ?? index + 1;
+        // "Waitlist" in the UI fires the `demote` mutation on the server —
+        // moving an approved/rsvp signup down to waitlisted is conceptually
+        // a demotion. Named handler so the JSX stays readable and the
+        // semantic gap between button label and mutation name is documented.
+        const handleWaitlist = () => signupActions.demote.mutate(signup.id);
 
         const adminActions = isAdmin ? (
           <div className="flex gap-1">
@@ -841,6 +846,7 @@ function SignupsTab({
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <SecondaryButton color="green" size="sm"
+                      data-testid={`approve-signup-${signup.id}`}
                       onClick={() => setApprovalSignup(signup)}
                       disabled={signupActions.approve.isPending}
                     >
@@ -852,7 +858,9 @@ function SignupsTab({
                 </Tooltip>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <DestructiveButton size="sm" onClick={() => signupActions.demote.mutate(signup.id)} loading={signupActions.demote.isPending} depth={false}>
+                    <DestructiveButton size="sm"
+                      data-testid={`waitlist-signup-${signup.id}`}
+                      onClick={handleWaitlist} loading={signupActions.demote.isPending} depth={false}>
                       <ArrowDownToLine className="h-3.5 w-3.5" />
                       <span className="hidden lg:inline ml-1">Waitlist</span>
                     </DestructiveButton>
@@ -874,7 +882,7 @@ function SignupsTab({
                 </Tooltip>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <DestructiveButton size="sm" onClick={() => signupActions.demote.mutate(signup.id)} loading={signupActions.demote.isPending} depth={false}>
+                    <DestructiveButton size="sm" onClick={handleWaitlist} loading={signupActions.demote.isPending} depth={false}>
                       <ArrowDownToLine className="h-3.5 w-3.5" />
                       <span className="hidden lg:inline ml-1">Waitlist</span>
                     </DestructiveButton>
@@ -898,6 +906,7 @@ function SignupsTab({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <SecondaryButton color="green" size="sm"
+                    data-testid={`approve-signup-${signup.id}`}
                     onClick={() => setApprovalSignup(signup)}
                     disabled={signupActions.approve.isPending}
                   >
@@ -975,6 +984,7 @@ function SignupsTab({
           return (
             <UserEventStrip
               key={signup.id}
+              data-testid={`event-signup-row-${signup.id}`}
               user={user}
               dotaProfile={stripProfile}
               contextSlot={statusSlot}

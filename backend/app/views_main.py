@@ -49,6 +49,7 @@ from .permissions_org import (
     IsLeagueAdmin,
     IsLeagueStaff,
     IsOrgAdmin,
+    IsOrgOwner,
     can_edit_tournament,
     can_manage_game,
     has_league_admin_access,
@@ -1085,7 +1086,7 @@ class OrganizationView(viewsets.ModelViewSet):
 
     def get_permissions(self):
         if self.action == "destroy":
-            self.permission_classes = [IsAdminUser]
+            self.permission_classes = [IsOrgOwner]
         elif self.action == "create":
             self.permission_classes = [IsAuthenticated]
         elif self.action in ["update", "partial_update"]:

@@ -1,18 +1,8 @@
-import { useEffect, type FormEvent } from 'react';
+import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from '~/components/ui/alert-dialog';
+import { ConfirmDialog } from '~/components/ui/dialogs';
 import { Button } from '~/components/ui/button';
-import { CancelButton, ConfirmButton, PrimaryButton, brandSuccessBg } from '~/components/ui/buttons';
+import { PrimaryButton } from '~/components/ui/buttons';
 import { AdminOnlyButton } from '~/components/reusable/adminButton';
 import { buildDiscordLoginUrl } from '~/components/navbar/login';
 import type { UserType } from '~/index';
@@ -39,6 +29,8 @@ export const ChoosePlayerButton: React.FC<{
   const autoRefreshDraft = useUserStore((state) => state.autoRefreshDraft);
   const location = useLocation();
 
+  const [showConfirm, setShowConfirm] = useState(false);
+
   // Check if current user is logged in
   const isLoggedIn = currentUser?.pk != null;
 
@@ -58,7 +50,7 @@ export const ChoosePlayerButton: React.FC<{
 
   useEffect(() => {}, [tournament.draft, tournament.teams]);
 
-  const handleChange = async (e: FormEvent) => {
+  const handleChange = async () => {
     log.debug('ChoosePlayerButton: Tournament', {
       tournament,
     });
@@ -140,27 +132,24 @@ export const ChoosePlayerButton: React.FC<{
 
   return (
     <div data-testid="available-player">
-      <AlertDialog>
-        <AlertDialogTrigger asChild>
-          <PrimaryButton size="sm" className="text-xs px-2" data-testid="pickPlayerButton">Pick</PrimaryButton>
-        </AlertDialogTrigger>
-        <AlertDialogContent className={`bg-green-900 ${brandSuccessBg}`}>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Choose player {DisplayName(user)}</AlertDialogTitle>
-            <AlertDialogDescription className="text-green-100">
-              This will add {DisplayName(user)} to your team.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel asChild>
-              <CancelButton>Cancel</CancelButton>
-            </AlertDialogCancel>
-            <AlertDialogAction asChild onClick={handleChange}>
-              <ConfirmButton data-testid="confirmPickButton">Confirm Pick</ConfirmButton>
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <PrimaryButton
+        size="sm"
+        className="text-xs px-2"
+        data-testid="pickPlayerButton"
+        onClick={() => setShowConfirm(true)}
+      >
+        Pick
+      </PrimaryButton>
+      <ConfirmDialog
+        open={showConfirm}
+        onOpenChange={setShowConfirm}
+        title={`Choose player ${DisplayName(user)}`}
+        description={`This will add ${DisplayName(user)} to your team.`}
+        confirmLabel="Confirm Pick"
+        variant="default"
+        onConfirm={handleChange}
+        confirmTestId="confirmPickButton"
+      />
     </div>
   );
 };

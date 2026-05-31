@@ -4,37 +4,61 @@ import logging
 import sys
 
 import discord
+from asgiref.sync import sync_to_async
 from discord import app_commands
 from django.conf import settings
+
+from discordbot.components import (
+    DeclineButton,
+    NotifyButton,
+    SignupButton,
+    TentativeButton,
+)
+from discordbot.internal_client.bot_actions import (
+    check_site_admin,
+    create_legacy_event,
+    reaction_cancel,
+    reaction_signup,
+    remove_legacy_rsvp,
+    set_legacy_rsvp,
+)
+from discordbot.internal_client.signup_actions import set_position
 
 log = logging.getLogger(__name__)
 
 
 def is_site_admin():
-    """Check if user is an admin in the Django database by discordId."""
+    """Check if user is an admin via the internal API.
+
+    The bot has no DB mount in production, so this MUST go over HTTP. The
+    backend distinguishes "not linked" (no CustomUser row) from "not staff"
+    so we can preserve the original CheckFailure messaging.
+    """
 
     async def predicate(interaction: discord.Interaction) -> bool:
-        from app.models import CustomUser
-
-        discord_id = str(interaction.user.id)
-        try:
-            user = CustomUser.objects.get(discordId=discord_id)
-            if user.is_staff:
-                return True
-            raise app_commands.CheckFailure("You are not a site admin.")
-        except CustomUser.DoesNotExist:
+        result = await sync_to_async(check_site_admin, thread_sensitive=False)(
+            discord_user_id=str(interaction.user.id),
+        )
+        if result.get("error"):
+            raise app_commands.CheckFailure(
+                "Admin check unavailable; please try again later."
+            )
+        if not result.get("is_linked"):
             raise app_commands.CheckFailure(
                 "Your Discord account is not linked to the site."
             )
+        if not result.get("is_admin"):
+            raise app_commands.CheckFailure("You are not a site admin.")
+        return True
 
     return app_commands.check(predicate)
 
 
 # Emoji mappings for RSVP
 RSVP_EMOJIS = {
-    "\u2705": "yes",  # checkmark
-    "\u2753": "maybe",  # question mark
-    "\u274c": "no",  # x mark
+    "✅": "yes",  # checkmark
+    "❓": "maybe",  # question mark
+    "❌": "no",  # x mark
 }
 
 
@@ -72,15 +96,13 @@ class KettleBot(discord.Client):
         emoji = str(payload.emoji)
 
         # New events system: ✅ = signup, ❌ = cancel
-        if emoji == "\u2705":
-            from asgiref.sync import sync_to_async
-
-            from events.discord import handle_reaction_signup
-
-            success, detail = await sync_to_async(handle_reaction_signup)(
-                str(payload.message_id), str(payload.user_id)
+        if emoji == "✅":
+            result = await sync_to_async(reaction_signup, thread_sensitive=False)(
+                discord_message_id=str(payload.message_id),
+                discord_user_id=str(payload.user_id),
             )
-            if success:
+            detail = result.get("detail") or ""
+            if result.get("success"):
                 log.info(
                     f"Event signup via reaction: user={payload.user_id} detail={detail}"
                 )
@@ -93,15 +115,13 @@ class KettleBot(discord.Client):
                 return
             # Fall through to old ScheduledEvent RSVP system
 
-        if emoji == "\u274c":
-            from asgiref.sync import sync_to_async
-
-            from events.discord import handle_reaction_cancel
-
-            success, detail = await sync_to_async(handle_reaction_cancel)(
-                str(payload.message_id), str(payload.user_id)
+        if emoji == "❌":
+            result = await sync_to_async(reaction_cancel, thread_sensitive=False)(
+                discord_message_id=str(payload.message_id),
+                discord_user_id=str(payload.user_id),
             )
-            if success:
+            detail = result.get("detail") or ""
+            if result.get("success"):
                 log.info(f"Event cancel via reaction: user={payload.user_id}")
                 return
             elif detail != "not_event_message":
@@ -121,15 +141,13 @@ class KettleBot(discord.Client):
         emoji = str(payload.emoji)
 
         # New events system: removing ✅ = cancel signup
-        if emoji == "\u2705":
-            from asgiref.sync import sync_to_async
-
-            from events.discord import handle_reaction_cancel
-
-            success, detail = await sync_to_async(handle_reaction_cancel)(
-                str(payload.message_id), str(payload.user_id)
+        if emoji == "✅":
+            result = await sync_to_async(reaction_cancel, thread_sensitive=False)(
+                discord_message_id=str(payload.message_id),
+                discord_user_id=str(payload.user_id),
             )
-            if success:
+            detail = result.get("detail") or ""
+            if result.get("success"):
                 log.info(f"Event cancel via reaction remove: user={payload.user_id}")
                 return
             elif detail != "not_event_message":
@@ -148,241 +166,78 @@ class KettleBot(discord.Client):
         if interaction.type == discord.InteractionType.component:
             if custom_id.startswith("event_signup:"):
                 event_id = int(custom_id.split(":")[1])
-                from discordbot.components import SignupButton
-
                 button = SignupButton(event_id)
                 await button.callback(interaction)
             elif custom_id.startswith("event_tentative:"):
                 event_id = int(custom_id.split(":")[1])
-                from discordbot.components import TentativeButton
-
                 button = TentativeButton(event_id)
                 await button.callback(interaction)
             elif custom_id.startswith("event_decline:"):
                 event_id = int(custom_id.split(":")[1])
-                from discordbot.components import DeclineButton
-
                 button = DeclineButton(event_id)
                 await button.callback(interaction)
             elif custom_id.startswith("event_notify:"):
                 event_id = int(custom_id.split(":")[1])
-                from discordbot.components import NotifyButton
-
                 button = NotifyButton(event_id)
                 await button.callback(interaction)
+            # Dynamic-view components (pos_confirm, rank_status, rank_star,
+            # bcup_tier, screenshot_upload) are dispatched by discord.py's
+            # stored-View system — each has an overridden ``callback`` in
+            # components.py that runs the canonical handler. Routing them
+            # here too caused a 40060 race: HTTP to internal_client takes
+            # ~200ms, plenty of time for the View dispatch to ACK first.
+            # pos_select_ stays here because the bare ui.Select has no
+            # overridden callback (discord.py's default is a no-op).
             elif custom_id.startswith("pos_select_"):
-                # Save position immediately on selection
+                if interaction.response.is_done():
+                    return
                 event_id = int(custom_id.split(":")[1])
-                pos_number = custom_id.split(":")[0].replace(
-                    "pos_select_", ""
-                )  # "1", "2", or "3"
                 selected = interaction.data.get("values", [])
                 if selected:
-                    from asgiref.sync import sync_to_async
-
-                    from events.discord import _get_org_user
-                    from events.models import Event
-
-                    event = await sync_to_async(
-                        Event.objects.select_related("organization").get
-                    )(pk=event_id)
-                    org_user, _ = await sync_to_async(_get_org_user)(
-                        event, str(interaction.user.id)
-                    )
-                    if org_user:
-                        from app.cache_utils import invalidate_obj
-
-                        from org.models_profiles import PlayerDotaProfile
-
-                        profile = await sync_to_async(
-                            lambda: PlayerDotaProfile.objects.get_or_create(
-                                org_user=org_user
-                            )[0]
-                        )()
-                        pos_val = selected[0]
-                        # Set the selected position
-                        if pos_val == "1":
-                            profile.pos_1 = True
-                        if pos_val == "2":
-                            profile.pos_2 = True
-                        if pos_val == "3":
-                            profile.pos_3 = True
-                        if pos_val == "4":
-                            profile.pos_4 = True
-                        if pos_val == "5":
-                            profile.pos_5 = True
-                        await sync_to_async(profile.save)()
-                        await sync_to_async(invalidate_obj)(profile)
-                await interaction.response.defer()
-            elif custom_id.startswith("pos_confirm:"):
-                event_id = int(custom_id.split(":")[1])
-                from asgiref.sync import sync_to_async
-
-                from events.discord import _get_org_user
-                from events.models import Event
-
-                event = await sync_to_async(
-                    Event.objects.select_related("organization").get
-                )(pk=event_id)
-                org_user, _ = await sync_to_async(_get_org_user)(
-                    event, str(interaction.user.id)
-                )
-                if org_user:
-                    from org.models_profiles import PlayerDotaProfile
-
-                    profile = await sync_to_async(
-                        lambda: PlayerDotaProfile.objects.get_or_create(
-                            org_user=org_user
-                        )[0]
-                    )()
-                    rank_status = profile.rank_status or "never"
-                    require_screenshot = (
-                        event.discord_require_rank_screenshot
-                        if rank_status == "active"
-                        else (
-                            event.discord_require_battlecup_screenshot
-                            if rank_status == "never"
-                            else False
-                        )
-                    )
-                    from discordbot.components import RankDetailsView
-
-                    view = RankDetailsView(
-                        event_id,
-                        rank_status,
-                        require_screenshot=require_screenshot,
-                        min_mmr=event.min_mmr,
-                    )
-                    labels = {
-                        "active": "\U0001f3c5 **Now select your rank:**",
-                        "previous": "\U0001f4dd **Now select your previous rank:**",
-                        "never": "\U0001f4dd **Now select your Battle Cup tier:**",
-                    }
-                    await interaction.response.edit_message(
-                        content=labels.get(rank_status, labels["never"]), view=view
-                    )
-                else:
-                    await interaction.response.send_message(
-                        "\u274c User not found.", ephemeral=True
-                    )
-            elif custom_id.startswith("rank_star:"):
-                # custom_id format: rank_star:{event_id}:{medal}
-                parts = custom_id.split(":")
-                event_id = int(parts[1])
-                medal = parts[2] if len(parts) > 2 else "Herald"
-
-                from asgiref.sync import sync_to_async
-
-                from events.discord import handle_rank_medal_select
-
-                star_values = interaction.data.get("values", [])
-                star = star_values[0] if star_values else "1"
-                medal_with_star = (
-                    f"{medal} {star}" if medal != "Immortal" else "Immortal"
-                )
-
-                result = await sync_to_async(handle_rank_medal_select)(
-                    event_id=event_id,
-                    discord_user_id=str(interaction.user.id),
-                    medal=medal_with_star,
-                )
-
-                if result.get("action") == "needs_screenshot":
-                    from discordbot.components import ScreenshotUploadPromptView
-
-                    view = ScreenshotUploadPromptView(
-                        event_id, result["screenshot_type"]
-                    )
-                    await interaction.response.edit_message(
-                        content=(
-                            f"\U0001f3c5 Rank set to **{medal_with_star}**\n\n"
-                            "\U0001f4f7 **Upload your screenshot to complete your signup.**\n"
-                            "Press the button below to upload \u2192"
-                        ),
-                        view=view,
-                    )
-                elif result.get("action") == "error":
-                    await interaction.response.edit_message(
-                        content=f"\u274c {result['message']}",
-                        view=None,
-                    )
-                else:
-                    await interaction.response.edit_message(
-                        content=f"\u2705 Rank set to **{medal_with_star}**. You're signed up! Status: **{result.get('status', 'pending')}**",
-                        view=None,
-                    )
-            elif custom_id.startswith("rank_status:"):
-                event_id = int(custom_id.split(":")[1])
-                from discordbot.components import RankStatusSelect
-
-                select = RankStatusSelect(event_id)
-                select._values = interaction.data.get("values", [])
-                await select.callback(interaction)
-            elif custom_id.startswith("bcup_tier:"):
-                event_id = int(custom_id.split(":")[1])
-                from discordbot.components import BattleCupTierSelect
-
-                select = BattleCupTierSelect(event_id)
-                select._values = interaction.data.get("values", [])
-                await select.callback(interaction)
-            elif custom_id.startswith("screenshot_upload:"):
-                # Handled by discord.py view system (ScreenshotUploadPromptView)
-                # Only handle as fallback if view timed out / bot restarted
-                if not interaction.response.is_done():
                     try:
-                        parts = custom_id.split(":")
-                        event_id = int(parts[1])
-                        screenshot_type = parts[2]
-                        from discordbot.components import ScreenshotUploadButton
-
-                        button = ScreenshotUploadButton(event_id, screenshot_type)
-                        await button.callback(interaction)
-                    except discord.errors.HTTPException:
-                        pass  # View already handled it
+                        pos_int = int(selected[0])
+                    except (TypeError, ValueError):
+                        pos_int = 0
+                    if pos_int in (1, 2, 3, 4, 5):
+                        await sync_to_async(set_position, thread_sensitive=False)(
+                            event_id=event_id,
+                            discord_user_id=str(interaction.user.id),
+                            position=pos_int,
+                        )
+                await interaction.response.defer()
         # Modal submissions are auto-dispatched by discord.py to Modal.on_submit
 
-    async def _handle_rsvp(self, payload, status):
-        """Create or update RSVP record."""
-        # Import here to avoid circular imports
-        from discordbot.models import RSVP, ScheduledEvent
-
-        try:
-            event = ScheduledEvent.objects.get(
-                discord_message_id=str(payload.message_id)
-            )
-        except ScheduledEvent.DoesNotExist:
-            return  # Not an event message
-
-        # Get user info
+    async def _handle_rsvp(
+        self, payload: discord.RawReactionActionEvent, status: str
+    ) -> None:
+        """Create/update an RSVP record for a legacy ScheduledEvent."""
         guild = self.get_guild(payload.guild_id)
         member = guild.get_member(payload.user_id) if guild else None
         username = member.display_name if member else f"User {payload.user_id}"
 
-        RSVP.objects.update_or_create(
-            scheduled_event=event,
+        result = await sync_to_async(set_legacy_rsvp, thread_sensitive=False)(
+            discord_message_id=str(payload.message_id),
             discord_user_id=str(payload.user_id),
-            defaults={
-                "discord_username": username,
-                "status": status,
-            },
+            status=status,
+            discord_username=username,
         )
-        log.info(f"RSVP: {username} marked {status} for {event.template.name}")
-
-    async def _remove_rsvp(self, payload):
-        """Remove RSVP record."""
-        from discordbot.models import RSVP, ScheduledEvent
-
-        try:
-            event = ScheduledEvent.objects.get(
-                discord_message_id=str(payload.message_id)
+        if result.get("success"):
+            log.info(
+                f"RSVP: {username} marked {status} for {result.get('event_name')}"
             )
-            RSVP.objects.filter(
-                scheduled_event=event,
-                discord_user_id=str(payload.user_id),
-            ).delete()
-            log.info(f"RSVP removed: user {payload.user_id} for {event.template.name}")
-        except ScheduledEvent.DoesNotExist:
-            pass
+
+    async def _remove_rsvp(
+        self, payload: discord.RawReactionActionEvent
+    ) -> None:
+        """Remove a legacy ScheduledEvent RSVP record."""
+        result = await sync_to_async(remove_legacy_rsvp, thread_sensitive=False)(
+            discord_message_id=str(payload.message_id),
+            discord_user_id=str(payload.user_id),
+        )
+        if result.get("success"):
+            log.info(
+                f"RSVP removed: user {payload.user_id} for {result.get('event_name')}"
+            )
 
 
 # Create bot instance
@@ -411,27 +266,17 @@ async def event_command(
     description: str,
 ):
     """Admin command to create event from Discord."""
-    from django.utils import timezone
-
-    from discordbot.models import EventTemplate, ScheduledEvent
-
-    # Create a one-time event template
-    template = EventTemplate.objects.create(
+    result = await sync_to_async(create_legacy_event, thread_sensitive=False)(
         name=name,
-        template_type="announcement",
-        title=name,
         description=description,
-        color="#5865F2",
         channel_id=str(interaction.channel_id),
-        include_rsvp=True,
     )
-
-    # Create scheduled event (post immediately)
-    event = ScheduledEvent.objects.create(
-        template=template,
-        next_post_at=timezone.now(),
-        is_recurring=False,
-    )
+    if not result.get("success"):
+        await interaction.response.send_message(
+            f"Failed to create event: {result.get('error') or 'unknown error'}",
+            ephemeral=True,
+        )
+        return
 
     await interaction.response.send_message(
         f"Event '{name}' created! It will be posted shortly.", ephemeral=True

@@ -26,16 +26,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "~/components/ui/tooltip";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "~/components/ui/alert-dialog";
+import { ConfirmDialog } from "~/components/ui/dialogs";
 
 /** Shows which captain is currently choosing, with their avatar */
 function WaitingForCaptain({
@@ -849,65 +840,51 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
       )}
 
       {/* Confirm pick dialog */}
-      <AlertDialog
+      <ConfirmDialog
         open={confirmHeroId !== null}
-        onOpenChange={() => {
-          setConfirmHeroId(null);
-          setSelectedHeroId(null);
+        onOpenChange={(open) => {
+          if (!open) {
+            setConfirmHeroId(null);
+            setSelectedHeroId(null);
+          }
         }}
-      >
-        <AlertDialogContent data-testid="herodraft-confirm-dialog">
-          <AlertDialogHeader>
-            <AlertDialogTitle data-testid="herodraft-confirm-title">
-              {currentAction === "ban" ? "Ban" : "Pick"} this hero?
-            </AlertDialogTitle>
-            <AlertDialogDescription data-testid="herodraft-confirm-description">
-              Are you sure you want to {currentAction} this hero?
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isSubmitting} data-testid="herodraft-confirm-cancel">Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleConfirmPick} disabled={isSubmitting} data-testid="herodraft-confirm-submit">
-              {isSubmitting
-                ? "Submitting..."
-                : `Confirm ${currentAction === "ban" ? "Ban" : "Pick"}`}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        title={`${currentAction === "ban" ? "Ban" : "Pick"} this hero?`}
+        description={`Are you sure you want to ${currentAction} this hero?`}
+        confirmLabel={`Confirm ${currentAction === "ban" ? "Ban" : "Pick"}`}
+        variant="default"
+        isLoading={isSubmitting}
+        onConfirm={handleConfirmPick}
+        contentTestId="herodraft-confirm-dialog"
+        titleTestId="herodraft-confirm-title"
+        descriptionTestId="herodraft-confirm-description"
+        cancelTestId="herodraft-confirm-cancel"
+        confirmTestId="herodraft-confirm-submit"
+      />
 
       {/* Confirm choice dialog (for pick order / side selection) */}
-      <AlertDialog
+      <ConfirmDialog
         open={pendingChoice !== null}
-        onOpenChange={() => setPendingChoice(null)}
-      >
-        <AlertDialogContent data-testid="herodraft-confirm-choice-dialog">
-          <AlertDialogHeader>
-            <AlertDialogTitle data-testid="herodraft-confirm-choice-title">
-              Confirm your choice
-            </AlertDialogTitle>
-            <AlertDialogDescription data-testid="herodraft-confirm-choice-description">
-              Are you sure you want to choose{" "}
-              <span className="font-semibold text-white">
-                {pendingChoice ? getChoiceLabel(pendingChoice.type, pendingChoice.value) : ""}
-              </span>
-              ? This choice cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isSubmitting} data-testid="herodraft-confirm-choice-cancel">
-              Cancel
-            </AlertDialogCancel>
-            <AlertDialogAction
-              onClick={confirmPendingChoice}
-              disabled={isSubmitting}
-              data-testid="herodraft-confirm-choice-submit"
-            >
-              {isSubmitting ? "Submitting..." : "Confirm"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        onOpenChange={(open) => { if (!open) setPendingChoice(null); }}
+        title="Confirm your choice"
+        description={
+          <>
+            Are you sure you want to choose{" "}
+            <span className="font-semibold text-white">
+              {pendingChoice ? getChoiceLabel(pendingChoice.type, pendingChoice.value) : ""}
+            </span>
+            ? This choice cannot be undone.
+          </>
+        }
+        confirmLabel="Confirm"
+        variant="default"
+        isLoading={isSubmitting}
+        onConfirm={confirmPendingChoice}
+        contentTestId="herodraft-confirm-choice-dialog"
+        titleTestId="herodraft-confirm-choice-title"
+        descriptionTestId="herodraft-confirm-choice-description"
+        cancelTestId="herodraft-confirm-choice-cancel"
+        confirmTestId="herodraft-confirm-choice-submit"
+      />
     </>
   );
 }

@@ -13,6 +13,13 @@
       "pattern": "^docker compose.*down",
       "just_command": "just test::down",
       "reason": "project-standard compose config"
+    },
+    {
+      "category": "docker",
+      "enabled": true,
+      "pattern": "^docker compose.*run.*manage.py test",
+      "just_command": "just test::run",
+      "reason": "test::run bypasses daphne entrypoint for backend tests"
     }
   ]
 }

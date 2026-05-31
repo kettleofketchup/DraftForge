@@ -46,6 +46,7 @@ export function RankStatusRadioGroup({
                 return (
                   <label
                     key={o.value}
+                    data-testid={`signup-rank-status-${o.value}`}
                     className={cn(
                       // ring-inset keeps the highlight inside the card's box —
                       // the modal body scrolls (overflow-y-auto) and an outside

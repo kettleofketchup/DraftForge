@@ -294,6 +294,11 @@ def get_discord_event_state(request, event_id):
         result["signup_message_id"] = signup_msg.message_id
         result["signup_channel_id"] = signup_msg.channel_id
         result["signup_thread_id"] = signup_msg.thread_id
+        # "text" | "forum" — drives explicit edit routing in
+        # events.tasks._send_signup_update_impl. Legacy rows may have ""
+        # (unset); workers fall back to a thread_id-vs-channel_id heuristic
+        # in that case and emit a `legacy_channel_type` warning.
+        result["signup_channel_type"] = signup_msg.channel_type or None
 
     return Response(result)
 
@@ -851,12 +856,18 @@ def get_tournament_for_task(request, tournament_id):
 @authentication_classes(_auth)
 @permission_classes(_perm)
 def get_tournament_participants(request, tournament_id):
-    """Get tournament participants with Discord IDs (for DM sending)."""
+    """Get tournament participants with Discord IDs (for DM sending).
+
+    Returns the full tournament membership pool (``Tournament.users``) —
+    captains and undrafted participants alike. A roster-based query
+    (``Team.members``) would miss the undrafted pool: at draft-start time
+    only captains have been seeded onto team rosters.
+    """
     from app.models import CustomUser
 
     users = (
         CustomUser.objects.filter(
-            teams_as_member__tournament_id=tournament_id,
+            tournaments=tournament_id,
             discordId__isnull=False,
         )
         .exclude(discordId="")

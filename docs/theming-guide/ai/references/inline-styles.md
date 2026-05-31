@@ -14,25 +14,18 @@ DraftForge's brand is enforced through semantic tokens (`bg-primary`, `bg-base-9
 <div className="bg-base-950 p-4">
 ```
 
-Inline `style={{}}` is acceptable **only** for dynamic computed values: a progress bar's `width: ${pct}%`, a positioned floating overlay, or a CSS variable injected from props (`style={{ '--row-h': `${rowH}px` }}`). Static styling MUST be Tailwind.
-
-The one **sanctioned exception** for dialog surfaces is the `[background-image:var(--brand-bg)]` arbitrary property — see [`THEMING-GUIDE.md` §"Brand Surface Background"](../../THEMING-GUIDE.md#brand-surface-background-brandbg). That's not inline style; it's a Tailwind arbitrary property and is the *only* correct way to layer a gradient over `bg-background`.
+Acceptable only for dynamic computed values (`width: ${pct}%`, CSS variable injection). Static styling MUST be Tailwind. Exception: `[background-image:var(--brand-bg)]` on dialog surfaces (see [`THEMING-GUIDE.md` §"Brand Surface Background"](../../THEMING-GUIDE.md#brand-surface-background-brandbg)).
 
 ### Raw violet/indigo Tailwind classes
 
 ```tsx
-// WRONG — bypasses brand tokens
+// WRONG
 <button className="bg-violet-500 text-white">
-
-// RIGHT — use a brand wrapper
+// RIGHT
 <PrimaryButton>...</PrimaryButton>
-
-// or for non-button contexts
-<span className="text-primary">...</span>
-<div className="bg-secondary">...</div>
 ```
 
-The brand primary is a **gradient**, not a flat violet. If you find yourself reaching for `bg-violet-*` you almost certainly want `<PrimaryButton>` or `brandGradient` (imported from `~/components/ui/buttons/styles`).
+The brand primary is a gradient — use `<PrimaryButton>` or import `brandGradient` from `~/components/ui/buttons/styles`.
 
 ### Raw slate classes instead of `bg-base-*`
 
@@ -45,8 +38,6 @@ The brand primary is a **gradient**, not a flat violet. If you find yourself rea
 <div className="bg-base-900">
 <div className="bg-base-800 border border-border">
 ```
-
-The `bg-base-*` scale maps slate values to a semantic elevation hierarchy (lower number = brighter / more elevated). Raw slate classes break this contract and make future palette tweaks painful.
 
 See [`THEMING-GUIDE.md` §"Background Scale (Slate)"](../../THEMING-GUIDE.md#background-scale-slate).
 
@@ -62,7 +53,7 @@ import { brandGradient } from '~/components/ui/buttons/styles';
 // (or just use <PrimaryButton>)
 ```
 
-`brandGradient`, `brandSecondary`, `brandErrorBg`, `brandErrorCard`, `brandSuccessBg`, `brandSecondaryOpaque`, `brandBg`, `brandGlow`, `brandToxic`, `brandToxicDepthColors` — all exported from `~/components/ui/buttons` (and `styles.ts`). Hand-rolling these is a `block` because the constants drift independently and reviewers can't easily diff them.
+`brandGradient`, `brandSecondary`, `brandErrorBg`, `brandSuccessBg`, `brandBg`, `brandGlow`, `brandToxic` — all exported from `~/components/ui/buttons`. Hand-rolling is a `block`.
 
 ### Hardcoded hex / oklch in `className`
 
@@ -78,105 +69,59 @@ import { brandGradient } from '~/components/ui/buttons/styles';
 <div className="ring-ring">
 ```
 
-Hex/oklch literals in `className` are review blocks. The `[bg-image:var(--brand-bg)]` arbitrary property is the **only** sanctioned arbitrary value, and only on dialog surfaces.
+Hex/oklch literals in `className` are `block`. The `[bg-image:var(--brand-bg)]` arbitrary property is the only sanctioned arbitrary value, and only on dialog surfaces.
 
 ### `space-x-*` / `space-y-*`
 
-```tsx
-// WRONG
-<div className="space-y-4">
-
-// RIGHT
-<div className="flex flex-col gap-4">
-```
-
-Use `flex` + `gap-*`. `space-*` doesn't honor RTL and breaks with conditional children.
+Use `flex` + `gap-*` instead. `space-*` doesn't honor RTL and breaks with conditional children.
 
 ### `w-N h-N` for square dimensions
 
-```tsx
-// WRONG
-<Avatar className="w-10 h-10">
-
-// RIGHT
-<Avatar className="size-10">
-// or just use <UserAvatar size="lg">
-```
+Use `size-N` (or `<UserAvatar size="lg">`).
 
 ### Conditional classes without `cn()`
 
-```tsx
-// WRONG
-className={`base-class ${active ? 'extra' : ''}`}
-
-// RIGHT
-import { cn } from '~/lib/utils';
-className={cn('base-class', active && 'extra')}
-```
-
-`cn()` (clsx + tailwind-merge) deduplicates conflicting classes — critical when composing brand constants with caller-supplied `className` overrides.
+Use `cn()` (clsx + tailwind-merge) from `~/lib/utils` — deduplicates conflicting classes when composing brand constants.
 
 ### Ad-hoc glow / shadow
 
-```tsx
-// WRONG
-<div className="shadow-[0_0_10px_rgba(139,92,246,0.5)]">
-
-// RIGHT — use the brand glow tokens
-import { brandGlow } from '~/components/ui/buttons/styles';
-<div className={brandGlow}>
-// or the utility class
-<div className="shadow-brand-glow">
-```
-
-For text glow, use `text-glow`, `text-glow-violet`, `text-glow-cyan`. For radial backgrounds, use `gradient-glow-violet` / `gradient-glow-cyan`. These all live in `app.css`.
+Use `brandGlow` / `shadow-brand-glow`. Text glow: `text-glow-violet`, `text-glow-cyan`. Radial: `gradient-glow-violet` / `gradient-glow-cyan` (all in `app.css`).
 
 ### Body text on a colored brand surface
 
-```tsx
-// WRONG — muted-foreground / text-slate-* fades into the success/warning gradients
-<AlertDialogDescription className="text-muted-foreground">...</AlertDialogDescription>
+Use the variant-matched readable constant — not `text-muted-foreground` (fades) and never a `text-shadow` outline on body copy (`block`).
 
-// WRONG — text-shadow outlines on body copy muddy sub-pixel rendering
-<p className="text-violet-200 [text-shadow:_-1px_-1px_0_#000,...]">...</p>
+| Constant | Use over |
+|---|---|
+| `brandReadableSuccess` | `brandSuccessBg`, emerald gradients |
+| `brandReadableWarning` | warning surfaces, orange/amber gradients |
+| `brandReadableDestructive` | destructive surfaces, red gradients |
 
-// RIGHT — use the variant-matched brand readable
-import { brandReadableSuccess } from '~/components/ui/buttons';
-<AlertDialogDescription className={brandReadableSuccess}>...</AlertDialogDescription>
-```
+For display/title text use `text-outline-black`. All exported from `~/components/ui/buttons`.
 
-Three tonal-harmony constants, one per surface family:
+### Inner panels on a colored dialog surface
 
-| Constant | Use over | Foreground |
-|---|---|---|
-| `brandReadableSuccess` | `brandSuccessBg`, emerald gradients, success callouts | `text-emerald-50 font-medium tracking-[0.005em]` |
-| `brandReadableWarning` | warning surfaces, orange/amber gradients | `text-orange-50 font-medium tracking-[0.005em]` |
-| `brandReadableDestructive` | destructive surfaces, red gradients | `text-rose-50 font-medium tracking-[0.005em]` |
-
-Each picks up the hue family of its surface without competing — the near-white
-foreground keeps high contrast while the medium weight + `tracking-[0.005em]`
-gives glyphs presence on top of color. **Body copy only** — for display/title
-text on colored surfaces use `text-outline-black` instead, and never combine a
-text-shadow outline with body copy (paragraph text-shadow is a `block` review
-finding because it destroys sub-pixel rendering).
-
-### Inner panels (e.g. UserStrip) on a colored dialog surface
+Use `brandDialogPanel` (`bg-black/40 ring-1 ring-white/10`) for any nested block (UserStrip, info cards, recap rows) rendered inside a colored brand dialog.
 
 ```tsx
-// WRONG — UserStrip's default bg-muted/25 vanishes on dark destructive surfaces
-<UserStrip user={user} showBorder={false} />
-
-// RIGHT — compose the brand panel constant via the strip's className
-import { brandDialogPanel, UserStrip } from '~/components/ui/buttons';
+import { brandDialogPanel } from '~/components/ui/buttons';
 <UserStrip user={user} showBorder={false} className={brandDialogPanel} />
 ```
 
-`brandDialogPanel` (`bg-black/40 ring-1 ring-white/10`) gives any nested block
-(UserStrip, recap rows, info cards) enough contrast against either a darker
-destructive/red or lighter success/emerald gradient. Reach for it any time a
-component is rendered *inside* a colored brand dialog — UserStrip, info rows,
-key/value recaps, etc. The constant is composable: it merges via cn() so the
-inner component can still receive caller-specific styling.
+## Destructive content-surface exception (the only sanctioned raw `bg-red-*`)
+
+`bg-red-950/95 border-red-800` is the documented destructive content-surface
+class and is **allowed in exactly one place**: the `contentVariantStyles.destructive`
+entry inside `frontend/app/components/ui/dialogs/ConfirmDialog.tsx`. This is the
+source of truth for the destructive dialog surface; `<DeleteDialog>` inherits it
+unchanged via composition.
+
+Raw `bg-red-*` or `border-red-*` anywhere else in `frontend/app/` (including new
+variants on `ConfirmDialog` or any feature component) remains a `block` finding.
+Use semantic tokens instead:
+
+- `bg-destructive` / `border-destructive` / `ring-destructive` for the destructive intent.
+- `bg-base-900/80` for recessed surfaces inside the destructive dialog (see `DeleteDialog`'s Input).
 
 ## What's NOT an inline-style violation
 

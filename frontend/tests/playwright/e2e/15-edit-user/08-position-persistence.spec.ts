@@ -35,6 +35,9 @@ test.describe('Position dropdown persistence (@cicd)', () => {
     await loginAdmin();
   });
 
+  // Dedicated user — see USER_EDIT_USERS in backend/tests/data/users.py.
+  const TARGET_USERNAME = 'edit_user_positions';
+
   test('@cicd position changes persist in PATCH and re-render correctly', async ({ page }) => {
     // Use a wider viewport so the 5-column position grid (xl:grid-cols-5
     // ≥ 1280px) renders without the SelectTrigger buttons visually overlapping
@@ -43,13 +46,13 @@ test.describe('Position dropdown persistence (@cicd)', () => {
     await page.setViewportSize({ width: 1600, height: 900 });
     await visitAndWaitForHydration(page, `/organizations/${orgPk}`);
     await page.locator('[data-testid="org-tab-users"]').click();
-    const card = page.locator('[data-testid^="usercard-"]').first();
-    await expect(card).toBeVisible({ timeout: 10000 });
+    const targetCard = page.locator(`[data-testid="usercard-${TARGET_USERNAME}"]`);
+    await expect(targetCard).toBeVisible({ timeout: 10000 });
 
     // Step 1: reset carry+hard_support to 0 so the next set is guaranteed to
     // make `formState.isDirty` true (the modal short-circuits and skips PATCH
     // when no fields changed; previous runs may have left non-zero values).
-    await openEditModal(page, card);
+    await openEditModal(page, targetCard);
     await setPositionField(page, 'carry', 0);
     await setPositionField(page, 'hard_support', 0);
     // Best-effort reset: if both were already 0, the modal closes without a
@@ -61,8 +64,7 @@ test.describe('Position dropdown persistence (@cicd)', () => {
     });
 
     // Step 2: now apply the real target values and assert the PATCH body.
-    const cardAfterReset = page.locator('[data-testid^="usercard-"]').first();
-    await openEditModal(page, cardAfterReset);
+    await openEditModal(page, targetCard);
     await setPositionField(page, 'carry', 1);
     await setPositionField(page, 'hard_support', 5);
 
@@ -80,7 +82,7 @@ test.describe('Position dropdown persistence (@cicd)', () => {
     expect(body.positions.hard_support).toBe(5);
 
     // Re-open and confirm the trigger displays the new selection (not placeholder)
-    await openEditModal(page, page.locator('[data-testid^="usercard-"]').first());
+    await openEditModal(page, targetCard);
     const carryDisplay = await readPositionField(page, 'carry');
     expect(carryDisplay).toContain('Favorite');
     const supportDisplay = await readPositionField(page, 'hard_support');

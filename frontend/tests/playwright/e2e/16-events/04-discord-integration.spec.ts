@@ -278,6 +278,7 @@ test.describe('Events - Discord Integration (@cicd)', () => {
     await loginEventPlayer(context);
     const rsvpResp = await postWithCsrf(context, `${API_URL}/events/${event.id}/signup/`, { intent: 'rsvp' });
     expect(rsvpResp.ok()).toBeTruthy();
+    const signup = await rsvpResp.json();
 
     // Clear event_player_1's prior approved MMR so the test exercises the
     // self-report → range fallback (populate seeds an org-user MMR of 3500
@@ -293,11 +294,10 @@ test.describe('Events - Discord Integration (@cicd)', () => {
     await page.getByTestId('event-tab-signups').click();
 
     // 5. Verify player is in the signups list
-    await expect(page.getByText('EventPlayer1')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId(`event-signup-row-${signup.id}`)).toBeVisible({ timeout: 10000 });
 
     // 6. Click the Approve button — opens MMR approval modal (Dota 2 event)
-    const approveBtn = page.getByRole('button', { name: 'Approve' }).first();
-    await approveBtn.click();
+    await page.getByTestId(`approve-signup-${signup.id}`).click();
 
     // 7. Verify modal opened with player name in the dialog title
     const dialog = page.locator('[role="dialog"]');
@@ -383,6 +383,7 @@ test.describe('Events - Discord Integration (@cicd)', () => {
     await loginEventPlayer(context);
     const rsvpResp = await postWithCsrf(context, `${API_URL}/events/${event.id}/signup/`, { intent: "rsvp" });
     expect(rsvpResp.ok()).toBeTruthy();
+    const signup = await rsvpResp.json();
 
     // Set prior approved MMR before opening modal
     await setApprovedMmr(context, eventInfo.orgPk, 5001, 2400);
@@ -390,8 +391,8 @@ test.describe('Events - Discord Integration (@cicd)', () => {
     await loginEventAdmin(context);
     await visitAndWaitForHydration(page, `/events/${event.id}`);
     await page.getByTestId('event-tab-signups').click();
-    await expect(page.getByText('EventPlayer1')).toBeVisible({ timeout: 10000 });
-    await page.getByRole('button', { name: 'Approve' }).first().click();
+    await expect(page.getByTestId(`event-signup-row-${signup.id}`)).toBeVisible({ timeout: 10000 });
+    await page.getByTestId(`approve-signup-${signup.id}`).click();
 
     const dialog = page.locator('[role="dialog"]');
     await expect(dialog).toBeVisible({ timeout: 5000 });
@@ -431,6 +432,7 @@ test.describe('Events - Discord Integration (@cicd)', () => {
     await loginEventPlayer4(context);
     const rsvpResp = await postWithCsrf(context, `${API_URL}/events/${event.id}/signup/`, { intent: "rsvp" });
     expect(rsvpResp.ok()).toBeTruthy();
+    const signup = await rsvpResp.json();
 
     // Clear event_player_4's prior approved MMR so the test exercises the
     // battle-cup midpoint fallback rather than the populate-seeded prior.
@@ -439,8 +441,8 @@ test.describe('Events - Discord Integration (@cicd)', () => {
     await loginEventAdmin(context);
     await visitAndWaitForHydration(page, `/events/${event.id}`);
     await page.getByTestId('event-tab-signups').click();
-    await expect(page.getByText('EventPlayer4')).toBeVisible({ timeout: 10000 });
-    await page.getByRole('button', { name: 'Approve' }).first().click();
+    await expect(page.getByTestId(`event-signup-row-${signup.id}`)).toBeVisible({ timeout: 10000 });
+    await page.getByTestId(`approve-signup-${signup.id}`).click();
 
     const dialog = page.locator('[role="dialog"]');
     await expect(dialog).toBeVisible({ timeout: 5000 });
@@ -489,6 +491,7 @@ test.describe('Events - Discord Integration (@cicd)', () => {
     await loginEventPlayer(context);
     const rsvpResp = await postWithCsrf(context, `${API_URL}/events/${event.id}/signup/`, { intent: "rsvp" });
     expect(rsvpResp.ok()).toBeTruthy();
+    const signup = await rsvpResp.json();
 
     // 33% delta scenario: prior 2,400 vs autofill 3,200 (self-report).
     await setApprovedMmr(context, eventInfo.orgPk, 5001, 2400);
@@ -496,8 +499,8 @@ test.describe('Events - Discord Integration (@cicd)', () => {
     await loginEventAdmin(context);
     await visitAndWaitForHydration(page, `/events/${event.id}`);
     await page.getByTestId('event-tab-signups').click();
-    await expect(page.getByText('EventPlayer1')).toBeVisible({ timeout: 10000 });
-    await page.getByRole('button', { name: 'Approve' }).first().click();
+    await expect(page.getByTestId(`event-signup-row-${signup.id}`)).toBeVisible({ timeout: 10000 });
+    await page.getByTestId(`approve-signup-${signup.id}`).click();
 
     const dialog = page.locator('[role="dialog"]');
     await expect(dialog).toBeVisible({ timeout: 5000 });
@@ -570,6 +573,7 @@ test.describe('Events - Discord Integration (@cicd)', () => {
     await loginEventPlayer(context);
     const rsvpResp = await postWithCsrf(context, `${API_URL}/events/${event.id}/signup/`, { intent: "rsvp" });
     expect(rsvpResp.ok()).toBeTruthy();
+    const signup = await rsvpResp.json();
 
     // Login as the site superuser (is_superuser=True) so PlayerModal shows
     // the edit button (canEdit = is_staff || is_superuser).
@@ -589,10 +593,11 @@ test.describe('Events - Discord Integration (@cicd)', () => {
     await orgUsersLoaded;
 
     await page.getByTestId('event-tab-signups').click();
-    await expect(page.getByText('EventPlayer1')).toBeVisible({ timeout: 10000 });
+    const signupRow = page.getByTestId(`event-signup-row-${signup.id}`);
+    await expect(signupRow).toBeVisible({ timeout: 10000 });
 
     // Open the PlayerModal by clicking the user name in the signup row.
-    await page.getByText('EventPlayer1').first().click();
+    await signupRow.getByText('EventPlayer1').click();
 
     // Click the edit-user pencil button inside PlayerModal.
     await page.getByTestId('edit-user-btn').click();

@@ -107,6 +107,41 @@ def store_match(request):
 
         steam_id_64 = account_id + STEAM_ID_64_BASE
 
+        # Steam API omits hero_damage / tower_damage / hero_healing
+        # (and sometimes kda/lh/denies) for matches it hasn't finished
+        # parsing yet. Storing zeros would advance sync_league_matches'
+        # cursor past this match and we'd never re-fetch the real stats.
+        # Return 422 so _fetch_and_store_match returns False and the
+        # cursor stays put for this match — next sync tick retries it.
+        required = (
+            "player_slot",
+            "hero_id",
+            "kills",
+            "deaths",
+            "assists",
+            "gold_per_min",
+            "xp_per_min",
+            "last_hits",
+            "denies",
+            "hero_damage",
+            "tower_damage",
+            "hero_healing",
+        )
+        missing = [k for k in required if k not in player]
+        if missing:
+            log.info(
+                "steam_store_match_unparsed",
+                system="steam",
+                subsystem="ingest",
+                match_id=match_id,
+                league_id=league_id,
+                missing_fields=missing,
+                reason="steam_api_match_not_yet_parsed",
+            )
+            return Response(
+                {"error": "match_unparsed", "missing_fields": missing},
+                status=422,
+            )
         stats, _ = PlayerMatchStats.objects.update_or_create(
             match=match,
             steam_id=steam_id_64,

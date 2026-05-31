@@ -156,6 +156,48 @@ jobs:
         if: always()
         run: docker compose --project-directory . -f docker/docker-compose.test.yaml -f docker/docker-compose.ci.override.yaml down -v || true
 
+  events:
+    name: Playwright events (sequential)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-playwright-stack
+        with:
+          registry-token: ${{ secrets.GITHUB_TOKEN }}
+          github-actor: ${{ github.actor }}
+          image-prefix: ${{ env.IMAGE_PREFIX }}
+
+      - name: Run Playwright (events-sequential, workers=1)
+        env:
+          CI: 'true'
+        run: just test::pw::cicd-events --workers=1
+
+      - name: Dump container logs on failure
+        if: failure()
+        run: |
+          docker logs frontend 2>&1 | tail -200 || true
+          docker logs backend 2>&1 | tail -200 || true
+          docker logs nginx 2>&1 | tail -100 || true
+
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-events
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+          retention-days: 7
+
+      - name: Clean up
+        if: always()
+        run: docker compose --project-directory . -f docker/docker-compose.test.yaml -f docker/docker-compose.ci.override.yaml down -v || true
+
   backend:
     name: Backend tests (test_bracket)
     runs-on: ubuntu-latest

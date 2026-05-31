@@ -42,32 +42,30 @@ test.describe('Edit User MMR on Organization Page (@cicd)', () => {
     await loginAdmin();
   });
 
+  // Dedicated user — see USER_EDIT_USERS in backend/tests/data/users.py.
+  const TARGET_USERNAME = 'edit_user_mmr';
+
   test('@cicd smoke: edit user MMR via org user card', async ({ page }) => {
     await visitAndWaitForHydration(page, `/organizations/${orgPk}`);
     await expect(page.locator('h1')).toBeVisible({ timeout: 15000 });
 
-    // Switch to Users tab
     const usersTab = page.locator('[data-testid="org-tab-users"]');
     await expect(usersTab).toBeVisible({ timeout: 5000 });
     await usersTab.click();
 
-    // Wait for user cards to load
-    const firstUserCard = page.locator('[data-testid^="usercard-"]').first();
-    await expect(firstUserCard).toBeVisible({ timeout: 10000 });
+    const targetCard = page.locator(`[data-testid="usercard-${TARGET_USERNAME}"]`);
+    await expect(targetCard).toBeVisible({ timeout: 10000 });
 
-    // Open edit modal and read original MMR
-    await openEditModal(page, firstUserCard);
+    await openEditModal(page, targetCard);
     const originalMmr = await readEditField(page, 'mmr');
     const newMmr = originalMmr === '9999' ? '8888' : '9999';
 
     await fillEditField(page, 'mmr', newMmr);
     await saveEditModal(page);
 
-    // Verify the MMR value updated in the UI (allow time for store refresh + cache invalidation)
-    await expect(page.getByText(newMmr).first()).toBeVisible({ timeout: 10000 });
+    // Allow store refresh + cache invalidation
+    await expect(targetCard.getByText(newMmr).first()).toBeVisible({ timeout: 10000 });
 
-    // Restore original value
-    const userCardAfter = page.locator('[data-testid^="usercard-"]').first();
-    await restoreUserField(page, userCardAfter, 'mmr', originalMmr);
+    await restoreUserField(page, targetCard, 'mmr', originalMmr);
   });
 });

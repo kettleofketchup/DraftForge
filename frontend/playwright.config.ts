@@ -77,9 +77,12 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      // Exclude herodraft tests (run in herodraft project) and mobile specs
-      // (which live under e2e/mobile/ and run in the mobile-* projects).
-      testIgnore: [/herodraft/i, /e2e\/mobile\//],
+      // Exclude herodraft tests (run in herodraft project), mobile specs
+      // (which live under e2e/mobile/ and run in the mobile-* projects),
+      // and 16-events specs (run in events-sequential project — those tests
+      // share a single seeded event PK from getEventsTestData and race on
+      // start_roll_call / resetEventsData when workers > 1 in the same shard).
+      testIgnore: [/herodraft/i, /e2e\/mobile\//, /e2e\/16-events\//],
       use: {
         ...devices['Desktop Chrome'],
         launchOptions: {
@@ -94,6 +97,30 @@ export default defineConfig({
           ],
         },
       },
+    },
+    {
+      name: 'events-sequential',
+      testMatch: /e2e\/16-events\/.*\.spec\.ts/,
+      use: {
+        ...devices['Desktop Chrome'],
+        headless: true,
+        launchOptions: {
+          executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
+          args: [
+            '--no-sandbox',
+            '--disable-gpu',
+            '--disable-dev-shm-usage',
+            '--disable-setuid-sandbox',
+          ],
+        },
+      },
+      // 16-events specs share a single seeded event PK (returned by
+      // getEventsTestData). Each file mutates event state independently —
+      // running two files in parallel races on resetEventsData /
+      // start_roll_call / reopen_signups. test.describe.serial only
+      // protects within a file; this project serializes ACROSS files too.
+      dependencies: ['chromium'],
+      fullyParallel: false,
     },
     {
       name: 'herodraft',

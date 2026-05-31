@@ -434,6 +434,7 @@ _PATCH_MAP = {
 # ``app.internal_client.X`` is not enough.
 _CALLSITE_MODULES = (
     "events.discord.embeds",
+    "events.tasks",
     "discordbot.utils",
 )
 

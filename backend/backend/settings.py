@@ -24,6 +24,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 import logging
 import warnings
 
+from config.installed_apps import MODEL_APPS
 from paths import DEV_DB_PATH, PROD_DB_PATH, TEST_DB_PATH
 
 # Show cacheops Redis connection warning only once (not on every import)
@@ -113,6 +114,9 @@ if _log_level != "DEBUG":
 if "NODE_ENV" in os.environ:
     NODE_ENV = os.environ.get("NODE_ENV")
 
+# MODEL_APPS = ["app", "events", "discordbot", "steam", "org"] —
+# shared with config.settings_celery so a new model-bearing app can't
+# be added to one process and silently forgotten in the other.
 INSTALLED_APPS = [
     "daphne",
     "channels",
@@ -122,18 +126,14 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    "app.apps.AppConfig",
-    "user.apps.UserConfig",
-    "org.apps.OrgConfig",
+    *MODEL_APPS,
     "league.apps.LeagueConfig",
     "social_django",
     "rest_framework",
     "django_jinja",
     "corsheaders",
-    "steam.apps.SteamConfig",
     "bracket.apps.TournamentConfig",
-    "discordbot.apps.DiscordbotConfig",
-    "events.apps.EventsConfig",
+    "user.apps.UserConfig",
     "cacheops",  # Added for django-cacheops
 ]
 

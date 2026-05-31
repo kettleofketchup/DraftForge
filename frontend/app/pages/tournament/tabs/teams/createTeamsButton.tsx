@@ -1,4 +1,4 @@
-import React, { type FormEvent } from 'react';
+import React, { useState } from 'react';
 import { toast } from 'sonner';
 import {
   createTeam,
@@ -11,17 +11,7 @@ import { AdminOnlyButton } from '~/components/reusable/adminButton';
 import type { TeamType, TournamentType } from '~/components/tournament/types';
 import type { UserType } from '~/components/user/types';
 import { hydrateTournament } from '~/lib/hydrateTournament';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from '~/components/ui/alert-dialog';
+import { ConfirmDialog } from '~/components/ui/dialogs';
 import { SubmitButton } from '~/components/ui/buttons';
 import { useUserStore } from '~/store/userStore';
 interface CreateTeamsButtonProps {
@@ -39,6 +29,8 @@ export const CreateTeamsButton: React.FC<CreateTeamsButtonProps> = ({
 }) => {
   const setTournament = useUserStore((state) => state.setTournament);
   const isStaff = useUserStore((state) => state.isStaff);
+  const [showConfirm, setShowConfirm] = useState(false);
+
   const deleteTeams = async () => {
     if (!tournament.teams || tournament.teams.length === 0) {
       return;
@@ -56,9 +48,7 @@ export const CreateTeamsButton: React.FC<CreateTeamsButtonProps> = ({
     }
   };
 
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-
+  const handleSubmit = async () => {
     await deleteTeams();
     teams = teams.sort((a, b) => {
       if (a.name === b.name) return 0;
@@ -102,35 +92,25 @@ export const CreateTeamsButton: React.FC<CreateTeamsButtonProps> = ({
   if (!isStaff()) return <AdminOnlyButton />;
 
   return (
-    <AlertDialog>
-      <AlertDialogTrigger asChild>
-        <SubmitButton
-          data-testid="submitTeamsBtn"
-          aria-label="Submit and create teams"
-        >
-          Submit this
-        </SubmitButton>
-      </AlertDialogTrigger>
-      <AlertDialogContent className="bg-red-900">
-        <AlertDialogHeader>
-          <AlertDialogTitle>Regenerate Teams? Are You Sure?</AlertDialogTitle>
-          <AlertDialogDescription className="text-base-700">
-            This action cannot be undone. This will permanently delete the
-            previous teams and regenerate the new ones
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel data-testid="cancelTeamsCreationBtn">
-            Cancel
-          </AlertDialogCancel>
-          <AlertDialogAction
-            onClick={handleSubmit}
-            data-testid="confirmTeamsCreationBtn"
-          >
-            Continue
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+    <>
+      <SubmitButton
+        data-testid="submitTeamsBtn"
+        aria-label="Submit and create teams"
+        onClick={() => setShowConfirm(true)}
+      >
+        Submit this
+      </SubmitButton>
+      <ConfirmDialog
+        open={showConfirm}
+        onOpenChange={setShowConfirm}
+        title="Regenerate Teams? Are You Sure?"
+        description="This action cannot be undone. This will permanently delete the previous teams and regenerate the new ones"
+        confirmLabel="Continue"
+        variant="destructive"
+        onConfirm={handleSubmit}
+        confirmTestId="confirmTeamsCreationBtn"
+        cancelTestId="cancelTeamsCreationBtn"
+      />
+    </>
   );
 };

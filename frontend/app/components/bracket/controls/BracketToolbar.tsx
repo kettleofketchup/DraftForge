@@ -2,20 +2,11 @@ import { RotateCcw, Save, Wand2 } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
 import { AutoAssignModal } from '~/components/bracket/modals';
 import {
-  CancelButton,
-  ConfirmButton,
   DestructiveButton,
   SecondaryButton,
   SubmitButton,
 } from '~/components/ui/buttons';
-import {
-  AlertDialog,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '~/components/ui/alert-dialog';
+import { ConfirmDialog } from '~/components/ui/dialogs';
 import {
   BrandDropdownMenu,
   type BrandDropdownAction,
@@ -213,49 +204,28 @@ export function BracketToolbar({
       </span>
 
       {/* Generate confirmation dialog */}
-      <AlertDialog open={showGenerateConfirm} onOpenChange={setShowGenerateConfirm}>
-        <AlertDialogContent className="bg-orange-950/95 border-orange-800">
-          <AlertDialogHeader>
-            <AlertDialogTitle>Regenerate Bracket?</AlertDialogTitle>
-            <AlertDialogDescription className="text-orange-200">
-              This will replace the current bracket structure. Any unsaved changes
-              will be lost.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter className="gap-2">
-            <CancelButton onClick={() => setShowGenerateConfirm(false)}>
-              Cancel
-            </CancelButton>
-            <ConfirmButton
-              variant="warning"
-              onClick={confirmGenerate}
-              data-testid="regenerateBracketConfirmButton"
-            >
-              Regenerate
-            </ConfirmButton>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDialog
+        open={showGenerateConfirm}
+        onOpenChange={setShowGenerateConfirm}
+        title="Regenerate Bracket?"
+        description="This will replace the current bracket structure. Any unsaved changes will be lost."
+        confirmLabel="Regenerate"
+        variant="warning"
+        onConfirm={confirmGenerate}
+        confirmTestId="regenerateBracketConfirmButton"
+      />
 
       {/* Reset confirmation dialog */}
-      <AlertDialog open={showResetConfirm} onOpenChange={setShowResetConfirm}>
-        <AlertDialogContent className="bg-red-950/95 border-red-800">
-          <AlertDialogHeader>
-            <AlertDialogTitle>Reset Bracket?</AlertDialogTitle>
-            <AlertDialogDescription className="text-muted-foreground">
-              This will clear all matches. This cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter className="gap-2">
-            <CancelButton onClick={() => setShowResetConfirm(false)}>
-              Cancel
-            </CancelButton>
-            <ConfirmButton variant="destructive" onClick={handleReset}>
-              Reset
-            </ConfirmButton>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDialog
+        open={showResetConfirm}
+        onOpenChange={setShowResetConfirm}
+        title="Reset Bracket?"
+        description="This will clear all matches. This cannot be undone."
+        confirmLabel="Reset"
+        variant="destructive"
+        onConfirm={handleReset}
+        confirmTestId="resetBracketConfirmButton"
+      />
     </div>
   );
 }

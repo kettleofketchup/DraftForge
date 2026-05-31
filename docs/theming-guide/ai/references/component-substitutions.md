@@ -57,8 +57,8 @@ Required breadcrumb pages: `/organizations/:id`, `/leagues/:id`, `/events/:id`, 
 | Custom `<div role="dialog">` | shadcn `<Dialog>` / `<AlertDialog>` | Brand surface (`brandBg`) is automatic. |
 | `<DialogContent className="bg-gradient-to-r ...">` | Don't override the surface | Tailwind-merge will strip `bg-background` and the dialog goes translucent. Use `[background-image:var(--brand-bg)]` arbitrary property if a custom overlay is genuinely needed. |
 | `<Dialog>` without `<DialogTitle>` | Always include title | Use `className="sr-only"` if visually hidden — required for a11y. |
-| Hand-rolled `<AlertDialog>` for yes/no confirmation | `<ConfirmDialog>` from `~/components/ui/dialogs` | Bundles the brand `<ConfirmButton>` / `<CancelButton>`, Enter→confirm + Backspace→cancel hotkeys, and `<Kbd>` keycap hints on each button. Hand-rolled confirms drop these for free. |
-| `<AlertDialog>` confirm without keyboard hotkey support | `<ConfirmDialog>` | Power users (rollcall, draft, admin) operate by keyboard; every confirm should bind Enter/Backspace and surface the binding via `<Kbd>` so the hint is visible. |
+| Hand-rolled `<AlertDialog>` for any yes/no confirm — positive ("add user", "approve", "pick hero") OR negative ("delete", "restart") | `<ConfirmDialog>` from `~/components/ui/dialogs`. Auto-wires Enter/Backspace + brand button variants + variant-aware destructive/warning surfaces. |
+| Hand-rolled name-match destructive flow (input "Type the X name to confirm" gating a delete) | `<DeleteDialog>` from `~/components/ui/dialogs`. Pass `entityKind` + `entityName`; the dialog inherits the destructive surface and gates Delete on strict equality. |
 
 ## Keyboard Hints
 
