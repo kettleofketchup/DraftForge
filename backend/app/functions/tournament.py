@@ -1,5 +1,4 @@
 import json
-import logging
 
 import requests
 from django.contrib.auth import login
@@ -35,8 +34,9 @@ from app.serializers import (
     _build_users_dict,
 )
 from backend import settings
+from telemetry.logging import get_logger
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 
 def _serialize_tournament(tournament):
@@ -100,8 +100,13 @@ def pick_player_for_round(request):
 
     if not (is_tournament_staff or is_captain_for_round):
         log.warning(
-            f"User {request.user.username} attempted to pick for round {draft_round_pk} "
-            f"but is not tournament staff or captain (captain is {draft_round.captain.username})"
+            "pick_unauthorized",
+            system="tournament",
+            subsystem="draft",
+            user_id=request.user.pk,
+            username=request.user.username,
+            draft_round_id=draft_round_pk,
+            captain_username=draft_round.captain.username,
         )
         return Response(
             {
@@ -119,8 +124,12 @@ def pick_player_for_round(request):
     try:
         draft_round.pick_player(user)
     except Exception as e:
-        logging.error(
-            f"Error picking player for draft round {draft_round_pk}: {str(e)}"
+        log.error(
+            "pick_failed",
+            system="tournament",
+            subsystem="draft",
+            draft_round_id=draft_round_pk,
+            error=str(e),
         )
         return Response({"error": f"Failed to pick player. {str(e)}"}, status=500)
 
@@ -220,9 +229,13 @@ def create_team_from_captain(request):
     except Draft.DoesNotExist:
         pass  # No draft exists, continue
     if Team.objects.filter(tournament=tournament, captain=user).exists():
-        if draft_order is 0:
-            logging.debug(
-                "User is already a captain in this tournament with a draft order"
+        if draft_order == 0:
+            log.debug(
+                "captain_already_registered",
+                system="tournament",
+                subsystem="registration",
+                user_id=user.pk,
+                tournament_id=tournament.pk,
             )
             return Response(
                 _serialize_tournament(tournament),
@@ -294,10 +307,20 @@ def generate_draft_rounds(request):
     try:
         draft = tournament.draft
     except Draft.DoesNotExist:
-        log.debug(f"Draft doesn't exist for {tournament.pk}, creating new one")
+        log.debug(
+            "draft_created",
+            system="tournament",
+            subsystem="draft",
+            tournament_id=tournament.pk,
+        )
         draft = Draft.objects.create(tournament=tournament)
 
-    logging.debug(f"Initialization draft for tournament {tournament.name}")
+    log.debug(
+        "draft_initializing",
+        system="tournament",
+        subsystem="draft",
+        tournament_id=tournament.pk,
+    )
 
     # Remove all existing teams — draft init starts fresh.
     # Save captain info so we can recreate valid teams.
@@ -382,10 +405,20 @@ def rebuild_team(request):
     try:
         draft = tournament.draft
         if not draft:
-            logging.debug(f"Draft doesn't exist for {tournament.pk}, creating new one")
+            log.debug(
+                "draft_created",
+                system="tournament",
+                subsystem="draft",
+                tournament_id=tournament.pk,
+            )
             draft = Draft.objects.create(tournament=tournament)
     except Draft.DoesNotExist:
-        logging.debug(f"Draft doesn't exist for {tournament.pk}, creating new one")
+        log.debug(
+            "draft_created",
+            system="tournament",
+            subsystem="draft",
+            tournament_id=tournament.pk,
+        )
         draft = Draft.objects.create(tournament=tournament)
 
     # Validate: tournament must have captains assigned to teams
@@ -405,16 +438,33 @@ def rebuild_team(request):
 
     # Build rounds if they don't exist
     if will_build_rounds:
-        logging.debug("Draft rounds do not exist, building them now")
+        log.debug(
+            "draft_rounds_building",
+            system="tournament",
+            subsystem="draft",
+            tournament_id=tournament.pk,
+            draft_id=draft.pk,
+        )
         draft.build_rounds()
     else:
-        logging.debug(f"Draft already exists for tournament {tournament.name}")
+        log.debug(
+            "draft_rounds_exist",
+            system="tournament",
+            subsystem="draft",
+            tournament_id=tournament.pk,
+            draft_id=draft.pk,
+        )
 
     draft.save()
     tournament.draft = draft
     tournament = Tournament.objects.get(pk=tournament_pk)
     data = _serialize_tournament(tournament)
-    log.debug(data)
+    log.debug(
+        "tournament_rebuilt",
+        system="tournament",
+        subsystem="draft",
+        tournament_id=tournament.pk,
+    )
 
     # Invalidate specific objects after rebuilding teams
     invalidate_obj(draft)
@@ -435,6 +485,10 @@ class DraftPredictMMRSerializer(serializers.Serializer):
 
 from cacheops import cached_as
 
+# cached_as sites depending on CustomUser must also list BaseUserProfile
+# (owns nickname/avatar) — enforced by user/tests/test_cacheops.py.
+from user.models import BaseUserProfile
+
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
@@ -453,7 +507,15 @@ def get_draft_style_mmrs(request):
         return Response({"error": "Draft not found"}, status=404)
     cache_key = f"draft_sim_pk:{request.get_full_path()}"
 
-    @cached_as(Draft, CustomUser, Tournament, Team, extra=cache_key, timeout=60 * 15)
+    @cached_as(
+        Draft,
+        CustomUser,
+        BaseUserProfile,
+        Tournament,
+        Team,
+        extra=cache_key,
+        timeout=60 * 15,
+    )
     def get_data(request):
         return DraftSerializerMMRs(draft).data
 
@@ -516,7 +578,14 @@ def undo_last_pick(request):
     team = last_round_with_choice.team
 
     log.info(
-        f"Undoing pick: {player.username} from team {team.name if team else 'unknown'}"
+        "pick_undone",
+        system="tournament",
+        subsystem="draft",
+        draft_id=draft.pk,
+        player_id=player.pk,
+        player_username=player.username,
+        team_id=team.pk if team else None,
+        team_name=team.name if team else None,
     )
 
     # Remove player from team

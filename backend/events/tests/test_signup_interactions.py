@@ -137,9 +137,14 @@ class HandleSignupModalSubmitTest(EventTestCase):
         self.assertEqual(profile.rank_status, "active")
         self.assertEqual(profile.unverified_friend_id, "12345")
 
-        # Verify CustomUser.steam_account_id was NOT modified
+        # Verify CustomUser.steam_account_id was NOT modified by the modal.
+        # The setUp sets steamid, and CustomUser.save() syncs steam_account_id
+        # from steamid (32-bit vs 64-bit are the same identity — see T1.5
+        # resurrection of the steam-id sync). So the baseline is the derived
+        # value, not None. Confirm the modal handler didn't *change* it.
+        baseline_steam_account_id = self.user.steam_account_id
         self.user.refresh_from_db()
-        self.assertIsNone(self.user.steam_account_id)
+        self.assertEqual(self.user.steam_account_id, baseline_steam_account_id)
 
     def test_modal_submit_calls_apply_signup_input_for_dota(self):
         """Dota 2 branch routes profile writes through apply_signup_input."""

@@ -63,14 +63,18 @@ def search_users(request):
         | Q(discordNickname__icontains=query)
         | Q(guildNickname__icontains=query)
         | Q(username__icontains=query)
-        | Q(nickname__icontains=query)
+        # nickname lives on base_profile; ORM filters need the relation path
+        | Q(base_profile__nickname__icontains=query)
     )
 
     # Add Steam ID search if query is numeric
     if query.isdigit():
         q_filter |= Q(steamid=int(query)) | Q(steam_account_id=int(query))
 
-    users = CustomUser.objects.filter(q_filter)[:20]
+    users = (
+        CustomUser.objects.select_related("base_profile", "positions")
+        .filter(q_filter)[:20]
+    )
     data = TournamentUserSerializer(users, many=True).data
 
     # Annotate with membership context if org_id provided
@@ -724,7 +728,9 @@ def update_org_user(request, org_id, org_user_id):
         )
 
     org_user = get_object_or_404(
-        OrgUser.objects.select_related("user", "user__positions"),
+        OrgUser.objects.select_related(
+            "user", "user__positions", "user__base_profile"
+        ),
         pk=org_user_id,
         organization=org,
     )

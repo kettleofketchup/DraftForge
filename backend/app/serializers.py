@@ -62,6 +62,22 @@ class TournamentUserSerializer(serializers.ModelSerializer):
     positions = PositionsSerializer(many=False, read_only=True)
     # Auto-computed 32-bit Steam Account ID from 64-bit Friend ID
     steam_account_id = serializers.IntegerField(read_only=True)
+    # nickname/avatar live on BaseUserProfile (T1 epic). Use `source="nickname"`
+    # so DRF goes through the CustomUser transitional @property — the getter
+    # reads from base_profile, the setter writes to base_profile + invalidates
+    # cacheops. Critically, this keeps PATCH /users/<pk>/ working for admin
+    # user-edit flows (org / tournament pages), which would otherwise be a
+    # silent no-op if the fields were read_only=True.
+    nickname = serializers.CharField(
+        allow_null=True,
+        allow_blank=True,
+        required=False,
+    )
+    avatar = serializers.CharField(
+        allow_null=True,
+        allow_blank=True,
+        required=False,
+    )
 
     class Meta:
         model = CustomUser
@@ -108,7 +124,7 @@ def _serialize_users_with_mmr(users_qs, tournament):
 
     org_users = (
         OrgUser.objects.filter(user__in=users_qs, organization=org)
-        .select_related("user", "user__positions")
+        .select_related("user", "user__positions", "user__base_profile")
         .prefetch_related(
             Prefetch(
                 "league_memberships",
@@ -157,7 +173,9 @@ def _collect_tournament_user_pks(tournament):
 def _build_users_dict(tournament):
     """Build a deduplicated {pk: serialized_user} dict for a tournament."""
     seen_pks = _collect_tournament_user_pks(tournament)
-    user_qs = CustomUser.objects.filter(pk__in=seen_pks).select_related("positions")
+    user_qs = CustomUser.objects.filter(pk__in=seen_pks).select_related(
+        "positions", "base_profile"
+    )
     return {u["pk"]: u for u in _serialize_users_with_mmr(user_qs, tournament)}
 
 
@@ -1102,6 +1120,21 @@ class UserSerializer(serializers.ModelSerializer):
     staff_organization_ids = serializers.SerializerMethodField()
     admin_league_ids = serializers.SerializerMethodField()
     staff_league_ids = serializers.SerializerMethodField()
+    # nickname/avatar live on BaseUserProfile (T1 epic). Use `source="nickname"`
+    # so DRF goes through the CustomUser transitional @property — the getter
+    # reads from base_profile, the setter writes to base_profile + invalidates
+    # cacheops. Keeps PATCH /users/<pk>/ working for admin user-edit flows
+    # (org/tournament pages) which would otherwise be a silent no-op.
+    nickname = serializers.CharField(
+        allow_null=True,
+        allow_blank=True,
+        required=False,
+    )
+    avatar = serializers.CharField(
+        allow_null=True,
+        allow_blank=True,
+        required=False,
+    )
 
     class Meta:
         model = CustomUser

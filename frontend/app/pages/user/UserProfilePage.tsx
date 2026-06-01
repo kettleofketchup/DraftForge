@@ -98,11 +98,15 @@ export function UserProfilePage() {
               {/* User Info */}
               <div className="flex-1 text-center sm:text-left min-w-0">
                 <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-2">
-                  <h1 className="text-xl sm:text-3xl font-bold break-words min-w-0">
+                  <h1
+                    data-testid="user-card-nickname"
+                    className="text-xl sm:text-3xl font-bold break-words min-w-0"
+                  >
                     {user.nickname || user.username}
                   </h1>
                   {isOwnProfile && (
                     <EditIconButton
+                      data-testid="edit-user-btn"
                       onClick={() => setEditModalOpen(true)}
                       tooltip="Edit Profile"
                       className="self-center sm:self-auto"
@@ -179,7 +183,7 @@ export function UserProfilePage() {
       {/* Edit Profile Modal */}
       {isOwnProfile && (
         <EditProfileModal
-          user={user}
+          userPk={user.pk!}
           open={editModalOpen}
           onOpenChange={setEditModalOpen}
           onSave={() => refetch()}

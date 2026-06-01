@@ -11,10 +11,44 @@ frontend := root / "frontend"
 
 # Bootstrap and start dev environment (for ./dev script)
 # Called by: ./dev
+#
+# In a git worktree, stops after dependency install (skips docker compose
+# startup) — worktrees share the main repo's docker stack and shouldn't
+# spin up a parallel one. Pass --up to force docker startup anyway.
 bootstrap *args:
     #!/usr/bin/env bash
     set -euo pipefail
     cd "{{root}}"
+
+    # Detect worktree once, up front — reused for .env copy + dev-startup skip.
+    # In a worktree, .git is a FILE (containing `gitdir: <path>`). In a main
+    # checkout, .git is a DIRECTORY. That's the most reliable signal — much
+    # more robust than parsing `git rev-parse --git-common-dir`, which
+    # returns the relative path `.git` in a main repo and absolute paths in
+    # worktrees, so string comparisons against {{root}}/.git or "." misfire.
+    is_worktree=false
+    main_repo=""
+    if [[ -f "{{root}}/.git" ]]; then
+        is_worktree=true
+        common_dir="$(git rev-parse --git-common-dir 2>/dev/null)"
+        # common_dir may be relative or absolute; normalize.
+        if [[ "$common_dir" = /* ]]; then
+            main_repo="$(dirname "$common_dir")"
+        else
+            main_repo="$(cd "$common_dir" && pwd | sed 's|/\.git$||')"
+        fi
+    fi
+
+    # Parse --up out of args (forces docker startup even in worktree).
+    force_up=false
+    passthrough_args=()
+    for arg in {{args}}; do
+        case "$arg" in
+            --up) force_up=true ;;
+            *) passthrough_args+=("$arg") ;;
+        esac
+    done
+
     if [[ ! -d "{{root}}/.venv" ]]; then
         echo "Creating Python virtual environment..."
         python3 -m venv "{{root}}/.venv"
@@ -30,19 +64,31 @@ bootstrap *args:
         cd "{{root}}"
     fi
     # If running in a git worktree, copy backend/.env from the main repo
-    main_repo="$(git rev-parse --git-common-dir 2>/dev/null | sed 's|/\.git$||')"
-    if [[ -n "$main_repo" && "$main_repo" != "{{root}}/.git" && "$main_repo" != "." ]]; then
+    if [[ "$is_worktree" == "true" ]]; then
         if [[ -f "$main_repo/backend/.env" && ! -f "{{root}}/backend/.env" ]]; then
             echo "Worktree detected — copying backend/.env from main repo..."
             cp "$main_repo/backend/.env" "{{root}}/backend/.env"
         fi
     fi
+
+    # In a worktree, stop here unless --up was passed. Worktrees share the
+    # main repo's docker stack (project name pinned by an earlier fix) and
+    # spinning up a parallel one collides.
+    if [[ "$is_worktree" == "true" && "$force_up" != "true" ]]; then
+        echo
+        echo "Worktree setup complete — dependencies installed, .env copied."
+        echo "  - Run 'just dev::debug' from the main repo to start docker compose."
+        echo "  - Run 'just test::setup' / 'just test::upd' to manage the test stack."
+        echo "  - Re-run './dev --up' here to force docker startup in this worktree."
+        exit 0
+    fi
+
     # Use M1 compose on macOS ARM, standard compose elsewhere
     if [[ "$(uname -s)" == "Darwin" && "$(uname -m)" == "arm64" ]]; then
         echo "Detected macOS ARM — using M1 Docker Compose config"
-        inv dev.mac {{args}}
+        inv dev.mac "${passthrough_args[@]}"
     else
-        inv dev.debug {{args}}
+        inv dev.debug "${passthrough_args[@]}"
     fi
 
 # Modules (namespaced with ::)

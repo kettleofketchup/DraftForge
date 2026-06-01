@@ -23,6 +23,7 @@ import { User } from '~/components/user/user';
 import type { GameType, GuildMember, GuildMembers, UserType } from '~/index';
 import { getLogger } from '~/lib/logger';
 import { useUserCacheStore } from '~/store/userCacheStore';
+import { useUserProfileStore } from '~/store/userProfileStore';
 
 const log = getLogger('userStore');
 
@@ -32,6 +33,7 @@ interface UserState {
   hasHydrated: boolean;
   setHasHydrated: (hydrated: boolean) => void;
   setCurrentUser: (user: UserType) => void;
+  patchCurrentUser: (partial: Partial<UserType>) => void;
   clearUser: () => void;
   isStaff: () => boolean;
   selectedDiscordUser: GuildMember;
@@ -199,9 +201,16 @@ export const useUserStore = create<UserState>()(
         set({ currentUser: user });
       },
 
+      patchCurrentUser: (partial) => {
+        const current = get().currentUser;
+        if (!current?.pk) return;
+        set({ currentUser: { ...current, ...partial } as UserType });
+      },
+
       clearUser: () => {
         set({ currentUser: {} as UserType });
         useUserCacheStore.getState().reset();
+        useUserProfileStore.getState().reset();
       },
       isStaff: () => !!get().currentUser?.is_staff,
       globalUserPks: [] as number[],

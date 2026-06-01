@@ -1018,12 +1018,17 @@ def list_users_for_avatar_check(request):
     qs = User.objects.filter(discordId__isnull=False)
 
     has_avatar = request.query_params.get("has_avatar")
+    # avatar lives on base_profile; ORM filters need the relation path
     if has_avatar == "true":
-        qs = qs.exclude(avatar__isnull=True).exclude(avatar="")
+        qs = qs.exclude(base_profile__avatar__isnull=True).exclude(
+            base_profile__avatar=""
+        )
     elif has_avatar == "false":
         from django.db.models import Q
 
-        qs = qs.filter(Q(avatar__isnull=True) | Q(avatar=""))
+        qs = qs.filter(
+            Q(base_profile__avatar__isnull=True) | Q(base_profile__avatar="")
+        )
 
     limit = int(request.query_params.get("limit", 100))
     offset = int(request.query_params.get("offset", 0))
@@ -1059,8 +1064,26 @@ def update_user_avatar(request, pk):
     except User.DoesNotExist:
         return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
 
-    user.avatar = request.data.get("avatar")
-    user.save(update_fields=["avatar"])
+    # Discord avatar hashes are 32 chars (or 34 with the `a_` animated prefix).
+    # Cap at 64 to defend the TextField from accidental URL/blob payloads —
+    # this endpoint is internal-only but the only celery-driven ingress for
+    # avatar refresh, so a sanity cap closes a tail-risk.
+    avatar = request.data.get("avatar")
+    if avatar is not None:
+        if not isinstance(avatar, str):
+            return Response(
+                {"error": "avatar must be a string or null"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if len(avatar) > 64:
+            return Response(
+                {"error": "avatar exceeds 64 characters"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+    # avatar setter persists + invalidates base_profile; also evict the user
+    # row since UserSerializer.avatar reads through base_profile.
+    user.avatar = avatar
     invalidate_after_commit(user)
 
     return Response({"pk": user.pk, "avatar": user.avatar})

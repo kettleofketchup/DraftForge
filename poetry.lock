@@ -1403,6 +1403,21 @@ redis = ">=4.0.2"
 hiredis = ["redis[hiredis] (>=4.0.2)"]
 
 [[package]]
+name = "django-test-migrations"
+version = "1.5.0"
+description = "Test django schema and data migrations, including ordering"
+optional = false
+python-versions = "<4.0,>=3.10"
+groups = ["dev"]
+files = [
+    {file = "django_test_migrations-1.5.0-py3-none-any.whl", hash = "sha256:96a08f085fc8bfaa53d44618341d82a2d22fd194c821cd81b147b66f0bec0da8"},
+    {file = "django_test_migrations-1.5.0.tar.gz", hash = "sha256:1cbff04b1e82c5564a6f635284907b381cc11a2ff883adff46776d9126824f07"},
+]
+
+[package.dependencies]
+typing_extensions = ">=4.0"
+
+[[package]]
 name = "djangorestframework"
 version = "3.16.1"
 description = "Web APIs for Django, made easy."
@@ -4886,7 +4901,6 @@ files = [
     {file = "typing_extensions-4.15.0-py3-none-any.whl", hash = "sha256:f0fa19c6845758ab08074a0cfa8b7aecb71c999ca73d62883bc25cc018c4e548"},
     {file = "typing_extensions-4.15.0.tar.gz", hash = "sha256:0cea48d173cc12fa28ecabc3b837ea3cf6f38c6d1136f85cbaaf598984861466"},
 ]
-markers = {dev = "python_version == \"3.12\""}
 
 [[package]]
 name = "typing-inspection"
@@ -5661,4 +5675,4 @@ cffi = ["cffi (>=1.17,<2.0) ; platform_python_implementation != \"PyPy\" and pyt
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12,<4"
-content-hash = "9280f1404233696f776f18d8811e3028cc606adc6d5b3dab83d1ce59370a95cc"
+content-hash = "92161b43865683ad780f3097c8e990cf44c7f5e8022c20b514dbfd8db686c177"
