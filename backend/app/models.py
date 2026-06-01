@@ -1517,11 +1517,13 @@ class DraftRound(models.Model):
         log.debug(
             f"Draft round {self.pk} picking player {user.username} for captain {captain_name}"
         )
-        log.debug(self.draft.users_remaining)
 
         # Debug the current state
         remaining_count_before = self.draft.users_remaining.count()
-        log.debug(f"Users remaining before pick: {remaining_count_before}")
+        log.debug(
+            f"Users remaining before pick: {remaining_count_before} "
+            f"({list(self.draft.users_remaining.values_list('username', flat=True))})"
+        )
 
         if self.draft.users_remaining.filter(id=user.id).exists():
             self.choice = user
