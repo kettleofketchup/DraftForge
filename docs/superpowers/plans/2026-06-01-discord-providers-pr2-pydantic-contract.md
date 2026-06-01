@@ -12,6 +12,8 @@
 
 **Deploy note:** `extra:"forbid"` turns a backend↔bot version skew into a crash. This PR's two containers MUST deploy from the same release tag (the existing release model). See spec "Deploy-skew note".
 
+**Test-runner correction (learned during implementation):** the `python -m pytest events/tests/...` commands below DO NOT WORK here — CI runs only `python manage.py test` (Django unittest runner, TestCase only), and bare pytest fails collecting `events/tests/` (`ModuleNotFoundError: app.schemas`, a `/app/backend/__init__.py` rootdir quirk). Write contract tests as a `SimpleTestCase` in `backend/events/tests/test_modal_config_contract.py` and run via `just test::run 'python manage.py test events.tests.test_modal_config_contract -v 2'`. The def-style `test_signup_schema.py` tests are orphaned (not collected by CI) — leave them; don't append to them.
+
 ---
 
 ### Task 1: Add the config models + union + `dota_require_screenshot` to `events/schemas.py`
