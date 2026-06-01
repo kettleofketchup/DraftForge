@@ -46,6 +46,18 @@ Every log MUST include `system` and `subsystem` kwargs. These are the primary Gr
 | `websocket` | `broadcast` | — | `app/broadcast.py` | Draft / herodraft event + state broadcast to channel groups (`kind` field distinguishes draft/herodraft/herodraft_state) |
 | `auth` | `internal` | — | `app/auth.py` | Internal-service auth (X-Internal-Token): IP-allowlist rejects, invalid-token failures |
 | `auth` | `social` | — | `app/pipelines.py` | Discord OAuth social-auth pipeline: account reclaim/merge, username matching |
+| `auth` | `merge` | — | `app/discord_accounts.py` | Discord account de-dup / merge |
+| `tournament` | `draft`, `registration`, `user` | — | `app/models.py`, `app/functions/tournament.py` | Draft build/pick/rebuild, captain/team registration, per-user avatar refresh |
+| `api` | `serializer`, `routing`, `main`, `csv_import`, `joke` | — | `app/serializers.py`, `app/views*.py`, `app/views/csv_import.py`, `backend/urls.py` | DRF serializer mutations, view cache-miss, CSV import, env/routing |
+| `user` | `functions` | — | `app/functions/user.py` | Profile-update request/validate/apply |
+| `app` | `signals` | — | `app/signals.py` | Model signal handlers (org/league user create, herodraft cleanup) |
+| `internal_client` | `http` | — | `app/internal_client/__init__.py` | Internal HTTP client JSON-parse failures |
+| `discord` | `bot`, `utils`, `views`, `channels`, `roles`, `users` | — | `discordbot/**` | Bot lifecycle, message utils, slash views, channel/role/user services |
+| `events` | `tasks`, `services`, `views`, `dispatch` | — | `events/**` | Event task lifecycle, signup services, manual fire, tournament-link dispatch |
+| `steam` | `api`, `game_linking`, `match`, `mmr`, `stats`, `model`, `league_sync`, `retry` | — | `steam/**` | Steam API, account/game linking, match fetch/store, MMR/stats, league sync, retry |
+| `bracket` | `generate`, `model` | — | `bracket/**` | Bracket generation + model-level cache logging |
+| `org` | `views` | — | `org/views.py` | Org admin actions (user delete/merge) |
+| `common` | `utils` | — | `common/utils.py` | Shared utility warnings (CI/IP detection) |
 
 Add new systems/subsystems as features grow. Keep systems coarse (feature area), subsystems functional (what role the code plays).
 

@@ -17,3 +17,14 @@ repos:
         args: ['--unsafe']
     -   id: end-of-file-fixer
     -   id: trailing-whitespace
+  # Enforce structured-logging taxonomy: every get_logger(...) call must pass a
+  # string-literal event name + system= + subsystem=. Only files binding a
+  # logger via get_logger are checked (stdlib-logging files are ignored).
+  - repo: local
+    hooks:
+      - id: logging-taxonomy
+        name: structured logging taxonomy (system/subsystem)
+        entry: python3 backend/scripts/check_logging_taxonomy.py
+        language: system
+        files: \.py$
+        pass_filenames: true
