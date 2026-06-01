@@ -610,9 +610,10 @@ fallback passes `view=view`/`embed=embed` (often `None`) to
 `TypeError: expected view parameter to be of type View not NoneType` — `None`
 is not `MISSING` and lacks `__discord_ui_view__`. The DM path (`Messageable.send`)
 tolerates `None`, so only the fallback crashes. **Fix:** use the
-`discord.utils.MISSING` sentinel (`send_view = view if view is not None else
-MISSING`, same for embed) on the `followup.send` call (and defensively on
-`dm_channel.send`). `signup_responses.py` is not split by the refactor, so this
+`discord.utils.MISSING` sentinel (`view if view is not None else MISSING`, same
+for embed) on the `followup.send` call **only** — the DM `Messageable.send` path
+tolerates `None` (an existing test asserts the DM send receives `view=None`), so
+it stays unchanged. `signup_responses.py` is not split by the refactor, so this
 is a small self-contained edit on the branch; `base.py`'s RSVP confirmation path
 depends on it.
 
