@@ -113,6 +113,41 @@ class RespondToSignupUserDMDisabledTest(SimpleTestCase):
         self.assertEqual(result, ResponseChannel.EPHEMERAL)
 
 
+class RespondToSignupUserNoViewFallbackTest(SimpleTestCase):
+    async def test_forbidden_fallback_with_no_view_does_not_raise_typeerror(self):
+        """#268 bug 1: DM-disabled + no view/embed must fall back cleanly.
+
+        discord.py's Webhook.send (the followup.send path) rejects a literal
+        None view (None is not MISSING and lacks __discord_ui_view__). The
+        fallback must pass MISSING, not None. The DM path (Messageable.send)
+        tolerates None, so only the followup is affected.
+        """
+        interaction = _make_interaction(user_id=999)
+        dm_channel = AsyncMock()
+        dm_channel.send = AsyncMock(side_effect=_make_forbidden(50007))
+        interaction.user.create_dm.return_value = dm_channel
+
+        # Mirror Webhook.send: reject a literal None view/embed.
+        def _send(*args, **kwargs):
+            if kwargs.get("view", discord.utils.MISSING) is None:
+                raise TypeError(
+                    "expected view parameter to be of type View not NoneType"
+                )
+            if kwargs.get("embed", discord.utils.MISSING) is None:
+                raise TypeError(
+                    "expected embed parameter to be of type Embed not NoneType"
+                )
+        interaction.followup.send = AsyncMock(side_effect=_send)
+
+        channel = await respond_to_signup_user(interaction, content="✅ You're signed up!")
+
+        self.assertEqual(channel, ResponseChannel.EPHEMERAL)
+        interaction.followup.send.assert_awaited_once()
+        kwargs = interaction.followup.send.await_args.kwargs
+        self.assertTrue(kwargs["ephemeral"])
+        self.assertTrue(kwargs["content"].startswith("<@999>"))
+
+
 class RespondToSignupUserOtherForbiddenTest(SimpleTestCase):
     async def test_non_50007_forbidden_reraises(self):
         interaction = _make_interaction()
