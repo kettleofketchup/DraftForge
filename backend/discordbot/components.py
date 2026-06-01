@@ -163,27 +163,14 @@ class SignupButton(ui.Button):
                     content=f"\u2705 You're signed up! Status: **{result['status']}**",
                 )
             elif result["action"] == "needs_modal":
+                # modal_config is the typed per-game config dict (same keys as
+                # the old flat fields, plus `kind`). Downstream
+                # self.event_config.get("...") reads are unchanged.
                 modal = EventSignupModal(
                     event_id=self.event_id,
                     game_type=result["game_type"],
                     prefill=result.get("prefill", {}),
-                    event_config={
-                        "require_steam_id": result.get("require_steam_id", True),
-                        "require_rank_screenshot": result.get(
-                            "require_rank_screenshot", False
-                        ),
-                        "require_battlecup_screenshot": result.get(
-                            "require_battlecup_screenshot", False
-                        ),
-                        "min_mmr": result.get("min_mmr"),
-                        "allow_active_mmr": result.get("allow_active_mmr", True),
-                        "allow_previous_rank": result.get(
-                            "allow_previous_rank", True
-                        ),
-                        "allow_battlecup_rating": result.get(
-                            "allow_battlecup_rating", True
-                        ),
-                    },
+                    event_config=result.get("modal_config", {}) or {},
                 )
                 await send_modal_v2(interaction, modal)
             elif result["action"] == "error":
@@ -440,16 +427,15 @@ class EventSignupModal(ui.Modal):
             ctx.set_outcome(result["action"])
 
             if result["action"] == "needs_rank_details":
+                from events.schemas import DotaModalConfig, dota_require_screenshot
+
                 rank_status = values.get("rank_status", "never")
-                require_screenshot = (
-                    self.event_config.get("require_rank_screenshot", False)
-                    if rank_status == "active"
-                    else (
-                        self.event_config.get("require_battlecup_screenshot", False)
-                        if rank_status == "never"
-                        else False
-                    )
-                )
+                cfg = DotaModalConfig(**{
+                    k: v
+                    for k, v in self.event_config.items()
+                    if k in DotaModalConfig.model_fields
+                })
+                require_screenshot = dota_require_screenshot(rank_status, cfg)
                 view = PositionSelectView(
                     self.event_id,
                     rank_status,
