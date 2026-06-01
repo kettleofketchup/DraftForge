@@ -25,7 +25,7 @@ transport package. Request bodies for the same endpoints live in
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TYPE_CHECKING, Literal, Optional
+from typing import TYPE_CHECKING, Annotated, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -263,6 +263,50 @@ class SignupInputPatch(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+class SignupModalConfig(BaseModel):
+    """Base / default game config carried in the needs_modal response."""
+
+    kind: Literal["default"] = "default"
+    require_steam_id: bool = True
+
+
+class DotaModalConfig(SignupModalConfig):
+    kind: Literal["dota"] = "dota"
+    require_rank_screenshot: bool = False
+    require_battlecup_screenshot: bool = False
+    min_mmr: int | None = None
+    allow_active_mmr: bool = True
+    allow_previous_rank: bool = True
+    allow_battlecup_rating: bool = True
+
+
+class DeadlockModalConfig(SignupModalConfig):
+    kind: Literal["deadlock"] = "deadlock"
+
+
+# Discriminated union — REQUIRED so model_validate(dict) -> model_dump() keeps
+# subclass fields. A plain `SignupModalConfig` annotation serializes by the
+# base type and silently drops the Dota fields on the wire path.
+ModalConfig = Annotated[
+    DotaModalConfig | DeadlockModalConfig | SignupModalConfig,
+    Field(discriminator="kind"),
+]
+
+
+def dota_require_screenshot(rank_status: str, cfg: "DotaModalConfig") -> bool:
+    """Single home for the screenshot-required rule.
+
+    Was duplicated as a ternary in components.py (modal follow-up) and in
+    handle_get_rank_flow_state. Pure over the transported config so both
+    processes call it.
+    """
+    if rank_status == "active":
+        return cfg.require_rank_screenshot
+    if rank_status == "never":
+        return cfg.require_battlecup_screenshot
+    return False
+
+
 class SignupActionResponse(BaseModel):
     """All bot-facing handler return dicts share this shape.
 
@@ -282,18 +326,10 @@ class SignupActionResponse(BaseModel):
     # signup_modal_submit / signup_button: needs_modal payload
     game_type: int | None = None
     prefill: dict | None = None
-    require_steam_id: bool | None = None
-    require_rank_screenshot: bool | None = None
-    require_battlecup_screenshot: bool | None = None
-    min_mmr: int | None = None
-    allow_active_mmr: bool | None = None
-    allow_previous_rank: bool | None = None
-    allow_battlecup_rating: bool | None = None
+    modal_config: "ModalConfig | None" = None  # discriminated (was 8 flat flags)
 
     # rank_medal_select / battle_cup_submit: needs_screenshot payload
-    screenshot_type: str | None = None
-    medal: str | None = None
-    tier: str | None = None
+    screenshot_type: str | None = None  # stays FLAT (views bracket-index it)
 
     # notify_button
     subscribed: bool | None = None
@@ -305,7 +341,7 @@ class SignupActionResponse(BaseModel):
     # save_positions
     positions: list[int] | None = None
 
-    model_config = {"extra": "ignore"}
+    model_config = {"extra": "forbid"}
 
 
 class RankFlowStateResponse(BaseModel):
