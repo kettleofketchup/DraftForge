@@ -63,9 +63,7 @@ def search_users(request):
         | Q(discordNickname__icontains=query)
         | Q(guildNickname__icontains=query)
         | Q(username__icontains=query)
-        # T1.5+: nickname moved off CustomUser to BaseUserProfile
-        # (related_name="base_profile"). ORM filters need the relation path;
-        # the transitional @property only works for attribute reads.
+        # nickname lives on base_profile; ORM filters need the relation path
         | Q(base_profile__nickname__icontains=query)
     )
 

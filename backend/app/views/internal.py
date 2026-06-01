@@ -1018,9 +1018,7 @@ def list_users_for_avatar_check(request):
     qs = User.objects.filter(discordId__isnull=False)
 
     has_avatar = request.query_params.get("has_avatar")
-    # T1.5+: avatar lives on base_profile, not CustomUser. ORM filters need
-    # the relation path; the transitional @property only works for attribute
-    # reads.
+    # avatar lives on base_profile; ORM filters need the relation path
     if has_avatar == "true":
         qs = qs.exclude(base_profile__avatar__isnull=True).exclude(
             base_profile__avatar=""
@@ -1083,11 +1081,8 @@ def update_user_avatar(request, pk):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-    # T1.5+: avatar is a property over base_profile.avatar; the setter
-    # persists via bp.save(update_fields=["avatar"]) internally. The setter
-    # also calls invalidate_after_commit(bp), but we still evict the user
-    # row's cached payloads since UserSerializer.avatar sources from the
-    # base_profile and cached CustomUser rows reference stale data.
+    # avatar setter persists + invalidates base_profile; also evict the user
+    # row since UserSerializer.avatar reads through base_profile.
     user.avatar = avatar
     invalidate_after_commit(user)
 

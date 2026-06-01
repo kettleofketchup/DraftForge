@@ -485,11 +485,8 @@ class DraftPredictMMRSerializer(serializers.Serializer):
 
 from cacheops import cached_as
 
-# BaseUserProfile owns nickname/avatar (T1 epic). Listed alongside CustomUser
-# in @cached_as below to satisfy the grep guardrail enforced by
-# backend/user/tests/test_cacheops.py — every cached_as site that depends on
-# CustomUser must also depend on BaseUserProfile so a PATCH to
-# /api/users/me/profile/base/ invalidates the cached response.
+# cached_as sites depending on CustomUser must also list BaseUserProfile
+# (owns nickname/avatar) — enforced by user/tests/test_cacheops.py.
 from user.models import BaseUserProfile
 
 
