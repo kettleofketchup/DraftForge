@@ -27,8 +27,9 @@ def link_user_to_stats(player_stats):
         player_stats.user = user
         player_stats.save(update_fields=["user"])
         log.debug(
-            "Linked player to user",
-            domain="steam",
+            "player_linked_to_user",
+            system="steam",
+            subsystem="league_sync",
             steam_id=player_stats.steam_id,
             username=user.username,
         )
@@ -52,7 +53,10 @@ def relink_all_users():
             linked_count += 1
 
     log.info(
-        "Relinked player stats to users", domain="steam", linked_count=linked_count
+        "player_stats_relinked",
+        system="steam",
+        subsystem="league_sync",
+        count=linked_count,
     )
     return linked_count
 
@@ -97,7 +101,12 @@ def process_match(match_id, league_id=None, match_seq_num=None):
     success, result = retry_with_backoff(fetch, max_retries=3, base_delay=1.0)
 
     if not success or not result or "result" not in result:
-        log.warning("Failed to fetch match", domain="steam", match_id=match_id)
+        log.warning(
+            "match_fetch_failed",
+            system="steam",
+            subsystem="league_sync",
+            match_id=match_id,
+        )
         return None
 
     data = result["result"]
@@ -116,8 +125,9 @@ def process_match(match_id, league_id=None, match_seq_num=None):
 
     if created:
         log.info(
-            "New steam match stored",
-            domain="steam",
+            "match_stored",
+            system="steam",
+            subsystem="league_sync",
             match_id=match.match_id,
             league_id=league_id,
             radiant_win=match.radiant_win,
@@ -173,7 +183,12 @@ def sync_league_matches(league_id, full_sync=False):
     )
 
     if state.is_syncing:
-        log.warning("Sync already in progress", domain="steam", league_id=league_id)
+        log.warning(
+            "league_sync_already_running",
+            system="steam",
+            subsystem="league_sync",
+            league_id=league_id,
+        )
         return {
             "error": "Sync already in progress",
             "synced_count": 0,
@@ -204,8 +219,9 @@ def sync_league_matches(league_id, full_sync=False):
 
             if not result or "result" not in result:
                 log.error(
-                    "Failed to fetch match history",
-                    domain="steam",
+                    "match_history_fetch_failed",
+                    system="steam",
+                    subsystem="league_sync",
                     league_id=league_id,
                 )
                 break
@@ -256,8 +272,9 @@ def sync_league_matches(league_id, full_sync=False):
         state.save()
 
     log.info(
-        "League sync complete",
-        domain="steam",
+        "league_sync_complete",
+        system="steam",
+        subsystem="league_sync",
         league_id=league_id,
         synced_count=synced_count,
         failed_count=failed_count,
@@ -302,8 +319,9 @@ def retry_failed_matches(league_id):
     state.save()
 
     log.info(
-        "Retry failed matches complete",
-        domain="steam",
+        "league_retry_complete",
+        system="steam",
+        subsystem="league_sync",
         league_id=league_id,
         retried_count=retried_count,
         still_failed_count=len(still_failed),

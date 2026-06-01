@@ -1,5 +1,3 @@
-from telemetry.logging import get_logger
-
 from django.db.models import Sum
 
 from steam.functions.mmr_calculation import (
@@ -7,6 +5,7 @@ from steam.functions.mmr_calculation import (
     update_user_league_mmr,
 )
 from steam.models import LeaguePlayerStats, PlayerMatchStats
+from telemetry.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -23,7 +22,13 @@ def update_player_league_stats(user, league_id: int) -> LeaguePlayerStats:
     ).select_related("match")
 
     if not match_stats.exists():
-        logger.debug(f"No match stats found for {user.username} in league {league_id}")
+        logger.debug(
+            "stats_not_found",
+            system="steam",
+            subsystem="stats",
+            username=user.username,
+            league_id=league_id,
+        )
         return None
 
     # Calculate aggregates
@@ -77,8 +82,15 @@ def update_player_league_stats(user, league_id: int) -> LeaguePlayerStats:
     update_user_league_mmr(user)
 
     logger.info(
-        f"Updated league stats for {user.username}: "
-        f"{games_played} games, {wins}W-{losses}L, adjustment={stats.mmr_adjustment}"
+        "league_stats_updated",
+        system="steam",
+        subsystem="stats",
+        username=user.username,
+        league_id=league_id,
+        games_played=games_played,
+        wins=wins,
+        losses=losses,
+        mmr_adjustment=stats.mmr_adjustment,
     )
 
     return stats
@@ -107,5 +119,11 @@ def update_all_league_stats_for_league(league_id: int) -> int:
         except CustomUser.DoesNotExist:
             continue
 
-    logger.info(f"Updated league stats for {updated_count} users in league {league_id}")
+    logger.info(
+        "league_stats_bulk_updated",
+        system="steam",
+        subsystem="stats",
+        league_id=league_id,
+        count=updated_count,
+    )
     return updated_count

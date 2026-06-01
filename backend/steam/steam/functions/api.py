@@ -1,5 +1,3 @@
-from telemetry.logging import get_logger
-
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAdminUser
@@ -34,6 +32,7 @@ from steam.serializers import (
     SyncStatusSerializer,
 )
 from steam.utils.steam_api_caller import SteamAPI
+from telemetry.logging import get_logger
 
 log = get_logger(__name__)
 

@@ -4,12 +4,11 @@ Embed builders for Discord event notifications.
 Pure functions that construct embed dicts for the Discord API.
 """
 
-from telemetry.logging import get_logger
-
 from django.conf import settings
 
 from app.constants import LOGO_URL
 from app.internal_client import get_event_signups
+from telemetry.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -108,11 +107,13 @@ def build_user_list_fields(signups, *, name, inline=True, max_items=40, numbered
     for line in lines:
         added = len(line) + (1 if bucket else 0)  # +1 for "\n" separator
         if bucket_len + added > EMBED_FIELD_VALUE_LIMIT:
-            fields.append({
-                "name": name if not fields else f"{name} (cont.)",
-                "value": "\n".join(bucket),
-                "inline": inline,
-            })
+            fields.append(
+                {
+                    "name": name if not fields else f"{name} (cont.)",
+                    "value": "\n".join(bucket),
+                    "inline": inline,
+                }
+            )
             bucket = [line]
             bucket_len = len(line)
         else:
@@ -120,11 +121,13 @@ def build_user_list_fields(signups, *, name, inline=True, max_items=40, numbered
             bucket_len += added
 
     if bucket:
-        fields.append({
-            "name": name if not fields else f"{name} (cont.)",
-            "value": "\n".join(bucket),
-            "inline": inline,
-        })
+        fields.append(
+            {
+                "name": name if not fields else f"{name} (cont.)",
+                "value": "\n".join(bucket),
+                "inline": inline,
+            }
+        )
     return fields
 
 
@@ -400,7 +403,7 @@ def build_announcement_notice(event, signup_link=None):
     date_line = local_dt.strftime("%A, %B %-d")
     time_line = local_dt.strftime("%-I:%M %p %Z")
 
-    desc = f"A new event is coming up!\n\n"
+    desc = "A new event is coming up!\n\n"
     desc += f"**When:** {date_line} at {time_line}\n"
     desc += f"**Max Players:** {event.max_players or 'Unlimited'}\n"
 

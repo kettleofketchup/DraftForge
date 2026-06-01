@@ -1,5 +1,3 @@
-from telemetry.logging import get_logger
-
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
@@ -38,6 +36,7 @@ from steam.serializers import (
 )
 from steam.services.match_suggestions import get_match_suggestions_for_game
 from steam.utils.steam_api_caller import SteamAPI
+from telemetry.logging import get_logger
 
 log = get_logger(__name__)
 
@@ -281,7 +280,6 @@ def link_game_match(request, game_id):
     Requires league staff access.
     """
     from app.cache_utils import invalidate_obj
-
     from app.models import Game
 
     serializer = LinkMatchRequestSerializer(data=request.data)
@@ -331,7 +329,6 @@ def unlink_game_match(request, game_id):
     Requires league staff access.
     """
     from app.cache_utils import invalidate_obj
-
     from app.models import Game
 
     try:

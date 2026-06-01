@@ -1,31 +1,32 @@
 import json
-from telemetry.logging import get_logger
 from datetime import timedelta
 
-import requests
 from cacheops import cached_as
 from django.contrib.auth import login
 from django.contrib.auth import logout as auth_logout
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
 from django.db.models import Count, Q
-from django.http import HttpResponse, HttpResponseBadRequest, JsonResponse
-from django.shortcuts import redirect, render
+from django.http import HttpResponse, HttpResponseBadRequest
+from django.shortcuts import redirect
 from django.utils import timezone
-from rest_framework import generics, permissions, status, viewsets
+from rest_framework import generics, status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
-from rest_framework.generics import GenericAPIView
 from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
-from rest_framework.reverse import reverse
 from social_core.backends.oauth import BaseOAuth1, BaseOAuth2
-from social_django.models import USER_MODEL  # fix: skip
-from social_django.models import AbstractUserSocialAuth, DjangoStorage
 from social_django.utils import load_strategy, psa
 
 # Create your views here.
 from app.permissions_org import has_org_staff_access
-from backend import settings
+from telemetry.logging import get_logger
+
+# BaseUserProfile owns nickname/avatar (T1 epic). Every @cached_as site below
+# that ships nickname or avatar in its payload MUST list BaseUserProfile as a
+# dependency, otherwise PATCH /api/users/me/profile/base/ won't invalidate the
+# cached response. See backend/user/tests/test_cacheops.py for the grep
+# guardrail that enforces this.
+from user.models import BaseUserProfile
 
 from .decorators import render_to
 from .models import (
@@ -47,13 +48,10 @@ from .permissions_org import (
     CanEditTournament,
     CanManageGame,
     IsLeagueAdmin,
-    IsLeagueStaff,
     IsOrgAdmin,
     IsOrgOwner,
-    can_edit_tournament,
     can_manage_game,
     has_league_admin_access,
-    has_org_admin_access,
 )
 from .serializers import (
     DraftRoundSerializer,
@@ -71,15 +69,7 @@ from .serializers import (
     TournamentUserSerializer,
     UserSerializer,
     _build_users_dict,
-    _serialize_users_with_mmr,
 )
-
-# BaseUserProfile owns nickname/avatar (T1 epic). Every @cached_as site below
-# that ships nickname or avatar in its payload MUST list BaseUserProfile as a
-# dependency, otherwise PATCH /api/users/me/profile/base/ won't invalidate the
-# cached response. See backend/user/tests/test_cacheops.py for the grep
-# guardrail that enforces this.
-from user.models import BaseUserProfile
 
 log = get_logger(__name__)
 from .utils.avatar_utils import refresh_user_avatar
@@ -170,13 +160,6 @@ def ajax_auth(request, backend):
     login(request, user)
     data = {"id": user.id, "username": user.username}
     return HttpResponse(json.dumps(data), mimetype="application/json")
-
-
-from django.contrib.auth.models import User
-from django.db import transaction
-
-from .models import CustomUser
-from .serializers import UserSerializer
 
 
 @permission_classes((IsStaff,))
@@ -459,7 +442,12 @@ class TournamentView(viewsets.ModelViewSet):
             timeout=60 * 10,
         )
         def get_data():
-            log.debug("get_tournament: fetching data")
+            log.debug(
+                "tournament_cache_miss",
+                system="api",
+                subsystem="main",
+                tournament_id=pk,
+            )
             instance = self.get_object()
             serializer = self.get_serializer(instance)
             data = serializer.data
@@ -562,7 +550,7 @@ class TeamView(viewsets.ModelViewSet):
             timeout=60 * 60,
         )
         def get_data():
-            log.debug("get_team: fetching data")
+            log.debug("team_list_cache_miss", system="api", subsystem="main")
             queryset = self.filter_queryset(self.get_queryset())
             serializer = self.get_serializer(queryset, many=True)
             return serializer.data
@@ -768,7 +756,7 @@ def current_user(request):
         active_drafts = []
 
         # Team drafts: user is captain with pending pick in in_progress tournament
-        from app.models import DraftTeam, HeroDraft
+        from app.models import DraftTeam
 
         pending_team_round = (
             DraftRound.objects.filter(
@@ -1137,7 +1125,9 @@ class OrganizationView(viewsets.ModelViewSet):
         org = self.get_object()
         cache_key = f"organization_users:{pk}"
 
-        @cached_as(OrgUser, CustomUser, BaseUserProfile, extra=cache_key, timeout=60 * 10)
+        @cached_as(
+            OrgUser, CustomUser, BaseUserProfile, extra=cache_key, timeout=60 * 10
+        )
         def get_data():
             org_users = OrgUser.objects.filter(organization=org).select_related(
                 "user", "user__positions", "user__base_profile"
@@ -1284,7 +1274,9 @@ class LeagueView(viewsets.ModelViewSet):
         league = self.get_object()
         cache_key = f"league_users:{pk}"
 
-        @cached_as(LeagueUser, CustomUser, BaseUserProfile, extra=cache_key, timeout=60 * 10)
+        @cached_as(
+            LeagueUser, CustomUser, BaseUserProfile, extra=cache_key, timeout=60 * 10
+        )
         def get_data():
             league_users = LeagueUser.objects.filter(league=league).select_related(
                 "user", "user__positions", "user__base_profile"

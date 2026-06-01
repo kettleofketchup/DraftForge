@@ -1,8 +1,8 @@
-from telemetry.logging import get_logger
-
 from django.db import models
 from django.db.models.signals import post_save
 from django.dispatch import receiver
+
+from telemetry.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -180,11 +180,21 @@ def invalidate_game_cache_on_match_save(sender, instance, **kwargs):
             )
             invalidate_after_commit(*linked_games, *tournaments)
             logger.debug(
-                f"Scheduled cache invalidation for {len(linked_games)} games, "
-                f"{len(tournaments)} tournaments linked to Match {instance.match_id}"
+                "match_cache_invalidated",
+                system="steam",
+                subsystem="model",
+                match_id=instance.match_id,
+                game_count=len(linked_games),
+                tournament_count=len(tournaments),
             )
     except ImportError:
         # cacheops not installed or not configured
         pass
     except Exception as e:
-        logger.warning(f"Failed to invalidate cache for Match {instance.match_id}: {e}")
+        logger.warning(
+            "match_cache_invalidation_failed",
+            system="steam",
+            subsystem="model",
+            match_id=instance.match_id,
+            error=str(e),
+        )

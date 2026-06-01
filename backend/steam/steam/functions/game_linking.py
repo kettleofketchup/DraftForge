@@ -1,9 +1,9 @@
-from telemetry.logging import get_logger
 from datetime import datetime
 from datetime import timezone as dt_timezone
 
 from app.models import Game, Tournament
 from steam.models import GameMatchSuggestion, Match
+from telemetry.logging import get_logger
 
 log = get_logger(__name__)
 
@@ -69,7 +69,13 @@ def check_match_for_games(match):
                     player_overlap=overlap,
                     auto_linked=True,
                 )
-                log.info(f"Auto-linked game {game.id} to match {match.match_id}")
+                log.info(
+                    "game_auto_linked",
+                    system="steam",
+                    subsystem="game_linking",
+                    game_id=game.id,
+                    match_id=match.match_id,
+                )
             else:
                 # Partial match - create suggestion for review
                 GameMatchSuggestion.objects.create(
@@ -234,7 +240,13 @@ def auto_link_matches_for_tournament(tournament_id):
                     auto_linked=True,
                 )
                 auto_linked_count += 1
-                log.info(f"Auto-linked game {game.id} to match {match.match_id}")
+                log.info(
+                    "game_auto_linked",
+                    system="steam",
+                    subsystem="game_linking",
+                    game_id=game.id,
+                    match_id=match.match_id,
+                )
                 break  # Game is now linked, move to next game
             else:
                 # Partial match - create suggestion

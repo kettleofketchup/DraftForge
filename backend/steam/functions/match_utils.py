@@ -1,8 +1,5 @@
+from steam.models import Match
 from telemetry.logging import get_logger
-
-from django.db.models import Count, Q
-
-from steam.models import Match, PlayerMatchStats
 
 log = get_logger(__name__)
 

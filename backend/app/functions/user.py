@@ -1,38 +1,16 @@
-import json
-from telemetry.logging import get_logger
-
-import requests
-from django.contrib.auth import login
-from django.contrib.auth import logout as auth_logout
-from django.contrib.auth.decorators import login_required
 from django.db import transaction
-from django.http import HttpResponse, HttpResponseBadRequest, JsonResponse
-from django.shortcuts import redirect, render
-from rest_framework import generics, permissions, serializers, status, viewsets
+from rest_framework import serializers
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.generics import GenericAPIView
-from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from rest_framework.reverse import reverse
-from social_core.backends.oauth import BaseOAuth1, BaseOAuth2
 
 # Create your views here.
-from social_django.models import USER_MODEL  # fix: skip
-from social_django.models import AbstractUserSocialAuth, DjangoStorage
-from social_django.utils import load_strategy, psa
-
-from app.models import CustomUser, Draft, DraftRound, PositionsModel, Team, Tournament
-from app.permissions import IsStaff
+from app.models import CustomUser, PositionsModel
 from app.serializers import (
-    DraftRoundSerializer,
-    DraftSerializer,
-    GameSerializer,
     PositionsSerializer,
-    TeamSerializer,
-    TournamentSerializer,
     UserSerializer,
 )
-from backend import settings
+from telemetry.logging import get_logger
 
 log = get_logger(__name__)
 
@@ -53,7 +31,6 @@ class ProfileUserSerializer(serializers.ModelSerializer):
 
 
 class ProfileUpdateSerializer(serializers.Serializer):
-
     positions = PositionsSerializer(many=False, required=False)
     nickname = serializers.CharField(required=False, allow_blank=True, max_length=100)
     steam_account_id = serializers.IntegerField(required=False, allow_null=True)
@@ -67,7 +44,9 @@ def profile_update(request):
         return Response({"error": "Unauthorized"}, status=401)
 
     serializer = ProfileUpdateSerializer(data=request.data)
-    log.debug(request.data)
+    log.debug(
+        "profile_update_request", system="user", subsystem="functions", user_id=user.pk
+    )
     if serializer.is_valid():
         positions = serializer.validated_data.get("positions", None)
         steam_account_id = serializer.validated_data.get("steam_account_id", None)
@@ -75,7 +54,12 @@ def profile_update(request):
 
     else:
         return Response(serializer.errors, status=400)
-    log.debug(serializer.validated_data)
+    log.debug(
+        "profile_update_validated",
+        system="user",
+        subsystem="functions",
+        user_id=user.pk,
+    )
 
     try:
         posObj = PositionsModel.objects.get(pk=user.positions.pk)
@@ -105,7 +89,15 @@ def profile_update(request):
             user.steam_account_id = steam_account_id
     if nickname is not None:
         user.nickname = nickname
-    log.debug(f"{positions}, {steam_account_id}, {nickname}")
+    log.debug(
+        "profile_update_fields",
+        system="user",
+        subsystem="functions",
+        user_id=user.pk,
+        has_positions=positions is not None,
+        has_steam_account_id=steam_account_id is not None,
+        has_nickname=nickname is not None,
+    )
     with transaction.atomic():
         posObj.save()
         user.save()

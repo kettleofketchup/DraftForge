@@ -1,9 +1,9 @@
-from telemetry.logging import get_logger
 from datetime import datetime
 from datetime import timezone as dt_timezone
 
 from app.models import Game, Tournament
 from steam.models import GameMatchSuggestion, Match
+from telemetry.logging import get_logger
 
 log = get_logger(__name__)
 
@@ -68,7 +68,13 @@ def check_match_for_games(match):
                     player_overlap=overlap,
                     auto_linked=True,
                 )
-                log.info(f"Auto-linked game {game.id} to match {match.match_id}")
+                log.info(
+                    "game_auto_linked",
+                    system="steam",
+                    subsystem="game_linking",
+                    game_id=game.id,
+                    match_id=match.match_id,
+                )
             else:
                 # Partial match - create suggestion for review
                 GameMatchSuggestion.objects.create(
@@ -145,7 +151,12 @@ def _determine_winner_from_match(game, match):
     option_b_score = radiant_as_dire + dire_as_radiant
 
     if option_a_score == 0 and option_b_score == 0:
-        log.warning(f"Cannot determine team mapping for game {game.id}")
+        log.warning(
+            "team_mapping_indeterminate",
+            system="steam",
+            subsystem="game_linking",
+            game_id=game.id,
+        )
         return None
 
     # Determine which mapping is correct
@@ -163,8 +174,14 @@ def _determine_winner_from_match(game, match):
             winner = game.radiant_team
 
     log.info(
-        f"Game {game.id}: Determined winner is {winner.name} "
-        f"(option_a={option_a_score}, option_b={option_b_score}, radiant_win={match.radiant_win})"
+        "game_winner_determined",
+        system="steam",
+        subsystem="game_linking",
+        game_id=game.id,
+        winner=winner.name,
+        option_a_score=option_a_score,
+        option_b_score=option_b_score,
+        radiant_win=match.radiant_win,
     )
     return winner
 
@@ -187,11 +204,20 @@ def _link_game_to_match(game, match):
         game.winning_team = winner
         game.status = "completed"
         log.info(
-            f"Linked game {game.id} to match {match.match_id}, winner: {winner.name}"
+            "game_linked_with_winner",
+            system="steam",
+            subsystem="game_linking",
+            game_id=game.id,
+            match_id=match.match_id,
+            winner=winner.name,
         )
     else:
         log.warning(
-            f"Linked game {game.id} to match {match.match_id}, but could not determine winner"
+            "game_linked_winner_unknown",
+            system="steam",
+            subsystem="game_linking",
+            game_id=game.id,
+            match_id=match.match_id,
         )
 
     game.save(update_fields=["gameid", "winning_team", "status"])
@@ -543,12 +569,24 @@ def auto_assign_matches_by_time(tournament_id, preview=True, min_overlap=4):
                 _link_game_to_match(game, match)
                 linked_count += 1
                 log.info(
-                    f"Auto-assigned game {game.id} ({game.bracket_type} R{game.round}) "
-                    f"to match {match.match_id} via {assignment['match_method']} "
-                    f"(overlap: {assignment['player_overlap']})"
+                    "game_auto_assigned",
+                    system="steam",
+                    subsystem="game_linking",
+                    game_id=game.id,
+                    bracket_type=game.bracket_type,
+                    round=game.round,
+                    match_id=match.match_id,
+                    match_method=assignment["match_method"],
+                    player_overlap=assignment["player_overlap"],
                 )
             except Exception as e:
-                log.error(f"Failed to link game {assignment['game_id']}: {e}")
+                log.error(
+                    "game_link_failed",
+                    system="steam",
+                    subsystem="game_linking",
+                    game_id=assignment["game_id"],
+                    error=str(e),
+                )
 
     return {
         "assignments": assignments,

@@ -7,6 +7,8 @@ import redis as _redis
 import requests
 from django.conf import settings
 
+from telemetry.logging import get_logger
+
 from .embeds import event_announcement_embed
 
 log = get_logger(__name__)
@@ -29,6 +31,7 @@ class MessageDeletedError(Exception):
         super().__init__(
             f"Discord message {self.message_id} in channel {self.channel_id} was deleted"
         )
+
 
 _REDIS_HOST = getattr(settings, "REDIS_HOST", "redis")
 redis_client = _redis.Redis(host=_REDIS_HOST, port=6379, db=2, socket_timeout=2)
@@ -80,7 +83,9 @@ def _acquire_rate_limit_token(max_wait=10.0):
             if result == 1:
                 return True
         except _redis.RedisError:
-            log.warning("Rate limiter Redis unavailable, allowing request")
+            log.warning(
+                "rate_limiter_redis_unavailable", system="discord", subsystem="utils"
+            )
             return True
         if _time.monotonic() >= deadline:
             raise RuntimeError(f"Discord rate limit: no token within {max_wait}s")
@@ -98,7 +103,12 @@ def _rate_limited_request(method, url, max_retries=3, **kwargs):
         if response.status_code == 429:
             retry_after = response.json().get("retry_after", 1.0)
             log.warning(
-                "Discord 429 on %s %s, retry_after=%.1fs", method, url, retry_after
+                "discord_rate_limited",
+                system="discord",
+                subsystem="utils",
+                method=method,
+                url=url,
+                retry_after=retry_after,
             )
             _time.sleep(retry_after)
             continue
@@ -157,9 +167,11 @@ def _log_discord_message(
             time.sleep(1)  # Brief retry delay
 
     log.error(
-        "Failed to log Discord message via internal API after 2 attempts (source=%s, source_id=%s)",
-        source,
-        source_id,
+        "message_log_failed",
+        system="discord",
+        subsystem="utils",
+        source=source,
+        source_id=source_id,
     )
     return None
 
@@ -223,11 +235,13 @@ def sync_send_embed(
             success=True,
         )
         log.info(
-            "Sent embed to channel %s: %s (source=%s, source_id=%s)",
-            channel_id,
-            title,
-            source,
-            source_id,
+            "embed_sent",
+            system="discord",
+            subsystem="utils",
+            channel_id=str(channel_id),
+            title=title,
+            source=source,
+            source_id=source_id,
         )
         return response_data
     except requests.RequestException as e:
@@ -253,11 +267,13 @@ def sync_send_embed(
             success=False,
         )
         log.error(
-            "Failed to send embed to channel %s: %s (source=%s, source_id=%s)",
-            channel_id,
-            e,
-            source,
-            source_id,
+            "embed_send_failed",
+            system="discord",
+            subsystem="utils",
+            channel_id=str(channel_id),
+            source=source,
+            source_id=source_id,
+            error=str(e),
         )
         return None
 
@@ -294,7 +310,7 @@ def sync_send_tournament_created(tournament, channel_id=None):
 
     channel = channel_id or getattr(settings, "DISCORD_ADMIN_CHANNEL_ID", None)
     if not channel:
-        log.warning("No channel_id provided and DISCORD_ADMIN_CHANNEL_ID not set")
+        log.warning("admin_channel_not_configured", system="discord", subsystem="utils")
         return None
 
     embed = tournament_created_embed(tournament)
@@ -315,7 +331,7 @@ def sync_send_draft_ready(draft, channel_id=None):
 
     channel = channel_id or getattr(settings, "DISCORD_ADMIN_CHANNEL_ID", None)
     if not channel:
-        log.warning("No channel_id provided and DISCORD_ADMIN_CHANNEL_ID not set")
+        log.warning("admin_channel_not_configured", system="discord", subsystem="utils")
         return None
 
     embed = draft_ready_embed(draft)
@@ -335,7 +351,7 @@ def sync_send_results_posted(tournament, channel_id=None):
 
     channel = channel_id or getattr(settings, "DISCORD_ADMIN_CHANNEL_ID", None)
     if not channel:
-        log.warning("No channel_id provided and DISCORD_ADMIN_CHANNEL_ID not set")
+        log.warning("admin_channel_not_configured", system="discord", subsystem="utils")
         return None
 
     embed = results_posted_embed(tournament)
@@ -383,9 +399,7 @@ def sync_send_embed_with_components_no_log(
         url = f"{DISCORD_API_BASE}/channels/{channel_id}/messages"
         payload = message_content
 
-    response = _rate_limited_request(
-        "POST", url, json=payload, headers=_get_headers()
-    )
+    response = _rate_limited_request("POST", url, json=payload, headers=_get_headers())
     response_data = response.json()
     response.raise_for_status()
     return response_data, response.status_code
@@ -431,8 +445,15 @@ def sync_send_embed_with_components(
     # so dedup is meaningless.
     if source_id is None:
         return _send_with_post_log(
-            channel_id, embed, components, source, source_id,
-            forum_thread_name, content, allowed_mentions, fired_by_user_id,
+            channel_id,
+            embed,
+            components,
+            source,
+            source_id,
+            forum_thread_name,
+            content,
+            allowed_mentions,
+            fired_by_user_id,
         )
 
     log_pk = claim_discord_message_log(
@@ -444,8 +465,11 @@ def sync_send_embed_with_components(
     )
     if log_pk is None:
         log.info(
-            "Lease already held for %s:%s — skipping Discord send",
-            source, source_id,
+            "send_lease_held",
+            system="discord",
+            subsystem="utils",
+            source=source,
+            source_id=source_id,
         )
         return None
 
@@ -461,14 +485,23 @@ def sync_send_embed_with_components(
         if forum_thread_name and response_data.get("message"):
             msg_id = response_data["message"].get("id")
             log.info(
-                "Created forum thread '%s' in channel %s (source=%s, thread_id=%s)",
-                forum_thread_name, channel_id, source, response_data.get("id"),
+                "forum_thread_created",
+                system="discord",
+                subsystem="utils",
+                forum_thread_name=forum_thread_name,
+                channel_id=str(channel_id),
+                source=source,
+                thread_id=response_data.get("id"),
             )
         else:
             msg_id = response_data.get("id")
             log.info(
-                "Sent embed to channel %s (source=%s, source_id=%s)",
-                channel_id, source, source_id,
+                "embed_sent",
+                system="discord",
+                subsystem="utils",
+                channel_id=str(channel_id),
+                source=source,
+                source_id=source_id,
             )
 
         finalize_discord_message_log(
@@ -499,13 +532,26 @@ def sync_send_embed_with_components(
             status_code=status_code,
             response_data=resp_data,
         )
-        log.error("Failed to send to channel %s: %s", channel_id, e)
+        log.error(
+            "embed_send_failed",
+            system="discord",
+            subsystem="utils",
+            channel_id=str(channel_id),
+            error=str(e),
+        )
         return None
 
 
 def _send_with_post_log(
-    channel_id, embed, components, source, source_id,
-    forum_thread_name, content, allowed_mentions, fired_by_user_id,
+    channel_id,
+    embed,
+    components,
+    source,
+    source_id,
+    forum_thread_name,
+    content,
+    allowed_mentions,
+    fired_by_user_id,
 ):
     """Send + post-log path for callers without a meaningful source_id.
 
@@ -517,8 +563,11 @@ def _send_with_post_log(
     embed_data = embeds[0] if embeds else {}
     try:
         response_data, status_code = sync_send_embed_with_components_no_log(
-            channel_id=channel_id, embed=embed, components=components,
-            forum_thread_name=forum_thread_name, content=content,
+            channel_id=channel_id,
+            embed=embed,
+            components=components,
+            forum_thread_name=forum_thread_name,
+            content=content,
             allowed_mentions=allowed_mentions,
         )
         if forum_thread_name and response_data.get("message"):
@@ -561,7 +610,13 @@ def _send_with_post_log(
             success=False,
             fired_by_user_id=fired_by_user_id,
         )
-        log.error("Failed to send to channel %s: %s", channel_id, e)
+        log.error(
+            "embed_send_failed",
+            system="discord",
+            subsystem="utils",
+            channel_id=str(channel_id),
+            error=str(e),
+        )
         return None
 
 
@@ -605,14 +660,21 @@ def sync_send_v2_message(
         if forum_thread_name and response_data.get("message"):
             msg_id = response_data["message"].get("id")
             log.info(
-                "Created V2 forum thread '%s' in %s (thread=%s)",
-                forum_thread_name,
-                channel_id,
-                response_data.get("id"),
+                "v2_forum_thread_created",
+                system="discord",
+                subsystem="utils",
+                forum_thread_name=forum_thread_name,
+                channel_id=str(channel_id),
+                thread_id=response_data.get("id"),
             )
         else:
             msg_id = response_data.get("id")
-            log.info("Sent V2 message to %s", channel_id)
+            log.info(
+                "v2_message_sent",
+                system="discord",
+                subsystem="utils",
+                channel_id=str(channel_id),
+            )
 
         _log_discord_message(
             channel_id=channel_id,
@@ -647,7 +709,13 @@ def sync_send_v2_message(
             response_data=resp_data,
             success=False,
         )
-        log.error("Failed to send V2 message to %s: %s", channel_id, e)
+        log.error(
+            "v2_message_send_failed",
+            system="discord",
+            subsystem="utils",
+            channel_id=str(channel_id),
+            error=str(e),
+        )
         return None
 
 
@@ -665,10 +733,22 @@ def sync_edit_v2_message(channel_id, message_id, v2_payload):
             "PATCH", url, json=v2_payload, headers=_get_headers()
         )
         response.raise_for_status()
-        log.info("Edited V2 message %s in %s", message_id, channel_id)
+        log.info(
+            "v2_message_edited",
+            system="discord",
+            subsystem="utils",
+            channel_id=str(channel_id),
+            message_id=str(message_id),
+        )
         return response.json()
     except requests.RequestException as e:
-        log.error("Failed to edit V2 message %s: %s", message_id, e)
+        log.error(
+            "v2_message_edit_failed",
+            system="discord",
+            subsystem="utils",
+            message_id=str(message_id),
+            error=str(e),
+        )
         return None
 
 
@@ -684,9 +764,6 @@ def sync_edit_message(channel_id, message_id, embed=None, components=None):
     Returns:
         dict: API response or None on error
     """
-    from telemetry.logging import get_logger
-    structured_log = get_logger(__name__)
-
     url = f"{DISCORD_API_BASE}/channels/{channel_id}/messages/{message_id}"
 
     payload = {}
@@ -695,10 +772,10 @@ def sync_edit_message(channel_id, message_id, embed=None, components=None):
     if components is not None:
         payload["components"] = components
 
-    structured_log.info(
+    log.info(
         "discord_message_edit_attempt",
-        system="events",
-        subsystem="discord",
+        system="discord",
+        subsystem="utils",
         channel_id=str(channel_id),
         message_id=str(message_id),
         embed_count=len(payload.get("embeds", []) or []),
@@ -720,10 +797,10 @@ def sync_edit_message(channel_id, message_id, embed=None, components=None):
                 body = (response.text or "")[:500]
             discord_code = body.get("code") if isinstance(body, dict) else None
             discord_msg = body.get("message") if isinstance(body, dict) else None
-            structured_log.error(
+            log.error(
                 "discord_message_edit_failed",
-                system="events",
-                subsystem="discord",
+                system="discord",
+                subsystem="utils",
                 channel_id=str(channel_id),
                 message_id=str(message_id),
                 status_code=response.status_code,
@@ -739,10 +816,10 @@ def sync_edit_message(channel_id, message_id, embed=None, components=None):
             ):
                 raise MessageDeletedError(channel_id, message_id)
             response.raise_for_status()
-        structured_log.info(
+        log.info(
             "discord_message_edit_success",
-            system="events",
-            subsystem="discord",
+            system="discord",
+            subsystem="utils",
             channel_id=str(channel_id),
             message_id=str(message_id),
         )
@@ -750,10 +827,10 @@ def sync_edit_message(channel_id, message_id, embed=None, components=None):
     except requests.RequestException as e:
         # Already logged the structured failure above when status_code was bad;
         # this branch also catches network errors (timeouts, DNS, etc.).
-        structured_log.error(
+        log.error(
             "discord_message_edit_exception",
-            system="events",
-            subsystem="discord",
+            system="discord",
+            subsystem="utils",
             channel_id=str(channel_id),
             message_id=str(message_id),
             error=str(e),
@@ -781,7 +858,13 @@ def sync_create_dm_channel(user_id):
         data = response.json()
         return data.get("id")
     except requests.RequestException as e:
-        log.error("Failed to create DM channel for user %s: %s", user_id, e)
+        log.error(
+            "dm_channel_create_failed",
+            system="discord",
+            subsystem="utils",
+            discord_user_id=str(user_id),
+            error=str(e),
+        )
         return None
 
 
@@ -810,9 +893,11 @@ def sync_send_dm(
         test_user_id = getattr(settings, "TEST_DISCORD_USER_ID", "")
         if test_user_id and str(user_id) != str(test_user_id):
             log.info(
-                "TEST mode: skipping DM to %s (only sending to test user %s)",
-                user_id,
-                test_user_id,
+                "dm_skipped_test_mode",
+                system="discord",
+                subsystem="utils",
+                discord_user_id=str(user_id),
+                test_user_id=str(test_user_id),
             )
             return {"id": "test-fake-message-id", "test_skipped": True}
 
@@ -830,7 +915,12 @@ def sync_send_dm(
         payload["components"] = components
 
     if not payload:
-        log.warning("sync_send_dm called with no content or embed")
+        log.warning(
+            "dm_empty_payload",
+            system="discord",
+            subsystem="utils",
+            discord_user_id=str(user_id),
+        )
         return None
 
     try:
@@ -839,7 +929,13 @@ def sync_send_dm(
         )
         response.raise_for_status()
         data = response.json()
-        log.info("Sent DM to user %s (message_id=%s)", user_id, data.get("id"))
+        log.info(
+            "dm_sent",
+            system="discord",
+            subsystem="utils",
+            discord_user_id=str(user_id),
+            message_id=data.get("id"),
+        )
         if tournament_log_id:
             _log_discord_message(
                 channel_id=dm_channel_id,
@@ -854,7 +950,13 @@ def sync_send_dm(
             )
         return data
     except requests.RequestException as e:
-        log.error("Failed to send DM to user %s: %s", user_id, e)
+        log.error(
+            "dm_send_failed",
+            system="discord",
+            subsystem="utils",
+            discord_user_id=str(user_id),
+            error=str(e),
+        )
         if tournament_log_id:
             _log_discord_message(
                 channel_id=dm_channel_id,
@@ -885,4 +987,12 @@ def sync_add_reactions(channel_id, message_id, emojis=None):
             response = _rate_limited_request("PUT", url, headers=_get_headers())
             response.raise_for_status()
         except requests.RequestException as e:
-            log.error(f"Failed to add reaction {emoji}: {e}")
+            log.error(
+                "reaction_add_failed",
+                system="discord",
+                subsystem="utils",
+                channel_id=str(channel_id),
+                message_id=str(message_id),
+                emoji=emoji,
+                error=str(e),
+            )

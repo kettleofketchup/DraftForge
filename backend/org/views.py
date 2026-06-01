@@ -4,8 +4,6 @@ Organization Views
 Handles org admin functionality including claim request management.
 """
 
-from telemetry.logging import get_logger
-
 from django.db import transaction
 from django.utils import timezone
 from rest_framework import status, viewsets
@@ -15,7 +13,6 @@ from rest_framework.response import Response
 
 from app.models import (
     DraftRound,
-    HeroDraftEvent,
     LeagueLog,
     LeagueMatchParticipant,
     LeagueRating,
@@ -29,6 +26,7 @@ from league.models import LeagueUser
 from org.models import OrgUser
 from org.serializers import ProfileClaimRequestSerializer
 from steam.models import LeaguePlayerStats, PlayerMatchStats
+from telemetry.logging import get_logger
 
 log = get_logger(__name__)
 
@@ -134,8 +132,12 @@ class ClaimRequestViewSet(viewsets.ModelViewSet):
             )
 
             log.info(
-                f"Claim approved: {claimer.username} claimed profile {target_user.pk} "
-                f"(steamid={target_user.steamid})"
+                "claim_approved",
+                system="org",
+                subsystem="views",
+                user_id=claimer.pk,
+                target_user_id=target_pk,
+                target_steamid=target_steamid,
             )
 
         return Response(

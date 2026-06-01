@@ -4,9 +4,9 @@ All data reads via internal_client HTTP calls (no ORM).
 All DB writes via internal API POST/PATCH endpoints.
 """
 
-from telemetry.logging import get_logger
-
 from celery import shared_task
+
+from telemetry.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -84,7 +84,14 @@ def send_tournament_draft_links(tournament_id, draft_id):
             success=sent > 0,
         )
 
-    logger.info("Tournament %d draft links: %s", tournament_id, message)
+    logger.info(
+        "tournament_draft_links_sent",
+        system="events",
+        subsystem="tasks",
+        tournament_id=tournament_id,
+        sent=sent,
+        count=len(participants),
+    )
     return message
 
 
@@ -159,7 +166,14 @@ def send_tournament_herodraft_links(
             success=sent > 0,
         )
 
-    logger.info("Tournament %d herodraft links: %s", tournament_id, message)
+    logger.info(
+        "tournament_herodraft_links_sent",
+        system="events",
+        subsystem="tasks",
+        tournament_id=tournament_id,
+        sent=sent,
+        count=len(participants),
+    )
     return message
 
 
@@ -181,11 +195,23 @@ def auto_create_herodrafts(tournament_id):
         return f"Tournament {tournament_id} not found"
 
     if tournament.state == "past":
-        logger.info("Tournament %d completed, stopping auto-create", tournament_id)
+        logger.info(
+            "tournament_auto_create_stopped",
+            system="events",
+            subsystem="tasks",
+            tournament_id=tournament_id,
+            reason="tournament_completed",
+        )
         return "Tournament completed"
 
     if not tournament.auto_create_hero_drafts:
-        logger.info("Tournament %d auto-create disabled", tournament_id)
+        logger.info(
+            "tournament_auto_create_skipped",
+            system="events",
+            subsystem="tasks",
+            tournament_id=tournament_id,
+            reason="config_disabled",
+        )
         return "Config disabled"
 
     games = get_games_without_herodraft(tournament_id)
@@ -197,7 +223,13 @@ def auto_create_herodrafts(tournament_id):
 
         resp = create_herodraft_for_game(game.id)
         if not resp or not resp.ok:
-            logger.error("Failed to create herodraft for game %d", game.id)
+            logger.error(
+                "herodraft_create_failed",
+                system="events",
+                subsystem="tasks",
+                tournament_id=tournament_id,
+                game_id=game.id,
+            )
             continue
 
         result = resp.json()
@@ -216,7 +248,11 @@ def auto_create_herodrafts(tournament_id):
 
     if created_count > 0:
         logger.info(
-            "Tournament %d: auto-created %d hero drafts", tournament_id, created_count
+            "herodrafts_auto_created",
+            system="events",
+            subsystem="tasks",
+            tournament_id=tournament_id,
+            count=created_count,
         )
 
     auto_create_herodrafts.apply_async(args=[tournament_id], countdown=10)

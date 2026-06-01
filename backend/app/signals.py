@@ -9,11 +9,11 @@ Handles:
 - Purge stale HeroDraft when a Game's teams change (issue #235)
 """
 
-from telemetry.logging import get_logger
-
 from django.db import transaction
 from django.db.models.signals import m2m_changed, pre_save
 from django.dispatch import receiver
+
+from telemetry.logging import get_logger
 
 log = get_logger(__name__)
 
@@ -154,8 +154,12 @@ def handle_tournament_user_addition(sender, instance, action, pk_set, **kwargs):
         )
         if org_created:
             log.info(
-                f"Created OrgUser for {user.username} in org {org.name} "
-                f"(via tournament {tournament.name})"
+                "org_user_created",
+                system="app",
+                subsystem="signals",
+                username=user.username,
+                user_id=user.pk,
+                tournament_id=tournament.pk,
             )
 
         # Step 2: Create LeagueUser if it doesn't exist
@@ -169,8 +173,12 @@ def handle_tournament_user_addition(sender, instance, action, pk_set, **kwargs):
         )
         if league_created:
             log.info(
-                f"Created LeagueUser for {user.username} in league {league.name} "
-                f"(via tournament {tournament.name})"
+                "league_user_created",
+                system="app",
+                subsystem="signals",
+                username=user.username,
+                user_id=user.pk,
+                tournament_id=tournament.pk,
             )
 
 
@@ -234,25 +242,32 @@ def reset_herodraft_on_team_change(sender, instance, **kwargs):
     if not draft:
         return
 
-    teams_cleared = (
-        instance.radiant_team_id is None or instance.dire_team_id is None
-    )
+    teams_cleared = instance.radiant_team_id is None or instance.dire_team_id is None
 
-    log.info(
-        "herodraft_deleted_on_team_cleared"
-        if teams_cleared
-        else "herodraft_reset_on_team_change",
-        extra={
-            "system": "bracket",
-            "subsystem": "herodraft",
-            "game_id": instance.pk,
-            "herodraft_id": draft.pk,
-            "prior_radiant_team_id": prior.radiant_team_id,
-            "new_radiant_team_id": instance.radiant_team_id,
-            "prior_dire_team_id": prior.dire_team_id,
-            "new_dire_team_id": instance.dire_team_id,
-        },
-    )
+    if teams_cleared:
+        log.info(
+            "herodraft_deleted_on_team_cleared",
+            system="app",
+            subsystem="signals",
+            game_id=instance.pk,
+            herodraft_id=draft.pk,
+            prior_radiant_team_id=prior.radiant_team_id,
+            new_radiant_team_id=instance.radiant_team_id,
+            prior_dire_team_id=prior.dire_team_id,
+            new_dire_team_id=instance.dire_team_id,
+        )
+    else:
+        log.info(
+            "herodraft_reset_on_team_change",
+            system="app",
+            subsystem="signals",
+            game_id=instance.pk,
+            herodraft_id=draft.pk,
+            prior_radiant_team_id=prior.radiant_team_id,
+            new_radiant_team_id=instance.radiant_team_id,
+            prior_dire_team_id=prior.dire_team_id,
+            new_dire_team_id=instance.dire_team_id,
+        )
 
     if teams_cleared:
         draft_pk = draft.pk
@@ -355,5 +370,10 @@ def _broadcast_draft_event(draft_pk, event_type, game_id):
         )
     except Exception as exc:
         log.warning(
-            f"Failed to broadcast {event_type} for HeroDraft {draft_pk}: {exc}"
+            "herodraft_broadcast_failed",
+            system="app",
+            subsystem="signals",
+            event_type=event_type,
+            herodraft_id=draft_pk,
+            error=str(exc),
         )

@@ -16,7 +16,12 @@ def notify_draft_started(tournament, draft):
     from events.tournament_tasks import send_tournament_draft_links
 
     send_tournament_draft_links.delay(tournament.pk, draft.pk)
-    logger.info("Dispatched draft link DMs for tournament %d", tournament.pk)
+    logger.info(
+        "draft_links_dispatched",
+        system="events",
+        subsystem="dispatch",
+        tournament_id=tournament.pk,
+    )
 
 
 def notify_herodraft_created(tournament, herodraft, game):
@@ -32,7 +37,12 @@ def notify_herodraft_created(tournament, herodraft, game):
         radiant_name=game.radiant_team.name if game.radiant_team else "",
         dire_name=game.dire_team.name if game.dire_team else "",
     )
-    logger.info("Dispatched herodraft link DMs for tournament %d", tournament.pk)
+    logger.info(
+        "herodraft_links_dispatched",
+        system="events",
+        subsystem="dispatch",
+        tournament_id=tournament.pk,
+    )
 
 
 def start_auto_create_herodrafts(tournament):
@@ -42,4 +52,9 @@ def start_auto_create_herodrafts(tournament):
     from events.tournament_tasks import auto_create_herodrafts
 
     auto_create_herodrafts.delay(tournament.pk)
-    logger.info("Started auto-create herodrafts for tournament %d", tournament.pk)
+    logger.info(
+        "herodraft_auto_create_started",
+        system="events",
+        subsystem="dispatch",
+        tournament_id=tournament.pk,
+    )

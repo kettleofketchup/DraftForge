@@ -61,18 +61,22 @@ def handle_reaction_signup(discord_message_id, discord_user_id):
     try:
         signup = process_rsvp(event, user)
         logger.info(
-            "Discord reaction signup: user=%s event=%s status=%s",
-            user.pk,
-            event.pk,
-            signup.status,
+            "reaction_signup_created",
+            system="events",
+            subsystem="discord",
+            user_id=user.pk,
+            event_id=event.pk,
+            status=signup.status,
         )
         return True, signup.status
     except ValueError as e:
         logger.info(
-            "Discord reaction signup skipped: user=%s event=%s reason=%s",
-            user.pk,
-            event.pk,
-            str(e),
+            "reaction_signup_skipped",
+            system="events",
+            subsystem="discord",
+            user_id=user.pk,
+            event_id=event.pk,
+            reason=str(e),
         )
         return False, str(e)
 
@@ -125,9 +129,11 @@ def handle_reaction_cancel(discord_message_id, discord_user_id):
         signup = EventSignup.objects.get(event=event, user=user)
         cancel_signup(signup)
         logger.info(
-            "Discord reaction cancel: user=%s event=%s",
-            user.pk,
-            event.pk,
+            "reaction_signup_cancelled",
+            system="events",
+            subsystem="discord",
+            user_id=user.pk,
+            event_id=event.pk,
         )
         return True, "cancelled"
     except EventSignup.DoesNotExist:

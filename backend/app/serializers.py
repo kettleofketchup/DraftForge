@@ -1,8 +1,4 @@
-from ast import alias
-from typing import TypeAlias
-
 import nh3
-from django.contrib.auth.models import User
 from django.db import transaction
 from rest_framework import serializers
 
@@ -10,6 +6,7 @@ from app.cache_utils import invalidate_after_commit
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
+
 from .models import (
     CustomUser,
     Draft,
@@ -552,7 +549,6 @@ class LeaguesSerializer(serializers.ModelSerializer):
 
 
 class DraftRoundForDraftSerializer(serializers.ModelSerializer):
-
     captain = serializers.SerializerMethodField()
     pick_phase = serializers.IntegerField()
     pick_number = serializers.IntegerField()
@@ -674,7 +670,6 @@ class TournamentSerializerDraft(serializers.ModelSerializer):
 
 
 class DraftSerializer(serializers.ModelSerializer):
-
     tournament = TournamentSerializerDraft(
         many=False,
         read_only=True,
@@ -703,7 +698,6 @@ class DraftSerializer(serializers.ModelSerializer):
 
 
 class DraftSerializerMMRs(serializers.ModelSerializer):
-
     class Meta:
         model = Draft
         fields = (
@@ -1036,7 +1030,11 @@ class TournamentSerializer(serializers.ModelSerializer):
                     )
                     if captain_teams.exists():
                         log.info(
-                            f"Removing {captain_teams.count()} captain team(s) from tournament {instance.name}"
+                            "captain_teams_removed",
+                            system="api",
+                            subsystem="serializer",
+                            count=captain_teams.count(),
+                            tournament_id=instance.pk,
                         )
                         captain_teams.delete()
 
@@ -1187,14 +1185,23 @@ class UserSerializer(serializers.ModelSerializer):
                     for key, value in positions_data.items():
                         setattr(positions_instance, key, value)
                     positions_instance.save()
-                    log.debug(positions_data)
+                    log.debug(
+                        "positions_updated",
+                        system="api",
+                        subsystem="serializer",
+                    )
             except KeyError:
                 pass
             for key, value in validated_data.items():
                 setattr(instance, key, value)
 
             instance.save()
-            log.debug("Updated User")
+            log.debug(
+                "user_updated",
+                system="api",
+                subsystem="serializer",
+                user_id=instance.pk,
+            )
 
             # Invalidate all cached views that include this user.
             # Deferred until after commit so cacheops sees committed state.
@@ -1220,19 +1227,19 @@ class UserSerializer(serializers.ModelSerializer):
         fields = self.Meta.fields
 
         with transaction.atomic():
-
             for key in validated_data.keys():
                 if key not in fields:
                     raise KeyError(f"Invalid field: {key}")
 
             if "positions" in validated_data:
-
                 positions_data = validated_data.pop("positions")
                 positions = PositionsModel.objects.create(**positions_data)
                 user = CustomUser.objects.create(positions=positions, **validated_data)
 
             else:
-                log.debug(validated_data)
+                log.debug(
+                    "user_create_no_positions", system="api", subsystem="serializer"
+                )
                 positions = PositionsModel.objects.create()
                 user = CustomUser(positions=positions, **validated_data)
 
@@ -1241,7 +1248,6 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 class GameSerializer(serializers.ModelSerializer):
-
     tournament_id = serializers.PrimaryKeyRelatedField(
         source="tournament",
         many=False,

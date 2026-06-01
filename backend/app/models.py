@@ -1,24 +1,17 @@
-from telemetry.logging import get_logger
-
-import nh3
 import requests
-from cacheops import cached_as
-
-from app.cache_utils import invalidate_obj
 from django.conf import settings
-from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import models
 from django.db.utils import IntegrityError
 from django.utils import timezone
-from social_django.models import USER_MODEL  # fix: skip
-from social_django.models import AbstractUserSocialAuth, DjangoStorage
+
+from app.cache_utils import invalidate_obj
+from telemetry.logging import get_logger
 
 User = settings.AUTH_USER_MODEL
 
 from enum import IntEnum, StrEnum
 
 from django.contrib.auth.models import AbstractUser
-from django.db.models import JSONField
 
 log = get_logger(__name__)
 
@@ -158,6 +151,7 @@ class CustomUser(AbstractUser):
         """
         # Use a local import to avoid the circular at module load.
         from app.cache_utils import invalidate_after_commit
+
         bp = getattr(self, "base_profile", None)
         if bp is None:
             # User hasn't been saved yet (no pk) — buffer the value and apply
@@ -176,6 +170,7 @@ class CustomUser(AbstractUser):
     @avatar.setter
     def avatar(self, value):
         from app.cache_utils import invalidate_after_commit
+
         bp = getattr(self, "base_profile", None)
         if bp is None:
             self._pending_avatar = value
@@ -230,7 +225,11 @@ class CustomUser(AbstractUser):
             return response.status_code == 200
         except requests.RequestException:
             log.warning(
-                f"Failed to validate avatar URL for user {self.username}: {url}"
+                "avatar_url_validation_failed",
+                system="tournament",
+                subsystem="user",
+                username=self.username,
+                url=url,
             )
             return False
 
@@ -248,7 +247,11 @@ class CustomUser(AbstractUser):
         discord_bot_token = getattr(settings, "DISCORD_BOT_TOKEN", None)
         if not discord_bot_token:
             log.debug(
-                f"Skipping avatar fetch for {self.username}: DISCORD_BOT_TOKEN not configured"
+                "avatar_fetch_skipped",
+                system="tournament",
+                subsystem="user",
+                username=self.username,
+                reason="DISCORD_BOT_TOKEN not configured",
             )
             return False
 
@@ -274,25 +277,41 @@ class CustomUser(AbstractUser):
                     # model field.
                     self.avatar = new_avatar
                     log.info(
-                        f"Updated avatar for user {self.username} (Discord ID: {self.discordId})"
+                        "avatar_updated",
+                        system="tournament",
+                        subsystem="user",
+                        username=self.username,
+                        discord_id=self.discordId,
                     )
                     return True
                 return False
 
             else:
                 log.warning(
-                    f"Failed to fetch Discord user data for {self.username}: {response.status_code}"
+                    "avatar_fetch_failed",
+                    system="tournament",
+                    subsystem="user",
+                    username=self.username,
+                    status_code=response.status_code,
                 )
                 return False
 
         except requests.RequestException as e:
             log.error(
-                f"Error fetching Discord avatar for user {self.username}: {str(e)}"
+                "avatar_fetch_error",
+                system="tournament",
+                subsystem="user",
+                username=self.username,
+                error=str(e),
             )
             return False
         except Exception as e:
             log.error(
-                f"Unexpected error updating avatar for user {self.username}: {str(e)}"
+                "avatar_update_unexpected_error",
+                system="tournament",
+                subsystem="user",
+                username=self.username,
+                error=str(e),
             )
             return False
 
@@ -327,6 +346,7 @@ class CustomUser(AbstractUser):
         # 4. BaseUserProfile auto-create. Idempotent via get_or_create.
         # Local import avoids the circular: user.models -> app.CustomUser.
         from user.models import BaseUserProfile
+
         bp, _ = BaseUserProfile.objects.get_or_create(user=self)
 
         # 5. Flush pending nickname/avatar values buffered by the property
@@ -344,6 +364,7 @@ class CustomUser(AbstractUser):
             fields_to_update.append("avatar")
         if fields_to_update:
             from app.cache_utils import invalidate_after_commit
+
             bp.save(update_fields=fields_to_update)
             invalidate_after_commit(bp)
             if pending_nickname is not None:
@@ -369,7 +390,7 @@ class CustomUser(AbstractUser):
             # New default avatar URL logic based on user ID
             return f"https://cdn.discordapp.com/embed/avatars/{(int(self.discordId) >> 22) % 6}.png"
 
-        return f"https://cdn.discordapp.com/embed/avatars/0.png"  # Fallback
+        return "https://cdn.discordapp.com/embed/avatars/0.png"  # Fallback
 
     class Meta:
         indexes = [
@@ -932,11 +953,7 @@ class Game(models.Model):
             invalidate_obj(self.league)
 
 
-from cacheops import cached_as
-
-
 class Draft(models.Model):
-
     tournament = models.OneToOneField(
         Tournament,
         related_name="draft",
@@ -976,7 +993,13 @@ class Draft(models.Model):
 
         def get_simulation_data(draft_style=draft_style):
             teams = list(self.tournament.teams.order_by("draft_order"))
-            log.debug(f"Getting Simulation for {draft_style} teams: {teams}")
+            log.debug(
+                "simulation_teams_loaded",
+                system="tournament",
+                subsystem="draft",
+                draft_style=draft_style,
+                team_count=len(teams),
+            )
             if not teams:
                 return {}
 
@@ -1018,7 +1041,6 @@ class Draft(models.Model):
             num_teams = len(teams)
             total_picks = num_teams * picks_per_team
             pick_number = 1
-            phase = 1
 
             for round_num in range(picks_per_team):
                 if draft_style == "snake":
@@ -1035,7 +1057,6 @@ class Draft(models.Model):
 
                 # Each team in the pick order gets one pick this round
                 for team in pick_order:
-
                     if pick_number <= total_picks and available_players:
                         # Pick highest MMR available player
                         player_id, player_mmr = available_players.pop(0)
@@ -1044,14 +1065,26 @@ class Draft(models.Model):
                         team_rosters[team.id].append((player_id, player_mmr))
 
                         log.debug(
-                            f"{draft_style} sim: Team {team.name} picked player {player_id} with MMR {player_mmr}"
+                            "simulation_pick",
+                            system="tournament",
+                            subsystem="draft",
+                            draft_style=draft_style,
+                            team_name=team.name,
+                            player_id=player_id,
+                            player_mmr=player_mmr,
                         )
                         pick_number += 1
 
             return team_rosters
 
         data = get_simulation_data(draft_style=draft_style)
-        log.debug(data)
+        log.debug(
+            "simulation_complete",
+            system="tournament",
+            subsystem="draft",
+            draft_style=draft_style,
+            team_count=len(data),
+        )
         return data
 
     @property
@@ -1162,18 +1195,38 @@ class Draft(models.Model):
                 "choice_id", flat=True
             )
         )
-        log.debug(f"Picked user IDs: {list(picked_user_ids)}")
+        log.debug(
+            "draft_picked_user_ids",
+            system="tournament",
+            subsystem="draft",
+            picked_user_ids=list(picked_user_ids),
+        )
         captain_ids = list(
             self.tournament.teams.filter(captain__isnull=False).values_list(
                 "captain_id", flat=True
             )
         )
-        log.debug(f"Captain IDs: {captain_ids}")
+        log.debug(
+            "draft_captain_ids",
+            system="tournament",
+            subsystem="draft",
+            captain_ids=captain_ids,
+        )
         excluded_ids = set(picked_user_ids + captain_ids)
-        log.debug(f"All excluded IDs: {excluded_ids}")
+        log.debug(
+            "draft_excluded_ids",
+            system="tournament",
+            subsystem="draft",
+            excluded_count=len(excluded_ids),
+        )
         users = self.tournament.users.exclude(id__in=excluded_ids).distinct()
 
-        log.debug(f"Users remaining: {[user.pk for user in users ]}")
+        log.debug(
+            "draft_users_remaining",
+            system="tournament",
+            subsystem="draft",
+            user_ids=[user.pk for user in users],
+        )
         return users
 
     @property
@@ -1189,7 +1242,12 @@ class Draft(models.Model):
         Returns the latest draft round.
         """
         if not self.draft_rounds.exists():
-            log.error("No draft rounds exist")
+            log.error(
+                "no_draft_rounds_exist",
+                system="tournament",
+                subsystem="draft",
+                draft_id=self.pk,
+            )
             return
 
         latest_round = (
@@ -1210,16 +1268,30 @@ class Draft(models.Model):
             clear_only: If True, only clear teams to captain-only (for draft restart).
                        If False (default), also re-add players from existing draft rounds.
         """
-        log.debug(f"Creating draft round for {self.tournament.name} ")
+        log.debug(
+            "rebuild_teams_started",
+            system="tournament",
+            subsystem="draft",
+            tournament_name=self.tournament.name if self.tournament else None,
+        )
         if not self.tournament:
             raise ValueError("Draft must be associated with a tournament.")
 
         if not self.tournament.captains:
             raise ValueError("Draft must have captains to build teams.")
-        log.debug(f"Creating draft round 2 for {self.tournament.name} ")
+        log.debug(
+            "rebuild_teams_clearing",
+            system="tournament",
+            subsystem="draft",
+            tournament_name=self.tournament.name,
+        )
         for team in self.tournament.teams.all():
             log.debug(
-                f"Rebuilding team {team.name} for tournament {self.tournament.name}"
+                "rebuild_team",
+                system="tournament",
+                subsystem="draft",
+                team_name=team.name,
+                tournament_name=self.tournament.name,
             )
             # Remove all members except captain to avoid triggering empty team deletion
             # (using remove() instead of clear() keeps captain as member during operation)
@@ -1231,11 +1303,15 @@ class Draft(models.Model):
 
         # Skip re-adding draft choices if we're just clearing for a restart
         if clear_only:
-            log.debug("clear_only=True, skipping re-adding draft choices")
+            log.debug(
+                "rebuild_teams_clear_only",
+                system="tournament",
+                subsystem="draft",
+                draft_id=self.pk,
+            )
             return
 
         for captain in self.captains.all():
-
             team = Team.objects.get(
                 captain=captain,
                 tournament=self.tournament,
@@ -1247,18 +1323,32 @@ class Draft(models.Model):
                 if not draft_round.choice:
                     continue  # Skip rounds with no choice (e.g., after restart)
                 log.debug(
-                    f"Rebuild_TEAMS: Creating draft round for {team.name} for tournament {self.tournament.name}"
+                    "rebuild_teams_adding_pick",
+                    system="tournament",
+                    subsystem="draft",
+                    team_name=team.name,
+                    tournament_name=self.tournament.name,
                 )
                 team.members.add(draft_round.choice)
                 team.save()
 
     def build_rounds(self):
-        log.debug(f"Building draft rounds with style: {self.draft_style}")
+        log.debug(
+            "build_rounds_started",
+            system="tournament",
+            subsystem="draft",
+            draft_style=self.draft_style,
+            draft_id=self.pk,
+        )
 
         # Clear existing draft rounds
         for round in self.draft_rounds.all():
             log.debug(
-                f"Draft round {round.pk} already exists for {self.tournament.name}"
+                "build_rounds_clearing_existing",
+                system="tournament",
+                subsystem="draft",
+                draft_round_id=round.pk,
+                tournament_name=self.tournament.name,
             )
             round.delete()
 
@@ -1271,7 +1361,12 @@ class Draft(models.Model):
 
         teams = list(self.tournament.teams.order_by("draft_order"))
         if not teams:
-            log.error("No teams found for tournament")
+            log.error(
+                "no_teams_found",
+                system="tournament",
+                subsystem="draft",
+                tournament_id=self.tournament_id,
+            )
             return
 
         num_teams = len(teams)
@@ -1290,14 +1385,23 @@ class Draft(models.Model):
                     pick_phase=phase_num,
                 )
                 log.debug(
-                    f"Draft round {draft_round.pk} created for {captain.username} "
-                    f"in phase {phase_num}, pick {pick_num}"
+                    "draft_round_created",
+                    system="tournament",
+                    subsystem="draft",
+                    draft_round_id=draft_round.pk,
+                    username=captain.username,
+                    pick_phase=phase_num,
+                    pick_number=pick_num,
                 )
                 return True
             except IntegrityError:
                 log.error(
-                    f"IntegrityError: Draft round already exists for {captain.username} "
-                    f"in phase {phase_num}, pick {pick_num}"
+                    "draft_round_integrity_error",
+                    system="tournament",
+                    subsystem="draft",
+                    username=captain.username,
+                    pick_phase=phase_num,
+                    pick_number=pick_num,
                 )
                 return False
 
@@ -1325,7 +1429,11 @@ class Draft(models.Model):
             phase += 1
 
         log.debug(
-            f"Created {pick_number - 1} draft rounds for {self.tournament.name}"
+            "build_rounds_complete",
+            system="tournament",
+            subsystem="draft",
+            rounds_created=pick_number - 1,
+            tournament_name=self.tournament.name,
         )
         self.save()
 
@@ -1515,13 +1623,29 @@ class DraftRound(models.Model):
 
         captain_name = self.captain.username if self.captain else "unassigned"
         log.debug(
-            f"Draft round {self.pk} picking player {user.username} for captain {captain_name}"
+            "draft_round_pick_started",
+            system="tournament",
+            subsystem="draft",
+            draft_round_id=self.pk,
+            username=user.username,
+            captain_name=captain_name,
         )
-        log.debug(self.draft.users_remaining)
+        log.debug(
+            "draft_users_remaining_snapshot",
+            system="tournament",
+            subsystem="draft",
+            draft_id=self.draft_id,
+        )
 
         # Debug the current state
         remaining_count_before = self.draft.users_remaining.count()
-        log.debug(f"Users remaining before pick: {remaining_count_before}")
+        log.debug(
+            "draft_remaining_before_pick",
+            system="tournament",
+            subsystem="draft",
+            draft_round_id=self.pk,
+            remaining_count=remaining_count_before,
+        )
 
         if self.draft.users_remaining.filter(id=user.id).exists():
             self.choice = user
@@ -1532,14 +1656,30 @@ class DraftRound(models.Model):
             self.save()  # This triggers cache invalidation
 
             remaining_count_after = self.draft.users_remaining.count()
-            log.debug(f"Users remaining after pick: {remaining_count_after}")
-            log.debug(f"Successfully picked {user.username}")
+            log.debug(
+                "draft_remaining_after_pick",
+                system="tournament",
+                subsystem="draft",
+                draft_round_id=self.pk,
+                remaining_count=remaining_count_after,
+            )
+            log.debug(
+                "draft_pick_success",
+                system="tournament",
+                subsystem="draft",
+                username=user.username,
+                draft_round_id=self.pk,
+            )
         else:
             available_users = list(
                 self.draft.users_remaining.values_list("username", flat=True)
             )
             log.error(
-                f"User {user.username} is not available. Available: {available_users}"
+                "draft_pick_user_unavailable",
+                system="tournament",
+                subsystem="draft",
+                username=user.username,
+                available_usernames=available_users,
             )
             raise ValueError("User is not available for drafting.")
 

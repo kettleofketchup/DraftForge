@@ -1,11 +1,10 @@
-from telemetry.logging import get_logger
-
 from django.utils import timezone
 
 from app.models import CustomUser
 from steam.models import LeagueSyncState, Match, PlayerMatchStats
 from steam.utils.retry import retry_with_backoff
 from steam.utils.steam_api_caller import SteamAPI
+from telemetry.logging import get_logger
 
 log = get_logger(__name__)
 
@@ -27,7 +26,13 @@ def link_user_to_stats(player_stats):
         user = CustomUser.objects.get(steamid=player_stats.steam_id)
         player_stats.user = user
         player_stats.save(update_fields=["user"])
-        log.debug(f"Linked player {player_stats.steam_id} to user {user.username}")
+        log.debug(
+            "player_linked_to_user",
+            system="steam",
+            subsystem="league_sync",
+            steam_id=player_stats.steam_id,
+            username=user.username,
+        )
         return True
     except CustomUser.DoesNotExist:
         return False
@@ -47,7 +52,12 @@ def relink_all_users():
         if link_user_to_stats(stats):
             linked_count += 1
 
-    log.info(f"Relinked {linked_count} player stats to users")
+    log.info(
+        "player_stats_relinked",
+        system="steam",
+        subsystem="league_sync",
+        count=linked_count,
+    )
     return linked_count
 
 
@@ -91,7 +101,12 @@ def process_match(match_id, league_id=None, match_seq_num=None):
     success, result = retry_with_backoff(fetch, max_retries=3, base_delay=1.0)
 
     if not success or not result or "result" not in result:
-        log.warning(f"Failed to fetch match {match_id}")
+        log.warning(
+            "match_fetch_failed",
+            system="steam",
+            subsystem="league_sync",
+            match_id=match_id,
+        )
         return None
 
     data = result["result"]
@@ -155,7 +170,12 @@ def sync_league_matches(league_id, full_sync=False):
     )
 
     if state.is_syncing:
-        log.warning(f"Sync already in progress for league {league_id}")
+        log.warning(
+            "league_sync_already_running",
+            system="steam",
+            subsystem="league_sync",
+            league_id=league_id,
+        )
         return {
             "error": "Sync already in progress",
             "synced_count": 0,
@@ -181,7 +201,12 @@ def sync_league_matches(league_id, full_sync=False):
             )
 
             if not result or "result" not in result:
-                log.error(f"Failed to fetch match history for league {league_id}")
+                log.error(
+                    "match_history_fetch_failed",
+                    system="steam",
+                    subsystem="league_sync",
+                    league_id=league_id,
+                )
                 break
 
             matches = result["result"].get("matches", [])
@@ -228,7 +253,12 @@ def sync_league_matches(league_id, full_sync=False):
         state.save()
 
     log.info(
-        f"Sync complete for league {league_id}: {synced_count} synced, {failed_count} failed"
+        "league_sync_complete",
+        system="steam",
+        subsystem="league_sync",
+        league_id=league_id,
+        synced_count=synced_count,
+        failed_count=failed_count,
     )
 
     return {
@@ -269,7 +299,12 @@ def retry_failed_matches(league_id):
     state.save()
 
     log.info(
-        f"Retry complete for league {league_id}: {retried_count} succeeded, {len(still_failed)} still failed"
+        "league_retry_complete",
+        system="steam",
+        subsystem="league_sync",
+        league_id=league_id,
+        retried_count=retried_count,
+        still_failed_count=len(still_failed),
     )
 
     return {
