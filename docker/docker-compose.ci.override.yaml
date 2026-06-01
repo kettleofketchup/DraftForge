@@ -5,10 +5,16 @@ services:
   frontend:
     # Mount source + configs only; keep the image's /app/node_modules. Replacing
     # the base list (./frontend:/app) with !override so it doesn't merge.
+    # vitest.config.ts + vitest.setup.ts MUST be mounted: they are source files
+    # (not baked into the image), and without vitest.config.ts vitest falls back
+    # to vite.config.ts — whose reactRouter() plugin breaks rendering tests with
+    # "React Router Vite plugin can't detect preamble".
     volumes: !override
       - ./frontend/app:/app/app
       - ./frontend/public:/app/public
       - ./frontend/vite.config.ts:/app/vite.config.ts
+      - ./frontend/vitest.config.ts:/app/vitest.config.ts
+      - ./frontend/vitest.setup.ts:/app/vitest.setup.ts
       - ./frontend/react-router.config.ts:/app/react-router.config.ts
       - ./frontend/tsconfig.json:/app/tsconfig.json
 
