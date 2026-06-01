@@ -26,6 +26,7 @@ CRITICAL — `thinking=True` on defer for component interactions:
 from enum import Enum
 
 import discord
+from discord.utils import MISSING
 
 from telemetry.logging import get_logger
 
@@ -93,8 +94,14 @@ async def respond_to_signup_user(
         if getattr(e, "code", None) == 50007:
             mention = f"<@{user_id}>"
             text = f"{mention} {content}".strip() if content else mention
+            # Webhook.send (followup) rejects a literal None view/embed — it is
+            # not MISSING and lacks __discord_ui_view__. Pass MISSING instead.
+            # (The DM path above is Messageable.send, which tolerates None.)
             await interaction.followup.send(
-                content=text, embed=embed, view=view, ephemeral=True
+                content=text,
+                embed=embed if embed is not None else MISSING,
+                view=view if view is not None else MISSING,
+                ephemeral=True,
             )
             channel = ResponseChannel.EPHEMERAL
         else:
