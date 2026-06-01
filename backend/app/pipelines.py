@@ -21,6 +21,11 @@ def save_discord(
 ) -> dict:
     from app.discord_accounts import merge_discord_accounts
 
+    # save_discord runs after create_user, so user is always present here;
+    # guard makes the None-path explicit and narrows the type for the body.
+    if user is None:
+        raise ValueError("save_discord requires an authenticated user")
+
     social_auth = user.social_auth.filter(provider="discord").first()
     discordId = social_auth.extra_data["id"]
     avatar = social_auth.extra_data["avatar"]

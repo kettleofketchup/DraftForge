@@ -10,7 +10,8 @@ pipeline, so logs never reach Grafana.
 
 ## Rules
 
-- **Never `import logging` / `logging.getLogger(__name__)`.** Use
+- **Never `import logging` / `logging.getLogger(__name__)`** (except management
+  commands — see "Out of scope" below). Use
   `from telemetry.logging import get_logger` then `log = get_logger(__name__)`.
   This is enforced by ruff (`TID251` bans `logging.getLogger`); Copilot is the
   backup reviewer.
