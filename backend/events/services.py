@@ -1,6 +1,5 @@
 import calendar
 import datetime
-import logging
 import re
 from datetime import timedelta
 from zoneinfo import ZoneInfo
@@ -25,7 +24,7 @@ from events.models import (
 )
 from telemetry.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 log = get_logger(__name__)
 
 

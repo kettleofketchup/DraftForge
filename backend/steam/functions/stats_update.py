@@ -1,4 +1,4 @@
-import logging
+from telemetry.logging import get_logger
 
 from django.db.models import Sum
 
@@ -8,7 +8,7 @@ from steam.functions.mmr_calculation import (
 )
 from steam.models import LeaguePlayerStats, PlayerMatchStats
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def update_player_league_stats(user, league_id: int) -> LeaguePlayerStats:

@@ -4,14 +4,14 @@ Embed builders for Discord event notifications.
 Pure functions that construct embed dicts for the Discord API.
 """
 
-import logging
+from telemetry.logging import get_logger
 
 from django.conf import settings
 
 from app.constants import LOGO_URL
 from app.internal_client import get_event_signups
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 SITE_URL = getattr(settings, "SITE_URL", "") or "https://localhost"
 

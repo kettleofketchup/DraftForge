@@ -1,4 +1,3 @@
-import logging
 import time
 from datetime import datetime, timedelta, timezone as tz
 
@@ -54,7 +53,7 @@ from events.discord.embeds import (
 )
 from telemetry.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 log = get_logger(__name__)
 
 

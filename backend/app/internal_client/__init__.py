@@ -9,14 +9,13 @@ Config:
     INTERNAL_SERVICE_TOKEN: shared secret for X-Internal-Token header.
 """
 
-import logging
 import os
 
 import requests
 
 from telemetry.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 log = get_logger("app.internal_client")
 
 INTERNAL_API_URL = os.environ.get(

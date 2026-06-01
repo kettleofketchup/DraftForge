@@ -1,6 +1,6 @@
 """Discord bot client with slash commands."""
 
-import logging
+from telemetry.logging import get_logger
 import sys
 
 import discord
@@ -24,7 +24,7 @@ from discordbot.internal_client.bot_actions import (
 )
 from discordbot.internal_client.signup_actions import set_position
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 
 def is_site_admin():

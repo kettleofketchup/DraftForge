@@ -1,10 +1,10 @@
-import logging
+from telemetry.logging import get_logger
 
 from django.contrib import admin
 from django.urls import include, path
 from rest_framework import routers
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 from django.views.generic.base import RedirectView
 

@@ -1,5 +1,4 @@
 from ast import alias
-from logging import getLogger
 from typing import TypeAlias
 
 import nh3
@@ -8,8 +7,9 @@ from django.db import transaction
 from rest_framework import serializers
 
 from app.cache_utils import invalidate_after_commit
+from telemetry.logging import get_logger
 
-log = getLogger(__name__)
+log = get_logger(__name__)
 from .models import (
     CustomUser,
     Draft,

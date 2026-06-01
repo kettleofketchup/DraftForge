@@ -1,8 +1,8 @@
-import logging
+from telemetry.logging import get_logger
 import time
 from functools import wraps
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 # Module-level state for throttling
 _last_request_time = 0.0

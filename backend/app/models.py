@@ -1,4 +1,4 @@
-import logging
+from telemetry.logging import get_logger
 
 import nh3
 import requests
@@ -20,7 +20,7 @@ from enum import IntEnum, StrEnum
 from django.contrib.auth.models import AbstractUser
 from django.db.models import JSONField
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 
 class PositionsModel(models.Model):
@@ -229,7 +229,7 @@ class CustomUser(AbstractUser):
             response = requests.head(url, timeout=5)
             return response.status_code == 200
         except requests.RequestException:
-            logging.warning(
+            log.warning(
                 f"Failed to validate avatar URL for user {self.username}: {url}"
             )
             return False
@@ -247,7 +247,7 @@ class CustomUser(AbstractUser):
         # Skip if Discord bot token is not configured (e.g., in CI)
         discord_bot_token = getattr(settings, "DISCORD_BOT_TOKEN", None)
         if not discord_bot_token:
-            logging.debug(
+            log.debug(
                 f"Skipping avatar fetch for {self.username}: DISCORD_BOT_TOKEN not configured"
             )
             return False
@@ -273,25 +273,25 @@ class CustomUser(AbstractUser):
                     # here would crash now that `avatar` is a property, not a
                     # model field.
                     self.avatar = new_avatar
-                    logging.info(
+                    log.info(
                         f"Updated avatar for user {self.username} (Discord ID: {self.discordId})"
                     )
                     return True
                 return False
 
             else:
-                logging.warning(
+                log.warning(
                     f"Failed to fetch Discord user data for {self.username}: {response.status_code}"
                 )
                 return False
 
         except requests.RequestException as e:
-            logging.error(
+            log.error(
                 f"Error fetching Discord avatar for user {self.username}: {str(e)}"
             )
             return False
         except Exception as e:
-            logging.error(
+            log.error(
                 f"Unexpected error updating avatar for user {self.username}: {str(e)}"
             )
             return False
@@ -1210,15 +1210,15 @@ class Draft(models.Model):
             clear_only: If True, only clear teams to captain-only (for draft restart).
                        If False (default), also re-add players from existing draft rounds.
         """
-        logging.debug(f"Creating draft round for {self.tournament.name} ")
+        log.debug(f"Creating draft round for {self.tournament.name} ")
         if not self.tournament:
             raise ValueError("Draft must be associated with a tournament.")
 
         if not self.tournament.captains:
             raise ValueError("Draft must have captains to build teams.")
-        logging.debug(f"Creating draft round 2 for {self.tournament.name} ")
+        log.debug(f"Creating draft round 2 for {self.tournament.name} ")
         for team in self.tournament.teams.all():
-            logging.debug(
+            log.debug(
                 f"Rebuilding team {team.name} for tournament {self.tournament.name}"
             )
             # Remove all members except captain to avoid triggering empty team deletion
@@ -1231,7 +1231,7 @@ class Draft(models.Model):
 
         # Skip re-adding draft choices if we're just clearing for a restart
         if clear_only:
-            logging.debug("clear_only=True, skipping re-adding draft choices")
+            log.debug("clear_only=True, skipping re-adding draft choices")
             return
 
         for captain in self.captains.all():
@@ -1246,18 +1246,18 @@ class Draft(models.Model):
                     continue
                 if not draft_round.choice:
                     continue  # Skip rounds with no choice (e.g., after restart)
-                logging.debug(
+                log.debug(
                     f"Rebuild_TEAMS: Creating draft round for {team.name} for tournament {self.tournament.name}"
                 )
                 team.members.add(draft_round.choice)
                 team.save()
 
     def build_rounds(self):
-        logging.debug(f"Building draft rounds with style: {self.draft_style}")
+        log.debug(f"Building draft rounds with style: {self.draft_style}")
 
         # Clear existing draft rounds
         for round in self.draft_rounds.all():
-            logging.debug(
+            log.debug(
                 f"Draft round {round.pk} already exists for {self.tournament.name}"
             )
             round.delete()
@@ -1271,7 +1271,7 @@ class Draft(models.Model):
 
         teams = list(self.tournament.teams.order_by("draft_order"))
         if not teams:
-            logging.error("No teams found for tournament")
+            log.error("No teams found for tournament")
             return
 
         num_teams = len(teams)
@@ -1289,13 +1289,13 @@ class Draft(models.Model):
                     pick_number=pick_num,
                     pick_phase=phase_num,
                 )
-                logging.debug(
+                log.debug(
                     f"Draft round {draft_round.pk} created for {captain.username} "
                     f"in phase {phase_num}, pick {pick_num}"
                 )
                 return True
             except IntegrityError:
-                logging.error(
+                log.error(
                     f"IntegrityError: Draft round already exists for {captain.username} "
                     f"in phase {phase_num}, pick {pick_num}"
                 )
@@ -1324,7 +1324,7 @@ class Draft(models.Model):
             # Increment phase after all teams have picked
             phase += 1
 
-        logging.debug(
+        log.debug(
             f"Created {pick_number - 1} draft rounds for {self.tournament.name}"
         )
         self.save()

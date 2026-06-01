@@ -4,7 +4,7 @@ Organization Views
 Handles org admin functionality including claim request management.
 """
 
-import logging
+from telemetry.logging import get_logger
 
 from django.db import transaction
 from django.utils import timezone
@@ -30,7 +30,7 @@ from org.models import OrgUser
 from org.serializers import ProfileClaimRequestSerializer
 from steam.models import LeaguePlayerStats, PlayerMatchStats
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 
 class ClaimRequestViewSet(viewsets.ModelViewSet):

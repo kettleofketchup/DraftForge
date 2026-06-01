@@ -1,6 +1,6 @@
 """CSV import views for bulk-adding users to organizations and tournaments."""
 
-import logging
+from telemetry.logging import get_logger
 
 from app.cache_utils import invalidate_obj
 from django.db import IntegrityError, transaction
@@ -23,7 +23,7 @@ from app.serializers import TournamentUserSerializer
 from league.models import LeagueUser
 from org.models import OrgUser
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 MAX_ROWS = 500
 STEAM_ID_64_MIN = 76561197960265728  # Smallest valid Steam64 ID

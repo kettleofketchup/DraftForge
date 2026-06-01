@@ -1,5 +1,5 @@
 import json
-import logging
+from telemetry.logging import get_logger
 
 import requests
 from django.contrib.auth import login
@@ -20,7 +20,7 @@ from app.models import CustomUser, Draft, DraftRound, Team, Tournament
 from app.permissions import IsStaff
 from app.serializers import TournamentSerializer
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 from bracket.models import BracketSlot, TournamentBracket
 
 

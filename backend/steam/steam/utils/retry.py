@@ -1,7 +1,7 @@
-import logging
+from telemetry.logging import get_logger
 import time
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 
 def retry_with_backoff(func, max_retries=3, base_delay=1.0):

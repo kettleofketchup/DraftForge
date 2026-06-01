@@ -1,7 +1,6 @@
 # backend/discordbot/utils.py
 """Admin utility functions for sending Discord messages."""
 
-import logging
 import time as _time
 
 import redis as _redis
@@ -10,7 +9,7 @@ from django.conf import settings
 
 from .embeds import event_announcement_embed
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 DISCORD_API_BASE = "https://discord.com/api/v10"
 

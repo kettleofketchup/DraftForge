@@ -1,5 +1,5 @@
 import json
-import logging
+from telemetry.logging import get_logger
 
 import requests
 from django.contrib.auth import login
@@ -43,7 +43,7 @@ from app.serializers import (
 )
 from backend import settings
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 from django.core.cache import cache
 

@@ -9,13 +9,13 @@ Handles:
 - Purge stale HeroDraft when a Game's teams change (issue #235)
 """
 
-import logging
+from telemetry.logging import get_logger
 
 from django.db import transaction
 from django.db.models.signals import m2m_changed, pre_save
 from django.dispatch import receiver
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 
 @receiver(m2m_changed, sender="app.Team_members")

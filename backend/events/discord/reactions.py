@@ -6,9 +6,9 @@ announcement messages. These are synchronous functions — the bot calls
 them from async handlers via sync_to_async or database_sync_to_async.
 """
 
-import logging
+from telemetry.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def handle_reaction_signup(discord_message_id, discord_user_id):

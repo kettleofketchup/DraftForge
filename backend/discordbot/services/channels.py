@@ -1,6 +1,6 @@
 """Discord channel listing with Redis caching."""
 
-import logging
+from telemetry.logging import get_logger
 
 import requests
 from django.conf import settings
@@ -12,7 +12,7 @@ from rest_framework.response import Response
 from app.models import Organization
 from app.permissions_org import has_org_staff_access
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 CHANNELS_CACHE_TTL = 600  # 10 minutes
 

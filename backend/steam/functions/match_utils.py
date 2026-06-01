@@ -1,10 +1,10 @@
-import logging
+from telemetry.logging import get_logger
 
 from django.db.models import Count, Q
 
 from steam.models import Match, PlayerMatchStats
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 
 def find_matches_by_players(steam_ids, require_all=True, league_id=None):

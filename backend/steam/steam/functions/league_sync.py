@@ -1,4 +1,4 @@
-import logging
+from telemetry.logging import get_logger
 
 from django.utils import timezone
 
@@ -7,7 +7,7 @@ from steam.models import LeagueSyncState, Match, PlayerMatchStats
 from steam.utils.retry import retry_with_backoff
 from steam.utils.steam_api_caller import SteamAPI
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 
 def link_user_to_stats(player_stats):

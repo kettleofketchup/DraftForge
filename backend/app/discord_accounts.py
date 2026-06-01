@@ -14,14 +14,14 @@ This module reconciles the two rows: it keeps the account that already owns the
 it, moving the social-auth link and any other related data across.
 """
 
-import logging
+from telemetry.logging import get_logger
 
 from django.db import IntegrityError, transaction
 
 from app.cache_utils import invalidate_obj
 from app.models import CustomUser
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Discord identity / profile fields copied from the duplicate onto the kept
 # account when the kept account is missing them. Split into two groups because

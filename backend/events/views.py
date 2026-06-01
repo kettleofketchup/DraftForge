@@ -1,4 +1,4 @@
-import logging
+from telemetry.logging import get_logger
 
 from cacheops import cached_as
 from django.db import transaction
@@ -10,7 +10,7 @@ from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 from app.models import Organization
 from app.permissions_org import has_event_staff_access, has_org_staff_access

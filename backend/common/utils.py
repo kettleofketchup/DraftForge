@@ -1,12 +1,12 @@
 import ipaddress
-import logging
+from telemetry.logging import get_logger
 import os
 
 from django.conf import settings
 from social_core.backends.google import GooglePlusAuth
 from social_core.backends.utils import load_backends
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 
 def _is_ip_allowed(ip_str, allowed_ranges):

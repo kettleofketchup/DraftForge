@@ -1,10 +1,10 @@
-import logging
+from telemetry.logging import get_logger
 
 from django.db import models
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class Match(models.Model):

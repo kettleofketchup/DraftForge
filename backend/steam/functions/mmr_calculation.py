@@ -1,9 +1,9 @@
-import logging
+from telemetry.logging import get_logger
 
 from django.conf import settings
 from django.db.models import Avg, Max
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def get_league_avg_kda(league_id: int) -> float:

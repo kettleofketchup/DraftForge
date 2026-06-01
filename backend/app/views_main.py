@@ -1,5 +1,5 @@
 import json
-import logging
+from telemetry.logging import get_logger
 from datetime import timedelta
 
 import requests
@@ -81,7 +81,7 @@ from .serializers import (
 # guardrail that enforces this.
 from user.models import BaseUserProfile
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 from .utils.avatar_utils import refresh_user_avatar
 
 

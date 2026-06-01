@@ -4,9 +4,9 @@ These run in Django (same process), so they CAN access ORM.
 They check config flags and fire Celery tasks via .delay().
 """
 
-import logging
+from telemetry.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def notify_draft_started(tournament, draft):

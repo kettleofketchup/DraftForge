@@ -4,11 +4,11 @@ All data reads via internal_client HTTP calls (no ORM).
 All DB writes via internal API POST/PATCH endpoints.
 """
 
-import logging
+from telemetry.logging import get_logger
 
 from celery import shared_task
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 @shared_task

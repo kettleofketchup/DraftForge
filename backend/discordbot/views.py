@@ -1,14 +1,14 @@
 """Discord bot HTTP interaction endpoints."""
 
 import json
-import logging
+from telemetry.logging import get_logger
 
 from django.conf import settings
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 
 def verify_discord_signature(request) -> bool:

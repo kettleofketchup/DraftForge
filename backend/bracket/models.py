@@ -1,11 +1,11 @@
-import logging
+from telemetry.logging import get_logger
 import math
 
 from django.db import models
 
 from app.models import TOURNAMNET_TYPE_CHOICES, CustomUser, Game, Team, Tournament
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 # Create your models here.
 # TODO Move tournament related stuff to here

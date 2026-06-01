@@ -1,11 +1,11 @@
-import logging
+from telemetry.logging import get_logger
 from datetime import datetime
 from datetime import timezone as dt_timezone
 
 from app.models import Game, Tournament
 from steam.models import GameMatchSuggestion, Match
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 
 def check_match_for_games(match):
