@@ -4,7 +4,7 @@
 
 **Goal:** Stop `respond_to_signup_user` from raising `TypeError` when a user with DMs disabled signs up and no `view`/`embed` was passed.
 
-**Architecture:** discord.py's `Webhook.send` (the `interaction.followup.send` fallback path) rejects a literal `None` for `view`/`embed` (`None` is not `MISSING` and has no `__discord_ui_view__`). The DM path (`Messageable.send`) tolerates `None`. Fix: pass `discord.utils.MISSING` instead of `None` on both sends.
+**Architecture:** discord.py's `Webhook.send` (the `interaction.followup.send` fallback path) rejects a literal `None` for `view`/`embed` (`None` is not `MISSING` and has no `__discord_ui_view__`). The DM path (`Messageable.send`) tolerates `None`. Fix: pass `discord.utils.MISSING` instead of `None` on the `followup.send` path **only** (the DM send stays unchanged — it tolerates `None` and an existing test asserts it).
 
 **Tech Stack:** Python, discord.py, Django `SimpleTestCase`, run via `just test::run`.
 
@@ -64,15 +64,14 @@ In `backend/discordbot/signup_responses.py`, add the import near the top (with t
 from discord.utils import MISSING
 ```
 
-Then in `respond_to_signup_user`, replace the two send calls. The DM send (currently `await dm_channel.send(content=content, embed=embed, view=view)`) and the fallback send become:
+Then in `respond_to_signup_user`, change ONLY the `followup.send` fallback (the
+crash site). Leave the DM `dm_channel.send` unchanged — `Messageable.send`
+tolerates `None`, and an existing test asserts the DM send receives `view=None`:
 
 ```python
-    send_embed = embed if embed is not None else MISSING
-    send_view = view if view is not None else MISSING
-
     try:
         dm_channel = await interaction.user.create_dm()
-        await dm_channel.send(content=content, embed=send_embed, view=send_view)
+        await dm_channel.send(content=content, embed=embed, view=view)  # unchanged
         try:
             await interaction.delete_original_response()
             log.info(
@@ -91,8 +90,12 @@ Then in `respond_to_signup_user`, replace the two send calls. The DM send (curre
         if getattr(e, "code", None) == 50007:
             mention = f"<@{user_id}>"
             text = f"{mention} {content}".strip() if content else mention
+            # Webhook.send rejects a literal None view/embed — pass MISSING.
             await interaction.followup.send(
-                content=text, embed=send_embed, view=send_view, ephemeral=True
+                content=text,
+                embed=embed if embed is not None else MISSING,
+                view=view if view is not None else MISSING,
+                ephemeral=True,
             )
             channel = ResponseChannel.EPHEMERAL
         else:
@@ -135,5 +138,5 @@ git commit -m "fix(discord): MISSING sentinel for view/embed in DM-disabled sign
 ## Self-Review
 - **Spec coverage:** Implements "Bugs fixed in-flight → bug 1" and its test bullet. ✓
 - **Placeholders:** none — full test + full replacement block.
-- **Type consistency:** `send_embed`/`send_view` used in both sends; `MISSING` imported.
+- **Type consistency:** `MISSING` imported; sentinel applied inline on the `followup.send` call only.
 - **Scope:** single file + its test; independent of the refactor; safe to ship first.
