@@ -87,9 +87,11 @@ class HandleSignupButtonTest(EventTestCase):
             discord_user_id="100000000000000001",
         )
         self.assertEqual(result["action"], "needs_modal")
-        self.assertTrue(result["require_rank_screenshot"])
-        self.assertFalse(result["require_battlecup_screenshot"])
-        self.assertEqual(result["min_mmr"], 3000)
+        cfg = result["modal_config"]
+        self.assertEqual(cfg["kind"], "dota")
+        self.assertTrue(cfg["require_rank_screenshot"])
+        self.assertFalse(cfg["require_battlecup_screenshot"])
+        self.assertEqual(cfg["min_mmr"], 3000)
 
 
 class HandleSignupModalSubmitTest(EventTestCase):

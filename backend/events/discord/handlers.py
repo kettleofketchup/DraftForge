@@ -13,7 +13,13 @@ from discordbot.models import DiscordEventLog
 from django.core.exceptions import ValidationError as DjangoValidationError
 from events.constants import EventState, SignupStatus
 from events.models import Event, EventSignup
-from events.schemas import SignupInputPatch
+from events.schemas import (
+    DeadlockModalConfig,
+    DotaModalConfig,
+    SignupInputPatch,
+    SignupModalConfig,
+    dota_require_screenshot,
+)
 from org.models_profiles import PlayerDotaProfile
 from telemetry.logging import get_logger
 
@@ -251,8 +257,23 @@ def handle_signup_button(event_id, discord_user_id, discord_username=None):
             )
             return {"action": "error", "message": str(e)}
 
+    if event.game_type == GameType.DOTA2:
+        modal_config = DotaModalConfig(
+            require_steam_id=event.require_steam_id,
+            require_rank_screenshot=event.discord_require_rank_screenshot,
+            require_battlecup_screenshot=event.discord_require_battlecup_screenshot,
+            min_mmr=event.min_mmr,
+            allow_active_mmr=event.allow_active_mmr,
+            allow_previous_rank=event.allow_previous_rank,
+            allow_battlecup_rating=event.allow_battlecup_rating,
+        )
+    elif event.game_type == GameType.DEADLOCK:
+        modal_config = DeadlockModalConfig(require_steam_id=event.require_steam_id)
+    else:
+        modal_config = SignupModalConfig(require_steam_id=event.require_steam_id)
+
     _log_interaction(event_id, "signup_modal_opened", discord_user_id, discord_username)
-    # Needs modal — return prefill data + event config flags
+    # Needs modal — return prefill data + typed per-game modal_config
     return {
         "action": "needs_modal",
         "game_type": event.game_type,
@@ -265,13 +286,7 @@ def handle_signup_button(event_id, discord_user_id, discord_username=None):
             )
             or "",
         },
-        "require_steam_id": event.require_steam_id,
-        "require_rank_screenshot": event.discord_require_rank_screenshot,
-        "require_battlecup_screenshot": event.discord_require_battlecup_screenshot,
-        "min_mmr": event.min_mmr,
-        "allow_active_mmr": event.allow_active_mmr,
-        "allow_previous_rank": event.allow_previous_rank,
-        "allow_battlecup_rating": event.allow_battlecup_rating,
+        "modal_config": modal_config.model_dump(),
     }
 
 
@@ -433,7 +448,6 @@ def handle_rank_medal_select(event_id, discord_user_id, medal):
         return {
             "action": "needs_screenshot",
             "screenshot_type": "rank",
-            "medal": medal,
         }
 
     try:
@@ -490,7 +504,6 @@ def handle_previous_rank_submit(event_id, discord_user_id, medal, date_text):
         return {
             "action": "needs_screenshot",
             "screenshot_type": "rank",
-            "medal": medal,
         }
 
     try:
@@ -545,7 +558,6 @@ def handle_battle_cup_submit(event_id, discord_user_id, tier):
         return {
             "action": "needs_screenshot",
             "screenshot_type": "battlecup",
-            "tier": tier,
         }
 
     try:
@@ -796,14 +808,12 @@ def handle_get_rank_flow_state(
 
     profile, _ = PlayerDotaProfile.objects.get_or_create(org_user=org_user)
     rank_status = profile.rank_status or "never"
-    require_screenshot = (
-        bool(event.discord_require_rank_screenshot)
-        if rank_status == "active"
-        else (
-            bool(event.discord_require_battlecup_screenshot)
-            if rank_status == "never"
-            else False
-        )
+    require_screenshot = dota_require_screenshot(
+        rank_status,
+        DotaModalConfig(
+            require_rank_screenshot=event.discord_require_rank_screenshot,
+            require_battlecup_screenshot=event.discord_require_battlecup_screenshot,
+        ),
     )
     return {
         "rank_status": rank_status,
