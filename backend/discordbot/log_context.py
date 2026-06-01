@@ -20,6 +20,8 @@ from opentelemetry import trace
 from opentelemetry.trace import Status, StatusCode
 from structlog.contextvars import bind_contextvars, clear_contextvars
 
+# Single source of truth for signup-flow prefixes (see custom_ids.py).
+from discordbot.custom_ids import SIGNUP_TAG_PREFIXES as _SIGNUP_TAG_PREFIXES
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
@@ -39,20 +41,15 @@ class InteractionContext:
         self.extra.update(kwargs)
 
 
-_SIGNUP_TAG_PREFIXES = {
-    "event_signup", "event_notify", "event_tentative", "event_decline",
-    "signup_friend_id", "signup_rank_status", "signup_deadlock_rank", "signup_deadlock_date",
-    "pos_select_1", "pos_select_2", "pos_select_3", "pos_confirm",
-    "rank_medal", "rank_star", "rank_status",
-    "bcup_tier",
-    "screenshot_upload", "screenshot_file", "screenshot_url",
-}
-
-
 def _prefix(custom_id: str | None) -> str | None:
     if not custom_id:
         return None
-    return custom_id.split(":", 1)[0]
+    head = custom_id.split(":", 1)[0]
+    # pos_select_<slot> normalizes to the codec prefix "pos_select" (the slot
+    # lives in the prefix segment, unlike every other custom_id).
+    if head.startswith("pos_select_"):
+        return "pos_select"
+    return head
 
 
 def resolve_tags(custom_id: str | None) -> list[str]:
