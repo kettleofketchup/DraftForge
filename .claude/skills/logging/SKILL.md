@@ -43,6 +43,9 @@ Every log MUST include `system` and `subsystem` kwargs. These are the primary Gr
 | `discord` | `dispatch` | `["events","signup"]` | `events/discord/dispatch.py` | `notify_*` dispatch visibility (queued vs skipped); threads `interaction_id` to Celery |
 | `discord` | `celery` | `["events","signup"]` | `events/tasks.py` (Discord-dispatching tasks) | `celery_task_started/finished/failed` bookend logs |
 | `cache` | `invalidate` | — | `app/cache_utils.py` | Per-object cacheops invalidation fired from `transaction.on_commit` |
+| `websocket` | `broadcast` | — | `app/broadcast.py` | Draft / herodraft event + state broadcast to channel groups (`kind` field distinguishes draft/herodraft/herodraft_state) |
+| `auth` | `internal` | — | `app/auth.py` | Internal-service auth (X-Internal-Token): IP-allowlist rejects, invalid-token failures |
+| `auth` | `social` | — | `app/pipelines.py` | Discord OAuth social-auth pipeline: account reclaim/merge, username matching |
 
 Add new systems/subsystems as features grow. Keep systems coarse (feature area), subsystems functional (what role the code plays).
 
