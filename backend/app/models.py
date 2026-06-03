@@ -1645,6 +1645,9 @@ class DraftRound(models.Model):
             subsystem="draft",
             draft_round_id=self.pk,
             remaining_count=remaining_count_before,
+            remaining_usernames=list(
+                self.draft.users_remaining.values_list("username", flat=True)
+            ),
         )
 
         if self.draft.users_remaining.filter(id=user.id).exists():
