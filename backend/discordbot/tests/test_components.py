@@ -83,14 +83,29 @@ class EventSignupViewTest(TestCase):
         run_async(_test())
 
 
+def _dota_modal(event_id, prefill=None, config=None):
+    """Build a Dota signup modal via the provider (replaces EventSignupModal)."""
+    from discordbot.components import DotaComponents
+    from events.schemas import DotaModalConfig
+
+    cfg = config if config is not None else DotaModalConfig().model_dump()
+    return DotaComponents().build_signup_modal(event_id, prefill or {}, cfg)
+
+
+def _deadlock_modal(event_id, prefill=None, config=None):
+    from discordbot.components import DeadlockComponents
+    from events.schemas import DeadlockModalConfig
+
+    cfg = config if config is not None else DeadlockModalConfig().model_dump()
+    return DeadlockComponents().build_signup_modal(event_id, prefill or {}, cfg)
+
+
 class EventSignupModalTest(TestCase):
     def test_dota_modal_components_are_textinput_or_label(self):
         """Modal items must be TextInput or Label (Label wraps Select for components-v2)."""
 
         async def _test():
-            from discordbot.components import EventSignupModal
-
-            modal = EventSignupModal(event_id=42, game_type=1, prefill={})
+            modal = _dota_modal(event_id=42, prefill={})
             allowed = (discord.ui.TextInput, discord.ui.Label)
             for item in modal.children:
                 self.assertIsInstance(
@@ -106,9 +121,7 @@ class EventSignupModalTest(TestCase):
         are gathered in a follow-up ephemeral, not in the modal."""
 
         async def _test():
-            from discordbot.components import EventSignupModal
-
-            modal = EventSignupModal(event_id=42, game_type=1, prefill={})
+            modal = _dota_modal(event_id=42, prefill={})
             custom_ids = []
             for item in modal.children:
                 if hasattr(item, "custom_id") and item.custom_id:
@@ -130,9 +143,7 @@ class EventSignupModalTest(TestCase):
 
     def test_deadlock_modal_has_rank_and_date(self):
         async def _test():
-            from discordbot.components import EventSignupModal
-
-            modal = EventSignupModal(event_id=42, game_type=2, prefill={})
+            modal = _deadlock_modal(event_id=42, prefill={})
             custom_ids = [item.custom_id for item in modal.children]
             self.assertTrue(any("deadlock_rank" in cid for cid in custom_ids))
             self.assertTrue(any("deadlock_date" in cid for cid in custom_ids))
@@ -141,10 +152,8 @@ class EventSignupModalTest(TestCase):
 
     def test_steam_input_prefilled(self):
         async def _test():
-            from discordbot.components import EventSignupModal
-
-            modal = EventSignupModal(
-                event_id=42, game_type=1, prefill={"unverified_friend_id": "12345"}
+            modal = _dota_modal(
+                event_id=42, prefill={"unverified_friend_id": "12345"}
             )
             steam_inputs = [
                 i for i in modal.children if "steam" in getattr(i, "custom_id", "")
@@ -156,9 +165,7 @@ class EventSignupModalTest(TestCase):
 
     def test_max_5_components(self):
         async def _test():
-            from discordbot.components import EventSignupModal
-
-            modal = EventSignupModal(event_id=42, game_type=1, prefill={})
+            modal = _dota_modal(event_id=42, prefill={})
             self.assertLessEqual(len(modal.children), 5)
 
         run_async(_test())
@@ -296,14 +303,15 @@ class PositionConfirmButtonCallbackTest(TestCase):
             interaction.user = MagicMock()
             interaction.user.id = "100000000000000001"
             interaction.response = MagicMock()
-            interaction.response.edit_message = AsyncMock()
+            interaction.response.defer = AsyncMock()
+            interaction.edit_original_response = AsyncMock()
 
             fake_event = MagicMock()
             fake_event.pk = 42
             fake_org_user = MagicMock()
 
             with mock_patch(
-                "discordbot.components.save_positions",
+                "discordbot.components.dota.save_positions",
                 side_effect=handle_save_positions,
             ), mock_patch(
                 "events.discord.handlers.Event.objects.select_related"
