@@ -26,8 +26,8 @@ from telemetry.logging import get_logger
 log = get_logger(__name__)
 tracer = trace.get_tracer(__name__)
 
-TICK_STEP_SLOW_THRESHOLD_S = 0.3       # 30% of the 1s budget
-TICK_GAP_STALL_THRESHOLD_S = 1.5       # expected gap is 1.0s
+TICK_STEP_SLOW_THRESHOLD_S = 0.3  # 30% of the 1s budget
+TICK_GAP_STALL_THRESHOLD_S = 1.5  # expected gap is 1.0s
 TICK_ITERATION_SLOW_THRESHOLD_S = 1.5  # backstop if no single step crossed
 
 # Redis client for locking and connection tracking
@@ -62,7 +62,13 @@ def increment_connection_count(draft_id: int) -> int:
     key = CONN_COUNT_KEY.format(draft_id=draft_id)
     count = r.incr(key)
     r.expire(key, 300)  # Expire after 5 min of no activity
-    log.debug(f"Draft {draft_id} connection count incremented to {count}")
+    log.debug(
+        "connection_count_incremented",
+        system="herodraft",
+        subsystem="timer",
+        draft_id=draft_id,
+        count=count,
+    )
     return count
 
 
@@ -74,7 +80,13 @@ def decrement_connection_count(draft_id: int) -> int:
     if count <= 0:
         r.delete(key)
         count = 0
-    log.debug(f"Draft {draft_id} connection count decremented to {count}")
+    log.debug(
+        "connection_count_decremented",
+        system="herodraft",
+        subsystem="timer",
+        draft_id=draft_id,
+        count=count,
+    )
     return count
 
 
@@ -192,7 +204,9 @@ async def broadcast_tick(draft_id: int):
             round=current_round.round_number,
             server_time=now.isoformat(),
             round_started_at=(
-                current_round.started_at.isoformat() if current_round.started_at else None
+                current_round.started_at.isoformat()
+                if current_round.started_at
+                else None
             ),
         )
 
@@ -205,7 +219,9 @@ async def broadcast_tick(draft_id: int):
             "current_round": current_round.round_number - 1,  # 0-indexed
             "active_team_id": current_round.draft_team_id,
             "round_started_at": (
-                current_round.started_at.isoformat() if current_round.started_at else None
+                current_round.started_at.isoformat()
+                if current_round.started_at
+                else None
             ),
             "round_grace_time_ms": current_round.grace_time_ms,
             # DraftTeam.reserve_time_remaining — the team's cumulative
@@ -215,13 +231,9 @@ async def broadcast_tick(draft_id: int):
             # The client subtracts the IN-ROUND consumption locally for
             # display on the active team only.
             "team_a_id": team_a.id if team_a else None,
-            "team_a_reserve_ms": (
-                team_a.reserve_time_remaining if team_a else None
-            ),
+            "team_a_reserve_ms": (team_a.reserve_time_remaining if team_a else None),
             "team_b_id": team_b.id if team_b else None,
-            "team_b_reserve_ms": (
-                team_b.reserve_time_remaining if team_b else None
-            ),
+            "team_b_reserve_ms": (team_b.reserve_time_remaining if team_b else None),
         }
 
     tick_data = await get_tick_data()
@@ -373,10 +385,19 @@ async def check_resume_countdown(draft_id: int):
                     "rounds",
                 ).get(id=draft_id)
                 broadcast_herodraft_state(draft, "draft_resumed")
-                log.debug(f"Broadcast draft_resumed for draft {draft_id}")
+                log.debug(
+                    "draft_resumed_broadcast",
+                    system="herodraft",
+                    subsystem="timer",
+                    draft_id=draft_id,
+                )
             except Exception as e:
                 log.error(
-                    f"Failed to broadcast draft_resumed for draft {draft_id}: {e}"
+                    "draft_resumed_broadcast_failed",
+                    system="herodraft",
+                    subsystem="timer",
+                    draft_id=draft_id,
+                    error=str(e),
                 )
 
         return transitioned
@@ -704,7 +725,13 @@ def start_tick_broadcaster(draft_id: int) -> bool:
     acquired = r.set(lock_key, "locked", nx=True, ex=LOCK_TIMEOUT)
 
     if not acquired:
-        log.debug(f"Tick broadcaster already running for draft {draft_id} (lock held)")
+        log.debug(
+            "tick_broadcaster_already_running",
+            system="herodraft",
+            subsystem="timer",
+            draft_id=draft_id,
+            reason="lock_held",
+        )
         return False
 
     def run_in_thread():
@@ -713,7 +740,13 @@ def start_tick_broadcaster(draft_id: int) -> bool:
         try:
             loop.run_until_complete(run_tick_loop(draft_id, stop_event))
         except Exception as e:
-            log.error(f"Tick broadcaster error for draft {draft_id}: {e}")
+            log.error(
+                "tick_broadcaster_error",
+                system="herodraft",
+                subsystem="timer",
+                draft_id=draft_id,
+                error=str(e),
+            )
         finally:
             loop.close()
             try:
@@ -721,6 +754,8 @@ def start_tick_broadcaster(draft_id: int) -> bool:
             except Exception as e:
                 log.debug(
                     "tick_lock_release_failed",
+                    system="herodraft",
+                    subsystem="timer",
                     draft_id=draft_id,
                     phase="run_in_thread",
                     error=str(e),
@@ -739,7 +774,12 @@ def start_tick_broadcaster(draft_id: int) -> bool:
         _active_tick_tasks[draft_id] = TaskInfo(stop_event, thread)
 
     thread.start()
-    log.info(f"Started tick broadcaster for draft {draft_id}")
+    log.info(
+        "tick_broadcaster_started",
+        system="herodraft",
+        subsystem="timer",
+        draft_id=draft_id,
+    )
     return True
 
 
@@ -753,7 +793,12 @@ def stop_tick_broadcaster(draft_id: int):
         task_info = _active_tick_tasks.get(draft_id)
 
     if task_info:
-        log.info(f"Stopping tick broadcaster for draft {draft_id}")
+        log.info(
+            "tick_broadcaster_stopping",
+            system="herodraft",
+            subsystem="timer",
+            draft_id=draft_id,
+        )
         task_info.stop_event.set()
         task_info.thread.join(timeout=2.0)
 
@@ -762,6 +807,8 @@ def stop_tick_broadcaster(draft_id: int):
     except Exception as e:
         log.debug(
             "tick_lock_release_failed",
+            system="herodraft",
+            subsystem="timer",
             draft_id=draft_id,
             phase="stop_tick_broadcaster",
             error=str(e),
@@ -779,7 +826,12 @@ def stop_all_broadcasters():
     for draft_id in draft_ids:
         stop_tick_broadcaster(draft_id)
 
-    log.info(f"Stopped {len(draft_ids)} tick broadcasters on shutdown")
+    log.info(
+        "tick_broadcasters_shutdown",
+        system="herodraft",
+        subsystem="timer",
+        count=len(draft_ids),
+    )
 
 
 # Register cleanup on process exit

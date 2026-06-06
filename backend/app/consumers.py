@@ -58,8 +58,11 @@ class DraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
     async def draft_event(self, event):
         """Handle draft.event messages from channel layer."""
         log.debug(
-            f"DraftConsumer sending draft_event to client "
-            f"(draft={self.draft_id}, channel={self.channel_name})"
+            "draft_event_send",
+            system="herodraft",
+            subsystem="connection",
+            draft_id=self.draft_id,
+            channel_name=self.channel_name,
         )
         message = {
             "type": "draft_event",

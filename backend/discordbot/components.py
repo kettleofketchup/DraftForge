@@ -193,7 +193,9 @@ class NotifyButton(ui.Button):
         self.event_id = event_id
 
     async def callback(self, interaction: discord.Interaction):
-        async with discord_log_context(interaction, custom_id=self.custom_id, event_id=self.event_id) as ctx:
+        async with discord_log_context(
+            interaction, custom_id=self.custom_id, event_id=self.event_id
+        ) as ctx:
             result = await sync_to_async(notify_button, thread_sensitive=False)(
                 event_id=self.event_id,
                 discord_user_id=str(interaction.user.id),
@@ -225,7 +227,9 @@ class TentativeButton(ui.Button):
         self.event_id = event_id
 
     async def callback(self, interaction: discord.Interaction):
-        async with discord_log_context(interaction, custom_id=self.custom_id, event_id=self.event_id) as ctx:
+        async with discord_log_context(
+            interaction, custom_id=self.custom_id, event_id=self.event_id
+        ) as ctx:
             result = await sync_to_async(tentative_button, thread_sensitive=False)(
                 event_id=self.event_id,
                 discord_user_id=str(interaction.user.id),
@@ -257,7 +261,9 @@ class DeclineButton(ui.Button):
         self.event_id = event_id
 
     async def callback(self, interaction: discord.Interaction):
-        async with discord_log_context(interaction, custom_id=self.custom_id, event_id=self.event_id) as ctx:
+        async with discord_log_context(
+            interaction, custom_id=self.custom_id, event_id=self.event_id
+        ) as ctx:
             result = await sync_to_async(decline_button, thread_sensitive=False)(
                 event_id=self.event_id,
                 discord_user_id=str(interaction.user.id),
@@ -265,9 +271,13 @@ class DeclineButton(ui.Button):
             ctx.set_outcome(result["action"])
 
             if result["action"] == "declined":
-                await respond_to_signup_user(interaction, content="You've declined the event.")
+                await respond_to_signup_user(
+                    interaction, content="You've declined the event."
+                )
             elif result["action"] == "not_signed_up":
-                await interaction.response.send_message("You weren't signed up for this event.", ephemeral=True)
+                await interaction.response.send_message(
+                    "You weren't signed up for this event.", ephemeral=True
+                )
             else:
                 await interaction.response.send_message(
                     result.get("message", "Something went wrong."), ephemeral=True
@@ -430,11 +440,13 @@ class EventSignupModal(ui.Modal):
                 from events.schemas import DotaModalConfig, dota_require_screenshot
 
                 rank_status = values.get("rank_status", "never")
-                cfg = DotaModalConfig(**{
-                    k: v
-                    for k, v in self.event_config.items()
-                    if k in DotaModalConfig.model_fields
-                })
+                cfg = DotaModalConfig(
+                    **{
+                        k: v
+                        for k, v in self.event_config.items()
+                        if k in DotaModalConfig.model_fields
+                    }
+                )
                 require_screenshot = dota_require_screenshot(rank_status, cfg)
                 view = PositionSelectView(
                     self.event_id,
@@ -536,7 +548,9 @@ class RankStatusSelect(ui.Select):
         self.event_id = event_id
 
     async def callback(self, interaction: discord.Interaction):
-        async with discord_log_context(interaction, custom_id=self.custom_id, event_id=self.event_id) as ctx:
+        async with discord_log_context(
+            interaction, custom_id=self.custom_id, event_id=self.event_id
+        ) as ctx:
             rank_status = self.values[0]
             await sync_to_async(rank_status_select, thread_sensitive=False)(
                 event_id=self.event_id,
@@ -625,7 +639,9 @@ class PositionConfirmButton(ui.Button):
         self.min_mmr = min_mmr
 
     async def callback(self, interaction: discord.Interaction):
-        async with discord_log_context(interaction, custom_id=self.custom_id, event_id=self.event_id) as ctx:
+        async with discord_log_context(
+            interaction, custom_id=self.custom_id, event_id=self.event_id
+        ) as ctx:
             positions = []
             for item in self.view.children:
                 if isinstance(item, ui.Select) and item.values:
@@ -636,7 +652,9 @@ class PositionConfirmButton(ui.Button):
             except (TypeError, ValueError):
                 ctx.set_outcome("error")
                 ctx.add(reason="invalid_positions")
-                await interaction.response.edit_message(content="❌ Invalid positions.", view=None)
+                await interaction.response.edit_message(
+                    content="❌ Invalid positions.", view=None
+                )
                 return
 
             result = await sync_to_async(save_positions, thread_sensitive=False)(
@@ -738,7 +756,9 @@ class MedalSelect(ui.Select):
         and StarSelect keeps custom_id=rank_star:{event_id}:Herald. Doing the rebuild
         here removes the race.
         """
-        async with discord_log_context(interaction, custom_id=self.custom_id, event_id=self.event_id) as ctx:
+        async with discord_log_context(
+            interaction, custom_id=self.custom_id, event_id=self.event_id
+        ) as ctx:
             medal = self.values[0] if self.values else "Herald"
             ctx.set_outcome("medal_selected")
             ctx.add(medal=medal)
@@ -783,7 +803,9 @@ class StarSelect(ui.Select):
         self.require_screenshot = require_screenshot
 
     async def callback(self, interaction: discord.Interaction):
-        async with discord_log_context(interaction, custom_id=self.custom_id, event_id=self.event_id) as ctx:
+        async with discord_log_context(
+            interaction, custom_id=self.custom_id, event_id=self.event_id
+        ) as ctx:
             parts = self.custom_id.split(":")
             medal = parts[2] if len(parts) > 2 and parts[2] != "Herald" else None
 
@@ -808,7 +830,9 @@ class StarSelect(ui.Select):
             label = "Rank" if self.rank_status == "active" else "Previous rank"
 
             if result.get("action") == "needs_screenshot":
-                view = ScreenshotUploadPromptView(self.event_id, result["screenshot_type"])
+                view = ScreenshotUploadPromptView(
+                    self.event_id, result["screenshot_type"]
+                )
                 await interaction.response.edit_message(
                     content=(
                         f"\U0001f3c5 {label} set to **{medal_with_star}**\n\n"
@@ -847,7 +871,9 @@ class BattleCupTierSelect(ui.Select):
         self.require_screenshot = require_screenshot
 
     async def callback(self, interaction: discord.Interaction):
-        async with discord_log_context(interaction, custom_id=self.custom_id, event_id=self.event_id) as ctx:
+        async with discord_log_context(
+            interaction, custom_id=self.custom_id, event_id=self.event_id
+        ) as ctx:
             tier = self.values[0]
             result = await sync_to_async(battle_cup_submit, thread_sensitive=False)(
                 event_id=self.event_id,
@@ -858,7 +884,9 @@ class BattleCupTierSelect(ui.Select):
             ctx.add(tier=tier)
 
             if result.get("action") == "needs_screenshot":
-                view = ScreenshotUploadPromptView(self.event_id, result["screenshot_type"])
+                view = ScreenshotUploadPromptView(
+                    self.event_id, result["screenshot_type"]
+                )
                 await interaction.response.edit_message(
                     content=(
                         f"\U0001f3c6 Battle Cup tier {tier} saved\n\n"
@@ -919,9 +947,15 @@ class ScreenshotUploadButton(ui.Button):
         self.screenshot_type = screenshot_type
 
     async def callback(self, interaction: discord.Interaction):
-        async with discord_log_context(interaction, custom_id=self.custom_id, event_id=self.event_id) as ctx:
+        async with discord_log_context(
+            interaction, custom_id=self.custom_id, event_id=self.event_id
+        ) as ctx:
             if interaction.response.is_done():
-                log.warning("screenshot_upload_already_acknowledged")
+                log.warning(
+                    "screenshot_upload_already_acknowledged",
+                    system="discord",
+                    subsystem="interaction",
+                )
                 ctx.set_outcome("already_acknowledged")
                 return
             modal = ScreenshotUploadModal(self.event_id, self.screenshot_type)
@@ -996,7 +1030,13 @@ class ScreenshotUploadModal(ui.Modal):
                 screenshot_type=self.screenshot_type,
                 attachment_url=attachment_url,
             )
-            ctx.set_outcome("signed_up" if result.get("signed_up") else "screenshot_saved" if result.get("success") else "error")
+            ctx.set_outcome(
+                "signed_up"
+                if result.get("signed_up")
+                else "screenshot_saved"
+                if result.get("success")
+                else "error"
+            )
             ctx.add(screenshot_type=self.screenshot_type)
 
             if result.get("success"):

@@ -75,7 +75,12 @@ class TelemetryConsumerMixin:
         structlog.contextvars.bind_contextvars(**context)
 
         # Log connection
-        log.info("ws_connected", client_ip=client_ip)
+        log.info(
+            "ws_connected",
+            system="websocket",
+            subsystem="connection",
+            client_ip=client_ip,
+        )
 
     async def telemetry_disconnect(self, close_code: int) -> None:
         """
@@ -86,7 +91,12 @@ class TelemetryConsumerMixin:
         Args:
             close_code: WebSocket close code
         """
-        log.info("ws_disconnected", close_code=close_code)
+        log.info(
+            "ws_disconnected",
+            system="websocket",
+            subsystem="connection",
+            close_code=close_code,
+        )
 
         # Clear context
         structlog.contextvars.clear_contextvars()
@@ -102,4 +112,9 @@ class TelemetryConsumerMixin:
         """
         # Log with truncated data to avoid huge log entries
         preview = text_data[:100] if text_data else None
-        log.debug("ws_receive", data_preview=preview)
+        log.debug(
+            "ws_receive",
+            system="websocket",
+            subsystem="connection",
+            data_preview=preview,
+        )

@@ -10,8 +10,6 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
-from telemetry.logging import get_logger
-
 from app.broadcast import broadcast_herodraft_event
 from app.functions.herodraft import (
     get_available_heroes,
@@ -22,6 +20,7 @@ from app.functions.herodraft import (
 from app.models import DraftTeam, Game, HeroDraft, HeroDraftEvent, HeroDraftState
 from app.permissions_org import IsTournamentStaff
 from app.serializers import HeroDraftEventSerializer, HeroDraftSerializer
+from telemetry.logging import get_logger
 
 log = get_logger(__name__)
 
@@ -122,7 +121,13 @@ def create_herodraft(request, game_pk):
     DraftTeam.objects.create(draft=draft, tournament_team=game.radiant_team)
     DraftTeam.objects.create(draft=draft, tournament_team=game.dire_team)
 
-    log.info(f"Created HeroDraft {draft.pk} for game {game.pk}")
+    log.info(
+        "herodraft_created",
+        system="herodraft",
+        subsystem="view",
+        draft_id=draft.pk,
+        game_id=game.pk,
+    )
 
     # Create event
     HeroDraftEvent.objects.create(
@@ -209,7 +214,12 @@ def set_ready(request, draft_pk):
     if all_ready:
         draft.state = HeroDraftState.ROLLING
         draft.save()
-        log.info(f"HeroDraft {draft.pk} transitioning to rolling state")
+        log.info(
+            "herodraft_state_rolling",
+            system="herodraft",
+            subsystem="view",
+            draft_id=draft.pk,
+        )
 
     broadcast_herodraft_event(draft, "captain_ready", draft_team)
 
@@ -251,7 +261,12 @@ def do_trigger_roll(request, draft_pk):
     winner = trigger_roll(draft, draft_team)
 
     log.info(
-        f"HeroDraft {draft.pk} roll triggered by team {draft_team.pk}, winner: {winner.pk}"
+        "herodraft_roll_triggered",
+        system="herodraft",
+        subsystem="view",
+        draft_id=draft.pk,
+        draft_team_id=draft_team.pk,
+        winner_team_id=winner.pk,
     )
 
     broadcast_herodraft_event(draft, "roll_result", winner)
@@ -336,7 +351,6 @@ def do_submit_choice(request, draft_pk):
             )
 
     # Roll winner must make first choice
-    other_team = draft.draft_teams.exclude(pk=draft_team.pk).first()
     if is_roll_winner:
         # Roll winner makes first choice (either pick_order or side)
         pass
@@ -361,7 +375,13 @@ def do_submit_choice(request, draft_pk):
     submit_choice(draft, draft_team, choice_type, value)
 
     log.info(
-        f"HeroDraft {draft.pk} choice submitted: {choice_type}={value} by team {draft_team.pk}"
+        "herodraft_choice_submitted",
+        system="herodraft",
+        subsystem="view",
+        draft_id=draft.pk,
+        draft_team_id=draft_team.pk,
+        choice_type=choice_type,
+        value=value,
     )
 
     broadcast_herodraft_event(draft, "choice_made", draft_team)
@@ -453,7 +473,13 @@ def do_submit_pick(request, draft_pk):
         return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     log.info(
-        f"HeroDraft {draft.pk} pick submitted: hero {hero_id} by team {draft_team.pk} (round {completed_round.round_number})"
+        "herodraft_pick_submitted",
+        system="herodraft",
+        subsystem="view",
+        draft_id=draft.pk,
+        draft_team_id=draft_team.pk,
+        hero_id=hero_id,
+        round_number=completed_round.round_number,
     )
 
     # Include hero_id and action_type in metadata for the toast notification
@@ -546,7 +572,12 @@ def abandon_draft(request, draft_pk):
     draft.save()
 
     log.info(
-        f"HeroDraft {draft.pk} abandoned by user {request.user.pk} (staff={is_staff})"
+        "herodraft_abandoned",
+        system="herodraft",
+        subsystem="view",
+        draft_id=draft.pk,
+        user_id=request.user.pk,
+        is_staff=is_staff,
     )
 
     # Create event for audit trail
@@ -600,7 +631,13 @@ def reset_draft(request, draft_pk):
     draft.is_manual_pause = False
     draft.save()
 
-    log.info(f"HeroDraft {draft.pk} reset by admin {request.user.pk}")
+    log.info(
+        "herodraft_reset",
+        system="herodraft",
+        subsystem="view",
+        draft_id=draft.pk,
+        user_id=request.user.pk,
+    )
 
     # Create event for audit trail
     HeroDraftEvent.objects.create(

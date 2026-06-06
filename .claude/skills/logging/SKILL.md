@@ -31,6 +31,9 @@ Every log MUST include `system` and `subsystem` kwargs. These are the primary Gr
 | `herodraft` | `heartbeat` | — | `herodraft_tick.py` | Heartbeat staleness checks, heartbeat-triggered pauses |
 | `herodraft` | `timer` | — | `herodraft_tick.py` | Tick loop lifecycle, tick broadcast, timeout auto-pick, resume |
 | `websocket` | `heartbeat` | — | `consumers_base.py` | Heartbeat receive, captain register/unregister (generic WS infra) |
+| `websocket` | `connection` | — | `telemetry/websocket.py` | Generic WS connect/disconnect/receive instrumentation |
+| `herodraft` | `view` | — | `app/functions/herodraft_views.py` | HeroDraft HTTP actions: create, roll, choice/pick submit, abandon, reset |
+| `celery` | `task` | — | `telemetry/celery.py` | Generic Celery task lifecycle bookends (started/completed/failed) |
 | `events` | `discord` | — | `events/tasks.py` (cron sync, non-interaction tasks like `sync_discord_events`) | Cron-driven event sync to Discord that isn't triggered by an interaction |
 | `events` | `scheduling` | — | `events/tasks.py` | Event generation, signup opening, repeaters |
 | `tournament` | `discord` | — | `discordbot/tasks.py` | Tournament DMs, bracket notifications |
