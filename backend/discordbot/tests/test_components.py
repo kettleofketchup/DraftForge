@@ -283,6 +283,7 @@ class PositionConfirmButtonCallbackTest(TestCase):
 
     def test_callback_calls_apply_signup_input_with_positions(self):
         async def _test():
+            from app.models import GameType
             from discordbot.components import PositionConfirmButton, PositionSelectView
             from events.discord.handlers import handle_save_positions
             from events.schemas import SignupInputPatch
@@ -308,15 +309,18 @@ class PositionConfirmButtonCallbackTest(TestCase):
 
             fake_event = MagicMock()
             fake_event.pk = 42
+            fake_event.game_type = GameType.DOTA2
             fake_org_user = MagicMock()
 
             with mock_patch(
                 "discordbot.components.dota.save_positions",
                 side_effect=handle_save_positions,
             ), mock_patch(
-                "events.discord.handlers.Event.objects.select_related"
+                "events.discord._shared.Event.objects.select_related"
             ) as mock_sr, mock_patch(
-                "events.discord.handlers._get_org_user",
+                # DotaHandler.save_positions imports _get_org_user into the
+                # provider namespace, so patch it there (not _shared).
+                "events.discord.providers.dota._get_org_user",
                 return_value=(fake_org_user, MagicMock()),
             ), mock_patch("events.services.apply_signup_input") as spy:
                 mock_sr.return_value.get.return_value = fake_event

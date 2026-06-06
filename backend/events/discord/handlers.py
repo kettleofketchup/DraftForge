@@ -1,195 +1,55 @@
 """
-Interactive component handlers for Discord buttons and modals.
+Thin dispatcher for Discord button and modal handlers.
 
-Called by discord.py View/Modal callbacks (discordbot/components.py).
-These are synchronous functions — the caller wraps them with sync_to_async.
-Return dicts with 'action' key so the caller knows how to respond.
+Called by discord.py View/Modal callbacks (discordbot/components/). These are
+synchronous functions — the caller wraps them with sync_to_async. Each public
+``handle_*`` keeps its EXACT name and ``/discord/...`` route binding
+(internal_signup_views.py); the body loads the event, resolves the per-game
+handler via ``get_signup_handler(event.game_type)`` (server truth), and
+delegates. Return dicts with an 'action' key so the caller knows how to respond.
+
+Shared helpers live in ``events/discord/_shared.py``; per-game logic lives in
+``events/discord/providers/``. The ``events.services -> events.discord(__init__)
+-> handlers`` cycle stays broken by keeping every ``from events.services import
+...`` import function-local.
 """
+
+from __future__ import annotations
 
 from structlog.contextvars import bind_contextvars
 
-from app.cache_utils import invalidate_obj
-from discordbot.models import DiscordEventLog
-from django.core.exceptions import ValidationError as DjangoValidationError
 from events.constants import EventState, SignupStatus
-from events.models import Event, EventSignup
-from events.schemas import (
-    DeadlockModalConfig,
-    DotaModalConfig,
-    SignupInputPatch,
-    SignupModalConfig,
-    dota_require_screenshot,
+from events.discord._shared import (
+    _direct_signup,
+    _existing_active_signup,
+    _get_org_user,
+    _load_event,
+    _log_interaction,
+    _log_signup,
 )
-from org.models_profiles import PlayerDotaProfile
+from events.discord.providers.dota import DotaHandler
+from events.discord.providers.registry import get_signup_handler
+from events.models import EventSignup
 from telemetry.logging import get_logger
 
-# events.services is imported inline below — module-level import would cycle:
-# events.services -> events.discord (package __init__) -> events.discord.handlers.
+# Re-exported for back-compat: callers/tests import these private helpers from
+# events.discord.handlers (and from the package __init__).
+from events.discord.providers.deadlock import (  # noqa: F401
+    _check_deadlock_profile_complete,
+)
+from events.discord.providers.dota import _check_dota_profile_complete  # noqa: F401
 
 log = get_logger(__name__)
 
-
-def _log_interaction(
-    event_id,
-    action,
-    discord_user_id="",
-    discord_username="",
-    success=True,
-    error_message="",
-):
-    """Log a Discord interaction (best-effort; surface failures via structlog)."""
-    try:
-        DiscordEventLog.log_interaction(
-            event_id, action, discord_user_id, discord_username, success, error_message
-        )
-    except Exception as e:
-        log.error(
-            "discord_event_log_write_failed",
-            kind="interaction",
-            action=action,
-            event_id=event_id,
-            error=str(e),
-            exc_info=True,
-        )
-
-
-def _log_signup(
-    event_id,
-    action,
-    discord_user_id="",
-    discord_username="",
-    success=True,
-    error_message="",
-):
-    """Log a signup action (best-effort; surface failures via structlog)."""
-    try:
-        DiscordEventLog.log_signup(
-            event_id, action, discord_user_id, discord_username, success, error_message
-        )
-    except Exception as e:
-        log.error(
-            "discord_event_log_write_failed",
-            kind="signup",
-            action=action,
-            event_id=event_id,
-            error=str(e),
-            exc_info=True,
-        )
-
-
-def _check_dota_profile_complete(org_user, event=None):
-    """Check if OrgUser has a complete Dota 2 profile for the given event."""
-    try:
-        profile = org_user.dota_profile
-        has_positions = any(
-            [profile.pos_1, profile.pos_2, profile.pos_3, profile.pos_4, profile.pos_5]
-        )
-        has_rank = (
-            (profile.rank_status == "active" and profile.rank_medal)
-            or (profile.rank_status == "previous" and profile.rank_medal)
-            or (profile.rank_status == "never" and profile.battle_cup_tier is not None)
-        )
-        # If event requires min_mmr, profile must have a numeric MMR
-        if event and event.min_mmr and not profile.mmr:
-            return False
-        return has_positions and has_rank
-    except Exception:
-        return False
-
-
-def _check_deadlock_profile_complete(org_user):
-    """Check if OrgUser has a complete Deadlock profile."""
-    try:
-        profile = org_user.deadlock_profile
-        return bool(profile.rank)
-    except Exception:
-        return False
-
-
-def _get_org_user(event, discord_user_id, discord_username=None):
-    """Look up or create OrgUser for the event's org + Discord user.
-
-    If no CustomUser exists with this Discord ID, a "phantom" placeholder is
-    auto-created using the Discord username. A button click only carries a
-    Discord ID — it can't run the OAuth pipeline — so the phantom holds the
-    signup until the person logs in, at which point the social-auth pipeline
-    reclaims this exact row by discordId (see app/pipelines.py). The phantom is
-    a normal, immediately-loginable account — no restrictions.
-
-    Returns (org_user, user) or (None, None).
-    """
-    from django.db import IntegrityError, transaction
-
-    from app.models import CustomUser, PositionsModel
-    from events.services import resolve_or_create_org_user
-
-    discord_id_str = str(discord_user_id)
-
-    # 1) Primary: an account already linked to this Discord ID.
-    user = CustomUser.objects.filter(discordId=discord_id_str).first()
-
-    # 2) Discord usernames are globally unique, so an existing *unclaimed*
-    #    account with this username is the same person. Claim it for this
-    #    Discord ID instead of creating a duplicate (and instead of mangling
-    #    the username, which would later collide when the OAuth login writes
-    #    the real handle back in save_discord).
-    if user is None and discord_username:
-        candidate = CustomUser.objects.filter(username=discord_username).first()
-        if candidate is not None and not candidate.discordId:
-            candidate.discordId = discord_id_str
-            try:
-                with transaction.atomic():
-                    candidate.save(update_fields=["discordId"])
-                user = candidate
-            except IntegrityError:
-                # A concurrent click/login claimed this discordId first —
-                # adopt that row instead of propagating a 500.
-                user = CustomUser.objects.filter(discordId=discord_id_str).first()
-
-    # 3) Otherwise create a fresh account keyed by the unique Discord handle.
-    if user is None:
-        username = discord_username or f"discord_{discord_id_str}"
-        positions = PositionsModel.objects.create()
-        new_user = CustomUser(
-            username=username,
-            discordId=discord_id_str,
-            nickname=discord_username or username,
-            positions=positions,
-        )
-        try:
-            with transaction.atomic():
-                new_user.save()
-            user = new_user
-        except IntegrityError:
-            # Lost a race (a concurrent click or login created the row first),
-            # rather than crash on the unique discordId/username constraint.
-            positions.delete()
-            user = CustomUser.objects.filter(discordId=discord_id_str).first()
-            if user is None:
-                # Handle is held by a different Discord identity (stale rename):
-                # fall back to an id-based username, which is always unique.
-                fallback_positions = PositionsModel.objects.create()
-                user = CustomUser.objects.create(
-                    username=f"discord_{discord_id_str}",
-                    discordId=discord_id_str,
-                    nickname=discord_username or f"discord_{discord_id_str}",
-                    positions=fallback_positions,
-                )
-
-    org_user = resolve_or_create_org_user(user, event.organization)
-    return org_user, user
+_NOT_APPLICABLE = {"action": "error", "message": "Not applicable."}
 
 
 def handle_signup_button(event_id, discord_user_id, discord_username=None):
     """Handle Sign Up button click. Returns action dict."""
     log.info("handler_invoked", handler="signup_button")
-    from app.models import GameType
 
-    try:
-        event = Event.objects.select_related("organization", "event_repeater").get(
-            pk=event_id
-        )
-    except Event.DoesNotExist:
+    event = _load_event(event_id, select_related=("organization", "event_repeater"))
+    if event is None:
         return {"action": "error", "message": "Event not found."}
 
     if event.state != EventState.SIGNUPS_OPEN:
@@ -209,42 +69,23 @@ def handle_signup_button(event_id, discord_user_id, discord_username=None):
         }
 
     # Check if already signed up (tentative can upgrade to full signup)
-    existing = (
-        EventSignup.objects.filter(event=event, user=user)
-        .exclude(
-            status__in=[
-                SignupStatus.CANCELLED,
-                SignupStatus.REJECTED,
-                SignupStatus.TENTATIVE,
-            ]
-        )
-        .first()
-    )
+    existing = _existing_active_signup(event, user)
     if existing:
         return {
             "action": "error",
             "message": f"You're already signed up (status: {existing.status}).",
         }
 
-    # Check profile completeness (profiles are on OrgUser, not CustomUser)
-    if event.game_type == GameType.DOTA2:
-        profile_complete = _check_dota_profile_complete(org_user, event=event)
-    elif event.game_type == GameType.DEADLOCK:
-        profile_complete = _check_deadlock_profile_complete(org_user)
-    else:
-        profile_complete = True
+    handler = get_signup_handler(event.game_type)
 
-    if profile_complete:
+    if handler.profile_complete(org_user, event):
         # Direct signup — no modal needed
-        from events.services import process_rsvp
-
         try:
-            signup = process_rsvp(event, user)
-            log.info("signup_persisted", signup_id=signup.pk, signup_status=signup.status)
+            result = _direct_signup(event, user)
             _log_signup(event_id, "signup_direct", discord_user_id, discord_username)
-            # notify_signup_changed is dispatched by _create_signup's on_commit hook
-            # (services.py:246) — do NOT call directly or the embed updates twice.
-            return {"action": "signed_up", "status": signup.status}
+            # notify_signup_changed is dispatched by _create_signup's on_commit
+            # hook — do NOT call directly or the embed updates twice.
+            return result
         except ValueError as e:
             log.warning("signup_rejected", reason=str(e))
             _log_signup(
@@ -257,50 +98,27 @@ def handle_signup_button(event_id, discord_user_id, discord_username=None):
             )
             return {"action": "error", "message": str(e)}
 
-    if event.game_type == GameType.DOTA2:
-        modal_config = DotaModalConfig(
-            require_steam_id=event.require_steam_id,
-            require_rank_screenshot=event.discord_require_rank_screenshot,
-            require_battlecup_screenshot=event.discord_require_battlecup_screenshot,
-            min_mmr=event.min_mmr,
-            allow_active_mmr=event.allow_active_mmr,
-            allow_previous_rank=event.allow_previous_rank,
-            allow_battlecup_rating=event.allow_battlecup_rating,
-        )
-    elif event.game_type == GameType.DEADLOCK:
-        modal_config = DeadlockModalConfig(require_steam_id=event.require_steam_id)
-    else:
-        modal_config = SignupModalConfig(require_steam_id=event.require_steam_id)
-
     _log_interaction(event_id, "signup_modal_opened", discord_user_id, discord_username)
     # Needs modal — return prefill data + typed per-game modal_config
     return {
         "action": "needs_modal",
         "game_type": event.game_type,
-        "prefill": {
-            "unverified_friend_id": getattr(
-                getattr(org_user, "dota_profile", None), "unverified_friend_id", ""
-            )
-            or getattr(
-                getattr(org_user, "deadlock_profile", None), "unverified_friend_id", ""
-            )
-            or "",
-        },
-        "modal_config": modal_config.model_dump(),
+        "prefill": handler.prefill(org_user),
+        "modal_config": handler.modal_config(event).model_dump(),
     }
 
 
 def handle_signup_modal_submit(event_id, discord_user_id, game_type, values):
-    """Handle modal form submission. Saves profile data to OrgUser, may need follow-up."""
+    """Handle modal form submission. Delegates to the per-game handler.
+
+    ``game_type`` is accepted-but-ignored: dispatch resolves from
+    ``event.game_type`` (server truth), removing the modal-open-vs-submit drift
+    window.
+    """
     log.info("handler_invoked", handler="signup_modal_submit")
-    from app.cache_utils import invalidate_obj
 
-    from app.models import GameType
-    from org.models_profiles import PlayerDeadlockProfile
-
-    try:
-        event = Event.objects.select_related("organization").get(pk=event_id)
-    except Event.DoesNotExist:
+    event = _load_event(event_id)
+    if event is None:
         return {"action": "error", "message": "Event not found."}
 
     org_user, user = _get_org_user(event, discord_user_id)
@@ -311,358 +129,86 @@ def handle_signup_modal_submit(event_id, discord_user_id, game_type, values):
     if not org_user:
         return {"action": "error", "message": "User not found."}
 
-    friend_id = values.get("unverified_friend_id", "").strip()
-
-    if game_type == GameType.DOTA2:
-        from django.core.exceptions import ValidationError as DjangoValidationError
-
-        from events.schemas import SignupInputPatch
-        from events.services import apply_signup_input
-
-        # NOTE: positions are collected in the follow-up PositionConfirmButton
-        # flow, not in this modal. Task 22 handles the positions write.
-        rank_status = values.get("rank_status") or None
-        # Coerce legacy non-canonical values to "never" (matches prior behavior).
-        if rank_status and rank_status not in ("active", "previous", "never"):
-            rank_status = "never"
-
-        patch_kwargs = {}
-        if friend_id:
-            patch_kwargs["unverified_friend_id"] = friend_id
-        if rank_status:
-            patch_kwargs["rank_status"] = rank_status
-
-        try:
-            apply_signup_input(
-                org_user=org_user,
-                event=event,
-                patch=SignupInputPatch(**patch_kwargs),
-            )
-        except DjangoValidationError as exc:
-            msg = exc.messages[0] if hasattr(exc, "messages") else str(exc)
-            return {"action": "error", "message": msg}
-
-        if rank_status:
-            return {
-                "action": "needs_rank_details",
-                "message": _rank_followup_message(rank_status),
-            }
-
-        # Rank status not yet selected — will be set via select
-        return {"action": "needs_rank_status"}
-
-    elif game_type == GameType.DEADLOCK:
-        # Save Deadlock profile and sign up directly
-        profile, _ = PlayerDeadlockProfile.objects.get_or_create(org_user=org_user)
-        if friend_id:
-            profile.unverified_friend_id = friend_id
-        profile.rank = values.get("deadlock_rank", "")
-        profile.save()
-        invalidate_obj(profile)
-
-        from events.services import process_rsvp
-
-        try:
-            signup = process_rsvp(event, user)
-            log.info("signup_persisted", signup_id=signup.pk, signup_status=signup.status)
-            return {"action": "signed_up", "status": signup.status}
-        except ValueError as e:
-            log.warning("signup_rejected", reason=str(e))
-            return {"action": "error", "message": str(e)}
-
-    return {"action": "error", "message": "Unknown game type."}
-
-
-def _rank_followup_message(rank_status):
-    """Build the ephemeral follow-up message for Dota rank details."""
-    if rank_status == "active":
-        return "Almost there! Select your current medal:"
-    elif rank_status == "previous":
-        return "Almost there! Click below to enter your previous rank details:"
-    else:
-        return "Almost there! Click below to enter your Battle Cup info:"
+    handler = get_signup_handler(event.game_type)
+    return handler.apply_modal_submit(event, org_user, user, values)
 
 
 def handle_rank_status_select(event_id, discord_user_id, rank_status):
     """Save the rank status from the select menu to the Dota profile."""
     log.info("handler_invoked", handler="rank_status_select")
-    from django.core.exceptions import ValidationError as DjangoValidationError
-
-    from events.schemas import SignupInputPatch
-    from events.services import apply_signup_input
-
-    try:
-        event = Event.objects.select_related("organization").get(pk=event_id)
-    except Event.DoesNotExist:
+    event = _load_event(event_id)
+    if event is None:
         return
-
-    org_user, _ = _get_org_user(event, discord_user_id)
-    if not org_user:
-        return
-
-    try:
-        apply_signup_input(
-            org_user=org_user,
-            event=event,
-            patch=SignupInputPatch(rank_status=rank_status),
-        )
-    except DjangoValidationError:
-        # Fail silently per existing behavior (function returns None either way).
-        pass
+    handler = get_signup_handler(event.game_type)
+    if not isinstance(handler, DotaHandler):
+        return _NOT_APPLICABLE
+    return handler.rank_status_select(event, discord_user_id, rank_status)
 
 
 def handle_rank_medal_select(event_id, discord_user_id, medal):
     """Handle active rank medal selection. Saves medal and signs up."""
     log.info("handler_invoked", handler="rank_medal_select")
-    from django.core.exceptions import ValidationError as DjangoValidationError
-
-    from events.schemas import SignupInputPatch
-    from events.services import apply_signup_input, process_rsvp
-
-    try:
-        event = Event.objects.select_related("organization").get(pk=event_id)
-    except Event.DoesNotExist:
+    event = _load_event(event_id)
+    if event is None:
         return {"action": "error", "message": "Not found."}
-
-    org_user, user = _get_org_user(event, discord_user_id)
-    if org_user is not None:
-        bind_contextvars(org_user_id=org_user.pk)
-    if user is not None:
-        bind_contextvars(user_id=user.pk)
-    if not org_user:
-        return {"action": "error", "message": "Not found."}
-
-    try:
-        profile = apply_signup_input(
-            org_user=org_user,
-            event=event,
-            patch=SignupInputPatch(rank_medal=medal),
-        )
-    except DjangoValidationError as exc:
-        msg = exc.messages[0] if hasattr(exc, "messages") else str(exc)
-        return {"action": "error", "message": msg}
-
-    # Check if screenshot required before completing signup
-    if event.discord_require_rank_screenshot and not profile.rank_screenshot:
-        _log_interaction(event_id, "awaiting_rank_screenshot", discord_user_id)
-        return {
-            "action": "needs_screenshot",
-            "screenshot_type": "rank",
-        }
-
-    try:
-        signup = process_rsvp(event, user)
-        log.info("signup_persisted", signup_id=signup.pk, signup_status=signup.status)
-        _log_signup(event_id, f"signup_ranked:{medal}", discord_user_id)
-        return {"action": "signed_up", "status": signup.status}
-    except ValueError as e:
-        log.warning("signup_rejected", reason=str(e))
-        _log_signup(
-            event_id,
-            "signup_failed",
-            discord_user_id,
-            success=False,
-            error_message=str(e),
-        )
-        return {"action": "error", "message": str(e)}
+    handler = get_signup_handler(event.game_type)
+    if not isinstance(handler, DotaHandler):
+        return _NOT_APPLICABLE
+    return handler.rank_medal_select(event, discord_user_id, medal)
 
 
 def handle_previous_rank_submit(event_id, discord_user_id, medal, date_text):
     """Handle previous rank modal submission. Saves rank info and signs up."""
     log.info("handler_invoked", handler="previous_rank_submit")
-    from django.core.exceptions import ValidationError as DjangoValidationError
-
-    from events.schemas import SignupInputPatch
-    from events.services import apply_signup_input, process_rsvp
-
-    try:
-        event = Event.objects.select_related("organization").get(pk=event_id)
-    except Event.DoesNotExist:
+    event = _load_event(event_id)
+    if event is None:
         return {"action": "error", "message": "Not found."}
-
-    org_user, user = _get_org_user(event, discord_user_id)
-    if org_user is not None:
-        bind_contextvars(org_user_id=org_user.pk)
-    if user is not None:
-        bind_contextvars(user_id=user.pk)
-    if not org_user:
-        return {"action": "error", "message": "Not found."}
-
-    try:
-        profile = apply_signup_input(
-            org_user=org_user,
-            event=event,
-            patch=SignupInputPatch(rank_medal=medal),
-        )
-    except DjangoValidationError as exc:
-        msg = exc.messages[0] if hasattr(exc, "messages") else str(exc)
-        return {"action": "error", "message": msg}
-
-    # Check if screenshot required before completing signup
-    if event.discord_require_rank_screenshot and not profile.rank_screenshot:
-        _log_interaction(event_id, "awaiting_rank_screenshot", discord_user_id)
-        return {
-            "action": "needs_screenshot",
-            "screenshot_type": "rank",
-        }
-
-    try:
-        signup = process_rsvp(event, user)
-        log.info("signup_persisted", signup_id=signup.pk, signup_status=signup.status)
-        return {"action": "signed_up", "status": signup.status}
-    except ValueError as e:
-        log.warning("signup_rejected", reason=str(e))
-        return {"action": "error", "message": str(e)}
+    handler = get_signup_handler(event.game_type)
+    if not isinstance(handler, DotaHandler):
+        return _NOT_APPLICABLE
+    return handler.previous_rank_submit(event, discord_user_id, medal, date_text)
 
 
 def handle_battle_cup_submit(event_id, discord_user_id, tier):
     """Handle battle cup modal submission. Saves tier and signs up."""
     log.info("handler_invoked", handler="battle_cup_submit")
-    from django.core.exceptions import ValidationError as DjangoValidationError
-
-    from events.schemas import SignupInputPatch
-    from events.services import apply_signup_input, process_rsvp
-
-    try:
-        event = Event.objects.select_related("organization").get(pk=event_id)
-    except Event.DoesNotExist:
+    event = _load_event(event_id)
+    if event is None:
         return {"action": "error", "message": "Not found."}
-
-    org_user, user = _get_org_user(event, discord_user_id)
-    if org_user is not None:
-        bind_contextvars(org_user_id=org_user.pk)
-    if user is not None:
-        bind_contextvars(user_id=user.pk)
-    if not org_user:
-        return {"action": "error", "message": "Not found."}
-
-    try:
-        tier_int = int(tier.strip())
-    except (ValueError, TypeError, AttributeError):
-        return {"action": "error", "message": "Invalid tier. Must be a number."}
-
-    try:
-        patch = SignupInputPatch(battle_cup_tier=tier_int)
-    except Exception:  # pydantic.ValidationError (range 1..8)
-        return {"action": "error", "message": "Invalid tier. Must be 1-8."}
-
-    try:
-        profile = apply_signup_input(org_user=org_user, event=event, patch=patch)
-    except DjangoValidationError as exc:
-        msg = exc.messages[0] if hasattr(exc, "messages") else str(exc)
-        return {"action": "error", "message": msg}
-
-    # Check if screenshot required before completing signup
-    if event.discord_require_battlecup_screenshot and not profile.battlecup_screenshot:
-        _log_interaction(event_id, "awaiting_battlecup_screenshot", discord_user_id)
-        return {
-            "action": "needs_screenshot",
-            "screenshot_type": "battlecup",
-        }
-
-    try:
-        signup = process_rsvp(event, user)
-        log.info("signup_persisted", signup_id=signup.pk, signup_status=signup.status)
-        _log_signup(event_id, f"signup_battlecup:T{tier}", discord_user_id)
-        return {"action": "signed_up", "status": signup.status}
-    except ValueError as e:
-        log.warning("signup_rejected", reason=str(e))
-        _log_signup(
-            event_id,
-            "signup_failed",
-            discord_user_id,
-            success=False,
-            error_message=str(e),
-        )
-        return {"action": "error", "message": str(e)}
+    handler = get_signup_handler(event.game_type)
+    if not isinstance(handler, DotaHandler):
+        return _NOT_APPLICABLE
+    return handler.battle_cup_submit(event, discord_user_id, tier)
 
 
-def handle_screenshot_upload(
-    event_id, discord_user_id, screenshot_type, attachment_url
-):
+def handle_screenshot_upload(event_id, discord_user_id, screenshot_type, attachment_url):
     """Validate and save screenshot URL to PlayerDotaProfile."""
     log.info("handler_invoked", handler="screenshot_upload")
-    from django.core.exceptions import ValidationError as DjangoValidationError
-
-    from events.schemas import SignupInputPatch
-    from events.services import apply_signup_input
-
-    # Validate URL
-    if not attachment_url:
-        return {"success": False, "message": "No file provided."}
-
-    if screenshot_type == "rank":
-        key = "rank_screenshot"
-    elif screenshot_type == "battlecup":
-        key = "battlecup_screenshot"
-    else:
-        return {"success": False, "message": "Unknown screenshot type."}
-
-    try:
-        event = Event.objects.select_related("organization").get(pk=event_id)
-    except Event.DoesNotExist:
+    event = _load_event(event_id)
+    if event is None:
         return {"success": False, "message": "Event not found."}
-
-    org_user, user = _get_org_user(event, discord_user_id)
-    if org_user is not None:
-        bind_contextvars(org_user_id=org_user.pk)
-    if user is not None:
-        bind_contextvars(user_id=user.pk)
-    if not org_user:
-        return {"success": False, "message": "User not found."}
-
-    try:
-        apply_signup_input(
-            org_user=org_user,
-            event=event,
-            patch=SignupInputPatch(**{key: attachment_url}),
-        )
-    except DjangoValidationError as exc:
-        msg = exc.messages[0] if hasattr(exc, "messages") else str(exc)
-        return {"success": False, "message": msg}
-
-    _log_interaction(
-        event_id, f"screenshot_uploaded:{screenshot_type}", discord_user_id
+    handler = get_signup_handler(event.game_type)
+    if not isinstance(handler, DotaHandler):
+        return _NOT_APPLICABLE
+    return handler.screenshot_upload(
+        event, discord_user_id, screenshot_type, attachment_url
     )
-
-    # Complete the signup now that screenshot is provided
-    from events.services import process_rsvp
-
-    _, user = _get_org_user(event, discord_user_id)
-    if not user:
-        return {"success": True, "signed_up": False, "message": "Screenshot saved."}
-
-    try:
-        signup = process_rsvp(event, user)
-        log.info("signup_persisted", signup_id=signup.pk, signup_status=signup.status)
-        _log_signup(
-            event_id, f"signup_after_screenshot:{screenshot_type}", discord_user_id
-        )
-        return {
-            "success": True,
-            "signed_up": True,
-            "message": f"Screenshot saved! You're signed up. Status: **{signup.status}**",
-        }
-    except ValueError as e:
-        log.warning("signup_rejected", reason=str(e))
-        return {
-            "success": True,
-            "signed_up": False,
-            "message": f"Screenshot saved. {str(e)}",
-        }
 
 
 def handle_notify_button(event_id, discord_user_id):
-    """Handle Notify Me button click. Toggles RepeaterSubscription."""
+    """Handle Notify Me button click. Toggles RepeaterSubscription.
+
+    Game-agnostic. CACHE GUARDRAIL (#268): the subscriber-count cache on the
+    EventRepeater (a CACHEOPS model) is invalidated directly — the toggle is
+    outside transaction.atomic.
+    """
     log.info("handler_invoked", handler="notify_button")
     from app.cache_utils import invalidate_obj
-
     from app.models import CustomUser
     from events.models import RepeaterSubscription
 
-    try:
-        event = Event.objects.select_related("event_repeater").get(pk=event_id)
-    except Event.DoesNotExist:
+    event = _load_event(event_id, select_related=("event_repeater",))
+    if event is None:
         return {"subscribed": False}
 
     if not event.event_repeater:
@@ -684,13 +230,15 @@ def handle_notify_button(event_id, discord_user_id):
 
 
 def handle_decline_button(event_id, discord_user_id):
-    """Handle Decline button click. Cancels signup if exists, or no-ops."""
+    """Handle Decline button click. Cancels signup if exists, or no-ops.
+
+    Game-agnostic.
+    """
     log.info("handler_invoked", handler="decline_button")
     from events.services import cancel_signup
 
-    try:
-        event = Event.objects.select_related("organization").get(pk=event_id)
-    except Event.DoesNotExist:
+    event = _load_event(event_id)
+    if event is None:
         return {"action": "error", "message": "Event not found."}
 
     org_user, user = _get_org_user(event, discord_user_id)
@@ -708,18 +256,20 @@ def handle_decline_button(event_id, discord_user_id):
         cancel_signup(signup)
         _log_signup(event_id, "declined", discord_user_id)
         # notify_signup_changed is dispatched by cancel_signup's on_commit hook
-        # (services.py:537) — do NOT call directly.
+        # — do NOT call directly.
         return {"action": "declined", "message": "You've declined the event."}
     except EventSignup.DoesNotExist:
         return {"action": "not_signed_up", "message": "You weren't signed up."}
 
 
 def handle_tentative_button(event_id, discord_user_id, discord_username=None):
-    """Handle Tentative button click. Routes through create_tentative_signup service."""
+    """Handle Tentative button click. Routes through create_tentative_signup.
+
+    Game-agnostic.
+    """
     log.info("handler_invoked", handler="tentative_button")
-    try:
-        event = Event.objects.select_related("organization").get(pk=event_id)
-    except Event.DoesNotExist:
+    event = _load_event(event_id)
+    if event is None:
         return {"action": "error", "message": "Event not found."}
 
     org_user, user = _get_org_user(
@@ -749,8 +299,8 @@ def handle_tentative_button(event_id, discord_user_id, discord_username=None):
         event_id=event.pk,
         signup_id=signup.pk,
     )
-    # notify_signup_changed is dispatched by create_tentative_signup's on_commit hook
-    # (services.py) — do NOT call directly.
+    # notify_signup_changed is dispatched by create_tentative_signup's on_commit
+    # hook — do NOT call directly.
     return {"action": "tentative", "message": "Marked as tentative."}
 
 
@@ -759,67 +309,30 @@ def handle_set_position(
     discord_user_id: str,
     position: int,
 ) -> dict[str, str]:
-    """Set a single position flag (pos_N=True) on the user's PlayerDotaProfile.
-
-    Used by the legacy per-click position dropdown (``pos_select_*``). Only
-    sets the chosen flag True — doesn't reset others. Multiple clicks
-    accumulate positions, matching the pre-migration behavior.
-    """
+    """Set a single position flag (pos_N=True) on the user's PlayerDotaProfile."""
     log.info("handler_invoked", handler="set_position")
-    if position not in (1, 2, 3, 4, 5):
-        return {"action": "error", "message": "Position must be 1-5."}
-
-    try:
-        event = Event.objects.select_related("organization").get(pk=event_id)
-    except Event.DoesNotExist:
+    event = _load_event(event_id)
+    if event is None:
         return {"action": "error", "message": "Event not found."}
-
-    org_user, _ = _get_org_user(event, discord_user_id)
-    if org_user is None:
-        return {"action": "error", "message": "Could not find your account."}
-    bind_contextvars(org_user_id=org_user.pk)
-
-    profile, _ = PlayerDotaProfile.objects.get_or_create(org_user=org_user)
-    setattr(profile, f"pos_{position}", True)
-    profile.save(update_fields=[f"pos_{position}"])
-    invalidate_obj(profile)
-    return {"action": "position_set"}
+    handler = get_signup_handler(event.game_type)
+    if not isinstance(handler, DotaHandler):
+        return _NOT_APPLICABLE
+    return handler.set_position(event, discord_user_id, position)
 
 
 def handle_get_rank_flow_state(
     event_id: int,
     discord_user_id: str,
 ) -> dict[str, object]:
-    """Read the state the pos_confirm flow needs to render the next view.
-
-    Returns dict with rank_status / require_screenshot / min_mmr, or
-    error/message on lookup failure.
-    """
+    """Read the state the pos_confirm flow needs to render the next view."""
     log.info("handler_invoked", handler="get_rank_flow_state")
-    try:
-        event = Event.objects.select_related("organization").get(pk=event_id)
-    except Event.DoesNotExist:
+    event = _load_event(event_id)
+    if event is None:
         return {"error": "event_not_found", "message": "Event not found."}
-
-    org_user, _ = _get_org_user(event, discord_user_id)
-    if org_user is None:
-        return {"error": "no_org_user", "message": "Could not find your account."}
-    bind_contextvars(org_user_id=org_user.pk)
-
-    profile, _ = PlayerDotaProfile.objects.get_or_create(org_user=org_user)
-    rank_status = profile.rank_status or "never"
-    require_screenshot = dota_require_screenshot(
-        rank_status,
-        DotaModalConfig(
-            require_rank_screenshot=event.discord_require_rank_screenshot,
-            require_battlecup_screenshot=event.discord_require_battlecup_screenshot,
-        ),
-    )
-    return {
-        "rank_status": rank_status,
-        "require_screenshot": require_screenshot,
-        "min_mmr": event.min_mmr,
-    }
+    handler = get_signup_handler(event.game_type)
+    if not isinstance(handler, DotaHandler):
+        return _NOT_APPLICABLE
+    return handler.get_rank_flow_state(event, discord_user_id)
 
 
 def handle_save_positions(
@@ -827,35 +340,12 @@ def handle_save_positions(
     discord_user_id: str,
     positions: list[int],
 ) -> dict[str, str]:
-    """Save positions for the user's signup on this event.
-
-    Used by the PositionConfirmButton flow. Returns {"action": "positions_saved"} on
-    success or {"action": "error", "message": str} on validation failure.
-    """
+    """Save positions for the user's signup on this event."""
     log.info("handler_invoked", handler="save_positions")
-    try:
-        event = Event.objects.select_related("organization").get(pk=event_id)
-    except Event.DoesNotExist:
+    event = _load_event(event_id)
+    if event is None:
         return {"action": "error", "message": "Event not found."}
-
-    org_user, _ = _get_org_user(event, discord_user_id)
-    if org_user is not None:
-        bind_contextvars(org_user_id=org_user.pk)
-    if not org_user:
-        return {"action": "error", "message": "Could not find your account."}
-
-    # events.services -> events.discord cycle: must stay function-local.
-    from events.services import apply_signup_input
-
-    try:
-        apply_signup_input(
-            org_user=org_user,
-            event=event,
-            patch=SignupInputPatch(positions=positions),
-        )
-    except DjangoValidationError as exc:
-        msg = exc.messages[0] if hasattr(exc, "messages") else str(exc)
-        log.warning("signup_rejected", reason=msg)
-        return {"action": "error", "message": msg}
-
-    return {"action": "positions_saved"}
+    handler = get_signup_handler(event.game_type)
+    if not isinstance(handler, DotaHandler):
+        return _NOT_APPLICABLE
+    return handler.save_positions(event, discord_user_id, positions)
