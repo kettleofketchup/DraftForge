@@ -67,12 +67,12 @@ DOTA_MEDALS = [
 DOTA_STARS = ["1", "2", "3", "4", "5"]
 
 
-def _medal_options():
+def _medal_options() -> list[discord.SelectOption]:
     """Build SelectOption list for Dota 2 medals."""
     return [discord.SelectOption(label=m, value=m) for m in DOTA_MEDALS]
 
 
-def _star_options():
+def _star_options() -> list[discord.SelectOption]:
     """Build SelectOption list for medal stars 1-5."""
     return [discord.SelectOption(label=f"Star {s}", value=s) for s in DOTA_STARS]
 
@@ -367,7 +367,13 @@ class DotaSignupModal(ui.Modal):
     ``self`` and read at the follow-up step.
     """
 
-    def __init__(self, event_id, prefill=None, config=None, provider=None):
+    def __init__(
+        self,
+        event_id: int,
+        prefill: dict | None = None,
+        config: dict | None = None,
+        provider: DotaComponents | None = None,
+    ) -> None:
         self.event_id = event_id
         self.event_config = config or {}
         self._provider = provider or _PROVIDER
@@ -384,7 +390,7 @@ class DotaSignupModal(ui.Modal):
 
         self._add_dota_fields(event_id, prefill)
 
-    def _add_dota_fields(self, event_id, prefill):
+    def _add_dota_fields(self, event_id: int, prefill: dict) -> None:
         # Modal only has Steam ID + Rank Status.
         # Positions are collected in a follow-up ephemeral message (3 selects).
         self.pos_1_select = None
@@ -446,7 +452,7 @@ class DotaSignupModal(ui.Modal):
             )
         )
 
-    async def on_submit(self, interaction: discord.Interaction):
+    async def on_submit(self, interaction: discord.Interaction) -> None:
         async with discord_log_context(
             interaction,
             custom_id=f"signup_modal:{self.event_id}",
@@ -517,7 +523,9 @@ class DotaSignupModal(ui.Modal):
                     ephemeral=True,
                 )
 
-    async def on_error(self, interaction: discord.Interaction, error: Exception):
+    async def on_error(
+        self, interaction: discord.Interaction, error: Exception
+    ) -> None:
         async with discord_log_context(
             interaction,
             custom_id=f"signup_modal:{self.event_id}",
@@ -542,7 +550,7 @@ class DotaSignupModal(ui.Modal):
 class RankStatusSelectView(ui.View):
     """Ephemeral select for MMR status after modal submit."""
 
-    def __init__(self, event_id, provider=None):
+    def __init__(self, event_id: int, provider: DotaComponents | None = None) -> None:
         super().__init__(timeout=300)
         self.event_id = event_id
         self._provider = provider or _PROVIDER
@@ -552,7 +560,7 @@ class RankStatusSelectView(ui.View):
 class RankStatusSelect(ui.Select):
     """Select menu for rank status choice."""
 
-    def __init__(self, event_id, provider=None):
+    def __init__(self, event_id: int, provider: DotaComponents | None = None) -> None:
         super().__init__(
             placeholder="Select your ranked status",
             custom_id=RankStatusId(event_id=event_id).encode(),
@@ -582,7 +590,7 @@ class RankStatusSelect(ui.Select):
         self.event_id = event_id
         self._provider = provider or _PROVIDER
 
-    async def callback(self, interaction: discord.Interaction):
+    async def callback(self, interaction: discord.Interaction) -> None:
         await self._provider.rank_status_select(
             interaction, RankStatusId.decode(self.custom_id), values=list(self.values)
         )
@@ -593,12 +601,12 @@ class PositionSelectView(ui.View):
 
     def __init__(
         self,
-        event_id,
-        rank_status,
-        require_screenshot=False,
-        min_mmr=None,
-        provider=None,
-    ):
+        event_id: int,
+        rank_status: str,
+        require_screenshot: bool = False,
+        min_mmr: int | None = None,
+        provider: DotaComponents | None = None,
+    ) -> None:
         super().__init__(timeout=300)
         self.event_id = event_id
         self.rank_status = rank_status
@@ -658,12 +666,12 @@ class PositionConfirmButton(ui.Button):
 
     def __init__(
         self,
-        event_id,
-        rank_status,
-        require_screenshot=False,
-        min_mmr=None,
-        provider=None,
-    ):
+        event_id: int,
+        rank_status: str,
+        require_screenshot: bool = False,
+        min_mmr: int | None = None,
+        provider: DotaComponents | None = None,
+    ) -> None:
         super().__init__(
             label="Confirm Positions",
             style=discord.ButtonStyle.success,
@@ -676,7 +684,7 @@ class PositionConfirmButton(ui.Button):
         self.min_mmr = min_mmr
         self._provider = provider or _PROVIDER
 
-    async def callback(self, interaction: discord.Interaction):
+    async def callback(self, interaction: discord.Interaction) -> None:
         await self._provider.position_confirm(
             interaction,
             PosConfirmId.decode(self.custom_id),
@@ -697,13 +705,13 @@ class RankDetailsView(ui.View):
 
     def __init__(
         self,
-        event_id,
-        rank_status,
-        require_screenshot=False,
-        min_mmr=None,
-        selected_medal=None,
-        provider=None,
-    ):
+        event_id: int,
+        rank_status: str,
+        require_screenshot: bool = False,
+        min_mmr: int | None = None,
+        selected_medal: str | None = None,
+        provider: DotaComponents | None = None,
+    ) -> None:
         super().__init__(timeout=300)
         self.event_id = event_id
         self.rank_status = rank_status
@@ -743,8 +751,12 @@ class MedalSelect(ui.Select):
     """Select menu for rank medal."""
 
     def __init__(
-        self, event_id, rank_status="active", require_screenshot=False, provider=None
-    ):
+        self,
+        event_id: int,
+        rank_status: str = "active",
+        require_screenshot: bool = False,
+        provider: DotaComponents | None = None,
+    ) -> None:
         super().__init__(
             placeholder="Select your medal",
             custom_id=RankMedalId(event_id=event_id).encode(),
@@ -757,7 +769,7 @@ class MedalSelect(ui.Select):
         self.require_screenshot = require_screenshot
         self._provider = provider or _PROVIDER
 
-    async def callback(self, interaction: discord.Interaction):
+    async def callback(self, interaction: discord.Interaction) -> None:
         await self._provider.rank_medal_select(
             interaction,
             RankMedalId.decode(self.custom_id),
@@ -777,12 +789,12 @@ class StarSelect(ui.Select):
 
     def __init__(
         self,
-        event_id,
-        rank_status="active",
-        require_screenshot=False,
-        selected_medal=None,
-        provider=None,
-    ):
+        event_id: int,
+        rank_status: str = "active",
+        require_screenshot: bool = False,
+        selected_medal: str | None = None,
+        provider: DotaComponents | None = None,
+    ) -> None:
         medal_part = selected_medal or "Herald"
         super().__init__(
             placeholder="Select your star (1-5)",
@@ -796,7 +808,7 @@ class StarSelect(ui.Select):
         self.require_screenshot = require_screenshot
         self._provider = provider or _PROVIDER
 
-    async def callback(self, interaction: discord.Interaction):
+    async def callback(self, interaction: discord.Interaction) -> None:
         await self._provider.rank_star_select(
             interaction,
             RankStarId.decode(self.custom_id),
@@ -809,7 +821,12 @@ class StarSelect(ui.Select):
 class BattleCupTierSelect(ui.Select):
     """Select menu for Battle Cup tier. Triggers signup on selection."""
 
-    def __init__(self, event_id, require_screenshot=False, provider=None):
+    def __init__(
+        self,
+        event_id: int,
+        require_screenshot: bool = False,
+        provider: DotaComponents | None = None,
+    ) -> None:
         super().__init__(
             placeholder="Select your max Battle Cup tier",
             custom_id=BattleCupTierId(event_id=event_id).encode(),
@@ -824,7 +841,7 @@ class BattleCupTierSelect(ui.Select):
         self.require_screenshot = require_screenshot
         self._provider = provider or _PROVIDER
 
-    async def callback(self, interaction: discord.Interaction):
+    async def callback(self, interaction: discord.Interaction) -> None:
         await self._provider.battle_cup_select(
             interaction,
             BattleCupTierId.decode(self.custom_id),

@@ -1,6 +1,8 @@
 """Discord bot client with slash commands."""
 
 import sys
+from collections.abc import Callable
+from typing import Any
 
 import discord
 from asgiref.sync import sync_to_async
@@ -28,7 +30,7 @@ from telemetry.logging import get_logger
 log = get_logger(__name__)
 
 
-def is_site_admin():
+def is_site_admin() -> Callable[..., Any]:
     """Check if user is an admin via the internal API.
 
     The bot has no DB mount in production, so this MUST go over HTTP. The
@@ -66,7 +68,7 @@ RSVP_EMOJIS = {
 class KettleBot(discord.Client):
     """Discord bot for DTX gaming organization."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         intents = discord.Intents.default()
         intents.reactions = True
         intents.members = True
@@ -76,7 +78,7 @@ class KettleBot(discord.Client):
         self.tree = app_commands.CommandTree(self)
         self.guild_id = settings.DISCORD_GUILD_ID
 
-    async def setup_hook(self):
+    async def setup_hook(self) -> None:
         """Called when bot is ready to sync commands."""
         guild = discord.Object(id=self.guild_id)
         self.tree.copy_global_to(guild=guild)
@@ -85,7 +87,7 @@ class KettleBot(discord.Client):
             "commands_synced", system="discord", subsystem="bot", guild_id=self.guild_id
         )
 
-    async def on_ready(self):
+    async def on_ready(self) -> None:
         """Called when bot successfully connects."""
         log.info(
             "bot_connected",
@@ -98,7 +100,9 @@ class KettleBot(discord.Client):
             "bot_guild_count", system="discord", subsystem="bot", count=len(self.guilds)
         )
 
-    async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
+    async def on_raw_reaction_add(
+        self, payload: discord.RawReactionActionEvent
+    ) -> None:
         """Track RSVP when user reacts."""
         # Ignore bot's own reactions
         if payload.user_id == self.user.id:
@@ -164,7 +168,9 @@ class KettleBot(discord.Client):
 
         await self._handle_rsvp(payload, RSVP_EMOJIS[emoji])
 
-    async def on_raw_reaction_remove(self, payload: discord.RawReactionActionEvent):
+    async def on_raw_reaction_remove(
+        self, payload: discord.RawReactionActionEvent
+    ) -> None:
         """Remove RSVP when user removes reaction."""
         emoji = str(payload.emoji)
 
@@ -192,7 +198,7 @@ class KettleBot(discord.Client):
 
         await self._remove_rsvp(payload)
 
-    async def on_interaction(self, interaction: discord.Interaction):
+    async def on_interaction(self, interaction: discord.Interaction) -> None:
         """Route component and modal interactions to event signup handlers."""
         custom_id = interaction.data.get("custom_id", "") if interaction.data else ""
 
@@ -281,7 +287,7 @@ bot = KettleBot()
 
 
 @bot.tree.command(name="roles", description="Set your Dota 2 position preferences")
-async def roles_command(interaction: discord.Interaction):
+async def roles_command(interaction: discord.Interaction) -> None:
     """Links user to DTX website for role selection."""
     site_url = getattr(settings, "SITE_URL", "https://localhost")
     url = f"{site_url}/profile?discord_id={interaction.user.id}"
@@ -300,7 +306,7 @@ async def event_command(
     interaction: discord.Interaction,
     name: str,
     description: str,
-):
+) -> None:
     """Admin command to create event from Discord."""
     result = await sync_to_async(create_legacy_event, thread_sensitive=False)(
         name=name,
@@ -320,7 +326,9 @@ async def event_command(
 
 
 @event_command.error
-async def event_error(interaction: discord.Interaction, error):
+async def event_error(
+    interaction: discord.Interaction, error: app_commands.AppCommandError
+) -> None:
     """Handle permission errors for event command."""
     if isinstance(error, app_commands.CheckFailure):
         await interaction.response.send_message(str(error), ephemeral=True)
@@ -330,7 +338,7 @@ async def event_error(interaction: discord.Interaction, error):
         )
 
 
-def run_bot():
+def run_bot() -> None:
     """Run the Discord bot."""
     token = settings.DISCORD_BOT_TOKEN
     if not token:

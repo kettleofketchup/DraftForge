@@ -13,22 +13,28 @@ deferring those imports to call time; a top-level import here re-introduces it.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from discordbot.models import DiscordEventLog
 from events.constants import SignupStatus
 from events.models import Event, EventSignup
 from telemetry.logging import get_logger
 
+if TYPE_CHECKING:
+    from app.models import CustomUser
+    from org.models import OrgUser
+
 log = get_logger(__name__)
 
 
 def _log_interaction(
-    event_id,
-    action,
-    discord_user_id="",
-    discord_username="",
-    success=True,
-    error_message="",
-):
+    event_id: int,
+    action: str,
+    discord_user_id: str = "",
+    discord_username: str = "",
+    success: bool = True,
+    error_message: str = "",
+) -> None:
     """Log a Discord interaction (best-effort; surface failures via structlog)."""
     try:
         DiscordEventLog.log_interaction(
@@ -48,13 +54,13 @@ def _log_interaction(
 
 
 def _log_signup(
-    event_id,
-    action,
-    discord_user_id="",
-    discord_username="",
-    success=True,
-    error_message="",
-):
+    event_id: int,
+    action: str,
+    discord_user_id: str = "",
+    discord_username: str = "",
+    success: bool = True,
+    error_message: str = "",
+) -> None:
     """Log a signup action (best-effort; surface failures via structlog)."""
     try:
         DiscordEventLog.log_signup(
@@ -88,7 +94,11 @@ def _load_event(
         return None
 
 
-def _get_org_user(event, discord_user_id, discord_username=None):
+def _get_org_user(
+    event: Event,
+    discord_user_id: str,
+    discord_username: str | None = None,
+) -> tuple[OrgUser | None, CustomUser | None]:
     """Look up or create OrgUser for the event's org + Discord user.
 
     If no CustomUser exists with this Discord ID, a "phantom" placeholder is
@@ -162,7 +172,7 @@ def _get_org_user(event, discord_user_id, discord_username=None):
     return org_user, user
 
 
-def _existing_active_signup(event, user) -> EventSignup | None:
+def _existing_active_signup(event: Event, user: CustomUser) -> EventSignup | None:
     """Return a non-cancelled/rejected/tentative signup for this user, if any.
 
     Tentative can upgrade to a full signup, so it is excluded from the dedupe
@@ -181,7 +191,7 @@ def _existing_active_signup(event, user) -> EventSignup | None:
     )
 
 
-def _direct_signup(event, user) -> dict[str, str]:
+def _direct_signup(event: Event, user: CustomUser) -> dict[str, str]:
     """process_rsvp happy path: persist + log signup_persisted, return dict.
 
     Raises ValueError on rejection so callers can attach endpoint-specific

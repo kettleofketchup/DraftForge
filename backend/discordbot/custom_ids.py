@@ -12,7 +12,7 @@ its tag prefixes from ``SIGNUP_TAG_PREFIXES`` below.
 
 from __future__ import annotations
 
-from typing import ClassVar
+from typing import Any, ClassVar
 
 from pydantic import BaseModel, ValidationError
 
@@ -28,7 +28,7 @@ class CustomId(BaseModel):
     event_id: int
     model_config = {"frozen": True}
 
-    def __init_subclass__(cls, **kwargs) -> None:
+    def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
         if not getattr(cls, "PREFIX", None):
             raise TypeError(f"{cls.__name__} must set a non-empty PREFIX")

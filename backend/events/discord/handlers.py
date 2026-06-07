@@ -16,6 +16,8 @@ Shared helpers live in ``events/discord/_shared.py``; per-game logic lives in
 
 from __future__ import annotations
 
+from typing import Any
+
 from structlog.contextvars import bind_contextvars
 
 from events.constants import EventState, SignupStatus
@@ -46,7 +48,11 @@ log = get_logger(__name__)
 _NOT_APPLICABLE = {"action": "error", "message": "Not applicable."}
 
 
-def handle_signup_button(event_id, discord_user_id, discord_username=None):
+def handle_signup_button(
+    event_id: int,
+    discord_user_id: str,
+    discord_username: str | None = None,
+) -> dict[str, Any]:
     """Handle Sign Up button click. Returns action dict."""
     log.info(
         "handler_invoked",
@@ -120,7 +126,12 @@ def handle_signup_button(event_id, discord_user_id, discord_username=None):
     }
 
 
-def handle_signup_modal_submit(event_id, discord_user_id, game_type, values):
+def handle_signup_modal_submit(
+    event_id: int,
+    discord_user_id: str,
+    game_type: int,
+    values: dict,
+) -> dict[str, Any]:
     """Handle modal form submission. Delegates to the per-game handler.
 
     ``game_type`` is accepted-but-ignored: dispatch resolves from
@@ -150,7 +161,11 @@ def handle_signup_modal_submit(event_id, discord_user_id, game_type, values):
     return handler.apply_modal_submit(event, org_user, user, values)
 
 
-def handle_rank_status_select(event_id, discord_user_id, rank_status):
+def handle_rank_status_select(
+    event_id: int,
+    discord_user_id: str,
+    rank_status: str,
+) -> dict[str, Any] | None:
     """Save the rank status from the select menu to the Dota profile."""
     log.info(
         "handler_invoked",
@@ -167,7 +182,11 @@ def handle_rank_status_select(event_id, discord_user_id, rank_status):
     return handler.rank_status_select(event, discord_user_id, rank_status)
 
 
-def handle_rank_medal_select(event_id, discord_user_id, medal):
+def handle_rank_medal_select(
+    event_id: int,
+    discord_user_id: str,
+    medal: str,
+) -> dict[str, Any]:
     """Handle active rank medal selection. Saves medal and signs up."""
     log.info(
         "handler_invoked",
@@ -184,7 +203,12 @@ def handle_rank_medal_select(event_id, discord_user_id, medal):
     return handler.rank_medal_select(event, discord_user_id, medal)
 
 
-def handle_previous_rank_submit(event_id, discord_user_id, medal, date_text):
+def handle_previous_rank_submit(
+    event_id: int,
+    discord_user_id: str,
+    medal: str,
+    date_text: str,
+) -> dict[str, Any]:
     """Handle previous rank modal submission. Saves rank info and signs up."""
     log.info(
         "handler_invoked",
@@ -201,7 +225,11 @@ def handle_previous_rank_submit(event_id, discord_user_id, medal, date_text):
     return handler.previous_rank_submit(event, discord_user_id, medal, date_text)
 
 
-def handle_battle_cup_submit(event_id, discord_user_id, tier):
+def handle_battle_cup_submit(
+    event_id: int,
+    discord_user_id: str,
+    tier: str,
+) -> dict[str, Any]:
     """Handle battle cup modal submission. Saves tier and signs up."""
     log.info(
         "handler_invoked",
@@ -219,8 +247,11 @@ def handle_battle_cup_submit(event_id, discord_user_id, tier):
 
 
 def handle_screenshot_upload(
-    event_id, discord_user_id, screenshot_type, attachment_url
-):
+    event_id: int,
+    discord_user_id: str,
+    screenshot_type: str,
+    attachment_url: str,
+) -> dict[str, Any]:
     """Validate and save screenshot URL to PlayerDotaProfile."""
     log.info(
         "handler_invoked",
@@ -239,7 +270,7 @@ def handle_screenshot_upload(
     )
 
 
-def handle_notify_button(event_id, discord_user_id):
+def handle_notify_button(event_id: int, discord_user_id: str) -> dict[str, Any]:
     """Handle Notify Me button click. Toggles RepeaterSubscription.
 
     Game-agnostic. CACHE GUARDRAIL (#268): the subscriber-count cache on the
@@ -278,7 +309,7 @@ def handle_notify_button(event_id, discord_user_id):
     return {"subscribed": created}
 
 
-def handle_decline_button(event_id, discord_user_id):
+def handle_decline_button(event_id: int, discord_user_id: str) -> dict[str, Any]:
     """Handle Decline button click. Cancels signup if exists, or no-ops.
 
     Game-agnostic.
@@ -316,7 +347,11 @@ def handle_decline_button(event_id, discord_user_id):
         return {"action": "not_signed_up", "message": "You weren't signed up."}
 
 
-def handle_tentative_button(event_id, discord_user_id, discord_username=None):
+def handle_tentative_button(
+    event_id: int,
+    discord_user_id: str,
+    discord_username: str | None = None,
+) -> dict[str, Any]:
     """Handle Tentative button click. Routes through create_tentative_signup.
 
     Game-agnostic.

@@ -16,7 +16,11 @@ from discordbot.components.base import (
     build_friend_id_input,
     respond_to_signup_user,
 )
-from discordbot.custom_ids import SignupDeadlockDateId, SignupDeadlockRankId
+from discordbot.custom_ids import (
+    CustomId,
+    SignupDeadlockDateId,
+    SignupDeadlockRankId,
+)
 from discordbot.internal_client.signup_actions import signup_modal_submit
 from discordbot.log_context import discord_log_context
 from telemetry.logging import get_logger
@@ -35,7 +39,7 @@ class DeadlockComponents(GameComponentProvider):
         return DeadlockSignupModal(event_id, prefill, config)
 
     async def dispatch_bare_select(
-        self, interaction: discord.Interaction, cid
+        self, interaction: discord.Interaction, cid: CustomId
     ) -> None:  # pragma: no cover - no bare selects
         return None
 
@@ -43,7 +47,12 @@ class DeadlockComponents(GameComponentProvider):
 class DeadlockSignupModal(ui.Modal):
     """Modal that collects Deadlock player profile data: friend-id + rank/date."""
 
-    def __init__(self, event_id, prefill=None, config=None):
+    def __init__(
+        self,
+        event_id: int,
+        prefill: dict | None = None,
+        config: dict | None = None,
+    ) -> None:
         self.event_id = event_id
         self.event_config = config or {}
         prefill = prefill or {}
@@ -78,7 +87,7 @@ class DeadlockSignupModal(ui.Modal):
         )
         self.add_item(self.rank_date_input)
 
-    async def on_submit(self, interaction: discord.Interaction):
+    async def on_submit(self, interaction: discord.Interaction) -> None:
         async with discord_log_context(
             interaction,
             custom_id=f"signup_modal:{self.event_id}",
@@ -110,7 +119,9 @@ class DeadlockSignupModal(ui.Modal):
                     ephemeral=True,
                 )
 
-    async def on_error(self, interaction: discord.Interaction, error: Exception):
+    async def on_error(
+        self, interaction: discord.Interaction, error: Exception
+    ) -> None:
         async with discord_log_context(
             interaction,
             custom_id=f"signup_modal:{self.event_id}",

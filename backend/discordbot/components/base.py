@@ -129,7 +129,12 @@ class EventSignupView(ui.View):
     - View Event button (link to site)
     """
 
-    def __init__(self, event_id, has_repeater=False, site_url=None):
+    def __init__(
+        self,
+        event_id: int,
+        has_repeater: bool = False,
+        site_url: str | None = None,
+    ) -> None:
         super().__init__(timeout=None)  # Persistent
 
         # Sign Up button
@@ -155,7 +160,7 @@ class EventSignupView(ui.View):
 class SignupButton(ui.Button):
     """Green 'Sign Up' button. custom_id='event_signup:{event_id}'"""
 
-    def __init__(self, event_id):
+    def __init__(self, event_id: int) -> None:
         super().__init__(
             label="Sign Up",
             style=discord.ButtonStyle.success,
@@ -164,7 +169,7 @@ class SignupButton(ui.Button):
         )
         self.event_id = event_id
 
-    async def callback(self, interaction: discord.Interaction):
+    async def callback(self, interaction: discord.Interaction) -> None:
         async with discord_log_context(
             interaction,
             custom_id=self.custom_id,
@@ -202,7 +207,7 @@ class SignupButton(ui.Button):
 class NotifyButton(ui.Button):
     """Grey 'Notify Me' button. custom_id='event_notify:{event_id}'"""
 
-    def __init__(self, event_id):
+    def __init__(self, event_id: int) -> None:
         super().__init__(
             label="Notify Me for Future Events",
             style=discord.ButtonStyle.secondary,
@@ -211,7 +216,7 @@ class NotifyButton(ui.Button):
         )
         self.event_id = event_id
 
-    async def callback(self, interaction: discord.Interaction):
+    async def callback(self, interaction: discord.Interaction) -> None:
         async with discord_log_context(
             interaction, custom_id=self.custom_id, event_id=self.event_id
         ) as ctx:
@@ -236,7 +241,7 @@ class NotifyButton(ui.Button):
 class TentativeButton(ui.Button):
     """Grey 'Tentative' button. custom_id='event_tentative:{event_id}'"""
 
-    def __init__(self, event_id):
+    def __init__(self, event_id: int) -> None:
         super().__init__(
             label="Tentative",
             style=discord.ButtonStyle.secondary,
@@ -245,7 +250,7 @@ class TentativeButton(ui.Button):
         )
         self.event_id = event_id
 
-    async def callback(self, interaction: discord.Interaction):
+    async def callback(self, interaction: discord.Interaction) -> None:
         async with discord_log_context(
             interaction, custom_id=self.custom_id, event_id=self.event_id
         ) as ctx:
@@ -271,7 +276,7 @@ class TentativeButton(ui.Button):
 class DeclineButton(ui.Button):
     """Grey 'Decline' button. custom_id='event_decline:{event_id}'"""
 
-    def __init__(self, event_id):
+    def __init__(self, event_id: int) -> None:
         super().__init__(
             label="Decline",
             style=discord.ButtonStyle.secondary,
@@ -279,7 +284,7 @@ class DeclineButton(ui.Button):
         )
         self.event_id = event_id
 
-    async def callback(self, interaction: discord.Interaction):
+    async def callback(self, interaction: discord.Interaction) -> None:
         async with discord_log_context(
             interaction, custom_id=self.custom_id, event_id=self.event_id
         ) as ctx:
@@ -316,7 +321,7 @@ SCREENSHOT_EXAMPLE_URLS = {
 class ScreenshotUploadPromptView(ui.View):
     """Ephemeral prompt with Upload Screenshot button."""
 
-    def __init__(self, event_id, screenshot_type):
+    def __init__(self, event_id: int, screenshot_type: str) -> None:
         super().__init__(timeout=300)
         self.event_id = event_id
         self.screenshot_type = screenshot_type
@@ -327,7 +332,7 @@ class ScreenshotUploadPromptView(ui.View):
 class ScreenshotUploadButton(ui.Button):
     """Button that opens the screenshot upload modal."""
 
-    def __init__(self, event_id, screenshot_type):
+    def __init__(self, event_id: int, screenshot_type: str) -> None:
         label = (
             "Upload MMR Screenshot"
             if screenshot_type == "rank"
@@ -344,7 +349,7 @@ class ScreenshotUploadButton(ui.Button):
         self.event_id = event_id
         self.screenshot_type = screenshot_type
 
-    async def callback(self, interaction: discord.Interaction):
+    async def callback(self, interaction: discord.Interaction) -> None:
         async with discord_log_context(
             interaction, custom_id=self.custom_id, event_id=self.event_id
         ) as ctx:
@@ -365,7 +370,7 @@ class ScreenshotUploadButton(ui.Button):
 class ScreenshotUploadModal(ui.Modal):
     """V2 modal with TextDisplay (example + tips) and FileUpload or URL fallback."""
 
-    def __init__(self, event_id, screenshot_type):
+    def __init__(self, event_id: int, screenshot_type: str) -> None:
         self.event_id = event_id
         self.screenshot_type = screenshot_type
 
@@ -411,7 +416,7 @@ class ScreenshotUploadModal(ui.Modal):
             )
             self.add_item(self.url_input)
 
-    async def on_submit(self, interaction: discord.Interaction):
+    async def on_submit(self, interaction: discord.Interaction) -> None:
         async with discord_log_context(
             interaction,
             custom_id=ScreenshotUploadId(
@@ -460,7 +465,9 @@ class ScreenshotUploadModal(ui.Modal):
                     ephemeral=True,
                 )
 
-    async def on_error(self, interaction: discord.Interaction, error: Exception):
+    async def on_error(
+        self, interaction: discord.Interaction, error: Exception
+    ) -> None:
         async with discord_log_context(
             interaction,
             custom_id=ScreenshotUploadId(

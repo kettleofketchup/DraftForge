@@ -10,6 +10,8 @@ CACHEOPS model) outside ``transaction.atomic``, so it must call
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from django.core.exceptions import ValidationError as DjangoValidationError
 from structlog.contextvars import bind_contextvars
 
@@ -29,13 +31,17 @@ from events.schemas import (
 from org.models_profiles import PlayerDotaProfile
 from telemetry.logging import get_logger
 
+if TYPE_CHECKING:
+    from app.models import CustomUser
+    from org.models import OrgUser
+
 # events.services is imported function-local (see _shared.py) to avoid the
 # events.services -> events.discord(__init__) -> handlers import cycle.
 
 log = get_logger(__name__)
 
 
-def _check_dota_profile_complete(org_user, event=None) -> bool:
+def _check_dota_profile_complete(org_user: OrgUser, event: Event | None = None) -> bool:
     """Check if OrgUser has a complete Dota 2 profile for the given event."""
     try:
         profile = org_user.dota_profile
@@ -55,7 +61,7 @@ def _check_dota_profile_complete(org_user, event=None) -> bool:
         return False
 
 
-def _rank_followup_message(rank_status) -> str:
+def _rank_followup_message(rank_status: str) -> str:
     """Build the ephemeral follow-up message for Dota rank details."""
     if rank_status == "active":
         return "Almost there! Select your current medal:"
@@ -70,10 +76,10 @@ class DotaHandler:
 
     # ---- Common operations -------------------------------------------------
 
-    def profile_complete(self, org_user, event: Event) -> bool:
+    def profile_complete(self, org_user: OrgUser, event: Event) -> bool:
         return _check_dota_profile_complete(org_user, event=event)
 
-    def prefill(self, org_user) -> dict:
+    def prefill(self, org_user: OrgUser) -> dict:
         return {
             "unverified_friend_id": getattr(
                 getattr(org_user, "dota_profile", None), "unverified_friend_id", ""
@@ -92,7 +98,9 @@ class DotaHandler:
             allow_battlecup_rating=event.allow_battlecup_rating,
         )
 
-    def apply_modal_submit(self, event: Event, org_user, user, values: dict) -> dict:
+    def apply_modal_submit(
+        self, event: Event, org_user: OrgUser, user: CustomUser, values: dict
+    ) -> dict:
         from events.services import apply_signup_input
 
         friend_id = values.get("unverified_friend_id", "").strip()
@@ -131,7 +139,9 @@ class DotaHandler:
 
     # ---- Rank-flow operations ---------------------------------------------
 
-    def rank_status_select(self, event: Event, discord_user_id, rank_status):
+    def rank_status_select(
+        self, event: Event, discord_user_id: str, rank_status: str
+    ) -> None:
         """Save the rank status from the select menu to the Dota profile."""
         from events.services import apply_signup_input
 
@@ -149,7 +159,7 @@ class DotaHandler:
             # Fail silently per existing behavior (function returns None either way).
             pass
 
-    def rank_medal_select(self, event: Event, discord_user_id, medal) -> dict:
+    def rank_medal_select(self, event: Event, discord_user_id: str, medal: str) -> dict:
         """Handle active rank medal selection. Saves medal and signs up."""
         from events.services import apply_signup_input
 
@@ -200,7 +210,7 @@ class DotaHandler:
             return {"action": "error", "message": str(e)}
 
     def previous_rank_submit(
-        self, event: Event, discord_user_id, medal, date_text
+        self, event: Event, discord_user_id: str, medal: str, date_text: str
     ) -> dict:
         """Handle previous rank modal submission. Saves rank info and signs up."""
         from events.services import apply_signup_input
@@ -242,7 +252,7 @@ class DotaHandler:
             )
             return {"action": "error", "message": str(e)}
 
-    def battle_cup_submit(self, event: Event, discord_user_id, tier) -> dict:
+    def battle_cup_submit(self, event: Event, discord_user_id: str, tier: str) -> dict:
         """Handle battle cup modal submission. Saves tier and signs up."""
         from events.services import apply_signup_input
 
@@ -302,7 +312,11 @@ class DotaHandler:
             return {"action": "error", "message": str(e)}
 
     def screenshot_upload(
-        self, event: Event, discord_user_id, screenshot_type, attachment_url
+        self,
+        event: Event,
+        discord_user_id: str,
+        screenshot_type: str,
+        attachment_url: str,
     ) -> dict:
         """Validate and save screenshot URL to PlayerDotaProfile, then sign up."""
         from events.services import apply_signup_input
@@ -369,7 +383,7 @@ class DotaHandler:
             }
 
     def save_positions(
-        self, event: Event, discord_user_id, positions: list[int]
+        self, event: Event, discord_user_id: str, positions: list[int]
     ) -> dict[str, str]:
         """Save positions for the user's signup on this event.
 
@@ -401,7 +415,7 @@ class DotaHandler:
         return {"action": "positions_saved"}
 
     def set_position(
-        self, event: Event, discord_user_id, position: int
+        self, event: Event, discord_user_id: str, position: int
     ) -> dict[str, str]:
         """Set a single position flag (pos_N=True) on the user's PlayerDotaProfile.
 
@@ -424,7 +438,9 @@ class DotaHandler:
         invalidate_obj(profile)
         return {"action": "position_set"}
 
-    def get_rank_flow_state(self, event: Event, discord_user_id) -> dict[str, object]:
+    def get_rank_flow_state(
+        self, event: Event, discord_user_id: str
+    ) -> dict[str, object]:
         """Read the state the pos_confirm flow needs to render the next view.
 
         Returns dict with rank_status / require_screenshot / min_mmr, or

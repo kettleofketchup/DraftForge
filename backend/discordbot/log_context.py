@@ -14,7 +14,7 @@ The CM:
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from typing import Any, AsyncIterator
+from typing import TYPE_CHECKING, Any, AsyncIterator
 
 from opentelemetry import trace
 from opentelemetry.trace import Status, StatusCode
@@ -23,6 +23,9 @@ from structlog.contextvars import bind_contextvars, clear_contextvars
 # Single source of truth for signup-flow prefixes (see custom_ids.py).
 from discordbot.custom_ids import SIGNUP_TAG_PREFIXES as _SIGNUP_TAG_PREFIXES
 from telemetry.logging import get_logger
+
+if TYPE_CHECKING:
+    import discord
 
 log = get_logger(__name__)
 
@@ -77,7 +80,7 @@ def span_name(custom_id: str | None) -> str:
     return f"discord.interaction.{_prefix(custom_id) or 'unknown'}"
 
 
-def _interaction_type_name(interaction) -> str:
+def _interaction_type_name(interaction: discord.Interaction) -> str:
     """Map discord.InteractionType to a stable string for our logs."""
     try:
         return interaction.type.name
@@ -85,7 +88,13 @@ def _interaction_type_name(interaction) -> str:
         return "unknown"
 
 
-def _identity_fields(interaction, *, custom_id, event_id, tags) -> dict[str, Any]:
+def _identity_fields(
+    interaction: discord.Interaction,
+    *,
+    custom_id: str | None,
+    event_id: int | None,
+    tags: list[str],
+) -> dict[str, Any]:
     """The set of identity fields bound to contextvars AND passed to bookend logs."""
     return {
         "system": "discord",
@@ -107,7 +116,7 @@ def _identity_fields(interaction, *, custom_id, event_id, tags) -> dict[str, Any
 
 @asynccontextmanager
 async def discord_log_context(
-    interaction,
+    interaction: discord.Interaction,
     *,
     custom_id: str | None = None,
     event_id: int | None = None,

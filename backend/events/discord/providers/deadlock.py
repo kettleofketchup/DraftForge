@@ -10,6 +10,8 @@ CACHE GUARDRAIL (#268): ``apply_modal_submit`` saves ``PlayerDeadlockProfile``
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from app.cache_utils import invalidate_obj
 from events.discord._shared import _direct_signup
 from events.models import Event
@@ -17,13 +19,17 @@ from events.schemas import DeadlockModalConfig
 from org.models_profiles import PlayerDeadlockProfile
 from telemetry.logging import get_logger
 
+if TYPE_CHECKING:
+    from app.models import CustomUser
+    from org.models import OrgUser
+
 # events.services is imported function-local (via _shared._direct_signup) to
 # avoid the events.services -> events.discord(__init__) -> handlers cycle.
 
 log = get_logger(__name__)
 
 
-def _check_deadlock_profile_complete(org_user) -> bool:
+def _check_deadlock_profile_complete(org_user: OrgUser) -> bool:
     """Check if OrgUser has a complete Deadlock profile."""
     try:
         profile = org_user.deadlock_profile
@@ -35,10 +41,10 @@ def _check_deadlock_profile_complete(org_user) -> bool:
 class DeadlockHandler:
     """Deadlock signup logic (text-field profile, no rank-flow follow-up)."""
 
-    def profile_complete(self, org_user, event: Event) -> bool:
+    def profile_complete(self, org_user: OrgUser, event: Event) -> bool:
         return _check_deadlock_profile_complete(org_user)
 
-    def prefill(self, org_user) -> dict:
+    def prefill(self, org_user: OrgUser) -> dict:
         return {
             "unverified_friend_id": getattr(
                 getattr(org_user, "deadlock_profile", None), "unverified_friend_id", ""
@@ -49,7 +55,9 @@ class DeadlockHandler:
     def modal_config(self, event: Event) -> DeadlockModalConfig:
         return DeadlockModalConfig(require_steam_id=event.require_steam_id)
 
-    def apply_modal_submit(self, event: Event, org_user, user, values: dict) -> dict:
+    def apply_modal_submit(
+        self, event: Event, org_user: OrgUser, user: CustomUser, values: dict
+    ) -> dict:
         friend_id = values.get("unverified_friend_id", "").strip()
 
         # Save Deadlock profile and sign up directly

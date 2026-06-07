@@ -38,7 +38,7 @@ COMPONENT_PROVIDERS: dict[GameType, GameComponentProvider] = {
 _DEFAULT = DefaultComponents()
 
 
-def get_component_provider(game_type) -> GameComponentProvider:
+def get_component_provider(game_type: GameType) -> GameComponentProvider:
     provider = COMPONENT_PROVIDERS.get(game_type)
     if provider is None:
         log.error(
