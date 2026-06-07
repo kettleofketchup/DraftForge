@@ -171,9 +171,9 @@ def _build_users_dict(tournament) -> dict:
 
 ---
 
-## Scope B — deferred epic (DO NOT build here)
+## Scope B — deferred epic (DO NOT build here) — tracked in **GH issue #276**
 
-Captured so it isn't lost. Full structural-cache decoupling + prebaked-once-everywhere, to be planned/built deliberately as its own epic. Reviewed scope + the corrections the 3-agent panel found:
+Captured so it isn't lost. Full structural-cache decoupling + prebaked-once-everywhere, to be planned/built deliberately as its own epic (**https://github.com/kettleofketchup/DraftForge/issues/276**). Reviewed scope + the corrections the 3-agent panel found:
 
 1. **Convert nested users to pk-refs** everywhere `TeamSerializerForTournament` reaches — tournament-detail, draft, **bracket** (`views/bracket.py:50,300,395,548` + `BracketGameSerializer`), **game** (`GameView`/`GameCreateView`, `GameSerializer`), **TeamView**, **tournament-list** (`TournamentsSerializer.captains`). Each emitting endpoint must attach `_users`.
 2. **Decouple structural caches:** drop `CustomUser`/`BaseUserProfile` from the tournament/draft/team `@cached_as`; compose `_users` from the per-user cache; **collect `_users` pks from the cached payload dict, not `get_object()`/ORM** (avoids the warm-path re-query). Align draft struct timeout to 10m (currently 60m).
