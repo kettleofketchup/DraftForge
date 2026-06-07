@@ -31,3 +31,52 @@ class BaseUserProfile(models.Model):
 
     def __str__(self):
         return f"BaseUserProfile({self.user.username or self.user_id})"
+
+
+class DotaUserProfile(models.Model):
+    """User-wide Dota profile. Owns position preferences + MMR-verification state
+    that used to live on CustomUser (T2 epic)."""
+
+    base_profile = models.OneToOneField(
+        BaseUserProfile,
+        on_delete=models.CASCADE,
+        related_name="dota_user_profile",
+        db_index=True,
+    )
+    # NO related_name on positions: PositionsModel.save() walks the Django
+    # default reverse accessor `dotauserprofile_set`. Changing this silently
+    # breaks cache invalidation (T2 hard constraint).
+    positions = models.ForeignKey(
+        "app.PositionsModel",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
+    has_active_dota_mmr = models.BooleanField(default=False)
+    dota_mmr_last_verified = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Dota User Profile"
+
+    def __str__(self):
+        return f"DotaUserProfile({self.base_profile.user_id})"
+
+
+class DeadlockUserProfile(models.Model):
+    """User-wide Deadlock profile. Mirrors org.PlayerDeadlockProfile's
+    user-relevant fields (T2 epic)."""
+
+    base_profile = models.OneToOneField(
+        BaseUserProfile,
+        on_delete=models.CASCADE,
+        related_name="deadlock_user_profile",
+        db_index=True,
+    )
+    rank = models.CharField(max_length=64, null=True, blank=True)
+    rank_date = models.DateField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Deadlock User Profile"
+
+    def __str__(self):
+        return f"DeadlockUserProfile({self.base_profile.user_id})"
