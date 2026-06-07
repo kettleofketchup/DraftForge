@@ -201,13 +201,21 @@ class KettleBot(discord.Client):
             # handed to discord.py as a ui.View, so they are reconstructed here
             # from the typed custom-id on every interaction.
             if SignupId.matches(custom_id):
-                await SignupButton(SignupId.decode(custom_id).event_id).callback(interaction)
+                await SignupButton(SignupId.decode(custom_id).event_id).callback(
+                    interaction
+                )
             elif TentativeId.matches(custom_id):
-                await TentativeButton(TentativeId.decode(custom_id).event_id).callback(interaction)
+                await TentativeButton(TentativeId.decode(custom_id).event_id).callback(
+                    interaction
+                )
             elif DeclineId.matches(custom_id):
-                await DeclineButton(DeclineId.decode(custom_id).event_id).callback(interaction)
+                await DeclineButton(DeclineId.decode(custom_id).event_id).callback(
+                    interaction
+                )
             elif NotifyId.matches(custom_id):
-                await NotifyButton(NotifyId.decode(custom_id).event_id).callback(interaction)
+                await NotifyButton(NotifyId.decode(custom_id).event_id).callback(
+                    interaction
+                )
             else:
                 # Game-specific bare ui.Selects (no overridden callback) are the
                 # ONLY components routed here — e.g. pos_select_. Every other

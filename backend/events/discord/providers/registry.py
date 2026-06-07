@@ -22,11 +22,10 @@ Adding a game type (mirror of the spec's extension checklist):
 from __future__ import annotations
 
 from app.models import GameType
-from telemetry.logging import get_logger
-
 from events.discord.providers.base import DefaultHandler, GameSignupHandler
 from events.discord.providers.deadlock import DeadlockHandler
 from events.discord.providers.dota import DotaHandler
+from telemetry.logging import get_logger
 
 log = get_logger(__name__)
 

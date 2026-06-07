@@ -96,7 +96,9 @@ def _identity_fields(interaction, *, custom_id, event_id, tags) -> dict[str, Any
         "discord_user_id": str(interaction.user.id),
         "discord_username": interaction.user.name,
         "channel_id": str(interaction.channel_id) if interaction.channel_id else None,
-        "guild_id": str(interaction.guild_id) if getattr(interaction, "guild_id", None) else None,
+        "guild_id": str(interaction.guild_id)
+        if getattr(interaction, "guild_id", None)
+        else None,
         "interaction_type": _interaction_type_name(interaction),
         "custom_id": custom_id,
         "event_id": event_id,
@@ -113,9 +115,13 @@ async def discord_log_context(
 ) -> AsyncIterator[InteractionContext]:
     """Bind interaction identity to logs + emit bookend events."""
     resolved_custom_id = custom_id or (
-        interaction.data.get("custom_id") if getattr(interaction, "data", None) else None
+        interaction.data.get("custom_id")
+        if getattr(interaction, "data", None)
+        else None
     )
-    resolved_event_id = event_id if event_id is not None else parse_event_id(resolved_custom_id)
+    resolved_event_id = (
+        event_id if event_id is not None else parse_event_id(resolved_custom_id)
+    )
     resolved_tags = tags if tags is not None else resolve_tags(resolved_custom_id)
 
     fields = _identity_fields(
@@ -125,7 +131,9 @@ async def discord_log_context(
         tags=resolved_tags,
     )
 
-    tracer = trace.get_tracer(__name__)  # Lazy — test fixtures install processors AFTER import
+    tracer = trace.get_tracer(
+        __name__
+    )  # Lazy — test fixtures install processors AFTER import
     with tracer.start_as_current_span(span_name(resolved_custom_id)) as span:
         # Span attributes mirror the bound contextvars
         for key, val in fields.items():

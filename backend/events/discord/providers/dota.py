@@ -10,10 +10,10 @@ CACHEOPS model) outside ``transaction.atomic``, so it must call
 
 from __future__ import annotations
 
-from app.cache_utils import invalidate_obj
 from django.core.exceptions import ValidationError as DjangoValidationError
 from structlog.contextvars import bind_contextvars
 
+from app.cache_utils import invalidate_obj
 from events.discord._shared import (
     _direct_signup,
     _get_org_user,
@@ -184,7 +184,12 @@ class DotaHandler:
             _log_signup(event.pk, f"signup_ranked:{medal}", discord_user_id)
             return result
         except ValueError as e:
-            log.warning("signup_rejected", system="discord", subsystem="interaction", reason=str(e))
+            log.warning(
+                "signup_rejected",
+                system="discord",
+                subsystem="interaction",
+                reason=str(e),
+            )
             _log_signup(
                 event.pk,
                 "signup_failed",
@@ -194,7 +199,9 @@ class DotaHandler:
             )
             return {"action": "error", "message": str(e)}
 
-    def previous_rank_submit(self, event: Event, discord_user_id, medal, date_text) -> dict:
+    def previous_rank_submit(
+        self, event: Event, discord_user_id, medal, date_text
+    ) -> dict:
         """Handle previous rank modal submission. Saves rank info and signs up."""
         from events.services import apply_signup_input
 
@@ -227,7 +234,12 @@ class DotaHandler:
         try:
             return _direct_signup(event, user)
         except ValueError as e:
-            log.warning("signup_rejected", system="discord", subsystem="interaction", reason=str(e))
+            log.warning(
+                "signup_rejected",
+                system="discord",
+                subsystem="interaction",
+                reason=str(e),
+            )
             return {"action": "error", "message": str(e)}
 
     def battle_cup_submit(self, event: Event, discord_user_id, tier) -> dict:
@@ -259,7 +271,10 @@ class DotaHandler:
             return {"action": "error", "message": msg}
 
         # Check if screenshot required before completing signup
-        if event.discord_require_battlecup_screenshot and not profile.battlecup_screenshot:
+        if (
+            event.discord_require_battlecup_screenshot
+            and not profile.battlecup_screenshot
+        ):
             _log_interaction(event.pk, "awaiting_battlecup_screenshot", discord_user_id)
             return {
                 "action": "needs_screenshot",
@@ -271,7 +286,12 @@ class DotaHandler:
             _log_signup(event.pk, f"signup_battlecup:T{tier}", discord_user_id)
             return result
         except ValueError as e:
-            log.warning("signup_rejected", system="discord", subsystem="interaction", reason=str(e))
+            log.warning(
+                "signup_rejected",
+                system="discord",
+                subsystem="interaction",
+                reason=str(e),
+            )
             _log_signup(
                 event.pk,
                 "signup_failed",
@@ -336,7 +356,12 @@ class DotaHandler:
                 "message": f"Screenshot saved! You're signed up. Status: **{result['status']}**",
             }
         except ValueError as e:
-            log.warning("signup_rejected", system="discord", subsystem="interaction", reason=str(e))
+            log.warning(
+                "signup_rejected",
+                system="discord",
+                subsystem="interaction",
+                reason=str(e),
+            )
             return {
                 "success": True,
                 "signed_up": False,
@@ -368,7 +393,9 @@ class DotaHandler:
             )
         except DjangoValidationError as exc:
             msg = exc.messages[0] if hasattr(exc, "messages") else str(exc)
-            log.warning("signup_rejected", system="discord", subsystem="interaction", reason=msg)
+            log.warning(
+                "signup_rejected", system="discord", subsystem="interaction", reason=msg
+            )
             return {"action": "error", "message": msg}
 
         return {"action": "positions_saved"}
@@ -397,9 +424,7 @@ class DotaHandler:
         invalidate_obj(profile)
         return {"action": "position_set"}
 
-    def get_rank_flow_state(
-        self, event: Event, discord_user_id
-    ) -> dict[str, object]:
+    def get_rank_flow_state(self, event: Event, discord_user_id) -> dict[str, object]:
         """Read the state the pos_confirm flow needs to render the next view.
 
         Returns dict with rank_status / require_screenshot / min_mmr, or

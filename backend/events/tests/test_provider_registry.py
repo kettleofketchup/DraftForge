@@ -14,7 +14,7 @@ from django.test import SimpleTestCase
 from app.models import GameType
 from discordbot.components.registry import COMPONENT_PROVIDERS, get_component_provider
 from events.discord.providers.base import DefaultHandler
-from events.discord.providers.registry import SIGNUP_HANDLERS, get_signup_handler
+from events.discord.providers.registry import SIGNUP_HANDLERS
 from events.schemas import (
     DeadlockModalConfig,
     DotaModalConfig,

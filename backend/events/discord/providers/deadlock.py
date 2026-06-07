@@ -11,7 +11,6 @@ CACHE GUARDRAIL (#268): ``apply_modal_submit`` saves ``PlayerDeadlockProfile``
 from __future__ import annotations
 
 from app.cache_utils import invalidate_obj
-
 from events.discord._shared import _direct_signup
 from events.models import Event
 from events.schemas import DeadlockModalConfig
@@ -64,5 +63,10 @@ class DeadlockHandler:
         try:
             return _direct_signup(event, user)
         except ValueError as e:
-            log.warning("signup_rejected", system="discord", subsystem="interaction", reason=str(e))
+            log.warning(
+                "signup_rejected",
+                system="discord",
+                subsystem="interaction",
+                reason=str(e),
+            )
             return {"action": "error", "message": str(e)}

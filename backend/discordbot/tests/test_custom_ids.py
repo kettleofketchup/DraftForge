@@ -42,7 +42,9 @@ class CustomIdRoundTripTest(SimpleTestCase):
     def test_rank_star_carries_medal(self):
         obj = cid.RankStarId(event_id=5, medal="Crusader")
         self.assertEqual(obj.encode(), "rank_star:5:Crusader")
-        self.assertEqual(cid.RankStarId.decode("rank_star:5:Crusader").medal, "Crusader")
+        self.assertEqual(
+            cid.RankStarId.decode("rank_star:5:Crusader").medal, "Crusader"
+        )
 
     def test_screenshot_codecs(self):
         self.assertEqual(

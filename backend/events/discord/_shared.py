@@ -13,8 +13,6 @@ deferring those imports to call time; a top-level import here re-introduces it.
 
 from __future__ import annotations
 
-from structlog.contextvars import bind_contextvars
-
 from discordbot.models import DiscordEventLog
 from events.constants import SignupStatus
 from events.models import Event, EventSignup
@@ -193,5 +191,11 @@ def _direct_signup(event, user) -> dict[str, str]:
     from events.services import process_rsvp
 
     signup = process_rsvp(event, user)
-    log.info("signup_persisted", system="discord", subsystem="interaction", signup_id=signup.pk, signup_status=signup.status)
+    log.info(
+        "signup_persisted",
+        system="discord",
+        subsystem="interaction",
+        signup_id=signup.pk,
+        signup_status=signup.status,
+    )
     return {"action": "signed_up", "status": signup.status}

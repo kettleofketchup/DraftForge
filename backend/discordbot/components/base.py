@@ -212,7 +212,9 @@ class NotifyButton(ui.Button):
         self.event_id = event_id
 
     async def callback(self, interaction: discord.Interaction):
-        async with discord_log_context(interaction, custom_id=self.custom_id, event_id=self.event_id) as ctx:
+        async with discord_log_context(
+            interaction, custom_id=self.custom_id, event_id=self.event_id
+        ) as ctx:
             result = await sync_to_async(notify_button, thread_sensitive=False)(
                 event_id=self.event_id,
                 discord_user_id=str(interaction.user.id),
@@ -244,7 +246,9 @@ class TentativeButton(ui.Button):
         self.event_id = event_id
 
     async def callback(self, interaction: discord.Interaction):
-        async with discord_log_context(interaction, custom_id=self.custom_id, event_id=self.event_id) as ctx:
+        async with discord_log_context(
+            interaction, custom_id=self.custom_id, event_id=self.event_id
+        ) as ctx:
             result = await sync_to_async(tentative_button, thread_sensitive=False)(
                 event_id=self.event_id,
                 discord_user_id=str(interaction.user.id),
@@ -276,7 +280,9 @@ class DeclineButton(ui.Button):
         self.event_id = event_id
 
     async def callback(self, interaction: discord.Interaction):
-        async with discord_log_context(interaction, custom_id=self.custom_id, event_id=self.event_id) as ctx:
+        async with discord_log_context(
+            interaction, custom_id=self.custom_id, event_id=self.event_id
+        ) as ctx:
             result = await sync_to_async(decline_button, thread_sensitive=False)(
                 event_id=self.event_id,
                 discord_user_id=str(interaction.user.id),
@@ -284,9 +290,13 @@ class DeclineButton(ui.Button):
             ctx.set_outcome(result["action"])
 
             if result["action"] == "declined":
-                await respond_to_signup_user(interaction, content="You've declined the event.")
+                await respond_to_signup_user(
+                    interaction, content="You've declined the event."
+                )
             elif result["action"] == "not_signed_up":
-                await interaction.response.send_message("You weren't signed up for this event.", ephemeral=True)
+                await interaction.response.send_message(
+                    "You weren't signed up for this event.", ephemeral=True
+                )
             else:
                 await interaction.response.send_message(
                     result.get("message", "Something went wrong."), ephemeral=True
@@ -335,9 +345,15 @@ class ScreenshotUploadButton(ui.Button):
         self.screenshot_type = screenshot_type
 
     async def callback(self, interaction: discord.Interaction):
-        async with discord_log_context(interaction, custom_id=self.custom_id, event_id=self.event_id) as ctx:
+        async with discord_log_context(
+            interaction, custom_id=self.custom_id, event_id=self.event_id
+        ) as ctx:
             if interaction.response.is_done():
-                log.warning("screenshot_upload_already_acknowledged", system="discord", subsystem="interaction")
+                log.warning(
+                    "screenshot_upload_already_acknowledged",
+                    system="discord",
+                    subsystem="interaction",
+                )
                 ctx.set_outcome("already_acknowledged")
                 return
             modal = ScreenshotUploadModal(self.event_id, self.screenshot_type)
@@ -418,7 +434,13 @@ class ScreenshotUploadModal(ui.Modal):
                 screenshot_type=self.screenshot_type,
                 attachment_url=attachment_url,
             )
-            ctx.set_outcome("signed_up" if result.get("signed_up") else "screenshot_saved" if result.get("success") else "error")
+            ctx.set_outcome(
+                "signed_up"
+                if result.get("signed_up")
+                else "screenshot_saved"
+                if result.get("success")
+                else "error"
+            )
             ctx.add(screenshot_type=self.screenshot_type)
 
             if result.get("success"):

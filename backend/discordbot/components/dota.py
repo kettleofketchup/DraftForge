@@ -22,7 +22,6 @@ from discordbot.components.base import (
     ScreenshotUploadPromptView,
     build_friend_id_input,
     respond_to_signup_user,
-    send_modal_v2,
 )
 from discordbot.custom_ids import (
     BattleCupTierId,
@@ -120,7 +119,9 @@ class DotaComponents(GameComponentProvider):
     async def rank_status_select(
         self, interaction: discord.Interaction, cid: RankStatusId, *, values: list[str]
     ) -> None:
-        async with discord_log_context(interaction, custom_id=cid.encode(), event_id=cid.event_id) as ctx:
+        async with discord_log_context(
+            interaction, custom_id=cid.encode(), event_id=cid.event_id
+        ) as ctx:
             rank_status = values[0] if values else "never"
             await sync_to_async(rank_status_select, thread_sensitive=False)(
                 event_id=cid.event_id,
@@ -151,7 +152,9 @@ class DotaComponents(GameComponentProvider):
         require_screenshot: bool,
         min_mmr: int | None,
     ) -> None:
-        async with discord_log_context(interaction, custom_id=cid.encode(), event_id=cid.event_id) as ctx:
+        async with discord_log_context(
+            interaction, custom_id=cid.encode(), event_id=cid.event_id
+        ) as ctx:
             positions = []
             for item in view.children:
                 if isinstance(item, ui.Select) and item.values:
@@ -168,7 +171,9 @@ class DotaComponents(GameComponentProvider):
             except (TypeError, ValueError):
                 ctx.set_outcome("error")
                 ctx.add(reason="invalid_positions")
-                await interaction.edit_original_response(content="❌ Invalid positions.", view=None)
+                await interaction.edit_original_response(
+                    content="❌ Invalid positions.", view=None
+                )
                 return
 
             result = await sync_to_async(save_positions, thread_sensitive=False)(
@@ -217,7 +222,9 @@ class DotaComponents(GameComponentProvider):
         Doing the rebuild here (rather than in a central handler) removes the
         40060 race against discord.py's view dispatch.
         """
-        async with discord_log_context(interaction, custom_id=cid.encode(), event_id=cid.event_id) as ctx:
+        async with discord_log_context(
+            interaction, custom_id=cid.encode(), event_id=cid.event_id
+        ) as ctx:
             medal = values[0] if values else "Herald"
             ctx.set_outcome("medal_selected")
             ctx.add(medal=medal)
@@ -244,7 +251,9 @@ class DotaComponents(GameComponentProvider):
         view: ui.View,
         rank_status: str,
     ) -> None:
-        async with discord_log_context(interaction, custom_id=cid.encode(), event_id=cid.event_id) as ctx:
+        async with discord_log_context(
+            interaction, custom_id=cid.encode(), event_id=cid.event_id
+        ) as ctx:
             medal = cid.medal if cid.medal != "Herald" else None
 
             if not medal:
@@ -274,7 +283,9 @@ class DotaComponents(GameComponentProvider):
             label = "Rank" if rank_status == "active" else "Previous rank"
 
             if result.get("action") == "needs_screenshot":
-                new_view = ScreenshotUploadPromptView(cid.event_id, result["screenshot_type"])
+                new_view = ScreenshotUploadPromptView(
+                    cid.event_id, result["screenshot_type"]
+                )
                 await interaction.edit_original_response(
                     content=(
                         f"\U0001f3c5 {label} set to **{medal_with_star}**\n\n"
@@ -302,7 +313,9 @@ class DotaComponents(GameComponentProvider):
         values: list[str],
         view: ui.View,
     ) -> None:
-        async with discord_log_context(interaction, custom_id=cid.encode(), event_id=cid.event_id) as ctx:
+        async with discord_log_context(
+            interaction, custom_id=cid.encode(), event_id=cid.event_id
+        ) as ctx:
             tier = values[0] if values else "1"
 
             # Disable selects (double-click guard) before the slow ORM call.
@@ -320,7 +333,9 @@ class DotaComponents(GameComponentProvider):
             ctx.add(tier=tier)
 
             if result.get("action") == "needs_screenshot":
-                new_view = ScreenshotUploadPromptView(cid.event_id, result["screenshot_type"])
+                new_view = ScreenshotUploadPromptView(
+                    cid.event_id, result["screenshot_type"]
+                )
                 await interaction.edit_original_response(
                     content=(
                         f"\U0001f3c6 Battle Cup tier {tier} saved\n\n"
@@ -361,7 +376,9 @@ class DotaSignupModal(ui.Modal):
         super().__init__(title="Event Sign Up")
 
         require_friend_id = (self.event_config or {}).get("require_steam_id", True)
-        self.friend_id_input = build_friend_id_input(event_id, prefill, require_friend_id)
+        self.friend_id_input = build_friend_id_input(
+            event_id, prefill, require_friend_id
+        )
         if self.friend_id_input is not None:
             self.add_item(self.friend_id_input)
 
@@ -459,11 +476,13 @@ class DotaSignupModal(ui.Modal):
                 from events.schemas import DotaModalConfig, dota_require_screenshot
 
                 rank_status = values.get("rank_status", "never")
-                cfg = DotaModalConfig(**{
-                    k: v
-                    for k, v in self.event_config.items()
-                    if k in DotaModalConfig.model_fields
-                })
+                cfg = DotaModalConfig(
+                    **{
+                        k: v
+                        for k, v in self.event_config.items()
+                        if k in DotaModalConfig.model_fields
+                    }
+                )
                 require_screenshot = dota_require_screenshot(rank_status, cfg)
                 view = PositionSelectView(
                     self.event_id,
@@ -479,7 +498,9 @@ class DotaSignupModal(ui.Modal):
                     ephemeral=True,
                 )
             elif result["action"] == "needs_rank_status":
-                view = RankStatusSelectView(event_id=self.event_id, provider=self._provider)
+                view = RankStatusSelectView(
+                    event_id=self.event_id, provider=self._provider
+                )
                 await interaction.response.send_message(
                     "\U0001f3ae **What's your Dota 2 ranked status?**",
                     view=view,
@@ -570,7 +591,14 @@ class RankStatusSelect(ui.Select):
 class PositionSelectView(ui.View):
     """Ephemeral view with 3 position selects. Confirm saves positions and shows rank details."""
 
-    def __init__(self, event_id, rank_status, require_screenshot=False, min_mmr=None, provider=None):
+    def __init__(
+        self,
+        event_id,
+        rank_status,
+        require_screenshot=False,
+        min_mmr=None,
+        provider=None,
+    ):
         super().__init__(timeout=300)
         self.event_id = event_id
         self.rank_status = rank_status
@@ -616,7 +644,11 @@ class PositionSelectView(ui.View):
 
         self.add_item(
             PositionConfirmButton(
-                event_id, rank_status, require_screenshot, min_mmr, provider=self._provider
+                event_id,
+                rank_status,
+                require_screenshot,
+                min_mmr,
+                provider=self._provider,
             )
         )
 
@@ -624,7 +656,14 @@ class PositionSelectView(ui.View):
 class PositionConfirmButton(ui.Button):
     """Confirm button that saves positions and transitions to rank details."""
 
-    def __init__(self, event_id, rank_status, require_screenshot=False, min_mmr=None, provider=None):
+    def __init__(
+        self,
+        event_id,
+        rank_status,
+        require_screenshot=False,
+        min_mmr=None,
+        provider=None,
+    ):
         super().__init__(
             label="Confirm Positions",
             style=discord.ButtonStyle.success,
@@ -693,7 +732,9 @@ class RankDetailsView(ui.View):
         elif rank_status == "never":
             self.add_item(
                 BattleCupTierSelect(
-                    event_id, require_screenshot=require_screenshot, provider=self._provider
+                    event_id,
+                    require_screenshot=require_screenshot,
+                    provider=self._provider,
                 )
             )
 
@@ -701,7 +742,9 @@ class RankDetailsView(ui.View):
 class MedalSelect(ui.Select):
     """Select menu for rank medal."""
 
-    def __init__(self, event_id, rank_status="active", require_screenshot=False, provider=None):
+    def __init__(
+        self, event_id, rank_status="active", require_screenshot=False, provider=None
+    ):
         super().__init__(
             placeholder="Select your medal",
             custom_id=RankMedalId(event_id=event_id).encode(),
