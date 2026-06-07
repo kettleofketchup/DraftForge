@@ -1074,11 +1074,13 @@ export interface DeadlockUserProfile {
 }
 ```
 
-- [ ] **Step 4: Add `selectPositions` reading `userCacheStore`** (`frontend/app/store/selectPositions.ts`):
+- [ ] **Step 4a: Export the store state type.** `userCacheStore.ts:118` declares `interface UserCacheState extends EntityState<UserEntry>` with NO `export` — add `export` so `selectPositions.ts` can import it (else Task 10 won't compile). Confirmed missing in the live file.
+
+- [ ] **Step 4b: Add `selectPositions` reading `userCacheStore`** (`frontend/app/store/selectPositions.ts`):
 
 ```typescript
-import type { UserCacheState } from './userCacheStore';      // the store's state type
-import type { PositionsValue } from './userProfileTypes';
+import type { UserCacheState } from './userCacheStore';      // now exported (Step 4a)
+import type { PositionsType } from './userCacheTypes';        // the store's positions type
 import { GAME_TYPE } from '~/components/game/constants';
 import type { GameTypeValue } from '~/components/game/constants';
 
@@ -1094,13 +1096,13 @@ export function selectPositions(
   userPk: number,
   gameType: GameTypeValue | null,
   _orgUserId?: number,   // T3 only
-): PositionsValue | undefined {
+): PositionsType | undefined {
   if (gameType !== GAME_TYPE.DOTA2) return undefined;
   return state.entities[userPk]?.positions ?? undefined;
 }
 ```
 
-Read `userCacheStore.ts` to get the exact state shape (it uses `createEntityAdapter`; entities are keyed by pk) and the exported state type name; adjust the import/`state.entities[userPk]` access to match.
+Return type is `PositionsType` (what the store actually holds, `userCacheTypes.ts:22`), not the edit-layer `PositionsValue` — structurally compatible but annotate to the real type. `state.entities[userPk]` matches the live `createEntityAdapter` shape (entities keyed by pk).
 
 - [ ] **Step 5: Run, verify pass, commit**
 
@@ -1240,7 +1242,7 @@ git commit -m "feat(user): patchGameProfile API client (T2.12, epic #224)"
 
 **Template:** `frontend/app/pages/user/EditProfileModal/tabs/BaseTab.tsx` is the exact pattern — shadcn `Form` + `zodResolver` + `useForm` + `useMutation` + `getLogger('user.editProfile.dota')`. Read BaseTab.tsx end to end and mirror its structure.
 
-**Reuse the existing branded position picker — do NOT hand-roll number inputs.** A branded ranked 0–5 `<Select>` primitive exists. Find it: `rg -n "PositionFormFields|PositionSelect|setPositionField" frontend/app` — candidates are `frontend/app/pages/profile/forms/position.tsx` (`PositionFormFields`, renders 5 branded role `<Select>`s, bound to `name="positions.carry"` etc.) and `frontend/app/components/user/userCard/editForm.tsx` (`PositionSelect`, testids `edit-user-{position}` wired to the Playwright helpers `setPositionField`/`readPositionField` in `frontend/tests/playwright/helpers/edit-user.ts`). **Pick the one whose testids already have Playwright helpers (`edit-user-{position}`)** so Task 17 reuses `setPositionField`/`readPositionField` for free. Reusing the primitive means: (a) the schema must be NESTED (`{ positions: {...} }`) to match `name="positions.*"`, (b) you get the semantic 0–5 preference labels (UX parity), (c) no invented testids.
+**Reuse the existing branded position picker — do NOT hand-roll number inputs.** Use **`PositionFormFields`** from `frontend/app/pages/profile/forms/position.tsx` — it's the **exported, purpose-built reusable** primitive (already consumed by EventSignupModal + the profile page), renders 5 branded role `<Select>`s bound to `name="positions.carry"` etc. with `position-choice-{role}` testids. (The other candidate, `PositionSelect` in `userCard/editForm.tsx`, has the `edit-user-{position}` testids + existing Playwright helpers BUT is **not exported** — re-review confirmed — so it can't be imported; don't use it.) Reusing `PositionFormFields` means: (a) the schema must be NESTED (`{ positions: {...} }`) to match `name="positions.*"`, (b) you get the semantic 0–5 preference labels (UX parity), (c) testids are `position-choice-{role}` — Task 17 drives those directly (the `setPositionField`/`readPositionField` helpers are keyed to `edit-user-*`, so they won't match `PositionFormFields`; the Dota spec interacts with `position-choice-*` selects directly, or you add a small helper). The component prop is **`form`** (pass `form={form}`), NOT `control`.
 
 - [ ] **Step 1: Add the NESTED Dota schema to `schemas.ts`** (mirror `editUserSchema.ts`'s `PositionFieldSchema`)
 
@@ -1263,7 +1265,7 @@ If `editUserSchema.ts` already exports a `PositionFieldSchema`/positions sub-sch
 
 Mirror BaseTab. Key deltas:
 - `useForm<z.input<typeof DotaProfileFormSchema>, unknown, DotaProfileFormValues>({ resolver: zodResolver(DotaProfileFormSchema), defaultValues })` — **3-generic** because of `z.coerce` (lesson #12). `defaultValues = { positions: { carry: profile.gameUser.dota?.positions?.carry ?? 0, ... } }`.
-- Render the reused `<PositionFormFields control={form.control} />` (or whichever primitive you picked) — NOT raw `<Input type=number>`.
+- Render the reused `<PositionFormFields form={form} />` (prop is `form`, not `control`) — NOT raw `<Input type=number>`.
 - `mutationFn: (vals) => patchGameProfile('dota', vals)` — `vals` is already `{ positions: {...} }`, so pass it directly (NOT `{ positions: vals }`).
 - **`onSuccess` DUAL-WRITE** (the load-bearing multi-write — display surfaces read `userCacheStore`, edit layer reads `userProfileStore`; `onClose()` unmounts before any refetch so both manual writes are required):
   ```ts
@@ -1284,7 +1286,7 @@ Mirror BaseTab. Key deltas:
   onSave?.(); onClose();
   ```
   Read `userCacheStore.ts` for the exact upsert/getById API (it requires a `UserType` with `username` — spread the existing cached entry as BaseTab does; if no cached entry exists, skip the cache write — the invalidate covers it).
-- `data-testid="edit-user-dota-save"` on submit. Position inputs reuse the primitive's existing `edit-user-{position}` testids — do NOT invent `edit-user-pos-*`.
+- `data-testid="edit-user-dota-save"` on submit. Position inputs come from `PositionFormFields` and carry its existing `position-choice-{role}` testids — do NOT invent new ones.
 - Brand: `CancelButton`/`SubmitButton`, `flex flex-col gap-4`, no raw button, no `space-y-*`. **`export default`** (lazy import needs it). Do NOT add `form.watch` (no live preview here — would re-render per keystroke for nothing).
 
 - [ ] **Step 3: Typecheck**
@@ -1371,8 +1373,8 @@ git commit -m "feat(user): wire Dota + Deadlock tabs into EditProfileModal (T2.1
 | `user/positions/index.tsx` | single-user badge component (render path) | `usePlayerPositions(user.pk)` (reactive hook) |
 | `user/userCard.tsx` | single-user card (render path) | `usePlayerPositions(user.pk)` |
 | `user/UserStrip.tsx` | single-user strip (render path, useMemo dep) | `usePlayerPositions(user.pk)` then feed the memo |
-| `teamdraft/TeamPositionCoverage.tsx` | per-member `.map` (render path) | top-level `useUserCacheStore(useShallow(s => members.map(m => selectPositions(s, m.pk, gt))))`, index per row |
-| `teamdraft/sections/AvailablePlayersSection.tsx` | per-row `.map` (render path) | same shallow-subscribe-once pattern |
+| `teamdraft/TeamPositionCoverage.tsx` | reads `member.positions` (lines 73,128) inside the PURE fn `computeTeamPositionCoverage`, called via `useMemo` (line ~551) — no JSX `.map` to subscribe at | In `TeamPositionCoverageRow`, build `positionsByPk = useUserCacheStore(useShallow(s => new Map(members.map(m => [m.pk, selectPositions(s, m.pk, gt)]))))`, thread it into `computeTeamPositionCoverage(team, positionsByPk)`, replace the two `member.positions` reads with `positionsByPk.get(member.pk)`. (Genuine data-source switch, not a re-route.) |
+| `teamdraft/sections/AvailablePlayersSection.tsx` | reads `user.positions` (line ~197) inside `filteredPlayers` useMemo over the DRAFT store `usersRemaining` (not the cache) | Subscribe a `positionsByPk` map at component top via `useUserCacheStore(useShallow(...))`, add it to the useMemo deps, look up by pk. (Also a data-source switch.) |
 | `pages/tournament/hasErrors.tsx` | derivation inside a hook over entities | subscribe via the store hook (reactive), not getState |
 | `user/userCard/editUserSchema.ts` | pure form-default builder (non-reactive) | `selectPositions(getState(), pk, DOTA2)` OK |
 | `pages/profile/profile.tsx` | form seed from `currentUser` (reactive store) | read positions for the current user via the selector; keep write path |
@@ -1384,7 +1386,9 @@ For form defaults/patch that read AND write positions, **only the READ migrates*
 
 - [ ] **Step 1: Migrate render-path single-user readers** — `user/positions/index.tsx`, `user/userCard.tsx`, `user/UserStrip.tsx` via `usePlayerPositions(user.pk)`.
 
-- [ ] **Step 2: Migrate render-path per-row `.map` readers** — `teamdraft/TeamPositionCoverage.tsx`, `teamdraft/sections/AvailablePlayersSection.tsx`, `pages/tournament/hasErrors.tsx` via the top-level shallow-subscribe-once pattern (NEVER `getState()` in a render-path `.map`).
+- [ ] **Step 2: Migrate render-path per-row `.map` readers** — `teamdraft/TeamPositionCoverage.tsx`, `teamdraft/sections/AvailablePlayersSection.tsx`, `pages/tournament/hasErrors.tsx` via the `positionsByPk`-map-at-top pattern (NEVER `getState()` in a render-path `.map`).
+
+  **CRITICAL gameType-gate check (do this FIRST, before migrating teamdraft):** `selectPositions` returns `undefined` unless `currentGameType === GAME_TYPE.DOTA2`. Today teamdraft/coverage/available-players ALWAYS show positions regardless of active game. Verify `currentGameType` is actually set to DOTA2 when these routes mount — `rg -n "setCurrentGameType|currentGameType" frontend/app/pages/tournament frontend/app/components/teamdraft frontend/app/routes`. If teamdraft/tournament routes do NOT set `currentGameType=DOTA2`, the gate makes positions vanish there — a regression. If unset, either (a) pass an explicit `GAME_TYPE.DOTA2` to `selectPositions` at these Dota-only teamdraft sites instead of the ambient gameType (these surfaces are inherently Dota), OR (b) ensure the route sets `currentGameType`. Prefer (a) for teamdraft (it's Dota-specific). Confirm the chosen approach renders positions before moving on.
 
 - [ ] **Step 3: Migrate form readers (non-reactive `getState()` acceptable)** — `user/userCard/editUserSchema.ts`, `pages/profile/profile.tsx`, `EventSignupModal/schema.ts`, `EventSignupModal/toPatch.ts`, `EventSignupModal.tsx`.
 
@@ -1412,7 +1416,7 @@ git commit -m "refactor(user): route positions reads through gameType-aware sele
 
 - [ ] **Step 1: Playwright — Dota positions persist + reflect**
 
-Mirror `06-profile-edit.spec.ts`. **Log in as `loginAsUser(2057)`** (`edit_user_positions`, `backend/tests/data/users.py` — the dedicated positions user; NOT `loginAdmin`/pk 1001, since the `/profile` Dota tab edits the logged-in user). Capture the original positions first. Open `/profile` → EditProfileModal → Dota tab; set a position via the reused picker (reuse the `setPositionField`/`readPositionField` helpers from `frontend/tests/playwright/helpers/edit-user.ts` keyed on the `edit-user-{position}` testids — confirm Task 13 reused that primitive); save; assert toast.
+Mirror `06-profile-edit.spec.ts`. **Log in via the `n` fixture: `await n(2057)`** (`edit_user_positions`, `backend/tests/data/users.py:545`; the per-user login fixture is `n(userPk)` in `fixtures/auth.ts` — there is NO `loginAsUser`; `loginAdmin` is admin-only and wrong here since the `/profile` Dota tab edits the logged-in user). Capture the original positions first. Open `/profile` → EditProfileModal → Dota tab; set a position by driving the `PositionFormFields` `position-choice-{role}` `<Select>` directly (the `setPositionField`/`readPositionField` helpers are keyed to `edit-user-*` and won't match `PositionFormFields` — interact with the `position-choice-*` testids, or add a small helper); save; assert toast.
 
 **Reflect-assertion caveat:** `/profile` has no active game, so `currentGameType === null` and any `usePlayerPositions` display there returns `undefined`. Assert the persisted change by **re-opening the modal** and reading the field back (as existing `08` does), NOT by expecting a profile-page badge to update. Restore the original in `finally`. Add an error-path test (`page.route` 500 on `**/api/users/me/profile/game/dota/`, assert error toast + modal stays open + `page.unroute`).
 
