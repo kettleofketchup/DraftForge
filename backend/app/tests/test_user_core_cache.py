@@ -26,6 +26,22 @@ class SerializeUserCoreTests(TransactionTestCase):
         u.positions.save()  # PositionsModel.save() → invalidate_obj(user)
         assert serialize_user_core(u.pk)["positions"]["carry"] == 5
 
+    def test_invalidation_is_user_specific(self):
+        # Editing user X must invalidate ONLY X's entry, never Y's. The per-pk
+        # cache key (user_core:{pk}) + pk-filtered dep querysets scope the
+        # eviction to the edited user — not a broad flush of all users.
+        x = CustomUser.objects.create(username="x", nickname="X-old")
+        y = CustomUser.objects.create(username="y", nickname="Y-old")
+        # Prime both caches.
+        assert serialize_user_core(x.pk)["nickname"] == "X-old"
+        assert serialize_user_core(y.pk)["nickname"] == "Y-old"
+        # Edit only X.
+        x.nickname = "X-new"
+        # X reflects the edit (its entry was invalidated)...
+        assert serialize_user_core(x.pk)["nickname"] == "X-new"
+        # ...and Y is unaffected and correct.
+        assert serialize_user_core(y.pk)["nickname"] == "Y-old"
+
 
 class BulkUsersCacheTests(TransactionTestCase):
     def setUp(self):
