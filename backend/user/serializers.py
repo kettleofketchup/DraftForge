@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from app.models import CustomUser
+from app.models import CustomUser, PositionsModel
 from app.serializers import PositionsSerializer
 
 from .models import BaseUserProfile, DeadlockUserProfile, DotaUserProfile
@@ -18,6 +18,19 @@ class DotaUserProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = DotaUserProfile
         fields = ["positions", "has_active_dota_mmr", "dota_mmr_last_verified"]
+
+    def update(self, instance, validated_data):
+        positions_data = validated_data.pop("positions", None)
+        if positions_data:
+            if instance.positions is None:
+                instance.positions = PositionsModel.objects.create()
+            for key, value in positions_data.items():
+                setattr(instance.positions, key, value)
+            instance.positions.save()
+        for key, value in validated_data.items():
+            setattr(instance, key, value)
+        instance.save()
+        return instance
 
 
 class DeadlockUserProfileSerializer(serializers.ModelSerializer):
