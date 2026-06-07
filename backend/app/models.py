@@ -139,7 +139,11 @@ class CustomUser(AbstractUser):
         PATCH /api/users/me/profile/base/.
         """
         bp = getattr(self, "base_profile", None)
-        return bp.nickname if bp else None
+        if bp is not None:
+            return bp.nickname
+        # Unsaved user (no base_profile yet): read back the value the setter
+        # buffered, so set-then-get works pre-save (e.g. createFromDiscordData).
+        return getattr(self, "_pending_nickname", None)
 
     @nickname.setter
     def nickname(self, value):
