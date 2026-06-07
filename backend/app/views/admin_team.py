@@ -72,8 +72,9 @@ def search_users(request):
         q_filter |= Q(steamid=int(query)) | Q(steam_account_id=int(query))
 
     users = (
-        CustomUser.objects.select_related("base_profile", "positions")
-        .filter(q_filter)[:20]
+        CustomUser.objects.select_related(
+            "base_profile", "base_profile__dota_user_profile__positions"
+        ).filter(q_filter)[:20]
     )
     data = TournamentUserSerializer(users, many=True).data
 
@@ -729,7 +730,9 @@ def update_org_user(request, org_id, org_user_id):
 
     org_user = get_object_or_404(
         OrgUser.objects.select_related(
-            "user", "user__positions", "user__base_profile"
+            "user",
+            "user__base_profile",
+            "user__base_profile__dota_user_profile__positions",
         ),
         pk=org_user_id,
         organization=org,

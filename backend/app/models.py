@@ -137,7 +137,11 @@ class CustomUser(AbstractUser):
         PATCH /api/users/me/profile/base/.
         """
         bp = getattr(self, "base_profile", None)
-        return bp.nickname if bp else None
+        if bp is None:
+            # Pre-pk: return the value buffered by the setter so set-then-read
+            # before save() works (matches the old column's behavior).
+            return getattr(self, "_pending_nickname", None)
+        return bp.nickname
 
     @nickname.setter
     def nickname(self, value):
@@ -163,7 +167,9 @@ class CustomUser(AbstractUser):
     @property
     def avatar(self):
         bp = getattr(self, "base_profile", None)
-        return bp.avatar if bp else None
+        if bp is None:
+            return getattr(self, "_pending_avatar", None)
+        return bp.avatar
 
     @avatar.setter
     def avatar(self, value):

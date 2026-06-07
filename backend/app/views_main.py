@@ -171,7 +171,9 @@ class UserView(viewsets.ModelViewSet):
     # base_profile is required because nickname/avatar now resolve via the
     # @property on CustomUser, which reads self.base_profile.* (T1 epic).
     queryset = (
-        CustomUser.objects.select_related("positions", "base_profile")
+        CustomUser.objects.select_related(
+            "base_profile", "base_profile__dota_user_profile__positions"
+        )
         .prefetch_related(
             "owned_organizations",
             "admin_organizations",
@@ -393,17 +395,17 @@ class TournamentView(viewsets.ModelViewSet):
             "source_event",
             "source_event__event_repeater",
             "users",
-            "users__positions",
+            "users__base_profile__dota_user_profile__positions",
             "teams__members",
-            "teams__members__positions",
+            "teams__members__base_profile__dota_user_profile__positions",
             "teams__captain",
-            "teams__captain__positions",
+            "teams__captain__base_profile__dota_user_profile__positions",
             "teams__deputy_captain",
-            "teams__deputy_captain__positions",
+            "teams__deputy_captain__base_profile__dota_user_profile__positions",
             "teams__dropin_members",
-            "teams__dropin_members__positions",
+            "teams__dropin_members__base_profile__dota_user_profile__positions",
             "teams__left_members",
-            "teams__left_members__positions",
+            "teams__left_members__base_profile__dota_user_profile__positions",
         )
 
     def list(self, request, *args, **kwargs):
@@ -1148,7 +1150,9 @@ class OrganizationView(viewsets.ModelViewSet):
         )
         def get_data():
             org_users = OrgUser.objects.filter(organization=org).select_related(
-                "user", "user__positions", "user__base_profile"
+                "user",
+                "user__base_profile",
+                "user__base_profile__dota_user_profile__positions",
             )
             serializer = OrgUserSerializer(org_users, many=True)
             return serializer.data
@@ -1302,7 +1306,9 @@ class LeagueView(viewsets.ModelViewSet):
         )
         def get_data():
             league_users = LeagueUser.objects.filter(league=league).select_related(
-                "user", "user__positions", "user__base_profile"
+                "user",
+                "user__base_profile",
+                "user__base_profile__dota_user_profile__positions",
             )
             serializer = LeagueUserSerializer(league_users, many=True)
             return serializer.data
