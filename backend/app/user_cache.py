@@ -1,6 +1,6 @@
 from cacheops import cached_as
 
-from user.models import BaseUserProfile
+from user.models import BaseUserProfile, DotaUserProfile
 
 from .models import CustomUser
 from .serializers import TournamentUserSerializer  # core fields incl. positions, no mmr
@@ -11,11 +11,15 @@ def serialize_user_core(pk: int) -> dict:
 
     Invalidated only by this user's own model changes. BaseUserProfile dep is
     required: nickname/avatar are CustomUser @propertys backed by base_profile.
+    DotaUserProfile dep keeps the per-user core fresh on positions/dota edits
+    (positions also fire PositionsModel.save()→invalidate_obj(user); the explicit
+    dep is robust + matches the test_cacheops guardrail).
     """
 
     @cached_as(
         CustomUser.objects.filter(pk=pk),
         BaseUserProfile.objects.filter(user_id=pk),
+        DotaUserProfile.objects.filter(base_profile__user_id=pk),
         extra=f"user_core:{pk}",
         timeout=60 * 60,
     )

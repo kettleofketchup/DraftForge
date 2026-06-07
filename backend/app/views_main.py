@@ -21,12 +21,12 @@ from social_django.utils import load_strategy, psa
 from app.permissions_org import has_org_staff_access
 from telemetry.logging import get_logger
 
-# BaseUserProfile owns nickname/avatar (T1 epic). Every @cached_as site below
-# that ships nickname or avatar in its payload MUST list BaseUserProfile as a
-# dependency, otherwise PATCH /api/users/me/profile/base/ won't invalidate the
-# cached response. See backend/user/tests/test_cacheops.py for the grep
-# guardrail that enforces this.
-from user.models import BaseUserProfile
+# BaseUserProfile owns nickname/avatar (T1 epic); DotaUserProfile owns
+# positions/dota-mmr (T2 epic). Every @cached_as site below that ships
+# nickname/avatar/positions MUST list both as dependencies, otherwise PATCH
+# /api/users/me/profile/base/ or /game/dota/ won't invalidate the cached
+# response. See backend/user/tests/test_cacheops.py for the grep guardrail.
+from user.models import BaseUserProfile, DotaUserProfile
 
 from .decorators import render_to
 from .models import (
@@ -198,6 +198,7 @@ class UserView(viewsets.ModelViewSet):
         @cached_as(
             CustomUser.objects.all(),
             BaseUserProfile,
+            DotaUserProfile,
             keep_fresh=True,
             extra=cache_key,
             timeout=60 * 60,
@@ -217,6 +218,7 @@ class UserView(viewsets.ModelViewSet):
         @cached_as(
             CustomUser.objects.filter(pk=pk),
             BaseUserProfile,
+            DotaUserProfile,
             keep_fresh=True,
             extra=cache_key,
             timeout=60 * 60,
@@ -412,6 +414,7 @@ class TournamentView(viewsets.ModelViewSet):
             Team,
             CustomUser,
             BaseUserProfile,
+            DotaUserProfile,
             Draft,
             Game,
             DraftRound,
@@ -435,6 +438,7 @@ class TournamentView(viewsets.ModelViewSet):
             Team,
             CustomUser,
             BaseUserProfile,
+            DotaUserProfile,
             Game,
             Draft,
             DraftRound,
@@ -542,6 +546,7 @@ class TeamView(viewsets.ModelViewSet):
             Team.objects.all(),
             CustomUser,
             BaseUserProfile,
+            DotaUserProfile,
             Tournament,
             Game,
             Draft,
@@ -566,6 +571,7 @@ class TeamView(viewsets.ModelViewSet):
             Team.objects.filter(pk=pk),
             CustomUser,
             BaseUserProfile,
+            DotaUserProfile,
             Tournament,
             Game,
             Draft,
@@ -620,6 +626,7 @@ class DraftView(viewsets.ModelViewSet):
             Tournament,
             CustomUser,
             BaseUserProfile,
+            DotaUserProfile,
             extra=cache_key,
             timeout=60 * 60,
         )
@@ -642,6 +649,7 @@ class DraftView(viewsets.ModelViewSet):
             Tournament,
             CustomUser,
             BaseUserProfile,
+            DotaUserProfile,
             extra=cache_key,
             timeout=60 * 60,
         )
@@ -695,6 +703,7 @@ class DraftRoundView(viewsets.ModelViewSet):
             Tournament,
             CustomUser,
             BaseUserProfile,
+            DotaUserProfile,
             extra=cache_key,
             timeout=60 * 10,
         )
@@ -716,6 +725,7 @@ class DraftRoundView(viewsets.ModelViewSet):
             Tournament,
             CustomUser,
             BaseUserProfile,
+            DotaUserProfile,
             extra=cache_key,
             timeout=60 * 10,
         )
@@ -880,6 +890,7 @@ class GameView(viewsets.ModelViewSet):
             Tournament,
             CustomUser,
             BaseUserProfile,
+            DotaUserProfile,
             extra=cache_key,
             timeout=60 * 10,
         )
@@ -901,6 +912,7 @@ class GameView(viewsets.ModelViewSet):
             Tournament,
             CustomUser,
             BaseUserProfile,
+            DotaUserProfile,
             extra=cache_key,
             timeout=60 * 10,
         )
@@ -990,6 +1002,7 @@ class TournamentsBasicView(viewsets.ModelViewSet):
             Team,
             CustomUser,
             BaseUserProfile,
+            DotaUserProfile,
             Game,
             extra=cache_key,
             timeout=60 * 10,
@@ -1126,7 +1139,12 @@ class OrganizationView(viewsets.ModelViewSet):
         cache_key = f"organization_users:{pk}"
 
         @cached_as(
-            OrgUser, CustomUser, BaseUserProfile, extra=cache_key, timeout=60 * 10
+            OrgUser,
+            CustomUser,
+            BaseUserProfile,
+            DotaUserProfile,
+            extra=cache_key,
+            timeout=60 * 10,
         )
         def get_data():
             org_users = OrgUser.objects.filter(organization=org).select_related(
@@ -1275,7 +1293,12 @@ class LeagueView(viewsets.ModelViewSet):
         cache_key = f"league_users:{pk}"
 
         @cached_as(
-            LeagueUser, CustomUser, BaseUserProfile, extra=cache_key, timeout=60 * 10
+            LeagueUser,
+            CustomUser,
+            BaseUserProfile,
+            DotaUserProfile,
+            extra=cache_key,
+            timeout=60 * 10,
         )
         def get_data():
             league_users = LeagueUser.objects.filter(league=league).select_related(
