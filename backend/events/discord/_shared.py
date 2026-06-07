@@ -39,6 +39,8 @@ def _log_interaction(
     except Exception as e:
         log.error(
             "discord_event_log_write_failed",
+            system="discord",
+            subsystem="interaction",
             kind="interaction",
             action=action,
             event_id=event_id,
@@ -63,6 +65,8 @@ def _log_signup(
     except Exception as e:
         log.error(
             "discord_event_log_write_failed",
+            system="discord",
+            subsystem="interaction",
             kind="signup",
             action=action,
             event_id=event_id,
@@ -189,5 +193,5 @@ def _direct_signup(event, user) -> dict[str, str]:
     from events.services import process_rsvp
 
     signup = process_rsvp(event, user)
-    log.info("signup_persisted", signup_id=signup.pk, signup_status=signup.status)
+    log.info("signup_persisted", system="discord", subsystem="interaction", signup_id=signup.pk, signup_status=signup.status)
     return {"action": "signed_up", "status": signup.status}

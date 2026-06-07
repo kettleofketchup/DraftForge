@@ -64,5 +64,5 @@ class DeadlockHandler:
         try:
             return _direct_signup(event, user)
         except ValueError as e:
-            log.warning("signup_rejected", reason=str(e))
+            log.warning("signup_rejected", system="discord", subsystem="interaction", reason=str(e))
             return {"action": "error", "message": str(e)}

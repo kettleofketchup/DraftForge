@@ -184,7 +184,7 @@ class DotaHandler:
             _log_signup(event.pk, f"signup_ranked:{medal}", discord_user_id)
             return result
         except ValueError as e:
-            log.warning("signup_rejected", reason=str(e))
+            log.warning("signup_rejected", system="discord", subsystem="interaction", reason=str(e))
             _log_signup(
                 event.pk,
                 "signup_failed",
@@ -227,7 +227,7 @@ class DotaHandler:
         try:
             return _direct_signup(event, user)
         except ValueError as e:
-            log.warning("signup_rejected", reason=str(e))
+            log.warning("signup_rejected", system="discord", subsystem="interaction", reason=str(e))
             return {"action": "error", "message": str(e)}
 
     def battle_cup_submit(self, event: Event, discord_user_id, tier) -> dict:
@@ -271,7 +271,7 @@ class DotaHandler:
             _log_signup(event.pk, f"signup_battlecup:T{tier}", discord_user_id)
             return result
         except ValueError as e:
-            log.warning("signup_rejected", reason=str(e))
+            log.warning("signup_rejected", system="discord", subsystem="interaction", reason=str(e))
             _log_signup(
                 event.pk,
                 "signup_failed",
@@ -336,7 +336,7 @@ class DotaHandler:
                 "message": f"Screenshot saved! You're signed up. Status: **{result['status']}**",
             }
         except ValueError as e:
-            log.warning("signup_rejected", reason=str(e))
+            log.warning("signup_rejected", system="discord", subsystem="interaction", reason=str(e))
             return {
                 "success": True,
                 "signed_up": False,
@@ -368,7 +368,7 @@ class DotaHandler:
             )
         except DjangoValidationError as exc:
             msg = exc.messages[0] if hasattr(exc, "messages") else str(exc)
-            log.warning("signup_rejected", reason=msg)
+            log.warning("signup_rejected", system="discord", subsystem="interaction", reason=msg)
             return {"action": "error", "message": msg}
 
         return {"action": "positions_saved"}

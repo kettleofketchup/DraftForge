@@ -337,7 +337,7 @@ class ScreenshotUploadButton(ui.Button):
     async def callback(self, interaction: discord.Interaction):
         async with discord_log_context(interaction, custom_id=self.custom_id, event_id=self.event_id) as ctx:
             if interaction.response.is_done():
-                log.warning("screenshot_upload_already_acknowledged")
+                log.warning("screenshot_upload_already_acknowledged", system="discord", subsystem="interaction")
                 ctx.set_outcome("already_acknowledged")
                 return
             modal = ScreenshotUploadModal(self.event_id, self.screenshot_type)
