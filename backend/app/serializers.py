@@ -167,13 +167,95 @@ def _collect_tournament_user_pks(tournament):
     return seen_pks
 
 
-def _build_users_dict(tournament):
-    """Build a deduplicated {pk: serialized_user} dict for a tournament."""
-    seen_pks = _collect_tournament_user_pks(tournament)
-    user_qs = CustomUser.objects.filter(pk__in=seen_pks).select_related(
-        "positions", "base_profile"
+# Org-context-only keys that OrgUserSerializer adds on top of the cached core.
+# discordNickname is core-only (TournamentUserSerializer); guildNickname is
+# org-only — so the org shape replaces the former with the latter.
+_CONTEXT_MMR_KEYS = ("orgUserPk", "guildNickname", "mmr", "league_mmr")
+
+
+def _collect_context_mmr(tournament, seen_pks) -> dict:
+    """Per-request contextual org/league overlay keyed by user pk.
+
+    Returns ``{pk: {orgUserPk, guildNickname, mmr, league_mmr}}`` for a
+    tournament whose league has an organization, else an empty dict (non-org
+    tournaments carry no MMR). Reuses OrgUserSerializer so the values and the
+    league_mmr computation are identical to the legacy path.
+    """
+    from django.db.models import Prefetch
+
+    from league.models import LeagueUser
+    from org.models import OrgUser
+    from org.serializers import OrgUserSerializer
+
+    league = tournament.league if tournament else None
+    org = league.organization if league else None
+    if not org:
+        return {}
+
+    user_qs = CustomUser.objects.filter(pk__in=seen_pks)
+
+    # Auto-create OrgUser records for tournament users missing from the org
+    # (preserves the side-effect of the legacy _serialize_users_with_mmr path).
+    existing_user_pks = set(
+        OrgUser.objects.filter(user__in=user_qs, organization=org).values_list(
+            "user_id", flat=True
+        )
     )
-    return {u["pk"]: u for u in _serialize_users_with_mmr(user_qs, tournament)}
+    missing_users = user_qs.exclude(pk__in=existing_user_pks)
+    if missing_users.exists():
+        OrgUser.objects.bulk_create(
+            [OrgUser(user=u, organization=org) for u in missing_users],
+            ignore_conflicts=True,
+        )
+
+    org_users = (
+        OrgUser.objects.filter(user__in=user_qs, organization=org)
+        .select_related("user", "user__positions", "user__base_profile")
+        .prefetch_related(
+            Prefetch(
+                "league_memberships",
+                queryset=LeagueUser.objects.filter(league_id=league.pk),
+            )
+        )
+    )
+    serialized = OrgUserSerializer(
+        org_users, many=True, context={"league_id": league.pk}
+    ).data
+    return {
+        row["pk"]: {k: row[k] for k in _CONTEXT_MMR_KEYS} for row in serialized
+    }
+
+
+def _build_users_dict(tournament) -> dict:
+    """Build a deduplicated ``{pk: serialized_user}`` dict for a tournament.
+
+    Shape-preserving: the CORE half is sourced from the per-user cache
+    (``serialize_user_core``) and the contextual MMR half is merged per-request.
+    Output JSON is byte-identical to the legacy _serialize_users_with_mmr path —
+    org entries carry core + MMR (orgUserPk/mmr/league_mmr/guildNickname, no
+    discordNickname); non-org entries carry core only.
+    """
+    from app.user_cache import serialize_user_core
+
+    seen_pks = _collect_tournament_user_pks(tournament)
+    mmr_map = _collect_context_mmr(tournament, seen_pks)
+    league = tournament.league if tournament else None
+    is_org = bool(league and league.organization_id)
+
+    result: dict = {}
+    for pk in seen_pks:
+        core = serialize_user_core(pk)
+        if not core:
+            continue
+        if is_org:
+            # Match OrgUserSerializer's shape exactly: it omits discordNickname
+            # and adds guildNickname + the MMR fields from the overlay.
+            entry = {k: v for k, v in core.items() if k != "discordNickname"}
+            entry.update(mmr_map.get(pk, {}))
+        else:
+            entry = dict(core)
+        result[pk] = entry
+    return result
 
 
 class TournamentSerializerBase(serializers.ModelSerializer):
