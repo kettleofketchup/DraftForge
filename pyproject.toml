@@ -1,6 +1,6 @@
 [project]
 name = "website"
-version = "0.9.64"
+version = "0.9.65"
 description = ""
 authors = [
     {name = "kettleofketchup@gmail.com",email = "kettleofketchup@gmail.com"}
@@ -81,7 +81,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.ruff]
 # Ruff replaces black (ruff format) AND isort (the `I` lint rules).
-target-version = "py312"
+target-version = "0.9.65"
 line-length = 88
 src = ["backend", "."]
 extend-exclude = ["**/migrations/**"]
