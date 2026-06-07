@@ -32,6 +32,35 @@ class BaseUserProfile(models.Model):
     def __str__(self):
         return f"BaseUserProfile({self.user.username or self.user_id})"
 
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        # Auto-create user-wide game profiles. Idempotent via get_or_create.
+        # invalidate_after_commit (not bare invalidate_obj) because this runs
+        # inside the parent CustomUser.save() transaction (epic lesson:
+        # auto-create within transaction.atomic).
+        from app.cache_utils import invalidate_after_commit
+
+        # CRITICAL: positions default MUST be a callable so PositionsModel is
+        # created ONLY on the create branch. A bare
+        # defaults={"positions": PositionsModel.objects.create()} evaluates the
+        # create() on EVERY call (the dict is built before the lookup), leaking
+        # an orphan PositionsModel row on every idempotent resave. Django
+        # resolves callable defaults only when actually creating.
+        from app.models import PositionsModel
+
+        dota, dota_created = DotaUserProfile.objects.get_or_create(
+            base_profile=self,
+            defaults={"positions": lambda: PositionsModel.objects.create()},
+        )
+        deadlock, dl_created = DeadlockUserProfile.objects.get_or_create(base_profile=self)
+        targets = []
+        if dota_created:
+            targets.append(dota)
+        if dl_created:
+            targets.append(deadlock)
+        if targets:
+            invalidate_after_commit(*targets)
+
 
 class DotaUserProfile(models.Model):
     """User-wide Dota profile. Owns position preferences + MMR-verification state
