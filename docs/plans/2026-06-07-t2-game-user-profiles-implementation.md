@@ -305,9 +305,12 @@ git commit -m "feat(user): auto-create Dota/Deadlock profiles on BaseUserProfile
 
 ## Task 3: CACHEOPS entries + grep guardrail extension
 
+> **Scope-A coexistence note:** `backend/app/user_cache.py::serialize_user_core` (merged in #277) is the per-user cache that `bulk_users` + `_build_users_dict` source from. It currently `@cached_as(CustomUser.objects.filter(pk=pk), BaseUserProfile.objects.filter(user_id=pk), ...)`. Since T2 moves positions onto `DotaUserProfile`, **add `DotaUserProfile.objects.filter(base_profile__user_id=pk)` to its `@cached_as` deps** so a positions/dota edit invalidates the per-user core (positions changes also fire `PositionsModel.save()→invalidate_obj(user)`, but the explicit dep is robust + matches the guardrail intent). Add `serialize_user_core`'s file to the grep `SCAN_TARGETS` too.
+
 **Files:**
 - Modify: `backend/backend/settings.py` (CACHEOPS block)
-- Modify: `backend/user/tests/test_cacheops.py` (SCAN_TARGETS / guardrail)
+- Modify: `backend/app/user_cache.py` (`serialize_user_core` `@cached_as` deps — add DotaUserProfile)
+- Modify: `backend/user/tests/test_cacheops.py` (SCAN_TARGETS incl. user_cache.py / guardrail)
 - Test: `backend/user/tests/test_cacheops.py` (existing + extended)
 
 - [ ] **Step 1: Add CACHEOPS entries**
@@ -990,8 +993,9 @@ After the column drops, `select_related("positions")` / `select_related("user__p
 - `backend/app/views_main.py:174, 1133, 1282, 1327`
 - `backend/app/serializers.py:124, 174`
 - `backend/app/views/admin_team.py:75, 732`
+- **`backend/app/user_cache.py` (Scope A, #277):** `serialize_user_core` uses `select_related("positions")` — repoint to `base_profile__dota_user_profile__positions` (TournamentUserSerializer reads `user.positions`, which is now the @property → needs the reverse-path prefetch).
 
-Re-grep to confirm none missed: `rg -n 'select_related\([^)]*positions' backend --type py`.
+Re-grep to confirm none missed: `rg -n 'select_related\([^)]*positions' backend --type py` (must include `user_cache.py`).
 
 - [ ] **Step 2: save(update_fields) crash class — delete the now-illegal writes.**
 
