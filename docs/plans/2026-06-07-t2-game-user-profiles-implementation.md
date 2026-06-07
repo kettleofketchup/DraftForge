@@ -8,7 +8,19 @@
 
 **Tech Stack:** Django 5 + DRF + django-cacheops (backend); React 19 + Zustand + TanStack Query 5 + shadcn Form + Zod + Vitest + Playwright (frontend).
 
-**Single PR.** Full consumer migration. Full Deadlock parity with Dota.
+**Single PR.** Full Deadlock parity with Dota.
+
+## Architecture decision — positions read from the flat, rendered-once, indexed `_users[]` entity adapter
+
+The review found the original "migrate all consumers to `usePlayerPositions` over `userProfileStore`" is **broken**: `userProfileStore` is modal-scoped (one user at a time, populated only when an edit modal opens), so list/card/table/coverage surfaces would read `undefined` and positions would vanish.
+
+**Correct design (per the existing pattern):** the backend renders a **flat `_users[]`** — each user serialized **exactly once** with the info those surfaces need (positions included), deduplicated (the `_build_users_dict` / tournament `_users` pattern at `backend/app/serializers.py:173`). The frontend **entity adapter** (`userCacheStore`, `createEntityAdapter` with `byDiscordId`/`bySteamAccountId` indexes) ingests that flat list on every roster/list/org-scoped load and indexes by pk — exactly as it does today. So positions are **list-populated and indexed** on `userCacheStore.UserEntry`, rendered once.
+
+Therefore:
+- `selectPositions(state, userPk, gameType)` and `usePlayerPositions(userPk)` read the **`userCacheStore`** entity adapter (list-populated, indexed) — NOT the modal `userProfileStore`. They are gameType-aware wrappers over the rendered-once positions, forward-compatible with T3 org overrides.
+- The modal `userProfileStore` stays the **edit-only** layered source (base/gameUser/orgProfiles), populated per-user by the layered GET when a modal opens.
+- The Dota tab's `onSuccess` **dual-writes**: `userCacheStore.upsert(...)` (so every list surface reflects the new positions immediately) AND `userProfileStore.upsert(...)` (edit layer) AND `invalidateQueries(['userProfile', pk])` — the same load-bearing multi-write T1's BaseTab used.
+- `UserEntry.positions` is **NOT deprecated** — it IS the flat `_users[]` field, rendered once and indexed. The 11 consumers migrate to the gameType-aware `selectPositions`/`usePlayerPositions` selector over `userCacheStore`, not to raw field access and not to the modal store.
 
 **Inherits the 24 lessons in `docs/plans/2026-05-17-user-profile-entity-adapter-epic-design.md` ("Patterns from T1").** The ones that bite hardest in T2:
 - **#1 select_related discipline** — every queryset feeding a user serializer that ships positions needs `select_related("dota_user_profile__positions")` (reverse path) or `select_related("user__dota_user_profile__positions")`.
@@ -254,7 +266,17 @@ In `backend/user/models.py`, add to `BaseUserProfile`:
         # auto-create within transaction.atomic).
         from app.cache_utils import invalidate_after_commit
 
-        dota, dota_created = DotaUserProfile.objects.get_or_create(base_profile=self)
+        # CRITICAL: positions default MUST be a callable so PositionsModel is
+        # created ONLY on the create branch. A bare
+        # defaults={"positions": PositionsModel.objects.create()} evaluates the
+        # create() on EVERY call (the dict is built before the lookup), leaking
+        # an orphan PositionsModel row on every idempotent resave. Django
+        # resolves callable defaults only when actually creating.
+        from app.models import PositionsModel
+        dota, dota_created = DotaUserProfile.objects.get_or_create(
+            base_profile=self,
+            defaults={"positions": lambda: PositionsModel.objects.create()},
+        )
         deadlock, dl_created = DeadlockUserProfile.objects.get_or_create(base_profile=self)
         targets = []
         if dota_created:
@@ -401,6 +423,15 @@ from django.db import migrations
 
 
 def backfill_game_profiles(apps, schema_editor):
+    # Defensive cache clear (mirrors T1 user/0002): django-redis hard-fails on
+    # Redis-down, unlike cacheops which degrades. Wrap so cold-start / broken-
+    # Redis CI doesn't fail the migration.
+    from django.core.cache import cache
+    try:
+        cache.clear()
+    except Exception:
+        pass
+
     CustomUser = apps.get_model("app", "CustomUser")
     BaseUserProfile = apps.get_model("user", "BaseUserProfile")
     DotaUserProfile = apps.get_model("user", "DotaUserProfile")
@@ -634,7 +665,9 @@ The current `save()` auto-creates a `PositionsModel` when `not self.positions_id
                     delattr(self, attr)
 ```
 
-Move the old `if not self.positions_id: PositionsModel.objects.create()` block out — default positions are now created in the Task 2 `get_or_create(defaults=...)`. Update Task 2's get_or_create to pass `defaults={"positions": PositionsModel.objects.create()}` (import PositionsModel lazily inside `save()`).
+**Delete** the old `if not self.positions_id: PositionsModel.objects.create()` block (lines ~337-340) — default positions are now created in Task 2's `get_or_create(defaults={"positions": lambda: PositionsModel.objects.create()})`. If you don't delete it, the property setter fires mid-`save()` before `base_profile`/`dota_user_profile` exist (buffering into `_pending_positions`), which is wasteful and confusing.
+
+**`save()` is INSERT-not-rewrite:** the steps above (steam 32/64-bit `steam_account_id`↔`steamid` sync — lesson #23 — and the `_pending_nickname`/`_pending_avatar` flush from T1) MUST be preserved verbatim. Only ADD the dota pending-flush block below; do not rewrite or drop the existing save() body.
 
 - [ ] **Step 5: Generate the column-drop migration**
 
@@ -711,14 +744,9 @@ Replace lines 43-48 in `backend/app/models.py`:
             targets += [dp, dp.base_profile, dp.base_profile.user]
         if targets:
             invalidate_after_commit(*targets)
-        log.debug(
-            "positions_invalidated",
-            system="user", subsystem="cache",
-            positions_id=self.pk, dota_profiles=len(dota_profiles),
-        )
 ```
 
-Ensure `log` is the module logger (`from telemetry.logging import get_logger; log = get_logger(__name__)` — confirm it's imported at top of `app/models.py`; if not, add it). Remove the old `from app.cache_utils import invalidate_obj` import if now unused.
+**No bespoke log here.** `invalidate_after_commit` already emits a `cache_invalidate` log (`system="cache", subsystem="invalidate"`) per target on commit — a `positions_invalidated` line would duplicate it, and `subsystem="cache"` isn't in the taxonomy (the `cache` system owns invalidation logging). This matches T1: its nickname/avatar shims add no bespoke cache log. (`log` already exists at `app/models.py:8,16` if any other log is ever needed — no import change required.) Remove the old `from app.cache_utils import invalidate_obj` import if now unused after this rewrite.
 
 - [ ] **Step 4: Run tests, verify pass**
 
@@ -858,6 +886,17 @@ class MeProfileGamePatchTests(TestCase):
         self.user.base_profile.deadlock_user_profile.refresh_from_db()
         assert self.user.base_profile.deadlock_user_profile.rank == "Ascendant"
 
+    def test_patch_deadlock_rank_blank_and_null(self):
+        # DeadlockUserProfile.rank is null=True/blank=True, so a bare
+        # ModelSerializer auto-infers allow_blank/allow_null (same as T1's
+        # nickname). Clearing must NOT 400 (lesson #5).
+        r1 = self.client.patch("/api/users/me/profile/game/deadlock/",
+                               data={"rank": ""}, format="json")
+        assert r1.status_code == 200, r1.content
+        r2 = self.client.patch("/api/users/me/profile/game/deadlock/",
+                               data={"rank": None}, format="json")
+        assert r2.status_code == 200, r2.content
+
     def test_unknown_game_404(self):
         r = self.client.patch("/api/users/me/profile/game/chess/",
                               data={}, format="json")
@@ -934,74 +973,90 @@ git commit -m "feat(user): PATCH /me/profile/game/<game>/ endpoint with structlo
 
 ---
 
-## Task 9: `select_related` the positions reverse path + backend regression sweep
+## Task 9: Fix every post-shim positions breakage (select_related FieldError, save(update_fields), None-guards)
+
+> **Two distinct breakage classes** appear the moment `positions` becomes a `@property` (after Task 5). The plan's first draft only saw the first. Both crash production paths.
 
 **Files:**
-- Modify: `backend/app/serializers.py`, `backend/app/views_main.py`, `backend/app/views/admin_team.py` (querysets feeding user serializers that ship `positions`)
-- Modify: any non-`app` cross-app queryset shipping `user.positions` (lesson #14 cross-app sweep)
-- Test: existing backend suite (no new test; verified by full run)
+- Modify (FieldError class): `backend/app/views_main.py`, `backend/app/serializers.py`, `backend/app/views/admin_team.py`
+- Modify (save(update_fields) crash class): `backend/events/services.py`
+- Modify (None-guard class): `backend/app/serializers.py` (`UserSerializer.update`), `backend/app/functions/user.py`
+- Cross-app N+1 sweep: `backend/org/serializers.py`, `backend/league/serializers.py` (nested `source="user.positions"` keeps working via the property but their feeding querysets need the new select_related to avoid N+1)
+- Test: broad backend suite + `events` suite
 
-- [ ] **Step 1: Find every queryset feeding a positions-shipping serializer**
+- [ ] **Step 1: FieldError class — replace dead `select_related` strings.**
 
-Run: `rg -n 'select_related\(' backend --type py | rg -i 'user|positions'` and `rg -n 'PositionsSerializer|"positions"' backend/app/serializers.py backend/org/serializers.py backend/league/serializers.py backend/steam/serializers.py`.
-The positions reverse path is now `dota_user_profile__positions`. For a direct user queryset: `select_related("base_profile__dota_user_profile__positions")`. For reverse-through OrgUser/LeagueUser: `select_related("user__base_profile__dota_user_profile__positions")`.
+After the column drops, `select_related("positions")` / `select_related("user__positions")` raise `FieldError: Invalid field name(s) given in select_related: 'positions'`. New reverse path: direct user queryset → `select_related("base_profile__dota_user_profile__positions")`; reverse-through OrgUser/LeagueUser → `select_related("user__base_profile__dota_user_profile__positions")`. Confirmed offending sites:
+- `backend/app/views_main.py:174, 1133, 1282, 1327`
+- `backend/app/serializers.py:124, 174`
+- `backend/app/views/admin_team.py:75, 732`
 
-- [ ] **Step 2: Update each queryset**
+Re-grep to confirm none missed: `rg -n 'select_related\([^)]*positions' backend --type py`.
 
-Add `"base_profile__dota_user_profile__positions"` (or the `user__...` variant) alongside the existing `base_profile` / `positions` select_related at every site T1 touched plus any positions-shipping site. Sites to check (from T1 + cross-app sweep): `views_main.py` UserView queryset + org/league list endpoints; `admin_team.py` search + org_user detail; `serializers.py` `_build_users_dict` + `_serialize_users_with_mmr`; `events/views.py`, `steam/views.py` if they ship positions.
+- [ ] **Step 2: save(update_fields) crash class — delete the now-illegal writes.**
 
-The old `"positions"` / `"user__positions"` select_related strings now point at a property, not a relation — Django will raise `FieldError` on those. Replace them with the new reverse path.
+`user.save(update_fields=["positions"])` raises `ValueError: The following fields do not exist in this model: positions` (a property is not a concrete field). Sites (production):
+- `backend/events/services.py:457` and `backend/events/services.py:663`
 
-- [ ] **Step 3: Run the broad backend suite, verify green**
+**Delete these `user.save(update_fields=["positions"])` lines entirely** — the Task 5 property setter (`user.positions = ...`) already persisted via `dp.save(update_fields=["positions"]) + invalidate_after_commit(dp)`. Leaving them crashes signup approval / `apply_signup_input`. Also fix test sites surfaced by the run: `backend/events/tests/test_signup_input.py:75,95,116` (same pattern).
 
-Run: `just test::run 'python manage.py test app user -v 2'`
-Expected: PASS. Fix any `FieldError: Invalid field name(s) given in select_related: 'positions'` by swapping to the reverse path. Fix any test that set `user.positions` and asserted via the old column.
+- [ ] **Step 3: None-guard class — positions can now be `None` (SET_NULL).**
 
-- [ ] **Step 4: Commit**
+Old `CustomUser.positions` was `null=False`; new `DotaUserProfile.positions` is `null=True, on_delete=SET_NULL`, so the shim getter can return `None`. Guard the two writers that assume non-null:
+- `backend/app/serializers.py:1184` (`UserSerializer.update`): `positions_instance = instance.positions` then `setattr(positions_instance, ...)`. If `instance.positions is None`, create one first: `if instance.positions is None: instance.positions = PositionsModel.objects.create()` (the setter persists it), then re-read `instance.positions`.
+- `backend/app/functions/user.py:65`: `PositionsModel.objects.get(pk=user.positions.pk)` → `AttributeError` on None. Guard: `if user.positions is None: ...` (skip or create-on-demand to match prior behavior).
+- (`backend/events/services.py:454` already guards `if user_positions is None` — leave it.)
+
+- [ ] **Step 4: Run the broad suites, verify green.**
+
+Run: `just test::run 'python manage.py test app user events -v 2'`
+Expected: PASS. Fix any remaining `FieldError`/`ValueError` from a missed site by applying the matching fix above. Fix any test that set `user.positions` and asserted via the old column.
+
+- [ ] **Step 5: Commit**
 
 ```bash
-git add backend/app/serializers.py backend/app/views_main.py backend/app/views/admin_team.py
-git commit -m "fix(user): select_related dota_user_profile__positions across user querysets (T2.9, epic #224)"
+git add backend/app/serializers.py backend/app/views_main.py backend/app/views/admin_team.py backend/events/services.py backend/app/functions/user.py backend/events/tests/test_signup_input.py
+git commit -m "fix(user): chase post-shim positions breakages — select_related, save(update_fields), None-guards (T2.9, epic #224)"
 ```
 
 ---
 
-## Task 10: Expand frontend types + `selectPositions` store selector
+## Task 10: Expand edit-layer types + `selectPositions` selector over the list-populated `userCacheStore`
+
+> **Architecture (revised):** `selectPositions` reads the **flat `_users[]` entity adapter** (`userCacheStore`, list-populated + indexed), NOT the modal-scoped `userProfileStore`. `UserEntry.positions` is the rendered-once flat field every roster/list load hydrates. The `userProfileStore` gameUser types still get expanded — they're the **edit-layer** shape the modal reads/writes.
 
 **Files:**
-- Modify: `frontend/app/store/userProfileTypes.ts`, `frontend/app/store/userProfileStore.ts`
-- Test: `frontend/app/store/userProfileStore.test.ts`
+- Modify: `frontend/app/store/userProfileTypes.ts` (edit-layer types), `frontend/app/store/userCacheTypes.ts` (confirm `UserEntry.positions` shape)
+- Create: `frontend/app/store/selectPositions.ts` (selector over userCacheStore) — or co-locate in `userCacheStore.ts`
+- Test: `frontend/app/store/userCacheStore.test.ts` (or the selectPositions test file)
 
-- [ ] **Step 1: Write the failing Vitest**
+- [ ] **Step 1: Confirm the flat field + write the failing Vitest**
 
-Add to `userProfileStore.test.ts`:
+Read `frontend/app/store/userCacheTypes.ts` — `UserEntry.positions` already carries the flat `{carry,mid,offlane,soft_support,hard_support}` (the rendered-once `_users[]` field). Write a test that seeds `userCacheStore` and reads via `selectPositions`:
 
 ```typescript
-it('selectPositions returns dota positions for the dota game id', () => {
-  const e = entry(5);
-  e.gameUser.dota = { positions: { carry: 5, mid: 0, offlane: 0, soft_support: 0, hard_support: 0 }, has_active_dota_mmr: false };
-  useUserProfileStore.getState().upsert(e);
-  const pos = selectPositions(useUserProfileStore.getState(), 5, GAME_TYPE.DOTA2);
+// in userCacheStore.test.ts (or a new selectPositions.test.ts)
+import { useUserCacheStore } from '~/store/userCacheStore';
+import { selectPositions } from '~/store/selectPositions';
+import { GAME_TYPE } from '~/components/game/constants';
+
+it('selectPositions reads positions off the list-populated userCacheStore for the dota id', () => {
+  useUserCacheStore.getState().upsert({
+    pk: 5, username: 'x',
+    positions: { carry: 5, mid: 0, offlane: 0, soft_support: 0, hard_support: 0 },
+  } as any);
+  const pos = selectPositions(useUserCacheStore.getState(), 5, GAME_TYPE.DOTA2);
   expect(pos?.carry).toBe(5);
 });
 
-it('selectPositions returns undefined for null gameType', () => {
-  const e = entry(6);
-  useUserProfileStore.getState().upsert(e);
-  expect(selectPositions(useUserProfileStore.getState(), 6, null)).toBeUndefined();
+it('selectPositions returns undefined for null/non-dota gameType', () => {
+  expect(selectPositions(useUserCacheStore.getState(), 5, null)).toBeUndefined();
 });
 ```
 
-Import `selectPositions` from the store and `GAME_TYPE` from `~/components/game/constants`.
+- [ ] **Step 2: Run, verify it fails** — `cd frontend && npx vitest run app/store/userCacheStore.test.ts` → FAIL (`selectPositions` not found).
 
-- [ ] **Step 2: Run, verify it fails**
-
-Run: `cd frontend && npx vitest run app/store/userProfileStore.test.ts`
-Expected: FAIL — `selectPositions is not exported`.
-
-- [ ] **Step 3: Expand types**
-
-In `userProfileTypes.ts`, replace the stubs:
+- [ ] **Step 3: Expand the edit-layer types** (`userProfileTypes.ts`) — these are the modal's layered shape (still needed for the GET + Dota tab edit form):
 
 ```typescript
 export interface PositionsValue {
@@ -1019,40 +1074,45 @@ export interface DeadlockUserProfile {
 }
 ```
 
-- [ ] **Step 4: Add `selectPositions`**
-
-In `userProfileStore.ts`:
+- [ ] **Step 4: Add `selectPositions` reading `userCacheStore`** (`frontend/app/store/selectPositions.ts`):
 
 ```typescript
+import type { UserCacheState } from './userCacheStore';      // the store's state type
+import type { PositionsValue } from './userProfileTypes';
 import { GAME_TYPE } from '~/components/game/constants';
 import type { GameTypeValue } from '~/components/game/constants';
-import type { PositionsValue } from './userProfileTypes';
 
+/**
+ * Read a user's positions from the list-populated, rendered-once flat
+ * `_users[]` entity adapter (userCacheStore). gameType-gated so future games
+ * resolve their own layer. orgUserId is a T3 parameter (org overrides) — pass
+ * undefined in T2. Returns the stored reference (or undefined) — stable for
+ * Zustand Object.is, no per-call allocation.
+ */
 export function selectPositions(
-  state: UserProfileState,
+  state: UserCacheState,
   userPk: number,
   gameType: GameTypeValue | null,
-  // orgUserId is T3 only; undefined in T2.
-  _orgUserId?: number,
+  _orgUserId?: number,   // T3 only
 ): PositionsValue | undefined {
   if (gameType !== GAME_TYPE.DOTA2) return undefined;
-  return state.entities[userPk]?.gameUser.dota?.positions ?? undefined;
+  return state.entities[userPk]?.positions ?? undefined;
 }
 ```
 
-Also extend the store's `hasChanged` if it doesn't already compare `gameUser.dota.positions` / `gameUser.deadlock` (the explorer reported it compares `gameUser` — verify it deep-compares enough to catch a positions edit; if it's reference equality on `gameUser.dota`, that's fine since `upsert` replaces the object).
+Read `userCacheStore.ts` to get the exact state shape (it uses `createEntityAdapter`; entities are keyed by pk) and the exported state type name; adjust the import/`state.entities[userPk]` access to match.
 
 - [ ] **Step 5: Run, verify pass, commit**
 
 ```bash
-cd frontend && npx vitest run app/store/userProfileStore.test.ts
-git add frontend/app/store/userProfileTypes.ts frontend/app/store/userProfileStore.ts frontend/app/store/userProfileStore.test.ts
-git commit -m "feat(user): expand gameUser types + selectPositions selector (T2.10, epic #224)"
+cd frontend && npx vitest run app/store/userCacheStore.test.ts
+git add frontend/app/store/userProfileTypes.ts frontend/app/store/selectPositions.ts frontend/app/store/userCacheStore.test.ts
+git commit -m "feat(user): selectPositions over list-populated userCacheStore + edit-layer types (T2.10, epic #224)"
 ```
 
 ---
 
-## Task 11: `usePlayerPositions` hook
+## Task 11: `usePlayerPositions` hook (subscribes to `userCacheStore`)
 
 **Files:**
 - Create: `frontend/app/hooks/usePlayerPositions.ts`
@@ -1065,19 +1125,18 @@ git commit -m "feat(user): expand gameUser types + selectPositions selector (T2.
 import { renderHook } from '@testing-library/react';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { usePlayerPositions } from '../usePlayerPositions';
-import { useUserProfileStore } from '~/store/userProfileStore';
+import { useUserCacheStore } from '~/store/userCacheStore';
 import { useGameTypeStore } from '~/store/gameTypeStore';
 import { GAME_TYPE } from '~/components/game/constants';
 
 describe('usePlayerPositions', () => {
-  beforeEach(() => { useUserProfileStore.getState().reset(); });
+  beforeEach(() => { useUserCacheStore.getState().reset?.(); });
 
-  it('returns dota positions when active game is dota', () => {
-    useUserProfileStore.getState().upsert({
-      pk: 9, base: { nickname: null, avatar: null },
-      gameUser: { dota: { positions: { carry: 4, mid: 0, offlane: 0, soft_support: 0, hard_support: 0 } } },
-      orgProfiles: {}, _fetchedAt: Date.now(),
-    });
+  it('returns dota positions when active game is dota, from the list-populated cache', () => {
+    useUserCacheStore.getState().upsert({
+      pk: 9, username: 'p',
+      positions: { carry: 4, mid: 0, offlane: 0, soft_support: 0, hard_support: 0 },
+    } as any);
     useGameTypeStore.setState({ currentGameType: GAME_TYPE.DOTA2 });
     const { result } = renderHook(() => usePlayerPositions(9));
     expect(result.current?.carry).toBe(4);
@@ -1091,29 +1150,30 @@ describe('usePlayerPositions', () => {
 });
 ```
 
-- [ ] **Step 2: Run, verify it fails**
+- [ ] **Step 2: Run, verify it fails** — `cd frontend && npx vitest run app/hooks/__tests__/usePlayerPositions.test.tsx` → FAIL (module not found).
 
-Run: `cd frontend && npx vitest run app/hooks/__tests__/usePlayerPositions.test.tsx`
-Expected: FAIL — module not found.
-
-- [ ] **Step 3: Implement the hook**
+- [ ] **Step 3: Implement the hook (over `userCacheStore`)**
 
 ```typescript
 // frontend/app/hooks/usePlayerPositions.ts
 import { useGameType } from '~/hooks/useGameType';
-import { useUserProfileStore, selectPositions } from '~/store/userProfileStore';
+import { useUserCacheStore } from '~/store/userCacheStore';
+import { selectPositions } from '~/store/selectPositions';
 import type { PositionsValue } from '~/store/userProfileTypes';
 
 /**
- * Ambient positions read for DISPLAY surfaces that follow the active game.
- * Returns undefined when no active game (currentGameType === null) — never
- * silently defaults to Dota. The Dota EDIT tab must NOT use this; it reads
- * with the explicit GAME_TYPE.DOTA2 id (currentGameType is null off event
- * pages). orgUserId is T3 — not passed here.
+ * Reactive positions read for DISPLAY surfaces, off the list-populated flat
+ * `_users[]` entity adapter (userCacheStore). Returns undefined when no active
+ * game — never silently defaults to Dota. The Dota EDIT tab does NOT use this;
+ * it reads positions off the modal's layered `profile.gameUser.dota.positions`.
+ * Cannot be called inside `.map()` row callbacks (Rules of Hooks) — for per-row
+ * reads in a list, call `selectPositions(useUserCacheStore.getState(), pk, gt)`
+ * ONCE at the component top with a single store subscription, or subscribe the
+ * whole row list. orgUserId is T3.
  */
 export function usePlayerPositions(userPk: number): PositionsValue | undefined {
   const gameType = useGameType();
-  return useUserProfileStore((s) => selectPositions(s, userPk, gameType));
+  return useUserCacheStore((s) => selectPositions(s, userPk, gameType));
 }
 ```
 
@@ -1122,7 +1182,7 @@ export function usePlayerPositions(userPk: number): PositionsValue | undefined {
 ```bash
 cd frontend && npx vitest run app/hooks/__tests__/usePlayerPositions.test.tsx
 git add frontend/app/hooks/usePlayerPositions.ts frontend/app/hooks/__tests__/usePlayerPositions.test.tsx
-git commit -m "feat(user): usePlayerPositions ambient hook (T2.11, epic #224)"
+git commit -m "feat(user): usePlayerPositions hook over list-populated userCacheStore (T2.11, epic #224)"
 ```
 
 ---
@@ -1141,6 +1201,15 @@ export type DotaPatchPayload = {
 };
 export type DeadlockPatchPayload = { rank?: string | null; rank_date?: string | null };
 
+// OVERLOADS — without them the union return makes `updated.positions` a TS2339
+// in DotaTab.onSuccess (DeadlockUserProfile has no `positions`). The overloads
+// narrow the return per game so each tab's onSuccess is typed.
+export async function patchGameProfile(
+  game: 'dota', patch: DotaPatchPayload,
+): Promise<DotaUserProfile>;
+export async function patchGameProfile(
+  game: 'deadlock', patch: DeadlockPatchPayload,
+): Promise<DeadlockUserProfile>;
 export async function patchGameProfile(
   game: 'dota' | 'deadlock',
   patch: DotaPatchPayload | DeadlockPatchPayload,
@@ -1169,31 +1238,54 @@ git commit -m "feat(user): patchGameProfile API client (T2.12, epic #224)"
 - Modify: `frontend/app/pages/user/EditProfileModal/schemas.ts`
 - Test: covered by Playwright (Task 17) + manual
 
-**Template:** `frontend/app/pages/user/EditProfileModal/tabs/BaseTab.tsx` is the exact pattern — shadcn `Form` + `zodResolver` + `useForm` + `useMutation` + `getLogger('user.editProfile.dota')` + the 3-way store sync in `onSuccess` (userCacheStore is N/A for positions; sync userProfileStore via its `upsert` + `queryClient.invalidateQueries(['userProfile', profile.pk])`; `userStore.patchCurrentUser` only if positions appear on currentUser consumers). Read BaseTab.tsx end to end and mirror its structure.
+**Template:** `frontend/app/pages/user/EditProfileModal/tabs/BaseTab.tsx` is the exact pattern — shadcn `Form` + `zodResolver` + `useForm` + `useMutation` + `getLogger('user.editProfile.dota')`. Read BaseTab.tsx end to end and mirror its structure.
 
-- [ ] **Step 1: Add the Dota schema to `schemas.ts`**
+**Reuse the existing branded position picker — do NOT hand-roll number inputs.** A branded ranked 0–5 `<Select>` primitive exists. Find it: `rg -n "PositionFormFields|PositionSelect|setPositionField" frontend/app` — candidates are `frontend/app/pages/profile/forms/position.tsx` (`PositionFormFields`, renders 5 branded role `<Select>`s, bound to `name="positions.carry"` etc.) and `frontend/app/components/user/userCard/editForm.tsx` (`PositionSelect`, testids `edit-user-{position}` wired to the Playwright helpers `setPositionField`/`readPositionField` in `frontend/tests/playwright/helpers/edit-user.ts`). **Pick the one whose testids already have Playwright helpers (`edit-user-{position}`)** so Task 17 reuses `setPositionField`/`readPositionField` for free. Reusing the primitive means: (a) the schema must be NESTED (`{ positions: {...} }`) to match `name="positions.*"`, (b) you get the semantic 0–5 preference labels (UX parity), (c) no invented testids.
+
+- [ ] **Step 1: Add the NESTED Dota schema to `schemas.ts`** (mirror `editUserSchema.ts`'s `PositionFieldSchema`)
 
 ```typescript
+export const PositionFieldSchema = z.coerce.number().int().min(0).max(5);
 export const DotaProfileFormSchema = z.object({
-  carry: z.coerce.number().int().min(0).max(5),
-  mid: z.coerce.number().int().min(0).max(5),
-  offlane: z.coerce.number().int().min(0).max(5),
-  soft_support: z.coerce.number().int().min(0).max(5),
-  hard_support: z.coerce.number().int().min(0).max(5),
+  positions: z.object({
+    carry: PositionFieldSchema,
+    mid: PositionFieldSchema,
+    offlane: PositionFieldSchema,
+    soft_support: PositionFieldSchema,
+    hard_support: PositionFieldSchema,
+  }),
 });
 export type DotaProfileFormValues = z.infer<typeof DotaProfileFormSchema>;
 ```
+If `editUserSchema.ts` already exports a `PositionFieldSchema`/positions sub-schema, import and reuse it (DRY) rather than redefining.
 
 - [ ] **Step 2: Implement `DotaTab.tsx`**
 
 Mirror BaseTab. Key deltas:
-- `useForm<z.input<typeof DotaProfileFormSchema>, unknown, DotaProfileFormValues>({ resolver: zodResolver(DotaProfileFormSchema), defaultValues })` — **3-generic form** because the schema has `z.coerce` (lesson #12).
-- `defaultValues` from `profile.gameUser.dota?.positions` (carry/mid/.../hard_support, default 0).
-- Five position inputs (number 0-5) using the existing position UI primitive if one exists (`rg "carry" frontend/app/components/user/positions`), else shadcn `Input type=number` inside `FormField`.
-- `mutationFn: (vals) => patchGameProfile('dota', { positions: vals })`.
-- `onSuccess`: `useUserProfileStore.getState().upsert({ ...current, gameUser: { ...current.gameUser, dota: { ...current.gameUser.dota, positions: updated.positions } }, _fetchedAt: Date.now() })`; `queryClient.invalidateQueries({ queryKey: ['userProfile', profile.pk] })`; `toast.success`; `onSave?.(); onClose()`.
-- `data-testid="edit-user-dota-save"` on submit, `data-testid="edit-user-pos-carry"` etc. on inputs.
-- Brand: `CancelButton`/`SubmitButton`, `flex flex-col gap-4`, no raw button, no `space-y-*`.
+- `useForm<z.input<typeof DotaProfileFormSchema>, unknown, DotaProfileFormValues>({ resolver: zodResolver(DotaProfileFormSchema), defaultValues })` — **3-generic** because of `z.coerce` (lesson #12). `defaultValues = { positions: { carry: profile.gameUser.dota?.positions?.carry ?? 0, ... } }`.
+- Render the reused `<PositionFormFields control={form.control} />` (or whichever primitive you picked) — NOT raw `<Input type=number>`.
+- `mutationFn: (vals) => patchGameProfile('dota', vals)` — `vals` is already `{ positions: {...} }`, so pass it directly (NOT `{ positions: vals }`).
+- **`onSuccess` DUAL-WRITE** (the load-bearing multi-write — display surfaces read `userCacheStore`, edit layer reads `userProfileStore`; `onClose()` unmounts before any refetch so both manual writes are required):
+  ```ts
+  // 1. list/display source — every roster/card/table reading selectPositions updates now
+  const cached = useUserCacheStore.getState().getById?.(profile.pk);
+  if (cached) {
+    useUserCacheStore.getState().upsert({ ...cached, pk: profile.pk, positions: updated.positions });
+  }
+  // 2. edit layer — base on the `profile` prop (always full), NOT a getState() lookup that can be undefined
+  useUserProfileStore.getState().upsert({
+    ...profile,
+    gameUser: { ...profile.gameUser, dota: { ...profile.gameUser?.dota, positions: updated.positions } },
+    _fetchedAt: Date.now(),
+  });
+  // 3. refetch-on-next-mount
+  queryClient.invalidateQueries({ queryKey: ['userProfile', profile.pk] });
+  toast.success('Dota profile updated');
+  onSave?.(); onClose();
+  ```
+  Read `userCacheStore.ts` for the exact upsert/getById API (it requires a `UserType` with `username` — spread the existing cached entry as BaseTab does; if no cached entry exists, skip the cache write — the invalidate covers it).
+- `data-testid="edit-user-dota-save"` on submit. Position inputs reuse the primitive's existing `edit-user-{position}` testids — do NOT invent `edit-user-pos-*`.
+- Brand: `CancelButton`/`SubmitButton`, `flex flex-col gap-4`, no raw button, no `space-y-*`. **`export default`** (lazy import needs it). Do NOT add `form.watch` (no live preview here — would re-render per keystroke for nothing).
 
 - [ ] **Step 3: Typecheck**
 
@@ -1226,7 +1318,7 @@ export type DeadlockProfileFormValues = z.infer<typeof DeadlockProfileFormSchema
 
 - [ ] **Step 2: Implement `DeadlockTab.tsx`**
 
-Mirror BaseTab (single text field for `rank`, optional date for `rank_date`). `getLogger('user.editProfile.deadlock')`. `mutationFn: (vals) => patchGameProfile('deadlock', vals)`. `onSuccess` upserts `gameUser.deadlock` into userProfileStore + invalidateQueries. `data-testid="edit-user-deadlock-rank"`, `data-testid="edit-user-deadlock-save"`. Single-generic `useForm` is fine here (no coerce/transform) but use 3-generic for consistency.
+Mirror BaseTab (single text field for `rank`, optional date for `rank_date`). `getLogger('user.editProfile.deadlock')`. `mutationFn: (vals) => patchGameProfile('deadlock', vals)`. `onSuccess` upserts `gameUser.deadlock` into `userProfileStore` based on the **`profile` prop** (not a `getState()` lookup): `useUserProfileStore.getState().upsert({ ...profile, gameUser: { ...profile.gameUser, deadlock: { ...profile.gameUser?.deadlock, ...updated } }, _fetchedAt: Date.now() })` + `invalidateQueries(['userProfile', profile.pk])`. No `userCacheStore` write needed (deadlock rank is not a flat `_users[]` list-display field). `data-testid="edit-user-deadlock-rank"`, `data-testid="edit-user-deadlock-save"`. 3-generic `useForm` for consistency (harmless without coerce). **`export default`** (lazy import). No `form.watch`.
 
 - [ ] **Step 3: Typecheck + commit**
 
@@ -1254,6 +1346,8 @@ Add `const DotaTab = lazy(() => import('./EditProfileModal/tabs/DotaTab'));` and
 
 Add two `<TabsContent>` blocks mirroring the Base one, each wrapping its lazy tab in `<Suspense fallback={<ProfileSkeleton />}>`, passing `profile={data} onSave={onSave} onClose={onClose}`.
 
+**Query-key sanity:** the modal's `useSuspenseQuery` is keyed `['userProfile', userPk]` while the tabs invalidate `['userProfile', profile.pk]`. These match only because `getUserProfile` ignores its arg (hits `/me/`) and the modal mounts only for the self user (`isOwnProfile`, `userPk={user.pk}`). Add a dev-time assertion in `EditProfileModalBody` — `if (import.meta.env.DEV && data.pk !== userPk) console.warn('userProfile key/pk mismatch', {userPk, dataPk: data.pk})` — so a future non-self mount surfaces the latent invalidate-miss instead of silently failing.
+
 - [ ] **Step 2: Typecheck + commit**
 
 ```bash
@@ -1264,35 +1358,48 @@ git commit -m "feat(user): wire Dota + Deadlock tabs into EditProfileModal (T2.1
 
 ---
 
-## Task 16: Migrate the 11 user-scoped positions consumers
+## Task 16: Route user-scoped positions reads through the gameType-aware selector
 
-**Files (migrate each):** `EventSignupModal/schema.ts`, `EventSignupModal/toPatch.ts`, `EventSignupModal.tsx`, `teamdraft/sections/AvailablePlayersSection.tsx`, `teamdraft/TeamPositionCoverage.tsx`, `user/positions/index.tsx`, `user/userCard/editUserSchema.ts`, `user/userCard.tsx`, `user/UserStrip.tsx`, `pages/profile/profile.tsx`, `pages/tournament/hasErrors.tsx`
-- Modify: `frontend/app/store/userCacheTypes.ts` (deprecate `UserEntry.positions`)
+> **Revised approach (architecture decision above).** The 11 consumers already read positions from the list-populated `userCacheStore.UserEntry.positions` (directly or via `currentUser`/props). The migration is NOT "move to a different store" — the data stays on the flat `_users[]` entity (`UserEntry.positions`). It's "route reads through the gameType-aware `selectPositions`/`usePlayerPositions`" so positions resolve per active game (Dota today) and stay forward-compatible with T3 org overrides. **`UserEntry.positions` is NOT deprecated** — it's the rendered-once flat field the selector reads.
+>
+> **Rules-of-Hooks + reactivity (the trap the review caught):** `usePlayerPositions` is a hook — it CANNOT be called inside a `.map()` row callback, and `selectPositions(useUserCacheStore.getState(), …)` is a NON-reactive snapshot (won't re-render on change). For per-row list reads, subscribe ONCE at the component top to the rows you need (e.g. `useUserCacheStore(s => members.map(m => selectPositions(s, m.pk, gameType)))` with `useShallow`) so the component re-renders reactively, then index per row — do NOT sprinkle `getState()` in render. Genuinely non-reactive call sites (pure form-default builders, event handlers) may use `getState()`.
 
-> **Approach:** For each consumer, replace the direct `user.positions` / `currentUser.positions` read with `usePlayerPositions(userPk)` (component context) or `selectPositions(useUserProfileStore.getState(), userPk, GAME_TYPE.DOTA2)` (non-hook context). For form defaults/patch that read AND write positions (`editUserSchema.ts`, `profile.tsx`, `EventSignupModal`), keep writing via the existing PATCH path for now (the backend `UserSerializer`/`EventSignup` shim still accepts `positions`) — only the READ migrates. Migrate one file per step; typecheck after each.
+**Per-consumer classification (verify each against the file before editing):**
 
-- [ ] **Step 1: Migrate display-only readers (lowest risk first)**
+| File | Context | How to migrate |
+|---|---|---|
+| `user/positions/index.tsx` | single-user badge component (render path) | `usePlayerPositions(user.pk)` (reactive hook) |
+| `user/userCard.tsx` | single-user card (render path) | `usePlayerPositions(user.pk)` |
+| `user/UserStrip.tsx` | single-user strip (render path, useMemo dep) | `usePlayerPositions(user.pk)` then feed the memo |
+| `teamdraft/TeamPositionCoverage.tsx` | per-member `.map` (render path) | top-level `useUserCacheStore(useShallow(s => members.map(m => selectPositions(s, m.pk, gt))))`, index per row |
+| `teamdraft/sections/AvailablePlayersSection.tsx` | per-row `.map` (render path) | same shallow-subscribe-once pattern |
+| `pages/tournament/hasErrors.tsx` | derivation inside a hook over entities | subscribe via the store hook (reactive), not getState |
+| `user/userCard/editUserSchema.ts` | pure form-default builder (non-reactive) | `selectPositions(getState(), pk, DOTA2)` OK |
+| `pages/profile/profile.tsx` | form seed from `currentUser` (reactive store) | read positions for the current user via the selector; keep write path |
+| `EventSignupModal/schema.ts` | form schema/default builder | `getState()` snapshot OK (form init) |
+| `EventSignupModal/toPatch.ts` | patch-diff builder (non-reactive) | `getState()` snapshot OK |
+| `EventSignupModal.tsx` | form seed (reactive) | selector at component top |
 
-`user/positions/index.tsx`, `user/userCard.tsx`, `user/UserStrip.tsx`, `teamdraft/TeamPositionCoverage.tsx`, `teamdraft/sections/AvailablePlayersSection.tsx`, `pages/tournament/hasErrors.tsx` — replace the read. For list/table contexts where you have a `userPk` but not hook context, call `selectPositions(useUserProfileStore.getState(), pk, GAME_TYPE.DOTA2)`. After each file: `cd frontend && npx tsc --noEmit 2>&1 | grep <file> || echo clean`.
+For form defaults/patch that read AND write positions, **only the READ migrates** — keep the existing write path (backend `UserSerializer`/EventSignup shim still accepts `positions`). Migrate one file per step; `cd frontend && npx tsc --noEmit 2>&1 | grep <file> || echo clean` after each.
 
-- [ ] **Step 2: Migrate form readers**
+- [ ] **Step 1: Migrate render-path single-user readers** — `user/positions/index.tsx`, `user/userCard.tsx`, `user/UserStrip.tsx` via `usePlayerPositions(user.pk)`.
 
-`user/userCard/editUserSchema.ts`, `pages/profile/profile.tsx`, `EventSignupModal/schema.ts`, `EventSignupModal/toPatch.ts`, `EventSignupModal.tsx` — read baseline positions from the profile store, keep the existing write path.
+- [ ] **Step 2: Migrate render-path per-row `.map` readers** — `teamdraft/TeamPositionCoverage.tsx`, `teamdraft/sections/AvailablePlayersSection.tsx`, `pages/tournament/hasErrors.tsx` via the top-level shallow-subscribe-once pattern (NEVER `getState()` in a render-path `.map`).
 
-- [ ] **Step 3: Deprecate `UserEntry.positions`**
+- [ ] **Step 3: Migrate form readers (non-reactive `getState()` acceptable)** — `user/userCard/editUserSchema.ts`, `pages/profile/profile.tsx`, `EventSignupModal/schema.ts`, `EventSignupModal/toPatch.ts`, `EventSignupModal.tsx`.
 
-In `userCacheTypes.ts`, mark `positions` with `/** @deprecated T2 — read via usePlayerPositions(userPk); dropped in cleanup */`. Do NOT remove it yet (cleanup ticket). Confirm no remaining `\.positions` reads against `UserEntry`/`UserType` outside the leave-alone set: `rg "\.positions" frontend/app --include="*.ts" --include="*.tsx"` and verify every remaining hit is in the leave-alone set or is a `PositionsValue`/form-local read.
+- [ ] **Step 4: Do NOT deprecate `UserEntry.positions`** — it is the flat `_users[]` field the selector reads. Add a one-line comment in `userCacheTypes.ts`: `/** Flat rendered-once positions; read via selectPositions/usePlayerPositions for gameType-awareness. */`. Then confirm no remaining RAW `user.positions` reads outside the leave-alone set: `rg "\.positions" frontend/app --include="*.ts" --include="*.tsx"` — every hit must be (a) the leave-alone set [`EventSignupModal/evaluateSignupGap.ts`, `events/games/dota2/Dota2RankSignalsCard.tsx`, `CSVImportModal.tsx`, `csvParser.ts`, `UserEventStrip.tsx`], (b) inside `selectPositions`/the picker primitive, or (c) a `PositionsValue`/form-local read.
 
-- [ ] **Step 4: Full typecheck + vitest**
+- [ ] **Step 5: Full typecheck + vitest**
 
 Run: `cd frontend && npx tsc --noEmit 2>&1 | grep -v node_modules | grep "error TS" | head; npx vitest run`
 Expected: no NEW tsc errors vs main baseline; all vitest pass.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add frontend/app
-git commit -m "refactor(user): migrate user-scoped positions consumers to usePlayerPositions (T2.16, epic #224)"
+git commit -m "refactor(user): route positions reads through gameType-aware selectPositions (T2.16, epic #224)"
 ```
 
 ---
@@ -1300,12 +1407,14 @@ git commit -m "refactor(user): migrate user-scoped positions consumers to usePla
 ## Task 17: Playwright spec + cacheops integration test (shipped skipped)
 
 **Files:**
-- Create: `frontend/tests/playwright/e2e/15-edit-user/08-position-persistence.spec.ts`
+- Create: `frontend/tests/playwright/e2e/15-edit-user/11-dota-tab-positions.spec.ts` (NEW file — `08-position-persistence.spec.ts` ALREADY EXISTS and guards the legacy userCard `/users/<id>/` shim path; do NOT overwrite it — it's now a valuable Task-9 shim regression test)
 - Create: `backend/user/tests/test_game_cacheops_integration.py` (shipped `@unittest.skip`, lesson #24)
 
 - [ ] **Step 1: Playwright — Dota positions persist + reflect**
 
-Mirror `06-profile-edit.spec.ts`. Log in as a `USER_EDIT_USERS` user (NOT admin pk 1001 — lesson: cross-test pollution; use the testing skill's feature-isolated users), open `/profile` → EditProfileModal → Dota tab, change a position input, save, assert toast + a position-display surface reflects the change without reload, and restore in `finally`. Add an error-path test (`page.route` 500 on `**/api/users/me/profile/game/dota/`, assert error toast + modal stays open).
+Mirror `06-profile-edit.spec.ts`. **Log in as `loginAsUser(2057)`** (`edit_user_positions`, `backend/tests/data/users.py` — the dedicated positions user; NOT `loginAdmin`/pk 1001, since the `/profile` Dota tab edits the logged-in user). Capture the original positions first. Open `/profile` → EditProfileModal → Dota tab; set a position via the reused picker (reuse the `setPositionField`/`readPositionField` helpers from `frontend/tests/playwright/helpers/edit-user.ts` keyed on the `edit-user-{position}` testids — confirm Task 13 reused that primitive); save; assert toast.
+
+**Reflect-assertion caveat:** `/profile` has no active game, so `currentGameType === null` and any `usePlayerPositions` display there returns `undefined`. Assert the persisted change by **re-opening the modal** and reading the field back (as existing `08` does), NOT by expecting a profile-page badge to update. Restore the original in `finally`. Add an error-path test (`page.route` 500 on `**/api/users/me/profile/game/dota/`, assert error toast + modal stays open + `page.unroute`).
 
 - [ ] **Step 2: Cacheops integration test (skipped)**
 
@@ -1318,8 +1427,8 @@ Run: `just test::pw::spec 15-edit-user` and `just test::run 'python manage.py te
 - [ ] **Step 4: Commit**
 
 ```bash
-git add frontend/tests/playwright/e2e/15-edit-user/08-position-persistence.spec.ts backend/user/tests/test_game_cacheops_integration.py
-git commit -m "test(user): Dota positions Playwright spec + skipped cacheops integration (T2.17, epic #224)"
+git add frontend/tests/playwright/e2e/15-edit-user/11-dota-tab-positions.spec.ts backend/user/tests/test_game_cacheops_integration.py
+git commit -m "test(user): Dota tab Playwright spec + skipped cacheops integration (T2.17, epic #224)"
 ```
 
 ---
@@ -1331,8 +1440,10 @@ git commit -m "test(user): Dota positions Playwright spec + skipped cacheops int
 - [ ] `cd frontend && npx tsc --noEmit` — no new errors vs main baseline.
 - [ ] `just test::pw::spec 15-edit-user` — edit-user E2E green.
 - [ ] Grep guardrails: `rg "@cached_as\(.*CustomUser" backend/app backend/user | rg -v "DotaUserProfile"` → zero lines. `rg "related_name=" backend/user/models.py` → no `related_name` on the `positions` FK.
-- [ ] `rg "\.positions" frontend/app --include="*.ts" --include="*.tsx"` → every hit is leave-alone-set or a `PositionsValue`/form-local read.
+- [ ] `rg "\.positions" frontend/app --include="*.ts" --include="*.tsx"` → every hit is leave-alone-set, inside `selectPositions`/the picker primitive, or a `PositionsValue`/form-local read.
 - [ ] Migration safety: `just db::migrate::all` on a populated DB → no errors; `app/0096` runs after `user/0004`.
+- [ ] **Populate smoke** (lesson: T1 had this; the positions shim must not break populate): `just db::populate::all` → completes; spot-check a populated user has `user.base_profile.dota_user_profile.positions` set. Confirms `objects.create(positions=…)` + the `user.positions = …` setter still flow through the shim.
+- [ ] **Brand grep gate** for the new tabs: `rg "from '~/components/ui/button'" frontend/app/pages/user/EditProfileModal/tabs/DotaTab.tsx frontend/app/pages/user/EditProfileModal/tabs/DeadlockTab.tsx` → zero (use CancelButton/SubmitButton); `rg "space-y-|<button" frontend/app/pages/user/EditProfileModal/tabs/` → zero.
 - [ ] Demo recording if any of `frontend/app/components/herodraft|draft|bracket` changed (none expected in T2 — skip).
 
 ---
@@ -1341,7 +1452,12 @@ git commit -m "test(user): Dota positions Playwright spec + skipped cacheops int
 
 `docs/plans/2026-05-17-user-profile-entity-adapter-epic-design.md` §T2 + "Patterns from T1" (24 lessons).
 
+**Justified divergences from §T2 (found in plan review):**
+- **Positions read source.** §T2 said consumers migrate to `usePlayerPositions` over `userProfileStore` and `UserEntry.positions` is deprecated. That's infeasible — `userProfileStore` is modal-scoped, not list-populated. Revised: `selectPositions`/`usePlayerPositions` read the rendered-once flat `_users[]` entity adapter (`userCacheStore`); `UserEntry.positions` stays. (See "Architecture decision" above.)
+- **`positions_invalidated` log dropped.** §T2 acceptance lists it; it duplicates `invalidate_after_commit`'s built-in `cache_invalidate` log and uses a non-taxonomy subsystem. Omitted (matches T1, which added no bespoke cache log).
+- **Legacy `profile_update`/UpdateProfile positions path** is kept working via the shim (covered-by-shim), not removed — same approach T1 took for nickname/avatar. Retirement deferred to cleanup.
+
 ## Follow-ups (deferred, real)
 
-- **T3:** OrgUserProfile + OrgDotaUserProfile/OrgDeadlockUserProfile (rename PlayerDotaProfile/PlayerDeadlockProfile, rewire FKs to OrgUserProfile), per-org tabs, `useRouteOrgUserId()` route helper, `orgUserId` selector arg wired, `PositionsModel.save()` gains the `orgdotauserprofile_set` branch.
-- **Cleanup:** remove `CustomUser.positions`/`has_active_dota_mmr`/`dota_mmr_last_verified` transitional shims; remove `UserEntry.positions`; re-enable the live-Redis cacheops behavioral tests once T1's keep_fresh/eviction root cause is fixed (lesson #24).
+- **T3:** OrgUserProfile + OrgDotaUserProfile/OrgDeadlockUserProfile (rename PlayerDotaProfile/PlayerDeadlockProfile, rewire FKs to OrgUserProfile), per-org tabs, `useRouteOrgUserId()` route helper, `orgUserId` selector arg wired through `selectPositions` (org override → user-wide → undefined), `PositionsModel.save()` gains the `orgdotauserprofile_set` branch.
+- **Cleanup:** remove `CustomUser.positions`/`has_active_dota_mmr`/`dota_mmr_last_verified` transitional shims; retire the legacy `profile_update` positions path; re-enable the live-Redis cacheops behavioral tests once T1's keep_fresh/eviction root cause is fixed (lesson #24). (`UserEntry.positions` is NOT removed — it's the flat `_users[]` field the selector reads.)
