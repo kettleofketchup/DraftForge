@@ -66,10 +66,10 @@ from .serializers import (
     TournamentListSerializer,
     TournamentSerializer,
     TournamentsSerializer,
-    TournamentUserSerializer,
     UserSerializer,
     _build_users_dict,
 )
+from .user_cache import serialize_user_core
 
 log = get_logger(__name__)
 from .utils.avatar_utils import refresh_user_avatar
@@ -1324,9 +1324,8 @@ def bulk_users(request):
     if len(pks) == 0 or len(pks) > 200:
         return Response({"error": "Provide 1-200 pks"}, status=400)
 
-    users = CustomUser.objects.filter(pk__in=pks).select_related("positions")
-    serializer = TournamentUserSerializer(users, many=True)
-    return Response(serializer.data)
+    data = [d for d in (serialize_user_core(pk) for pk in pks) if d]
+    return Response(data)
 
 
 @api_view(["GET"])

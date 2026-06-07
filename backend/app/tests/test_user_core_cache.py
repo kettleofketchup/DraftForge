@@ -25,3 +25,20 @@ class SerializeUserCoreTests(TransactionTestCase):
         u.positions.carry = 5
         u.positions.save()  # PositionsModel.save() → invalidate_obj(user)
         assert serialize_user_core(u.pk)["positions"]["carry"] == 5
+
+
+class BulkUsersCacheTests(TransactionTestCase):
+    def setUp(self):
+        from rest_framework.test import APIClient
+
+        self.client = APIClient()
+        self.requester = CustomUser.objects.create(username="bulk_requester")
+        self.client.force_authenticate(user=self.requester)
+
+    def test_bulk_users_returns_core_and_reflects_edit(self):
+        u = CustomUser.objects.create(username="b1", nickname="B1")
+        r = self.client.post("/api/users/bulk/", {"pks": [u.pk]}, format="json")
+        assert r.status_code == 200 and r.json()[0]["nickname"] == "B1"
+        u.nickname = "B1x"
+        r2 = self.client.post("/api/users/bulk/", {"pks": [u.pk]}, format="json")
+        assert r2.json()[0]["nickname"] == "B1x"
