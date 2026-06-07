@@ -1,7 +1,8 @@
-import logging
 import time
 
-log = logging.getLogger(__name__)
+from telemetry.logging import get_logger
+
+log = get_logger(__name__)
 
 
 def retry_with_backoff(func, max_retries=3, base_delay=1.0):
@@ -27,7 +28,12 @@ def retry_with_backoff(func, max_retries=3, base_delay=1.0):
             if attempt < max_retries - 1:
                 delay = base_delay * (2**attempt)
                 log.warning(
-                    f"Attempt {attempt + 1} failed: {e}. Retrying in {delay}s..."
+                    "retry_attempt_failed",
+                    system="steam",
+                    subsystem="retry",
+                    attempt=attempt + 1,
+                    delay=delay,
+                    error=str(e),
                 )
                 time.sleep(delay)
 

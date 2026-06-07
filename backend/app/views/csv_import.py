@@ -1,8 +1,5 @@
 """CSV import views for bulk-adding users to organizations and tournaments."""
 
-import logging
-
-from app.cache_utils import invalidate_obj
 from django.db import IntegrityError, transaction
 from django.shortcuts import get_object_or_404
 from rest_framework import status
@@ -10,6 +7,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from app.cache_utils import invalidate_obj
 from app.models import (
     CustomUser,
     Organization,
@@ -22,8 +20,9 @@ from app.permissions_org import has_org_staff_access
 from app.serializers import TournamentUserSerializer
 from league.models import LeagueUser
 from org.models import OrgUser
+from telemetry.logging import get_logger
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 MAX_ROWS = 500
 STEAM_ID_64_MIN = 76561197960265728  # Smallest valid Steam64 ID
@@ -250,10 +249,11 @@ def import_csv_org(request, org_id):
     rows = request.data.get("rows", [])
     update_mmr = bool(request.data.get("update_mmr", False))
     log.info(
-        "CSV org import: update_mmr=%s, raw=%r, rows=%d",
-        update_mmr,
-        request.data.get("update_mmr"),
-        len(rows) if isinstance(rows, list) else 0,
+        "csv_org_import_started",
+        system="api",
+        subsystem="csv_import",
+        update_mmr=update_mmr,
+        count=len(rows) if isinstance(rows, list) else 0,
     )
 
     if not isinstance(rows, list):
@@ -325,10 +325,12 @@ def import_csv_org(request, org_id):
                 )
         except IntegrityError:
             log.info(
-                "Row %d: existing member, update_mmr=%s, base_mmr=%r",
-                i + 1,
-                update_mmr,
-                base_mmr,
+                "csv_row_existing_member",
+                system="api",
+                subsystem="csv_import",
+                row=i + 1,
+                update_mmr=update_mmr,
+                base_mmr=base_mmr,
             )
             if update_mmr and base_mmr is not None:
                 OrgUser.objects.filter(user=user, organization=org).update(mmr=base_mmr)
@@ -423,11 +425,13 @@ def import_csv_tournament(request, tournament_id):
         "mmr_target", "organization"
     )  # "organization" | "league"
     log.info(
-        "CSV tournament import: update_mmr=%s, mmr_target=%s, raw_update_mmr=%r, rows=%d",
-        update_mmr,
-        mmr_target,
-        request.data.get("update_mmr"),
-        len(rows) if isinstance(rows, list) else 0,
+        "csv_tournament_import_started",
+        system="api",
+        subsystem="csv_import",
+        update_mmr=update_mmr,
+        mmr_target=mmr_target,
+        tournament_id=tournament.pk,
+        count=len(rows) if isinstance(rows, list) else 0,
     )
 
     if not isinstance(rows, list):

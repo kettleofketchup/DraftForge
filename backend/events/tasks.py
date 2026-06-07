@@ -1,6 +1,6 @@
-import logging
 import time
-from datetime import datetime, timedelta, timezone as tz
+from datetime import datetime, timedelta
+from datetime import timezone as tz
 
 import requests as req
 from celery import shared_task
@@ -54,11 +54,13 @@ from events.discord.embeds import (
 )
 from telemetry.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 log = get_logger(__name__)
 
 
-def _bind_celery_context(task_name: str, event_id: int, interaction_id: str | None) -> None:
+def _bind_celery_context(
+    task_name: str, event_id: int, interaction_id: str | None
+) -> None:
     fields = {
         "system": "discord",
         "subsystem": "celery",
@@ -72,11 +74,16 @@ def _bind_celery_context(task_name: str, event_id: int, interaction_id: str | No
     bind_contextvars(**fields)
 
 
-def _celery_bookend_fields(task_name: str, event_id: int, interaction_id: str | None, **extra) -> dict:
+def _celery_bookend_fields(
+    task_name: str, event_id: int, interaction_id: str | None, **extra
+) -> dict:
     """Build kwargs dict for bookend log lines, dropping None values from interaction_id and extras."""
     fields = {
-        "system": "discord", "subsystem": "celery", "tags_csv": "events,signup",
-        "task": task_name, "event_id": event_id,
+        "system": "discord",
+        "subsystem": "celery",
+        "tags_csv": "events,signup",
+        "task": task_name,
+        "event_id": event_id,
     }
     if interaction_id is not None:
         fields["interaction_id"] = interaction_id
@@ -84,7 +91,9 @@ def _celery_bookend_fields(task_name: str, event_id: int, interaction_id: str | 
     return fields
 
 
-def _run_with_bookends(task_name: str, event_id: int, interaction_id: str | None, work, **extra):
+def _run_with_bookends(
+    task_name: str, event_id: int, interaction_id: str | None, work, **extra
+):
     """Wrap a task body with celery_task_started/finished/failed bookend logs.
 
     `work` is a zero-arg callable returning the task's return value. Extra
@@ -101,7 +110,9 @@ def _run_with_bookends(task_name: str, event_id: int, interaction_id: str | None
         failed = True
         log.error(
             "celery_task_failed",
-            error=str(exc), error_type=type(exc).__name__, exc_info=True,
+            error=str(exc),
+            error_type=type(exc).__name__,
+            exc_info=True,
             **fields,
         )
         raise
@@ -178,9 +189,13 @@ def generate_upcoming_events():
         try:
             count = generate_repeater_events(repeater["pk"])
             total += count
-        except Exception:
+        except Exception as e:
             logger.exception(
-                "Failed to generate events for repeater %s", repeater["pk"]
+                "repeater_events_generate_failed",
+                system="events",
+                subsystem="tasks",
+                repeater_id=repeater["pk"],
+                error=str(e),
             )
     return f"Generated {total} events from {len(repeaters)} repeaters"
 
@@ -207,12 +222,26 @@ def cleanup_stale_events():
             if resp and resp.ok:
                 cancelled_count += 1
                 logger.info(
-                    "Auto-cancelled stale event %s (pk=%s)", event["name"], event["id"]
+                    "event_auto_cancelled",
+                    system="events",
+                    subsystem="tasks",
+                    event_id=event["id"],
                 )
             else:
-                logger.warning("Failed to auto-cancel event %s: %s", event["id"], resp)
-        except Exception:
-            logger.exception("Failed to auto-cancel event %s", event["id"])
+                logger.warning(
+                    "event_auto_cancel_failed",
+                    system="events",
+                    subsystem="tasks",
+                    event_id=event["id"],
+                )
+        except Exception as e:
+            logger.exception(
+                "event_auto_cancel_error",
+                system="events",
+                subsystem="tasks",
+                event_id=event["id"],
+                error=str(e),
+            )
 
     # Started but not closed → completed
     started = get_events_list(states="roll_call,in_progress", scheduled_before=cutoff)
@@ -223,14 +252,26 @@ def cleanup_stale_events():
             if resp and resp.ok:
                 completed_count += 1
                 logger.info(
-                    "Auto-completed stale event %s (pk=%s)", event["name"], event["id"]
+                    "event_auto_completed",
+                    system="events",
+                    subsystem="tasks",
+                    event_id=event["id"],
                 )
             else:
                 logger.warning(
-                    "Failed to auto-complete event %s: %s", event["id"], resp
+                    "event_auto_complete_failed",
+                    system="events",
+                    subsystem="tasks",
+                    event_id=event["id"],
                 )
-        except Exception:
-            logger.exception("Failed to auto-complete event %s", event["id"])
+        except Exception as e:
+            logger.exception(
+                "event_auto_complete_error",
+                system="events",
+                subsystem="tasks",
+                event_id=event["id"],
+                error=str(e),
+            )
 
     return f"Cleaned up {cancelled_count} cancelled, {completed_count} completed"
 
@@ -250,16 +291,26 @@ def open_scheduled_signups():
             if resp and resp.ok:
                 opened += 1
                 logger.info(
-                    "Auto-opened signups for event %s (pk=%s)",
-                    event["name"],
-                    event["id"],
+                    "signups_auto_opened",
+                    system="events",
+                    subsystem="tasks",
+                    event_id=event["id"],
                 )
             else:
                 logger.warning(
-                    "Failed to auto-open signups for event %s: %s", event["id"], resp
+                    "signups_auto_open_failed",
+                    system="events",
+                    subsystem="tasks",
+                    event_id=event["id"],
                 )
-        except Exception:
-            logger.exception("Failed to auto-open signups for event %s", event["id"])
+        except Exception as e:
+            logger.exception(
+                "signups_auto_open_error",
+                system="events",
+                subsystem="tasks",
+                event_id=event["id"],
+                error=str(e),
+            )
     return f"Opened signups for {opened} events"
 
 
@@ -437,7 +488,12 @@ def _send_event_announcement_impl(event_id):
     # Get or create DiscordEvent via internal API
     de_resp = get_or_create_discord_event(event_id=event.pk, guild_id=guild_id or "")
     if not de_resp or not de_resp.ok:
-        logger.error("Failed to get/create DiscordEvent for event %s", event.pk)
+        logger.error(
+            "discord_event_get_or_create_failed",
+            system="events",
+            subsystem="tasks",
+            event_id=event.pk,
+        )
         return "Failed: could not get/create DiscordEvent"
     discord_event_pk = de_resp.json().get("id")
 
@@ -536,7 +592,6 @@ def send_attendance_reminder(event_id):
         get_or_create_discord_event,
     )
     from discordbot.utils import sync_send_embed_with_components
-    from events.discord import build_attendance_reminder_embed
 
     event = get_event_for_task(event_id)
     if not event:
@@ -586,7 +641,6 @@ def send_profile_reminder(event_id):
         get_or_create_discord_event,
     )
     from discordbot.utils import sync_send_embed_with_components
-    from events.discord import build_profile_reminder_embed
 
     event = get_event_for_task(event_id)
     if not event:
@@ -691,7 +745,11 @@ def _send_signup_update_impl(event_id, interaction_id):
     discord_event = None
 
     discord_state = get_discord_event_state(event_id)
-    if discord_state and discord_state.signup_posted and discord_state.signup_message_id:
+    if (
+        discord_state
+        and discord_state.signup_posted
+        and discord_state.signup_message_id
+    ):
         message_id = discord_state.signup_message_id
         edit_channel_id = _resolve_signup_edit_channel(discord_state, fields)
 
@@ -707,8 +765,10 @@ def _send_signup_update_impl(event_id, interaction_id):
 
         if not log_entry or not log_entry.discord_message_id:
             logger.info(
-                "No announcement message found for event %s, skipping update",
-                event.pk,
+                "signup_update_no_announcement",
+                system="events",
+                subsystem="tasks",
+                event_id=event.pk,
             )
             return "Skipped: no announcement message"
 
@@ -835,7 +895,12 @@ def _create_discord_scheduled_event_impl(event_id):
     # Get or create DiscordEvent via internal API
     de_resp = get_or_create_discord_event(event_id=event.pk, guild_id=guild_id)
     if not de_resp or not de_resp.ok:
-        logger.error("Failed to get/create DiscordEvent for event %s", event.pk)
+        logger.error(
+            "discord_event_get_or_create_failed",
+            system="events",
+            subsystem="tasks",
+            event_id=event.pk,
+        )
         return "Failed: could not get/create DiscordEvent"
     discord_event_pk = de_resp.json().get("id")
 
@@ -892,8 +957,11 @@ def _create_discord_scheduled_event_impl(event_id):
             # "Sync: created ..." — the silent-success bug that caused 20+
             # invisible 403 Missing-Permissions failures on prod (0.9.49).
             logger.error(
-                "Discord scheduled-event create failed for event %s: %s",
-                event.pk, error_message,
+                "discord_scheduled_event_create_failed",
+                system="events",
+                subsystem="tasks",
+                event_id=event.pk,
+                reason=error_message,
             )
             raise RuntimeError(
                 f"Discord scheduled-event create failed for event {event.pk}: "
@@ -923,7 +991,11 @@ def _create_discord_scheduled_event_impl(event_id):
             error_message=str(e),
         )
         logger.exception(
-            "Failed to create Discord scheduled event for event %s", event.pk
+            "discord_scheduled_event_create_error",
+            system="events",
+            subsystem="tasks",
+            event_id=event.pk,
+            error=str(e),
         )
         return f"Failed: {e}"
 
@@ -972,7 +1044,13 @@ def _sync_discord_event_signups_impl(event_id):
         )
         return f"Synced signups for event {event.pk}"
     except Exception as e:
-        logger.exception("Failed to sync Discord event signups for event %s", event.pk)
+        logger.exception(
+            "discord_signups_sync_error",
+            system="events",
+            subsystem="tasks",
+            event_id=event.pk,
+            error=str(e),
+        )
         return f"Failed: {e}"
 
 
@@ -1018,7 +1096,12 @@ def _mark_interested_discord_event_impl(event_id, user_id):
         return f"Marked user {user_id} interested: {response.status_code}"
     except Exception as e:
         logger.exception(
-            "Failed to mark interested for event %s user %s", event.pk, user_id
+            "discord_mark_interested_error",
+            system="events",
+            subsystem="tasks",
+            event_id=event.pk,
+            user_id=user_id,
+            error=str(e),
         )
         return f"Failed: {e}"
 
@@ -1031,15 +1114,12 @@ def fire_event_reminder(event_id, reminder_type, fired_by_user_id=None):
     Called from the admin "Fire" button, not from celery beat.
     """
     from app.internal_client import (
-        check_message_log_exists,
         create_event_log,
         get_or_create_discord_event,
     )
     from discordbot.utils import sync_send_embed_with_components
     from events.discord import (
-        build_attendance_reminder_embed,
         build_profile_reminder_embed,
-        build_signup_reminder_embed,
     )
 
     REMINDER_MAP = {
@@ -1135,19 +1215,11 @@ def send_subscriber_notifications(event_id):
 
     Rate-limited at 1 DM/second to respect Discord limits.
     """
-    import time
 
     from app.internal_client import (
-        claim_discord_message_log,
-        create_event_dm,
-        finalize_discord_message_log,
         get_discord_event_state,
         get_event_for_task,
-        get_repeater_subscribers,
-        update_event_dm,
     )
-    from discordbot.utils import sync_send_dm
-    from events.discord.embeds import build_subscriber_dm_embed
 
     event = get_event_for_task(event_id)
     if not event:
@@ -1178,13 +1250,15 @@ def send_subscriber_notifications(event_id):
     )
     if log_pk is None:
         logger.info(
-            "Signup reminder lease for event %s held by another worker — skipping",
-            event_id,
+            "signup_reminder_lease_held",
+            system="events",
+            subsystem="tasks",
+            event_id=event_id,
+            reason="lease_held_by_another_worker",
         )
         return f"Signup reminder for event {event_id}: lease held by another worker"
 
     # Get user PKs who already signed up — skip them
-    from app.internal_client import get_event_signups
 
     all_signups = get_event_signups(event_id)
     signed_up_user_pks = {s.user for s in all_signups if s.status != "cancelled"}
@@ -1264,10 +1338,12 @@ def send_subscriber_notifications(event_id):
     )
 
     logger.info(
-        "Signup reminder DMs for event %s: sent=%d, skipped=%d, failed=%d",
-        event_id,
-        sent,
-        skipped,
-        failed,
+        "signup_reminder_dms_sent",
+        system="events",
+        subsystem="tasks",
+        event_id=event_id,
+        sent=sent,
+        skipped=skipped,
+        failed=failed,
     )
     return f"Sent {sent} DMs, skipped {skipped}, failed {failed} for event {event_id}"

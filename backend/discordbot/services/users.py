@@ -1,49 +1,19 @@
-import json
-import logging
-
 import requests
-from django.contrib.auth import login
-from django.contrib.auth import logout as auth_logout
-from django.contrib.auth.decorators import login_required
-from django.db import transaction
-from django.http import HttpResponse, HttpResponseBadRequest, JsonResponse
-from django.shortcuts import redirect, render
-from rest_framework import generics, permissions, serializers, status, viewsets
+from django.http import JsonResponse
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.generics import GenericAPIView
-from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
-from rest_framework.response import Response
-from rest_framework.reverse import reverse
-from social_core.backends.oauth import BaseOAuth1, BaseOAuth2
+from rest_framework.permissions import AllowAny, IsAuthenticated
 
 # Create your views here.
-from social_django.models import USER_MODEL  # fix: skip
-from social_django.models import AbstractUserSocialAuth, DjangoStorage
-from social_django.utils import load_strategy, psa
-
 from app.models import (
     CustomUser,
-    Draft,
-    DraftRound,
     Organization,
-    PositionsModel,
-    Team,
-    Tournament,
 )
 from app.permissions import IsStaff
 from app.permissions_org import has_org_staff_access
-from app.serializers import (
-    DraftRoundSerializer,
-    DraftSerializer,
-    GameSerializer,
-    PositionsSerializer,
-    TeamSerializer,
-    TournamentSerializer,
-    UserSerializer,
-)
 from backend import settings
+from telemetry.logging import get_logger
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 from django.core.cache import cache
 
@@ -56,7 +26,7 @@ def get_user_guilds(request):
     ]
     url = "https://discord.com/api/users/@me/guilds"
     headers = {"Authorization": f"Bearer {access_token}"}
-    cache_key = f"discord_guilds"
+    cache_key = "discord_guilds"
     cached_guilds = cache.get(cache_key)
     if cached_guilds:
         return JsonResponse({"guilds": cached_guilds}, safe=True)
@@ -94,7 +64,7 @@ def get_discord_members_api():
         return JsonResponse({"error": str(e)}, status=500)
 
 
-from cacheops import cached, cached_view
+from cacheops import cached
 
 
 @api_view(["GET"])
@@ -188,7 +158,6 @@ def get_discord_voice_channel_activity(request):
             {"error": f"Error communicating with Discord API: {str(e)}"}, status=500
         )
     except Exception as e:
-
         # Catch any other unexpected errors during processing
         return JsonResponse(
             {"error": f"An unexpected error occurred: {str(e)}"}, status=500
@@ -228,7 +197,13 @@ def get_organization_discord_members(request, pk):
         members = get_discord_members_data(guild_id=org.discord_server_id)
         return JsonResponse({"members": members}, safe=True)
     except Exception as e:
-        log.error(f"Error fetching Discord members for org {pk}: {e}")
+        log.error(
+            "members_fetch_failed",
+            system="discord",
+            subsystem="users",
+            org_id=pk,
+            error=str(e),
+        )
         return JsonResponse({"error": str(e)}, status=500)
 
 
@@ -276,7 +251,13 @@ def search_discord_members(request):
         try:
             members = get_discord_members_data(guild_id=org.discord_server_id)
         except Exception as e:
-            log.error(f"Error fetching Discord members for org {org.pk}: {e}")
+            log.error(
+                "members_search_fetch_failed",
+                system="discord",
+                subsystem="users",
+                org_id=org.pk,
+                error=str(e),
+            )
             return JsonResponse(
                 {"error": "Failed to fetch Discord members"}, status=502
             )
@@ -358,7 +339,13 @@ def refresh_discord_members(request):
     try:
         members = get_discord_members_data(guild_id=org.discord_server_id)
     except Exception as e:
-        log.error(f"Error refreshing Discord members for org {org.pk}: {e}")
+        log.error(
+            "members_refresh_failed",
+            system="discord",
+            subsystem="users",
+            org_id=org.pk,
+            error=str(e),
+        )
         return JsonResponse({"error": "Failed to fetch Discord members"}, status=502)
     cache.set(cache_key, members, timeout=DISCORD_MEMBERS_CACHE_TTL)
     cache.set(cooldown_key, True, timeout=300)  # 5-minute cooldown

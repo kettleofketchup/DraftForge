@@ -1,27 +1,14 @@
-import json
-import logging
-
-import requests
-from django.contrib.auth import login
-from django.contrib.auth import logout as auth_logout
-from django.contrib.auth.decorators import login_required
-from django.http import HttpResponse, HttpResponseBadRequest, JsonResponse
-from django.shortcuts import redirect, render
-from rest_framework import generics, permissions, serializers, status, viewsets
+from rest_framework import serializers
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 
 # Create your views here.
-from social_django.models import USER_MODEL  # fix: skip
-from social_django.utils import load_strategy, psa
-
-from app.models import CustomUser, Draft, DraftRound, Team, Tournament
+from app.models import CustomUser, Tournament
 from app.permissions import IsStaff
-from app.serializers import TournamentSerializer
+from telemetry.logging import get_logger
 
-log = logging.getLogger(__name__)
-from bracket.models import BracketSlot, TournamentBracket
+log = get_logger(__name__)
+from bracket.models import TournamentBracket
 
 
 class CreateDoubleElminationSerializer(serializers.Serializer):
@@ -50,7 +37,12 @@ def gen_double_elim(request):
     try:
         brackets = tournament.brackets.all()
         for b in brackets:
-            log.debug(f"Deleting previous bracket: {b}")
+            log.debug(
+                "bracket_deleted",
+                system="bracket",
+                subsystem="generate",
+                bracket=str(b),
+            )
             b.delete()
 
     except TournamentBracket.DoesNotExist:

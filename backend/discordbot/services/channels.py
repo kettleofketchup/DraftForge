@@ -1,7 +1,5 @@
 """Discord channel listing with Redis caching."""
 
-import logging
-
 import requests
 from django.conf import settings
 from django.core.cache import cache
@@ -11,8 +9,9 @@ from rest_framework.response import Response
 
 from app.models import Organization
 from app.permissions_org import has_org_staff_access
+from telemetry.logging import get_logger
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 CHANNELS_CACHE_TTL = 600  # 10 minutes
 
@@ -80,7 +79,13 @@ def get_discord_channels(request, pk):
     try:
         channels = _get_channels_cached(org.discord_server_id)
     except Exception as e:
-        log.error("Failed to fetch Discord channels for org %s: %s", org.pk, e)
+        log.error(
+            "channels_fetch_failed",
+            system="discord",
+            subsystem="channels",
+            org_id=org.pk,
+            error=str(e),
+        )
         return Response({"error": "Failed to fetch Discord channels"}, status=502)
 
     return Response({"channels": channels})

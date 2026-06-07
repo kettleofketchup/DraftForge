@@ -9,14 +9,13 @@ Config:
     INTERNAL_SERVICE_TOKEN: shared secret for X-Internal-Token header.
 """
 
-import logging
 import os
 
 import requests
 
 from telemetry.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 log = get_logger("app.internal_client")
 
 INTERNAL_API_URL = os.environ.get(
@@ -576,7 +575,12 @@ def list_discord_linked_users():
     try:
         return resp.json()
     except ValueError:
-        logger.error("discord-linked-users returned non-JSON: %s", resp.text[:200])
+        logger.error(
+            "discord_linked_users_invalid_json",
+            system="internal_client",
+            subsystem="http",
+            body_excerpt=resp.text[:200],
+        )
         return []
 
 
@@ -591,7 +595,12 @@ def list_discord_guild_ids():
     try:
         return resp.json().get("guild_ids", [])
     except ValueError:
-        logger.error("discord-guild-ids returned non-JSON: %s", resp.text[:200])
+        logger.error(
+            "discord_guild_ids_invalid_json",
+            system="internal_client",
+            subsystem="http",
+            body_excerpt=resp.text[:200],
+        )
         return []
 
 
@@ -637,5 +646,10 @@ def sweep_discord_leases(pending_threshold_minutes=5, failed_threshold_hours=1):
     try:
         return resp.json()
     except ValueError:
-        logger.error("sweep-stale-leases returned non-JSON: %s", resp.text[:200])
+        logger.error(
+            "sweep_stale_leases_invalid_json",
+            system="internal_client",
+            subsystem="http",
+            body_excerpt=resp.text[:200],
+        )
         return {"pending_swept": 0, "failed_swept": 0, "total": 0}

@@ -1,16 +1,15 @@
-import logging
-
 from cacheops import cached_as
 from django.db import transaction
-
-from app.cache_utils import invalidate_obj
 from django.db.models import BooleanField, Count, Exists, F, OuterRef, Q, Value
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 
-logger = logging.getLogger(__name__)
+from app.cache_utils import invalidate_obj
+from telemetry.logging import get_logger
+
+logger = get_logger(__name__)
 
 from app.models import Organization
 from app.permissions_org import has_event_staff_access, has_org_staff_access
@@ -209,9 +208,7 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
         schedule_changed = any(
             before[f] != getattr(repeater, f) for f in schedule_fields
         )
-        future_events = sync_future_events(
-            repeater, realign_schedule=schedule_changed
-        )
+        future_events = sync_future_events(repeater, realign_schedule=schedule_changed)
         # Single batched invalidation — repeater + every cascaded child
         invalidate_after_commit(repeater, *future_events)
 
@@ -454,7 +451,8 @@ class EventViewSet(viewsets.ModelViewSet):
                 self.permission_denied(request)
 
     @action(
-        detail=True, methods=["post"],
+        detail=True,
+        methods=["post"],
         permission_classes=[permissions.IsAuthenticated],
     )
     def signup(self, request, pk=None):
@@ -512,7 +510,9 @@ class EventViewSet(viewsets.ModelViewSet):
         except ValueError as exc:
             return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
-        return Response(EventSignupSerializer(signup).data, status=status.HTTP_201_CREATED)
+        return Response(
+            EventSignupSerializer(signup).data, status=status.HTTP_201_CREATED
+        )
 
     @action(detail=True, methods=["post"], url_path="admin-signup")
     def admin_signup(self, request, pk=None):
@@ -1066,9 +1066,7 @@ def get_event_task_schedule(request, event_id):
         # Discord post is missing (deleted externally) or to push a fresh
         # version. fire_event_task clears dedup state before re-running.
         repostable = task in ("signup_post", "announcement")
-        entry["can_fire"] = (
-            s in ("ready", "pending") or (s == "fired" and repostable)
-        )
+        entry["can_fire"] = s in ("ready", "pending") or (s == "fired" and repostable)
         if log_source and log_source in last_fired_map:
             info = last_fired_map[log_source]
             entry["last_fired_at"] = info["created_at"].isoformat()
@@ -1338,9 +1336,11 @@ def fire_event_task(request, event_id, task_name):
         current_app.send_task(celery_task)
 
     logger.info(
-        "Manual fire: task=%s event=%s by user=%s",
-        task_name,
-        event_id,
-        request.user.pk,
+        "task_manually_fired",
+        system="events",
+        subsystem="views",
+        task_name=task_name,
+        event_id=event_id,
+        user_id=request.user.pk,
     )
     return Response({"fired": task_name, "event_id": event_id})

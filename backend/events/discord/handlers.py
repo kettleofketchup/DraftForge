@@ -6,11 +6,11 @@ These are synchronous functions — the caller wraps them with sync_to_async.
 Return dicts with 'action' key so the caller knows how to respond.
 """
 
+from django.core.exceptions import ValidationError as DjangoValidationError
 from structlog.contextvars import bind_contextvars
 
 from app.cache_utils import invalidate_obj
 from discordbot.models import DiscordEventLog
-from django.core.exceptions import ValidationError as DjangoValidationError
 from events.constants import EventState, SignupStatus
 from events.models import Event, EventSignup
 from events.schemas import (
@@ -45,6 +45,8 @@ def _log_interaction(
     except Exception as e:
         log.error(
             "discord_event_log_write_failed",
+            system="discord",
+            subsystem="interaction",
             kind="interaction",
             action=action,
             event_id=event_id,
@@ -69,6 +71,8 @@ def _log_signup(
     except Exception as e:
         log.error(
             "discord_event_log_write_failed",
+            system="discord",
+            subsystem="interaction",
             kind="signup",
             action=action,
             event_id=event_id,
@@ -182,7 +186,12 @@ def _get_org_user(event, discord_user_id, discord_username=None):
 
 def handle_signup_button(event_id, discord_user_id, discord_username=None):
     """Handle Sign Up button click. Returns action dict."""
-    log.info("handler_invoked", handler="signup_button")
+    log.info(
+        "handler_invoked",
+        system="discord",
+        subsystem="interaction",
+        handler="signup_button",
+    )
     from app.models import GameType
 
     try:
@@ -240,13 +249,24 @@ def handle_signup_button(event_id, discord_user_id, discord_username=None):
 
         try:
             signup = process_rsvp(event, user)
-            log.info("signup_persisted", signup_id=signup.pk, signup_status=signup.status)
+            log.info(
+                "signup_persisted",
+                system="discord",
+                subsystem="interaction",
+                signup_id=signup.pk,
+                signup_status=signup.status,
+            )
             _log_signup(event_id, "signup_direct", discord_user_id, discord_username)
             # notify_signup_changed is dispatched by _create_signup's on_commit hook
             # (services.py:246) — do NOT call directly or the embed updates twice.
             return {"action": "signed_up", "status": signup.status}
         except ValueError as e:
-            log.warning("signup_rejected", reason=str(e))
+            log.warning(
+                "signup_rejected",
+                system="discord",
+                subsystem="interaction",
+                reason=str(e),
+            )
             _log_signup(
                 event_id,
                 "signup_failed",
@@ -292,9 +312,13 @@ def handle_signup_button(event_id, discord_user_id, discord_username=None):
 
 def handle_signup_modal_submit(event_id, discord_user_id, game_type, values):
     """Handle modal form submission. Saves profile data to OrgUser, may need follow-up."""
-    log.info("handler_invoked", handler="signup_modal_submit")
+    log.info(
+        "handler_invoked",
+        system="discord",
+        subsystem="interaction",
+        handler="signup_modal_submit",
+    )
     from app.cache_utils import invalidate_obj
-
     from app.models import GameType
     from org.models_profiles import PlayerDeadlockProfile
 
@@ -364,10 +388,21 @@ def handle_signup_modal_submit(event_id, discord_user_id, game_type, values):
 
         try:
             signup = process_rsvp(event, user)
-            log.info("signup_persisted", signup_id=signup.pk, signup_status=signup.status)
+            log.info(
+                "signup_persisted",
+                system="discord",
+                subsystem="interaction",
+                signup_id=signup.pk,
+                signup_status=signup.status,
+            )
             return {"action": "signed_up", "status": signup.status}
         except ValueError as e:
-            log.warning("signup_rejected", reason=str(e))
+            log.warning(
+                "signup_rejected",
+                system="discord",
+                subsystem="interaction",
+                reason=str(e),
+            )
             return {"action": "error", "message": str(e)}
 
     return {"action": "error", "message": "Unknown game type."}
@@ -385,7 +420,12 @@ def _rank_followup_message(rank_status):
 
 def handle_rank_status_select(event_id, discord_user_id, rank_status):
     """Save the rank status from the select menu to the Dota profile."""
-    log.info("handler_invoked", handler="rank_status_select")
+    log.info(
+        "handler_invoked",
+        system="discord",
+        subsystem="interaction",
+        handler="rank_status_select",
+    )
     from django.core.exceptions import ValidationError as DjangoValidationError
 
     from events.schemas import SignupInputPatch
@@ -413,7 +453,12 @@ def handle_rank_status_select(event_id, discord_user_id, rank_status):
 
 def handle_rank_medal_select(event_id, discord_user_id, medal):
     """Handle active rank medal selection. Saves medal and signs up."""
-    log.info("handler_invoked", handler="rank_medal_select")
+    log.info(
+        "handler_invoked",
+        system="discord",
+        subsystem="interaction",
+        handler="rank_medal_select",
+    )
     from django.core.exceptions import ValidationError as DjangoValidationError
 
     from events.schemas import SignupInputPatch
@@ -452,11 +497,19 @@ def handle_rank_medal_select(event_id, discord_user_id, medal):
 
     try:
         signup = process_rsvp(event, user)
-        log.info("signup_persisted", signup_id=signup.pk, signup_status=signup.status)
+        log.info(
+            "signup_persisted",
+            system="discord",
+            subsystem="interaction",
+            signup_id=signup.pk,
+            signup_status=signup.status,
+        )
         _log_signup(event_id, f"signup_ranked:{medal}", discord_user_id)
         return {"action": "signed_up", "status": signup.status}
     except ValueError as e:
-        log.warning("signup_rejected", reason=str(e))
+        log.warning(
+            "signup_rejected", system="discord", subsystem="interaction", reason=str(e)
+        )
         _log_signup(
             event_id,
             "signup_failed",
@@ -469,7 +522,12 @@ def handle_rank_medal_select(event_id, discord_user_id, medal):
 
 def handle_previous_rank_submit(event_id, discord_user_id, medal, date_text):
     """Handle previous rank modal submission. Saves rank info and signs up."""
-    log.info("handler_invoked", handler="previous_rank_submit")
+    log.info(
+        "handler_invoked",
+        system="discord",
+        subsystem="interaction",
+        handler="previous_rank_submit",
+    )
     from django.core.exceptions import ValidationError as DjangoValidationError
 
     from events.schemas import SignupInputPatch
@@ -508,16 +566,29 @@ def handle_previous_rank_submit(event_id, discord_user_id, medal, date_text):
 
     try:
         signup = process_rsvp(event, user)
-        log.info("signup_persisted", signup_id=signup.pk, signup_status=signup.status)
+        log.info(
+            "signup_persisted",
+            system="discord",
+            subsystem="interaction",
+            signup_id=signup.pk,
+            signup_status=signup.status,
+        )
         return {"action": "signed_up", "status": signup.status}
     except ValueError as e:
-        log.warning("signup_rejected", reason=str(e))
+        log.warning(
+            "signup_rejected", system="discord", subsystem="interaction", reason=str(e)
+        )
         return {"action": "error", "message": str(e)}
 
 
 def handle_battle_cup_submit(event_id, discord_user_id, tier):
     """Handle battle cup modal submission. Saves tier and signs up."""
-    log.info("handler_invoked", handler="battle_cup_submit")
+    log.info(
+        "handler_invoked",
+        system="discord",
+        subsystem="interaction",
+        handler="battle_cup_submit",
+    )
     from django.core.exceptions import ValidationError as DjangoValidationError
 
     from events.schemas import SignupInputPatch
@@ -562,11 +633,19 @@ def handle_battle_cup_submit(event_id, discord_user_id, tier):
 
     try:
         signup = process_rsvp(event, user)
-        log.info("signup_persisted", signup_id=signup.pk, signup_status=signup.status)
+        log.info(
+            "signup_persisted",
+            system="discord",
+            subsystem="interaction",
+            signup_id=signup.pk,
+            signup_status=signup.status,
+        )
         _log_signup(event_id, f"signup_battlecup:T{tier}", discord_user_id)
         return {"action": "signed_up", "status": signup.status}
     except ValueError as e:
-        log.warning("signup_rejected", reason=str(e))
+        log.warning(
+            "signup_rejected", system="discord", subsystem="interaction", reason=str(e)
+        )
         _log_signup(
             event_id,
             "signup_failed",
@@ -581,7 +660,12 @@ def handle_screenshot_upload(
     event_id, discord_user_id, screenshot_type, attachment_url
 ):
     """Validate and save screenshot URL to PlayerDotaProfile."""
-    log.info("handler_invoked", handler="screenshot_upload")
+    log.info(
+        "handler_invoked",
+        system="discord",
+        subsystem="interaction",
+        handler="screenshot_upload",
+    )
     from django.core.exceptions import ValidationError as DjangoValidationError
 
     from events.schemas import SignupInputPatch
@@ -634,7 +718,13 @@ def handle_screenshot_upload(
 
     try:
         signup = process_rsvp(event, user)
-        log.info("signup_persisted", signup_id=signup.pk, signup_status=signup.status)
+        log.info(
+            "signup_persisted",
+            system="discord",
+            subsystem="interaction",
+            signup_id=signup.pk,
+            signup_status=signup.status,
+        )
         _log_signup(
             event_id, f"signup_after_screenshot:{screenshot_type}", discord_user_id
         )
@@ -644,7 +734,9 @@ def handle_screenshot_upload(
             "message": f"Screenshot saved! You're signed up. Status: **{signup.status}**",
         }
     except ValueError as e:
-        log.warning("signup_rejected", reason=str(e))
+        log.warning(
+            "signup_rejected", system="discord", subsystem="interaction", reason=str(e)
+        )
         return {
             "success": True,
             "signed_up": False,
@@ -654,9 +746,13 @@ def handle_screenshot_upload(
 
 def handle_notify_button(event_id, discord_user_id):
     """Handle Notify Me button click. Toggles RepeaterSubscription."""
-    log.info("handler_invoked", handler="notify_button")
+    log.info(
+        "handler_invoked",
+        system="discord",
+        subsystem="interaction",
+        handler="notify_button",
+    )
     from app.cache_utils import invalidate_obj
-
     from app.models import CustomUser
     from events.models import RepeaterSubscription
 
@@ -685,7 +781,12 @@ def handle_notify_button(event_id, discord_user_id):
 
 def handle_decline_button(event_id, discord_user_id):
     """Handle Decline button click. Cancels signup if exists, or no-ops."""
-    log.info("handler_invoked", handler="decline_button")
+    log.info(
+        "handler_invoked",
+        system="discord",
+        subsystem="interaction",
+        handler="decline_button",
+    )
     from events.services import cancel_signup
 
     try:
@@ -716,7 +817,12 @@ def handle_decline_button(event_id, discord_user_id):
 
 def handle_tentative_button(event_id, discord_user_id, discord_username=None):
     """Handle Tentative button click. Routes through create_tentative_signup service."""
-    log.info("handler_invoked", handler="tentative_button")
+    log.info(
+        "handler_invoked",
+        system="discord",
+        subsystem="interaction",
+        handler="tentative_button",
+    )
     try:
         event = Event.objects.select_related("organization").get(pk=event_id)
     except Event.DoesNotExist:
@@ -737,7 +843,9 @@ def handle_tentative_button(event_id, discord_user_id, discord_username=None):
     try:
         signup = create_tentative_signup(event, user)
     except ValueError as e:
-        log.warning("signup_rejected", reason=str(e))
+        log.warning(
+            "signup_rejected", system="discord", subsystem="interaction", reason=str(e)
+        )
         if "already marked as tentative" in str(e).lower():
             return {"action": "already_tentative", "message": str(e)}
         return {"action": "error", "message": str(e)}
@@ -745,6 +853,8 @@ def handle_tentative_button(event_id, discord_user_id, discord_username=None):
     _log_signup(event_id, "tentative", discord_user_id, discord_username)
     log.info(
         "tentative_created",
+        system="discord",
+        subsystem="interaction",
         user_id=user.pk,
         event_id=event.pk,
         signup_id=signup.pk,
@@ -765,7 +875,12 @@ def handle_set_position(
     sets the chosen flag True — doesn't reset others. Multiple clicks
     accumulate positions, matching the pre-migration behavior.
     """
-    log.info("handler_invoked", handler="set_position")
+    log.info(
+        "handler_invoked",
+        system="discord",
+        subsystem="interaction",
+        handler="set_position",
+    )
     if position not in (1, 2, 3, 4, 5):
         return {"action": "error", "message": "Position must be 1-5."}
 
@@ -795,7 +910,12 @@ def handle_get_rank_flow_state(
     Returns dict with rank_status / require_screenshot / min_mmr, or
     error/message on lookup failure.
     """
-    log.info("handler_invoked", handler="get_rank_flow_state")
+    log.info(
+        "handler_invoked",
+        system="discord",
+        subsystem="interaction",
+        handler="get_rank_flow_state",
+    )
     try:
         event = Event.objects.select_related("organization").get(pk=event_id)
     except Event.DoesNotExist:
@@ -832,7 +952,12 @@ def handle_save_positions(
     Used by the PositionConfirmButton flow. Returns {"action": "positions_saved"} on
     success or {"action": "error", "message": str} on validation failure.
     """
-    log.info("handler_invoked", handler="save_positions")
+    log.info(
+        "handler_invoked",
+        system="discord",
+        subsystem="interaction",
+        handler="save_positions",
+    )
     try:
         event = Event.objects.select_related("organization").get(pk=event_id)
     except Event.DoesNotExist:
@@ -855,7 +980,9 @@ def handle_save_positions(
         )
     except DjangoValidationError as exc:
         msg = exc.messages[0] if hasattr(exc, "messages") else str(exc)
-        log.warning("signup_rejected", reason=msg)
+        log.warning(
+            "signup_rejected", system="discord", subsystem="interaction", reason=msg
+        )
         return {"action": "error", "message": msg}
 
     return {"action": "positions_saved"}

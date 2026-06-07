@@ -1,10 +1,10 @@
-import logging
-
 from django.contrib import admin
 from django.urls import include, path
 from rest_framework import routers
 
-log = logging.getLogger(__name__)
+from telemetry.logging import get_logger
+
+log = get_logger(__name__)
 
 from django.views.generic.base import RedirectView
 
@@ -373,12 +373,12 @@ from app.views.internal import (
     clear_event_signup_state,
     create_discord_event_log,
     create_discord_message_log,
-    finalize_discord_message_log,
     create_event_dm,
     create_herodraft_for_game,
     create_or_update_announcement,
     create_or_update_signup_message,
     create_tournament_log,
+    finalize_discord_message_log,
     generate_repeater_events,
     get_active_repeaters,
     get_discord_event_state,
@@ -521,9 +521,11 @@ urlpatterns += [
     path("api/internal/steam/recalculate-mmr/<int:user_id>/", recalculate_mmr),
 ]
 
-log.debug(f"Test Environ:  {isTestEnvironment()}")
+log.debug(
+    "test_environ_check", system="api", subsystem="routing", is_test=isTestEnvironment()
+)
 if isTestEnvironment():
-    log.debug("Adding test environment URLs")
+    log.debug("test_urls_added", system="api", subsystem="routing")
     urlpatterns += [
         path("api/tests/", include("tests.urls")),
     ]

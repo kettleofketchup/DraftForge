@@ -1,6 +1,5 @@
 """Discord bot client with slash commands."""
 
-import logging
 import sys
 
 import discord
@@ -23,8 +22,9 @@ from discordbot.internal_client.bot_actions import (
     set_legacy_rsvp,
 )
 from discordbot.internal_client.signup_actions import set_position
+from telemetry.logging import get_logger
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 
 def is_site_admin():
@@ -80,12 +80,22 @@ class KettleBot(discord.Client):
         guild = discord.Object(id=self.guild_id)
         self.tree.copy_global_to(guild=guild)
         await self.tree.sync(guild=guild)
-        log.info(f"Synced commands to guild {self.guild_id}")
+        log.info(
+            "commands_synced", system="discord", subsystem="bot", guild_id=self.guild_id
+        )
 
     async def on_ready(self):
         """Called when bot successfully connects."""
-        log.info(f"Bot connected as {self.user} (ID: {self.user.id})")
-        log.info(f"Connected to {len(self.guilds)} guilds")
+        log.info(
+            "bot_connected",
+            system="discord",
+            subsystem="bot",
+            discord_user_id=str(self.user.id),
+            discord_username=str(self.user),
+        )
+        log.info(
+            "bot_guild_count", system="discord", subsystem="bot", count=len(self.guilds)
+        )
 
     async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
         """Track RSVP when user reacts."""
@@ -104,13 +114,21 @@ class KettleBot(discord.Client):
             detail = result.get("detail") or ""
             if result.get("success"):
                 log.info(
-                    f"Event signup via reaction: user={payload.user_id} detail={detail}"
+                    "reaction_signup",
+                    system="discord",
+                    subsystem="bot",
+                    discord_user_id=str(payload.user_id),
+                    reason=detail,
                 )
                 return
             elif detail != "not_event_message":
                 # Was an event message but signup failed (already signed up, event closed, etc.)
                 log.info(
-                    f"Event signup skipped: user={payload.user_id} detail={detail}"
+                    "reaction_signup_skipped",
+                    system="discord",
+                    subsystem="bot",
+                    discord_user_id=str(payload.user_id),
+                    reason=detail,
                 )
                 return
             # Fall through to old ScheduledEvent RSVP system
@@ -122,11 +140,20 @@ class KettleBot(discord.Client):
             )
             detail = result.get("detail") or ""
             if result.get("success"):
-                log.info(f"Event cancel via reaction: user={payload.user_id}")
+                log.info(
+                    "reaction_cancel",
+                    system="discord",
+                    subsystem="bot",
+                    discord_user_id=str(payload.user_id),
+                )
                 return
             elif detail != "not_event_message":
                 log.info(
-                    f"Event cancel skipped: user={payload.user_id} detail={detail}"
+                    "reaction_cancel_skipped",
+                    system="discord",
+                    subsystem="bot",
+                    discord_user_id=str(payload.user_id),
+                    reason=detail,
                 )
                 return
 
@@ -148,7 +175,12 @@ class KettleBot(discord.Client):
             )
             detail = result.get("detail") or ""
             if result.get("success"):
-                log.info(f"Event cancel via reaction remove: user={payload.user_id}")
+                log.info(
+                    "reaction_remove_cancel",
+                    system="discord",
+                    subsystem="bot",
+                    discord_user_id=str(payload.user_id),
+                )
                 return
             elif detail != "not_event_message":
                 return
@@ -223,12 +255,16 @@ class KettleBot(discord.Client):
         )
         if result.get("success"):
             log.info(
-                f"RSVP: {username} marked {status} for {result.get('event_name')}"
+                "rsvp_set",
+                system="discord",
+                subsystem="bot",
+                discord_user_id=str(payload.user_id),
+                discord_username=username,
+                rsvp_status=status,
+                event_name=result.get("event_name"),
             )
 
-    async def _remove_rsvp(
-        self, payload: discord.RawReactionActionEvent
-    ) -> None:
+    async def _remove_rsvp(self, payload: discord.RawReactionActionEvent) -> None:
         """Remove a legacy ScheduledEvent RSVP record."""
         result = await sync_to_async(remove_legacy_rsvp, thread_sensitive=False)(
             discord_message_id=str(payload.message_id),
@@ -236,7 +272,11 @@ class KettleBot(discord.Client):
         )
         if result.get("success"):
             log.info(
-                f"RSVP removed: user {payload.user_id} for {result.get('event_name')}"
+                "rsvp_removed",
+                system="discord",
+                subsystem="bot",
+                discord_user_id=str(payload.user_id),
+                event_name=result.get("event_name"),
             )
 
 
@@ -298,7 +338,7 @@ def run_bot():
     """Run the Discord bot."""
     token = settings.DISCORD_BOT_TOKEN
     if not token:
-        log.error("DISCORD_BOT_TOKEN not set!")
+        log.error("bot_token_missing", system="discord", subsystem="bot")
         sys.exit(1)
 
     bot.run(token, log_handler=None)

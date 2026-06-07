@@ -14,14 +14,13 @@ This module reconciles the two rows: it keeps the account that already owns the
 it, moving the social-auth link and any other related data across.
 """
 
-import logging
-
 from django.db import IntegrityError, transaction
 
 from app.cache_utils import invalidate_obj
 from app.models import CustomUser
+from telemetry.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Discord identity / profile fields copied from the duplicate onto the kept
 # account when the kept account is missing them. Split into two groups because
@@ -149,12 +148,14 @@ def merge_discord_accounts(keep: CustomUser, drop: CustomUser) -> CustomUser:
             keep.save(update_fields=changed)
 
         logger.info(
-            "Merged Discord account #%s (%s) into #%s (%s) discordId=%s",
-            drop.pk,
-            drop.username,
-            keep.pk,
-            keep.username,
-            keep.discordId,
+            "discord_accounts_merged",
+            system="auth",
+            subsystem="merge",
+            dropped_user_id=drop.pk,
+            dropped_username=drop.username,
+            kept_user_id=keep.pk,
+            kept_username=keep.username,
+            discord_id=keep.discordId,
         )
         drop.delete()
     invalidate_obj(keep)
@@ -176,9 +177,7 @@ def find_split_discord_accounts():
     )
     # Single query for all candidate owners instead of one per social row (N+1).
     uids = {str(sa.uid) for sa in socials}
-    owners = {
-        u.discordId: u for u in CustomUser.objects.filter(discordId__in=uids)
-    }
+    owners = {u.discordId: u for u in CustomUser.objects.filter(discordId__in=uids)}
 
     pairs = []
     for sa in socials:
