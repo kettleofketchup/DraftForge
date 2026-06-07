@@ -1,16 +1,16 @@
 """Views for joke-related endpoints (tangoes, etc.)."""
 
-import logging
-
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from telemetry.logging import get_logger
+
 from .models import Joke
 from .serializers import JokeSerializer
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 
 @api_view(["GET"])

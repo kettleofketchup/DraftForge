@@ -1,11 +1,11 @@
-import logging
 import math
 
 from django.db import models
 
-from app.models import TOURNAMNET_TYPE_CHOICES, CustomUser, Game, Team, Tournament
+from app.models import TOURNAMNET_TYPE_CHOICES, Game, Team, Tournament
+from telemetry.logging import get_logger
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 # Create your models here.
 # TODO Move tournament related stuff to here
@@ -44,10 +44,21 @@ class TournamentBracket(models.Model):
         Winners' Bracket and a Losers' Bracket, culminating in a Grand Final.
         """
         if not self.tournament:
-            log.error("No Tournament")
+            log.error(
+                "bracket_generate_skipped",
+                system="bracket",
+                subsystem="model",
+                reason="no_tournament",
+            )
             return
         if not self.tournament.teams.exists():
-            log.error("No Teams in Tournament")
+            log.error(
+                "bracket_generate_skipped",
+                system="bracket",
+                subsystem="model",
+                tournament_id=self.tournament.pk,
+                reason="no_teams",
+            )
             return
 
         teams = list(self.tournament.teams.all())

@@ -1,7 +1,7 @@
 """Celery telemetry base task with context binding."""
 
 import uuid
-from typing import Any, Optional
+from typing import Any
 
 import structlog
 from celery import Task
@@ -56,14 +56,20 @@ class TelemetryTask(Task):
         # Bind context
         structlog.contextvars.bind_contextvars(**context)
 
-        log.info("task_started")
+        log.info("task_started", system="celery", subsystem="task")
 
         try:
             result = self.run(*args, **kwargs)
-            log.info("task_completed")
+            log.info("task_completed", system="celery", subsystem="task")
             return result
         except Exception as e:
-            log.error("task_failed", error=str(e), exc_info=True)
+            log.error(
+                "task_failed",
+                system="celery",
+                subsystem="task",
+                error=str(e),
+                exc_info=True,
+            )
             raise
         finally:
             structlog.contextvars.clear_contextvars()

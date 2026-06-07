@@ -1,14 +1,15 @@
 """Discord bot HTTP interaction endpoints."""
 
 import json
-import logging
 
 from django.conf import settings
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 
-log = logging.getLogger(__name__)
+from telemetry.logging import get_logger
+
+log = get_logger(__name__)
 
 
 def verify_discord_signature(request) -> bool:
@@ -30,19 +31,19 @@ def verify_discord_signature(request) -> bool:
         except ImportError:
             from nacl.exceptions import BadSignature
     except ImportError as e:
-        log.error("PyNaCl not installed - cannot verify Discord signatures: %s", e)
+        log.error("pynacl_missing", system="discord", subsystem="views", error=str(e))
         return False
 
     public_key = getattr(settings, "DISCORD_PUBLIC_KEY", None)
     if not public_key:
-        log.error("DISCORD_PUBLIC_KEY not configured in settings")
+        log.error("discord_public_key_missing", system="discord", subsystem="views")
         return False
 
     signature = request.headers.get("X-Signature-Ed25519")
     timestamp = request.headers.get("X-Signature-Timestamp")
 
     if not signature or not timestamp:
-        log.warning("Missing Discord signature headers")
+        log.warning("signature_headers_missing", system="discord", subsystem="views")
         return False
 
     try:
@@ -51,10 +52,12 @@ def verify_discord_signature(request) -> bool:
         verify_key.verify(message, bytes.fromhex(signature))
         return True
     except BadSignature:
-        log.warning("Invalid Discord signature")
+        log.warning("signature_invalid", system="discord", subsystem="views")
         return False
     except Exception as e:
-        log.error(f"Error verifying Discord signature: {e}")
+        log.error(
+            "signature_verify_error", system="discord", subsystem="views", error=str(e)
+        )
         return False
 
 
@@ -86,7 +89,7 @@ def discord_interactions(request):
 
     # Type 1: PING - Discord is verifying the endpoint
     if interaction_type == 1:
-        log.info("Discord PING received - responding with PONG")
+        log.info("ping_received", system="discord", subsystem="views")
         return JsonResponse({"type": 1})  # PONG
 
     # Type 2: APPLICATION_COMMAND - Slash command
@@ -101,7 +104,12 @@ def discord_interactions(request):
     if interaction_type == 5:
         return handle_modal_submit(data)
 
-    log.warning(f"Unhandled interaction type: {interaction_type}")
+    log.warning(
+        "interaction_type_unhandled",
+        system="discord",
+        subsystem="views",
+        interaction_type=interaction_type,
+    )
     return JsonResponse({"type": 4, "data": {"content": "Unknown interaction type"}})
 
 
@@ -111,7 +119,13 @@ def handle_application_command(data: dict) -> JsonResponse:
     user = data.get("member", {}).get("user", {}) or data.get("user", {})
     username = user.get("username", "Unknown")
 
-    log.info(f"Slash command '{command_name}' from {username}")
+    log.info(
+        "slash_command_received",
+        system="discord",
+        subsystem="views",
+        command_name=command_name,
+        discord_username=username,
+    )
 
     # Respond with deferred message - actual handling done by gateway bot
     # This is useful for commands that need database access or complex processing
@@ -128,7 +142,13 @@ def handle_message_component(data: dict) -> JsonResponse:
     user = data.get("member", {}).get("user", {}) or data.get("user", {})
     username = user.get("username", "Unknown")
 
-    log.info(f"Component interaction '{custom_id}' from {username}")
+    log.info(
+        "component_interaction_received",
+        system="discord",
+        subsystem="views",
+        custom_id=custom_id,
+        discord_username=username,
+    )
 
     # Acknowledge the interaction
     return JsonResponse(
@@ -144,7 +164,13 @@ def handle_modal_submit(data: dict) -> JsonResponse:
     user = data.get("member", {}).get("user", {}) or data.get("user", {})
     username = user.get("username", "Unknown")
 
-    log.info(f"Modal submit '{custom_id}' from {username}")
+    log.info(
+        "modal_submit_received",
+        system="discord",
+        subsystem="views",
+        custom_id=custom_id,
+        discord_username=username,
+    )
 
     return JsonResponse(
         {

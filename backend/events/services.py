@@ -1,14 +1,12 @@
 import calendar
 import datetime
-import logging
 import re
 from datetime import timedelta
 from zoneinfo import ZoneInfo
 
-from app.cache_utils import invalidate_obj
 from django.db import models, transaction
 
-from app.cache_utils import invalidate_after_commit
+from app.cache_utils import invalidate_after_commit, invalidate_obj
 from app.models import Tournament
 from events.constants import EventState, RepeatFrequency, SignupStatus, SignupType
 from events.discord import (
@@ -25,7 +23,7 @@ from events.models import (
 )
 from telemetry.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 log = get_logger(__name__)
 
 
@@ -64,9 +62,9 @@ def clear_signup_dedup_state(event_id):
         DiscordEventMsgSignup.objects.filter(event_id=event_id, has_posted=True)
     )
     signup_rows_cleared = len(affected_signups)
-    DiscordEventMsgSignup.objects.filter(
-        event_id=event_id, has_posted=True
-    ).update(has_posted=False)
+    DiscordEventMsgSignup.objects.filter(event_id=event_id, has_posted=True).update(
+        has_posted=False
+    )
     for row in affected_signups:
         row.refresh_from_db()
         invalidate_after_commit(row)
@@ -84,6 +82,7 @@ def clear_signup_dedup_state(event_id):
 def _validate_screenshot_url(url):
     if url and not SCREENSHOT_URL_RE.match(url):
         from django.core.exceptions import ValidationError
+
         raise ValidationError(SCREENSHOT_BAD_URL_MESSAGE, code="screenshot_bad_url")
 
 
@@ -186,18 +185,32 @@ def _create_signup(event, user, event_team=None):
     existing = EventSignup.objects.filter(event=event, user=user).first()
     if existing:
         logger.info(
-            "Existing signup found: user=%s, event=%s, status=%s, id=%s",
-            user.pk,
-            event.pk,
-            existing.status,
-            existing.id,
+            "signup_existing_found",
+            system="events",
+            subsystem="services",
+            user_id=user.pk,
+            event_id=event.pk,
+            status=existing.status,
+            signup_id=existing.id,
         )
         if existing.status in (SignupStatus.CANCELLED, SignupStatus.REJECTED):
             existing.delete()
-            logger.info("Deleted cancelled/rejected signup, allowing re-RSVP")
+            logger.info(
+                "signup_cancelled_deleted",
+                system="events",
+                subsystem="services",
+                user_id=user.pk,
+                event_id=event.pk,
+            )
         elif existing.status == SignupStatus.TENTATIVE:
             existing.delete()
-            logger.info("Upgrading tentative signup to full RSVP")
+            logger.info(
+                "signup_tentative_upgraded",
+                system="events",
+                subsystem="services",
+                user_id=user.pk,
+                event_id=event.pk,
+            )
         else:
             raise ValueError("User has already signed up for this event.")
 
@@ -222,6 +235,8 @@ def _create_signup(event, user, event_team=None):
         invalidate_after_commit(event)
         log.info(
             "signup_post_commit_hooks_scheduled",
+            system="events",
+            subsystem="services",
             signup_id=signup.pk,
             event_id=event.pk,
         )
@@ -252,6 +267,8 @@ def _create_signup(event, user, event_team=None):
     invalidate_after_commit(event)
     log.info(
         "signup_post_commit_hooks_scheduled",
+        system="events",
+        subsystem="services",
         signup_id=signup.pk,
         event_id=event.pk,
     )
@@ -263,7 +280,13 @@ def _create_signup(event, user, event_team=None):
 
 def process_rsvp(event, user, event_team=None):
     """Public-path signup. Locked to SIGNUPS_OPEN."""
-    log.info("process_rsvp_started", event_id=event.pk, user_id=user.pk)
+    log.info(
+        "process_rsvp_started",
+        system="events",
+        subsystem="services",
+        event_id=event.pk,
+        user_id=user.pk,
+    )
     if event.state != EventState.SIGNUPS_OPEN:
         raise ValueError("Event is not accepting signups.")
     signup = _create_signup(event, user, event_team=event_team)
@@ -272,6 +295,8 @@ def process_rsvp(event, user, event_team=None):
     transaction.on_commit(
         lambda: log.info(
             "signup_created",
+            system="events",
+            subsystem="services",
             signup_id=signup.pk,
             status=signup.status,
             event_id=event.pk,
@@ -357,8 +382,7 @@ def apply_signup_input(*, org_user, event, patch):
             # Global scope (matches handlers.py:234 — Friend ID is unique site-wide,
             # not per-org).
             collision = (
-                PlayerDotaProfile.objects
-                .filter(unverified_friend_id=fid)
+                PlayerDotaProfile.objects.filter(unverified_friend_id=fid)
                 .exclude(org_user=org_user)
                 .exists()
             )
@@ -438,7 +462,13 @@ def apply_signup_input(*, org_user, event, patch):
                 changed = True
         if changed:
             user_positions.save(
-                update_fields=["carry", "mid", "offlane", "soft_support", "hard_support"]
+                update_fields=[
+                    "carry",
+                    "mid",
+                    "offlane",
+                    "soft_support",
+                    "hard_support",
+                ]
             )
             invalidate_after_commit(user_positions, user)
     if "rank_status" in set_fields:
@@ -473,6 +503,8 @@ def apply_signup_input(*, org_user, event, patch):
     invalidate_after_commit(profile, org_user, event)
     log.info(
         "signup_input_applied",
+        system="events",
+        subsystem="services",
         set_fields=list(set_fields.keys()),
         profile_id=profile.pk,
         org_user_id=org_user.pk,
@@ -510,9 +542,7 @@ def approve_signup(signup, mmr_override=None):
     if mmr_override is not None:
         if signup.event.organization_id is None:
             raise ValueError("Cannot set MMR for an event without an organization.")
-        org_user = resolve_or_create_org_user(
-            signup.user, signup.event.organization
-        )
+        org_user = resolve_or_create_org_user(signup.user, signup.event.organization)
         org_user.mmr = mmr_override
         org_user.has_active_dota_mmr = True
         org_user.dota_mmr_last_verified = tz.now()
@@ -577,6 +607,8 @@ def cancel_signup(signup):
     transaction.on_commit(
         lambda: log.info(
             "signup_cancelled",
+            system="events",
+            subsystem="services",
             signup_id=signup.pk,
             prior_status=prior_status,
             event_id=signup.event_id,
@@ -826,9 +858,11 @@ def ensure_discord_event(event):
     )
     if created:
         logger.info(
-            "Auto-created DiscordEvent for event %s (guild=%s)",
-            event.pk,
-            org.discord_server_id,
+            "discord_event_auto_created",
+            system="events",
+            subsystem="services",
+            event_id=event.pk,
+            guild_id=str(org.discord_server_id),
         )
     return de
 
@@ -1154,8 +1188,10 @@ def sync_future_events(repeater, *, realign_schedule=False):
         invalidate_after_commit(*future_events)
 
     logger.info(
-        "Synced %d upcoming events for repeater %s",
-        len(future_events),
-        repeater.pk,
+        "repeater_future_events_synced",
+        system="events",
+        subsystem="services",
+        repeater_id=repeater.pk,
+        count=len(future_events),
     )
     return future_events

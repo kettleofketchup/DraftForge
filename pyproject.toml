@@ -79,9 +79,33 @@ requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
 
 
-[tool.isort]
-profile = "black"
-src_paths = ["backend", "."]
-line_length = 88
-multi_line_output = 3
-include_trailing_comma = true
+[tool.ruff]
+# Ruff replaces black (ruff format) AND isort (the `I` lint rules).
+target-version = "py312"
+line-length = 88
+src = ["backend", "."]
+extend-exclude = ["**/migrations/**"]
+
+[tool.ruff.lint]
+# E,F = pycodestyle/pyflakes  •  I = isort (import order)
+# ANN = flake8-annotations (push type coverage forward over time)
+# TID = flake8-tidy-imports (banned-api below)
+select = ["E", "F", "I", "ANN", "TID"]
+# E501 (line length) is owned by the formatter; ANN401 allows `Any` for
+# framework-injected callback params.
+ignore = ["E501", "ANN401"]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"logging.getLogger".msg = "Use `from telemetry.logging import get_logger` (structlog -> OTEL). See .claude/skills/logging."
+
+[tool.ruff.lint.per-file-ignores]
+# Legit stdlib-logging users / not part of the OTEL-exported request·task flow.
+"**/telemetry/logging.py" = ["TID251"]
+"**/telemetry/config.py" = ["TID251"]
+"**/telemetry/tracing.py" = ["TID251"]
+"**/telemetry/db.py" = ["TID251"]
+"**/settings.py" = ["TID251"]
+"**/management/commands/*.py" = ["TID251"]
+# Tests use stdlib logging freely and are not annotation-gated.
+"**/tests/**" = ["ANN", "TID251"]
+"**/test_*.py" = ["ANN", "TID251"]

@@ -1,25 +1,43 @@
+from typing import Any
+
 from django.contrib.auth import get_user_model
-from social_core.pipeline.partial import partial
+
+from telemetry.logging import get_logger
 
 from .models import CustomUser, PositionsModel
 
 User = get_user_model()
-import logging
 
-# Get an instance of a logger
-logger = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 
 def save_discord(
-    strategy, details, user: CustomUser = None, is_new=False, *args, **kwargs
-):
+    strategy: Any,
+    details: Any,
+    user: CustomUser | None = None,
+    is_new: bool = False,
+    *args: Any,
+    **kwargs: Any,
+) -> dict:
     from app.discord_accounts import merge_discord_accounts
+
+    # save_discord runs after create_user, so user is always present here;
+    # guard makes the None-path explicit and narrows the type for the body.
+    if user is None:
+        raise ValueError("save_discord requires an authenticated user")
 
     social_auth = user.social_auth.filter(provider="discord").first()
     discordId = social_auth.extra_data["id"]
     avatar = social_auth.extra_data["avatar"]
-    logger.info(f"SAVE_DISCORD {social_auth.extra_data}")
     discordUsername = social_auth.extra_data["username"]
+    log.info(
+        "discord_social_save",
+        system="auth",
+        subsystem="social",
+        user_id=user.pk,
+        discord_id=discordId,
+        discord_username=discordUsername,
+    )
 
     # Defense-in-depth: a Discord *button* signup may have already created a
     # separate account holding this discordId (unique). If so, fold this
@@ -28,9 +46,7 @@ def save_discord(
     # associate_by_discord_id reclaims it before create_user in the common case;
     # this covers logins where a prior failed attempt left a duplicate behind.
     conflict = (
-        CustomUser.objects.filter(discordId=str(discordId))
-        .exclude(pk=user.pk)
-        .first()
+        CustomUser.objects.filter(discordId=str(discordId)).exclude(pk=user.pk).first()
     )
     if conflict:
         merge_discord_accounts(keep=conflict, drop=user)
@@ -41,9 +57,7 @@ def save_discord(
     # the unclaimed one in before writing the handle, so we can't hit
     # `UNIQUE constraint failed: username`.
     username_owner = (
-        CustomUser.objects.filter(username=discordUsername)
-        .exclude(pk=user.pk)
-        .first()
+        CustomUser.objects.filter(username=discordUsername).exclude(pk=user.pk).first()
     )
     if username_owner is not None and not username_owner.discordId:
         merge_discord_accounts(keep=user, drop=username_owner)
@@ -68,8 +82,14 @@ def save_discord(
 
 
 def associate_by_discord_id(
-    backend=None, uid=None, user=None, response=None, details=None, *args, **kwargs
-):
+    backend: Any = None,
+    uid: Any = None,
+    user: CustomUser | None = None,
+    response: Any = None,
+    details: Any = None,
+    *args: Any,
+    **kwargs: Any,
+) -> dict | None:
     """Reclaim an existing CustomUser that already holds this Discord ID.
 
     Runs before `create_user` so a login adopts the row a Discord *button*
@@ -90,16 +110,24 @@ def associate_by_discord_id(
 
     existing_user = User.objects.filter(discordId=str(discord_id)).first()
     if existing_user:
-        logger.info(
-            "Reclaiming existing account #%s by discordId=%s",
-            existing_user.pk,
-            discord_id,
+        log.info(
+            "discord_account_reclaimed",
+            system="auth",
+            subsystem="social",
+            user_id=existing_user.pk,
+            discord_id=discord_id,
         )
         return {"user": existing_user}
     return None
 
 
-def associate_by_discord_username(backend, details, user=None, *args, **kwargs):
+def associate_by_discord_username(
+    backend: Any,
+    details: Any,
+    user: CustomUser | None = None,
+    *args: Any,
+    **kwargs: Any,
+) -> dict | None:
     """
     Connect to a user if their discord username matches an existing user.
     `username` is the Discord username from the provider.
@@ -108,20 +136,37 @@ def associate_by_discord_username(backend, details, user=None, *args, **kwargs):
         return None  # Already authenticated or linked
 
     discordUsername = details.get("username")
-    logger.warning(f"discordUsername: {discordUsername}")
+    log.debug(
+        "discord_username_lookup",
+        system="auth",
+        subsystem="social",
+        discord_username=discordUsername,
+    )
     if not discordUsername:
         return None
 
     try:
         existing_user = User.objects.get(username=discordUsername)
-        logger.warning(f"Found existing user: {existing_user}")
+        log.info(
+            "discord_user_matched",
+            system="auth",
+            subsystem="social",
+            match_by="username",
+            user_id=existing_user.pk,
+        )
         return {"user": existing_user}
     except User.DoesNotExist:
         pass
 
     try:
         existing_user = User.objects.get(discordUsername=discordUsername)
-        logger.warning(f"Found existing user: {existing_user}")
+        log.info(
+            "discord_user_matched",
+            system="auth",
+            subsystem="social",
+            match_by="discord_username",
+            user_id=existing_user.pk,
+        )
         return {"user": existing_user}
     except User.DoesNotExist:
         return None

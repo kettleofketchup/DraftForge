@@ -1,12 +1,13 @@
 import ipaddress
-import logging
 import os
 
 from django.conf import settings
 from social_core.backends.google import GooglePlusAuth
 from social_core.backends.utils import load_backends
 
-log = logging.getLogger(__name__)
+from telemetry.logging import get_logger
+
+log = get_logger(__name__)
 
 
 def _is_ip_allowed(ip_str, allowed_ranges):
@@ -61,7 +62,13 @@ def isTestEnvironment(request=None):
             else request.META.get("REMOTE_ADDR")
         )
         # TODO(#84): Temporary logging to diagnose CI test failures
-        log.warning(f"isTestEnvironment: CI={ci_env}, IP={remote_addr}")
+        log.warning(
+            "test_environ_ip_check",
+            system="common",
+            subsystem="utils",
+            ci=ci_env,
+            ip=remote_addr,
+        )
         if remote_addr and not _is_ip_allowed(remote_addr, allowed_ips):
             return False
 

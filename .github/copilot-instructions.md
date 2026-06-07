@@ -16,6 +16,7 @@ Each rule set below is canonical at `.claude/skills/<name>/SKILL.md`. The matchi
 | Skill | Canonical | Scope (Copilot `applyTo`) |
 |-------|-----------|---------------------------|
 | Backend caching | `.claude/skills/django-redis-caching/SKILL.md` | `backend/**/*.py` |
+| Backend logging | `.claude/skills/logging/SKILL.md` | `backend/**/*.py` (excl. management commands) |
 | Brand / theming | `.claude/skills/brand/SKILL.md` (+ `docs/THEMING-GUIDE.md`) | `frontend/app/components/**`, `routes/**`, `features/**`, `app.css` |
 | React patterns | global `react` skill | `frontend/**/*.{ts,tsx}` |
 | shadcn/ui | global `shadcn` skill (+ `frontend/components.json`) | `frontend/app/components/**/*.{ts,tsx}` |

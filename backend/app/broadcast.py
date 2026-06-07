@@ -2,7 +2,7 @@
 Broadcast helper for sending draft events to WebSocket channel groups.
 """
 
-import logging
+from typing import TYPE_CHECKING
 
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
@@ -14,11 +14,15 @@ from app.serializers import (
     HeroDraftSerializer,
     _build_users_dict,
 )
+from telemetry.logging import get_logger
 
-log = logging.getLogger(__name__)
+if TYPE_CHECKING:
+    from app.models import DraftEvent, DraftTeam, HeroDraft
+
+log = get_logger(__name__)
 
 
-def broadcast_event(event, include_draft_state=True):
+def broadcast_event(event: "DraftEvent", include_draft_state: bool = True) -> None:
     """
     Broadcast a DraftEvent to both draft-specific and tournament channel groups.
 
@@ -33,7 +37,14 @@ def broadcast_event(event, include_draft_state=True):
     """
     channel_layer = get_channel_layer()
     if channel_layer is None:
-        log.warning("No channel layer configured, skipping broadcast")
+        log.warning(
+            "broadcast_skipped",
+            system="websocket",
+            subsystem="broadcast",
+            kind="draft",
+            reason="no_channel_layer",
+            draft_id=event.draft_id,
+        )
         return
 
     payload = DraftEventSerializer(event).data
@@ -60,7 +71,14 @@ def broadcast_event(event, include_draft_state=True):
                 str(k): v for k, v in _build_users_dict(draft.tournament).items()
             }
         except Exception as e:
-            log.warning(f"Failed to serialize draft state: {e}")
+            log.warning(
+                "broadcast_serialize_failed",
+                system="websocket",
+                subsystem="broadcast",
+                kind="draft",
+                draft_id=event.draft_id,
+                error=str(e),
+            )
 
     try:
         message = {
@@ -83,18 +101,34 @@ def broadcast_event(event, include_draft_state=True):
         )
 
         log.info(
-            f"Broadcast {event.event_type} to draft_{event.draft_id} and tournament_{tournament_id}"
-            + (" (with draft state)" if draft_state else "")
+            "broadcast_sent",
+            system="websocket",
+            subsystem="broadcast",
+            kind="draft",
+            event_type=event.event_type,
+            draft_id=event.draft_id,
+            tournament_id=tournament_id,
+            with_state=bool(draft_state),
         )
     except Exception as e:
         # Log the error but don't fail the draft operation
         log.warning(
-            f"Failed to broadcast {event.event_type} to channels: {e}. "
-            "WebSocket clients will not receive real-time updates for this event."
+            "broadcast_failed",
+            system="websocket",
+            subsystem="broadcast",
+            kind="draft",
+            event_type=event.event_type,
+            draft_id=event.draft_id,
+            error=str(e),
         )
 
 
-def broadcast_herodraft_event(draft, event_type: str, draft_team=None, metadata=None):
+def broadcast_herodraft_event(
+    draft: "HeroDraft",
+    event_type: str,
+    draft_team: "DraftTeam | None" = None,
+    metadata: dict | None = None,
+) -> None:
     """
     Broadcast a HeroDraft event to WebSocket consumers.
 
@@ -108,7 +142,14 @@ def broadcast_herodraft_event(draft, event_type: str, draft_team=None, metadata=
 
     channel_layer = get_channel_layer()
     if channel_layer is None:
-        log.warning("No channel layer configured, skipping herodraft broadcast")
+        log.warning(
+            "broadcast_skipped",
+            system="websocket",
+            subsystem="broadcast",
+            kind="herodraft",
+            reason="no_channel_layer",
+            draft_id=draft.id,
+        )
         return
 
     # Create event record (if not already created by the view)
@@ -140,22 +181,47 @@ def broadcast_herodraft_event(draft, event_type: str, draft_team=None, metadata=
         ).get(id=draft.id)
         payload["draft_state"] = HeroDraftSerializer(draft).data
     except Exception as e:
-        log.warning(f"Failed to serialize herodraft state: {e}")
+        log.warning(
+            "broadcast_serialize_failed",
+            system="websocket",
+            subsystem="broadcast",
+            kind="herodraft",
+            draft_id=draft.id,
+            error=str(e),
+        )
 
     # Send to channel group
     room_group_name = f"herodraft_{draft.id}"
 
     try:
         async_to_sync(channel_layer.group_send)(room_group_name, payload)
-        log.debug(f"Broadcast herodraft {event_type} to {room_group_name}")
+        log.debug(
+            "broadcast_sent",
+            system="websocket",
+            subsystem="broadcast",
+            kind="herodraft",
+            event_type=event_type,
+            draft_id=draft.id,
+            event_id=event.id,
+        )
     except Exception as e:
         log.warning(
-            f"Failed to broadcast herodraft {event_type} to channels: {e}. "
-            "WebSocket clients will not receive real-time updates for this event."
+            "broadcast_failed",
+            system="websocket",
+            subsystem="broadcast",
+            kind="herodraft",
+            event_type=event_type,
+            draft_id=draft.id,
+            error=str(e),
         )
 
 
-def broadcast_herodraft_state(draft, event_type: str, metadata=None, draft_team=None):
+def broadcast_herodraft_state(
+    draft: "HeroDraft",
+    event_type: str,
+    metadata: dict | None = None,
+    draft_team: "DraftTeam | None" = None,
+) -> None:
     """
     Broadcast the current HeroDraft state to WebSocket consumers.
 
@@ -170,7 +236,14 @@ def broadcast_herodraft_state(draft, event_type: str, metadata=None, draft_team=
     """
     channel_layer = get_channel_layer()
     if channel_layer is None:
-        log.warning("No channel layer configured, skipping herodraft state broadcast")
+        log.warning(
+            "broadcast_skipped",
+            system="websocket",
+            subsystem="broadcast",
+            kind="herodraft_state",
+            reason="no_channel_layer",
+            draft_id=draft.id,
+        )
         return
 
     # Build payload with current state
@@ -197,7 +270,14 @@ def broadcast_herodraft_state(draft, event_type: str, metadata=None, draft_team=
         ).get(id=draft.id)
         payload["draft_state"] = HeroDraftSerializer(draft).data
     except Exception as e:
-        log.warning(f"Failed to serialize herodraft state: {e}")
+        log.warning(
+            "broadcast_serialize_failed",
+            system="websocket",
+            subsystem="broadcast",
+            kind="herodraft_state",
+            draft_id=draft.id,
+            error=str(e),
+        )
         return  # Don't broadcast without state
 
     # Send to channel group
@@ -205,9 +285,21 @@ def broadcast_herodraft_state(draft, event_type: str, metadata=None, draft_team=
 
     try:
         async_to_sync(channel_layer.group_send)(room_group_name, payload)
-        log.debug(f"Broadcast herodraft state ({event_type}) to {room_group_name}")
+        log.debug(
+            "broadcast_sent",
+            system="websocket",
+            subsystem="broadcast",
+            kind="herodraft_state",
+            event_type=event_type,
+            draft_id=draft.id,
+        )
     except Exception as e:
         log.warning(
-            f"Failed to broadcast herodraft state to channels: {e}. "
-            "WebSocket clients will not receive real-time updates."
+            "broadcast_failed",
+            system="websocket",
+            subsystem="broadcast",
+            kind="herodraft_state",
+            event_type=event_type,
+            draft_id=draft.id,
+            error=str(e),
         )

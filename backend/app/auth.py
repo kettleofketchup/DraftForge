@@ -13,13 +13,16 @@ Security layers:
 """
 
 import hmac
-import logging
+import ipaddress
 
 from django.conf import settings
 from rest_framework.authentication import BaseAuthentication
 from rest_framework.permissions import BasePermission
+from rest_framework.request import Request
 
-logger = logging.getLogger(__name__)
+from telemetry.logging import get_logger
+
+log = get_logger(__name__)
 
 # Default allowed IPs: localhost + Docker bridge networks
 DEFAULT_ALLOWED_IPS = [
@@ -31,7 +34,7 @@ DEFAULT_ALLOWED_IPS = [
 ]
 
 
-def _get_client_ip(request):
+def _get_client_ip(request: Request) -> str:
     """Extract client IP from request, handling proxy headers."""
     forwarded = request.META.get("HTTP_X_FORWARDED_FOR")
     if forwarded:
@@ -39,10 +42,8 @@ def _get_client_ip(request):
     return request.META.get("REMOTE_ADDR", "")
 
 
-def _ip_in_allowlist(ip, allowed):
+def _ip_in_allowlist(ip: str, allowed: list[str]) -> bool:
     """Check if IP matches any entry in the allowlist (supports CIDR)."""
-    import ipaddress
-
     try:
         addr = ipaddress.ip_address(ip)
     except ValueError:
@@ -70,14 +71,16 @@ class InternalServiceUser:
     pk = -1
     username = "_internal_service"
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.username
 
 
 class InternalServiceAuth(BaseAuthentication):
     """Authenticate via X-Internal-Token header + IP whitelist."""
 
-    def authenticate(self, request):
+    def authenticate(
+        self, request: Request
+    ) -> tuple["InternalServiceUser", None] | None:
         token = (
             request.headers.get("X-Internal-Token")
             or request.META.get("HTTP_X_INTERNAL_TOKEN")
@@ -94,19 +97,31 @@ class InternalServiceAuth(BaseAuthentication):
         )
         client_ip = _get_client_ip(request)
         if not _ip_in_allowlist(client_ip, allowed_ips):
-            logger.warning("Internal auth rejected: IP %s not in allowlist", client_ip)
+            log.warning(
+                "internal_auth_rejected",
+                system="auth",
+                subsystem="internal",
+                reason="ip_not_allowed",
+                client_ip=client_ip,
+            )
             return None
 
         # Token comparison (timing-safe)
         if hmac.compare_digest(token, expected):
             return (InternalServiceUser(), None)
 
-        logger.warning("Internal auth failed: invalid token from IP %s", client_ip)
+        log.warning(
+            "internal_auth_failed",
+            system="auth",
+            subsystem="internal",
+            reason="invalid_token",
+            client_ip=client_ip,
+        )
         return None
 
 
 class IsInternalService(BasePermission):
     """Allow only authenticated internal service requests."""
 
-    def has_permission(self, request, view):
+    def has_permission(self, request: Request, view: object) -> bool:
         return isinstance(request.user, InternalServiceUser)

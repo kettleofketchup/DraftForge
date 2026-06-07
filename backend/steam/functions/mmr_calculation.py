@@ -1,9 +1,9 @@
-import logging
-
 from django.conf import settings
 from django.db.models import Avg, Max
 
-logger = logging.getLogger(__name__)
+from telemetry.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 def get_league_avg_kda(league_id: int) -> float:
@@ -125,8 +125,13 @@ def update_user_league_mmr(user, organization=None, league=None) -> None:
             league_user.mmr = calculated_league_mmr
             league_user.save(update_fields=["mmr"])
             logger.debug(
-                f"Updated {user.username} LeagueUser.mmr to {calculated_league_mmr} "
-                f"(base: {base_mmr}, adjustment: {best_adjustment})"
+                "league_mmr_updated",
+                system="steam",
+                subsystem="mmr",
+                username=user.username,
+                mmr=calculated_league_mmr,
+                base_mmr=base_mmr,
+                adjustment=best_adjustment,
             )
         except LeagueUser.DoesNotExist:
             # No LeagueUser entry, nothing to update
@@ -134,6 +139,11 @@ def update_user_league_mmr(user, organization=None, league=None) -> None:
     else:
         # No league context, nothing to update
         logger.debug(
-            f"No league context for {user.username}, skipping league MMR update "
-            f"(base: {base_mmr}, adjustment: {best_adjustment})"
+            "league_mmr_skipped",
+            system="steam",
+            subsystem="mmr",
+            username=user.username,
+            reason="no_league_context",
+            base_mmr=base_mmr,
+            adjustment=best_adjustment,
         )

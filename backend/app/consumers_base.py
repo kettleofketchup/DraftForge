@@ -207,7 +207,11 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
             self._connection_tracked = True
         except Exception as e:
             log.warning(
-                f"Failed to increment connection for draft {self.draft_id}: {e}"
+                "connection_count_increment_failed",
+                system="websocket",
+                subsystem="heartbeat",
+                draft_id=self.draft_id,
+                error=str(e),
             )
 
     @database_sync_to_async
@@ -220,7 +224,11 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
             self._connection_tracked = False
         except Exception as e:
             log.warning(
-                f"Failed to decrement connection for draft {self.draft_id}: {e}"
+                "connection_count_decrement_failed",
+                system="websocket",
+                subsystem="heartbeat",
+                draft_id=self.draft_id,
+                error=str(e),
             )
 
     # --- Tick broadcaster ---
@@ -234,7 +242,11 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
             start_tick_broadcaster(self.draft_id)
         except Exception as e:
             log.warning(
-                f"Failed to start tick broadcaster for draft {self.draft_id}: {e}"
+                "tick_broadcaster_start_failed",
+                system="websocket",
+                subsystem="heartbeat",
+                draft_id=self.draft_id,
+                error=str(e),
             )
 
     # --- Server-side ping loop ---
@@ -252,7 +264,13 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
         except asyncio.CancelledError:
             pass
         except Exception as e:
-            log.debug(f"Ping loop ended for draft {self.draft_id}: {e}")
+            log.debug(
+                "ping_loop_ended",
+                system="websocket",
+                subsystem="heartbeat",
+                draft_id=self.draft_id,
+                error=str(e),
+            )
 
     # --- Span helpers ---
 
@@ -332,7 +350,10 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
 
         with tracer.start_as_current_span(
             "ws.connect",
-            attributes={**self._base_span_attrs(), "ws.path": self.scope.get("path", "")},
+            attributes={
+                **self._base_span_attrs(),
+                "ws.path": self.scope.get("path", ""),
+            },
         ) as span:
             # OTel's start_as_current_span auto-records propagating
             # exceptions and sets ERROR status on context exit, so no
@@ -344,7 +365,13 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
             exists = await self.draft_exists(self.draft_id)
             if not exists:
                 span.set_attribute("ws.connect_outcome", "draft_not_found")
-                log.warning(f"{prefix} {self.draft_id} not found, closing connection")
+                log.warning(
+                    "draft_not_found",
+                    system="websocket",
+                    subsystem="heartbeat",
+                    draft_id=self.draft_id,
+                    reason="closing connection",
+                )
                 await self.close()
                 return False
 
@@ -382,14 +409,21 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
                 # Start tick broadcaster if draft is in an active state
                 if (
                     initial_state
-                    and initial_state.get("state") in self.get_active_draft_state_values()
+                    and initial_state.get("state")
+                    in self.get_active_draft_state_values()
                 ):
                     await self._maybe_start_tick_broadcaster()
 
             except Exception as e:
                 span.record_exception(e)
                 span.set_status(Status(StatusCode.ERROR, "initial_state_failed"))
-                log.error(f"Failed to send initial state for {prefix} {self.draft_id}: {e}")
+                log.error(
+                    "initial_state_send_failed",
+                    system="websocket",
+                    subsystem="heartbeat",
+                    draft_id=self.draft_id,
+                    error=str(e),
+                )
                 await self.close()
                 return False
 
@@ -436,8 +470,11 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
             if was_kicked:
                 span.set_attribute("ws.kicked", True)
                 log.info(
-                    f"Skipping disconnect handling for kicked connection "
-                    f"(user {getattr(self, 'user', None)}, draft {getattr(self, 'draft_id', None)})"
+                    "kicked_disconnect_skipped",
+                    system="websocket",
+                    subsystem="heartbeat",
+                    draft_id=getattr(self, "draft_id", None),
+                    user_id=getattr(getattr(self, "user", None), "id", None),
                 )
                 if hasattr(self, "room_group_name"):
                     await self.channel_layer.group_discard(
@@ -462,7 +499,11 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
                     # Tempo shows what failed.
                     span.record_exception(e)
                     log.error(
-                        f"Failed to mark captain disconnected for draft {self.draft_id}: {e}"
+                        "captain_disconnect_cleanup_failed",
+                        system="websocket",
+                        subsystem="heartbeat",
+                        draft_id=self.draft_id,
+                        error=str(e),
                     )
 
             # Leave room group
