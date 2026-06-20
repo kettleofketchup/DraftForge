@@ -26,3 +26,12 @@ export const DotaProfileFormSchema = z.object({
 });
 
 export type DotaProfileFormValues = z.infer<typeof DotaProfileFormSchema>;
+
+// Deadlock rank is a free-text rank label (e.g. "Archon") with an optional
+// verification date. Both nullable/optional — clearing them is valid.
+export const DeadlockProfileFormSchema = z.object({
+  rank: z.string().max(64).nullable().optional(),
+  rank_date: z.string().nullable().optional(),
+});
+
+export type DeadlockProfileFormValues = z.infer<typeof DeadlockProfileFormSchema>;
