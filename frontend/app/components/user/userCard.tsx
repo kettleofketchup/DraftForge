@@ -15,13 +15,12 @@ import { UserAvatar } from '~/components/user/UserAvatar';
 import { getLogger } from '~/lib/logger';
 import { isUserEntry } from '~/store/userCacheTypes';
 import { PlayerRemoveButton } from '~/pages/tournament/tabs/players/playerRemoveButton';
-import { useLeagueStore } from '~/store/leagueStore';
 import { useOrgStore } from '~/store/orgStore';
 import { useUserStore } from '~/store/userStore';
 import { RolePositions } from './positions';
 import { UserRemoveButton } from './userCard/deleteButton';
 import UserEditModal from './userCard/editModal';
-import { deriveEditScope, type EditUserScope } from './userCard/editUserSchema';
+import type { EditUserScope } from './userCard/editUserSchema';
 import { LoginAsUserButton } from './userCard/LoginAsUserButton';
 
 /** Returns true if the user has rated any role > 0. */
@@ -54,7 +53,6 @@ export const UserCard: React.FC<Props> = memo(
     const currentUser: UserType = useUserStore((state) => state.currentUser);
     const getUsers = useUserStore((state) => state.getUsers);
     const currentOrg = useOrgStore((state) => state.currentOrg);
-    const currentLeague = useLeagueStore((state) => state.currentLeague);
     // Actions-only subscription: openPlayerModal is referentially stable, and
     // this hook does NOT re-render UserCard when the popover/modal state
     // transitions. Avoids cascading every grid card on hover.
@@ -65,20 +63,13 @@ export const UserCard: React.FC<Props> = memo(
       ? (organizationId ? orgEntry?.mmr : undefined)
       : user.mmr;
 
-    // Contextual grids (tournament / org / league) get a scope-aware edit so
-    // OrgUser MMR is editable; the global /users grid (no org/league prop)
-    // stays global. Mirrors the incomplete-profiles card via deriveEditScope
-    // (league > org > global) — a league tournament sets currentLeague but not
-    // always currentOrg, so requiring currentOrg here was the MMR-edit bug.
-    // Match the loaded store entity to the grid's prop so a stale currentOrg/
-    // currentLeague from another page can't leak the wrong scope here.
-    const editScope = React.useMemo<EditUserScope>(() => {
-      const league =
-        leagueId && currentLeague?.pk === leagueId ? currentLeague : null;
-      const org =
-        organizationId && currentOrg?.pk === organizationId ? currentOrg : null;
-      return deriveEditScope({ league, currentOrg: org });
-    }, [leagueId, currentLeague?.pk, organizationId, currentOrg?.pk]);
+    const editScope = React.useMemo<EditUserScope>(
+      () =>
+        orgEntry && currentOrg
+          ? { kind: 'org', organization: currentOrg }
+          : { kind: 'global' },
+      [orgEntry?.id, currentOrg?.pk],
+    );
 
     // Construct the User instance ONCE per stable input set. Doing this
     // inline (`user={new User(...)}`) created a fresh reference on every
