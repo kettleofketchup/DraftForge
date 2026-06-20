@@ -12,8 +12,10 @@ import { useSharedPopoverActions } from '~/components/ui/shared-popover-context'
 import type { UserClassType, UserType } from '~/components/user/types';
 import { User } from '~/components/user/user';
 import { UserAvatar } from '~/components/user/UserAvatar';
+import { usePlayerPositions } from '~/hooks/usePlayerPositions';
 import { getLogger } from '~/lib/logger';
 import { isUserEntry } from '~/store/userCacheTypes';
+import type { PositionsType } from '~/store/userCacheTypes';
 import { PlayerRemoveButton } from '~/pages/tournament/tabs/players/playerRemoveButton';
 import { useOrgStore } from '~/store/orgStore';
 import { useUserStore } from '~/store/userStore';
@@ -24,8 +26,7 @@ import type { EditUserScope } from './userCard/editUserSchema';
 import { LoginAsUserButton } from './userCard/LoginAsUserButton';
 
 /** Returns true if the user has rated any role > 0. */
-function hasAnyPosition(user: UserClassType | UserType): boolean {
-  const p = user.positions;
+function hasAnyPosition(p: PositionsType | undefined): boolean {
   if (!p) return false;
   return (p.carry ?? 0) > 0
     || (p.mid ?? 0) > 0
@@ -52,6 +53,9 @@ export const UserCard: React.FC<Props> = memo(
   ({ user, saveFunc = 'save', compact, deleteButtonType, animationIndex = 0, leagueId, organizationId }) => {
     const currentUser: UserType = useUserStore((state) => state.currentUser);
     const getUsers = useUserStore((state) => state.getUsers);
+    // gameType-aware positions over the list-populated entity adapter; fall back
+    // to the passed user.positions off-Dota / pre-cache so display is unchanged.
+    const positions = usePlayerPositions(user.pk ?? -1) ?? user.positions;
     const currentOrg = useOrgStore((state) => state.currentOrg);
     // Actions-only subscription: openPlayerModal is referentially stable, and
     // this hook does NOT re-render UserCard when the popover/modal state
@@ -180,7 +184,7 @@ export const UserCard: React.FC<Props> = memo(
           {organizationId && !mmr && (
             <span className="font-semibold text-red-500">MMR: Not added</span>
           )}
-          {!user.positions && (
+          {!positions && (
             <span className="font-semibold text-red-500">
               Position: Not added
             </span>
@@ -262,7 +266,7 @@ export const UserCard: React.FC<Props> = memo(
 
             {/* Right column - Positions and MMR */}
             <div className="flex flex-col gap-1 w-full">
-              {hasAnyPosition(user) && (
+              {hasAnyPosition(positions) && (
                 <Item size="sm" variant="muted" className="!p-1.5 w-full">
                   <ItemContent className="!gap-1 items-center w-full">
                     <ItemTitle className="!text-xs text-muted-foreground">Positions</ItemTitle>
@@ -330,7 +334,7 @@ export const UserCard: React.FC<Props> = memo(
           </div>
 
           {/* Error info row */}
-          {((organizationId && !mmr) || !user.positions) && (
+          {((organizationId && !mmr) || !positions) && (
             <div className="flex justify-end">
               {errorInfo()}
             </div>

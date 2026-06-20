@@ -21,6 +21,7 @@ export interface UserEntry {
   username: string;
   avatar?: string | null;
   avatarUrl?: string;
+  /** Flat rendered-once positions; read via selectPositions/usePlayerPositions for gameType-awareness. */
   positions?: PositionsType;
   steam_account_id?: number | null;
   discordId?: string | null;
