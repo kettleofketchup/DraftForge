@@ -18,6 +18,8 @@ import { ProfileSkeleton } from './EditProfileModal/ProfileSkeleton';
 import { ProfileErrorFallback } from './EditProfileModal/ProfileErrorFallback';
 
 const BaseTab = lazy(() => import('./EditProfileModal/tabs/BaseTab'));
+const DotaTab = lazy(() => import('./EditProfileModal/tabs/DotaTab'));
+const DeadlockTab = lazy(() => import('./EditProfileModal/tabs/DeadlockTab'));
 
 interface EditProfileModalProps {
   userPk: number;
@@ -85,17 +87,40 @@ function EditProfileModalBody({
     useUserProfileStore.getState().upsert(data);
   }, [data]);
 
+  // Tabs invalidate ['userProfile', profile.pk] while this query is keyed by
+  // userPk; they match only because getUserProfile ignores its arg (/me/) and
+  // the modal mounts self-only. Surface a future non-self mount's latent
+  // invalidate-miss instead of failing silently.
+  if (import.meta.env.DEV && data.pk !== userPk) {
+    console.warn('userProfile key/pk mismatch', { userPk, dataPk: data.pk });
+  }
+
   return (
     <Tabs defaultValue="base">
       <TabsList>
         <TabsTrigger value="base" data-testid="edit-user-tab-base">
           Base
         </TabsTrigger>
-        {/* T2 adds: <TabsTrigger value="dota">Dota</TabsTrigger> etc. */}
+        <TabsTrigger value="dota" data-testid="edit-user-tab-dota">
+          Dota
+        </TabsTrigger>
+        <TabsTrigger value="deadlock" data-testid="edit-user-tab-deadlock">
+          Deadlock
+        </TabsTrigger>
       </TabsList>
       <TabsContent value="base">
         <Suspense fallback={<ProfileSkeleton />}>
           <BaseTab profile={data} onSave={onSave} onClose={onClose} />
+        </Suspense>
+      </TabsContent>
+      <TabsContent value="dota">
+        <Suspense fallback={<ProfileSkeleton />}>
+          <DotaTab profile={data} onSave={onSave} onClose={onClose} />
+        </Suspense>
+      </TabsContent>
+      <TabsContent value="deadlock">
+        <Suspense fallback={<ProfileSkeleton />}>
+          <DeadlockTab profile={data} onSave={onSave} onClose={onClose} />
         </Suspense>
       </TabsContent>
     </Tabs>
