@@ -33,6 +33,28 @@ export type EditUserScope =
   | { kind: 'league'; league: LeagueType; organization?: OrganizationType }
   | { kind: 'global' };
 
+/**
+ * Resolve the edit scope from the available context: league > org > global.
+ *
+ * Shared by the tournament incomplete-profiles card and UserCard so both
+ * derive the SAME scope (and therefore the same editable-MMR behaviour). A
+ * league tournament sets `league` but not always `currentOrg`; preferring
+ * league here (and routing its PATCH through the parent org's OrgUser
+ * endpoint) is why the errors card could edit MMR while the plain card,
+ * which previously required `currentOrg`, could not.
+ */
+export function deriveEditScope({
+  league,
+  currentOrg,
+}: {
+  league: LeagueType | null;
+  currentOrg: OrganizationType | null;
+}): EditUserScope {
+  if (league) return { kind: 'league', league };
+  if (currentOrg) return { kind: 'org', organization: currentOrg };
+  return { kind: 'global' };
+}
+
 export type EditableField = keyof EditUserInput;
 
 // Coerce missing-or-empty string fields to null so Zod's `.nullable()`

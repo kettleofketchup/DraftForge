@@ -1,7 +1,5 @@
 import { ChevronDown } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import type { LeagueType } from '~/components/league/schemas';
-import type { OrganizationType } from '~/components/organization/schemas';
 import type { UserClassType, UserType } from '~/components/user';
 import { brandErrorBg, brandErrorCard } from '~/components/ui/buttons';
 import {
@@ -10,7 +8,10 @@ import {
   CollapsibleTrigger,
 } from '~/components/ui/collapsible';
 import UserEditModal from '~/components/user/userCard/editModal';
-import type { EditUserScope } from '~/components/user/userCard/editUserSchema';
+import {
+  deriveEditScope,
+  type EditUserScope,
+} from '~/components/user/userCard/editUserSchema';
 import { getLogger } from '~/lib/logger';
 import { cn } from '~/lib/utils';
 import { useLeagueStore } from '~/store/leagueStore';
@@ -19,24 +20,6 @@ import type { UserEntry } from '~/store/userCacheTypes';
 import { useUserCacheStore } from '~/store/userCacheStore';
 import { useUserStore } from '~/store/userStore';
 const log = getLogger('hasErrors');
-
-/**
- * Derive the EditUserModal scope for the tournament-edit panel.
- * Order: league > org > global. Falls back to global only when neither
- * is loaded — callers should ensure currentOrg is populated before render
- * (TournamentDetailPage calls getOrganization in a useEffect on mount).
- */
-export function deriveEditScope({
-  league,
-  currentOrg,
-}: {
-  league: LeagueType | null;
-  currentOrg: OrganizationType | null;
-}): EditUserScope {
-  if (league) return { kind: 'league', league };
-  if (currentOrg) return { kind: 'org', organization: currentOrg };
-  return { kind: 'global' };
-}
 
 interface UserIssue {
   user: UserClassType;
