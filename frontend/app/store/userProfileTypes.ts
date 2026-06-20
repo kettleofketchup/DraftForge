@@ -9,11 +9,27 @@ export const BaseProfileSchema = z.object({
 
 export type BaseProfile = z.infer<typeof BaseProfileSchema>;
 
-// Placeholders for T2/T3. Kept as empty objects in T1 so the type
-// shape is stable across the epic and no consumer breaks when later
-// tickets fill them in.
-export type DotaUserProfile = { positions?: never };       // T2 expands
-export type DeadlockUserProfile = { rank?: never };        // T2 expands
+// Edit-layer (modal) shapes. These are the layered GET/PATCH payload the
+// EditProfileModal Dota/Deadlock tabs read and write. List/card/table surfaces
+// read positions from userCacheStore via selectPositions, NOT from here.
+export interface PositionsValue {
+  carry: number;
+  mid: number;
+  offlane: number;
+  soft_support: number;
+  hard_support: number;
+}
+export interface DotaUserProfile {
+  positions?: PositionsValue | null;
+  has_active_dota_mmr?: boolean;
+  dota_mmr_last_verified?: string | null;
+}
+export interface DeadlockUserProfile {
+  rank?: string | null;
+  rank_date?: string | null;
+}
+// Placeholders for T3. Kept as empty objects so the type shape is stable
+// across the epic and no consumer breaks when later tickets fill them in.
 export type OrgUserProfile = Record<string, never>;        // T3 expands
 export type OrgDotaUserProfile = { positions?: never };    // T3 expands
 export type OrgDeadlockUserProfile = { rank?: never };     // T3 expands
