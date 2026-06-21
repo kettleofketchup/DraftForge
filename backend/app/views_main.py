@@ -201,7 +201,9 @@ class UserView(viewsets.ModelViewSet):
             CustomUser.objects.all(),
             BaseUserProfile,
             DotaUserProfile,
-            keep_fresh=True,
+            # No keep_fresh: it defeats predictable eviction after a profile
+            # edit (lesson #24 — nickname/avatar/positions edits would serve
+            # stale until TTL). Strict eviction is correct for user payloads.
             extra=cache_key,
             timeout=60 * 60,
         )
@@ -221,7 +223,10 @@ class UserView(viewsets.ModelViewSet):
             CustomUser.objects.filter(pk=pk),
             BaseUserProfile,
             DotaUserProfile,
-            keep_fresh=True,
+            # No keep_fresh: it served a stale nickname/avatar after a profile
+            # edit (lesson #24 keep_fresh/eviction deferral). This is the
+            # `/api/users/<pk>/` payload the profile header reads — strict
+            # eviction makes edits reflect without a manual refresh.
             extra=cache_key,
             timeout=60 * 60,
         )
