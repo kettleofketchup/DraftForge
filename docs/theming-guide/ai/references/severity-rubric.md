@@ -9,7 +9,7 @@ Brand-review findings are graded so reviewers can triage quickly. Use these defi
 User-visible affordance is wrong, accessibility is broken, or the brand contract is violated in a load-bearing way.
 
 Examples:
-- Primary action wired as raw `<button>` (loses brand gradient, 3D depth, focus ring) — should be `<PrimaryButton>`.
+- Primary action wired as raw `<button>` (loses brand gradient, soft-shadow lift, consistent height, focus ring) — should be `<PrimaryButton>`.
 - `<Button onClick={handleSave}>` for a domain action (button policy violation) — should be `<PrimaryButton>` / `<SubmitButton>` / `<ConfirmButton>`.
 - Raw `<img>` rendering a user avatar (skips Discord CDN handling, fallback initials, memoization) — must be `<UserAvatar>`.
 - Manual breadcrumb `<nav>` on a required detail page — must be `<EntityBreadcrumb>`.
@@ -63,7 +63,7 @@ Examples:
 
 ```
 brand: block · frontend/app/routes/tournament/$pk.tsx:84 — raw <button> for "Start Tournament" CTA
-  why: THEMING-GUIDE.md §"Button Policy" — user-facing actions must use a brand wrapper; raw <button> loses gradient, 3D depth, focus ring
+  why: THEMING-GUIDE.md §"Button Policy" — user-facing actions must use a brand wrapper; raw <button> loses gradient, soft-shadow lift, consistent height, focus ring
   fix: replace with <PrimaryButton onClick={handleStart}>Start Tournament</PrimaryButton>
 
 brand: block · frontend/app/features/teams/TeamRoster.tsx:42 — raw <img> for team-captain avatar

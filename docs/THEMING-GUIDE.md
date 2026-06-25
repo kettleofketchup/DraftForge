@@ -23,9 +23,8 @@ This theme uses a violet/indigo primary palette with cyan accents for an esports
 Primary CTA buttons use the brand gradient via `<PrimaryButton>`, not flat `bg-primary`. The `--primary` CSS variable remains the base brand color for non-button contexts.
 
 ```tsx
-// Primary CTA (brand gradient + 3D depth)
+// Primary CTA (brand gradient, flat soft-shadow lift)
 <PrimaryButton>Create Tournament</PrimaryButton>
-<PrimaryButton depth={false}>Flat Variant</PrimaryButton>
 
 // Secondary brand action (violet gradient + ring outline)
 <SecondaryButton>Edit Settings</SecondaryButton>
@@ -323,7 +322,7 @@ Renders as a hierarchical breadcrumb with type labels (e.g., "ORGANIZATION" abov
 ### Buttons
 
 ```tsx
-// Primary CTA (brand gradient + 3D depth)
+// Primary CTA (brand gradient, flat soft-shadow lift)
 <PrimaryButton>Create Tournament</PrimaryButton>
 <PrimaryButton size="lg">Large CTA</PrimaryButton>
 
@@ -337,8 +336,8 @@ Renders as a hierarchical breadcrumb with type labels (e.g., "ORGANIZATION" abov
 // Secondary (default brand violet gradient + ring)
 <SecondaryButton>Settings</SecondaryButton>
 
-// Secondary with colored background + 3D
-<SecondaryButton color="cyan" depth>Colored Action</SecondaryButton>
+// Secondary with colored background
+<SecondaryButton color="cyan">Colored Action</SecondaryButton>
 
 // Avoid using <Button> directly for user-facing actions.
 // Reserve for structural uses: dropdown triggers, combobox triggers, etc.

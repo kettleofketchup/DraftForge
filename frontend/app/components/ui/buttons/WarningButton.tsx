@@ -30,6 +30,7 @@ const WarningButton = React.forwardRef<HTMLButtonElement, WarningButtonProps>(
         ref={ref}
         disabled={disabled || loading}
         className={cn(
+          'min-h-11',
           depth ? button3DVariants.warning : 'bg-orange-500 text-white hover:bg-orange-400',
           className
         )}

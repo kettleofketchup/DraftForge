@@ -1,6 +1,6 @@
 # Component Substitutions
 
-Replace hand-rolled HTML and one-off styled markup with DraftForge's brand component wrappers. The wrappers ship the brand gradient, 3D depth, hover/active states, focus rings, and disabled treatment; raw markup loses all of it and drifts visually over time.
+Replace hand-rolled HTML and one-off styled markup with DraftForge's brand component wrappers. The wrappers ship the brand gradient, soft-shadow lift, consistent height, hover/active states, focus rings, and disabled treatment; raw markup loses all of it and drifts visually over time.
 
 ## Buttons (Primary Targets)
 
@@ -8,15 +8,15 @@ Per [`THEMING-GUIDE.md` §"Button Policy"](../../THEMING-GUIDE.md#button-policy)
 
 | Anti-pattern | Replace with | Notes |
 |---|---|---|
-| `<button onClick={...}>...` | `<PrimaryButton onClick={...}>` | Brand violet→blue gradient + 3D depth. The headline CTA on a view. |
+| `<button onClick={...}>...` | `<PrimaryButton onClick={...}>` | Brand violet→blue gradient, flat soft-shadow lift. The headline CTA on a view. |
 | `<button className="bg-primary ...">` | `<PrimaryButton>` | `bg-primary` flat is reserved for non-button contexts. Buttons use the gradient. |
 | `<Button onClick={submit}>Save</Button>` (form submission) | `<SubmitButton loading={isSubmitting}>Save</SubmitButton>` | Wires `type="submit"` + loading spinner. |
 | `<Button>Confirm</Button>` inside a dialog | `<ConfirmButton variant="success">Approve</ConfirmButton>` | Pairs with `variant="destructive"` / `variant="warning"` for the matching dialog tone. |
 | Supporting / contextual action | `<SecondaryButton>` | Violet gradient + ring outline. "Cancel", "Edit Settings", etc. |
 | Cancel / dismiss inside a dialog | `<CancelButton>` or `<SecondaryButton>` | Translucent violet on opaque backgrounds. |
 | Edit affordance | `<EditButton>` / `<EditIconButton>` | Toxic violet→emerald cyberpunk blend per `brandToxic`. |
-| Destructive page-level action | `<DestructiveButton>` | Red + 3D. NOT for dialog confirmation — use `<ConfirmButton variant="destructive">` there. |
-| Navigation action (link styled as button) | `<NavButton>` | Sky blue + 3D. |
+| Destructive page-level action | `<DestructiveButton>` | Red, flat. NOT for dialog confirmation — use `<ConfirmButton variant="destructive">` there. |
+| Navigation action (link styled as button) | `<NavButton>` | Sky blue, flat. |
 | Icon-only variant of a generic button | The matching `*IconButton` in `buttons/icons/` (e.g. `<EditIconButton>`, `<ViewIconButton>`) | Don't roll a new icon-only button — extend the icons folder. |
 
 ### Structural `<Button>` exceptions (NOT a violation)

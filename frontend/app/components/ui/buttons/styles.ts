@@ -90,13 +90,18 @@ export const brandErrorCard = 'bg-red-900/60 border border-red-500/15';
 // Brand error primary - lighter red for interactive error elements (buttons, close icons)
 export const brandErrorPrimary = 'bg-gradient-to-r from-red-700/80 to-violet-900/80 hover:from-red-600/80 hover:to-violet-800/80 text-white';
 
-// Base 3D button effect classes (active state removed for disabled buttons via CSS)
+// Base button lift — flat by design. The old chunky bevel
+// (`border-b-4 active:border-b-0 active:translate-y-1`) was removed so action
+// buttons read clean and consistent (no mix of 3D / non-3D across a footer).
+// A soft drop shadow keeps the surface separated from the dialog; press
+// feedback comes from <Button>'s `active:scale-[0.95]` (button.tsx). Per-variant
+// `border-b-<color>` accents below are now inert (width 0) and harmless.
 export const button3DBase =
-  'shadow-lg shadow-black/30 border-b-4 active:border-b-0 active:translate-y-1 transition-all duration-75';
+  'shadow-lg shadow-black/30 transition-all duration-75';
 
-// Disabled state styling - removes 3D effects and uses muted colors
+// Disabled state styling - removes lift and uses muted colors
 export const button3DDisabled =
-  'disabled:shadow-none disabled:border-b-0 disabled:translate-y-0 disabled:bg-gray-400 disabled:text-gray-600 disabled:cursor-not-allowed disabled:opacity-70';
+  'disabled:shadow-none disabled:bg-gray-400 disabled:text-gray-600 disabled:cursor-not-allowed disabled:opacity-70';
 
 // Icon styling to ensure icons inherit text color
 const iconWhite = '[&_svg]:text-white [&_svg]:drop-shadow-[1px_1px_1px_rgba(0,0,0,0.5)]';

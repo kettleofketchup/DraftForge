@@ -54,7 +54,7 @@ export function MobileNavDropdown({
       className={cn(
         'rounded-lg',
         isPrimary
-          ? [brandGradient, `shadow-lg border-b-4 ${brandDepthColors}`]
+          ? [brandGradient, `shadow-lg ${brandDepthColors}`]
           : brandSecondary,
         className,
       )}

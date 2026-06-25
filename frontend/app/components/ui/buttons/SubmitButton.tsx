@@ -44,6 +44,9 @@ const SubmitButton = React.forwardRef<HTMLButtonElement, SubmitButtonProps>(
         type="submit"
         disabled={disabled || loading}
         className={cn(
+          // min-h-11 keeps submit/approve actions the same 44px height as
+          // ConfirmButton/CancelButton so dialog footers line up.
+          'min-h-11',
           depth ? button3DVariants.success : 'bg-green-600 text-white hover:bg-green-500',
           className
         )}
