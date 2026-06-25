@@ -112,10 +112,11 @@ export const PlayersTab: React.FC = memo(() => {
           deleteButtonType="tournament"
           cols={cols}
           emptyMessage="No players in this tournament"
-          // Org context so each UserCard resolves orgEntry -> org-scoped edit
+          // Org/league context so each UserCard resolves a scope-aware edit
           // (editable MMR). Without it the edit pencil falls back to global
-          // scope and the MMR field is stripped / blocked for org admins.
+          // scope and the MMR field is hidden.
           organizationId={tournament?.organization_pk ?? currentOrg?.pk}
+          leagueId={tournament?.league_pk ?? undefined}
         />
       </div>
 

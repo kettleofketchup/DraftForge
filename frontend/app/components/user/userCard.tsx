@@ -15,12 +15,13 @@ import { UserAvatar } from '~/components/user/UserAvatar';
 import { getLogger } from '~/lib/logger';
 import { isUserEntry } from '~/store/userCacheTypes';
 import { PlayerRemoveButton } from '~/pages/tournament/tabs/players/playerRemoveButton';
+import { useLeagueStore } from '~/store/leagueStore';
 import { useOrgStore } from '~/store/orgStore';
 import { useUserStore } from '~/store/userStore';
 import { RolePositions } from './positions';
 import { UserRemoveButton } from './userCard/deleteButton';
 import UserEditModal from './userCard/editModal';
-import type { EditUserScope } from './userCard/editUserSchema';
+import { resolveEditScope, type EditUserScope } from './userCard/editUserSchema';
 import { LoginAsUserButton } from './userCard/LoginAsUserButton';
 
 /** Returns true if the user has rated any role > 0. */
@@ -53,6 +54,7 @@ export const UserCard: React.FC<Props> = memo(
     const currentUser: UserType = useUserStore((state) => state.currentUser);
     const getUsers = useUserStore((state) => state.getUsers);
     const currentOrg = useOrgStore((state) => state.currentOrg);
+    const currentLeague = useLeagueStore((state) => state.currentLeague);
     // Actions-only subscription: openPlayerModal is referentially stable, and
     // this hook does NOT re-render UserCard when the popover/modal state
     // transitions. Avoids cascading every grid card on hover.
@@ -63,12 +65,14 @@ export const UserCard: React.FC<Props> = memo(
       ? (organizationId ? orgEntry?.mmr : undefined)
       : user.mmr;
 
+    // Shared resolver (same as the incomplete-profiles card). Gates on the
+    // player's OrgUser link (flat orgUserPk on hydrated tournament users);
+    // league scope carries a deterministic orgId. Deps are primitives so a new
+    // currentOrg/currentLeague object ref with the same pk doesn't recompute.
     const editScope = React.useMemo<EditUserScope>(
       () =>
-        orgEntry && currentOrg
-          ? { kind: 'org', organization: currentOrg }
-          : { kind: 'global' },
-      [orgEntry?.id, currentOrg?.pk],
+        resolveEditScope(user, { organizationId, leagueId, currentOrg, currentLeague }),
+      [user, organizationId, leagueId, currentOrg?.pk, currentLeague?.pk],
     );
 
     // Construct the User instance ONCE per stable input set. Doing this
