@@ -31,7 +31,6 @@ export interface UserClassType extends UserType {
   [key: string]: any;
 
   setFromGuildMember: (member: GuildMember) => void;
-  getAvatarUrl: () => string;
   dbFetch: () => Promise<UserType>;
   dbUpdate: (data: Partial<UserType>) => Promise<UserType>;
   dbCreate: () => Promise<UserType>;

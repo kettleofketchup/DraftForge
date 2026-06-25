@@ -103,10 +103,4 @@ export class User implements UserClassType {
     this.guildNickname = member.nick ?? null;
     log.debug('User set from GuildMember:', this, member);
   }
-  getAvatarUrl(): string {
-    if (!this.avatar) {
-      throw new Error('Avatar is not set.');
-    }
-    return `https://cdn.discordapp.com/avatars/${this.discordId}/${this.avatar}.png`;
-  }
 }

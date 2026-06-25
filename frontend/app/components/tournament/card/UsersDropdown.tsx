@@ -1,7 +1,8 @@
 import { Link } from 'react-router';
 import type { UserType } from '~/components/user/types';
+import { UserAvatar } from '~/components/user/UserAvatar';
+import { DisplayName } from '~/components/user/avatar';
 
-import { AvatarUrl } from '~/index';
 interface Props {
   users: UserType[];
 }
@@ -13,16 +14,12 @@ export const UsersDropdown: React.FC<Props> = ({ users }) => {
         key={`userdropdown-${user.pk || user.username}`}
         className="flex items-center gap-3 py-2"
       >
-        <div className="avatar">
-          <div className="w-8 h-8 rounded-full">
-            <img src={AvatarUrl(user)} alt={user.nickname || user.username} />
-          </div>
-        </div>
+        <UserAvatar user={user} size="md" />
         <Link
           to={`/user/${user.pk ?? user.username}`}
           className="link link-primary"
         >
-          {user.nickname || user.username}
+          {DisplayName(user)}
         </Link>
       </li>
     );
