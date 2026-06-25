@@ -67,7 +67,7 @@ export function UserEditModal({ user, scope = { kind: 'global' }, fields }: Prop
     scope.kind === 'org'
       ? scope.organization.pk
       : scope.kind === 'league'
-        ? (scope.organization?.pk ?? scope.league.organization?.pk ?? null)
+        ? (scope.orgId ?? scope.organization?.pk ?? scope.league.organization?.pk ?? null)
         : null;
   const scopeLeaguePk = scope.kind === 'league' ? scope.league.pk : null;
   useEffect(() => {

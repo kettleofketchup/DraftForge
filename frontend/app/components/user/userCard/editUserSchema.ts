@@ -30,7 +30,7 @@ export type EditUserInput = z.infer<typeof EditUserSchema>;
 
 export type EditUserScope =
   | { kind: 'org'; organization: OrganizationType }
-  | { kind: 'league'; league: LeagueType; organization?: OrganizationType }
+  | { kind: 'league'; league: LeagueType; organization?: OrganizationType; orgId?: number }
   | { kind: 'global' };
 
 export type EditableField = keyof EditUserInput;
@@ -108,7 +108,7 @@ export async function dispatchPatch(
     // FLEXIBLE POINT: today routes through the parent org's OrgUser endpoint.
     // When a league-user PATCH endpoint lands, swap this branch.
     const orgId: number | undefined =
-      scope.organization?.pk ?? scope.league.organization?.pk;
+      scope.orgId ?? scope.organization?.pk ?? scope.league.organization?.pk;
     const orgUserPk: number | undefined = user.orgUserPk;
     if (!orgId || !orgUserPk) {
       throw new Error('League scope requires a parent org with an OrgUser link');
@@ -124,7 +124,7 @@ export function scopeToContext(
 ): { orgId?: number } | undefined {
   if (scope.kind === 'org') return { orgId: scope.organization.pk };
   if (scope.kind === 'league')
-    return { orgId: scope.organization?.pk ?? scope.league.organization?.pk };
+    return { orgId: scope.orgId ?? scope.organization?.pk ?? scope.league.organization?.pk };
   return undefined;
 }
 
