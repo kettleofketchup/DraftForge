@@ -3,6 +3,7 @@ import type { FieldNamesMarkedBoolean } from 'react-hook-form';
 import type { LeagueType } from '~/components/league/schemas';
 import type { OrganizationType } from '~/components/organization/schemas';
 import type { UserClassType, UserType } from '~/components/user/types';
+import { isUserEntry, type UserEntry } from '~/store/userCacheTypes';
 import {
   useIsLeagueAdmin,
   useIsOrganizationStaff,
@@ -34,6 +35,57 @@ export type EditUserScope =
   | { kind: 'global' };
 
 export type EditableField = keyof EditUserInput;
+
+/**
+ * The OrgUser id (orgUserPk) for this user in the given context, or undefined.
+ * Flat field first (hydrated tournament users + the errors card's toUserType
+ * both carry it); entity-scoped maps as fallback (org/league Users tabs). Keys
+ * on id existence, never MMR truthiness, so MMR-0/null-but-linked players still
+ * get scope-aware editing.
+ */
+export function resolveOrgUserLink(
+  user: { orgUserPk?: number | null } | UserEntry,
+  ctx: { organizationId?: number; leagueId?: number },
+): number | undefined {
+  const flat = (user as { orgUserPk?: number | null }).orgUserPk;
+  if (flat != null) return flat;
+  // Narrow via a separate variable: calling isUserEntry(user) directly fails
+  // typecheck because the {orgUserPk} union member isn't assignable to
+  // UserType (which requires `username`). The cast-to-a-local lets the guard
+  // narrow `maybeEntry` so `.orgData`/`.leagueData` resolve.
+  const maybeEntry = user as UserType | UserEntry;
+  if (isUserEntry(maybeEntry)) {
+    const id =
+      (ctx.organizationId ? maybeEntry.orgData[ctx.organizationId]?.id : undefined) ??
+      (ctx.leagueId ? maybeEntry.leagueData[ctx.leagueId]?.id : undefined);
+    if (id != null) return id;
+  }
+  return undefined;
+}
+
+/**
+ * Shared edit-scope resolver for the player card AND the incomplete-profiles
+ * card. No OrgUser link -> global (nickname/positions only). With a link,
+ * league -> org -> global, league scope carrying a DETERMINISTIC orgId from
+ * tournament context so the PATCH never depends on currentOrg/
+ * currentLeague.organization load timing.
+ */
+export function resolveEditScope(
+  user: { orgUserPk?: number | null } | UserEntry,
+  ctx: {
+    organizationId?: number;
+    leagueId?: number;
+    currentOrg: OrganizationType | null;
+    currentLeague: LeagueType | null;
+  },
+): EditUserScope {
+  if (resolveOrgUserLink(user, ctx) == null) return { kind: 'global' };
+  if (ctx.leagueId && ctx.currentLeague?.pk === ctx.leagueId) {
+    return { kind: 'league', league: ctx.currentLeague, orgId: ctx.organizationId };
+  }
+  if (ctx.currentOrg) return { kind: 'org', organization: ctx.currentOrg };
+  return { kind: 'global' };
+}
 
 // Coerce missing-or-empty string fields to null so Zod's `.nullable()`
 // branch accepts them (an empty string would otherwise hit the .min(2)
