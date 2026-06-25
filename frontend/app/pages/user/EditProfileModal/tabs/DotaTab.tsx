@@ -74,8 +74,13 @@ export default function DotaTab({ profile, onSave, onClose }: DotaTabProps) {
         _fetchedAt: Date.now(),
       });
 
-      // 3. refetch-on-next-mount
+      // 3. refetch-on-next-mount. Invalidate BOTH keys: the modal reads
+      // ['userProfile', pk]; UserProfilePage's Overview renders <RolePositions>
+      // off the ['user', pk] query (fetchUser) — without this, the profile
+      // positions badge stays stale until a manual refresh (same fix BaseTab
+      // applies for the nickname header).
       queryClient.invalidateQueries({ queryKey: ['userProfile', profile.pk] });
+      queryClient.invalidateQueries({ queryKey: ['user', profile.pk] });
 
       log.debug('dota_patch_success', { userPk: profile.pk, updated });
       toast.success('Dota profile updated');

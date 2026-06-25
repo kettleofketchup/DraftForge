@@ -12,13 +12,12 @@ Without this test, the `@cached_as(..., DotaUserProfile, ...)` dependency
 declarations could silently drift to the wrong model and CI wouldn't catch
 it via behavior — only the grep guardrail would.
 
-Shipped skipped: inherits T1's keep_fresh/eviction timing deferral
-(lesson #24). The grep guardrail (Task 3) is the live gate. Re-enable once
-T1's keep_fresh-vs-eviction root cause is fixed (see T1
-test_cacheops_integration.py + PR #250 post-rebase review notes).
+Now ENABLED: T2 dropped `keep_fresh=True` from the user list + detail
+`@cached_as` blocks (the lesson-#24 deferral root cause), so eviction is now
+strict + deterministic under TransactionTestCase + on_commit. Skips itself
+when Redis is unreachable (local no-Redis CI). This locks in the keep_fresh
+removal with real behavioral coverage.
 """
-
-import unittest
 
 import redis
 from django.conf import settings
@@ -50,17 +49,6 @@ def _redis_reachable() -> bool:
         return False
 
 
-@unittest.skip(
-    "inherits T1 keep_fresh/eviction deferral — lesson #24. Under "
-    "TransactionTestCase + autocommit + cacheops `keep_fresh=True`, the "
-    "eviction (or refresh) sometimes lags the re-fetch in CI. The static "
-    "grep guardrail in test_cacheops.py already verifies the "
-    "@cached_as DotaUserProfile dep declarations are correct. Re-enable in "
-    "a follow-up once the keep_fresh vs eviction timing is understood — "
-    "likely needs `cache.clear()` between warm/re-fetch, or to drop "
-    "keep_fresh on the @cached_as blocks. See T1 "
-    "test_cacheops_integration.py + PR #250 review notes for context."
-)
 class CacheopsInvalidationOnDotaProfilePatchTests(TransactionTestCase):
     """Verify PATCH /users/me/profile/game/dota/ evicts cached user payloads.
 

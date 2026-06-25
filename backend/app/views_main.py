@@ -583,7 +583,9 @@ class TeamView(viewsets.ModelViewSet):
             Game,
             Draft,
             DraftRound,
-            keep_fresh=True,
+            # No keep_fresh: team detail ships member nickname/avatar/positions;
+            # keep_fresh would serve stale members after a profile edit (lesson
+            # #24), same as the user list/detail blocks above.
             extra=cache_key,
             timeout=60 * 60,
         )

@@ -88,7 +88,9 @@ export default function DeadlockTab({ profile, onSave, onClose }: DeadlockTabPro
   });
 
   const onSubmit = form.handleSubmit((values) => {
-    mutation.mutate(values);
+    // rank_date is a Django DateField — it rejects "" (the empty <input
+    // type=date> value). Coerce empty → null so saving without a date works.
+    mutation.mutate({ ...values, rank_date: values.rank_date || null });
   });
 
   return (

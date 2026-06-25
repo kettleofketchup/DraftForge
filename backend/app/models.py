@@ -187,8 +187,11 @@ class CustomUser(AbstractUser):
     def dota_user_profile(self):
         """Convenience accessor — the user-wide Dota profile lives one hop
         away on base_profile. Transitional sugar for the shims below and
-        writers still phrasing reads as `user.dota_user_profile`."""
-        return self.base_profile.dota_user_profile
+        writers still phrasing reads as `user.dota_user_profile`. None-safe
+        like the shims: a pre-pk user (no base_profile yet) returns None
+        instead of raising RelatedObjectDoesNotExist."""
+        bp = getattr(self, "base_profile", None)
+        return getattr(bp, "dota_user_profile", None) if bp else None
 
     @property
     def positions(self):
