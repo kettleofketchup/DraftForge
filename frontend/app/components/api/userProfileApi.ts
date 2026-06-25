@@ -6,7 +6,12 @@
  * present but empty in the response (filled in by T2/T3).
  */
 
-import type { UserProfileEntry } from '~/store/userProfileTypes';
+import type {
+  DeadlockUserProfile,
+  DotaUserProfile,
+  PositionsValue,
+  UserProfileEntry,
+} from '~/store/userProfileTypes';
 
 import axios from './axios';
 
@@ -47,6 +52,37 @@ export async function patchBaseProfile(
 ): Promise<BasePatchResponse> {
   const response = await axios.patch<BasePatchResponse>(
     '/users/me/profile/base/',
+    patch,
+  );
+  return response.data;
+}
+
+export type DotaPatchPayload = {
+  positions?: PositionsValue | null;
+  has_active_dota_mmr?: boolean;
+};
+export type DeadlockPatchPayload = {
+  rank?: string | null;
+  rank_date?: string | null;
+};
+
+// OVERLOADS — without them the union return makes `updated.positions` a TS2339
+// in DotaTab.onSuccess (DeadlockUserProfile has no `positions`). The overloads
+// narrow the return per game so each tab's onSuccess is typed.
+export async function patchGameProfile(
+  game: 'dota',
+  patch: DotaPatchPayload,
+): Promise<DotaUserProfile>;
+export async function patchGameProfile(
+  game: 'deadlock',
+  patch: DeadlockPatchPayload,
+): Promise<DeadlockUserProfile>;
+export async function patchGameProfile(
+  game: 'dota' | 'deadlock',
+  patch: DotaPatchPayload | DeadlockPatchPayload,
+): Promise<DotaUserProfile | DeadlockUserProfile> {
+  const response = await axios.patch<DotaUserProfile | DeadlockUserProfile>(
+    `/users/me/profile/game/${game}/`,
     patch,
   );
   return response.data;

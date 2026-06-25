@@ -1,5 +1,6 @@
 // frontend/app/components/teamdraft/TeamPositionCoverage.tsx
 import { memo, useCallback, useMemo, useState } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import {
   HoverCard,
   HoverCardContent,
@@ -13,7 +14,11 @@ import {
 } from '~/components/user/positions/positionEdit';
 import { UserAvatar } from '~/components/user/UserAvatar';
 import { PlayerPopover } from '~/components/player';
+import { GAME_TYPE } from '~/components/game/constants';
 import { cn } from '~/lib/utils';
+import { selectPositions } from '~/store/selectPositions';
+import { useUserCacheStore } from '~/store/userCacheStore';
+import type { PositionsType } from '~/store/userCacheTypes';
 import type { TeamType } from '~/components/tournament/types';
 import type { UserType } from '~/components/user/types';
 
@@ -51,9 +56,18 @@ const positionLabels: Record<PositionKey, string> = {
   hard_support: 'Pos 5',
 };
 
-// Compute position coverage for a team
-export const computeTeamPositionCoverage = (currentTeam: TeamType | undefined): TeamPositionCoverageResult => {
+// Compute position coverage for a team.
+// positionsByPk routes user-wide positions through the gameType-aware selector
+// (list-populated entity adapter). Pass undefined to fall back to the member's
+// inline positions (preserves callers that haven't migrated).
+export const computeTeamPositionCoverage = (
+  currentTeam: TeamType | undefined,
+  positionsByPk?: Map<number, PositionsType | undefined>,
+): TeamPositionCoverageResult => {
   const members = currentTeam?.members || [];
+  const positionsFor = (member: UserType): PositionsType | undefined =>
+    (member.pk != null ? positionsByPk?.get(member.pk) : undefined) ??
+    member.positions;
 
   const result: Record<PositionKey, PositionCoverage> = {
     carry: { bestRank: 6, players: [], playersWithRanks: [], conflicts: [], possibleMMR: 0 },
@@ -70,7 +84,7 @@ export const computeTeamPositionCoverage = (currentTeam: TeamType | undefined): 
 
   for (const pos of positionKeys) {
     for (const member of members) {
-      const userPositions = member.positions;
+      const userPositions = positionsFor(member);
       if (!userPositions) continue;
       const rank = userPositions[pos] || 0;
       if (rank > 0) {
@@ -125,7 +139,7 @@ export const computeTeamPositionCoverage = (currentTeam: TeamType | undefined): 
     carry: 0, mid: 0, offlane: 0, soft_support: 0, hard_support: 0,
   };
   for (const member of members) {
-    const userPositions = member.positions;
+    const userPositions = positionsFor(member);
     if (!userPositions) continue;
     for (const pos of positionKeys) {
       if (userPositions[pos] === 1) {
@@ -548,9 +562,32 @@ interface TeamPositionCoverageRowProps {
 export const TeamPositionCoverageRow = memo(({ team, className, teamName, showFullTable = false }: TeamPositionCoverageRowProps) => {
   const [modalOpen, setModalOpen] = useState(false);
 
+  // Subscribe ONCE to a pk→positions record (Rules of Hooks: cannot call the
+  // hook per-member inside the pure compute fn). Explicit GAME_TYPE.DOTA2 because
+  // the teamdraft routes never set currentGameType — coverage is inherently Dota,
+  // so gating on the ambient (null) gameType would make positions vanish here.
+  // A flat record (not a Map) so useShallow can compare values by Object.is —
+  // selectPositions returns the stored reference, so this stays stable until a
+  // member's positions actually change.
+  const memberPks: number[] = (team?.members ?? [])
+    .map((m: UserType) => m.pk)
+    .filter((pk: number | null | undefined): pk is number => pk != null);
+  const positionsRecord = useUserCacheStore(
+    useShallow((s) => {
+      const rec: Record<number, PositionsType | undefined> = {};
+      for (const pk of memberPks) {
+        rec[pk] = selectPositions(s, pk, GAME_TYPE.DOTA2);
+      }
+      return rec;
+    }),
+  );
+
   const teamPositionCoverage = useMemo(() => {
-    return computeTeamPositionCoverage(team);
-  }, [team]);
+    const positionsByPk = new Map<number, PositionsType | undefined>(
+      Object.entries(positionsRecord).map(([pk, p]) => [Number(pk), p]),
+    );
+    return computeTeamPositionCoverage(team, positionsByPk);
+  }, [team, positionsRecord]);
 
   const handleClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();

@@ -87,37 +87,67 @@ class CacheopsSettingsTests(TestCase):
         )
 
 
+# Files we scan. Add new files here whenever a new module starts using
+# @cached_as with CustomUser deps.
+SCAN_TARGETS = [
+    REPO_ROOT / "backend" / "app" / "views_main.py",
+    REPO_ROOT / "backend" / "app" / "functions" / "tournament.py",
+    REPO_ROOT / "backend" / "app" / "user_cache.py",
+]
+
+
+def _customuser_blocks_missing(dep: str) -> list[str]:
+    """Return formatted offender strings for every @cached_as block in
+    SCAN_TARGETS that lists ``CustomUser`` but not ``dep``.
+
+    Positions and nickname/avatar both ship on the same user-list/detail/org/
+    league/draft endpoints, so any CustomUser-dependent block needs both
+    BaseUserProfile (T1) and DotaUserProfile (T2) deps.
+    """
+    offenders = []
+    for path in SCAN_TARGETS:
+        assert path.exists(), f"Scan target missing: {path}"
+        for start_line, block in _iter_cached_as_blocks(path):
+            if "CustomUser" not in block:
+                continue
+            if dep not in block:
+                offenders.append(
+                    f"  {path.relative_to(REPO_ROOT)}:{start_line}\n"
+                    f"    {block.splitlines()[0].strip()} ..."
+                )
+    return offenders
+
+
 class CachedAsGuardrailTests(TestCase):
     """Every cacheops decorator block that depends on ``CustomUser`` MUST
-    also depend on ``BaseUserProfile``. Nickname and avatar live on
-    BaseUserProfile (T1 epic) — a CustomUser-only dep would serve stale data
-    from cached endpoints (org rosters, tournament participants, draft
-    payloads) after a PATCH to the profile-base endpoint.
+    also depend on ``BaseUserProfile`` (nickname/avatar — T1 epic) AND
+    ``DotaUserProfile`` (positions/dota-mmr — T2 epic). A CustomUser-only dep
+    would serve stale data from cached endpoints (org rosters, tournament
+    participants, draft payloads) after a PATCH to the profile-base or
+    profile-game/dota endpoints.
     """
 
-    # Files we scan. Add new files here whenever a new module starts using
-    # @cached_as with CustomUser deps.
-    SCAN_TARGETS = [
-        REPO_ROOT / "backend" / "app" / "views_main.py",
-        REPO_ROOT / "backend" / "app" / "functions" / "tournament.py",
-    ]
-
     def test_every_customuser_cached_as_block_also_lists_baseuserprofile(self):
-        offenders = []
-        for path in self.SCAN_TARGETS:
-            assert path.exists(), f"Scan target missing: {path}"
-            for start_line, block in _iter_cached_as_blocks(path):
-                if "CustomUser" not in block:
-                    continue
-                if "BaseUserProfile" not in block:
-                    offenders.append(
-                        f"  {path.relative_to(REPO_ROOT)}:{start_line}\n"
-                        f"    {block.splitlines()[0].strip()} ..."
-                    )
+        offenders = _customuser_blocks_missing("BaseUserProfile")
         assert not offenders, (
             "@cached_as sites depending on CustomUser but missing "
             "BaseUserProfile dep:\n"
             + "\n".join(offenders)
             + "\n\nAdd `BaseUserProfile` (from user.models) to each "
+            "decorator's model list."
+        )
+
+    def test_every_customuser_cached_as_block_also_lists_dotauserprofile(self):
+        """Any @cached_as(CustomUser, ...) site that ships positions must also
+        depend on DotaUserProfile so a PATCH to /api/users/me/profile/game/dota/
+        evicts it. Positions ship on the same user-list/detail/org/league
+        endpoints that T1 guarded for BaseUserProfile, so the dependency set is
+        identical."""
+        offenders = _customuser_blocks_missing("DotaUserProfile")
+        assert not offenders, (
+            "@cached_as sites depending on CustomUser but missing "
+            "DotaUserProfile dep:\n"
+            + "\n".join(offenders)
+            + "\n\nAdd `DotaUserProfile` (from user.models) to each "
             "decorator's model list."
         )

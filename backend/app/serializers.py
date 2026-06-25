@@ -121,7 +121,11 @@ def _serialize_users_with_mmr(users_qs, tournament):
 
     org_users = (
         OrgUser.objects.filter(user__in=users_qs, organization=org)
-        .select_related("user", "user__positions", "user__base_profile")
+        .select_related(
+            "user",
+            "user__base_profile",
+            "user__base_profile__dota_user_profile__positions",
+        )
         .prefetch_related(
             Prefetch(
                 "league_memberships",
@@ -210,7 +214,11 @@ def _collect_context_mmr(tournament, seen_pks) -> dict:
 
     org_users = (
         OrgUser.objects.filter(user__in=user_qs, organization=org)
-        .select_related("user", "user__positions", "user__base_profile")
+        .select_related(
+            "user",
+            "user__base_profile",
+            "user__base_profile__dota_user_profile__positions",
+        )
         .prefetch_related(
             Prefetch(
                 "league_memberships",
@@ -1263,6 +1271,11 @@ class UserSerializer(serializers.ModelSerializer):
             try:
                 positions_data = validated_data.pop("positions", None)
                 if positions_data:
+                    if instance.positions is None:
+                        # SET_NULL on DotaUserProfile.positions means the shim
+                        # getter can return None — create on demand (the shim
+                        # setter persists it onto the dota profile).
+                        instance.positions = PositionsModel.objects.create()
                     positions_instance = instance.positions
                     for key, value in positions_data.items():
                         setattr(positions_instance, key, value)

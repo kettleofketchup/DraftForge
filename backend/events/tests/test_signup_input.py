@@ -72,7 +72,6 @@ class ApplySignupInputTests(TestCase):
 
         # Ensure user has a PositionsModel to write to.
         self.user.positions = PositionsModel.objects.create()
-        self.user.save(update_fields=["positions"])
 
         apply_signup_input(
             org_user=self.org_user,
@@ -92,7 +91,6 @@ class ApplySignupInputTests(TestCase):
         from app.models import PositionsModel
 
         self.user.positions = PositionsModel.objects.create()
-        self.user.save(update_fields=["positions"])
 
         apply_signup_input(
             org_user=self.org_user,
@@ -113,7 +111,6 @@ class ApplySignupInputTests(TestCase):
         from events.schemas import PositionPriorities
 
         self.user.positions = PositionsModel.objects.create()
-        self.user.save(update_fields=["positions"])
 
         apply_signup_input(
             org_user=self.org_user,

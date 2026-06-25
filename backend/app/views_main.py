@@ -21,12 +21,12 @@ from social_django.utils import load_strategy, psa
 from app.permissions_org import has_org_staff_access
 from telemetry.logging import get_logger
 
-# BaseUserProfile owns nickname/avatar (T1 epic). Every @cached_as site below
-# that ships nickname or avatar in its payload MUST list BaseUserProfile as a
-# dependency, otherwise PATCH /api/users/me/profile/base/ won't invalidate the
-# cached response. See backend/user/tests/test_cacheops.py for the grep
-# guardrail that enforces this.
-from user.models import BaseUserProfile
+# BaseUserProfile owns nickname/avatar (T1 epic); DotaUserProfile owns
+# positions/dota-mmr (T2 epic). Every @cached_as site below that ships
+# nickname/avatar/positions MUST list both as dependencies, otherwise PATCH
+# /api/users/me/profile/base/ or /game/dota/ won't invalidate the cached
+# response. See backend/user/tests/test_cacheops.py for the grep guardrail.
+from user.models import BaseUserProfile, DotaUserProfile
 
 from .decorators import render_to
 from .models import (
@@ -171,7 +171,9 @@ class UserView(viewsets.ModelViewSet):
     # base_profile is required because nickname/avatar now resolve via the
     # @property on CustomUser, which reads self.base_profile.* (T1 epic).
     queryset = (
-        CustomUser.objects.select_related("positions", "base_profile")
+        CustomUser.objects.select_related(
+            "base_profile", "base_profile__dota_user_profile__positions"
+        )
         .prefetch_related(
             "owned_organizations",
             "admin_organizations",
@@ -198,7 +200,10 @@ class UserView(viewsets.ModelViewSet):
         @cached_as(
             CustomUser.objects.all(),
             BaseUserProfile,
-            keep_fresh=True,
+            DotaUserProfile,
+            # No keep_fresh: it defeats predictable eviction after a profile
+            # edit (lesson #24 — nickname/avatar/positions edits would serve
+            # stale until TTL). Strict eviction is correct for user payloads.
             extra=cache_key,
             timeout=60 * 60,
         )
@@ -217,7 +222,11 @@ class UserView(viewsets.ModelViewSet):
         @cached_as(
             CustomUser.objects.filter(pk=pk),
             BaseUserProfile,
-            keep_fresh=True,
+            DotaUserProfile,
+            # No keep_fresh: it served a stale nickname/avatar after a profile
+            # edit (lesson #24 keep_fresh/eviction deferral). This is the
+            # `/api/users/<pk>/` payload the profile header reads — strict
+            # eviction makes edits reflect without a manual refresh.
             extra=cache_key,
             timeout=60 * 60,
         )
@@ -391,17 +400,17 @@ class TournamentView(viewsets.ModelViewSet):
             "source_event",
             "source_event__event_repeater",
             "users",
-            "users__positions",
+            "users__base_profile__dota_user_profile__positions",
             "teams__members",
-            "teams__members__positions",
+            "teams__members__base_profile__dota_user_profile__positions",
             "teams__captain",
-            "teams__captain__positions",
+            "teams__captain__base_profile__dota_user_profile__positions",
             "teams__deputy_captain",
-            "teams__deputy_captain__positions",
+            "teams__deputy_captain__base_profile__dota_user_profile__positions",
             "teams__dropin_members",
-            "teams__dropin_members__positions",
+            "teams__dropin_members__base_profile__dota_user_profile__positions",
             "teams__left_members",
-            "teams__left_members__positions",
+            "teams__left_members__base_profile__dota_user_profile__positions",
         )
 
     def list(self, request, *args, **kwargs):
@@ -412,6 +421,7 @@ class TournamentView(viewsets.ModelViewSet):
             Team,
             CustomUser,
             BaseUserProfile,
+            DotaUserProfile,
             Draft,
             Game,
             DraftRound,
@@ -435,6 +445,7 @@ class TournamentView(viewsets.ModelViewSet):
             Team,
             CustomUser,
             BaseUserProfile,
+            DotaUserProfile,
             Game,
             Draft,
             DraftRound,
@@ -542,6 +553,7 @@ class TeamView(viewsets.ModelViewSet):
             Team.objects.all(),
             CustomUser,
             BaseUserProfile,
+            DotaUserProfile,
             Tournament,
             Game,
             Draft,
@@ -566,11 +578,14 @@ class TeamView(viewsets.ModelViewSet):
             Team.objects.filter(pk=pk),
             CustomUser,
             BaseUserProfile,
+            DotaUserProfile,
             Tournament,
             Game,
             Draft,
             DraftRound,
-            keep_fresh=True,
+            # No keep_fresh: team detail ships member nickname/avatar/positions;
+            # keep_fresh would serve stale members after a profile edit (lesson
+            # #24), same as the user list/detail blocks above.
             extra=cache_key,
             timeout=60 * 60,
         )
@@ -620,6 +635,7 @@ class DraftView(viewsets.ModelViewSet):
             Tournament,
             CustomUser,
             BaseUserProfile,
+            DotaUserProfile,
             extra=cache_key,
             timeout=60 * 60,
         )
@@ -642,6 +658,7 @@ class DraftView(viewsets.ModelViewSet):
             Tournament,
             CustomUser,
             BaseUserProfile,
+            DotaUserProfile,
             extra=cache_key,
             timeout=60 * 60,
         )
@@ -695,6 +712,7 @@ class DraftRoundView(viewsets.ModelViewSet):
             Tournament,
             CustomUser,
             BaseUserProfile,
+            DotaUserProfile,
             extra=cache_key,
             timeout=60 * 10,
         )
@@ -716,6 +734,7 @@ class DraftRoundView(viewsets.ModelViewSet):
             Tournament,
             CustomUser,
             BaseUserProfile,
+            DotaUserProfile,
             extra=cache_key,
             timeout=60 * 10,
         )
@@ -880,6 +899,7 @@ class GameView(viewsets.ModelViewSet):
             Tournament,
             CustomUser,
             BaseUserProfile,
+            DotaUserProfile,
             extra=cache_key,
             timeout=60 * 10,
         )
@@ -901,6 +921,7 @@ class GameView(viewsets.ModelViewSet):
             Tournament,
             CustomUser,
             BaseUserProfile,
+            DotaUserProfile,
             extra=cache_key,
             timeout=60 * 10,
         )
@@ -990,6 +1011,7 @@ class TournamentsBasicView(viewsets.ModelViewSet):
             Team,
             CustomUser,
             BaseUserProfile,
+            DotaUserProfile,
             Game,
             extra=cache_key,
             timeout=60 * 10,
@@ -1126,11 +1148,18 @@ class OrganizationView(viewsets.ModelViewSet):
         cache_key = f"organization_users:{pk}"
 
         @cached_as(
-            OrgUser, CustomUser, BaseUserProfile, extra=cache_key, timeout=60 * 10
+            OrgUser,
+            CustomUser,
+            BaseUserProfile,
+            DotaUserProfile,
+            extra=cache_key,
+            timeout=60 * 10,
         )
         def get_data():
             org_users = OrgUser.objects.filter(organization=org).select_related(
-                "user", "user__positions", "user__base_profile"
+                "user",
+                "user__base_profile",
+                "user__base_profile__dota_user_profile__positions",
             )
             serializer = OrgUserSerializer(org_users, many=True)
             return serializer.data
@@ -1275,11 +1304,18 @@ class LeagueView(viewsets.ModelViewSet):
         cache_key = f"league_users:{pk}"
 
         @cached_as(
-            LeagueUser, CustomUser, BaseUserProfile, extra=cache_key, timeout=60 * 10
+            LeagueUser,
+            CustomUser,
+            BaseUserProfile,
+            DotaUserProfile,
+            extra=cache_key,
+            timeout=60 * 10,
         )
         def get_data():
             league_users = LeagueUser.objects.filter(league=league).select_related(
-                "user", "user__positions", "user__base_profile"
+                "user",
+                "user__base_profile",
+                "user__base_profile__dota_user_profile__positions",
             )
             serializer = LeagueUserSerializer(league_users, many=True)
             return serializer.data

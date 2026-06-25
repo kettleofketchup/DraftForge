@@ -1,5 +1,6 @@
 import { memo } from 'react';
 import type { UserType } from '~/index';
+import { usePlayerPositions } from '~/hooks/usePlayerPositions';
 import { cn } from '~/lib/utils';
 import { Badge } from '../../ui/badge';
 import {
@@ -444,12 +445,24 @@ export const RolePositions: React.FC<RolePositionsProps> = ({ user, compact, dis
   const isResponsive = compact === undefined;
   const forceCompact = compact === true;
 
+  // Route user-wide positions through the gameType-aware selector over the
+  // list-populated entity adapter. Falls back to the passed user.positions when
+  // the selector returns undefined: off-Dota surfaces (currentGameType !== DOTA2),
+  // users not yet in the cache, or synthetic-user callers (unranked org-boolean
+  // strips) that supply positions inline and have no cached pk. unranked callers
+  // (org DotaProfile booleans) are never re-routed.
+  const selected = usePlayerPositions(user?.pk ?? -1);
+  const resolved = !unranked && selected ? selected : user?.positions;
+  const resolvedUser = (
+    resolved === user?.positions ? user : { ...user, positions: resolved }
+  ) as UserType;
+
   const positions = [
-    { component: CarryBadge, value: user?.positions?.carry, key: 'carry' },
-    { component: MidBadge, value: user?.positions?.mid, key: 'mid' },
-    { component: OfflaneBadge, value: user?.positions?.offlane, key: 'offlane' },
-    { component: SoftSupportBadge, value: user?.positions?.soft_support, key: 'soft_support' },
-    { component: HardSupportBadge, value: user?.positions?.hard_support, key: 'hard_support' },
+    { component: CarryBadge, value: resolved?.carry, key: 'carry' },
+    { component: MidBadge, value: resolved?.mid, key: 'mid' },
+    { component: OfflaneBadge, value: resolved?.offlane, key: 'offlane' },
+    { component: SoftSupportBadge, value: resolved?.soft_support, key: 'soft_support' },
+    { component: HardSupportBadge, value: resolved?.hard_support, key: 'hard_support' },
   ];
 
   const activePositions = positions
@@ -470,7 +483,7 @@ export const RolePositions: React.FC<RolePositionsProps> = ({ user, compact, dis
     )}>
       {/* Render active positions first (sorted by preference) */}
       {activePositions.map(({ component: Component, key }) => (
-        <Component key={key} user={user} compact={compact} disableTooltips={disableTooltips} unranked={unranked} />
+        <Component key={key} user={resolvedUser} compact={compact} disableTooltips={disableTooltips} unranked={unranked} />
       ))}
       {/* Render placeholders for missing positions with correct icons */}
       {fillEmpty && missingPositions.map(({ key }) => (

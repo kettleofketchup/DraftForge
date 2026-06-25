@@ -486,8 +486,9 @@ class DraftPredictMMRSerializer(serializers.Serializer):
 from cacheops import cached_as
 
 # cached_as sites depending on CustomUser must also list BaseUserProfile
-# (owns nickname/avatar) — enforced by user/tests/test_cacheops.py.
-from user.models import BaseUserProfile
+# (nickname/avatar, T1) and DotaUserProfile (positions/dota-mmr, T2) —
+# enforced by user/tests/test_cacheops.py.
+from user.models import BaseUserProfile, DotaUserProfile
 
 
 @api_view(["POST"])
@@ -511,6 +512,7 @@ def get_draft_style_mmrs(request):
         Draft,
         CustomUser,
         BaseUserProfile,
+        DotaUserProfile,
         Tournament,
         Team,
         extra=cache_key,

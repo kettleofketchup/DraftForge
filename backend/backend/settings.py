@@ -352,6 +352,12 @@ else:
         # /api/users/me/profile/base/ invalidates the cached payload — see
         # backend/user/tests/test_cacheops.py for the grep guardrail.
         "user.baseuserprofile": {"ops": "all", "timeout": 60 * 60},
+        # DotaUserProfile owns positions + dota-mmr verification; DeadlockUserProfile
+        # owns rank (T2 epic). @cached_as sites shipping positions must list
+        # DotaUserProfile so PATCH /api/users/me/profile/game/dota/ invalidates the
+        # cached payload — see backend/user/tests/test_cacheops.py grep guardrail.
+        "user.dotauserprofile": {"ops": "all", "timeout": 60 * 60},
+        "user.deadlockuserprofile": {"ops": "all", "timeout": 60 * 60},
         "app.draft": {"ops": "all", "timeout": 60 * 60},
         "app.game": {"ops": "all", "timeout": 60 * 60},
         "app.herodraft": {"ops": "all", "timeout": 60 * 60},
