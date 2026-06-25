@@ -176,7 +176,7 @@ All brand style constants are exported from `~/components/ui/buttons`:
 | `brandBg` | `[background-image:var(--brand-bg)]` | Subtle surface background (default on dialogs) |
 | `brandGlow` | `shadow-brand-glow` | Brand glow shadow |
 | `brandToxic` | `bg-gradient-to-br from-violet-700 via-emerald-800 to-emerald-700 hover:from-violet-600 hover:via-emerald-700 hover:to-emerald-600 text-white` | Cyberpunk "toxic ooze" edit affordance — violet-700 → emerald-800 → emerald-700 diagonal blend (same palette family as `brandHighlight`, deeper and smoothly mixed). Used by `<EditButton>` / `<EditIconButton>`. |
-| `brandToxicDepthColors` | `border-b-emerald-900 shadow-emerald-950/60` | 3D depth + shadow tuned to the toxic gradient (deep-emerald glow on press) |
+| `brandToxicDepthColors` | `border-b-emerald-900 shadow-emerald-950/60` | Deep-emerald shadow tint for the toxic gradient. (The `border-b-*` accent is inert since buttons went flat — see [Button Lift](#button-lift-flat).) |
 
 ### Brand Surface Background (`brandBg`)
 
@@ -226,19 +226,25 @@ The `-mx-6 px-6` cancels the dialog's `p-6` for the viewport so the scrollbar si
 
 See [`theming-guide/ai/references/scrollbars-dialogs.md`](theming-guide/ai/references/scrollbars-dialogs.md) for the full ScrollArea-inside-Dialog contract (the `overflow-hidden` rule, why Radix Viewport's `size-full` needs a definite parent height, and how to verify the dialog actually clips).
 
-### 3D Depth Effects
+### Button Lift (Flat)
 
-Buttons support a `depth` prop for 3D press effects:
+Brand buttons are **flat by design** — a soft drop shadow lifts them off the
+dialog surface, and press feedback comes from the base `<Button>`'s
+`active:scale-[0.95]`. The old chunky bevel (`border-b-4` + `active:translate-y`)
+was removed: a footer that mixed bevelled and flat buttons read as inconsistent.
 
 ```tsx
-// 3D button (default for PrimaryButton)
+// Flat brand button with a soft-shadow lift (default)
 <PrimaryButton>Create</PrimaryButton>
-
-// Flat button
-<PrimaryButton depth={false}>Create</PrimaryButton>
 ```
 
-The 3D system uses `button3DBase` (shadow, border-b-4, active press) and `button3DDisabled` (muted disabled state).
+The lift lives in `button3DBase` (`shadow-lg shadow-black/30`) and the muted
+disabled treatment in `button3DDisabled`. The `depth` prop is retained for
+backwards compatibility but no longer toggles a chunky bevel.
+
+> **Do not reintroduce 3D bevels.** Never add `border-b-4` /
+> `active:translate-y-*` to a button (inline or via a new constant). Buttons
+> must read consistently flat across a footer — no mix of bevelled and flat.
 
 ### Button Policy
 
@@ -253,19 +259,28 @@ Do **not** use `<Button>` directly for user-facing actions. Reserve `<Button>` f
 
 | Context | Component | Visual |
 |---------|-----------|--------|
-| Main CTA / most-clicked action | `<PrimaryButton>` | Brand gradient + 3D |
-| Form submission | `<SubmitButton>` | Brand gradient + 3D |
-| Dialog confirmation | `<ConfirmButton variant="success">` | Brand gradient + 3D |
-| Destructive dialog action | `<ConfirmButton variant="destructive">` | Red + 3D |
-| Warning dialog action | `<ConfirmButton variant="warning">` | Orange + 3D |
+| Main CTA / most-clicked action | `<PrimaryButton>` | Brand gradient, flat |
+| Form submission | `<SubmitButton>` | Brand gradient, flat |
+| Dialog confirmation | `<ConfirmButton variant="success">` | Brand gradient, flat |
+| Destructive dialog action | `<ConfirmButton variant="destructive">` | Red, flat |
+| Warning dialog action | `<ConfirmButton variant="warning">` | Orange, flat |
 | Supporting/contextual action | `<SecondaryButton>` | Violet gradient + ring |
-| Cancel/back/dismiss | `<SecondaryButton>` or `<CancelButton>` | Translucent violet |
-| Colored contextual action | `<SecondaryButton color="sky">` | Colored background + 3D |
-| Navigation action | `<NavButton>` | Sky blue + 3D |
-| Edit action | `<EditButton>` / `<EditIconButton>` | Toxic violet→emerald cyberpunk blend + 3D |
-| Destructive page action | `<DestructiveButton>` | Red + 3D |
+| Cancel/back/dismiss | `<SecondaryButton>` or `<CancelButton>` | Translucent slate |
+| Colored contextual action | `<SecondaryButton color="sky">` | Colored background, flat |
+| Navigation action | `<NavButton>` | Sky blue, flat |
+| Edit action | `<EditButton>` / `<EditIconButton>` | Toxic violet→emerald cyberpunk blend, flat |
+| Destructive page action | `<DestructiveButton>` | Red, flat |
 
 > `PrimaryButton`, `SubmitButton`, and `ConfirmButton variant="success"` share the brand gradient visual. Choose based on HTML semantics and context, not appearance.
+
+### Footer Button Height
+
+Dialog-footer action buttons are **44px tall** (`min-h-11`) so a row of them
+lines up — a tall button next to short ones is the most common footer
+inconsistency. `ConfirmButton`, `CancelButton`, `SubmitButton`,
+`DestructiveButton`, and `WarningButton` all bake in `min-h-11`. When you build
+a footer, reach for these full-size action buttons (or pass `min-h-11`
+yourself) rather than mixing in a default-height `<Button>`.
 
 ---
 
@@ -411,8 +426,10 @@ import { UserAvatar } from '~/components/user/UserAvatar';
 // From a UserType object
 <UserAvatar user={user} size="md" />
 
-// From partial data (e.g., DM recipient)
-<UserAvatar user={{ nickname: "Player", discordId: "123" }} size="sm" />
+// From partial data — pass the avatar hash for the REAL avatar.
+// Omitting `avatar` falls back to a generated ui-avatars.com image,
+// which makes the same user look different across the app.
+<UserAvatar user={{ nickname: "Player", username: "player1", avatar: "abc123hash", discordId: "123" }} size="sm" />
 
 // With online indicator
 <UserAvatar user={user} size="lg" showOnline online />
@@ -429,6 +446,21 @@ import { UserAvatar } from '~/components/user/UserAvatar';
 **Borders:** `none` | `primary` (violet ring) | `muted` (subtle) | `captain` (gold ring)
 
 **DO NOT** use `<img>` with `AvatarUrl()` directly — use `<UserAvatar>` which wraps `AvatarUrl` with proper loading states, fallback initials, and memoization.
+
+**Pass the full identity, not a partial object.** `AvatarUrl` only builds the Discord CDN URL when it has `discordId` **and** the `avatar` hash (or a full `avatarUrl`); otherwise it falls back to a generated `ui-avatars.com` image. A `<UserAvatar user={{ nickname }} />` therefore renders a *different* avatar than the same user shown elsewhere. When the data comes from a serializer, expose `nickname` / `username` / `avatar` on the payload so the component can render the canonical avatar. (Real regression: the Discord activity log showed generated avatars because the log serializer didn't expose the avatar hash.)
+
+### Display Names
+
+**ALWAYS render a user's name via `DisplayName()`** from `~/components/user/avatar` — never a raw `username` / `nickname` / `discord_username` string. It applies the canonical priority (`nickname` → `username`) with an optional length cap, so the same person reads the same everywhere.
+
+```tsx
+import { DisplayName } from '~/components/user/avatar';
+
+<span>{DisplayName(user)}</span>        // nickname → username → '?'
+<span>{DisplayName(user, 20)}</span>    // truncates with … past 20 chars
+```
+
+**DO NOT** render `{user.username}` / `{log.discord_username}` directly — it bypasses the nickname preference and drifts from the rest of the UI.
 
 ---
 
