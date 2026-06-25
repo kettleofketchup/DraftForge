@@ -11,7 +11,7 @@ Walk this list against any diff that touches an [in-scope source tree](scope.md)
 - [ ] Page-level destructive action uses `<DestructiveButton>`, not `<ConfirmButton variant="destructive">`.
 - [ ] Edit affordance uses `<EditButton>` / `<EditIconButton>`, not a custom violet button.
 - [ ] Icon-only buttons live in `frontend/app/components/ui/buttons/icons/` (not invented inline).
-- [ ] No 3D bevel on buttons: no `border-b-4` / `active:border-b-0` / `active:translate-y-*` (inline or in a new constant). Buttons are flat. → [3D Depth Effects → Button Lift](../../THEMING-GUIDE.md#button-lift-flat)
+- [ ] No 3D bevel on buttons: no `border-b-4` / `active:border-b-0` / `active:translate-y-*` (inline or in a new constant). Buttons are flat. → [Button Lift](../../THEMING-GUIDE.md#button-lift-flat)
 - [ ] Dialog-footer action buttons are the same height. Use full-size action buttons (`ConfirmButton` / `CancelButton` / `SubmitButton` / `DestructiveButton` / `WarningButton`, all `min-h-11`) — don't mix in a default-height `<Button>`. → [Footer Button Height](../../THEMING-GUIDE.md#footer-button-height)
 - [ ] A "Close"/"dismiss" footer button is neutral (`<CancelButton>` / `<SecondaryButton>`), not red — red reads as a second destructive action next to the real one.
 

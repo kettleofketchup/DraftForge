@@ -2,13 +2,13 @@ import * as React from 'react';
 import { Button } from '~/components/ui/button';
 import { cn } from '~/lib/utils';
 import { HotkeyBadge } from './HotkeyBadge';
-import { brandNeutralOpaque, brandNeutralOpaque3D, button3DVariants } from './styles';
+import { brandNeutralOpaque, brandNeutralOpaqueLift, brandButtonVariants } from './styles';
 
 export type CancelButtonVariant = 'default' | 'success' | 'destructive';
 
 export interface CancelButtonProps
   extends Omit<React.ComponentProps<typeof Button>, 'variant'> {
-  /** Whether to apply 3D depth effects (default: true) */
+  /** Whether to apply the soft-shadow lift (default: true) */
   depth?: boolean;
   /** Color variant - 'success' for green cancel (e.g., in warning dialogs) */
   variant?: CancelButtonVariant;
@@ -17,7 +17,7 @@ export interface CancelButtonProps
 }
 
 /**
- * A cancel button with outline styling and optional 3D depth effects.
+ * A cancel button with outline styling and an optional soft-shadow lift.
  * Can be wrapped with DialogClose for dialog dismissal.
  *
  * @example
@@ -39,9 +39,9 @@ export interface CancelButtonProps
 const CancelButton = React.forwardRef<HTMLButtonElement, CancelButtonProps>(
   ({ children = 'Cancel', className, depth = true, variant = 'default', hotkey, ...props }, ref) => {
     const variantStyles = {
-      default: depth ? brandNeutralOpaque3D : brandNeutralOpaque,
-      success: depth ? button3DVariants.success : 'bg-green-600 text-white hover:bg-green-500',
-      destructive: depth ? button3DVariants.destructive : 'bg-red-600 text-white hover:bg-red-500',
+      default: depth ? brandNeutralOpaqueLift : brandNeutralOpaque,
+      success: depth ? brandButtonVariants.success : 'bg-green-600 text-white hover:bg-green-500',
+      destructive: depth ? brandButtonVariants.destructive : 'bg-red-600 text-white hover:bg-red-500',
     };
 
     // When hotkey is unset, pass children as the single child so `asChild`

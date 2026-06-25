@@ -2,7 +2,7 @@ import * as React from 'react';
 import { Button } from '~/components/ui/button';
 import { cn } from '~/lib/utils';
 import { HotkeyBadge } from './HotkeyBadge';
-import { brandSecondary, brandSecondary3D, button3DBase, button3DDisabled } from './styles';
+import { brandSecondary, brandSecondaryLift, buttonLift, buttonDisabled } from './styles';
 
 export type SecondaryColor = 'green' | 'blue' | 'purple' | 'orange' | 'red' | 'sky' | 'cyan' | 'lime' | 'emerald';
 
@@ -10,22 +10,22 @@ export interface SecondaryButtonProps
   extends Omit<React.ComponentProps<typeof Button>, 'variant'> {
   /** Optional background color for contextual actions */
   color?: SecondaryColor;
-  /** Whether to apply 3D depth effects (default: false for brand, true for colored) */
+  /** Whether to apply the soft-shadow lift (default: false for brand, true for colored) */
   depth?: boolean;
   /** Optional keyboard shortcut label rendered as a badge in the top-left corner. */
   hotkey?: string;
 }
 
 const colorStyles: Record<SecondaryColor, string> = {
-  green: `${button3DBase} ${button3DDisabled} bg-green-800 hover:bg-green-700 text-white border-b-green-950 shadow-green-900/50`,
-  blue: `${button3DBase} ${button3DDisabled} bg-blue-800 hover:bg-blue-700 text-white border-b-blue-950 shadow-blue-900/50`,
-  purple: `${button3DBase} ${button3DDisabled} bg-purple-800 hover:bg-purple-700 text-white border-b-purple-950 shadow-purple-900/50`,
-  orange: `${button3DBase} ${button3DDisabled} bg-orange-800 hover:bg-orange-700 text-white border-b-orange-950 shadow-orange-900/50`,
-  red: `${button3DBase} ${button3DDisabled} bg-red-800 hover:bg-red-700 text-white border-b-red-950 shadow-red-900/50`,
-  sky: `${button3DBase} ${button3DDisabled} bg-sky-800 hover:bg-sky-700 text-white border-b-sky-950 shadow-sky-900/50`,
-  cyan: `${button3DBase} ${button3DDisabled} bg-cyan-700 hover:bg-cyan-600 text-white border-b-cyan-900 shadow-cyan-900/50`,
-  lime: `${button3DBase} ${button3DDisabled} bg-lime-700 hover:bg-lime-600 text-white border-b-lime-900 shadow-lime-900/50`,
-  emerald: `${button3DBase} ${button3DDisabled} bg-emerald-800 hover:bg-emerald-700 text-white border-b-emerald-950 shadow-emerald-900/50`,
+  green: `${buttonLift} ${buttonDisabled} bg-green-800 hover:bg-green-700 text-white shadow-green-900/50`,
+  blue: `${buttonLift} ${buttonDisabled} bg-blue-800 hover:bg-blue-700 text-white shadow-blue-900/50`,
+  purple: `${buttonLift} ${buttonDisabled} bg-purple-800 hover:bg-purple-700 text-white shadow-purple-900/50`,
+  orange: `${buttonLift} ${buttonDisabled} bg-orange-800 hover:bg-orange-700 text-white shadow-orange-900/50`,
+  red: `${buttonLift} ${buttonDisabled} bg-red-800 hover:bg-red-700 text-white shadow-red-900/50`,
+  sky: `${buttonLift} ${buttonDisabled} bg-sky-800 hover:bg-sky-700 text-white shadow-sky-900/50`,
+  cyan: `${buttonLift} ${buttonDisabled} bg-cyan-700 hover:bg-cyan-600 text-white shadow-cyan-900/50`,
+  lime: `${buttonLift} ${buttonDisabled} bg-lime-700 hover:bg-lime-600 text-white shadow-lime-900/50`,
+  emerald: `${buttonLift} ${buttonDisabled} bg-emerald-800 hover:bg-emerald-700 text-white shadow-emerald-900/50`,
 };
 
 /**
@@ -38,7 +38,7 @@ const colorStyles: Record<SecondaryColor, string> = {
  * // Brand secondary (default) - translucent violet tint
  * <SecondaryButton onClick={handleAction}>Stats</SecondaryButton>
  *
- * // With 3D depth
+ * // With soft-shadow lift
  * <SecondaryButton depth>Secondary with Depth</SecondaryButton>
  *
  * // Colored variant for contextual actions
@@ -53,7 +53,7 @@ const SecondaryButton = React.forwardRef<
   const styles = color
     ? colorStyles[color]
     : useDepth
-      ? brandSecondary3D
+      ? brandSecondaryLift
       : brandSecondary;
 
   // When hotkey is unset we must pass `children` as the single child so this

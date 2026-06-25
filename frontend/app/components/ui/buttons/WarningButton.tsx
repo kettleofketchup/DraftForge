@@ -2,18 +2,18 @@ import { Loader2 } from 'lucide-react';
 import * as React from 'react';
 import { Button } from '~/components/ui/button';
 import { cn } from '~/lib/utils';
-import { button3DVariants } from './styles';
+import { brandButtonVariants } from './styles';
 
 export interface WarningButtonProps
   extends Omit<React.ComponentProps<typeof Button>, 'variant'> {
   /** Whether the button is in a loading state */
   loading?: boolean;
-  /** Whether to apply 3D depth effects (default: true) */
+  /** Whether to apply the soft-shadow lift (default: true) */
   depth?: boolean;
 }
 
 /**
- * A warning button with orange theme styling and 3D depth effects.
+ * A warning button with orange theme styling and a soft-shadow lift.
  * Used for caution-level actions that aren't destructive.
  *
  * @example
@@ -31,7 +31,7 @@ const WarningButton = React.forwardRef<HTMLButtonElement, WarningButtonProps>(
         disabled={disabled || loading}
         className={cn(
           'min-h-11',
-          depth ? button3DVariants.warning : 'bg-orange-500 text-white hover:bg-orange-400',
+          depth ? brandButtonVariants.warning : 'bg-orange-500 text-white hover:bg-orange-400',
           className
         )}
         {...props}

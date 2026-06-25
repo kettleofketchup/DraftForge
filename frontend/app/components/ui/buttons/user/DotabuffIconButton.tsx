@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { Button } from '~/components/ui/button';
 import { cn } from '~/lib/utils';
-import { brandSecondary, button3DBase } from '../styles';
+import { brandSecondary, buttonLift } from '../styles';
 
 export interface DotabuffIconButtonProps
   extends Omit<React.ComponentProps<typeof Button>, 'variant' | 'size' | 'asChild'> {
@@ -39,7 +39,7 @@ const DotabuffIconButton = React.forwardRef<HTMLButtonElement, DotabuffIconButto
         className={cn(
           'rounded-full',
           brandSecondary,
-          button3DBase,
+          buttonLift,
           'border-b-violet-700/50 shadow-black/30',
           className,
         )}
