@@ -102,6 +102,46 @@ def _attach_user_can_manage(payload, user):
     return payload
 
 
+def _teardown_event(event):
+    """Delete an event and everything Discord/tournament-related it owns.
+
+    Dispatches deletion of the live Discord scheduled event (nothing else in the
+    app removes scheduled events), then removes the linked tournament, DiscordEvent
+    (cascades to messages, logs, DMs) and legacy message logs, then the event row.
+    Shared by EventViewSet (single delete) and EventRepeaterViewSet (series delete)
+    so both paths clean up identically and can't leave ghost events behind.
+    """
+    from app.cache_utils import invalidate_after_commit
+    from discordbot.models import DiscordEvent, DiscordMessageLog
+    from events.tasks import delete_discord_scheduled_event
+
+    with transaction.atomic():
+        invalidate_after_commit(event)
+        if event.tournament:
+            tournament = event.tournament
+            event.tournament = None
+            event.save(update_fields=["tournament", "updated_at"])
+            tournament.delete()
+
+        try:
+            discord_event = event.discord_event
+        except DiscordEvent.DoesNotExist:
+            discord_event = None
+        if discord_event is not None:
+            if discord_event.scheduled_event_id:
+                delete_discord_scheduled_event.delay(
+                    discord_event.guild_id, discord_event.scheduled_event_id
+                )
+            discord_event.delete()
+
+        DiscordMessageLog.objects.filter(
+            source__in=["event_announcement", "event_notice"],
+            source_id=event.pk,
+        ).delete()
+
+        event.delete()
+
+
 class EventRepeaterViewSet(viewsets.ModelViewSet):
     serializer_class = EventRepeaterSerializer
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
@@ -116,6 +156,21 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
         if self.action in ("update", "partial_update", "destroy"):
             if not has_org_staff_access(request.user, obj.organization):
                 self.permission_denied(request)
+
+    def perform_destroy(self, instance):
+        """Tear down the series' still-active occurrences (and their live Discord
+        scheduled events) before deleting the series, so sync_discord_events can't
+        resurrect them as ghosts. Terminal (completed/cancelled) occurrences are
+        left as orphans via Event.event_repeater=SET_NULL for historical record.
+        """
+        active_states = [
+            EventState.UPCOMING,
+            EventState.SIGNUPS_OPEN,
+            EventState.ROLL_CALL,
+        ]
+        for event in list(instance.events.filter(state__in=active_states)):
+            _teardown_event(event)
+        instance.delete()
 
     def get_queryset(self):
         from django.db.models import Min
@@ -628,35 +683,7 @@ class EventViewSet(viewsets.ModelViewSet):
 
     def perform_destroy(self, instance):
         """Clean up tournament and Discord messages before deleting event."""
-        from app.cache_utils import invalidate_after_commit
-
-        with transaction.atomic():
-            invalidate_after_commit(instance)
-            # Delete linked tournament
-            if instance.tournament:
-                tournament = instance.tournament
-                instance.tournament = None
-                instance.save(update_fields=["tournament", "updated_at"])
-                tournament.delete()
-
-            # Delete DiscordEvent (cascades to messages, logs, DMs)
-            from discordbot.models import DiscordEvent
-
-            try:
-                discord_event = instance.discord_event
-                discord_event.delete()
-            except DiscordEvent.DoesNotExist:
-                pass
-
-            # Clean up legacy DiscordMessageLog entries for pre-migration data
-            from discordbot.models import DiscordMessageLog
-
-            DiscordMessageLog.objects.filter(
-                source__in=["event_announcement", "event_notice"],
-                source_id=instance.pk,
-            ).delete()
-
-            instance.delete()
+        _teardown_event(instance)
 
     @action(detail=True, methods=["post"])
     def cancel(self, request, pk=None):
