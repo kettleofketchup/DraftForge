@@ -224,6 +224,7 @@ jobs:
               app.tests.test_discord_reclaim \
               events.discord.tests \
               events.tests.test_signup_interactions \
+              events.tests.test_series_oneoff \
               user.tests \
               -v 2
 

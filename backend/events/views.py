@@ -1,6 +1,7 @@
 from cacheops import cached_as
 from django.db import transaction
 from django.db.models import BooleanField, Count, Exists, F, OuterRef, Q, Value
+from django.utils import timezone
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
@@ -211,13 +212,16 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
         # and tell sync_future_events to realign occurrences. Without this,
         # editing day_of_week leaves stale UPCOMING rows on the old day
         # while generate_events_for_repeater creates new rows on the new
-        # day — admins see duplicates.
+        # day — admins see duplicates. is_active is in the tuple so a plain
+        # PATCH that unpauses a series realigns exactly like the reactivate
+        # button does.
         schedule_fields = (
             "day_of_week",
             "time_of_day",
             "timezone",
             "starts_at",
             "frequency",
+            "is_active",
         )
         before = {f: getattr(serializer.instance, f) for f in schedule_fields}
         repeater = serializer.save()
@@ -323,6 +327,58 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
         return Response(
             EventSerializer(event, context={"request": request}).data,
             status=status.HTTP_201_CREATED,
+        )
+
+    @action(
+        detail=True, methods=["post"], permission_classes=[permissions.IsAuthenticated]
+    )
+    def reactivate(self, request, pk=None):
+        """Reactivate a paused series and realign its upcoming events."""
+        from app.cache_utils import invalidate_after_commit
+
+        repeater = self.get_object()
+        if not has_org_staff_access(request.user, repeater.organization):
+            return Response(
+                {"detail": "You do not have staff access to this organization."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        before = set(
+            Event.objects.filter(event_repeater=repeater).values_list("pk", flat=True)
+        )
+        if not repeater.is_active:
+            repeater.is_active = True
+            repeater.save(update_fields=["is_active", "updated_at"])
+
+        # realign_schedule=True, not the bare generator: a schedule edit made
+        # while paused would otherwise leave stale rows alongside new ones.
+        touched = sync_future_events(repeater, realign_schedule=True)
+        after = set(
+            Event.objects.filter(event_repeater=repeater).values_list("pk", flat=True)
+        )
+        created_count = len(after - before)
+
+        if created_count:
+            detail = f"Series reactivated. {created_count} upcoming event(s) created."
+        elif repeater.ends_at and repeater.ends_at < timezone.localdate():
+            detail = (
+                "Series reactivated, but no events were created because its "
+                "end date has passed."
+            )
+        else:
+            detail = "Series reactivated. No new events were due."
+
+        invalidate_after_commit(repeater, *touched)
+        logger.info(
+            "repeater_reactivated",
+            system="events",
+            subsystem="views",
+            repeater_id=repeater.pk,
+            created_count=created_count,
+        )
+        return Response(
+            {"detail": detail, "created_count": created_count, "is_active": True},
+            status=status.HTTP_200_OK,
         )
 
 

@@ -200,7 +200,7 @@ class CreateOffScheduleEventTest(EventTestCase):
         self.assertTrue(event.is_off_schedule)
         self.assertEqual(event.state, EventState.UPCOMING)
         self.assertEqual(event.name, "Sunday Turbo")
-        self.assertEqual(event.max_players, 20)          # EventConfigMixin
+        self.assertEqual(event.max_players, 20)  # EventConfigMixin
         self.assertFalse(event.discord_send_draft_link)  # DiscordTournamentConfigMixin
         self.assertEqual(event.tournament_date, when)
 
@@ -428,5 +428,98 @@ class CreateEventEndpointTest(EventTestCase):
     def test_invalidates_repeater_cache(self, _n, _c, _t, _e, mock_invalidate):
         self.client.force_authenticate(self.admin)
         self.client.post(self.url, {"scheduled_at": self.when}, format="json")
+        invalidated = [a for call in mock_invalidate.call_args_list for a in call.args]
+        self.assertTrue(any(obj.pk == self.repeater.pk for obj in invalidated))
+
+
+class ReactivateEndpointTest(EventTestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.repeater = EventRepeater.objects.create(
+            organization=self.org,
+            name="Sunday Turbo",
+            frequency=RepeatFrequency.WEEKLY,
+            day_of_week=0,
+            time_of_day=time(18, 0),
+            starts_at=tz.now().date(),
+            created_by=self.admin,
+            is_active=False,
+        )
+        self.url = f"/api/events/repeaters/{self.repeater.pk}/reactivate/"
+
+    @patch("events.services.ensure_discord_event")
+    @patch("events.services.create_tournament_for_event")
+    @patch("events.services.notify_create_discord_event")
+    @patch("events.services.notify_new_event")
+    def test_reactivate_flips_flag_and_generates(self, *_mocks):
+        self.client.force_authenticate(self.admin)
+        resp = self.client.post(self.url)
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.repeater.refresh_from_db()
+        self.assertTrue(self.repeater.is_active)
+        self.assertGreater(resp.data["created_count"], 0)
+        self.assertEqual(
+            Event.objects.filter(event_repeater=self.repeater).count(),
+            resp.data["created_count"],
+        )
+
+    def test_non_staff_forbidden(self):
+        self.client.force_authenticate(self.unrelated_user)
+        resp = self.client.post(self.url)
+        self.assertEqual(resp.status_code, 403, resp.content)
+        self.repeater.refresh_from_db()
+        self.assertFalse(self.repeater.is_active)
+
+    @patch("events.services.ensure_discord_event")
+    @patch("events.services.create_tournament_for_event")
+    @patch("events.services.notify_create_discord_event")
+    @patch("events.services.notify_new_event")
+    def test_ended_series_reports_zero(self, *_mocks):
+        self.repeater.ends_at = tz.now().date() - timedelta(days=1)
+        self.repeater.save(update_fields=["ends_at"])
+        self.client.force_authenticate(self.admin)
+        resp = self.client.post(self.url)
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertEqual(resp.data["created_count"], 0)
+        self.assertIn("end date", resp.data["detail"].lower())
+
+    @patch("events.services.ensure_discord_event")
+    @patch("events.services.create_tournament_for_event")
+    @patch("events.services.notify_create_discord_event")
+    @patch("events.services.notify_new_event")
+    def test_reactivate_realigns_after_schedule_change(self, *_mocks):
+        stale = Event.objects.create(
+            organization=self.org,
+            event_repeater=self.repeater,
+            name="Sunday Turbo",
+            scheduled_at=tz.now() + timedelta(days=1, hours=2),
+            state=EventState.UPCOMING,
+        )
+        self.repeater.day_of_week = 3
+        self.repeater.name = "Renamed While Paused"
+        self.repeater.save()
+
+        self.client.force_authenticate(self.admin)
+        resp = self.client.post(self.url)
+        self.assertEqual(resp.status_code, 200, resp.content)
+
+        self.assertFalse(Event.objects.filter(pk=stale.pk).exists())
+        survivors = Event.objects.filter(event_repeater=self.repeater)
+        self.assertTrue(survivors.exists())
+        self.assertEqual(
+            survivors.count(),
+            survivors.values("scheduled_at").distinct().count(),
+        )
+        for event in survivors:
+            self.assertEqual(event.name, "Renamed While Paused")
+
+    @patch("app.cache_utils.invalidate_after_commit")
+    @patch("events.services.ensure_discord_event")
+    @patch("events.services.create_tournament_for_event")
+    @patch("events.services.notify_create_discord_event")
+    @patch("events.services.notify_new_event")
+    def test_invalidates_repeater_cache(self, _n, _c, _t, _e, mock_invalidate):
+        self.client.force_authenticate(self.admin)
+        self.client.post(self.url)
         invalidated = [a for call in mock_invalidate.call_args_list for a in call.args]
         self.assertTrue(any(obj.pk == self.repeater.pk for obj in invalidated))
