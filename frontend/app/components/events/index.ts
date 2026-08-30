@@ -6,6 +6,7 @@ export {
 
 export { ApprovalConfigSection } from './ApprovalConfigSection';
 export { CreateEventModal } from './CreateEventModal';
+export { CreateSeriesEventModal } from './CreateSeriesEventModal';
 export { EditEventModal } from './EditEventModal';
 export { EditOrgDefaultsModal } from './EditOrgDefaultsModal';
 export { EditRepeaterModal } from './EditRepeaterModal';
