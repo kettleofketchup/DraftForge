@@ -11,6 +11,8 @@ import { findOverflow } from '../../../../scripts/find-overflow';
 type Route = { path: string };
 
 let ROUTES: Route[];
+// keep in sync with the ROUTES array below
+const ROUTE_COUNT = 12;
 
 test.beforeAll(async ({ browser }) => {
   const ctx = await browser.newContext({ ignoreHTTPSErrors: true });
@@ -21,6 +23,16 @@ test.beforeAll(async ({ browser }) => {
     );
   }
   const events = await getEventsTestData(ctx);
+  // No fixture exposes a repeater id, and "Weekly Inhouse" is created without
+  // an explicit pk, so resolve it by name instead of hard-coding one.
+  const repResp = await ctx.request.get(
+    `https://${process.env.DOCKER_HOST || 'localhost'}/api/events/repeaters/?organization=${events.orgPk}`,
+  );
+  const repeaters = await repResp.json();
+  const series = repeaters.find((r: { name: string }) => r.name === 'Weekly Inhouse');
+  if (!series) {
+    throw new Error("Repeater 'Weekly Inhouse' not found. Run `just db::populate::all`.");
+  }
   await ctx.close();
   ROUTES = [
     { path: '/' },
@@ -34,6 +46,7 @@ test.beforeAll(async ({ browser }) => {
     { path: '/leagues/1' },
     { path: `/tournament/${tournament.pk}/bracket` },
     { path: `/events/${events.pk}/discord` },
+    { path: `/event-series/${series.id}` },
   ];
 });
 
@@ -42,7 +55,7 @@ test.describe('mobile horizontal overflow audit (@cicd)', () => {
     await loginAdmin(context);
   });
 
-  for (let i = 0; i < 11; i++) {
+  for (let i = 0; i < ROUTE_COUNT; i++) {
     test(`route ${i} has no horizontal overflow`, async ({ page }) => {
       const route = ROUTES[i];
       await visitAndWaitForHydration(page, route.path);
@@ -60,7 +73,7 @@ test.describe('mobile hydration mismatch audit (@cicd)', () => {
     await loginAdmin(context);
   });
 
-  for (let i = 0; i < 11; i++) {
+  for (let i = 0; i < ROUTE_COUNT; i++) {
     test(`route ${i} renders without SSR/client divergence`, async ({ page }) => {
       const errors: string[] = [];
       page.on('pageerror', (e) => errors.push(e.message));
