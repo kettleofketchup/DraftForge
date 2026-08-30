@@ -161,6 +161,13 @@ export function useIsOrganizationStaff(
 }
 
 /**
+ * Minimal leagues (a tournament's embedded `LeagueMinimalSchema`) and bare pks
+ * carry no staff/admin arrays, so the league-level checks below skip and only
+ * the `organizations` cascade decides — such call sites must pass the org.
+ */
+export type LeagueLike = Partial<LeagueType> | number | null | undefined;
+
+/**
  * Check if the current user is an admin of the given league.
  * League admin access includes admins of any linked organization.
  *
@@ -168,26 +175,12 @@ export function useIsOrganizationStaff(
  * @param organizations - Array of parent organizations (for org admin check)
  * @returns true if user is league admin, admin of any linked org, or superuser
  */
-/**
- * League argument accepted by the permission hooks.
- *
- * Call sites pass either a full `LeagueType`, the lightweight
- * `LeagueMinimalSchema` embedded on a tournament (pk/name/organization_name —
- * no staff/admin arrays), or a raw pk. Every league field read below is
- * optional-chained, so a minimal league or a bare pk simply skips the
- * league-level checks and falls through to the `organizations` cascade. That
- * is why those call sites fetch the org separately and pass it as the second
- * argument.
- */
-export type LeagueLike = Partial<LeagueType> | number | null | undefined;
-
 export function useIsLeagueAdmin(
   league: LeagueLike,
   organizations?: OrganizationType[] | OrganizationType | null
 ): boolean {
   const currentUser = useUserStore((state) => state.currentUser);
-  // A tournament's `league` can arrive as a bare pk; only the object form
-  // carries the staff/admin arrays these checks read.
+  // Narrow away the bare-pk form; only objects carry staff/admin arrays.
   const leagueObj = typeof league === 'object' ? league : null;
 
   return useMemo(() => {
@@ -258,8 +251,7 @@ export function useIsLeagueStaff(
   organizations?: OrganizationType[] | OrganizationType | null
 ): boolean {
   const currentUser = useUserStore((state) => state.currentUser);
-  // A tournament's `league` can arrive as a bare pk; only the object form
-  // carries the staff/admin arrays these checks read.
+  // Narrow away the bare-pk form; only objects carry staff/admin arrays.
   const leagueObj = typeof league === 'object' ? league : null;
   const isLeagueAdmin = useIsLeagueAdmin(league, organizations);
 

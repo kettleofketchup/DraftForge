@@ -791,9 +791,8 @@ function SignupsTab({
   const signupUserPks = useMemo(() => new Set(signups.map((s) => s.user)), [signups]);
   const entityContext = useMemo(() => ({ orgId }), [orgId]);
   const handleAddUser = useCallback(async (payload: AddMemberPayload): Promise<UserType> => {
-    // adminAddSignup takes a site-user pk only, but the modal's Discord tab can
-    // hand back a discord_id with no user_id. Fail loudly rather than posting
-    // user_id: undefined (the modal surfaces the message as a toast).
+    // The modal's Discord tab can hand back a discord_id with no user_id, and
+    // adminAddSignup takes a site-user pk only; the throw surfaces as a toast.
     if (payload.user_id == null) {
       throw new Error('Select a site user — adding a Discord member directly is not supported here yet.');
     }
