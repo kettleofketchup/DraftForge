@@ -241,15 +241,16 @@ export function localToUTC(datetimeLocal: string, timezone: string): string {
   const tzMinute = Number(parts.minute);
   const tzDay = Number(parts.day);
 
-  // Offset = difference between what we want (the naive values) and what the tz shows
-  let diffMinutes = (hour - tzHour) * 60 + (minute - tzMinute);
-  // Handle day boundary crossing
-  if (tzDay !== day) {
-    diffMinutes += (day - tzDay) * 24 * 60;
-  }
-
-  const result = new Date(utcGuess + diffMinutes * 60_000);
-  return result.toISOString();
+  // Offset = difference between what we want (utcGuess) and what the tz shows for
+  // that same instant, taken from the full date so month/year boundaries hold.
+  const tzAsUtc = Date.UTC(
+    Number(parts.year),
+    Number(parts.month) - 1,
+    tzDay,
+    tzHour,
+    tzMinute
+  );
+  return new Date(utcGuess + (utcGuess - tzAsUtc)).toISOString();
 }
 
 export const discordConfigSchema = z.object({
