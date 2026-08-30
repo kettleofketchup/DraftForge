@@ -1,4 +1,8 @@
-import type { EventSignupType, EventType } from '~/components/events/schemas';
+import type {
+  CreateSeriesEventInput,
+  EventSignupType,
+  EventType,
+} from '~/components/events/schemas';
 import axios from './axios';
 
 export async function getEvents(params?: {
@@ -322,6 +326,24 @@ export async function adminAddSignup(
     `/events/${eventId}/admin-signup/`,
     { user_id: userId },
   );
+  return data;
+}
+
+export async function createSeriesOneOffEvent(
+  repeaterId: number,
+  payload: CreateSeriesEventInput,
+): Promise<EventType> {
+  const { data } = await axios.post<EventType>(
+    `/events/repeaters/${repeaterId}/create-event/`,
+    payload,
+  );
+  return data;
+}
+
+export async function reactivateRepeater(
+  repeaterId: number,
+): Promise<{ detail: string; created_count: number; is_active: boolean }> {
+  const { data } = await axios.post(`/events/repeaters/${repeaterId}/reactivate/`);
   return data;
 }
 

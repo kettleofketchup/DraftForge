@@ -84,6 +84,7 @@ export const eventSchema = z.object({
   discord_require_rank_screenshot: z.boolean(),
   discord_require_battlecup_screenshot: z.boolean(),
   min_mmr: z.number().nullable(),
+  is_off_schedule: z.boolean().optional(),
   user_can_manage: z.boolean().default(false),
   _warning: z.string().optional(),
 }).superRefine((val, ctx) => {
@@ -355,6 +356,28 @@ export const createEventInputSchema = z.object({
 }).merge(discordConfigSchema);
 
 export type CreateEventInput = z.infer<typeof createEventInputSchema>;
+
+// A one-off event inherits its schedule-shape from the series, so every
+// recurring/signup-scheduling key is dropped. signup_mode has no backend
+// counterpart here and discord_notify_new_events lives on EventRepeater only.
+export const createSeriesEventInputSchema = createEventInputSchema
+  .omit({
+    is_recurring: true,
+    frequency: true,
+    day_of_week: true,
+    time_of_day: true,
+    starts_at: true,
+    ends_at: true,
+    generate_days_ahead: true,
+    signup_mode: true,
+    signup_days_before: true,
+    organization: true,
+    discord_notify_new_events: true,
+  })
+  .extend({ open_signups: z.boolean().default(false) })
+  .merge(discordConfigSchema);
+
+export type CreateSeriesEventInput = z.output<typeof createSeriesEventInputSchema>;
 
 export const discordEventMsgSchema = z.object({
   id: z.number(),
