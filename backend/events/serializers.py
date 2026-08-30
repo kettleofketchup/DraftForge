@@ -180,6 +180,7 @@ class EventSlimSerializer(serializers.ModelSerializer):
             "signup_count",
             "confirmed_count",
             "event_repeater",
+            "is_off_schedule",
             # Reminder fields needed by fire_due_reminders — see
             # events/scheduling/registry.py REMINDERS list. Test
             # tests/test_serializers.py::EventSlimSerializerReminderFieldsTest
@@ -287,10 +288,12 @@ class EventSerializer(serializers.ModelSerializer):
             "discord_send_draft_link",
             "discord_send_herodraft_link",
             "user_can_manage",
+            "is_off_schedule",
         ]
         read_only_fields = [
             "id",
             "event_repeater",
+            "is_off_schedule",
             "tournament",
             "created_by",
             "created_at",
