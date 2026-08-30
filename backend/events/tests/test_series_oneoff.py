@@ -6,10 +6,12 @@ from unittest.mock import patch
 from django.utils import timezone as tz
 from rest_framework.test import APIClient
 
+from discordbot.models import DiscordMessageLog
 from events.constants import EventState, RepeatFrequency
 from events.models import Event, EventRepeater
 from events.serializers import EventSerializer
 from events.tests.base import EventTestCase
+from events.tests.test_discord_tasks import _DiscordTaskTestCase, _ok_response
 
 
 class OffScheduleFieldTest(EventTestCase):
@@ -567,3 +569,65 @@ class CancelDeletesDiscordEventTest(EventTestCase):
         resp = self.client.post(f"/api/events/{self.target.pk}/cancel/")
         self.assertEqual(resp.status_code, 200, resp.content)
         mock_delete.delay.assert_not_called()
+
+
+class NewEventNotificationLeaseTest(_DiscordTaskTestCase):
+    """The 🆕 embed must be leased before the HTTP send, like every other
+    Discord notification in events.tasks."""
+
+    def setUp(self):
+        super().setUp()
+        self.target = Event.objects.create(
+            organization=self.org,
+            name="Announce Me",
+            scheduled_at=tz.now() + timedelta(days=3),
+            state=EventState.UPCOMING,
+            discord_announcement=True,
+            discord_announcement_channel_id="1482767177063858216",
+        )
+
+    @patch("discordbot.utils._rate_limited_request")
+    def test_second_dispatch_does_not_resend(self, mock_req):
+        mock_req.return_value = _ok_response({"id": "msg_new_event"})
+        from events.tasks import send_new_event_notification
+
+        send_new_event_notification(self.target.pk)
+        second = send_new_event_notification(self.target.pk)
+
+        self.assertEqual(mock_req.call_count, 1)
+        rows = DiscordMessageLog.objects.filter(
+            source="new_event", source_id=self.target.pk
+        )
+        self.assertEqual(rows.count(), 1)
+        self.assertTrue(rows.first().success)
+        self.assertIn("lease", second.lower())
+
+    @patch("discordbot.utils._rate_limited_request")
+    def test_claim_happens_before_send(self, mock_req):
+        pending_at_send = {}
+
+        def _capture(method, url, **kwargs):
+            pending_at_send["count"] = DiscordMessageLog.objects.filter(
+                source="new_event", source_id=self.target.pk, success=None
+            ).count()
+            return _ok_response({"id": "msg_new_event"})
+
+        mock_req.side_effect = _capture
+        from events.tasks import send_new_event_notification
+
+        send_new_event_notification(self.target.pk)
+
+        self.assertEqual(pending_at_send.get("count"), 1)
+
+    @patch("discordbot.utils._rate_limited_request")
+    def test_disabled_announcement_burns_no_lease(self, mock_req):
+        self.target.discord_announcement = False
+        self.target.save(update_fields=["discord_announcement"])
+        from events.tasks import send_new_event_notification
+
+        send_new_event_notification(self.target.pk)
+
+        mock_req.assert_not_called()
+        self.assertEqual(
+            DiscordMessageLog.objects.filter(source="new_event").count(), 0
+        )
