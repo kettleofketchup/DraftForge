@@ -10,12 +10,14 @@ from app.cache_utils import invalidate_after_commit, invalidate_obj
 from app.models import Tournament
 from events.constants import EventState, RepeatFrequency, SignupStatus, SignupType
 from events.discord import (
+    notify_create_discord_event,
     notify_mark_interested,
     notify_new_event,
     notify_signup_changed,
 )
 from events.models import (
     DiscordEventConfigMixin,
+    DiscordTournamentConfigMixin,
     Event,
     EventConfigMixin,
     EventSignup,
@@ -995,6 +997,17 @@ EVENT_CONFIG_FIELDS = [
 DISCORD_CONFIG_FIELDS = [
     f.name for f in DiscordEventConfigMixin._meta.get_fields() if hasattr(f, "column")
 ]
+DISCORD_TOURNAMENT_TEMPLATE_FIELDS = [
+    f.name
+    for f in DiscordTournamentConfigMixin._meta.get_fields()
+    if hasattr(f, "column")
+]
+REPEATER_CREATE_COPY_FIELDS = (
+    TOURNAMENT_TEMPLATE_FIELDS
+    + EVENT_CONFIG_FIELDS
+    + DISCORD_CONFIG_FIELDS
+    + DISCORD_TOURNAMENT_TEMPLATE_FIELDS
+)
 
 
 def _python_weekday(sunday_zero_dow):
@@ -1097,9 +1110,7 @@ def generate_events_for_repeater(repeater):
             state=EventState.UPCOMING,
             created_by=repeater.created_by,
         )
-        _copy_mixin_fields(repeater, event, TOURNAMENT_TEMPLATE_FIELDS)
-        _copy_mixin_fields(repeater, event, EVENT_CONFIG_FIELDS)
-        _copy_mixin_fields(repeater, event, DISCORD_CONFIG_FIELDS)
+        _copy_mixin_fields(repeater, event, REPEATER_CREATE_COPY_FIELDS)
         event.tournament_date = dt
         event.save()
         create_tournament_for_event(event)
@@ -1108,8 +1119,6 @@ def generate_events_for_repeater(repeater):
         if repeater.discord_notify_new_events:
             notify_new_event(event)
         if event.discord_create_event:
-            from events.discord import notify_create_discord_event
-
             notify_create_discord_event(event)
     return created_events
 
