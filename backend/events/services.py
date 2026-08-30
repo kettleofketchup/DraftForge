@@ -1171,12 +1171,18 @@ def sync_future_events(repeater, *, realign_schedule=False):
     (i.e. signups haven't opened yet), so in-progress events are untouched.
 
     If realign_schedule=True (caller detected a day_of_week / time_of_day /
-    timezone / starts_at / frequency change), UPCOMING rows whose
-    scheduled_at is no longer in the repeater's new occurrence set are
-    DELETED, and any new occurrences not already present are INSERTED via
-    generate_events_for_repeater. This eliminates the duplicate-occurrence
+    timezone / starts_at / frequency / is_active change), UPCOMING rows whose
+    scheduled_at is no longer in the repeater's new occurrence set are torn
+    down via teardown_event (so they can't leave ghost Discord scheduled
+    events behind), and any new occurrences not already present are INSERTED
+    via generate_events_for_repeater. This eliminates the duplicate-occurrence
     problem where the next hourly generation produced new rows at the
-    new schedule alongside the stale ones.
+    new schedule alongside the stale ones. Realign is skipped entirely for an
+    inactive series — a paused series generates nothing, so realigning would
+    only delete its remaining rows.
+
+    Events with is_off_schedule=True are never realigned and never receive the
+    config cascade: they are one-offs the series only hosts.
 
     Returns the list of touched Event instances so callers can chain a
     single invalidate_after_commit at the end of the request.
@@ -1189,7 +1195,7 @@ def sync_future_events(repeater, *, realign_schedule=False):
     """
     from app.cache_utils import invalidate_after_commit
 
-    if realign_schedule:
+    if realign_schedule and repeater.is_active:
         # Compute the new occurrence set using the same helper that
         # generate_events_for_repeater uses — guarantees timestamp equality
         # between regenerated and pre-existing rows.
@@ -1197,21 +1203,36 @@ def sync_future_events(repeater, *, realign_schedule=False):
         to_date = today + timedelta(days=repeater.generate_days_ahead)
         new_occurrences = set(_get_next_occurrences(repeater, today, to_date))
 
-        # Delete UPCOMING rows that don't match the new occurrence set
-        Event.objects.filter(
-            event_repeater=repeater,
-            state=EventState.UPCOMING,
-        ).exclude(scheduled_at__in=new_occurrences).delete()
+        # Tear down UPCOMING rows that don't match the new occurrence set.
+        doomed = (
+            Event.objects.filter(
+                event_repeater=repeater,
+                state=EventState.UPCOMING,
+            )
+            .exclude(is_off_schedule=True)
+            .exclude(scheduled_at__in=new_occurrences)
+        )
+        for event in list(doomed):
+            teardown_event(event)
 
         # Generate any missing occurrences. The existing helper handles
         # the "row already exists" check via its pre-insert filter.
         generate_events_for_repeater(repeater)
+    elif realign_schedule:
+        logger.info(
+            "realign_skipped_inactive_repeater",
+            system="events",
+            subsystem="services",
+            repeater_id=repeater.pk,
+        )
 
     future_events = list(
         Event.objects.filter(
             event_repeater=repeater,
             state=EventState.UPCOMING,
-        ).select_related("tournament")
+        )
+        .exclude(is_off_schedule=True)
+        .select_related("tournament")
     )
     shared_fields = ["name", "description"]
     update_fields = (

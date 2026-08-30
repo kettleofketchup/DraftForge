@@ -51,3 +51,117 @@ class RepeaterCopyFieldsTest(EventTestCase):
         for event in created:
             self.assertFalse(event.discord_send_draft_link)
             self.assertFalse(event.discord_send_herodraft_link)
+
+
+class SyncFutureEventsShieldTest(EventTestCase):
+    def setUp(self):
+        self.repeater = EventRepeater.objects.create(
+            organization=self.org,
+            name="Sunday Turbo",
+            frequency=RepeatFrequency.WEEKLY,
+            day_of_week=0,
+            time_of_day=time(18, 0),
+            starts_at=tz.now().date(),
+            created_by=self.admin,
+        )
+        self.extra = Event.objects.create(
+            organization=self.org,
+            event_repeater=self.repeater,
+            name="Holiday Special",
+            scheduled_at=tz.now() + timedelta(days=3, hours=7),
+            state=EventState.UPCOMING,
+            is_off_schedule=True,
+        )
+
+    @patch("events.services.notify_create_discord_event")
+    @patch("events.services.notify_new_event")
+    def test_realign_does_not_delete_off_schedule_event(self, _n, _c):
+        from events.services import sync_future_events
+
+        self.repeater.day_of_week = 3
+        self.repeater.save()
+        sync_future_events(self.repeater, realign_schedule=True)
+
+        self.assertTrue(Event.objects.filter(pk=self.extra.pk).exists())
+
+    @patch("events.services.notify_create_discord_event")
+    @patch("events.services.notify_new_event")
+    def test_cascade_does_not_revert_off_schedule_overrides(self, _n, _c):
+        from events.services import sync_future_events
+
+        sync_future_events(self.repeater)
+        self.extra.refresh_from_db()
+        self.assertEqual(self.extra.name, "Holiday Special")
+
+    @patch("events.services.notify_create_discord_event")
+    @patch("events.services.notify_new_event")
+    def test_realign_skipped_for_inactive_repeater(self, _n, _c):
+        from events.services import sync_future_events
+
+        on_schedule = Event.objects.create(
+            organization=self.org,
+            event_repeater=self.repeater,
+            name="Sunday Turbo",
+            scheduled_at=tz.now() + timedelta(days=2),
+            state=EventState.UPCOMING,
+        )
+        self.repeater.is_active = False
+        self.repeater.day_of_week = 3
+        self.repeater.save()
+
+        result = sync_future_events(self.repeater, realign_schedule=True)
+
+        self.assertIsInstance(result, list)
+        self.assertTrue(Event.objects.filter(pk=on_schedule.pk).exists())
+
+    @patch("events.services.notify_create_discord_event")
+    @patch("events.services.notify_new_event")
+    def test_cascade_still_runs_for_inactive_repeater(self, _n, _c):
+        from events.services import sync_future_events
+
+        on_schedule = Event.objects.create(
+            organization=self.org,
+            event_repeater=self.repeater,
+            name="Old Name",
+            scheduled_at=tz.now() + timedelta(days=2),
+            state=EventState.UPCOMING,
+        )
+        self.repeater.is_active = False
+        self.repeater.name = "Renamed Series"
+        self.repeater.save()
+
+        sync_future_events(self.repeater)
+
+        on_schedule.refresh_from_db()
+        self.assertEqual(on_schedule.name, "Renamed Series")
+
+    @patch("events.tasks.delete_discord_scheduled_event")
+    @patch("events.services.notify_create_discord_event")
+    @patch("events.services.notify_new_event")
+    def test_realign_delete_tears_down_discord(self, _n, _c, mock_delete):
+        from discordbot.models import DiscordEvent
+        from events.services import sync_future_events
+
+        self.org.discord_server_id = "734185035623825559"
+        self.org.save(update_fields=["discord_server_id"])
+        stale = Event.objects.create(
+            organization=self.org,
+            event_repeater=self.repeater,
+            name="Sunday Turbo",
+            scheduled_at=tz.now() + timedelta(days=2, hours=3),
+            state=EventState.UPCOMING,
+        )
+        DiscordEvent.objects.create(
+            event=stale,
+            guild_id="734185035623825559",
+            scheduled_event_id="1529289108529352788",
+        )
+
+        self.repeater.day_of_week = 3
+        self.repeater.save()
+        sync_future_events(self.repeater, realign_schedule=True)
+
+        self.assertFalse(Event.objects.filter(pk=stale.pk).exists())
+        mock_delete.delay.assert_called_once_with(
+            "734185035623825559", "1529289108529352788"
+        )
