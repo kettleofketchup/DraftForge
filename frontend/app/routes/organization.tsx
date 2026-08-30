@@ -155,7 +155,7 @@ function RepeatersList({ repeaters, loading, onEdit, onDelete }: { repeaters: Ev
                 </Badge>
               </div>
               <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground">
-                {r.day_of_week != null && <span>{DAY_LABELS[r.day_of_week]}</span>}
+                {r.day_of_week != null && <span>{DAY_LABELS[r.day_of_week]?.slice(0, 3)}</span>}
                 {r.time_of_day && <span>{r.time_of_day?.slice(0, 5)}</span>}
                 <span className="inline-flex items-center gap-0.5">
                   <Users className="h-3 w-3" />
