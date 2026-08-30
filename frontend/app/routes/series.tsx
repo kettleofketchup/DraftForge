@@ -7,7 +7,7 @@ import { generateMeta } from '~/lib/seo';
 import { EventStateBadge } from '~/components/events';
 import { EditRepeaterModal } from '~/components/events/EditRepeaterModal';
 import { SubscriberList } from '~/components/events/SubscriberList';
-import type { EventType } from '~/components/events/schemas';
+import { DAY_LABELS, FREQUENCY_LABELS, type EventType } from '~/components/events/schemas';
 import { Badge } from '~/components/ui/badge';
 import { DestructiveButton, PrimaryButton, SecondaryButton } from '~/components/ui/buttons';
 import { DeleteDialog } from '~/components/ui/dialogs';
@@ -59,15 +59,6 @@ interface RepeaterDetail {
   people_per_team: number;
   number_of_teams: number | null;
 }
-
-const FREQUENCY_LABELS: Record<string, string> = {
-  daily: 'Daily',
-  weekly: 'Weekly',
-  biweekly: 'Biweekly',
-  monthly: 'Monthly',
-};
-
-const DAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 function useRepeater(id: number | null) {
   return useQuery<RepeaterDetail>({

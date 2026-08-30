@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router';
 import { Calendar, Repeat, Users } from 'lucide-react';
 import { Badge } from '~/components/ui/badge';
+import { FREQUENCY_LABELS } from './schemas';
 
 interface RepeaterCardProps {
   repeater: {
@@ -14,13 +15,6 @@ interface RepeaterCardProps {
     next_event_date: string | null;
   };
 }
-
-const FREQUENCY_LABELS: Record<string, string> = {
-  daily: 'Daily',
-  weekly: 'Weekly',
-  biweekly: 'Biweekly',
-  monthly: 'Monthly',
-};
 
 export function RepeaterCard({ repeater }: RepeaterCardProps) {
   const navigate = useNavigate();
