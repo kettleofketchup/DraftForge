@@ -196,8 +196,14 @@ export interface EventRepeaterType {
   discord_notify_new_events: boolean;
   discord_profile_reminder_hours: number;
   discord_confirm_attendance_hours: number;
+  discord_announcement_role_ids: string[];
+  discord_signup_role_ids: string[];
+  auto_create_hero_drafts: boolean;
+  discord_send_draft_link: boolean;
+  discord_send_herodraft_link: boolean;
   subscriber_count: number;
   is_subscribed: boolean;
+  next_event_date: string | null;
 }
 
 export async function getEventRepeaters(params?: { organization?: number }): Promise<EventRepeaterType[]> {
