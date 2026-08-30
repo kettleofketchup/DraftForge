@@ -984,6 +984,46 @@ def ensure_tournament_with_signups(event):
     return tournament
 
 
+def teardown_event(event: Event) -> None:
+    """Delete an event and everything Discord/tournament-related it owns.
+
+    Dispatches deletion of the live Discord scheduled event (nothing else in the
+    app removes scheduled events), then removes the linked tournament, DiscordEvent
+    (cascades to messages, logs, DMs) and legacy message logs, then the event row.
+    Shared by EventViewSet (single delete), EventRepeaterViewSet (series delete)
+    and sync_future_events' realign, so no path leaves ghost events behind.
+    """
+    from app.cache_utils import invalidate_after_commit
+    from discordbot.models import DiscordEvent, DiscordMessageLog
+    from events.tasks import delete_discord_scheduled_event
+
+    with transaction.atomic():
+        invalidate_after_commit(event)
+        if event.tournament:
+            tournament = event.tournament
+            event.tournament = None
+            event.save(update_fields=["tournament", "updated_at"])
+            tournament.delete()
+
+        try:
+            discord_event = event.discord_event
+        except DiscordEvent.DoesNotExist:
+            discord_event = None
+        if discord_event is not None:
+            if discord_event.scheduled_event_id:
+                delete_discord_scheduled_event.delay(
+                    discord_event.guild_id, discord_event.scheduled_event_id
+                )
+            discord_event.delete()
+
+        DiscordMessageLog.objects.filter(
+            source__in=["event_announcement", "event_notice"],
+            source_id=event.pk,
+        ).delete()
+
+        event.delete()
+
+
 # ---------------------------------------------------------------------------
 # Event generation
 # ---------------------------------------------------------------------------
