@@ -181,6 +181,14 @@ export const FREQUENCY_LABELS: Record<string, string> = {
   [Frequency.MONTHLY]: 'Monthly',
 };
 
+/** Compact forms for fixed-width columns, where slicing FREQUENCY_LABELS yields "Dail"/"Mont"/"Ever". */
+export const FREQUENCY_SHORT_LABELS: Record<string, string> = {
+  [Frequency.DAILY]: 'Day',
+  [Frequency.WEEKLY]: 'Wk',
+  [Frequency.EVERY_TWO_WEEKS]: '2wk',
+  [Frequency.MONTHLY]: 'Mo',
+};
+
 export const DAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 export const COMMON_TIMEZONES = [

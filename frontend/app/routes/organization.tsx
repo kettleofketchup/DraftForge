@@ -51,7 +51,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { addOrgMember, checkDiscordBotStatus } from '~/components/api/api';
 import type { AddMemberPayload } from '~/components/api/api';
 import { CreateEventModal, EditEventModal, EditOrgDefaultsModal, EditRepeaterModal, EventStrip, type EventType } from '~/components/events';
-import { DAY_LABELS, FREQUENCY_LABELS } from '~/components/events/schemas';
+import { DAY_LABELS, FREQUENCY_SHORT_LABELS } from '~/components/events/schemas';
 import type { EventRepeaterType } from '~/components/api/api';
 import { useEvents, useEventRepeaters, useRepeaterSubscriptionMutation } from '~/hooks/useEvent';
 import { Repeat, CalendarDays } from 'lucide-react';
@@ -142,7 +142,7 @@ function RepeatersList({ repeaters, loading, onEdit, onDelete }: { repeaters: Ev
             <div className="shrink-0 text-center w-12">
               <Repeat className="h-5 w-5 mx-auto text-muted-foreground" />
               <p className="text-[10px] text-muted-foreground mt-0.5">
-                {FREQUENCY_LABELS[r.frequency]?.slice(0, 4) ?? r.frequency.slice(0, 4)}
+                {FREQUENCY_SHORT_LABELS[r.frequency] ?? r.frequency.slice(0, 4)}
               </p>
             </div>
 
