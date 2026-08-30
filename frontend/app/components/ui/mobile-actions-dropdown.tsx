@@ -8,8 +8,8 @@ import {
 } from '~/components/ui/dropdown-menu';
 import {
   brandBg,
-  brandDepthColors,
-  button3DBase,
+  brandGlowLift,
+  buttonLift,
 } from '~/components/ui/buttons';
 import { cn } from '~/lib/utils';
 
@@ -55,9 +55,9 @@ export function MobileActionsDropdown({
         <Button
           data-testid={testId}
           className={cn(
-            button3DBase,
+            buttonLift,
             brandBg,
-            `border border-primary/25 ${brandDepthColors}`,
+            `border border-primary/25 ${brandGlowLift}`,
             'text-foreground',
             className,
           )}

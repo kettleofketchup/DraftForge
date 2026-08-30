@@ -2,7 +2,7 @@ import { Loader2 } from 'lucide-react';
 import * as React from 'react';
 import { Button } from '~/components/ui/button';
 import { cn } from '~/lib/utils';
-import { button3DVariants } from './styles';
+import { brandButtonVariants } from './styles';
 
 export interface SubmitButtonProps
   extends Omit<React.ComponentProps<typeof Button>, 'type'> {
@@ -10,12 +10,12 @@ export interface SubmitButtonProps
   loading?: boolean;
   /** Text to display when loading (defaults to "Submitting...") */
   loadingText?: string;
-  /** Whether to apply 3D depth effects (default: true) */
+  /** Whether to apply the soft-shadow lift (default: true) */
   depth?: boolean;
 }
 
 /**
- * A submit button with brand gradient styling and 3D depth effects for form submissions.
+ * A submit button with brand gradient styling and a soft-shadow lift for form submissions.
  * Automatically sets type="submit" and handles loading states.
  *
  * @example
@@ -44,7 +44,10 @@ const SubmitButton = React.forwardRef<HTMLButtonElement, SubmitButtonProps>(
         type="submit"
         disabled={disabled || loading}
         className={cn(
-          depth ? button3DVariants.success : 'bg-green-600 text-white hover:bg-green-500',
+          // min-h-11 keeps submit/approve actions the same 44px height as
+          // ConfirmButton/CancelButton so dialog footers line up.
+          'min-h-11',
+          depth ? brandButtonVariants.success : 'bg-green-600 text-white hover:bg-green-500',
           className
         )}
         {...props}

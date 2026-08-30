@@ -3,7 +3,7 @@ import * as AlertDialogPrimitive from "@radix-ui/react-alert-dialog"
 
 import { cn } from "~/lib/utils"
 import { buttonVariants } from "~/components/ui/button"
-import { brandBg, brandSecondary, button3DVariants } from "~/components/ui/buttons/styles"
+import { brandBg, brandSecondary, brandButtonVariants } from "~/components/ui/buttons/styles"
 
 function AlertDialog({
   ...props
@@ -130,7 +130,7 @@ function AlertDialogAction({
 }: React.ComponentProps<typeof AlertDialogPrimitive.Action>) {
   return (
     <AlertDialogPrimitive.Action
-      className={cn(buttonVariants(), button3DVariants.success, className)}
+      className={cn(buttonVariants(), brandButtonVariants.success, className)}
       {...props}
     />
   )

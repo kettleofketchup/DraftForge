@@ -3,7 +3,7 @@ import * as React from 'react';
 import { Button } from '~/components/ui/button';
 import { cn } from '~/lib/utils';
 import { HotkeyBadge } from './HotkeyBadge';
-import { brandGradient, button3DVariants } from './styles';
+import { brandGradient, brandButtonVariants } from './styles';
 
 export type ConfirmButtonVariant = 'default' | 'destructive' | 'warning' | 'success';
 
@@ -13,14 +13,14 @@ export interface ConfirmButtonProps
   loading?: boolean;
   /** Visual variant */
   variant?: ConfirmButtonVariant;
-  /** Whether to apply 3D depth effects (default: true) */
+  /** Whether to apply the soft-shadow lift (default: true) */
   depth?: boolean;
   /** Optional keyboard shortcut label rendered as a badge in the top-left corner. */
   hotkey?: string;
 }
 
 /**
- * A confirm action button with 3D depth effects for use in dialogs.
+ * A confirm action button with a soft-shadow lift for use in dialogs.
  * Supports multiple variants for different action types.
  *
  * @example
@@ -59,10 +59,10 @@ const ConfirmButton = React.forwardRef<HTMLButtonElement, ConfirmButtonProps>(
     ref
   ) => {
     const variantStyles = {
-      default: depth ? button3DVariants.success : brandGradient,
-      destructive: depth ? button3DVariants.destructive : 'bg-red-600 text-white hover:bg-red-500',
-      warning: depth ? button3DVariants.warning : 'bg-orange-500 text-white hover:bg-orange-400',
-      success: depth ? button3DVariants.success : brandGradient,
+      default: depth ? brandButtonVariants.success : brandGradient,
+      destructive: depth ? brandButtonVariants.destructive : 'bg-red-600 text-white hover:bg-red-500',
+      warning: depth ? brandButtonVariants.warning : 'bg-orange-500 text-white hover:bg-orange-400',
+      success: depth ? brandButtonVariants.success : brandGradient,
     };
 
     const loadingText = {

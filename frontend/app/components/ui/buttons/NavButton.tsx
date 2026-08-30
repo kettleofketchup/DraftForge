@@ -2,7 +2,7 @@ import { ChevronLeft, ChevronRight, ChevronsRight } from 'lucide-react';
 import * as React from 'react';
 import { Button } from '~/components/ui/button';
 import { cn } from '~/lib/utils';
-import { brandDepthColors, brandGradient, button3DBase, button3DDisabled } from './styles';
+import { brandGlowLift, brandGradient, buttonLift, buttonDisabled } from './styles';
 
 export type NavDirection = 'prev' | 'next' | 'latest';
 
@@ -10,7 +10,7 @@ export interface NavButtonProps
   extends Omit<React.ComponentProps<typeof Button>, 'variant'> {
   /** Navigation direction - determines icon and default text */
   direction?: NavDirection;
-  /** Whether to apply 3D depth effects (default: true) */
+  /** Whether to apply the soft-shadow lift (default: true) */
   depth?: boolean;
 }
 
@@ -24,7 +24,7 @@ const directionConfig: Record<
 };
 
 /**
- * A navigation button with sky blue theme styling and 3D depth effects.
+ * A navigation button with sky blue theme styling and a soft-shadow lift.
  * Used for navigation between pages or items.
  *
  * @example
@@ -43,10 +43,10 @@ const NavButton = React.forwardRef<HTMLButtonElement, NavButtonProps>(
       <Button
         ref={ref}
         className={cn(
-          depth && button3DBase,
-          depth && button3DDisabled,
+          depth && buttonLift,
+          depth && buttonDisabled,
           brandGradient,
-          brandDepthColors,
+          brandGlowLift,
           '[text-shadow:_0_1px_2px_rgba(0,0,0,0.5)]',
           '[&_svg]:text-white [&_svg]:drop-shadow-[1px_1px_1px_rgba(0,0,0,0.5)]',
           className
