@@ -93,6 +93,8 @@ import { AddUserModal } from '~/components/user/AddUserModal';
 import { useResolvedUsers } from '~/hooks/useResolvedUsers';
 import { useOrganization } from '~/components/organization';
 import { usePageNav } from '~/hooks/usePageNav';
+import type { UserType } from '~/components/user/types';
+import type { AddMemberPayload } from '~/components/api/api';
 import { useOrgStore } from '~/store/orgStore';
 import { useUserStore } from '~/store/userStore';
 import { isUserEntry } from '~/store/userCacheTypes';
@@ -788,15 +790,34 @@ function SignupsTab({
 
   const signupUserPks = useMemo(() => new Set(signups.map((s) => s.user)), [signups]);
   const entityContext = useMemo(() => ({ orgId }), [orgId]);
-  const handleAddUser = useCallback(async (payload: { user_id: number }) => {
+  const handleAddUser = useCallback(async (payload: AddMemberPayload): Promise<UserType> => {
+    // adminAddSignup takes a site-user pk only, but the modal's Discord tab can
+    // hand back a discord_id with no user_id. Fail loudly rather than posting
+    // user_id: undefined (the modal surfaces the message as a toast).
+    if (payload.user_id == null) {
+      throw new Error('Select a site user — adding a Discord member directly is not supported here yet.');
+    }
     const resp = await adminAddSignup(eventId!, payload.user_id);
     queryClient.invalidateQueries({ queryKey: ['event-signups', eventId] });
     // Backend now adds the user as an OrgUser when admin signs them up; reset
     // the org-users cache so the org page reflects the new membership.
     if (orgId) useOrgStore.getState().clearOrgUsers();
-    return resp;
+    // AddUserModal reads `.pk` off this to track optimistic adds — the signup
+    // itself has no pk, so hand back the user it embeds.
+    const added = resp.user_data;
+    return added
+      ? {
+          ...added,
+          // The signup serializer nulls these; UserType models them as optional.
+          positions: added.positions ?? undefined,
+          avatarUrl: added.avatarUrl ?? undefined,
+        }
+      : { pk: payload.user_id, username: null };
   }, [eventId, orgId, queryClient]);
-  const checkIsAdded = useCallback((user: { pk: number }) => signupUserPks.has(user.pk), [signupUserPks]);
+  const checkIsAdded = useCallback(
+    (user: UserType) => (user.pk != null ? signupUserPks.has(user.pk) : false),
+    [signupUserPks]
+  );
 
   return (
     <div className="space-y-3">

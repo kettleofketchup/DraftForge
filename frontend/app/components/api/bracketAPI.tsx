@@ -1,6 +1,7 @@
 import { api } from './axios';
 import { BracketResponseSchema } from '~/components/bracket/schemas';
-import type { BracketMatch, BracketResponse } from '~/components/bracket/types';
+import type { BracketMatch } from '~/components/bracket/types';
+import type { BracketResponseDTO } from '~/components/bracket/schemas';
 
 /**
  * Save bracket matches to backend
@@ -8,7 +9,7 @@ import type { BracketMatch, BracketResponse } from '~/components/bracket/types';
 export async function saveBracket(
   tournamentId: number,
   matches: BracketMatch[]
-): Promise<BracketResponse> {
+): Promise<BracketResponseDTO> {
   const response = await api.post(`/bracket/tournaments/${tournamentId}/save/`, {
     matches,
   });
@@ -18,7 +19,7 @@ export async function saveBracket(
 /**
  * Load bracket from backend
  */
-export async function loadBracket(tournamentId: number): Promise<BracketResponse> {
+export async function loadBracket(tournamentId: number): Promise<BracketResponseDTO> {
   const response = await api.get(`/bracket/tournaments/${tournamentId}/`);
   return BracketResponseSchema.parse(response.data);
 }
