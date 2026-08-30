@@ -17,6 +17,8 @@ export interface ConfirmButtonProps
   depth?: boolean;
   /** Optional keyboard shortcut label rendered as a badge in the top-left corner. */
   hotkey?: string;
+  /** Overrides the variant's default loading label (e.g. "Applying..."). */
+  loadingText?: string;
 }
 
 /**
@@ -54,6 +56,7 @@ const ConfirmButton = React.forwardRef<HTMLButtonElement, ConfirmButtonProps>(
       variant = 'default',
       depth = true,
       hotkey,
+      loadingText,
       ...props
     },
     ref
@@ -65,7 +68,7 @@ const ConfirmButton = React.forwardRef<HTMLButtonElement, ConfirmButtonProps>(
       success: depth ? brandButtonVariants.success : brandGradient,
     };
 
-    const loadingText = {
+    const defaultLoadingText = {
       default: 'Confirming...',
       destructive: 'Deleting...',
       warning: 'Processing...',
@@ -77,7 +80,7 @@ const ConfirmButton = React.forwardRef<HTMLButtonElement, ConfirmButtonProps>(
     const inner = loading ? (
       <>
         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-        {loadingText[variant]}
+        {loadingText ?? defaultLoadingText[variant]}
       </>
     ) : (
       children
