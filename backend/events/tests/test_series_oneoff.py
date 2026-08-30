@@ -523,3 +523,47 @@ class ReactivateEndpointTest(EventTestCase):
         self.client.post(self.url)
         invalidated = [a for call in mock_invalidate.call_args_list for a in call.args]
         self.assertTrue(any(obj.pk == self.repeater.pk for obj in invalidated))
+
+
+class CancelDeletesDiscordEventTest(EventTestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.org.discord_server_id = "734185035623825559"
+        self.org.save(update_fields=["discord_server_id"])
+        self.target = Event.objects.create(
+            organization=self.org,
+            name="Cancel Me",
+            scheduled_at=tz.now() + timedelta(days=3),
+            state=EventState.UPCOMING,
+            discord_create_event=True,
+        )
+
+    @patch("events.tasks.delete_discord_scheduled_event")
+    def test_cancel_deletes_live_discord_scheduled_event(self, mock_delete):
+        from discordbot.models import DiscordEvent
+
+        discord_event = DiscordEvent.objects.create(
+            event=self.target,
+            guild_id="734185035623825559",
+            scheduled_event_id="1529289108529352788",
+        )
+        self.client.force_authenticate(self.admin)
+        resp = self.client.post(f"/api/events/{self.target.pk}/cancel/")
+
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.target.refresh_from_db()
+        self.assertEqual(self.target.state, EventState.CANCELLED)
+        # The event row survives — only the Discord scheduled event is torn down.
+        self.assertTrue(Event.objects.filter(pk=self.target.pk).exists())
+        mock_delete.delay.assert_called_once_with(
+            "734185035623825559", "1529289108529352788"
+        )
+        discord_event.refresh_from_db()
+        self.assertIsNone(discord_event.scheduled_event_id)
+
+    @patch("events.tasks.delete_discord_scheduled_event")
+    def test_cancel_without_discord_event_is_noop(self, mock_delete):
+        self.client.force_authenticate(self.admin)
+        resp = self.client.post(f"/api/events/{self.target.pk}/cancel/")
+        self.assertEqual(resp.status_code, 200, resp.content)
+        mock_delete.delay.assert_not_called()
