@@ -631,3 +631,40 @@ class NewEventNotificationLeaseTest(_DiscordTaskTestCase):
         self.assertEqual(
             DiscordMessageLog.objects.filter(source="new_event").count(), 0
         )
+
+
+class RepeaterLeagueOrgValidationTest(EventTestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.repeater = EventRepeater.objects.create(
+            organization=self.org,
+            name="Sunday Turbo",
+            frequency=RepeatFrequency.WEEKLY,
+            day_of_week=0,
+            time_of_day=time(18, 0),
+            starts_at=tz.now().date(),
+            created_by=self.admin,
+        )
+
+    def test_foreign_org_league_rejected_on_repeater(self):
+        from app.models import League, Organization
+
+        other_org = Organization.objects.create(name="Other Org 19", owner=self.admin)
+        other = League.objects.create(name="Other League 19", organization=other_org)
+
+        self.client.force_authenticate(self.admin)
+        resp = self.client.patch(
+            f"/api/events/repeaters/{self.repeater.pk}/",
+            {"tournament_league": other.pk},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 400, resp.content)
+
+    def test_same_org_league_accepted_on_repeater(self):
+        self.client.force_authenticate(self.admin)
+        resp = self.client.patch(
+            f"/api/events/repeaters/{self.repeater.pk}/",
+            {"tournament_league": self.league.pk},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 200, resp.content)

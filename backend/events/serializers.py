@@ -2,6 +2,7 @@ import nh3
 from django.utils import timezone
 from rest_framework import serializers
 
+from app.models import League
 from events.models import (
     Event,
     EventRepeater,
@@ -16,6 +17,28 @@ from events.services import (
     EVENT_CONFIG_FIELDS,
     TOURNAMENT_TEMPLATE_FIELDS,
 )
+
+
+class TournamentLeagueOrgMixin:
+    """Reject a tournament_league owned by another organization.
+
+    Resolves the org from the instance on update, else from the incoming body.
+    Neither available (create with an org the view supplies later) — skip.
+    """
+
+    def validate_tournament_league(self, value: League | None) -> League | None:
+        if value is None:
+            return value
+        org_id = (
+            self.instance.organization_id
+            if self.instance is not None
+            else self.initial_data.get("organization")
+        )
+        if org_id is not None and value.organization_id != org_id:
+            raise serializers.ValidationError(
+                "League must belong to the event's organization."
+            )
+        return value
 
 
 class EventRepeaterSlimSerializer(serializers.ModelSerializer):
@@ -44,7 +67,7 @@ class EventRepeaterSlimSerializer(serializers.ModelSerializer):
         ]
 
 
-class EventRepeaterSerializer(serializers.ModelSerializer):
+class EventRepeaterSerializer(TournamentLeagueOrgMixin, serializers.ModelSerializer):
     organization_name = serializers.CharField(
         source="organization.name", read_only=True
     )
@@ -204,7 +227,7 @@ class EventSlimSerializer(serializers.ModelSerializer):
         ]
 
 
-class EventSerializer(serializers.ModelSerializer):
+class EventSerializer(TournamentLeagueOrgMixin, serializers.ModelSerializer):
     organization_name = serializers.CharField(
         source="organization.name", read_only=True
     )
@@ -306,20 +329,6 @@ class EventSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
-
-    def validate_tournament_league(self, value):
-        if value is None:
-            return value
-        org_id = (
-            self.instance.organization_id
-            if self.instance is not None
-            else self.initial_data.get("organization")
-        )
-        if org_id is not None and value.organization_id != org_id:
-            raise serializers.ValidationError(
-                "League must belong to the event's organization."
-            )
-        return value
 
     def validate_description(self, value):
         return nh3.clean(value) if value else value
@@ -553,7 +562,7 @@ class EventSignupSerializer(serializers.ModelSerializer):
         return obj._mmr_suggestion_cache
 
 
-class OrgEventDefaultsSerializer(serializers.ModelSerializer):
+class OrgEventDefaultsSerializer(TournamentLeagueOrgMixin, serializers.ModelSerializer):
     class Meta:
         model = OrgEventDefaults
         fields = [
