@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { Button } from '~/components/ui/button';
 import { cn } from '~/lib/utils';
-import { brandDepthColors, brandGradient, brandLabelOnGradient, button3DBase, button3DDisabled } from './styles';
+import { brandGlowLift, brandGradient, brandLabelOnGradient, buttonLift, buttonDisabled } from './styles';
 
 export type PrimaryButtonColor = 'green' | 'blue' | 'yellow';
 
@@ -9,14 +9,14 @@ export interface PrimaryButtonProps
   extends Omit<React.ComponentProps<typeof Button>, 'variant'> {
   /** Color theme for the button (omit for brand gradient) */
   color?: PrimaryButtonColor;
-  /** Whether to apply 3D depth effects (default: true) */
+  /** Whether to apply the soft-shadow lift (default: true) */
   depth?: boolean;
 }
 
 const colorClasses: Record<PrimaryButtonColor, string> = {
-  green: 'bg-green-700 hover:bg-green-600 text-white border-b-green-900 shadow-green-900/50',
-  blue: 'bg-blue-700 hover:bg-blue-600 text-white border-b-blue-900 shadow-blue-900/50',
-  yellow: 'bg-yellow-600 hover:bg-yellow-500 text-black border-b-yellow-800 shadow-yellow-900/50',
+  green: 'bg-green-700 hover:bg-green-600 text-white shadow-green-900/50',
+  blue: 'bg-blue-700 hover:bg-blue-600 text-white shadow-blue-900/50',
+  yellow: 'bg-yellow-600 hover:bg-yellow-500 text-black shadow-yellow-900/50',
 };
 
 // Two-layer dark text-shadow under every PrimaryButton label: a hard 1px
@@ -26,7 +26,7 @@ const colorClasses: Record<PrimaryButtonColor, string> = {
 const primaryTextStroke =
   '[text-shadow:_0_1px_0_rgba(0,0,0,0.85),_0_2px_3px_rgba(0,0,0,0.5)]';
 
-const brandExtras = `${brandDepthColors} ${brandLabelOnGradient}`;
+const brandExtras = `${brandGlowLift} ${brandLabelOnGradient}`;
 
 const PrimaryButton = React.forwardRef<HTMLButtonElement, PrimaryButtonProps>(
   ({ color, className, children, depth = true, ...props }, ref) => {
@@ -35,8 +35,8 @@ const PrimaryButton = React.forwardRef<HTMLButtonElement, PrimaryButtonProps>(
       <Button
         ref={ref}
         className={cn(
-          depth && button3DBase,
-          depth && button3DDisabled,
+          depth && buttonLift,
+          depth && buttonDisabled,
           !depth && 'shadow-lg shadow-black/30',
           isBrand ? [brandGradient, brandExtras] : [colorClasses[color], primaryTextStroke],
           className

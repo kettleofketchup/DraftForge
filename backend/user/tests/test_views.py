@@ -24,7 +24,7 @@ class MeProfileViewTests(TestCase):
         body = response.json()
         assert body["pk"] == self.user.pk
         assert body["base"]["nickname"] == "Kara"
-        assert body["gameUser"] == {}
+        assert set(body["gameUser"].keys()) == {"dota", "deadlock"}
         assert body["orgProfiles"] == {}
 
     def test_patch_base_updates_only_sent_fields(self):

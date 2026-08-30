@@ -115,7 +115,7 @@ function toUserEntry(
   } as UserEntry;
 }
 
-interface UserCacheState extends EntityState<UserEntry> {
+export interface UserCacheState extends EntityState<UserEntry> {
   staleAfterMs: number;
 
   // Write operations

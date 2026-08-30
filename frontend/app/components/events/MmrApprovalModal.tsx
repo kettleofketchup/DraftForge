@@ -25,8 +25,8 @@ import {
 import { Input } from '~/components/ui/input';
 import { Badge } from '~/components/ui/badge';
 import {
+  CancelButton,
   ConfirmButton,
-  DestructiveButton,
   DotabuffButton,
   SubmitButton,
   brandDialogPanel,
@@ -287,14 +287,14 @@ export function MmrApprovalModal({
               />
 
               <DialogFooter className="flex-col-reverse sm:flex-row gap-2">
-                <DestructiveButton
+                <CancelButton
                   type="button"
                   onClick={() => onOpenChange(false)}
                   disabled={isApproving || isRejecting}
                   data-testid="mmr-modal-close"
                 >
                   Close
-                </DestructiveButton>
+                </CancelButton>
                 {onReject && (
                   <ConfirmButton
                     type="button"

@@ -454,7 +454,6 @@ def apply_signup_input(*, org_user, event, patch):
         if user_positions is None:
             user_positions = PositionsModel.objects.create()
             user.positions = user_positions
-            user.save(update_fields=["positions"])
         changed = False
         for role, rating in priorities.items():
             if getattr(user_positions, role) != rating:
@@ -660,7 +659,6 @@ def apply_signup_writethrough(signup):
     if user_positions is None:
         user_positions = PositionsModel.objects.create()
         user.positions = user_positions
-        user.save(update_fields=["positions"])
 
     # steam_account_id: first-write-wins on User.steam_account_id (unique=True).
     # Source: profile.unverified_friend_id (CharField of digits; empty string = none).

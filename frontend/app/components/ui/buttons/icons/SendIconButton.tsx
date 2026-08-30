@@ -24,8 +24,7 @@ const SendIconButton = React.forwardRef<HTMLButtonElement, SendIconButtonProps>(
         size="icon"
         className={cn(
           'rounded-full',
-          'shadow-lg shadow-black/30 border-b-4 border-b-secondary/50',
-          'active:border-b-0 active:translate-y-1 transition-all duration-75',
+          'shadow-lg shadow-black/30 transition-all duration-75',
           className
         )}
         {...props}

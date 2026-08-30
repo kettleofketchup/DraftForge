@@ -61,6 +61,11 @@ def profile_update(request):
         user_id=user.pk,
     )
 
+    # DotaUserProfile.positions is SET_NULL, so the shim getter can be None.
+    # Create on demand to match the prior null=False behavior.
+    if user.positions is None:
+        user.positions = PositionsModel.objects.create()
+
     try:
         posObj = PositionsModel.objects.get(pk=user.positions.pk)
 

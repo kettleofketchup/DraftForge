@@ -38,5 +38,5 @@ class UserProfileLayeredSerializerTests(TestCase):
         data = UserProfileLayeredSerializer(user).data
         assert data["pk"] == user.pk
         assert data["base"]["nickname"] == "Jake"
-        assert data["gameUser"] == {}
+        assert set(data["gameUser"].keys()) == {"dota", "deadlock"}
         assert data["orgProfiles"] == {}

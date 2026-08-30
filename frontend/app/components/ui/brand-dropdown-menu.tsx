@@ -11,13 +11,13 @@ import {
 } from '~/components/ui/dropdown-menu';
 import {
   brandBg,
-  brandDepthColors,
+  brandGlowLift,
   brandErrorBg,
   brandGradient,
   brandLabelOnGradient,
   brandSecondary,
-  button3DBase,
-  button3DDisabled,
+  buttonLift,
+  buttonDisabled,
 } from '~/components/ui/buttons';
 import { cn } from '~/lib/utils';
 
@@ -55,11 +55,11 @@ const variantStyles = {
   destructive: 'text-error font-medium [&_svg]:text-error hover:bg-red-500/20 focus:bg-red-500/20',
 } as const;
 
-// Reuse shared button3D recipes so trigger matches its sibling standalone button at rest.
+// Reuse shared button lift recipes so trigger matches its sibling standalone button at rest.
 const triggerVariants = {
-  primary: `${button3DBase} ${button3DDisabled} ${brandGradient} ${brandDepthColors} ${brandLabelOnGradient} border-0`,
-  secondary: `${button3DBase} ${button3DDisabled} ${brandSecondary} border-b-violet-700/50`,
-  admin: `${button3DBase} ${button3DDisabled} ${brandErrorBg} text-foreground hover:brightness-110 border-b-red-900/60 shadow-red-950/40`,
+  primary: `${buttonLift} ${buttonDisabled} ${brandGradient} ${brandGlowLift} ${brandLabelOnGradient} border-0`,
+  secondary: `${buttonLift} ${buttonDisabled} ${brandSecondary}`,
+  admin: `${buttonLift} ${buttonDisabled} ${brandErrorBg} text-foreground hover:brightness-110 shadow-red-950/40`,
 } as const;
 
 /**

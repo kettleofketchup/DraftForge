@@ -42,8 +42,7 @@ const TrashIconButton = React.forwardRef<
       size="icon"
       className={cn(
         'rounded-full',
-        'shadow-lg shadow-red-900/50 border-b-4 border-b-red-800',
-        'active:border-b-0 active:translate-y-1 transition-all duration-75',
+        'shadow-lg shadow-red-900/50 transition-all duration-75',
         sizeConfig.button,
         className
       )}

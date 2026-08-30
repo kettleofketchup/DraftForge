@@ -1,14 +1,42 @@
 from rest_framework import serializers
 
-from app.models import CustomUser
+from app.models import CustomUser, PositionsModel
+from app.serializers import PositionsSerializer
 
-from .models import BaseUserProfile
+from .models import BaseUserProfile, DeadlockUserProfile, DotaUserProfile
 
 
 class BaseUserProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = BaseUserProfile
         fields = ["nickname", "avatar"]
+
+
+class DotaUserProfileSerializer(serializers.ModelSerializer):
+    positions = PositionsSerializer(required=False, allow_null=True)
+
+    class Meta:
+        model = DotaUserProfile
+        fields = ["positions", "has_active_dota_mmr", "dota_mmr_last_verified"]
+
+    def update(self, instance, validated_data):
+        positions_data = validated_data.pop("positions", None)
+        if positions_data:
+            if instance.positions is None:
+                instance.positions = PositionsModel.objects.create()
+            for key, value in positions_data.items():
+                setattr(instance.positions, key, value)
+            instance.positions.save()
+        for key, value in validated_data.items():
+            setattr(instance, key, value)
+        instance.save()
+        return instance
+
+
+class DeadlockUserProfileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DeadlockUserProfile
+        fields = ["rank", "rank_date"]
 
 
 class UserProfileLayeredSerializer(serializers.Serializer):
@@ -24,7 +52,11 @@ class UserProfileLayeredSerializer(serializers.Serializer):
     orgProfiles = serializers.SerializerMethodField()
 
     def get_gameUser(self, user: CustomUser) -> dict:
-        return {}  # T2 populates
+        bp = user.base_profile
+        return {
+            "dota": DotaUserProfileSerializer(bp.dota_user_profile).data,
+            "deadlock": DeadlockUserProfileSerializer(bp.deadlock_user_profile).data,
+        }
 
     def get_orgProfiles(self, user: CustomUser) -> dict:
         return {}  # T3 populates

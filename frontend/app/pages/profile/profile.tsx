@@ -13,6 +13,9 @@ import { toast } from 'sonner';
 import { z } from 'zod';
 
 import { UpdateProfile } from '~/components/api/api';
+import { GAME_TYPE } from '~/components/game/constants';
+import { selectPositions } from '~/store/selectPositions';
+import { useUserCacheStore } from '~/store/userCacheStore';
 import { SubmitButton } from '~/components/ui/buttons';
 import {
   Form,
@@ -29,11 +32,21 @@ import { PositionForm } from './forms/position';
 export const ProfilePage: React.FC = () => {
   const currentUser = useUserStore((state) => state.currentUser);
   const setCurrentUser = useUserStore((state) => state.setCurrentUser);
+  // Route the current user's positions through the gameType-aware selector over
+  // the list-populated entity adapter (userStore upserts currentUser into the
+  // cache). Explicit GAME_TYPE.DOTA2: /profile has no active game context, so the
+  // ambient (null) gameType would seed an empty form. Non-reactive snapshot is
+  // fine for form init; the write path (UpdateProfile) is unchanged.
+  const seedPositions = () =>
+    (currentUser?.pk != null
+      ? selectPositions(useUserCacheStore.getState(), currentUser.pk, GAME_TYPE.DOTA2)
+      : undefined) ?? currentUser?.positions;
+
   const form = useForm<z.infer<typeof UserSchema>>({
     resolver: zodResolver(UserSchema),
     defaultValues: {
       positions: {
-        ...currentUser?.positions,
+        ...seedPositions(),
       },
     },
   });
@@ -46,17 +59,12 @@ export const ProfilePage: React.FC = () => {
   const initialiazeForm = () => {
     if (currentUser == null || currentUser == undefined) return;
 
-    form.setValue('positions.carry', currentUser?.positions?.carry || 0);
-    form.setValue('positions.mid', currentUser?.positions?.mid || 0);
-    form.setValue('positions.offlane', currentUser?.positions?.offlane || 0);
-    form.setValue(
-      'positions.soft_support',
-      currentUser?.positions?.soft_support || 0,
-    );
-    form.setValue(
-      'positions.hard_support',
-      currentUser?.positions?.hard_support || 0,
-    );
+    const positions = seedPositions();
+    form.setValue('positions.carry', positions?.carry || 0);
+    form.setValue('positions.mid', positions?.mid || 0);
+    form.setValue('positions.offlane', positions?.offlane || 0);
+    form.setValue('positions.soft_support', positions?.soft_support || 0);
+    form.setValue('positions.hard_support', positions?.hard_support || 0);
     form.setValue('steam_account_id', currentUser?.steam_account_id || null);
     log.debug('Form initialized with values:', form.getValues());
     log.debug(currentUser);

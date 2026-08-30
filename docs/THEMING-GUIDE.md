@@ -23,9 +23,8 @@ This theme uses a violet/indigo primary palette with cyan accents for an esports
 Primary CTA buttons use the brand gradient via `<PrimaryButton>`, not flat `bg-primary`. The `--primary` CSS variable remains the base brand color for non-button contexts.
 
 ```tsx
-// Primary CTA (brand gradient + 3D depth)
+// Primary CTA (brand gradient, flat soft-shadow lift)
 <PrimaryButton>Create Tournament</PrimaryButton>
-<PrimaryButton depth={false}>Flat Variant</PrimaryButton>
 
 // Secondary brand action (violet gradient + ring outline)
 <SecondaryButton>Edit Settings</SecondaryButton>
@@ -176,7 +175,9 @@ All brand style constants are exported from `~/components/ui/buttons`:
 | `brandBg` | `[background-image:var(--brand-bg)]` | Subtle surface background (default on dialogs) |
 | `brandGlow` | `shadow-brand-glow` | Brand glow shadow |
 | `brandToxic` | `bg-gradient-to-br from-violet-700 via-emerald-800 to-emerald-700 hover:from-violet-600 hover:via-emerald-700 hover:to-emerald-600 text-white` | Cyberpunk "toxic ooze" edit affordance — violet-700 → emerald-800 → emerald-700 diagonal blend (same palette family as `brandHighlight`, deeper and smoothly mixed). Used by `<EditButton>` / `<EditIconButton>`. |
-| `brandToxicDepthColors` | `border-b-emerald-900 shadow-emerald-950/60` | Deep-emerald shadow tint for the toxic gradient. (The `border-b-*` accent is inert since buttons went flat — see [Button Lift](#button-lift-flat).) |
+| `brandToxicGlowLift` | `shadow-emerald-950/60` | Deep-emerald shadow tint for the toxic gradient (`<EditButton>`). |
+| `buttonLift` | `shadow-lg shadow-black/30 transition-all duration-75` | The flat soft-shadow lift shared by every brand button — see [Button Lift](#button-lift-flat). |
+| `brandGlowLift` | `shadow-[0_8px_20px_-8px_var(--glow-violet),inset_0_1px_0_rgba(255,255,255,0.18)]` | Brand-violet glow + inset top highlight for the gradient primary. |
 
 ### Brand Surface Background (`brandBg`)
 
@@ -230,17 +231,19 @@ See [`theming-guide/ai/references/scrollbars-dialogs.md`](theming-guide/ai/refer
 
 Brand buttons are **flat by design** — a soft drop shadow lifts them off the
 dialog surface, and press feedback comes from the base `<Button>`'s
-`active:scale-[0.95]`. The old chunky bevel (`border-b-4` + `active:translate-y`)
-was removed: a footer that mixed bevelled and flat buttons read as inconsistent.
+`active:scale-[0.95]`. The old chunky bevel (`border-b-4` + `active:translate-y`,
+plus per-variant `border-b-<color>` accents) was removed: a footer that mixed
+bevelled and flat buttons read as inconsistent.
 
 ```tsx
 // Flat brand button with a soft-shadow lift (default)
 <PrimaryButton>Create</PrimaryButton>
 ```
 
-The lift lives in `button3DBase` (`shadow-lg shadow-black/30`) and the muted
-disabled treatment in `button3DDisabled`. The `depth` prop is retained for
-backwards compatibility but no longer toggles a chunky bevel.
+The lift lives in `buttonLift` (`shadow-lg shadow-black/30`) and the muted
+disabled treatment in `buttonDisabled`; the gradient primary adds `brandGlowLift`
+(violet glow + inset highlight). The `depth` prop is retained for backwards
+compatibility but only toggles the soft shadow now — there is no bevel.
 
 > **Do not reintroduce 3D bevels.** Never add `border-b-4` /
 > `active:translate-y-*` to a button (inline or via a new constant). Buttons
@@ -338,7 +341,7 @@ Renders as a hierarchical breadcrumb with type labels (e.g., "ORGANIZATION" abov
 ### Buttons
 
 ```tsx
-// Primary CTA (brand gradient + 3D depth)
+// Primary CTA (brand gradient, flat soft-shadow lift)
 <PrimaryButton>Create Tournament</PrimaryButton>
 <PrimaryButton size="lg">Large CTA</PrimaryButton>
 
@@ -352,8 +355,8 @@ Renders as a hierarchical breadcrumb with type labels (e.g., "ORGANIZATION" abov
 // Secondary (default brand violet gradient + ring)
 <SecondaryButton>Settings</SecondaryButton>
 
-// Secondary with colored background + 3D
-<SecondaryButton color="cyan" depth>Colored Action</SecondaryButton>
+// Secondary with colored background
+<SecondaryButton color="cyan">Colored Action</SecondaryButton>
 
 // Avoid using <Button> directly for user-facing actions.
 // Reserve for structural uses: dropdown triggers, combobox triggers, etc.

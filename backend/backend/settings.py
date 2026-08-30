@@ -336,53 +336,65 @@ CACHEOPS_REDIS = {
     "socket_connect_timeout": 2,  # Timeout for initial connection (prevents hanging)
 }
 
-# When DISABLE_CACHE is set, fully disable cacheops (no Redis connection attempts)
+# Cacheops op registration — kept populated even when caching is disabled so
+# @cached_as sites can resolve a cacheprofile. CACHEOPS_ENABLED (set below) is
+# what actually gates every Redis read/write and invalidation.
+CACHEOPS = {
+    "app.organization": {"ops": "all", "timeout": 60 * 60},
+    "app.league": {"ops": "all", "timeout": 60 * 60},
+    "app.tournament": {"ops": "all", "timeout": 60 * 60},
+    "app.team": {"ops": "all", "timeout": 60 * 60},
+    "app.customuser": {"ops": "all", "timeout": 60 * 60},
+    # BaseUserProfile owns nickname/avatar (T1 epic). Every @cached_as
+    # site that ships nickname/avatar must list BaseUserProfile so PATCH
+    # /api/users/me/profile/base/ invalidates the cached payload — see
+    # backend/user/tests/test_cacheops.py for the grep guardrail.
+    "user.baseuserprofile": {"ops": "all", "timeout": 60 * 60},
+    # DotaUserProfile owns positions + dota-mmr verification; DeadlockUserProfile
+    # owns rank (T2 epic). @cached_as sites shipping positions must list
+    # DotaUserProfile so PATCH /api/users/me/profile/game/dota/ invalidates the
+    # cached payload — see backend/user/tests/test_cacheops.py grep guardrail.
+    "user.dotauserprofile": {"ops": "all", "timeout": 60 * 60},
+    "user.deadlockuserprofile": {"ops": "all", "timeout": 60 * 60},
+    "app.draft": {"ops": "all", "timeout": 60 * 60},
+    "app.game": {"ops": "all", "timeout": 60 * 60},
+    "app.herodraft": {"ops": "all", "timeout": 60 * 60},
+    "app.draftteam": {"ops": "all", "timeout": 60 * 60},
+    "app.draftround": {"ops": "all", "timeout": 60 * 60},
+    # Organization/League membership models
+    "org.orguser": {"ops": "all", "timeout": 60 * 60},
+    "org.playerdotaprofile": {"ops": "all", "timeout": 60 * 60},
+    "org.playerdeadlockprofile": {"ops": "all", "timeout": 60 * 60},
+    "league.leagueuser": {"ops": "all", "timeout": 60 * 60},
+    # Steam match data - cached with shorter timeout for freshness
+    "steam.match": {"ops": "all", "timeout": 30 * 60},
+    "steam.playermatchstats": {"ops": "all", "timeout": 30 * 60},
+    "steam.leaguesyncstate": {"ops": "all", "timeout": 30 * 60},
+    "steam.leagueplayerstats": {"ops": "all", "timeout": 30 * 60},
+    # Events app
+    "events.eventrepeater": {"ops": "all", "timeout": 60 * 60},
+    "events.event": {"ops": "all", "timeout": 60 * 60},
+    "events.eventteam": {"ops": "all", "timeout": 60 * 60},
+    "events.eventsignup": {"ops": "all", "timeout": 60 * 60},
+    "events.repeatersubscription": {"ops": "all", "timeout": 60 * 60},
+    "events.orgeventdefaults": {"ops": "all", "timeout": 60 * 60},
+    # Discord Event models (read-heavy, checked on signup updates)
+    "discordbot.discordevent": {"ops": "all", "timeout": 60 * 60},
+    "discordbot.discordeventmsgsignup": {"ops": "all", "timeout": 60 * 60},
+    "discordbot.discordeventmsgannouncement": {"ops": "all", "timeout": 60 * 60},
+    # Discord audit/log models — few writes per event lifecycle
+    "discordbot.discordeventlog": {"ops": "all", "timeout": 60 * 60},
+    "discordbot.discordeventdm": {"ops": "all", "timeout": 60 * 60},
+    "discordbot.discordmessagelog": {"ops": "all", "timeout": 60 * 60},
+}
+
+# DISABLE_CACHE turns off all cacheops Redis I/O (no connection attempts). We
+# flip CACHEOPS_ENABLED rather than emptying CACHEOPS: cacheops' cached_as()
+# resolves each sample queryset's cacheprofile at decoration time — before the
+# CACHEOPS_ENABLED short-circuit runs — so an empty CACHEOPS makes every
+# @cached_as endpoint raise ImproperlyConfigured.
 if env_bool("DISABLE_CACHE"):
     CACHEOPS_ENABLED = False
-    CACHEOPS = {}
-else:
-    CACHEOPS = {
-        "app.organization": {"ops": "all", "timeout": 60 * 60},
-        "app.league": {"ops": "all", "timeout": 60 * 60},
-        "app.tournament": {"ops": "all", "timeout": 60 * 60},
-        "app.team": {"ops": "all", "timeout": 60 * 60},
-        "app.customuser": {"ops": "all", "timeout": 60 * 60},
-        # BaseUserProfile owns nickname/avatar (T1 epic). Every @cached_as
-        # site that ships nickname/avatar must list BaseUserProfile so PATCH
-        # /api/users/me/profile/base/ invalidates the cached payload — see
-        # backend/user/tests/test_cacheops.py for the grep guardrail.
-        "user.baseuserprofile": {"ops": "all", "timeout": 60 * 60},
-        "app.draft": {"ops": "all", "timeout": 60 * 60},
-        "app.game": {"ops": "all", "timeout": 60 * 60},
-        "app.herodraft": {"ops": "all", "timeout": 60 * 60},
-        "app.draftteam": {"ops": "all", "timeout": 60 * 60},
-        "app.draftround": {"ops": "all", "timeout": 60 * 60},
-        # Organization/League membership models
-        "org.orguser": {"ops": "all", "timeout": 60 * 60},
-        "org.playerdotaprofile": {"ops": "all", "timeout": 60 * 60},
-        "org.playerdeadlockprofile": {"ops": "all", "timeout": 60 * 60},
-        "league.leagueuser": {"ops": "all", "timeout": 60 * 60},
-        # Steam match data - cached with shorter timeout for freshness
-        "steam.match": {"ops": "all", "timeout": 30 * 60},
-        "steam.playermatchstats": {"ops": "all", "timeout": 30 * 60},
-        "steam.leaguesyncstate": {"ops": "all", "timeout": 30 * 60},
-        "steam.leagueplayerstats": {"ops": "all", "timeout": 30 * 60},
-        # Events app
-        "events.eventrepeater": {"ops": "all", "timeout": 60 * 60},
-        "events.event": {"ops": "all", "timeout": 60 * 60},
-        "events.eventteam": {"ops": "all", "timeout": 60 * 60},
-        "events.eventsignup": {"ops": "all", "timeout": 60 * 60},
-        "events.repeatersubscription": {"ops": "all", "timeout": 60 * 60},
-        "events.orgeventdefaults": {"ops": "all", "timeout": 60 * 60},
-        # Discord Event models (read-heavy, checked on signup updates)
-        "discordbot.discordevent": {"ops": "all", "timeout": 60 * 60},
-        "discordbot.discordeventmsgsignup": {"ops": "all", "timeout": 60 * 60},
-        "discordbot.discordeventmsgannouncement": {"ops": "all", "timeout": 60 * 60},
-        # Discord audit/log models — few writes per event lifecycle
-        "discordbot.discordeventlog": {"ops": "all", "timeout": 60 * 60},
-        "discordbot.discordeventdm": {"ops": "all", "timeout": 60 * 60},
-        "discordbot.discordmessagelog": {"ops": "all", "timeout": 60 * 60},
-    }
 
 CACHEOPS_DEGRADE_ON_FAILURE = True
 

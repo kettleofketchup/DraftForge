@@ -1001,6 +1001,45 @@ def _create_discord_scheduled_event_impl(event_id):
 
 
 @shared_task
+def delete_discord_scheduled_event(guild_id: str, scheduled_event_id: str) -> str:
+    """Delete a live Discord guild scheduled event.
+
+    Idempotent: a 404 (already gone) counts as success. Nothing else in the app
+    removes scheduled events, so this must run whenever an Event or its series is
+    deleted — otherwise the event is orphaned on the guild and sync_discord_events
+    keeps it alive as a "ghost".
+    """
+    if not guild_id or not scheduled_event_id:
+        return "Skipped: missing guild_id or scheduled_event_id"
+    url = f"{DISCORD_API_BASE}/guilds/{guild_id}/scheduled-events/{scheduled_event_id}"
+    try:
+        response = req.delete(url, headers=_get_headers())
+        if response.status_code not in (204, 404):
+            logger.error(
+                "discord_scheduled_event_delete_failed",
+                system="events",
+                subsystem="tasks",
+                guild_id=guild_id,
+                scheduled_event_id=scheduled_event_id,
+                status_code=response.status_code,
+            )
+        return (
+            f"Deleted Discord scheduled event {scheduled_event_id} "
+            f"(HTTP {response.status_code})"
+        )
+    except Exception as e:
+        logger.exception(
+            "discord_scheduled_event_delete_error",
+            system="events",
+            subsystem="tasks",
+            guild_id=guild_id,
+            scheduled_event_id=scheduled_event_id,
+            error=str(e),
+        )
+        return f"Failed: {e}"
+
+
+@shared_task
 def sync_discord_event_signups(event_id, interaction_id=None):
     """Sync signup count to Discord scheduled event description."""
     return _run_with_bookends(

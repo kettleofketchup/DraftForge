@@ -3,20 +3,20 @@ import * as React from 'react';
 import { Button } from '~/components/ui/button';
 import { cn } from '~/lib/utils';
 import { HotkeyBadge } from './HotkeyBadge';
-import { brandErrorPrimary, button3DBase, button3DDisabled } from './styles';
+import { brandErrorPrimary, buttonLift, buttonDisabled } from './styles';
 
 export interface DestructiveButtonProps
   extends Omit<React.ComponentProps<typeof Button>, 'variant'> {
   /** Whether the button is in a loading state */
   loading?: boolean;
-  /** Whether to apply 3D depth effects (default: true) */
+  /** Whether to apply the soft-shadow lift (default: true) */
   depth?: boolean;
   /** Optional keyboard shortcut label rendered as a badge in the top-left corner. */
   hotkey?: string;
 }
 
 /**
- * A destructive action button with red styling and 3D depth effects.
+ * A destructive action button with red styling and a soft-shadow lift.
  * Used for delete, remove, or other destructive actions.
  *
  * @example
@@ -46,10 +46,9 @@ const DestructiveButton = React.forwardRef<
       ref={ref}
       disabled={disabled || loading}
       className={cn(
-        // Bottom-border opacity bumped 50 → 80 so the 3D floor reads at the
-        // same visual weight as <EditButton>'s emerald-900 floor. /50 was
-        // making the destructive pill look ~2px shorter than its sibling.
-        depth ? `${button3DBase} ${button3DDisabled} ${brandErrorPrimary} border-b-red-900/80 shadow-red-950/40` : brandErrorPrimary,
+        // min-h-11 matches ConfirmButton/CancelButton so footer rows align.
+        'min-h-11',
+        depth ? `${buttonLift} ${buttonDisabled} ${brandErrorPrimary} shadow-red-950/40` : brandErrorPrimary,
         hotkey && 'relative',
         className
       )}

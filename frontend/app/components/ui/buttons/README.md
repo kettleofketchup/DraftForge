@@ -9,7 +9,7 @@ library grows, group buttons by **scope of use**, not by visual style.
 buttons/
 ├── README.md             ← this guide
 ├── index.ts              ← barrel re-export of EVERYTHING
-├── styles.ts             ← shared style constants (brandGradient, button3DBase, …)
+├── styles.ts             ← shared style constants (brandGradient, buttonLift, …)
 │
 ├── PrimaryButton.tsx     ← generic, shape-agnostic buttons live at the root
 ├── SecondaryButton.tsx
@@ -71,7 +71,7 @@ That's it. Existing imports keep working because everything funnels through the 
 
 ## Anti-patterns
 
-- ❌ Buttons that re-implement `brandGradient` / `button3DBase` instead of composing `PrimaryButton`/`SecondaryButton`/etc.
+- ❌ Buttons that re-implement `brandGradient` / `buttonLift` instead of composing `PrimaryButton`/`SecondaryButton`/etc.
 - ❌ Buttons with hand-rolled hover transitions when `transform-gpu transition-transform duration-150 hover:scale-[1.02]` is the brand-standard hover.
 - ❌ Domain-specific buttons in the root folder.
 - ❌ Buttons that import from a feature folder back into `ui/buttons/` (introduces circular dependency).
