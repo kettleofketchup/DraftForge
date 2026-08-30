@@ -165,3 +165,125 @@ class SyncFutureEventsShieldTest(EventTestCase):
         mock_delete.delay.assert_called_once_with(
             "734185035623825559", "1529289108529352788"
         )
+
+
+class CreateOffScheduleEventTest(EventTestCase):
+    def setUp(self):
+        self.repeater = EventRepeater.objects.create(
+            organization=self.org,
+            name="Sunday Turbo",
+            description="Weekly turbo night",
+            frequency=RepeatFrequency.WEEKLY,
+            day_of_week=0,
+            time_of_day=time(18, 0),
+            starts_at=tz.now().date(),
+            created_by=self.admin,
+            max_players=20,
+            discord_send_draft_link=False,
+        )
+
+    @patch("events.services.ensure_discord_event")
+    @patch("events.services.create_tournament_for_event")
+    @patch("events.services.notify_create_discord_event")
+    @patch("events.services.notify_new_event")
+    def test_creates_off_schedule_event_with_inherited_config(
+        self, mock_notify, mock_discord_event, mock_tournament, mock_ensure
+    ):
+        from events.services import create_off_schedule_event
+
+        when = tz.now() + timedelta(days=2, hours=5)
+        event = create_off_schedule_event(
+            self.repeater, scheduled_at=when, created_by=self.admin
+        )
+
+        self.assertEqual(event.event_repeater_id, self.repeater.pk)
+        self.assertTrue(event.is_off_schedule)
+        self.assertEqual(event.state, EventState.UPCOMING)
+        self.assertEqual(event.name, "Sunday Turbo")
+        self.assertEqual(event.max_players, 20)          # EventConfigMixin
+        self.assertFalse(event.discord_send_draft_link)  # DiscordTournamentConfigMixin
+        self.assertEqual(event.tournament_date, when)
+
+    @patch("events.services.ensure_discord_event")
+    @patch("events.services.create_tournament_for_event")
+    @patch("events.services.notify_create_discord_event")
+    @patch("events.services.notify_new_event")
+    def test_applies_overrides(self, *_mocks):
+        from events.services import create_off_schedule_event
+
+        event = create_off_schedule_event(
+            self.repeater,
+            scheduled_at=tz.now() + timedelta(days=2, hours=5),
+            created_by=self.admin,
+            overrides={"name": "Holiday Special", "max_players": 10},
+        )
+        self.assertEqual(event.name, "Holiday Special")
+        self.assertEqual(event.max_players, 10)
+
+    @patch("events.services.ensure_discord_event")
+    @patch("events.services.create_tournament_for_event")
+    @patch("events.services.notify_create_discord_event")
+    @patch("events.services.notify_new_event")
+    def test_dispatches_discord_notifications(
+        self, mock_notify_new, mock_notify_create, *_mocks
+    ):
+        from events.services import create_off_schedule_event
+
+        self.repeater.discord_notify_new_events = True
+        self.repeater.discord_create_event = True
+        self.repeater.save()
+
+        event = create_off_schedule_event(
+            self.repeater,
+            scheduled_at=tz.now() + timedelta(days=2, hours=5),
+            created_by=self.admin,
+        )
+        mock_notify_new.assert_called_once_with(event)
+        mock_notify_create.assert_called_once_with(event)
+
+    @patch("events.services.ensure_discord_event")
+    @patch("events.services.create_tournament_for_event")
+    @patch("events.services.notify_create_discord_event")
+    @patch("events.services.notify_new_event")
+    def test_rejects_collision_with_existing_row(self, *_mocks):
+        from events.services import OccurrenceCollision, create_off_schedule_event
+
+        when = tz.now() + timedelta(days=2, hours=5)
+        Event.objects.create(
+            organization=self.org,
+            event_repeater=self.repeater,
+            name="Sunday Turbo",
+            scheduled_at=when,
+            state=EventState.UPCOMING,
+        )
+        with self.assertRaises(OccurrenceCollision):
+            create_off_schedule_event(
+                self.repeater, scheduled_at=when, created_by=self.admin
+            )
+
+    @patch("events.services.ensure_discord_event")
+    @patch("events.services.create_tournament_for_event")
+    @patch("events.services.notify_create_discord_event")
+    @patch("events.services.notify_new_event")
+    def test_rejects_collision_with_future_occurrence(self, *_mocks):
+        from events.services import (
+            OccurrenceCollision,
+            _get_next_occurrences,
+            _today,
+            create_off_schedule_event,
+            generate_events_for_repeater,
+        )
+
+        occurrences = _get_next_occurrences(
+            self.repeater, _today(), _today() + timedelta(days=14)
+        )
+        target = occurrences[0]
+
+        with self.assertRaises(OccurrenceCollision):
+            create_off_schedule_event(
+                self.repeater, scheduled_at=target, created_by=self.admin
+            )
+
+        # The real recurring event is still generated afterwards.
+        created = generate_events_for_repeater(self.repeater)
+        self.assertIn(target, [e.scheduled_at for e in created])

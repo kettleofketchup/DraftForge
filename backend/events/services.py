@@ -2,12 +2,13 @@ import calendar
 import datetime
 import re
 from datetime import timedelta
+from typing import Any
 from zoneinfo import ZoneInfo
 
 from django.db import models, transaction
 
 from app.cache_utils import invalidate_after_commit, invalidate_obj
-from app.models import Tournament
+from app.models import CustomUser, Tournament
 from events.constants import EventState, RepeatFrequency, SignupStatus, SignupType
 from events.discord import (
     notify_create_discord_event,
@@ -20,6 +21,7 @@ from events.models import (
     DiscordTournamentConfigMixin,
     Event,
     EventConfigMixin,
+    EventRepeater,
     EventSignup,
     TournamentTemplateMixin,
 )
@@ -1161,6 +1163,77 @@ def generate_events_for_repeater(repeater):
         if event.discord_create_event:
             notify_create_discord_event(event)
     return created_events
+
+
+class OccurrenceCollision(ValueError):
+    """A requested one-off timestamp collides with an existing or generated occurrence."""
+
+
+def create_off_schedule_event(
+    repeater: EventRepeater,
+    *,
+    scheduled_at: datetime.datetime,
+    created_by: CustomUser | None,
+    overrides: dict[str, Any] | None = None,
+) -> Event:
+    """Create a single event attached to `repeater` but outside its schedule.
+
+    Mirrors generate_events_for_repeater for one caller-supplied instant. Not
+    atomic, for the same reason: .delay() publishes to Redis immediately and the
+    worker re-reads the row over the internal API, so an uncommitted event would
+    be "not found". repeater.is_active is deliberately not checked — a paused
+    series is a legitimate template.
+    """
+    if Event.objects.filter(
+        event_repeater=repeater, scheduled_at=scheduled_at
+    ).exists():
+        raise OccurrenceCollision(
+            "An event in this series is already scheduled for that time."
+        )
+
+    today = _today()
+    horizon = max(
+        scheduled_at.date(), today + timedelta(days=repeater.generate_days_ahead)
+    )
+    if scheduled_at in set(_get_next_occurrences(repeater, today, horizon)):
+        raise OccurrenceCollision(
+            "That time is a scheduled occurrence of this series. "
+            "Pick a different time for a one-off event."
+        )
+
+    event = Event(
+        organization=repeater.organization,
+        event_repeater=repeater,
+        name=repeater.name,
+        description=repeater.description,
+        scheduled_at=scheduled_at,
+        state=EventState.UPCOMING,
+        created_by=created_by,
+        is_off_schedule=True,
+    )
+    _copy_mixin_fields(repeater, event, REPEATER_CREATE_COPY_FIELDS)
+    for field_name, value in (overrides or {}).items():
+        setattr(event, field_name, value)
+    event.tournament_date = scheduled_at
+    event.save()
+
+    create_tournament_for_event(event)
+    ensure_discord_event(event)
+
+    if repeater.discord_notify_new_events:
+        notify_new_event(event)
+    if event.discord_create_event:
+        notify_create_discord_event(event)
+
+    logger.info(
+        "off_schedule_event_created",
+        system="events",
+        subsystem="services",
+        repeater_id=repeater.pk,
+        event_id=event.pk,
+        scheduled_at=scheduled_at.isoformat(),
+    )
+    return event
 
 
 @transaction.atomic
