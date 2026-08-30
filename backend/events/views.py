@@ -271,6 +271,60 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
             invalidate_obj(repeater)
         return Response({"detail": "Unsubscribed"}, status=status.HTTP_200_OK)
 
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path="create-event",
+        permission_classes=[permissions.IsAuthenticated],
+    )
+    def create_event(self, request, pk=None):
+        """Create a single off-schedule ("one-off") event from this series."""
+        from app.cache_utils import invalidate_after_commit
+        from events.serializers import OneOffEventCreateSerializer
+        from events.services import OccurrenceCollision, create_off_schedule_event
+
+        repeater = self.get_object()
+        if not has_org_staff_access(request.user, repeater.organization):
+            return Response(
+                {"detail": "You do not have staff access to this organization."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        serializer = OneOffEventCreateSerializer(
+            data=request.data, context={"repeater": repeater, "request": request}
+        )
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        try:
+            event = create_off_schedule_event(
+                repeater,
+                scheduled_at=data["scheduled_at"],
+                created_by=request.user,
+                overrides=data.get("overrides") or {},
+            )
+        except OccurrenceCollision as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+
+        if data.get("open_signups"):
+            try:
+                event.transition_state(EventState.SIGNUPS_OPEN)
+            except ValueError:
+                pass
+
+        invalidate_after_commit(repeater, event)
+        logger.info(
+            "off_schedule_event_endpoint",
+            system="events",
+            subsystem="views",
+            repeater_id=repeater.pk,
+            event_id=event.pk,
+        )
+        return Response(
+            EventSerializer(event, context={"request": request}).data,
+            status=status.HTTP_201_CREATED,
+        )
+
 
 class EventViewSet(viewsets.ModelViewSet):
     serializer_class = EventSerializer

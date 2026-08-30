@@ -287,3 +287,146 @@ class CreateOffScheduleEventTest(EventTestCase):
         # The real recurring event is still generated afterwards.
         created = generate_events_for_repeater(self.repeater)
         self.assertIn(target, [e.scheduled_at for e in created])
+
+
+class CreateEventEndpointTest(EventTestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.repeater = EventRepeater.objects.create(
+            organization=self.org,
+            name="Sunday Turbo",
+            frequency=RepeatFrequency.WEEKLY,
+            day_of_week=0,
+            time_of_day=time(18, 0),
+            starts_at=tz.now().date(),
+            created_by=self.admin,
+        )
+        self.url = f"/api/events/repeaters/{self.repeater.pk}/create-event/"
+        self.when = (tz.now() + timedelta(days=2, hours=5)).isoformat()
+
+    @patch("events.services.ensure_discord_event")
+    @patch("events.services.create_tournament_for_event")
+    @patch("events.services.notify_create_discord_event")
+    @patch("events.services.notify_new_event")
+    def test_staff_creates_off_schedule_event(self, *_mocks):
+        self.client.force_authenticate(self.admin)
+        resp = self.client.post(self.url, {"scheduled_at": self.when}, format="json")
+        self.assertEqual(resp.status_code, 201, resp.content)
+        self.assertTrue(resp.data["is_off_schedule"])
+        self.assertEqual(resp.data["event_repeater"], self.repeater.pk)
+
+    @patch("events.services.ensure_discord_event")
+    @patch("events.services.create_tournament_for_event")
+    @patch("events.services.notify_create_discord_event")
+    @patch("events.services.notify_new_event")
+    def test_open_signups_flag_transitions_state(self, *_mocks):
+        self.client.force_authenticate(self.admin)
+        resp = self.client.post(
+            self.url,
+            {"scheduled_at": self.when, "open_signups": True},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 201, resp.content)
+        self.assertEqual(resp.data["state"], EventState.SIGNUPS_OPEN)
+
+    def test_non_staff_forbidden(self):
+        self.client.force_authenticate(self.unrelated_user)
+        resp = self.client.post(self.url, {"scheduled_at": self.when}, format="json")
+        self.assertEqual(resp.status_code, 403, resp.content)
+        self.assertFalse(Event.objects.filter(is_off_schedule=True).exists())
+
+    def test_anonymous_forbidden(self):
+        resp = self.client.post(self.url, {"scheduled_at": self.when}, format="json")
+        # SessionAuthentication supplies no WWW-Authenticate header, so DRF
+        # downgrades NotAuthenticated to 403 — there is no 401 path here.
+        self.assertEqual(resp.status_code, 403, resp.content)
+
+    @patch("events.services.ensure_discord_event")
+    @patch("events.services.create_tournament_for_event")
+    @patch("events.services.notify_create_discord_event")
+    @patch("events.services.notify_new_event")
+    def test_collision_returns_409(self, *_mocks):
+        Event.objects.create(
+            organization=self.org,
+            event_repeater=self.repeater,
+            name="Sunday Turbo",
+            scheduled_at=tz.now() + timedelta(days=2, hours=5),
+            state=EventState.UPCOMING,
+        )
+        self.client.force_authenticate(self.admin)
+        before = Event.objects.count()
+        resp = self.client.post(
+            self.url,
+            {"scheduled_at": Event.objects.latest("id").scheduled_at.isoformat()},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 409, resp.content)
+        self.assertEqual(Event.objects.count(), before)
+
+    def test_past_scheduled_at_rejected(self):
+        self.client.force_authenticate(self.admin)
+        resp = self.client.post(
+            self.url,
+            {"scheduled_at": (tz.now() - timedelta(days=1)).isoformat()},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 400, resp.content)
+
+    def test_invalid_game_mode_for_game_type_rejected(self):
+        self.repeater.game_type = 2
+        self.repeater.save(update_fields=["game_type"])
+        self.client.force_authenticate(self.admin)
+        resp = self.client.post(
+            self.url,
+            {"scheduled_at": self.when, "game_mode": "captains_mode"},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 400, resp.content)
+        self.assertFalse(Event.objects.filter(is_off_schedule=True).exists())
+
+    @patch("events.services.ensure_discord_event")
+    @patch("events.services.create_tournament_for_event")
+    @patch("events.services.notify_create_discord_event")
+    @patch("events.services.notify_new_event")
+    def test_overrides_are_coerced_not_raw(self, *_mocks):
+        self.client.force_authenticate(self.admin)
+        resp = self.client.post(
+            self.url,
+            {
+                "scheduled_at": self.when,
+                "tournament_league": self.league.pk,
+                "max_players": "12",
+                "discord_announcement": "false",
+            },
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 201, resp.content)
+        event = Event.objects.get(pk=resp.data["id"])
+        self.assertEqual(event.tournament_league_id, self.league.pk)
+        self.assertIsInstance(event.max_players, int)
+        self.assertEqual(event.max_players, 12)
+        self.assertIs(event.discord_announcement, False)
+
+    def test_foreign_org_league_rejected(self):
+        from app.models import League, Organization
+
+        other_org = Organization.objects.create(name="Other Org", owner=self.admin)
+        other = League.objects.create(name="Other", organization=other_org)
+        self.client.force_authenticate(self.admin)
+        resp = self.client.post(
+            self.url,
+            {"scheduled_at": self.when, "tournament_league": other.pk},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 400, resp.content)
+
+    @patch("app.cache_utils.invalidate_after_commit")
+    @patch("events.services.ensure_discord_event")
+    @patch("events.services.create_tournament_for_event")
+    @patch("events.services.notify_create_discord_event")
+    @patch("events.services.notify_new_event")
+    def test_invalidates_repeater_cache(self, _n, _c, _t, _e, mock_invalidate):
+        self.client.force_authenticate(self.admin)
+        self.client.post(self.url, {"scheduled_at": self.when}, format="json")
+        invalidated = [a for call in mock_invalidate.call_args_list for a in call.args]
+        self.assertTrue(any(obj.pk == self.repeater.pk for obj in invalidated))
