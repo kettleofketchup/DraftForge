@@ -38,7 +38,6 @@ from discordbot.utils import (
     _get_headers,
     sync_edit_message,
     sync_send_dm,
-    sync_send_embed,
     sync_send_embed_with_components,
 )
 from events.discord import (
@@ -834,7 +833,7 @@ def send_new_event_notification(event_id, interaction_id=None):
     )
 
 
-def _send_new_event_notification_impl(event_id):
+def _send_new_event_notification_impl(event_id: int) -> str:
     event = get_event_for_task(event_id)
     if not event:
         return f"Failed: event {event_id} not found"
@@ -842,15 +841,25 @@ def _send_new_event_notification_impl(event_id):
         return "Skipped: announcements disabled"
 
     embed = build_new_event_embed(event)
-    sync_send_embed(
+    # Lease-wrapped send: claims (new_event, event_id) before the HTTP POST, so a
+    # retry or double dispatch can't double-post the embed.
+    response = sync_send_embed_with_components(
         channel_id=event.discord_announcement_channel_id,
-        title=embed["title"],
-        description=embed["description"],
-        color=embed["color"],
-        fields=embed.get("fields"),
+        embed=embed,
         source="new_event",
         source_id=event.pk,
     )
+    if response is None:
+        logger.info(
+            "new_event_notification_not_sent",
+            system="events",
+            subsystem="tasks",
+            event_id=event_id,
+            reason="lease_held_by_another_worker",
+        )
+        return (
+            f"New event notification for event {event_id}: lease held by another worker"
+        )
     return f"Notified new event {event.pk}"
 
 

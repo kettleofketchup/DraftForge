@@ -143,6 +143,7 @@ export {
   getDiscordRoles,
   adminAddSignup,
   subscribeToRepeater, unsubscribeFromRepeater,
+  createSeriesOneOffEvent, reactivateRepeater,
   getRepeaterSubscribers,
   getOrgEventDefaults,
   updateOrgEventDefaults,

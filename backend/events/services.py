@@ -2,22 +2,26 @@ import calendar
 import datetime
 import re
 from datetime import timedelta
+from typing import Any
 from zoneinfo import ZoneInfo
 
 from django.db import models, transaction
 
 from app.cache_utils import invalidate_after_commit, invalidate_obj
-from app.models import Tournament
+from app.models import CustomUser, Tournament
 from events.constants import EventState, RepeatFrequency, SignupStatus, SignupType
 from events.discord import (
+    notify_create_discord_event,
     notify_mark_interested,
     notify_new_event,
     notify_signup_changed,
 )
 from events.models import (
     DiscordEventConfigMixin,
+    DiscordTournamentConfigMixin,
     Event,
     EventConfigMixin,
+    EventRepeater,
     EventSignup,
     TournamentTemplateMixin,
 )
@@ -982,6 +986,46 @@ def ensure_tournament_with_signups(event):
     return tournament
 
 
+def teardown_event(event: Event) -> None:
+    """Delete an event and everything Discord/tournament-related it owns.
+
+    Dispatches deletion of the live Discord scheduled event (nothing else in the
+    app removes scheduled events), then removes the linked tournament, DiscordEvent
+    (cascades to messages, logs, DMs) and legacy message logs, then the event row.
+    Shared by EventViewSet (single delete), EventRepeaterViewSet (series delete)
+    and sync_future_events' realign, so no path leaves ghost events behind.
+    """
+    from app.cache_utils import invalidate_after_commit
+    from discordbot.models import DiscordEvent, DiscordMessageLog
+    from events.tasks import delete_discord_scheduled_event
+
+    with transaction.atomic():
+        invalidate_after_commit(event)
+        if event.tournament:
+            tournament = event.tournament
+            event.tournament = None
+            event.save(update_fields=["tournament", "updated_at"])
+            tournament.delete()
+
+        try:
+            discord_event = event.discord_event
+        except DiscordEvent.DoesNotExist:
+            discord_event = None
+        if discord_event is not None:
+            if discord_event.scheduled_event_id:
+                delete_discord_scheduled_event.delay(
+                    discord_event.guild_id, discord_event.scheduled_event_id
+                )
+            discord_event.delete()
+
+        DiscordMessageLog.objects.filter(
+            source__in=["event_announcement", "event_notice"],
+            source_id=event.pk,
+        ).delete()
+
+        event.delete()
+
+
 # ---------------------------------------------------------------------------
 # Event generation
 # ---------------------------------------------------------------------------
@@ -995,6 +1039,17 @@ EVENT_CONFIG_FIELDS = [
 DISCORD_CONFIG_FIELDS = [
     f.name for f in DiscordEventConfigMixin._meta.get_fields() if hasattr(f, "column")
 ]
+DISCORD_TOURNAMENT_TEMPLATE_FIELDS = [
+    f.name
+    for f in DiscordTournamentConfigMixin._meta.get_fields()
+    if hasattr(f, "column")
+]
+REPEATER_CREATE_COPY_FIELDS = (
+    TOURNAMENT_TEMPLATE_FIELDS
+    + EVENT_CONFIG_FIELDS
+    + DISCORD_CONFIG_FIELDS
+    + DISCORD_TOURNAMENT_TEMPLATE_FIELDS
+)
 
 
 def _python_weekday(sunday_zero_dow):
@@ -1097,9 +1152,7 @@ def generate_events_for_repeater(repeater):
             state=EventState.UPCOMING,
             created_by=repeater.created_by,
         )
-        _copy_mixin_fields(repeater, event, TOURNAMENT_TEMPLATE_FIELDS)
-        _copy_mixin_fields(repeater, event, EVENT_CONFIG_FIELDS)
-        _copy_mixin_fields(repeater, event, DISCORD_CONFIG_FIELDS)
+        _copy_mixin_fields(repeater, event, REPEATER_CREATE_COPY_FIELDS)
         event.tournament_date = dt
         event.save()
         create_tournament_for_event(event)
@@ -1108,10 +1161,79 @@ def generate_events_for_repeater(repeater):
         if repeater.discord_notify_new_events:
             notify_new_event(event)
         if event.discord_create_event:
-            from events.discord import notify_create_discord_event
-
             notify_create_discord_event(event)
     return created_events
+
+
+class OccurrenceCollision(ValueError):
+    """A requested one-off timestamp collides with an existing or generated occurrence."""
+
+
+def create_off_schedule_event(
+    repeater: EventRepeater,
+    *,
+    scheduled_at: datetime.datetime,
+    created_by: CustomUser | None,
+    overrides: dict[str, Any] | None = None,
+) -> Event:
+    """Create a single event attached to `repeater` but outside its schedule.
+
+    Mirrors generate_events_for_repeater for one caller-supplied instant. Not
+    atomic, for the same reason: .delay() publishes to Redis immediately and the
+    worker re-reads the row over the internal API, so an uncommitted event would
+    be "not found". repeater.is_active is deliberately not checked — a paused
+    series is a legitimate template.
+    """
+    if Event.objects.filter(
+        event_repeater=repeater, scheduled_at=scheduled_at
+    ).exists():
+        raise OccurrenceCollision(
+            "An event in this series is already scheduled for that time."
+        )
+
+    today = _today()
+    horizon = max(
+        scheduled_at.date(), today + timedelta(days=repeater.generate_days_ahead)
+    )
+    if scheduled_at in set(_get_next_occurrences(repeater, today, horizon)):
+        raise OccurrenceCollision(
+            "That time is a scheduled occurrence of this series. "
+            "Pick a different time for a one-off event."
+        )
+
+    event = Event(
+        organization=repeater.organization,
+        event_repeater=repeater,
+        name=repeater.name,
+        description=repeater.description,
+        scheduled_at=scheduled_at,
+        state=EventState.UPCOMING,
+        created_by=created_by,
+        is_off_schedule=True,
+    )
+    _copy_mixin_fields(repeater, event, REPEATER_CREATE_COPY_FIELDS)
+    for field_name, value in (overrides or {}).items():
+        setattr(event, field_name, value)
+    event.tournament_date = scheduled_at
+    event.save()
+
+    create_tournament_for_event(event)
+    ensure_discord_event(event)
+
+    if repeater.discord_notify_new_events:
+        notify_new_event(event)
+    if event.discord_create_event:
+        notify_create_discord_event(event)
+
+    logger.info(
+        "off_schedule_event_created",
+        system="events",
+        subsystem="services",
+        repeater_id=repeater.pk,
+        event_id=event.pk,
+        scheduled_at=scheduled_at.isoformat(),
+    )
+    return event
 
 
 @transaction.atomic
@@ -1122,12 +1244,18 @@ def sync_future_events(repeater, *, realign_schedule=False):
     (i.e. signups haven't opened yet), so in-progress events are untouched.
 
     If realign_schedule=True (caller detected a day_of_week / time_of_day /
-    timezone / starts_at / frequency change), UPCOMING rows whose
-    scheduled_at is no longer in the repeater's new occurrence set are
-    DELETED, and any new occurrences not already present are INSERTED via
-    generate_events_for_repeater. This eliminates the duplicate-occurrence
+    timezone / starts_at / frequency / is_active change), UPCOMING rows whose
+    scheduled_at is no longer in the repeater's new occurrence set are torn
+    down via teardown_event (so they can't leave ghost Discord scheduled
+    events behind), and any new occurrences not already present are INSERTED
+    via generate_events_for_repeater. This eliminates the duplicate-occurrence
     problem where the next hourly generation produced new rows at the
-    new schedule alongside the stale ones.
+    new schedule alongside the stale ones. Realign is skipped entirely for an
+    inactive series — a paused series generates nothing, so realigning would
+    only delete its remaining rows.
+
+    Events with is_off_schedule=True are never realigned and never receive the
+    config cascade: they are one-offs the series only hosts.
 
     Returns the list of touched Event instances so callers can chain a
     single invalidate_after_commit at the end of the request.
@@ -1140,7 +1268,7 @@ def sync_future_events(repeater, *, realign_schedule=False):
     """
     from app.cache_utils import invalidate_after_commit
 
-    if realign_schedule:
+    if realign_schedule and repeater.is_active:
         # Compute the new occurrence set using the same helper that
         # generate_events_for_repeater uses — guarantees timestamp equality
         # between regenerated and pre-existing rows.
@@ -1148,21 +1276,36 @@ def sync_future_events(repeater, *, realign_schedule=False):
         to_date = today + timedelta(days=repeater.generate_days_ahead)
         new_occurrences = set(_get_next_occurrences(repeater, today, to_date))
 
-        # Delete UPCOMING rows that don't match the new occurrence set
-        Event.objects.filter(
-            event_repeater=repeater,
-            state=EventState.UPCOMING,
-        ).exclude(scheduled_at__in=new_occurrences).delete()
+        # Tear down UPCOMING rows that don't match the new occurrence set.
+        doomed = (
+            Event.objects.filter(
+                event_repeater=repeater,
+                state=EventState.UPCOMING,
+            )
+            .exclude(is_off_schedule=True)
+            .exclude(scheduled_at__in=new_occurrences)
+        )
+        for event in list(doomed):
+            teardown_event(event)
 
         # Generate any missing occurrences. The existing helper handles
         # the "row already exists" check via its pre-insert filter.
         generate_events_for_repeater(repeater)
+    elif realign_schedule:
+        logger.info(
+            "realign_skipped_inactive_repeater",
+            system="events",
+            subsystem="services",
+            repeater_id=repeater.pk,
+        )
 
     future_events = list(
         Event.objects.filter(
             event_repeater=repeater,
             state=EventState.UPCOMING,
-        ).select_related("tournament")
+        )
+        .exclude(is_off_schedule=True)
+        .select_related("tournament")
     )
     shared_fields = ["name", "description"]
     update_fields = (

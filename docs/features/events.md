@@ -59,6 +59,32 @@ Recurring events automatically generate individual events based on the schedule,
 
 Admins configure default settings per organization. When creating new events, the form pre-fills from these defaults — no need to re-enter Discord channels, tournament config, or approval settings each time.
 
+### Extra Sessions on a Series
+
+From a series page (`/event-series/{id}`) org staff can add an **extra session attached to the series** — one event scheduled outside the series' recurrence, at a time they pick. It is fully part of the series: it carries `event_repeater`, so it inherits the series' tournament template, signup rules and Discord config. Subscriber reminders, the Discord *Notify Me for Future Events* button and every other reminder work on it exactly as they do on a generated occurrence. The UI labels the button *Add one-off event* and badges the result **One-off**.
+
+What sets it apart is `Event.is_off_schedule`, which `create_off_schedule_event` sets on the row. The flag means "attached to the series, but not produced by its schedule", and it keeps the series' realign and config cascade off the event (see [Event Reminder Scheduling](../architecture/event-reminder-scheduling.md#realign-on-edit)):
+
+- Editing the series' day, time or frequency never deletes or moves it.
+- Editing the series' name, tournament config or Discord settings never overwrites the values chosen for it.
+
+Every config field on the create form is optional and prefilled from the series, so an untouched submit reproduces the series' own settings at the chosen instant. Two timestamps are rejected with `409 Conflict`: one that already has an event in this series, and one that is a real upcoming occurrence of the schedule. A past timestamp, or one past the series' `ends_at`, is a `400`.
+
+!!! note "Not the same as a one-off event"
+    Elsewhere on this page "one-off"/"single event" means an event created with **no** series — that is what `discord_signup_reminder` is rejected for. An extra session is the opposite case: it belongs to a series and is only off that series' *schedule*.
+
+### Series Reactivation
+
+Pausing a series (`is_active = false`) stops event generation. **Reactivate** turns it back on and realigns in one step, so a paused series doesn't come back with a mix of stale and fresh rows:
+
+1. `is_active` is set back to `true`.
+2. Upcoming events are realigned against the *current* schedule — rows that no longer match a scheduled occurrence (typically left behind by a schedule edit made while paused) are torn down, taking their Discord scheduled event with them, and the missing occurrences are generated.
+3. Off-schedule extra sessions are left alone.
+
+The response carries `created_count` plus a message that distinguishes "no new events were due" from "the series' end date has passed", so the page can say which of the two happened. A `PATCH` that flips `is_active` from `false` to `true` realigns identically — `is_active` is part of the schedule-change snapshot that `perform_update` compares.
+
+While a series is paused, realign is skipped entirely rather than run against a schedule that generates nothing — otherwise it would simply delete the series' remaining events.
+
 ### Discord Integration
 
 | Feature | Description |
@@ -71,6 +97,7 @@ Admins configure default settings per organization. When creating new events, th
 | Signup reminder | DM subscribers who haven't signed up (recurring series only) |
 | Profile reminder | DM users to complete their profile (Steam ID, MMR) |
 | Confirm attendance | Require Discord reply to confirm attendance on event day |
+| Scheduled-event cleanup | Cancelling or deleting an event deletes its Discord scheduled event (`events.tasks.delete_discord_scheduled_event`), so nothing is left orphaned in the guild |
 
 **Discord signup pipeline** (Dota events): clicking *Sign Up* either signs the user up directly (profile complete) or opens a modal with rank-status select → position select view → optional medal+star follow-up → optional screenshot upload. Each step routes through `events.services.apply_signup_input` — the **same service the web `/signup/` endpoint uses** — so the two paths converge on identical writes. Deadlock signups take a separate Discord-only branch that writes `PlayerDeadlockProfile.rank` directly.
 
@@ -112,7 +139,14 @@ Admin approve uses `POST /api/event-signups/{id}/approve/` with optional `{ "mmr
 
 ### Repeater Subscriptions
 
-Users can subscribe to event repeaters (mail icon on repeater cards). When `discord_notify_new_events` is enabled, subscribed users are notified when new events are created or cancelled.
+Users can subscribe to event repeaters (mail icon on repeater cards). Two distinct notifications hang off a series, and they reach different audiences:
+
+| When | What is sent | Gated by |
+|---|---|---|
+| An event is created from the series | A **channel embed** announcing the new event | `EventRepeater.discord_notify_new_events`, then the event's `discord_announcement` **and** `discord_announcement_channel_id` |
+| `discord_signup_reminder_hours` before the event | A **DM to each subscriber** who hasn't signed up yet | `discord_signup_reminder` (series only) |
+
+Subscribing is what earns you the pre-event signup-reminder DM. The new-event announcement is a channel post, not a DM, and it is silently skipped when no announcement channel is configured.
 
 ---
 
@@ -136,7 +170,7 @@ See [Roll Call](events/roll-call.md) for the dedicated roll call feature documen
 | POST | `/api/events/{id}/open_signups/` | Transition to signups_open |
 | POST | `/api/events/{id}/start_roll_call/` | Transition to roll_call |
 | POST | `/api/events/{id}/start_tournament/` | Start tournament with the confirmed roster |
-| POST | `/api/events/{id}/cancel/` | Cancel event |
+| POST | `/api/events/{id}/cancel/` | Cancel event. Deletes the linked tournament **and** the event's live Discord scheduled event, then clears `scheduled_event_id` so the 60-second `sync-discord-events` beat can't resurrect it. |
 | GET | `/api/events/{id}/discord-logs/` | Discord notification audit log for the event's tournament |
 
 ### Signup actions (admin)
@@ -158,6 +192,8 @@ See [Roll Call](events/roll-call.md) for the dedicated roll call feature documen
 | GET | `/api/events/repeaters/` | List repeaters |
 | POST | `/api/events/repeaters/{id}/subscribe/` | Subscribe to repeater |
 | POST | `/api/events/repeaters/{id}/unsubscribe/` | Unsubscribe |
+| POST | `/api/events/repeaters/{id}/create-event/` | Create an extra ("one-off") event attached to the series (org staff). Body: `{"scheduled_at": <ISO8601>, "open_signups": <bool>, ...config overrides}`. Returns `201` with the event; `409` on an occurrence collision, `400` on a past/out-of-range time or an invalid override, `403` for non-staff. |
+| POST | `/api/events/repeaters/{id}/reactivate/` | Reactivate a paused series and realign its upcoming events (org staff). Returns `200` with `{"detail", "created_count", "is_active"}`. |
 | GET | `/api/events/defaults/` | Get org event defaults |
 | PATCH | `/api/events/defaults/{id}/` | Update org defaults |
 | GET | `/api/discord/organizations/{id}/channels/` | List Discord channels |

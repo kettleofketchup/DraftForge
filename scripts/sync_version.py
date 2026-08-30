@@ -8,7 +8,6 @@ Usage:
 """
 
 import argparse
-import os
 import re
 from pathlib import Path
 
@@ -58,7 +57,12 @@ def update_pyproject_version(version: str):
         content = re.sub(r'dynamic = \["version"\]', f'version = "{version}"', content)
     else:
         # Update existing version
-        content = re.sub(r'version = "[^"]+"', f'version = "{version}"', content)
+        content = re.sub(
+            r'^version = "[^"]+"',
+            f'version = "{version}"',
+            content,
+            flags=re.MULTILINE,
+        )
 
     with open(pyproject_path, "w") as f:
         f.write(content)

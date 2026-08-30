@@ -1,4 +1,8 @@
-import type { EventSignupType, EventType } from '~/components/events/schemas';
+import type {
+  CreateSeriesEventInput,
+  EventSignupType,
+  EventType,
+} from '~/components/events/schemas';
 import axios from './axios';
 
 export async function getEvents(params?: {
@@ -196,8 +200,14 @@ export interface EventRepeaterType {
   discord_notify_new_events: boolean;
   discord_profile_reminder_hours: number;
   discord_confirm_attendance_hours: number;
+  discord_announcement_role_ids: string[];
+  discord_signup_role_ids: string[];
+  auto_create_hero_drafts: boolean;
+  discord_send_draft_link: boolean;
+  discord_send_herodraft_link: boolean;
   subscriber_count: number;
   is_subscribed: boolean;
+  next_event_date: string | null;
 }
 
 export async function getEventRepeaters(params?: { organization?: number }): Promise<EventRepeaterType[]> {
@@ -316,6 +326,24 @@ export async function adminAddSignup(
     `/events/${eventId}/admin-signup/`,
     { user_id: userId },
   );
+  return data;
+}
+
+export async function createSeriesOneOffEvent(
+  repeaterId: number,
+  payload: CreateSeriesEventInput,
+): Promise<EventType> {
+  const { data } = await axios.post<EventType>(
+    `/events/repeaters/${repeaterId}/create-event/`,
+    payload,
+  );
+  return data;
+}
+
+export async function reactivateRepeater(
+  repeaterId: number,
+): Promise<{ detail: string; created_count: number; is_active: boolean }> {
+  const { data } = await axios.post(`/events/repeaters/${repeaterId}/reactivate/`);
   return data;
 }
 

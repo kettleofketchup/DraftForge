@@ -124,6 +124,10 @@ interface DiscordConfigSectionProps<T extends FieldValues & DiscordFields> {
   watch: UseFormWatch<T>;
   isRepeater: boolean;
   organizationId: number;
+  /** Gates the repeater-only "Message interested users" block. Defaults to
+   *  `isRepeater`; a one-off event inherits the series' setting instead of
+   *  exposing its own toggle. */
+  showNotifyNewEvents?: boolean;
 }
 
 export function DiscordConfigSection<T extends FieldValues & DiscordFields>({
@@ -131,6 +135,7 @@ export function DiscordConfigSection<T extends FieldValues & DiscordFields>({
   watch: parentWatch,
   isRepeater,
   organizationId,
+  showNotifyNewEvents = isRepeater,
 }: DiscordConfigSectionProps<T>) {
   // T extends DiscordFields by the generic constraint, so narrowing to
   // Control<DiscordFields> is sound: we touch only the discord-config slice.
@@ -333,7 +338,7 @@ export function DiscordConfigSection<T extends FieldValues & DiscordFields>({
       </div>
 
       {/* Notify new events — repeater only */}
-      {isRepeater && (
+      {showNotifyNewEvents && (
         <div className="rounded-md border border-border p-3">
           <CheckboxField control={control} name="discord_notify_new_events"
             label="Message interested users"

@@ -81,7 +81,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.ruff]
 # Ruff replaces black (ruff format) AND isort (the `I` lint rules).
-target-version = "0.9.66"
+target-version = "py312"
 line-length = 88
 src = ["backend", "."]
 extend-exclude = ["**/migrations/**"]
