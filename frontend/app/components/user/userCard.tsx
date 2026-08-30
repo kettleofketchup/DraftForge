@@ -12,6 +12,7 @@ import { useSharedPopoverActions } from '~/components/ui/shared-popover-context'
 import type { UserClassType, UserType } from '~/components/user/types';
 import { User } from '~/components/user/user';
 import { UserAvatar } from '~/components/user/UserAvatar';
+import { DisplayName } from '~/components/user/avatar';
 import { usePlayerPositions } from '~/hooks/usePlayerPositions';
 import { getLogger } from '~/lib/logger';
 import { isUserEntry } from '~/store/userCacheTypes';
@@ -232,7 +233,7 @@ export const UserCard: React.FC<Props> = memo(
           {/* Header: 2-col layout with name/badges left, actions right */}
           <CardHeader className="p-0 gap-0.5">
             <CardTitle className="text-base truncate">
-              {user.nickname || user.username}
+              {DisplayName(user)}
             </CardTitle>
             {!compact && (user.is_staff || user.is_superuser) && (
               <CardDescription className="flex gap-1">

@@ -429,8 +429,10 @@ import { UserAvatar } from '~/components/user/UserAvatar';
 // From a UserType object
 <UserAvatar user={user} size="md" />
 
-// From partial data (e.g., DM recipient)
-<UserAvatar user={{ nickname: "Player", discordId: "123" }} size="sm" />
+// From partial data — pass the avatar hash for the REAL avatar.
+// Omitting `avatar` falls back to a generated ui-avatars.com image,
+// which makes the same user look different across the app.
+<UserAvatar user={{ nickname: "Player", username: "player1", avatar: "abc123hash", discordId: "123" }} size="sm" />
 
 // With online indicator
 <UserAvatar user={user} size="lg" showOnline online />
@@ -447,6 +449,21 @@ import { UserAvatar } from '~/components/user/UserAvatar';
 **Borders:** `none` | `primary` (violet ring) | `muted` (subtle) | `captain` (gold ring)
 
 **DO NOT** use `<img>` with `AvatarUrl()` directly — use `<UserAvatar>` which wraps `AvatarUrl` with proper loading states, fallback initials, and memoization.
+
+**Pass the full identity, not a partial object.** `AvatarUrl` only builds the Discord CDN URL when it has `discordId` **and** the `avatar` hash (or a full `avatarUrl`); otherwise it falls back to a generated `ui-avatars.com` image. A `<UserAvatar user={{ nickname }} />` therefore renders a *different* avatar than the same user shown elsewhere. When the data comes from a serializer, expose `nickname` / `username` / `avatar` on the payload so the component can render the canonical avatar. (Real regression: the Discord activity log showed generated avatars because the log serializer didn't expose the avatar hash.)
+
+### Display Names
+
+**ALWAYS render a user's name via `DisplayName()`** from `~/components/user/avatar` — never a raw `username` / `nickname` / `discord_username` string. It applies the canonical priority (`nickname` → `username`) with an optional length cap, so the same person reads the same everywhere.
+
+```tsx
+import { DisplayName } from '~/components/user/avatar';
+
+<span>{DisplayName(user)}</span>        // nickname → username → '?'
+<span>{DisplayName(user, 20)}</span>    // truncates with … past 20 chars
+```
+
+**DO NOT** render `{user.username}` / `{log.discord_username}` directly — it bypasses the nickname preference and drifts from the rest of the UI.
 
 ---
 

@@ -1,6 +1,8 @@
 import React, { useCallback } from 'react';
 import { ConfirmButton } from '~/components/ui/buttons';
 import type { DiscordSearchResult } from '~/components/api/api';
+import { UserAvatar } from '~/components/user/UserAvatar';
+import { DisplayName } from '~/components/user/avatar';
 import { cn } from '~/lib/utils';
 
 interface DiscordMemberStripProps {
@@ -12,16 +14,6 @@ interface DiscordMemberStripProps {
   adding?: boolean;
 }
 
-function getDiscordAvatarUrl(member: DiscordSearchResult): string {
-  const { id, avatar } = member.user;
-  if (avatar) {
-    return `https://cdn.discordapp.com/avatars/${id}/${avatar}.png?size=32`;
-  }
-  // Default Discord avatar
-  const index = Number(BigInt(id) >> 22n) % 6;
-  return `https://cdn.discordapp.com/embed/avatars/${index}.png`;
-}
-
 export const DiscordMemberStrip = React.memo(function DiscordMemberStrip({
   member,
   onAdd,
@@ -29,8 +21,10 @@ export const DiscordMemberStrip = React.memo(function DiscordMemberStrip({
   disabledLabel,
   adding,
 }: DiscordMemberStripProps) {
-  const displayName =
-    member.nick || member.user.global_name || member.user.username;
+  const displayName = DisplayName({
+    nickname: member.nick,
+    username: member.user.global_name || member.user.username,
+  });
   const subtitle =
     member.nick || member.user.global_name
       ? member.user.username
@@ -48,10 +42,15 @@ export const DiscordMemberStrip = React.memo(function DiscordMemberStrip({
       )}
     >
       {/* Avatar */}
-      <img
-        src={getDiscordAvatarUrl(member)}
-        alt={displayName}
-        className="h-8 w-8 rounded-full shrink-0"
+      <UserAvatar
+        user={{
+          nickname: member.nick ?? member.user.global_name,
+          username: member.user.username,
+          avatar: member.user.avatar,
+          discordId: member.user.id,
+        }}
+        size="md"
+        className="shrink-0"
       />
 
       {/* Name */}

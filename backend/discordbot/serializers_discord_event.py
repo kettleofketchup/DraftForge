@@ -1,3 +1,4 @@
+from app.models import CustomUser
 from rest_framework import serializers
 
 from .models import (
@@ -66,6 +67,29 @@ class DiscordEventLogSerializer(serializers.ModelSerializer):
         source="get_category_display", read_only=True
     )
     message_log = MessageLogInlineSerializer(read_only=True)
+    # Resolved from the linked CustomUser (by discordId) so the frontend can
+    # render the canonical avatar/display name via UserAvatar + DisplayName
+    # rather than falling back to a generated image. The lookup map is built
+    # once per response in DiscordEventDetailSerializer.to_representation.
+    nickname = serializers.SerializerMethodField()
+    username = serializers.SerializerMethodField()
+    avatar = serializers.SerializerMethodField()
+
+    def _resolved_user(self, obj: DiscordEventLog) -> CustomUser | None:
+        user_map: dict[str, CustomUser] = self.context.get("discord_user_map", {})
+        return user_map.get(obj.discord_user_id) if obj.discord_user_id else None
+
+    def get_nickname(self, obj: DiscordEventLog) -> str | None:
+        user = self._resolved_user(obj)
+        return user.nickname if user else None
+
+    def get_username(self, obj: DiscordEventLog) -> str | None:
+        user = self._resolved_user(obj)
+        return user.username if user else None
+
+    def get_avatar(self, obj: DiscordEventLog) -> str | None:
+        user = self._resolved_user(obj)
+        return user.avatar if user else None
 
     class Meta:
         model = DiscordEventLog
@@ -77,6 +101,9 @@ class DiscordEventLogSerializer(serializers.ModelSerializer):
             "target_type",
             "discord_user_id",
             "discord_username",
+            "nickname",
+            "username",
+            "avatar",
             "message_id",
             "status_code",
             "error_message",
@@ -89,6 +116,7 @@ class DiscordEventLogSerializer(serializers.ModelSerializer):
 class DiscordEventDMSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source="org_user.user.username", read_only=True)
     nickname = serializers.CharField(source="org_user.user.nickname", read_only=True)
+    avatar = serializers.CharField(source="org_user.user.avatar", read_only=True)
     discord_user_id = serializers.CharField(read_only=True)
     can_send = serializers.BooleanField(read_only=True)
     dm_type_display = serializers.CharField(
@@ -103,6 +131,7 @@ class DiscordEventDMSerializer(serializers.ModelSerializer):
             "dm_type_display",
             "username",
             "nickname",
+            "avatar",
             "discord_user_id",
             "can_send",
             "message_id",
@@ -120,6 +149,22 @@ class DiscordEventDetailSerializer(serializers.ModelSerializer):
     announcement = DiscordEventMsgAnnouncementSerializer(read_only=True)
     logs = DiscordEventLogSerializer(many=True, read_only=True)
     dms = DiscordEventDMSerializer(many=True, read_only=True)
+
+    def to_representation(self, instance: DiscordEvent) -> dict:
+        # Batch-resolve the CustomUsers referenced by the logs (by discordId)
+        # into a single map so DiscordEventLogSerializer can expose
+        # avatar/nickname/username without an N+1 per log entry.
+        discord_ids = {
+            log.discord_user_id for log in instance.logs.all() if log.discord_user_id
+        }
+        user_map: dict[str, CustomUser] = {}
+        if discord_ids:
+            users = CustomUser.objects.filter(
+                discordId__in=discord_ids
+            ).select_related("base_profile")
+            user_map = {user.discordId: user for user in users}
+        self.context["discord_user_map"] = user_map
+        return super().to_representation(instance)
 
     class Meta:
         model = DiscordEvent

@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import type { UserType } from '~/components/user';
+import { DisplayName } from '~/components/user/avatar';
 import { useUserStore } from '~/store/userStore';
 
 import { useState } from 'react';
@@ -103,7 +104,7 @@ export const ProfilePage: React.FC = () => {
         <div className="flex flex-col  gap-4">
           <div className="flex flex-col  sm:flex-row w-90 justify-center text-center align-center w-full">
             <h1 className="text-title text-pretty text-center">
-              {currentUser.username}
+              {DisplayName(currentUser)}
             </h1>
           </div>
 

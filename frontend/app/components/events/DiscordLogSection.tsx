@@ -8,6 +8,7 @@ import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import { UserStrip } from '~/components/user';
 import { UserAvatar } from '~/components/user/UserAvatar';
+import { DisplayName } from '~/components/user/avatar';
 import { ScrollArea } from '~/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { TaskScheduleSection } from './TaskScheduleSection';
@@ -46,7 +47,8 @@ export function DiscordLogSection({ eventId, isAdmin, eventTimezone }: DiscordLo
   // (must be before early returns to keep hook order stable)
   const allLogs = useMemo(() => {
     if (!discordState) return [];
-    const dmLogs: DiscordEventState['logs'] = discordState.dms.map((dm) => ({
+    const dmLogs: DiscordEventState['logs'] = discordState.dms.map(
+      (dm: DiscordEventState['dms'][number]) => ({
       id: -dm.id,
       category: LogCategory.NOTIFICATION,
       category_display: 'Notification',
@@ -54,6 +56,9 @@ export function DiscordLogSection({ eventId, isAdmin, eventTimezone }: DiscordLo
       target_type: dm.nickname || dm.username || '',
       discord_user_id: dm.discord_user_id || '',
       discord_username: dm.nickname || dm.username || '',
+      nickname: dm.nickname,
+      username: dm.username,
+      avatar: dm.avatar,
       message_id: dm.message_id || null,
       status_code: null,
       error_message: dm.delivered ? '' : (dm.can_send ? 'Pending delivery' : 'User has no Discord'),
@@ -192,15 +197,22 @@ export function DiscordLogSection({ eventId, isAdmin, eventTimezone }: DiscordLo
                       </Badge>
                     )}
                   </div>
-                  {log.discord_username && (
-                    <div className="flex items-center gap-1.5 mt-0.5">
-                      <UserAvatar
-                        user={{ nickname: log.discord_username, discordId: log.discord_user_id }}
-                        size="tiny"
-                      />
-                      <span className="text-muted-foreground text-xs">{log.discord_username}</span>
-                    </div>
-                  )}
+                  {log.discord_username && (() => {
+                    const logUser = {
+                      nickname: log.nickname ?? log.discord_username,
+                      username: log.username,
+                      avatar: log.avatar,
+                      discordId: log.discord_user_id,
+                    };
+                    return (
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <UserAvatar user={logUser} size="tiny" />
+                        <span className="text-muted-foreground text-xs">
+                          {DisplayName(logUser)}
+                        </span>
+                      </div>
+                    );
+                  })()}
                   {log.error_message && (
                     <p className="text-error text-xs mt-0.5">{log.error_message}</p>
                   )}
@@ -252,10 +264,14 @@ export function DiscordLogSection({ eventId, isAdmin, eventTimezone }: DiscordLo
                       action: `DM: ${dm.dm_type_display}`,
                       target_type: dm.nickname || dm.username || '',
                       success: dm.delivered,
-                      message_id: dm.message_id || undefined,
-                      discord_user_id: dm.discord_user_id || undefined,
-                      discord_username: dm.nickname || dm.username || undefined,
-                      error_message: !dm.delivered && !dm.can_send ? 'User has no Discord ID' : undefined,
+                      message_id: dm.message_id || null,
+                      status_code: null,
+                      discord_user_id: dm.discord_user_id || '',
+                      discord_username: dm.nickname || dm.username || '',
+                      nickname: dm.nickname,
+                      username: dm.username,
+                      avatar: dm.avatar,
+                      error_message: !dm.delivered && !dm.can_send ? 'User has no Discord ID' : '',
                       created_at: dm.sent_at || dm.created_at,
                       category: LogCategory.NOTIFICATION,
                       category_display: 'Notification',

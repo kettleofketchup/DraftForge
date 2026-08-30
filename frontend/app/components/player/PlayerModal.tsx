@@ -13,6 +13,7 @@ import { User } from '~/components/user/user';
 import UserEditModal from '~/components/user/userCard/editModal';
 import type { EditUserScope } from '~/components/user/userCard/editUserSchema';
 import { UserAvatar } from '~/components/user/UserAvatar';
+import { DisplayName } from '~/components/user/avatar';
 import { useUserLeagueStats } from '~/features/leaderboard/queries';
 import { getLogger } from '~/lib/logger';
 import { useLeagueStore } from '~/store/leagueStore';
@@ -152,7 +153,7 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
 
   // Use full data if available, otherwise fall back to partial player data
   const displayPlayer = fullUserData || player;
-  const playerName = displayPlayer.nickname || displayPlayer.username || 'Unknown';
+  const playerName = DisplayName(displayPlayer);
 
   const handleViewFullProfile = () => {
     if (displayPlayer.pk) {

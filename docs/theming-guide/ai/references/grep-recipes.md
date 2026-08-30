@@ -24,11 +24,17 @@ rg -n '<Button[^>]*type=["\x27]submit' "$SCOPE" --glob '!**/components/ui/**'
 rg -n 'border-b-4|active:border-b-0|active:translate-y-' frontend/app -g '*.tsx' -g '*.ts'
 ```
 
-## Avatars
+## Avatars & Display Names
 
 ```bash
 rg -n '<img[^>]*(src=\{[^}]*[Aa]vatar|src=\{[^}]*\.avatar|cdn\.discordapp)' "$SCOPE"
 rg -n 'AvatarUrl\s*\(' "$SCOPE" --glob '!**/UserAvatar*'
+
+# <UserAvatar> fed an inline partial object — manually check each for a missing `avatar` hash
+rg -nP '<UserAvatar[^>]*user=\{\{(?![^}]*avatar)' "$SCOPE"
+
+# Raw username/nickname rendered in JSX instead of DisplayName() — manual review per hit
+rg -n '\{[a-zA-Z_.]*\.(username|nickname|discord_username)\}' "$SCOPE" --glob '!**/UserAvatar*' --glob '!**/avatar.tsx'
 ```
 
 ## Breadcrumbs

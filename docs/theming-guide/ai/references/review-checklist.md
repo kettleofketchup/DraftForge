@@ -17,7 +17,9 @@ Walk this list against any diff that touches an [in-scope source tree](scope.md)
 
 ## 2. Mandatory Components
 
-- [ ] `<UserAvatar>` for every avatar render. No raw `<img>` with `AvatarUrl()`. → [substitutions](component-substitutions.md#avatars)
+- [ ] `<UserAvatar>` for every avatar render. No raw `<img>` with `AvatarUrl()`. → [substitutions](component-substitutions.md#avatars--display-names)
+- [ ] `<UserAvatar>` receives the full identity (`nickname`/`username`/`avatar`/`discordId`), not a partial object missing the `avatar` hash — a partial object forces the generated `ui-avatars.com` fallback. Serialized data must expose `nickname`/`username`/`avatar`.
+- [ ] User names render via `DisplayName()` from `~/components/user/avatar`, never a raw `username` / `nickname` / `discord_username` string.
 - [ ] `<EntityBreadcrumb>` on every detail page that requires it (organization, league, event, event-series, tournament, rollcall). → [substitutions](component-substitutions.md#breadcrumbs)
 - [ ] No hand-built breadcrumb `<nav>` markup on those pages.
 

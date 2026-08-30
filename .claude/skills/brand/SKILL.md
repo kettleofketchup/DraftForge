@@ -12,7 +12,7 @@ DraftForge's visual identity is "Neon Cyber Esports" — a violet/indigo primary
 1. **`docs/THEMING-GUIDE.md`** — single source of truth. Palette, brand button system (`PrimaryButton`/`SecondaryButton`/`ConfirmButton`/`EditButton`), `bg-base-*` scale, status colors, gradient utilities, glow effects, mandatory `<UserAvatar>` / `<EntityBreadcrumb>` components, button policy. Read first.
 2. **`docs/theming-guide/ai/references/`** — AI-targeted review references (hidden from MkDocs nav, mirrored into the canonical guide via `pymdownx.snippets`).
 3. **`frontend/app/app.css`** — token SSOT (CSS variables for palette, oklch values, gradients).
-4. **`frontend/app/components/ui/buttons/styles.ts`** — exported brand style constants (`brandGradient`, `brandSecondary`, `brandErrorBg`, `brandSuccessBg`, `brandBg`, `button3DBase`, etc.).
+4. **`frontend/app/components/ui/buttons/styles.ts`** — exported brand style constants (`brandGradient`, `brandSecondary`, `brandErrorBg`, `brandSuccessBg`, `brandBg`, `buttonLift`, etc.).
 5. **`frontend/app/components/ui/buttons/README.md`** — folder convention (root for generic buttons, `icons/` for icon-only, `<domain>/` for domain-specific).
 
 ## When To Use
