@@ -48,12 +48,13 @@ test.describe('Edit Profile — Base tab (new layered modal) (@cicd)', () => {
     const originalNickname = await nicknameInput.inputValue();
 
     const newNickname = `Renamed-${Date.now()}`;
+    const successToast = page.getByText(/profile updated/i);
     try {
       await nicknameInput.fill(newNickname);
       await page.locator('[data-testid="edit-user-save"]').click();
 
       // Toast confirms the PATCH landed.
-      await expect(page.getByText(/profile updated/i)).toBeVisible({ timeout: 10_000 });
+      await expect(successToast).toBeVisible({ timeout: 10_000 });
       await expect(page.getByRole('dialog')).toBeHidden({ timeout: 5_000 });
 
       // Dual-write verification (1/2) — the profile header (sourced via the
@@ -66,12 +67,20 @@ test.describe('Edit Profile — Base tab (new layered modal) (@cicd)', () => {
       // patchCurrentUser is broken, the alt stays as the old nickname.
       await expect(navAvatar).toHaveAttribute('alt', newNickname, { timeout: 10_000 });
     } finally {
+      // Wait out the success toast from the edit above. Sonner stacks toasts
+      // rather than replacing them, and the restore below raises an identical
+      // "Profile updated" — if the first is still on screen, the assertion at
+      // the end of this block matches two nodes and fails strict mode. The
+      // whole try block can finish inside sonner's ~4s dismiss window, so this
+      // is load-dependent, not flaky: CI hit it, local runs did not.
+      await expect(successToast).toHaveCount(0, { timeout: 15_000 });
+
       // Restore — open the modal again and write the original value back.
       await editTrigger.click();
       await expect(nicknameInput).toBeVisible({ timeout: 5_000 });
       await nicknameInput.fill(originalNickname);
       await page.locator('[data-testid="edit-user-save"]').click();
-      await expect(page.getByText(/profile updated/i)).toBeVisible({ timeout: 10_000 });
+      await expect(successToast).toBeVisible({ timeout: 10_000 });
       await expect(page.getByRole('dialog')).toBeHidden({ timeout: 5_000 });
     }
   });
