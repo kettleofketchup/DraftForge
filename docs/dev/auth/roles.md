@@ -113,20 +113,25 @@ The five entry points locked by `e2e/17-auth/02-edit-and-bracket-gates.spec.ts`.
 - **Edit User (org members tab)** uses `useIsOrganizationStaff(currentOrg)`
   via the UserCard's org-scoped editScope — staff-permissive.
 - **Edit User (tournament players tab)** is a **known divergence**.
-  The hasErrors panel renders first when a player profile is incomplete
-  and uses the shared
+  The card uses the shared
   `resolveEditScope(user, { organizationId, leagueId, currentOrg, currentLeague })`,
-  which returns `{ kind: 'league', league, orgId }` whenever the tournament
-  has a league — it sets `orgId`, but still no `.organization` on the scope.
-  `useScopedEditPermission` gates league scope on `scope.organization`, so
-  this resolves to `useIsLeagueAdmin(league, undefined)`. The hook's org-admin cascade
-  only fires if `league.organization` is embedded — in this navigation
-  path it's not, so **org admins lose access**. Only site admins and
-  direct league admins pass. Same user record, two gates depending on
-  which page you're on, with an additional store-state dependency.
+  which returns `{ kind: 'league', league, orgId }` only when the league store
+  has already loaded the matching league (`currentLeague.pk === leagueId`);
+  otherwise it falls back to `{ kind: 'org' }`, or to global when neither
+  store is loaded. So the gate a given user hits depends on store state at
+  render time, not on the tournament alone.
 
-  The `orgId` the resolver carries makes the **PATCH target** deterministic
-  (via `scopeToContext`), but it is not read by the permission gate, so it
+  On the league branch the scope carries `orgId` but no `.organization`.
+  `useScopedEditPermission` gates league scope on `scope.organization`, so it
+  resolves to `useIsLeagueAdmin(league, undefined)`. The hook's org-admin
+  cascade only fires if `league.organization` is embedded — in this navigation
+  path it is not, so **org admins lose access**. Only site admins and direct
+  league admins pass. Same user record, two gates depending on which page
+  you're on.
+
+  `orgId` makes the **PATCH target** deterministic — `dispatchPatch` reads it
+  to pick the parent org's OrgUser endpoint, and `scopeToContext` reuses it to
+  key the user-cache upsert. Neither is read by the permission gate, so it
   does not close this divergence.
 - **Generate Bracket** and **Set Winner** use `useCanEditTournament` /
   `useIsLeagueStaff` — operational match-management actions that

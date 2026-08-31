@@ -69,11 +69,18 @@ export const UserCard: React.FC<Props> = memo(
     const mmr = isUserEntry(user)
       ? (organizationId ? orgEntry?.mmr : undefined)
       : user.mmr;
+    // Same resolution as UserStrip: scoped map for cache entries, flat field
+    // for raw payloads.
+    const leagueMmr = isUserEntry(user)
+      ? (leagueId ? user.leagueData[leagueId]?.mmr : undefined)
+      : (user as UserType & { league_mmr?: number | null }).league_mmr;
 
     // Shared resolver (same as the incomplete-profiles card). Gates on the
-    // player's OrgUser link (flat orgUserPk on hydrated tournament users);
-    // league scope carries a deterministic orgId. Deps are primitives so a new
-    // currentOrg/currentLeague object ref with the same pk doesn't recompute.
+    // player's OrgUser link (flat orgUserPk on raw payloads, orgData/leagueData
+    // on cache entries); league scope carries a deterministic orgId. currentOrg
+    // and currentLeague are depped by pk so a new object ref with the same pk
+    // doesn't recompute; `user` is still an object ref, so an unchanged entry
+    // must keep its identity for this memo to hold.
     const editScope = React.useMemo<EditUserScope>(
       () =>
         resolveEditScope(user, { organizationId, leagueId, currentOrg, currentLeague }),
@@ -294,11 +301,11 @@ export const UserCard: React.FC<Props> = memo(
                       </ItemContent>
                     </Item>
                   )}
-                  {leagueId && (
+                  {leagueId && leagueMmr != null && (
                     <Item size="sm" variant="muted" className="!p-1 flex-1 min-w-0">
                       <ItemContent className="!gap-0 items-center min-w-0">
                         <ItemTitle className="!text-xs text-muted-foreground">League MMR</ItemTitle>
-                        <span className="text-sm font-semibold">?</span>
+                        <span className="text-sm font-semibold">{leagueMmr}</span>
                       </ItemContent>
                     </Item>
                   )}

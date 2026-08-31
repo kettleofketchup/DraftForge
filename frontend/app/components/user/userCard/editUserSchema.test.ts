@@ -1,8 +1,22 @@
-import { describe, it, expect } from 'vitest';
-import { scopeToContext, resolveOrgUserLink, resolveEditScope, type EditUserScope } from './editUserSchema';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
+import {
+  buildDefaults,
+  dispatchPatch,
+  scopeToContext,
+  resolveOrgUserLink,
+  resolveEditScope,
+  type EditUserScope,
+} from './editUserSchema';
 import type { LeagueType } from '~/components/league/schemas';
+import type { UserClassType, UserType } from '~/components/user/types';
 import type { UserEntry } from '~/store/userCacheTypes';
 import type { OrganizationType } from '~/components/organization/schemas';
+import { updateOrgUser } from '~/components/api/api';
+
+vi.mock('~/components/api/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('~/components/api/api')>()),
+  updateOrgUser: vi.fn(),
+}));
 
 const league = { pk: 7, name: 'L' } as LeagueType;
 
@@ -105,5 +119,82 @@ describe('resolveEditScope', () => {
     expect(
       resolveEditScope(u, { currentOrg: org, currentLeague: null }),
     ).toEqual({ kind: 'global' });
+  });
+});
+
+// dispatchPatch — the org/league branches PATCH through a bare axios call that
+// mutates nothing locally, unlike the global branch's User.dbUpdate. Without
+// the write-back, the modal re-seeds pre-edit values on reopen and RHF reports
+// the form clean, so a follow-up edit sends no request at all.
+describe('dispatchPatch', () => {
+  const mockUpdateOrgUser = vi.mocked(updateOrgUser);
+
+  function userClass(over: Partial<UserClassType> = {}): UserClassType {
+    return {
+      pk: 1,
+      username: 'u',
+      nickname: 'Before',
+      orgUserPk: 110,
+      positions: {},
+      dbUpdate: vi.fn(),
+      ...over,
+    } as unknown as UserClassType;
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('org scope PATCHes the OrgUser endpoint', async () => {
+    mockUpdateOrgUser.mockResolvedValue({ pk: 1, nickname: 'After' } as UserType);
+    const user = userClass();
+    await dispatchPatch(user, { kind: 'org', organization: org }, { nickname: 'After' });
+    expect(mockUpdateOrgUser).toHaveBeenCalledWith(2, 110, { nickname: 'After' });
+  });
+
+  it('league scope PATCHes through the deterministic parent orgId', async () => {
+    mockUpdateOrgUser.mockResolvedValue({ pk: 1, nickname: 'After' } as UserType);
+    const user = userClass();
+    await dispatchPatch(user, { kind: 'league', league: lg, orgId: 2 }, { nickname: 'After' });
+    expect(mockUpdateOrgUser).toHaveBeenCalledWith(2, 110, { nickname: 'After' });
+  });
+
+  it('mirrors the org response onto the instance so a reopen re-seeds fresh', async () => {
+    mockUpdateOrgUser.mockResolvedValue({ pk: 1, nickname: 'After' } as UserType);
+    const user = userClass();
+    await dispatchPatch(user, { kind: 'org', organization: org }, { nickname: 'After' });
+    expect(user.nickname).toBe('After');
+    expect(buildDefaults(user, { kind: 'org', organization: org }).nickname).toBe('After');
+  });
+
+  it('mirrors the league response onto the instance', async () => {
+    mockUpdateOrgUser.mockResolvedValue({ pk: 1, nickname: 'After' } as UserType);
+    const user = userClass();
+    const scope: EditUserScope = { kind: 'league', league: lg, orgId: 2 };
+    await dispatchPatch(user, scope, { nickname: 'After' });
+    expect(buildDefaults(user, scope).nickname).toBe('After');
+  });
+
+  it('keeps user.pk intact — OrgUserSerializer maps pk to the User pk', async () => {
+    mockUpdateOrgUser.mockResolvedValue({
+      pk: 1, orgUserPk: 110, nickname: 'After',
+    } as UserType);
+    const user = userClass();
+    await dispatchPatch(user, { kind: 'org', organization: org }, { nickname: 'After' });
+    expect(user.pk).toBe(1);
+  });
+
+  it('global scope delegates to dbUpdate, which assigns in place itself', async () => {
+    const user = userClass({ orgUserPk: undefined });
+    await dispatchPatch(user, { kind: 'global' }, { nickname: 'After' });
+    expect(user.dbUpdate).toHaveBeenCalledWith({ nickname: 'After' });
+    expect(mockUpdateOrgUser).not.toHaveBeenCalled();
+  });
+
+  it('league scope without an OrgUser link throws rather than silently no-op', async () => {
+    const user = userClass({ orgUserPk: undefined });
+    await expect(
+      dispatchPatch(user, { kind: 'league', league: lg, orgId: 2 }, { nickname: 'After' }),
+    ).rejects.toThrow(/OrgUser link/);
   });
 });

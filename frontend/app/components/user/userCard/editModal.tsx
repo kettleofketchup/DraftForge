@@ -188,7 +188,10 @@ export function UserEditModal({ user, scope = { kind: 'global' }, fields }: Prop
           <UserEditForm
             form={form}
             showMmr={showMmr}
-            mmrLabel={scope.kind === 'org' ? 'Org MMR' : 'MMR'}
+            // League scope PATCHes the parent OrgUser too (the backend's
+            // ORG_USER_FIELDS is just {'mmr'}), so this field is org MMR in
+            // both scopes that show it.
+            mmrLabel="Org MMR"
           />
         </Form>
       </FormDialog>

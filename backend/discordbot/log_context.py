@@ -1,6 +1,6 @@
 """Async context manager that ties Discord interactions to structured logs + OTel spans.
 
-Every callback in discordbot/components.py wraps its body with discord_log_context.
+Every callback in discordbot/components/ wraps its body with discord_log_context.
 The CM:
   - opens an OTel span (lazy tracer lookup — never cache the tracer module-level
     or test fixtures cannot install a TracerProvider)

@@ -21,6 +21,7 @@ from events.discord._shared import (
     _get_org_user,
     _log_interaction,
     _log_signup,
+    _steam_friend_id_prefill,
 )
 from events.models import Event
 from events.schemas import (
@@ -80,12 +81,7 @@ class DotaHandler:
         return _check_dota_profile_complete(org_user, event=event)
 
     def prefill(self, org_user: OrgUser) -> dict:
-        return {
-            "unverified_friend_id": getattr(
-                getattr(org_user, "dota_profile", None), "unverified_friend_id", ""
-            )
-            or "",
-        }
+        return {"unverified_friend_id": _steam_friend_id_prefill(org_user)}
 
     def modal_config(self, event: Event) -> DotaModalConfig:
         return DotaModalConfig(

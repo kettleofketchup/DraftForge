@@ -156,6 +156,20 @@ export function pickDirty(
   return out;
 }
 
+/**
+ * Mirror the server response back onto the passed instance. The global branch
+ * gets this for free from User.dbUpdate's in-place Object.assign; the org and
+ * league branches go through a bare axios call that mutates nothing locally.
+ * Without the parity, buildDefaults re-seeds the pre-edit values on reopen and
+ * RHF reports the form clean, so a second edit sends no request at all.
+ *
+ * OrgUserSerializer maps pk -> user.pk, so user.pk survives the merge.
+ */
+function applyLocal(user: UserClassType, updated: UserType): UserType {
+  Object.assign(user, updated);
+  return updated;
+}
+
 export async function dispatchPatch(
   user: UserClassType,
   scope: EditUserScope,
@@ -166,7 +180,7 @@ export async function dispatchPatch(
     const orgId: number | undefined = scope.organization.pk;
     if (!orgId) throw new Error('Org scope requires organization.pk');
     if (!orgUserPk) throw new Error('Org scope requires user.orgUserPk');
-    return updateOrgUser(orgId, orgUserPk, payload);
+    return applyLocal(user, await updateOrgUser(orgId, orgUserPk, payload));
   }
   if (scope.kind === 'league') {
     // FLEXIBLE POINT: today routes through the parent org's OrgUser endpoint.
@@ -177,7 +191,7 @@ export async function dispatchPatch(
     if (!orgId || !orgUserPk) {
       throw new Error('League scope requires a parent org with an OrgUser link');
     }
-    return updateOrgUser(orgId, orgUserPk, payload);
+    return applyLocal(user, await updateOrgUser(orgId, orgUserPk, payload));
   }
   if (!user.pk) throw new Error('Global scope requires user.pk');
   return user.dbUpdate(payload);
@@ -205,4 +219,3 @@ export function useScopedEditPermission(scope: EditUserScope): boolean {
   if (scope.kind === 'league') return leagueAdmin;
   return superuser;
 }
-

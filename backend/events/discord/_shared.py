@@ -27,6 +27,20 @@ if TYPE_CHECKING:
 log = get_logger(__name__)
 
 
+def _steam_friend_id_prefill(org_user: OrgUser) -> str:
+    """Steam friend id from either game profile.
+
+    One Steam account backs both games, so a Deadlock signup prefills from a
+    known Dota friend id and vice versa. Splitting the handlers per game
+    (#274) dropped this cross-game fallback; keep it in one place.
+    """
+    for attr in ("dota_profile", "deadlock_profile"):
+        value = getattr(getattr(org_user, attr, None), "unverified_friend_id", "")
+        if value:
+            return value
+    return ""
+
+
 def _log_interaction(
     event_id: int,
     action: str,
