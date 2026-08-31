@@ -159,9 +159,13 @@ class DiscordEventDetailSerializer(serializers.ModelSerializer):
         }
         user_map: dict[str, CustomUser] = {}
         if discord_ids:
-            users = CustomUser.objects.filter(
-                discordId__in=discord_ids
-            ).select_related("base_profile")
+            # .nocache(): the join is invalidated only on CustomUser, so a
+            # nickname/avatar edit would survive in the joined base_profile row.
+            users = (
+                CustomUser.objects.filter(discordId__in=discord_ids)
+                .select_related("base_profile")
+                .nocache()
+            )
             user_map = {user.discordId: user for user in users}
         self.context["discord_user_map"] = user_map
         return super().to_representation(instance)

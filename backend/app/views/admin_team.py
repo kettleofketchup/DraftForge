@@ -71,10 +71,14 @@ def search_users(request):
     if query.isdigit():
         q_filter |= Q(steamid=int(query)) | Q(steam_account_id=int(query))
 
+    # .nocache(): the join is invalidated only on CustomUser, so a nickname
+    # edit would survive in the joined base_profile row.
     users = (
         CustomUser.objects.select_related(
             "base_profile", "base_profile__dota_user_profile__positions"
-        ).filter(q_filter)[:20]
+        )
+        .nocache()
+        .filter(q_filter)[:20]
     )
     data = TournamentUserSerializer(users, many=True).data
 
@@ -728,12 +732,15 @@ def update_org_user(request, org_id, org_user_id):
             status=status.HTTP_403_FORBIDDEN,
         )
 
+    # .nocache(): this is the read half of a read-modify-write. A cached join
+    # (invalidated only on OrgUser) would hand back a stale base_profile and
+    # the PATCH would echo the pre-edit nickname straight back to the client.
     org_user = get_object_or_404(
         OrgUser.objects.select_related(
             "user",
             "user__base_profile",
             "user__base_profile__dota_user_profile__positions",
-        ),
+        ).nocache(),
         pk=org_user_id,
         organization=org,
     )

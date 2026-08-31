@@ -23,8 +23,8 @@
 
 import { test, expect } from '../../fixtures';
 
-test.describe('Edit Profile — Base tab (new layered modal)', () => {
-  test('user can change nickname and see it reflect in profile header AND navbar avatar without refresh', async ({
+test.describe('Edit Profile — Base tab (new layered modal) (@cicd)', () => {
+  test('@cicd smoke: change nickname, see it in profile header AND navbar avatar without refresh', async ({
     page,
     loginAdmin,
   }) => {
