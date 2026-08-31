@@ -1,4 +1,5 @@
 import { UserProfilePage } from '~/pages/user/UserProfilePage';
+import { AvatarUrl } from '~/components/user/UserAvatar';
 import { generateMeta } from '~/lib/seo';
 import { fetchUser } from '~/components/api/api';
 import type { Route } from './+types/user';
@@ -30,7 +31,7 @@ export function meta({ data }: Route.MetaArgs) {
     return generateMeta({
       title: displayName,
       description: `${displayName} — Dota 2 player profile on DraftForge`,
-      image: user.avatar_url || undefined,
+      image: AvatarUrl(user),
       url: `/user/${user.pk}`,
     });
   }

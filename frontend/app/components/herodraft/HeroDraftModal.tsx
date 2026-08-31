@@ -483,7 +483,7 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
                     <h2 className="text-2xl font-bold" data-testid="herodraft-flip-winner">
                       {rollWinnerTeam?.captain ? DisplayName(rollWinnerTeam.captain) : 'Unknown'} won the flip!
                     </h2>
-                    {isCaptain && rollWinnerTeam?.id === myTeam?.id ? (
+                    {isCaptain && myTeam && rollWinnerTeam?.id === myTeam.id ? (
                       // Winner captain's turn - check if they already made their choice
                       myTeam.is_first_pick !== null || myTeam.is_radiant !== null ? (
                         // Winner already made their choice, waiting for loser

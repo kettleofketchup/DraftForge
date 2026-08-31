@@ -18,8 +18,8 @@ export interface InfoDialogProps {
   open: boolean;
   /** Callback when open state changes */
   onOpenChange: (open: boolean) => void;
-  /** Dialog title */
-  title: string;
+  /** Dialog title. Accepts a node so callers can attach test ids / markup. */
+  title: React.ReactNode;
   /** Dialog description for accessibility (visually hidden if not provided) */
   description?: string;
   /** Dialog content */
@@ -74,7 +74,7 @@ export const InfoDialog = React.forwardRef<HTMLDivElement, InfoDialogProps>(
           <DialogHeader>
             <DialogTitle>{title}</DialogTitle>
             <DialogDescription className={description ? '' : 'sr-only'}>
-              {description || `${title} dialog`}
+              {description || (typeof title === 'string' ? `${title} dialog` : 'Dialog')}
             </DialogDescription>
           </DialogHeader>
 

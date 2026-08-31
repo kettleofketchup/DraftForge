@@ -81,7 +81,14 @@ export default function LeaguePage() {
   // Set org and league context for child components (e.g. UsersTab)
   useEffect(() => {
     if (league) {
-      useOrgStore.getState().setCurrentOrg(league.organization ?? null);
+      // league.organization is the lightweight LeagueOrganizationSchema (no
+      // discord_server_id), so it cannot stand in for the full OrganizationType
+      // the store's consumers read; getOrganization no-ops if already current.
+      if (league.organization?.pk) {
+        void useOrgStore.getState().getOrganization(league.organization.pk);
+      } else {
+        useOrgStore.getState().setCurrentOrg(null);
+      }
       useLeagueStore.getState().setCurrentLeague(league);
     }
 

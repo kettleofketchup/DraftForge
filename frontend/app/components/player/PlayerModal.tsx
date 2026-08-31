@@ -166,8 +166,9 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
     if (!player.pk || !currentUser?.pk) return;
 
     setIsClaiming(true);
+    const claim = claimUserProfile(player.pk);
     toast.promise(
-      claimUserProfile(player.pk),
+      claim,
       {
         loading: 'Claiming profile...',
         success: (updatedUser) => {
@@ -181,7 +182,15 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
           return err?.response?.data?.error || 'Failed to claim profile';
         },
       }
-    ).finally(() => setIsClaiming(false));
+    );
+
+    try {
+      await claim;
+    } catch {
+      // toast.promise already surfaced the failure to the user.
+    } finally {
+      setIsClaiming(false);
+    }
   };
 
   return (

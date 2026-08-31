@@ -10,6 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from '~/components/ui/table';
+import { DisplayName } from '~/components/user/avatar';
 import { RolePositions } from '~/components/user/positions';
 import type { UserType } from '~/components/user/types';
 import { UserStrip } from '~/components/user/UserStrip';
@@ -126,19 +127,13 @@ export const TeamTable: React.FC<TeamTableProps> = memo(({ team, compact = false
                     className="hover:ring-2 hover:ring-primary transition-all"
                   />
                   <span className={compact ? "hidden" : "hidden 3xl:inline"}>
-                    {user.nickname || user.username}
+                    {DisplayName(user)}
                   </span>
                   <span
                     className={compact ? "inline" : "inline 3xl:hidden"}
-                    title={user.nickname || user.username}
+                    title={DisplayName(user)}
                   >
-                    {compact
-                      ? (user.nickname || user.username).length > 6
-                        ? `${(user.nickname || user.username).substring(0, 6)}…`
-                        : user.nickname || user.username
-                      : (user.nickname || user.username).length > 10
-                        ? `${(user.nickname || user.username).substring(0, 12)}...`
-                        : user.nickname || user.username}
+                    {DisplayName(user, compact ? 6 : 12)}
                   </span>
                 </div>
               </PlayerPopover>

@@ -378,7 +378,8 @@ export const HardSupportBadge: React.FC<BadgeProps> = memo(({ user, compact, dis
   );
 });
 interface RolePositionsProps {
-  user: UserType;
+  /** Only `pk` and `positions` are read, so callers with no cached pk may pass just `{ positions }`. */
+  user: UserType | { pk?: number; positions?: UserType['positions'] };
   /**
    * Compact mode: icon + rank only, no text labels.
    * - `true`: Always compact

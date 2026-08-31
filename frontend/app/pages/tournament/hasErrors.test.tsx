@@ -6,7 +6,7 @@ import type { OrganizationType } from '~/components/organization/schemas';
 
 describe('deriveEditScope', () => {
   const org: OrganizationType = { pk: 7, name: 'Events Test Org' } as OrganizationType;
-  const league: LeagueType = { pk: 7, name: 'Events Test League', organization: org } as LeagueType;
+  const league: LeagueType = { pk: 7, name: 'Events Test League', organization: org } as unknown as LeagueType;
 
   it('returns league scope when a league is present', () => {
     expect(deriveEditScope({ league, currentOrg: org })).toEqual({
