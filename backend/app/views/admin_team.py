@@ -1,6 +1,5 @@
 """Admin Team API views for organization and league permission management."""
 
-from app.cache_utils import invalidate_obj
 from django.core.cache import cache
 from django.db import IntegrityError, transaction
 from django.db.models import Q
@@ -10,7 +9,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from app.cache_utils import invalidate_after_commit
+from app.cache_utils import invalidate_after_commit, invalidate_obj
 from app.models import (
     CustomUser,
     League,

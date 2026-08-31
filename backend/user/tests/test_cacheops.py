@@ -24,7 +24,6 @@ import re
 from django.conf import settings
 from django.test import TestCase
 
-
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[3]
 
 
