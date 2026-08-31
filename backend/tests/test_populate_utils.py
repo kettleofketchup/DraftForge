@@ -36,9 +36,7 @@ class UnusedSteamAccountIdTests(TestCase):
         )
 
         # First two draws collide with the existing row; the third is free.
-        with patch(
-            "tests.populate.utils.random.randint", side_effect=[4242, 4242, 99]
-        ):
+        with patch("tests.populate.utils.random.randint", side_effect=[4242, 4242, 99]):
             self.assertEqual(unused_steam_account_id(), 99)
 
     def test_returns_first_free_draw(self) -> None:
