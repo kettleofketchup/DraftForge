@@ -114,14 +114,20 @@ The five entry points locked by `e2e/17-auth/02-edit-and-bracket-gates.spec.ts`.
   via the UserCard's org-scoped editScope — staff-permissive.
 - **Edit User (tournament players tab)** is a **known divergence**.
   The hasErrors panel renders first when a player profile is incomplete
-  and uses `deriveEditScope({ league, currentOrg })`, which returns
-  `{ kind: 'league', league }` whenever the tournament has a league
-  (no `.organization` on the scope). That resolves to
-  `useIsLeagueAdmin(league, undefined)`. The hook's org-admin cascade
+  and uses the shared
+  `resolveEditScope(user, { organizationId, leagueId, currentOrg, currentLeague })`,
+  which returns `{ kind: 'league', league, orgId }` whenever the tournament
+  has a league — it sets `orgId`, but still no `.organization` on the scope.
+  `useScopedEditPermission` gates league scope on `scope.organization`, so
+  this resolves to `useIsLeagueAdmin(league, undefined)`. The hook's org-admin cascade
   only fires if `league.organization` is embedded — in this navigation
   path it's not, so **org admins lose access**. Only site admins and
   direct league admins pass. Same user record, two gates depending on
   which page you're on, with an additional store-state dependency.
+
+  The `orgId` the resolver carries makes the **PATCH target** deterministic
+  (via `scopeToContext`), but it is not read by the permission gate, so it
+  does not close this divergence.
 - **Generate Bracket** and **Set Winner** use `useCanEditTournament` /
   `useIsLeagueStaff` — operational match-management actions that
   league staff legitimately do.

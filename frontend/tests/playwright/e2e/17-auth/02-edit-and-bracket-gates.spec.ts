@@ -18,7 +18,7 @@
  * Two known divergences:
  *
  * - **Tournament players edit** uses ``useIsLeagueAdmin`` (via the
- *   hasErrors panel's ``deriveEditScope`` returning league scope) while
+ *   hasErrors panel's ``resolveEditScope`` returning league scope) while
  *   the org members tab uses ``useIsOrganizationStaff``. Same user
  *   record, two gates — org staff can edit a user from the org page
  *   but not from a tournament players page with profile errors.
@@ -67,7 +67,7 @@ const EDIT_USER_ORG_EXPECTATIONS: Expectations = {
 };
 
 // Edit User on the tournament players tab — first match on the page is
-// the hasErrors panel which uses ``deriveEditScope({ league, currentOrg })``.
+// the hasErrors panel which uses the shared ``resolveEditScope(user, ctx)``.
 // That returns ``{ kind: 'league', league }`` (no ``.organization`` on
 // the scope) when the tournament has a league, so the gate is
 // ``useIsLeagueAdmin(league, undefined)``. The fallback to
