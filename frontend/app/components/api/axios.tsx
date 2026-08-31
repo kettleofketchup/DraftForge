@@ -48,8 +48,8 @@ api.interceptors.response.use(undefined, (error) => {
     if (!isAuthCheck && typeof window !== 'undefined') {
       // Only show once per session to avoid toast spam
       const key = '_auth_toast_shown';
-      if (!(window as Record<string, unknown>)[key]) {
-        (window as Record<string, unknown>)[key] = true;
+      if (!(window as unknown as Record<string, unknown>)[key]) {
+        (window as unknown as Record<string, unknown>)[key] = true;
         // Dynamic import to avoid circular deps
         import('sonner').then(({ toast }) => {
           toast.error('Session expired — please log in again', {
@@ -61,7 +61,7 @@ api.interceptors.response.use(undefined, (error) => {
           });
         });
         // Reset after 30s so it can show again if needed
-        setTimeout(() => { (window as Record<string, unknown>)[key] = false; }, 30000);
+        setTimeout(() => { (window as unknown as Record<string, unknown>)[key] = false; }, 30000);
       }
     }
   }

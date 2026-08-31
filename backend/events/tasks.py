@@ -38,7 +38,6 @@ from discordbot.utils import (
     _get_headers,
     sync_edit_message,
     sync_send_dm,
-    sync_send_embed,
     sync_send_embed_with_components,
 )
 from events.discord import (
@@ -834,7 +833,7 @@ def send_new_event_notification(event_id, interaction_id=None):
     )
 
 
-def _send_new_event_notification_impl(event_id):
+def _send_new_event_notification_impl(event_id: int) -> str:
     event = get_event_for_task(event_id)
     if not event:
         return f"Failed: event {event_id} not found"
@@ -842,15 +841,25 @@ def _send_new_event_notification_impl(event_id):
         return "Skipped: announcements disabled"
 
     embed = build_new_event_embed(event)
-    sync_send_embed(
+    # Lease-wrapped send: claims (new_event, event_id) before the HTTP POST, so a
+    # retry or double dispatch can't double-post the embed.
+    response = sync_send_embed_with_components(
         channel_id=event.discord_announcement_channel_id,
-        title=embed["title"],
-        description=embed["description"],
-        color=embed["color"],
-        fields=embed.get("fields"),
+        embed=embed,
         source="new_event",
         source_id=event.pk,
     )
+    if response is None:
+        logger.info(
+            "new_event_notification_not_sent",
+            system="events",
+            subsystem="tasks",
+            event_id=event_id,
+            reason="lease_held_by_another_worker",
+        )
+        return (
+            f"New event notification for event {event_id}: lease held by another worker"
+        )
     return f"Notified new event {event.pk}"
 
 
@@ -995,6 +1004,45 @@ def _create_discord_scheduled_event_impl(event_id):
             system="events",
             subsystem="tasks",
             event_id=event.pk,
+            error=str(e),
+        )
+        return f"Failed: {e}"
+
+
+@shared_task
+def delete_discord_scheduled_event(guild_id: str, scheduled_event_id: str) -> str:
+    """Delete a live Discord guild scheduled event.
+
+    Idempotent: a 404 (already gone) counts as success. Nothing else in the app
+    removes scheduled events, so this must run whenever an Event or its series is
+    deleted — otherwise the event is orphaned on the guild and sync_discord_events
+    keeps it alive as a "ghost".
+    """
+    if not guild_id or not scheduled_event_id:
+        return "Skipped: missing guild_id or scheduled_event_id"
+    url = f"{DISCORD_API_BASE}/guilds/{guild_id}/scheduled-events/{scheduled_event_id}"
+    try:
+        response = req.delete(url, headers=_get_headers())
+        if response.status_code not in (204, 404):
+            logger.error(
+                "discord_scheduled_event_delete_failed",
+                system="events",
+                subsystem="tasks",
+                guild_id=guild_id,
+                scheduled_event_id=scheduled_event_id,
+                status_code=response.status_code,
+            )
+        return (
+            f"Deleted Discord scheduled event {scheduled_event_id} "
+            f"(HTTP {response.status_code})"
+        )
+    except Exception as e:
+        logger.exception(
+            "discord_scheduled_event_delete_error",
+            system="events",
+            subsystem="tasks",
+            guild_id=guild_id,
+            scheduled_event_id=scheduled_event_id,
             error=str(e),
         )
         return f"Failed: {e}"

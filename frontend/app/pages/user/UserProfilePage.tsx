@@ -15,6 +15,7 @@ import type { UserClassType, UserType } from '~/components/user/types';
 import { User } from '~/components/user/user';
 import { useUserStore } from '~/store/userStore';
 import { UserAvatar } from '~/components/user/UserAvatar';
+import { DisplayName } from '~/components/user/avatar';
 import { RolePositions } from '~/components/user/positions';
 import UserEditModal from '~/components/user/userCard/editModal';
 import { EditProfileModal } from './EditProfileModal';
@@ -102,7 +103,7 @@ export function UserProfilePage() {
                     data-testid="user-card-nickname"
                     className="text-xl sm:text-3xl font-bold break-words min-w-0"
                   >
-                    {user.nickname || user.username}
+                    {DisplayName(user)}
                   </h1>
                   {isOwnProfile && (
                     <EditIconButton

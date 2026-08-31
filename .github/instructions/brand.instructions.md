@@ -14,7 +14,7 @@ Canonical: `.claude/skills/brand/SKILL.md` and `docs/THEMING-GUIDE.md` (single s
 
 ## Styling rules
 
-- **No inline `style={{}}` for colors / spacing / sizing.** Move to Tailwind classes or to the brand style constants in `frontend/app/components/ui/buttons/styles.ts` (`brandGradient`, `brandSecondary`, `brandBg`, `button3DBase`, etc.).
+- **No inline `style={{}}` for colors / spacing / sizing.** Move to Tailwind classes or to the brand style constants in `frontend/app/components/ui/buttons/styles.ts` (`brandGradient`, `brandSecondary`, `brandBg`, `buttonLift`, etc.).
 - **No hardcoded violet/slate hex values, no `bg-slate-*` / `text-slate-*`.** Use the `bg-base-*` scale and brand tokens defined in `frontend/app/app.css`.
 - **No `space-x-*` / `space-y-*`.** Use `flex` + `gap-*` (or `flex flex-col gap-*`).
 - **No `w-N h-N` when width and height are equal.** Use `size-N`.

@@ -3,7 +3,7 @@ import * as React from 'react';
 import { Button } from '~/components/ui/button';
 import { FastTooltip } from '~/components/ui/tooltip';
 import { cn } from '~/lib/utils';
-import { brandToxic, brandToxicDepthColors, button3DBase } from '../styles';
+import { brandToxic, brandToxicGlowLift, buttonLift } from '../styles';
 
 export interface EditIconButtonProps
   extends Omit<React.ComponentProps<typeof Button>, 'variant' | 'size'> {
@@ -32,8 +32,8 @@ const EditIconButton = React.forwardRef<HTMLButtonElement, EditIconButtonProps>(
         className={cn(
           'rounded-full',
           brandToxic,
-          button3DBase,
-          brandToxicDepthColors,
+          buttonLift,
+          brandToxicGlowLift,
           '[&_svg]:text-white [&_svg]:drop-shadow-[1px_1px_1px_rgba(0,0,0,0.5)]',
           className
         )}

@@ -33,7 +33,7 @@ export const SimpleAvatar = memo(function SimpleAvatar({
     onError?.();
   }, [onError]);
 
-  const showImage = src && !hasError;
+  const showImage = !!src && !hasError;
 
   return (
     <div

@@ -8,8 +8,8 @@ interface DiscordLogEntry {
   action: string;
   target_type: string;
   success: boolean;
-  status_code?: number;
-  message_id?: string;
+  status_code?: number | null;
+  message_id?: string | null;
   discord_user_id?: string;
   discord_username?: string;
   response_data?: Record<string, unknown>;

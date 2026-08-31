@@ -80,6 +80,11 @@ export default function BaseTab({ profile, onSave, onClose }: BaseTabProps) {
       }
 
       queryClient.invalidateQueries({ queryKey: ['userProfile', profile.pk] });
+      // The profile-page header (UserProfilePage) reads the ['user', pk] query
+      // (fetchUser), a DIFFERENT key — invalidate it too or the header keeps the
+      // stale nickname until a manual refresh. (Pre-existing key mismatch; the
+      // 06-profile-edit acceptance spec asserts the header updates without reload.)
+      queryClient.invalidateQueries({ queryKey: ['user', profile.pk] });
 
       log.debug('base_patch_success', { userPk: profile.pk, updated });
       toast.success('Profile updated');

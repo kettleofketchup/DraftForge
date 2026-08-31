@@ -3,7 +3,7 @@ import * as React from 'react';
 import { Button } from '~/components/ui/button';
 import { FastTooltip } from '~/components/ui/tooltip';
 import { cn } from '~/lib/utils';
-import { brandDepthColors, brandGradient, button3DBase } from '../styles';
+import { brandGlowLift, brandGradient, buttonLift } from '../styles';
 
 export interface ViewIconButtonProps
   extends Omit<React.ComponentProps<typeof Button>, 'variant' | 'size'> {
@@ -29,8 +29,8 @@ const ViewIconButton = React.forwardRef<HTMLButtonElement, ViewIconButtonProps>(
         className={cn(
           'rounded-full',
           brandGradient,
-          button3DBase,
-          brandDepthColors,
+          buttonLift,
+          brandGlowLift,
           '[&_svg]:text-white [&_svg]:drop-shadow-[1px_1px_1px_rgba(0,0,0,0.5)]',
           className
         )}

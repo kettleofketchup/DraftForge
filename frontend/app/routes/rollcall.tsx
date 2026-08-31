@@ -457,10 +457,12 @@ export default function RollCallPage() {
             setIsNavigating(true);
             const result = await actions.startTournament.mutateAsync();
             toast.success('Tournament started!');
-            // Navigate to the tournament page if available, otherwise back to event
+            // Navigate to the tournament page if available, otherwise back to event.
+            // Land on the tournament overview rather than jumping straight into the
+            // draft view so the organizer can pick the draft type from there (#267).
             const tournamentPk = result?.tournament;
             if (tournamentPk) {
-              navigate(`/tournament/${tournamentPk}/teams/draft`);
+              navigate(`/tournament/${tournamentPk}`);
             } else {
               navigate(`/events/${eventId}`);
             }

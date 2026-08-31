@@ -199,7 +199,7 @@ const DiscordUserDropdown: React.FC<Props> = ({
   };
   return (
     <div className="w-full max-w-md">
-      <Combobox value={discordUser} onChange={onSelect}>
+      <Combobox value={discordUser} onChange={(u) => { if (u) onSelect(u); }}>
         <ComboboxInput
           className="input input-bordered w-full"
           placeholder="Search DTX members..."

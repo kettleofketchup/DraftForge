@@ -1,6 +1,6 @@
 # Component Substitutions
 
-Replace hand-rolled HTML and one-off styled markup with DraftForge's brand component wrappers. The wrappers ship the brand gradient, 3D depth, hover/active states, focus rings, and disabled treatment; raw markup loses all of it and drifts visually over time.
+Replace hand-rolled HTML and one-off styled markup with DraftForge's brand component wrappers. The wrappers ship the brand gradient, soft-shadow lift, consistent height, hover/active states, focus rings, and disabled treatment; raw markup loses all of it and drifts visually over time.
 
 ## Buttons (Primary Targets)
 
@@ -8,15 +8,15 @@ Per [`THEMING-GUIDE.md` §"Button Policy"](../../THEMING-GUIDE.md#button-policy)
 
 | Anti-pattern | Replace with | Notes |
 |---|---|---|
-| `<button onClick={...}>...` | `<PrimaryButton onClick={...}>` | Brand violet→blue gradient + 3D depth. The headline CTA on a view. |
+| `<button onClick={...}>...` | `<PrimaryButton onClick={...}>` | Brand violet→blue gradient, flat soft-shadow lift. The headline CTA on a view. |
 | `<button className="bg-primary ...">` | `<PrimaryButton>` | `bg-primary` flat is reserved for non-button contexts. Buttons use the gradient. |
 | `<Button onClick={submit}>Save</Button>` (form submission) | `<SubmitButton loading={isSubmitting}>Save</SubmitButton>` | Wires `type="submit"` + loading spinner. |
 | `<Button>Confirm</Button>` inside a dialog | `<ConfirmButton variant="success">Approve</ConfirmButton>` | Pairs with `variant="destructive"` / `variant="warning"` for the matching dialog tone. |
 | Supporting / contextual action | `<SecondaryButton>` | Violet gradient + ring outline. "Cancel", "Edit Settings", etc. |
 | Cancel / dismiss inside a dialog | `<CancelButton>` or `<SecondaryButton>` | Translucent violet on opaque backgrounds. |
 | Edit affordance | `<EditButton>` / `<EditIconButton>` | Toxic violet→emerald cyberpunk blend per `brandToxic`. |
-| Destructive page-level action | `<DestructiveButton>` | Red + 3D. NOT for dialog confirmation — use `<ConfirmButton variant="destructive">` there. |
-| Navigation action (link styled as button) | `<NavButton>` | Sky blue + 3D. |
+| Destructive page-level action | `<DestructiveButton>` | Red, flat. NOT for dialog confirmation — use `<ConfirmButton variant="destructive">` there. |
+| Navigation action (link styled as button) | `<NavButton>` | Sky blue, flat. |
 | Icon-only variant of a generic button | The matching `*IconButton` in `buttons/icons/` (e.g. `<EditIconButton>`, `<ViewIconButton>`) | Don't roll a new icon-only button — extend the icons folder. |
 
 ### Structural `<Button>` exceptions (NOT a violation)
@@ -30,16 +30,22 @@ Raw `<Button>` from `~/components/ui/button` is **correct** in these contexts:
 
 If `<Button>` has an `onClick` that performs a domain action (save, delete, navigate), that's a `block` regardless of where it sits.
 
-## Avatars
+## Avatars & Display Names
+
+Both come from the shared user-identity utilities. See [`THEMING-GUIDE.md` §"User Avatars"](../../THEMING-GUIDE.md#user-avatars) and §"Display Names" for the *why*.
 
 | Anti-pattern | Replace with | Notes |
 |---|---|---|
 | `<img src={user.avatar} ...>` | `<UserAvatar user={user} size="md" />` | Handles Discord CDN, fallback initials, memoization. |
 | `<img src={AvatarUrl(user)} ...>` | `<UserAvatar user={user} size="md" />` | `AvatarUrl()` is wrapped — never call it directly in JSX. |
+| `<UserAvatar user={{ nickname }} />` — partial object **missing the `avatar` hash** | `<UserAvatar user={{ nickname, username, avatar, discordId }} />` | Without `avatar` (or a full `avatarUrl`), `AvatarUrl` can't build the Discord CDN URL and renders a generated `ui-avatars.com` image — so the same user looks different here than elsewhere. If the data is serialized, expose `nickname`/`username`/`avatar` on the payload first. |
+| `<span>{user.username}</span>` / `{log.discord_username}` — raw name string | `<span>{DisplayName(user)}</span>` from `~/components/user/avatar` | `DisplayName()` applies the canonical `nickname` → `username` priority (with optional length cap). Raw strings skip the nickname preference and drift. |
 | Custom online-indicator dot | `<UserAvatar user={user} showOnline online />` | The component renders the indicator. |
 | Custom captain ring | `<UserAvatar user={user} border="captain" />` | Gold ring is built in. |
 
 Sizes: `tiny` (16px) | `xs` (20px) | `sm` (24px) | `md` (32px) | `lg` (40px) | `xl` (48px). Don't invent intermediate sizes.
+
+Real regression: the Discord activity log (`DiscordLogSection`) showed generated avatars and raw usernames because the log serializer exposed only `discord_user_id` + `discord_username`. Fix = serializer resolves the `CustomUser` and exposes `nickname`/`username`/`avatar`, component renders via `<UserAvatar user={{ nickname, username, avatar, discordId }} />` + `DisplayName()`.
 
 ## Breadcrumbs
 

@@ -28,6 +28,8 @@ import {
   positionKeys,
 } from '~/components/user/positions/positionEdit';
 import { useUserStore } from '~/store/userStore';
+import { useUserCacheStore } from '~/store/userCacheStore';
+import { selectPositions } from '~/store/selectPositions';
 
 import { type EventType } from './schemas';
 import { GAME_TYPE } from '~/components/game/constants';
@@ -86,10 +88,23 @@ export function EventSignupModal({
 }: EventSignupModalProps) {
   const isDesktop = useMediaQuery('(min-width: 768px)');
 
-  // Read currentUser.positions BEFORE useMemo so the schema can consult it.
-  const currentUserPositions = useUserStore(
+  // Read the current user's positions BEFORE useMemo so the schema can consult
+  // it. Route through the gameType-aware selector over the list-populated entity
+  // adapter (userStore upserts currentUser into the cache). Explicit
+  // GAME_TYPE.DOTA2: these are user-wide Dota positions, read unconditionally
+  // here regardless of the event's game; fall back to currentUser.positions when
+  // the user isn't cached yet.
+  const currentUserPk = useUserStore((s) => s.currentUser?.pk);
+  const currentUserFallbackPositions = useUserStore(
     (s) => s.currentUser?.positions,
   ) as Partial<PositionPriorities> | undefined;
+  const cachedPositions = useUserCacheStore((s) =>
+    currentUserPk != null
+      ? selectPositions(s, currentUserPk, GAME_TYPE.DOTA2)
+      : undefined,
+  );
+  const currentUserPositions = (cachedPositions ??
+    currentUserFallbackPositions) as Partial<PositionPriorities> | undefined;
   const userHasPos =
     !!currentUserPositions &&
     Object.values(currentUserPositions).some((v) => (v ?? 0) > 0);
@@ -97,7 +112,6 @@ export function EventSignupModal({
   const schema = useMemo(
     () => buildSignupPatchSchema(event, profile, currentUserPositions),
     // Specific deps that drive section visibility:
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       event.id,
       event.require_steam_id,

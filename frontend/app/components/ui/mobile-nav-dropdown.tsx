@@ -5,7 +5,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '~/components/ui/select';
-import { brandDepthColors, brandGradient, brandSecondary } from '~/components/ui/buttons';
+import { brandGlowLift, brandGradient, brandSecondary } from '~/components/ui/buttons';
 import { cn } from '~/lib/utils';
 
 export interface MobileNavOption {
@@ -32,7 +32,7 @@ interface MobileNavDropdownProps {
 
 /**
  * Branded mobile dropdown that replaces tab bars on narrow screens.
- * Primary variant: bold gradient with 3D depth for navbar.
+ * Primary variant: bold gradient lift for navbar.
  * Secondary variant: subtle translucent gradient for in-page tabs.
  */
 export function MobileNavDropdown({
@@ -54,7 +54,7 @@ export function MobileNavDropdown({
       className={cn(
         'rounded-lg',
         isPrimary
-          ? [brandGradient, `shadow-lg border-b-4 ${brandDepthColors}`]
+          ? [brandGradient, `shadow-lg ${brandGlowLift}`]
           : brandSecondary,
         className,
       )}

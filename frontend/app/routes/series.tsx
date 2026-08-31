@@ -1,22 +1,28 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bell, BellOff, CalendarDays, Pencil, Repeat, Trash2, Users } from 'lucide-react';
+import { Bell, BellOff, CalendarDays, CalendarPlus, Pencil, Play, Repeat, Trash2, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { generateMeta } from '~/lib/seo';
 import { EventStateBadge } from '~/components/events';
+import { CreateSeriesEventModal } from '~/components/events/CreateSeriesEventModal';
 import { EditRepeaterModal } from '~/components/events/EditRepeaterModal';
 import { SubscriberList } from '~/components/events/SubscriberList';
-import type { EventType } from '~/components/events/schemas';
+import { DAY_LABELS, FREQUENCY_LABELS, type EventType } from '~/components/events/schemas';
 import { Badge } from '~/components/ui/badge';
 import { DestructiveButton, PrimaryButton, SecondaryButton } from '~/components/ui/buttons';
-import { DeleteDialog } from '~/components/ui/dialogs';
+import { ConfirmDialog, DeleteDialog } from '~/components/ui/dialogs';
 import { Card, CardContent, CardHeader } from '~/components/ui/card';
 import { EntityBreadcrumb, type BreadcrumbSegment } from '~/components/ui/entity-breadcrumb';
 import { useOrganization } from '~/components/organization';
 import { useIsOrganizationStaff } from '~/hooks/usePermissions';
 import { useUserStore } from '~/store/userStore';
-import { subscribeToRepeater, unsubscribeFromRepeater } from '~/components/api/api';
+import {
+  reactivateRepeater,
+  subscribeToRepeater,
+  unsubscribeFromRepeater,
+  type EventRepeaterType,
+} from '~/components/api/api';
 import api from '~/components/api/axios';
 import type { Route } from './+types/series';
 
@@ -39,38 +45,8 @@ export function meta({ data }: Route.MetaArgs) {
   });
 }
 
-interface RepeaterDetail {
-  id: number;
-  name: string;
-  description: string;
-  organization: number;
-  organization_name: string;
-  frequency: string;
-  day_of_week: number | null;
-  time_of_day: string;
-  is_active: boolean;
-  is_subscribed: boolean;
-  subscriber_count: number;
-  next_event_date: string | null;
-  tournament_name: string;
-  tournament_type: string;
-  draft_type: string;
-  game_type: number;
-  people_per_team: number;
-  number_of_teams: number | null;
-}
-
-const FREQUENCY_LABELS: Record<string, string> = {
-  daily: 'Daily',
-  weekly: 'Weekly',
-  biweekly: 'Biweekly',
-  monthly: 'Monthly',
-};
-
-const DAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-
 function useRepeater(id: number | null) {
-  return useQuery<RepeaterDetail>({
+  return useQuery<EventRepeaterType>({
     queryKey: ['repeater', id],
     queryFn: () => api.get(`/events/repeaters/${id}/`).then((r) => r.data),
     enabled: !!id,
@@ -95,6 +71,14 @@ function EventGrid({ events, opacity }: { events: EventType[]; opacity?: boolean
             <CardHeader className="pb-2">
               <div className="flex items-center justify-between gap-2">
                 <span className="font-medium text-sm truncate">{event.name}</span>
+                {event.is_off_schedule && (
+                  <Badge
+                    className="bg-primary/20 text-primary border-primary/30"
+                    data-testid="one-off-badge"
+                  >
+                    One-off
+                  </Badge>
+                )}
                 <EventStateBadge state={event.state} />
               </div>
             </CardHeader>
@@ -125,6 +109,8 @@ export default function SeriesPage() {
   const { data: events } = useRepeaterEvents(id);
   const [editOpen, setEditOpen] = useState(false);
   const [showDeleteSeries, setShowDeleteSeries] = useState(false);
+  const [oneOffOpen, setOneOffOpen] = useState(false);
+  const [showReactivate, setShowReactivate] = useState(false);
   const currentUser = useUserStore((state) => state.currentUser);
 
   const { organization } = useOrganization(repeater?.organization);
@@ -148,6 +134,20 @@ export default function SeriesPage() {
       queryClient.invalidateQueries({ queryKey: ['repeater-subscribers', id] });
       toast.success('Unsubscribed from notifications');
     },
+  });
+
+  const reactivateMutation = useMutation({
+    mutationFn: () => reactivateRepeater(id!),
+    onSuccess: (data) => {
+      toast.success(data.detail);
+      queryClient.invalidateQueries({ queryKey: ['repeater', id] });
+      queryClient.invalidateQueries({ queryKey: ['repeater-events', id] });
+      queryClient.invalidateQueries({ queryKey: ['repeaters'] });
+      queryClient.invalidateQueries({ queryKey: ['event-repeaters'] });
+      queryClient.invalidateQueries({ queryKey: ['events'] });
+      setShowReactivate(false);
+    },
+    onError: () => toast.error('Failed to reactivate series'),
   });
 
   const deleteMutation = useMutation({
@@ -218,7 +218,7 @@ export default function SeriesPage() {
             {repeater.organization_name}
           </Link>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {currentUser && (
             repeater.is_subscribed ? (
               <SecondaryButton
@@ -244,6 +244,25 @@ export default function SeriesPage() {
             <>
               <SecondaryButton
                 size="sm"
+                onClick={() => setOneOffOpen(true)}
+                data-testid="create-one-off-btn"
+              >
+                <CalendarPlus className="h-4 w-4 mr-1" />
+                Add one-off event
+              </SecondaryButton>
+              {!repeater.is_active && (
+                <SecondaryButton
+                  size="sm"
+                  onClick={() => setShowReactivate(true)}
+                  disabled={reactivateMutation.isPending}
+                  data-testid="reactivate-series-btn"
+                >
+                  <Play className="h-4 w-4 mr-1" />
+                  Reactivate
+                </SecondaryButton>
+              )}
+              <SecondaryButton
+                size="sm"
                 onClick={() => setEditOpen(true)}
                 data-testid="edit-series-btn"
               >
@@ -267,6 +286,7 @@ export default function SeriesPage() {
                 ? 'bg-success/20 text-success border-success/30'
                 : 'bg-muted text-muted-foreground border-border'
             }
+            data-testid="series-active-badge"
           >
             {repeater.is_active ? 'Active' : 'Inactive'}
           </Badge>
@@ -375,7 +395,7 @@ export default function SeriesPage() {
       {/* Edit Repeater Modal */}
       {isStaff && (
         <EditRepeaterModal
-          repeater={repeater as any}
+          repeater={repeater}
           open={editOpen}
           onOpenChange={(open) => {
             setEditOpen(open);
@@ -386,6 +406,34 @@ export default function SeriesPage() {
           }}
         />
       )}
+
+      {isStaff && (
+        <CreateSeriesEventModal
+          repeater={repeater}
+          open={oneOffOpen}
+          onOpenChange={setOneOffOpen}
+        />
+      )}
+
+      <ConfirmDialog
+        open={showReactivate}
+        onOpenChange={setShowReactivate}
+        title="Reactivate this series?"
+        description={
+          <>
+            <strong>{repeater.name}</strong> will start generating events again.
+            Upcoming events are created immediately and announced in Discord if
+            the series has announcements enabled.
+          </>
+        }
+        confirmLabel="Reactivate"
+        variant="default"
+        isLoading={reactivateMutation.isPending}
+        onConfirm={() => reactivateMutation.mutate()}
+        contentTestId="reactivate-series-dialog"
+        confirmTestId="reactivate-series-confirm"
+        cancelTestId="reactivate-series-cancel"
+      />
 
       <DeleteDialog
         open={showDeleteSeries}

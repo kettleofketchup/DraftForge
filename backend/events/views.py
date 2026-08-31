@@ -1,6 +1,7 @@
 from cacheops import cached_as
 from django.db import transaction
 from django.db.models import BooleanField, Count, Exists, F, OuterRef, Q, Value
+from django.utils import timezone
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
@@ -46,6 +47,7 @@ from events.services import (
     staff_add_signup,
     sync_future_events,
     sync_tournament_from_event,
+    teardown_event,
     unconfirm_signup,
 )
 
@@ -116,6 +118,21 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
         if self.action in ("update", "partial_update", "destroy"):
             if not has_org_staff_access(request.user, obj.organization):
                 self.permission_denied(request)
+
+    def perform_destroy(self, instance):
+        """Tear down the series' still-active occurrences (and their live Discord
+        scheduled events) before deleting the series, so sync_discord_events can't
+        resurrect them as ghosts. Terminal (completed/cancelled) occurrences are
+        left as orphans via Event.event_repeater=SET_NULL for historical record.
+        """
+        active_states = [
+            EventState.UPCOMING,
+            EventState.SIGNUPS_OPEN,
+            EventState.ROLL_CALL,
+        ]
+        for event in list(instance.events.filter(state__in=active_states)):
+            teardown_event(event)
+        instance.delete()
 
     def get_queryset(self):
         from django.db.models import Min
@@ -195,13 +212,16 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
         # and tell sync_future_events to realign occurrences. Without this,
         # editing day_of_week leaves stale UPCOMING rows on the old day
         # while generate_events_for_repeater creates new rows on the new
-        # day — admins see duplicates.
+        # day — admins see duplicates. is_active is in the tuple so a plain
+        # PATCH that unpauses a series realigns exactly like the reactivate
+        # button does.
         schedule_fields = (
             "day_of_week",
             "time_of_day",
             "timezone",
             "starts_at",
             "frequency",
+            "is_active",
         )
         before = {f: getattr(serializer.instance, f) for f in schedule_fields}
         repeater = serializer.save()
@@ -254,6 +274,112 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
         if deleted:
             invalidate_obj(repeater)
         return Response({"detail": "Unsubscribed"}, status=status.HTTP_200_OK)
+
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path="create-event",
+        permission_classes=[permissions.IsAuthenticated],
+    )
+    def create_event(self, request, pk=None):
+        """Create a single off-schedule ("one-off") event from this series."""
+        from app.cache_utils import invalidate_after_commit
+        from events.serializers import OneOffEventCreateSerializer
+        from events.services import OccurrenceCollision, create_off_schedule_event
+
+        repeater = self.get_object()
+        if not has_org_staff_access(request.user, repeater.organization):
+            return Response(
+                {"detail": "You do not have staff access to this organization."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        serializer = OneOffEventCreateSerializer(
+            data=request.data, context={"repeater": repeater, "request": request}
+        )
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        try:
+            event = create_off_schedule_event(
+                repeater,
+                scheduled_at=data["scheduled_at"],
+                created_by=request.user,
+                overrides=data.get("overrides") or {},
+            )
+        except OccurrenceCollision as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+
+        if data.get("open_signups"):
+            try:
+                event.transition_state(EventState.SIGNUPS_OPEN)
+            except ValueError:
+                pass
+
+        invalidate_after_commit(repeater, event)
+        logger.info(
+            "off_schedule_event_endpoint",
+            system="events",
+            subsystem="views",
+            repeater_id=repeater.pk,
+            event_id=event.pk,
+        )
+        return Response(
+            EventSerializer(event, context={"request": request}).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+    @action(
+        detail=True, methods=["post"], permission_classes=[permissions.IsAuthenticated]
+    )
+    def reactivate(self, request, pk=None):
+        """Reactivate a paused series and realign its upcoming events."""
+        from app.cache_utils import invalidate_after_commit
+
+        repeater = self.get_object()
+        if not has_org_staff_access(request.user, repeater.organization):
+            return Response(
+                {"detail": "You do not have staff access to this organization."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        before = set(
+            Event.objects.filter(event_repeater=repeater).values_list("pk", flat=True)
+        )
+        if not repeater.is_active:
+            repeater.is_active = True
+            repeater.save(update_fields=["is_active", "updated_at"])
+
+        # realign_schedule=True, not the bare generator: a schedule edit made
+        # while paused would otherwise leave stale rows alongside new ones.
+        touched = sync_future_events(repeater, realign_schedule=True)
+        after = set(
+            Event.objects.filter(event_repeater=repeater).values_list("pk", flat=True)
+        )
+        created_count = len(after - before)
+
+        if created_count:
+            detail = f"Series reactivated. {created_count} upcoming event(s) created."
+        elif repeater.ends_at and repeater.ends_at < timezone.localdate():
+            detail = (
+                "Series reactivated, but no events were created because its "
+                "end date has passed."
+            )
+        else:
+            detail = "Series reactivated. No new events were due."
+
+        invalidate_after_commit(repeater, *touched)
+        logger.info(
+            "repeater_reactivated",
+            system="events",
+            subsystem="views",
+            repeater_id=repeater.pk,
+            created_count=created_count,
+        )
+        return Response(
+            {"detail": detail, "created_count": created_count, "is_active": True},
+            status=status.HTTP_200_OK,
+        )
 
 
 class EventViewSet(viewsets.ModelViewSet):
@@ -628,41 +754,17 @@ class EventViewSet(viewsets.ModelViewSet):
 
     def perform_destroy(self, instance):
         """Clean up tournament and Discord messages before deleting event."""
-        from app.cache_utils import invalidate_after_commit
-
-        with transaction.atomic():
-            invalidate_after_commit(instance)
-            # Delete linked tournament
-            if instance.tournament:
-                tournament = instance.tournament
-                instance.tournament = None
-                instance.save(update_fields=["tournament", "updated_at"])
-                tournament.delete()
-
-            # Delete DiscordEvent (cascades to messages, logs, DMs)
-            from discordbot.models import DiscordEvent
-
-            try:
-                discord_event = instance.discord_event
-                discord_event.delete()
-            except DiscordEvent.DoesNotExist:
-                pass
-
-            # Clean up legacy DiscordMessageLog entries for pre-migration data
-            from discordbot.models import DiscordMessageLog
-
-            DiscordMessageLog.objects.filter(
-                source__in=["event_announcement", "event_notice"],
-                source_id=instance.pk,
-            ).delete()
-
-            instance.delete()
+        teardown_event(instance)
 
     @action(detail=True, methods=["post"])
     def cancel(self, request, pk=None):
         event = self.get_object()
         if not has_event_staff_access(request.user, event):
             return Response(status=status.HTTP_403_FORBIDDEN)
+        # Function-local: events.tasks imports events.services, which imports this module.
+        from discordbot.models import DiscordEvent
+        from events.tasks import delete_discord_scheduled_event
+
         try:
             with transaction.atomic():
                 # Delete linked tournament before cancelling
@@ -672,6 +774,24 @@ class EventViewSet(viewsets.ModelViewSet):
                     event.save(update_fields=["tournament", "updated_at"])
                     tournament.delete()
                 event.transition_state(EventState.CANCELLED)
+                try:
+                    discord_event = event.discord_event
+                except DiscordEvent.DoesNotExist:
+                    discord_event = None
+                if discord_event is not None and discord_event.scheduled_event_id:
+                    # Clearing the id stops the 60s sync_discord_events resurrecting it.
+                    delete_discord_scheduled_event.delay(
+                        discord_event.guild_id, discord_event.scheduled_event_id
+                    )
+                    discord_event.scheduled_event_id = None
+                    discord_event.save(update_fields=["scheduled_event_id"])
+                    logger.info(
+                        "event_cancel_discord_scheduled_event_deleted",
+                        system="events",
+                        subsystem="views",
+                        event_id=event.pk,
+                        guild_id=discord_event.guild_id,
+                    )
             qs = _annotate_event_qs(Event.objects.filter(pk=event.pk))
             data = EventSerializer(qs.first()).data
             _attach_user_can_manage(data, request.user)

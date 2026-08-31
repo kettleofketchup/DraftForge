@@ -1,6 +1,8 @@
 import nh3
+from django.utils import timezone
 from rest_framework import serializers
 
+from app.models import League
 from events.models import (
     Event,
     EventRepeater,
@@ -9,6 +11,34 @@ from events.models import (
     OrgEventDefaults,
     RepeaterSubscription,
 )
+from events.services import (
+    DISCORD_CONFIG_FIELDS,
+    DISCORD_TOURNAMENT_TEMPLATE_FIELDS,
+    EVENT_CONFIG_FIELDS,
+    TOURNAMENT_TEMPLATE_FIELDS,
+)
+
+
+class TournamentLeagueOrgMixin:
+    """Reject a tournament_league owned by another organization.
+
+    Resolves the org from the instance on update, else from the incoming body.
+    Neither available (create with an org the view supplies later) — skip.
+    """
+
+    def validate_tournament_league(self, value: League | None) -> League | None:
+        if value is None:
+            return value
+        org_id = (
+            self.instance.organization_id
+            if self.instance is not None
+            else self.initial_data.get("organization")
+        )
+        if org_id is not None and value.organization_id != org_id:
+            raise serializers.ValidationError(
+                "League must belong to the event's organization."
+            )
+        return value
 
 
 class EventRepeaterSlimSerializer(serializers.ModelSerializer):
@@ -37,7 +67,7 @@ class EventRepeaterSlimSerializer(serializers.ModelSerializer):
         ]
 
 
-class EventRepeaterSerializer(serializers.ModelSerializer):
+class EventRepeaterSerializer(TournamentLeagueOrgMixin, serializers.ModelSerializer):
     organization_name = serializers.CharField(
         source="organization.name", read_only=True
     )
@@ -180,6 +210,7 @@ class EventSlimSerializer(serializers.ModelSerializer):
             "signup_count",
             "confirmed_count",
             "event_repeater",
+            "is_off_schedule",
             # Reminder fields needed by fire_due_reminders — see
             # events/scheduling/registry.py REMINDERS list. Test
             # tests/test_serializers.py::EventSlimSerializerReminderFieldsTest
@@ -196,7 +227,7 @@ class EventSlimSerializer(serializers.ModelSerializer):
         ]
 
 
-class EventSerializer(serializers.ModelSerializer):
+class EventSerializer(TournamentLeagueOrgMixin, serializers.ModelSerializer):
     organization_name = serializers.CharField(
         source="organization.name", read_only=True
     )
@@ -287,29 +318,17 @@ class EventSerializer(serializers.ModelSerializer):
             "discord_send_draft_link",
             "discord_send_herodraft_link",
             "user_can_manage",
+            "is_off_schedule",
         ]
         read_only_fields = [
             "id",
             "event_repeater",
+            "is_off_schedule",
             "tournament",
             "created_by",
             "created_at",
             "updated_at",
         ]
-
-    def validate_tournament_league(self, value):
-        if value is None:
-            return value
-        org_id = (
-            self.instance.organization_id
-            if self.instance is not None
-            else self.initial_data.get("organization")
-        )
-        if org_id is not None and value.organization_id != org_id:
-            raise serializers.ValidationError(
-                "League must belong to the event's organization."
-            )
-        return value
 
     def validate_description(self, value):
         return nh3.clean(value) if value else value
@@ -543,7 +562,7 @@ class EventSignupSerializer(serializers.ModelSerializer):
         return obj._mmr_suggestion_cache
 
 
-class OrgEventDefaultsSerializer(serializers.ModelSerializer):
+class OrgEventDefaultsSerializer(TournamentLeagueOrgMixin, serializers.ModelSerializer):
     class Meta:
         model = OrgEventDefaults
         fields = [
@@ -618,3 +637,72 @@ class RepeaterSubscriptionSerializer(serializers.ModelSerializer):
     class Meta:
         model = RepeaterSubscription
         fields = ["id", "username", "nickname", "discordId", "avatar", "created_at"]
+
+
+ONE_OFF_OVERRIDE_FIELDS = (
+    ["name", "description"]
+    + TOURNAMENT_TEMPLATE_FIELDS
+    + EVENT_CONFIG_FIELDS
+    + DISCORD_CONFIG_FIELDS
+    + DISCORD_TOURNAMENT_TEMPLATE_FIELDS
+)
+
+
+class OneOffEventCreateSerializer(serializers.ModelSerializer):
+    """Validates the body of POST /events/repeaters/<pk>/create-event/.
+
+    Every config key is optional: an absent key means "inherit from the series",
+    so nothing here may carry a `default` — that would clobber the inherited value.
+    Never call .save() on this serializer; the view calls create_off_schedule_event.
+    """
+
+    OVERRIDE_FIELDS = ONE_OFF_OVERRIDE_FIELDS
+
+    scheduled_at = serializers.DateTimeField()
+    open_signups = serializers.BooleanField(required=False, default=False)
+
+    class Meta:
+        model = Event
+        fields = ONE_OFF_OVERRIDE_FIELDS + ["scheduled_at", "open_signups"]
+        extra_kwargs = {name: {"required": False} for name in ONE_OFF_OVERRIDE_FIELDS}
+
+    def validate_scheduled_at(self, value):
+        if value <= timezone.now():
+            raise serializers.ValidationError("Scheduled time must be in the future.")
+        repeater = self.context["repeater"]
+        if repeater.ends_at and value.date() > repeater.ends_at:
+            raise serializers.ValidationError(
+                "Scheduled time is after this series' end date."
+            )
+        return value
+
+    def validate_tournament_league(self, value):
+        repeater = self.context["repeater"]
+        if value is not None and value.organization_id != repeater.organization_id:
+            raise serializers.ValidationError(
+                "League must belong to the series' organization."
+            )
+        return value
+
+    def validate(self, data):
+        repeater = self.context["repeater"]
+        # Same cross-field rule EventSerializer.validate and
+        # EventRepeaterSerializer.validate carry; "effective" = override else series.
+        game_type = data.get("game_type", repeater.game_type)
+        game_mode = data.get("game_mode", repeater.game_mode)
+        if game_mode in ("captains_mode", "turbo") and game_type != 1:
+            raise serializers.ValidationError(
+                {"game_mode": f"'{game_mode}' is only valid for Dota 2 events."}
+            )
+        return data
+
+    def to_internal_value(self, data):
+        validated = super().to_internal_value(data)
+        # Source overrides from the COERCED values, never the raw body:
+        # tournament_league is a ForeignKey and setattr() rejects a bare pk.
+        validated["overrides"] = {
+            k: validated[k]
+            for k in self.OVERRIDE_FIELDS
+            if k in data and k in validated
+        }
+        return validated

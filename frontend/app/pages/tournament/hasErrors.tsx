@@ -1,6 +1,8 @@
 import { ChevronDown } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import type { UserClassType, UserType } from '~/components/user';
+import { GAME_TYPE } from '~/components/game/constants';
 import { brandErrorBg, brandErrorCard } from '~/components/ui/buttons';
 import {
   Collapsible,
@@ -13,8 +15,9 @@ import { getLogger } from '~/lib/logger';
 import { cn } from '~/lib/utils';
 import { useLeagueStore } from '~/store/leagueStore';
 import { useOrgStore } from '~/store/orgStore';
-import type { UserEntry } from '~/store/userCacheTypes';
+import type { PositionsType, UserEntry } from '~/store/userCacheTypes';
 import { useUserCacheStore } from '~/store/userCacheStore';
+import { selectPositions } from '~/store/selectPositions';
 import { useUserStore } from '~/store/userStore';
 const log = getLogger('hasErrors');
 
@@ -33,8 +36,7 @@ function toUserType(entry: UserEntry, orgId?: number): UserClassType {
   } as unknown as UserClassType;
 }
 
-function hasNoPositions(user: UserEntry): boolean {
-  const positions = user.positions;
+function hasNoPositions(positions: PositionsType | undefined): boolean {
   if (!positions) return true;
   const totalPreference =
     (positions.carry || 0) +
@@ -61,6 +63,24 @@ export const hasErrors = () => {
 
   const currentOrg = useOrgStore((state) => state.currentOrg);
 
+  // Route positions through the gameType-aware selector. Explicit GAME_TYPE.DOTA2
+  // because the tournament route never sets currentGameType — incomplete-profile
+  // detection is inherently Dota, so the ambient (null) gameType would flag every
+  // player as "No positions". Flat record so useShallow compares values by
+  // Object.is (selectPositions returns the stored reference).
+  const tournamentUserPks = (tournament?.users ?? [])
+    .map((u) => (typeof u === 'number' ? u : (u as UserType)?.pk))
+    .filter((pk): pk is number => pk != null);
+  const positionsByPk = useUserCacheStore(
+    useShallow((s) => {
+      const rec: Record<number, PositionsType | undefined> = {};
+      for (const pk of tournamentUserPks) {
+        rec[pk] = selectPositions(s, pk, GAME_TYPE.DOTA2);
+      }
+      return rec;
+    }),
+  );
+
   // Resolve users from entity cache — the single source of truth
   const usersWithIssues = useMemo(() => {
     if (!tournament?.users) return [];
@@ -84,7 +104,7 @@ export const hasErrors = () => {
       if (!cached.steam_account_id) {
         userIssues.push('No Friend ID');
       }
-      if (hasNoPositions(cached)) {
+      if (hasNoPositions(positionsByPk[pk])) {
         userIssues.push('No positions');
       }
 
@@ -95,7 +115,7 @@ export const hasErrors = () => {
 
     log.debug('Users with issues:', issues.length, issues);
     return issues;
-  }, [tournament?.users, entities, orgId]);
+  }, [tournament?.users, entities, orgId, positionsByPk]);
 
   if (usersWithIssues.length === 0) return null;
 

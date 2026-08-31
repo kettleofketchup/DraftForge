@@ -1,13 +1,18 @@
 import { memo, useMemo, useState } from 'react';
 import { Search } from 'lucide-react';
+import { useShallow } from 'zustand/react/shallow';
 import { Button } from '~/components/ui/button';
 import { Card } from '~/components/ui/card';
 import { Input } from '~/components/ui/input';
 import { ScrollArea } from '~/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { cn } from '~/lib/utils';
-import { brandGradient, brandDepthColors } from '~/components/ui/buttons/styles';
+import { brandGradient, brandGlowLift } from '~/components/ui/buttons/styles';
+import { GAME_TYPE } from '~/components/game/constants';
 import { useUserStore } from '~/store/userStore';
+import { useUserCacheStore } from '~/store/userCacheStore';
+import { selectPositions } from '~/store/selectPositions';
+import type { PositionsType } from '~/store/userCacheTypes';
 import { DisplayName } from '~/components/user/avatar';
 import { UserStrip } from '~/components/user/UserStrip';
 import { ChoosePlayerButton } from '../buttons/choosePlayerButtons';
@@ -125,6 +130,25 @@ export const AvailablePlayersSection = memo(() => {
   const curDraftRoundChoice = useUserStore(selectCurDraftRoundChoice);
   const organizationPk = useUserStore(selectOrganizationPk);
 
+  // Subscribe ONCE to a pk→positions record off the list-populated entity
+  // adapter (usersRemaining lives in the DRAFT store, not the cache, so the
+  // position filter must read positions from the cache by pk). Explicit
+  // GAME_TYPE.DOTA2: the draft route never sets currentGameType and shuffle
+  // drafting is Dota-only — ambient (null) gameType would hide every player.
+  // Flat record so useShallow compares values by Object.is (stable refs).
+  const remainingPks = (usersRemaining ?? [])
+    .map((u: UserType) => u.pk)
+    .filter((pk): pk is number => pk != null);
+  const positionsByPk = useUserCacheStore(
+    useShallow((s) => {
+      const rec: Record<number, PositionsType | undefined> = {};
+      for (const pk of remainingPks) {
+        rec[pk] = selectPositions(s, pk, GAME_TYPE.DOTA2);
+      }
+      return rec;
+    }),
+  );
+
   // Filter states
   const [searchQuery, setSearchQuery] = useState('');
   const [positionFilter, setPositionFilter] = useState<PositionFilter>('all');
@@ -194,7 +218,8 @@ export const AvailablePlayersSection = memo(() => {
     // Position filter
     if (positionFilter !== 'all') {
       players = players.filter((user) => {
-        const positions = user.positions;
+        const positions =
+          (user.pk != null ? positionsByPk[user.pk] : undefined) ?? user.positions;
         if (!positions) return false;
         return (positions[positionFilter] || 0) > 0;
       });
@@ -222,7 +247,7 @@ export const AvailablePlayersSection = memo(() => {
     }
 
     return players;
-  }, [availablePlayers, searchQuery, positionFilter, pickOrderFilter, leagueStatsFilter, isShuffle, currentTeam, teams]);
+  }, [availablePlayers, searchQuery, positionFilter, pickOrderFilter, leagueStatsFilter, isShuffle, currentTeam, teams, positionsByPk]);
 
   // Split players into columns (newspaper style)
   const { col1, col2, col3, leftCol, rightCol } = useMemo(() => {
@@ -315,7 +340,7 @@ export const AvailablePlayersSection = memo(() => {
                   onClick={() => setPositionFilter(pos)}
                   className={cn(
                     "text-xs px-2 py-0.5 h-6",
-                    positionFilter === pos && `${brandGradient} ${brandDepthColors} border-b-2 [text-shadow:_0_1px_2px_rgba(0,0,0,0.5)]`
+                    positionFilter === pos && `${brandGradient} ${brandGlowLift} [text-shadow:_0_1px_2px_rgba(0,0,0,0.5)]`
                   )}
                 >
                   {POSITION_LABELS[pos]}
@@ -334,7 +359,7 @@ export const AvailablePlayersSection = memo(() => {
                   onClick={() => setPickOrderFilter(filter)}
                   className={cn(
                     "text-xs px-2 py-0.5 h-6",
-                    pickOrderFilter === filter && `${brandGradient} ${brandDepthColors} border-b-2 [text-shadow:_0_1px_2px_rgba(0,0,0,0.5)]`
+                    pickOrderFilter === filter && `${brandGradient} ${brandGlowLift} [text-shadow:_0_1px_2px_rgba(0,0,0,0.5)]`
                   )}
                   disabled
                 >
@@ -354,7 +379,7 @@ export const AvailablePlayersSection = memo(() => {
                   onClick={() => setLeagueStatsFilter(filter)}
                   className={cn(
                     "text-xs px-2 py-0.5 h-6",
-                    leagueStatsFilter === filter && `${brandGradient} ${brandDepthColors} border-b-2 [text-shadow:_0_1px_2px_rgba(0,0,0,0.5)]`
+                    leagueStatsFilter === filter && `${brandGradient} ${brandGlowLift} [text-shadow:_0_1px_2px_rgba(0,0,0,0.5)]`
                   )}
                   disabled
                 >

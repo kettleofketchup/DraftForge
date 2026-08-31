@@ -1,5 +1,5 @@
 /**
- * Shared button style constants for 3D effects and variants
+ * Shared button style constants — flat surfaces with a soft-shadow lift.
  */
 
 // Brand gradient - single source of truth for primary action buttons
@@ -18,13 +18,11 @@ export const brandSecondary = 'bg-gradient-to-r from-violet-500/30 to-blue-500/2
 // (e.g. bg-background on dialogs). Applied by default to Dialog and AlertDialog content.
 export const brandBg = '[background-image:var(--brand-bg)]';
 
-// Brand 3D depth colors — deep indigo bottom edge bridges the violet→blue
-// gradient (instead of fighting it the way `violet-700` did), and the drop
-// shadow swaps generic black for a brand-violet glow with a subtle 1px
-// inner-top highlight that reads as "lit from above". Together this gives
-// the brand primary a neon-cyber lift without the chunky-bevel feel.
-export const brandDepthColors =
-  'border-b-indigo-950 shadow-[0_8px_20px_-8px_var(--glow-violet),inset_0_1px_0_rgba(255,255,255,0.18)]';
+// Brand glow lift for the violet→blue gradient — a brand-violet drop shadow
+// plus a subtle 1px inner-top highlight that reads as "lit from above",
+// giving the brand primary a neon-cyber lift without any bevel.
+export const brandGlowLift =
+  'shadow-[0_8px_20px_-8px_var(--glow-violet),inset_0_1px_0_rgba(255,255,255,0.18)]';
 
 // Brand glow shadow - visible on dark backgrounds, matches brand gradient
 // Defined as --shadow-brand-glow in @theme (app.css) for use with variants
@@ -80,7 +78,7 @@ export const brandHighlightText = 'bg-gradient-to-r from-emerald-400 to-violet-4
 // against the slate base without competing with the primary CTA gradient.
 export const brandToxic =
   'bg-gradient-to-br from-violet-700 via-emerald-800 to-emerald-700 hover:from-violet-600 hover:via-emerald-700 hover:to-emerald-600 text-white';
-export const brandToxicDepthColors = 'border-b-emerald-900 shadow-emerald-950/60';
+export const brandToxicGlowLift = 'shadow-emerald-950/60';
 
 // Brand error surfaces - muted deep wine/red tones for error containers.
 // Uses raw Tailwind colors (not semantic --error/--primary) because error surfaces
@@ -90,13 +88,18 @@ export const brandErrorCard = 'bg-red-900/60 border border-red-500/15';
 // Brand error primary - lighter red for interactive error elements (buttons, close icons)
 export const brandErrorPrimary = 'bg-gradient-to-r from-red-700/80 to-violet-900/80 hover:from-red-600/80 hover:to-violet-800/80 text-white';
 
-// Base 3D button effect classes (active state removed for disabled buttons via CSS)
-export const button3DBase =
-  'shadow-lg shadow-black/30 border-b-4 active:border-b-0 active:translate-y-1 transition-all duration-75';
+// Base button lift — flat by design. The old chunky bevel
+// (`border-b-4 active:border-b-0 active:translate-y-1` plus per-variant
+// `border-b-<color>` accents) was removed so action buttons read clean and
+// consistent — no mix of bevelled and flat across a footer. A soft drop
+// shadow keeps the surface separated from the dialog; press feedback comes
+// from <Button>'s `active:scale-[0.95]` (button.tsx).
+export const buttonLift =
+  'shadow-lg shadow-black/30 transition-all duration-75';
 
-// Disabled state styling - removes 3D effects and uses muted colors
-export const button3DDisabled =
-  'disabled:shadow-none disabled:border-b-0 disabled:translate-y-0 disabled:bg-gray-400 disabled:text-gray-600 disabled:cursor-not-allowed disabled:opacity-70';
+// Disabled state styling - removes lift and uses muted colors
+export const buttonDisabled =
+  'disabled:shadow-none disabled:bg-gray-400 disabled:text-gray-600 disabled:cursor-not-allowed disabled:opacity-70';
 
 // Icon styling to ensure icons inherit text color
 const iconWhite = '[&_svg]:text-white [&_svg]:drop-shadow-[1px_1px_1px_rgba(0,0,0,0.5)]';
@@ -105,26 +108,26 @@ const iconMuted = 'disabled:[&_svg]:text-gray-600 disabled:[&_svg]:drop-shadow-n
 // Brand secondary opaque - for use on colored backgrounds (dialogs) where translucency bleeds
 export const brandSecondaryOpaque = 'bg-violet-950 border border-violet-400/30 text-violet-100 hover:bg-violet-900';
 
-// Brand secondary with 3D depth
-export const brandSecondary3D = `${button3DBase} ${button3DDisabled} ${brandSecondary} border-b-violet-700/50`;
+// Brand secondary with soft-shadow lift
+export const brandSecondaryLift = `${buttonLift} ${buttonDisabled} ${brandSecondary}`;
 
-// Brand secondary opaque with 3D depth (for colored dialog backgrounds)
-export const brandSecondaryOpaque3D = `${button3DBase} ${button3DDisabled} ${brandSecondaryOpaque} border-b-violet-700/50`;
+// Brand secondary opaque with soft-shadow lift (for colored dialog backgrounds)
+export const brandSecondaryOpaqueLift = `${buttonLift} ${buttonDisabled} ${brandSecondaryOpaque}`;
 
 // Neutral opaque - gray/slate for cancel buttons on colored dialog backgrounds
 export const brandNeutralOpaque = 'bg-slate-700 border border-slate-500/30 text-slate-100 hover:bg-slate-600';
-export const brandNeutralOpaque3D = `${button3DBase} ${button3DDisabled} ${brandNeutralOpaque} border-b-slate-800/50`;
+export const brandNeutralOpaqueLift = `${buttonLift} ${buttonDisabled} ${brandNeutralOpaque}`;
 
-// Variant-specific 3D styles with disabled state
-export const button3DVariants = {
-  destructive: `${button3DBase} ${button3DDisabled} ${iconWhite} ${iconMuted} bg-red-600 text-white hover:bg-red-500 border-b-red-800 shadow-red-900/50`,
-  warning: `${button3DBase} ${button3DDisabled} ${iconWhite} ${iconMuted} bg-orange-500 text-white hover:bg-orange-400 border-b-orange-700 shadow-orange-900/50`,
-  success: `${button3DBase} ${button3DDisabled} ${iconWhite} ${iconMuted} ${brandGradient} ${brandDepthColors}`,
-  primary: `${button3DBase} ${button3DDisabled} bg-primary text-primary-foreground hover:bg-primary/90 border-b-primary/50`,
-  secondary: `${brandSecondary3D}`,
-  outline: `${button3DBase} ${button3DDisabled} border-b-gray-600`,
-  edit: `${button3DBase} ${button3DDisabled} ${iconWhite} ${iconMuted} ${brandToxic} ${brandToxicDepthColors}`,
-  nav: `${button3DBase} ${button3DDisabled} ${iconWhite} ${iconMuted} bg-sky-700 text-white hover:bg-sky-600 border-b-sky-900 shadow-sky-900/50`,
+// Variant-specific styles (flat fill + lift) with disabled state
+export const brandButtonVariants = {
+  destructive: `${buttonLift} ${buttonDisabled} ${iconWhite} ${iconMuted} bg-red-600 text-white hover:bg-red-500 shadow-red-900/50`,
+  warning: `${buttonLift} ${buttonDisabled} ${iconWhite} ${iconMuted} bg-orange-500 text-white hover:bg-orange-400 shadow-orange-900/50`,
+  success: `${buttonLift} ${buttonDisabled} ${iconWhite} ${iconMuted} ${brandGradient} ${brandGlowLift}`,
+  primary: `${buttonLift} ${buttonDisabled} bg-primary text-primary-foreground hover:bg-primary/90`,
+  secondary: `${brandSecondaryLift}`,
+  outline: `${buttonLift} ${buttonDisabled}`,
+  edit: `${buttonLift} ${buttonDisabled} ${iconWhite} ${iconMuted} ${brandToxic} ${brandToxicGlowLift}`,
+  nav: `${buttonLift} ${buttonDisabled} ${iconWhite} ${iconMuted} bg-sky-700 text-white hover:bg-sky-600 shadow-sky-900/50`,
 } as const;
 
-export type Button3DVariant = keyof typeof button3DVariants;
+export type BrandButtonVariant = keyof typeof brandButtonVariants;

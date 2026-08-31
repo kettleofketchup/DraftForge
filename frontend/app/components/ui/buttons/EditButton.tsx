@@ -1,18 +1,18 @@
 import * as React from 'react';
 import { Button } from '~/components/ui/button';
 import { cn } from '~/lib/utils';
-import { brandToxic, button3DVariants } from './styles';
+import { brandToxic, brandButtonVariants } from './styles';
 
 export interface EditButtonProps
   extends Omit<React.ComponentProps<typeof Button>, 'variant'> {
   /** When true, shows "Done Editing" text; when false, shows children or "Edit" */
   editMode?: boolean;
-  /** Whether to apply 3D depth effects (default: true) */
+  /** Whether to apply the soft-shadow lift (default: true) */
   depth?: boolean;
 }
 
 /**
- * An edit button with purple theme styling and 3D depth effects.
+ * An edit button with purple theme styling and a soft-shadow lift.
  * Can toggle between "Edit" and "Done Editing" states.
  *
  * @example
@@ -28,7 +28,7 @@ const EditButton = React.forwardRef<HTMLButtonElement, EditButtonProps>(
       <Button
         ref={ref}
         className={cn(
-          depth ? button3DVariants.edit : brandToxic,
+          depth ? brandButtonVariants.edit : brandToxic,
           className
         )}
         {...props}

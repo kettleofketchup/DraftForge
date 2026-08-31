@@ -83,7 +83,7 @@ const confirmButtonVariantMap: Record<string, ConfirmButtonVariant> = {
 
 /**
  * Standardized confirmation dialog for destructive or important actions.
- * Uses reusable ConfirmButton and CancelButton components with 3D depth effects.
+ * Uses reusable ConfirmButton and CancelButton components with a soft-shadow lift.
  *
  * @example
  * <ConfirmDialog

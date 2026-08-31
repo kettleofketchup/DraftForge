@@ -2,18 +2,18 @@ import { Loader2 } from 'lucide-react';
 import * as React from 'react';
 import { Button } from '~/components/ui/button';
 import { cn } from '~/lib/utils';
-import { button3DVariants } from './styles';
+import { brandButtonVariants } from './styles';
 
 export interface WarningButtonProps
   extends Omit<React.ComponentProps<typeof Button>, 'variant'> {
   /** Whether the button is in a loading state */
   loading?: boolean;
-  /** Whether to apply 3D depth effects (default: true) */
+  /** Whether to apply the soft-shadow lift (default: true) */
   depth?: boolean;
 }
 
 /**
- * A warning button with orange theme styling and 3D depth effects.
+ * A warning button with orange theme styling and a soft-shadow lift.
  * Used for caution-level actions that aren't destructive.
  *
  * @example
@@ -24,13 +24,19 @@ export interface WarningButtonProps
  * ```
  */
 const WarningButton = React.forwardRef<HTMLButtonElement, WarningButtonProps>(
-  ({ loading = false, disabled, children, className, depth = true, ...props }, ref) => {
+  ({ loading = false, disabled, children, className, depth = true, size, ...props }, ref) => {
+    // min-h-11 is the 44px touch target for dialog footers, but it would override
+    // an explicit size="sm"/"icon" and leave this button taller than the
+    // Primary/Secondary siblings it sits beside in compact action rows.
+    const touchTarget = size === 'sm' || size === 'icon' ? undefined : 'min-h-11';
     return (
       <Button
         ref={ref}
         disabled={disabled || loading}
+        size={size}
         className={cn(
-          depth ? button3DVariants.warning : 'bg-orange-500 text-white hover:bg-orange-400',
+          touchTarget,
+          depth ? brandButtonVariants.warning : 'bg-orange-500 text-white hover:bg-orange-400',
           className
         )}
         {...props}

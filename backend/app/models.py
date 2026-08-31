@@ -42,10 +42,20 @@ class PositionsModel(models.Model):
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
-        # Invalidate the user(s) that own this position preference
+        from app.cache_utils import invalidate_after_commit
 
-        for user in self.customuser_set.all():
-            invalidate_obj(user)
+        # T2: positions live on user.DotaUserProfile (default reverse accessor
+        # dotauserprofile_set). Walk it + bubbled parents. Org positions are
+        # pos_1..5 booleans on org.PlayerDotaProfile (no PositionsModel FK) —
+        # cacheops auto-invalidates that model; not this loop. Org branch is T3.
+        dota_profiles = list(
+            self.dotauserprofile_set.select_related("base_profile__user")
+        )
+        targets = []
+        for dp in dota_profiles:
+            targets += [dp, dp.base_profile, dp.base_profile.user]
+        if targets:
+            invalidate_after_commit(*targets)
 
 
 # Enum for Dota2 positions
@@ -93,10 +103,6 @@ class CustomUser(AbstractUser):
     # 64-bit Steam ID - auto-calculated from steam_account_id
     steamid = models.BigIntegerField(null=True, blank=True, db_index=True)
 
-    # MMR verification tracking
-    has_active_dota_mmr = models.BooleanField(default=False)
-    dota_mmr_last_verified = models.DateTimeField(null=True, blank=True)
-
     @property
     def needs_mmr_verification(self) -> bool:
         """Check if user needs to verify their MMR (>30 days since last verification)."""
@@ -107,14 +113,6 @@ class CustomUser(AbstractUser):
         days_since = (timezone.now() - self.dota_mmr_last_verified).days
         return days_since > 30
 
-    # Store positions as a dict of 1-5: bool, e.g. {"1": true, "2": false, ...}
-    positions = models.ForeignKey(
-        PositionsModel,
-        on_delete=models.CASCADE,
-        help_text="Positions field",
-        null=False,
-        blank=True,
-    )
     discordId = models.TextField(null=True, unique=True, blank=True)
     discordUsername = models.TextField(null=True, blank=True)
     discordNickname = models.TextField(null=True, blank=True)
@@ -139,11 +137,11 @@ class CustomUser(AbstractUser):
         PATCH /api/users/me/profile/base/.
         """
         bp = getattr(self, "base_profile", None)
-        if bp is not None:
-            return bp.nickname
-        # Unsaved user (no base_profile yet): read back the value the setter
-        # buffered, so set-then-get works pre-save (e.g. createFromDiscordData).
-        return getattr(self, "_pending_nickname", None)
+        if bp is None:
+            # Pre-pk: return the value buffered by the setter so set-then-read
+            # before save() works (matches the old column's behavior).
+            return getattr(self, "_pending_nickname", None)
+        return bp.nickname
 
     @nickname.setter
     def nickname(self, value):
@@ -169,7 +167,9 @@ class CustomUser(AbstractUser):
     @property
     def avatar(self):
         bp = getattr(self, "base_profile", None)
-        return bp.avatar if bp else None
+        if bp is None:
+            return getattr(self, "_pending_avatar", None)
+        return bp.avatar
 
     @avatar.setter
     def avatar(self, value):
@@ -182,6 +182,82 @@ class CustomUser(AbstractUser):
         bp.avatar = value
         bp.save(update_fields=["avatar"])
         invalidate_after_commit(bp)
+
+    @property
+    def dota_user_profile(self):
+        """Convenience accessor — the user-wide Dota profile lives one hop
+        away on base_profile. Transitional sugar for the shims below and
+        writers still phrasing reads as `user.dota_user_profile`. None-safe
+        like the shims: a pre-pk user (no base_profile yet) returns None
+        instead of raising RelatedObjectDoesNotExist."""
+        bp = getattr(self, "base_profile", None)
+        return getattr(bp, "dota_user_profile", None) if bp else None
+
+    @property
+    def positions(self):
+        """Transitional proxy — reads positions from dota_user_profile.
+        Removed in a cleanup ticket once writers migrate to
+        PATCH /api/users/me/profile/game/dota/."""
+        bp = getattr(self, "base_profile", None)
+        dp = getattr(bp, "dota_user_profile", None) if bp else None
+        return dp.positions if dp else None
+
+    @positions.setter
+    def positions(self, value):
+        from app.cache_utils import invalidate_after_commit
+
+        bp = getattr(self, "base_profile", None)
+        dp = getattr(bp, "dota_user_profile", None) if bp else None
+        if dp is None:
+            self._pending_positions = value
+            return
+        dp.positions = value
+        dp.save(update_fields=["positions"])
+        invalidate_after_commit(dp)
+
+    @property
+    def positions_id(self):
+        bp = getattr(self, "base_profile", None)
+        dp = getattr(bp, "dota_user_profile", None) if bp else None
+        return dp.positions_id if dp else None
+
+    @property
+    def has_active_dota_mmr(self):
+        bp = getattr(self, "base_profile", None)
+        dp = getattr(bp, "dota_user_profile", None) if bp else None
+        return dp.has_active_dota_mmr if dp else False
+
+    @has_active_dota_mmr.setter
+    def has_active_dota_mmr(self, value):
+        from app.cache_utils import invalidate_after_commit
+
+        bp = getattr(self, "base_profile", None)
+        dp = getattr(bp, "dota_user_profile", None) if bp else None
+        if dp is None:
+            self._pending_has_active_dota_mmr = value
+            return
+        dp.has_active_dota_mmr = value
+        dp.save(update_fields=["has_active_dota_mmr"])
+        invalidate_after_commit(dp)
+
+    @property
+    def dota_mmr_last_verified(self):
+        bp = getattr(self, "base_profile", None)
+        dp = getattr(bp, "dota_user_profile", None) if bp else None
+        return dp.dota_mmr_last_verified if dp else None
+
+    @dota_mmr_last_verified.setter
+    def dota_mmr_last_verified(self, value):
+        from app.cache_utils import invalidate_after_commit
+
+        bp = getattr(self, "base_profile", None)
+        dp = getattr(bp, "dota_user_profile", None) if bp else None
+        if dp is None:
+            self._pending_dota_mmr_last_verified = value
+            return
+        dp.dota_mmr_last_verified = value
+        dp.save(update_fields=["dota_mmr_last_verified"])
+        invalidate_after_commit(dp)
 
     def createFromDiscordData(self, data):
         self.username = data["user"]["username"]
@@ -320,9 +396,10 @@ class CustomUser(AbstractUser):
             return False
 
     def save(self, *args, **kwargs):
-        """Keep steam ids in sync, auto-create PositionsModel + BaseUserProfile,
-        invalidate cacheops, and flush pending nickname/avatar values buffered
-        by the transitional property setters before the user had a pk.
+        """Keep steam ids in sync, auto-create BaseUserProfile (which in turn
+        auto-creates the game profiles + default positions), invalidate
+        cacheops, and flush pending nickname/avatar/positions/mmr values
+        buffered by the transitional property setters before the user had a pk.
 
         This single save() merges what used to be two separately-defined
         save() overrides on CustomUser. Python MRO meant the second-defined
@@ -337,11 +414,6 @@ class CustomUser(AbstractUser):
         else:
             self.steamid = None
             self.steam_account_id = None
-
-        # 2. PositionsModel auto-create.
-        if not self.positions_id:
-            default_positions = PositionsModel.objects.create()
-            self.positions = default_positions
 
         super().save(*args, **kwargs)
         # Cacheops auto-fires invalidation for `self` via post_save signal
@@ -375,6 +447,31 @@ class CustomUser(AbstractUser):
                 del self._pending_nickname
             if pending_avatar is not None:
                 del self._pending_avatar
+
+        # 6. Flush pending positions/mmr buffered by the shims pre-pk.
+        dp = bp.dota_user_profile
+        dota_fields = []
+        if hasattr(self, "_pending_positions"):
+            dp.positions = self._pending_positions
+            dota_fields.append("positions")
+        if hasattr(self, "_pending_has_active_dota_mmr"):
+            dp.has_active_dota_mmr = self._pending_has_active_dota_mmr
+            dota_fields.append("has_active_dota_mmr")
+        if hasattr(self, "_pending_dota_mmr_last_verified"):
+            dp.dota_mmr_last_verified = self._pending_dota_mmr_last_verified
+            dota_fields.append("dota_mmr_last_verified")
+        if dota_fields:
+            from app.cache_utils import invalidate_after_commit
+
+            dp.save(update_fields=dota_fields)
+            invalidate_after_commit(dp)
+            for attr in (
+                "_pending_positions",
+                "_pending_has_active_dota_mmr",
+                "_pending_dota_mmr_last_verified",
+            ):
+                if hasattr(self, attr):
+                    delattr(self, attr)
 
     @property
     def avatarUrl(self):

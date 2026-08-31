@@ -3,6 +3,7 @@ import { Button } from '~/components/ui/button';
 import { User } from 'lucide-react';
 import { cn } from '~/lib/utils';
 import { UserPopover } from '~/components/user/UserPopover';
+import { DisplayName } from '~/components/user/avatar';
 
 export interface CaptainInfo {
   steam_id: number;
@@ -56,7 +57,7 @@ function PlayerDisplay({ player }: { player: MatchedPlayer }) {
         player.is_captain ? "text-yellow-500 font-medium" : "text-foreground",
         player.user_id && "hover:underline"
       )}>
-        {player.username || `Steam ${player.steam_id}`}
+        {player.username ? DisplayName(player) : `Steam ${player.steam_id}`}
         {player.is_captain && " (C)"}
       </span>
     </div>

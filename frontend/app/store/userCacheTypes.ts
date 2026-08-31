@@ -1,6 +1,8 @@
 import type { ActiveDraftType } from '~/components/user/schemas';
 import type { PositionsType, UserType } from '~/components/user/types';
 
+export type { PositionsType };
+
 export interface OrgUserData {
   id: number; // OrgUser.pk (for PATCH operations)
   mmr: number; // Org-scoped MMR
@@ -19,6 +21,7 @@ export interface UserEntry {
   username: string;
   avatar?: string | null;
   avatarUrl?: string;
+  /** Flat rendered-once positions; read via selectPositions/usePlayerPositions for gameType-awareness. */
   positions?: PositionsType;
   steam_account_id?: number | null;
   discordId?: string | null;

@@ -329,7 +329,7 @@ export default function EventsPage() {
 
   const statesChanged = selectedStates.size !== DEFAULT_STATES.size ||
     [...DEFAULT_STATES].some((s) => !selectedStates.has(s));
-  const hasActiveFilter = debouncedSearch || statesChanged || !!selectedOrgId;
+  const hasActiveFilter = !!debouncedSearch || statesChanged || !!selectedOrgId;
   const activeFilterCount = [
     selectedOrgId ? 1 : 0,
     statesChanged ? 1 : 0,

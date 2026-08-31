@@ -21,6 +21,7 @@ import { getHeroIcon, getHeroName as getHeroNameFromLib } from "~/lib/dota/heroe
 import { CaptainToast, HeroActionToast } from "./DraftToasts";
 import { Send, ArrowLeft, Users, Pause, Play } from "lucide-react";
 import { HistoryButton, PrimaryButton, SecondaryButton } from "~/components/ui/buttons";
+import { LoginButton } from "~/components/navbar/login";
 import {
   Tooltip,
   TooltipContent,
@@ -386,6 +387,10 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
     t.members?.some((m) => m.pk === currentUser?.pk)
   );
   const isOnTeam = !!myTeam;
+  // A logged-out viewer is an empty user object (no pk), so every captain/
+  // member check above silently resolves false and the UI looks identical to
+  // an authenticated spectator. Surface the guest state explicitly (#278).
+  const isLoggedIn = !!currentUser?.pk;
   // roll_winner is already the full DraftTeam object from the backend
   const rollWinnerTeam = draft?.roll_winner ?? null;
 
@@ -411,6 +416,21 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
             <div className="flex flex-col h-full w-full bg-background overflow-hidden" data-testid="herodraft-container">
               {/* Top Bar */}
               <DraftTopBar draft={draft} tick={tick} />
+
+              {/* Guest notice during the pre-draft (ready / roll / choose) phases:
+                  a logged-out captain would otherwise see no Ready button and no
+                  hint as to why (#278). */}
+              {!isLoggedIn &&
+                (draft.state === "waiting_for_captains" ||
+                  draft.state === "rolling" ||
+                  draft.state === "choosing") && (
+                  <div
+                    className="shrink-0 border-b border-yellow-700/50 bg-yellow-900/30 px-3 py-2 text-center text-xs sm:text-sm text-yellow-200"
+                    data-testid="herodraft-guest-notice"
+                  >
+                    You're not logged in — viewing as a guest. Log in to ready up and draft as a captain.
+                  </div>
+                )}
 
               {/* Pre-draft phases */}
               {draft.state === "waiting_for_captains" && (
@@ -463,7 +483,7 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
                     <h2 className="text-2xl font-bold" data-testid="herodraft-flip-winner">
                       {rollWinnerTeam?.captain ? DisplayName(rollWinnerTeam.captain) : 'Unknown'} won the flip!
                     </h2>
-                    {isCaptain && rollWinnerTeam?.id === myTeam?.id ? (
+                    {isCaptain && myTeam && rollWinnerTeam?.id === myTeam.id ? (
                       // Winner captain's turn - check if they already made their choice
                       myTeam.is_first_pick !== null || myTeam.is_radiant !== null ? (
                         // Winner already made their choice, waiting for loser
@@ -646,6 +666,13 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
 
                 {/* Right side controls */}
                 <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+                  {/* Login button - shown to guests so they can authenticate and
+                      return straight back to this draft (#278). */}
+                  {!isLoggedIn && (
+                    <span data-testid="herodraft-login-btn">
+                      <LoginButton />
+                    </span>
+                  )}
                   {/* Pause button - shown during drafting for captains/staff */}
                   {draft.state === "drafting" && (isCaptain || currentUser?.is_staff) && (
                     <Tooltip>

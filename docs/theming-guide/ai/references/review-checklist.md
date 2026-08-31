@@ -11,10 +11,15 @@ Walk this list against any diff that touches an [in-scope source tree](scope.md)
 - [ ] Page-level destructive action uses `<DestructiveButton>`, not `<ConfirmButton variant="destructive">`.
 - [ ] Edit affordance uses `<EditButton>` / `<EditIconButton>`, not a custom violet button.
 - [ ] Icon-only buttons live in `frontend/app/components/ui/buttons/icons/` (not invented inline).
+- [ ] No 3D bevel on buttons: no `border-b-4` / `active:border-b-0` / `active:translate-y-*` (inline or in a new constant). Buttons are flat. → [Button Lift](../../THEMING-GUIDE.md#button-lift-flat)
+- [ ] Dialog-footer action buttons are the same height. Use full-size action buttons (`ConfirmButton` / `CancelButton` / `SubmitButton` / `DestructiveButton` / `WarningButton`, all `min-h-11`) — don't mix in a default-height `<Button>`. → [Footer Button Height](../../THEMING-GUIDE.md#footer-button-height)
+- [ ] A "Close"/"dismiss" footer button is neutral (`<CancelButton>` / `<SecondaryButton>`), not red — red reads as a second destructive action next to the real one.
 
 ## 2. Mandatory Components
 
-- [ ] `<UserAvatar>` for every avatar render. No raw `<img>` with `AvatarUrl()`. → [substitutions](component-substitutions.md#avatars)
+- [ ] `<UserAvatar>` for every avatar render. No raw `<img>` with `AvatarUrl()`. → [substitutions](component-substitutions.md#avatars--display-names)
+- [ ] `<UserAvatar>` receives the full identity (`nickname`/`username`/`avatar`/`discordId`), not a partial object missing the `avatar` hash — a partial object forces the generated `ui-avatars.com` fallback. Serialized data must expose `nickname`/`username`/`avatar`.
+- [ ] User names render via `DisplayName()` from `~/components/user/avatar`, never a raw `username` / `nickname` / `discord_username` string.
 - [ ] `<EntityBreadcrumb>` on every detail page that requires it (organization, league, event, event-series, tournament, rollcall). → [substitutions](component-substitutions.md#breadcrumbs)
 - [ ] No hand-built breadcrumb `<nav>` markup on those pages.
 

@@ -19,13 +19,22 @@ rg -nB1 -A2 '<Button[^>]*onClick' "$SCOPE" --glob '!**/components/ui/**' \
 rg -n 'from-violet-[0-9]+\s+to-blue-[0-9]+' "$SCOPE" --glob '!**/components/ui/buttons/**'
 rg -nB0 -A0 '<button[^>]*bg-primary|<Button[^>]*bg-primary' "$SCOPE"
 rg -n '<Button[^>]*type=["\x27]submit' "$SCOPE" --glob '!**/components/ui/**'
+
+# Reintroduced 3D bevel — buttons are flat. Any hit is a finding (incl. inside buttons/).
+rg -n 'border-b-4|active:border-b-0|active:translate-y-' frontend/app -g '*.tsx' -g '*.ts'
 ```
 
-## Avatars
+## Avatars & Display Names
 
 ```bash
 rg -n '<img[^>]*(src=\{[^}]*[Aa]vatar|src=\{[^}]*\.avatar|cdn\.discordapp)' "$SCOPE"
 rg -n 'AvatarUrl\s*\(' "$SCOPE" --glob '!**/UserAvatar*'
+
+# <UserAvatar> fed an inline partial object — manually check each for a missing `avatar` hash
+rg -nP '<UserAvatar[^>]*user=\{\{(?![^}]*avatar)' "$SCOPE"
+
+# Raw username/nickname rendered in JSX instead of DisplayName() — manual review per hit
+rg -n '\{[a-zA-Z_.]*\.(username|nickname|discord_username)\}' "$SCOPE" --glob '!**/UserAvatar*' --glob '!**/avatar.tsx'
 ```
 
 ## Breadcrumbs

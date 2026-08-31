@@ -105,7 +105,7 @@ For base-only fields (nickname, avatar): read `base.field` directly.
 
 **Context inputs:**
 - `gameType` — read from `frontend/app/store/gameTypeStore.ts` (the active view's game).
-- `orgUserId` — read from route context. Hooks resolve via existing route helpers; selectors take it as an explicit arg.
+- `orgUserId` — read from route context (**T3**; no `useRouteOrgUserId()` helper exists yet — T2 passes `undefined`). Hooks resolve via a route helper added in T3; selectors take it as an explicit arg.
 
 **`gameType === null` fallback.** When no active game is set, `selectPositions` returns `undefined`. Never a silent default to Dota.
 
@@ -113,32 +113,33 @@ For base-only fields (nickname, avatar): read `base.field` directly.
 
 Consumers resolving a layered field MUST go through these hooks/selectors.
 
-**Selector signatures (primitive args, not an object) so memoization downstream works:**
+**Selector signatures (primitive args, not an object) so memoization downstream works.** Note `gameType` is the **scalar `GameTypeValue`** (from `~/components/game/constants`), NOT the `GameType` Zod object; `orgUserId` is a **T3** parameter (org overrides don't exist in T2 — pass `undefined`):
 
 ```ts
 selectPositions(
   state: UserProfileState,
   userPk: number,
-  gameType: GameType | null,
-  orgUserId?: number,
+  gameType: GameTypeValue | null,
+  orgUserId?: number,   // T3 only; undefined in T2
 ): PositionsType | undefined;
 
 selectMmrSnapshot(state, userPk, gameType, orgUserId): MmrSnapshot | undefined;
 ```
 
-**Hooks use primitive selectors + `useShallow` on resolved-object reads:**
+**Ambient hook (for read-only display surfaces) reads `currentGameType`:**
 
 ```ts
-import { useShallow } from 'zustand/react/shallow';  // explicit import — not auto-included
+import { useGameType } from '~/hooks/useGameType';   // wraps gameTypeStore.currentGameType (subscription)
 
 function usePlayerPositions(userPk: number): PositionsType | undefined {
-  const gameType  = useGameTypeStore(s => s.activeGame);   // primitive
-  const orgUserId = useRouteOrgUserId();                   // primitive | undefined
-  return useUserProfileStore(useShallow(s =>
-    selectPositions(s, userPk, gameType, orgUserId)
-  ));
+  const gameType = useGameType();                    // GameTypeValue | null
+  return useUserProfileStore(s => selectPositions(s, userPk, gameType));
 }
 ```
+
+The store field is **`currentGameType`** (there is no `activeGame`). All three inputs are **subscriptions**, never `getState()` reads. `selectPositions` returns the stored reference (or `undefined`) — no per-call object construction — so `useShallow` is unnecessary here (reserve `useShallow` for selectors that *build* a new array/object, e.g. resolved-user lists).
+
+> **The Dota EDIT tab must NOT use the ambient hook.** `currentGameType` is `null` everywhere except event pages (`routes/event.tsx`), so an ambient read would render the Dota tab empty for a user who actually has positions. The editor reads positions with the **explicit numeric** Dota id (`selectPositions(state, userPk, GAME_TYPE.DOTA2)` — `GAME_TYPE.DOTA2 === 1`, NOT a `'dota'` string), or directly off `profile.gameUser.dota?.positions`. Reserve the ambient `usePlayerPositions` for display surfaces that legitimately follow the active game. In **T2** there is no `useRouteOrgUserId()` helper — it is **T3** route-context work; T2 passes `orgUserId` as `undefined`.
 
 Pull model: the hook subscribes to both stores; React re-renders when either changes. No `subscribeWithSelector` on `gameTypeStore`.
 
@@ -265,24 +266,24 @@ The new model layer changes which rows must be invalidated when which fields cha
 
 **`PositionsModel.save()` rewrite (T2, classed as a blocker):**
 
-After T2, `PositionsModel.customuser_set` is empty — the existing invalidation loop becomes a no-op and cached `CustomUser` / `OrgDotaUserProfile` rows stay stale until the 1h TTL elapses. T2 MUST rewrite the loop to walk the new owners (using the default `related_name` accessors per the discipline note above):
+After T2, `PositionsModel.customuser_set` is empty — the existing invalidation loop becomes a no-op and cached `CustomUser` rows stay stale until the 1h TTL elapses. T2 MUST rewrite the loop to walk the new **Dota** owner (default `related_name` `dotauserprofile_set`) and use `invalidate_after_commit` (the save runs inside request transactions; bare `invalidate_obj` would evict pre-commit and re-populate stale):
 
 ```python
 def save(self, *args, **kwargs):
     super().save(*args, **kwargs)
-    dota_profiles = list(self.dotauserprofile_set.all())
-    org_profiles  = list(self.orgdotauserprofile_set.all())
-    for profile in dota_profiles:
-        invalidate_obj(profile)
-        invalidate_obj(profile.base_profile.user)
-    for org_profile in org_profiles:
-        invalidate_obj(org_profile)
-        invalidate_obj(org_profile.org_user_profile.org_user)
+    from app.cache_utils import invalidate_after_commit
+    # T2: positions live on user.DotaUserProfile. Walk it + bubbled parents.
+    dota_profiles = list(self.dotauserprofile_set.select_related("base_profile__user"))
+    targets = []
+    for dp in dota_profiles:
+        targets += [dp, dp.base_profile, dp.base_profile.user]
+    if targets:
+        invalidate_after_commit(*targets)
     log.debug("positions_invalidated", system="user", subsystem="cache",
-              positions_id=self.pk,
-              dota_profiles=len(dota_profiles),
-              org_dota_profiles=len(org_profiles))
+              positions_id=self.pk, dota_profiles=len(dota_profiles))
 ```
+
+> **Org positions are NOT in this loop in T2.** Org-scoped Dota positions today are `pos_1..pos_5` **booleans** on `org.PlayerDotaProfile` with **no FK to `PositionsModel`** — cacheops auto-invalidates that model via its `org.playerdotaprofile` `ops="all"` entry. The `orgdotauserprofile_set` accessor and the `org_user_profile.org_user` traversal **do not exist until T3** renames the model and (if chosen) gives it a `positions` FK. T3 adds the org branch to this loop; in T2 it would raise `AttributeError`.
 
 **`@cached_as` decorator updates (T1) — enumerate, not blanket.** Every `@cached_as(CustomUser, ...)` call site in `backend/app/views_main.py` (currently 14+ sites including lines 192-1199) AND `backend/app/functions/tournament.py:456` that ships `nickname` or `avatar` must also depend on `BaseUserProfile`:
 
@@ -483,7 +484,7 @@ These were validated through PR #250 review iterations. Inherit them by design �
 - `BaseUserProfile.save()` auto-creates `DotaUserProfile` and `DeadlockUserProfile` if missing.
 - New endpoint: `PATCH /api/users/me/profile/game/{game}/` with structlog logging.
 - **Backward-compat: `CustomUser.positions` read/write shim.** `@property` proxying to `dota_user_profile.positions` (getter) and writing to `dota_user_profile.positions` + `invalidate_after_commit(dota_user_profile)` (setter). Property removed in cleanup follow-up.
-- `PositionsModel.save()` rewritten to walk `dotauserprofile_set` and `orgdotauserprofile_set` per the snippet above; logs each invalidation chain.
+- `PositionsModel.save()` rewritten to walk `dotauserprofile_set` only (via `invalidate_after_commit`) per the snippet above; logs the invalidation chain. The `orgdotauserprofile_set` branch is **T3** (that reverse accessor / model does not exist in T2).
 - Legacy `UpdateProfile` endpoint's positions path retired; nickname/avatar paths already moved in T1.
 
 **Frontend:**
@@ -498,7 +499,7 @@ These were validated through PR #250 review iterations. Inherit them by design �
 - **Functional:** A user can edit user-wide Dota positions and Deadlock data via the modal. Existing position-display surfaces continue to work via the adapter. The `CustomUser.positions` shim (read + write) keeps unmigrated consumers working.
 - **`related_name` discipline:** `rg "related_name=" backend/user/models.py` against the `positions` FKs shows either no `related_name` (default applies) OR explicit `related_name="dotauserprofile_set"` / `"orgdotauserprofile_set"`. Any other value fails CI.
 - **Brand:** Dota and Deadlock tabs follow the same brand-primitive rules as Base.
-- **Cache (blocker class):** `PositionsModel.save()` rewritten to invalidate `DotaUserProfile`, `OrgDotaUserProfile`, and their bubbled parents — NOT the now-empty `customuser_set`. `user.dotauserprofile` + `user.deadlockuserprofile` added to `CACHEOPS`. Auto-create inside `transaction.atomic()` uses `invalidate_after_commit`. Integration test mutates `PositionsModel` row, hits cached Dota draft view, asserts change reflected.
+- **Cache (blocker class):** `PositionsModel.save()` rewritten to invalidate `DotaUserProfile` and its bubbled parents (`base_profile`, `user`) via `invalidate_after_commit` — NOT the now-empty `customuser_set`, and NOT the org side (`orgdotauserprofile_set` does not exist until T3). `user.dotauserprofile` + `user.deadlockuserprofile` added to `CACHEOPS` (`PositionsModel` itself stays uncached → its `save()` is the only invalidation mechanism). Auto-create inside `transaction.atomic()` uses `invalidate_after_commit`. **Enforced gate:** the `test_cacheops.py` grep guardrail (every `@cached_as` block listing `CustomUser` also lists `DotaUserProfile`) + the CACHEOPS-presence test. The live-Redis behavioral test is shipped **skipped**, inheriting T1's `keep_fresh`/eviction-timing deferral (T1 lessons #24) — do not assert live eviction as a passing gate until that root cause is fixed.
 - **Frontend:** consumers reading `user.positions` migrated to `usePlayerPositions(userPk)`. Hook uses primitive selectors on `gameTypeStore` + `useShallow`.
 - **Logging:** `PositionsModel.save()` emits `positions_invalidated` debug log with chain counts. New PATCH endpoint emits structured logs.
 
@@ -563,7 +564,7 @@ These were validated through PR #250 review iterations. Inherit them by design �
 - `backend/app/models.py:48-53` — `PositionsModel.save()` rewrite (T2).
 - `backend/app/migrations/00XX_drop_user_nickname_avatar.py` (T1), `00YY_drop_user_positions_mmr.py` (T2).
 - `backend/app/serializers.py` — every user-identity serializer sources `nickname`/`avatar` from `base_profile` after T1.
-- `backend/app/views_main.py` — every `@cached_as` site shipping nickname/avatar gains a `BaseUserProfile` dep (T1); every site shipping positions gains `DotaUserProfile`/`OrgDotaUserProfile` deps (T2).
+- `backend/app/views_main.py` — every `@cached_as` site shipping nickname/avatar gains a `BaseUserProfile` dep (T1); every site shipping user-wide positions gains a `DotaUserProfile` dep (T2). The `OrgDotaUserProfile` dep is added in T3 (the model doesn't exist before then).
 - `backend/app/functions/tournament.py:456` — same `@cached_as` update.
 - `backend/org/models.py` — `OrgUser` gets `OrgUserProfile` auto-create on save (T3).
 - `backend/org/models_profiles.py` — `PlayerDotaProfile` / `PlayerDeadlockProfile` renamed + FK rewired in T3.

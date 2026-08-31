@@ -84,6 +84,7 @@ export const eventSchema = z.object({
   discord_require_rank_screenshot: z.boolean(),
   discord_require_battlecup_screenshot: z.boolean(),
   min_mmr: z.number().nullable(),
+  is_off_schedule: z.boolean().optional(),
   user_can_manage: z.boolean().default(false),
   _warning: z.string().optional(),
 }).superRefine((val, ctx) => {
@@ -180,6 +181,14 @@ export const FREQUENCY_LABELS: Record<string, string> = {
   [Frequency.MONTHLY]: 'Monthly',
 };
 
+/** Compact forms for fixed-width columns, where slicing FREQUENCY_LABELS yields "Dail"/"Mont"/"Ever". */
+export const FREQUENCY_SHORT_LABELS: Record<string, string> = {
+  [Frequency.DAILY]: 'Day',
+  [Frequency.WEEKLY]: 'Wk',
+  [Frequency.EVERY_TWO_WEEKS]: '2wk',
+  [Frequency.MONTHLY]: 'Mo',
+};
+
 export const DAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 export const COMMON_TIMEZONES = [
@@ -241,15 +250,16 @@ export function localToUTC(datetimeLocal: string, timezone: string): string {
   const tzMinute = Number(parts.minute);
   const tzDay = Number(parts.day);
 
-  // Offset = difference between what we want (the naive values) and what the tz shows
-  let diffMinutes = (hour - tzHour) * 60 + (minute - tzMinute);
-  // Handle day boundary crossing
-  if (tzDay !== day) {
-    diffMinutes += (day - tzDay) * 24 * 60;
-  }
-
-  const result = new Date(utcGuess + diffMinutes * 60_000);
-  return result.toISOString();
+  // Offset = difference between what we want (utcGuess) and what the tz shows for
+  // that same instant, taken from the full date so month/year boundaries hold.
+  const tzAsUtc = Date.UTC(
+    Number(parts.year),
+    Number(parts.month) - 1,
+    tzDay,
+    tzHour,
+    tzMinute
+  );
+  return new Date(utcGuess + (utcGuess - tzAsUtc)).toISOString();
 }
 
 export const discordConfigSchema = z.object({
@@ -355,6 +365,28 @@ export const createEventInputSchema = z.object({
 
 export type CreateEventInput = z.infer<typeof createEventInputSchema>;
 
+// A one-off event inherits its schedule-shape from the series, so every
+// recurring/signup-scheduling key is dropped. signup_mode has no backend
+// counterpart here and discord_notify_new_events lives on EventRepeater only.
+export const createSeriesEventInputSchema = createEventInputSchema
+  .omit({
+    is_recurring: true,
+    frequency: true,
+    day_of_week: true,
+    time_of_day: true,
+    starts_at: true,
+    ends_at: true,
+    generate_days_ahead: true,
+    signup_mode: true,
+    signup_days_before: true,
+    organization: true,
+    discord_notify_new_events: true,
+  })
+  .extend({ open_signups: z.boolean().default(false) })
+  .merge(discordConfigSchema);
+
+export type CreateSeriesEventInput = z.output<typeof createSeriesEventInputSchema>;
+
 export const discordEventMsgSchema = z.object({
   id: z.number(),
   channel_id: z.string(),
@@ -389,6 +421,9 @@ export const discordEventLogSchema = z.object({
   target_type: z.string(),
   discord_user_id: z.string(),
   discord_username: z.string(),
+  nickname: z.string().nullable(),
+  username: z.string().nullable(),
+  avatar: z.string().nullable(),
   message_id: z.string().nullable(),
   status_code: z.number().nullable(),
   error_message: z.string(),
@@ -402,6 +437,7 @@ export const discordEventDMSchema = z.object({
   dm_type_display: z.string(),
   username: z.string().nullable(),
   nickname: z.string().nullable(),
+  avatar: z.string().nullable(),
   discord_user_id: z.string().nullable(),
   can_send: z.boolean(),
   message_id: z.string(),

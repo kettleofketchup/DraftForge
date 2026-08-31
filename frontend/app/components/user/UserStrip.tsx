@@ -8,6 +8,7 @@ import {
 } from '~/components/ui/tooltip';
 import { DisplayName } from '~/components/user/avatar';
 import { UserAvatar } from '~/components/user/UserAvatar';
+import { usePlayerPositions } from '~/hooks/usePlayerPositions';
 import { cn } from '~/lib/utils';
 import { isUserEntry, type UserEntry } from '~/store/userCacheTypes';
 import { RolePositions } from './positions';
@@ -185,10 +186,14 @@ export const UserStrip = memo(
       [leagueMmr],
     );
 
+    // Reactive gameType-aware positions over the list-populated entity adapter
+    // (fall back to the passed user.positions off-Dota / pre-cache). RolePositions
+    // re-resolves internally too; subscribing here keeps the memo dep reactive.
+    const playerPositions = usePlayerPositions(user?.pk ?? -1) ?? user?.positions;
     // Memoize positions to prevent re-renders
     const positions = useMemo(
       () => <RolePositions user={user} compact disableTooltips fillEmpty />,
-      [user?.positions],
+      [user, playerPositions],
     );
 
     return (

@@ -10,6 +10,9 @@ import {
   useIsSuperuser,
 } from '~/hooks/usePermissions';
 import { updateOrgUser } from '~/components/api/api';
+import { GAME_TYPE } from '~/components/game/constants';
+import { selectPositions } from '~/store/selectPositions';
+import { useUserCacheStore } from '~/store/userCacheStore';
 
 // Dota positions use a 0-5 self-rating scale: 0=hidden, 1=favorite, 5=avoid.
 const PositionFieldSchema = z.coerce.number().int().min(0).max(5);
@@ -99,15 +102,24 @@ export function buildDefaults(
   user: UserClassType,
   scope: EditUserScope,
 ): EditUserInput {
+  // Non-reactive form-default read: route user-wide positions through the
+  // gameType-aware selector over the list-populated entity adapter. Explicit
+  // GAME_TYPE.DOTA2 (positions are Dota-scoped) since this builder runs outside
+  // any game-context provider. Fall back to the passed user.positions when the
+  // user isn't in the cache yet.
+  const positions =
+    (user.pk != null
+      ? selectPositions(useUserCacheStore.getState(), user.pk, GAME_TYPE.DOTA2)
+      : undefined) ?? user.positions;
   const base: Omit<EditUserInput, 'mmr'> = {
     nickname: emptyToNull(user.nickname),
     steam_account_id: user.steam_account_id ?? null,
     positions: {
-      carry: user.positions?.carry ?? 0,
-      mid: user.positions?.mid ?? 0,
-      offlane: user.positions?.offlane ?? 0,
-      soft_support: user.positions?.soft_support ?? 0,
-      hard_support: user.positions?.hard_support ?? 0,
+      carry: positions?.carry ?? 0,
+      mid: positions?.mid ?? 0,
+      offlane: positions?.offlane ?? 0,
+      soft_support: positions?.soft_support ?? 0,
+      hard_support: positions?.hard_support ?? 0,
     },
   };
   return scope.kind === 'global' ? base : { ...base, mmr: user.mmr ?? null };
