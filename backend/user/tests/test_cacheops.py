@@ -24,7 +24,6 @@ import re
 from django.conf import settings
 from django.test import TestCase
 
-
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[3]
 
 
@@ -150,4 +149,110 @@ class CachedAsGuardrailTests(TestCase):
             + "\n".join(offenders)
             + "\n\nAdd `DotaUserProfile` (from user.models) to each "
             "decorator's model list."
+        )
+
+
+# Relation paths that reach a profile table owning nickname/avatar (T1) or
+# positions/rank (T2) from some *other* base table.
+_PROFILE_JOIN_RE = re.compile(r"base_profile|dota_user_profile|deadlock_user_profile")
+
+# Every backend package scanned for un-nocached profile joins.
+_JOIN_SCAN_ROOTS = [
+    REPO_ROOT / "backend" / "app",
+    REPO_ROOT / "backend" / "discordbot",
+    REPO_ROOT / "backend" / "events",
+    REPO_ROOT / "backend" / "league",
+    REPO_ROOT / "backend" / "org",
+    REPO_ROOT / "backend" / "steam",
+    REPO_ROOT / "backend" / "user",
+]
+
+# Lines of slack either side of the select_related() call in which .nocache()
+# may appear — it chains before the call as often as after.
+_NOCACHE_WINDOW = 8
+
+
+def _iter_select_related_calls(path: pathlib.Path):
+    """Yield ``(start_line, end_line, call_text)`` for every
+    ``select_related(...)`` call in ``path``, walking parentheses balance so
+    multi-line calls are captured whole.
+    """
+    lines = path.read_text().splitlines()
+    i = 0
+    while i < len(lines):
+        match = re.search(r"select_related\s*\(", lines[i])
+        if not match:
+            i += 1
+            continue
+        start_line = i + 1
+        depth = 0
+        chunks = []
+        j = match.end() - 1
+        while i < len(lines):
+            current = lines[i] if j == 0 else lines[i][j:]
+            chunks.append(current)
+            for ch in current:
+                if ch == "(":
+                    depth += 1
+                elif ch == ")":
+                    depth -= 1
+                    if depth == 0:
+                        break
+            if depth == 0:
+                break
+            i += 1
+            j = 0
+        yield start_line, i + 1, "\n".join(chunks)
+        i += 1
+
+
+def _uncached_profile_joins() -> list[str]:
+    """Offenders: ``select_related()`` calls that traverse into a profile
+    table without ``.nocache()`` anywhere in the surrounding chain.
+    """
+    offenders = []
+    for root in _JOIN_SCAN_ROOTS:
+        assert root.exists(), f"Scan root missing: {root}"
+        for path in sorted(root.rglob("*.py")):
+            parts = path.parts
+            if "tests" in parts or "migrations" in parts:
+                continue
+            if path.name.startswith("test_"):
+                continue
+            lines = path.read_text().splitlines()
+            for start, end, call in _iter_select_related_calls(path):
+                if not _PROFILE_JOIN_RE.search(call):
+                    continue
+                window = "\n".join(
+                    lines[max(0, start - 1 - _NOCACHE_WINDOW) : end + _NOCACHE_WINDOW]
+                )
+                if ".nocache()" in window:
+                    continue
+                offenders.append(
+                    f"  {path.relative_to(REPO_ROOT)}:{start}\n"
+                    f"    {call.splitlines()[0].strip()} ..."
+                )
+    return offenders
+
+
+class ProfileJoinNoCacheGuardrailTests(TestCase):
+    """Cacheops registers an auto-cached queryset's invalidation keys against
+    its *base* table only. A ``select_related()`` that joins into
+    BaseUserProfile / DotaUserProfile / DeadlockUserProfile is therefore never
+    evicted when those tables are written, so a PATCH to
+    ``/api/users/me/profile/base/`` serves the pre-edit nickname until TTL —
+    and an enclosing ``@cached_as`` does not save you: it is evicted correctly,
+    then instantly repopulated from the stale inner join.
+
+    Every such join must opt out with ``.nocache()``.
+    """
+
+    def test_profile_joins_are_nocached(self):
+        offenders = _uncached_profile_joins()
+        assert not offenders, (
+            "select_related() joins into a profile table without .nocache():\n"
+            + "\n".join(offenders)
+            + "\n\nCacheops invalidates a cached JOIN only on its base table, "
+            "so these serve stale nickname/avatar/positions after a profile "
+            "PATCH. Chain `.nocache()` onto the queryset."
         )

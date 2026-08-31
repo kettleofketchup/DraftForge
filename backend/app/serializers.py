@@ -132,6 +132,9 @@ def _serialize_users_with_mmr(users_qs, tournament):
                 queryset=LeagueUser.objects.filter(league_id=league.pk),
             )
         )
+        # .nocache(): the join is invalidated only on OrgUser, so a nickname
+        # edit would survive in the joined base_profile row.
+        .nocache()
     )
     return OrgUserSerializer(
         org_users, many=True, context={"league_id": league.pk}
@@ -225,6 +228,9 @@ def _collect_context_mmr(tournament, seen_pks) -> dict:
                 queryset=LeagueUser.objects.filter(league_id=league.pk),
             )
         )
+        # .nocache(): the join is invalidated only on OrgUser, so a nickname
+        # edit would survive in the joined base_profile row.
+        .nocache()
     )
     serialized = OrgUserSerializer(
         org_users, many=True, context={"league_id": league.pk}

@@ -226,6 +226,8 @@ jobs:
               events.tests.test_signup_interactions \
               events.tests.test_series_oneoff \
               user.tests \
+              steam.tests \
+              tests.test_populate_utils \
               -v 2
 
       - name: Run frontend Vitest

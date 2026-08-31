@@ -42,7 +42,7 @@ Every log MUST include `system` and `subsystem` kwargs. These are the primary Gr
 | `avatars` | `single` | — | `app/tasks/avatar_refresh.py::refresh_single_user_avatar` + helpers | Single-user refresh: Discord API fetch + per-user `update_user_avatar` |
 | `avatars` | `legacy` | — | `app/tasks/avatar_refresh.py::refresh_discord_avatars` / `refresh_all_discord_data` | Older per-user fanout tasks (predates the batched path) |
 | `discord` | `lease` | — | `discordbot/tasks.py`, `app/views/internal.py` | DiscordMessageLog stale-lease sweep (pending NULL >5min, failed >1h) |
-| `discord` | `interaction` | `["events","signup"]` | `discordbot/components.py`, `discordbot/signup_responses.py`, `discordbot/log_context.py` | Discord-bot UI plumbing + response delivery: button/modal/select callbacks |
+| `discord` | `interaction` | `["events","signup"]` | `discordbot/components/{base,dota,deadlock,default,registry}.py`, `discordbot/signup_responses.py`, `discordbot/log_context.py`, `events/discord/providers/`, `events/discord/handlers.py`, `events/discord/_shared.py` | Discord-bot UI plumbing (per-game provider modules) + response delivery + signup-flow business logic: button/modal/select callbacks and their handlers. Per-game flows are tag-differentiated, NOT new subsystems. |
 | `discord` | `dispatch` | `["events","signup"]` | `events/discord/dispatch.py` | `notify_*` dispatch visibility (queued vs skipped); threads `interaction_id` to Celery |
 | `discord` | `celery` | `["events","signup"]` | `events/tasks.py` (Discord-dispatching tasks) | `celery_task_started/finished/failed` bookend logs |
 | `cache` | `invalidate` | — | `app/cache_utils.py` | Per-object cacheops invalidation fired from `transaction.on_commit` |

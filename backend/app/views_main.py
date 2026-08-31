@@ -170,10 +170,15 @@ class UserView(viewsets.ModelViewSet):
     # on the list endpoint fire 4·N extra queries on a cold cacheops key.
     # base_profile is required because nickname/avatar now resolve via the
     # @property on CustomUser, which reads self.base_profile.* (T1 epic).
+    # .nocache(): cacheops invalidates an auto-cached JOIN only on its base
+    # table (CustomUser), never on a joined one, so a nickname edit would leave
+    # a stale base_profile row in the join. The @cached_as blocks below are the
+    # sole cache layer and register the BaseUserProfile/DotaUserProfile deps.
     queryset = (
         CustomUser.objects.select_related(
             "base_profile", "base_profile__dota_user_profile__positions"
         )
+        .nocache()
         .prefetch_related(
             "owned_organizations",
             "admin_organizations",
@@ -1156,10 +1161,16 @@ class OrganizationView(viewsets.ModelViewSet):
             timeout=60 * 10,
         )
         def get_data():
-            org_users = OrgUser.objects.filter(organization=org).select_related(
-                "user",
-                "user__base_profile",
-                "user__base_profile__dota_user_profile__positions",
+            # .nocache(): the join is invalidated only on OrgUser, so a
+            # nickname edit would survive in the joined base_profile row.
+            org_users = (
+                OrgUser.objects.filter(organization=org)
+                .select_related(
+                    "user",
+                    "user__base_profile",
+                    "user__base_profile__dota_user_profile__positions",
+                )
+                .nocache()
             )
             serializer = OrgUserSerializer(org_users, many=True)
             return serializer.data
@@ -1312,10 +1323,16 @@ class LeagueView(viewsets.ModelViewSet):
             timeout=60 * 10,
         )
         def get_data():
-            league_users = LeagueUser.objects.filter(league=league).select_related(
-                "user",
-                "user__base_profile",
-                "user__base_profile__dota_user_profile__positions",
+            # .nocache(): the join is invalidated only on LeagueUser, so a
+            # nickname edit would survive in the joined base_profile row.
+            league_users = (
+                LeagueUser.objects.filter(league=league)
+                .select_related(
+                    "user",
+                    "user__base_profile",
+                    "user__base_profile__dota_user_profile__positions",
+                )
+                .nocache()
             )
             serializer = LeagueUserSerializer(league_users, many=True)
             return serializer.data

@@ -3,6 +3,7 @@ import type { FieldNamesMarkedBoolean } from 'react-hook-form';
 import type { LeagueType } from '~/components/league/schemas';
 import type { OrganizationType } from '~/components/organization/schemas';
 import type { UserClassType, UserType } from '~/components/user/types';
+import { isUserEntry, type UserEntry } from '~/store/userCacheTypes';
 import {
   useIsLeagueAdmin,
   useIsOrganizationStaff,
@@ -33,10 +34,61 @@ export type EditUserInput = z.infer<typeof EditUserSchema>;
 
 export type EditUserScope =
   | { kind: 'org'; organization: OrganizationType }
-  | { kind: 'league'; league: LeagueType; organization?: OrganizationType }
+  | { kind: 'league'; league: LeagueType; organization?: OrganizationType; orgId?: number }
   | { kind: 'global' };
 
 export type EditableField = keyof EditUserInput;
+
+/**
+ * The OrgUser id (orgUserPk) for this user in the given context, or undefined.
+ * Flat field first (hydrated tournament users + the errors card's toUserType
+ * both carry it); entity-scoped maps as fallback (org/league Users tabs). Keys
+ * on id existence, never MMR truthiness, so MMR-0/null-but-linked players still
+ * get scope-aware editing.
+ */
+export function resolveOrgUserLink(
+  user: { orgUserPk?: number | null } | UserEntry,
+  ctx: { organizationId?: number; leagueId?: number },
+): number | undefined {
+  const flat = (user as { orgUserPk?: number | null }).orgUserPk;
+  if (flat != null) return flat;
+  // Narrow via a separate variable: calling isUserEntry(user) directly fails
+  // typecheck because the {orgUserPk} union member isn't assignable to
+  // UserType (which requires `username`). The cast-to-a-local lets the guard
+  // narrow `maybeEntry` so `.orgData`/`.leagueData` resolve.
+  const maybeEntry = user as UserType | UserEntry;
+  if (isUserEntry(maybeEntry)) {
+    const id =
+      (ctx.organizationId ? maybeEntry.orgData[ctx.organizationId]?.id : undefined) ??
+      (ctx.leagueId ? maybeEntry.leagueData[ctx.leagueId]?.id : undefined);
+    if (id != null) return id;
+  }
+  return undefined;
+}
+
+/**
+ * Shared edit-scope resolver for the player card AND the incomplete-profiles
+ * card. No OrgUser link -> global (nickname/positions only). With a link,
+ * league -> org -> global, league scope carrying a DETERMINISTIC orgId from
+ * tournament context so the PATCH never depends on currentOrg/
+ * currentLeague.organization load timing.
+ */
+export function resolveEditScope(
+  user: { orgUserPk?: number | null } | UserEntry,
+  ctx: {
+    organizationId?: number;
+    leagueId?: number;
+    currentOrg: OrganizationType | null;
+    currentLeague: LeagueType | null;
+  },
+): EditUserScope {
+  if (resolveOrgUserLink(user, ctx) == null) return { kind: 'global' };
+  if (ctx.leagueId && ctx.currentLeague?.pk === ctx.leagueId) {
+    return { kind: 'league', league: ctx.currentLeague, orgId: ctx.organizationId };
+  }
+  if (ctx.currentOrg) return { kind: 'org', organization: ctx.currentOrg };
+  return { kind: 'global' };
+}
 
 // Coerce missing-or-empty string fields to null so Zod's `.nullable()`
 // branch accepts them (an empty string would otherwise hit the .min(2)
@@ -104,6 +156,20 @@ export function pickDirty(
   return out;
 }
 
+/**
+ * Mirror the server response back onto the passed instance. The global branch
+ * gets this for free from User.dbUpdate's in-place Object.assign; the org and
+ * league branches go through a bare axios call that mutates nothing locally.
+ * Without the parity, buildDefaults re-seeds the pre-edit values on reopen and
+ * RHF reports the form clean, so a second edit sends no request at all.
+ *
+ * OrgUserSerializer maps pk -> user.pk, so user.pk survives the merge.
+ */
+function applyLocal(user: UserClassType, updated: UserType): UserType {
+  Object.assign(user, updated);
+  return updated;
+}
+
 export async function dispatchPatch(
   user: UserClassType,
   scope: EditUserScope,
@@ -114,18 +180,18 @@ export async function dispatchPatch(
     const orgId: number | undefined = scope.organization.pk;
     if (!orgId) throw new Error('Org scope requires organization.pk');
     if (!orgUserPk) throw new Error('Org scope requires user.orgUserPk');
-    return updateOrgUser(orgId, orgUserPk, payload);
+    return applyLocal(user, await updateOrgUser(orgId, orgUserPk, payload));
   }
   if (scope.kind === 'league') {
     // FLEXIBLE POINT: today routes through the parent org's OrgUser endpoint.
     // When a league-user PATCH endpoint lands, swap this branch.
     const orgId: number | undefined =
-      scope.organization?.pk ?? scope.league.organization?.pk;
+      scope.orgId ?? scope.organization?.pk ?? scope.league.organization?.pk;
     const orgUserPk: number | undefined = user.orgUserPk;
     if (!orgId || !orgUserPk) {
       throw new Error('League scope requires a parent org with an OrgUser link');
     }
-    return updateOrgUser(orgId, orgUserPk, payload);
+    return applyLocal(user, await updateOrgUser(orgId, orgUserPk, payload));
   }
   if (!user.pk) throw new Error('Global scope requires user.pk');
   return user.dbUpdate(payload);
@@ -136,7 +202,7 @@ export function scopeToContext(
 ): { orgId?: number } | undefined {
   if (scope.kind === 'org') return { orgId: scope.organization.pk };
   if (scope.kind === 'league')
-    return { orgId: scope.organization?.pk ?? scope.league.organization?.pk };
+    return { orgId: scope.orgId ?? scope.organization?.pk ?? scope.league.organization?.pk };
   return undefined;
 }
 
@@ -153,4 +219,3 @@ export function useScopedEditPermission(scope: EditUserScope): boolean {
   if (scope.kind === 'league') return leagueAdmin;
   return superuser;
 }
-

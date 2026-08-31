@@ -50,6 +50,26 @@ def generate_mock_discord_members(count=100):
     return members
 
 
+def unused_steam_account_id() -> int:
+    """Draw a Friend ID that no user holds yet.
+
+    steam_account_id is UNIQUE. Drawing 1..1_000_000 unchecked for ~100 users
+    per populate is a birthday problem, and the losing draw aborts the whole
+    run with `IntegrityError: UNIQUE constraint failed:
+    app_customuser.steam_account_id`. CI hits this whenever a models.py edit
+    busts the test-db image hash and every job falls back to a fresh populate.
+    """
+    taken = set(
+        CustomUser.objects.exclude(steam_account_id=None).values_list(
+            "steam_account_id", flat=True
+        )
+    )
+    while True:
+        candidate = random.randint(1, 1_000_000)
+        if candidate not in taken:
+            return candidate
+
+
 def create_user(user_data, organization=None):
     """
     Create a user from Discord data.
@@ -77,7 +97,7 @@ def create_user(user_data, organization=None):
         positions.hard_support = random.randint(0, 5)
         positions.save()
         # All mock users get a Friend ID for testing
-        user.steam_account_id = random.randint(1, 1000000)
+        user.steam_account_id = unused_steam_account_id()
 
         user.positions = positions
         user.save()

@@ -71,11 +71,17 @@ class LeaderboardView(generics.ListAPIView):
         # which goes through CustomUser.avatar @property → base_profile.avatar
         # (T1 epic). Paginated up to 100; without user__base_profile, the
         # leaderboard is N+1 cold-cache.
-        queryset = LeaguePlayerStats.objects.filter(
-            league_id=LEAGUE_ID,
-            games_played__gt=0,
-            user__isnull=False,
-        ).select_related("user", "user__base_profile")
+        # .nocache(): the join is invalidated only on LeaguePlayerStats, so an
+        # avatar edit would survive in the joined base_profile row.
+        queryset = (
+            LeaguePlayerStats.objects.filter(
+                league_id=LEAGUE_ID,
+                games_played__gt=0,
+                user__isnull=False,
+            )
+            .select_related("user", "user__base_profile")
+            .nocache()
+        )
 
         # Sorting
         sort_by = self.request.query_params.get("sort_by", "league_mmr")

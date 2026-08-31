@@ -1,19 +1,18 @@
 from django.test import TestCase
 
-from app.models import CustomUser, PositionsModel
+from app.models import CustomUser
 from steam.functions.stats_update import update_player_league_stats
 from steam.models import LeaguePlayerStats, Match, PlayerMatchStats
 
 
 class TestStatsUpdate(TestCase):
-    def setUp(self):
-        self.positions = PositionsModel.objects.create()
+    def setUp(self) -> None:
+        # mmr/positions moved off CustomUser in the profile epic (mmr -> OrgUser,
+        # positions -> DotaUserProfile). update_player_league_stats reads neither.
         self.user = CustomUser.objects.create_user(
             username="testplayer",
             password="testpass",
             steamid=76561198000000001,
-            mmr=4000,
-            positions=self.positions,
         )
         self.league_id = 12345
 

@@ -165,6 +165,44 @@ def pick_player_for_round(draft_round, player):
 | User Profile Update | `invalidate_obj(user)` |
 | Bulk Update | `invalidate_model(AffectedModel)` |
 
+## select_related() Joins Are Never Invalidated by the Joined Table
+
+Cacheops registers a cached queryset's invalidation keys against its **base
+table only**. A `select_related()` that reaches into another table is therefore
+never evicted when that table is written:
+
+```python
+# BROKEN: cached under conj:app_customuser only. A BaseUserProfile write
+# (PATCH /api/users/me/profile/base/) never evicts it, so the nickname stays
+# stale for the full TTL.
+CustomUser.objects.select_related("base_profile").filter(pk=pk)
+```
+
+An enclosing `@cached_as` does **not** save you. It is evicted correctly, then
+immediately repopulated from the stale inner join:
+
+```python
+@cached_as(CustomUser.objects.filter(pk=pk), BaseUserProfile, extra=key)
+def get_data():
+    # evicted outer entry + stale inner join = stale payload, every time
+    return serialize(CustomUser.objects.select_related("base_profile").get(pk=pk))
+```
+
+Chain `.nocache()` onto any queryset that joins into a table it does not own.
+The outer `@cached_as` is then the sole cache layer, and its declared deps are
+what actually govern eviction:
+
+```python
+@cached_as(CustomUser.objects.filter(pk=pk), BaseUserProfile, extra=key)
+def get_data():
+    return serialize(
+        CustomUser.objects.select_related("base_profile").nocache().get(pk=pk)
+    )
+```
+
+`backend/user/tests/test_cacheops.py::ProfileJoinNoCacheGuardrailTests` scans
+the backend for profile joins missing `.nocache()`.
+
 ## Cascading Invalidation
 
 When models have deep relationships:

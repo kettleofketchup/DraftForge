@@ -45,7 +45,7 @@ def _patch_signup_button_inproc():
     stack = ExitStack()
     stack.enter_context(
         patch(
-            "discordbot.components.signup_button",
+            "discordbot.components.base.signup_button",
             side_effect=handle_signup_button,
         )
     )
@@ -100,7 +100,7 @@ class SignupButtonHappyPathTests(TransactionTestCase):
 
         with _patch_signup_button_inproc(), \
              capture_logs() as logs, \
-             patch("discordbot.components.respond_to_signup_user", new=AsyncMock()):
+             patch("discordbot.components.base.respond_to_signup_user", new=AsyncMock()):
             asyncio.run(button.callback(interaction))
 
         # 1. DB-state assertion - this is what catches the silent-signup bug
@@ -160,7 +160,7 @@ class FullSignupPipelineTests(TransactionTestCase):
         with _patch_signup_button_inproc(), \
              capture_logs() as logs, \
              patch("events.tasks.send_signup_update.delay") as mock_delay, \
-             patch("discordbot.components.respond_to_signup_user", new=AsyncMock()):
+             patch("discordbot.components.base.respond_to_signup_user", new=AsyncMock()):
             asyncio.run(button.callback(interaction))
 
         # DB-state - the canonical assertion
@@ -321,7 +321,7 @@ class SignupsClosedFailurePathTests(TransactionTestCase):
 
         with _patch_signup_button_inproc(), \
              capture_logs() as logs, \
-             patch("discordbot.components.respond_to_signup_user", new=AsyncMock()):
+             patch("discordbot.components.base.respond_to_signup_user", new=AsyncMock()):
             asyncio.run(button.callback(interaction))
 
         self.assertEqual(EventSignup.objects.filter(event=self.event).count(), 0)
@@ -354,7 +354,7 @@ class GetOrgUserNullPathTests(TransactionTestCase):
         with _patch_signup_button_inproc(), \
              capture_logs() as logs, \
              patch("events.discord.handlers._get_org_user", return_value=(None, None)), \
-             patch("discordbot.components.respond_to_signup_user", new=AsyncMock()):
+             patch("discordbot.components.base.respond_to_signup_user", new=AsyncMock()):
             asyncio.run(button.callback(interaction))
 
         finished = next(log for log in logs if log["event"] == "interaction_finished")
@@ -479,7 +479,7 @@ class DMContextEdgeCaseTests(TransactionTestCase):
 
         with _patch_signup_button_inproc(), \
              capture_logs() as logs, \
-             patch("discordbot.components.respond_to_signup_user", new=AsyncMock()):
+             patch("discordbot.components.base.respond_to_signup_user", new=AsyncMock()):
             asyncio.run(button.callback(interaction))
 
         finished = next(log for log in logs if log["event"] == "interaction_finished")

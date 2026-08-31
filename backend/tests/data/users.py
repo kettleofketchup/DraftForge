@@ -464,7 +464,7 @@ CSV_IMPORT_USERS: list[TestUser] = [
 ]
 
 # =============================================================================
-# User Edit Test Users (pk=2050-2058)
+# User Edit Test Users (pk=2050-2059)
 # Members of the User Edit Org / League / Tournament.
 #
 # Independent specs each own a dedicated user (so they can run in parallel
@@ -482,6 +482,7 @@ CSV_IMPORT_USERS: list[TestUser] = [
 # 2056 | edit_user_mmr             | 04-org-mmr-edit
 # 2057 | edit_user_positions       | 08-position-persistence
 # 2058 | edit_user_cache           | 10-cache-merge
+# 2059 | edit_user_tourn_mmr       | 11-tournament-mmr-edit
 # =============================================================================
 
 USER_EDIT_USERS: list[TestUser] = [
@@ -556,6 +557,14 @@ USER_EDIT_USERS: list[TestUser] = [
         discord_id="400000000000000009",
         steam_id_64=76561198900000009,
         mmr=3600,
+    ),
+    TestUser(
+        pk=2059,
+        username="edit_user_tourn_mmr",
+        nickname="Edit Tourn MMR",
+        discord_id="400000000000000010",
+        steam_id_64=76561198900000010,
+        mmr=3400,
     ),
 ]
 

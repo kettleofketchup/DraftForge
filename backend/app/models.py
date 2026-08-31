@@ -48,8 +48,11 @@ class PositionsModel(models.Model):
         # dotauserprofile_set). Walk it + bubbled parents. Org positions are
         # pos_1..5 booleans on org.PlayerDotaProfile (no PositionsModel FK) —
         # cacheops auto-invalidates that model; not this loop. Org branch is T3.
+        # .nocache(): invalidation must walk the live rows — a cached join
+        # (invalidated only on DotaUserProfile) could miss a freshly linked
+        # profile and skip its parents.
         dota_profiles = list(
-            self.dotauserprofile_set.select_related("base_profile__user")
+            self.dotauserprofile_set.select_related("base_profile__user").nocache()
         )
         targets = []
         for dp in dota_profiles:
