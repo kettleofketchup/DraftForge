@@ -69,6 +69,7 @@ from .serializers import (
     UserSerializer,
     _build_users_dict,
 )
+from .steam_accounts import steam_account_id_holder, steam_account_id_identity
 from .user_cache import serialize_user_core
 
 log = get_logger(__name__)
@@ -1362,6 +1363,17 @@ def bulk_users(request):
 
     data = [d for d in (serialize_user_core(pk) for pk in pks) if d]
     return Response(data)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def steam_account_id_lookup(request, steam_account_id: int) -> Response:
+    """Who already holds this Friend ID? Returns {"holder": null} when free.
+
+    Lets the edit-user form warn on blur instead of letting the save fail.
+    """
+    holder = steam_account_id_holder(steam_account_id)
+    return Response({"holder": steam_account_id_identity(holder) if holder else None})
 
 
 @api_view(["GET"])

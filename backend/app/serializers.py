@@ -1,6 +1,7 @@
 import nh3
 from django.db import transaction
 from rest_framework import serializers
+from rest_framework.validators import UniqueValidator
 
 from app.cache_utils import invalidate_after_commit
 from telemetry.logging import get_logger
@@ -229,9 +230,7 @@ def _collect_context_mmr(tournament, seen_pks) -> dict:
     serialized = OrgUserSerializer(
         org_users, many=True, context={"league_id": league.pk}
     ).data
-    return {
-        row["pk"]: {k: row[k] for k in _CONTEXT_MMR_KEYS} for row in serialized
-    }
+    return {row["pk"]: {k: row[k] for k in _CONTEXT_MMR_KEYS} for row in serialized}
 
 
 def _build_users_dict(tournament) -> dict:
@@ -1199,7 +1198,19 @@ class UserSerializer(serializers.ModelSerializer):
         required=False,
         allow_null=True,
     )
-    steam_account_id = serializers.IntegerField(required=False, allow_null=True)
+    # Declaring the field explicitly drops the UniqueValidator ModelSerializer
+    # would have built from unique=True, so re-attach it — without this a
+    # collision reaches the DB and surfaces as a 500.
+    steam_account_id = serializers.IntegerField(
+        required=False,
+        allow_null=True,
+        validators=[
+            UniqueValidator(
+                queryset=CustomUser.objects.all(),
+                message="This Friend ID is already assigned to another account.",
+            )
+        ],
+    )
     # Role memberships used by frontend permission hooks to gate create
     # actions without needing a follow-up fetch (e.g. Create Tournament
     # button on the global /tournaments/ page). Empty lists for users with
