@@ -350,6 +350,28 @@ def create_tentative_signup(event, user):
     return signup
 
 
+@transaction.atomic
+def decline_signup(event: Event, user: CustomUser) -> EventSignup:
+    """Record that a user declined an event.
+
+    Cancels an existing active/tentative signup, or creates a CANCELLED row so
+    a user who never signed up still appears in the Declined list.
+    Raises ValueError if the user has already declined.
+    """
+    existing = EventSignup.objects.filter(event=event, user=user).first()
+    if existing:
+        if existing.status in (SignupStatus.CANCELLED, SignupStatus.REJECTED):
+            raise ValueError("Already declined")
+        return cancel_signup(existing)
+
+    signup = EventSignup.objects.create(
+        event=event, user=user, status=SignupStatus.CANCELLED
+    )
+    invalidate_after_commit(signup, event)
+    transaction.on_commit(lambda: notify_signup_changed(event))
+    return signup
+
+
 def apply_signup_input(*, org_user, event, patch):
     """Idempotently write any provided fields onto the OrgUser's PlayerDotaProfile.
 

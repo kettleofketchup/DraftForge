@@ -267,16 +267,13 @@ class DeclineButton(ui.Button):
             result = await sync_to_async(decline_button, thread_sensitive=False)(
                 event_id=self.event_id,
                 discord_user_id=str(interaction.user.id),
+                discord_username=interaction.user.name,
             )
             ctx.set_outcome(result["action"])
 
             if result["action"] == "declined":
                 await respond_to_signup_user(
                     interaction, content="You've declined the event."
-                )
-            elif result["action"] == "not_signed_up":
-                await interaction.response.send_message(
-                    "You weren't signed up for this event.", ephemeral=True
                 )
             else:
                 await interaction.response.send_message(
