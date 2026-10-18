@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { TooltipProvider } from '~/components/ui/tooltip';
@@ -13,6 +13,12 @@ import { useUserStore } from '~/store/userStore';
 
 vi.mock('~/components/ui/shared-popover-context', () => ({
   useSharedPopoverActions: () => ({ openPlayerModal: vi.fn() }),
+}));
+
+const updateOrgUser = vi.hoisted(() => vi.fn());
+vi.mock('~/components/api/api', async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  updateOrgUser,
 }));
 
 // FormDialog renders a Radix ScrollArea, which jsdom cannot satisfy.
@@ -62,6 +68,21 @@ describe('UserCard org-scoped edit for tournament players', () => {
     renderCard(ORG_PK);
     fireEvent.click(screen.getByTestId('edit-user-btn'));
     expect(screen.getByTestId('edit-user-mmr')).toHaveProperty('value', '4200');
+  });
+
+  it('reopens with the saved values after an org-scoped save', async () => {
+    updateOrgUser.mockResolvedValue({ ...tournamentUser, nickname: 'Renamed' });
+    renderCard(ORG_PK);
+    fireEvent.click(screen.getByTestId('edit-user-btn'));
+    fireEvent.change(screen.getByTestId('edit-user-nickname'), {
+      target: { value: 'Renamed' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
+    await waitFor(() => expect(screen.queryByTestId('edit-user-nickname')).toBeNull());
+    expect(updateOrgUser).toHaveBeenCalledWith(ORG_PK, 77, { nickname: 'Renamed' });
+
+    fireEvent.click(screen.getByTestId('edit-user-btn'));
+    expect(screen.getByTestId('edit-user-nickname')).toHaveProperty('value', 'Renamed');
   });
 
   it('hides the MMR field without org context', () => {
