@@ -162,6 +162,20 @@ test.describe('Event Signup Form (@cicd)', () => {
     await expect(page.getByTestId('event-cancel-tentative-btn')).toHaveCount(0);
   });
 
+  test('cancelled signup can sign up again', async ({ page, context }) => {
+    await loginEventPlayer(context);
+    await page.goto(`/events/${eventInfo.pk}`);
+    await page.getByTestId('event-signup-btn').click();
+    await page.getByTestId('event-cancel-rsvp-btn').click();
+    await page
+      .getByRole('alertdialog')
+      .getByRole('button', { name: 'Cancel RSVP' })
+      .click();
+    await expect(page.getByTestId('event-signup-btn')).toBeVisible({ timeout: 10000 });
+    await page.getByTestId('event-signup-btn').click();
+    await expect(page.getByTestId('event-cancel-rsvp-btn')).toBeVisible({ timeout: 10000 });
+  });
+
   test('mobile viewport renders Sheet variant with sticky submit', async ({
     page,
     context,
