@@ -779,40 +779,42 @@ def handle_notify_button(event_id, discord_user_id):
     return {"subscribed": created}
 
 
-def handle_decline_button(event_id, discord_user_id):
-    """Handle Decline button click. Cancels signup if exists, or no-ops."""
+def handle_decline_button(
+    event_id: int, discord_user_id: str, discord_username: str | None = None
+) -> dict[str, str]:
+    """Handle Decline button click. Records a decline even with no prior signup."""
     log.info(
         "handler_invoked",
         system="discord",
         subsystem="interaction",
         handler="decline_button",
     )
-    from events.services import cancel_signup
+    from events.services import decline_signup
 
     try:
         event = Event.objects.select_related("organization").get(pk=event_id)
     except Event.DoesNotExist:
         return {"action": "error", "message": "Event not found."}
 
-    org_user, user = _get_org_user(event, discord_user_id)
+    org_user, user = _get_org_user(
+        event, discord_user_id, discord_username=discord_username
+    )
     if org_user is not None:
         bind_contextvars(org_user_id=org_user.pk)
     if user is not None:
         bind_contextvars(user_id=user.pk)
     if not user:
-        return {"action": "not_signed_up", "message": "You weren't signed up."}
+        return {"action": "error", "message": "Could not create your account."}
 
     try:
-        signup = EventSignup.objects.get(event=event, user=user)
-        if signup.status in (SignupStatus.CANCELLED, SignupStatus.REJECTED):
-            return {"action": "already_declined", "message": "You've already declined."}
-        cancel_signup(signup)
-        _log_signup(event_id, "declined", discord_user_id)
-        # notify_signup_changed is dispatched by cancel_signup's on_commit hook
-        # (services.py:537) — do NOT call directly.
-        return {"action": "declined", "message": "You've declined the event."}
-    except EventSignup.DoesNotExist:
-        return {"action": "not_signed_up", "message": "You weren't signed up."}
+        decline_signup(event, user)
+    except ValueError:
+        return {"action": "already_declined", "message": "You've already declined."}
+
+    _log_signup(event_id, "declined", discord_user_id, discord_username)
+    # notify_signup_changed is dispatched by decline_signup's on_commit hook
+    # — do NOT call directly.
+    return {"action": "declined", "message": "You've declined the event."}
 
 
 def handle_tentative_button(event_id, discord_user_id, discord_username=None):

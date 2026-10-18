@@ -318,10 +318,10 @@ class SignupActionResponse(BaseModel):
     # Common fields
     action: str | None = None  # signed_up | needs_modal | needs_screenshot |
     # needs_rank_details | needs_rank_status | error | tentative | declined |
-    # not_signed_up | already_declined | already_tentative | positions_saved |
+    # already_declined | already_tentative | positions_saved |
     # position_set
     status: str | None = None  # SignupStatus value when action == "signed_up"
-    message: str | None = None  # human-readable for error / not_signed_up / etc.
+    message: str | None = None  # human-readable for error / already_declined / etc.
 
     # signup_modal_submit / signup_button: needs_modal payload
     game_type: int | None = None
@@ -355,7 +355,9 @@ class RankFlowStateResponse(BaseModel):
     rank_status: str | None = None  # "active" | "previous" | "never"
     require_screenshot: bool = False
     min_mmr: int | None = None
-    error: str | None = None  # set when the lookup fails (e.g. event_not_found / no_org_user)
+    error: str | None = (
+        None  # set when the lookup fails (e.g. event_not_found / no_org_user)
+    )
     message: str | None = None
     model_config = {"extra": "ignore"}
 

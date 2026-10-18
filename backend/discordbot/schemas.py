@@ -148,6 +148,7 @@ class NotifyButtonRequest(BaseModel):
 class DeclineButtonRequest(BaseModel):
     event_id: int
     discord_user_id: str
+    discord_username: str | None = None
     model_config = {"extra": "ignore"}
 
 
