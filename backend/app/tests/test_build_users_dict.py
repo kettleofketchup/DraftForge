@@ -124,3 +124,47 @@ class BuildUsersDictNonOrgTests(TransactionTestCase):
         assert set(entry.keys()) == NONORG_ENTRY_KEYS
         for k in ref:
             assert entry[k] == ref[k], (k, entry[k], ref[k])
+
+
+class BuildUsersDictLeaguelessEventTests(TransactionTestCase):
+    """Event-spawned tournaments with no league inherit the event's org."""
+
+    def setUp(self) -> None:
+        from events.models import Event
+        from events.services import create_tournament_for_event
+        from org.models import OrgUser
+
+        self.owner = CustomUser.objects.create_user(username="owner", password="x")
+        self.org = Organization.objects.create(name="Org", owner=self.owner)
+        event = Event.objects.create(
+            name="Weekly",
+            organization=self.org,
+            scheduled_at=timezone.now(),
+            timezone="UTC",
+        )
+        self.tournament = create_tournament_for_event(event)
+        assert self.tournament.league is None
+        self.member = CustomUser.objects.create(username="member", nickname="Member")
+        self.tournament.users.add(self.member)
+        OrgUser.objects.update_or_create(
+            user=self.member, organization=self.org, defaults={"mmr": 4200}
+        )
+
+    def test_entry_carries_event_org_mmr(self) -> None:
+        entry = _build_users_dict(self.tournament)[self.member.pk]
+        assert entry["mmr"] == 4200
+        assert entry["league_mmr"] is None
+        assert "orgUserPk" in entry
+        ref = _serialize_users_with_mmr(
+            CustomUser.objects.filter(pk=self.member.pk), self.tournament
+        )[0]
+        assert set(entry.keys()) == set(ref.keys()) == ORG_ENTRY_KEYS
+        for k in ref:
+            assert entry[k] == ref[k], (k, entry[k], ref[k])
+
+    def test_organization_pk_falls_back_to_event_org(self) -> None:
+        from app.serializers import TournamentSerializer
+
+        data = TournamentSerializer(self.tournament).data
+        assert data["organization_pk"] == self.org.pk
+        assert data["league_pk"] is None

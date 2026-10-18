@@ -110,6 +110,8 @@ export const PlayersTab: React.FC = memo(() => {
           searchQuery={query}
           compact={true}
           deleteButtonType="tournament"
+          organizationId={tournament?.organization_pk ?? undefined}
+          leagueId={tournament?.league_pk ?? undefined}
           cols={cols}
           emptyMessage="No players in this tournament"
         />
