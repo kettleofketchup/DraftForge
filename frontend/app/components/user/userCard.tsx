@@ -15,6 +15,7 @@ import { UserAvatar } from '~/components/user/UserAvatar';
 import { DisplayName } from '~/components/user/avatar';
 import { usePlayerPositions } from '~/hooks/usePlayerPositions';
 import { getLogger } from '~/lib/logger';
+import { useUserCacheStore } from '~/store/userCacheStore';
 import { isUserEntry } from '~/store/userCacheTypes';
 import type { PositionsType } from '~/store/userCacheTypes';
 import { PlayerRemoveButton } from '~/pages/tournament/tabs/players/playerRemoveButton';
@@ -63,17 +64,25 @@ export const UserCard: React.FC<Props> = memo(
     // transitions. Avoids cascading every grid card on hover.
     const { openPlayerModal } = useSharedPopoverActions();
 
-    const orgEntry = isUserEntry(user) && organizationId ? user.orgData[organizationId] : undefined;
+    // Plain users (e.g. hydrated tournament players) carry no orgData; read
+    // it from the entity cache the page upserted them into.
+    const cachedEntry = useUserCacheStore((s) =>
+      !isUserEntry(user) && organizationId && user.pk != null
+        ? s.entities[user.pk]
+        : undefined,
+    );
+    const orgSource = isUserEntry(user) ? user : cachedEntry;
+    const orgEntry = organizationId ? orgSource?.orgData[organizationId] : undefined;
     const mmr = isUserEntry(user)
       ? (organizationId ? orgEntry?.mmr : undefined)
-      : user.mmr;
+      : (orgEntry?.mmr ?? user.mmr);
 
     const editScope = React.useMemo<EditUserScope>(
       () =>
-        orgEntry && currentOrg
+        orgEntry && currentOrg && currentOrg.pk === organizationId
           ? { kind: 'org', organization: currentOrg }
           : { kind: 'global' },
-      [orgEntry?.id, currentOrg?.pk],
+      [orgEntry?.id, currentOrg, organizationId],
     );
 
     // Construct the User instance ONCE per stable input set. Doing this
@@ -87,7 +96,7 @@ export const UserCard: React.FC<Props> = memo(
     const editUser = React.useMemo(
       () =>
         new User(
-          isUserEntry(user) && orgEntry
+          orgEntry
             ? { ...user, mmr: orgEntry.mmr, orgUserPk: orgEntry.id }
             : user,
         ),

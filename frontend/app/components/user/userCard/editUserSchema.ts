@@ -114,7 +114,10 @@ export async function dispatchPatch(
     const orgId: number | undefined = scope.organization.pk;
     if (!orgId) throw new Error('Org scope requires organization.pk');
     if (!orgUserPk) throw new Error('Org scope requires user.orgUserPk');
-    return updateOrgUser(orgId, orgUserPk, payload);
+    const updated = await updateOrgUser(orgId, orgUserPk, payload);
+    // Mirror User.dbUpdate so a reopened form seeds from the saved values.
+    Object.assign(user, updated);
+    return updated;
   }
   if (scope.kind === 'league') {
     // FLEXIBLE POINT: today routes through the parent org's OrgUser endpoint.
@@ -125,7 +128,9 @@ export async function dispatchPatch(
     if (!orgId || !orgUserPk) {
       throw new Error('League scope requires a parent org with an OrgUser link');
     }
-    return updateOrgUser(orgId, orgUserPk, payload);
+    const updated = await updateOrgUser(orgId, orgUserPk, payload);
+    Object.assign(user, updated);
+    return updated;
   }
   if (!user.pk) throw new Error('Global scope requires user.pk');
   return user.dbUpdate(payload);

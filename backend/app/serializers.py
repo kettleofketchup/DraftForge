@@ -92,6 +92,16 @@ class TournamentUserSerializer(serializers.ModelSerializer):
         )
 
 
+def _tournament_organization(tournament) -> Organization | None:
+    """League's org, else the org of the event that spawned the tournament."""
+    if tournament is None:
+        return None
+    if tournament.league and tournament.league.organization:
+        return tournament.league.organization
+    event = tournament.source_event.select_related("organization").first()
+    return event.organization if event else None
+
+
 def _serialize_users_with_mmr(users_qs, tournament):
     """Serialize users with org-scoped MMR if tournament has a league/org."""
     from django.db.models import Prefetch
@@ -101,7 +111,7 @@ def _serialize_users_with_mmr(users_qs, tournament):
     from org.serializers import OrgUserSerializer
 
     league = tournament.league if tournament else None
-    org = league.organization if league else None
+    org = _tournament_organization(tournament)
 
     if not org:
         return TournamentUserSerializer(users_qs, many=True).data
@@ -129,12 +139,14 @@ def _serialize_users_with_mmr(users_qs, tournament):
         .prefetch_related(
             Prefetch(
                 "league_memberships",
-                queryset=LeagueUser.objects.filter(league_id=league.pk),
+                queryset=LeagueUser.objects.filter(
+                    league_id=league.pk if league else None
+                ),
             )
         )
     )
     return OrgUserSerializer(
-        org_users, many=True, context={"league_id": league.pk}
+        org_users, many=True, context={"league_id": league.pk if league else None}
     ).data
 
 
@@ -192,7 +204,7 @@ def _collect_context_mmr(tournament, seen_pks) -> dict:
     from org.serializers import OrgUserSerializer
 
     league = tournament.league if tournament else None
-    org = league.organization if league else None
+    org = _tournament_organization(tournament)
     if not org:
         return {}
 
@@ -222,12 +234,14 @@ def _collect_context_mmr(tournament, seen_pks) -> dict:
         .prefetch_related(
             Prefetch(
                 "league_memberships",
-                queryset=LeagueUser.objects.filter(league_id=league.pk),
+                queryset=LeagueUser.objects.filter(
+                    league_id=league.pk if league else None
+                ),
             )
         )
     )
     serialized = OrgUserSerializer(
-        org_users, many=True, context={"league_id": league.pk}
+        org_users, many=True, context={"league_id": league.pk if league else None}
     ).data
     return {
         row["pk"]: {k: row[k] for k in _CONTEXT_MMR_KEYS} for row in serialized
@@ -247,8 +261,7 @@ def _build_users_dict(tournament) -> dict:
 
     seen_pks = _collect_tournament_user_pks(tournament)
     mmr_map = _collect_context_mmr(tournament, seen_pks)
-    league = tournament.league if tournament else None
-    is_org = bool(league and league.organization_id)
+    is_org = _tournament_organization(tournament) is not None
 
     result: dict = {}
     for pk in seen_pks:
@@ -1046,9 +1059,7 @@ class TournamentSerializer(serializers.ModelSerializer):
 
     def get_organization_pk(self, tournament):
         """Return the primary organization's PK for this tournament."""
-        if not tournament.league:
-            return None
-        org = tournament.league.organization
+        org = _tournament_organization(tournament)
         return org.pk if org else None
 
     def get_league_pk(self, tournament):
