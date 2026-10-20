@@ -124,6 +124,11 @@ urlpatterns = [
     # User search (must be before router to avoid conflict with UserView)
     path("api/users/search/", search_users, name="search_users"),
     path("api/users/bulk/", app_views.bulk_users, name="bulk_users"),
+    path(
+        "api/users/steam-account-id/<int:steam_account_id>/",
+        app_views.steam_account_id_lookup,
+        name="steam_account_id_lookup",
+    ),
     # User profile (Task 1 — see backend/user/urls.py)
     path("api/users/", include("user.urls")),
     path("api/", include(router.urls)),

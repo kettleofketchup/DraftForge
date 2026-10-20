@@ -10,6 +10,7 @@ import type {
   UserType,
 } from '~/index';
 import { getLogger } from '~/lib/logger';
+import type { SteamAccountIdHolder } from '~/components/user/userCard/steamAccountIdConflict';
 import axios from './axios';
 
 const log = getLogger('api');
@@ -56,6 +57,16 @@ export async function updateUser(
 ): Promise<UserType> {
   const response = await axios.patch<UserType>(`/users/${userId}/`, data);
   return response.data;
+}
+
+/** Who already holds this Friend ID? `null` when it is free. */
+export async function lookupSteamAccountIdHolder(
+  steamAccountId: number,
+): Promise<SteamAccountIdHolder | null> {
+  const response = await axios.get<{ holder: SteamAccountIdHolder | null }>(
+    `/users/steam-account-id/${steamAccountId}/`,
+  );
+  return response.data.holder;
 }
 
 export async function deleteUser(userId: number): Promise<void> {

@@ -1,6 +1,5 @@
 """Admin Team API views for organization and league permission management."""
 
-from app.cache_utils import invalidate_obj
 from django.core.cache import cache
 from django.db import IntegrityError, transaction
 from django.db.models import Q
@@ -10,7 +9,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from app.cache_utils import invalidate_after_commit
+from app.cache_utils import invalidate_after_commit, invalidate_obj
 from app.models import (
     CustomUser,
     League,
@@ -27,6 +26,10 @@ from app.permissions_org import (
     is_org_owner,
 )
 from app.serializers import TournamentUserSerializer
+from app.steam_accounts import (
+    steam_account_id_conflict_payload,
+    steam_account_id_holder,
+)
 from league.models import LeagueUser
 from org.models import OrgUser
 
@@ -71,11 +74,9 @@ def search_users(request):
     if query.isdigit():
         q_filter |= Q(steamid=int(query)) | Q(steam_account_id=int(query))
 
-    users = (
-        CustomUser.objects.select_related(
-            "base_profile", "base_profile__dota_user_profile__positions"
-        ).filter(q_filter)[:20]
-    )
+    users = CustomUser.objects.select_related(
+        "base_profile", "base_profile__dota_user_profile__positions"
+    ).filter(q_filter)[:20]
     data = TournamentUserSerializer(users, many=True).data
 
     # Annotate with membership context if org_id provided
@@ -768,6 +769,13 @@ def update_org_user(request, org_id, org_user_id):
             # Coerce empty strings to None for nullable fields
             if new_val == "" or new_val == "null":
                 new_val = None
+            if field == "steam_account_id" and new_val is not None:
+                holder = steam_account_id_holder(new_val, exclude_pk=user.pk)
+                if holder is not None:
+                    return Response(
+                        steam_account_id_conflict_payload(new_val, holder),
+                        status=status.HTTP_409_CONFLICT,
+                    )
             if getattr(user, field) != new_val:
                 setattr(user, field, new_val)
                 user_updated = True
