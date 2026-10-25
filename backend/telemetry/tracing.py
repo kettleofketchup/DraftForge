@@ -4,6 +4,10 @@ import atexit
 import logging
 import os
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    import requests
 
 # Use stdlib logging for bootstrap messages
 _log = logging.getLogger("telemetry.tracing")
@@ -127,9 +131,11 @@ def _setup_provider(resource, provider, endpoint, header_dict, sample_rate) -> N
         # body carries the actual reason (e.g. "invalid temporality and type
         # combination for metric X"). Without this, diagnosing future
         # regressions required SSH + monkey-patching requests at runtime.
+        # `_export` is private and its signature changed across SDK releases
+        # (1.20 takes no timeout), so pass arguments through untouched.
         class _DiagnosticMetricExporter(OTLPMetricExporter):
-            def _export(self, serialized_data, timeout_sec=None):
-                resp = super()._export(serialized_data, timeout_sec)
+            def _export(self, *args: Any, **kwargs: Any) -> "requests.Response":
+                resp = super()._export(*args, **kwargs)
                 if 400 <= resp.status_code < 500:
                     body = (resp.text or "")[:1000].replace("\x00", "?")
                     from telemetry.logging import get_logger

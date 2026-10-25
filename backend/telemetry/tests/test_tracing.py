@@ -3,6 +3,8 @@
 import os
 from unittest import TestCase, mock
 
+from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
+
 from telemetry.tracing import init_log_export, init_tracing
 
 
@@ -226,3 +228,63 @@ class DjangoInstrumentorHooksTest(TestCase):
             self.assertIn("request_hook", call_kwargs)
             self.assertIn("response_hook", call_kwargs)
             self.assertEqual(call_kwargs["excluded_urls"], "health,ready,metrics")
+
+
+class DiagnosticMetricExporterTest(TestCase):
+    """The metric exporter wrapper must work across OTLP SDK `_export` signatures."""
+
+    def _build_exporter(self) -> "OTLPMetricExporter":
+        from telemetry.tracing import _build_resource, _setup_provider
+
+        env = {"OTEL_ENABLED": "true", "OTEL_EXPORTER_OTLP_ENDPOINT": "http://x"}
+        with (
+            mock.patch.dict(os.environ, env, clear=False),
+            mock.patch(
+                "opentelemetry.sdk.metrics.export.PeriodicExportingMetricReader"
+            ) as MockReader,
+            mock.patch("opentelemetry.sdk.metrics.MeterProvider"),
+            mock.patch("opentelemetry.metrics.set_meter_provider"),
+            mock.patch("opentelemetry.instrumentation.django.DjangoInstrumentor"),
+        ):
+            _setup_provider(_build_resource(), mock.MagicMock(), "http://x", {}, 0.1)
+        return MockReader.call_args[0][0]
+
+    def test_sdk_1_20_signature_without_timeout(self) -> None:
+        exporter = self._build_exporter()
+        resp = mock.MagicMock(status_code=200)
+
+        def old_export(self, serialized_data):
+            return resp
+
+        with mock.patch.object(OTLPMetricExporter, "_export", old_export):
+            self.assertIs(exporter._export(b"payload"), resp)
+
+    def test_sdk_1_41_signature_forwards_timeout(self) -> None:
+        exporter = self._build_exporter()
+        resp = mock.MagicMock(status_code=200)
+        seen: dict[str, float | None] = {}
+
+        def new_export(self, serialized_data, timeout_sec=None):
+            seen["timeout_sec"] = timeout_sec
+            return resp
+
+        with mock.patch.object(OTLPMetricExporter, "_export", new_export):
+            self.assertIs(exporter._export(b"payload", 5.0), resp)
+        self.assertEqual(seen["timeout_sec"], 5.0)
+
+    def test_logs_rejected_batch_body(self) -> None:
+        exporter = self._build_exporter()
+        resp = mock.MagicMock(
+            status_code=400, reason="Bad Request", text="bad temporality"
+        )
+
+        with (
+            mock.patch.object(OTLPMetricExporter, "_export", lambda self, data: resp),
+            mock.patch("telemetry.logging.get_logger") as mock_get_logger,
+        ):
+            exporter._export(b"payload")
+
+        mock_get_logger.return_value.error.assert_called_once()
+        kwargs = mock_get_logger.return_value.error.call_args[1]
+        self.assertEqual(kwargs["status_code"], 400)
+        self.assertEqual(kwargs["body"], "bad temporality")
