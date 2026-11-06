@@ -71,7 +71,8 @@ export function resolveOrgUserLink(
  * card. No OrgUser link -> global (nickname/positions only). With a link,
  * league -> org -> global, league scope carrying a DETERMINISTIC orgId from
  * tournament context so the PATCH never depends on currentOrg/
- * currentLeague.organization load timing.
+ * currentLeague.organization load timing. `organizationId`/`leagueId` must be
+ * the entity's authoritative ids, never derived from currentOrg/currentLeague.
  */
 export function resolveEditScope(
   user: { orgUserPk?: number | null } | UserEntry,

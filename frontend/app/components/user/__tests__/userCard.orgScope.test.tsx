@@ -7,7 +7,9 @@ import { TooltipProvider } from '~/components/ui/tooltip';
 import { UserCard } from '~/components/user/userCard';
 import type { UserClassType } from '~/components/user/types';
 import type { OrganizationType } from '~/components/organization/schemas';
+import { useLeagueStore } from '~/store/leagueStore';
 import { useOrgStore } from '~/store/orgStore';
+import type { UserEntry } from '~/store/userCacheTypes';
 import { useUserCacheStore } from '~/store/userCacheStore';
 import { useUserStore } from '~/store/userStore';
 
@@ -61,6 +63,7 @@ describe('UserCard org-scoped edit for tournament players', () => {
     useOrgStore.setState({
       currentOrg: { pk: ORG_PK, name: 'Org' } as OrganizationType,
     });
+    useLeagueStore.setState({ currentLeague: null });
     useUserCacheStore.getState().upsert([tournamentUser], { orgId: ORG_PK });
   });
 
@@ -88,6 +91,71 @@ describe('UserCard org-scoped edit for tournament players', () => {
   it('hides the MMR field without org context', () => {
     renderCard(undefined);
     fireEvent.click(screen.getByTestId('edit-user-btn'));
+    expect(screen.queryByTestId('edit-user-mmr')).toBeNull();
+  });
+});
+
+describe('UserCard with a stale store org (finding 3)', () => {
+  const STALE_ORG_PK = 9;
+  const staleEntry = {
+    pk: 43,
+    username: 'stale',
+    nickname: 'Stale',
+    orgData: { [STALE_ORG_PK]: { id: 88, mmr: 3000, _fetchedAt: 0 } },
+    leagueData: {},
+    _fetchedAt: 0,
+  } as UserEntry;
+
+  function renderStale(organizationId?: number) {
+    return render(
+      <QueryClientProvider client={new QueryClient()}>
+        <TooltipProvider>
+          <MemoryRouter>
+            <UserCard
+              user={staleEntry as unknown as UserClassType}
+              organizationId={organizationId}
+            />
+          </MemoryRouter>
+        </TooltipProvider>
+      </QueryClientProvider>,
+    );
+  }
+
+  function viewer(superuser: boolean) {
+    useUserStore.setState({
+      currentUser: { pk: 1021, username: 'v', is_superuser: superuser, is_staff: false },
+    } as never);
+  }
+
+  beforeEach(() => {
+    useUserCacheStore.getState().reset?.();
+    useOrgStore.setState({
+      currentOrg: {
+        pk: STALE_ORG_PK, name: 'Stale', staff_ids: [1021],
+      } as unknown as OrganizationType,
+    });
+    useLeagueStore.setState({ currentLeague: null });
+  });
+
+  it('org staff of the stale org cannot edit in org 8; MMR error ring shows', () => {
+    viewer(false);
+    const { container } = renderStale(8);
+    expect(screen.queryByTestId('edit-user-btn')).toBeNull();
+    expect(container.querySelector('.animate-ping')).not.toBeNull();
+  });
+
+  it('org staff of the stale org cannot edit without org context; no error ring', () => {
+    viewer(false);
+    const { container } = renderStale(undefined);
+    expect(screen.queryByTestId('edit-user-btn')).toBeNull();
+    expect(container.querySelector('.animate-ping')).toBeNull();
+  });
+
+  it.each([8, undefined])('superuser in org %s gets global scope (no MMR field)', (orgId) => {
+    viewer(true);
+    renderStale(orgId);
+    fireEvent.click(screen.getByTestId('edit-user-btn'));
+    expect(screen.getByTestId('edit-user-nickname')).toBeTruthy();
     expect(screen.queryByTestId('edit-user-mmr')).toBeNull();
   });
 });

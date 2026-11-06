@@ -19,6 +19,7 @@ import type { PositionsType, UserEntry } from '~/store/userCacheTypes';
 import { useUserCacheStore } from '~/store/userCacheStore';
 import { selectPositions } from '~/store/selectPositions';
 import { useUserStore } from '~/store/userStore';
+import { tournamentEditContext } from './tournamentEditContext';
 const log = getLogger('hasErrors');
 
 interface UserIssue {
@@ -59,7 +60,7 @@ export const hasErrors = () => {
     }
   }, []);
 
-  const orgId = tournament?.organization_pk ?? undefined;
+  const { organizationId: orgId, leagueId } = tournamentEditContext(tournament);
 
   const currentOrg = useOrgStore((state) => state.currentOrg);
 
@@ -167,7 +168,7 @@ export const hasErrors = () => {
                   user={user}
                   scope={resolveEditScope(user, {
                     organizationId: orgId,
-                    leagueId: league?.pk,
+                    leagueId,
                     currentOrg,
                     currentLeague: league,
                   })}

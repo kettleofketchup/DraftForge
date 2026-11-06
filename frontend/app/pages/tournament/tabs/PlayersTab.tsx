@@ -17,6 +17,7 @@ import { useLeagueStore } from '~/store/leagueStore';
 import { useIsLeagueStaff } from '~/hooks/usePermissions';
 import { useTournamentUsers } from '~/hooks/useTournamentUsers';
 import { hasErrors } from '../hasErrors';
+import { tournamentEditContext } from '../tournamentEditContext';
 
 export const PlayersTab: React.FC = memo(() => {
   const tournament = useUserStore((state) => state.tournament);
@@ -31,8 +32,7 @@ export const PlayersTab: React.FC = memo(() => {
 
   // Org/league context: scopes each UserCard's edit (editable MMR) and keys
   // the scoped half of the cache entries seeded below.
-  const organizationId = tournament?.organization_pk ?? currentOrg?.pk;
-  const leagueId = tournament?.league_pk ?? undefined;
+  const { organizationId, leagueId } = tournamentEditContext(tournament);
 
   const rawUsers = useMemo(() => tournament?.users ?? [], [tournament?.users]);
   const tournamentUsers = useTournamentUsers(rawUsers, {

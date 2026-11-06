@@ -212,3 +212,33 @@ describe('dispatchPatch', () => {
     ).rejects.toThrow(/OrgUser link/);
   });
 });
+
+describe('org-less league tournament (spec 6.1)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('leagueData-only link -> league scope that PATCHes via the league parent org', async () => {
+    const leagueWithOrg = { pk: 3, name: 'L3', organization: { pk: 5 } } as LeagueType;
+    const ctx = {
+      organizationId: undefined,
+      leagueId: 3,
+      currentOrg: { pk: 9, name: 'Stale' } as OrganizationType,
+      currentLeague: leagueWithOrg,
+    };
+    const u = entry({ pk: 10, leagueData: { 3: { id: 41, mmr: 0, _fetchedAt: 0 } } });
+    const scope = resolveEditScope(u, ctx);
+    expect(scope).toMatchObject({ kind: 'league', orgId: undefined });
+
+    vi.mocked(updateOrgUser).mockResolvedValue({ pk: 10, nickname: 'After' } as UserType);
+    const user = {
+      pk: 10,
+      username: 'u',
+      orgUserPk: resolveOrgUserLink(u, ctx),
+      positions: {},
+      dbUpdate: vi.fn(),
+    } as unknown as UserClassType;
+    await dispatchPatch(user, scope, { nickname: 'After' });
+    expect(updateOrgUser).toHaveBeenCalledWith(5, 41, { nickname: 'After' });
+  });
+});
