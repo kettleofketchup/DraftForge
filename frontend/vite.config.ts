@@ -101,6 +101,7 @@ export default defineConfig({
       'react-hook-form',
       '@hookform/resolvers',
       'zod',
+      'i18next',
       // UI components (Radix)
       '@radix-ui/react-dialog',
       '@radix-ui/react-dropdown-menu',
