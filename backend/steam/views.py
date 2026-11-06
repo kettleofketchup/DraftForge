@@ -1,13 +1,17 @@
+from django.conf import settings
 from rest_framework import generics, status
 from rest_framework.generics import RetrieveAPIView
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from app.models import League
 from user.querysets import with_user_profiles
 
 from .constants import LEAGUE_ID
+from .functions.league_summary import empty_league_summary, get_league_summary
 from .functions.match import update_match_details
 from .models import LeaguePlayerStats, Match
 from .serializers import (
@@ -143,3 +147,31 @@ class MyLeagueStatsView(APIView):
                 {"error": "No league stats found"},
                 status=status.HTTP_404_NOT_FOUND,
             )
+
+
+class LeaguePlayerSummariesView(APIView):
+    """
+    GET /api/steam/leagues/<league_pk>/player-summaries/
+    Returns per-player ticket-match summaries and the win-rate distribution
+    for a DraftForge league.
+    """
+
+    permission_classes = [AllowAny]
+
+    def get(self, request: Request, league_pk: int) -> Response:
+        league = League.objects.filter(pk=league_pk).values("steam_league_id").first()
+        if league is None:
+            return Response(
+                {"error": "League not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        steam_league_id: int | None = league["steam_league_id"]
+        min_games: int = settings.LEAGUE_MMR_MIN_GAMES
+        summary = (
+            empty_league_summary(min_games)
+            if steam_league_id is None
+            else get_league_summary(steam_league_id, min_games)
+        )
+        return Response(
+            {"league_pk": league_pk, "steam_league_id": steam_league_id, **summary}
+        )
