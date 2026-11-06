@@ -7,6 +7,11 @@ import {
   TableRow,
 } from "~/components/ui/table";
 import { UserPopover } from "~/components/user/UserPopover";
+import {
+  formatWinRate,
+  toneClass,
+  winRateTone,
+} from "~/features/league-stats/format";
 import { cn } from "~/lib/utils";
 import type { LeaderboardEntry, SortField, SortOrder } from "./types";
 
@@ -58,14 +63,6 @@ export function LeaderboardTable({
       </TableHeader>
       <TableBody>
         {entries.map((entry, index) => {
-          const winRatePercent = Math.round(entry.win_rate * 100);
-          const winRateColor =
-            winRatePercent >= 55
-              ? "text-green-500"
-              : winRatePercent <= 45
-                ? "text-red-500"
-                : "";
-
           return (
             <TableRow key={entry.user_id} className="border-gray-700">
               <TableCell className="font-medium text-gray-400">
@@ -101,7 +98,9 @@ export function LeaderboardTable({
                 </div>
               </TableCell>
               <TableCell>{entry.games_played}</TableCell>
-              <TableCell className={winRateColor}>{winRatePercent}%</TableCell>
+              <TableCell className={toneClass[winRateTone(entry.win_rate)]}>
+                {formatWinRate(entry.win_rate)}
+              </TableCell>
               <TableCell>{entry.avg_kda.toFixed(2)}</TableCell>
               <TableCell>{Math.round(entry.avg_gpm)}</TableCell>
             </TableRow>
