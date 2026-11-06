@@ -36,6 +36,11 @@ describe('StreakBadge', () => {
     expect(badge.className).toContain('text-foreground');
   });
 
+  it('has no aria-label on the generic span', () => {
+    render(<StreakBadge streak={{ result: 'L', count: 3 }} />);
+    expect(screen.getByTestId('streak-badge').hasAttribute('aria-label')).toBe(false);
+  });
+
   it('renders W12 without growing the row', () => {
     render(<StreakBadge streak={{ result: 'W', count: 12 }} />);
     const badge = screen.getByTestId('streak-badge');

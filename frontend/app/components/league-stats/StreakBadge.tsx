@@ -12,7 +12,6 @@ export const StreakBadge: React.FC<{
   return (
     <Badge
       data-testid="streak-badge"
-      aria-label={`${win ? 'Win' : 'Loss'} streak of ${streak.count}`}
       className={cn(
         'rounded-[2px] border-transparent px-1 py-px text-[10px] leading-none font-semibold tabular-nums',
         win ? 'bg-success/15 text-success' : 'bg-destructive/25 text-foreground',
