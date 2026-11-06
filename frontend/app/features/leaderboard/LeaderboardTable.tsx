@@ -20,6 +20,7 @@ interface LeaderboardTableProps {
   sortBy: SortField;
   order: SortOrder;
   onSort: (field: SortField) => void;
+  rankOffset: number;
 }
 
 export function LeaderboardTable({
@@ -27,6 +28,7 @@ export function LeaderboardTable({
   sortBy,
   order,
   onSort,
+  rankOffset,
 }: LeaderboardTableProps) {
   const SortableHeader = ({
     field,
@@ -54,7 +56,7 @@ export function LeaderboardTable({
         <TableRow className="border-gray-700">
           <TableHead className="w-12">#</TableHead>
           <TableHead>Player</TableHead>
-          <SortableHeader field="league_mmr">League MMR</SortableHeader>
+          <TableHead>League MMR</TableHead>
           <SortableHeader field="games_played">Games</SortableHeader>
           <SortableHeader field="win_rate">Win Rate</SortableHeader>
           <SortableHeader field="avg_kda">KDA</SortableHeader>
@@ -65,8 +67,8 @@ export function LeaderboardTable({
         {entries.map((entry, index) => {
           return (
             <TableRow key={entry.user_id} className="border-gray-700">
-              <TableCell className="font-medium text-gray-400">
-                {index + 1}
+              <TableCell className="font-medium text-muted-foreground">
+                {rankOffset + index + 1}
               </TableCell>
               <TableCell>
                 <UserPopover

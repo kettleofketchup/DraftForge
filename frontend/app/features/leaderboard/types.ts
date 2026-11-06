@@ -42,5 +42,5 @@ export interface LeaderboardResponse {
   results: LeaderboardEntry[];
 }
 
-export type SortField = "league_mmr" | "win_rate" | "games_played" | "avg_kda";
+export type SortField = "win_rate" | "games_played" | "avg_kda";
 export type SortOrder = "asc" | "desc";
