@@ -1,9 +1,16 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { TooltipProvider } from '~/components/ui/tooltip';
 import { UserStripLeagueStats } from '../UserStripLeagueStats';
+
+class ResizeObserverStub {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+globalThis.ResizeObserver ??= ResizeObserverStub as unknown as typeof ResizeObserver;
 
 const buckets = Array.from({ length: 10 }, (_, i) => ({
   min: i * 10,
@@ -75,17 +82,33 @@ function stubFetch(body: unknown, status = 200) {
   );
 }
 
-function renderStats(userId: number) {
+function renderStats(userId: number, leaguePk = 3, controlUserId?: number) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   return render(
     <QueryClientProvider client={client}>
       <TooltipProvider>
-        <UserStripLeagueStats leaguePk={3} userId={userId} />
+        <div data-testid="subject">
+          <UserStripLeagueStats leaguePk={leaguePk} userId={userId} />
+        </div>
+        {controlUserId != null && (
+          <div data-testid="control">
+            <UserStripLeagueStats leaguePk={3} userId={controlUserId} />
+          </div>
+        )}
       </TooltipProvider>
     </QueryClientProvider>,
   );
+}
+
+async function expectSubjectEmptyAfterControlRenders() {
+  await waitFor(() =>
+    expect(
+      screen.getByTestId('control').querySelector('[data-testid="strip-league-stats"]'),
+    ).not.toBeNull(),
+  );
+  expect(screen.getByTestId('subject').childElementCount).toBe(0);
 }
 
 afterEach(() => {
@@ -102,7 +125,7 @@ describe('UserStripLeagueStats', () => {
     const pct = screen.getByText('57%');
     expect(pct.className).toContain('text-success');
     expect(column.getAttribute('aria-label')).toBe(
-      'Rank 12 of 84 players with ≥3 ticket games in this league',
+      'Rank 12 of 84 (≥3 ticket games), 14 games, 57% win rate, last 5: L W W W W, oldest to newest, win streak 4',
     );
     expect(screen.getByTestId('recent-form')).toBeTruthy();
     expect(screen.getByTestId('streak-badge').textContent).toBe('W4');
@@ -124,8 +147,9 @@ describe('UserStripLeagueStats', () => {
     renderStats(43);
     const column = await screen.findByTestId('strip-league-stats');
     const label = column.getAttribute('aria-label') ?? '';
-    expect(label).toBe('Needs 3 games to be ranked (2 so far)');
-    expect(label).not.toContain('5');
+    expect(label).toBe(
+      'Unranked: needs 3 ticket games (2 so far), 0% win rate, last 2: L L, oldest to newest',
+    );
     expect(column.textContent).not.toContain('#');
     expect(column.textContent).toContain('2g');
     expect(screen.getByTestId('strip-league-stats-rank').textContent).toBe('');
@@ -133,19 +157,23 @@ describe('UserStripLeagueStats', () => {
   });
 
   it('renders nothing for a missing user', async () => {
-    const fetchSpy = stubFetch(summaries);
-    renderStats(999);
-    await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
-    await new Promise((r) => setTimeout(r, 20));
-    expect(screen.queryByTestId('strip-league-stats')).toBeNull();
+    stubFetch(summaries);
+    renderStats(999, 3, 42);
+    await expectSubjectEmptyAfterControlRenders();
   });
 
   it('renders nothing for a 0-game user', async () => {
+    stubFetch(summaries);
+    renderStats(44, 3, 42);
+    await expectSubjectEmptyAfterControlRenders();
+  });
+
+  it('leaguePk=0 never fetches and renders nothing', async () => {
     const fetchSpy = stubFetch(summaries);
-    renderStats(44);
-    await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
-    await new Promise((r) => setTimeout(r, 20));
-    expect(screen.queryByTestId('strip-league-stats')).toBeNull();
+    renderStats(42, 0, 42);
+    await expectSubjectEmptyAfterControlRenders();
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(String(fetchSpy.mock.calls[0][0])).toContain('/leagues/3/');
   });
 
   it('renders nothing while loading', () => {
@@ -157,10 +185,50 @@ describe('UserStripLeagueStats', () => {
   });
 
   it('renders nothing on error', async () => {
-    const fetchSpy = stubFetch({ detail: 'boom' }, 500);
-    renderStats(42);
-    await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
-    await new Promise((r) => setTimeout(r, 20));
+    stubFetch({ detail: 'boom' }, 500);
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={client}>
+        <TooltipProvider>
+          <UserStripLeagueStats leaguePk={3} userId={42} />
+        </TooltipProvider>
+      </QueryClientProvider>,
+    );
+    await waitFor(() =>
+      expect(client.getQueryState(['league-player-summaries', 3])?.status).toBe('error'),
+    );
     expect(screen.queryByTestId('strip-league-stats')).toBeNull();
+  });
+
+  it('separators keep their surrounding spaces inside the flex badge', async () => {
+    stubFetch(summaries);
+    renderStats(42);
+    const column = await screen.findByTestId('strip-league-stats');
+    const seps = Array.from(column.querySelectorAll('span[aria-hidden]')).filter(
+      (s) => s.textContent === ' · ',
+    );
+    expect(seps).toHaveLength(2);
+    for (const sep of seps) expect(sep.className).toContain('whitespace-pre');
+  });
+
+  it('mounts the Radix tooltip only after pointerenter', async () => {
+    stubFetch(summaries);
+    renderStats(42);
+    const column = await screen.findByTestId('strip-league-stats');
+    const badge = () => column.firstElementChild as HTMLElement;
+    expect(badge().hasAttribute('data-state')).toBe(false);
+    expect(screen.queryByText('League ticket games')).toBeNull();
+
+    fireEvent.pointerOver(badge());
+    await waitFor(() => expect(badge().getAttribute('data-state')).toBe('closed'));
+
+    fireEvent.focus(badge());
+    expect((await screen.findAllByText('League ticket games')).length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText('Rank 12 of 84 players with ≥3 ticket games in this league')
+        .length,
+    ).toBeGreaterThan(0);
   });
 });

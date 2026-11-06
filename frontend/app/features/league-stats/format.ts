@@ -20,3 +20,9 @@ export const toneClass: Record<WinRateTone, string> = {
   bad: 'text-destructive',
   neutral: '',
 };
+
+export const toneChipClass: Record<WinRateTone, string> = {
+  good: 'text-success',
+  bad: 'rounded-[2px] bg-destructive/25 text-foreground font-semibold',
+  neutral: '',
+};

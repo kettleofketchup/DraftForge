@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   formatWinRate,
+  toneChipClass,
   toneClass,
   winRatePercent,
   winRateTone,
@@ -31,5 +32,13 @@ describe('win-rate helpers', () => {
       bad: 'text-destructive',
       neutral: '',
     });
+  });
+
+  it('chip tones swap small red text for a tinted chip', () => {
+    expect(toneChipClass.good).toBe('text-success');
+    expect(toneChipClass.neutral).toBe('');
+    expect(toneChipClass.bad).toContain('bg-destructive/25');
+    expect(toneChipClass.bad).toContain('text-foreground');
+    expect(toneChipClass.bad).not.toContain('text-destructive');
   });
 });

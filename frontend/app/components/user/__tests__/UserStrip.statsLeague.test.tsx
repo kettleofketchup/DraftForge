@@ -17,10 +17,12 @@ vi.mock('~/components/ui/shared-popover-context', () => ({
   }),
 }));
 
-const summaryCalls = vi.hoisted(() => ({ count: 0 }));
+const summaryCalls = vi.hoisted(() => ({ count: 0, leaguePks: [] as unknown[] }));
 vi.mock('~/features/league-stats/queries', () => ({
-  usePlayerLeagueSummary: () => {
+  usePlayerLeagueSummary: (leaguePk: number | null | undefined) => {
     summaryCalls.count += 1;
+    summaryCalls.leaguePks.push(leaguePk);
+    if (!leaguePk) return { data: undefined, isLoading: false, isError: false };
     return {
       data: {
         summary: {
@@ -77,6 +79,7 @@ function leagueBadgeText(container: HTMLElement): string | null {
 
 beforeEach(() => {
   summaryCalls.count = 0;
+  summaryCalls.leaguePks = [];
 });
 
 describe('UserStrip statsLeagueId', () => {
@@ -159,6 +162,21 @@ describe('UserStrip statsLeagueId', () => {
 
   it('no column without statsLeagueId', () => {
     render(wrap(<UserStrip user={plainUser} />));
+    expect(screen.queryByTestId('strip-league-stats')).toBeNull();
+  });
+
+  it('no column for a user without a pk', () => {
+    const noPk = { ...plainUser, pk: undefined } as unknown as UserType;
+    render(wrap(<UserStrip user={noPk} statsLeagueId={1} data-testid="strip" />));
+    expect(screen.getByTestId('strip').className.split(' ')).toContain('@container');
+    expect(screen.queryByTestId('strip-league-stats')).toBeNull();
+    expect(summaryCalls.count).toBe(0);
+  });
+
+  it('statsLeagueId=0 keeps @container but renders no column', () => {
+    render(wrap(<UserStrip user={plainUser} statsLeagueId={0} data-testid="strip" />));
+    expect(screen.getByTestId('strip').className.split(' ')).toContain('@container');
+    expect(summaryCalls.leaguePks).toEqual([0]);
     expect(screen.queryByTestId('strip-league-stats')).toBeNull();
   });
 });
