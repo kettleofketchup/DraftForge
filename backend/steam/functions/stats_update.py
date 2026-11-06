@@ -1,5 +1,6 @@
 from django.db.models import Sum
 
+from app.models import CustomUser
 from steam.functions.mmr_calculation import (
     calculate_mmr_adjustment,
     update_user_league_mmr,
@@ -10,7 +11,13 @@ from telemetry.logging import get_logger
 logger = get_logger(__name__)
 
 
-def update_player_league_stats(user, league_id: int) -> LeaguePlayerStats:
+def player_won(player_slot: int, radiant_win: bool) -> bool:
+    return (player_slot < 128) == radiant_win
+
+
+def update_player_league_stats(
+    user: CustomUser, league_id: int
+) -> LeaguePlayerStats | None:
     """
     Recalculate a player's aggregated stats for a specific league.
     Creates LeaguePlayerStats if it doesn't exist.
@@ -46,11 +53,7 @@ def update_player_league_stats(user, league_id: int) -> LeaguePlayerStats:
     wins = 0
     losses = 0
     for stat in match_stats:
-        is_radiant = stat.player_slot < 128
-        player_won = (is_radiant and stat.match.radiant_win) or (
-            not is_radiant and not stat.match.radiant_win
-        )
-        if player_won:
+        if player_won(stat.player_slot, stat.match.radiant_win):
             wins += 1
         else:
             losses += 1
@@ -101,8 +104,6 @@ def update_all_league_stats_for_league(league_id: int) -> int:
     Update league stats for all users who have played in a league.
     Returns count of users updated.
     """
-    from app.models import CustomUser
-
     # Find all users with match stats in this league
     user_ids = (
         PlayerMatchStats.objects.filter(match__league_id=league_id, user__isnull=False)
