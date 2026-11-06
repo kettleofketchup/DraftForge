@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.http import QueryDict
 from rest_framework import generics, status
 from rest_framework.generics import RetrieveAPIView
 from rest_framework.pagination import PageNumberPagination
@@ -104,14 +105,44 @@ class LeaderboardView(generics.ListAPIView):
         return queryset.order_by(sort_field)
 
 
+def _resolve_stats_league_id(params: QueryDict) -> int | Response:
+    if "league" in params:
+        try:
+            league_pk = int(params["league"])
+        except ValueError:
+            return Response(
+                {"error": "Invalid league"}, status=status.HTTP_400_BAD_REQUEST
+            )
+        steam_league_id = (
+            League.objects.filter(pk=league_pk)
+            .values_list("steam_league_id", flat=True)
+            .first()
+        )
+        if steam_league_id is None:
+            return Response(
+                {"error": "League not found"}, status=status.HTTP_404_NOT_FOUND
+            )
+        return steam_league_id
+    if "league_id" in params:
+        try:
+            return int(params["league_id"])
+        except ValueError:
+            return Response(
+                {"error": "Invalid league_id"}, status=status.HTTP_400_BAD_REQUEST
+            )
+    return LEAGUE_ID
+
+
 class LeagueStatsView(APIView):
     """
     GET /api/steam/league-stats/<user_id>/
     Returns a user's league stats.
     """
 
-    def get(self, request, user_id):
-        league_id = request.query_params.get("league_id", LEAGUE_ID)
+    def get(self, request: Request, user_id: int) -> Response:
+        league_id = _resolve_stats_league_id(request.query_params)
+        if isinstance(league_id, Response):
+            return league_id
         try:
             stats = LeaguePlayerStats.objects.select_related("user").get(
                 user_id=user_id,
