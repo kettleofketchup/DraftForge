@@ -120,6 +120,20 @@ describe('resolveEditScope', () => {
       resolveEditScope(u, { currentOrg: org, currentLeague: null }),
     ).toEqual({ kind: 'global' });
   });
+
+  it('flat link but no organizationId + stale currentOrg -> global', () => {
+    expect(
+      resolveEditScope({ orgUserPk: 110 }, { currentOrg: org, currentLeague: null }),
+    ).toEqual({ kind: 'global' });
+  });
+
+  it('flat link + currentOrg for a different org -> global', () => {
+    expect(
+      resolveEditScope({ orgUserPk: 110 }, {
+        organizationId: 3, currentOrg: org, currentLeague: null,
+      }),
+    ).toEqual({ kind: 'global' });
+  });
 });
 
 // dispatchPatch — the org/league branches PATCH through a bare axios call that
