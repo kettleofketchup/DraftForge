@@ -6,18 +6,23 @@ registry keyset drift and a missed ModalConfig union registration — plus
 the rank-flow isinstance guard and the loud fallback.
 """
 
+from collections.abc import Callable
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import patch
 
 from django.test import SimpleTestCase
+from structlog.testing import capture_logs
 
 from app.models import GameType
 from discordbot.components.registry import COMPONENT_PROVIDERS, get_component_provider
+from events.discord import handlers
 from events.discord.providers.base import DefaultHandler
 from events.discord.providers.registry import SIGNUP_HANDLERS
 from events.schemas import (
     DeadlockModalConfig,
     DotaModalConfig,
+    RankFlowStateResponse,
     SignupActionResponse,
 )
 
@@ -74,15 +79,78 @@ class ModalConfigTypeTest(SimpleTestCase):
         self.assertIsInstance(cfg, DeadlockModalConfig)
 
 
-class RankFlowGuardTest(SimpleTestCase):
-    def test_rank_flow_on_non_dota_returns_not_applicable(self):
-        from events.discord import handlers
+_ACTION_ERROR = {"action": "error", "message": "Not applicable."}
 
-        with patch.object(
-            handlers, "_load_event", return_value=_stub_event(GameType.DEADLOCK)
+
+class RankFlowGuardTest(SimpleTestCase):
+    def _call(
+        self, fn: Callable[..., Any], **kwargs: Any
+    ) -> tuple[Any, list[dict[str, Any]]]:
+        with (
+            patch.object(
+                handlers, "_load_event", return_value=_stub_event(GameType.DEADLOCK)
+            ),
+            capture_logs() as logs,
         ):
-            result = handlers.handle_rank_medal_select(
-                event_id=1, discord_user_id="1", medal="Crusader 3"
-            )
-        self.assertEqual(result["action"], "error")
-        self.assertEqual(result["message"], "Not applicable.")
+            result = fn(event_id=1, discord_user_id="1", **kwargs)
+        return result, logs
+
+    def _assert_logged(self, logs: list[dict[str, Any]], handler: str) -> None:
+        hits = [e for e in logs if e["event"] == "handler_not_applicable"]
+        self.assertEqual(len(hits), 1)
+        self.assertEqual(hits[0]["system"], "discord")
+        self.assertEqual(hits[0]["subsystem"], "interaction")
+        self.assertEqual(hits[0]["handler"], handler)
+        self.assertEqual(hits[0]["event_id"], 1)
+        self.assertEqual(hits[0]["game_type"], GameType.DEADLOCK)
+        self.assertEqual(hits[0]["log_level"], "warning")
+
+    def test_rank_status_select_returns_none(self) -> None:
+        result, logs = self._call(handlers.handle_rank_status_select, rank_status="x")
+        self.assertIsNone(result)
+        self._assert_logged(logs, "rank_status_select")
+
+    def test_action_endpoints_return_action_error(self) -> None:
+        cases: list[tuple[Callable[..., Any], str, dict[str, Any]]] = [
+            (
+                handlers.handle_rank_medal_select,
+                "rank_medal_select",
+                {"medal": "Crusader 3"},
+            ),
+            (
+                handlers.handle_previous_rank_submit,
+                "previous_rank_submit",
+                {"medal": "m", "date_text": "d"},
+            ),
+            (handlers.handle_battle_cup_submit, "battle_cup_submit", {"tier": "1"}),
+            (handlers.handle_set_position, "set_position", {"position": 1}),
+            (handlers.handle_save_positions, "save_positions", {"positions": [1]}),
+        ]
+        for fn, name, kwargs in cases:
+            with self.subTest(handler=name):
+                result, logs = self._call(fn, **kwargs)
+                self.assertEqual(result, _ACTION_ERROR)
+                self._assert_logged(logs, name)
+
+    def test_screenshot_upload_uses_success_contract(self) -> None:
+        result, logs = self._call(
+            handlers.handle_screenshot_upload,
+            screenshot_type="rank",
+            attachment_url="u",
+        )
+        self.assertEqual(result, {"success": False, "message": "Not applicable."})
+        self._assert_logged(logs, "screenshot_upload")
+
+    def test_get_rank_flow_state_uses_error_contract(self) -> None:
+        result, logs = self._call(handlers.handle_get_rank_flow_state)
+        self.assertEqual(
+            result, {"error": "not_applicable", "message": "Not applicable."}
+        )
+        self.assertTrue(RankFlowStateResponse.model_validate(result).error)
+        self._assert_logged(logs, "get_rank_flow_state")
+
+    def test_each_call_returns_a_fresh_object(self) -> None:
+        first, _ = self._call(handlers.handle_rank_medal_select, medal="Crusader 3")
+        second, _ = self._call(handlers.handle_rank_medal_select, medal="Crusader 3")
+        self.assertEqual(first, second)
+        self.assertIsNot(first, second)

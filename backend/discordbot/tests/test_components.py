@@ -1,4 +1,6 @@
 import asyncio
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from unittest import IsolatedAsyncioTestCase
 from unittest.mock import AsyncMock, MagicMock
 from unittest.mock import patch as mock_patch
@@ -9,6 +11,7 @@ from django.test import TestCase
 from app.models import GameType
 from discordbot.components import (
     DeadlockComponents,
+    DeclineButton,
     DotaComponents,
     EventSignupView,
     MedalSelect,
@@ -333,3 +336,34 @@ class PositionConfirmButtonCallbackTest(TestCase):
             self.assertEqual(spy.call_args.kwargs["event"], fake_event)
 
         run_async(_test())
+
+
+@asynccontextmanager
+async def _fake_log_context(
+    *_args: object, **_kwargs: object
+) -> AsyncIterator[MagicMock]:
+    yield MagicMock()
+
+
+class DeclineButtonCallbackTest(IsolatedAsyncioTestCase):
+    async def test_callback_passes_discord_username(self) -> None:
+        interaction = MagicMock()
+        interaction.user.id = 5
+        interaction.user.name = "alice"
+        with (
+            mock_patch(
+                "discordbot.components.base.decline_button",
+                return_value={"action": "declined"},
+            ) as mock_decline,
+            mock_patch(
+                "discordbot.components.base.respond_to_signup_user",
+                new_callable=AsyncMock,
+            ),
+            mock_patch(
+                "discordbot.components.base.discord_log_context", _fake_log_context
+            ),
+        ):
+            await DeclineButton(1).callback(interaction)
+        mock_decline.assert_called_once_with(
+            event_id=1, discord_user_id="5", discord_username="alice"
+        )

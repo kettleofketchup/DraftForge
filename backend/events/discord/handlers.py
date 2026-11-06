@@ -44,7 +44,16 @@ from telemetry.logging import get_logger
 
 log = get_logger(__name__)
 
-_NOT_APPLICABLE = {"action": "error", "message": "Not applicable."}
+
+def _log_not_applicable(handler: str, event_id: int, game_type: int) -> None:
+    log.warning(
+        "handler_not_applicable",
+        system="discord",
+        subsystem="interaction",
+        handler=handler,
+        event_id=event_id,
+        game_type=game_type,
+    )
 
 
 def handle_signup_button(
@@ -177,7 +186,8 @@ def handle_rank_status_select(
         return
     handler = get_signup_handler(event.game_type)
     if not isinstance(handler, DotaHandler):
-        return _NOT_APPLICABLE
+        _log_not_applicable("rank_status_select", event_id, event.game_type)
+        return None
     return handler.rank_status_select(event, discord_user_id, rank_status)
 
 
@@ -198,7 +208,8 @@ def handle_rank_medal_select(
         return {"action": "error", "message": "Not found."}
     handler = get_signup_handler(event.game_type)
     if not isinstance(handler, DotaHandler):
-        return _NOT_APPLICABLE
+        _log_not_applicable("rank_medal_select", event_id, event.game_type)
+        return {"action": "error", "message": "Not applicable."}
     return handler.rank_medal_select(event, discord_user_id, medal)
 
 
@@ -220,7 +231,8 @@ def handle_previous_rank_submit(
         return {"action": "error", "message": "Not found."}
     handler = get_signup_handler(event.game_type)
     if not isinstance(handler, DotaHandler):
-        return _NOT_APPLICABLE
+        _log_not_applicable("previous_rank_submit", event_id, event.game_type)
+        return {"action": "error", "message": "Not applicable."}
     return handler.previous_rank_submit(event, discord_user_id, medal, date_text)
 
 
@@ -241,7 +253,8 @@ def handle_battle_cup_submit(
         return {"action": "error", "message": "Not found."}
     handler = get_signup_handler(event.game_type)
     if not isinstance(handler, DotaHandler):
-        return _NOT_APPLICABLE
+        _log_not_applicable("battle_cup_submit", event_id, event.game_type)
+        return {"action": "error", "message": "Not applicable."}
     return handler.battle_cup_submit(event, discord_user_id, tier)
 
 
@@ -263,7 +276,8 @@ def handle_screenshot_upload(
         return {"success": False, "message": "Event not found."}
     handler = get_signup_handler(event.game_type)
     if not isinstance(handler, DotaHandler):
-        return _NOT_APPLICABLE
+        _log_not_applicable("screenshot_upload", event_id, event.game_type)
+        return {"success": False, "message": "Not applicable."}
     return handler.screenshot_upload(
         event, discord_user_id, screenshot_type, attachment_url
     )
@@ -420,7 +434,8 @@ def handle_set_position(
         return {"action": "error", "message": "Event not found."}
     handler = get_signup_handler(event.game_type)
     if not isinstance(handler, DotaHandler):
-        return _NOT_APPLICABLE
+        _log_not_applicable("set_position", event_id, event.game_type)
+        return {"action": "error", "message": "Not applicable."}
     return handler.set_position(event, discord_user_id, position)
 
 
@@ -440,7 +455,8 @@ def handle_get_rank_flow_state(
         return {"error": "event_not_found", "message": "Event not found."}
     handler = get_signup_handler(event.game_type)
     if not isinstance(handler, DotaHandler):
-        return _NOT_APPLICABLE
+        _log_not_applicable("get_rank_flow_state", event_id, event.game_type)
+        return {"error": "not_applicable", "message": "Not applicable."}
     return handler.get_rank_flow_state(event, discord_user_id)
 
 
@@ -461,5 +477,6 @@ def handle_save_positions(
         return {"action": "error", "message": "Event not found."}
     handler = get_signup_handler(event.game_type)
     if not isinstance(handler, DotaHandler):
-        return _NOT_APPLICABLE
+        _log_not_applicable("save_positions", event_id, event.game_type)
+        return {"action": "error", "message": "Not applicable."}
     return handler.save_positions(event, discord_user_id, positions)
