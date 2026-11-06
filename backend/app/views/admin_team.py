@@ -26,6 +26,10 @@ from app.permissions_org import (
     is_org_owner,
 )
 from app.serializers import TournamentUserSerializer
+from app.steam_accounts import (
+    steam_account_id_conflict_payload,
+    steam_account_id_holder,
+)
 from league.models import LeagueUser
 from org.models import OrgUser
 
@@ -774,6 +778,13 @@ def update_org_user(request, org_id, org_user_id):
             # Coerce empty strings to None for nullable fields
             if new_val == "" or new_val == "null":
                 new_val = None
+            if field == "steam_account_id" and new_val is not None:
+                holder = steam_account_id_holder(new_val, exclude_pk=user.pk)
+                if holder is not None:
+                    return Response(
+                        steam_account_id_conflict_payload(new_val, holder),
+                        status=status.HTTP_409_CONFLICT,
+                    )
             if getattr(user, field) != new_val:
                 setattr(user, field, new_val)
                 user_updated = True

@@ -1,5 +1,8 @@
+import { TriangleAlert } from 'lucide-react';
 import React from 'react';
 import type { UseFormReturn } from 'react-hook-form';
+import { lookupSteamAccountIdHolder } from '~/components/api/userAPI';
+import { getLogger } from '~/lib/logger';
 import {
   FormControl,
   FormField,
@@ -23,6 +26,12 @@ import {
   type PositionKey,
 } from '~/components/user/positions/positionEdit';
 import type { EditUserInput } from './editUserSchema';
+import {
+  describeSteamAccountIdConflict,
+  shouldLookupSteamAccountId,
+} from './steamAccountIdConflict';
+
+const log = getLogger('editForm');
 
 // Mnemonic-ish row of bottom-row keys mapping to the five Dota positions.
 // Z X C V B aligns with the QWERTY layout's bottom row, easy to remember
@@ -39,6 +48,99 @@ interface Props {
   form: UseFormReturn<EditUserInput>;
   showMmr: boolean;
   mmrLabel: string;
+  /** pk of the user being edited — their own Friend ID is never a conflict. */
+  editingUserPk?: number;
+}
+
+/** Friend ID field that warns on blur when the id belongs to someone else. */
+function SteamAccountIdField({
+  form,
+  editingUserPk,
+}: {
+  form: UseFormReturn<EditUserInput>;
+  editingUserPk?: number;
+}) {
+  const [conflict, setConflict] = React.useState<string | null>(null);
+  const [checking, setChecking] = React.useState(false);
+  const original = form.formState.defaultValues?.steam_account_id ?? null;
+  // Blurring twice in quick succession can land responses out of order.
+  const latest = React.useRef(0);
+
+  const check = async (value: number | null) => {
+    const seq = ++latest.current;
+    if (!shouldLookupSteamAccountId(value, original)) {
+      setConflict(null);
+      return;
+    }
+    setChecking(true);
+    try {
+      const holder = await lookupSteamAccountIdHolder(value as number);
+      if (seq !== latest.current) return;
+      setConflict(describeSteamAccountIdConflict(holder, editingUserPk));
+    } catch (err) {
+      // A failed lookup must not block editing — the save-time 409 still guards.
+      log.warn('Friend ID lookup failed', err);
+      if (seq === latest.current) setConflict(null);
+    } finally {
+      if (seq === latest.current) setChecking(false);
+    }
+  };
+
+  return (
+    <FormField
+      control={form.control}
+      name="steam_account_id"
+      render={({ field }) => (
+        <FormItem>
+          <FormLabel hotkey="F">Friend ID</FormLabel>
+          <FormControl>
+            <Input
+              ref={field.ref}
+              name={field.name}
+              type="number"
+              value={field.value ?? ''}
+              onBlur={() => {
+                field.onBlur();
+                void check(
+                  typeof field.value === 'number' ? field.value : null,
+                );
+              }}
+              onChange={(e) => {
+                const raw = e.target.value;
+                if (raw === '') {
+                  field.onChange(null);
+                } else {
+                  const n = Number(raw);
+                  field.onChange(Number.isFinite(n) ? n : raw);
+                }
+                if (conflict) setConflict(null);
+              }}
+              data-testid="edit-user-steam_account_id"
+            />
+          </FormControl>
+          {checking && (
+            <p
+              className="text-xs text-muted-foreground"
+              data-testid="edit-user-steam_account_id-checking"
+            >
+              Checking availability…
+            </p>
+          )}
+          {conflict && (
+            <p
+              className="text-xs text-warning flex items-start gap-1.5"
+              role="status"
+              data-testid="edit-user-steam_account_id-conflict"
+            >
+              <TriangleAlert className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+              <span>{conflict}</span>
+            </p>
+          )}
+          <FormMessage />
+        </FormItem>
+      )}
+    />
+  );
 }
 
 function PositionSelect({
@@ -152,7 +254,7 @@ function NumberField({
   hotkey,
 }: {
   form: UseFormReturn<EditUserInput>;
-  fieldKey: 'mmr' | 'steam_account_id';
+  fieldKey: 'mmr';
   label: string;
   hotkey?: string;
 }) {
@@ -192,7 +294,12 @@ function NumberField({
   );
 }
 
-export const UserEditForm: React.FC<Props> = ({ form, showMmr, mmrLabel }) => {
+export const UserEditForm: React.FC<Props> = ({
+  form,
+  showMmr,
+  mmrLabel,
+  editingUserPk,
+}) => {
   // No outer <ScrollArea> — FormDialog already wraps its children in one.
   return (
     <div className="flex flex-col w-full gap-4">
@@ -217,12 +324,7 @@ export const UserEditForm: React.FC<Props> = ({ form, showMmr, mmrLabel }) => {
           ))}
         </div>
       </div>
-      <NumberField
-        form={form}
-        fieldKey="steam_account_id"
-        label="Friend ID"
-        hotkey="F"
-      />
+      <SteamAccountIdField form={form} editingUserPk={editingUserPk} />
     </div>
   );
 };

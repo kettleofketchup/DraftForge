@@ -86,7 +86,9 @@ export function resolveEditScope(
   if (ctx.leagueId && ctx.currentLeague?.pk === ctx.leagueId) {
     return { kind: 'league', league: ctx.currentLeague, orgId: ctx.organizationId };
   }
-  if (ctx.currentOrg) return { kind: 'org', organization: ctx.currentOrg };
+  if (ctx.currentOrg && ctx.currentOrg.pk === ctx.organizationId) {
+    return { kind: 'org', organization: ctx.currentOrg };
+  }
   return { kind: 'global' };
 }
 

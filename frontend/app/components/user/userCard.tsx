@@ -15,6 +15,7 @@ import { UserAvatar } from '~/components/user/UserAvatar';
 import { DisplayName } from '~/components/user/avatar';
 import { usePlayerPositions } from '~/hooks/usePlayerPositions';
 import { getLogger } from '~/lib/logger';
+import { useUserCacheStore } from '~/store/userCacheStore';
 import { isUserEntry } from '~/store/userCacheTypes';
 import type { PositionsType } from '~/store/userCacheTypes';
 import { PlayerRemoveButton } from '~/pages/tournament/tabs/players/playerRemoveButton';
@@ -65,10 +66,18 @@ export const UserCard: React.FC<Props> = memo(
     // transitions. Avoids cascading every grid card on hover.
     const { openPlayerModal } = useSharedPopoverActions();
 
-    const orgEntry = isUserEntry(user) && organizationId ? user.orgData[organizationId] : undefined;
+    // Plain users (e.g. hydrated tournament players) carry no orgData; read
+    // it from the entity cache the page upserted them into.
+    const cachedEntry = useUserCacheStore((s) =>
+      !isUserEntry(user) && organizationId && user.pk != null
+        ? s.entities[user.pk]
+        : undefined,
+    );
+    const orgSource = isUserEntry(user) ? user : cachedEntry;
+    const orgEntry = organizationId ? orgSource?.orgData[organizationId] : undefined;
     const mmr = isUserEntry(user)
       ? (organizationId ? orgEntry?.mmr : undefined)
-      : user.mmr;
+      : (orgEntry?.mmr ?? user.mmr);
     // Same resolution as UserStrip: scoped map for cache entries, flat field
     // for raw payloads.
     const leagueMmr = isUserEntry(user)
@@ -83,8 +92,10 @@ export const UserCard: React.FC<Props> = memo(
     // must keep its identity for this memo to hold.
     const editScope = React.useMemo<EditUserScope>(
       () =>
-        resolveEditScope(user, { organizationId, leagueId, currentOrg, currentLeague }),
-      [user, organizationId, leagueId, currentOrg?.pk, currentLeague?.pk],
+        resolveEditScope(orgEntry ? { orgUserPk: orgEntry.id } : user, {
+          organizationId, leagueId, currentOrg, currentLeague,
+        }),
+      [user, orgEntry?.id, organizationId, leagueId, currentOrg?.pk, currentLeague?.pk],
     );
 
     // Construct the User instance ONCE per stable input set. Doing this
@@ -98,7 +109,7 @@ export const UserCard: React.FC<Props> = memo(
     const editUser = React.useMemo(
       () =>
         new User(
-          isUserEntry(user) && orgEntry
+          orgEntry
             ? { ...user, mmr: orgEntry.mmr, orgUserPk: orgEntry.id }
             : user,
         ),

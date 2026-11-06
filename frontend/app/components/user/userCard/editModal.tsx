@@ -20,6 +20,7 @@ import {
   type EditUserScope,
 } from './editUserSchema';
 import { UserEditForm } from './editForm';
+import { steamAccountIdConflictFromError } from './steamAccountIdConflict';
 
 interface Props {
   user: UserClassType;
@@ -98,6 +99,14 @@ export function UserEditModal({ user, scope = { kind: 'global' }, fields }: Prop
         toast.success(`${user.username} updated`);
         setOpen(false);
       } catch (err) {
+        const conflict = steamAccountIdConflictFromError(
+          (err as { response?: { data?: unknown } })?.response?.data,
+        );
+        if (conflict) {
+          form.setError('steam_account_id', { type: 'server', message: conflict });
+          toast.error(conflict);
+          return;
+        }
         const message =
           err instanceof Error ? err.message : `Failed to update ${user.username}`;
         toast.error(message);
@@ -192,6 +201,7 @@ export function UserEditModal({ user, scope = { kind: 'global' }, fields }: Prop
             // ORG_USER_FIELDS is just {'mmr'}), so this field is org MMR in
             // both scopes that show it.
             mmrLabel="Org MMR"
+            editingUserPk={user.pk}
           />
         </Form>
       </FormDialog>

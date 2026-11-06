@@ -276,7 +276,7 @@ def notify_button(request: Request) -> Response:
 @authentication_classes(_auth)
 @permission_classes(_perm)
 def decline_button(request: Request) -> Response:
-    """Wrap handle_decline_button. Body: event_id, discord_user_id."""
+    """Wrap handle_decline_button. Body: event_id, discord_user_id, discord_username?."""
     try:
         body = DeclineButtonRequest.model_validate(request.data)
     except ValidationError as exc:

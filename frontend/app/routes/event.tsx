@@ -261,17 +261,6 @@ export default function EventPage() {
     [signups, currentUser?.pk],
   );
 
-  // Check if user has a cancelled signup they can reinstate
-  const myCancelledSignup = useMemo(
-    () => {
-      if (!signups || !currentUser?.pk) return undefined;
-      return signups.find(
-        (s) => Number(s.user) === Number(currentUser.pk) && s.status === 'cancelled'
-      );
-    },
-    [signups, currentUser?.pk],
-  );
-
   // Split signups into active and waitlisted
   const activeSignups = useMemo(
     () => (signups ?? []).filter((s) => !['waitlisted', 'tentative', 'cancelled', 'rejected'].includes(s.status)),
@@ -447,7 +436,7 @@ export default function EventPage() {
               )
             )}
             {/* Not signed up — show Sign Up + Tentative */}
-            {currentUser && event.state === EventState.SIGNUPS_OPEN && signups && !mySignup && !myCancelledSignup && (
+            {currentUser && event.state === EventState.SIGNUPS_OPEN && signups && !mySignup && (
               <>
                 <PrimaryButton
                   size="sm"
@@ -458,29 +447,6 @@ export default function EventPage() {
                   <CheckCircle2 className="h-4 w-4 mr-1.5" />
                   Sign Up
                 </PrimaryButton>
-                <SecondaryButton
-                  size="sm"
-                  onClick={() => trySignup('tentative')}
-                  disabled={!event || !signups || !profileLoaded || signupMutation.isPending}
-                  data-testid="event-tentative-btn"
-                >
-                  <HelpCircle className="h-4 w-4 mr-1.5" />
-                  <span className="hidden sm:inline">Tentative</span>
-                </SecondaryButton>
-              </>
-            )}
-            {/* Cancelled — can reinstate */}
-            {currentUser && event.state === EventState.SIGNUPS_OPEN && signups && !mySignup && myCancelledSignup && (
-              <>
-                <SecondaryButton
-                  size="sm"
-                  onClick={() => signupActions.reinstate.mutate(myCancelledSignup.id)}
-                  disabled={signupActions.reinstate.isPending}
-                  data-testid="event-reinstate-btn"
-                >
-                  <Undo2 className="h-4 w-4 mr-1.5" />
-                  Reinstate
-                </SecondaryButton>
                 <SecondaryButton
                   size="sm"
                   onClick={() => trySignup('tentative')}

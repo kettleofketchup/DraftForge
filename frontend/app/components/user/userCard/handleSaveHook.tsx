@@ -6,6 +6,7 @@ import type { UserClassType, UserType } from '~/components/user/types';
 import { User } from '~/components/user/user';
 import { useUserCacheStore } from '~/store/userCacheStore';
 import { getLogger } from '~/lib/logger';
+import { steamAccountIdConflictFromError } from './steamAccountIdConflict';
 const log = getLogger('handleSaveHook');
 
 export const createErrorMessage = (
@@ -129,7 +130,10 @@ export const handleSave = async (
         const errData = err?.response?.data;
         if (errData) setErrorMessage(errData);
         setIsSaving(false);
-        return `Failed to update user ${user.username}.`;
+        return (
+          steamAccountIdConflictFromError(errData) ??
+          `Failed to update user ${user.username}.`
+        );
       },
     });
   }

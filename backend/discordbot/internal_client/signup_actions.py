@@ -195,12 +195,13 @@ def decline_button(
     *,
     event_id: int,
     discord_user_id: str,
+    discord_username: str | None = None,
 ) -> dict[str, Any]:
+    payload: dict[str, Any] = {"event_id": event_id, "discord_user_id": discord_user_id}
+    if discord_username is not None:
+        payload["discord_username"] = discord_username
     return _validated(
-        _post(
-            "/discord/decline-button/",
-            {"event_id": event_id, "discord_user_id": discord_user_id},
-        ),
+        _post("/discord/decline-button/", payload),
         default={"action": "error", "message": "Decline service unavailable."},
     )
 
@@ -276,9 +277,15 @@ def get_rank_flow_state(
         {"event_id": event_id, "discord_user_id": discord_user_id},
     )
     if resp is None or not resp.ok:
-        return {"error": "internal_api_unreachable", "message": "Could not fetch state."}
+        return {
+            "error": "internal_api_unreachable",
+            "message": "Could not fetch state.",
+        }
     try:
         payload = resp.json()
     except ValueError:
-        return {"error": "internal_api_unreachable", "message": "Could not fetch state."}
+        return {
+            "error": "internal_api_unreachable",
+            "message": "Could not fetch state.",
+        }
     return RankFlowStateResponse.model_validate(payload).model_dump()
