@@ -27,7 +27,7 @@ class GetLeagueSummaryCacheTests(TransactionTestCase):
             summary = get_league_summary(LEAGUE, 3)
         self.assertEqual(summary["min_games"], 3)
 
-    def test_pms_write_invalidates(self) -> None:
+    def test_new_match_ingest_invalidates(self) -> None:
         before = get_league_summary(LEAGUE, 5)["players"][str(self.user.pk)]["games"]
         record_game(
             self.user,
@@ -39,6 +39,32 @@ class GetLeagueSummaryCacheTests(TransactionTestCase):
         after = get_league_summary(LEAGUE, 5)["players"][str(self.user.pk)]
         self.assertEqual(after["games"], before + 1)
         self.assertEqual(after["recent"][-1], "W")
+
+    def test_pms_only_write_on_existing_match_invalidates(self) -> None:
+        other = make_player("cache_other", 76561198000000102)
+        self.assertNotIn(str(other.pk), get_league_summary(LEAGUE, 5)["players"])
+        matches_before = Match.objects.count()
+        record_game(other, league_id=LEAGUE, match_id=500, start_time=0, won=False)
+        self.assertEqual(Match.objects.count(), matches_before)
+        after = get_league_summary(LEAGUE, 5)
+        self.assertEqual(after["players"][str(other.pk)]["recent"], ["L"])
+
+    def test_pms_relink_invalidates(self) -> None:
+        other = make_player("cache_relink", 76561198000000103)
+        orphan = record_game(
+            None,
+            league_id=LEAGUE,
+            match_id=501,
+            start_time=0,
+            won=True,
+            steam_id=other.steamid,
+        )
+        before = get_league_summary(LEAGUE, 5)
+        self.assertNotIn(str(other.pk), before["players"])
+        orphan.user = other
+        orphan.save()
+        after = get_league_summary(LEAGUE, 5)
+        self.assertEqual(after["players"][str(other.pk)]["games"], 1)
 
     def test_match_only_edit_flips_result(self) -> None:
         before = get_league_summary(LEAGUE, 5)["players"][str(self.user.pk)]
