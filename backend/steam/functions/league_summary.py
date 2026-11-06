@@ -1,8 +1,10 @@
 from fractions import Fraction
 from typing import Literal, TypedDict
 
+from cacheops import cached_as
+
 from steam.functions.stats_update import player_won
-from steam.models import PlayerMatchStats
+from steam.models import Match, PlayerMatchStats
 from telemetry.logging import get_logger
 
 logger = get_logger(__name__)
@@ -165,3 +167,18 @@ def compute_league_summary(steam_league_id: int, min_games: int) -> LeagueSummar
         players=len(players),
     )
     return summary
+
+
+def get_league_summary(steam_league_id: int, min_games: int) -> LeagueSummary:
+    @cached_as(
+        Match.objects.filter(league_id=steam_league_id),
+        PlayerMatchStats,
+        extra=f"league-summary:{steam_league_id}:{min_games}",
+        timeout=30 * 60,
+        lock=True,
+        keep_fresh=True,
+    )
+    def _build() -> LeagueSummary:
+        return compute_league_summary(steam_league_id, min_games)
+
+    return _build()
