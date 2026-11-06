@@ -104,19 +104,36 @@ interface Box {
   bottom: number;
 }
 
-interface StripLayout {
-  width: number;
+interface Fit {
+  label: string;
   scrollWidth: number;
   clientWidth: number;
+}
+
+interface StripLayout {
+  width: number;
+  fits: Fit[];
   outer: Box;
   parts: Box[];
 }
 
-async function measureStrips(dialog: Locator): Promise<StripLayout[]> {
+const STATS_ONLY_AT_1920 =
+  'strip-league-stats is container-hidden at 1024 and 1280 in the draft modal; only 1920 measures stats against name/MMR/action';
+
+function draftStrips(dialog: Locator): Locator {
   return dialog
     .locator('[data-testid="available-player"]:has([aria-label^="View profile for"])')
-    .filter({ visible: true })
-    .evaluateAll((strips) =>
+    .filter({ visible: true });
+}
+
+function teamCardStrips(card: Locator): Locator {
+  return card
+    .locator('[class~="@container"]:has([aria-label^="View profile for"])')
+    .filter({ visible: true });
+}
+
+async function measureStrips(strips: Locator): Promise<StripLayout[]> {
+  return strips.evaluateAll((strips) =>
       strips.map((strip) => {
         const box = (label: string, el: Element): Box => {
           const r = el.getBoundingClientRect();
@@ -129,14 +146,29 @@ async function measureStrips(dialog: Locator): Promise<StripLayout[]> {
         const children = Array.from(strip.children);
         const mmr = children.find((c) => c.textContent?.includes('B:'));
         if (mmr) parts.push(box('mmr', mmr));
+        const fit = (label: string, el: Element): Fit => ({
+          label,
+          scrollWidth: el.scrollWidth,
+          clientWidth: el.clientWidth,
+        });
+        const fits: Fit[] = [fit('strip', strip)];
         const stats = strip.querySelector('[data-testid="strip-league-stats"]');
-        if (stats && stats.getBoundingClientRect().width > 0) parts.push(box('stats', stats));
-        const action = children[children.length - 1];
-        if (action && action.getBoundingClientRect().width > 0) parts.push(box('action', action));
+        if (stats && stats.getBoundingClientRect().width > 0) {
+          parts.push(box('stats', stats));
+          fits.push(fit('stats', stats));
+          const badge = stats.querySelector('[data-testid="strip-league-stats-rank"]')?.parentElement;
+          if (badge) fits.push(fit('stats badge', badge));
+        }
+        const last = children[children.length - 1];
+        if (last && last.classList.contains('flex-1')) {
+          const context = last.firstElementChild;
+          if (context && context.getBoundingClientRect().width > 0) parts.push(box('context', context));
+        } else if (last && last.getBoundingClientRect().width > 0) {
+          parts.push(box('action', last));
+        }
         return {
           width: strip.getBoundingClientRect().width,
-          scrollWidth: strip.scrollWidth,
-          clientWidth: strip.clientWidth,
+          fits,
           outer: box('strip', strip),
           parts,
         };
@@ -157,6 +189,33 @@ function inside(inner: Box, outer: Box): boolean {
   );
 }
 
+function expectCleanLayout(layouts: StripLayout[], where: string): void {
+  expect(layouts.length, `strips at ${where}`).toBeGreaterThan(0);
+  for (const layout of layouts) {
+    for (const f of layout.fits) {
+      expect(f.scrollWidth, `${f.label} scrollWidth at ${where}`).toBeLessThanOrEqual(f.clientWidth);
+    }
+    for (const part of layout.parts) {
+      expect(inside(part, layout.outer), `${part.label} inside strip at ${where}`).toBe(true);
+    }
+    for (let i = 0; i < layout.parts.length; i++) {
+      for (let j = i + 1; j < layout.parts.length; j++) {
+        const a = layout.parts[i];
+        const b = layout.parts[j];
+        expect(overlaps(a, b), `${a.label}/${b.label} overlap at ${where}`).toBe(false);
+      }
+    }
+  }
+}
+
+function statsBadge(stats: Locator): Locator {
+  return stats.getByTestId('strip-league-stats-rank').locator('xpath=..');
+}
+
+function winRateChip(stats: Locator): Locator {
+  return statsBadge(stats).locator('span').filter({ hasText: /^\d+%$/ });
+}
+
 test.describe('Strip league stats (@cicd)', () => {
   let tournament: StripStatsTournament;
 
@@ -173,7 +232,15 @@ test.describe('Strip league stats (@cicd)', () => {
       await expectAceVisible(dialog);
 
       const ace = availableStrip(dialog, NAMES.ace);
-      await expect(ace.getByTestId('strip-league-stats')).toContainText('#1 ·');
+      const aceStats = ace.getByTestId('strip-league-stats');
+      await expect(statsBadge(aceStats)).toHaveText('#1 · 8g · 88%');
+      await expect(winRateChip(aceStats)).toHaveClass(/\btext-success\b/);
+      await expect(winRateChip(aceStats)).not.toHaveClass(/destructive/);
+
+      const midStats = availableStrip(dialog, NAMES.mid).getByTestId('strip-league-stats');
+      await expect(statsBadge(midStats)).toHaveText('#6 · 7g · 29%');
+      await expect(winRateChip(midStats)).toHaveClass(/\bbg-destructive\//);
+      await expect(winRateChip(midStats)).not.toHaveClass(/text-success/);
       await expect(ace.getByTestId('streak-badge')).toHaveCount(0);
       const form = await ace
         .getByTestId('recent-form')
@@ -245,9 +312,7 @@ test.describe('Strip league stats (@cicd)', () => {
         await expect(strip, name).toContainText('B:');
       }
 
-      await page.keyboard.press('Escape');
-      await expect(dialog).toBeHidden();
-
+      await openTeamsTab(page, tournament);
       for (const name of [NAMES.captA, NAMES.captB]) {
         const strip = teamCard(page, name);
         await expect(strip, name).toHaveCount(1);
@@ -265,18 +330,19 @@ test.describe('Strip league stats (@cicd)', () => {
       await expectHiddenByDesign(dialog);
     });
 
-    test('@1280 TeamsTab (close modal) shows strip_capt_a stats', async ({ page }) => {
-      const dialog = await openDraftModal(page, tournament);
-      await expect(availableStrip(dialog, NAMES.ace)).toHaveCount(1);
-      await page.keyboard.press('Escape');
-      await expect(dialog).toBeHidden();
-
+    test('@1280 TeamsTab shows strip_capt_a stats', async ({ page }) => {
+      await openTeamsTab(page, tournament);
       const capt = teamCard(page, NAMES.captA);
       await expect(capt).toHaveCount(1);
       const stats = capt.getByTestId('strip-league-stats');
       await expect(stats).toBeVisible();
-      await expect(stats).toContainText('#7 ·');
-      await expect(stats).toContainText('5g');
+      await expect(statsBadge(stats)).toHaveText('#7 · 5g · 20%');
+
+      const cards = page.locator('[data-testid^="completed-team-card-"]').filter({ visible: true });
+      const layouts = await measureStrips(teamCardStrips(cards));
+      expectCleanLayout(layouts, 'TeamsTab 1280');
+      expect(layouts.some((l) => l.parts.some((p) => p.label === 'stats'))).toBe(true);
+      expect(layouts.some((l) => l.parts.some((p) => p.label === 'context'))).toBe(true);
 
       const captB = teamCard(page, NAMES.captB);
       await expect(captB).toBeVisible();
@@ -295,28 +361,16 @@ test.describe('Strip league stats (@cicd)', () => {
         await expect(availableStrip(dialog, NAMES.ace)).toBeVisible();
       }
 
-      const layouts = await measureStrips(dialog);
-      expect(layouts.length, `strips at ${width}`).toBeGreaterThan(0);
+      const layouts = await measureStrips(draftStrips(dialog));
       measured[width] = [...new Set(layouts.map((l) => Math.round(l.width)))];
-
-      for (const layout of layouts) {
-        expect(layout.scrollWidth, `scrollWidth at ${width}`).toBeLessThanOrEqual(layout.clientWidth);
-        for (const part of layout.parts) {
-          expect(inside(part, layout.outer), `${part.label} inside strip at ${width}`).toBe(true);
-        }
-        for (let i = 0; i < layout.parts.length; i++) {
-          for (let j = i + 1; j < layout.parts.length; j++) {
-            const a = layout.parts[i];
-            const b = layout.parts[j];
-            expect(overlaps(a, b), `${a.label}/${b.label} overlap at ${width}`).toBe(false);
-          }
-        }
-      }
+      expectCleanLayout(layouts, String(width));
       if (width === 1920) {
         expect(layouts.some((l) => l.parts.some((p) => p.label === 'stats'))).toBe(true);
+        expect(layouts.some((l) => l.fits.some((f) => f.label === 'stats badge'))).toBe(true);
       }
     }
     test.info().annotations.push({ type: 'strip-widths', description: JSON.stringify(measured) });
+    test.info().annotations.push({ type: 'stats-geometry', description: STATS_ONLY_AT_1920 });
   });
 
   test.describe('375 wide', () => {
