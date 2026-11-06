@@ -9,6 +9,7 @@ from rest_framework.response import Response
 
 from app.cache_utils import invalidate_obj
 from telemetry.logging import get_logger
+from user.querysets import with_user_profiles
 
 logger = get_logger(__name__)
 
@@ -31,6 +32,7 @@ from events.serializers import (
     EventSlimSerializer,
     EventTeamSerializer,
     OrgEventDefaultsSerializer,
+    RepeaterSubscriptionSerializer,
 )
 from events.services import (
     approve_signup,
@@ -255,15 +257,9 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
         # RepeaterSubscriptionSerializer reads user.nickname + user.avatar,
         # which go through the @property on CustomUser → base_profile (T1
         # epic). Without this prefetch the list view is N+1 cold-cache.
-        # .nocache(): the join is invalidated only on RepeaterSubscription, so
-        # a nickname/avatar edit would survive in the joined base_profile row.
-        subs = (
-            RepeaterSubscription.objects.filter(event_repeater=repeater)
-            .select_related("user", "user__base_profile")
-            .nocache()
+        subs = with_user_profiles(
+            RepeaterSubscription.objects.filter(event_repeater=repeater), "user"
         )
-        from events.serializers import RepeaterSubscriptionSerializer
-
         return Response(RepeaterSubscriptionSerializer(subs, many=True).data)
 
     @action(
@@ -861,11 +857,9 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
         # user.avatar — both resolve through the CustomUser @property to
         # base_profile (T1 epic). Without user__base_profile this is N+1
         # cold-cache on busy events.
-        # .nocache(): the join is invalidated only on EventSignup, so a
-        # nickname/avatar edit would survive in the joined base_profile row.
-        qs = EventSignup.objects.select_related(
-            "user", "user__base_profile", "event", "event_team"
-        ).nocache()
+        qs = with_user_profiles(
+            EventSignup.objects.select_related("event", "event_team"), "user"
+        )
         event_id = self.request.query_params.get("event")
         if event_id:
             qs = qs.filter(event_id=event_id)
