@@ -12,9 +12,10 @@ import { usePlayerPositions } from '~/hooks/usePlayerPositions';
 import { cn } from '~/lib/utils';
 import { isUserEntry, type UserEntry } from '~/store/userCacheTypes';
 import { RolePositions } from './positions';
+import { UserStripLeagueStats } from './UserStripLeagueStats';
 import type { UserType } from './types';
 
-interface UserStripProps {
+export interface UserStripProps {
   user: UserType | UserEntry;
 
   /** Optional slot for contextual data (e.g., projected MMR, pick order) */
@@ -28,6 +29,9 @@ interface UserStripProps {
 
   /** Optional organization ID for context-specific stats in mini profile */
   organizationId?: number;
+
+  /** League pk for the ticket-match stats column; independent of the L: badge */
+  statsLeagueId?: number | null;
 
   /** Compact mode - reduced padding, smaller avatar */
   compact?: boolean;
@@ -61,7 +65,7 @@ interface UserStripProps {
   'data-testid'?: string;
 }
 
-const userStripPropsAreEqual = (
+export const userStripPropsAreEqual = (
   prev: UserStripProps,
   next: UserStripProps,
 ): boolean => {
@@ -75,6 +79,7 @@ const userStripPropsAreEqual = (
   // Context IDs
   if (prev.leagueId !== next.leagueId) return false;
   if (prev.organizationId !== next.organizationId) return false;
+  if (prev.statsLeagueId !== next.statsLeagueId) return false;
 
   // Display options
   if (prev.compact !== next.compact) return false;
@@ -96,6 +101,7 @@ export const UserStrip = memo(
     actionSlot,
     leagueId,
     organizationId,
+    statsLeagueId,
     compact = false,
     showBorder = true,
     showPositions = true,
@@ -190,6 +196,8 @@ export const UserStrip = memo(
     // (fall back to the passed user.positions off-Dota / pre-cache). RolePositions
     // re-resolves internally too; subscribing here keeps the memo dep reactive.
     const playerPositions = usePlayerPositions(user?.pk ?? -1) ?? user?.positions;
+    const showStats = statsLeagueId != null;
+
     // Memoize positions to prevent re-renders
     const positions = useMemo(
       () => <RolePositions user={user} compact disableTooltips fillEmpty />,
@@ -203,6 +211,7 @@ export const UserStrip = memo(
           compact ? 'p-1' : 'p-2',
           showBorder && 'border border-border/50',
           'bg-muted/25 hover:bg-muted/45',
+          showStats && '@container',
           className,
         )}
         data-testid={testId}
@@ -225,7 +234,7 @@ export const UserStrip = memo(
                 'text-sm font-medium cursor-pointer hover:text-primary transition-colors leading-tight inline-block truncate',
                 // Fixed width when capped so MMR column lines up across rows.
                 nameMaxLength == null
-                  ? 'min-w-[15ch] sm:min-w-[20ch]'
+                  ? cn('min-w-[15ch]', showStats ? 'sm:min-w-[12ch]' : 'sm:min-w-[20ch]')
                   : 'w-[var(--name-width)]',
               )}
               style={
@@ -249,6 +258,10 @@ export const UserStrip = memo(
             {orgMmr ? baseMmrBadge : null}
             {leagueMmrValue ? leagueMmrBadge : null}
           </div>
+        ) : null}
+
+        {statsLeagueId != null && user.pk != null ? (
+          <UserStripLeagueStats leaguePk={statsLeagueId} userId={user.pk} />
         ) : null}
 
         {/* Column 4: Context Slot (flex-1 to push action to end) */}
