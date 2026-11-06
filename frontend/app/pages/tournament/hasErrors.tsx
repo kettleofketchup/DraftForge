@@ -13,6 +13,7 @@ import UserEditModal from '~/components/user/userCard/editModal';
 import {
   resolveEditScope,
   resolveOrgUserLink,
+  type EditUserScope,
 } from '~/components/user/userCard/editUserSchema';
 import { getLogger } from '~/lib/logger';
 import { cn } from '~/lib/utils';
@@ -27,6 +28,7 @@ const log = getLogger('hasErrors');
 
 interface UserIssue {
   user: UserClassType;
+  scope: EditUserScope;
   issues: string[];
 }
 
@@ -112,13 +114,20 @@ export const hasErrors = () => {
       }
 
       if (userIssues.length > 0) {
-        issues.push({ user: toUserType(cached, orgId, leagueId), issues: userIssues });
+        const user = toUserType(cached, orgId, leagueId);
+        const scope = resolveEditScope(user, {
+          organizationId: orgId,
+          leagueId,
+          currentOrg,
+          currentLeague: league,
+        });
+        issues.push({ user, scope, issues: userIssues });
       }
     }
 
     log.debug('Users with issues:', issues.length, issues);
     return issues;
-  }, [tournament?.users, entities, orgId, leagueId, positionsByPk]);
+  }, [tournament?.users, entities, orgId, leagueId, currentOrg, league, positionsByPk]);
 
   if (usersWithIssues.length === 0) return null;
 
@@ -152,7 +161,7 @@ export const hasErrors = () => {
         data-testid="incomplete-profiles-list"
       >
         <div className="grid grid-cols-1 min-[420px]:grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 p-3 sm:p-4 pt-0 sm:pt-0">
-          {usersWithIssues.map(({ user, issues }) => (
+          {usersWithIssues.map(({ user, scope, issues }) => (
             <div
               className={cn('flex flex-col p-3 rounded-lg h-full', brandErrorCard)}
               key={user.pk}
@@ -168,12 +177,7 @@ export const hasErrors = () => {
               <div className="flex justify-center mt-auto pt-3">
                 <UserEditModal
                   user={user}
-                  scope={resolveEditScope(user, {
-                    organizationId: orgId,
-                    leagueId,
-                    currentOrg,
-                    currentLeague: league,
-                  })}
+                  scope={scope}
                   key={`UserEditModal-${user.pk}`}
                 />
               </div>

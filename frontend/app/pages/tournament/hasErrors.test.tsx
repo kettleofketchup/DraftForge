@@ -113,6 +113,27 @@ describe('hasErrors incomplete-profile edit scope', () => {
   });
 });
 
+describe('hasErrors scope identity (finding 5)', () => {
+  beforeEach(() => {
+    captured.length = 0;
+    useUserStore.setState({
+      tournament: {},
+      currentUser: { pk: 1, username: 'admin', is_superuser: true, is_staff: true },
+    } as never);
+    useUserCacheStore.setState({ entities: { 10: entry } } as never);
+  });
+
+  it('rerender without a store change passes the same scope object', () => {
+    setTournament(8, 8);
+    setStores(8, 8);
+    const { rerender } = render(<Harness />);
+    const first = lastScope();
+    rerender(<Harness />);
+    expect(captured.filter((c) => c.user.pk === 10).length).toBeGreaterThan(1);
+    expect(lastScope()).toBe(first);
+  });
+});
+
 describe('hasErrors edit user carries the scope-gating link (finding 4)', () => {
   const CTX = { organizationId: 8, leagueId: 8 };
 

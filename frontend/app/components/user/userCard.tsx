@@ -92,8 +92,7 @@ export const UserCard: React.FC<Props> = memo(
     // player's OrgUser link (flat orgUserPk on raw payloads, orgData/leagueData
     // on cache entries); league scope carries a deterministic orgId. The same
     // link feeds editUser, so a scoped edit always carries its orgUserPk.
-    // currentOrg and currentLeague are depped by pk so a new object ref with
-    // the same pk doesn't recompute.
+    // Object deps: a same-pk store refresh (e.g. new staff_ids) must re-gate.
     const linkPk =
       resolveOrgUserLink(orgSource ?? user, { organizationId, leagueId }) ??
       resolveOrgUserLink(user, { organizationId, leagueId });
@@ -102,7 +101,7 @@ export const UserCard: React.FC<Props> = memo(
         resolveEditScope({ orgUserPk: linkPk }, {
           organizationId, leagueId, currentOrg, currentLeague,
         }),
-      [linkPk, organizationId, leagueId, currentOrg?.pk, currentLeague?.pk],
+      [linkPk, organizationId, leagueId, currentOrg, currentLeague],
     );
 
     // Construct the User instance ONCE per stable input set. Doing this

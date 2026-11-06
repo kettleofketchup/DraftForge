@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { toast } from 'sonner';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -374,5 +374,34 @@ describe('UserCard edit user carries the scope-gating link', () => {
     renderEntryCard(user, CTX.organizationId, CTX.leagueId);
     fireEvent.click(screen.getByTestId('edit-user-btn'));
     expect(screen.queryByTestId('edit-user-mmr')).toBeNull();
+  });
+});
+
+describe('UserCard edit gate follows a same-pk org refresh (MA-5)', () => {
+  beforeEach(() => {
+    useUserCacheStore.getState().reset?.();
+    useUserStore.setState({
+      currentUser: { pk: 1021, username: 'v', is_superuser: false, is_staff: false },
+    } as never);
+    useLeagueStore.setState({ currentLeague: null });
+  });
+
+  it('shows the edit button once the refreshed org lists the viewer as staff', () => {
+    const org = { pk: ORG_PK, name: 'Org', staff_ids: [] } as unknown as OrganizationType;
+    useOrgStore.setState({ currentOrg: org });
+    const entry = seed({
+      pk: 80, username: 'staffed', nickname: 'Staffed',
+      orgData: { [ORG_PK]: { id: 180, mmr: 1000, _fetchedAt: 0 } },
+      leagueData: {}, _fetchedAt: 0,
+    });
+    renderEntryCard(entry, ORG_PK);
+    expect(screen.queryByTestId('edit-user-btn')).toBeNull();
+
+    act(() =>
+      useOrgStore.setState({
+        currentOrg: { ...org, staff_ids: [1021] } as unknown as OrganizationType,
+      }),
+    );
+    expect(screen.getByTestId('edit-user-btn')).toBeTruthy();
   });
 });
