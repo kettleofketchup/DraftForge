@@ -55,6 +55,7 @@ const selectTeams = (state: ReturnType<typeof useUserStore.getState>) => state.t
 const selectCurDraftRoundCaptainPk = (state: ReturnType<typeof useUserStore.getState>) => state.curDraftRound?.captain?.pk;
 const selectCurDraftRoundChoice = (state: ReturnType<typeof useUserStore.getState>) => state.curDraftRound?.choice;
 const selectOrganizationPk = (state: ReturnType<typeof useUserStore.getState>) => state.tournament?.organization_pk;
+const selectLeaguePk = (state: ReturnType<typeof useUserStore.getState>) => state.tournament?.league_pk ?? null;
 
 // Helper to get ordinal suffix
 const getOrdinal = (n: number): string => {
@@ -105,15 +106,18 @@ const AvailablePlayerStrip = memo(({
   isShuffle,
   projected,
   organizationId,
+  statsLeagueId,
 }: {
   user: UserType;
   isShuffle: boolean;
   projected: { newTeamMmr: number; newPickOrder: number; isDoublePick: boolean } | null;
   organizationId?: number;
+  statsLeagueId: number | null;
 }) => (
   <UserStrip
     user={user}
     organizationId={organizationId}
+    statsLeagueId={statsLeagueId}
     className={projected?.isDoublePick ? 'bg-green-950/30 border-green-500/50' : undefined}
     contextSlot={isShuffle && projected ? <ShuffleProjectionSlot projected={projected} /> : undefined}
     actionSlot={<ChoosePlayerButton user={user} />}
@@ -129,6 +133,7 @@ export const AvailablePlayersSection = memo(() => {
   const curDraftRoundCaptainPk = useUserStore(selectCurDraftRoundCaptainPk);
   const curDraftRoundChoice = useUserStore(selectCurDraftRoundChoice);
   const organizationPk = useUserStore(selectOrganizationPk);
+  const leaguePk = useUserStore(selectLeaguePk);
 
   // Subscribe ONCE to a pk→positions record off the list-populated entity
   // adapter (usersRemaining lives in the DRAFT store, not the cache, so the
@@ -411,6 +416,7 @@ export const AvailablePlayersSection = memo(() => {
                 isShuffle={isShuffle}
                 projected={getProjectedData(user.mmr || 0)}
                 organizationId={organizationPk ?? undefined}
+                statsLeagueId={leaguePk}
               />
             ))}
           </div>
@@ -424,6 +430,7 @@ export const AvailablePlayersSection = memo(() => {
                 isShuffle={isShuffle}
                 projected={getProjectedData(user.mmr || 0)}
                 organizationId={organizationPk ?? undefined}
+                statsLeagueId={leaguePk}
               />
             ))}
           </div>
@@ -437,6 +444,7 @@ export const AvailablePlayersSection = memo(() => {
                 isShuffle={isShuffle}
                 projected={getProjectedData(user.mmr || 0)}
                 organizationId={organizationPk ?? undefined}
+                statsLeagueId={leaguePk}
               />
             ))}
           </div>
@@ -454,6 +462,7 @@ export const AvailablePlayersSection = memo(() => {
                 isShuffle={isShuffle}
                 projected={getProjectedData(user.mmr || 0)}
                 organizationId={organizationPk ?? undefined}
+                statsLeagueId={leaguePk}
               />
             ))}
           </div>
@@ -467,6 +476,7 @@ export const AvailablePlayersSection = memo(() => {
                 isShuffle={isShuffle}
                 projected={getProjectedData(user.mmr || 0)}
                 organizationId={organizationPk ?? undefined}
+                statsLeagueId={leaguePk}
               />
             ))}
           </div>
@@ -483,6 +493,7 @@ export const AvailablePlayersSection = memo(() => {
               isShuffle={isShuffle}
               projected={getProjectedData(user.mmr || 0)}
               organizationId={organizationPk ?? undefined}
+              statsLeagueId={leaguePk}
             />
           ))}
         </div>
