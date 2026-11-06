@@ -7,15 +7,18 @@ Contains functions for creating bracket-related test scenarios:
 """
 
 import random
-from datetime import date
+from datetime import date, datetime
+from datetime import time as dt_time
+from datetime import timezone as dt_tz
 
-from app.models import CustomUser
+from app.models import CustomUser, Game, League, PositionsModel, Team, Tournament
+from steam.models import Match, PlayerMatchStats
 
-from .constants import DTX_STEAM_LEAGUE_ID
+from .constants import BRACKET_STEAM_ID_BASE, BRACKET_USER_COUNT, DTX_STEAM_LEAGUE_ID
 from .utils import _ensure_league_user, _ensure_org_user, _flush_redis_cache
 
 
-def populate_bracket_linking_scenario(force=False):
+def populate_bracket_linking_scenario(force: bool = False) -> Tournament | None:
     """
     Creates test data for the bracket match linking feature.
 
@@ -35,11 +38,6 @@ def populate_bracket_linking_scenario(force=False):
     Args:
         force: If True, recreate the tournament even if it exists
     """
-    from datetime import datetime
-
-    from app.models import CustomUser, Game, League, PositionsModel, Team, Tournament
-    from steam.models import Match, PlayerMatchStats
-
     TOURNAMENT_NAME = "Bracket Linking Test"
     OLD_TOURNAMENT_NAME = "Link Test Tournament"  # Handle renamed tournament
     BASE_MATCH_ID = 9100000001
@@ -83,10 +81,10 @@ def populate_bracket_linking_scenario(force=False):
 
     # Create 20 users with unique steam IDs for the 4 teams
     team_users = []
-    for i in range(20):
+    for i in range(BRACKET_USER_COUNT):
         discord_id = str(200000000000000000 + i)
         username = f"link_test_player_{i}"
-        steam_account_id = 34272 + i  # Unique 32-bit Friend IDs for linking
+        steam_account_id = BRACKET_STEAM_ID_BASE + i
 
         user, created = CustomUser.objects.get_or_create(
             discordId=discord_id,
@@ -224,9 +222,6 @@ def populate_bracket_linking_scenario(force=False):
 
     # Create matches on the tournament day (today)
     # Start at 10 AM tournament day
-    from datetime import time as dt_time
-    from datetime import timezone as dt_tz
-
     tournament_start = datetime.combine(date.today(), dt_time(10, 0), tzinfo=dt_tz.utc)
     base_time = int(tournament_start.timestamp())
     match_interval = 3600  # 1 hour between matches

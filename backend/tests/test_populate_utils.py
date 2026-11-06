@@ -9,10 +9,16 @@ models.py edit busted the test-db image hash and every job fell back to
 
 from unittest.mock import patch
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
-from app.models import CustomUser
-from tests.populate.utils import create_user, unused_steam_account_id
+from app.models import CustomUser, Organization
+from tests.populate.constants import DTX_ORG_NAME
+from tests.populate.users import populate_users
+from tests.populate.utils import (
+    create_user,
+    generate_mock_discord_members,
+    unused_steam_account_id,
+)
 
 
 def _member(discord_id: str, username: str) -> dict:
@@ -41,6 +47,19 @@ class UnusedSteamAccountIdTests(TestCase):
 
     def test_returns_first_free_draw(self) -> None:
         with patch("tests.populate.utils.random.randint", return_value=7):
+            self.assertEqual(unused_steam_account_id(), 7)
+
+    def test_shared_set_skips_taken_without_queries(self) -> None:
+        taken = {5}
+        with (
+            patch("tests.populate.utils.random.randint", side_effect=[5, 5, 6]),
+            self.assertNumQueries(0),
+        ):
+            self.assertEqual(unused_steam_account_id(taken), 6)
+        self.assertIn(6, taken)
+
+    def test_skips_reserved_bracket_ids(self) -> None:
+        with patch("tests.populate.utils.random.randint", side_effect=[34272, 7]):
             self.assertEqual(unused_steam_account_id(), 7)
 
 
@@ -73,3 +92,44 @@ class CreateUserSteamIdTests(TestCase):
 
         self.assertEqual(second.steam_account_id, first.steam_account_id + 1)
         self.assertEqual(CustomUser.objects.filter(steam_account_id=None).count(), 0)
+
+
+@override_settings(DISCORD_BOT_TOKEN=None)
+class PopulateUsersSteamIdTests(TestCase):
+    def setUp(self) -> None:
+        Organization.objects.create(name=DTX_ORG_NAME)
+        # The auth-fixture helpers assert a live test environment; not under test here.
+        for name in ("createTestStaffUser", "createTestSuperUser", "createTestUser"):
+            stub = patch(f"tests.test_auth.{name}")
+            stub.start()
+            self.addCleanup(stub.stop)
+
+    def test_one_taken_set_shared_across_run(self) -> None:
+        with patch(
+            "tests.populate.utils.unused_steam_account_id",
+            wraps=unused_steam_account_id,
+        ) as mock:
+            populate_users(force=True)
+
+        sets = [
+            c.args[0] if c.args else c.kwargs.get("taken") for c in mock.call_args_list
+        ]
+        self.assertTrue(
+            sets and all(isinstance(s, set) for s in sets),
+            f"unused_steam_account_id called without a shared set: {mock.call_args_list}",
+        )
+        self.assertTrue(all(s is sets[0] for s in sets))
+
+    def test_rerun_skips_existing_friend_ids(self) -> None:
+        CustomUser.objects.create_user(
+            username="holder", password="x", steam_account_id=11
+        )
+        member = generate_mock_discord_members()[0]
+        with (
+            patch("tests.populate.users.random.sample", return_value=[member]),
+            patch("tests.populate.utils.random.randint", side_effect=_draws([11, 12])),
+        ):
+            populate_users(force=True)
+
+        created = CustomUser.objects.get(discordId=member["user"]["id"])
+        self.assertEqual(created.steam_account_id, 12)
