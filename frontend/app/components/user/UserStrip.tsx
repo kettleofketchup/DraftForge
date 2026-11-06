@@ -217,7 +217,7 @@ export const UserStrip = memo(
         data-testid={testId}
       >
         {/* Column 1: Avatar */}
-        <PlayerPopover player={user}>
+        <PlayerPopover player={user} statsLeagueId={statsLeagueId}>
           <UserAvatar
             user={user}
             size={compact ? 'md' : 'lg'}
@@ -228,7 +228,7 @@ export const UserStrip = memo(
         {/* Column 2: Name + Positions (grouped) */}
         <div className="min-w-0 flex flex-col justify-center">
           {/* Row 1: Name */}
-          <PlayerPopover player={user}>
+          <PlayerPopover player={user} statsLeagueId={statsLeagueId}>
             <span
               className={cn(
                 'text-sm font-medium cursor-pointer hover:text-primary transition-colors leading-tight inline-block truncate',

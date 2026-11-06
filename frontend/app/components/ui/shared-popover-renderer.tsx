@@ -106,6 +106,7 @@ export const SharedPopoverRenderer: React.FC = () => {
       openPlayerModal(state.player, {
         organizationId: currentOrg?.pk,
         leagueId: currentLeague?.pk,
+        statsLeagueId: state.context?.statsLeagueId,
       });
     } else if (state.type === 'team' && state.team) {
       openTeamModal(state.team);

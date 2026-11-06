@@ -17,16 +17,26 @@ interface SharedPopoverState {
   team: TeamType | null;
   anchorEl: HTMLElement | null;
   isOpen: boolean;
+  context?: PlayerPopoverContext;
+}
+
+export interface PlayerPopoverContext {
+  statsLeagueId?: number | null;
 }
 
 export interface PlayerModalContext {
   leagueId?: number;
   organizationId?: number;
+  statsLeagueId?: number | null;
 }
 
 /** Stable callbacks. The value is constructed once and never changes. */
 interface SharedPopoverActionsValue {
-  showPlayerPopover: (player: UserType, anchorEl: HTMLElement) => void;
+  showPlayerPopover: (
+    player: UserType,
+    anchorEl: HTMLElement,
+    context?: PlayerPopoverContext,
+  ) => void;
   showTeamPopover: (team: TeamType, anchorEl: HTMLElement) => void;
   hidePopover: () => void;
   openPlayerModal: (player: UserType, context?: PlayerModalContext) => void;
@@ -110,23 +120,27 @@ export const SharedPopoverProvider: React.FC<SharedPopoverProviderProps> = ({
   const hoverIntentRef = useRef<NodeJS.Timeout | null>(null);
   const isHoveringRef = useRef(false);
 
-  const showPlayerPopover = useCallback((player: UserType, anchorEl: HTMLElement) => {
-    isHoveringRef.current = true;
-    if (hoverIntentRef.current) {
-      clearTimeout(hoverIntentRef.current);
-    }
-    hoverIntentRef.current = setTimeout(() => {
-      if (isHoveringRef.current) {
-        setState({
-          type: 'player',
-          player,
-          team: null,
-          anchorEl,
-          isOpen: true,
-        });
+  const showPlayerPopover = useCallback(
+    (player: UserType, anchorEl: HTMLElement, context?: PlayerPopoverContext) => {
+      isHoveringRef.current = true;
+      if (hoverIntentRef.current) {
+        clearTimeout(hoverIntentRef.current);
       }
-    }, 50);
-  }, []);
+      hoverIntentRef.current = setTimeout(() => {
+        if (isHoveringRef.current) {
+          setState({
+            type: 'player',
+            player,
+            team: null,
+            anchorEl,
+            isOpen: true,
+            context,
+          });
+        }
+      }, 50);
+    },
+    [],
+  );
 
   const showTeamPopover = useCallback((team: TeamType, anchorEl: HTMLElement) => {
     isHoveringRef.current = true;
