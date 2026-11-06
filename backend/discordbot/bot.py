@@ -9,14 +9,7 @@ from asgiref.sync import sync_to_async
 from discord import app_commands
 from django.conf import settings
 
-from discordbot.components import (
-    DeclineButton,
-    NotifyButton,
-    SignupButton,
-    TentativeButton,
-)
-from discordbot.components.registry import iter_component_providers
-from discordbot.custom_ids import DeclineId, NotifyId, SignupId, TentativeId
+from discordbot.interaction_router import route_component_interaction
 from discordbot.internal_client.bot_actions import (
     check_site_admin,
     create_legacy_event,
@@ -203,42 +196,7 @@ class KettleBot(discord.Client):
         custom_id = interaction.data.get("custom_id", "") if interaction.data else ""
 
         if interaction.type == discord.InteractionType.component:
-            # RSVP buttons are posted as raw dicts (discordbot/utils.py), never
-            # handed to discord.py as a ui.View, so they are reconstructed here
-            # from the typed custom-id on every interaction.
-            if SignupId.matches(custom_id):
-                await SignupButton(SignupId.decode(custom_id).event_id).callback(
-                    interaction
-                )
-            elif TentativeId.matches(custom_id):
-                await TentativeButton(TentativeId.decode(custom_id).event_id).callback(
-                    interaction
-                )
-            elif DeclineId.matches(custom_id):
-                await DeclineButton(DeclineId.decode(custom_id).event_id).callback(
-                    interaction
-                )
-            elif NotifyId.matches(custom_id):
-                await NotifyButton(NotifyId.decode(custom_id).event_id).callback(
-                    interaction
-                )
-            else:
-                # Game-specific bare ui.Selects (no overridden callback) are the
-                # ONLY components routed here — e.g. pos_select_. Every other
-                # game component has an overridden callback and self-dispatches
-                # via discord.py's in-memory view store; routing those here too
-                # caused a 40060 ACK race (the ~200ms internal-client HTTP round
-                # trip lets the view dispatch ACK first). Do NOT add a codec
-                # whose component has an overridden callback to bare_select_ids.
-                for provider in iter_component_providers():
-                    for id_type in provider.bare_select_ids:
-                        if id_type.matches(custom_id):
-                            try:
-                                cid = id_type.decode(custom_id)
-                            except ValueError:
-                                return
-                            await provider.dispatch_bare_select(interaction, cid)
-                            return
+            await route_component_interaction(interaction, custom_id)
         # Modal submissions are auto-dispatched by discord.py to Modal.on_submit
 
     async def _handle_rsvp(

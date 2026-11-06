@@ -70,6 +70,21 @@ class CustomIdRoundTripTest(SimpleTestCase):
         with self.assertRaises(ValueError):
             cid.RankStarId.decode("rank_star:5")  # missing medal segment
 
+    def test_matching_but_undecodable_ids(self) -> None:
+        cases: list[tuple[str, type[cid.CustomId]]] = [
+            ("event_signup:abc", cid.SignupId),
+            ("event_tentative:abc", cid.TentativeId),
+            ("event_decline:abc", cid.DeclineId),
+            ("event_notify:abc", cid.NotifyId),
+            ("pos_select_x:5", cid.PosSelectId),
+            ("pos_select_1", cid.PosSelectId),
+        ]
+        for raw, codec in cases:
+            with self.subTest(raw=raw):
+                self.assertTrue(codec.matches(raw))
+                with self.assertRaises(ValueError):
+                    codec.decode(raw)
+
     def test_missing_prefix_subclass_fails_at_definition(self):
         with self.assertRaises(TypeError):
 
