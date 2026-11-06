@@ -10,7 +10,10 @@ import {
   CollapsibleTrigger,
 } from '~/components/ui/collapsible';
 import UserEditModal from '~/components/user/userCard/editModal';
-import { resolveEditScope } from '~/components/user/userCard/editUserSchema';
+import {
+  resolveEditScope,
+  resolveOrgUserLink,
+} from '~/components/user/userCard/editUserSchema';
 import { getLogger } from '~/lib/logger';
 import { cn } from '~/lib/utils';
 import { useLeagueStore } from '~/store/leagueStore';
@@ -28,12 +31,11 @@ interface UserIssue {
 }
 
 /** Convert a UserEntry to a UserType-like object with org-scoped fields flattened. */
-function toUserType(entry: UserEntry, orgId?: number): UserClassType {
-  const orgData = orgId ? entry.orgData[orgId] : undefined;
+function toUserType(entry: UserEntry, orgId?: number, leagueId?: number): UserClassType {
   return {
     ...entry,
-    orgUserPk: orgData?.id,
-    mmr: orgData?.mmr,
+    orgUserPk: resolveOrgUserLink(entry, { organizationId: orgId, leagueId }),
+    mmr: orgId ? entry.orgData[orgId]?.mmr : undefined,
   } as unknown as UserClassType;
 }
 
@@ -110,13 +112,13 @@ export const hasErrors = () => {
       }
 
       if (userIssues.length > 0) {
-        issues.push({ user: toUserType(cached, orgId), issues: userIssues });
+        issues.push({ user: toUserType(cached, orgId, leagueId), issues: userIssues });
       }
     }
 
     log.debug('Users with issues:', issues.length, issues);
     return issues;
-  }, [tournament?.users, entities, orgId, positionsByPk]);
+  }, [tournament?.users, entities, orgId, leagueId, positionsByPk]);
 
   if (usersWithIssues.length === 0) return null;
 

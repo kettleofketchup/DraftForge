@@ -1,7 +1,12 @@
 // @vitest-environment jsdom
 import { act, render } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { EditUserScope } from '~/components/user/userCard/editUserSchema';
+import {
+  dispatchPatch,
+  resolveOrgUserLink,
+  type EditUserScope,
+} from '~/components/user/userCard/editUserSchema';
+import type { UserClassType } from '~/components/user/types';
 import type { LeagueType } from '~/components/league/schemas';
 import type { OrganizationType } from '~/components/organization/schemas';
 import type { UserEntry } from '~/store/userCacheTypes';
@@ -12,8 +17,14 @@ import { useUserStore } from '~/store/userStore';
 import { hasErrors } from './hasErrors';
 
 const captured = vi.hoisted(
-  () => [] as Array<{ user: { pk?: number }; scope: EditUserScope }>,
+  () => [] as Array<{ user: { pk?: number; orgUserPk?: number }; scope: EditUserScope }>,
 );
+
+const updateOrgUser = vi.hoisted(() => vi.fn());
+vi.mock('~/components/api/api', async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  updateOrgUser,
+}));
 
 vi.mock('~/components/user/userCard/editModal', () => ({
   default: (props: { user: { pk?: number }; scope: EditUserScope }) => {
@@ -54,10 +65,14 @@ function setStores(orgPk: number, leaguePk: number) {
   });
 }
 
-function lastScope(): EditUserScope {
+function lastCapture() {
   const forUser = captured.filter((c) => c.user.pk === 10);
   expect(forUser.length).toBeGreaterThan(0);
-  return forUser.at(-1)!.scope;
+  return forUser.at(-1)!;
+}
+
+function lastScope(): EditUserScope {
+  return lastCapture().scope;
 }
 
 describe('hasErrors incomplete-profile edit scope', () => {
@@ -95,5 +110,85 @@ describe('hasErrors incomplete-profile edit scope', () => {
     act(() => setTournament(null, null));
     rerender(<Harness />);
     expect(lastScope().kind).toBe('global');
+  });
+});
+
+describe('hasErrors edit user carries the scope-gating link (finding 4)', () => {
+  const CTX = { organizationId: 8, leagueId: 8 };
+
+  beforeEach(() => {
+    captured.length = 0;
+    updateOrgUser.mockReset();
+    useUserStore.setState({
+      tournament: {},
+      currentUser: { pk: 1, username: 'admin', is_superuser: true, is_staff: true },
+    } as never);
+    useOrgStore.setState({ currentOrg: null });
+    useLeagueStore.setState({ currentLeague: null });
+  });
+
+  function seedEntry(e: UserEntry) {
+    useUserCacheStore.setState({ entities: { 10: e } } as never);
+  }
+
+  it('a leagueData-only link gives league scope with that link on the user', () => {
+    seedEntry({ ...entry, orgData: {}, leagueData: { 8: { id: 41, mmr: 0, _fetchedAt: 0 } } });
+    setTournament(8, 8);
+    useLeagueStore.setState({
+      currentLeague: { pk: 8, name: 'L', organization: { pk: 8 } } as LeagueType,
+    });
+    render(<Harness />);
+    const { user, scope } = lastCapture();
+    expect(scope.kind).toBe('league');
+    expect(scope.kind === 'league' && scope.orgId).toBe(8);
+    expect(user.orgUserPk).toBe(41);
+  });
+
+  const rows: Array<{ name: string; source: UserEntry; store: 'org' | 'league' | 'both' }> = [
+    {
+      name: 'flat link',
+      source: { ...entry, orgData: {}, leagueData: {}, orgUserPk: 170 } as unknown as UserEntry,
+      store: 'org',
+    },
+    {
+      name: 'orgData link',
+      source: { ...entry, orgData: { 8: { id: 171, mmr: 0, _fetchedAt: 0 } }, leagueData: {} },
+      store: 'org',
+    },
+    {
+      name: 'leagueData link',
+      source: { ...entry, orgData: {}, leagueData: { 8: { id: 172, mmr: 0, _fetchedAt: 0 } } },
+      store: 'league',
+    },
+    {
+      name: 'no link',
+      source: { ...entry, orgData: {}, leagueData: {} },
+      store: 'both',
+    },
+  ];
+
+  it.each(rows)('$name: edit user link matches the resolver', async ({ name, source, store }) => {
+    seedEntry(source);
+    setTournament(8, 8);
+    if (store !== 'league') {
+      useOrgStore.setState({ currentOrg: { pk: 8, name: 'O' } as OrganizationType });
+    }
+    if (store !== 'org') {
+      useLeagueStore.setState({
+        currentLeague: { pk: 8, name: 'L', organization: { pk: 8 } } as LeagueType,
+      });
+    }
+    render(<Harness />);
+    const { user, scope } = lastCapture();
+    if (name === 'no link') {
+      expect(scope.kind).toBe('global');
+      return;
+    }
+    expect(scope.kind).not.toBe('global');
+    const link = resolveOrgUserLink(source, CTX);
+    expect(user.orgUserPk).toBe(link);
+    updateOrgUser.mockResolvedValue({ pk: 10, username: 'incomplete' });
+    await dispatchPatch(user as UserClassType, scope, { nickname: 'x' });
+    expect(updateOrgUser).toHaveBeenCalledWith(8, link, { nickname: 'x' });
   });
 });

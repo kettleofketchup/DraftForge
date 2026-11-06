@@ -25,7 +25,11 @@ import { useUserStore } from '~/store/userStore';
 import { RolePositions } from './positions';
 import { UserRemoveButton } from './userCard/deleteButton';
 import UserEditModal from './userCard/editModal';
-import { resolveEditScope, type EditUserScope } from './userCard/editUserSchema';
+import {
+  resolveEditScope,
+  resolveOrgUserLink,
+  type EditUserScope,
+} from './userCard/editUserSchema';
 import { LoginAsUserButton } from './userCard/LoginAsUserButton';
 
 /** Returns true if the user has rated any role > 0. */
@@ -86,16 +90,19 @@ export const UserCard: React.FC<Props> = memo(
 
     // Shared resolver (same as the incomplete-profiles card). Gates on the
     // player's OrgUser link (flat orgUserPk on raw payloads, orgData/leagueData
-    // on cache entries); league scope carries a deterministic orgId. currentOrg
-    // and currentLeague are depped by pk so a new object ref with the same pk
-    // doesn't recompute; `user` is still an object ref, so an unchanged entry
-    // must keep its identity for this memo to hold.
+    // on cache entries); league scope carries a deterministic orgId. The same
+    // link feeds editUser, so a scoped edit always carries its orgUserPk.
+    // currentOrg and currentLeague are depped by pk so a new object ref with
+    // the same pk doesn't recompute.
+    const linkPk =
+      resolveOrgUserLink(orgSource ?? user, { organizationId, leagueId }) ??
+      resolveOrgUserLink(user, { organizationId, leagueId });
     const editScope = React.useMemo<EditUserScope>(
       () =>
-        resolveEditScope(orgEntry ? { orgUserPk: orgEntry.id } : user, {
+        resolveEditScope({ orgUserPk: linkPk }, {
           organizationId, leagueId, currentOrg, currentLeague,
         }),
-      [user, orgEntry?.id, organizationId, leagueId, currentOrg?.pk, currentLeague?.pk],
+      [linkPk, organizationId, leagueId, currentOrg?.pk, currentLeague?.pk],
     );
 
     // Construct the User instance ONCE per stable input set. Doing this
@@ -109,11 +116,11 @@ export const UserCard: React.FC<Props> = memo(
     const editUser = React.useMemo(
       () =>
         new User(
-          orgEntry
-            ? { ...user, mmr: orgEntry.mmr, orgUserPk: orgEntry.id }
+          linkPk != null
+            ? { ...user, mmr: orgEntry ? orgEntry.mmr : user.mmr, orgUserPk: linkPk }
             : user,
         ),
-      [user, orgEntry?.id, orgEntry?.mmr],
+      [user, linkPk, orgEntry?.mmr],
     );
 
     const handleViewProfile = () => {
