@@ -18,7 +18,14 @@ Or import specific functions:
     from tests.populate import populate_users, populate_tournaments
 """
 
+import io
+import sys
+import time
+
+from rich.console import Console
+
 from tests.helpers.tournament_config import populate_test_tournaments
+from tests.populate.auth_matrix import populate_auth_matrix_data
 
 # Re-export commonly used functions for backwards compatibility
 from tests.populate.bracket import (
@@ -37,11 +44,11 @@ from tests.populate.constants import (
     TEST_STEAM_LEAGUE_ID,
     TOURNAMENT_USERS,
 )
-from tests.populate.auth_matrix import populate_auth_matrix_data
 from tests.populate.csv_import import populate_csv_import_data
-from tests.populate.org_delete import populate_org_delete
 from tests.populate.demo import populate_demo_tournaments
 from tests.populate.events import populate_events_data
+from tests.populate.league_stats import populate_league_stats_data
+from tests.populate.org_delete import populate_org_delete
 from tests.populate.organizations import populate_organizations_and_leagues
 from tests.populate.shuffle_tie import populate_shuffle_tie_data
 from tests.populate.steam import populate_steam_matches
@@ -62,20 +69,13 @@ from tests.populate.utils import (
 )
 
 
-def populate_all(force=False):
+def populate_all(force: bool = False) -> None:
     """
     Run all population functions in the correct order.
 
     Args:
         force: If True, recreate data even if it exists
     """
-    import io
-    import sys
-    import time
-
-    from rich.console import Console
-    from rich.table import Table
-
     steps = [
         ("Organizations & Leagues", populate_organizations_and_leagues),
         ("Org Delete Data", populate_org_delete),
@@ -95,6 +95,7 @@ def populate_all(force=False):
         # auto-incremented org pk lands on 8 (matching AUTH_MATRIX_ORG.pk).
         ("Auth Matrix Data", populate_auth_matrix_data),
         ("Demo Tournaments", populate_demo_tournaments),
+        ("League Stats Data", populate_league_stats_data),
     ]
 
     console = Console()
@@ -143,6 +144,7 @@ __all__ = [
     "populate_events_data",
     "populate_auth_matrix_data",
     "populate_demo_tournaments",
+    "populate_league_stats_data",
     "populate_test_tournaments",
     # Utilities
     "create_user",
