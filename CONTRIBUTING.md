@@ -15,8 +15,9 @@
 1. Create a feature branch from `main`
 2. Make your changes
 3. Run tests: `inv dev.test`
-4. Commit with conventional commit messages
-5. Push and create a pull request
+4. Add a changelog fragment if users or operators would notice the change (see below)
+5. Commit with conventional commit messages
+6. Push and create a pull request
 
 ## Commit Message Format
 
@@ -29,6 +30,15 @@ Use conventional commits:
 ```
 
 Types: `feat`, `fix`, `docs`, `ci`, `chore`, `refactor`, `test`
+
+## Changelog
+
+Do not edit `CHANGELOG.md` in a PR. Add a fragment instead:
+`changelog.d/<section>/<branch-slug>.md`, where the slug is your branch name lowercased
+with `/` turned into `-`. Sections and format rules are in `changelog.d/README.md`;
+check your fragment with `python3 scripts/changelog.py check`. The release
+(`just version::set X.Y.Z`) assembles the fragments into `CHANGELOG.md`. Details:
+`docs/development/changelog.md` and `.claude/skills/changelog/SKILL.md`.
 
 ## AI Use
 
