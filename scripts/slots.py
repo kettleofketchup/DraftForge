@@ -678,3 +678,273 @@ def lease_and_recheck(env: SlotEnv, host: Host | None = None) -> None:
         _write_reservation(
             registry, env.slot, env.worktree, env.token, int(host.clock())
         )
+
+
+REAP_NAME_RE: Final = re.compile(r"^df(-dev|-s[0-9]|-run-[0-9a-f]{8})?$")
+TRANSITION_WARNING: Final = (
+    "worktrees on branches without this feature can still kill or hijack slot stacks; "
+    "merge main into them first."
+)
+BACKGROUND_SERVICES: Final = ("discord-bot", "celery-beat")
+
+
+def _refuse_in_ci(what: str) -> None:
+    if is_ci():
+        raise SlotError(f"{what} is not available in CI mode (GITHUB_ACTIONS=true)")
+
+
+def _slot_of_project(project: str) -> int | None:
+    if project == "df":
+        return 0
+    m = re.fullmatch(r"df-s([0-9])", project)
+    return int(m.group(1)) if m else None
+
+
+def _is_ours(res: Reservation | None, root: Path, token: str | None) -> bool:
+    return (
+        res is not None and res.owner == root and (token is None or res.token == token)
+    )
+
+
+def _held(
+    registry: Path, root: Path, kv: Mapping[str, str] | None
+) -> list[tuple[int, str | None]]:
+    held: dict[int, str | None] = {}
+    for n in range(SLOT_COUNT):
+        res = _read_reservation(registry, n)
+        if res is not None and res.owner == root:
+            held[n] = None
+    if kv is not None:
+        env = slot_env_from_kv(kv)
+        held[env.slot] = env.token
+    return sorted(held.items())
+
+
+def _check_releasable(
+    n: int, root: Path, host: Host, res: Reservation | None, token: str | None
+) -> None:
+    owners = host.containers(_project(n))
+    if res is None or _is_ours(res, root, token):
+        blocking = owners
+    else:
+        blocking = _own(owners, root)
+    if blocking:
+        raise SlotError(
+            f"slot {n} still has {len(blocking)} container(s) in {_project(n)}; "
+            f"run `just test::down` first"
+        )
+
+
+def _check_target_free_of_containers(n: int, host: Host) -> None:
+    owners = host.containers(_project(n))
+    if owners:
+        raise SlotError(
+            f"slot {n} has {len(owners)} container(s) in {_project(n)}; "
+            f"its owner must run `just test::down` first"
+        )
+
+
+def _check_target_free(n: int, host: Host) -> None:
+    _check_target_free_of_containers(n, host)
+    for p in _ports(n):
+        if host.port_busy(p):
+            raise SlotError(f"port {p} is busy; slot {n} cannot start here")
+
+
+def _drop_reservation(registry: Path, n: int, root: Path, token: str | None) -> None:
+    res = _read_reservation(registry, n)
+    if res is None:
+        print(f"slot {n} reservation was already gone", file=sys.stderr)
+    elif _is_ours(res, root, token):
+        (registry / f"slot-{n}").unlink(missing_ok=True)
+    else:
+        print(
+            f"slot {n} reservation now belongs to {res.owner}; left it alone",
+            file=sys.stderr,
+        )
+
+
+def release_slot(
+    root: Path | None = None, host: Host | None = None, *, slot: int | None = None
+) -> None:
+    root = (root or MODULE_ROOT).resolve()
+    _refuse_in_ci("slot release")
+    host = host or REAL_HOST
+    registry = registry_dir(root, host)
+    with registry_lock(registry):
+        kv = _read_slot_kv(root)
+        if kv is not None:
+            _check_worktree(kv, root)
+        own_slot = slot_env_from_kv(kv).slot if kv is not None else None
+        if slot is not None and slot != own_slot:
+            if not 0 <= slot < SLOT_COUNT:
+                raise SlotError(f"slot {slot} out of range [0, {SLOT_COUNT - 1}]")
+            _check_target_free_of_containers(slot, host)
+            if _read_reservation(registry, slot) is None:
+                print(f"slot {slot} has no reservation", file=sys.stderr)
+            (registry / f"slot-{slot}").unlink(missing_ok=True)
+            return
+        held = _held(registry, root, kv)
+        if not held:
+            print("this worktree holds no slot", file=sys.stderr)
+            return
+        for n, token in held:
+            _check_releasable(n, root, host, _read_reservation(registry, n), token)
+        for n, token in held:
+            _drop_reservation(registry, n, root, token)
+        (root / SLOT_FILE_REL).unlink(missing_ok=True)
+
+
+def claim_slot(n: int, root: Path | None = None, host: Host | None = None) -> SlotEnv:
+    root = (root or MODULE_ROOT).resolve()
+    _refuse_in_ci("slot claim")
+    host = host or REAL_HOST
+    if not 0 <= n < SLOT_COUNT:
+        raise SlotError(f"slot {n} out of range [0, {SLOT_COUNT - 1}]")
+    registry = registry_dir(root, host)
+    with registry_lock(registry):
+        kv = _read_slot_kv(root)
+        if kv is not None:
+            _check_worktree(kv, root)
+            current = slot_env_from_kv(kv)
+            if current.slot == n and _is_ours(
+                _read_reservation(registry, n), root, current.token
+            ):
+                return replace(current, registry=registry)
+        held = _held(registry, root, kv)
+        for m, token in held:
+            _check_releasable(m, root, host, _read_reservation(registry, m), token)
+        _check_target_free(n, host)
+        for m, token in held:
+            _drop_reservation(registry, m, root, token)
+        token = host.new_token()
+        env = slot_env_for(n, root, token, registry)
+        _write_reservation(registry, n, root, token, int(host.clock()))
+        atomic_write(root / SLOT_FILE_REL, render_slot_file(env), skip_if_same=False)
+    return env
+
+
+def reap_project(
+    project: str, root: Path | None = None, host: Host | None = None
+) -> None:
+    root = (root or MODULE_ROOT).resolve()
+    _refuse_in_ci("slot reap")
+    host = host or REAL_HOST
+    if not REAP_NAME_RE.match(project):
+        raise SlotError(
+            f"refusing to reap {project!r}: only df, df-dev, df-s<N> and df-run-<hex> are accepted"
+        )
+    registry = registry_dir(root, host)
+    with registry_lock(registry):
+        live = host.live_worktrees(root)
+        for o in host.containers(project):
+            wd = o.working_dir
+            if not o.oneoff and wd is not None and wd in live and wd.exists():
+                raise SlotError(
+                    f"refusing to reap {project}: container {o.name} belongs to the live "
+                    f"worktree {wd}; run `just test::down` there instead"
+                )
+        argv = ["docker", "compose", "-p", project, "down", "-v", "--remove-orphans"]
+        code, _ = host.run(argv, {}, False)
+        if code != 0:
+            raise SlotError(f"`{' '.join(argv)}` exited {code}")
+        n = _slot_of_project(project)
+        if n is not None:
+            (registry / f"slot-{n}").unlink(missing_ok=True)
+
+
+def check_background_free(slot: SlotEnv | None, project: str, host: Host) -> None:
+    if (
+        os.environ.get("DF_BACKGROUND_PROOF") == "1"
+        and slot is not None
+        and slot.slot >= 1
+    ):
+        return
+    for service in BACKGROUND_SERVICES:
+        for o in host.service_containers(service):
+            if o.project != project:
+                raise SlotError(
+                    f"{service} is already running in project {o.project} ({o.working_dir}); "
+                    f"only one stack may run the Discord bot and celery beat at a time"
+                )
+
+
+def set_background(
+    on: bool, root: Path | None = None, host: Host | None = None
+) -> SlotEnv:
+    root = (root or MODULE_ROOT).resolve()
+    _refuse_in_ci("slot background")
+    host = host or REAL_HOST
+    env = read_slot(root, host)
+    if on:
+        check_background_free(env, env.project, host)
+    with registry_lock(env.registry or registry_dir(root, host)):
+        new = replace(env, background=on)
+        atomic_write(root / SLOT_FILE_REL, render_slot_file(new), skip_if_same=True)
+    return new
+
+
+def _reservation_state(res: Reservation, live: set[Path], now: float) -> str:
+    if _is_stale(res) or res.owner not in live:
+        return "stale"
+    if res.slot != 0 and now - res.last_used > LEASE_TTL_S:
+        return "idle"
+    return "live"
+
+
+def status_report(root: Path | None = None, host: Host | None = None) -> str:
+    root = (root or MODULE_ROOT).resolve()
+    host = host or REAL_HOST
+    registry = registry_dir(root, host)
+    live = host.live_worktrees(root)
+    now = host.clock()
+    by_project: dict[str, list[ContainerOwner]] = {}
+    for o in host.all_df_containers():
+        by_project.setdefault(o.project, []).append(o)
+    reservations = {
+        n: res
+        for n in range(SLOT_COUNT)
+        if (res := _read_reservation(registry, n)) is not None
+    }
+    lines = [f"registry: {registry}"]
+    if not reservations:
+        lines.append("  (no reservations)")
+    for n, res in reservations.items():
+        age = (now - res.last_used) / 86_400
+        lines.append(
+            f"slot {n} {_reservation_state(res, live, now)} owner={res.owner} "
+            f"containers={len(by_project.get(_project(n), []))} lease_age={age:.1f}d"
+        )
+    for project in sorted(by_project):
+        owners = by_project[project]
+        n = _slot_of_project(project)
+        res = reservations.get(n) if n is not None else None
+        stack = [o for o in owners if not o.oneoff]
+        wds = sorted({str(o.working_dir) for o in owners if o.working_dir is not None})
+        files = sorted({f for o in owners for f in o.config_files})
+        live_owner = next(
+            (
+                o.working_dir
+                for o in stack
+                if o.working_dir is not None
+                and o.working_dir in live
+                and o.working_dir.exists()
+            ),
+            None,
+        )
+        reap = f"check it, then run `just test::slot-reap {project}`"
+        if not stack:
+            label = f"orphan hint (one-off only); {reap}"
+        elif live_owner is not None:
+            if res is not None and res.owner == live_owner:
+                label = f"slot {n} (owner live: {live_owner})"
+            elif res is not None:
+                label = f"reserved by {res.owner}, containers from live {live_owner}"
+            else:
+                label = f"unreserved (owner live: {live_owner})"
+        else:
+            label = f"orphan (owner gone); {reap}"
+        lines.append(f"project {project} containers={len(owners)} {label}")
+        lines.append(f"  working_dir: {', '.join(wds) or '-'}")
+        lines.append(f"  config_files: {', '.join(files) or '-'}")
+    return "\n".join(lines) + "\n"
