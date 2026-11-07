@@ -607,6 +607,7 @@ function SignupStrip({
         showPositions
         organizationId={signup.organization ?? undefined}
         statsLeagueId={leaguePk}
+        statsBreakpoint="wide"
         contextSlot={<EventStateBadge state={signup.status} />}
         actionSlot={actionSlot}
       />

@@ -35,13 +35,21 @@ function accessibleLabel(
   return parts.join(', ');
 }
 
+export type StatsBreakpoint = 'default' | 'wide';
+
+const breakpointClass: Record<StatsBreakpoint, string> = {
+  default: '@[30rem]:flex',
+  wide: '@[44rem]:flex',
+};
+
 interface UserStripLeagueStatsProps {
   leaguePk: number;
   userId: number;
+  breakpoint?: StatsBreakpoint;
 }
 
 export const UserStripLeagueStats = memo(
-  ({ leaguePk, userId }: UserStripLeagueStatsProps) => {
+  ({ leaguePk, userId, breakpoint = 'default' }: UserStripLeagueStatsProps) => {
     const { data } = usePlayerLeagueSummary(leaguePk, userId);
     const [tooltipArmed, setTooltipArmed] = useState(false);
 
@@ -81,7 +89,10 @@ export const UserStripLeagueStats = memo(
         data-testid="strip-league-stats"
         role="img"
         aria-label={accessibleLabel(summary, population, minGames)}
-        className="hidden @[30rem]:flex flex-col justify-center gap-0.5 shrink-0"
+        className={cn(
+          'hidden flex-col justify-center gap-0.5 shrink-0',
+          breakpointClass[breakpoint],
+        )}
       >
         {tooltipArmed ? (
           <Tooltip>

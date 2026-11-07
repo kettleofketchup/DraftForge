@@ -12,7 +12,7 @@ import { usePlayerPositions } from '~/hooks/usePlayerPositions';
 import { cn } from '~/lib/utils';
 import { isUserEntry, type UserEntry } from '~/store/userCacheTypes';
 import { RolePositions } from './positions';
-import { UserStripLeagueStats } from './UserStripLeagueStats';
+import { type StatsBreakpoint, UserStripLeagueStats } from './UserStripLeagueStats';
 import type { UserType } from './types';
 
 export interface UserStripProps {
@@ -32,6 +32,9 @@ export interface UserStripProps {
 
   /** League pk for the ticket-match stats column; independent of the L: badge */
   statsLeagueId?: number | null;
+
+  /** Container width at which the stats column appears; 'wide' for rows with heavy slots */
+  statsBreakpoint?: StatsBreakpoint;
 
   /** Compact mode - reduced padding, smaller avatar */
   compact?: boolean;
@@ -80,6 +83,7 @@ export const userStripPropsAreEqual = (
   if (prev.leagueId !== next.leagueId) return false;
   if (prev.organizationId !== next.organizationId) return false;
   if (prev.statsLeagueId !== next.statsLeagueId) return false;
+  if (prev.statsBreakpoint !== next.statsBreakpoint) return false;
 
   // Display options
   if (prev.compact !== next.compact) return false;
@@ -102,6 +106,7 @@ export const UserStrip = memo(
     leagueId,
     organizationId,
     statsLeagueId,
+    statsBreakpoint = 'default',
     compact = false,
     showBorder = true,
     showPositions = true,
@@ -234,7 +239,9 @@ export const UserStrip = memo(
                 'text-sm font-medium cursor-pointer hover:text-primary transition-colors leading-tight inline-block truncate',
                 // Fixed width when capped so MMR column lines up across rows.
                 nameMaxLength == null
-                  ? cn('min-w-[15ch]', showStats ? 'sm:min-w-[12ch]' : 'sm:min-w-[20ch]')
+                  ? showStats
+                    ? 'min-w-[12ch]'
+                    : 'min-w-[15ch] sm:min-w-[20ch]'
                   : 'w-[var(--name-width)]',
               )}
               style={
@@ -261,7 +268,11 @@ export const UserStrip = memo(
         ) : null}
 
         {statsLeagueId != null && user.pk != null ? (
-          <UserStripLeagueStats leaguePk={statsLeagueId} userId={user.pk} />
+          <UserStripLeagueStats
+            leaguePk={statsLeagueId}
+            userId={user.pk}
+            breakpoint={statsBreakpoint}
+          />
         ) : null}
 
         {/* Column 4: Context Slot (flex-1 to push action to end) */}

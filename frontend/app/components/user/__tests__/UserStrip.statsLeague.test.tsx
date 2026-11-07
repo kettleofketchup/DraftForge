@@ -151,8 +151,33 @@ describe('UserStrip statsLeagueId', () => {
     render(wrap(<UserStrip user={plainUser} statsLeagueId={1} />));
     const nameWith = screen.getByText('Alice', { selector: '.hidden.sm\\:inline' })
       .parentElement!;
-    expect(nameWith.className).toContain('sm:min-w-[12ch]');
+    const withClasses = nameWith.className.split(' ');
+    expect(withClasses).toContain('min-w-[12ch]');
+    expect(withClasses).not.toContain('min-w-[15ch]');
     expect(nameWith.className).not.toContain('sm:min-w-[20ch]');
+  });
+
+  it('stats column uses the default container threshold', () => {
+    render(wrap(<UserStrip user={plainUser} statsLeagueId={1} />));
+    const classes = screen.getByTestId('strip-league-stats').className.split(' ');
+    expect(classes).toContain('@[30rem]:flex');
+    expect(classes).not.toContain('@[44rem]:flex');
+  });
+
+  it('statsBreakpoint="wide" raises the container threshold', () => {
+    render(wrap(<UserStrip user={plainUser} statsLeagueId={1} statsBreakpoint="wide" />));
+    const classes = screen.getByTestId('strip-league-stats').className.split(' ');
+    expect(classes).toContain('@[44rem]:flex');
+    expect(classes).not.toContain('@[30rem]:flex');
+  });
+
+  it('propsAreEqual tracks statsBreakpoint', () => {
+    expect(
+      userStripPropsAreEqual(
+        { user: plainUser, statsBreakpoint: 'wide' },
+        { user: plainUser, statsBreakpoint: 'default' },
+      ),
+    ).toBe(false);
   });
 
   it('column renders with showMmr={false}', () => {
