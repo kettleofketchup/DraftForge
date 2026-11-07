@@ -1,0 +1,143 @@
+# Lint, unit-test, schema-check and budget-check the DraftForge Helm chart.
+# Tool versions match just/helm.just. Helm is v3.19.4 because that is what the
+# ArgoCD v3.3.4 repo-server renders the chart with.
+name: helm-chart
+
+on:
+  pull_request:
+    paths:
+      - "helm/**"
+      - "scripts/helm_budget_check.py"
+      - "scripts/helm_render_safety.sh"
+      - "scripts/helm_version_bump_check.sh"
+      - "scripts/preview_queue.py"
+      - "scripts/preview_tests/**"
+      - ".github/workflows/helm-chart.yml"
+  push:
+    branches: [main]
+    paths:
+      - "helm/**"
+      - "scripts/helm_budget_check.py"
+      - "scripts/helm_render_safety.sh"
+      - "scripts/helm_version_bump_check.sh"
+      - "scripts/preview_queue.py"
+      - "scripts/preview_tests/**"
+      - ".github/workflows/helm-chart.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  chart:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      HELM: helm
+      HELM_VERSION: v3.19.4
+      HELM_UNITTEST_VERSION: v1.2.1
+      KUBECONFORM_VERSION: v0.6.7
+      KUBECONFORM_SHA256: 95f14e87aa28c09d5941f11bd024c1d02fdc0303ccaa23f61cef67bc92619d73
+      YQ_VERSION: v4.53.2
+      YQ_SHA256: 44c3c6df6c58ef1460d98425954ca5e832926e0e8a1d75c5c8fd261691351510
+      ACTIONLINT_VERSION: 1.7.12
+      ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+      KUBECONFORM_CACHE: ${{ github.workspace }}/.kubeconform-cache
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Helm
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          version: v3.19.4
+
+      - name: Check Helm version
+        run: |
+          "$HELM" version --short
+          "$HELM" version --short | grep -q "^${HELM_VERSION}+"
+
+      - name: Install helm-unittest
+        run: |
+          "$HELM" plugin install https://github.com/helm-unittest/helm-unittest.git --version "$HELM_UNITTEST_VERSION"
+          "$HELM" plugin list
+
+      - name: Install kubeconform, yq and actionlint
+        run: |
+          bin="$RUNNER_TEMP/bin"
+          dl="$RUNNER_TEMP/dl"
+          mkdir -p "$bin" "$dl"
+          fetch() { # url sha256 file
+            curl -fsSL --retry 3 -o "$dl/$3" "$1"
+            echo "$2  $dl/$3" | sha256sum -c -
+          }
+          fetch "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz" \
+            "$KUBECONFORM_SHA256" kubeconform.tar.gz
+          tar -xzf "$dl/kubeconform.tar.gz" -C "$bin" kubeconform
+          fetch "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64.tar.gz" \
+            "$YQ_SHA256" yq.tar.gz
+          tar -xzf "$dl/yq.tar.gz" -C "$dl" ./yq_linux_amd64
+          install -m 0755 "$dl/yq_linux_amd64" "$bin/yq"
+          fetch "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" \
+            "$ACTIONLINT_SHA256" actionlint.tar.gz
+          tar -xzf "$dl/actionlint.tar.gz" -C "$bin" actionlint
+          echo "$bin" >> "$GITHUB_PATH"
+
+      - name: Check tool versions
+        run: |
+          kubeconform -v | grep -qx "$KUBECONFORM_VERSION"
+          yq --version | grep -q "version ${YQ_VERSION}$"
+          actionlint -version | head -n1 | grep -qx "$ACTIONLINT_VERSION"
+
+      - name: actionlint
+        run: actionlint .github/workflows/helm-chart.yml
+
+      - name: Lint (default values)
+        run: '"$HELM" lint --strict helm'
+
+      - name: Lint (preview profile)
+        run: >-
+          "$HELM" lint --strict helm
+          -f helm/values-preview.yaml
+          -f helm/tests/fixtures/preview-appset-values.yaml
+          --namespace draftforge-pr-1
+
+      - name: Render both profiles
+        run: |
+          mkdir -p "$RUNNER_TEMP/render"
+          "$HELM" template draftforge helm > "$RUNNER_TEMP/render/default.yaml"
+          "$HELM" template draftforge-pr-1 helm \
+            -f helm/values-preview.yaml \
+            -f helm/tests/fixtures/preview-appset-values.yaml \
+            --namespace draftforge-pr-1 > "$RUNNER_TEMP/render/preview.yaml"
+
+      - name: helm unittest
+        run: '"$HELM" unittest helm'
+
+      - name: kubeconform
+        run: |
+          mkdir -p "$KUBECONFORM_CACHE"
+          for profile in default preview; do
+            kubeconform -strict -ignore-missing-schemas -summary \
+              -cache "$KUBECONFORM_CACHE" "$RUNNER_TEMP/render/$profile.yaml"
+          done
+
+      - name: Budget check (preview render)
+        run: |
+          yq -o=json ea '[.]' "$RUNNER_TEMP/render/preview.yaml" \
+            | python3 -I scripts/helm_budget_check.py
+
+      - name: Render-safety check
+        run: scripts/helm_render_safety.sh helm
+
+      - name: Script tests
+        run: python3 -I -m unittest discover -s scripts/preview_tests -t . -v
+
+      - name: Chart version bump check
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: scripts/helm_version_bump_check.sh "$BASE_SHA"
