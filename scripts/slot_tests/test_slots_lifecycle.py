@@ -3,6 +3,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 import pytest
+
 from scripts.slot_tests._helpers import FakeHost, owner, reserve
 from scripts.slots import (
     REAP_NAME_RE,

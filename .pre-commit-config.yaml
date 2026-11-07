@@ -17,6 +17,7 @@ repos:
         args: ['--unsafe']
     -   id: end-of-file-fixer
     -   id: trailing-whitespace
+        exclude: ^scripts/slot_tests/fixtures/
   # Enforce structured-logging taxonomy: every get_logger(...) call must pass a
   # string-literal event name + system= + subsystem=. Only files binding a
   # logger via get_logger are checked (stdlib-logging files are ignored).

@@ -36,7 +36,9 @@ def owner(
 
 def reserve(reg: Path, n: int, owner_path: Path, token: str, last_used: int) -> None:
     reg.mkdir(parents=True, exist_ok=True)
-    (reg / f"slot-{n}").write_text(f"owner={owner_path}\ntoken={token}\nlast_used={last_used}\n")
+    (reg / f"slot-{n}").write_text(
+        f"owner={owner_path}\ntoken={token}\nlast_used={last_used}\n"
+    )
 
 
 class FakeHost:
@@ -64,7 +66,12 @@ class FakeHost:
 
     def service_containers(self, service: str) -> list[ContainerOwner]:
         self.calls.append("service_containers")
-        return [o for os_ in self.projects.values() for o in os_ if o.service == service and o.running]
+        return [
+            o
+            for os_ in self.projects.values()
+            for o in os_
+            if o.service == service and o.running
+        ]
 
     def all_df_containers(self) -> list[ContainerOwner]:
         self.calls.append("all_df_containers")
@@ -78,7 +85,9 @@ class FakeHost:
         self.calls.append("live_worktrees")
         return set(self.worktrees)
 
-    def run(self, argv: list[str], env: dict[str, str], capture: bool) -> tuple[int, str]:
+    def run(
+        self, argv: list[str], env: dict[str, str], capture: bool
+    ) -> tuple[int, str]:
         self.calls.append("run")
         self.compose_calls.append(list(argv))
         self.run_envs.append(dict(env))
@@ -96,14 +105,20 @@ def render_raw(
 ) -> subprocess.CompletedProcess[str]:
     if subprocess.run(["docker", "compose", "version"], capture_output=True).returncode:
         pytest.skip("docker compose unavailable")
-    clean = {k: v for k, v in os.environ.items() if not k.startswith(("DF_", "COMPOSE_"))} | env
+    clean = {
+        k: v for k, v in os.environ.items() if not k.startswith(("DF_", "COMPOSE_"))
+    } | env
     argv = ["docker", "compose", "--project-directory", str(ROOT)]
     argv += ["-p", project] if project else []
     argv += [a for f in files for a in ("-f", str(ROOT / "docker" / f))]
-    return subprocess.run([*argv, "config", "--format", "json"], env=clean, capture_output=True, text=True)
+    return subprocess.run(
+        [*argv, "config", "--format", "json"], env=clean, capture_output=True, text=True
+    )
 
 
-def render(files: list[str], env: dict[str, str], *, project: str | None = "df-s3") -> dict:
+def render(
+    files: list[str], env: dict[str, str], *, project: str | None = "df-s3"
+) -> dict:
     r = render_raw(files, env, project=project)
     assert r.returncode == 0, r.stderr
     return json.loads(r.stdout)

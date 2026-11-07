@@ -206,7 +206,6 @@ def _stub_setup_steps(monkeypatch: pytest.MonkeyPatch) -> None:
         "populate_all",
         "update_for_test",
         "docker_build_all",
-        "docker_pull_all",
     ):
         monkeypatch.setattr(st, name, lambda *a, **k: None)
     monkeypatch.setattr(st, "load_dotenv", lambda *a, **k: True)

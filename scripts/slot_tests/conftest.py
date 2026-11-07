@@ -14,7 +14,11 @@ from scripts.slot_tests._helpers import FakeHost  # noqa: E402
 @pytest.fixture(autouse=True)
 def _scrub_env(monkeypatch: pytest.MonkeyPatch) -> None:
     for k in list(os.environ):
-        if k.startswith(("DF_", "COMPOSE_")) or k in ("GITHUB_ACTIONS", "RUNNER_TEMP", "GITHUB_WORKSPACE"):
+        if k.startswith(("DF_", "COMPOSE_")) or k in (
+            "GITHUB_ACTIONS",
+            "RUNNER_TEMP",
+            "GITHUB_WORKSPACE",
+        ):
             monkeypatch.delenv(k)
 
 

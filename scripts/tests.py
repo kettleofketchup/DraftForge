@@ -2,6 +2,7 @@ import shutil
 import tempfile
 import time
 from pathlib import Path
+from typing import Any
 
 import requests
 import yaml
@@ -11,11 +12,11 @@ from invoke.context import Context
 from rich.console import Console
 
 import paths
-from backend.tasks import db_migrate, populate_all
+from backend.tasks import populate_all
 from backend.tests.tasks import ns_dbtest
 from backend.tests.tasks import run_tests as run_db_tests
 from scripts.compose import base_url, playwright_env, run_compose
-from scripts.docker import docker_build_all, docker_pull_all
+from scripts.docker import docker_build_all
 from scripts.slots import SlotEnv, ensure_slot
 from scripts.update import update_for_test
 
@@ -102,14 +103,14 @@ ns_playwright = Collection("playwright")
 
 
 @task
-def playwright_install(c):
+def playwright_install(c: Context) -> None:
     """Install Playwright browsers."""
     with c.cd(paths.FRONTEND_PATH):
         c.run("npx playwright install")
 
 
 @task
-def playwright_headless(c, args=""):
+def playwright_headless(c: Context, args: str = "") -> None:
     """Run all Playwright tests headless.
 
     Args:
@@ -118,30 +119,34 @@ def playwright_headless(c, args=""):
     flush_test_redis(c)
     with c.cd(paths.FRONTEND_PATH):
         # Exclude demo project - demos are run separately via inv demo.* commands
-        _playwright(c, f""
+        _playwright(
+            c,
+            f""
             f"--project=chromium --project=herodraft --project=events-sequential "
-            f"{args}".strip()
+            f"{args}".strip(),
         )
 
 
 @task
-def playwright_ui(c):
+def playwright_ui(c: Context) -> None:
     """Open Playwright UI mode for interactive test development."""
     flush_test_redis(c)
     with c.cd(paths.FRONTEND_PATH):
-        _playwright(c, f"--ui")
+        _playwright(c, "--ui")
 
 
 @task
-def playwright_debug(c):
+def playwright_debug(c: Context) -> None:
     """Run Playwright tests in debug mode."""
     flush_test_redis(c)
     with c.cd(paths.FRONTEND_PATH):
-        _playwright(c, f"--debug")
+        _playwright(c, "--debug")
 
 
 @task
-def playwright_spec(c, spec="", file="", grep="", args=""):
+def playwright_spec(
+    c: Context, spec: str = "", file: str = "", grep: str = "", args: str = ""
+) -> None:
     """Run Playwright tests for a specific spec pattern or file.
 
     Usage:
@@ -163,27 +168,24 @@ def playwright_spec(c, spec="", file="", grep="", args=""):
         # but when running a specific spec we don't want to run all chromium tests first)
         no_deps = "--no-deps" if pattern or grep else ""
         if pattern and grep:
-            _playwright(c, f'{pattern} --grep "{grep}" {no_deps} {args}'.strip()
-            )
+            _playwright(c, f'{pattern} --grep "{grep}" {no_deps} {args}'.strip())
         elif pattern:
-            _playwright(c, f"{pattern} {no_deps} {args}".strip()
-            )
+            _playwright(c, f"{pattern} {no_deps} {args}".strip())
         elif grep:
-            _playwright(c, f'--grep "{grep}" {no_deps} {args}'.strip()
-            )
+            _playwright(c, f'--grep "{grep}" {no_deps} {args}'.strip())
         else:
             _playwright(c, f"{args}".strip())
 
 
 @task
-def playwright_report(c):
+def playwright_report(c: Context) -> None:
     """Show Playwright HTML report."""
     with c.cd(paths.FRONTEND_PATH):
         c.run("npx playwright show-report")
 
 
 @task
-def playwright_navigation(c, args=""):
+def playwright_navigation(c: Context, args: str = "") -> None:
     """Run Playwright navigation tests.
 
     Args:
@@ -191,12 +193,14 @@ def playwright_navigation(c, args=""):
     """
     flush_test_redis(c)
     with c.cd(paths.FRONTEND_PATH):
-        _playwright(c, f"tests/playwright/e2e/00-hydration-handling.spec.ts tests/playwright/e2e/01-navigation.spec.ts {args}".strip()
+        _playwright(
+            c,
+            f"tests/playwright/e2e/00-hydration-handling.spec.ts tests/playwright/e2e/01-navigation.spec.ts {args}".strip(),
         )
 
 
 @task
-def playwright_tournament(c, args=""):
+def playwright_tournament(c: Context, args: str = "") -> None:
     """Run Playwright tournament tests.
 
     Args:
@@ -204,12 +208,14 @@ def playwright_tournament(c, args=""):
     """
     flush_test_redis(c)
     with c.cd(paths.FRONTEND_PATH):
-        _playwright(c, f"tests/playwright/e2e/03-tournaments/ tests/playwright/e2e/04-tournament/ {args}".strip()
+        _playwright(
+            c,
+            f"tests/playwright/e2e/03-tournaments/ tests/playwright/e2e/04-tournament/ {args}".strip(),
         )
 
 
 @task
-def playwright_draft(c, args=""):
+def playwright_draft(c: Context, args: str = "") -> None:
     """Run Playwright draft tests.
 
     Args:
@@ -217,12 +223,14 @@ def playwright_draft(c, args=""):
     """
     flush_test_redis(c)
     with c.cd(paths.FRONTEND_PATH):
-        _playwright(c, f"tests/playwright/e2e/07-draft/ tests/playwright/e2e/08-shuffle-draft/ {args}".strip()
+        _playwright(
+            c,
+            f"tests/playwright/e2e/07-draft/ tests/playwright/e2e/08-shuffle-draft/ {args}".strip(),
         )
 
 
 @task
-def playwright_bracket(c, args=""):
+def playwright_bracket(c: Context, args: str = "") -> None:
     """Run Playwright bracket tests.
 
     Args:
@@ -230,12 +238,11 @@ def playwright_bracket(c, args=""):
     """
     flush_test_redis(c)
     with c.cd(paths.FRONTEND_PATH):
-        _playwright(c, f"tests/playwright/e2e/09-bracket/ {args}".strip()
-        )
+        _playwright(c, f"tests/playwright/e2e/09-bracket/ {args}".strip())
 
 
 @task
-def playwright_league(c, args=""):
+def playwright_league(c: Context, args: str = "") -> None:
     """Run Playwright league tests.
 
     Args:
@@ -243,12 +250,11 @@ def playwright_league(c, args=""):
     """
     flush_test_redis(c)
     with c.cd(paths.FRONTEND_PATH):
-        _playwright(c, f"tests/playwright/e2e/10-leagues/ {args}".strip()
-        )
+        _playwright(c, f"tests/playwright/e2e/10-leagues/ {args}".strip())
 
 
 @task
-def playwright_herodraft(c, args=""):
+def playwright_herodraft(c: Context, args: str = "") -> None:
     """Run Playwright herodraft tests (headless).
 
     Args:
@@ -256,12 +262,11 @@ def playwright_herodraft(c, args=""):
     """
     flush_test_redis(c)
     with c.cd(paths.FRONTEND_PATH):
-        _playwright(c, f"tests/playwright/e2e/herodraft/ {args}".strip()
-        )
+        _playwright(c, f"tests/playwright/e2e/herodraft/ {args}".strip())
 
 
 @task
-def playwright_all(c, args=""):
+def playwright_all(c: Context, args: str = "") -> None:
     """Run all Playwright tests.
 
     Args:
@@ -273,7 +278,7 @@ def playwright_all(c, args=""):
 
 
 @task
-def playwright_cicd(c, args=""):
+def playwright_cicd(c: Context, args: str = "") -> None:
     """Run all @cicd tagged Playwright tests (chromium + mobile + herodraft).
 
     Local convenience entrypoint — runs every project in one shot. CI uses the
@@ -284,46 +289,50 @@ def playwright_cicd(c, args=""):
     """
     flush_test_redis(c)
     with c.cd(paths.FRONTEND_PATH):
-        _playwright(c, f'--grep "@cicd" '
+        _playwright(
+            c,
+            f'--grep "@cicd" '
             f"--project=chromium --project=mobile-pixel5 --project=mobile-iphone13 "
             f"--project=mobile-iphone-se --project=herodraft "
-            f"--project=events-sequential --no-deps {args}".strip()
+            f"--project=events-sequential --no-deps {args}".strip(),
         )
 
 
 @task
-def playwright_cicd_chromium(c, args=""):
+def playwright_cicd_chromium(c: Context, args: str = "") -> None:
     """Run @cicd tagged tests for the chromium project only."""
     flush_test_redis(c)
     with c.cd(paths.FRONTEND_PATH):
-        _playwright(c, f'--grep "@cicd" '
-            f"--project=chromium --no-deps {args}".strip()
+        _playwright(
+            c, f'--grep "@cicd" ' f"--project=chromium --no-deps {args}".strip()
         )
 
 
 @task
-def playwright_cicd_mobile(c, args=""):
+def playwright_cicd_mobile(c: Context, args: str = "") -> None:
     """Run @cicd tagged tests for the mobile projects (Pixel 5, iPhone 13, iPhone SE)."""
     flush_test_redis(c)
     with c.cd(paths.FRONTEND_PATH):
-        _playwright(c, f'--grep "@cicd" '
+        _playwright(
+            c,
+            f'--grep "@cicd" '
             f"--project=mobile-pixel5 --project=mobile-iphone13 "
-            f"--project=mobile-iphone-se --no-deps {args}".strip()
+            f"--project=mobile-iphone-se --no-deps {args}".strip(),
         )
 
 
 @task
-def playwright_cicd_herodraft(c, args=""):
+def playwright_cicd_herodraft(c: Context, args: str = "") -> None:
     """Run @cicd tagged tests for the herodraft project only (sequential)."""
     flush_test_redis(c)
     with c.cd(paths.FRONTEND_PATH):
-        _playwright(c, f'--grep "@cicd" '
-            f"--project=herodraft --no-deps {args}".strip()
+        _playwright(
+            c, f'--grep "@cicd" ' f"--project=herodraft --no-deps {args}".strip()
         )
 
 
 @task
-def playwright_cicd_events(c, args=""):
+def playwright_cicd_events(c: Context, args: str = "") -> None:
     """Run @cicd tagged tests for the events-sequential project (sequential).
 
     The 16-events specs share a single seeded event PK and race across files
@@ -332,8 +341,9 @@ def playwright_cicd_events(c, args=""):
     """
     flush_test_redis(c)
     with c.cd(paths.FRONTEND_PATH):
-        _playwright(c, f'--grep "@cicd" '
-            f"--project=events-sequential --no-deps {args}".strip()
+        _playwright(
+            c,
+            f'--grep "@cicd" ' f"--project=events-sequential --no-deps {args}".strip(),
         )
 
 
@@ -366,13 +376,13 @@ ns_test.add_collection(ns_playwright, "playwright")
 
 
 @task
-def backend_all(c):
+def backend_all(c: Context) -> None:
     """Run all backend tests."""
     run_db_tests(c)
 
 
 @task
-def backend_steam(c):
+def backend_steam(c: Context) -> None:
     """Run Steam-related backend tests."""
     load_dotenv(paths.TEST_ENV_FILE)
     with c.cd(paths.BACKEND_PATH):
@@ -380,7 +390,7 @@ def backend_steam(c):
 
 
 @task
-def backend_draft(c):
+def backend_draft(c: Context) -> None:
     """Run draft-related backend tests."""
     load_dotenv(paths.TEST_ENV_FILE)
     with c.cd(paths.BACKEND_PATH):
@@ -404,20 +414,20 @@ ns_test.add_collection(ns_backend, "backend")
 
 
 @task
-def cicd_playwright(c):
+def cicd_playwright(c: Context) -> None:
     """Run Playwright tests for CI/CD (with setup)."""
     setup(c)
     playwright_all(c)
 
 
 @task
-def cicd_backend(c):
+def cicd_backend(c: Context) -> None:
     """Run backend tests for CI/CD."""
     backend_all(c)
 
 
 @task
-def cicd_all(c):
+def cicd_all(c: Context) -> None:
     """Run all tests for CI/CD."""
     cicd_backend(c)
     cicd_playwright(c)
@@ -462,7 +472,7 @@ DEMO_RESET_KEYS = {
 }
 
 
-def _reset_demo_data(c, demo_key):
+def _reset_demo_data(c: Context, demo_key: str) -> dict[str, Any] | None:
     """Reset demo tournament data via API.
 
     Args:
@@ -495,7 +505,7 @@ def _reset_demo_data(c, demo_key):
         return None
 
 
-def _generate_bracket(c, tournament_pk):
+def _generate_bracket(c: Context, tournament_pk: int) -> bool:
     """Generate bracket for a tournament via test API.
 
     Args:
@@ -513,7 +523,7 @@ def _generate_bracket(c, tournament_pk):
     try:
         response = requests.post(url, verify=False, timeout=10)
         if response.ok:
-            print(f"  Bracket generated successfully")
+            print("  Bracket generated successfully")
             return True
         else:
             print(
@@ -525,7 +535,7 @@ def _generate_bracket(c, tournament_pk):
         return False
 
 
-def _run_demo(c, spec="", workers=1):
+def _run_demo(c: Context, spec: str = "", workers: int = 1) -> None:
     """Run Playwright demo tests on the host.
 
     Args:
@@ -544,7 +554,7 @@ def _run_demo(c, spec="", workers=1):
         _playwright(c, pw_args, warn=True)
 
 
-def _copy_demo_videos(c):
+def _copy_demo_videos(c: Context) -> None:
     """Copy demo videos from frontend container to docs/assets/videos/."""
 
     # Copy from container to host
@@ -575,7 +585,7 @@ def _copy_demo_videos(c):
         print(f"  Warning: Video directory not found: {videos_dir}")
 
 
-def _copy_demo_snapshots(c):
+def _copy_demo_snapshots(c: Context) -> None:
     """Copy demo snapshots from frontend container to docs/assets/site_snapshots/."""
 
     # Copy from container to host
@@ -604,7 +614,7 @@ def _copy_demo_snapshots(c):
 
 
 @task
-def demo_create(c, spec=""):
+def demo_create(c: Context, spec: str = "") -> None:
     """Record demo videos for documentation (runs in Docker).
 
     Resets demo data, runs Playwright demo tests headless in Docker,
@@ -640,7 +650,7 @@ def demo_create(c, spec=""):
 
 
 @task
-def demo_shuffle(c):
+def demo_shuffle(c: Context) -> None:
     """Record shuffle draft demo video.
 
     Resets demo_captaindraft tournament, records shuffle draft demo.
@@ -652,7 +662,7 @@ def demo_shuffle(c):
 
 
 @task
-def demo_snake(c):
+def demo_snake(c: Context) -> None:
     """Record snake draft demo video.
 
     Resets demo_captaindraft tournament, records snake draft demo.
@@ -664,7 +674,7 @@ def demo_snake(c):
 
 
 @task
-def demo_herodraft(c):
+def demo_herodraft(c: Context) -> None:
     """Record herodraft with bracket demo video.
 
     Resets demo_herodraft tournament, records hero draft demo.
@@ -676,7 +686,7 @@ def demo_herodraft(c):
 
 
 @task
-def demo_csv(c):
+def demo_csv(c: Context) -> None:
     """Record CSV import demo video.
 
     Resets demo_csv_import data, records CSV import demo.
@@ -688,7 +698,7 @@ def demo_csv(c):
 
 
 @task
-def demo_event_creation(c):
+def demo_event_creation(c: Context) -> None:
     """Record event creation demo."""
     print("=== Event Creation Demo ===")
     _run_demo(c, spec="event creation")
@@ -696,7 +706,7 @@ def demo_event_creation(c):
 
 
 @task
-def demo_roll_call(c):
+def demo_roll_call(c: Context) -> None:
     """Record roll call demo."""
     print("=== Roll Call Demo ===")
     _run_demo(c, spec="roll call")
@@ -704,7 +714,7 @@ def demo_roll_call(c):
 
 
 @task
-def demo_all(c):
+def demo_all(c: Context) -> None:
     """Record all demos sequentially.
 
     Resets all demo data, then runs all demos with 1 worker to avoid CPU overload.
@@ -726,7 +736,7 @@ def demo_all(c):
 
 
 @task
-def demo_clean(c):
+def demo_clean(c: Context) -> None:
     """Clean demo output directories."""
 
     demo_results = paths.FRONTEND_PATH / "demo-results"
@@ -735,7 +745,7 @@ def demo_clean(c):
         print(f"Cleaned: {demo_results}")
 
 
-def _get_video_duration(c, video_path):
+def _get_video_duration(c: Context, video_path: Path) -> float | None:
     """Get video duration in seconds using ffprobe."""
     result = c.run(
         f"ffprobe -v error -show_entries format=duration "
@@ -749,7 +759,13 @@ def _get_video_duration(c, video_path):
 
 
 @task
-def demo_gifs(c, duration=10, fps=12, width=400, start_from_middle=True):
+def demo_gifs(
+    c: Context,
+    duration: int = 10,
+    fps: int = 12,
+    width: int = 400,
+    start_from_middle: bool = True,
+) -> None:
     """Convert demo videos to GIFs from the middle of the video.
 
     Creates lightweight GIF previews from named demo videos for documentation.
@@ -860,13 +876,13 @@ def demo_gifs(c, duration=10, fps=12, width=400, start_from_middle=True):
     print(f"\nGIFs saved to: {docs_gifs}")
 
 
-def _load_trim_metadata():
+def _load_trim_metadata() -> dict[str, float]:
     """Load trim metadata from YAML files in demo-results/videos/.
 
     Returns dict mapping video filename to trim_start_seconds.
     """
 
-    trim_times = {}
+    trim_times: dict[str, float] = {}
     demo_results = paths.FRONTEND_PATH / "demo-results" / "videos"
 
     # Look for all *.demo.yaml files
@@ -892,7 +908,7 @@ def _load_trim_metadata():
 
 
 @task
-def demo_trim(c, trim_start=None, auto=True):
+def demo_trim(c: Context, trim_start: str | None = None, auto: bool = True) -> None:
     """Trim initial loading screen from demo videos.
 
     Removes the first N seconds from each video to eliminate the loading
@@ -997,7 +1013,7 @@ def demo_trim(c, trim_start=None, auto=True):
 
 
 @task
-def demo_quick(c, duration=10, fps=12, width=400):
+def demo_quick(c: Context, duration: int = 10, fps: int = 12, width: int = 400) -> None:
     """Record demos and create GIF previews in one step.
 
     Combines demo.create and demo.gifs for convenience.
@@ -1018,7 +1034,7 @@ def demo_quick(c, duration=10, fps=12, width=400):
 
 
 @task
-def demo_snapshots(c):
+def demo_snapshots(c: Context) -> None:
     """Take site screenshots for documentation.
 
     Captures screenshots of key pages and saves to docs/assets/site_snapshots/.
@@ -1044,7 +1060,7 @@ def demo_snapshots(c):
 
 
 @task
-def demo_git_cleanup(c):
+def demo_git_cleanup(c: Context) -> None:
     """Remove old demo video/GIF blobs from git history.
 
     Rewrites git history to strip prior versions of docs/assets/videos/*.webm
@@ -1110,7 +1126,6 @@ def demo_git_cleanup(c):
     if confirm != "y":
         print("Aborted.")
         return
-
 
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir = Path(tmpdir)

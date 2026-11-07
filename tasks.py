@@ -1,34 +1,28 @@
 import shlex
 import time
 
-import semver
-from invoke import UnexpectedExit
+import invoke
+from dotenv import load_dotenv
 from invoke.collection import Collection
 from invoke.context import Context
 from invoke.tasks import task
+from rich.traceback import install
 
 import paths
-from backend.tasks import ns_db
-from scripts.docker import docker_pull_all, docker_release_pull, ns_docker
+from backend.tasks import db_migrate, db_populate_steam, ns_db
+from scripts.compose import run_compose, run_compose_one_off
+from scripts.docker import docker_release_pull, ns_docker
 from scripts.docs import ns_docs
+from scripts.slots import Stack
 from scripts.sync_version import (
     get_version_from_env,
-    get_version_from_pyproject,
-    update_env_version,
-    update_pyproject_version,
 )
-from scripts.compose import run_compose, run_compose_one_off
-from scripts.slots import Stack
 from scripts.tests import dev_test, ns_demo, ns_test
 from scripts.update import ns_update
-from scripts.utils import crun, get_version
 from scripts.version import ns_version
 
 config = None
 version = None
-
-import invoke
-from rich.traceback import install
 
 install(suppress=[invoke])
 
@@ -44,7 +38,6 @@ ns.add_collection(ns_update, "update")
 ns.add_collection(ns_version, "version")
 ns.add_collection(ns_docs, "docs")
 ns.add_collection(ns_demo, "demo")
-from dotenv import load_dotenv
 
 
 def docker_compose_down(c: Context, stack: Stack) -> None:
@@ -151,12 +144,8 @@ def _auto_link_all_tournaments(c: Context, stack: Stack) -> None:
     )
 
 
-from backend.tasks import db_migrate, db_populate_steam
-
-
 @task
-def dev_debug(c):
-
+def dev_debug(c: Context) -> None:
     db_migrate(c, paths.DEBUG_ENV_FILE)
     load_dotenv(paths.DEBUG_ENV_FILE)
     run_compose(
@@ -165,15 +154,14 @@ def dev_debug(c):
 
 
 @task
-def dev_live(c):
-    cmd = f"./scripts/tmux.sh"
+def dev_live(c: Context) -> None:
+    cmd = "./scripts/tmux.sh"
     c.run(cmd, pty=True)
 
 
 @task
-def dev_prod(c):
+def dev_prod(c: Context) -> None:
     with c.cd(paths.PROJECT_PATH):
-
         load_dotenv(paths.PROD_ENV_FILE)
         db_migrate(c, paths.PROD_ENV_FILE)
     cmd = f"docker compose -p . -f {paths.DOCKER_COMPOSE_PROD_PATH.resolve()} up"
@@ -181,7 +169,7 @@ def dev_prod(c):
 
 
 @task
-def dev_mac(c):
+def dev_mac(c: Context) -> None:
     db_migrate(c, paths.DEBUG_ENV_FILE)
     load_dotenv(paths.DEBUG_ENV_FILE)
     run_compose(
@@ -197,10 +185,9 @@ def dev_mac(c):
 
 
 @task
-def dev_release(c):
+def dev_release(c: Context) -> None:
     # Read VERSION from .env.release and set it as environment variable
     with c.cd(paths.PROJECT_PATH):
-
         load_dotenv(paths.RELEASE_ENV_FILE)
         db_migrate(c, paths.RELEASE_ENV_FILE)
         docker_release_pull(c)
@@ -212,7 +199,7 @@ def dev_release(c):
 
 
 @task
-def certbot(c):
+def certbot(c: Context) -> None:
     cmd = "certbot certonly --register-unsafely-without-email"
     cmd += " --agree-tos --force-renewal"
 
@@ -248,7 +235,7 @@ ns_dev.add_task(dev_release, "release")
 
 # Sync from production tasks (defined before dev_up since it depends on them)
 @task
-def dev_sync_users(c, dry_run=False):
+def dev_sync_users(c: Context, dry_run: bool = False) -> None:
     """Sync users from production (dota.kettle.sh) to local dev database."""
     load_dotenv(paths.DEBUG_ENV_FILE)
     db_migrate(c, paths.DEBUG_ENV_FILE)
@@ -259,7 +246,7 @@ def dev_sync_users(c, dry_run=False):
 
 
 @task
-def dev_sync_tournaments(c, dry_run=False):
+def dev_sync_tournaments(c: Context, dry_run: bool = False) -> None:
     """Sync tournaments from production (dota.kettle.sh) to local dev database."""
     load_dotenv(paths.DEBUG_ENV_FILE)
     with c.cd(paths.BACKEND_PATH):
@@ -269,7 +256,7 @@ def dev_sync_tournaments(c, dry_run=False):
 
 
 @task
-def dev_sync_all(c, dry_run=False):
+def dev_sync_all(c: Context, dry_run: bool = False) -> None:
     """Sync all data (users, tournaments) from production to local dev database."""
     dev_sync_users(c, dry_run=dry_run)
     dev_sync_tournaments(c, dry_run=dry_run)
@@ -277,7 +264,7 @@ def dev_sync_all(c, dry_run=False):
 
 # Dev environment tasks (uses docker-compose.debug.yaml)
 @task
-def dev_up(c, sync: bool = True):
+def dev_up(c: Context, sync: bool = True) -> None:
     """Start dev environment, optionally sync data from production.
 
     Args:
@@ -312,58 +299,58 @@ def dev_up(c, sync: bool = True):
 
 
 @task
-def dev_down(c):
+def dev_down(c: Context) -> None:
     docker_compose_down(c, "dev")
 
 
 @task
-def dev_logs(c):
+def dev_logs(c: Context) -> None:
     docker_compose_logs(c, "dev")
 
 
 @task
-def dev_ps(c):
+def dev_ps(c: Context) -> None:
     docker_compose_ps(c, "dev")
 
 
 @task
-def dev_restart(c):
+def dev_restart(c: Context) -> None:
     docker_compose_restart(c, "dev")
 
 
 @task
-def dev_stop(c):
+def dev_stop(c: Context) -> None:
     docker_compose_stop(c, "dev")
 
 
 @task
-def dev_build(c):
+def dev_build(c: Context) -> None:
     docker_compose_build(c, "dev")
 
 
 @task
-def dev_pull(c):
+def dev_pull(c: Context) -> None:
     docker_compose_pull(c, "dev")
 
 
 @task
-def dev_top(c):
+def dev_top(c: Context) -> None:
     docker_compose_top(c, "dev")
 
 
 @task
-def dev_exec(c, service, cmd):
+def dev_exec(c: Context, service: str, cmd: str) -> None:
     docker_compose_exec(c, "dev", service, cmd)
 
 
 @task
-def dev_run(c, service="backend", cmd=""):
+def dev_run(c: Context, service: str = "backend", cmd: str = "") -> None:
     """Run a one-off command in dev environment. Example: inv dev.run --cmd 'python manage.py test'"""
     docker_compose_run(c, "dev", service, cmd)
 
 
 @task
-def dev_upd(c):
+def dev_upd(c: Context) -> None:
     """Start dev environment in detached mode."""
     docker_compose_up(c, "dev", detach=True)
 
@@ -390,63 +377,63 @@ ns_dev.add_task(dev_sync_all, "sync-all")
 
 
 @task(name="test-up")
-def test_up(c):
+def test_up(c: Context) -> None:
     docker_compose_up(c, "test")
 
 
 @task(name="test-down")
-def test_down(c):
+def test_down(c: Context) -> None:
     docker_compose_down(c, "test")
 
 
 @task(name="test-logs")
-def test_logs(c):
+def test_logs(c: Context) -> None:
     docker_compose_logs(c, "test")
 
 
 @task(name="test-ps")
-def test_ps(c):
+def test_ps(c: Context) -> None:
     docker_compose_ps(c, "test")
 
 
 @task(name="test-restart")
-def test_restart(c):
+def test_restart(c: Context) -> None:
     docker_compose_restart(c, "test")
 
 
 @task(name="test-stop")
-def test_stop(c):
+def test_stop(c: Context) -> None:
     docker_compose_stop(c, "test")
 
 
 @task(name="test-build")
-def test_build(c):
+def test_build(c: Context) -> None:
     docker_compose_build(c, "test")
 
 
 @task(name="test-pull")
-def test_pull(c):
+def test_pull(c: Context) -> None:
     docker_compose_pull(c, "test")
 
 
 @task(name="test-top")
-def test_top(c):
+def test_top(c: Context) -> None:
     docker_compose_top(c, "test")
 
 
 @task(name="test-exec")
-def test_exec(c, service, cmd):
+def test_exec(c: Context, service: str, cmd: str) -> None:
     docker_compose_exec(c, "test", service, cmd)
 
 
 @task(name="test-run")
-def test_run(c, service="backend", cmd=""):
+def test_run(c: Context, service: str = "backend", cmd: str = "") -> None:
     """Run a one-off command in test environment. Example: inv test.run --cmd 'python manage.py test app.tests -v 2'"""
     docker_compose_run(c, "test", service, cmd, entrypoint="")
 
 
 @task(name="test-upd")
-def test_upd(c):
+def test_upd(c: Context) -> None:
     """Start test environment in detached mode."""
     docker_compose_up(c, "test", detach=True)
 
@@ -467,63 +454,63 @@ ns_test.add_task(test_run, "run")
 
 # Prod environment tasks (uses docker-compose.prod.yaml)
 @task
-def prod_up(c):
+def prod_up(c: Context) -> None:
     docker_compose_up(c, "prod")
 
 
 @task
-def prod_down(c):
+def prod_down(c: Context) -> None:
     docker_compose_down(c, "prod")
 
 
 @task
-def prod_logs(c):
+def prod_logs(c: Context) -> None:
     docker_compose_logs(c, "prod")
 
 
 @task
-def prod_ps(c):
+def prod_ps(c: Context) -> None:
     docker_compose_ps(c, "prod")
 
 
 @task
-def prod_restart(c):
+def prod_restart(c: Context) -> None:
     docker_compose_restart(c, "prod")
 
 
 @task
-def prod_stop(c):
+def prod_stop(c: Context) -> None:
     docker_compose_stop(c, "prod")
 
 
 @task
-def prod_build(c):
+def prod_build(c: Context) -> None:
     docker_compose_build(c, "prod")
 
 
 @task
-def prod_pull(c):
+def prod_pull(c: Context) -> None:
     docker_compose_pull(c, "prod")
 
 
 @task
-def prod_top(c):
+def prod_top(c: Context) -> None:
     docker_compose_top(c, "prod")
 
 
 @task
-def prod_exec(c, service, cmd):
+def prod_exec(c: Context, service: str, cmd: str) -> None:
     docker_compose_exec(c, "prod", service, cmd)
 
 
 @task
-def prod_run(c, service="backend", cmd=""):
+def prod_run(c: Context, service: str = "backend", cmd: str = "") -> None:
     """Run a one-off command in prod environment. Example: inv prod.run --cmd 'python manage.py shell'"""
     docker_compose_run(c, "prod", service, cmd)
 
 
 @task
-def prod_upd(c):
+def prod_upd(c: Context) -> None:
     """Start prod environment in detached mode."""
     docker_compose_up(c, "prod", detach=True)
 
@@ -550,7 +537,7 @@ ns_discord = Collection("discord")
 
 
 @task
-def discord_ngrok(c, port=443):
+def discord_ngrok(c: Context, port: int = 443) -> None:
     """Start ngrok tunnel for Discord bot interactions.
 
     This exposes the local server to the internet so Discord can send
@@ -575,7 +562,7 @@ def discord_ngrok(c, port=443):
 
 
 @task
-def discord_logs(c):
+def discord_logs(c: Context) -> None:
     """Show logs from the Discord bot container."""
     run_compose(c, "test", "logs", "-f", "--tail=100", "discord-bot", pty=True)
 

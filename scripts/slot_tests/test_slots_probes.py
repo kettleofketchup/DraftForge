@@ -22,13 +22,22 @@ def test_parse_ps_fixture() -> None:
     assert oneoff.oneoff is True and oneoff.running is False
     assert len(oneoff.config_files) == 2
     plain = by_name["cliproxyapi"]
-    assert plain.project == "" and plain.working_dir is None and plain.config_files == ()
+    assert (
+        plain.project == "" and plain.working_dir is None and plain.config_files == ()
+    )
     assert by_name["df-s2-nginx-1"].working_dir == Path("/tmp/my wt")
 
 
 def test_parse_ps_treats_no_value_as_empty() -> None:
-    (o,) = parse_ps_output("x\trunning\t<no value>\t<no value>\t<no value>\t<no value>\t<no value>\n")
-    assert o.project == "" and o.working_dir is None and o.config_files == () and o.oneoff is False
+    (o,) = parse_ps_output(
+        "x\trunning\t<no value>\t<no value>\t<no value>\t<no value>\t<no value>\n"
+    )
+    assert (
+        o.project == ""
+        and o.working_dir is None
+        and o.config_files == ()
+        and o.oneoff is False
+    )
 
 
 def test_parse_ps_ignores_blank_lines() -> None:
@@ -52,16 +61,39 @@ GIT_ID = ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=fal
 def test_live_worktrees_lists_resolved_paths(tmp_path: Path) -> None:
     main = tmp_path / "main"
     subprocess.run(["git", "init", "-q", str(main)], check=True)
-    subprocess.run(["git", "-C", str(main), *GIT_ID, "commit", "-q", "--allow-empty", "-m", "i"], check=True)
-    subprocess.run(["git", "-C", str(main), "worktree", "add", "-q", str(tmp_path / "wt"), "-b", "b"], check=True)
-    assert REAL_HOST.live_worktrees(main) == {main.resolve(), (tmp_path / "wt").resolve()}
+    subprocess.run(
+        ["git", "-C", str(main), *GIT_ID, "commit", "-q", "--allow-empty", "-m", "i"],
+        check=True,
+    )
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(main),
+            "worktree",
+            "add",
+            "-q",
+            str(tmp_path / "wt"),
+            "-b",
+            "b",
+        ],
+        check=True,
+    )
+    assert REAL_HOST.live_worktrees(main) == {
+        main.resolve(),
+        (tmp_path / "wt").resolve(),
+    }
 
 
 def test_real_run_merges_process_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DF_KEEP_ME", "kept")
     monkeypatch.setenv("COMPOSE_PROJECT_NAME", "df")
     rc, out = REAL_HOST.run(
-        [sys.executable, "-c", "import os; print(os.environ['DF_KEEP_ME'], os.environ['COMPOSE_PROJECT_NAME'])"],
+        [
+            sys.executable,
+            "-c",
+            "import os; print(os.environ['DF_KEEP_ME'], os.environ['COMPOSE_PROJECT_NAME'])",
+        ],
         {"COMPOSE_PROJECT_NAME": "df-s4"},
         True,
     )
@@ -70,8 +102,17 @@ def test_real_run_merges_process_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.mark.parametrize(
     "project,ok",
-    [("df", True), ("df-dev", True), ("df-s3", True), ("df-run-0a1b2c3d", True),
-     ("df-s10", False), ("dfx", False), ("df-run-XYZ", False), ("cliproxyapi", False), ("", False)],
+    [
+        ("df", True),
+        ("df-dev", True),
+        ("df-s3", True),
+        ("df-run-0a1b2c3d", True),
+        ("df-s10", False),
+        ("dfx", False),
+        ("df-run-XYZ", False),
+        ("cliproxyapi", False),
+        ("", False),
+    ],
 )
 def test_df_project_pattern(project: str, ok: bool) -> None:
     assert bool(DF_PROJECT_RE.match(project)) is ok
