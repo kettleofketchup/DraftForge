@@ -1,7 +1,7 @@
 /**
  * Login As User Button
  *
- * DEV ONLY: Small red icon button that allows logging in as a specific user.
+ * DEV/PREVIEW ONLY: Small red icon button that allows logging in as a specific user.
  * Only visible when:
  * 1. import.meta.env.DEV (development mode, tree-shaken from production)
  * 2. NOT running under Playwright (hidden during demos/recordings)
