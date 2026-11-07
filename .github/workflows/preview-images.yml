@@ -1,0 +1,177 @@
+# Build per-PR preview images and report a `preview-images` commit status
+# (spec 5.5). Images go only to ghcr.io/kettleofketchup/draftforge-preview/*,
+# tagged pr-<n>-<sha7>; an existing tag is never rebuilt or re-pushed.
+# Not a security boundary: this runs from the PR head's copy of the workflow.
+name: preview-images
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    # jobs.<id>.if cannot read `env`, so the allowlist is read from `vars` here and in preview-queue.
+    # Exact substring match: PREVIEW_AUTHORS must have no whitespace (preview-queue fails loudly if it does).
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      contains(format(',{0},', vars.PREVIEW_AUTHORS || 'kettleofketchup'), format(',{0},', github.event.pull_request.user.login))
+    concurrency:
+      # matrix.name is part of the group: without it both legs share one group, run one at a time,
+      # and a second run for the same SHA cancels the first run's pending leg.
+      group: preview-images-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}-${{ matrix.name }}
+      # Never cancel: a cancelled build leaves Argo pointing at a tag that never appears.
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    # A hung build would otherwise hold the per-SHA concurrency slot for 6h.
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+      floor_ok: ${{ steps.floor.outputs.floor_ok }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: backend
+            context: .
+            file: backend/Dockerfile
+            target: runtime
+            args: ""
+          - name: frontend
+            context: frontend
+            file: frontend/Dockerfile
+            target: runtime
+            args: VITE_PREVIEW_TEST_FEATURES=true
+    steps:
+      # First, so the tag output exists even if a later step fails.
+      - name: Compute image tag
+        id: tag
+        env:
+          PR: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: echo "tag=pr-${PR}-${HEAD_SHA:0:7}" >> "$GITHUB_OUTPUT"
+
+      # The PR head, not the merge ref, so the tag matches what Argo deploys.
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      # A branch cut before preview support would build images that ignore
+      # SQLITE_PATH/REDIS_HOST/ALLOWED_HOSTS and lack the preview menu.
+      - name: Compatibility floor
+        id: floor
+        run: |
+          if test -f backend/backend/env_utils.py && grep -q 'ARG VITE_PREVIEW_TEST_FEATURES' frontend/Dockerfile; then
+            echo "floor_ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "floor_ok=false" >> "$GITHUB_OUTPUT"
+            echo "::error::This branch predates preview support; rebase on main to get a preview."
+            exit 1
+          fi
+
+      - name: Log in to GHCR
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # found=false only on a not-found answer. Any other failure (registry 5xx,
+      # rate limit, 401) fails the job, so a transient error never re-pushes
+      # over an existing tag.
+      - name: Check whether the image already exists
+        id: exists
+        env:
+          REF: ghcr.io/kettleofketchup/draftforge-preview/${{ matrix.name }}:${{ steps.tag.outputs.tag }}
+        run: |
+          rc=0
+          err=$(docker buildx imagetools inspect "$REF" 2>&1 >/dev/null) || rc=$?
+          if [ "$rc" -eq 0 ]; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          elif printf '%s\n' "$err" | grep -qiE 'not found|MANIFEST_UNKNOWN|NAME_UNKNOWN'; then
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          else
+            printf '%s\n' "$err" >&2
+            echo "::error::Cannot tell whether $REF exists; refusing to push."
+            exit 1
+          fi
+
+      - name: Set up Docker Buildx
+        if: steps.exists.outputs.found != 'true'
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      # cache-from reads the prod cache only. No cache-to: a preview cache would
+      # be written by PR code, and reading it would let one PR poison another's build.
+      - name: Build and push
+        if: steps.exists.outputs.found != 'true'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          target: ${{ matrix.target }}
+          push: true
+          provenance: false
+          tags: ghcr.io/kettleofketchup/draftforge-preview/${{ matrix.name }}:${{ steps.tag.outputs.tag }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.event.pull_request.head.sha }}
+            org.opencontainers.image.source=https://github.com/kettleofketchup/DraftForge
+          cache-from: type=registry,ref=ghcr.io/kettleofketchup/draftforge/${{ matrix.name }}:buildcache
+          build-args: ${{ matrix.args }}
+
+  report:
+    needs: build
+    if: always() && needs.build.result != 'skipped'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      statuses: write
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      PR: ${{ github.event.pull_request.number }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      # The description carries the tag: statuses attach to a SHA repo-wide, and
+      # the queue only accepts a status naming this PR's tag. Nothing on cancelled.
+      - name: Post preview-images status
+        id: status
+        if: needs.build.result == 'success' || needs.build.result == 'failure'
+        env:
+          STATE: ${{ needs.build.result }}
+          TAG: ${{ needs.build.outputs.tag }}
+        run: >-
+          gh api -X POST "repos/$GH_REPO/statuses/$HEAD_SHA"
+          -f context=preview-images
+          -f state="$STATE"
+          -f description="$TAG"
+          -f target_url="$RUN_URL"
+
+      # Per commit, not deduplicated.
+      - name: Comment on build failure
+        if: needs.build.result == 'failure' && needs.build.outputs.floor_ok != 'false'
+        run: |
+          body="Preview image build failed for commit \`${HEAD_SHA:0:7}\`. The preview (if any) keeps serving the previous commit's backend and frontend; the celery worker may be down until the next good commit. See ${RUN_URL}."
+          gh api -X POST "repos/$GH_REPO/issues/$PR/comments" -f body="$body"
+
+      # Posted at most once per PR, so repeated pushes to an old branch do not stack comments.
+      - name: Comment that the branch predates preview support
+        if: needs.build.result == 'failure' && needs.build.outputs.floor_ok == 'false'
+        run: |
+          marker='<!-- preview-floor -->'
+          bodies=$(gh api "repos/$GH_REPO/issues/$PR/comments" --paginate --jq '.[].body')
+          if grep -qF -- "$marker" <<<"$bodies"; then
+            echo "Floor comment already posted on PR #$PR."
+            exit 0
+          fi
+          body="${marker}
+          Preview images were not built for commit \`${HEAD_SHA:0:7}\`: this branch predates preview support. Rebase on main to get a preview."
+          gh api -X POST "repos/$GH_REPO/issues/$PR/comments" -f body="$body"
