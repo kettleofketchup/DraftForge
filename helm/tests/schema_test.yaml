@@ -2,6 +2,7 @@ suite: values schema and required resources
 templates:
   - templates/configmap-env.yaml
   - templates/backend.yaml
+  - templates/frontend.yaml
 tests:
   - it: renders with the default values
     asserts:
@@ -31,6 +32,14 @@ tests:
     template: templates/backend.yaml
     set:
       migrations.resources.limits.memory: null
+    asserts:
+      - failedTemplate:
+          errorPattern: "limits\\.memory"
+
+  - it: fails when the frontend container has no memory limit
+    template: templates/frontend.yaml
+    set:
+      frontend.resources.limits.memory: null
     asserts:
       - failedTemplate:
           errorPattern: "limits\\.memory"
