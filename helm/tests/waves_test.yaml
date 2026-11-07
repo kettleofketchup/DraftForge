@@ -20,6 +20,7 @@ templates:
   - templates/celery-beat.yaml
   - templates/discord-bot.yaml
   - templates/frontend.yaml
+  - templates/ingressroute.yaml
 tests:
   # ---- every document, under each profile ----
   - it: "preview: every document has a sync-wave of -1, 0 or 1 and no hook or sync-options"
@@ -83,6 +84,18 @@ tests:
       - equal: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", value: "0"}
         template: templates/redis.yaml
         documentSelector: {path: kind, value: Service}
+      - equal: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", value: "0"}
+        template: templates/ingressroute.yaml
+        documentSelector: {path: metadata.name, value: draftforge}
+      - equal: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", value: "0"}
+        template: templates/ingressroute.yaml
+        documentSelector: {path: metadata.name, value: draftforge-discord-rewrite}
+      - equal: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", value: "0"}
+        template: templates/ingressroute.yaml
+        documentSelector: {path: metadata.name, value: draftforge-internal-deny}
+      - equal: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", value: "0"}
+        template: templates/ingressroute.yaml
+        documentSelector: {path: metadata.name, value: draftforge-strip-identity}
       - equal: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", value: "1"}
         documentSelector: &deployments {path: kind, value: Deployment, matchMany: true, skipEmptyTemplates: true}
 
@@ -103,6 +116,15 @@ tests:
       - equal: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", value: "0"}
         template: templates/redis.yaml
         documentSelector: {path: kind, value: Service}
+      - equal: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", value: "0"}
+        template: templates/ingressroute.yaml
+        documentSelector: {path: metadata.name, value: draftforge}
+      - equal: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", value: "0"}
+        template: templates/ingressroute.yaml
+        documentSelector: {path: metadata.name, value: draftforge-discord-rewrite}
+      - equal: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", value: "0"}
+        template: templates/ingressroute.yaml
+        documentSelector: {path: metadata.name, value: draftforge-internal-deny}
       - equal: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", value: "1"}
         documentSelector: *deployments
 

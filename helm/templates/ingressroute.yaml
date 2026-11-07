@@ -1,0 +1,127 @@
+{{- include "draftforge.previewGuard" . -}}
+{{- if .Values.ingress.enabled -}}
+{{- $fullname := include "draftforge.fullname" . -}}
+{{- $ing := .Values.ingress -}}
+{{- $host := printf "Host(`%s`)" $ing.host -}}
+{{- /*
+Middlewares every route lists first: authentik forward-auth (other namespace),
+then strip-identity, so PR code never sees the reviewer's X-authentik-* headers.
+*/ -}}
+{{- $common := list -}}
+{{- if $ing.authentik.enabled -}}
+{{- $common = append $common (dict "name" $ing.authentik.middlewareName "namespace" $ing.authentik.middlewareNamespace) -}}
+{{- end -}}
+{{- if $ing.stripIdentityHeaders -}}
+{{- $common = append $common (dict "name" (printf "%s-strip-identity" $fullname)) -}}
+{{- end -}}
+{{- $backend := list (dict "name" "backend" "port" 8000) -}}
+{{- $frontend := list (dict "name" "frontend" "port" 3000) -}}
+{{- $backendPaths := list "/api" "/complete" "/login" "/static" "/admin" "/logout" "/disconnect" -}}
+{{- $prefixes := list -}}
+{{- range $backendPaths -}}
+{{- $prefixes = append $prefixes (printf "PathPrefix(`%s`)" .) -}}
+{{- end -}}
+{{- $routes := list -}}
+{{- if $ing.blockInternalApi -}}
+{{- /*
+Not in prod nginx: INTERNAL_SERVICE_ALLOWED_IPS defaults include 10/8, which
+covers Traefik's pod IPs, so external /api/internal requests get 403 here.
+*/ -}}
+{{- $routes = append $routes (dict
+  "priority" 300
+  "match" (printf "%s && PathPrefix(`/api/internal`)" $host)
+  "middlewares" (append $common (dict "name" (printf "%s-internal-deny" $fullname)))
+  "services" $backend) -}}
+{{- end -}}
+{{- $routes = append $routes (dict
+  "priority" 250
+  "match" (printf "%s && PathPrefix(`/discord/`)" $host)
+  "middlewares" (append $common (dict "name" (printf "%s-discord-rewrite" $fullname)))
+  "services" $backend) -}}
+{{- $routes = append $routes (dict
+  "priority" 200
+  "match" (printf "%s && (%s)" $host (join " || " $prefixes))
+  "middlewares" $common
+  "services" $backend) -}}
+{{- $routes = append $routes (dict
+  "priority" 100
+  "match" $host
+  "middlewares" $common
+  "services" $frontend) }}
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: {{ $fullname }}
+  labels:
+    {{- include "draftforge.labels" . | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  entryPoints:
+    - {{ $ing.entryPoint }}
+  routes:
+    {{- range $routes }}
+    - kind: Rule
+      match: {{ .match | quote }}
+      priority: {{ .priority }}
+      {{- with .middlewares }}
+      middlewares:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      services:
+        {{- toYaml .services | nindent 8 }}
+    {{- end }}
+  {{- with $ing.tls.secretName }}
+  tls:
+    secretName: {{ . }}
+  {{- end }}
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: {{ $fullname }}-discord-rewrite
+  labels:
+    {{- include "draftforge.labels" . | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  replacePathRegex:
+    regex: "^/discord/(.*)"
+    replacement: "/api/discord/$1"
+{{- if $ing.blockInternalApi }}
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: {{ $fullname }}-internal-deny
+  labels:
+    {{- include "draftforge.labels" . | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  ipAllowList:
+    sourceRange:
+      - 127.0.0.1/32
+{{- end }}
+{{- if $ing.stripIdentityHeaders }}
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: {{ $fullname }}-strip-identity
+  labels:
+    {{- include "draftforge.labels" . | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  # An empty value makes Traefik remove the header. These are the
+  # authResponseHeaders the authentik forward-auth middleware sets.
+  headers:
+    customRequestHeaders:
+      X-authentik-username: ""
+      X-authentik-groups: ""
+      X-authentik-email: ""
+      X-authentik-name: ""
+      X-authentik-uid: ""
+{{- end }}
+{{- end }}
