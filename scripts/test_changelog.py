@@ -509,6 +509,123 @@ class HasLabelTests(unittest.TestCase):
         assert "has-label: API error 403: Forbidden" in err.getvalue()
 
 
+class ReleaseRepo(Repo):
+    """A Repo on main with version files, one commit, and a local bare origin."""
+
+    def __init__(self):
+        super().__init__()
+        self.write("pyproject.toml", '[project]\nversion = "0.2.0"\n')
+        self.write("docker/.env.prod", "VERSION=0.2.0\n")
+        self.write("docker/.env.release", "VERSION=0.2.0\n")
+        self.fragment("added/a.md", "- A feature.\n")
+        self.fragment("upgrading/b.md", "Run the migrations.\n")
+        git(self.root, "commit", "-q", "-m", "init")
+        self.origin_tmp = tempfile.TemporaryDirectory()
+        self.origin = Path(self.origin_tmp.name)
+        git(self.origin, "init", "-q", "--bare", "-b", "main")
+        git(self.root, "remote", "add", "origin", str(self.origin))
+        git(self.root, "push", "-q", "-u", "origin", "main")
+
+    def status(self):
+        return git(self.root, "status", "--porcelain").stdout
+
+    def close(self):
+        super().close()
+        self.origin_tmp.cleanup()
+
+
+class ReleaseFlowTests(unittest.TestCase):
+    def setUp(self):
+        self.repo = ReleaseRepo()
+        self.addCleanup(self.repo.close)
+
+    def preflight(self, version="0.3.0", **kwargs):
+        return lambda: changelog.release_preflight(self.repo.root, version, **kwargs)
+
+    def test_preflight_passes_on_a_clean_synced_main(self):
+        self.repo.write("notes.txt", "local scratch\n", add=False)  # allowed
+        changelog.release_preflight(self.repo.root, "0.3.0")
+
+    def test_refuses_a_bad_version(self):
+        refused(self.preflight("v0.3"), "MAJOR.MINOR.PATCH")
+
+    def test_refuses_commit_without_a_tag(self):
+        refused(self.preflight(tag_version=False), "--no-commit")
+
+    def test_refuses_a_missing_changelog(self):
+        git(self.repo.root, "rm", "-q", "CHANGELOG.md")
+        git(self.repo.root, "commit", "-q", "-m", "drop changelog")
+        git(self.repo.root, "push", "-q", "origin", "main")
+        refused(self.preflight(), "CHANGELOG.md is missing")
+
+    def test_refuses_off_main(self):
+        git(self.repo.root, "switch", "-q", "-c", "side")
+        refused(self.preflight(), "from main")
+
+    def test_refuses_a_staged_change(self):
+        self.repo.write("pyproject.toml", '[project]\nversion = "9.9.9"\n')
+        refused(self.preflight(), "uncommitted")
+
+    def test_refuses_an_unstaged_change(self):
+        self.repo.write("docker/.env.prod", "VERSION=9.9.9\n", add=False)
+        refused(self.preflight(), "uncommitted")
+
+    def test_refuses_an_untracked_fragment(self):
+        self.repo.write("changelog.d/fixed/new.md", "- New.\n", add=False)
+        refused(self.preflight(), "untracked files under changelog.d/")
+
+    def test_refuses_when_head_is_not_origin_main(self):
+        self.repo.write("other.txt", "x\n")
+        git(self.repo.root, "commit", "-q", "-m", "local only")
+        refused(self.preflight(), "update main and retry")
+
+    def test_refuses_an_existing_local_tag(self):
+        git(self.repo.root, "tag", "0.3.0")
+        refused(self.preflight(), "git tag -d 0.3.0")
+
+    def test_refuses_a_tag_that_exists_only_on_origin(self):
+        git(self.repo.root, "tag", "0.3.0")
+        git(self.repo.root, "push", "-q", "origin", "refs/tags/0.3.0")
+        git(self.repo.root, "tag", "-d", "0.3.0")
+        refused(self.preflight(), "already exists on origin")
+
+    def test_assemble_release_stages_removal_of_exactly_the_consumed_fragments(self):
+        consumed = changelog.assemble_release(self.repo.root, "0.3.0", "2026-10-03")
+        assert consumed == ["changelog.d/added/a.md", "changelog.d/upgrading/b.md"]
+        staged = git(self.repo.root, "diff", "--cached", "--name-status").stdout
+        assert staged.splitlines() == [
+            "D\tchangelog.d/added/a.md",
+            "D\tchangelog.d/upgrading/b.md",
+        ]
+        assert not (self.repo.root / "changelog.d/added/a.md").exists()
+        assert "## [0.3.0] - 2026-10-03\n" in self.repo.text()
+
+    def test_rollback_after_a_failed_assemble_leaves_a_clean_tree(self):
+        self.repo.write("pyproject.toml", '[project]\nversion = "0.2.0"\n# bumped\n')
+        refused(
+            lambda: changelog.assemble_release(self.repo.root, "0.2.0", "2026-10-03"),
+            "already has",
+        )
+        changelog.rollback_release(self.repo.root)
+        assert self.repo.status() == ""
+
+    def test_rollback_after_git_rm_restores_the_fragments(self):
+        changelog.assemble_release(self.repo.root, "0.3.0", "2026-10-03")
+        changelog.rollback_release(self.repo.root)
+        assert self.repo.status() == ""
+        assert (self.repo.root / "changelog.d/added/a.md").exists()
+
+    def test_rollback_leaves_files_outside_the_release_paths_alone(self):
+        self.repo.write("notes.txt", "local scratch\n", add=False)
+        changelog.assemble_release(self.repo.root, "0.3.0", "2026-10-03")
+        changelog.rollback_release(self.repo.root)
+        assert self.repo.status() == "?? notes.txt\n"
+
+    def test_release_subject_matches_the_release_regex(self):
+        assert changelog.RELEASE_SUBJECT_RE.match(changelog.release_subject("1.2.3"))
+        assert not changelog.RELEASE_SUBJECT_RE.match("Updated version to 1.2.3 (#301)")
+
+
 class CommittedRepoTests(unittest.TestCase):
     def test_unreleased_body_is_only_the_pointer(self):
         text = (REPO / "CHANGELOG.md").read_text(encoding="utf-8")

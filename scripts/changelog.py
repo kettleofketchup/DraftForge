@@ -317,6 +317,117 @@ def has_label(name: str, env: Mapping[str, str] | None = None) -> bool:
     return any(label["name"] == name for label in labels)
 
 
+# --- release: called by `inv version.set` (scripts/version.py) -----------------
+
+RELEASE_PATHS: tuple[str, ...] = (
+    "pyproject.toml",
+    "docker/.env.prod",
+    "docker/.env.release",
+    "CHANGELOG.md",
+    FRAGMENT_DIR,
+)
+# Also in just/ci.just (push exemption, resurrection --grep); keep the two in sync.
+RELEASE_SUBJECT_RE = re.compile(r"^Updated version to [0-9]+\.[0-9]+\.[0-9]+$")
+
+
+def release_subject(version: str) -> str:
+    return f"Updated version to {version}"
+
+
+def _git(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", "-C", str(root), *args], capture_output=True, text=True, check=False
+    )
+
+
+def release_preflight(
+    root: Path,
+    version: str,
+    tag_version: bool = True,
+    remote: str = "origin",
+    branch: str = "main",
+) -> None:
+    """Refuse a release that could half-happen. Touches no file; raises ChangelogError."""
+    root = Path(root)
+    if not VERSION_RE.fullmatch(version):
+        raise ChangelogError(f"version '{version}' is not MAJOR.MINOR.PATCH")
+    if not tag_version:
+        raise ChangelogError(
+            "refusing to commit and push a release without a tag (no images would be "
+            "built); use --no-commit for a local version bump"
+        )
+    if not (root / "CHANGELOG.md").exists():
+        raise ChangelogError("CHANGELOG.md is missing; restore it from main")
+    current = _git(root, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
+    if current != branch:
+        raise ChangelogError(
+            f"releases are cut from {branch} (on '{current}'); git switch {branch}"
+        )
+    if _git(root, "status", "--porcelain", "--untracked-files=no").stdout.strip():
+        raise ChangelogError(
+            "uncommitted changes to tracked files; commit or stash them first"
+        )
+    untracked = _git(
+        root, "ls-files", "--others", "--exclude-standard", "--", FRAGMENT_DIR
+    ).stdout.splitlines()
+    if untracked:
+        raise ChangelogError(
+            "untracked files under changelog.d/ would miss the release: "
+            + ", ".join(untracked)
+            + "; commit or remove them"
+        )
+    fetch = _git(root, "fetch", "--tags", remote)
+    if fetch.returncode != 0:
+        raise ChangelogError(
+            f"git fetch --tags {remote} failed: {fetch.stderr.strip()}"
+        )
+    head = _git(root, "rev-parse", "HEAD").stdout.strip()
+    upstream = _git(root, "rev-parse", "-q", "--verify", f"{remote}/{branch}")
+    if upstream.stdout.strip() != head:
+        raise ChangelogError(
+            f"HEAD is not {remote}/{branch}; update {branch} and retry"
+        )
+    # Remote first: the fetch above also copies a remote-only tag locally.
+    remote_tag = _git(root, "ls-remote", "--tags", remote, f"refs/tags/{version}")
+    if remote_tag.returncode != 0:
+        raise ChangelogError(
+            f"git ls-remote {remote} failed: {remote_tag.stderr.strip()}"
+        )
+    if remote_tag.stdout.strip():
+        raise ChangelogError(f"tag {version} already exists on {remote}")
+    local_tag = _git(root, "rev-parse", "-q", "--verify", f"refs/tags/{version}")
+    if local_tag.returncode == 0:
+        raise ChangelogError(
+            f"tag {version} already exists locally (a leftover from a --no-commit run "
+            f"can be removed with: git tag -d {version})"
+        )
+
+
+def assemble_release(root: Path, version: str, date: str) -> list[str]:
+    """Assemble ## [version] - date and git rm the consumed fragments (staged)."""
+    root = Path(root)
+    paths = assemble(root, version, date)
+    text = (root / "CHANGELOG.md").read_text(encoding="utf-8")
+    if not re.search(rf"^## \[{re.escape(version)}\] - {re.escape(date)}$", text, re.M):
+        raise ChangelogError(
+            f"CHANGELOG.md has no '## [{version}] - {date}' section after assembling"
+        )
+    if paths:  # git rm with no paths is an error
+        rm = _git(root, "rm", "-q", "--", *paths)
+        if rm.returncode != 0:
+            raise ChangelogError(
+                f"git rm of consumed fragments failed: {rm.stderr.strip()}"
+            )
+    return paths
+
+
+def rollback_release(root: Path) -> None:
+    """Restore index and work tree for RELEASE_PATHS; nothing else is touched."""
+    result = _git(root, "checkout", "HEAD", "--", *RELEASE_PATHS)
+    if result.returncode != 0:
+        raise ChangelogError(f"rollback failed: {result.stderr.strip()}")
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
