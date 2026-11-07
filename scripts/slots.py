@@ -1,14 +1,17 @@
 from __future__ import annotations
 
+import fcntl
 import os
 import re
 import secrets
 import shutil
 import socket
 import subprocess
+import sys
 import tempfile
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final, Literal
@@ -97,7 +100,11 @@ def is_ci() -> bool:
 
 
 def slot_env_for(
-    n: int, worktree: Path, token: str, registry: Path | None, background: bool | None = None
+    n: int,
+    worktree: Path,
+    token: str,
+    registry: Path | None,
+    background: bool | None = None,
 ) -> SlotEnv:
     if not 0 <= n < SLOT_COUNT:
         raise SlotError(f"slot {n} out of range [0, {SLOT_COUNT - 1}]")
@@ -133,7 +140,9 @@ def render_slot_file(env: SlotEnv) -> str:
         "DF_SLOT_TOKEN": env.token,
         "DF_REGISTRY": "" if env.registry is None else str(env.registry),
     }
-    return "\n".join([SLOT_FILE_HEADER, *(f"{k}={values[k]}" for k in SLOT_KEYS)]) + "\n"
+    return (
+        "\n".join([SLOT_FILE_HEADER, *(f"{k}={values[k]}" for k in SLOT_KEYS)]) + "\n"
+    )
 
 
 def parse_kv(text: str) -> dict[str, str]:
@@ -158,7 +167,9 @@ def slot_env_from_kv(kv: Mapping[str, str]) -> SlotEnv:
     except ValueError as exc:
         raise SlotError(f"slot file has a malformed number: {exc}") from exc
     if not 0 <= slot < SLOT_COUNT:
-        raise SlotError(f"slot file names slot {slot}, out of range [0, {SLOT_COUNT - 1}]")
+        raise SlotError(
+            f"slot file names slot {slot}, out of range [0, {SLOT_COUNT - 1}]"
+        )
     return SlotEnv(
         slot=slot,
         suffix=kv["DF_SUFFIX"],
@@ -180,7 +191,9 @@ def atomic_write(path: Path, text: str, *, skip_if_same: bool) -> bool:
                 return False
         except FileNotFoundError:
             pass
-    tmp = tempfile.NamedTemporaryFile("w", dir=path.parent, prefix=f".{path.name}.", delete=False)
+    tmp = tempfile.NamedTemporaryFile(
+        "w", dir=path.parent, prefix=f".{path.name}.", delete=False
+    )
     try:
         with tmp:
             tmp.write(text)
@@ -231,7 +244,10 @@ def parse_ps_output(text: str) -> list[ContainerOwner]:
 def port_busy(port: int) -> bool:
     if shutil.which("ss"):
         r = subprocess.run(
-            ["ss", "-ltnH", f"sport = :{port}"], capture_output=True, text=True, check=False
+            ["ss", "-ltnH", f"sport = :{port}"],
+            capture_output=True,
+            text=True,
+            check=False,
         )
         if r.returncode == 0:
             return bool(r.stdout.strip())
@@ -242,7 +258,10 @@ def port_busy(port: int) -> bool:
 
 def _docker_ps(args: list[str]) -> list[ContainerOwner]:
     r = subprocess.run(
-        ["docker", "ps", *args, "--format", PS_FORMAT], capture_output=True, text=True, check=False
+        ["docker", "ps", *args, "--format", PS_FORMAT],
+        capture_output=True,
+        text=True,
+        check=False,
     )
     if r.returncode != 0:
         raise SlotError(f"docker ps failed ({r.returncode}): {r.stderr.strip()}")
@@ -262,19 +281,27 @@ def _all_df_containers() -> list[ContainerOwner]:
 
 
 def _git(root: Path, *args: str) -> str:
-    r = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True, check=False)
+    r = subprocess.run(
+        ["git", "-C", str(root), *args], capture_output=True, text=True, check=False
+    )
     if r.returncode != 0:
         raise SlotError(f"git {' '.join(args)} failed in {root}: {r.stderr.strip()}")
     return r.stdout
 
 
 def _common_dir(root: Path) -> Path:
-    return Path(_git(root, "rev-parse", "--path-format=absolute", "--git-common-dir").strip()).resolve()
+    return Path(
+        _git(root, "rev-parse", "--path-format=absolute", "--git-common-dir").strip()
+    ).resolve()
 
 
 def _live_worktrees(root: Path) -> set[Path]:
     out = _git(root, "worktree", "list", "--porcelain")
-    return {Path(line[len("worktree ") :]).resolve() for line in out.splitlines() if line.startswith("worktree ")}
+    return {
+        Path(line[len("worktree ") :]).resolve()
+        for line in out.splitlines()
+        if line.startswith("worktree ")
+    }
 
 
 def _run(argv: list[str], env: Mapping[str, str], capture: bool) -> tuple[int, str]:
@@ -299,3 +326,355 @@ REAL_HOST: Host = Host(
     clock=time.time,
     new_token=lambda: secrets.token_hex(8),
 )
+
+
+DEV_COMPOSE_MARKER: Final = "docker-compose.debug"
+
+
+@dataclass(frozen=True)
+class Reservation:
+    slot: int
+    owner: Path
+    token: str
+    last_used: int
+
+
+def _project(n: int) -> str:
+    return "df" if n == 0 else f"df-s{n}"
+
+
+def _ports(n: int) -> list[int]:
+    e = slot_env_for(n, Path("/"), "", None)
+    return [e.https_port] if e.http_port is None else [e.http_port, e.https_port]
+
+
+@contextmanager
+def registry_lock(registry: Path) -> Iterator[None]:
+    registry.mkdir(parents=True, exist_ok=True)
+    fd = os.open(registry / ".lock", os.O_RDWR | os.O_CREAT, 0o644)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        yield
+    finally:
+        os.close(fd)
+
+
+def _read_reservation(registry: Path, n: int) -> Reservation | None:
+    try:
+        kv = parse_kv((registry / f"slot-{n}").read_text())
+    except FileNotFoundError:
+        return None
+    try:
+        last_used = int(kv.get("last_used", "0"))
+    except ValueError:
+        last_used = 0
+    return Reservation(
+        slot=n,
+        owner=Path(kv.get("owner", "")),
+        token=kv.get("token", ""),
+        last_used=last_used,
+    )
+
+
+def _write_reservation(
+    registry: Path, n: int, owner_path: Path, token: str, last_used: int
+) -> None:
+    text = f"owner={owner_path}\ntoken={token}\nlast_used={last_used}\n"
+    atomic_write(registry / f"slot-{n}", text, skip_if_same=False)
+
+
+def _read_slot_kv(root: Path) -> dict[str, str] | None:
+    try:
+        return parse_kv((root / SLOT_FILE_REL).read_text())
+    except FileNotFoundError:
+        return None
+
+
+def _check_worktree(kv: Mapping[str, str], root: Path) -> None:
+    written_for = kv.get("DF_WORKTREE", "")
+    if Path(written_for) != root:
+        raise SlotError(
+            f"`.env.slot` was written for {written_for}, not {root}; "
+            f"delete {root / SLOT_FILE_REL} and run `just test::slot`"
+        )
+
+
+def _is_stale(res: Reservation) -> bool:
+    if not res.owner.exists():
+        return True
+    kv = _read_slot_kv(res.owner)
+    if kv is None:
+        return False
+    return kv.get("DF_SLOT") != str(res.slot) or kv.get("DF_SLOT_TOKEN") != res.token
+
+
+def _own(owners: list[ContainerOwner], root: Path) -> list[ContainerOwner]:
+    return [o for o in owners if not o.oneoff and o.working_dir == root]
+
+
+def _foreign(owners: list[ContainerOwner], root: Path) -> list[ContainerOwner]:
+    return [o for o in owners if not o.oneoff and o.working_dir != root]
+
+
+def _check_legacy_dev(df_owners: list[ContainerOwner]) -> None:
+    for o in df_owners:
+        dev_files = [
+            f for f in o.config_files if Path(f).name.startswith(DEV_COMPOSE_MARKER)
+        ]
+        if not dev_files:
+            continue
+        files = " ".join(f"-f {f}" for f in o.config_files)
+        raise SlotError(
+            f"project df is a legacy dev stack from {o.working_dir} ({', '.join(dev_files)}); "
+            f"stop it before using test slot 0: "
+            f"docker compose -p df {files} --project-directory {o.working_dir} down"
+        )
+
+
+def _check_containers(n: int, root: Path, owners: list[ContainerOwner]) -> None:
+    foreign = _foreign(owners, root)
+    if not foreign:
+        return
+    o = foreign[0]
+    if n == 0:
+        raise SlotError(
+            f"`df` was taken over by {o.working_dir} (config files: {', '.join(o.config_files)}); "
+            f"that worktree probably runs code without test slots: merge main into it, "
+            f"then run `just test::slot` there"
+        )
+    raise SlotError(
+        f"project {_project(n)} has containers from {o.working_dir}, not {root}"
+    )
+
+
+def _check_reservation(n: int, root: Path, token: str, res: Reservation | None) -> None:
+    if res is None:
+        raise SlotError(f"no reservation for slot {n}; run `just test::slot`")
+    if res.owner != root or res.token != token:
+        raise SlotError(
+            f"slot {n} now belongs to {res.owner}; run `just test::slot` to get a new slot"
+        )
+
+
+def _requested_slot(requested: int | None) -> int | None:
+    if requested is None:
+        raw = os.environ.get("DF_SLOT", "")
+        if not raw:
+            return None
+        try:
+            requested = int(raw)
+        except ValueError as exc:
+            raise SlotError(f"DF_SLOT={raw!r} is not a slot number") from exc
+    if not 0 <= requested < SLOT_COUNT:
+        raise SlotError(
+            f"requested slot {requested} out of range [0, {SLOT_COUNT - 1}]"
+        )
+    return requested
+
+
+class _Allocator:
+    def __init__(
+        self, root: Path, host: Host, registry: Path, requested: int | None
+    ) -> None:
+        self.root = root
+        self.host = host
+        self.registry = registry
+        self.requested = requested
+        self.candidates: list[int] = (
+            list(range(SLOT_COUNT)) if requested is None else [requested]
+        )
+        self._owners: dict[int, list[ContainerOwner]] = {}
+
+    def owners(self, n: int) -> list[ContainerOwner]:
+        if n not in self._owners:
+            self._owners[n] = self.host.containers(_project(n))
+        return self._owners[n]
+
+    def _readopt(self, res: Reservation) -> tuple[int, str]:
+        self._check_request(res.slot)
+        _check_containers(res.slot, self.root, self.owners(res.slot))
+        return res.slot, res.token
+
+    def _check_request(self, n: int) -> None:
+        if self.requested is not None and self.requested != n:
+            raise SlotError(
+                f"this worktree already holds slot {n} but DF_SLOT asks for {self.requested}; "
+                f"run `just test::slot-release` first"
+            )
+
+    def existing(
+        self, prev: dict[str, str] | None
+    ) -> tuple[tuple[int, str] | None, int | None]:
+        if prev is None:
+            for n in range(SLOT_COUNT):
+                res = _read_reservation(self.registry, n)
+                if res is not None and res.owner == self.root:
+                    return self._readopt(res), None
+            return None, None
+        n = slot_env_from_kv(prev).slot
+        res = _read_reservation(self.registry, n)
+        if res is not None and res.owner == self.root:
+            return self._readopt(res), None
+        if res is not None and _own(self.owners(n), self.root):
+            raise SlotError(
+                f"slot {n} now belongs to {res.owner}, but this worktree still has containers "
+                f"in {_project(n)}; sort it out with that worktree's owner"
+            )
+        return None, n
+
+    def adopt(self) -> int | None:
+        for n in self.candidates:
+            if not _own(self.owners(n), self.root):
+                continue
+            if n == 0:
+                _check_legacy_dev(self.owners(0))
+            _check_containers(n, self.root, self.owners(n))
+            res = _read_reservation(self.registry, n)
+            if res is not None and res.owner != self.root and not _is_stale(res):
+                continue
+            return n
+        return None
+
+    def fresh(self) -> int | None:
+        for n in self.candidates:
+            if n == 0:
+                _check_legacy_dev(self.owners(0))
+            res = _read_reservation(self.registry, n)
+            if res is not None and res.owner != self.root:
+                if not _is_stale(res):
+                    continue
+                if self.owners(n):
+                    p = _project(n)
+                    print(
+                        f"slot {n}: reservation for {res.owner} is stale but {p} still has containers "
+                        f"(orphan stack); check it, then run `just test::slot-reap {p}`",
+                        file=sys.stderr,
+                    )
+                    continue
+            if _foreign(self.owners(n), self.root):
+                continue
+            if any(self.host.port_busy(p) for p in _ports(n)):
+                continue
+            return n
+        return None
+
+    def idle_reclaim(self) -> int | None:
+        now = self.host.clock()
+        idle: list[tuple[int, int]] = []
+        for n in self.candidates:
+            if n == 0:
+                continue
+            res = _read_reservation(self.registry, n)
+            if (
+                res is None
+                or res.owner == self.root
+                or now - res.last_used <= LEASE_TTL_S
+            ):
+                continue
+            if self.owners(n):
+                continue
+            idle.append((res.last_used, n))
+        for _, n in sorted(idle):
+            if not any(self.host.port_busy(p) for p in _ports(n)):
+                return n
+        return None
+
+    def exhausted(self) -> SlotError:
+        now = self.host.clock()
+        head = (
+            f"slot {self.requested} is not free"
+            if self.requested is not None
+            else "no free test slot"
+        )
+        lines = [f"{head}:"]
+        for n in self.candidates:
+            res = _read_reservation(self.registry, n)
+            who = str(res.owner) if res else "-"
+            age = f"{(now - res.last_used) / 86_400:.1f}d" if res else "-"
+            lines.append(
+                f"  slot {n}: owner={who} containers={len(self.owners(n))} lease_age={age}"
+            )
+        lines.append(
+            "free one with `just test::slot-release --slot N` (needs zero containers) "
+            "or move one here with `just test::slot-claim N`"
+        )
+        return SlotError("\n".join(lines))
+
+
+def ensure_slot(
+    root: Path | None = None, host: Host | None = None, *, requested: int | None = None
+) -> SlotEnv:
+    root = (root or MODULE_ROOT).resolve()
+    if is_ci():
+        return ci_slot(root)
+    host = host or REAL_HOST
+    requested = _requested_slot(requested)
+    registry = registry_dir(root, host)
+    notice: str | None = None
+    with registry_lock(registry):
+        prev = _read_slot_kv(root)
+        if prev is not None:
+            _check_worktree(prev, root)
+        alloc = _Allocator(root, host, registry, requested)
+        kept, lost = alloc.existing(prev)
+        if kept is not None:
+            n, token = kept
+        else:
+            found = alloc.adopt()
+            if found is None:
+                found = alloc.fresh()
+            if found is None:
+                found = alloc.idle_reclaim()
+            if found is None:
+                raise alloc.exhausted()
+            n, token = found, host.new_token()
+            if lost is not None and lost != n:
+                notice = f"slot {lost} was reclaimed while idle; now slot {n}"
+        background: bool | None = None
+        if (
+            prev is not None
+            and prev.get("DF_SLOT") == str(n)
+            and "DF_BACKGROUND" in prev
+        ):
+            background = prev["DF_BACKGROUND"] == "1"
+        env = slot_env_for(n, root, token, registry, background)
+        _write_reservation(registry, n, root, token, int(host.clock()))
+        atomic_write(root / SLOT_FILE_REL, render_slot_file(env), skip_if_same=True)
+    if notice:
+        print(notice, file=sys.stderr)
+    return env
+
+
+def read_slot(root: Path | None = None, host: Host | None = None) -> SlotEnv:
+    root = (root or MODULE_ROOT).resolve()
+    if is_ci():
+        return ci_slot(root)
+    host = host or REAL_HOST
+    kv = _read_slot_kv(root)
+    if kv is None:
+        raise NoSlotFile(
+            f"no slot file at {root / SLOT_FILE_REL}; run `just test::slot`"
+        )
+    _check_worktree(kv, root)
+    env = slot_env_from_kv(kv)
+    registry = registry_dir(root, host)
+    _check_reservation(env.slot, root, env.token, _read_reservation(registry, env.slot))
+    _check_containers(env.slot, root, host.containers(env.project))
+    return env
+
+
+def lease_and_recheck(env: SlotEnv, host: Host | None = None) -> None:
+    if is_ci():
+        return
+    host = host or REAL_HOST
+    registry = env.registry or registry_dir(env.worktree, host)
+    with registry_lock(registry):
+        res = _read_reservation(registry, env.slot)
+        if res is None or res.owner != env.worktree or res.token != env.token:
+            who = res.owner if res is not None else "nobody (reservation removed)"
+            raise SlotError(
+                f"slot {env.slot} was taken by {who} since this command started; run `just test::slot`"
+            )
+        _write_reservation(
+            registry, env.slot, env.worktree, env.token, int(host.clock())
+        )
