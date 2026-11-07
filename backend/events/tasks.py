@@ -444,7 +444,7 @@ def sync_discord_events():
                     event_id=pk,
                 )
             except Exception as e:
-                # create_discord_scheduled_event now raises with a Discord
+                # create_discord_scheduled_event raises with a Discord
                 # error string (PR #222). The structlog event captures it so
                 # operators can grep `sync_scheduled_event_failed` in Grafana
                 # to find every silent 403/400 without DB diving.
@@ -707,7 +707,7 @@ def send_profile_reminder(event_id):
 def send_signup_update(event_id, interaction_id=None):
     """Edit the original announcement embed with updated signup lists.
 
-    Tries the new DiscordEvent.signup_message first, falls back to
+    Tries DiscordEvent.signup_message first, falls back to
     DiscordMessageLog for pre-migration events.
     """
     return _run_with_bookends(
@@ -1249,7 +1249,7 @@ def fire_event_reminder(event_id, reminder_type, fired_by_user_id=None):
 def check_event_reminders():
     """Beat-scheduled every 30s. Delegates to the registry-driven fire path.
 
-    All reminder dispatch logic now lives in events.scheduling.fire — the
+    All reminder dispatch logic lives in events.scheduling.fire — the
     polling task is a thin wrapper so beat re-uses its existing schedule
     name and cadence.
 
@@ -1299,7 +1299,6 @@ def send_subscriber_notifications(event_id):
     if not event.event_repeater_id:
         return "No repeater"
 
-    # Check Discord event exists
     discord_state = get_discord_event_state(event_id)
     if not discord_state or not discord_state.has_discord_event:
         return "No Discord event"
@@ -1364,7 +1363,6 @@ def send_subscriber_notifications(event_id):
                     continue
                 dm_pk = dm_resp.json().get("id")
 
-            # Send DM
             result = sync_send_dm(sub.discord_id, embed=embed, components=components)
 
             # Update delivery status via internal API
