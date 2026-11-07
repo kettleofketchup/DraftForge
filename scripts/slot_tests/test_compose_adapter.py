@@ -13,6 +13,7 @@ import tasks
 from scripts.compose import playwright_env, run_compose
 from scripts.slot_tests._helpers import FakeHost, owner
 from scripts.slots import SLOT_FILE_REL, NoSlotFile
+from scripts.tests import flush_test_redis
 
 
 class RecCtx(MockContext):
@@ -248,3 +249,40 @@ def test_dev_test_allocates_in_fresh_worktree(
     assert " -p df-s3 " in c.cmds[0] and " down" in c.cmds[0]
     assert " -p df-s3 " in c.cmds[-1] and " up --scale " in c.cmds[-1]
     assert c.cmds[-1].endswith(" -d")
+
+
+def test_flush_test_redis_refuses_without_slot(
+    slotless: tuple[Path, FakeHost], capsys: pytest.CaptureFixture[str]
+) -> None:
+    with pytest.raises(Exit):
+        flush_test_redis(MockContext())
+    assert "just test::slot" in capsys.readouterr().err
+
+
+def test_flush_test_redis_uses_fixture_slot(
+    slotless: tuple[Path, FakeHost], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DF_SLOT", "3")
+    slots.ensure_slot()
+    c = RecCtx()
+    flush_test_redis(c)
+    assert " -p df-s3 " in c.cmds[0]
+    assert c.cmds[0].endswith("exec -T redis redis-cli FLUSHALL")
+
+
+def test_flush_test_redis_ci_argv(monkeypatch: pytest.MonkeyPatch) -> None:
+    _ci(monkeypatch)
+    c = RecCtx()
+    flush_test_redis(c)
+    assert " -p df " in c.cmds[0] and "docker-compose.ci.override.yaml" in c.cmds[0]
+    assert c.cmds[0].endswith("exec -T redis redis-cli FLUSHALL")
+
+
+def test_flush_test_redis_is_fatal(
+    slotless: tuple[Path, FakeHost], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DF_SLOT", "3")
+    slots.ensure_slot()
+    c = RecCtx()
+    flush_test_redis(c)
+    assert not c.kws[0].get("warn")

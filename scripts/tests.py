@@ -39,9 +39,7 @@ def _playwright(c: Context, args: str, warn: bool = False) -> None:
 def flush_test_redis(c: Context) -> None:
     """Flush Redis cache in test environment to ensure fresh data."""
     print("Flushing Redis cache...")
-    run_compose(
-        c, "test", "exec", "-T", "redis", "redis-cli", "FLUSHALL", warn=True, hide=True
-    )
+    run_compose(c, "test", "exec", "-T", "redis", "redis-cli", "FLUSHALL", hide=True)
 
 
 def _start_test_stack(c: Context, slot: SlotEnv) -> None:
