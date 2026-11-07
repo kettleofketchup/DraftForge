@@ -1,5 +1,8 @@
 suite: sync waves and annotations (spec 5.4 test 3)
 # templates lists every template file; a new template must be added here.
+# The "every document" checks name no template: they run on every listed
+# template and, through the documentSelector, on every document it renders.
+# skipEmptyTemplates skips a template that renders nothing under a profile.
 # Wave -1: namespace controls. Wave 0: kinds healthy on apply. Wave 1 (last):
 # every Deployment. No resource hooks and no sync-options annotation.
 templates:
@@ -18,66 +21,37 @@ templates:
   - templates/discord-bot.yaml
   - templates/frontend.yaml
 tests:
-  # ---- preview ----
-  - it: "preview: every document carries a sync-wave of -1, 0 or 1"
+  # ---- every document, under each profile ----
+  - it: "preview: every document has a sync-wave of -1, 0 or 1 and no hook or sync-options"
     release:
       name: draftforge-pr-1
       namespace: draftforge-pr-1
     values:
       - ../values-preview.yaml
       - fixtures/preview-appset-values.yaml
-    asserts:
+    asserts: &everyDocument
       - exists: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]"}
-        template: templates/namespace.yaml
+        documentSelector: &allDocs {path: metadata.name, matchMany: true, skipEmptyTemplates: true}
       - matchRegex: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", pattern: "^(-1|0|1)$"}
-        template: templates/namespace.yaml
-      - exists: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]"}
-        template: templates/resourcequota.yaml
-      - matchRegex: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", pattern: "^(-1|0|1)$"}
-        template: templates/resourcequota.yaml
-      - exists: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]"}
-        template: templates/limitrange.yaml
-      - matchRegex: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", pattern: "^(-1|0|1)$"}
-        template: templates/limitrange.yaml
-      - exists: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]"}
-        template: templates/networkpolicy.yaml
-      - matchRegex: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", pattern: "^(-1|0|1)$"}
-        template: templates/networkpolicy.yaml
-      - exists: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]"}
-        template: templates/serviceaccount.yaml
-      - matchRegex: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", pattern: "^(-1|0|1)$"}
-        template: templates/serviceaccount.yaml
-      - exists: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]"}
-        template: templates/secret.yaml
-      - matchRegex: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", pattern: "^(-1|0|1)$"}
-        template: templates/secret.yaml
-      - exists: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]"}
-        template: templates/configmap-env.yaml
-      - matchRegex: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", pattern: "^(-1|0|1)$"}
-        template: templates/configmap-env.yaml
-      - exists: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]"}
-        template: templates/redis.yaml
-      - matchRegex: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", pattern: "^(-1|0|1)$"}
-        template: templates/redis.yaml
-      - exists: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]"}
-        template: templates/backend.yaml
-      - matchRegex: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", pattern: "^(-1|0|1)$"}
-        template: templates/backend.yaml
-      - exists: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]"}
-        template: templates/celery-worker.yaml
-      - matchRegex: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", pattern: "^(-1|0|1)$"}
-        template: templates/celery-worker.yaml
-      - exists: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]"}
-        template: templates/frontend.yaml
-      - matchRegex: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", pattern: "^(-1|0|1)$"}
-        template: templates/frontend.yaml
-      - hasDocuments: {count: 0}
-        template: templates/pvc.yaml
-      - hasDocuments: {count: 0}
-        template: templates/celery-beat.yaml
-      - hasDocuments: {count: 0}
-        template: templates/discord-bot.yaml
+        documentSelector: *allDocs
+      - notExists: {path: "metadata.annotations[\"helm.sh/hook\"]"}
+        documentSelector: *allDocs
+      - notExists: {path: "metadata.annotations[\"argocd.argoproj.io/hook\"]"}
+        documentSelector: *allDocs
+      - notExists: {path: "metadata.annotations[\"argocd.argoproj.io/sync-options\"]"}
+        documentSelector: *allDocs
 
+  - it: "defaults: every document has a sync-wave of -1, 0 or 1 and no hook or sync-options"
+    asserts: *everyDocument
+
+  - it: "defaults with secrets.create: every document has a sync-wave of -1, 0 or 1 and no hook or sync-options"
+    set:
+      secrets.create: true
+      secrets.djangoSecretKey: test-key
+      secrets.internalServiceToken: test-token
+    asserts: *everyDocument
+
+  # ---- waves per kind ----
   - it: "preview: waves per kind"
     release:
       name: draftforge-pr-1
@@ -110,141 +84,7 @@ tests:
         template: templates/redis.yaml
         documentSelector: {path: kind, value: Service}
       - equal: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", value: "1"}
-        template: templates/backend.yaml
-        documentSelector: {path: kind, value: Deployment}
-      - equal: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", value: "1"}
-        template: templates/frontend.yaml
-        documentSelector: {path: kind, value: Deployment}
-      - equal: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", value: "1"}
-        template: templates/redis.yaml
-        documentSelector: {path: kind, value: Deployment}
-      - equal: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", value: "1"}
-        template: templates/celery-worker.yaml
-
-  - it: "preview: no hook or sync-options annotation on any document"
-    release:
-      name: draftforge-pr-1
-      namespace: draftforge-pr-1
-    values:
-      - ../values-preview.yaml
-      - fixtures/preview-appset-values.yaml
-    asserts:
-      - notExists: {path: "metadata.annotations[\"helm.sh/hook\"]"}
-        template: templates/namespace.yaml
-      - notExists: {path: "metadata.annotations[\"argocd.argoproj.io/hook\"]"}
-        template: templates/namespace.yaml
-      - notExists: {path: "metadata.annotations[\"argocd.argoproj.io/sync-options\"]"}
-        template: templates/namespace.yaml
-      - notExists: {path: "metadata.annotations[\"helm.sh/hook\"]"}
-        template: templates/resourcequota.yaml
-      - notExists: {path: "metadata.annotations[\"argocd.argoproj.io/hook\"]"}
-        template: templates/resourcequota.yaml
-      - notExists: {path: "metadata.annotations[\"argocd.argoproj.io/sync-options\"]"}
-        template: templates/resourcequota.yaml
-      - notExists: {path: "metadata.annotations[\"helm.sh/hook\"]"}
-        template: templates/limitrange.yaml
-      - notExists: {path: "metadata.annotations[\"argocd.argoproj.io/hook\"]"}
-        template: templates/limitrange.yaml
-      - notExists: {path: "metadata.annotations[\"argocd.argoproj.io/sync-options\"]"}
-        template: templates/limitrange.yaml
-      - notExists: {path: "metadata.annotations[\"helm.sh/hook\"]"}
-        template: templates/networkpolicy.yaml
-      - notExists: {path: "metadata.annotations[\"argocd.argoproj.io/hook\"]"}
-        template: templates/networkpolicy.yaml
-      - notExists: {path: "metadata.annotations[\"argocd.argoproj.io/sync-options\"]"}
-        template: templates/networkpolicy.yaml
-      - notExists: {path: "metadata.annotations[\"helm.sh/hook\"]"}
-        template: templates/serviceaccount.yaml
-      - notExists: {path: "metadata.annotations[\"argocd.argoproj.io/hook\"]"}
-        template: templates/serviceaccount.yaml
-      - notExists: {path: "metadata.annotations[\"argocd.argoproj.io/sync-options\"]"}
-        template: templates/serviceaccount.yaml
-      - notExists: {path: "metadata.annotations[\"helm.sh/hook\"]"}
-        template: templates/secret.yaml
-      - notExists: {path: "metadata.annotations[\"argocd.argoproj.io/hook\"]"}
-        template: templates/secret.yaml
-      - notExists: {path: "metadata.annotations[\"argocd.argoproj.io/sync-options\"]"}
-        template: templates/secret.yaml
-      - notExists: {path: "metadata.annotations[\"helm.sh/hook\"]"}
-        template: templates/configmap-env.yaml
-      - notExists: {path: "metadata.annotations[\"argocd.argoproj.io/hook\"]"}
-        template: templates/configmap-env.yaml
-      - notExists: {path: "metadata.annotations[\"argocd.argoproj.io/sync-options\"]"}
-        template: templates/configmap-env.yaml
-      - notExists: {path: "metadata.annotations[\"helm.sh/hook\"]"}
-        template: templates/redis.yaml
-      - notExists: {path: "metadata.annotations[\"argocd.argoproj.io/hook\"]"}
-        template: templates/redis.yaml
-      - notExists: {path: "metadata.annotations[\"argocd.argoproj.io/sync-options\"]"}
-        template: templates/redis.yaml
-      - notExists: {path: "metadata.annotations[\"helm.sh/hook\"]"}
-        template: templates/backend.yaml
-      - notExists: {path: "metadata.annotations[\"argocd.argoproj.io/hook\"]"}
-        template: templates/backend.yaml
-      - notExists: {path: "metadata.annotations[\"argocd.argoproj.io/sync-options\"]"}
-        template: templates/backend.yaml
-      - notExists: {path: "metadata.annotations[\"helm.sh/hook\"]"}
-        template: templates/celery-worker.yaml
-      - notExists: {path: "metadata.annotations[\"argocd.argoproj.io/hook\"]"}
-        template: templates/celery-worker.yaml
-      - notExists: {path: "metadata.annotations[\"argocd.argoproj.io/sync-options\"]"}
-        template: templates/celery-worker.yaml
-      - notExists: {path: "metadata.annotations[\"helm.sh/hook\"]"}
-        template: templates/frontend.yaml
-      - notExists: {path: "metadata.annotations[\"argocd.argoproj.io/hook\"]"}
-        template: templates/frontend.yaml
-      - notExists: {path: "metadata.annotations[\"argocd.argoproj.io/sync-options\"]"}
-        template: templates/frontend.yaml
-
-  # ---- defaults ----
-  - it: "defaults: every document carries a sync-wave of -1, 0 or 1"
-    asserts:
-      - exists: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]"}
-        template: templates/serviceaccount.yaml
-      - matchRegex: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", pattern: "^(-1|0|1)$"}
-        template: templates/serviceaccount.yaml
-      - exists: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]"}
-        template: templates/configmap-env.yaml
-      - matchRegex: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", pattern: "^(-1|0|1)$"}
-        template: templates/configmap-env.yaml
-      - exists: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]"}
-        template: templates/pvc.yaml
-      - matchRegex: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", pattern: "^(-1|0|1)$"}
-        template: templates/pvc.yaml
-      - exists: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]"}
-        template: templates/redis.yaml
-      - matchRegex: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", pattern: "^(-1|0|1)$"}
-        template: templates/redis.yaml
-      - exists: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]"}
-        template: templates/backend.yaml
-      - matchRegex: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", pattern: "^(-1|0|1)$"}
-        template: templates/backend.yaml
-      - exists: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]"}
-        template: templates/celery-worker.yaml
-      - matchRegex: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", pattern: "^(-1|0|1)$"}
-        template: templates/celery-worker.yaml
-      - exists: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]"}
-        template: templates/celery-beat.yaml
-      - matchRegex: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", pattern: "^(-1|0|1)$"}
-        template: templates/celery-beat.yaml
-      - exists: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]"}
-        template: templates/discord-bot.yaml
-      - matchRegex: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", pattern: "^(-1|0|1)$"}
-        template: templates/discord-bot.yaml
-      - exists: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]"}
-        template: templates/frontend.yaml
-      - matchRegex: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", pattern: "^(-1|0|1)$"}
-        template: templates/frontend.yaml
-      - hasDocuments: {count: 0}
-        template: templates/namespace.yaml
-      - hasDocuments: {count: 0}
-        template: templates/resourcequota.yaml
-      - hasDocuments: {count: 0}
-        template: templates/limitrange.yaml
-      - hasDocuments: {count: 0}
-        template: templates/networkpolicy.yaml
-      - hasDocuments: {count: 0}
-        template: templates/secret.yaml
+        documentSelector: &deployments {path: kind, value: Deployment, matchMany: true, skipEmptyTemplates: true}
 
   - it: "defaults: waves per kind"
     asserts:
@@ -264,77 +104,7 @@ tests:
         template: templates/redis.yaml
         documentSelector: {path: kind, value: Service}
       - equal: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", value: "1"}
-        template: templates/backend.yaml
-        documentSelector: {path: kind, value: Deployment}
-      - equal: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", value: "1"}
-        template: templates/frontend.yaml
-        documentSelector: {path: kind, value: Deployment}
-      - equal: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", value: "1"}
-        template: templates/redis.yaml
-        documentSelector: {path: kind, value: Deployment}
-      - equal: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", value: "1"}
-        template: templates/celery-worker.yaml
-      - equal: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", value: "1"}
-        template: templates/celery-beat.yaml
-      - equal: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", value: "1"}
-        template: templates/discord-bot.yaml
-
-  - it: "defaults: no hook or sync-options annotation on any document"
-    asserts:
-      - notExists: {path: "metadata.annotations[\"helm.sh/hook\"]"}
-        template: templates/serviceaccount.yaml
-      - notExists: {path: "metadata.annotations[\"argocd.argoproj.io/hook\"]"}
-        template: templates/serviceaccount.yaml
-      - notExists: {path: "metadata.annotations[\"argocd.argoproj.io/sync-options\"]"}
-        template: templates/serviceaccount.yaml
-      - notExists: {path: "metadata.annotations[\"helm.sh/hook\"]"}
-        template: templates/configmap-env.yaml
-      - notExists: {path: "metadata.annotations[\"argocd.argoproj.io/hook\"]"}
-        template: templates/configmap-env.yaml
-      - notExists: {path: "metadata.annotations[\"argocd.argoproj.io/sync-options\"]"}
-        template: templates/configmap-env.yaml
-      - notExists: {path: "metadata.annotations[\"helm.sh/hook\"]"}
-        template: templates/pvc.yaml
-      - notExists: {path: "metadata.annotations[\"argocd.argoproj.io/hook\"]"}
-        template: templates/pvc.yaml
-      - notExists: {path: "metadata.annotations[\"argocd.argoproj.io/sync-options\"]"}
-        template: templates/pvc.yaml
-      - notExists: {path: "metadata.annotations[\"helm.sh/hook\"]"}
-        template: templates/redis.yaml
-      - notExists: {path: "metadata.annotations[\"argocd.argoproj.io/hook\"]"}
-        template: templates/redis.yaml
-      - notExists: {path: "metadata.annotations[\"argocd.argoproj.io/sync-options\"]"}
-        template: templates/redis.yaml
-      - notExists: {path: "metadata.annotations[\"helm.sh/hook\"]"}
-        template: templates/backend.yaml
-      - notExists: {path: "metadata.annotations[\"argocd.argoproj.io/hook\"]"}
-        template: templates/backend.yaml
-      - notExists: {path: "metadata.annotations[\"argocd.argoproj.io/sync-options\"]"}
-        template: templates/backend.yaml
-      - notExists: {path: "metadata.annotations[\"helm.sh/hook\"]"}
-        template: templates/celery-worker.yaml
-      - notExists: {path: "metadata.annotations[\"argocd.argoproj.io/hook\"]"}
-        template: templates/celery-worker.yaml
-      - notExists: {path: "metadata.annotations[\"argocd.argoproj.io/sync-options\"]"}
-        template: templates/celery-worker.yaml
-      - notExists: {path: "metadata.annotations[\"helm.sh/hook\"]"}
-        template: templates/celery-beat.yaml
-      - notExists: {path: "metadata.annotations[\"argocd.argoproj.io/hook\"]"}
-        template: templates/celery-beat.yaml
-      - notExists: {path: "metadata.annotations[\"argocd.argoproj.io/sync-options\"]"}
-        template: templates/celery-beat.yaml
-      - notExists: {path: "metadata.annotations[\"helm.sh/hook\"]"}
-        template: templates/discord-bot.yaml
-      - notExists: {path: "metadata.annotations[\"argocd.argoproj.io/hook\"]"}
-        template: templates/discord-bot.yaml
-      - notExists: {path: "metadata.annotations[\"argocd.argoproj.io/sync-options\"]"}
-        template: templates/discord-bot.yaml
-      - notExists: {path: "metadata.annotations[\"helm.sh/hook\"]"}
-        template: templates/frontend.yaml
-      - notExists: {path: "metadata.annotations[\"argocd.argoproj.io/hook\"]"}
-        template: templates/frontend.yaml
-      - notExists: {path: "metadata.annotations[\"argocd.argoproj.io/sync-options\"]"}
-        template: templates/frontend.yaml
+        documentSelector: *deployments
 
   - it: "defaults: the env Secret is wave 0 when created"
     template: templates/secret.yaml
@@ -344,6 +114,3 @@ tests:
       secrets.internalServiceToken: test-token
     asserts:
       - equal: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", value: "0"}
-      - notExists: {path: "metadata.annotations[\"helm.sh/hook\"]"}
-      - notExists: {path: "metadata.annotations[\"argocd.argoproj.io/hook\"]"}
-      - notExists: {path: "metadata.annotations[\"argocd.argoproj.io/sync-options\"]"}

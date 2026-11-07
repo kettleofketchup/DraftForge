@@ -260,31 +260,18 @@ tests:
         template: templates/networkpolicy.yaml
 
   - it: renders no Job of any kind
+    # No template: runs on every listed template and every document it renders.
     asserts:
       - isKind: {of: Job}
         not: true
-        template: templates/serviceaccount.yaml
+        documentSelector: {path: metadata.name, matchMany: true, skipEmptyTemplates: true}
+
+  - it: renders no Job of any kind when the env Secret is created
+    set:
+      secrets.create: true
+      secrets.djangoSecretKey: test-key
+      secrets.internalServiceToken: test-token
+    asserts:
       - isKind: {of: Job}
         not: true
-        template: templates/configmap-env.yaml
-      - isKind: {of: Job}
-        not: true
-        template: templates/pvc.yaml
-      - isKind: {of: Job}
-        not: true
-        template: templates/backend.yaml
-      - isKind: {of: Job}
-        not: true
-        template: templates/frontend.yaml
-      - isKind: {of: Job}
-        not: true
-        template: templates/redis.yaml
-      - isKind: {of: Job}
-        not: true
-        template: templates/celery-worker.yaml
-      - isKind: {of: Job}
-        not: true
-        template: templates/celery-beat.yaml
-      - isKind: {of: Job}
-        not: true
-        template: templates/discord-bot.yaml
+        documentSelector: {path: metadata.name, matchMany: true, skipEmptyTemplates: true}
