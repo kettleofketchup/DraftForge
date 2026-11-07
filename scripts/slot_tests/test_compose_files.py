@@ -1,3 +1,5 @@
+import pytest
+
 from scripts.slot_tests._helpers import render, render_raw
 
 SLOT3 = {"DF_SUFFIX": "-s3", "DF_HTTPS_PORT": "13443", "DF_BASE_URL": "https://localhost:13443"}
@@ -54,3 +56,15 @@ def test_base_test_file_invariants() -> None:
     assert ports == [("443", 443), ("80", 80)]
     names = {s["container_name"] for s in cfg["services"].values() if "container_name" in s}
     assert names <= {"frontend", "backend", "redis", "nginx"}
+
+
+@pytest.mark.parametrize("f", ["docker-compose.debug.yaml", "docker-compose.debug.m1.yaml"])
+def test_dev_render(f: str) -> None:
+    cfg = render([f], {}, project=None)
+    assert cfg["name"] == "df-dev"
+    names = {s["container_name"] for s in cfg["services"].values() if "container_name" in s}
+    assert names <= {"frontend-dev", "backend-dev", "redis-dev", "nginx-dev"}
+    assert cfg["services"]["redis"]["volumes"][0]["source"].endswith("backend/.redis_data-dev")
+    if "celery-beat" in cfg["services"]:
+        assert cfg["services"]["celery-beat"]["command"][-1] == "/app/backend/celerybeat-schedule-dev"
+    assert sorted(p["published"] for p in cfg["services"]["nginx"]["ports"]) == ["443", "80"]
