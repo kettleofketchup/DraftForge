@@ -1,3 +1,4 @@
+{{- include "draftforge.previewGuard" . -}}
 {{- if .Values.celeryBeat.enabled }}
 apiVersion: apps/v1
 kind: Deployment

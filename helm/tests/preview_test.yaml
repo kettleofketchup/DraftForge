@@ -1,0 +1,384 @@
+suite: preview profile (values-preview.yaml + the ApplicationSet valuesObject)
+release:
+  name: draftforge-pr-1
+  namespace: draftforge-pr-1
+values:
+  - ../values-preview.yaml
+  - fixtures/preview-appset-values.yaml
+templates:
+  - templates/namespace.yaml
+  - templates/resourcequota.yaml
+  - templates/limitrange.yaml
+  - templates/networkpolicy.yaml
+  - templates/serviceaccount.yaml
+  - templates/secret.yaml
+  - templates/configmap-env.yaml
+  - templates/pvc.yaml
+  - templates/redis.yaml
+  - templates/backend.yaml
+  - templates/celery-worker.yaml
+  - templates/celery-beat.yaml
+  - templates/discord-bot.yaml
+  - templates/frontend.yaml
+tests:
+  # --- workloads (spec 5.4 test 2) ---------------------------------------
+  - it: renders no PVC, celery beat or discord bot
+    asserts:
+      - hasDocuments: {count: 0}
+        template: templates/pvc.yaml
+      - hasDocuments: {count: 0}
+        template: templates/celery-beat.yaml
+      - hasDocuments: {count: 0}
+        template: templates/discord-bot.yaml
+
+  - it: rolls backend and frontend with surge 1 / unavailable 0
+    asserts:
+      - equal:
+          path: spec.strategy
+          value: {type: RollingUpdate, rollingUpdate: {maxSurge: 1, maxUnavailable: 0}}
+        template: templates/backend.yaml
+        documentSelector: {path: kind, value: Deployment}
+      - equal:
+          path: spec.strategy
+          value: {type: RollingUpdate, rollingUpdate: {maxSurge: 1, maxUnavailable: 0}}
+        template: templates/frontend.yaml
+        documentSelector: {path: kind, value: Deployment}
+
+  - it: rolls the worker with surge 0 / unavailable 1 and recreates redis
+    asserts:
+      - equal:
+          path: spec.strategy
+          value: {type: RollingUpdate, rollingUpdate: {maxSurge: 0, maxUnavailable: 1}}
+        template: templates/celery-worker.yaml
+      - equal:
+          path: spec.strategy
+          value: {type: Recreate}
+        template: templates/redis.yaml
+        documentSelector: {path: kind, value: Deployment}
+
+  - it: gives the backend an emptyDir data volume
+    template: templates/backend.yaml
+    documentSelector: {path: kind, value: Deployment}
+    asserts:
+      - equal:
+          path: spec.template.spec.volumes
+          value: [{name: data, emptyDir: {sizeLimit: 1Gi}}]
+
+  - it: sets progressDeadlineSeconds 1500 on every Deployment, redis included
+    asserts:
+      - equal: {path: spec.progressDeadlineSeconds, value: 1500}
+        template: templates/backend.yaml
+        documentSelector: {path: kind, value: Deployment}
+      - equal: {path: spec.progressDeadlineSeconds, value: 1500}
+        template: templates/frontend.yaml
+        documentSelector: {path: kind, value: Deployment}
+      - equal: {path: spec.progressDeadlineSeconds, value: 1500}
+        template: templates/celery-worker.yaml
+      - equal: {path: spec.progressDeadlineSeconds, value: 1500}
+        template: templates/redis.yaml
+        documentSelector: {path: kind, value: Deployment}
+
+  # --- pods (spec 5.4 test 7) ----------------------------------------------
+  - it: gives every pod preview-low, no API token and the commit annotation
+    asserts:
+      # backend
+      - equal: {path: spec.template.spec.priorityClassName, value: preview-low}
+        template: templates/backend.yaml
+        documentSelector: {path: kind, value: Deployment}
+      - equal: {path: spec.template.spec.automountServiceAccountToken, value: false}
+        template: templates/backend.yaml
+        documentSelector: {path: kind, value: Deployment}
+      - equal: {path: "spec.template.metadata.annotations[\"draftforge.kettle.sh/commit\"]", value: "0123456789abcdef0123456789abcdef01234567"}
+        template: templates/backend.yaml
+        documentSelector: {path: kind, value: Deployment}
+      # frontend
+      - equal: {path: spec.template.spec.priorityClassName, value: preview-low}
+        template: templates/frontend.yaml
+        documentSelector: {path: kind, value: Deployment}
+      - equal: {path: spec.template.spec.automountServiceAccountToken, value: false}
+        template: templates/frontend.yaml
+        documentSelector: {path: kind, value: Deployment}
+      - equal: {path: "spec.template.metadata.annotations[\"draftforge.kettle.sh/commit\"]", value: "0123456789abcdef0123456789abcdef01234567"}
+        template: templates/frontend.yaml
+        documentSelector: {path: kind, value: Deployment}
+      # celery worker
+      - equal: {path: spec.template.spec.priorityClassName, value: preview-low}
+        template: templates/celery-worker.yaml
+      - equal: {path: spec.template.spec.automountServiceAccountToken, value: false}
+        template: templates/celery-worker.yaml
+      - equal: {path: "spec.template.metadata.annotations[\"draftforge.kettle.sh/commit\"]", value: "0123456789abcdef0123456789abcdef01234567"}
+        template: templates/celery-worker.yaml
+      # redis
+      - equal: {path: spec.template.spec.priorityClassName, value: preview-low}
+        template: templates/redis.yaml
+        documentSelector: {path: kind, value: Deployment}
+      - equal: {path: spec.template.spec.automountServiceAccountToken, value: false}
+        template: templates/redis.yaml
+        documentSelector: {path: kind, value: Deployment}
+      - equal: {path: "spec.template.metadata.annotations[\"draftforge.kettle.sh/commit\"]", value: "0123456789abcdef0123456789abcdef01234567"}
+        template: templates/redis.yaml
+        documentSelector: {path: kind, value: Deployment}
+
+  - it: runs the frontend with NODE_ENV=production over the shared NODE_ENV=test
+    asserts:
+      - contains:
+          path: "spec.template.spec.containers[?(@.name == \"frontend\")].env"
+          content: {name: NODE_ENV, value: production}
+        template: templates/frontend.yaml
+        documentSelector: {path: kind, value: Deployment}
+      - equal: {path: data.NODE_ENV, value: test}
+        template: templates/configmap-env.yaml
+
+  # No Secret other than draftforge-env, through any path. The env, envFrom and
+  # volume lists are pinned exactly, so a secretKeyRef, an extra secretRef or a
+  # secret/projected volume shows up as a diff.
+  - it: references no Secret other than draftforge-env (backend pod)
+    template: templates/backend.yaml
+    documentSelector: {path: kind, value: Deployment}
+    asserts:
+      - notExists: {path: spec.template.spec.imagePullSecrets}
+      - equal:
+          path: spec.template.spec.volumes
+          value: [{name: data, emptyDir: {sizeLimit: 1Gi}}]
+      - equal:
+          path: "spec.template.spec.containers[?(@.name == \"backend\")].envFrom"
+          value: [{configMapRef: {name: draftforge-env}}, {secretRef: {name: draftforge-env}}]
+      - notExists: {path: "spec.template.spec.containers[?(@.name == \"backend\")].env"}
+      - equal:
+          path: "spec.template.spec.initContainers[?(@.name == \"migrate\")].envFrom"
+          value: [{configMapRef: {name: draftforge-env}}, {secretRef: {name: draftforge-env}}]
+      - equal:
+          path: "spec.template.spec.initContainers[?(@.name == \"migrate\")].env"
+          value: [{name: DISABLE_CACHE, value: "true"}]
+      - equal:
+          path: "spec.template.spec.initContainers[?(@.name == \"seed\")].envFrom"
+          value: [{configMapRef: {name: draftforge-env}}, {secretRef: {name: draftforge-env}}]
+      - equal:
+          path: "spec.template.spec.initContainers[?(@.name == \"seed\")].env"
+          value: [{name: DISABLE_CACHE, value: "true"}]
+      - lengthEqual: {path: spec.template.spec.initContainers, count: 2}
+      - lengthEqual: {path: spec.template.spec.containers, count: 1}
+
+  - it: references no Secret other than draftforge-env (frontend pod)
+    template: templates/frontend.yaml
+    documentSelector: {path: kind, value: Deployment}
+    asserts:
+      - notExists: {path: spec.template.spec.imagePullSecrets}
+      - notExists: {path: spec.template.spec.volumes}
+      - notExists: {path: spec.template.spec.initContainers}
+      - lengthEqual: {path: spec.template.spec.containers, count: 1}
+      - equal:
+          path: "spec.template.spec.containers[?(@.name == \"frontend\")].envFrom"
+          value: [{configMapRef: {name: draftforge-env}}, {secretRef: {name: draftforge-env}}]
+      - equal:
+          path: "spec.template.spec.containers[?(@.name == \"frontend\")].env"
+          value:
+            - {name: NODE_ENV, value: production}
+            - {name: PORT, value: "3000"}
+            - {name: SSR_API_URL, value: "http://backend:8000/api"}
+
+  - it: references no Secret other than draftforge-env (celery worker pod)
+    template: templates/celery-worker.yaml
+    asserts:
+      - notExists: {path: spec.template.spec.imagePullSecrets}
+      - notExists: {path: spec.template.spec.volumes}
+      - notExists: {path: spec.template.spec.initContainers}
+      - lengthEqual: {path: spec.template.spec.containers, count: 1}
+      - equal:
+          path: "spec.template.spec.containers[?(@.name == \"celery-worker\")].envFrom"
+          value: [{configMapRef: {name: draftforge-env}}, {secretRef: {name: draftforge-env}}]
+      - equal:
+          path: "spec.template.spec.containers[?(@.name == \"celery-worker\")].env"
+          value: [{name: DJANGO_SETTINGS_MODULE, value: config.settings_celery}]
+
+  - it: references no Secret at all (redis pod)
+    template: templates/redis.yaml
+    documentSelector: {path: kind, value: Deployment}
+    asserts:
+      - notExists: {path: spec.template.spec.imagePullSecrets}
+      - equal:
+          path: spec.template.spec.volumes
+          value: [{name: data, emptyDir: {}}]
+      - notExists: {path: spec.template.spec.initContainers}
+      - lengthEqual: {path: spec.template.spec.containers, count: 1}
+      - notExists: {path: "spec.template.spec.containers[?(@.name == \"redis\")].envFrom"}
+      - notExists: {path: "spec.template.spec.containers[?(@.name == \"redis\")].env"}
+
+  # --- namespace controls (spec 5.4 test 8) --------------------------------
+  - it: renders the Namespace draftforge-pr-1 with Pod Security restricted
+    template: templates/namespace.yaml
+    asserts:
+      - hasDocuments: {count: 1}
+      - isKind: {of: Namespace}
+      - equal: {path: metadata.name, value: draftforge-pr-1}
+      - equal: {path: "metadata.labels[\"pod-security.kubernetes.io/enforce\"]", value: restricted}
+      - equal: {path: "metadata.labels[\"pod-security.kubernetes.io/audit\"]", value: restricted}
+      - equal: {path: "metadata.labels[\"pod-security.kubernetes.io/warn\"]", value: restricted}
+      - equal: {path: "metadata.labels[\"pod-security.kubernetes.io/enforce-version\"]", value: latest}
+      - equal: {path: "metadata.labels[\"kettle.sh/draftforge-preview\"]", value: "true"}
+
+  - it: renders the ResourceQuota from preview.quota plus the fixed zeros
+    template: templates/resourcequota.yaml
+    asserts:
+      - hasDocuments: {count: 1}
+      - isKind: {of: ResourceQuota}
+      - equal: {path: metadata.name, value: draftforge-preview-quota}
+      - equal:
+          path: spec.hard
+          value:
+            pods: "8"
+            requests.cpu: "1"
+            requests.memory: 2Gi
+            limits.memory: 4Gi
+            count/persistentvolumeclaims: "0"
+            requests.storage: "0"
+            services.loadbalancers: "0"
+            services.nodeports: "0"
+
+  - it: renders the LimitRange safety net
+    template: templates/limitrange.yaml
+    asserts:
+      - hasDocuments: {count: 1}
+      - isKind: {of: LimitRange}
+      - equal: {path: metadata.name, value: draftforge-preview-limits}
+      - lengthEqual: {path: spec.limits, count: 1}
+      - equal: {path: "spec.limits[0].type", value: Container}
+      - equal: {path: "spec.limits[0].default", value: {cpu: 500m, memory: 512Mi}}
+      - equal: {path: "spec.limits[0].defaultRequest", value: {cpu: 50m, memory: 128Mi}}
+
+  - it: renders exactly four NetworkPolicies
+    template: templates/networkpolicy.yaml
+    asserts:
+      - hasDocuments: {count: 4}
+      - isKind: {of: NetworkPolicy}
+      - equal: {path: metadata.name, value: default-deny}
+        documentIndex: 0
+      - equal: {path: metadata.name, value: allow-intra-ns}
+        documentIndex: 1
+      - equal: {path: metadata.name, value: allow-ingress-traefik}
+        documentIndex: 2
+      - equal: {path: metadata.name, value: allow-dns}
+        documentIndex: 3
+
+  - it: denies all ingress and egress by default
+    template: templates/networkpolicy.yaml
+    documentSelector: {path: metadata.name, value: default-deny}
+    asserts:
+      - equal:
+          path: spec
+          value: {podSelector: {}, policyTypes: [Ingress, Egress]}
+
+  - it: allows all traffic between pods of the namespace
+    template: templates/networkpolicy.yaml
+    documentSelector: {path: metadata.name, value: allow-intra-ns}
+    asserts:
+      - equal:
+          path: spec
+          value:
+            podSelector: {}
+            policyTypes: [Ingress, Egress]
+            ingress: [{from: [{podSelector: {}}]}]
+            egress: [{to: [{podSelector: {}}]}]
+
+  # Without the Egress rule, default-deny egress cuts SSR -> backend and
+  # backend/celery -> redis.
+  - it: test_intra_ns_allows_egress
+    template: templates/networkpolicy.yaml
+    documentSelector: {path: metadata.name, value: allow-intra-ns}
+    asserts:
+      - contains: {path: spec.policyTypes, content: Egress}
+      - equal: {path: "spec.egress[0].to", value: [{podSelector: {}}]}
+
+  - it: admits Traefik pods to backend and frontend on 8000 and 3000 only
+    template: templates/networkpolicy.yaml
+    documentSelector: {path: metadata.name, value: allow-ingress-traefik}
+    asserts:
+      - equal: {path: spec.policyTypes, value: [Ingress]}
+      - notExists: {path: spec.egress}
+      - equal:
+          path: spec.podSelector
+          value:
+            matchExpressions:
+              - {key: app.kubernetes.io/component, operator: In, values: [backend, frontend]}
+      - lengthEqual: {path: spec.ingress, count: 1}
+      - equal:
+          path: "spec.ingress[0].from"
+          value:
+            - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: traefik}}
+              podSelector: {matchLabels: {app.kubernetes.io/name: traefik}}
+      - equal:
+          path: "spec.ingress[0].ports"
+          value:
+            - {port: 8000, protocol: TCP}
+            - {port: 3000, protocol: TCP}
+
+  # One peer carrying both selectors means namespace AND pod. Two peers would
+  # mean OR and admit every pod in the traefik namespace.
+  - it: test_traefik_peer_is_single_and_selector
+    template: templates/networkpolicy.yaml
+    documentSelector: {path: metadata.name, value: allow-ingress-traefik}
+    asserts:
+      - lengthEqual: {path: "spec.ingress[0].from", count: 1}
+      - isNotNullOrEmpty: {path: "spec.ingress[0].from[0].namespaceSelector.matchLabels"}
+      - isNotNullOrEmpty: {path: "spec.ingress[0].from[0].podSelector.matchLabels"}
+
+  - it: allows DNS egress to kube-dns only
+    template: templates/networkpolicy.yaml
+    documentSelector: {path: metadata.name, value: allow-dns}
+    asserts:
+      - equal: {path: spec.policyTypes, value: [Egress]}
+      - notExists: {path: spec.ingress}
+      - equal: {path: spec.podSelector, value: {}}
+      - lengthEqual: {path: spec.egress, count: 1}
+      - equal:
+          path: "spec.egress[0].to"
+          value:
+            - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}
+              podSelector: {matchLabels: {k8s-app: kube-dns}}
+      - equal:
+          path: "spec.egress[0].ports"
+          value:
+            - {port: 53, protocol: UDP}
+            - {port: 53, protocol: TCP}
+
+  - it: test_dns_peer_is_single_and_selector
+    template: templates/networkpolicy.yaml
+    documentSelector: {path: metadata.name, value: allow-dns}
+    asserts:
+      - lengthEqual: {path: "spec.egress[0].to", count: 1}
+      - isNotNullOrEmpty: {path: "spec.egress[0].to[0].namespaceSelector.matchLabels"}
+      - isNotNullOrEmpty: {path: "spec.egress[0].to[0].podSelector.matchLabels"}
+
+  # No ipBlock, no empty peer {} (matches everything) and no empty
+  # namespaceSelector (matches every namespace) in any policy.
+  - it: has no ipBlock, empty peer or empty namespaceSelector
+    template: templates/networkpolicy.yaml
+    asserts:
+      - notExists: {path: spec.ingress}
+        documentSelector: {path: metadata.name, value: default-deny}
+      - notExists: {path: spec.egress}
+        documentSelector: {path: metadata.name, value: default-deny}
+      - notContains: {path: "spec.ingress[0].from", content: {}}
+        documentSelector: {path: metadata.name, value: allow-intra-ns}
+      - notContains: {path: "spec.egress[0].to", content: {}}
+        documentSelector: {path: metadata.name, value: allow-intra-ns}
+      - notExists: {path: "spec.ingress[0].from[0].namespaceSelector"}
+        documentSelector: {path: metadata.name, value: allow-intra-ns}
+      - notExists: {path: "spec.egress[0].to[0].namespaceSelector"}
+        documentSelector: {path: metadata.name, value: allow-intra-ns}
+      - notExists: {path: "spec.ingress[0].from[0].ipBlock"}
+        documentSelector: {path: metadata.name, value: allow-intra-ns}
+      - notExists: {path: "spec.egress[0].to[0].ipBlock"}
+        documentSelector: {path: metadata.name, value: allow-intra-ns}
+      - notContains: {path: "spec.ingress[0].from", content: {}}
+        documentSelector: {path: metadata.name, value: allow-ingress-traefik}
+      - notExists: {path: "spec.ingress[0].from[0].ipBlock"}
+        documentSelector: {path: metadata.name, value: allow-ingress-traefik}
+      - isNotNullOrEmpty: {path: "spec.ingress[0].from[0].namespaceSelector.matchLabels[\"kubernetes.io/metadata.name\"]"}
+        documentSelector: {path: metadata.name, value: allow-ingress-traefik}
+      - notContains: {path: "spec.egress[0].to", content: {}}
+        documentSelector: {path: metadata.name, value: allow-dns}
+      - notExists: {path: "spec.egress[0].to[0].ipBlock"}
+        documentSelector: {path: metadata.name, value: allow-dns}
+      - isNotNullOrEmpty: {path: "spec.egress[0].to[0].namespaceSelector.matchLabels[\"kubernetes.io/metadata.name\"]"}
+        documentSelector: {path: metadata.name, value: allow-dns}

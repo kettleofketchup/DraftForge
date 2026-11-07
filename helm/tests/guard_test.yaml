@@ -1,0 +1,131 @@
+suite: preview guard (spec 5.4 test 10)
+# Each case breaks one value of the preview fixture. The guard is included at
+# the top of every template, and a fail aborts the whole render, so one template
+# is enough to observe it.
+release:
+  name: draftforge-pr-1
+  namespace: draftforge-pr-1
+values:
+  - ../values-preview.yaml
+  - fixtures/preview-appset-values.yaml
+templates:
+  - templates/namespace.yaml
+tests:
+  - it: renders with the unmodified preview fixture
+    asserts:
+      - notFailedTemplate: {}
+      - hasDocuments: {count: 1}
+
+  - it: fails when the release namespace is default
+    release:
+      namespace: default
+    asserts:
+      - failedTemplate:
+          errorPattern: "preview guard: release namespace \"default\" must match"
+
+  - it: fails when ingress.authentik.enabled is false
+    set:
+      ingress.authentik.enabled: false
+    asserts:
+      - failedTemplate:
+          errorPattern: "preview guard: ingress\\.authentik\\.enabled must"
+
+  - it: fails when ingress.host is another host
+    set:
+      ingress.host: evil.home.kettle.sh
+    asserts:
+      - failedTemplate:
+          errorPattern: "preview guard: ingress\\.host must"
+
+  - it: fails when persistence.enabled is true
+    set:
+      persistence.enabled: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "preview guard: persistence\\.enabled must"
+
+  - it: fails when priorityClassName is empty
+    set:
+      priorityClassName: ""
+    asserts:
+      - failedTemplate:
+          errorPattern: "preview guard: priorityClassName must"
+
+  - it: fails when preview.quota.requestsCpu is empty
+    set:
+      preview.quota.requestsCpu: ""
+    asserts:
+      - failedTemplate:
+          errorPattern: "preview guard: preview\\.quota\\.requestsCpu must"
+
+  - it: fails when preview.quota.requestsMemory is empty
+    set:
+      preview.quota.requestsMemory: ""
+    asserts:
+      - failedTemplate:
+          errorPattern: "preview guard: preview\\.quota\\.requestsMemory must"
+
+  - it: fails when preview.quota.limitsMemory is empty
+    set:
+      preview.quota.limitsMemory: ""
+    asserts:
+      - failedTemplate:
+          errorPattern: "preview guard: preview\\.quota\\.limitsMemory must"
+
+  - it: fails when preview.quota.pods is empty
+    set:
+      preview.quota.pods: ""
+    asserts:
+      - failedTemplate:
+          errorPattern: "preview guard: preview\\.quota\\.pods must"
+
+  - it: fails when ingress.stripIdentityHeaders is false
+    set:
+      ingress.stripIdentityHeaders: false
+    asserts:
+      - failedTemplate:
+          errorPattern: "preview guard: ingress\\.stripIdentityHeaders must"
+
+  - it: fails when preview.networkPolicy.ingressNamespace is empty
+    set:
+      preview.networkPolicy.ingressNamespace: ""
+    asserts:
+      - failedTemplate:
+          errorPattern: "preview guard: preview\\.networkPolicy\\.ingressNamespace must"
+
+  - it: fails when ingress.enabled is false
+    set:
+      ingress.enabled: false
+    asserts:
+      - failedTemplate:
+          errorPattern: "preview guard: ingress\\.enabled must"
+
+  - it: fails when ingress.blockInternalApi is false
+    set:
+      ingress.blockInternalApi: false
+    asserts:
+      - failedTemplate:
+          errorPattern: "preview guard: ingress\\.blockInternalApi must"
+
+  - it: fails when ingress.authentik.middlewareName is empty
+    set:
+      ingress.authentik.middlewareName: ""
+    asserts:
+      - failedTemplate:
+          errorPattern: "preview guard: ingress\\.authentik\\.middlewareName must"
+
+  - it: fails when ingress.authentik.middlewareNamespace is empty
+    set:
+      ingress.authentik.middlewareNamespace: ""
+    asserts:
+      - failedTemplate:
+          errorPattern: "preview guard: ingress\\.authentik\\.middlewareNamespace must"
+
+  # Checked on its own, so the host comparison cannot run against
+  # "draftforge-pr-1." with an empty suffix.
+  - it: fails when preview.hostSuffix is empty
+    set:
+      preview.hostSuffix: ""
+    asserts:
+      - failedTemplate:
+          errorPattern: "preview guard: preview\\.hostSuffix must"

@@ -1,0 +1,24 @@
+# Literal copy of the home ApplicationSet's helm.valuesObject (spec 6.1) with
+# {{.number}} -> 1, {{.head_sha}} -> 0123456789abcdef0123456789abcdef01234567 and
+# {{.head_short_sha_7}} -> 0123456. Keep it a literal copy; the home pin check
+# renders the real one.
+image:
+  registry: ghcr.io/kettleofketchup/draftforge-preview
+  tag: 'pr-1-0123456'
+previewCommit: '0123456789abcdef0123456789abcdef01234567'    # the notification triggers key on this (§6.4)
+priorityClassName: preview-low
+persistence: { enabled: false }
+env: { siteUrl: 'https://draftforge-pr-1.home.kettle.sh' }
+ingress:
+  enabled: true
+  host: 'draftforge-pr-1.home.kettle.sh'
+  entryPoint: websecure
+  tls: { secretName: home-kettle-sh-tls }
+  authentik: { enabled: true, middlewareName: authentik-forwardauth, middlewareNamespace: authentik }
+  blockInternalApi: true
+  stripIdentityHeaders: true
+preview:
+  enabled: true
+  hostSuffix: home.kettle.sh
+  quota: { pods: "8", requestsCpu: "1", requestsMemory: 2Gi, limitsMemory: 4Gi }
+  networkPolicy: { ingressNamespace: traefik }

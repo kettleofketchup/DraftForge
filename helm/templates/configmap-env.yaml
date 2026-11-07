@@ -1,3 +1,4 @@
+{{- include "draftforge.previewGuard" . -}}
 {{- $host := .Values.ingress.host | default "" -}}
 {{- $siteUrl := .Values.env.siteUrl | default (ternary (printf "https://%s" $host) "" (ne $host "")) -}}
 {{- $data := dict

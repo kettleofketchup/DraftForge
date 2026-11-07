@@ -1,0 +1,22 @@
+{{- include "draftforge.previewGuard" . -}}
+{{- if .Values.preview.enabled }}
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: draftforge-preview-quota
+  labels:
+    {{- include "draftforge.labels" . | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  hard:
+    pods: {{ .Values.preview.quota.pods | toString | quote }}
+    requests.cpu: {{ .Values.preview.quota.requestsCpu | toString | quote }}
+    requests.memory: {{ .Values.preview.quota.requestsMemory | toString | quote }}
+    limits.memory: {{ .Values.preview.quota.limitsMemory | toString | quote }}
+    # No storage and no externally reachable Service types in a preview.
+    count/persistentvolumeclaims: "0"
+    requests.storage: "0"
+    services.loadbalancers: "0"
+    services.nodeports: "0"
+{{- end }}

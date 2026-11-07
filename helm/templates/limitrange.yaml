@@ -1,0 +1,21 @@
+{{- include "draftforge.previewGuard" . -}}
+{{- if .Values.preview.enabled }}
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: draftforge-preview-limits
+  labels:
+    {{- include "draftforge.labels" . | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  # A safety net only: every chart container sets explicit resources.
+  limits:
+    - type: Container
+      default:
+        cpu: 500m
+        memory: 512Mi
+      defaultRequest:
+        cpu: 50m
+        memory: 128Mi
+{{- end }}

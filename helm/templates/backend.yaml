@@ -1,3 +1,4 @@
+{{- include "draftforge.previewGuard" . -}}
 {{- $fullname := include "draftforge.fullname" . -}}
 {{- $image := include "draftforge.image" (dict "root" . "img" "backend") -}}
 apiVersion: apps/v1
