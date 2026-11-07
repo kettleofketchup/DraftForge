@@ -626,6 +626,14 @@ class ReleaseFlowTests(unittest.TestCase):
         assert not changelog.RELEASE_SUBJECT_RE.match("Updated version to 1.2.3 (#301)")
 
 
+class CiRecipeTests(unittest.TestCase):
+    def test_ci_recipe_uses_the_same_release_subject_regex(self):
+        recipe = (REPO / "just" / "ci.just").read_text(encoding="utf-8")
+        found = re.search(r"^\s*release_re='([^']*)'$", recipe, re.M)
+        assert found, "release_re not found in just/ci.just"
+        assert found.group(1) == changelog.RELEASE_SUBJECT_RE.pattern
+
+
 class CommittedRepoTests(unittest.TestCase):
     def test_unreleased_body_is_only_the_pointer(self):
         text = (REPO / "CHANGELOG.md").read_text(encoding="utf-8")

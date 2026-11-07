@@ -92,6 +92,7 @@ bootstrap *args:
     fi
 
 # Modules (namespaced with ::)
+mod ci 'just/ci.just'
 mod dev 'just/dev.just'
 mod docker 'just/docker/mod.just'
 mod demo 'just/demo.just'

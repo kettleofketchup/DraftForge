@@ -1,0 +1,40 @@
+name: Changelog
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    # No `labeled`: after adding changelog:edit, re-run the failed job instead.
+    types: [opened, synchronize, reopened]
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: read # reads the PR's labels live
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changelog:
+    name: changelog
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # fetch-depth: 0: the recipe diffs against the merge base and reads release history.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          filter: blob:none
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - uses: extractions/setup-just@v2
+
+      - name: Changelog fragments gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: just ci::changelog-check
