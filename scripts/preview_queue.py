@@ -165,15 +165,26 @@ def plan(prs: list[PR], closed_labelled: list[int], now: datetime, cap: int,
         key=lambda p: (idle(p), p.created_at, p.number),
     )
 
-    # Step 8: while waiters outnumber free slots, evict stale holders, oldest
-    # head first, one per otherwise-unserved waiter.
+    # Step 8: while waiters outnumber free slots, evict stale holders, one per
+    # otherwise-unserved waiter: failed holders first, then idle ones, oldest
+    # head first within each. Free and freed slots go to non-idle waiters
+    # first (step 7 order), so an idle holder is evicted only for a non-idle
+    # waiter that a free or failed slot does not already serve. Otherwise an
+    # idle waiter would take an idle holder's slot, the evicted PR would be
+    # the idle waiter on the next run, and the two would trade the slot every
+    # run; and an idle holder evicted while a failed holder stays would take
+    # the failed holder's slot back on the next run.
     free = cap - len(keep)
-    evictable = sorted(
-        (p for p in keep if failed(p) or idle(p)),
+    unserved = max(0, len(waiting) - free)
+    unserved_active = max(0, sum(1 for p in waiting if not idle(p)) - free)
+    by_age = sorted(
+        keep,
         key=lambda p: (_first_seen(p) is None, _first_seen(p) or datetime.min,
                        *_grant_key(p)),
     )
-    evicted = evictable[:max(0, min(len(evictable), len(waiting) - free))]
+    evicted = [p for p in by_age if failed(p)][:unserved]
+    room = max(0, unserved_active - len(evicted))
+    evicted += [p for p in by_age if idle(p) and not failed(p)][:room]
     evicted_nums = {p.number for p in evicted}
     keep = [p for p in keep if p.number not in evicted_nums]
 

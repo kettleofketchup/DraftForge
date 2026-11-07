@@ -293,6 +293,127 @@ class Eviction(unittest.TestCase):
         self.assertEqual(status_of(p, 1), queued(1, 1))
 
 
+    def test_idle_waiter_does_not_displace_idle_holder(self):
+        holder = mk(1, labelled=True, queue=idle_queue(days=12))
+        waiter = mk(2, queue=idle_queue(days=10))
+        p = run([holder, waiter], cap=1)
+        self.assertEqual(p.remove, [])
+        self.assertEqual(p.add, [])
+        self.assertEqual(status_of(p, 1), None)  # already "held"
+        self.assertEqual(status_of(p, 2), queued(1, 1))
+
+    def test_idle_waiter_takes_failed_holders_slot(self):
+        failed = mk(1, labelled=True, built=False,
+                    images=("failure", tag_for(1, sha(1))), queue=fresh_queue())
+        waiter = mk(2, queue=idle_queue())
+        p = run([failed, waiter], cap=1)
+        self.assertEqual(p.remove, [1])
+        self.assertEqual(p.add, [2])
+
+    def test_idle_holder_evicted_only_for_non_idle_waiters(self):
+        # cap 2: an idle holder (oldest head) and a failed holder; one fresh
+        # and two idle waiters. The failed holder goes first and its slot
+        # serves the fresh waiter, so the idle holder stays: evicting it would
+        # only hand its slot to an idle waiter.
+        prs = [
+            mk(1, labelled=True, queue=idle_queue(days=20)),
+            mk(2, labelled=True, built=False,
+               images=("failure", tag_for(2, sha(2))), queue=idle_queue(days=8)),
+            mk(3, queue=fresh_queue()),
+            mk(4, queue=idle_queue(days=9)),
+            mk(5, queue=idle_queue(days=9)),
+        ]
+        p = run(prs, cap=2)
+        self.assertEqual(p.remove, [2])
+        self.assertEqual(p.add, [3])
+        # Two fresh waiters: the idle holder is evicted for the second one.
+        two_fresh = run([*prs[:3], mk(6, queue=fresh_queue()), *prs[3:]], cap=2)
+        self.assertEqual(two_fresh.remove, [1, 2])
+        self.assertEqual(two_fresh.add, [3, 6])
+        # Only idle waiters: they may take only the failed holder's slot.
+        only_idle = run([prs[0], prs[1], prs[3], prs[4]], cap=2)
+        self.assertEqual(only_idle.remove, [2])
+        self.assertEqual(only_idle.add, [4])
+
+    def test_failed_holder_evicted_before_older_idle_holder(self):
+        idle = mk(1, labelled=True, queue=idle_queue(days=20))
+        conflicted = mk(2, labelled=True, mergeable=False, queue=idle_queue(days=8))
+        p = run([idle, conflicted, mk(3, queue=fresh_queue())], cap=2)
+        self.assertEqual(p.remove, [2])
+        self.assertEqual(p.add, [3])
+
+def simulate(prs, runs, cap=3, step=timedelta(minutes=10)):
+    """Run the queue `runs` times, feeding each plan's label changes and
+    statuses back into the PR records as GitHub would. Returns the plans."""
+    state = {p.number: p for p in prs}
+    plans = []
+    for i in range(runs):
+        now = NOW + step * i
+        p = plan(list(state.values()), [], now, cap, AUTHORS, IDLE_DAYS, BASE)
+        plans.append(p)
+        for n in p.remove:
+            state[n] = replace(state[n], labels=state[n].labels - {"preview-env"})
+        for n in p.add:
+            state[n] = replace(state[n], labels=state[n].labels | {"preview-env"},
+                               grant_time=now)
+        for n, _head, s, d in p.statuses:
+            state[n] = replace(state[n],
+                               queue_statuses=state[n].queue_statuses + ((now, s, d),))
+    return plans
+
+
+class Stability(unittest.TestCase):
+    """The queue is level-triggered and runs every 10 minutes: once applied,
+    a plan must not be undone by the next run on the same PR state."""
+
+    def assert_fixed_point(self, plans):
+        for i, p in enumerate(plans[1:], start=1):
+            self.assertEqual((p.remove, p.add), ([], []), f"labels changed on run {i}")
+        for i, p in enumerate(plans[2:], start=2):
+            self.assertEqual(p.statuses, [], f"statuses changed on run {i}")
+
+    def test_more_idle_prs_than_cap_do_not_swap(self):
+        prs = [mk(1, labelled=True, queue=idle_queue(days=10), grant=NOW - timedelta(days=10)),
+               mk(2, queue=idle_queue(days=10))]
+        plans = simulate(prs, runs=6, cap=1)
+        self.assertEqual((plans[0].remove, plans[0].add), ([], []))
+        self.assert_fixed_point(plans)
+
+    def test_fresh_waiter_evicts_once_then_stable(self):
+        prs = [mk(1, labelled=True, queue=idle_queue()), mk(2, labelled=True, queue=idle_queue()),
+               mk(3, queue=fresh_queue()), mk(4, queue=idle_queue()), mk(5, queue=idle_queue())]
+        plans = simulate(prs, runs=6, cap=2)
+        self.assertEqual(plans[0].add, [3])
+        self.assertEqual(len(plans[0].remove), 1)
+        self.assert_fixed_point(plans)
+
+    def test_random_states_reach_fixed_point(self):
+        import random
+        rng = random.Random(20261107)
+        for case in range(400):
+            prs = []
+            for n in range(1, rng.randint(1, 7) + 1):
+                kind = rng.choice(["fresh", "idle", "failed", "conflict", "unbuilt", "none"])
+                kw = {"labelled": rng.random() < 0.5}
+                if kw["labelled"]:
+                    kw["grant"] = NOW - timedelta(hours=rng.randint(1, 500))
+                if kind == "fresh":
+                    kw["queue"] = fresh_queue(hours=rng.randint(1, 100))
+                elif kind == "idle":
+                    kw["queue"] = idle_queue(days=rng.randint(8, 30))
+                elif kind == "failed":
+                    kw.update(built=False, images=("failure", tag_for(n, sha(n))),
+                              queue=idle_queue(days=rng.randint(1, 30)))
+                elif kind == "conflict":
+                    kw.update(mergeable=False, queue=idle_queue(days=rng.randint(1, 30)))
+                elif kind == "unbuilt":
+                    kw.update(built=False, queue=fresh_queue(hours=rng.randint(1, 5)))
+                prs.append(mk(n, **kw))
+            cap = rng.randint(0, 4)
+            with self.subTest(case=case, cap=cap, prs=[(p.number, sorted(p.labels)) for p in prs]):
+                self.assert_fixed_point(simulate(prs, runs=5, cap=cap))
+
+
 class Writes(unittest.TestCase):
     def test_removals_before_additions(self):
         prs = [mk(1, labelled=True, queue=idle_queue()), mk(2)]
