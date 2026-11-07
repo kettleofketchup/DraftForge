@@ -4,10 +4,23 @@
 returns the label removals, label additions and `preview-queue` commit
 statuses that bring the repo to the desired state. The I/O around it only
 fetches that state and applies the plan (removals first, then additions).
+
+`main` fetches everything first (all pages of every list, every GHCR check),
+so an API error anywhere exits non-zero before a single write.
+
+Run by .github/workflows/preview-queue.yml as `python3 -I scripts/preview_queue.py`
+with GH_TOKEN, GH_REPO, CAP, PREVIEW_AUTHORS, PREVIEW_IDLE_DAYS and CLOSED_PR.
 """
+import json
+import os
 import re
-from dataclasses import dataclass
-from datetime import datetime, timedelta
+import sys
+import urllib.error
+import urllib.parse
+import urllib.request
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, replace
+from datetime import datetime, timedelta, timezone
 
 LABEL = "preview-env"
 OPT_OUT = "no-preview"
@@ -205,3 +218,280 @@ def plan(prs: list[PR], closed_labelled: list[int], now: datetime, cap: int,
         if _current_status(by_num[n]) != (state, desc)
     ]
     return Plan(remove=remove, add=add, statuses=statuses)
+
+
+# --- I/O ---
+
+API = "https://api.github.com"
+GHCR = "https://ghcr.io"
+QUEUE_CONTEXT = "preview-queue"
+IMAGES_CONTEXT = "preview-images"
+PREVIEW_IMAGES = (
+    "kettleofketchup/draftforge-preview/backend",
+    "kettleofketchup/draftforge-preview/frontend",
+)
+MANIFEST_TYPES = (
+    "application/vnd.oci.image.index.v1+json",
+    "application/vnd.docker.distribution.manifest.list.v2+json",
+    "application/vnd.oci.image.manifest.v1+json",
+    "application/vnd.docker.distribution.manifest.v2+json",
+)
+TIMEOUT = 30
+
+# (status, headers, body). HTTP errors come back as a status, never raised.
+Opener = Callable[[urllib.request.Request], tuple[int, Mapping[str, str], bytes]]
+
+
+def default_opener(req: urllib.request.Request) -> tuple[int, Mapping[str, str], bytes]:
+    try:
+        with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
+            return resp.status, dict(resp.headers.items()), resp.read()
+    except urllib.error.HTTPError as exc:
+        headers = dict(exc.headers.items()) if exc.headers else {}
+        return exc.code, headers, exc.read()
+
+
+class GitHubError(Exception):
+    pass
+
+
+class RegistryError(Exception):
+    pass
+
+
+def _header(headers: Mapping[str, str], name: str) -> str:
+    for key, value in headers.items():
+        if key.lower() == name.lower():
+            return value
+    return ""
+
+
+LINK_NEXT_RE = re.compile(r'<([^>]+)>\s*;\s*rel="next"')
+
+
+def _next_link(headers: Mapping[str, str]) -> str | None:
+    match = LINK_NEXT_RE.search(_header(headers, "Link"))
+    return match.group(1) if match else None
+
+
+def _with_per_page(url: str) -> str:
+    """`url` with per_page=100; a URL that already has it is returned unchanged."""
+    parts = urllib.parse.urlsplit(url)
+    pairs = urllib.parse.parse_qsl(parts.query, keep_blank_values=True)
+    if [v for k, v in pairs if k == "per_page"] == ["100"]:
+        return url
+    query = [(k, v) for k, v in pairs if k != "per_page"]
+    query.append(("per_page", "100"))
+    return urllib.parse.urlunsplit(parts._replace(query=urllib.parse.urlencode(query)))
+
+
+def _time(value: str) -> datetime:
+    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+
+class GitHub:
+    def __init__(self, token: str, repo: str, opener: Opener = default_opener):
+        self.token = token
+        self.repo = repo
+        self.opener = opener
+
+    @classmethod
+    def from_env(cls, env: Mapping[str, str] = os.environ) -> "GitHub":
+        token, repo = env.get("GH_TOKEN", ""), env.get("GH_REPO", "")
+        if not token or not repo:
+            raise GitHubError("GH_TOKEN and GH_REPO must be set")
+        return cls(token, repo)
+
+    def _send(self, method: str, url: str, body: dict | None = None):
+        if not url.startswith(API + "/"):
+            raise GitHubError(f"refusing to send the token outside {API}: {url}")
+        data = json.dumps(body).encode() if body is not None else None
+        req = urllib.request.Request(url, data=data, method=method)
+        req.add_header("Accept", "application/vnd.github+json")
+        req.add_header("Authorization", f"Bearer {self.token}")
+        req.add_header("X-GitHub-Api-Version", "2022-11-28")
+        req.add_header("User-Agent", "draftforge-preview-queue")
+        if data is not None:
+            req.add_header("Content-Type", "application/json")
+        try:
+            return self.opener(req)
+        except OSError as exc:
+            raise GitHubError(f"{method} {url}: {exc}") from exc
+
+    def _url(self, path: str, params: Mapping[str, str] = {}) -> str:
+        url = f"{API}/{path}"
+        return f"{url}?{urllib.parse.urlencode(dict(params))}" if params else url
+
+    @staticmethod
+    def _json(method: str, url: str, status: int, body: bytes):
+        if not 200 <= status < 300:
+            raise GitHubError(f"{method} {url}: HTTP {status}: {body[:200]!r}")
+        try:
+            return json.loads(body)
+        except ValueError as exc:
+            raise GitHubError(f"{method} {url}: invalid JSON: {exc}") from exc
+
+    def _get_all(self, path: str, params: Mapping[str, str] = {},
+                 items_key: str | None = None) -> list[dict]:
+        """Every item of a list endpoint, following `Link: rel="next"` to the end."""
+        url: str | None = _with_per_page(self._url(path, params))
+        items: list[dict] = []
+        while url:
+            status, headers, body = self._send("GET", url)
+            data = self._json("GET", url, status, body)
+            if items_key:
+                page = data.get(items_key) if isinstance(data, dict) else None
+            else:
+                page = data
+            if not isinstance(page, list):
+                raise GitHubError(f"GET {url}: expected a list, got {type(page).__name__}")
+            items.extend(page)
+            nxt = _next_link(headers)
+            url = _with_per_page(nxt) if nxt else None
+        return items
+
+    def _get_one(self, path: str) -> dict:
+        url = self._url(path)
+        status, _headers, body = self._send("GET", url)
+        return self._json("GET", url, status, body)
+
+    def _write(self, method: str, path: str, body: dict | None = None,
+               ok_404: bool = False) -> None:
+        url = self._url(path)
+        status, _headers, data = self._send(method, url, body)
+        if ok_404 and status == 404:
+            return
+        if not 200 <= status < 300:
+            raise GitHubError(f"{method} {url}: HTTP {status}: {data[:200]!r}")
+
+    def _pr(self, raw: dict) -> PR:
+        n = raw["number"]
+        head = raw["head"]["sha"]
+        labels = frozenset(label["name"] for label in raw.get("labels", []))
+        grant = None
+        if LABEL in labels:
+            events = self._get_all(f"repos/{self.repo}/issues/{n}/events")
+            grants = [_time(e["created_at"]) for e in events
+                      if e.get("event") == "labeled"
+                      and (e.get("label") or {}).get("name") == LABEL]
+            grant = max(grants, default=None)
+        statuses = self._get_all(f"repos/{self.repo}/commits/{head}/statuses")
+        images = [s for s in statuses if s.get("context") == IMAGES_CONTEXT]
+        # Newest first from the API; max() keeps the first of equal timestamps.
+        latest = max(images, key=lambda s: _time(s["created_at"]), default=None)
+        queue = tuple((_time(s["created_at"]), s["state"], s.get("description") or "")
+                      for s in statuses if s.get("context") == QUEUE_CONTEXT)
+        detail = self._get_one(f"repos/{self.repo}/pulls/{n}")
+        head_repo = (raw["head"].get("repo") or {}).get("full_name", "")
+        return PR(
+            number=n,
+            author=raw["user"]["login"],
+            head_repo=head_repo,
+            head_sha=head,
+            draft=bool(raw.get("draft")),
+            labels=labels,
+            created_at=_time(raw["created_at"]),
+            images_status=(latest["state"], latest.get("description") or "") if latest else None,
+            queue_statuses=queue,
+            grant_time=grant,
+            manifests_exist=False,  # checked by main, only for heads that need it
+            mergeable=detail.get("mergeable"),
+        )
+
+    def open_prs(self) -> list[PR]:
+        pulls = self._get_all(f"repos/{self.repo}/pulls", {"state": "open"})
+        return [self._pr(raw) for raw in pulls]
+
+    def closed_labelled(self) -> list[int]:
+        query = f"repo:{self.repo} is:pr is:closed label:{LABEL}"
+        items = self._get_all("search/issues", {"q": query}, items_key="items")
+        return [item["number"] for item in items]
+
+    def remove_label(self, n: int) -> None:
+        # 404: the label is already gone.
+        self._write("DELETE", f"repos/{self.repo}/issues/{n}/labels/{LABEL}", ok_404=True)
+
+    def add_label(self, n: int) -> None:
+        self._write("POST", f"repos/{self.repo}/issues/{n}/labels", {"labels": [LABEL]})
+
+    def set_status(self, sha: str, state: str, desc: str) -> None:
+        self._write("POST", f"repos/{self.repo}/statuses/{sha}",
+                    {"state": state, "description": desc, "context": QUEUE_CONTEXT})
+
+
+def manifest_exists(image: str, tag: str, opener: Opener = default_opener) -> bool:
+    """Anonymous GHCR check that `<image>:<tag>` exists (the packages are public)."""
+    token_url = f"{GHCR}/token?scope=repository:{image}:pull"
+    try:
+        status, _h, body = opener(urllib.request.Request(token_url, method="GET"))
+    except OSError as exc:
+        raise RegistryError(f"GET {token_url}: {exc}") from exc
+    if status != 200:
+        raise RegistryError(f"GET {token_url}: HTTP {status}")
+    try:
+        token = json.loads(body)["token"]
+    except (ValueError, KeyError, TypeError) as exc:
+        raise RegistryError(f"GET {token_url}: no token in response") from exc
+    url = f"{GHCR}/v2/{image}/manifests/{tag}"
+    req = urllib.request.Request(url, method="HEAD")
+    req.add_header("Authorization", f"Bearer {token}")
+    req.add_header("Accept", ", ".join(MANIFEST_TYPES))
+    try:
+        status, _h, _body = opener(req)
+    except OSError as exc:
+        raise RegistryError(f"HEAD {url}: {exc}") from exc
+    if status == 200:
+        return True
+    if status == 404:
+        return False
+    raise RegistryError(f"HEAD {url}: HTTP {status}")
+
+
+def _log(msg: str) -> None:
+    print(f"preview-queue: {msg}", file=sys.stderr)
+
+
+def main(env: Mapping[str, str], gh: GitHub, manifest_exists=manifest_exists) -> int:
+    try:
+        cap, authors, idle_days = parse_config(
+            env.get("CAP", ""), env.get("PREVIEW_AUTHORS", ""), env.get("PREVIEW_IDLE_DAYS", ""))
+        closed_pr = env.get("CLOSED_PR", "")
+        if closed_pr and not UINT_RE.fullmatch(closed_pr):
+            raise ValueError(f"CLOSED_PR must be empty or a PR number, got {closed_pr!r}")
+    except ValueError as exc:
+        _log(f"config error, nothing written: {exc}")
+        return 2
+
+    # Fetch everything before the first write.
+    try:
+        prs = [p for p in gh.open_prs() if str(p.number) != closed_pr]
+        closed = gh.closed_labelled()
+        checked = []
+        for p in prs:
+            tag = tag_for(p.number, p.head_sha)
+            exists = (p.images_status == ("success", tag)
+                      and all(manifest_exists(image, tag) for image in PREVIEW_IMAGES))
+            checked.append(replace(p, manifests_exist=exists))
+    except (GitHubError, RegistryError) as exc:
+        _log(f"fetch failed, nothing written: {exc}")
+        return 1
+
+    result = plan(checked, closed, datetime.now(timezone.utc), cap, authors, idle_days,
+                  gh.repo)
+    print(f"remove={result.remove} add={result.add} statuses={len(result.statuses)}")
+    try:
+        for n in result.remove:
+            gh.remove_label(n)
+        for n in result.add:
+            gh.add_label(n)
+        for n, sha, state, desc in result.statuses:
+            print(f"#{n} {sha[:7]}: {state} {desc}")
+            gh.set_status(sha, state, desc)
+    except GitHubError as exc:
+        _log(f"write failed; the next run reconciles: {exc}")
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(os.environ, GitHub.from_env()))

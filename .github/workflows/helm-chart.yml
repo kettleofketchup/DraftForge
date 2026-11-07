@@ -14,6 +14,7 @@ on:
       - "scripts/preview_tests/**"
       - ".github/workflows/helm-chart.yml"
       - ".github/workflows/preview-images.yml"
+      - ".github/workflows/preview-queue.yml"
   push:
     branches: [main]
     paths:
@@ -25,6 +26,7 @@ on:
       - "scripts/preview_tests/**"
       - ".github/workflows/helm-chart.yml"
       - ".github/workflows/preview-images.yml"
+      - ".github/workflows/preview-queue.yml"
 
 permissions:
   contents: read
@@ -95,7 +97,7 @@ jobs:
           actionlint -version | head -n1 | grep -qx "$ACTIONLINT_VERSION"
 
       - name: actionlint
-        run: actionlint .github/workflows/helm-chart.yml .github/workflows/preview-images.yml
+        run: actionlint .github/workflows/helm-chart.yml .github/workflows/preview-images.yml .github/workflows/preview-queue.yml
 
       - name: Lint (default values)
         run: '"$HELM" lint --strict helm'

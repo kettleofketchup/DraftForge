@@ -18,9 +18,10 @@ from pathlib import Path
 from scripts.preview_tests import _util
 
 WORKFLOW_DIR = _util.REPO_ROOT / ".github" / "workflows"
-WORKFLOWS_ADDED = ["helm-chart.yml", "preview-images.yml"]
+WORKFLOWS_ADDED = ["helm-chart.yml", "preview-images.yml", "preview-queue.yml"]
 
 IMAGES = "preview-images.yml"
+QUEUE = "preview-queue.yml"
 PREVIEW_REPO = "ghcr.io/kettleofketchup/draftforge-preview/"
 PROD_REPO = "ghcr.io/kettleofketchup/draftforge/"
 FLOOR_MARKER = "<!-- preview-floor -->"
@@ -397,6 +398,117 @@ class ReportCommentTest(unittest.TestCase):
         self.assertNotIn("-X", calls[0])
         self.assertIn("--paginate", calls[0])
         self.assertIn("repos/kettleofketchup/DraftForge/issues/12/comments", calls[0])
+
+
+GH_EXIT_SHIM = """import json, os, sys
+with open(os.environ["GH_LOG"], "a") as f:
+    f.write(json.dumps(sys.argv[1:]) + "\\n")
+sys.stderr.write(os.environ.get("GH_FAKE_ERR", ""))
+sys.exit(int(os.environ.get("GH_FAKE_RC", "0")))
+"""
+
+
+class PreviewQueueStructureTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.wf = load(QUEUE)
+        cls.text = (WORKFLOW_DIR / QUEUE).read_text()
+        cls.release = cls.wf["jobs"]["release-closed"]
+        cls.reconcile = cls.wf["jobs"]["reconcile"]
+
+    def test_queue_never_checks_out_pr_code(self):
+        self.assertNotIn("head.sha", self.text)
+        self.assertNotIn("head.ref", self.text)
+        self.assertNotIn("github.head_ref", self.text)
+        # release-closed only calls the API; it checks nothing out.
+        self.assertEqual([s for s in self.release["steps"] if "uses" in s], [])
+
+    def test_queue_checkout_ref(self):
+        checkout = step_using(self.reconcile["steps"], "actions/checkout")
+        self.assertEqual(checkout["with"]["ref"],
+                         "${{ github.event.repository.default_branch || 'main' }}")
+        self.assertIs(checkout["with"]["persist-credentials"], False)
+        run = [s for s in self.reconcile["steps"] if "run" in s]
+        self.assertEqual([s["run"].strip() for s in run], ["python3 -I scripts/preview_queue.py"])
+
+    def test_release_closed_tolerates_404(self):
+        (step,) = [s for s in self.release["steps"] if "run" in s]
+        self.assertIn("HTTP 404", step["run"])
+        self.assertIn(
+            'out=$(gh api -X DELETE "repos/$GH_REPO/issues/$PR/labels/preview-env" 2>&1) || '
+            "{ grep -q 'HTTP 404' <<<\"$out\" || { echo \"$out\"; exit 1; }; }", step["run"])
+        cases = [(0, "", True), (1, "gh: Not Found (HTTP 404)", True),
+                 (1, "gh: Server Error (HTTP 500)", False),
+                 (1, "gh: Forbidden (HTTP 403)", False)]
+        with tempfile.TemporaryDirectory() as tmp:
+            bindir = Path(tmp)
+            make_shim(bindir, "gh", GH_EXIT_SHIM)
+            for rc, err, ok in cases:
+                with self.subTest(rc=rc, err=err):
+                    proc, _, calls = run_step(step, {
+                        "PATH": f"{bindir}:{os.environ['PATH']}",
+                        "GH_REPO": "kettleofketchup/DraftForge", "PR": "12",
+                        "GH_FAKE_RC": str(rc), "GH_FAKE_ERR": err})
+                    self.assertEqual(proc.returncode == 0, ok, proc.stdout + proc.stderr)
+                    if not ok:
+                        self.assertIn(err, proc.stdout)
+                    self.assertEqual(calls, [[
+                        "api", "-X", "DELETE",
+                        "repos/kettleofketchup/DraftForge/issues/12/labels/preview-env"]])
+
+    def test_queue_triggers(self):
+        on = self.wf["on"]
+        self.assertEqual(set(on), {"workflow_run", "pull_request_target", "schedule",
+                                   "workflow_dispatch"})
+        self.assertEqual(on["workflow_run"],
+                         {"workflows": ["preview-images"], "types": ["completed"]})
+        self.assertEqual(on["pull_request_target"],
+                         {"types": ["closed", "reopened", "labeled", "unlabeled"]})
+        self.assertNotIn("branches", on["pull_request_target"])
+        self.assertEqual(on["schedule"], [{"cron": "*/10 * * * *"}])
+        self.assertIn(on["workflow_dispatch"], ({}, None))
+        self.assertEqual(self.wf["permissions"], {})
+
+    def test_reconcile_wiring(self):
+        self.assertEqual(self.reconcile["needs"], "release-closed")
+        self.assertEqual(self.reconcile["if"], "always()")
+        self.assertEqual(self.reconcile["concurrency"],
+                         {"group": "preview-queue", "cancel-in-progress": False})
+        self.assertEqual(self.reconcile["permissions"], {
+            "contents": "read", "issues": "write", "pull-requests": "read",
+            "statuses": "write"})
+        self.assertNotIn("concurrency", self.release)
+        self.assertEqual(self.release["permissions"], {"issues": "write"})
+        self.assertEqual(
+            self.release["if"],
+            "github.event_name == 'pull_request_target' && github.event.action == 'closed'")
+
+    def test_queue_env(self):
+        self.assertEqual(self.release["env"], {
+            "GH_TOKEN": "${{ github.token }}",
+            "GH_REPO": "${{ github.repository }}",
+            "PR": "${{ github.event.pull_request.number }}",
+        })
+        self.assertEqual(self.reconcile["env"], {
+            "GH_TOKEN": "${{ github.token }}",
+            "GH_REPO": "${{ github.repository }}",
+            "CAP": "${{ vars.PREVIEW_CAP || '3' }}",
+            "PREVIEW_AUTHORS": "${{ vars.PREVIEW_AUTHORS || 'kettleofketchup' }}",
+            "PREVIEW_IDLE_DAYS": "${{ vars.PREVIEW_IDLE_DAYS || '7' }}",
+            "CLOSED_PR": "${{ github.event.action == 'closed' && "
+                         "github.event.pull_request.number || '' }}",
+        })
+
+
+class HelmChartWorkflowTest(unittest.TestCase):
+    def test_helm_chart_watches_and_lints_queue_workflow(self):
+        wf = load("helm-chart.yml")
+        path = ".github/workflows/" + QUEUE
+        for event in ("pull_request", "push"):
+            with self.subTest(event=event):
+                self.assertIn(path, wf["on"][event]["paths"])
+        (lint,) = [s for s in all_steps(wf) if s.get("name") == "actionlint"]
+        self.assertIn(path, lint["run"].split())
 
 
 class WorkflowHygieneTest(unittest.TestCase):

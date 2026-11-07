@@ -1,12 +1,20 @@
-"""Pure-function tests for the preview queue planner (spec §5.6).
+"""Tests for the preview queue (spec §5.6).
 
-Every case builds `PR` records by hand and calls `plan()` directly; no I/O.
+The planner cases build `PR` records by hand and call `plan()` directly. The
+I/O cases drive the real `GitHub` client and `manifest_exists` through a
+canned transport, and `main` through a fake client that records writes.
 """
+import contextlib
+import io
+import json
 import unittest
+import urllib.parse
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 
-from scripts.preview_queue import PR, Plan, parse_config, plan, tag_for
+from scripts import preview_queue
+from scripts.preview_queue import (PR, GitHub, GitHubError, Plan, RegistryError, main,
+                                   manifest_exists, parse_config, plan, tag_for)
 
 BASE = "kettleofketchup/DraftForge"
 OWNER = "kettleofketchup"
@@ -372,6 +380,439 @@ class Config(unittest.TestCase):
             parse_config("10", "kettleofketchup,other-user", "365"),
             (10, frozenset({"kettleofketchup", "other-user"}), 365),
         )
+
+
+# --- I/O: the real GitHub client and GHCR check over a canned transport ---
+
+API = "https://api.github.com"
+TOKEN_JSON = json.dumps({"token": "anon-token"}).encode()
+
+
+class Canned:
+    """An Opener that replays (status, headers, body) responses in order and
+    records every request it was given."""
+
+    def __init__(self, responses):
+        self.responses = list(responses)
+        self.requests = []
+
+    def __call__(self, req):
+        self.requests.append(req)
+        if not self.responses:
+            raise AssertionError(f"unexpected request {req.get_method()} {req.full_url}")
+        return self.responses.pop(0)
+
+    def urls(self):
+        return [r.full_url for r in self.requests]
+
+    def writes(self):
+        return [r for r in self.requests if r.get_method() not in ("GET", "HEAD")]
+
+
+def page(items, next_url=None, status=200):
+    headers = {"Link": f'<{next_url}>; rel="next", <{API}/x?page=9>; rel="last"'} if next_url else {}
+    return (status, headers, json.dumps(items).encode())
+
+
+def error(status=500):
+    return (status, {}, b'{"message": "boom"}')
+
+
+def pr_json(n, head, *, labels=(), login=OWNER, head_repo=BASE, draft=False,
+            created="2026-10-01T00:00:00Z"):
+    return {"number": n, "user": {"login": login}, "draft": draft, "created_at": created,
+            "head": {"sha": head, "repo": {"full_name": head_repo}},
+            "labels": [{"name": name} for name in labels]}
+
+
+def status_json(context, state, description, created):
+    return {"context": context, "state": state, "description": description,
+            "created_at": created}
+
+
+def label_event(name, created, event="labeled"):
+    return {"event": event, "label": {"name": name}, "created_at": created}
+
+
+def per_pr(n, *, events=None, statuses=([],), mergeable=True):
+    """Responses one PR consumes after the PR list: issue events (only for a
+    PR carrying preview-env), commit statuses, then GET /pulls/{n}."""
+    out = []
+    if events is not None:
+        out += [page(items, next_url=nxt) for items, nxt in events]
+    if statuses and isinstance(statuses[0], list):
+        statuses = [(items, None) for items in statuses]
+    out += [page(items, next_url=nxt) for items, nxt in statuses]
+    out.append((200, {}, json.dumps({"number": n, "mergeable": mergeable}).encode()))
+    return out
+
+
+def dt(s):
+    return datetime.fromisoformat(s.replace("Z", "+00:00"))
+
+
+def client(responses):
+    opener = Canned(responses)
+    return GitHub("secret-token", BASE, opener=opener), opener
+
+
+class RealClient(unittest.TestCase):
+    def test_real_client_paginates_link_next(self):
+        nxt = f"{API}/repos/{BASE}/pulls?state=open&per_page=100&page=2"
+        gh, opener = client(
+            [page([pr_json(1, sha(1))], next_url=nxt), page([pr_json(2, sha(2))])]
+            + per_pr(1) + per_pr(2))
+        prs = gh.open_prs()
+        self.assertEqual([p.number for p in prs], [1, 2])
+        self.assertEqual(opener.urls()[1], nxt)
+        self.assertEqual(opener.responses, [])
+        self.assertEqual(opener.requests[0].get_header("Authorization"), "Bearer secret-token")
+
+    def test_real_client_page2_500_raises(self):
+        nxt = f"{API}/repos/{BASE}/pulls?state=open&per_page=100&page=2"
+        gh, _ = client([page([pr_json(1, sha(1))], next_url=nxt), error(500)])
+        with self.assertRaises(GitHubError):
+            gh.open_prs()
+
+    def test_real_client_reads_mergeable(self):
+        for value in (True, False, None):
+            with self.subTest(mergeable=value):
+                gh, opener = client([page([pr_json(3, sha(3))])] + per_pr(3, mergeable=value))
+                (pr,) = gh.open_prs()
+                self.assertIs(pr.mergeable, value)
+                self.assertEqual(opener.urls()[-1], f"{API}/repos/{BASE}/pulls/3")
+
+    def test_real_client_builds_pr_fields(self):
+        gh, _ = client([page([pr_json(4, sha(4), labels=("no-preview",), login="someone",
+                                      head_repo="fork/DraftForge", draft=True,
+                                      created="2026-10-02T03:04:05Z")])] + per_pr(4))
+        (pr,) = gh.open_prs()
+        self.assertEqual((pr.number, pr.author, pr.head_repo, pr.head_sha, pr.draft),
+                         (4, "someone", "fork/DraftForge", sha(4), True))
+        self.assertEqual(pr.labels, frozenset({"no-preview"}))
+        self.assertEqual(pr.created_at, dt("2026-10-02T03:04:05Z"))
+        self.assertIsNone(pr.images_status)
+        self.assertEqual(pr.queue_statuses, ())
+        self.assertIsNone(pr.grant_time)
+        self.assertIs(pr.manifests_exist, False)
+
+    def test_grant_time_from_last_events_page(self):
+        nxt = f"{API}/repos/{BASE}/issues/5/events?per_page=100&page=2"
+        events = [
+            ([label_event("preview-env", "2026-10-01T00:00:00Z")], nxt),
+            ([label_event("preview-env", "2026-10-05T00:00:00Z"),
+              label_event("other", "2026-10-06T00:00:00Z"),
+              label_event("preview-env", "2026-10-07T00:00:00Z", event="unlabeled")], None),
+        ]
+        gh, opener = client([page([pr_json(5, sha(5), labels=("preview-env",))])]
+                            + per_pr(5, events=events))
+        (pr,) = gh.open_prs()
+        self.assertEqual(pr.grant_time, dt("2026-10-05T00:00:00Z"))
+        self.assertIn(nxt, opener.urls())
+
+    def test_earliest_queue_status_from_last_statuses_page(self):
+        nxt = f"{API}/repos/{BASE}/commits/{sha(6)}/statuses?per_page=100&page=2"
+        statuses = [
+            ([status_json("preview-queue", "success", "Preview slot held", "2026-10-05T00:00:00Z"),
+              status_json("preview-queue", "pending", "Waiting for preview images",
+                          "2026-10-04T00:00:00Z")], nxt),
+            ([status_json("preview-queue", "pending", "Waiting for preview images",
+                          "2026-10-01T00:00:00Z")], None),
+        ]
+        gh, _ = client([page([pr_json(6, sha(6))])] + per_pr(6, statuses=statuses))
+        (pr,) = gh.open_prs()
+        self.assertEqual(len(pr.queue_statuses), 3)
+        self.assertEqual(min(t for t, _s, _d in pr.queue_statuses), dt("2026-10-01T00:00:00Z"))
+        self.assertIn((dt("2026-10-05T00:00:00Z"), "success", "Preview slot held"),
+                      pr.queue_statuses)
+
+    def test_images_status_uses_latest_for_context(self):
+        tag = tag_for(7, sha(7))
+        statuses = [[
+            status_json("preview-images", "success", tag, "2026-10-03T00:00:00Z"),
+            status_json("preview-queue", "pending", "Waiting for preview images",
+                        "2026-10-02T12:00:00Z"),
+            status_json("preview-images", "failure", tag, "2026-10-02T00:00:00Z"),
+            status_json("preview-queue", "pending", "Waiting for preview images",
+                        "2026-10-01T00:00:00Z"),
+        ]]
+        gh, _ = client([page([pr_json(7, sha(7))])] + per_pr(7, statuses=statuses))
+        (pr,) = gh.open_prs()
+        self.assertEqual(pr.images_status, ("success", tag))
+
+    def test_queue_statuses_filtered_to_context(self):
+        statuses = [[
+            status_json("preview-images", "success", "pr-8-x", "2026-10-03T00:00:00Z"),
+            status_json("ci/test", "success", "ok", "2026-10-02T00:00:00Z"),
+            status_json("preview-queue", "success", "Preview slot held", "2026-10-01T00:00:00Z"),
+        ]]
+        gh, _ = client([page([pr_json(8, sha(8))])] + per_pr(8, statuses=statuses))
+        (pr,) = gh.open_prs()
+        self.assertEqual(pr.queue_statuses,
+                         ((dt("2026-10-01T00:00:00Z"), "success", "Preview slot held"),))
+
+    def test_closed_search_paginates(self):
+        nxt = f"{API}/search/issues?q=x&per_page=100&page=2"
+        gh, opener = client([page({"total_count": 2, "items": [{"number": 4}]}, next_url=nxt),
+                             page({"total_count": 2, "items": [{"number": 9}]})])
+        self.assertEqual(gh.closed_labelled(), [4, 9])
+        first = urllib.parse.urlsplit(opener.urls()[0])
+        self.assertEqual(first.path, "/search/issues")
+        self.assertEqual(urllib.parse.parse_qs(first.query)["q"],
+                         [f"repo:{BASE} is:pr is:closed label:preview-env"])
+        self.assertEqual(opener.urls()[1], nxt)
+
+    def test_every_list_request_has_per_page_100(self):
+        # The second PR's events `next` link lacks per_page; the client adds it.
+        events = [([label_event("preview-env", "2026-10-01T00:00:00Z")],
+                   f"{API}/repos/{BASE}/issues/2/events?page=2"),
+                  ([], None)]
+        gh, opener = client(
+            [page([pr_json(1, sha(1)), pr_json(2, sha(2), labels=("preview-env",))])]
+            + per_pr(1) + per_pr(2, events=events)
+            + [page({"items": []})])
+        gh.open_prs()
+        gh.closed_labelled()
+        self.assertEqual(opener.responses, [])
+        details = {f"{API}/repos/{BASE}/pulls/1", f"{API}/repos/{BASE}/pulls/2"}
+        lists = [u for u in opener.urls() if u not in details]
+        self.assertEqual(len(lists), 6)
+        for url in lists:
+            with self.subTest(url=url):
+                query = urllib.parse.parse_qs(urllib.parse.urlsplit(url).query)
+                self.assertEqual(query["per_page"], ["100"])
+
+    def test_next_link_to_other_host_rejected(self):
+        gh, _ = client([page([pr_json(1, sha(1))], next_url="https://evil.example/steal")])
+        with self.assertRaises(GitHubError):
+            gh.open_prs()
+
+    def test_set_status_and_label_request_shapes(self):
+        gh, opener = client([(201, {}, b"{}"), (200, {}, b"[]"), (200, {}, b"[]"),
+                             (404, {}, b"{}"), error(500)])
+        gh.set_status(sha(1), "success", "Preview slot held")
+        gh.add_label(5)
+        gh.remove_label(5)
+        gh.remove_label(6)  # 404: already gone, success
+        with self.assertRaises(GitHubError):
+            gh.remove_label(7)
+        shapes = [(r.get_method(), r.full_url, json.loads(r.data) if r.data else None)
+                  for r in opener.requests]
+        self.assertEqual(shapes, [
+            ("POST", f"{API}/repos/{BASE}/statuses/{sha(1)}",
+             {"state": "success", "description": "Preview slot held",
+              "context": "preview-queue"}),
+            ("POST", f"{API}/repos/{BASE}/issues/5/labels", {"labels": ["preview-env"]}),
+            ("DELETE", f"{API}/repos/{BASE}/issues/5/labels/preview-env", None),
+            ("DELETE", f"{API}/repos/{BASE}/issues/6/labels/preview-env", None),
+            ("DELETE", f"{API}/repos/{BASE}/issues/7/labels/preview-env", None),
+        ])
+        for req in opener.requests[:2]:
+            self.assertEqual(req.get_header("Content-type"), "application/json")
+
+    def test_write_error_raises(self):
+        for call in (lambda gh: gh.set_status(sha(1), "success", "x"),
+                     lambda gh: gh.add_label(1)):
+            gh, _ = client([error(422)])
+            with self.assertRaises(GitHubError):
+                call(gh)
+
+    def test_from_env(self):
+        gh = GitHub.from_env({"GH_TOKEN": "t", "GH_REPO": BASE})
+        self.assertEqual((gh.token, gh.repo), ("t", BASE))
+        for env in ({"GH_REPO": BASE}, {"GH_TOKEN": "t"}, {"GH_TOKEN": "", "GH_REPO": BASE}):
+            with self.subTest(env=env), self.assertRaises(GitHubError):
+                GitHub.from_env(env)
+
+
+IMAGE = "kettleofketchup/draftforge-preview/backend"
+TAG = "pr-12-0123456"
+
+
+class ManifestExists(unittest.TestCase):
+    def test_manifest_200_404_500(self):
+        for status, expected in ((200, True), (404, False), (500, RegistryError)):
+            with self.subTest(status=status):
+                opener = Canned([(200, {}, TOKEN_JSON), (status, {}, b"")])
+                if expected is RegistryError:
+                    with self.assertRaises(RegistryError):
+                        manifest_exists(IMAGE, TAG, opener=opener)
+                else:
+                    self.assertIs(manifest_exists(IMAGE, TAG, opener=opener), expected)
+                token_req, head_req = opener.requests
+                self.assertEqual(token_req.get_method(), "GET")
+                self.assertEqual(token_req.full_url,
+                                 f"https://ghcr.io/token?scope=repository:{IMAGE}:pull")
+                self.assertEqual(head_req.get_method(), "HEAD")
+                self.assertEqual(head_req.full_url,
+                                 f"https://ghcr.io/v2/{IMAGE}/manifests/{TAG}")
+                self.assertEqual(head_req.get_header("Authorization"), "Bearer anon-token")
+
+    def test_manifest_token_error_raises(self):
+        for resp in (error(500), (200, {}, b"not json"), (200, {}, b"{}")):
+            with self.subTest(resp=resp):
+                opener = Canned([resp])
+                with self.assertRaises(RegistryError):
+                    manifest_exists(IMAGE, TAG, opener=opener)
+                self.assertEqual(len(opener.requests), 1)
+
+    def test_manifest_accept_header_lists_four_types(self):
+        opener = Canned([(200, {}, TOKEN_JSON), (200, {}, b"")])
+        manifest_exists(IMAGE, TAG, opener=opener)
+        accept = opener.requests[1].get_header("Accept")
+        self.assertEqual(sorted(t.strip() for t in accept.split(",")), sorted([
+            "application/vnd.oci.image.index.v1+json",
+            "application/vnd.docker.distribution.manifest.list.v2+json",
+            "application/vnd.oci.image.manifest.v1+json",
+            "application/vnd.docker.distribution.manifest.v2+json",
+        ]))
+
+
+# --- main: fetch everything, then plan, then write ---
+
+ENV = {"CAP": "3", "PREVIEW_AUTHORS": OWNER, "PREVIEW_IDLE_DAYS": "7", "CLOSED_PR": ""}
+
+
+class FakeGitHub:
+    repo = BASE
+
+    def __init__(self, prs=(), closed=()):
+        self.prs = list(prs)
+        self.closed = list(closed)
+        self.fetched = False
+        self.writes = []
+
+    def open_prs(self):
+        self.fetched = True
+        return list(self.prs)
+
+    def closed_labelled(self):
+        return list(self.closed)
+
+    def remove_label(self, n):
+        self.writes.append(("remove", n))
+
+    def add_label(self, n):
+        self.writes.append(("add", n))
+
+    def set_status(self, head, state, desc):
+        self.writes.append(("status", head, state, desc))
+
+
+def always(_image, _tag):
+    return True
+
+
+def run_main(env, gh, manifests=always):
+    out, err = io.StringIO(), io.StringIO()
+    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+        rc = main(env, gh, manifest_exists=manifests)
+    return rc, out.getvalue(), err.getvalue()
+
+
+def as_listed(p: PR) -> PR:
+    """What GitHub.open_prs returns: manifests are checked later, by main."""
+    return replace(p, manifests_exist=False)
+
+
+class Main(unittest.TestCase):
+    def test_main_bad_cap_no_writes(self):
+        bad = [dict(ENV, CAP="x"), dict(ENV, CAP="11"), dict(ENV, CAP=""),
+               dict(ENV, PREVIEW_AUTHORS="a, b"), dict(ENV, PREVIEW_IDLE_DAYS="0"),
+               dict(ENV, CLOSED_PR="abc"), {k: v for k, v in ENV.items() if k != "CAP"}]
+        for env in bad:
+            with self.subTest(env=env):
+                gh = FakeGitHub([as_listed(mk(1, labelled=True, head_repo="fork/x"))])
+                rc, _, err = run_main(env, gh)
+                self.assertNotEqual(rc, 0)
+                self.assertEqual(gh.writes, [])
+                self.assertFalse(gh.fetched)
+                self.assertIn("preview-queue:", err)
+
+    def test_fetch_error_on_second_page_writes_nothing(self):
+        stale = pr_json(1, sha(1), labels=("preview-env",), head_repo="fork/x")
+        pulls_next = f"{API}/repos/{BASE}/pulls?state=open&per_page=100&page=2"
+        search_next = f"{API}/search/issues?q=x&per_page=100&page=2"
+        events = [([label_event("preview-env", "2026-10-01T00:00:00Z")], None)]
+        cases = {
+            "pulls": [page([stale], next_url=pulls_next), error(500)],
+            "search": [page([stale])] + per_pr(1, events=events)
+                      + [page({"items": [{"number": 9}]}, next_url=search_next), error(500)],
+        }
+        for name, responses in cases.items():
+            with self.subTest(list=name):
+                gh, opener = client(responses)
+                rc, _, err = run_main(ENV, gh)
+                self.assertNotEqual(rc, 0)
+                self.assertEqual(opener.writes(), [])
+                self.assertEqual(opener.responses, [])
+                self.assertIn("500", err)
+
+    def test_events_page2_500_writes_nothing(self):
+        stale = pr_json(1, sha(1), labels=("preview-env",), head_repo="fork/x")
+        nxt = f"{API}/repos/{BASE}/issues/1/events?per_page=100&page=2"
+        gh, opener = client([page([stale]),
+                             page([label_event("preview-env", "2026-10-01T00:00:00Z")],
+                                  next_url=nxt),
+                             error(500)])
+        rc, _, _ = run_main(ENV, gh)
+        self.assertNotEqual(rc, 0)
+        self.assertEqual(opener.writes(), [])
+        self.assertEqual(opener.urls()[-1], nxt)
+
+    def test_closed_pr_dropped_from_open_list(self):
+        holder = as_listed(mk(4, labelled=True))
+        waiter = as_listed(mk(5))
+        gh = FakeGitHub([holder, waiter])
+        rc, _, _ = run_main(dict(ENV, CAP="1", CLOSED_PR="4"), gh)
+        self.assertEqual(rc, 0)
+        self.assertIn(("add", 5), gh.writes)
+        self.assertFalse([w for w in gh.writes if 4 in w or holder.head_sha in w])
+        # Without CLOSED_PR the holder keeps the only slot.
+        gh = FakeGitHub([holder, waiter])
+        run_main(dict(ENV, CAP="1"), gh)
+        self.assertNotIn(("add", 5), gh.writes)
+
+    def test_writes_in_plan_order(self):
+        prs = [as_listed(mk(2)),
+               as_listed(mk(3, labelled=True, labels=("no-preview",))),
+               as_listed(mk(5, labelled=True, head_repo="fork/x"))]
+        gh = FakeGitHub(prs, closed=[7])
+        rc, _, _ = run_main(dict(ENV, CAP="1"), gh)
+        self.assertEqual(rc, 0)
+        labels = [w for w in gh.writes if w[0] in ("remove", "add")]
+        self.assertEqual(labels, [("remove", 7), ("remove", 3), ("remove", 5), ("add", 2)])
+        first_add = gh.writes.index(("add", 2))
+        self.assertTrue(all(w[0] == "remove" for w in gh.writes[:first_add]))
+        self.assertIn(("status", sha(2), "success", "Preview slot held"), gh.writes)
+
+    def test_manifests_checked_for_both_images_of_built_heads_only(self):
+        seen = []
+
+        def record(image, tag):
+            seen.append((image, tag))
+            return image.endswith("/backend")  # frontend missing -> not built
+
+        gh = FakeGitHub([as_listed(mk(2)), as_listed(mk(3, built=False))])
+        rc, _, _ = run_main(ENV, gh, manifests=record)
+        self.assertEqual(rc, 0)
+        tag = tag_for(2, sha(2))
+        self.assertEqual(sorted(seen), [
+            ("kettleofketchup/draftforge-preview/backend", tag),
+            ("kettleofketchup/draftforge-preview/frontend", tag),
+        ])
+        self.assertNotIn(("add", 2), gh.writes)
+
+    def test_manifest_error_status_aborts(self):
+        def failing(image, tag):
+            opener = Canned([(200, {}, TOKEN_JSON), (500, {}, b"")])
+            return preview_queue.manifest_exists(image, tag, opener=opener)
+
+        gh = FakeGitHub([as_listed(mk(2)), as_listed(mk(5, labelled=True, head_repo="fork/x"))])
+        rc, _, err = run_main(ENV, gh, manifests=failing)
+        self.assertNotEqual(rc, 0)
+        self.assertEqual(gh.writes, [])
+        self.assertIn("500", err)
 
 
 if __name__ == "__main__":
