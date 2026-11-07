@@ -512,7 +512,7 @@ class HelmChartWorkflowTest(unittest.TestCase):
 
 
 class WorkflowHygieneTest(unittest.TestCase):
-    """Hygiene rules for every workflow this project adds (Global Constraints)."""
+    """Hygiene rules for every workflow this project adds."""
 
     def each(self):
         for name in WORKFLOWS_ADDED:
