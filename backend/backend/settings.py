@@ -24,6 +24,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 import logging
 import warnings
 
+from backend.env_utils import env_list
 from config.installed_apps import MODEL_APPS
 from paths import DEV_DB_PATH, PROD_DB_PATH, TEST_DB_PATH
 
@@ -521,6 +522,7 @@ CORS_ORIGIN_WHITELIST = [
     "http://localhost:5171",
     "https://localhost:443",
     "https://localhost",
+    *env_list("DF_EXTRA_CSRF_ORIGINS"),
 ]
 
 CSRF_TRUSTED_ORIGINS = [
@@ -534,6 +536,7 @@ CSRF_TRUSTED_ORIGINS = [
     "http://dtx.kettle.sh",
     "https://kettle.sh",
     "http://kettle.sh",
+    *env_list("DF_EXTRA_CSRF_ORIGINS"),
 ]
 AUTH_USER_MODEL = "app.CustomUser"
 

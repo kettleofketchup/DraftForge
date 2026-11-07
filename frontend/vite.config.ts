@@ -42,16 +42,11 @@ export default defineConfig({
         '**/.playwright/**',
       ],
     },
-    // HMR: the page is served via nginx at https://localhost (port 443),
-    // but Vite's dev server runs on port 3000 inside the frontend
-    // container. Without an explicit clientPort the HMR client tries to
-    // open a WebSocket back to localhost:3000 which isn't exposed
-    // publicly. Tell the client to use the same protocol/host/port as
-    // the page and route through a dedicated nginx WS location.
+    // HMR goes through nginx on the stack's published HTTPS port, not Vite's 3000.
     hmr: {
       protocol: 'wss',
       host: 'localhost',
-      clientPort: 443,
+      clientPort: Number(process.env.DF_HTTPS_PORT || 443),
       path: '/__vite_hmr',
     },
     // Warm up frequently used files for faster initial loads
