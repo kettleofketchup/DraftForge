@@ -537,3 +537,20 @@ def test_flush_refuses_after_reclaim(
             root=a,
             host=fake_host,
         )
+
+
+def test_compose_argv_refuses_project_override() -> None:
+    slot = slot_env_for(3, ROOTX, "t", REG)
+    with pytest.raises(SlotError, match="not allowed"):
+        compose_argv("test", "--project-name=df", "down", slot=slot, root=ROOTX)
+
+
+def test_prepare_refuses_project_override_before_allocating(
+    fake_host: FakeHost, make_worktree: MakeWt, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DF_SLOT", "3")
+    wt = make_worktree("a")
+    with pytest.raises(SlotError, match="not allowed"):
+        prepare("test", ["-p", "df", "up", "-d"], root=wt, host=fake_host)
+    assert not (fake_host.common / "df-slots" / "slot-3").exists()
+    assert fake_host.compose_calls == []

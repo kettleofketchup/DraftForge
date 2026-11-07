@@ -967,6 +967,7 @@ GLOBAL_OPTS_WITH_VALUE: Final = frozenset(
         "--parallel",
     }
 )
+TARGET_OPTS: Final = ("--project-name", "--project-directory", "--file")
 SCALE_ARGS: Final = ("--scale", "celery-beat=0", "--scale", "discord-bot=0")
 DEV_PROJECT: Final = "df-dev"
 DEV_PORTS: Final = (80, 443)
@@ -1003,6 +1004,24 @@ def split_verb(args: Sequence[str]) -> tuple[list[str], str | None, list[str]]:
         else:
             i += 1
     return opts, None, []
+
+
+def _is_target_opt(a: str) -> bool:
+    if a.startswith("--"):
+        return a.split("=", 1)[0] in TARGET_OPTS
+    return a.startswith(("-p", "-f"))
+
+
+def check_global_opts(opts: Sequence[str]) -> None:
+    i = 0
+    while i < len(opts):
+        a = opts[i]
+        if _is_target_opt(a):
+            raise SlotError(
+                f"compose option {a} is not allowed: the helper sets the project, "
+                "project directory and compose files itself"
+            )
+        i += 2 if a in GLOBAL_OPTS_WITH_VALUE else 1
 
 
 def _proof() -> bool:
@@ -1052,6 +1071,7 @@ def compose_argv(
     if stack == "test":
         slot = _test_slot(slot, root)
     opts, verb, rest = split_verb(args)
+    check_global_opts(opts)
     scale: list[str] = []
     if (
         stack == "test"
@@ -1163,7 +1183,8 @@ def prepare(
 ) -> tuple[list[str], dict[str, str]]:
     root = (root or MODULE_ROOT).resolve()
     host = host or REAL_HOST
-    _, verb, _ = split_verb(args)
+    opts, verb, _ = split_verb(args)
+    check_global_opts(opts)
     _check_ci_runner(verb)
     if stack == "test":
         if verb == "run":
@@ -1316,6 +1337,7 @@ def _compose_opts(rest: Sequence[str]) -> tuple[Stack, int | None, list[str]]:
 def _compose_main(root: Path, host: Host, rest: Sequence[str]) -> int:
     stack, as_slot, args = _compose_opts(rest)
     opts, verb, after = split_verb(args)
+    check_global_opts(opts)
     if as_slot is not None:
         if as_slot != 0 or stack != "test" or verb != "config":
             print("--as-slot 0 is only allowed with config", file=sys.stderr)

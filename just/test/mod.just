@@ -71,7 +71,7 @@ setup:
     fi
     {{inv}} test.setup
 
-slots_py := "cd " + root + " && " + root / ".venv/bin/python -m scripts.slots --root " + root
+slots_py := "cd " + quote(root) + " && " + quote(root / ".venv/bin/python") + " -m scripts.slots --root " + quote(root)
 
 # Allocate (or re-adopt) this worktree's test slot and print it
 [group('test')]
@@ -115,4 +115,4 @@ compose *args:
 # Slot helper unit tests (no containers)
 [group('test')]
 slots-unit *args:
-    cd {{root}} && {{root}}/.venv/bin/python -m pytest -p no:django -p no:cacheprovider scripts/slot_tests -q {{args}}
+    cd {{quote(root)}} && {{quote(root / ".venv/bin/python")}} -m pytest -p no:django -p no:cacheprovider scripts/slot_tests -q {{args}}

@@ -144,3 +144,45 @@ def test_cli_slot_error_exits_1(
     root, _ = cli
     assert slots.main(["--root", str(root), "reap", "postgres"]) == 1
     assert "refusing to reap" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    "opts",
+    [
+        ["-p", "df"],
+        ["--project-name", "df"],
+        ["--project-name=df"],
+        ["-pdf"],
+        ["-p=df"],
+        ["--project-directory", "/tmp/elsewhere"],
+        ["--project-directory=/tmp/elsewhere"],
+        ["-f", "/tmp/c.yaml"],
+        ["--file=/tmp/c.yaml"],
+        ["-fc.yaml"],
+        ["--ansi", "never", "-p", "df"],
+    ],
+)
+@pytest.mark.parametrize("stack", [[], ["--stack", "dev"], ["--stack", "prod"]])
+def test_cli_compose_refuses_project_override(
+    cli: tuple[Path, Execs],
+    fake_host: FakeHost,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    opts: list[str],
+    stack: list[str],
+) -> None:
+    root, execs = cli
+    monkeypatch.setenv("DF_SLOT", "3")
+    slots.ensure_slot(root, fake_host)
+    assert slots.main(["--root", str(root), "compose", *stack, *opts, "down"]) == 1
+    assert "not allowed" in capsys.readouterr().err
+    assert execs == [] and fake_host.compose_calls == []
+
+
+def test_cli_as_slot_0_config_refuses_project_override(
+    cli: tuple[Path, Execs], capsys: pytest.CaptureFixture[str]
+) -> None:
+    root, execs = cli
+    argv = ["--root", str(root), "compose", "--as-slot", "0", "-p", "x", "config"]
+    assert slots.main(argv) == 1
+    assert "not allowed" in capsys.readouterr().err and execs == []
