@@ -1,0 +1,53 @@
+# Prod-oriented defaults. Previews layer values-preview.yaml and the home
+# ApplicationSet's valuesObject on top (preview.enabled: true).
+fullnameOverride: ""      # resource name prefix; defaults to the constant "draftforge", never the release name
+image:
+  registry: ghcr.io/kettleofketchup/draftforge
+  tag: ""                 # defaults to .Chart.AppVersion
+  pullPolicy: IfNotPresent
+  pullSecrets: []
+priorityClassName: ""
+previewCommit: ""         # set by the ApplicationSet; becomes pod annotation draftforge.kettle.sh/commit
+backend:   { replicas: 1, progressDeadlineSeconds: 900, resources: {requests: {cpu: 200m, memory: 512Mi}, limits: {cpu: "1", memory: 1Gi}} }
+frontend:  { replicas: 1, progressDeadlineSeconds: 300, resources: {requests: {cpu: 100m, memory: 192Mi}, limits: {cpu: 500m, memory: 512Mi}} }
+celeryWorker: { enabled: true, concurrency: 20, progressDeadlineSeconds: 300, resources: {requests: {cpu: 100m, memory: 256Mi}, limits: {cpu: 500m, memory: 512Mi}} }
+celeryBeat:   { enabled: true, resources: {requests: {cpu: 50m, memory: 128Mi}, limits: {cpu: 250m, memory: 256Mi}} }
+discordBot:   { enabled: true, resources: {requests: {cpu: 50m, memory: 128Mi}, limits: {cpu: 250m, memory: 256Mi}} }
+redis:
+  enabled: true
+  image: redis:8.2.1-alpine
+  progressDeadlineSeconds: 300
+  resources: {requests: {cpu: 50m, memory: 64Mi}, limits: {cpu: 200m, memory: 128Mi}}
+persistence: { enabled: true, size: 2Gi, storageClass: ceph-block, accessMode: ReadWriteOnce }
+migrations: { enabled: true, resources: {requests: {cpu: 100m, memory: 256Mi}, limits: {cpu: "1", memory: 512Mi}} }
+seed: { enabled: false, commands: ["populate_all --force"], resources: {requests: {cpu: 200m, memory: 512Mi}, limits: {cpu: "1", memory: 1Gi}} }
+env:
+  nodeEnv: production     # NODE_ENV, matches docker/.env.prod
+  debug: false            # DEBUG
+  test: false             # TEST
+  release: false          # RELEASE, as docker/.env.prod
+  ci: false               # CI
+  siteUrl: ""             # SITE_URL (default https://<ingress.host>)
+  otelEnabled: false      # differs from .env.prod (true): the chart ships no collector endpoint; a prod cutover sets both
+  logFormat: json
+  logLevel: INFO
+  extra: {}
+secrets:
+  create: false
+  djangoSecretKey: ""
+  internalServiceToken: ""
+extraEnvSecrets: []
+ingress:
+  enabled: true
+  host: dota.kettle.sh
+  entryPoint: websecure
+  tls: { secretName: "" }
+  authentik: { enabled: false, middlewareName: authentik-forwardauth, middlewareNamespace: authentik }
+  blockInternalApi: true
+  stripIdentityHeaders: false
+preview:
+  enabled: false          # true only from the home ApplicationSet
+  hostSuffix: ""          # e.g. home.kettle.sh; host must be <namespace>.<hostSuffix>
+  quota: { pods: "", requestsCpu: "", requestsMemory: "", limitsMemory: "" }
+  networkPolicy: { ingressNamespace: "" }   # namespace Traefik runs in
+podSecurityContext: { fsGroup: 1000, runAsUser: 1000, runAsGroup: 1000, runAsNonRoot: true, seccompProfile: {type: RuntimeDefault} }

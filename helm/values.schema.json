@@ -1,0 +1,155 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "draftforge chart values",
+  "type": "object",
+  "additionalProperties": false,
+  "definitions": {
+    "resources": {
+      "type": "object",
+      "properties": {
+        "requests": { "type": "object" },
+        "limits": { "type": "object" }
+      }
+    },
+    "component": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "replicas": { "type": "integer", "minimum": 0 },
+        "concurrency": { "type": "integer", "minimum": 1 },
+        "progressDeadlineSeconds": { "type": "integer", "minimum": 1 },
+        "resources": { "$ref": "#/definitions/resources" }
+      }
+    }
+  },
+  "properties": {
+    "global": { "type": "object" },
+    "fullnameOverride": { "type": "string" },
+    "image": {
+      "type": "object",
+      "properties": {
+        "registry": { "type": "string", "minLength": 1 },
+        "tag": { "type": "string" },
+        "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] },
+        "pullSecrets": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "priorityClassName": { "type": "string" },
+    "previewCommit": { "type": "string" },
+    "backend": {
+      "allOf": [
+        { "$ref": "#/definitions/component" },
+        { "properties": { "replicas": { "const": 1 } } }
+      ]
+    },
+    "frontend": { "$ref": "#/definitions/component" },
+    "celeryWorker": { "$ref": "#/definitions/component" },
+    "celeryBeat": { "$ref": "#/definitions/component" },
+    "discordBot": { "$ref": "#/definitions/component" },
+    "redis": {
+      "allOf": [
+        { "$ref": "#/definitions/component" },
+        { "properties": { "image": { "type": "string", "minLength": 1 } } }
+      ]
+    },
+    "persistence": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "size": { "type": "string" },
+        "storageClass": { "type": "string" },
+        "accessMode": { "type": "string" }
+      }
+    },
+    "migrations": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "resources": { "$ref": "#/definitions/resources" }
+      }
+    },
+    "seed": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "commands": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "resources": { "$ref": "#/definitions/resources" }
+      }
+    },
+    "env": {
+      "type": "object",
+      "properties": {
+        "nodeEnv": { "type": "string" },
+        "debug": { "type": "boolean" },
+        "test": { "type": "boolean" },
+        "release": { "type": "boolean" },
+        "ci": { "type": "boolean" },
+        "siteUrl": { "type": "string" },
+        "otelEnabled": { "type": "boolean" },
+        "logFormat": { "type": "string" },
+        "logLevel": { "type": "string" },
+        "extra": { "type": "object" }
+      }
+    },
+    "secrets": {
+      "type": "object",
+      "properties": {
+        "create": { "type": "boolean" },
+        "djangoSecretKey": { "type": "string" },
+        "internalServiceToken": { "type": "string" }
+      }
+    },
+    "extraEnvSecrets": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "ingress": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "host": { "type": "string" },
+        "entryPoint": { "type": "string" },
+        "tls": {
+          "type": "object",
+          "properties": { "secretName": { "type": "string" } }
+        },
+        "authentik": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "middlewareName": { "type": "string" },
+            "middlewareNamespace": { "type": "string" }
+          }
+        },
+        "blockInternalApi": { "type": "boolean" },
+        "stripIdentityHeaders": { "type": "boolean" }
+      },
+      "if": {
+        "properties": { "enabled": { "const": true } },
+        "required": ["enabled"]
+      },
+      "then": {
+        "required": ["host"],
+        "properties": { "host": { "type": "string", "minLength": 1 } }
+      }
+    },
+    "preview": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "hostSuffix": { "type": "string" },
+        "quota": {
+          "type": "object",
+          "properties": {
+            "pods": { "type": "string" },
+            "requestsCpu": { "type": "string" },
+            "requestsMemory": { "type": "string" },
+            "limitsMemory": { "type": "string" }
+          }
+        },
+        "networkPolicy": {
+          "type": "object",
+          "properties": { "ingressNamespace": { "type": "string" } }
+        }
+      }
+    },
+    "podSecurityContext": { "type": "object" }
+  }
+}

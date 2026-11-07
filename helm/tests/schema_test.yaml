@@ -1,0 +1,27 @@
+suite: values schema and required resources
+templates:
+  - templates/configmap-env.yaml
+tests:
+  - it: renders with the default values
+    asserts:
+      - notFailedTemplate: {}
+
+  - it: rejects backend.replicas other than 1
+    set:
+      backend.replicas: 2
+    asserts:
+      - failedTemplate: {}
+
+  - it: rejects an empty ingress.host when ingress is enabled
+    set:
+      ingress.enabled: true
+      ingress.host: ""
+    asserts:
+      - failedTemplate: {}
+
+  - it: allows an empty ingress.host when ingress is disabled
+    set:
+      ingress.enabled: false
+      ingress.host: ""
+    asserts:
+      - notFailedTemplate: {}
