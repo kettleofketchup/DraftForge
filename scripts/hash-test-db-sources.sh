@@ -12,4 +12,4 @@ find backend -type f \( \
     -path "backend/app/management/commands/populate_*.py" -o \
     -path "backend/*/migrations/*.py" -o \
     -name "models.py" \
-\) | sort | xargs cat | sha256sum | cut -d' ' -f1
+\) | LC_ALL=C sort | xargs cat | sha256sum | cut -d' ' -f1
