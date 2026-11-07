@@ -426,3 +426,27 @@ def test_defaults_resolved_at_call_time(
     assert ensure_slot().slot == 0
     assert fake_host.calls != []
     assert read_slot().slot == 0
+
+
+def test_requested_slot_never_idle_reclaims(
+    fake_host: FakeHost, make_worktree: MakeWt
+) -> None:
+    other = make_worktree("other")
+    assert ensure_slot(other, fake_host, requested=3).slot == 3
+    fake_host.clock_value[0] += 30 * DAY
+    with pytest.raises(SlotError, match="slot 3 is not free"):
+        ensure_slot(make_worktree("me"), fake_host, requested=3)
+    assert _res(fake_host, 3)["owner"] == str(other)
+
+
+def test_read_slot_returns_validated_registry(
+    fake_host: FakeHost, make_worktree: MakeWt
+) -> None:
+    wt = make_worktree("a")
+    ensure_slot(wt, fake_host)
+    path = wt / SLOT_FILE_REL
+    text = path.read_text().replace(
+        f"DF_REGISTRY={_reg(fake_host)}", "DF_REGISTRY=/bogus"
+    )
+    path.write_text(text)
+    assert read_slot(wt, fake_host).registry == _reg(fake_host)

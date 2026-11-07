@@ -12,7 +12,7 @@ import tempfile
 import time
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Final, Literal
 
@@ -623,7 +623,7 @@ def ensure_slot(
             found = alloc.adopt()
             if found is None:
                 found = alloc.fresh()
-            if found is None:
+            if found is None and requested is None:
                 found = alloc.idle_reclaim()
             if found is None:
                 raise alloc.exhausted()
@@ -660,7 +660,7 @@ def read_slot(root: Path | None = None, host: Host | None = None) -> SlotEnv:
     registry = registry_dir(root, host)
     _check_reservation(env.slot, root, env.token, _read_reservation(registry, env.slot))
     _check_containers(env.slot, root, host.containers(env.project))
-    return env
+    return replace(env, registry=registry)
 
 
 def lease_and_recheck(env: SlotEnv, host: Host | None = None) -> None:
