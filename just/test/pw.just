@@ -96,8 +96,7 @@ headless-with-logs *args:
     STAMP=$(date -u +"%Y%m%dT%H%M%SZ")
     BACKEND_LOG="$LOG_DIR/backend-$STAMP.log"
     echo "[run-logs] backend logs streaming to $BACKEND_LOG"
-    docker compose -f docker/docker-compose.test.yaml --project-directory $(pwd) \
-      logs -f --no-log-prefix --tail=0 backend > "$BACKEND_LOG" 2>&1 &
+    "{{root}}/.venv/bin/python" -m scripts.slots --root "{{root}}" compose logs -f --no-log-prefix --tail=0 backend > "$BACKEND_LOG" 2>&1 &
     LOG_PID=$!
-    trap "kill $LOG_PID 2>/dev/null || true" EXIT
+    trap 'kill "$LOG_PID" 2>/dev/null || true' EXIT
     just test::pw::headless {{ args }}

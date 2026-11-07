@@ -1,13 +1,23 @@
-import os
+import shutil
+import tempfile
+import time
 from pathlib import Path
 
+import requests
+import yaml
 from dotenv import load_dotenv
 from invoke import Collection, task
+from invoke.context import Context
+from rich.console import Console
 
-from backend.tasks import db_migrate
+import paths
+from backend.tasks import db_migrate, populate_all
 from backend.tests.tasks import ns_dbtest
 from backend.tests.tasks import run_tests as run_db_tests
-from scripts.docker import docker_build_all
+from scripts.compose import base_url, playwright_env, run_compose
+from scripts.docker import docker_build_all, docker_pull_all
+from scripts.slots import SlotEnv, ensure_slot
+from scripts.update import update_for_test
 
 ns_test = Collection("test")
 ns_runner = Collection("runner")
@@ -16,77 +26,48 @@ ns_backend = Collection("backend")
 ns_test.add_collection(ns_dbtest, "db")
 ns_test.add_collection(ns_runner, "runner")
 
-
-import paths
-
-
-def get_docker_host():
-    """Detect DOCKER_HOST based on environment.
-
-    Returns 'nginx' if running inside a Docker container, 'localhost' otherwise.
-    Detection checks for /.dockerenv file or 'docker' in /proc/1/cgroup.
-    """
-    # Check for /.dockerenv (created by Docker)
-    if Path("/.dockerenv").exists():
-        return "nginx"
-
-    # Check /proc/1/cgroup for 'docker' (Linux containers)
-    cgroup_path = Path("/proc/1/cgroup")
-    if cgroup_path.exists():
-        try:
-            content = cgroup_path.read_text()
-            if "docker" in content:
-                return "nginx"
-        except (PermissionError, OSError):
-            pass
-
-    return "localhost"
+SHARED_IMAGES_WARNING = (
+    "note: test::setup rebuilds the shared dev images every slot uses; "
+    "other running slots pick them up on their next recreate"
+)
 
 
-def flush_test_redis(c):
+def _playwright(c: Context, args: str, warn: bool = False) -> None:
+    c.run(f"npx playwright test {args}".strip(), env=playwright_env(), warn=warn)
+
+
+def flush_test_redis(c: Context) -> None:
     """Flush Redis cache in test environment to ensure fresh data."""
     print("Flushing Redis cache...")
-    result = c.run("docker exec test-redis redis-cli FLUSHALL", warn=True, hide=True)
-    if not result.ok:
-        c.run("docker exec redis redis-cli FLUSHALL", warn=True, hide=True)
+    run_compose(
+        c, "test", "exec", "-T", "redis", "redis-cli", "FLUSHALL", warn=True, hide=True
+    )
+
+
+def _start_test_stack(c: Context, slot: SlotEnv) -> None:
+    run_compose(c, "test", "down", slot=slot)
+    run_compose(c, "test", "--ansi", "always", "up", "-d", slot=slot)
 
 
 @task
-def dev_test(c):
-
-    with c.cd(paths.PROJECT_PATH):
-        load_dotenv(paths.TEST_ENV_FILE)
-
-        cmd1 = f"docker compose --project-directory {paths.PROJECT_PATH.resolve()} -f {paths.DOCKER_COMPOSE_TEST_PATH.resolve()} down "
-
-        c.run(cmd1)
-        cmd = (
-            f"docker compose "
-            f"--project-directory {paths.PROJECT_PATH.resolve()} "
-            f"-f {paths.DOCKER_COMPOSE_TEST_PATH.resolve()} "
-            f"--ansi always up -d"
-        )
-        c.run(cmd)
-
-
-@task
-def setup(c):
-    import time
-
-    from rich.console import Console
-
-    from backend.tasks import populate_all
-    from scripts.docker import docker_build_all, docker_pull_all
-    from scripts.update import update_for_test
-
+def dev_test(c: Context) -> None:
     load_dotenv(paths.TEST_ENV_FILE)
+    _start_test_stack(c, ensure_slot())
+
+
+@task
+def setup(c: Context) -> None:
+    load_dotenv(paths.TEST_ENV_FILE)
+    held = ensure_slot()
+    if held.slot >= 1:
+        print(SHARED_IMAGES_WARNING)
 
     steps = [
-        ("Stopping test stack", lambda: _setup_stop_stack(c)),
+        ("Stopping test stack", lambda: _setup_stop_stack(c, held)),
         ("Updating dependencies", lambda: update_for_test(c)),
         ("Building Docker images", lambda: docker_build_all(c)),
         ("Populating test database", lambda: populate_all(c)),
-        ("Starting test stack", lambda: dev_test(c)),
+        ("Starting test stack", lambda: _start_test_stack(c, held)),
     ]
 
     console = Console()
@@ -107,14 +88,9 @@ def setup(c):
     console.print(f"[bold green]Test setup completed in {overall:.1f}s[/bold green]\n")
 
 
-def _setup_stop_stack(c):
+def _setup_stop_stack(c: Context, slot: SlotEnv) -> None:
     """Stop the test Docker stack."""
-    with c.cd(paths.PROJECT_PATH):
-        cmd = (
-            f"docker compose --project-directory {paths.PROJECT_PATH.resolve()} "
-            f"-f {paths.DOCKER_COMPOSE_TEST_PATH.resolve()} down --remove-orphans"
-        )
-        c.run(cmd, warn=True)
+    run_compose(c, "test", "down", "--remove-orphans", warn=True, slot=slot)
 
 
 ns_test.add_task(setup, "setup")
@@ -142,11 +118,9 @@ def playwright_headless(c, args=""):
         args: Additional arguments to pass to Playwright (e.g., --shard=1/4)
     """
     flush_test_redis(c)
-    docker_host = get_docker_host()
     with c.cd(paths.FRONTEND_PATH):
         # Exclude demo project - demos are run separately via inv demo.* commands
-        c.run(
-            f"DOCKER_HOST={docker_host} npx playwright test "
+        _playwright(c, f""
             f"--project=chromium --project=herodraft --project=events-sequential "
             f"{args}".strip()
         )
@@ -156,18 +130,16 @@ def playwright_headless(c, args=""):
 def playwright_ui(c):
     """Open Playwright UI mode for interactive test development."""
     flush_test_redis(c)
-    docker_host = get_docker_host()
     with c.cd(paths.FRONTEND_PATH):
-        c.run(f"DOCKER_HOST={docker_host} npx playwright test --ui")
+        _playwright(c, f"--ui")
 
 
 @task
 def playwright_debug(c):
     """Run Playwright tests in debug mode."""
     flush_test_redis(c)
-    docker_host = get_docker_host()
     with c.cd(paths.FRONTEND_PATH):
-        c.run(f"DOCKER_HOST={docker_host} npx playwright test --debug")
+        _playwright(c, f"--debug")
 
 
 @task
@@ -187,26 +159,22 @@ def playwright_spec(c, spec="", file="", grep="", args=""):
         args: Additional arguments to pass to Playwright (e.g., --shard=1/4)
     """
     flush_test_redis(c)
-    docker_host = get_docker_host()
     with c.cd(paths.FRONTEND_PATH):
         pattern = file or spec
         # --no-deps: skip project dependencies (e.g. herodraft depends on chromium,
         # but when running a specific spec we don't want to run all chromium tests first)
         no_deps = "--no-deps" if pattern or grep else ""
         if pattern and grep:
-            c.run(
-                f'DOCKER_HOST={docker_host} npx playwright test {pattern} --grep "{grep}" {no_deps} {args}'.strip()
+            _playwright(c, f'{pattern} --grep "{grep}" {no_deps} {args}'.strip()
             )
         elif pattern:
-            c.run(
-                f"DOCKER_HOST={docker_host} npx playwright test {pattern} {no_deps} {args}".strip()
+            _playwright(c, f"{pattern} {no_deps} {args}".strip()
             )
         elif grep:
-            c.run(
-                f'DOCKER_HOST={docker_host} npx playwright test --grep "{grep}" {no_deps} {args}'.strip()
+            _playwright(c, f'--grep "{grep}" {no_deps} {args}'.strip()
             )
         else:
-            c.run(f"DOCKER_HOST={docker_host} npx playwright test {args}".strip())
+            _playwright(c, f"{args}".strip())
 
 
 @task
@@ -224,10 +192,8 @@ def playwright_navigation(c, args=""):
         args: Additional arguments to pass to Playwright (e.g., --shard=1/4)
     """
     flush_test_redis(c)
-    docker_host = get_docker_host()
     with c.cd(paths.FRONTEND_PATH):
-        c.run(
-            f"DOCKER_HOST={docker_host} npx playwright test tests/playwright/e2e/00-hydration-handling.spec.ts tests/playwright/e2e/01-navigation.spec.ts {args}".strip()
+        _playwright(c, f"tests/playwright/e2e/00-hydration-handling.spec.ts tests/playwright/e2e/01-navigation.spec.ts {args}".strip()
         )
 
 
@@ -239,10 +205,8 @@ def playwright_tournament(c, args=""):
         args: Additional arguments to pass to Playwright (e.g., --shard=1/4)
     """
     flush_test_redis(c)
-    docker_host = get_docker_host()
     with c.cd(paths.FRONTEND_PATH):
-        c.run(
-            f"DOCKER_HOST={docker_host} npx playwright test tests/playwright/e2e/03-tournaments/ tests/playwright/e2e/04-tournament/ {args}".strip()
+        _playwright(c, f"tests/playwright/e2e/03-tournaments/ tests/playwright/e2e/04-tournament/ {args}".strip()
         )
 
 
@@ -254,10 +218,8 @@ def playwright_draft(c, args=""):
         args: Additional arguments to pass to Playwright (e.g., --shard=1/4)
     """
     flush_test_redis(c)
-    docker_host = get_docker_host()
     with c.cd(paths.FRONTEND_PATH):
-        c.run(
-            f"DOCKER_HOST={docker_host} npx playwright test tests/playwright/e2e/07-draft/ tests/playwright/e2e/08-shuffle-draft/ {args}".strip()
+        _playwright(c, f"tests/playwright/e2e/07-draft/ tests/playwright/e2e/08-shuffle-draft/ {args}".strip()
         )
 
 
@@ -269,10 +231,8 @@ def playwright_bracket(c, args=""):
         args: Additional arguments to pass to Playwright (e.g., --shard=1/4)
     """
     flush_test_redis(c)
-    docker_host = get_docker_host()
     with c.cd(paths.FRONTEND_PATH):
-        c.run(
-            f"DOCKER_HOST={docker_host} npx playwright test tests/playwright/e2e/09-bracket/ {args}".strip()
+        _playwright(c, f"tests/playwright/e2e/09-bracket/ {args}".strip()
         )
 
 
@@ -284,10 +244,8 @@ def playwright_league(c, args=""):
         args: Additional arguments to pass to Playwright (e.g., --shard=1/4)
     """
     flush_test_redis(c)
-    docker_host = get_docker_host()
     with c.cd(paths.FRONTEND_PATH):
-        c.run(
-            f"DOCKER_HOST={docker_host} npx playwright test tests/playwright/e2e/10-leagues/ {args}".strip()
+        _playwright(c, f"tests/playwright/e2e/10-leagues/ {args}".strip()
         )
 
 
@@ -299,10 +257,8 @@ def playwright_herodraft(c, args=""):
         args: Additional arguments to pass to Playwright (e.g., --shard=1/4)
     """
     flush_test_redis(c)
-    docker_host = get_docker_host()
     with c.cd(paths.FRONTEND_PATH):
-        c.run(
-            f"DOCKER_HOST={docker_host} npx playwright test tests/playwright/e2e/herodraft/ {args}".strip()
+        _playwright(c, f"tests/playwright/e2e/herodraft/ {args}".strip()
         )
 
 
@@ -314,9 +270,8 @@ def playwright_all(c, args=""):
         args: Additional arguments to pass to Playwright (e.g., --shard=1/4)
     """
     flush_test_redis(c)
-    docker_host = get_docker_host()
     with c.cd(paths.FRONTEND_PATH):
-        c.run(f"DOCKER_HOST={docker_host} npx playwright test {args}".strip())
+        _playwright(c, f"{args}".strip())
 
 
 @task
@@ -330,10 +285,8 @@ def playwright_cicd(c, args=""):
         args: Additional arguments to pass to Playwright
     """
     flush_test_redis(c)
-    docker_host = get_docker_host()
     with c.cd(paths.FRONTEND_PATH):
-        c.run(
-            f'DOCKER_HOST={docker_host} npx playwright test --grep "@cicd" '
+        _playwright(c, f'--grep "@cicd" '
             f"--project=chromium --project=mobile-pixel5 --project=mobile-iphone13 "
             f"--project=mobile-iphone-se --project=herodraft "
             f"--project=events-sequential --no-deps {args}".strip()
@@ -344,10 +297,8 @@ def playwright_cicd(c, args=""):
 def playwright_cicd_chromium(c, args=""):
     """Run @cicd tagged tests for the chromium project only."""
     flush_test_redis(c)
-    docker_host = get_docker_host()
     with c.cd(paths.FRONTEND_PATH):
-        c.run(
-            f'DOCKER_HOST={docker_host} npx playwright test --grep "@cicd" '
+        _playwright(c, f'--grep "@cicd" '
             f"--project=chromium --no-deps {args}".strip()
         )
 
@@ -356,10 +307,8 @@ def playwright_cicd_chromium(c, args=""):
 def playwright_cicd_mobile(c, args=""):
     """Run @cicd tagged tests for the mobile projects (Pixel 5, iPhone 13, iPhone SE)."""
     flush_test_redis(c)
-    docker_host = get_docker_host()
     with c.cd(paths.FRONTEND_PATH):
-        c.run(
-            f'DOCKER_HOST={docker_host} npx playwright test --grep "@cicd" '
+        _playwright(c, f'--grep "@cicd" '
             f"--project=mobile-pixel5 --project=mobile-iphone13 "
             f"--project=mobile-iphone-se --no-deps {args}".strip()
         )
@@ -369,10 +318,8 @@ def playwright_cicd_mobile(c, args=""):
 def playwright_cicd_herodraft(c, args=""):
     """Run @cicd tagged tests for the herodraft project only (sequential)."""
     flush_test_redis(c)
-    docker_host = get_docker_host()
     with c.cd(paths.FRONTEND_PATH):
-        c.run(
-            f'DOCKER_HOST={docker_host} npx playwright test --grep "@cicd" '
+        _playwright(c, f'--grep "@cicd" '
             f"--project=herodraft --no-deps {args}".strip()
         )
 
@@ -386,10 +333,8 @@ def playwright_cicd_events(c, args=""):
     frontend/playwright.config.ts events-sequential project).
     """
     flush_test_redis(c)
-    docker_host = get_docker_host()
     with c.cd(paths.FRONTEND_PATH):
-        c.run(
-            f'DOCKER_HOST={docker_host} npx playwright test --grep "@cicd" '
+        _playwright(c, f'--grep "@cicd" '
             f"--project=events-sequential --no-deps {args}".strip()
         )
 
@@ -529,15 +474,13 @@ def _reset_demo_data(c, demo_key):
     Returns:
         dict: Response data if successful, None otherwise
     """
-    import requests
 
     reset_key = DEMO_RESET_KEYS.get(demo_key)
     if not reset_key:
         print(f"  Warning: No reset key for demo '{demo_key}'")
         return None
 
-    # Use localhost since we're calling from host to Docker container
-    url = f"https://localhost/api/tests/demo/{reset_key}/reset/"
+    url = f"{base_url()}/api/tests/demo/{reset_key}/reset/"
 
     print(f"  Resetting demo data: {reset_key}...")
     try:
@@ -564,10 +507,9 @@ def _generate_bracket(c, tournament_pk):
     Returns:
         bool: True if successful
     """
-    import requests
 
     # Use test endpoint (no auth required)
-    url = f"https://localhost/api/tests/demo/bracket/{tournament_pk}/generate/"
+    url = f"{base_url()}/api/tests/demo/bracket/{tournament_pk}/generate/"
 
     print(f"  Generating bracket for tournament {tournament_pk}...")
     try:
@@ -595,23 +537,17 @@ def _run_demo(c, spec="", workers=1):
     """
     flush_test_redis(c)
 
-    docker_host = get_docker_host()
     grep_arg = f'--grep "{spec}"' if spec else ""
-    playwright_cmd = (
-        f"DOCKER_HOST={docker_host} npx playwright test --config=playwright.demo.config.ts "
-        f"--workers={workers} {grep_arg}"
-    ).strip()
+    pw_args = f"--config=playwright.demo.config.ts --workers={workers} {grep_arg}"
 
-    print(f"  Running: {playwright_cmd}")
+    print(f"  Running: npx playwright test {pw_args}")
 
     with c.cd(paths.FRONTEND_PATH):
-        c.run(playwright_cmd, warn=True)
+        _playwright(c, pw_args, warn=True)
 
 
 def _copy_demo_videos(c):
     """Copy demo videos from frontend container to docs/assets/videos/."""
-    import shutil
-    from pathlib import Path
 
     # Copy from container to host
     demo_results = paths.FRONTEND_PATH / "demo-results"
@@ -643,8 +579,6 @@ def _copy_demo_videos(c):
 
 def _copy_demo_snapshots(c):
     """Copy demo snapshots from frontend container to docs/assets/site_snapshots/."""
-    import shutil
-    from pathlib import Path
 
     # Copy from container to host
     demo_results = paths.FRONTEND_PATH / "demo-results"
@@ -796,7 +730,6 @@ def demo_all(c):
 @task
 def demo_clean(c):
     """Clean demo output directories."""
-    import shutil
 
     demo_results = paths.FRONTEND_PATH / "demo-results"
     if demo_results.exists():
@@ -845,7 +778,6 @@ def demo_gifs(c, duration=10, fps=12, width=400, start_from_middle=True):
 
     Requires: FFmpeg (install via: sudo apt install ffmpeg)
     """
-    import shutil
 
     # Check if ffmpeg is available
     if not shutil.which("ffmpeg"):
@@ -935,7 +867,6 @@ def _load_trim_metadata():
 
     Returns dict mapping video filename to trim_start_seconds.
     """
-    import yaml
 
     trim_times = {}
     demo_results = paths.FRONTEND_PATH / "demo-results" / "videos"
@@ -983,7 +914,6 @@ def demo_trim(c, trim_start=None, auto=True):
 
     Requires: FFmpeg (install via: sudo apt install ffmpeg)
     """
-    import shutil
 
     # Check if ffmpeg is available
     if not shutil.which("ffmpeg"):
@@ -1129,7 +1059,6 @@ def demo_git_cleanup(c):
         inv demo.git-cleanup         # Dry run (report only)
         inv demo.git-cleanup --run   # Actually rewrite history
     """
-    import shutil
 
     # Check for git-filter-repo
     if not shutil.which("git-filter-repo"):
@@ -1184,7 +1113,6 @@ def demo_git_cleanup(c):
         print("Aborted.")
         return
 
-    import tempfile
 
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir = Path(tmpdir)

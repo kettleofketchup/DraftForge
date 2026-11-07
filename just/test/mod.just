@@ -103,7 +103,7 @@ slot-reap project:
 background state:
     {{slots_py}} background {{state}}
 
-# Run docker compose against this worktree's slot (--stack S, --as-slot 0 for config)
+# Run compose against this worktree's slot (--stack S, --as-slot 0 for config)
 [group('test')]
 [positional-arguments]
 compose *args:

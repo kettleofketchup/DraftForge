@@ -4,8 +4,7 @@ These tests validate that Django serializer output matches the Pydantic
 schemas used by celery workers. If a model/serializer field changes but
 the Pydantic schema isn't updated, these tests fail immediately.
 
-Run: docker compose -f docker/docker-compose.test.yaml run --rm --entrypoint "" backend \
-       python manage.py test app.tests.test_schema_drift -v 2
+Run: just test::run 'python manage.py test app.tests.test_schema_drift -v 2'
 """
 
 from datetime import timedelta
