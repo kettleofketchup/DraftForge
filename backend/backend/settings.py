@@ -24,6 +24,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 import logging
 import warnings
 
+from backend.env_utils import env_bool, env_list
 from config.installed_apps import MODEL_APPS
 from paths import DEV_DB_PATH, PROD_DB_PATH, TEST_DB_PATH
 
@@ -76,16 +77,12 @@ BASE_DIR_PATH = Path(BASE_DIR)
 # See https://docs.djangoproject.com/en/1.10/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = "v*kswpdyi3+*-=q4a)7&_!xwb%@udm1vi56r690!!j6e*p3^mn"
+SECRET_KEY = (
+    os.environ.get("DJANGO_SECRET_KEY")
+    or "v*kswpdyi3+*-=q4a)7&_!xwb%@udm1vi56r690!!j6e*p3^mn"
+)
 
 # SECURITY WARNING: don't run with debug turned on in production!
-
-
-def env_bool(key: str, default: bool = False) -> bool:
-    value = os.environ.get(key)
-    if value is None:
-        return default
-    return value.strip().lower() in ("1", "true", "yes", "on")
 
 
 NODE_ENV = "dev"
@@ -292,6 +289,8 @@ DATABASES = {
         },
     }
 }
+if os.environ.get("SQLITE_PATH"):
+    DATABASES["default"]["NAME"] = Path(os.environ["SQLITE_PATH"])
 
 
 # Docker environment detection
@@ -308,7 +307,7 @@ def is_docker() -> bool:
 
 
 IN_DOCKER = is_docker()
-REDIS_HOST = "redis" if IN_DOCKER else "localhost"
+REDIS_HOST = os.environ.get("REDIS_HOST") or ("redis" if IN_DOCKER else "localhost")
 
 # Cacheops/Redis cache configuration
 if not env_bool("DISABLE_CACHE"):
@@ -512,6 +511,9 @@ ALLOWED_HOSTS = [
 if TEST or DEBUG:
     ALLOWED_HOSTS += [".ngrok-free.dev", ".ngrok.io"]
 
+# Extra hosts for deployments such as PR previews; local_settings still wins.
+ALLOWED_HOSTS += env_list("EXTRA_ALLOWED_HOSTS")
+
 
 with contextlib.suppress(ImportError):
     from backend.local_settings import *  # noqa: F403
@@ -535,6 +537,10 @@ CSRF_TRUSTED_ORIGINS = [
     "https://kettle.sh",
     "http://kettle.sh",
 ]
+CSRF_TRUSTED_ORIGINS += env_list("EXTRA_CSRF_TRUSTED_ORIGINS")
+# Behind a TLS-terminating proxy (Traefik) that sets X-Forwarded-Proto.
+if env_bool("TRUST_X_FORWARDED_PROTO"):
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 AUTH_USER_MODEL = "app.CustomUser"
 
 # Celery Configuration
