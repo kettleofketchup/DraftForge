@@ -21,14 +21,18 @@ version commit.
 2. Pick a section from `changelog.d/sections.json`: `upgrading` (prose: migrations, env
    or config changes operators must apply), `security`, `added`, `changed`,
    `deprecated`, `removed`, `fixed`, `documentation`.
-3. Slug = branch name, lowercased, `/` turned into `-`:
-   `slug=$(git branch --show-current | tr '[:upper:]/' '[:lower:]-')`.
-   It must match `^[a-z0-9][a-z0-9._-]*$`.
+3. Slug = branch name by convention (not enforced), lowercased, with `/` and any other
+   character outside `a-z 0-9 . _ -` turned into `-`:
+   `slug=$(git branch --show-current | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9._-]/-/g; s/^[._-]*//')`.
+   It must match `^[a-z0-9][a-z0-9._-]*$`. If a release already consumed that path
+   (a reused branch name such as `fix/typo`), add a suffix: `fix-typo-2.md`.
 4. Write `changelog.d/<section>/<slug>.md`:
    - bullet sections: `- ` bullets, continuation lines indented 2 spaces;
    - `upgrading`: paragraphs and fenced code are fine;
    - never `#` headings, HTML comments or link-reference definitions; inline links are fine.
-5. Run `python3 scripts/changelog.py check` (exit 0, no output), commit, push.
+5. Run `python3 scripts/changelog.py check` (exit 0, no output). It also reads files you
+   have not `git add`-ed yet (not ignored ones), so run it before or after staging.
+   Then commit and push.
 
 Never edit `CHANGELOG.md` in a PR. A note for a PR that already merged without one is
 `changelog.d/<section>/pr-<N>.md`, committed on `main` (never `main.md`).
@@ -39,13 +43,17 @@ On a pull request to `main`:
 
 | Finding | Result | Fix |
 |---------|--------|-----|
-| malformed fragment (`path:line: msg`) | fails | fix the file as the message says |
-| `CHANGELOG.md` edited, no `changelog:edit` label | fails | move the bullets to a fragment and revert the hunk, or add the label (below) |
-| a fragment a release already consumed (`was released in X.Y.Z`) | fails | delete the file; a genuinely new note needs a new slug |
+| malformed or misnamed fragment (`path:line: msg`) | fails | fix the file as the message says; a bad name comes with a suggested one |
+| `CHANGELOG.md:N: [Unreleased] must hold only the pointer comment` | fails, label or not | move those lines into a fragment and revert the hunk |
+| `CHANGELOG.md` edited elsewhere, no `changelog:edit` label | fails | move the bullets to a fragment and revert the hunk, or add the label (below) |
+| `this path was already released in X.Y.Z` | fails | same note restored: delete it; new note on a reused branch name: rename it, e.g. `<slug>-2.md` |
+| `this bullet is identical to one released in X.Y.Z` (or `this note ...` for `upgrading`) | fails | remove or reword that bullet; the rest of the file stays |
 | no fragment added | warning only | add one if the change is user- or operator-visible |
 
-`just ci::changelog-check` run locally does only the fragment checks; locally use
-`python3 scripts/changelog.py check`.
+The job runs every check before it exits, so one run lists every problem. Every row
+except the label check and the warning comes from `python3 scripts/changelog.py check`,
+so it fails locally before CI; `just ci::changelog-check` run locally does the same plus
+the checker's tests.
 
 ## The `changelog:edit` label
 

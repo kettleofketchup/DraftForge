@@ -33,6 +33,12 @@ RELEASE_HEADING = re.compile(r"^## \[([^\]]+)\]")
 SUB_HEADING = re.compile(r"^### (.+?)\s*$")
 LINK_DEFINITION = re.compile(r"^\[[^\]]+\]:\s")
 FENCE = re.compile(r"^\s*(```|~~~)")
+# Also in just/ci.just (push exemption); keep the two in sync.
+RELEASE_SUBJECT_RE = re.compile(r"^Updated version to [0-9]+\.[0-9]+\.[0-9]+$")
+# A prose fragment shorter than this is not compared with released text: one short
+# sentence ("Run the migrations.") legitimately recurs across releases. A consumed
+# fragment restored at its old path is still caught by released_paths().
+PROSE_MATCH_MIN = 60
 
 Section = dict[str, Any]
 Released = list[tuple[str, str, list[str]]]
@@ -48,18 +54,68 @@ def sections(root: Path) -> list[Section]:
 
 
 def fragment_paths(root: Path) -> list[str]:
-    """Tracked fragment paths. git ls-files, not a walk: ignored debris must not count."""
+    """Tracked fragment paths: what a release consumes (its preflight refuses untracked)."""
     known = {s["dir"] for s in sections(root)}
     return sorted(p for p in _tracked(root) if _is_fragment(p, known))
 
 
-def _tracked(root: Path) -> list[str]:
+def _ls(root: Path, *flags: str) -> list[str]:
+    """git ls-files, not a walk: ignored debris must not count."""
     out = subprocess.run(
-        ["git", "-C", str(root), "ls-files", "-z", "--", FRAGMENT_DIR],
+        ["git", "-C", str(root), "ls-files", "-z", *flags, "--", FRAGMENT_DIR],
         check=True,
         capture_output=True,
     ).stdout
     return [p for p in out.decode().split("\0") if p]
+
+
+def _tracked(root: Path) -> list[str]:
+    return _ls(root)
+
+
+def _untracked(root: Path) -> list[str]:
+    """Not yet git-added and not ignored: checked so a bad fragment fails before commit."""
+    return _ls(root, "--others", "--exclude-standard")
+
+
+def suggest_slug(name: str) -> str:
+    """Lowercase; each run outside [a-z0-9._-] becomes '-'; leading . _ - dropped."""
+    slug = re.sub(r"[^a-z0-9._-]+", "-", name.lower()).lstrip("._-")
+    return slug or "note"
+
+
+def _name_problem(path: str, known: list[str]) -> str | None:
+    """Why path is not changelog.d/<section>/<slug>.md, with a suggested name."""
+    parts = path.split("/")
+    listed = ", ".join(known)
+    if len(parts) != 3:
+        where = "directly in" if len(parts) == 2 else "nested too deep in"
+        stem = parts[-1].rsplit(".", 1)[0]
+        return (
+            f"{where} {FRAGMENT_DIR}/; a fragment is {FRAGMENT_DIR}/<section>/"
+            f"{suggest_slug(stem)}.md (sections: {listed})"
+        )
+    section, name = parts[1], parts[2]
+    if section not in known:
+        return f"unknown section '{section}'; use one of: {listed}"
+    if not name.endswith(".md"):
+        stem = name.rsplit(".", 1)[0]
+        return (
+            f"extension must be .md; rename to "
+            f"{FRAGMENT_DIR}/{section}/{suggest_slug(stem)}.md"
+        )
+    stem = name[:-3]
+    if SLUG.match(stem):
+        return None
+    bad = sorted({c for c in stem if not re.fullmatch(r"[a-z0-9._-]", c)})
+    if bad:
+        why = "invalid character(s) " + " ".join(repr(c) for c in bad)
+    else:
+        why = "must start with a lowercase letter or digit"
+    return (
+        f"slug '{stem}': {why} (allowed: a-z 0-9 . _ -); rename to "
+        f"{FRAGMENT_DIR}/{section}/{suggest_slug(stem)}.md"
+    )
 
 
 def _is_fragment(path: str, known: set[str]) -> bool:
@@ -86,19 +142,37 @@ def _collapse(text: str) -> str:
     return " ".join(text.split())
 
 
-def _bullets(lines: list[str]) -> list[str]:
-    """Top-level bullets, continuation lines joined, whitespace collapsed."""
-    found: list[str] = []
-    is_open = False
-    for line in _drop_fences(lines):
+def _bullets(lines: list[str]) -> list[tuple[int, str]]:
+    """(line number, text) of top-level bullets; continuations joined, whitespace collapsed."""
+    found: list[tuple[int, str]] = []
+    is_open = inside = False
+    for n, line in enumerate(lines, 1):
+        if FENCE.match(line):
+            inside = not inside
+            continue
+        if inside:
+            continue
         if line.startswith("- "):
-            found.append(line[2:])
+            found.append((n, line[2:]))
             is_open = True
         elif is_open and line.startswith(" ") and line.strip():
-            found[-1] += " " + line
+            found[-1] = (found[-1][0], found[-1][1] + " " + line)
         elif line.strip():
             is_open = False  # an unindented non-bullet line ends the bullet
-    return [_collapse(b) for b in found if b.strip()]
+    return [(n, _collapse(b)) for n, b in found if b.strip()]
+
+
+def _paragraphs(lines: list[str]) -> list[str]:
+    """Blank-line separated blocks, whitespace collapsed so rewrapping does not matter."""
+    blocks: list[str] = []
+    current: list[str] = []
+    for line in [*lines, ""]:
+        if line.strip():
+            current.append(line)
+        elif current:
+            blocks.append(_collapse(" ".join(current)))
+            current = []
+    return blocks
 
 
 def released(text: str) -> Released:
@@ -120,6 +194,60 @@ def released(text: str) -> Released:
         if version and heading:
             blocks[-1][2].append(line)
     return blocks
+
+
+def released_paths(root: Path) -> dict[str, tuple[str, str]]:
+    """Fragment path -> (version, short sha) of the latest release commit that removed it.
+
+    Needs full history (CI checks out with fetch-depth 0); a shallow clone finds less.
+    """
+    result = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(root),
+            "log",
+            "--diff-filter=D",
+            "-E",
+            f"--grep={RELEASE_SUBJECT_RE.pattern}",
+            "--name-only",
+            "--format=%x00%h %s",
+            "--",
+            FRAGMENT_DIR,
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:  # e.g. a repo with no commits yet
+        return {}
+    found: dict[str, tuple[str, str]] = {}
+    for chunk in result.stdout.split("\0")[1:]:
+        lines = [line.strip() for line in chunk.strip().splitlines() if line.strip()]
+        if not lines:
+            continue
+        sha, _, subject = lines[0].partition(" ")
+        for path in lines[1:]:
+            found.setdefault(path, (subject.rsplit(" ", 1)[-1], sha))
+    return found
+
+
+def _unreleased_problems(text: str) -> list[str]:
+    """[Unreleased] holds only the pointer; the release refuses anything else."""
+    match = re.search(r"^## \[Unreleased\][^\n]*\n", text, re.M)
+    if not match:
+        return ["CHANGELOG.md:1: no '## [Unreleased]' heading; restore it from main"]
+    first = text[: match.end()].count("\n") + 1
+    for n, line in enumerate(text[match.end() :].splitlines(), first):
+        if line.startswith("## ["):
+            break
+        if line.strip() and line.strip() != POINTER:
+            return [
+                f"CHANGELOG.md:{n}: [Unreleased] must hold only the pointer comment; "
+                f"move these lines into {FRAGMENT_DIR}/<section>/<branch-slug>.md "
+                "and revert the CHANGELOG.md hunk"
+            ]
+    return []
 
 
 def _check_fragment(
@@ -174,56 +302,77 @@ def _check_fragment(
 def _check_resurrection(
     path: str, lines: list[str], section: Section, history: Released
 ) -> list[str]:
-    hint = (
-        "a release already consumed this fragment; delete the file "
-        "(a genuinely new note needs a new slug)"
-    )
+    """Content a release already shipped, e.g. a consumed fragment restored under a new name."""
     if section["prose"]:
-        mine = _collapse("\n".join(_drop_fences(lines)))
-        if not mine:
+        mine = _paragraphs(lines)
+        if not _drop_fences(lines) or len(" ".join(mine)) < PROSE_MATCH_MIN:
             return []
+        size = len(mine)
         for version, heading, body in history:
-            if heading == section["heading"] and mine in _collapse(
-                "\n".join(_drop_fences(body))
-            ):
-                return [f"{path}:1: released in {version}: {hint}"]
+            if heading != section["heading"]:
+                continue
+            theirs = _paragraphs(body)
+            if any(theirs[i : i + size] == mine for i in range(len(theirs) - size + 1)):
+                return [
+                    f"{path}:1: this note is identical to one released in {version}; "
+                    "if a release already consumed it, delete the file, otherwise reword it"
+                ]
         return []
     shipped: dict[str, str] = {}
     for version, _heading, body in history:
-        for bullet in _bullets(body):
+        for _n, bullet in _bullets(body):
             shipped.setdefault(bullet, version)
-    for bullet in _bullets(lines):
+    problems = []
+    for n, bullet in _bullets(lines):
         if bullet in shipped:
-            return [f"{path}:1: released in {shipped[bullet]}: {hint}"]
-    return []
+            quote = bullet if len(bullet) <= 70 else bullet[:67] + "..."
+            problems.append(
+                f"{path}:{n}: this bullet is identical to one released in "
+                f'{shipped[bullet]} ("{quote}"); remove or reword it'
+            )
+    return problems
 
 
 def check(root: Path) -> list[str]:
+    """Every rule, over tracked and untracked (not ignored) files under changelog.d/."""
     root = Path(root)
     try:
         config = sections(root)
     except (OSError, ValueError) as exc:
         return [f"{FRAGMENT_DIR}/sections.json:1: unreadable ({exc})"]
     by_dir = {s["dir"]: s for s in config}
+    problems: list[str] = []
     # No CHANGELOG.md (a branch that predates it): nothing released, nothing to resurrect.
     changelog = root / "CHANGELOG.md"
-    history = (
-        released(changelog.read_text(encoding="utf-8")) if changelog.exists() else []
-    )
-    problems: list[str] = []
-    for path in sorted(_tracked(root)):
+    history: Released = []
+    if changelog.exists():
+        text = changelog.read_text(encoding="utf-8")
+        history = released(text)
+        problems += _unreleased_problems(text)
+    gone = released_paths(root)
+    for path in sorted(set(_tracked(root)) | set(_untracked(root))):
         if path in (f"{FRAGMENT_DIR}/sections.json", f"{FRAGMENT_DIR}/README.md"):
             continue
-        if not _is_fragment(path, set(by_dir)):
-            problems.append(
-                f"{path}:1: not a fragment; use {FRAGMENT_DIR}/<section>/<slug>.md, sections: "
-                + ", ".join(by_dir)
-                + ", slug ^[a-z0-9][a-z0-9._-]*$"
-            )
-            continue
+        misnamed = _name_problem(path, list(by_dir))
+        if misnamed:
+            problems.append(f"{path}:1: {misnamed}")
+            parts = path.split("/")
+            # A misnamed .md in a known section still gets its content checked, so
+            # one round of fixes covers both.
+            if not (len(parts) == 3 and parts[1] in by_dir and path.endswith(".md")):
+                continue
         full = root / path
         if not full.exists():
             problems.append(f"{path}:1: tracked but missing from the working tree")
+            continue
+        if path in gone:
+            version, sha = gone[path]
+            slug = path.rsplit("/", 1)[1].removesuffix(".md")
+            problems.append(
+                f"{path}:1: this path was already released in {version} ({sha}). "
+                "If it is the same note, delete it; if it is a new note, rename the "
+                f"file, e.g. {slug}-2.md"
+            )
             continue
         section = by_dir[path.split("/")[1]]
         problems += _check_fragment(path, full.read_bytes(), section, history)
@@ -326,8 +475,6 @@ RELEASE_PATHS: tuple[str, ...] = (
     "CHANGELOG.md",
     FRAGMENT_DIR,
 )
-# Also in just/ci.just (push exemption, resurrection --grep); keep the two in sync.
-RELEASE_SUBJECT_RE = re.compile(r"^Updated version to [0-9]+\.[0-9]+\.[0-9]+$")
 
 
 def release_subject(version: str) -> str:

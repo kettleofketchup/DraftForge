@@ -11,7 +11,7 @@ branch=$(git branch --show-current)
 # Changelog fragment (.claude/skills/changelog/SKILL.md). If the diff is user- or
 # operator-visible and has no fragment yet, write and commit it first.
 # Branches that predate the checker skip this until they merge main.
-slug=$(printf '%s' "$branch" | tr '[:upper:]/' '[:lower:]-')
+slug=$(printf '%s' "$branch" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9._-]/-/g; s/^[._-]*//')
 echo "fragment path: changelog.d/<section>/$slug.md"
 if [ -f scripts/changelog.py ]; then
   python3 scripts/changelog.py check || { echo "fix changelog.d/ fragments first"; exit 1; }

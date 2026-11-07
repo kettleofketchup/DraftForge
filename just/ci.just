@@ -3,10 +3,11 @@
 
 root := source_directory() / ".."
 
-# Every event: fragment rules and the checker's tests. push to main: HEAD must not
-# hand-edit CHANGELOG.md. pull_request: CHANGELOG.md untouched unless labelled
-# changelog:edit, no fragment a release already consumed, and a warning when the PR
-# adds none.
+# Every event: fragment rules (including [Unreleased] holding only the pointer and no
+# fragment a release already consumed) and the checker's tests. push to main: HEAD
+# must not hand-edit CHANGELOG.md. pull_request: CHANGELOG.md untouched unless
+# labelled changelog:edit, and a warning when the PR adds no fragment. Every check
+# reports before the recipe exits, so one run shows all problems.
 #
 # Changelog fragments gate (the `changelog` CI job); locally, fragment checks only
 [group('ci')]
@@ -14,8 +15,10 @@ changelog-check:
     #!/usr/bin/env bash
     set -euo pipefail
     cd "{{root}}"
-    python3 scripts/changelog.py check
-    python3 scripts/test_changelog.py
+    fail=0
+    python3 scripts/changelog.py check || fail=1
+    # Fixtures and temp repos only; never the checkout's own CHANGELOG.md.
+    python3 scripts/test_changelog.py || fail=1
     # Same pattern as RELEASE_SUBJECT_RE in scripts/changelog.py.
     release_re='^Updated version to [0-9]+\.[0-9]+\.[0-9]+$'
     squash_re='\(#[0-9]+\)$'
@@ -34,21 +37,19 @@ changelog-check:
                 fi
             elif ! git diff --quiet HEAD~1 HEAD -- CHANGELOG.md; then
                 echo "::error file=CHANGELOG.md::$(git rev-parse --short HEAD) edits CHANGELOG.md outside a release commit. A backfill note for an already-merged PR #N goes in changelog.d/<section>/pr-<N>.md."
-                exit 1
+                fail=1
             fi
         fi
-        echo "event 'push': fragment checks only"
-        exit 0
+        exit "$fail"
     fi
 
     if [ "$event" != "pull_request" ]; then
         echo "event '${event:-local}': fragment checks only"
-        exit 0
+        exit "$fail"
     fi
 
     base="$(scripts/ci-merge-base.sh)" || exit 1
     echo "Comparing $(git rev-parse --short HEAD) against merge base $(git rev-parse --short "$base")"
-    fail=0
 
     if ! git cat-file -e "$base:CHANGELOG.md" 2>/dev/null; then
         echo "::notice::CHANGELOG.md is introduced by this PR; label check skipped."
@@ -68,15 +69,7 @@ changelog-check:
     fi
 
     mapfile -d '' -t added < <(git diff -z --name-only --diff-filter=A "$base" HEAD -- 'changelog.d/*/*.md')
-    for f in ${added[@]+"${added[@]}"}; do
-        hit="$(git log -n 1 --diff-filter=D -E --grep="$release_re" --format='%H %s' "$base" -- "$f")"
-        if [ -n "$hit" ]; then
-            ver="${hit#* Updated version to }"
-            echo "::error file=${f}::${f} was released in ${ver} (${hit:0:9}) and must not come back; delete it. A genuinely new note needs a new slug."
-            fail=1
-        fi
-    done
-
+    # A fragment at a path a release already removed is reported by `changelog.py check`.
     if [ "${#added[@]}" -eq 0 ]; then
         echo "::warning::This PR adds no changelog.d/ fragment. Fine for chore/CI/test work; anything a user or operator would notice needs one."
     fi

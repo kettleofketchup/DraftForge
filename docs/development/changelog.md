@@ -13,9 +13,13 @@ fragments into a `## [X.Y.Z] - DATE` section and removes them in the version com
 ## Adding a fragment
 
 1. Pick a section (table below).
-2. Name the file after your branch: lowercase it and turn `/` into `-`.
-   `feat/event-reminders` becomes `changelog.d/added/feat-event-reminders.md`.
-3. Write it, commit it with your change, and check it:
+2. Name the file after your branch: lowercase it and turn `/` and any other character
+   outside `a-z 0-9 . _ -` into `-`. `feat/event-reminders` becomes
+   `changelog.d/added/feat-event-reminders.md`. The name is a convention, not a rule: if
+   a release already used that path (a reused branch name such as `fix/typo`), add a
+   suffix, e.g. `fix-typo-2.md`.
+3. Write it and check it (it reads new files before `git add` too), then commit it with
+   your change:
 
     ```bash
     python3 scripts/changelog.py check
@@ -68,9 +72,11 @@ The `changelog` CI job runs on every PR to `main` and every push to `main`.
 
 | Situation | Result |
 |-----------|--------|
-| A fragment is malformed | Fails |
+| A fragment is malformed or misnamed | Fails |
+| `CHANGELOG.md`'s `[Unreleased]` holds anything but the pointer comment | Fails, even with the label |
 | A PR edits `CHANGELOG.md` without the `changelog:edit` label | Fails |
-| A PR brings back a fragment a release already consumed | Fails |
+| A fragment sits at a path a release already consumed | Fails: delete it if it is the same note, rename it (`<slug>-2.md`) if it is new |
+| A bullet is identical to one already released | Fails: remove or reword that bullet |
 | A PR adds no fragment | Warning only |
 | A direct push to `main` edits `CHANGELOG.md` outside a release commit | Fails (report only; the commit is already on `main`) |
 

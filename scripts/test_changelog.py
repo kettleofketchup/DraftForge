@@ -11,7 +11,6 @@ import io
 import json
 import os
 import re
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -336,24 +335,82 @@ class CheckTests(RepoCase):
         self.repo.fragment("upgrading/a.md", "Run:\n\n```bash\njust db::migrate::all\n")
         self.expect_problem("unclosed")
 
-    def test_unknown_section_dir(self):
-        self.repo.fragment("misc/a.md", "- X.\n")
-        self.expect_problem("changelog.d/misc/a.md")
-
     def test_stray_file_at_the_top(self):
         self.repo.fragment("notes.txt", "x\n")
-        self.expect_problem("changelog.d/notes.txt")
+        self.expect_problem("changelog.d/notes.txt:1: directly in changelog.d/")
 
-    def test_bad_slug(self):
+    def test_bad_slug_names_the_characters_and_suggests_a_name(self):
         self.repo.fragment("added/Feat_X.md", "- X.\n")
-        self.expect_problem("changelog.d/added/Feat_X.md")
+        self.expect_problem(
+            "changelog.d/added/Feat_X.md:1: slug 'Feat_X': invalid character(s) 'F' 'X'"
+        )
+        self.expect_problem("rename to changelog.d/added/feat_x.md")
 
-    def test_enumerates_tracked_files_only(self):
+    def test_slug_with_a_leading_separator(self):
+        self.repo.fragment("added/-x.md", "- X.\n")
+        self.expect_problem("must start with a lowercase letter or digit")
+
+    def test_unknown_section_is_named(self):
+        self.repo.fragment("misc/a.md", "- X.\n")
+        self.expect_problem("unknown section 'misc'; use one of: upgrading, added")
+
+    def test_wrong_extension_suggests_md(self):
+        self.repo.fragment("added/a.txt", "- X.\n")
+        self.expect_problem("extension must be .md; rename to changelog.d/added/a.md")
+
+    def test_too_deep(self):
+        self.repo.fragment("added/sub/a.md", "- X.\n")
+        self.expect_problem("nested too deep")
+
+    def test_a_misnamed_fragment_still_gets_its_content_checked(self):
+        self.repo.fragment("added/Bad.md", "# Added\nnot a bullet\n")
+        problems = self.repo.problems()
+        assert any("slug 'Bad'" in p for p in problems), problems
+        assert any(
+            "changelog.d/added/Bad.md:1: a Added" in p for p in problems
+        ), problems
+
+    def test_suggest_slug(self):
+        assert changelog.suggest_slug("fix/issue#12") == "fix-issue-12"
+        assert changelog.suggest_slug("Feat/C++ Thing") == "feat-c-thing"
+        assert changelog.suggest_slug("_x") == "x"
+        assert changelog.suggest_slug("###") == "note"
+
+    def test_ignored_debris_is_skipped(self):
         self.repo.write(".gitignore", "*~\n")
         self.repo.write("changelog.d/added/x.md~", "junk\n", add=False)
-        self.repo.write("changelog.d/added/untracked.txt", "junk\n", add=False)
         self.expect_clean()
         assert changelog.fragment_paths(self.repo.root) == []
+
+    def test_untracked_files_are_checked_before_git_add(self):
+        self.repo.write("changelog.d/fixed/Bad_Name.md", "# Fixed\nprose\n", add=False)
+        self.repo.write("changelog.d/added/untracked.txt", "junk\n", add=False)
+        self.expect_problem("changelog.d/fixed/Bad_Name.md:1: slug")
+        self.expect_problem("changelog.d/fixed/Bad_Name.md:1: a Fixed fragment")
+        self.expect_problem("changelog.d/added/untracked.txt:1: extension")
+        # A release consumes tracked fragments only (its preflight refuses untracked).
+        assert changelog.fragment_paths(self.repo.root) == []
+
+    def test_bullets_under_unreleased_fail_with_their_line(self):
+        self.repo.write(
+            "CHANGELOG.md", BASE_CHANGELOG.replace(POINTER, POINTER + "\n- hand edit")
+        )
+        self.expect_problem(
+            "CHANGELOG.md:8: [Unreleased] must hold only the pointer comment"
+        )
+
+    def test_bullets_appended_to_an_unreleased_only_file_fail(self):
+        text = f"# Changelog\n\n## [Unreleased]\n\n{POINTER}\n- hand edit\n"
+        self.repo.write("CHANGELOG.md", text)
+        self.expect_problem("CHANGELOG.md:6: [Unreleased]")
+
+    def test_an_empty_unreleased_and_released_sections_are_clean(self):
+        self.repo.write("CHANGELOG.md", BASE_CHANGELOG.replace(POINTER + "\n", ""))
+        self.expect_clean()
+
+    def test_a_missing_unreleased_heading_fails(self):
+        self.repo.write("CHANGELOG.md", BASE_CHANGELOG.replace("## [Unreleased]\n", ""))
+        self.expect_problem("no '## [Unreleased]' heading")
 
     def test_missing_changelog_is_clean(self):
         repo = Repo(changelog_text=None)
@@ -388,7 +445,9 @@ class ResurrectionTests(RepoCase):
         )
         self.repo.write("CHANGELOG.md", text)
         self.repo.fragment("changed/new.md", bullet + "\n")
-        self.expect_clean()
+        # Only the [Unreleased] rule fires; the fragment is not a resurrection.
+        problems = self.repo.problems()
+        assert [p.split(":", 1)[0] for p in problems] == ["CHANGELOG.md"], problems
         assert not any(
             "Released bullet" in "\n".join(body)
             for _, _, body in changelog.released(self.repo.text())
@@ -412,6 +471,70 @@ class ResurrectionTests(RepoCase):
     def test_a_fence_only_fragment_is_not_checked(self):
         self.repo.fragment("upgrading/new.md", "```\njust db::migrate::all\n```\n")
         self.expect_clean()
+
+    def test_a_released_bullet_is_reported_at_its_own_line_and_quoted(self):
+        self.repo.fragment(
+            "changed/new.md",
+            "- A genuinely new change.\n- **Released bullet.** It wraps onto a second line.\n",
+        )
+        problems = self.repo.problems()
+        assert problems == [
+            "changelog.d/changed/new.md:2: this bullet is identical to one released "
+            'in 0.2.0 ("**Released bullet.** It wraps onto a second line."); '
+            "remove or reword it"
+        ], problems
+
+    def test_a_sentence_from_a_released_paragraph_passes(self):
+        self.repo.fragment("upgrading/new.md", "Run the migrations after rollout.\n")
+        self.expect_clean()
+
+    def test_a_long_prose_note_inside_a_released_paragraph_passes(self):
+        released = (
+            "Two new migrations add the schedule tables. Apply them before starting "
+            "the new backend image, then restart the workers."
+        )
+        self.repo.write(
+            "CHANGELOG.md",
+            BASE_CHANGELOG.replace("Run the migrations after rollout.", released),
+        )
+        self.repo.fragment(
+            "upgrading/new.md",
+            "Apply them before starting the new backend image, then restart the workers.\n",
+        )
+        self.expect_clean()
+
+
+class ReleasedPathTests(unittest.TestCase):
+    """A release commit removed changelog.d/fixed/fix-typo.md; the path comes back."""
+
+    def setUp(self):
+        self.repo = Repo()
+        self.addCleanup(self.repo.close)
+        self.repo.fragment("fixed/fix-typo.md", "- Old note.\n")
+        git(self.repo.root, "commit", "-q", "-m", "add note")
+        git(self.repo.root, "rm", "-q", "changelog.d/fixed/fix-typo.md")
+        git(self.repo.root, "commit", "-q", "-m", changelog.release_subject("0.3.0"))
+
+    def test_a_reused_path_fails_and_suggests_a_new_name(self):
+        self.repo.fragment("fixed/fix-typo.md", "- A brand new note.\n")
+        problems = changelog.check(self.repo.root)
+        assert len(problems) == 1, problems
+        assert problems[0].startswith(
+            "changelog.d/fixed/fix-typo.md:1: this path was already released in 0.3.0 ("
+        ), problems
+        assert "if it is a new note, rename the file, e.g. fix-typo-2.md" in problems[0]
+
+    def test_a_suffixed_name_passes(self):
+        self.repo.fragment("fixed/fix-typo-2.md", "- A brand new note.\n")
+        assert changelog.check(self.repo.root) == []
+
+    def test_a_path_removed_by_an_ordinary_commit_may_return(self):
+        self.repo.fragment("fixed/other.md", "- Note.\n")
+        git(self.repo.root, "commit", "-q", "-m", "add other")
+        git(self.repo.root, "rm", "-q", "changelog.d/fixed/other.md")
+        git(self.repo.root, "commit", "-q", "-m", "fix: drop note (#12)")
+        self.repo.fragment("fixed/other.md", "- Note.\n")
+        assert changelog.check(self.repo.root) == []
 
 
 class FixtureTests(unittest.TestCase):
@@ -632,18 +755,6 @@ class CiRecipeTests(unittest.TestCase):
         found = re.search(r"^\s*release_re='([^']*)'$", recipe, re.M)
         assert found, "release_re not found in just/ci.just"
         assert found.group(1) == changelog.RELEASE_SUBJECT_RE.pattern
-
-
-class CommittedRepoTests(unittest.TestCase):
-    def test_unreleased_body_is_only_the_pointer(self):
-        text = (REPO / "CHANGELOG.md").read_text(encoding="utf-8")
-        body = text.split("## [Unreleased]\n", 1)[1].split("\n## [", 1)[0]
-        assert body.strip() == POINTER
-
-    def test_committed_fragments_pass_check(self):
-        if not shutil.which("git") or not (REPO / ".git").exists():
-            self.skipTest("not a git checkout")
-        assert changelog.check(REPO) == []
 
 
 if __name__ == "__main__":

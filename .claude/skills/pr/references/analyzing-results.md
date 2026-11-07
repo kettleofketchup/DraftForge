@@ -39,7 +39,7 @@ Look for canonical patterns and tag them:
 | `Error: page.goto: Timeout` | Frontend not ready before Playwright fired | Check `webServer` block in `playwright.config.ts` |
 | `Cannot find module '~/...'` | Path alias broken | Vite/tsconfig path alias regression |
 | `Type 'X' is not assignable` | TypeScript error | Run `npm run typecheck` locally |
-| `changelog.d/`, `CHANGELOG.md` or `was released in` in the `changelog` job | Changelog gate | See `.claude/skills/changelog/SKILL.md`: move the bullets to a fragment, delete the resurrected file, or add `changelog:edit` and `gh run rerun <id> --failed` |
+| `changelog.d/`, `CHANGELOG.md` or `released in` in the `changelog` job | Changelog gate | See the CI-gate table in `.claude/skills/changelog/SKILL.md`: move the bullets to a fragment, rename a reused path (`<slug>-2.md`) or delete a restored one, reword a bullet identical to a released one, or add `changelog:edit` and `gh run rerun <id> --failed` |
 
 This list is starter — extend it whenever a new repeat-offender shows up.
 

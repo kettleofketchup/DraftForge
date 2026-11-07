@@ -34,9 +34,11 @@ Types: `feat`, `fix`, `docs`, `ci`, `chore`, `refactor`, `test`
 ## Changelog
 
 Do not edit `CHANGELOG.md` in a PR. Add a fragment instead:
-`changelog.d/<section>/<branch-slug>.md`, where the slug is your branch name lowercased
-with `/` turned into `-`. Sections and format rules are in `changelog.d/README.md`;
-check your fragment with `python3 scripts/changelog.py check`. The release
+`changelog.d/<section>/<branch-slug>.md`, where the slug is by convention your branch
+name lowercased, with `/` and any other character outside `a-z 0-9 . _ -` turned into
+`-` (add a suffix such as `-2` if a release already used that path). Sections and
+format rules are in `changelog.d/README.md`; check your fragment with
+`python3 scripts/changelog.py check` (it also reads files not yet `git add`-ed). The release
 (`just version::set X.Y.Z`) assembles the fragments into `CHANGELOG.md`. Details:
 `docs/development/changelog.md` and `.claude/skills/changelog/SKILL.md`.
 
