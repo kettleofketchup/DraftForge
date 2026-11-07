@@ -1,8 +1,11 @@
+from unittest.mock import patch
+
 from cacheops import invalidate_all
 from django.test import TransactionTestCase
 from rest_framework.test import APIClient
 
 from app.models import CustomUser, League, Organization, ProfileClaimRequest
+from org.views import ClaimRequestViewSet
 from steam.functions.league_summary import get_league_summary
 from steam.tests.league_summary_fixtures import make_player, record_series
 
@@ -46,3 +49,17 @@ class ClaimMergeLeagueSummaryTests(TransactionTestCase):
         players = get_league_summary(STEAM_LEAGUE, 5)["players"]
         self.assertEqual(players[str(self.claimer.pk)]["games"], 5)
         self.assertNotIn(str(target_pk), players)
+
+    def test_match_stats_reassignment_invalidates_without_user_delete(self) -> None:
+        get_league_summary(STEAM_LEAGUE, 5)
+        with patch.object(CustomUser, "delete"):
+            ClaimRequestViewSet()._merge_profiles(self.claimer, self.target)
+        players = get_league_summary(STEAM_LEAGUE, 5)["players"]
+        self.assertEqual(players[str(self.claimer.pk)]["games"], 5)
+        self.assertNotIn(str(self.target.pk), players)
+
+    def test_user_delete_drops_player_from_summary(self) -> None:
+        target_pk = self.target.pk
+        self.assertIn(str(target_pk), get_league_summary(STEAM_LEAGUE, 5)["players"])
+        self.target.delete()
+        self.assertNotIn(str(target_pk), get_league_summary(STEAM_LEAGUE, 5)["players"])
