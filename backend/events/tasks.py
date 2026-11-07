@@ -125,6 +125,32 @@ def _run_with_bookends(
         clear_contextvars()
 
 
+def _starts_in_future(scheduled_at: str | datetime) -> bool:
+    if isinstance(scheduled_at, str):
+        scheduled_at = datetime.fromisoformat(scheduled_at)
+    return scheduled_at > datetime.now(tz.utc)
+
+
+def _flatten_discord_form_errors(errors: dict, path: str = "") -> list[str]:
+    found: list[str] = []
+    for key, value in errors.items():
+        if key == "_errors" and isinstance(value, list):
+            found.extend(f"{path}: {e.get('message', e)}" for e in value)
+        elif isinstance(value, dict):
+            found.extend(
+                _flatten_discord_form_errors(value, f"{path}.{key}" if path else key)
+            )
+    return found
+
+
+def _discord_error_message(data: object, status_code: int) -> str:
+    if not (isinstance(data, dict) and data.get("message")):
+        return f"HTTP {status_code}"
+    message = f"{data['message']} (code {data.get('code', '?')}, HTTP {status_code})"
+    details = _flatten_discord_form_errors(data.get("errors") or {})
+    return f"{message}: {'; '.join(details)}" if details else message
+
+
 def _build_signup_message_link(guild_id, channel_id, post_result):
     """Construct a discord.com message permalink from a sync_send_embed result."""
     if not guild_id:
@@ -398,6 +424,7 @@ def sync_discord_events():
             event["discord_create_event"]
             and event["organization__discord_server_id"]
             and not has_scheduled
+            and _starts_in_future(event["scheduled_at"])
         )
         if sched_eligible:
             structured_log.info(
@@ -887,6 +914,8 @@ def _create_discord_scheduled_event_impl(event_id):
     guild_id = event.organization.discord_server_id
     if not guild_id:
         return "Skipped: no discord_server_id on organization"
+    if not _starts_in_future(event.scheduled_at):
+        return "Skipped: event start time has passed"
 
     title = event.discord_event_title or event.name
     description = event.discord_event_description or event.description or ""
@@ -923,15 +952,9 @@ def _create_discord_scheduled_event_impl(event_id):
         # audit log surfaces it without anyone having to dig through
         # response_data JSON. Default to the raw status when Discord
         # didn't send a structured body.
-        error_message = ""
-        if not success:
-            if isinstance(data, dict) and data.get("message"):
-                error_message = (
-                    f"{data['message']} (code {data.get('code', '?')}, "
-                    f"HTTP {response.status_code})"
-                )
-            else:
-                error_message = f"HTTP {response.status_code}"
+        error_message = (
+            "" if success else _discord_error_message(data, response.status_code)
+        )
 
         # Legacy log via internal API
         create_message_log(
