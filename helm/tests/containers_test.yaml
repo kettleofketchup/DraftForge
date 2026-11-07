@@ -3,6 +3,9 @@ templates:
   - templates/backend.yaml
   - templates/frontend.yaml
   - templates/redis.yaml
+  - templates/celery-worker.yaml
+  - templates/celery-beat.yaml
+  - templates/discord-bot.yaml
 tests:
   - it: runs migrations as an explicit-argv init container with the cache disabled
     template: templates/backend.yaml
@@ -105,3 +108,54 @@ tests:
       - equal: {path: "spec.template.spec.containers[?(@.name == \"redis\")].securityContext.allowPrivilegeEscalation", value: false}
       - equal: {path: "spec.template.spec.containers[?(@.name == \"redis\")].securityContext.capabilities.drop", value: [ALL]}
       - equal: {path: "spec.template.spec.containers[?(@.name == \"redis\")].securityContext.seccompProfile.type", value: RuntimeDefault}
+
+  - it: gives the celery-worker container resources and a restricted securityContext
+    template: templates/celery-worker.yaml
+    documentSelector: {path: kind, value: Deployment}
+    asserts:
+      - equal: {path: spec.template.spec.securityContext.fsGroup, value: 1000}
+      - equal: {path: spec.template.spec.automountServiceAccountToken, value: false}
+      - equal: {path: spec.template.spec.serviceAccountName, value: draftforge}
+      - isNotNullOrEmpty: {path: "spec.template.spec.containers[?(@.name == \"celery-worker\")].resources.requests.cpu"}
+      - isNotNullOrEmpty: {path: "spec.template.spec.containers[?(@.name == \"celery-worker\")].resources.requests.memory"}
+      - isNotNullOrEmpty: {path: "spec.template.spec.containers[?(@.name == \"celery-worker\")].resources.limits.memory"}
+      - equal: {path: "spec.template.spec.containers[?(@.name == \"celery-worker\")].securityContext.runAsNonRoot", value: true}
+      - equal: {path: "spec.template.spec.containers[?(@.name == \"celery-worker\")].securityContext.runAsUser", value: 1000}
+      - equal: {path: "spec.template.spec.containers[?(@.name == \"celery-worker\")].securityContext.runAsGroup", value: 1000}
+      - equal: {path: "spec.template.spec.containers[?(@.name == \"celery-worker\")].securityContext.allowPrivilegeEscalation", value: false}
+      - equal: {path: "spec.template.spec.containers[?(@.name == \"celery-worker\")].securityContext.capabilities.drop", value: [ALL]}
+      - equal: {path: "spec.template.spec.containers[?(@.name == \"celery-worker\")].securityContext.seccompProfile.type", value: RuntimeDefault}
+
+  - it: gives the celery-beat container resources and a restricted securityContext
+    template: templates/celery-beat.yaml
+    documentSelector: {path: kind, value: Deployment}
+    asserts:
+      - equal: {path: spec.template.spec.securityContext.fsGroup, value: 1000}
+      - equal: {path: spec.template.spec.automountServiceAccountToken, value: false}
+      - equal: {path: spec.template.spec.serviceAccountName, value: draftforge}
+      - isNotNullOrEmpty: {path: "spec.template.spec.containers[?(@.name == \"celery-beat\")].resources.requests.cpu"}
+      - isNotNullOrEmpty: {path: "spec.template.spec.containers[?(@.name == \"celery-beat\")].resources.requests.memory"}
+      - isNotNullOrEmpty: {path: "spec.template.spec.containers[?(@.name == \"celery-beat\")].resources.limits.memory"}
+      - equal: {path: "spec.template.spec.containers[?(@.name == \"celery-beat\")].securityContext.runAsNonRoot", value: true}
+      - equal: {path: "spec.template.spec.containers[?(@.name == \"celery-beat\")].securityContext.runAsUser", value: 1000}
+      - equal: {path: "spec.template.spec.containers[?(@.name == \"celery-beat\")].securityContext.runAsGroup", value: 1000}
+      - equal: {path: "spec.template.spec.containers[?(@.name == \"celery-beat\")].securityContext.allowPrivilegeEscalation", value: false}
+      - equal: {path: "spec.template.spec.containers[?(@.name == \"celery-beat\")].securityContext.capabilities.drop", value: [ALL]}
+      - equal: {path: "spec.template.spec.containers[?(@.name == \"celery-beat\")].securityContext.seccompProfile.type", value: RuntimeDefault}
+
+  - it: gives the discord-bot container resources and a restricted securityContext
+    template: templates/discord-bot.yaml
+    documentSelector: {path: kind, value: Deployment}
+    asserts:
+      - equal: {path: spec.template.spec.securityContext.fsGroup, value: 1000}
+      - equal: {path: spec.template.spec.automountServiceAccountToken, value: false}
+      - equal: {path: spec.template.spec.serviceAccountName, value: draftforge}
+      - isNotNullOrEmpty: {path: "spec.template.spec.containers[?(@.name == \"discord-bot\")].resources.requests.cpu"}
+      - isNotNullOrEmpty: {path: "spec.template.spec.containers[?(@.name == \"discord-bot\")].resources.requests.memory"}
+      - isNotNullOrEmpty: {path: "spec.template.spec.containers[?(@.name == \"discord-bot\")].resources.limits.memory"}
+      - equal: {path: "spec.template.spec.containers[?(@.name == \"discord-bot\")].securityContext.runAsNonRoot", value: true}
+      - equal: {path: "spec.template.spec.containers[?(@.name == \"discord-bot\")].securityContext.runAsUser", value: 1000}
+      - equal: {path: "spec.template.spec.containers[?(@.name == \"discord-bot\")].securityContext.runAsGroup", value: 1000}
+      - equal: {path: "spec.template.spec.containers[?(@.name == \"discord-bot\")].securityContext.allowPrivilegeEscalation", value: false}
+      - equal: {path: "spec.template.spec.containers[?(@.name == \"discord-bot\")].securityContext.capabilities.drop", value: [ALL]}
+      - equal: {path: "spec.template.spec.containers[?(@.name == \"discord-bot\")].securityContext.seccompProfile.type", value: RuntimeDefault}

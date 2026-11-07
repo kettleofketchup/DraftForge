@@ -1,0 +1,123 @@
+suite: celery worker, celery beat and discord bot
+templates:
+  - templates/celery-worker.yaml
+  - templates/celery-beat.yaml
+  - templates/discord-bot.yaml
+tests:
+  - it: renders the celery worker Deployment at wave 1
+    template: templates/celery-worker.yaml
+    asserts:
+      - hasDocuments: {count: 1}
+      - isKind: {of: Deployment}
+      - equal: {path: metadata.name, value: draftforge-celery-worker}
+      - equal: {path: "metadata.labels[\"app.kubernetes.io/component\"]", value: celery-worker}
+      - equal: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", value: "1"}
+      - equal: {path: "spec.selector.matchLabels[\"app.kubernetes.io/component\"]", value: celery-worker}
+      - equal: {path: "spec.template.metadata.labels[\"app.kubernetes.io/component\"]", value: celery-worker}
+      - equal: {path: spec.progressDeadlineSeconds, value: 300}
+
+  - it: runs the worker with explicit celery argv (command, never args)
+    template: templates/celery-worker.yaml
+    set:
+      image.tag: pr-7-abcdef1
+    asserts:
+      - equal:
+          path: "spec.template.spec.containers[?(@.name == \"celery-worker\")].command"
+          value: [celery, -A, config.celery_light, worker, -l, info, --pool=gevent, --concurrency=20, --prefetch-multiplier=1]
+      - notExists: {path: "spec.template.spec.containers[?(@.name == \"celery-worker\")].args"}
+      - equal: {path: "spec.template.spec.containers[?(@.name == \"celery-worker\")].image", value: "ghcr.io/kettleofketchup/draftforge/backend:pr-7-abcdef1"}
+
+  - it: takes the worker concurrency from celeryWorker.concurrency
+    template: templates/celery-worker.yaml
+    set:
+      celeryWorker.concurrency: 4
+    asserts:
+      - contains:
+          path: "spec.template.spec.containers[?(@.name == \"celery-worker\")].command"
+          content: --concurrency=4
+      - notContains:
+          path: "spec.template.spec.containers[?(@.name == \"celery-worker\")].command"
+          content: --concurrency=20
+
+  - it: uses the celery settings module and no data volume
+    template: templates/celery-worker.yaml
+    asserts:
+      - contains:
+          path: "spec.template.spec.containers[?(@.name == \"celery-worker\")].env"
+          content: {name: DJANGO_SETTINGS_MODULE, value: config.settings_celery}
+      - notExists: {path: spec.template.spec.volumes}
+      - notExists: {path: "spec.template.spec.containers[?(@.name == \"celery-worker\")].volumeMounts"}
+
+  - it: rolls the worker without a surge pod
+    template: templates/celery-worker.yaml
+    asserts:
+      - equal: {path: spec.strategy.type, value: RollingUpdate}
+      - equal: {path: spec.strategy.rollingUpdate.maxSurge, value: 0}
+      - equal: {path: spec.strategy.rollingUpdate.maxUnavailable, value: 1}
+
+  - it: pings the worker through the broker only for liveness
+    template: templates/celery-worker.yaml
+    asserts:
+      - equal: {path: "spec.template.spec.containers[?(@.name == \"celery-worker\")].livenessProbe.exec.command[0]", value: sh}
+      - equal: {path: "spec.template.spec.containers[?(@.name == \"celery-worker\")].livenessProbe.exec.command[1]", value: -c}
+      - matchRegex: {path: "spec.template.spec.containers[?(@.name == \"celery-worker\")].livenessProbe.exec.command[2]", pattern: "--broker"}
+      - notMatchRegex: {path: "spec.template.spec.containers[?(@.name == \"celery-worker\")].livenessProbe.exec.command[2]", pattern: "-A "}
+      - equal: {path: "spec.template.spec.containers[?(@.name == \"celery-worker\")].livenessProbe.initialDelaySeconds", value: 60}
+      - equal: {path: "spec.template.spec.containers[?(@.name == \"celery-worker\")].livenessProbe.periodSeconds", value: 60}
+      - equal: {path: "spec.template.spec.containers[?(@.name == \"celery-worker\")].livenessProbe.timeoutSeconds", value: 20}
+      - equal: {path: "spec.template.spec.containers[?(@.name == \"celery-worker\")].livenessProbe.failureThreshold", value: 3}
+
+  - it: renders no worker when celeryWorker is disabled
+    template: templates/celery-worker.yaml
+    set:
+      celeryWorker.enabled: false
+    asserts:
+      - hasDocuments: {count: 0}
+
+  - it: renders celery beat as a single Recreate Deployment at wave 1
+    template: templates/celery-beat.yaml
+    asserts:
+      - hasDocuments: {count: 1}
+      - isKind: {of: Deployment}
+      - equal: {path: metadata.name, value: draftforge-celery-beat}
+      - equal: {path: "metadata.labels[\"app.kubernetes.io/component\"]", value: celery-beat}
+      - equal: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", value: "1"}
+      - equal: {path: "spec.selector.matchLabels[\"app.kubernetes.io/component\"]", value: celery-beat}
+      - equal: {path: spec.replicas, value: 1}
+      - equal: {path: spec.strategy.type, value: Recreate}
+      - notExists: {path: spec.strategy.rollingUpdate}
+      - equal:
+          path: "spec.template.spec.containers[?(@.name == \"celery-beat\")].command"
+          value: [celery, -A, config.celery_light, beat, -l, info]
+      - notExists: {path: "spec.template.spec.containers[?(@.name == \"celery-beat\")].args"}
+
+  - it: renders no beat when celeryBeat is disabled
+    template: templates/celery-beat.yaml
+    set:
+      celeryBeat.enabled: false
+    asserts:
+      - hasDocuments: {count: 0}
+
+  - it: renders the discord bot as a single Recreate Deployment at wave 1
+    template: templates/discord-bot.yaml
+    asserts:
+      - hasDocuments: {count: 1}
+      - isKind: {of: Deployment}
+      - equal: {path: metadata.name, value: draftforge-discord-bot}
+      - equal: {path: "metadata.labels[\"app.kubernetes.io/component\"]", value: discord-bot}
+      - equal: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", value: "1"}
+      - equal: {path: "spec.selector.matchLabels[\"app.kubernetes.io/component\"]", value: discord-bot}
+      - equal: {path: spec.replicas, value: 1}
+      - equal: {path: spec.strategy.type, value: Recreate}
+      - notExists: {path: spec.strategy.rollingUpdate}
+      - equal:
+          path: "spec.template.spec.containers[?(@.name == \"discord-bot\")].command"
+          value: [python, manage.py, run_discord_bot]
+      - notExists: {path: "spec.template.spec.containers[?(@.name == \"discord-bot\")].args"}
+
+  - it: renders no bot when discordBot is disabled
+    template: templates/discord-bot.yaml
+    set:
+      discordBot.enabled: false
+    asserts:
+      - hasDocuments: {count: 0}

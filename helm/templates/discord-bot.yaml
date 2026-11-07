@@ -1,0 +1,40 @@
+{{- if .Values.discordBot.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "draftforge.fullname" . }}-discord-bot
+  labels:
+    {{- include "draftforge.labels" . | nindent 4 }}
+    app.kubernetes.io/component: discord-bot
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  replicas: 1
+  progressDeadlineSeconds: {{ .Values.discordBot.progressDeadlineSeconds | default 300 }}
+  strategy:
+    # Never two Discord gateway sessions at once.
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "draftforge.selectorLabels" (dict "root" . "component" "discord-bot") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "draftforge.selectorLabels" (dict "root" . "component" "discord-bot") | nindent 8 }}
+      annotations:
+        {{- include "draftforge.podAnnotations" . | nindent 8 }}
+    spec:
+      {{- include "draftforge.podCommon" . | nindent 6 }}
+      containers:
+        # Backend image: the ENTRYPOINT is daphne, so set command, never args.
+        - name: discord-bot
+          image: {{ include "draftforge.image" (dict "root" . "img" "backend") }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: [python, manage.py, run_discord_bot]
+          envFrom:
+            {{- include "draftforge.envFrom" . | nindent 12 }}
+          resources:
+            {{- include "draftforge.requireResources" (dict "name" "discord-bot" "res" .Values.discordBot.resources) | nindent 12 }}
+          securityContext:
+            {{- include "draftforge.containerSecurity" (list 1000 1000) | nindent 12 }}
+{{- end }}
