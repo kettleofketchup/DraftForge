@@ -75,16 +75,16 @@ def parse_config(cap: str, authors: str, idle_days: str) -> tuple[int, frozenset
 
     Raises ValueError on anything malformed, before the caller writes anything.
     """
-    if not UINT_RE.match(cap) or not 0 <= int(cap) <= MAX_CAP:
+    if not UINT_RE.fullmatch(cap) or not 0 <= int(cap) <= MAX_CAP:
         raise ValueError(f"PREVIEW_CAP must be an integer 0-{MAX_CAP}, got {cap!r}")
     entries = authors.split(",")
     for entry in entries:
-        if not LOGIN_RE.match(entry):
+        if not LOGIN_RE.fullmatch(entry):
             raise ValueError(
                 "PREVIEW_AUTHORS must be comma-separated GitHub logins in canonical "
                 f"case, no whitespace or empty entries; bad entry {entry!r}"
             )
-    if not UINT_RE.match(idle_days) or not 1 <= int(idle_days) <= 365:
+    if not UINT_RE.fullmatch(idle_days) or not 1 <= int(idle_days) <= 365:
         raise ValueError(f"PREVIEW_IDLE_DAYS must be an integer 1-365, got {idle_days!r}")
     return int(cap), frozenset(entries), int(idle_days)
 

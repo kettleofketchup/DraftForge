@@ -359,6 +359,8 @@ class Config(unittest.TestCase):
             ("-1", OWNER, "7"), ("11", OWNER, "7"), ("x", OWNER, "7"), ("", OWNER, "7"),
             ("3", "a, b", "7"), ("3", "a,,b", "7"), ("3", "", "7"), ("3", "bad_login", "7"),
             ("3", OWNER, "0"), ("3", OWNER, "x"), ("3", OWNER, ""), ("3", OWNER, "366"),
+            ("3", "a,b\n", "7"), ("3", "kettleofketchup\n", "7"),
+            ("3\n", OWNER, "7"), ("3", OWNER, "7\n"),
         ]
         for args in bad:
             with self.subTest(args=args), self.assertRaises(ValueError):
