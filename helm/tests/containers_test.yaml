@@ -1,5 +1,7 @@
 suite: containers (command, resources, securityContext)
 templates:
+  - templates/configmap-env.yaml
+  - templates/secret.yaml
   - templates/backend.yaml
   - templates/frontend.yaml
   - templates/redis.yaml

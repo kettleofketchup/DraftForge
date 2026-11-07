@@ -1,5 +1,7 @@
 suite: celery worker, celery beat and discord bot
 templates:
+  - templates/configmap-env.yaml
+  - templates/secret.yaml
   - templates/celery-worker.yaml
   - templates/celery-beat.yaml
   - templates/discord-bot.yaml
