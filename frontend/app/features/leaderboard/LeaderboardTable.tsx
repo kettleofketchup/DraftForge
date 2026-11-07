@@ -38,7 +38,7 @@ export function LeaderboardTable({
     children: React.ReactNode;
   }) => (
     <TableHead
-      className="cursor-pointer select-none hover:bg-gray-700"
+      className="cursor-pointer select-none hover:bg-base-700"
       onClick={() => onSort(field)}
     >
       <div className="flex items-center gap-1">
@@ -53,7 +53,7 @@ export function LeaderboardTable({
   return (
     <Table>
       <TableHeader>
-        <TableRow className="border-gray-700">
+        <TableRow className="border-border">
           <TableHead className="w-12">#</TableHead>
           <TableHead>Player</TableHead>
           <TableHead>League MMR</TableHead>
@@ -66,7 +66,7 @@ export function LeaderboardTable({
       <TableBody>
         {entries.map((entry, index) => {
           return (
-            <TableRow key={entry.user_id} className="border-gray-700">
+            <TableRow key={entry.user_id} className="border-border">
               <TableCell className="font-medium text-muted-foreground">
                 {rankOffset + index + 1}
               </TableCell>
@@ -91,7 +91,7 @@ export function LeaderboardTable({
                         ? "text-green-500"
                         : entry.mmr_adjustment < 0
                           ? "text-red-500"
-                          : "text-gray-500"
+                          : "text-muted-foreground"
                     )}
                   >
                     ({entry.mmr_adjustment > 0 ? "+" : ""}
