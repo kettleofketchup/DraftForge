@@ -63,7 +63,9 @@ describe('WinRateHistogram', () => {
     expect(highlighted).toHaveLength(1);
     expect(bars()[9].contains(highlighted[0])).toBe(true);
     expect(root.textContent).toContain('bucket 90–100%');
-    expect(screen.getByText('this player').className).toContain('right-0');
+    const label = screen.getByText('this player');
+    expect(label.className).toContain('col-start-10');
+    expect(label.className).toContain('justify-self-end');
   });
 
   it('highlights bucket 0', () => {
@@ -73,7 +75,9 @@ describe('WinRateHistogram', () => {
     expect(highlighted).toHaveLength(1);
     expect(bars()[0].contains(highlighted[0])).toBe(true);
     expect(root.textContent).toContain('bucket 0–10%');
-    expect(screen.getByText('this player').className).toContain('left-0');
+    const label = screen.getByText('this player');
+    expect(label.className).toContain('col-start-1');
+    expect(label.className).toContain('justify-self-start');
   });
 
   it('no highlight when unranked', () => {
@@ -114,7 +118,22 @@ describe('WinRateHistogram', () => {
     expect(tick).not.toBeNull();
     expect(tick.className).toContain('bg-border');
     const fill = sixth.querySelector('[data-fill]') as HTMLElement;
-    expect(fill.style.height).toBe('100%');
+    expect(fill.getAttribute('height')).toBe('100%');
+    const third = bars()[2].querySelector('[data-fill]') as Element;
+    expect(third.getAttribute('height')).toBe(`${(2 / 12) * 100}%`);
+  });
+
+  it('centres the label on a middle bucket', () => {
+    renderHistogram({ highlightBucket: 4 });
+    const label = screen.getByText('this player');
+    expect(label.className).toContain('col-start-5');
+    expect(label.className).toContain('justify-self-center');
+  });
+
+  it('renders without inline styles', () => {
+    renderHistogram();
+    const root = screen.getByTestId('win-rate-histogram');
+    expect(root.querySelectorAll('[style]')).toHaveLength(0);
   });
 
   it('sr-only table has 10 rows', () => {

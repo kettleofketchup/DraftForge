@@ -13,16 +13,27 @@ const bucketRange = (b: Bucket): string => `${b.min}–${b.max}%`;
 const bucketLabel = (b: Bucket): string =>
   `${bucketRange(b)}: ${b.count} ${b.count === 1 ? 'player' : 'players'}`;
 
-function labelPosition(index: number, total: number): {
-  className: string;
-  style?: React.CSSProperties;
-} {
-  if (index === 0) return { className: 'left-0' };
-  if (index === total - 1) return { className: 'right-0' };
-  return {
-    className: '-translate-x-1/2',
-    style: { left: `${((index + 0.5) / total) * 100}%` },
-  };
+const COL_START = [
+  'col-start-1',
+  'col-start-2',
+  'col-start-3',
+  'col-start-4',
+  'col-start-5',
+  'col-start-6',
+  'col-start-7',
+  'col-start-8',
+  'col-start-9',
+  'col-start-10',
+] as const;
+
+function labelPosition(index: number, total: number): string {
+  const align =
+    index === 0
+      ? 'justify-self-start'
+      : index === total - 1
+        ? 'justify-self-end'
+        : 'justify-self-center';
+  return cn(COL_START[index], align);
 }
 
 export const WinRateHistogram: React.FC<{
@@ -51,15 +62,16 @@ export const WinRateHistogram: React.FC<{
         <>
           <div className="relative h-[90px] pt-[14px]">
             {label && (
-              <span
-                className={cn(
-                  'absolute top-0 whitespace-nowrap text-[10px] leading-[14px] text-foreground',
-                  label.className,
-                )}
-                style={label.style}
-              >
-                this player
-              </span>
+              <div className="absolute inset-x-0 top-0 grid grid-cols-10 gap-[2px]">
+                <span
+                  className={cn(
+                    'row-start-1 whitespace-nowrap text-[10px] leading-[14px] text-foreground',
+                    label,
+                  )}
+                >
+                  this player
+                </span>
+              </div>
             )}
             <div className="flex h-full items-end gap-[2px]">
               {buckets.map((b, i) => {
@@ -77,16 +89,18 @@ export const WinRateHistogram: React.FC<{
                         {b.count === 0 ? (
                           <div data-empty="true" className="h-px w-full bg-border" />
                         ) : (
-                          <div
+                          <svg
                             data-fill
+                            aria-hidden="true"
+                            width="100%"
+                            height={`${(b.count / maxCount) * 100}%`}
                             data-highlighted={isHighlighted ? 'true' : undefined}
                             className={cn(
-                              'w-full min-h-[4px] rounded-t-[4px]',
+                              'block min-h-[4px] rounded-t-[4px]',
                               isHighlighted
                                 ? 'bg-foreground ring-1 ring-primary'
                                 : 'bg-muted-foreground/70',
                             )}
-                            style={{ height: `${(b.count / maxCount) * 100}%` }}
                           />
                         )}
                       </div>
