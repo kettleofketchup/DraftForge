@@ -1,20 +1,22 @@
 from __future__ import annotations
 
+import argparse
 import fcntl
 import os
 import re
 import secrets
+import shlex
 import shutil
 import socket
 import subprocess
 import sys
 import tempfile
 import time
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Final, Literal
+from typing import Final, Literal, cast
 
 Stack = Literal["test", "dev", "dev-m1", "prod", "release"]
 
@@ -418,16 +420,12 @@ def _foreign(owners: list[ContainerOwner], root: Path) -> list[ContainerOwner]:
 
 def _check_legacy_dev(df_owners: list[ContainerOwner]) -> None:
     for o in df_owners:
-        dev_files = [
-            f for f in o.config_files if Path(f).name.startswith(DEV_COMPOSE_MARKER)
-        ]
+        dev_files = [f for f in o.config_files if _is_dev_file(f)]
         if not dev_files:
             continue
-        files = " ".join(f"-f {f}" for f in o.config_files)
         raise SlotError(
             f"project df is a legacy dev stack from {o.working_dir} ({', '.join(dev_files)}); "
-            f"stop it before using test slot 0: "
-            f"docker compose -p df {files} --project-directory {o.working_dir} down"
+            f"stop it before using test slot 0: {_legacy_dev_cleanup(o)}"
         )
 
 
@@ -948,3 +946,434 @@ def status_report(root: Path | None = None, host: Host | None = None) -> str:
         lines.append(f"  working_dir: {', '.join(wds) or '-'}")
         lines.append(f"  config_files: {', '.join(files) or '-'}")
     return "\n".join(lines) + "\n"
+
+
+ALLOCATE_VERBS: Final = frozenset({"up", "build", "pull", "create"})
+READ_VERBS: Final = frozenset(
+    {"ps", "logs", "top", "exec", "restart", "down", "stop", "config", "images", "port"}
+)
+SCALE_VERBS: Final = frozenset({"up", "create"})
+GLOBAL_OPTS_WITH_VALUE: Final = frozenset(
+    {
+        "--ansi",
+        "--progress",
+        "--profile",
+        "--env-file",
+        "-f",
+        "--file",
+        "-p",
+        "--project-name",
+        "--project-directory",
+        "--parallel",
+    }
+)
+SCALE_ARGS: Final = ("--scale", "celery-beat=0", "--scale", "discord-bot=0")
+DEV_PROJECT: Final = "df-dev"
+DEV_PORTS: Final = (80, 443)
+COMPOSE_DIR: Final = Path("docker")
+TEST_FILE: Final = "docker-compose.test.yaml"
+CI_FILE: Final = "docker-compose.ci.override.yaml"
+SLOT_FILE: Final = "docker-compose.slot.yaml"
+OFFLINE_FILE: Final = "docker-compose.slot-offline.yaml"
+RUN_FILE: Final = "docker-compose.run.yaml"
+STACK_FILES: Final[dict[str, str]] = {
+    "dev": "docker-compose.debug.yaml",
+    "dev-m1": "docker-compose.debug.m1.yaml",
+    "prod": "docker-compose.prod.yaml",
+    "release": "docker-compose.release.yaml",
+}
+STACKS: Final = ("test", "dev", "dev-m1", "prod", "release")
+OFFLINE_NOTE: Final = (
+    "note: Discord/Steam tokens are blanked in this stack; integration tests that need them "
+    "(e.g. events.tests.test_discord_integration) will skip; use slot 0 or `just test::background on`"
+)
+
+
+def split_verb(args: Sequence[str]) -> tuple[list[str], str | None, list[str]]:
+    opts: list[str] = []
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if not a.startswith("-"):
+            return opts, a, list(args[i + 1 :])
+        opts.append(a)
+        if a in GLOBAL_OPTS_WITH_VALUE and i + 1 < len(args):
+            opts.append(args[i + 1])
+            i += 2
+        else:
+            i += 1
+    return opts, None, []
+
+
+def _proof() -> bool:
+    return os.environ.get("DF_BACKGROUND_PROOF") == "1"
+
+
+def _test_slot(slot: SlotEnv | None, root: Path) -> SlotEnv:
+    if slot is not None:
+        return slot
+    if is_ci():
+        return ci_slot(root)
+    raise SlotError("the test stack needs a slot; call prepare() or pass slot=")
+
+
+def compose_files(stack: Stack, slot: SlotEnv | None, root: Path) -> list[Path]:
+    d = root / COMPOSE_DIR
+    if stack != "test":
+        return [d / STACK_FILES[stack]]
+    if is_ci():
+        return [d / TEST_FILE, d / CI_FILE]
+    slot = _test_slot(slot, root)
+    files = [d / TEST_FILE]
+    if slot.slot >= 1:
+        files.append(d / SLOT_FILE)
+        if not slot.background or _proof():
+            files.append(d / OFFLINE_FILE)
+    return files
+
+
+def _stack_project(stack: Stack, slot: SlotEnv | None, root: Path) -> str:
+    if stack == "test":
+        return _test_slot(slot, root).project
+    return DEV_PROJECT if stack in ("dev", "dev-m1") else "df"
+
+
+def _base_argv(project: str, files: Sequence[Path], root: Path) -> list[str]:
+    argv = ["docker", "compose", "--project-directory", str(root), "-p", project]
+    for f in files:
+        argv += ["-f", str(f)]
+    return argv
+
+
+def compose_argv(
+    stack: Stack, *args: str, slot: SlotEnv | None = None, root: Path | None = None
+) -> list[str]:
+    root = (root or MODULE_ROOT).resolve()
+    if stack == "test":
+        slot = _test_slot(slot, root)
+    opts, verb, rest = split_verb(args)
+    scale: list[str] = []
+    if (
+        stack == "test"
+        and slot is not None
+        and verb in SCALE_VERBS
+        and not is_ci()
+        and not slot.background
+    ):
+        scale = list(SCALE_ARGS)
+    argv = _base_argv(
+        _stack_project(stack, slot, root), compose_files(stack, slot, root), root
+    )
+    return [*argv, *opts, *([verb] if verb else []), *scale, *rest]
+
+
+def compose_env(stack: Stack, slot: SlotEnv | None = None) -> dict[str, str]:
+    if stack != "test":
+        return {"COMPOSE_PROJECT_NAME": _stack_project(stack, None, MODULE_ROOT)}
+    slot = _test_slot(slot, MODULE_ROOT.resolve())
+    return {
+        "COMPOSE_PROJECT_NAME": slot.project,
+        "DF_SLOT": str(slot.slot),
+        "DF_SUFFIX": slot.suffix,
+        "DF_HTTPS_PORT": str(slot.https_port),
+        "DF_HTTP_PORT": "" if slot.http_port is None else str(slot.http_port),
+        "DF_BASE_URL": slot.base_url,
+    }
+
+
+def compose_cmd(
+    stack: Stack, *args: str, slot: SlotEnv | None = None, root: Path | None = None
+) -> str:
+    return shlex.join(compose_argv(stack, *args, slot=slot, root=root))
+
+
+def _check_ci_runner(verb: str | None) -> None:
+    if not is_ci() or verb == "config":
+        return
+    if not os.environ.get("RUNNER_TEMP") or not os.environ.get("GITHUB_WORKSPACE"):
+        raise SlotError(
+            "GITHUB_ACTIONS=true outside a GitHub runner: only `config` is allowed"
+        )
+
+
+def _own_nginx_running(project: str, root: Path, host: Host) -> bool:
+    return any(
+        o.service == "nginx" and o.running and o.working_dir == root
+        for o in _own(host.containers(project), root)
+    )
+
+
+def _check_ports(ports: Sequence[int], project: str, root: Path, host: Host) -> None:
+    if _own_nginx_running(project, root, host):
+        return
+    for p in ports:
+        if host.port_busy(p):
+            raise SlotError(f"port {p} is busy; free it before `up` on {project}")
+
+
+def _slot_ports(slot: SlotEnv) -> list[int]:
+    return [p for p in (slot.http_port, slot.https_port) if p is not None]
+
+
+def _legacy_dev_cleanup(o: ContainerOwner) -> str:
+    files = " ".join(f"-f {f}" for f in o.config_files)
+    return f"docker compose -p df {files} --project-directory {o.working_dir} down"
+
+
+def _is_dev_file(f: str) -> bool:
+    return Path(f).name.startswith(DEV_COMPOSE_MARKER)
+
+
+def _print_legacy_dev_hint(host: Host) -> None:
+    for o in host.containers("df"):
+        if any(_is_dev_file(f) for f in o.config_files):
+            print(
+                f"note: project df is a legacy dev stack from {o.working_dir}; dev verbs now "
+                f"target {DEV_PROJECT} and cannot reach it. One-time cleanup (run it yourself): "
+                f"{_legacy_dev_cleanup(o)}",
+                file=sys.stderr,
+            )
+            return
+
+
+def _check_dev_owner(root: Path, host: Host) -> None:
+    for o in _foreign(host.containers(DEV_PROJECT), root):
+        raise SlotError(
+            f"`{DEV_PROJECT}` belongs to {o.working_dir}; run dev verbs there, "
+            f"or `just test::slot-reap {DEV_PROJECT}` if that worktree is gone"
+        )
+
+
+def _check_prod_target(host: Host) -> None:
+    for o in host.containers("df"):
+        if any(Path(f).name == TEST_FILE or _is_dev_file(f) for f in o.config_files):
+            raise SlotError(
+                f"project df holds container {o.name} from {o.working_dir} "
+                f"({', '.join(o.config_files)}), a test or dev stack; refusing prod/release verbs"
+            )
+
+
+def prepare(
+    stack: Stack,
+    args: Sequence[str],
+    *,
+    root: Path | None = None,
+    host: Host | None = None,
+    slot: SlotEnv | None = None,
+) -> tuple[list[str], dict[str, str]]:
+    root = (root or MODULE_ROOT).resolve()
+    host = host or REAL_HOST
+    _, verb, _ = split_verb(args)
+    _check_ci_runner(verb)
+    if stack == "test":
+        if verb == "run":
+            raise SlotError("`compose run` on the test stack must use run_one_off")
+        if slot is None:
+            slot = (
+                ensure_slot(root, host)
+                if verb in ALLOCATE_VERBS
+                else read_slot(root, host)
+            )
+        if verb in SCALE_VERBS and not is_ci():
+            lease_and_recheck(slot, host)
+            _check_ports(_slot_ports(slot), slot.project, root, host)
+            if slot.background:
+                check_background_free(slot, slot.project, host)
+    elif stack in ("dev", "dev-m1"):
+        _check_dev_owner(root, host)
+        if verb in ("up", "down", "stop"):
+            _print_legacy_dev_hint(host)
+        if verb == "up":
+            _check_ports(DEV_PORTS, DEV_PROJECT, root, host)
+            check_background_free(None, DEV_PROJECT, host)
+    else:
+        _check_prod_target(host)
+    return compose_argv(stack, *args, slot=slot, root=root), compose_env(stack, slot)
+
+
+def _running_services(base: list[str], env: Mapping[str, str], host: Host) -> list[str]:
+    _, out = host.run([*base, "ps", "--services", "--status", "running"], env, True)
+    return [s for s in out.split() if s]
+
+
+def _run_ephemeral(args: Sequence[str], root: Path, host: Host) -> int:
+    hexid = secrets.token_hex(4)
+    project = f"df-run-{hexid}"
+    d = root / COMPOSE_DIR
+    base = _base_argv(
+        project, [d / TEST_FILE, d / SLOT_FILE, d / OFFLINE_FILE, d / RUN_FILE], root
+    )
+    env = {
+        **os.environ,
+        "COMPOSE_PROJECT_NAME": project,
+        "DF_SLOT": "",
+        "DF_SUFFIX": f"-run-{hexid}",
+        "DF_HTTPS_PORT": "0",
+        "DF_HTTP_PORT": "",
+        "DF_BASE_URL": "https://localhost",
+    }
+    print(OFFLINE_NOTE, file=sys.stderr)
+    try:
+        code, _ = host.run([*base, "run", *args], env, False)
+        return code
+    finally:
+        host.run([*base, "down", "-v", "--remove-orphans"], env, False)
+
+
+def run_one_off(
+    args: Sequence[str], *, root: Path | None = None, host: Host | None = None
+) -> int:
+    root = (root or MODULE_ROOT).resolve()
+    host = host or REAL_HOST
+    _check_ci_runner("run")
+    if is_ci():
+        slot = ci_slot(root)
+        env = {**os.environ, **compose_env("test", slot)}
+        code, _ = host.run(
+            compose_argv("test", "run", *args, slot=slot, root=root), env, False
+        )
+        return code
+    try:
+        slot = read_slot(root, host)
+    except NoSlotFile:
+        return _run_ephemeral(args, root, host)
+    lease_and_recheck(slot, host)
+    env = {**os.environ, **compose_env("test", slot)}
+    files = compose_files("test", slot, root)
+    if root / COMPOSE_DIR / OFFLINE_FILE in files:
+        print(OFFLINE_NOTE, file=sys.stderr)
+    base = _base_argv(slot.project, files, root)
+    before = set(_running_services(base, env, host))
+    try:
+        code, _ = host.run(
+            compose_argv("test", "run", *args, slot=slot, root=root), env, False
+        )
+        return code
+    finally:
+        started = [s for s in _running_services(base, env, host) if s not in before]
+        if started:
+            host.run([*base, "stop", *started], env, False)
+            host.run([*base, "rm", "-f", *started], env, False)
+
+
+def _toplevel(cwd: Path) -> Path:
+    return Path(_git(cwd, "rev-parse", "--show-toplevel").strip()).resolve()
+
+
+def _parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(prog="python -m scripts.slots")
+    p.add_argument("--root", required=True)
+    p.add_argument(
+        "cmd",
+        choices=[
+            "ensure",
+            "print",
+            "status",
+            "release",
+            "claim",
+            "reap",
+            "background",
+            "compose",
+        ],
+    )
+    p.add_argument("rest", nargs=argparse.REMAINDER)
+    return p
+
+
+def _sub(cmd: str, rest: Sequence[str]) -> argparse.Namespace:
+    p = argparse.ArgumentParser(prog=f"python -m scripts.slots {cmd}")
+    if cmd == "release":
+        p.add_argument("--slot", type=int)
+    elif cmd == "claim":
+        p.add_argument("n", type=int)
+    elif cmd == "reap":
+        p.add_argument("project")
+    elif cmd == "background":
+        p.add_argument("state", choices=["on", "off"])
+    return p.parse_args(list(rest))
+
+
+def _compose_opts(rest: Sequence[str]) -> tuple[Stack, int | None, list[str]]:
+    stack: Stack = "test"
+    as_slot: int | None = None
+    args = list(rest)
+    while args and args[0] in ("--stack", "--as-slot"):
+        if len(args) < 2:
+            raise SlotError(f"{args[0]} needs a value")
+        opt, value, args = args[0], args[1], args[2:]
+        if opt == "--stack":
+            if value not in STACKS:
+                raise SlotError(f"--stack must be one of {', '.join(STACKS)}")
+            stack = cast(Stack, value)
+        else:
+            try:
+                as_slot = int(value)
+            except ValueError as exc:
+                raise SlotError(f"--as-slot {value!r} is not a slot number") from exc
+    return stack, as_slot, args
+
+
+def _compose_main(root: Path, host: Host, rest: Sequence[str]) -> int:
+    stack, as_slot, args = _compose_opts(rest)
+    opts, verb, after = split_verb(args)
+    if as_slot is not None:
+        if as_slot != 0 or stack != "test" or verb != "config":
+            print("--as-slot 0 is only allowed with config", file=sys.stderr)
+            return 2
+        slot = slot_env_for(0, root, "render-only", None)
+        argv = compose_argv("test", *args, slot=slot, root=root)
+        env = compose_env("test", slot)
+    elif stack == "test" and verb == "run":
+        if opts:
+            raise SlotError("global compose options before `run` are not supported")
+        return run_one_off(after, root=root, host=host)
+    else:
+        argv, env = prepare(stack, args, root=root, host=host)
+    os.execvpe(argv[0], argv, {**os.environ, **env})
+    return 0
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    ns = _parser().parse_args(argv)
+    root = Path(ns.root).resolve()
+    try:
+        top: Path | None = _toplevel(Path.cwd())
+    except SlotError:
+        top = None
+    module_root = MODULE_ROOT.resolve()
+    if not (root == top == module_root):
+        print(
+            f"refusing: --root {root} is not this checkout ({module_root})",
+            file=sys.stderr,
+        )
+        return 2
+    host = REAL_HOST
+    try:
+        if ns.cmd == "compose":
+            return _compose_main(root, host, ns.rest)
+        sub = _sub(ns.cmd, ns.rest)
+        if ns.cmd == "ensure":
+            env = ensure_slot(root, host)
+            print(f"slot {env.slot} {env.project} {env.base_url}")
+        elif ns.cmd == "print":
+            print(render_slot_file(ensure_slot(root, host)), end="")
+            print(TRANSITION_WARNING)
+        elif ns.cmd == "status":
+            print(status_report(root, host), end="")
+        elif ns.cmd == "release":
+            release_slot(root, host, slot=sub.slot)
+        elif ns.cmd == "claim":
+            print(render_slot_file(claim_slot(sub.n, root, host)), end="")
+        elif ns.cmd == "reap":
+            reap_project(sub.project, root, host)
+        elif ns.cmd == "background":
+            env = set_background(sub.state == "on", root, host)
+            print(f"slot {env.slot} background {'on' if env.background else 'off'}")
+    except SlotError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
