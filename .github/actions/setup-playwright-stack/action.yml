@@ -39,12 +39,19 @@ runs:
       working-directory: frontend
       run: npm ci
 
+    - name: Detect OS release
+      id: os-release
+      shell: bash
+      run: |
+        . /etc/os-release
+        echo "id=${ID}${VERSION_ID}" >> "$GITHUB_OUTPUT"
+
     - name: Cache Playwright browsers
       uses: actions/cache@v4
       id: playwright-cache
       with:
         path: ~/.cache/ms-playwright
-        key: playwright-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
+        key: playwright-${{ steps.os-release.outputs.id }}-${{ hashFiles('frontend/package-lock.json') }}
 
     - name: Install Playwright browsers
       if: steps.playwright-cache.outputs.cache-hit != 'true'
