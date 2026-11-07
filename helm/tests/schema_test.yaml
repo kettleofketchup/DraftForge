@@ -1,6 +1,7 @@
 suite: values schema and required resources
 templates:
   - templates/configmap-env.yaml
+  - templates/backend.yaml
 tests:
   - it: renders with the default values
     asserts:
@@ -25,3 +26,11 @@ tests:
       ingress.host: ""
     asserts:
       - notFailedTemplate: {}
+
+  - it: fails when the migrate init container has no memory limit
+    template: templates/backend.yaml
+    set:
+      migrations.resources.limits.memory: null
+    asserts:
+      - failedTemplate:
+          errorPattern: "limits\\.memory"

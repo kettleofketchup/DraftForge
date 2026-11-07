@@ -83,9 +83,9 @@ the chart's ServiceAccount, pull secrets and the pod securityContext.
 Takes the root context.
 */}}
 {{- define "draftforge.podCommon" -}}
-{{- with .Values.priorityClassName }}
+{{- with .Values.priorityClassName -}}
 priorityClassName: {{ . }}
-{{- end }}
+{{ end -}}
 automountServiceAccountToken: false
 serviceAccountName: {{ include "draftforge.fullname" . }}
 {{- with .Values.image.pullSecrets }}
