@@ -1,0 +1,39 @@
+{{- $host := .Values.ingress.host | default "" -}}
+{{- $siteUrl := .Values.env.siteUrl | default (ternary (printf "https://%s" $host) "" (ne $host "")) -}}
+{{- $data := dict
+  "NODE_ENV" .Values.env.nodeEnv
+  "DEBUG" .Values.env.debug
+  "TEST" .Values.env.test
+  "RELEASE" .Values.env.release
+  "CI" .Values.env.ci
+  "SITE_URL" $siteUrl
+  "OTEL_ENABLED" .Values.env.otelEnabled
+  "LOG_FORMAT" .Values.env.logFormat
+  "LOG_LEVEL" .Values.env.logLevel
+  "REDIS_HOST" "redis"
+  "CELERY_BROKER_URL" "redis://redis:6379/3"
+  "CELERY_RESULT_BACKEND" "redis://redis:6379/3"
+  "INTERNAL_API_URL" "http://backend:8000/api/internal"
+  "API_BASE_URL" "http://backend:8000/api"
+  "SQLITE_PATH" "/data/db.sqlite3"
+  "EXTRA_ALLOWED_HOSTS" $host
+  "EXTRA_CSRF_TRUSTED_ORIGINS" (ternary (printf "https://%s" $host) "" (ne $host ""))
+  "TRUST_X_FORWARDED_PROTO" "true"
+  "DEPLOY_VERSION" (include "draftforge.imageTag" .)
+-}}
+{{- /* env.extra is applied last and may override a chart key. */ -}}
+{{- $data = mergeOverwrite $data (.Values.env.extra | default dict) -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "draftforge.fullname" . }}-env
+  labels:
+    {{- include "draftforge.labels" . | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+# Broker and result backend use redis db 3: cacheops/CACHES use db 1, which the
+# backend flushes on every start in test/dev envs, and db 0 is the channels layer.
+data:
+  {{- range $k := keys $data | sortAlpha }}
+  {{ $k }}: {{ index $data $k | toString | quote }}
+  {{- end }}

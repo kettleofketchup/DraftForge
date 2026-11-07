@@ -1,0 +1,88 @@
+suite: default (prod-shaped) values
+templates:
+  - templates/serviceaccount.yaml
+  - templates/secret.yaml
+  - templates/configmap-env.yaml
+  - templates/pvc.yaml
+tests:
+  - it: renders the PVC draftforge-data
+    template: templates/pvc.yaml
+    asserts:
+      - hasDocuments: {count: 1}
+      - isKind: {of: PersistentVolumeClaim}
+      - equal: {path: metadata.name, value: draftforge-data}
+      - equal: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", value: "0"}
+      - equal: {path: spec.storageClassName, value: ceph-block}
+      - equal: {path: spec.accessModes, value: [ReadWriteOnce]}
+      - equal: {path: spec.resources.requests.storage, value: 2Gi}
+
+  - it: renders no PVC when persistence is disabled
+    template: templates/pvc.yaml
+    set:
+      persistence.enabled: false
+    asserts:
+      - hasDocuments: {count: 0}
+
+  - it: renders the env ConfigMap with the in-cluster wiring
+    template: templates/configmap-env.yaml
+    asserts:
+      - hasDocuments: {count: 1}
+      - isKind: {of: ConfigMap}
+      - equal: {path: metadata.name, value: draftforge-env}
+      - equal: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", value: "0"}
+      - equal: {path: data.CELERY_BROKER_URL, value: "redis://redis:6379/3"}
+      - equal: {path: data.CELERY_RESULT_BACKEND, value: "redis://redis:6379/3"}
+      - equal: {path: data.REDIS_HOST, value: redis}
+      - equal: {path: data.SQLITE_PATH, value: /data/db.sqlite3}
+      - equal: {path: data.EXTRA_ALLOWED_HOSTS, value: dota.kettle.sh}
+      - equal: {path: data.EXTRA_CSRF_TRUSTED_ORIGINS, value: "https://dota.kettle.sh"}
+      - equal: {path: data.TRUST_X_FORWARDED_PROTO, value: "true"}
+      - equal: {path: data.DEPLOY_VERSION, value: "0.9.70"}
+      - equal: {path: data.NODE_ENV, value: production}
+      - equal: {path: data.INTERNAL_API_URL, value: "http://backend:8000/api/internal"}
+      - equal: {path: data.API_BASE_URL, value: "http://backend:8000/api"}
+      - equal: {path: data.SITE_URL, value: "https://dota.kettle.sh"}
+      - equal: {path: data.DEBUG, value: "false"}
+
+  - it: sets DEPLOY_VERSION to the rendered image tag
+    template: templates/configmap-env.yaml
+    set:
+      image.tag: pr-7-abcdef1
+    asserts:
+      - equal: {path: data.DEPLOY_VERSION, value: pr-7-abcdef1}
+
+  - it: appends env.extra after the chart keys
+    template: templates/configmap-env.yaml
+    set:
+      env.extra:
+        FOO: bar
+    asserts:
+      - equal: {path: data.FOO, value: bar}
+
+  - it: renders no Secret when secrets.create is false
+    template: templates/secret.yaml
+    asserts:
+      - hasDocuments: {count: 0}
+
+  - it: renders the env Secret when secrets.create is true
+    template: templates/secret.yaml
+    set:
+      secrets.create: true
+      secrets.djangoSecretKey: test-key
+      secrets.internalServiceToken: test-token
+    asserts:
+      - hasDocuments: {count: 1}
+      - isKind: {of: Secret}
+      - equal: {path: metadata.name, value: draftforge-env}
+      - equal: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", value: "0"}
+      - equal: {path: stringData.DJANGO_SECRET_KEY, value: test-key}
+      - equal: {path: stringData.INTERNAL_SERVICE_TOKEN, value: test-token}
+
+  - it: renders the ServiceAccount without an API token
+    template: templates/serviceaccount.yaml
+    asserts:
+      - hasDocuments: {count: 1}
+      - isKind: {of: ServiceAccount}
+      - equal: {path: metadata.name, value: draftforge}
+      - equal: {path: automountServiceAccountToken, value: false}
+      - equal: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", value: "0"}
