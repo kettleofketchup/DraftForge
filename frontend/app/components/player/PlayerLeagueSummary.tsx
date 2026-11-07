@@ -64,12 +64,27 @@ export const PlayerLeagueSummary: React.FC<{ leaguePk: number; userId: number }>
     });
   }, [statsError, leaguePk, userId]);
 
-  if (summaryQuery.isPending || statsQuery.isPending) {
+  const averages = statsQuery.isPending ? (
+    <div className="text-xs text-muted-foreground">Loading averages...</div>
+  ) : statsQuery.isError ? (
+    <div className="text-xs text-muted-foreground">Averages unavailable</div>
+  ) : statsQuery.data ? (
+    <div className="text-xs text-muted-foreground tabular-nums">
+      {averagesLine(statsQuery.data)}
+    </div>
+  ) : null;
+
+  if (summaryQuery.isPending) {
     return <div className="text-sm text-muted-foreground">Loading stats...</div>;
   }
 
   if (summaryQuery.isError || distributionQuery.isError) {
-    return <div className="text-sm text-muted-foreground">Couldn't load league stats</div>;
+    return (
+      <div className="space-y-1">
+        <div className="text-sm text-muted-foreground">Couldn't load league stats</div>
+        {statsQuery.isSuccess ? averages : null}
+      </div>
+    );
   }
 
   const { summary, population, minGames } = summaryQuery.data;
@@ -119,13 +134,7 @@ export const PlayerLeagueSummary: React.FC<{ leaguePk: number; userId: number }>
         />
       )}
 
-      {statsQuery.isError ? (
-        <div className="text-xs text-muted-foreground">Averages unavailable</div>
-      ) : statsQuery.data ? (
-        <div className="text-xs text-muted-foreground tabular-nums">
-          {averagesLine(statsQuery.data)}
-        </div>
-      ) : null}
+      {averages}
     </div>
   );
 };

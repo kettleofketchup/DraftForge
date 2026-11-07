@@ -121,7 +121,7 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
     currentUser?.discordId &&
     currentUser?.pk !== player.pk;
 
-  const statsLeaguePk = ctx?.statsLeagueId ?? leagueId;
+  const statsLeaguePk = ctx?.statsLeagueId !== undefined ? ctx.statsLeagueId : leagueId;
 
   // Fetch full user data when modal opens
   useEffect(() => {

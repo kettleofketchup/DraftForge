@@ -107,6 +107,14 @@ describe('PlayerModal league stats context', () => {
     expect(screen.queryByText('Organization stats coming soon')).toBeNull();
   });
 
+  it('an explicit null statsLeagueId suppresses the leagueId fallback', () => {
+    modalCtx.value = { leagueId: 2, statsLeagueId: null };
+    const fetchSpy = stubFetch();
+    renderModal({ leagueId: 2 });
+    expect(screen.queryByText('League Stats')).toBeNull();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
   it('keeps the org placeholder without any league context', () => {
     modalCtx.value = { organizationId: 1 };
     const fetchSpy = stubFetch();

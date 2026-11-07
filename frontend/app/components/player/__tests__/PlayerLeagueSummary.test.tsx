@@ -118,13 +118,22 @@ afterEach(() => {
 });
 
 describe('PlayerLeagueSummary', () => {
-  it('shows loading while either query is pending', async () => {
+  it('renders the summary while the averages are still pending', async () => {
     stubFetch({ status: 200, body: summaries({ [USER_ID]: rankedRow }) }, 'pending');
     renderPanel();
-    expect(screen.getByText('Loading stats...')).toBeTruthy();
-    await new Promise((r) => setTimeout(r, 20));
-    expect(screen.getByText('Loading stats...')).toBeTruthy();
-    expect(screen.queryByTestId('player-league-summary')).toBeNull();
+    const panel = await screen.findByTestId('player-league-summary');
+    expect(panel.textContent).toContain('#12 / 84');
+    expect(screen.queryByText('Loading stats...')).toBeNull();
+    expect(screen.getByText('Loading averages...')).toBeTruthy();
+  });
+
+  it('keeps loaded averages when the summary fails', async () => {
+    stubFetch({ status: 500, body: {} }, { status: 200, body: leagueStats });
+    renderPanel();
+    expect(await screen.findByText("Couldn't load league stats")).toBeTruthy();
+    expect(
+      await screen.findByText('KDA 7.2 / 4.1 / 11.5 · GPM 512 · XPM 601'),
+    ).toBeTruthy();
   });
 
   it('shows loading while the summary is pending', () => {
