@@ -255,11 +255,11 @@ export const TournamentCard: React.FC<Props> = React.memo(({
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.15, delay: Math.min(animationIndex * 0.02, 0.2) }}
         key={`Tournamentcard:${getKeyName()} base`}
-        className="flex items-center justify-center p-4 gap-6 content-center w-full h-full"
+        className="flex items-stretch justify-center p-4 gap-6 w-full h-full"
         whileHover={{ scale: 1.02 }}
       >
         <div
-          className="card card-compact bg-base-300 rounded-2xl w-full max-w-sm
+          className="card card-compact bg-base-300 rounded-2xl w-full max-w-sm h-full flex flex-col
               hover:bg-base-200 focus:outline-2
               focus:outline-offset-2 focus:outline-primary
               active:bg-base-200"
@@ -279,7 +279,7 @@ export const TournamentCard: React.FC<Props> = React.memo(({
           </div>
 
           {/* Footer */}
-          <div className="flex flex-row mt-2 items-center justify-between">
+          <div className="flex flex-row mt-auto pt-2 items-center justify-between">
             <PrimaryButton
               size="sm"
               onClick={() => navigate(`/tournament/${tournament.pk}`)}
