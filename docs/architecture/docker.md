@@ -55,12 +55,36 @@ flowchart TB
 
 The project provides multiple Docker Compose configurations for different environments:
 
-| File | Purpose | Use Case |
-|------|---------|----------|
-| `docker-compose.debug.yaml` | Development | Local development with hot reload |
-| `docker-compose.test.yaml` | Testing | Cypress E2E testing |
-| `docker-compose.prod.yaml` | Production | Production deployment |
-| `docker-compose.release.yaml` | Release | Versioned release deployment |
+| File | Purpose | Compose project | Use Case |
+|------|---------|-----------------|----------|
+| `docker-compose.debug.yaml` | Development | `df-dev` | Local development with hot reload |
+| `docker-compose.debug.m1.yaml` | Development (macOS ARM) | `df-dev` | `just dev::mac` |
+| `docker-compose.test.yaml` | Testing | `df` (slot 0) / `df-sN` | Playwright E2E testing |
+| `docker-compose.slot.yaml` | Test override, slot N ≥ 1 | `df-sN` | Suffixed container names, HTTPS on `1N443`, per-slot redis data |
+| `docker-compose.slot-offline.yaml` | Test override, slot N ≥ 1 with background off | `df-sN` | Blanks `DISCORD_BOT_TOKEN` / `STEAM_API_KEY` on backend, celery and the bot |
+| `docker-compose.run.yaml` | One-off `test::run` without a slot | `df-run-<hex>` | Ephemeral backend run, tmpfs redis, removed afterwards |
+| `docker-compose.ci.override.yaml` | CI override | `df` | GitHub Actions only |
+| `docker-compose.prod.yaml` | Production | `df` | Production deployment |
+| `docker-compose.release.yaml` | Release | `df` | Versioned release deployment |
+
+## Compose Projects and Test Stack Slots
+
+Every compose call goes through one helper (`scripts/slots.py`), which always passes
+an explicit `-p <project>` and absolute `-f` paths. Run it through
+`just test::compose <args>` (add `--stack dev` for the dev stack) rather than raw
+`docker compose`.
+
+- **Test stacks are per worktree.** Each worktree gets a slot N in 0-9 and its own
+  project: slot 0 is `df` on ports 80/443 (`https://localhost`, what CI uses);
+  slot N ≥ 1 is `df-sN` on HTTPS port `10443 + N*1000` only. `just test::slot` shows
+  this worktree's slot; `just test::slots` lists all of them.
+- **The dev stack is project `df-dev`** with containers `frontend-dev`, `backend-dev`,
+  `redis-dev` and `nginx-dev`. It still publishes 80/443, so it cannot run at the same
+  time as test slot 0; the helper refuses before any container starts.
+- **Discord bot and celery beat** run on slot 0 and dev only. Slots N ≥ 1 scale them to
+  zero unless `just test::background on` is set for that slot.
+
+Details, commands and troubleshooting: [Test Stack Slots](../development/test-stack-slots.md).
 
 ## Services
 
@@ -275,7 +299,7 @@ just docker::all-pull
 # Start development
 just dev::debug
 
-# Start production locally
+# Start production locally (known broken: renders `-p .`)
 just dev::local-prod
 ```
 
@@ -293,11 +317,17 @@ networks:
     driver: bridge
 ```
 
+Compose scopes the network per project (`df_test-network`, `df-s2_test-network`), so
+every slot has its own network and its own nginx `localhost` alias. No subnets are
+pinned.
+
 ## Volume Mounts
 
 ### Development Volumes
 - Source code mounted for hot reload
 - Database files persisted locally
+- Redis data is per stack: `backend/.redis_data` (test slot 0), `backend/.redis_data-sN`
+  (slot N), `backend/.redis_data-dev` (dev)
 
 ### Production Volumes
 - Only database and SSL certificates mounted

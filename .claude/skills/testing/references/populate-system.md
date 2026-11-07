@@ -77,9 +77,8 @@ just db::populate::all
 # Fresh populate (bypass cache)
 just db::populate::fresh
 
-# Specific function (in Docker)
-docker compose -f docker/docker-compose.test.yaml run --rm --entrypoint "" backend \
-  python manage.py shell -c "from tests.populate.csv_import import populate_csv_import_data; populate_csv_import_data(force=True)"
+# Specific function (in Docker; test::run bypasses daphne and uses this worktree's slot)
+just test::run 'python manage.py shell -c "from tests.populate.csv_import import populate_csv_import_data; populate_csv_import_data(force=True)"'
 ```
 
 ## Adding New Populate Functions

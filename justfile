@@ -12,9 +12,9 @@ frontend := root / "frontend"
 # Bootstrap and start dev environment (for ./dev script)
 # Called by: ./dev
 #
-# In a git worktree, stops after dependency install (skips docker compose
-# startup) — worktrees share the main repo's docker stack and shouldn't
-# spin up a parallel one. Pass --up to force docker startup anyway.
+# In a git worktree, stops after dependency install (skips dev stack
+# startup). There is one dev stack per machine (project df-dev); test stacks
+# are per worktree (`just test::slot`). Pass --up to start dev here anyway.
 bootstrap *args:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -71,15 +71,14 @@ bootstrap *args:
         fi
     fi
 
-    # In a worktree, stop here unless --up was passed. Worktrees share the
-    # main repo's docker stack (project name pinned by an earlier fix) and
-    # spinning up a parallel one collides.
+    # In a worktree, stop here unless --up was passed: the dev stack (df-dev)
+    # is one per machine, while each worktree gets its own test stack slot.
     if [[ "$is_worktree" == "true" && "$force_up" != "true" ]]; then
         echo
         echo "Worktree setup complete — dependencies installed, .env copied."
-        echo "  - Run 'just dev::debug' from the main repo to start docker compose."
-        echo "  - Run 'just test::setup' / 'just test::upd' to manage the test stack."
-        echo "  - Re-run './dev --up' here to force docker startup in this worktree."
+        echo "  - This worktree gets its own test stack: 'just test::slot' shows its slot and URL."
+        echo "  - Run 'just test::setup' / 'just test::upd' to manage that test stack."
+        echo "  - The dev stack (df-dev) is one per machine; './dev --up' starts it from here."
         exit 0
     fi
 

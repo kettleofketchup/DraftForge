@@ -118,10 +118,27 @@ just test::pw::spec herodraft   # HeroDraft tests
 ```bash
 just test::setup              # Full test environment setup
 just test::up                 # Start test environment
-just test::down               # Stop test environment
+just test::down               # Stop this worktree's test stack (scoped to its slot)
 just test::logs               # Follow test logs
 just test::ps                 # List test containers
 just test::restart            # Restart test services
+```
+
+### Test Stack Slots
+
+Each worktree runs its own test stack in a slot. See
+[Test Stack Slots](test-stack-slots.md).
+
+```bash
+just test::slot                    # Allocate or re-adopt this worktree's slot; print slot, project, URL
+just test::slots                   # List every slot reservation and df* stack (read-only, never allocates)
+just test::slot-release            # Release this worktree's slot (stack must be down)
+just test::slot-release --slot N   # Release another worktree's idle slot N (ask the user first)
+just test::slot-claim N            # Move slot N to this worktree (ask the user first)
+just test::slot-reap <project>     # Tear down an orphaned df/df-sN/df-dev/df-run-* stack (ask the user first)
+just test::background on|off       # Discord bot + celery beat for this slot (off by default on N >= 1)
+just test::compose <args>          # docker compose against this worktree's slot (--stack dev for df-dev)
+just test::slots-unit              # Slot helper unit tests (no containers)
 ```
 
 ### Backend Tests

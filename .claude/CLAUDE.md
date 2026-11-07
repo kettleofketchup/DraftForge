@@ -355,6 +355,26 @@ just dev::debug
 just test::run 'python manage.py test app.tests -v 2'
 ```
 
+### Test Stack Slots (one test stack per worktree)
+
+Each worktree gets its own test stack. The first `just test::up|upd|setup` in a
+worktree allocates a **slot** (0-9) and writes `docker/.env.slot`:
+
+| Slot | Compose project | URL |
+|------|-----------------|-----|
+| 0 | `df` | `https://localhost` (ports 80/443) |
+| N ≥ 1 | `df-sN` | `https://localhost:1N443` (HTTPS only) |
+
+The dev stack is separate (project `df-dev`, one per machine).
+
+- `just test::slot` shows this worktree's slot and URL; `just test::slots` lists every slot and stack (read-only).
+- **Never hardcode `https://localhost`** — Playwright reads the slot file; use `just test::compose <args>` instead of raw `docker compose`.
+- Discord bot + celery beat run only on slot 0; `just test::background on` enables them for one N ≥ 1 stack.
+- **Ask the user before** `just test::slot-reap`, `just test::slot-claim` or `just test::slot-release --slot N` — they act on other worktrees.
+- Worktrees on branches without this feature can still kill or hijack slot stacks: merge main into a worktree before using its test stack.
+
+See `docs/development/test-stack-slots.md`.
+
 ## Agents Available
 
 - `python-backend` - Django/Python backend expertise

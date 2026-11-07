@@ -123,6 +123,26 @@ inv test.spec --spec <shortcut>  # Run specific Cypress spec
 inv test.run --cmd '<command>'  # Run command in test container
 ```
 
+### Compose Helper and Test Stack Slots
+
+Every `test.*`, `dev.*`, `prod.*` and `release` compose call is rendered by
+`scripts/slots.py` (`compose_cmd(stack, ...)`), which always passes an explicit
+`-p <project>` and absolute `-f` paths. The old host-wide `docker_stop_all` is gone:
+`test.down` and `test.stop` act only on this worktree's project.
+
+| Verbs | Slot behaviour |
+|-------|----------------|
+| `test.up`, `test.upd`, `test.setup`, `test.build`, `test.pull` | Allocate or re-adopt this worktree's slot, refresh its lease |
+| `test.ps`, `test.logs`, `test.top`, `test.exec`, `test.restart`, `test.down`, `test.stop`, Playwright tasks | Read the existing slot; error if there is none or another worktree took it |
+| `test.run` | Never allocates: uses the slot if one exists, otherwise an ephemeral `df-run-<hex>` project that is removed afterwards |
+
+With `GITHUB_ACTIONS=true` the helper uses a synthetic slot 0 (project `df`,
+`test.yaml` + `ci.override.yaml`, `https://localhost`) and touches no slot files.
+Playwright tasks get the base URL through `DF_BASE_URL`, not `DOCKER_HOST`.
+
+The slot commands themselves are just recipes (`just test::slot`, `test::slots`,
+`test::compose`, ...); see [Test Stack Slots](test-stack-slots.md).
+
 ## Update Tasks (`inv update.*`)
 
 ```bash
