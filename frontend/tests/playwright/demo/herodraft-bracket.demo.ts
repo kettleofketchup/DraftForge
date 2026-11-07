@@ -17,6 +17,7 @@
  * 7. Drafting phase (24 rounds: 14 bans + 10 picks)
  */
 
+import { BASE_URL } from '../fixtures/base-url';
 import {
   test,
   expect,
@@ -25,7 +26,7 @@ import {
   type BrowserContext,
   type Page,
 } from '@playwright/test';
-import { loginAsDiscordId, waitForHydration, DOCKER_HOST, API_URL } from '../fixtures/auth';
+import { loginAsDiscordId, waitForHydration, API_URL } from '../fixtures/auth';
 import { waitForDemoReady, waitForMatchModalReady } from '../fixtures/demo-utils';
 import { HeroDraftPage } from '../helpers/HeroDraftPage';
 import * as path from 'path';
@@ -36,8 +37,6 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Use centralized DOCKER_HOST from fixtures
-const BASE_URL = `https://${DOCKER_HOST}`;
 const VIDEO_OUTPUT_DIR = 'demo-results/videos';
 const DOCS_VIDEO_DIR = path.resolve(__dirname, '../../../docs/assets/videos');
 const DEMO_METADATA_FILE = path.join(VIDEO_OUTPUT_DIR, 'herodraft.demo.yaml');

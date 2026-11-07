@@ -5,14 +5,13 @@
  * Only the tournament key and output names differ between draft types.
  */
 
+import { API_URL, BASE_URL } from '../fixtures/base-url';
 import { test, expect, chromium } from '@playwright/test';
-import { loginAdminFromPage, waitForHydration, DOCKER_HOST } from '../fixtures/auth';
+import { loginAdminFromPage, waitForHydration } from '../fixtures/auth';
 import { waitForDemoReady, waitForDraftReady, waitForLoadingComplete } from '../fixtures/demo-utils';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 
-const API_URL = `https://${DOCKER_HOST}/api`;
-const BASE_URL = `https://${DOCKER_HOST}`;
 const VIDEO_OUTPUT_DIR = 'demo-results/videos';
 
 interface TournamentData {
@@ -358,7 +357,7 @@ export async function runDraftDemo(config: DraftDemoConfig): Promise<void> {
   console.log('Video: Recording started');
 
   // Navigate first to establish origin, then login from page
-  await page.goto(`https://${DOCKER_HOST}/`);
+  await page.goto(`${BASE_URL}/`);
   await loginAdminFromPage(page);
   const videoCookies = await videoContext.cookies();
   const hasSession = videoCookies.some(c => c.name === 'sessionid');

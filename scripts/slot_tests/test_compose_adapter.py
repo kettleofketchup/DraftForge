@@ -85,7 +85,6 @@ def test_playwright_env_ci(monkeypatch: pytest.MonkeyPatch) -> None:
     assert playwright_env() == {
         "DF_BASE_URL": "https://localhost",
         "DF_BASE_URL_SOURCE": "invoke",
-        "DOCKER_HOST": "localhost",
     }
 
 
@@ -98,7 +97,6 @@ def test_playwright_env_local_slot(
     assert playwright_env() == {
         "DF_BASE_URL": "https://localhost:13443",
         "DF_BASE_URL_SOURCE": "invoke",
-        "DOCKER_HOST": "localhost",
     }
 
 
@@ -117,7 +115,6 @@ def test_playwright_env_container(
     assert playwright_env() == {
         "DF_BASE_URL": "https://nginx",
         "DF_BASE_URL_SOURCE": "container",
-        "DOCKER_HOST": "nginx",
     }
     assert slotless[1].calls == []
 

@@ -14,10 +14,10 @@
  * - Database populated (just db::populate::all)
  */
 
+import { API_URL } from '../../fixtures/base-url';
 import { test, expect, visitAndWaitForHydration } from '../../fixtures';
 import { loginAsDiscordId } from '../../fixtures/auth';
 
-const API_URL = 'https://localhost/api';
 
 /** Discord ID of the league admin test user (PK 1030, league 1 admin). */
 const LEAGUE_ADMIN_DISCORD_ID = '100000000000000008';

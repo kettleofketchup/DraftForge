@@ -36,3 +36,8 @@ def test_no_raw_compose_outside_helper() -> None:
 
 def test_no_localhost_literal_in_scripts_tests() -> None:
     assert "https://localhost" not in (ROOT / "scripts/tests.py").read_text()
+
+
+def test_no_docker_host_in_scripts() -> None:
+    for rel in ["scripts/tests.py", "scripts/compose.py"]:
+        assert "DOCKER_HOST" not in (ROOT / rel).read_text(), rel

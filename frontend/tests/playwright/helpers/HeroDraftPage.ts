@@ -1,3 +1,4 @@
+import { API_URL } from '../fixtures/base-url';
 import { expect } from '@playwright/test';
 import type { Page, Locator } from '@playwright/test';
 
@@ -180,7 +181,7 @@ export class HeroDraftPage {
    */
   async fetchDraftStateFromAPI(draftId: number): Promise<{ state: string; teams: Array<{ is_ready: boolean; team_name: string }> } | null> {
     try {
-      const response = await this.page.request.get(`https://localhost/api/herodraft/${draftId}/`, {
+      const response = await this.page.request.get(`${API_URL}/herodraft/${draftId}/`, {
         failOnStatusCode: false,
       });
       if (response.ok()) {

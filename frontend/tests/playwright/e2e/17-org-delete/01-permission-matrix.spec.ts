@@ -12,6 +12,7 @@
  * PKs match backend/tests/data/org_delete.py.
  */
 
+import { API_URL } from '../../fixtures/base-url';
 import { test, expect } from '../../fixtures';
 import { loginAsUser } from '../../fixtures/auth';
 
@@ -26,7 +27,7 @@ let orgPk: number;
 test.describe('Organization delete — permission matrix', () => {
   test.beforeAll(async ({ browser }) => {
     const context = await browser.newContext({ ignoreHTTPSErrors: true });
-    const resp = await context.request.get('https://localhost/api/organizations/');
+    const resp = await context.request.get(`${API_URL}/organizations/`);
     const data = await resp.json();
     const list = Array.isArray(data) ? data : (data.results ?? []);
     const org = list.find((o: { name: string }) => o.name === ORG_DELETE_ORG_NAME);

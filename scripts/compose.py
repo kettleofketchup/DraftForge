@@ -66,7 +66,6 @@ def playwright_env() -> dict[str, str]:
         return {
             "DF_BASE_URL": "https://nginx",
             "DF_BASE_URL_SOURCE": "container",
-            "DOCKER_HOST": "nginx",
         }
     try:
         base_url = read_slot().base_url
@@ -75,7 +74,6 @@ def playwright_env() -> dict[str, str]:
     return {
         "DF_BASE_URL": base_url,
         "DF_BASE_URL_SOURCE": "invoke",
-        "DOCKER_HOST": "localhost",
     }
 
 

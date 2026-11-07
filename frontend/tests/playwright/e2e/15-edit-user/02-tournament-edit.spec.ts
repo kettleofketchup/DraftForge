@@ -10,6 +10,7 @@
  * Uses isolated "User Edit Tournament" data — does not touch other test entities.
  */
 
+import { API_URL } from '../../fixtures/base-url';
 import {
   test,
   expect,
@@ -21,7 +22,6 @@ import {
   restoreUserField,
 } from '../../fixtures';
 
-const API_URL = 'https://localhost/api';
 const USER_EDIT_LEAGUE_NAME = 'User Edit League';
 const USER_EDIT_TOURNAMENT_NAME = 'User Edit Tournament';
 
