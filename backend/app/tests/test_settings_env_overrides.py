@@ -105,8 +105,8 @@ class SettingsEnvOverrideTests(SimpleTestCase):
                 "DJANGO_SECRET_KEY": "k1",
                 "SQLITE_PATH": "/data/db.sqlite3",
                 "REDIS_HOST": "redis",
-                "EXTRA_ALLOWED_HOSTS": "draftforge-pr-1.home.kettle.sh",
-                "EXTRA_CSRF_TRUSTED_ORIGINS": "https://draftforge-pr-1.home.kettle.sh",
+                "EXTRA_ALLOWED_HOSTS": "draftforge-pr-1.preview.example.test",
+                "EXTRA_CSRF_TRUSTED_ORIGINS": "https://draftforge-pr-1.preview.example.test",
                 "TRUST_X_FORWARDED_PROTO": "true",
             }
         )
@@ -116,10 +116,10 @@ class SettingsEnvOverrideTests(SimpleTestCase):
         self.assertEqual(mod.CACHEOPS_REDIS["host"], "redis")
         self.assertEqual(mod.CELERY_BROKER_URL, "redis://redis:6379/1")
         self.assertEqual(mod.CELERY_RESULT_BACKEND, "redis://redis:6379/1")
-        self.assertEqual(mod.ALLOWED_HOSTS[-1], "draftforge-pr-1.home.kettle.sh")
+        self.assertEqual(mod.ALLOWED_HOSTS[-1], "draftforge-pr-1.preview.example.test")
         self.assertEqual(
             mod.CSRF_TRUSTED_ORIGINS,
-            [*DEFAULT_CSRF_TRUSTED_ORIGINS, "https://draftforge-pr-1.home.kettle.sh"],
+            [*DEFAULT_CSRF_TRUSTED_ORIGINS, "https://draftforge-pr-1.preview.example.test"],
         )
         self.assertEqual(
             mod.SECURE_PROXY_SSL_HEADER, ("HTTP_X_FORWARDED_PROTO", "https")
