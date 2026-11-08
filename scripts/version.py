@@ -1,4 +1,5 @@
 from datetime import date
+from pathlib import Path
 
 from invoke.collection import Collection
 from invoke.context import Context
@@ -7,6 +8,7 @@ from invoke.tasks import task
 
 import paths
 from scripts import changelog
+from scripts.docker import docker_release_build
 from scripts.sync_version import (
     get_version_from_env,
     get_version_from_pyproject,
@@ -111,41 +113,23 @@ def set_version(
 def build_with_version(
     c: Context, version: str | None = None, env_file: str | None = None
 ) -> None:
-    """Build Docker images with version sync"""
-    import os
+    """Sync the version into pyproject.toml and the env files, then build release images.
 
-    # Determine the version to use
-    if version:
-        target_version = version
-        print(f"Setting version to {target_version}...")
-        # Update all files with the specified version
-        update_pyproject_version(target_version)
-        for env_file_path in [".env.release", ".env.debug"]:
-            update_env_version(env_file_path, target_version)
-    elif env_file:
-        print(f"Syncing version from {env_file}...")
-        target_version = get_version_from_env(env_file)
-        print(f"Syncing to version: {target_version}")
-        # Update pyproject.toml with version from env file
-        update_pyproject_version(target_version)
-    else:
-        # Default to using .env.release
-        env_file = ".env.release"
-        print(f"Syncing version from {env_file}...")
-        target_version = get_version_from_env(env_file)
-        print(f"Syncing to version: {target_version}")
-        update_pyproject_version(target_version)
+    Args:
+        version: Version to set; if omitted, read from env_file.
+        env_file: Env file to read the version from (default: docker/.env.release).
+    """
+    if version is None:
+        source = Path(env_file) if env_file else paths.RELEASE_ENV_FILE
+        print(f"Syncing version from {source}...")
+        version = get_version_from_env(source)
+    print(f"Setting version to {version}...")
+    update_pyproject_version(version)
+    for env_path in [paths.PROD_ENV_FILE, paths.RELEASE_ENV_FILE]:
+        update_env_version(env_path, version)
 
-    print(f"Building with VERSION={target_version}")
-
-    # Set environment variable for docker compose
-    os.environ["VERSION"] = target_version
-
-    # Build using local compose file
-    cmd = f"docker compose -f docker-compose.local.yaml build --build-arg VERSION={target_version}"
-    c.run(cmd)
-
-    print(f"Build complete with version {target_version}")
+    print(f"Building release images for {version}")
+    docker_release_build(c)
 
 
 ns_version.add_task(sync_version_from_env, "from-env")
