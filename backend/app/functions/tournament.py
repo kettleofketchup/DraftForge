@@ -4,12 +4,15 @@ import requests
 from django.contrib.auth import login
 from django.contrib.auth import logout as auth_logout
 from django.contrib.auth.decorators import login_required
+from django.db import transaction
 from django.http import HttpResponse, HttpResponseBadRequest, JsonResponse
 from django.shortcuts import redirect, render
+from django.utils import timezone
 from rest_framework import generics, permissions, serializers, status, viewsets
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.generics import GenericAPIView
 from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
+from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.reverse import reverse
 from social_core.backends.oauth import BaseOAuth1, BaseOAuth2
@@ -20,7 +23,18 @@ from social_django.models import AbstractUserSocialAuth, DjangoStorage
 from social_django.utils import load_strategy, psa
 
 from app.broadcast import broadcast_event
-from app.models import CustomUser, Draft, DraftEvent, DraftRound, Team, Tournament
+from app.cache_utils import invalidate_after_commit, invalidate_obj
+from app.functions.shuffle_draft import assign_next_shuffle_captain
+from app.functions.teamdraft import advance_after_pick, record_pick_timing
+from app.models import (
+    CustomUser,
+    Draft,
+    DraftEvent,
+    DraftRound,
+    Team,
+    TeamDraftState,
+    Tournament,
+)
 from app.permissions import IsStaff
 from app.permissions_org import CanEditDraft, can_edit_tournament
 from app.serializers import (
@@ -33,6 +47,7 @@ from app.serializers import (
     UserSerializer,
     _build_users_dict,
 )
+from app.tasks.draft_tick import evaluate_client_pick_time
 from backend import settings
 from telemetry.logging import get_logger
 
@@ -49,14 +64,12 @@ def _serialize_tournament(tournament):
 class PickPlayerForRound(serializers.Serializer):
     draft_round_pk = serializers.IntegerField(required=True)
     user_pk = serializers.IntegerField(required=True)
-
-
-from app.cache_utils import invalidate_obj
+    client_picked_at = serializers.DateTimeField(required=False, allow_null=True)
 
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
-def pick_player_for_round(request):
+def pick_player_for_round(request: Request) -> Response:
     """
     Pick a player for a draft round.
 
@@ -66,12 +79,14 @@ def pick_player_for_round(request):
     Request body:
         draft_round_pk: int - Primary key of the draft round
         user_pk: int - Primary key of the user to pick
+        client_picked_at: optional ISO datetime of the client-side pick
 
     Returns:
         201: Success with updated tournament data
         400: Validation error
         403: Not authorized (not staff and not captain for this round)
         404: Draft round or user not found
+        409: Draft not accepting picks / not the active round / already picked
         500: Error during pick
     """
 
@@ -80,6 +95,7 @@ def pick_player_for_round(request):
     if serializer.is_valid():
         draft_round_pk = serializer.validated_data["draft_round_pk"]
         user_pk = serializer.validated_data["user_pk"]
+        client_picked_at = serializer.validated_data.get("client_picked_at")
     else:
         return Response(serializer.errors, status=400)
 
@@ -115,14 +131,103 @@ def pick_player_for_round(request):
             status=403,
         )
 
-    # Authorization check: staff OR captain for this round
     try:
         user = CustomUser.objects.get(pk=user_pk)
     except CustomUser.DoesNotExist:
         return Response({"error": "User not found"}, status=404)
 
+    tie_data = None
     try:
-        draft_round.pick_player(user)
+        with transaction.atomic():
+            draft = Draft.objects.select_for_update().get(pk=draft_round.draft_id)
+            active = draft.lock_active_round()
+            draft_round = DraftRound.objects.select_for_update().get(
+                pk=draft_round.pk
+            )
+            team = Team.objects.select_for_update().filter(
+                tournament=draft.tournament_id, captain_id=draft_round.captain_id
+            ).first()
+            tournament = draft.tournament
+            options = tournament.get_draft_options(fresh=True)
+            timed = options.timer_enabled
+
+            if timed:
+                if draft.state in (
+                    TeamDraftState.PENDING,
+                    TeamDraftState.RESUMING,
+                    TeamDraftState.COMPLETED,
+                ):
+                    return Response(
+                        {"code": "draft_not_accepting_picks", "state": draft.state},
+                        status=409,
+                    )
+                if draft.state == TeamDraftState.PAUSED and not is_tournament_staff:
+                    return Response({"code": "paused_staff_only"}, status=403)
+                if active is None or draft_round.pk != active.pk:
+                    return Response(
+                        {
+                            "code": "not_active_round",
+                            "active_pick_number": (
+                                active.pick_number if active else None
+                            ),
+                        },
+                        status=409,
+                    )
+
+            if draft_round.choice_id is not None:
+                return Response({"code": "already_picked"}, status=409)
+
+            armed = (
+                timed
+                and draft.state == TeamDraftState.DRAFTING
+                and active is not None
+                and active.started_at is not None
+            )
+            activate_next = timed and (armed or draft.state == TeamDraftState.PAUSED)
+
+            now = timezone.now()
+            effective, _source, _age = evaluate_client_pick_time(
+                now, client_picked_at, draft.pk, system="teamdraft", subsystem="timer"
+            )
+            if draft.state == TeamDraftState.PAUSED and draft.paused_at is not None:
+                effective = min(effective, draft.paused_at)
+
+            draft_round.pick_player(user)
+
+            if timed and draft_round.started_at and team is not None:
+                record_pick_timing(
+                    draft_round,
+                    team,
+                    completed_at=now,
+                    effective_pick_time=effective,
+                    default_reserve_ms=options.reserve_time_ms,
+                )
+
+            captain = draft_round.captain
+            round_team = draft_round.team
+            picked_event = DraftEvent.objects.create(
+                draft=draft,
+                event_type="player_picked",
+                actor=request.user,
+                payload={
+                    "pick_number": draft_round.pick_number,
+                    "captain_id": captain.pk,
+                    "captain_name": captain.username,
+                    "captain_avatar_url": captain.avatarUrl,
+                    "picked_id": user.pk,
+                    "picked_name": user.username,
+                    "picked_avatar_url": user.avatarUrl,
+                    "team_id": round_team.pk if round_team else None,
+                    "team_name": round_team.name if round_team else None,
+                },
+            )
+            transaction.on_commit(lambda e=picked_event: broadcast_event(e))
+
+            if draft.draft_style == "shuffle" and draft.users_remaining.exists():
+                tie_data = assign_next_shuffle_captain(draft)
+
+            advance_after_pick(draft, options, now=now, activate=activate_next)
+            invalidate_after_commit(tournament, draft)
     except Exception as e:
         log.error(
             "pick_failed",
@@ -133,51 +238,9 @@ def pick_player_for_round(request):
         )
         return Response({"error": f"Failed to pick player. {str(e)}"}, status=500)
 
-    draft = draft_round.draft
-    draft.save()
-    draft_round.save()
-
-    # Create player_picked event
-    team = draft_round.team
-    captain = draft_round.captain
-    picked_event = DraftEvent.objects.create(
-        draft=draft,
-        event_type="player_picked",
-        actor=request.user,
-        payload={
-            "pick_number": draft_round.pick_number,
-            "captain_id": captain.pk,
-            "captain_name": captain.username,
-            "captain_avatar_url": captain.avatarUrl,
-            "picked_id": user.pk,
-            "picked_name": user.username,
-            "picked_avatar_url": user.avatarUrl,
-            "team_id": team.pk if team else None,
-            "team_name": team.name if team else None,
-        },
-    )
-    broadcast_event(picked_event)
-
-    # For shuffle draft, assign next captain
-    tie_data = None
-    if draft.draft_style == "shuffle" and draft.users_remaining.exists():
-        from app.functions.shuffle_draft import assign_next_shuffle_captain
-
-        tie_data = assign_next_shuffle_captain(draft)
-
-    try:
-        tournament = draft_round.draft.tournament
-    except Tournament.DoesNotExist:
-        return Response({"error": "Tournament not found"}, status=404)
-    # Build response data
     response_data = _serialize_tournament(tournament)
     if tie_data:
         response_data["tie_resolution"] = tie_data
-
-    # Invalidate specific objects, not entire model caches
-    invalidate_obj(tournament)
-    if draft:
-        invalidate_obj(draft)
     return Response(response_data, status=201)
 
 

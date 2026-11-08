@@ -3,6 +3,8 @@
 import random
 from typing import Optional
 
+from django.db import transaction
+
 from app.broadcast import broadcast_event
 from app.models import DraftEvent
 
@@ -208,7 +210,7 @@ def assign_next_shuffle_captain(draft) -> Optional[dict]:
             "team_mmr": get_team_total_mmr(next_team),
         },
     )
-    broadcast_event(captain_event)
+    transaction.on_commit(lambda e=captain_event: broadcast_event(e))
 
     # If there was a tie, also create a tie_roll event
     if tie_data:
@@ -223,6 +225,6 @@ def assign_next_shuffle_captain(draft) -> Optional[dict]:
                 "winner_name": next_team.captain.username,
             },
         )
-        broadcast_event(tie_event)
+        transaction.on_commit(lambda e=tie_event: broadcast_event(e))
 
     return tie_data
