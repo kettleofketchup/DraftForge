@@ -38,6 +38,10 @@ from django.core.cache import cache
 # admin-triggered fills, not for 15 seconds.
 DISCORD_MEMBER_CACHE_TTL_S = 60 * 60  # 1 hour
 
+# Per-request bound for Discord REST calls. Without one, a request whose TCP
+# handshake is dropped (filtered egress) blocks its caller indefinitely.
+DISCORD_HTTP_TIMEOUT_S = 10
+
 
 def get_discord_members_data(guild_id=None):
     """Get Discord guild members as a raw list (cache-backed).
@@ -48,6 +52,10 @@ def get_discord_members_data(guild_id=None):
     if guild_id is None:
         guild_id = settings.DISCORD_GUILD_ID
     bot_token = settings.DISCORD_BOT_TOKEN
+    # Skip if Discord bot token is not configured (e.g., in CI): the request
+    # can only fail, and an empty result is not cached.
+    if not bot_token:
+        return []
 
     cache_key = f"discord_members_{guild_id}"
     cached_members = cache.get(cache_key)
@@ -66,7 +74,9 @@ def get_discord_members_data(guild_id=None):
             params["after"] = after
 
         try:
-            response = requests.get(url, headers=headers, params=params)
+            response = requests.get(
+                url, headers=headers, params=params, timeout=DISCORD_HTTP_TIMEOUT_S
+            )
             response.raise_for_status()
             page = response.json()
             if not page:

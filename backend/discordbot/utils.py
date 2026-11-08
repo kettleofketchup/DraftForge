@@ -10,6 +10,7 @@ from django.conf import settings
 from telemetry.logging import get_logger
 
 from .embeds import event_announcement_embed
+from .services.discord_members import DISCORD_HTTP_TIMEOUT_S
 
 log = get_logger(__name__)
 
@@ -96,7 +97,9 @@ def _rate_limited_request(method, url, max_retries=3, **kwargs):
     """Make a rate-limited HTTP request to the Discord API.
 
     Acquires a token before each attempt and retries on 429 responses.
+    Applies DISCORD_HTTP_TIMEOUT_S unless the caller passes its own timeout.
     """
+    kwargs.setdefault("timeout", DISCORD_HTTP_TIMEOUT_S)
     for attempt in range(max_retries):
         _acquire_rate_limit_token()
         response = requests.request(method, url, **kwargs)
