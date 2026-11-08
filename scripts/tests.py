@@ -575,9 +575,8 @@ def _run_demo(c: Context, spec: str = "", workers: int = 1) -> None:
 
 
 def _copy_demo_videos(c: Context) -> None:
-    """Copy demo videos from frontend container to docs/assets/videos/."""
+    """Copy demo videos from frontend/demo-results/ to docs/assets/videos/."""
 
-    # Copy from container to host
     demo_results = paths.FRONTEND_PATH / "demo-results"
     videos_dir = demo_results / "videos"
     docs_videos = paths.PROJECT_PATH / "docs" / "assets" / "videos"
@@ -606,9 +605,8 @@ def _copy_demo_videos(c: Context) -> None:
 
 
 def _copy_demo_snapshots(c: Context) -> None:
-    """Copy demo snapshots from frontend container to docs/assets/site_snapshots/."""
+    """Copy demo snapshots from frontend/demo-results/ to docs/assets/site_snapshots/."""
 
-    # Copy from container to host
     demo_results = paths.FRONTEND_PATH / "demo-results"
     snapshots_dir = demo_results / "site_snapshots"
     docs_snapshots = paths.PROJECT_PATH / "docs" / "assets" / "site_snapshots"
