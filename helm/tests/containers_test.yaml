@@ -1,0 +1,165 @@
+suite: containers (command, resources, securityContext)
+values:
+  - fixtures/prod-values.yaml
+templates:
+  - templates/configmap-env.yaml
+  - templates/secret.yaml
+  - templates/backend.yaml
+  - templates/frontend.yaml
+  - templates/redis.yaml
+  - templates/celery-worker.yaml
+  - templates/celery-beat.yaml
+  - templates/discord-bot.yaml
+tests:
+  - it: runs migrations as an explicit-argv init container with the cache disabled
+    template: templates/backend.yaml
+    documentSelector: {path: kind, value: Deployment}
+    asserts:
+      - equal: {path: "spec.template.spec.initContainers[0].name", value: migrate}
+      - equal: {path: "spec.template.spec.initContainers[?(@.name == \"migrate\")].command", value: [python, manage.py, migrate, --noinput]}
+      - notExists: {path: "spec.template.spec.initContainers[?(@.name == \"migrate\")].args"}
+      - contains:
+          path: "spec.template.spec.initContainers[?(@.name == \"migrate\")].env"
+          content: {name: DISABLE_CACHE, value: "true"}
+      - lengthEqual: {path: spec.template.spec.initContainers, count: 1}
+
+  - it: seeds through sh -ec when seed is enabled
+    template: templates/backend.yaml
+    documentSelector: {path: kind, value: Deployment}
+    set:
+      seed.enabled: true
+    asserts:
+      - equal: {path: "spec.template.spec.initContainers[1].name", value: seed}
+      - equal: {path: "spec.template.spec.initContainers[?(@.name == \"seed\")].command[0]", value: sh}
+      - equal: {path: "spec.template.spec.initContainers[?(@.name == \"seed\")].command[1]", value: -ec}
+      - matchRegex: {path: "spec.template.spec.initContainers[?(@.name == \"seed\")].command[2]", pattern: "python manage\\.py populate_all --force"}
+      - contains:
+          path: "spec.template.spec.initContainers[?(@.name == \"seed\")].env"
+          content: {name: DISABLE_CACHE, value: "true"}
+
+  - it: leaves the daphne entrypoint alone (no args on the backend container)
+    template: templates/backend.yaml
+    documentSelector: {path: kind, value: Deployment}
+    asserts:
+      - notExists: {path: "spec.template.spec.containers[?(@.name == \"backend\")].args"}
+      - notExists: {path: "spec.template.spec.containers[?(@.name == \"backend\")].command"}
+
+  - it: gives every backend pod container resources and a restricted securityContext
+    template: templates/backend.yaml
+    documentSelector: {path: kind, value: Deployment}
+    set:
+      seed.enabled: true
+    asserts:
+      - equal: {path: spec.template.spec.securityContext.fsGroup, value: 1000}
+      - equal: {path: spec.template.spec.automountServiceAccountToken, value: false}
+      - equal: {path: spec.template.spec.serviceAccountName, value: draftforge}
+      - isNotNullOrEmpty: {path: "spec.template.spec.initContainers[?(@.name == \"migrate\")].resources.requests.cpu"}
+      - isNotNullOrEmpty: {path: "spec.template.spec.initContainers[?(@.name == \"migrate\")].resources.requests.memory"}
+      - isNotNullOrEmpty: {path: "spec.template.spec.initContainers[?(@.name == \"migrate\")].resources.limits.memory"}
+      - equal: {path: "spec.template.spec.initContainers[?(@.name == \"migrate\")].securityContext.runAsNonRoot", value: true}
+      - equal: {path: "spec.template.spec.initContainers[?(@.name == \"migrate\")].securityContext.runAsUser", value: 1000}
+      - equal: {path: "spec.template.spec.initContainers[?(@.name == \"migrate\")].securityContext.runAsGroup", value: 1000}
+      - equal: {path: "spec.template.spec.initContainers[?(@.name == \"migrate\")].securityContext.allowPrivilegeEscalation", value: false}
+      - equal: {path: "spec.template.spec.initContainers[?(@.name == \"migrate\")].securityContext.capabilities.drop", value: [ALL]}
+      - equal: {path: "spec.template.spec.initContainers[?(@.name == \"migrate\")].securityContext.seccompProfile.type", value: RuntimeDefault}
+      - isNotNullOrEmpty: {path: "spec.template.spec.initContainers[?(@.name == \"seed\")].resources.requests.cpu"}
+      - isNotNullOrEmpty: {path: "spec.template.spec.initContainers[?(@.name == \"seed\")].resources.requests.memory"}
+      - isNotNullOrEmpty: {path: "spec.template.spec.initContainers[?(@.name == \"seed\")].resources.limits.memory"}
+      - equal: {path: "spec.template.spec.initContainers[?(@.name == \"seed\")].securityContext.runAsNonRoot", value: true}
+      - equal: {path: "spec.template.spec.initContainers[?(@.name == \"seed\")].securityContext.runAsUser", value: 1000}
+      - equal: {path: "spec.template.spec.initContainers[?(@.name == \"seed\")].securityContext.runAsGroup", value: 1000}
+      - equal: {path: "spec.template.spec.initContainers[?(@.name == \"seed\")].securityContext.allowPrivilegeEscalation", value: false}
+      - equal: {path: "spec.template.spec.initContainers[?(@.name == \"seed\")].securityContext.capabilities.drop", value: [ALL]}
+      - equal: {path: "spec.template.spec.initContainers[?(@.name == \"seed\")].securityContext.seccompProfile.type", value: RuntimeDefault}
+      - isNotNullOrEmpty: {path: "spec.template.spec.containers[?(@.name == \"backend\")].resources.requests.cpu"}
+      - isNotNullOrEmpty: {path: "spec.template.spec.containers[?(@.name == \"backend\")].resources.requests.memory"}
+      - isNotNullOrEmpty: {path: "spec.template.spec.containers[?(@.name == \"backend\")].resources.limits.memory"}
+      - equal: {path: "spec.template.spec.containers[?(@.name == \"backend\")].securityContext.runAsNonRoot", value: true}
+      - equal: {path: "spec.template.spec.containers[?(@.name == \"backend\")].securityContext.runAsUser", value: 1000}
+      - equal: {path: "spec.template.spec.containers[?(@.name == \"backend\")].securityContext.runAsGroup", value: 1000}
+      - equal: {path: "spec.template.spec.containers[?(@.name == \"backend\")].securityContext.allowPrivilegeEscalation", value: false}
+      - equal: {path: "spec.template.spec.containers[?(@.name == \"backend\")].securityContext.capabilities.drop", value: [ALL]}
+      - equal: {path: "spec.template.spec.containers[?(@.name == \"backend\")].securityContext.seccompProfile.type", value: RuntimeDefault}
+
+  - it: gives the frontend container resources and a restricted securityContext
+    template: templates/frontend.yaml
+    documentSelector: {path: kind, value: Deployment}
+    asserts:
+      - equal: {path: spec.template.spec.securityContext.fsGroup, value: 1000}
+      - equal: {path: spec.template.spec.automountServiceAccountToken, value: false}
+      - isNotNullOrEmpty: {path: "spec.template.spec.containers[?(@.name == \"frontend\")].resources.requests.cpu"}
+      - isNotNullOrEmpty: {path: "spec.template.spec.containers[?(@.name == \"frontend\")].resources.requests.memory"}
+      - isNotNullOrEmpty: {path: "spec.template.spec.containers[?(@.name == \"frontend\")].resources.limits.memory"}
+      - equal: {path: "spec.template.spec.containers[?(@.name == \"frontend\")].securityContext.runAsNonRoot", value: true}
+      - equal: {path: "spec.template.spec.containers[?(@.name == \"frontend\")].securityContext.runAsUser", value: 1000}
+      - equal: {path: "spec.template.spec.containers[?(@.name == \"frontend\")].securityContext.runAsGroup", value: 1000}
+      - equal: {path: "spec.template.spec.containers[?(@.name == \"frontend\")].securityContext.allowPrivilegeEscalation", value: false}
+      - equal: {path: "spec.template.spec.containers[?(@.name == \"frontend\")].securityContext.capabilities.drop", value: [ALL]}
+      - equal: {path: "spec.template.spec.containers[?(@.name == \"frontend\")].securityContext.seccompProfile.type", value: RuntimeDefault}
+
+  - it: gives the redis container resources and a restricted securityContext
+    template: templates/redis.yaml
+    documentSelector: {path: kind, value: Deployment}
+    asserts:
+      - equal: {path: spec.template.spec.securityContext.fsGroup, value: 1000}
+      - equal: {path: spec.template.spec.automountServiceAccountToken, value: false}
+      - isNotNullOrEmpty: {path: "spec.template.spec.containers[?(@.name == \"redis\")].resources.requests.cpu"}
+      - isNotNullOrEmpty: {path: "spec.template.spec.containers[?(@.name == \"redis\")].resources.requests.memory"}
+      - isNotNullOrEmpty: {path: "spec.template.spec.containers[?(@.name == \"redis\")].resources.limits.memory"}
+      - equal: {path: "spec.template.spec.containers[?(@.name == \"redis\")].securityContext.runAsNonRoot", value: true}
+      - equal: {path: "spec.template.spec.containers[?(@.name == \"redis\")].securityContext.runAsUser", value: 999}
+      - equal: {path: "spec.template.spec.containers[?(@.name == \"redis\")].securityContext.runAsGroup", value: 1000}
+      - equal: {path: "spec.template.spec.containers[?(@.name == \"redis\")].securityContext.allowPrivilegeEscalation", value: false}
+      - equal: {path: "spec.template.spec.containers[?(@.name == \"redis\")].securityContext.capabilities.drop", value: [ALL]}
+      - equal: {path: "spec.template.spec.containers[?(@.name == \"redis\")].securityContext.seccompProfile.type", value: RuntimeDefault}
+
+  - it: gives the celery-worker container resources and a restricted securityContext
+    template: templates/celery-worker.yaml
+    documentSelector: {path: kind, value: Deployment}
+    asserts:
+      - equal: {path: spec.template.spec.securityContext.fsGroup, value: 1000}
+      - equal: {path: spec.template.spec.automountServiceAccountToken, value: false}
+      - equal: {path: spec.template.spec.serviceAccountName, value: draftforge}
+      - isNotNullOrEmpty: {path: "spec.template.spec.containers[?(@.name == \"celery-worker\")].resources.requests.cpu"}
+      - isNotNullOrEmpty: {path: "spec.template.spec.containers[?(@.name == \"celery-worker\")].resources.requests.memory"}
+      - isNotNullOrEmpty: {path: "spec.template.spec.containers[?(@.name == \"celery-worker\")].resources.limits.memory"}
+      - equal: {path: "spec.template.spec.containers[?(@.name == \"celery-worker\")].securityContext.runAsNonRoot", value: true}
+      - equal: {path: "spec.template.spec.containers[?(@.name == \"celery-worker\")].securityContext.runAsUser", value: 1000}
+      - equal: {path: "spec.template.spec.containers[?(@.name == \"celery-worker\")].securityContext.runAsGroup", value: 1000}
+      - equal: {path: "spec.template.spec.containers[?(@.name == \"celery-worker\")].securityContext.allowPrivilegeEscalation", value: false}
+      - equal: {path: "spec.template.spec.containers[?(@.name == \"celery-worker\")].securityContext.capabilities.drop", value: [ALL]}
+      - equal: {path: "spec.template.spec.containers[?(@.name == \"celery-worker\")].securityContext.seccompProfile.type", value: RuntimeDefault}
+
+  - it: gives the celery-beat container resources and a restricted securityContext
+    template: templates/celery-beat.yaml
+    documentSelector: {path: kind, value: Deployment}
+    asserts:
+      - equal: {path: spec.template.spec.securityContext.fsGroup, value: 1000}
+      - equal: {path: spec.template.spec.automountServiceAccountToken, value: false}
+      - equal: {path: spec.template.spec.serviceAccountName, value: draftforge}
+      - isNotNullOrEmpty: {path: "spec.template.spec.containers[?(@.name == \"celery-beat\")].resources.requests.cpu"}
+      - isNotNullOrEmpty: {path: "spec.template.spec.containers[?(@.name == \"celery-beat\")].resources.requests.memory"}
+      - isNotNullOrEmpty: {path: "spec.template.spec.containers[?(@.name == \"celery-beat\")].resources.limits.memory"}
+      - equal: {path: "spec.template.spec.containers[?(@.name == \"celery-beat\")].securityContext.runAsNonRoot", value: true}
+      - equal: {path: "spec.template.spec.containers[?(@.name == \"celery-beat\")].securityContext.runAsUser", value: 1000}
+      - equal: {path: "spec.template.spec.containers[?(@.name == \"celery-beat\")].securityContext.runAsGroup", value: 1000}
+      - equal: {path: "spec.template.spec.containers[?(@.name == \"celery-beat\")].securityContext.allowPrivilegeEscalation", value: false}
+      - equal: {path: "spec.template.spec.containers[?(@.name == \"celery-beat\")].securityContext.capabilities.drop", value: [ALL]}
+      - equal: {path: "spec.template.spec.containers[?(@.name == \"celery-beat\")].securityContext.seccompProfile.type", value: RuntimeDefault}
+
+  - it: gives the discord-bot container resources and a restricted securityContext
+    template: templates/discord-bot.yaml
+    documentSelector: {path: kind, value: Deployment}
+    asserts:
+      - equal: {path: spec.template.spec.securityContext.fsGroup, value: 1000}
+      - equal: {path: spec.template.spec.automountServiceAccountToken, value: false}
+      - equal: {path: spec.template.spec.serviceAccountName, value: draftforge}
+      - isNotNullOrEmpty: {path: "spec.template.spec.containers[?(@.name == \"discord-bot\")].resources.requests.cpu"}
+      - isNotNullOrEmpty: {path: "spec.template.spec.containers[?(@.name == \"discord-bot\")].resources.requests.memory"}
+      - isNotNullOrEmpty: {path: "spec.template.spec.containers[?(@.name == \"discord-bot\")].resources.limits.memory"}
+      - equal: {path: "spec.template.spec.containers[?(@.name == \"discord-bot\")].securityContext.runAsNonRoot", value: true}
+      - equal: {path: "spec.template.spec.containers[?(@.name == \"discord-bot\")].securityContext.runAsUser", value: 1000}
+      - equal: {path: "spec.template.spec.containers[?(@.name == \"discord-bot\")].securityContext.runAsGroup", value: 1000}
+      - equal: {path: "spec.template.spec.containers[?(@.name == \"discord-bot\")].securityContext.allowPrivilegeEscalation", value: false}
+      - equal: {path: "spec.template.spec.containers[?(@.name == \"discord-bot\")].securityContext.capabilities.drop", value: [ALL]}
+      - equal: {path: "spec.template.spec.containers[?(@.name == \"discord-bot\")].securityContext.seccompProfile.type", value: RuntimeDefault}

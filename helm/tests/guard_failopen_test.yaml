@@ -1,0 +1,93 @@
+suite: preview guard without the ApplicationSet values
+# A draftforge-pr-* namespace must never render without the full preview
+# values, whatever subset of them arrives; the last cases cover the guard rails
+# that also apply outside preview mode.
+release:
+  name: draftforge-pr-1
+  namespace: draftforge-pr-1
+templates:
+  - templates/namespace.yaml
+tests:
+  - it: fails with only values-preview.yaml
+    values:
+      - ../values-preview.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "preview guard: "
+
+  - it: fails with only values-preview.yaml and preview.enabled false
+    values:
+      - ../values-preview.yaml
+    set:
+      preview.enabled: false
+    asserts:
+      - failedTemplate:
+          errorPattern: "preview namespace, so preview\\.enabled must be true"
+
+  - it: fails with the default values
+    asserts:
+      - failedTemplate:
+          errorPattern: "preview namespace, so preview\\.enabled must be true"
+
+  # env.extra must not reach TEST, DEBUG, CI or NODE_ENV around the env.test
+  # check: together they turn on the test-login endpoints.
+  - it: fails when env.extra sets TEST outside preview mode
+    release:
+      name: draftforge
+      namespace: prod
+    values:
+      - fixtures/prod-values.yaml
+    set:
+      env.extra: {TEST: "true", DEBUG: "true", CI: "true", NODE_ENV: test}
+    asserts:
+      - failedTemplate:
+          errorPattern: "env\\.extra must not set the chart-managed key \"CI\""
+
+  - it: fails when env.extra sets only TEST outside preview mode
+    release:
+      name: draftforge
+      namespace: prod
+    values:
+      - fixtures/prod-values.yaml
+    set:
+      env.extra: {TEST: "true"}
+    asserts:
+      - failedTemplate:
+          errorPattern: "env\\.extra must not set the chart-managed key \"TEST\""
+
+  - it: fails when env.extra sets a chart-managed key in preview mode
+    values:
+      - ../values-preview.yaml
+      - fixtures/preview-appset-values.yaml
+    set:
+      env.extra: {SQLITE_PATH: /tmp/db.sqlite3}
+    asserts:
+      - failedTemplate:
+          errorPattern: "env\\.extra must not set the chart-managed key \"SQLITE_PATH\""
+
+  # Without DJANGO_SECRET_KEY the backend falls back to the public dev key.
+  - it: fails outside preview mode with no env Secret
+    release:
+      name: draftforge
+      namespace: prod
+    asserts:
+      - failedTemplate:
+          errorPattern: "set secrets\\.create or extraEnvSecrets"
+
+  - it: renders outside preview mode with secrets.create
+    release:
+      name: draftforge
+      namespace: prod
+    set:
+      secrets: {create: true, djangoSecretKey: k, internalServiceToken: t}
+    asserts:
+      - notFailedTemplate: {}
+
+  - it: renders outside preview mode with extraEnvSecrets
+    release:
+      name: draftforge
+      namespace: prod
+    values:
+      - fixtures/prod-values.yaml
+    asserts:
+      - notFailedTemplate: {}

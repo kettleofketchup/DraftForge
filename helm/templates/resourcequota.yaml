@@ -1,0 +1,23 @@
+{{- include "draftforge.previewGuard" . -}}
+{{- if .Values.preview.enabled }}
+{{- $hard := dict -}}
+{{- range $key, $value := .Values.preview.resourceQuota.hard }}
+{{- $_ := set $hard $key (toString $value) -}}
+{{- end }}
+{{- /* The pinned keys always win; the guard already rejects a different value. */ -}}
+{{- range $key, $value := include "draftforge.quotaPinned" . | fromYaml }}
+{{- $_ := set $hard $key $value -}}
+{{- end }}
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: draftforge-preview-quota
+  labels:
+    {{- include "draftforge.labels" . | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  # Set by the deploying cluster, apart from the keys the chart pins at 0.
+  hard:
+    {{- toYaml $hard | nindent 4 }}
+{{- end }}

@@ -27,6 +27,7 @@ website/
   backend/          # Django REST API
   frontend/         # React + TypeScript + Vite
   docker/           # Docker Compose configurations
+  helm/             # Helm chart (per-PR preview environments); see helm/README.md
   nginx/            # Nginx reverse proxy config
   scripts/          # Utility scripts
 ```
@@ -178,6 +179,12 @@ just prod::up            # Start prod environment
 just prod::down          # Stop prod environment
 # ... (same commands as dev::)
 
+# Helm chart (helm/, see helm/README.md)
+just helm::plugins            # Install the pinned helm-unittest plugin
+just helm::lint               # Lint the default and preview profiles
+just helm::template preview   # Render a profile (default or preview)
+just helm::test               # Unit tests, budget, render-safety, kubeconform, script tests
+
 # Database Migrations
 just db::run-migrate           # Run migrations for dev (default)
 just db::migrate::dev          # Run migrations for dev environment
@@ -215,7 +222,7 @@ just docs::build         # Build static docs site
 just update::all         # Update everything (git, deps, images)
 
 # Version
-just version::set 1.2.3  # Set version
+just version::set 1.2.3  # Release: assemble changelog, commit, tag, push (docs/development/changelog.md)
 just version::tag        # Tag and bump version
 
 # Tests (Playwright)
@@ -388,6 +395,7 @@ See `docs/development/test-stack-slots.md`.
 - `just` - Just command runner (auto-activates venv, works in worktrees)
 - `testing` - Test infrastructure (populate system, Playwright fixtures, feature-isolated test data)
 - `visual-debugging` - Chrome MCP browser automation for debugging
+- `changelog` - Changelog fragments (`changelog.d/`), the `changelog` CI check and release assembly
 
 ## Demo Video Recording
 

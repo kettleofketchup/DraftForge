@@ -1,0 +1,148 @@
+{{- include "draftforge.previewGuard" . -}}
+{{- $fullname := include "draftforge.fullname" . -}}
+{{- $image := include "draftforge.image" (dict "root" . "img" "backend") -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fullname }}-backend
+  labels:
+    {{- include "draftforge.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backend
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  replicas: {{ .Values.backend.replicas }}
+  progressDeadlineSeconds: {{ .Values.backend.progressDeadlineSeconds }}
+  strategy:
+    {{- if .Values.persistence.enabled }}
+    # RWO volume and a single SQLite writer: never run two pods at once.
+    type: Recreate
+    {{- else }}
+    # The old pod keeps serving until the new commit's pod is ready.
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    {{- end }}
+  selector:
+    matchLabels:
+      {{- include "draftforge.selectorLabels" (dict "root" . "component" "backend") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "draftforge.selectorLabels" (dict "root" . "component" "backend") | nindent 8 }}
+      annotations:
+        {{- include "draftforge.podAnnotations" . | nindent 8 }}
+    spec:
+      {{- include "draftforge.podCommon" . | nindent 6 }}
+      {{- if or .Values.migrations.enabled .Values.seed.enabled }}
+      # The image ENTRYPOINT is daphne, so init containers set command, never args.
+      initContainers:
+        {{- if .Values.migrations.enabled }}
+        - name: migrate
+          image: {{ $image }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: [python, manage.py, migrate, --noinput]
+          env:
+            - name: DISABLE_CACHE
+              value: "true"
+          envFrom:
+            {{- include "draftforge.envFrom" . | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          resources:
+            {{- include "draftforge.requireResources" (dict "name" "migrate" "res" .Values.migrations.resources) | nindent 12 }}
+          securityContext:
+            {{- include "draftforge.containerSecurity" (list 1000 1000) | nindent 12 }}
+        {{- end }}
+        {{- if .Values.seed.enabled }}
+        - name: seed
+          image: {{ $image }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - sh
+            - -ec
+            - {{ $lines := list }}{{ range .Values.seed.commands }}{{ $lines = append $lines (printf "python manage.py %s" .) }}{{ end }}{{ join "\n" $lines | quote }}
+          env:
+            - name: DISABLE_CACHE
+              value: "true"
+          envFrom:
+            {{- include "draftforge.envFrom" . | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          resources:
+            {{- include "draftforge.requireResources" (dict "name" "seed" "res" .Values.seed.resources) | nindent 12 }}
+          securityContext:
+            {{- include "draftforge.containerSecurity" (list 1000 1000) | nindent 12 }}
+        {{- end }}
+      {{- end }}
+      containers:
+        - name: backend
+          image: {{ $image }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          envFrom:
+            {{- include "draftforge.envFrom" . | nindent 12 }}
+          startupProbe:
+            httpGet:
+              path: /api/
+              port: 8000
+              httpHeaders:
+                - name: Host
+                  value: backend
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /api/
+              port: 8000
+              httpHeaders:
+                - name: Host
+                  value: backend
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 8000
+            periodSeconds: 20
+            failureThreshold: 6
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          resources:
+            {{- include "draftforge.requireResources" (dict "name" "backend" "res" .Values.backend.resources) | nindent 12 }}
+          securityContext:
+            {{- include "draftforge.containerSecurity" (list 1000 1000) | nindent 12 }}
+      volumes:
+        - name: data
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ $fullname }}-data
+          {{- else }}
+          emptyDir:
+            sizeLimit: 1Gi
+          {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  # Fixed name: SSR_API_URL, INTERNAL_API_URL and ALLOWED_HOSTS expect "backend".
+  name: backend
+  labels:
+    {{- include "draftforge.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backend
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "draftforge.selectorLabels" (dict "root" . "component" "backend") | nindent 4 }}
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+      protocol: TCP

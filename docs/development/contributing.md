@@ -68,4 +68,5 @@ Follow conventional commits:
 - Include description of changes
 - Reference related issues
 - Ensure tests pass
+- Add a `changelog.d/` fragment for user- or operator-visible changes (see [Changelog](changelog.md))
 - Update documentation if needed

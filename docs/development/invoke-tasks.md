@@ -156,7 +156,7 @@ inv update.all_test  # Test environment
 ## Version Tasks (`inv version.*`)
 
 ```bash
-inv version.set 1.2.3     # Set version
+inv version.set 1.2.3     # Release: assemble changelog, commit, tag, push (see changelog.md)
 inv version.from-env      # Sync from .env.release
 inv version.from-pyproject # Sync from pyproject.toml
 inv version.build         # Build with version

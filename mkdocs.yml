@@ -115,6 +115,7 @@ nav:
       - Testing: development/testing.md
       - Test Stack Slots: development/test-stack-slots.md
       - Contributing: development/contributing.md
+      - Changelog: development/changelog.md
       - Theming Guide: THEMING-GUIDE.md
       - Demo Videos: ai/demo/index.md
       - Telemetry:

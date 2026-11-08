@@ -17,9 +17,11 @@ This project uses [just](https://github.com/casey/just) as the task runner. Just
 | `test::*` | Testing commands |
 | `update::*` | Dependency updates |
 | `version::*` | Version management |
+| `ci::*` | CI entry points (`ci::changelog-check`) |
 | `prod::*` | Production commands |
 | `demo::*` | Demo video recording |
 | `docs::*` | Documentation commands |
+| `helm::*` | Helm chart for preview environments |
 | `py::*` | Python/Django commands |
 
 ## Development Commands (`just dev::*`)
@@ -156,7 +158,7 @@ just update::all       # Everything (git, deps, images)
 ## Version Commands (`just version::*`)
 
 ```bash
-just version::set 1.2.3     # Set version
+just version::set 1.2.3     # Release: assemble changelog, commit, tag, push (see changelog.md)
 just version::tag            # Git tag and bump
 ```
 
@@ -212,6 +214,17 @@ Output locations:
 ```bash
 just docs::serve      # Start MkDocs dev server
 just docs::build      # Build static documentation site
+```
+
+## Helm Commands (`just helm::*`)
+
+The chart in `helm/` deploys per-PR preview environments. See `helm/README.md`.
+
+```bash
+just helm::plugins            # Install the pinned helm-unittest plugin
+just helm::lint               # Lint the default and preview profiles
+just helm::template preview   # Render a profile (default or preview)
+just helm::test               # Unit tests, budget, render-safety, kubeconform, script tests
 ```
 
 ## Justfile Location

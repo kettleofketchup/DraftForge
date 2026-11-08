@@ -1,0 +1,19 @@
+DraftForge {{ .Values.image.tag | default .Chart.AppVersion }} is deployed to namespace {{ .Release.Namespace }}.
+{{- if .Values.ingress.enabled }}
+
+URL: https://{{ .Values.ingress.host }}
+{{- end }}
+{{- if .Values.preview.enabled }}
+
+Login: preview images show test login buttons (admin, staff, user) in the navbar.
+They sign in as built-in test users; no Discord login is needed.
+{{- if .Values.ingress.authentik.enabled }}
+The site sits behind authentik forward-auth, so sign in to authentik first.
+{{- end }}
+
+Each new commit starts fresh pods with freshly seeded data, so reviewers must log in again after every push or pod reschedule (sessions live in the pod's SQLite).
+{{- end }}
+
+One release per namespace: the Services are named exactly backend, frontend and
+redis (not release-prefixed), so a second release of this chart in
+{{ .Release.Namespace }} would collide with this one.

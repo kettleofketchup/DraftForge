@@ -91,6 +91,7 @@ bootstrap *args:
     fi
 
 # Modules (namespaced with ::)
+mod ci 'just/ci.just'
 mod dev 'just/dev.just'
 mod docker 'just/docker/mod.just'
 mod demo 'just/demo.just'
@@ -105,6 +106,7 @@ mod py 'just/py.just'
 mod test 'just/test/mod.just'
 mod db 'just/db/mod.just'
 mod r2 'just/r2.just'
+mod helm 'just/helm.just'
 
 # Default: show available commands
 [private]
