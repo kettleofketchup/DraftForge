@@ -37,10 +37,8 @@ from events.discord.embeds import (
     build_signup_update_embed,
     build_subscriber_dm_embed,
 )
+from events.discord._shared import _get_org_user
 from events.discord.handlers import (
-    _check_deadlock_profile_complete,
-    _check_dota_profile_complete,
-    _get_org_user,
     handle_battle_cup_submit,
     handle_decline_button,
     handle_notify_button,
@@ -52,6 +50,8 @@ from events.discord.handlers import (
     handle_signup_modal_submit,
     handle_tentative_button,
 )
+from events.discord.providers.deadlock import _check_deadlock_profile_complete
+from events.discord.providers.dota import _check_dota_profile_complete
 from events.discord.reactions import handle_reaction_cancel, handle_reaction_signup
 
 __all__ = [

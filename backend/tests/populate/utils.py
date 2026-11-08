@@ -3,12 +3,23 @@ Utility functions for test database population.
 """
 
 import random
+from typing import Any, Final
 
 from django.db import transaction
 
-from app.models import CustomUser, PositionsModel
+from app.models import CustomUser, Organization, PositionsModel
 
-from .constants import DTX_ORG_NAME, MOCK_USERNAMES, TOURNAMENT_USERS
+from .constants import (
+    BRACKET_STEAM_ID_BASE,
+    BRACKET_USER_COUNT,
+    DTX_ORG_NAME,
+    MOCK_USERNAMES,
+    TOURNAMENT_USERS,
+)
+
+RESERVED_STEAM_ACCOUNT_IDS: Final[range] = range(
+    BRACKET_STEAM_ID_BASE, BRACKET_STEAM_ID_BASE + BRACKET_USER_COUNT
+)
 
 
 def generate_mock_discord_members(count=100):
@@ -50,13 +61,43 @@ def generate_mock_discord_members(count=100):
     return members
 
 
-def create_user(user_data, organization=None):
+def unused_steam_account_id(taken: set[int] | None = None) -> int:
+    """Draw a Friend ID that no user holds yet.
+
+    steam_account_id is UNIQUE. Drawing 1..1_000_000 unchecked for ~100 users
+    per populate is a birthday problem, and the losing draw aborts the whole
+    run with `IntegrityError: UNIQUE constraint failed:
+    app_customuser.steam_account_id`. CI hits this whenever a models.py edit
+    busts the test-db image hash and every job falls back to a fresh populate.
+
+    Pass one `taken` set across a run to load the held ids once; the drawn id
+    is added to it. Ids reserved for the bracket scenario are never drawn.
+    """
+    if taken is None:
+        taken = set(
+            CustomUser.objects.exclude(steam_account_id=None).values_list(
+                "steam_account_id", flat=True
+            )
+        )
+    while True:
+        candidate = random.randint(1, 1_000_000)
+        if candidate not in taken and candidate not in RESERVED_STEAM_ACCOUNT_IDS:
+            taken.add(candidate)
+            return candidate
+
+
+def create_user(
+    user_data: dict[str, Any],
+    organization: Organization | None = None,
+    taken_steam_ids: set[int] | None = None,
+) -> CustomUser:
     """
     Create a user from Discord data.
 
     Args:
         user_data: Discord user data dict
         organization: Optional Organization to create OrgUser for
+        taken_steam_ids: Friend IDs already held, shared across a populate run
     """
     user, created = CustomUser.objects.get_or_create(discordId=user_data["user"]["id"])
     if not created:
@@ -77,7 +118,7 @@ def create_user(user_data, organization=None):
         positions.hard_support = random.randint(0, 5)
         positions.save()
         # All mock users get a Friend ID for testing
-        user.steam_account_id = random.randint(1, 1000000)
+        user.steam_account_id = unused_steam_account_id(taken_steam_ids)
 
         user.positions = positions
         user.save()

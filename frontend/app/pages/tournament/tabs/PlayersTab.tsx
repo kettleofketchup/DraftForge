@@ -15,7 +15,9 @@ import { useUserStore } from '~/store/userStore';
 import { useOrgStore } from '~/store/orgStore';
 import { useLeagueStore } from '~/store/leagueStore';
 import { useIsLeagueStaff } from '~/hooks/usePermissions';
+import { useTournamentUsers } from '~/hooks/useTournamentUsers';
 import { hasErrors } from '../hasErrors';
+import { tournamentEditContext } from '../tournamentEditContext';
 
 export const PlayersTab: React.FC = memo(() => {
   const tournament = useUserStore((state) => state.tournament);
@@ -28,7 +30,15 @@ export const PlayersTab: React.FC = memo(() => {
   const [showAddUser, setShowAddUser] = useState(false);
   const [showCSVImport, setShowCSVImport] = useState(false);
 
-  const tournamentUsers = tournament?.users ?? [];
+  // Org/league context: scopes each UserCard's edit (editable MMR) and keys
+  // the scoped half of the cache entries seeded below.
+  const { organizationId, leagueId } = tournamentEditContext(tournament);
+
+  const rawUsers = useMemo(() => tournament?.users ?? [], [tournament?.users]);
+  const tournamentUsers = useTournamentUsers(rawUsers, {
+    orgId: organizationId,
+    leagueId,
+  });
 
   // AddUserModal callbacks
   const handleAddMember = useCallback(
@@ -110,10 +120,10 @@ export const PlayersTab: React.FC = memo(() => {
           searchQuery={query}
           compact={true}
           deleteButtonType="tournament"
-          organizationId={tournament?.organization_pk ?? undefined}
-          leagueId={tournament?.league_pk ?? undefined}
           cols={cols}
           emptyMessage="No players in this tournament"
+          organizationId={organizationId}
+          leagueId={leagueId}
         />
       </div>
 

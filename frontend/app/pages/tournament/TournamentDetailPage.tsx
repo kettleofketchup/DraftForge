@@ -22,6 +22,7 @@ import { ConfirmDialog } from '~/components/ui/dialogs';
 import { toast } from 'sonner';
 
 import { getLogger } from '~/lib/logger';
+import { tournamentEditContext } from './tournamentEditContext';
 const log = getLogger('TournamentDetailPage');
 
 export const TournamentDetailPage: React.FC = () => {
@@ -56,8 +57,7 @@ export const TournamentDetailPage: React.FC = () => {
         | undefined;
       if (_users) {
         const users = Object.values(_users);
-        const orgId = hydratedTournament.organization_pk ?? useOrgStore.getState().currentOrg?.pk;
-        const leagueId = hydratedTournament.league_pk ?? undefined;
+        const { organizationId: orgId, leagueId } = tournamentEditContext(hydratedTournament);
         useUserCacheStore.getState().upsert(users, { orgId, leagueId });
       }
       useUserStore.getState().setTournament(hydratedTournament);

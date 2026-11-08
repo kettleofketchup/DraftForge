@@ -1,6 +1,6 @@
 """Async context manager that ties Discord interactions to structured logs + OTel spans.
 
-Every callback in discordbot/components.py wraps its body with discord_log_context.
+Every callback in discordbot/components/ wraps its body with discord_log_context.
 The CM:
   - opens an OTel span (lazy tracer lookup — never cache the tracer module-level
     or test fixtures cannot install a TracerProvider)
@@ -14,13 +14,18 @@ The CM:
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from typing import Any, AsyncIterator
+from typing import TYPE_CHECKING, Any, AsyncIterator
 
 from opentelemetry import trace
 from opentelemetry.trace import Status, StatusCode
 from structlog.contextvars import bind_contextvars, clear_contextvars
 
+# Single source of truth for signup-flow prefixes (see custom_ids.py).
+from discordbot.custom_ids import SIGNUP_TAG_PREFIXES as _SIGNUP_TAG_PREFIXES
 from telemetry.logging import get_logger
+
+if TYPE_CHECKING:
+    import discord
 
 log = get_logger(__name__)
 
@@ -39,20 +44,15 @@ class InteractionContext:
         self.extra.update(kwargs)
 
 
-_SIGNUP_TAG_PREFIXES = {
-    "event_signup", "event_notify", "event_tentative", "event_decline",
-    "signup_friend_id", "signup_rank_status", "signup_deadlock_rank", "signup_deadlock_date",
-    "pos_select_1", "pos_select_2", "pos_select_3", "pos_confirm",
-    "rank_medal", "rank_star", "rank_status",
-    "bcup_tier",
-    "screenshot_upload", "screenshot_file", "screenshot_url",
-}
-
-
 def _prefix(custom_id: str | None) -> str | None:
     if not custom_id:
         return None
-    return custom_id.split(":", 1)[0]
+    head = custom_id.split(":", 1)[0]
+    # pos_select_<slot> normalizes to the codec prefix "pos_select" (the slot
+    # lives in the prefix segment, unlike every other custom_id).
+    if head.startswith("pos_select_"):
+        return "pos_select"
+    return head
 
 
 def resolve_tags(custom_id: str | None) -> list[str]:
@@ -80,7 +80,7 @@ def span_name(custom_id: str | None) -> str:
     return f"discord.interaction.{_prefix(custom_id) or 'unknown'}"
 
 
-def _interaction_type_name(interaction) -> str:
+def _interaction_type_name(interaction: discord.Interaction) -> str:
     """Map discord.InteractionType to a stable string for our logs."""
     try:
         return interaction.type.name
@@ -88,7 +88,13 @@ def _interaction_type_name(interaction) -> str:
         return "unknown"
 
 
-def _identity_fields(interaction, *, custom_id, event_id, tags) -> dict[str, Any]:
+def _identity_fields(
+    interaction: discord.Interaction,
+    *,
+    custom_id: str | None,
+    event_id: int | None,
+    tags: list[str],
+) -> dict[str, Any]:
     """The set of identity fields bound to contextvars AND passed to bookend logs."""
     return {
         "system": "discord",
@@ -99,7 +105,9 @@ def _identity_fields(interaction, *, custom_id, event_id, tags) -> dict[str, Any
         "discord_user_id": str(interaction.user.id),
         "discord_username": interaction.user.name,
         "channel_id": str(interaction.channel_id) if interaction.channel_id else None,
-        "guild_id": str(interaction.guild_id) if getattr(interaction, "guild_id", None) else None,
+        "guild_id": str(interaction.guild_id)
+        if getattr(interaction, "guild_id", None)
+        else None,
         "interaction_type": _interaction_type_name(interaction),
         "custom_id": custom_id,
         "event_id": event_id,
@@ -108,7 +116,7 @@ def _identity_fields(interaction, *, custom_id, event_id, tags) -> dict[str, Any
 
 @asynccontextmanager
 async def discord_log_context(
-    interaction,
+    interaction: discord.Interaction,
     *,
     custom_id: str | None = None,
     event_id: int | None = None,
@@ -116,9 +124,13 @@ async def discord_log_context(
 ) -> AsyncIterator[InteractionContext]:
     """Bind interaction identity to logs + emit bookend events."""
     resolved_custom_id = custom_id or (
-        interaction.data.get("custom_id") if getattr(interaction, "data", None) else None
+        interaction.data.get("custom_id")
+        if getattr(interaction, "data", None)
+        else None
     )
-    resolved_event_id = event_id if event_id is not None else parse_event_id(resolved_custom_id)
+    resolved_event_id = (
+        event_id if event_id is not None else parse_event_id(resolved_custom_id)
+    )
     resolved_tags = tags if tags is not None else resolve_tags(resolved_custom_id)
 
     fields = _identity_fields(
@@ -128,7 +140,9 @@ async def discord_log_context(
         tags=resolved_tags,
     )
 
-    tracer = trace.get_tracer(__name__)  # Lazy — test fixtures install processors AFTER import
+    tracer = trace.get_tracer(
+        __name__
+    )  # Lazy — test fixtures install processors AFTER import
     with tracer.start_as_current_span(span_name(resolved_custom_id)) as span:
         # Span attributes mirror the bound contextvars
         for key, val in fields.items():

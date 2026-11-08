@@ -226,6 +226,16 @@ jobs:
               events.tests.test_signup_interactions \
               events.tests.test_series_oneoff \
               user.tests \
+              steam.tests \
+              tests.test_populate_utils \
+              discordbot.tests.test_components \
+              discordbot.tests.test_custom_ids \
+              discordbot.tests.test_interaction_router \
+              discordbot.tests.test_log_context \
+              events.tests.test_discord_decline_button \
+              events.tests.test_provider_registry \
+              app.tests.test_build_users_dict \
+              tests.test_populate \
               -v 2
 
       - name: Run frontend Vitest

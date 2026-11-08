@@ -125,6 +125,32 @@ def _run_with_bookends(
         clear_contextvars()
 
 
+def _starts_in_future(scheduled_at: str | datetime) -> bool:
+    if isinstance(scheduled_at, str):
+        scheduled_at = datetime.fromisoformat(scheduled_at)
+    return scheduled_at > datetime.now(tz.utc)
+
+
+def _flatten_discord_form_errors(errors: dict, path: str = "") -> list[str]:
+    found: list[str] = []
+    for key, value in errors.items():
+        if key == "_errors" and isinstance(value, list):
+            found.extend(f"{path}: {e.get('message', e)}" for e in value)
+        elif isinstance(value, dict):
+            found.extend(
+                _flatten_discord_form_errors(value, f"{path}.{key}" if path else key)
+            )
+    return found
+
+
+def _discord_error_message(data: object, status_code: int) -> str:
+    if not (isinstance(data, dict) and data.get("message")):
+        return f"HTTP {status_code}"
+    message = f"{data['message']} (code {data.get('code', '?')}, HTTP {status_code})"
+    details = _flatten_discord_form_errors(data.get("errors") or {})
+    return f"{message}: {'; '.join(details)}" if details else message
+
+
 def _build_signup_message_link(guild_id, channel_id, post_result):
     """Construct a discord.com message permalink from a sync_send_embed result."""
     if not guild_id:
@@ -398,6 +424,7 @@ def sync_discord_events():
             event["discord_create_event"]
             and event["organization__discord_server_id"]
             and not has_scheduled
+            and _starts_in_future(event["scheduled_at"])
         )
         if sched_eligible:
             structured_log.info(
@@ -417,7 +444,7 @@ def sync_discord_events():
                     event_id=pk,
                 )
             except Exception as e:
-                # create_discord_scheduled_event now raises with a Discord
+                # create_discord_scheduled_event raises with a Discord
                 # error string (PR #222). The structlog event captures it so
                 # operators can grep `sync_scheduled_event_failed` in Grafana
                 # to find every silent 403/400 without DB diving.
@@ -680,7 +707,7 @@ def send_profile_reminder(event_id):
 def send_signup_update(event_id, interaction_id=None):
     """Edit the original announcement embed with updated signup lists.
 
-    Tries the new DiscordEvent.signup_message first, falls back to
+    Tries DiscordEvent.signup_message first, falls back to
     DiscordMessageLog for pre-migration events.
     """
     return _run_with_bookends(
@@ -887,6 +914,8 @@ def _create_discord_scheduled_event_impl(event_id):
     guild_id = event.organization.discord_server_id
     if not guild_id:
         return "Skipped: no discord_server_id on organization"
+    if not _starts_in_future(event.scheduled_at):
+        return "Skipped: event start time has passed"
 
     title = event.discord_event_title or event.name
     description = event.discord_event_description or event.description or ""
@@ -923,15 +952,9 @@ def _create_discord_scheduled_event_impl(event_id):
         # audit log surfaces it without anyone having to dig through
         # response_data JSON. Default to the raw status when Discord
         # didn't send a structured body.
-        error_message = ""
-        if not success:
-            if isinstance(data, dict) and data.get("message"):
-                error_message = (
-                    f"{data['message']} (code {data.get('code', '?')}, "
-                    f"HTTP {response.status_code})"
-                )
-            else:
-                error_message = f"HTTP {response.status_code}"
+        error_message = (
+            "" if success else _discord_error_message(data, response.status_code)
+        )
 
         # Legacy log via internal API
         create_message_log(
@@ -1226,7 +1249,7 @@ def fire_event_reminder(event_id, reminder_type, fired_by_user_id=None):
 def check_event_reminders():
     """Beat-scheduled every 30s. Delegates to the registry-driven fire path.
 
-    All reminder dispatch logic now lives in events.scheduling.fire — the
+    All reminder dispatch logic lives in events.scheduling.fire — the
     polling task is a thin wrapper so beat re-uses its existing schedule
     name and cadence.
 
@@ -1276,7 +1299,6 @@ def send_subscriber_notifications(event_id):
     if not event.event_repeater_id:
         return "No repeater"
 
-    # Check Discord event exists
     discord_state = get_discord_event_state(event_id)
     if not discord_state or not discord_state.has_discord_event:
         return "No Discord event"
@@ -1341,7 +1363,6 @@ def send_subscriber_notifications(event_id):
                     continue
                 dm_pk = dm_resp.json().get("id")
 
-            # Send DM
             result = sync_send_dm(sub.discord_id, embed=embed, components=components)
 
             # Update delivery status via internal API

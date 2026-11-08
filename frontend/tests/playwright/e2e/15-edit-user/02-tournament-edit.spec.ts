@@ -3,9 +3,10 @@
  *
  * @cicd smoke test verifying that the edit modal opens and saves on a tournament page.
  *
- * Note: On tournament pages with org context, the PATCH routes through the org-scoped
- * endpoint which only persists MMR changes. Nickname verification after reload is skipped
- * here — the org and league tests cover full nickname update verification.
+ * The org-scoped endpoint persists nickname as well as MMR, so a second edit in
+ * this spec sends a real PATCH — that is what caught the missing write-back in
+ * dispatchPatch (#274). Verification after reload is left to the org and league
+ * specs; this one only asserts the round-trip.
  *
  * Uses isolated "User Edit Tournament" data — does not touch other test entities.
  */

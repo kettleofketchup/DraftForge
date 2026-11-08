@@ -53,6 +53,26 @@ class TagsAndIdsTests(TestCase):
         self.assertEqual(resolve_tags(None), [])
         self.assertEqual(resolve_tags(""), [])
 
+    def test_prefix_set_derived_from_codecs(self):
+        # #268: log_context derives its prefixes from custom_ids (one source).
+        from discordbot.custom_ids import SIGNUP_TAG_PREFIXES
+        from discordbot.log_context import _SIGNUP_TAG_PREFIXES
+
+        self.assertEqual(_SIGNUP_TAG_PREFIXES, SIGNUP_TAG_PREFIXES)
+
+    def test_pos_select_slot_normalizes_to_bare_prefix(self):
+        # Runtime guard: pos_select_<slot> must still resolve to the signup tags
+        # even though the codec prefix is the bare "pos_select".
+        from discordbot.log_context import _prefix, resolve_tags
+
+        self.assertEqual(_prefix("pos_select_3:7"), "pos_select")
+        self.assertEqual(resolve_tags("pos_select_2:42"), ["events", "signup"])
+
+    def test_deadlock_date_prefix_resolves(self):
+        from discordbot.log_context import resolve_tags
+
+        self.assertEqual(resolve_tags("signup_deadlock_date:42"), ["events", "signup"])
+
     def test_tags_csv_helper(self):
         from discordbot.log_context import tags_csv
 

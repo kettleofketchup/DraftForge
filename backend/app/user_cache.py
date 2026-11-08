@@ -1,6 +1,7 @@
 from cacheops import cached_as
 
 from user.models import BaseUserProfile, DotaUserProfile
+from user.querysets import with_user_profiles
 
 from .models import CustomUser
 from .serializers import TournamentUserSerializer  # core fields incl. positions, no mmr
@@ -24,17 +25,8 @@ def serialize_user_core(pk: int) -> dict:
         timeout=60 * 60,
     )
     def _build() -> dict:
-        # .nocache(): the inner select_related JOIN must NOT be independently
-        # cached by cacheops. cacheops only invalidates an auto-cached join
-        # query on its base table (CustomUser), never on joined tables, so a
-        # nickname edit (BaseUserProfile) would leave a stale base_profile in
-        # the joined row. The outer @cached_as is the sole cache layer here and
-        # registers the BaseUserProfile / DotaUserProfile deps correctly.
         user = (
-            CustomUser.objects.select_related(
-                "base_profile__dota_user_profile__positions"
-            )
-            .nocache()
+            with_user_profiles(CustomUser.objects.all(), dota=True)
             .filter(pk=pk)
             .first()
         )
