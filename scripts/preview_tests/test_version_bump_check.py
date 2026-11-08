@@ -77,6 +77,25 @@ class VersionBumpCheckTest(unittest.TestCase):
         self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
         self.assertIn(MESSAGE, r.stdout + r.stderr)
 
+    def test_tests_and_readme_only_pass_without_bump(self):
+        # helm/tests/ is .helmignored and README.md does not render, so neither
+        # changes what a deployer renders.
+        base = self.base_with_chart()
+        self.write("helm/tests/backend_test.yaml", "suite: x\n")
+        self.write("helm/README.md", "docs\n")
+        self.commit("tests and docs only")
+        r = self.check(base)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
+    def test_tests_plus_template_change_still_needs_bump(self):
+        base = self.base_with_chart()
+        self.write("helm/tests/backend_test.yaml", "suite: x\n")
+        self.write("helm/templates/backend.yaml", "kind: Deployment\n# changed\n")
+        self.commit("tests and template")
+        r = self.check(base)
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn(MESSAGE, r.stdout + r.stderr)
+
     def test_base_absent_counts_as_bumped(self):
         self.write("README.md", "app\n")
         base = self.commit("base without chart")

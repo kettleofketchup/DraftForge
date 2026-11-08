@@ -3,11 +3,12 @@
 #
 #   scripts/helm_version_bump_check.sh <base_sha>
 #
-# Run from inside the repository. Exits 1 if anything under helm/ differs
-# between <base_sha> and HEAD while helm/Chart.yaml `version` is unchanged.
+# Run from inside the repository. Exits 1 if anything under helm/ other than
+# helm/tests/ and helm/README.md differs between <base_sha> and HEAD while
+# helm/Chart.yaml `version` is unchanged.
 # A base without helm/Chart.yaml counts as bumped (the chart is new).
-# Each chart version names one chart tag (chart-v<version>), so every helm/
-# change needs its own version.
+# Each chart version names one chart tag (chart-v<version>), so every rendered
+# helm/ change needs its own version.
 set -euo pipefail
 
 if [[ $# -ne 1 ]]; then
@@ -22,8 +23,9 @@ if ! git rev-parse --quiet --verify "${base}^{commit}" >/dev/null; then
   exit 2
 fi
 
-if git diff --quiet "$base" HEAD -- helm/; then
-  echo "OK: helm/ unchanged since $base"
+# helm/tests/ is .helmignored and README.md never renders: neither needs a bump.
+if git diff --quiet "$base" HEAD -- helm/ ':(exclude)helm/tests/' ':(exclude)helm/README.md'; then
+  echo "OK: rendered helm/ unchanged since $base"
   exit 0
 fi
 
