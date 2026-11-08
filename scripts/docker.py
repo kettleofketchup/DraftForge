@@ -124,7 +124,7 @@ def docker_pull(c, image: str, version: str, dockerfile: Path, context: Path):
 def docker_pull_by_hash(c, image: str, service: str) -> bool:
     """Try to pull an image by content hash, falling back to latest.
 
-    On success, tags the pulled image as :latest for docker compose compatibility.
+    On success, tags the pulled image as :latest for compose compatibility.
     Returns True if pull succeeded, False otherwise.
     """
     content_hash = get_content_hash(service)

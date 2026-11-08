@@ -37,12 +37,32 @@ Use this agent when:
 
 ## Docker Compose Files
 
-| File | Purpose | Command |
-|------|---------|---------|
-| `docker-compose.debug.yaml` | Development | `inv dev.debug` |
-| `docker-compose.test.yaml` | Testing | `inv dev.test` |
-| `docker-compose.prod.yaml` | Production | `inv dev.prod` |
-| `docker-compose.release.yaml` | Release | `inv dev.release` |
+| File | Purpose | Project | Command |
+|------|---------|---------|---------|
+| `docker-compose.debug.yaml` | Development | `df-dev` | `just dev::debug` |
+| `docker-compose.test.yaml` (+ `slot.yaml`, `slot-offline.yaml` on N ≥ 1) | Testing | `df` (slot 0) / `df-sN` | `just test::upd` |
+| `docker-compose.prod.yaml` | Production | `df` | `just prod::up` |
+| `docker-compose.release.yaml` | Release | `df` | `just dev::release` |
+
+## Test Stack Slots and Safety
+
+Each worktree has its own test stack slot. Slot 0 is project `df` (containers
+`frontend`, `backend`, `redis`, `nginx`, `https://localhost`); slot N ≥ 1 is `df-sN`
+(containers suffixed `-sN`, `https://localhost:1N443`). The dev stack is `df-dev`
+(containers suffixed `-dev`).
+
+- Find stacks and ports with `just test::slots` (read-only) and this worktree's slot
+  with `just test::slot`. Never assume a container named `backend` belongs to the
+  worktree you are in.
+- Run compose through `just test::compose <args>` (test, this worktree's slot) or
+  `just test::compose --stack dev <args>` (dev). Never raw `docker compose`, which has
+  no `-p` and can recreate another worktree's stack.
+- Never run host-wide commands (`docker stop $(docker ps -aq)`, `docker system prune`):
+  other worktrees' stacks share the host.
+- Ask the user before `just test::slot-reap`, `just test::slot-claim` or
+  `just test::slot-release --slot N`.
+
+Full reference: `docs/development/test-stack-slots.md`.
 
 ## Services Configuration
 
@@ -59,7 +79,7 @@ frontend:
 
 **Health Check**:
 ```bash
-docker logs frontend
+just test::compose logs --tail=50 frontend
 # Should show Vite dev server running on port 3000
 ```
 
@@ -76,7 +96,7 @@ backend:
 
 **Health Check**:
 ```bash
-docker logs backend
+just test::compose logs --tail=50 backend
 # Should show Django running on port 8000
 ```
 
@@ -91,7 +111,7 @@ redis:
 
 **Health Check**:
 ```bash
-docker exec redis redis-cli ping
+just test::compose exec -T redis redis-cli ping
 # Should return: PONG
 ```
 
@@ -110,7 +130,8 @@ nginx:
 
 **Health Check**:
 ```bash
-curl -k https://localhost
+just test::slot   # DF_BASE_URL for this worktree
+curl -k <DF_BASE_URL>
 # Should return HTML
 ```
 
@@ -146,11 +167,14 @@ VERSION=1.0.0
 ### Container Won't Start
 
 ```bash
-# Check container status
-docker ps -a
+# Check container status for this worktree's stack
+just test::compose ps -a
 
 # View logs
-docker logs <container_name>
+just test::compose logs --tail=100 <service>
+
+# Every df* stack on the host, with owners and ports
+just test::slots
 
 # Check for port conflicts
 docker ps --format "{{.Names}}: {{.Ports}}"
@@ -166,7 +190,7 @@ docker network ls
 docker network inspect <network_name>
 
 # Test container connectivity
-docker exec backend ping redis
+just test::compose exec -T backend ping -c1 redis
 ```
 
 ### Volume Permission Issues
@@ -175,9 +199,13 @@ docker exec backend ping redis
 # Check volume mounts
 docker inspect <container> --format '{{.Mounts}}'
 
-# Fix permissions (common issue)
-sudo chown -R $USER:$USER ./backend/.redis_data
+# Fix permissions (common issue; ask the user, needs sudo)
+sudo chown -R $USER:$USER ./backend/.redis_data*
 sudo chown -R $USER:$USER ./nginx/data/
+
+# Rootless podman: frontend (uid 100999) cannot write the worktree
+setfacl -R -m u:100999:rwX -m d:u:100999:rwX <worktree>
+just test::compose restart frontend nginx
 ```
 
 ### Image Issues
@@ -189,8 +217,8 @@ docker images | grep dota_tournament
 # Remove old images
 docker image prune -f
 
-# Force rebuild
-inv docker.all.build
+# Force rebuild (shared :latest images; other stacks pick them up on recreate)
+just docker::all-build
 ```
 
 ## Common Operations
@@ -198,23 +226,21 @@ inv docker.all.build
 ### Start Fresh
 
 ```bash
-source .venv/bin/activate
-
-# Stop and remove everything
-docker compose -f docker/docker-compose.debug.yaml down -v
+# Stop and remove this worktree's dev stack (df-dev only)
+just test::compose --stack dev down -v
 
 # Rebuild and start
-inv docker.all.build
-inv dev.debug
+just docker::all-build
+just dev::debug
 ```
 
 ### Check All Services
 
 ```bash
-# Status of all containers
-docker ps
+# Status of this worktree's test stack
+just test::compose ps
 
-# Expected output:
+# Expected output (slot 0; slot N adds a -sN suffix and publishes only 1N443):
 # frontend  - Up, healthy
 # backend   - Up, healthy
 # redis     - Up, healthy
@@ -224,13 +250,13 @@ docker ps
 ### View Logs
 
 ```bash
-# All services
-docker compose -f docker/docker-compose.debug.yaml logs -f
+# All services (dev)
+just dev::logs
 
-# Specific service
-docker logs -f frontend
-docker logs -f backend
-docker logs -f nginx
+# Specific service (test stack of this worktree; add --stack dev for dev)
+just test::compose logs -f frontend
+just test::compose logs -f backend
+just test::compose logs -f nginx
 ```
 
 ## Agent Collaboration

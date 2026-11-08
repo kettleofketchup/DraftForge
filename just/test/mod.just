@@ -70,3 +70,49 @@ setup:
         fi
     fi
     {{inv}} test.setup
+
+slots_py := "cd " + quote(root) + " && " + quote(root / ".venv/bin/python") + " -m scripts.slots --root " + quote(root)
+
+# Allocate (or re-adopt) this worktree's test slot and print it
+[group('test')]
+slot:
+    {{slots_py}} print
+
+# Show every slot reservation and df* project (read-only)
+[group('test')]
+slots:
+    {{slots_py}} status
+
+# Release this worktree's slot, or another idle one with --slot N
+[group('test')]
+slot-release *args:
+    {{slots_py}} release {{args}}
+
+# Move this worktree to slot N
+[group('test')]
+slot-claim n:
+    {{slots_py}} claim {{n}}
+
+# Tear down an orphaned df* project, or every slot idle past 12h with --stale
+[group('test')]
+slot-reap *args:
+    {{slots_py}} reap {{args}}
+
+# Turn the Discord bot and celery beat on or off for this slot
+[group('test')]
+background state:
+    {{slots_py}} background {{state}}
+
+# Run compose against this worktree's slot (--stack S, --as-slot 0 for config)
+[group('test')]
+[positional-arguments]
+compose *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd "{{root}}"
+    exec "{{root}}/.venv/bin/python" -m scripts.slots --root "{{root}}" compose "$@"
+
+# Slot helper unit tests (no containers)
+[group('test')]
+slots-unit *args:
+    cd {{quote(root)}} && {{quote(root / ".venv/bin/python")}} -m pytest -p no:django -p no:cacheprovider scripts/slot_tests -q {{args}}

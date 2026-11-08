@@ -1,6 +1,6 @@
+import { API_URL } from './base-url';
 import type { BrowserContext } from '@playwright/test';
 
-const API_URL = 'https://localhost/api';
 
 /**
  * Kill all WebSocket connections for a team draft.

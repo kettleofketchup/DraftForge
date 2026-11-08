@@ -4,8 +4,7 @@ These tests validate that Django serializer output matches the Pydantic
 schemas used by celery workers. If a model/serializer field changes but
 the Pydantic schema isn't updated, these tests fail immediately.
 
-Run: docker compose -f docker/docker-compose.test.yaml run --rm --entrypoint "" backend \
-       python manage.py test app.tests.test_schema_drift -v 2
+Run: just test::run 'python manage.py test app.tests.test_schema_drift -v 2'
 """
 
 from datetime import timedelta
@@ -14,7 +13,7 @@ from django.test import TestCase
 from django.utils import timezone
 from pydantic import ValidationError
 
-from app.models import CustomUser, Organization
+from app.models import Organization
 from app.schemas import (
     GameWithoutHeroDraftSchema,
     TournamentParticipantSchema,
@@ -140,7 +139,6 @@ class TournamentTaskSchemaDriftTest(TestCase):
 
     def test_tournament_validates(self):
         from app.models import Tournament
-        from app.schemas import TournamentTaskSchema
 
         t = Tournament.objects.create(
             name="Test", state="future", date_played=timezone.now()
@@ -160,8 +158,6 @@ class TournamentTaskSchemaDriftTest(TestCase):
         self.assertFalse(parsed.auto_create_hero_drafts)
 
     def test_extra_fields_ignored(self):
-        from app.schemas import TournamentTaskSchema
-
         data = {
             "id": 1,
             "name": "T",
@@ -172,8 +168,6 @@ class TournamentTaskSchemaDriftTest(TestCase):
         self.assertEqual(parsed.id, 1)
 
     def test_missing_required_field_raises(self):
-        from app.schemas import TournamentTaskSchema
-
         with self.assertRaises(ValidationError):
             TournamentTaskSchema(name="T")  # missing id and state
 
@@ -182,8 +176,6 @@ class GameWithoutHeroDraftSchemaDriftTest(TestCase):
     """Verify GameWithoutHeroDraftSchema schema validates correctly."""
 
     def test_game_without_herodraft_validates(self):
-        from app.schemas import GameWithoutHeroDraftSchema
-
         data = {
             "id": 1,
             "radiant_team_id": 10,
@@ -202,15 +194,11 @@ class TournamentParticipantSchemaDriftTest(TestCase):
     """Verify TournamentParticipantSchema schema validates correctly."""
 
     def test_participant_validates(self):
-        from app.schemas import TournamentParticipantSchema
-
         data = {"user_pk": 1, "discord_id": "123456789", "username": "player1"}
         parsed = TournamentParticipantSchema.model_validate(data)
         self.assertEqual(parsed.discord_id, "123456789")
 
     def test_extra_fields_ignored(self):
-        from app.schemas import TournamentParticipantSchema
-
         data = {
             "user_pk": 1,
             "discord_id": "123",

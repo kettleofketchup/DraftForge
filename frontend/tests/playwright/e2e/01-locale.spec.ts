@@ -1,5 +1,6 @@
 // Import from project fixtures (provides waitForHydration, sets
 // window.playwright = true to disable react-scan, and exposes login helpers).
+import { BASE_URL } from '../fixtures/base-url';
 import { test, expect, loginUser } from '../fixtures';
 import type { Page } from '@playwright/test';
 
@@ -91,7 +92,7 @@ test.describe('navbar i18n — anonymous', () => {
   test('?lang=en beats df-locale=es cookie', async ({ browser }) => {
     const ctx = await browser.newContext({ locale: 'en-US' });
     await ctx.addCookies([
-      { name: 'df-locale', value: 'es', url: 'https://localhost' },
+      { name: 'df-locale', value: 'es', url: BASE_URL },
     ]);
     const page = await ctx.newPage();
     const errors = attachErrorCapture(page);
@@ -107,7 +108,7 @@ test.describe('navbar i18n — anonymous', () => {
     // is the actual subject; locale doesn't change between p1 and p2.
     const ctx = await browser.newContext({ locale: 'en-US' });
     await ctx.addCookies([
-      { name: 'df-locale', value: 'es', url: 'https://localhost' },
+      { name: 'df-locale', value: 'es', url: BASE_URL },
     ]);
     const p1 = await ctx.newPage();
     const errorsP1 = attachErrorCapture(p1);

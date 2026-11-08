@@ -1,31 +1,29 @@
-import shlex
-from pathlib import Path
+import time
+from typing import cast
 
-import semver
-from invoke import UnexpectedExit
+import invoke
+from dotenv import load_dotenv
 from invoke.collection import Collection
+from invoke.context import Context
+from invoke.exceptions import Exit
 from invoke.tasks import task
+from rich.traceback import install
 
 import paths
-from backend.tasks import ns_db
-from scripts.docker import docker_pull_all, docker_release_pull, ns_docker
+from backend.tasks import db_migrate, db_populate_steam, ns_db
+from scripts.compose import _fail, run_compose, run_compose_one_off, shell_argv
+from scripts.docker import docker_release_pull, ns_docker
 from scripts.docs import ns_docs
+from scripts.slots import STACKS, SlotError, Stack
 from scripts.sync_version import (
     get_version_from_env,
-    get_version_from_pyproject,
-    update_env_version,
-    update_pyproject_version,
 )
 from scripts.tests import dev_test, ns_demo, ns_test
 from scripts.update import ns_update
-from scripts.utils import crun, get_version
 from scripts.version import ns_version
 
 config = None
 version = None
-
-import invoke
-from rich.traceback import install
 
 install(suppress=[invoke])
 
@@ -41,176 +39,105 @@ ns.add_collection(ns_update, "update")
 ns.add_collection(ns_version, "version")
 ns.add_collection(ns_docs, "docs")
 ns.add_collection(ns_demo, "demo")
-from dotenv import load_dotenv
 
 
-# Every compose file sets `name: df`, so this label identifies all of this
-# project's containers regardless of which compose file started them, and
-# nothing else running on the host.
-COMPOSE_PROJECT_NAME = "df"
-_PROJECT_FILTER = f"--filter label=com.docker.compose.project={COMPOSE_PROJECT_NAME}"
+def docker_compose_down(c: Context, stack: Stack) -> None:
+    run_compose(c, stack, "down", "--remove-orphans")
 
 
-def _project_container_ids(c) -> list[str]:
-    result = c.run(f"docker ps -aq {_PROJECT_FILTER}", hide=True, warn=True)
-    return result.stdout.split() if result.ok else []
+def docker_compose_up(c: Context, stack: Stack, detach: bool = False) -> None:
+    run_compose(c, stack, "up", *(["-d"] if detach else []), "--remove-orphans")
 
 
-def docker_stop_project(c):
-    """Stop this project's containers, including ones from other compose files."""
-    ids = _project_container_ids(c)
-    if ids:
-        c.run(f"docker stop {' '.join(ids)}", warn=True)
+def docker_compose_logs(c: Context, stack: Stack) -> None:
+    run_compose(c, stack, "logs", "-f")
 
 
-def docker_remove_project(c):
-    """Stop and remove this project's containers, including ones from other compose files."""
-    ids = _project_container_ids(c)
-    if ids:
-        c.run(f"docker rm -f {' '.join(ids)}", warn=True)
+def docker_compose_ps(c: Context, stack: Stack) -> None:
+    run_compose(c, stack, "ps")
 
 
-def docker_compose_down(c, compose_file: Path):
-    docker_remove_project(c)
-    with c.cd(paths.PROJECT_PATH):
-        cmd = (
-            f"docker compose --project-directory {paths.PROJECT_PATH.resolve()} "
-            f"-f {compose_file.resolve()} down --remove-orphans"
-        )
-        c.run(cmd)
+def docker_compose_restart(c: Context, stack: Stack) -> None:
+    run_compose(c, stack, "restart")
 
 
-def docker_compose_up(c, compose_file: Path, detach: bool = False):
-    with c.cd(paths.PROJECT_PATH):
-        detach_flag = "-d" if detach else ""
-        cmd = (
-            f"docker compose --project-directory {paths.PROJECT_PATH.resolve()} "
-            f"-f {compose_file.resolve()} up {detach_flag} --remove-orphans"
-        )
-        c.run(cmd)
+def docker_compose_stop(c: Context, stack: Stack) -> None:
+    run_compose(c, stack, "stop")
 
 
-def docker_compose_logs(c, compose_file: Path):
-    with c.cd(paths.PROJECT_PATH):
-        cmd = (
-            f"docker compose --project-directory {paths.PROJECT_PATH.resolve()} "
-            f"-f {compose_file.resolve()} logs -f"
-        )
-        c.run(cmd)
+def docker_compose_build(c: Context, stack: Stack) -> None:
+    run_compose(c, stack, "build")
 
 
-def docker_compose_ps(c, compose_file: Path):
-    with c.cd(paths.PROJECT_PATH):
-        cmd = (
-            f"docker compose --project-directory {paths.PROJECT_PATH.resolve()} "
-            f"-f {compose_file.resolve()} ps"
-        )
-        c.run(cmd)
+def docker_compose_pull(c: Context, stack: Stack) -> None:
+    run_compose(c, stack, "pull")
 
 
-def docker_compose_restart(c, compose_file: Path):
-    with c.cd(paths.PROJECT_PATH):
-        cmd = (
-            f"docker compose --project-directory {paths.PROJECT_PATH.resolve()} "
-            f"-f {compose_file.resolve()} restart"
-        )
-        c.run(cmd)
+def docker_compose_top(c: Context, stack: Stack) -> None:
+    run_compose(c, stack, "top")
 
 
-def docker_compose_stop(c, compose_file: Path):
-    docker_stop_project(c)
-    with c.cd(paths.PROJECT_PATH):
-        cmd = (
-            f"docker compose --project-directory {paths.PROJECT_PATH.resolve()} "
-            f"-f {compose_file.resolve()} stop"
-        )
-        c.run(cmd)
-
-
-def docker_compose_build(c, compose_file: Path):
-    with c.cd(paths.PROJECT_PATH):
-        cmd = (
-            f"docker compose --project-directory {paths.PROJECT_PATH.resolve()} "
-            f"-f {compose_file.resolve()} build"
-        )
-        c.run(cmd)
-
-
-def docker_compose_pull(c, compose_file: Path):
-    with c.cd(paths.PROJECT_PATH):
-        cmd = (
-            f"docker compose --project-directory {paths.PROJECT_PATH.resolve()} "
-            f"-f {compose_file.resolve()} pull"
-        )
-        c.run(cmd)
-
-
-def docker_compose_top(c, compose_file: Path):
-    with c.cd(paths.PROJECT_PATH):
-        cmd = (
-            f"docker compose --project-directory {paths.PROJECT_PATH.resolve()} "
-            f"-f {compose_file.resolve()} top"
-        )
-        c.run(cmd)
-
-
-def docker_compose_exec(c, compose_file: Path, service: str, cmd_str: str):
-    with c.cd(paths.PROJECT_PATH):
-        cmd = (
-            f"docker compose --project-directory {paths.PROJECT_PATH.resolve()} "
-            f"-f {compose_file.resolve()} exec {service} {cmd_str}"
-        )
-        c.run(cmd, pty=True)
+def docker_compose_exec(c: Context, stack: Stack, service: str, cmd_str: str) -> None:
+    run_compose(c, stack, "exec", service, *shell_argv(cmd_str), pty=True)
 
 
 def docker_compose_run(
-    c, compose_file: Path, service: str, cmd_str: str, entrypoint: str | None = None
-):
+    c: Context, stack: Stack, service: str, cmd_str: str, entrypoint: str | None = None
+) -> None:
     """Run a one-off command in a new container with --rm flag.
 
     Pass ``entrypoint=""`` to bypass the image entrypoint (e.g. daphne) so the
     command runs directly — required for ``python manage.py ...`` one-offs.
     """
-    entrypoint_flag = (
-        f"--entrypoint {shlex.quote(entrypoint)} " if entrypoint is not None else ""
+    run_compose_one_off(c, stack, service, cmd_str, entrypoint=entrypoint)
+
+
+HEALTH_CHECK_CODE = (
+    "import requests; requests.get('http://localhost:8000/api/', timeout=5)"
+)
+AUTO_LINK_CODE = (
+    "import django; django.setup(); "
+    "from app.models import Tournament; "
+    "from steam.functions.game_linking import auto_link_matches_for_tournament; "
+    "results = [auto_link_matches_for_tournament(t.id) for t in Tournament.objects.all()]; "
+    "linked = sum(r['auto_linked_count'] for r in results); "
+    "suggestions = sum(r['suggestions_created_count'] for r in results); "
+    "print(f'Auto-linked {linked} games, created {suggestions} suggestions')"
+)
+
+
+def _backend_healthy(c: Context, stack: Stack) -> bool:
+    result = run_compose(
+        c, stack, "ps", "backend", "--format", "json", hide=True, warn=True
     )
-    with c.cd(paths.PROJECT_PATH):
-        cmd = (
-            f"docker compose --project-directory {paths.PROJECT_PATH.resolve()} "
-            f"-f {compose_file.resolve()} run --rm {entrypoint_flag}{service} {cmd_str}"
-        )
-        c.run(cmd, pty=True)
+    if result is None or not result.ok or "running" not in result.stdout.lower():
+        return False
+    health_result = run_compose(
+        c,
+        stack,
+        "exec",
+        "-T",
+        "backend",
+        "python",
+        "-c",
+        HEALTH_CHECK_CODE,
+        hide=True,
+        warn=True,
+    )
+    return health_result is not None and health_result.ok
 
 
-def _wait_for_backend(c, compose_file: Path, timeout: int = 120):
+def _wait_for_backend(c: Context, stack: Stack, timeout: int = 120) -> bool:
     """Wait for backend container to be healthy and accepting requests."""
-    import time
-
     print("Waiting for backend to be ready...")
     start_time = time.time()
 
     while time.time() - start_time < timeout:
         try:
-            # Check if backend container is running
-            result = c.run(
-                f"docker compose --project-directory {paths.PROJECT_PATH.resolve()} "
-                f"-f {compose_file.resolve()} ps backend --format json",
-                hide=True,
-                warn=True,
-            )
-            if result.ok and "running" in result.stdout.lower():
-                # Probe /api/ from inside the container
-                health_result = c.run(
-                    f"docker compose --project-directory {paths.PROJECT_PATH.resolve()} "
-                    f"-f {compose_file.resolve()} exec -T backend "
-                    f"python -c \"import requests; requests.get('http://localhost:8000/api/', timeout=5)\"",
-                    hide=True,
-                    warn=True,
-                )
-                if health_result.ok:
-                    print("Backend is ready!")
-                    return True
-        except Exception:
+            if _backend_healthy(c, stack):
+                print("Backend is ready!")
+                return True
+        except (SlotError, Exit):
             pass
         time.sleep(2)
 
@@ -218,91 +145,65 @@ def _wait_for_backend(c, compose_file: Path, timeout: int = 120):
     return False
 
 
-def _auto_link_all_tournaments(c, compose_file: Path):
+def _auto_link_all_tournaments(c: Context, stack: Stack) -> None:
     """Run auto-link for all tournaments to link games to Steam matches."""
     print("Auto-linking tournament games to Steam matches...")
-    with c.cd(paths.PROJECT_PATH):
-        cmd = (
-            f"docker compose --project-directory {paths.PROJECT_PATH.resolve()} "
-            f"-f {compose_file.resolve()} exec -T backend "
-            f'python -c "'
-            f"import django; django.setup(); "
-            f"from app.models import Tournament; "
-            f"from steam.functions.game_linking import auto_link_matches_for_tournament; "
-            f"results = [auto_link_matches_for_tournament(t.id) for t in Tournament.objects.all()]; "
-            f"linked = sum(r['auto_linked_count'] for r in results); "
-            f"suggestions = sum(r['suggestions_created_count'] for r in results); "
-            f"print(f'Auto-linked {{linked}} games, created {{suggestions}} suggestions')\""
-        )
-        c.run(cmd, warn=True)
-
-
-from backend.tasks import db_migrate, db_populate_steam
+    run_compose(
+        c, stack, "exec", "-T", "backend", "python", "-c", AUTO_LINK_CODE, warn=True
+    )
 
 
 @task
-def dev_debug(c):
-
+def dev_debug(c: Context) -> None:
     db_migrate(c, paths.DEBUG_ENV_FILE)
-    with c.cd(paths.PROJECT_PATH):
-        load_dotenv(paths.DEBUG_ENV_FILE)
-
-        cmd = (
-            f"docker compose "
-            f"--project-directory {paths.PROJECT_PATH.resolve()} "
-            f"-f {paths.DOCKER_COMPOSE_DEBUG_PATH.resolve()} "
-            f"--ansi always up --no-attach nginx --remove-orphans"
-        )
-        c.run(cmd)
+    load_dotenv(paths.DEBUG_ENV_FILE)
+    run_compose(
+        c, "dev", "--ansi", "always", "up", "--no-attach", "nginx", "--remove-orphans"
+    )
 
 
 @task
-def dev_live(c):
-    cmd = f"./scripts/tmux.sh"
+def dev_live(c: Context) -> None:
+    cmd = "./scripts/tmux.sh"
     c.run(cmd, pty=True)
 
 
 @task
-def dev_prod(c):
+def dev_prod(c: Context) -> None:
     with c.cd(paths.PROJECT_PATH):
-
         load_dotenv(paths.PROD_ENV_FILE)
         db_migrate(c, paths.PROD_ENV_FILE)
-    cmd = f"docker compose -p . -f {paths.DOCKER_COMPOSE_PROD_PATH.resolve()} up"
-    c.run(cmd)
+    run_compose(c, "prod", "up")
 
 
 @task
-def dev_mac(c):
+def dev_mac(c: Context) -> None:
     db_migrate(c, paths.DEBUG_ENV_FILE)
-    with c.cd(paths.PROJECT_PATH):
-        load_dotenv(paths.DEBUG_ENV_FILE)
-
-        cmd = (
-            f"docker compose "
-            f"--project-directory {paths.PROJECT_PATH.resolve()} "
-            f"-f {paths.DOCKER_COMPOSE_DEBUG_M1_PATH.resolve()} "
-            f"--ansi always up --no-attach nginx --remove-orphans"
-        )
-        c.run(cmd)
+    load_dotenv(paths.DEBUG_ENV_FILE)
+    run_compose(
+        c,
+        "dev-m1",
+        "--ansi",
+        "always",
+        "up",
+        "--no-attach",
+        "nginx",
+        "--remove-orphans",
+    )
 
 
 @task
-def dev_release(c):
+def dev_release(c: Context) -> None:
     # Read VERSION from .env.release and set it as environment variable
     with c.cd(paths.PROJECT_PATH):
-
         load_dotenv(paths.RELEASE_ENV_FILE)
         db_migrate(c, paths.RELEASE_ENV_FILE)
         docker_release_pull(c)
 
         version = get_version_from_env(paths.RELEASE_ENV_FILE.resolve())
         print(f"launching release version {version}")
-        cmd1 = f"docker compose --project-directory {paths.PROJECT_PATH.resolve()} -f {paths.DOCKER_COMPOSE_RELEASE_PATH.resolve()} down "
-        cmd2 = f"docker compose --project-directory {paths.PROJECT_PATH.resolve()} -f {paths.DOCKER_COMPOSE_RELEASE_PATH.resolve()} up -d"
-
-        c.run(cmd1)
-        c.run(cmd2)
+        run_compose(c, "release", "down")
+        run_compose(c, "release", "up", "-d")
 
 
 ns_dev.add_task(dev_live, "live")
@@ -322,7 +223,7 @@ ns_dev.add_task(dev_release, "release")
 
 # Sync from production tasks (defined before dev_up since it depends on them)
 @task
-def dev_sync_users(c, dry_run=False):
+def dev_sync_users(c: Context, dry_run: bool = False) -> None:
     """Sync users from production (dota.kettle.sh) to local dev database."""
     load_dotenv(paths.DEBUG_ENV_FILE)
     db_migrate(c, paths.DEBUG_ENV_FILE)
@@ -333,7 +234,7 @@ def dev_sync_users(c, dry_run=False):
 
 
 @task
-def dev_sync_tournaments(c, dry_run=False):
+def dev_sync_tournaments(c: Context, dry_run: bool = False) -> None:
     """Sync tournaments from production (dota.kettle.sh) to local dev database."""
     load_dotenv(paths.DEBUG_ENV_FILE)
     with c.cd(paths.BACKEND_PATH):
@@ -343,7 +244,7 @@ def dev_sync_tournaments(c, dry_run=False):
 
 
 @task
-def dev_sync_all(c, dry_run=False):
+def dev_sync_all(c: Context, dry_run: bool = False) -> None:
     """Sync all data (users, tournaments) from production to local dev database."""
     dev_sync_users(c, dry_run=dry_run)
     dev_sync_tournaments(c, dry_run=dry_run)
@@ -351,7 +252,7 @@ def dev_sync_all(c, dry_run=False):
 
 # Dev environment tasks (uses docker-compose.debug.yaml)
 @task
-def dev_up(c, sync: bool = True):
+def dev_up(c: Context, sync: bool = True) -> None:
     """Start dev environment, optionally sync data from production.
 
     Args:
@@ -359,9 +260,9 @@ def dev_up(c, sync: bool = True):
               Use --no-sync to skip syncing and just start containers.
     """
     if sync:
-        docker_compose_up(c, paths.DOCKER_COMPOSE_DEBUG_PATH, detach=True)
+        docker_compose_up(c, "dev", detach=True)
 
-        _wait_for_backend(c, paths.DOCKER_COMPOSE_DEBUG_PATH)
+        _wait_for_backend(c, "dev")
 
         print("\n=== Syncing data from production ===")
         dev_sync_all(c)
@@ -370,69 +271,69 @@ def dev_up(c, sync: bool = True):
         db_populate_steam(c, paths.DEBUG_ENV_FILE, full_sync=False, relink=True)
 
         print("\n=== Auto-linking tournament games ===")
-        _auto_link_all_tournaments(c, paths.DOCKER_COMPOSE_DEBUG_PATH)
+        _auto_link_all_tournaments(c, "dev")
 
         print("\n=== Sync complete, attaching to logs ===")
-        docker_compose_logs(c, paths.DOCKER_COMPOSE_DEBUG_PATH)
+        docker_compose_logs(c, "dev")
     else:
-        docker_compose_up(c, paths.DOCKER_COMPOSE_DEBUG_PATH)
+        docker_compose_up(c, "dev")
 
 
 @task
-def dev_down(c):
-    docker_compose_down(c, paths.DOCKER_COMPOSE_DEBUG_PATH)
+def dev_down(c: Context) -> None:
+    docker_compose_down(c, "dev")
 
 
 @task
-def dev_logs(c):
-    docker_compose_logs(c, paths.DOCKER_COMPOSE_DEBUG_PATH)
+def dev_logs(c: Context) -> None:
+    docker_compose_logs(c, "dev")
 
 
 @task
-def dev_ps(c):
-    docker_compose_ps(c, paths.DOCKER_COMPOSE_DEBUG_PATH)
+def dev_ps(c: Context) -> None:
+    docker_compose_ps(c, "dev")
 
 
 @task
-def dev_restart(c):
-    docker_compose_restart(c, paths.DOCKER_COMPOSE_DEBUG_PATH)
+def dev_restart(c: Context) -> None:
+    docker_compose_restart(c, "dev")
 
 
 @task
-def dev_stop(c):
-    docker_compose_stop(c, paths.DOCKER_COMPOSE_DEBUG_PATH)
+def dev_stop(c: Context) -> None:
+    docker_compose_stop(c, "dev")
 
 
 @task
-def dev_build(c):
-    docker_compose_build(c, paths.DOCKER_COMPOSE_DEBUG_PATH)
+def dev_build(c: Context) -> None:
+    docker_compose_build(c, "dev")
 
 
 @task
-def dev_pull(c):
-    docker_compose_pull(c, paths.DOCKER_COMPOSE_DEBUG_PATH)
+def dev_pull(c: Context) -> None:
+    docker_compose_pull(c, "dev")
 
 
 @task
-def dev_top(c):
-    docker_compose_top(c, paths.DOCKER_COMPOSE_DEBUG_PATH)
+def dev_top(c: Context) -> None:
+    docker_compose_top(c, "dev")
 
 
 @task
-def dev_exec(c, service, cmd):
-    docker_compose_exec(c, paths.DOCKER_COMPOSE_DEBUG_PATH, service, cmd)
+def dev_exec(c: Context, service: str, cmd: str) -> None:
+    docker_compose_exec(c, "dev", service, cmd)
 
 
 @task
-def dev_run(c, service="backend", cmd=""):
+def dev_run(c: Context, service: str = "backend", cmd: str = "") -> None:
     """Run a one-off command in dev environment. Example: inv dev.run --cmd 'python manage.py test'"""
-    docker_compose_run(c, paths.DOCKER_COMPOSE_DEBUG_PATH, service, cmd)
+    docker_compose_run(c, "dev", service, cmd)
 
 
 @task
-def dev_upd(c):
+def dev_upd(c: Context) -> None:
     """Start dev environment in detached mode."""
-    docker_compose_up(c, paths.DOCKER_COMPOSE_DEBUG_PATH, detach=True)
+    docker_compose_up(c, "dev", detach=True)
 
 
 ns_dev.add_task(dev_up, "up")
@@ -457,65 +358,65 @@ ns_dev.add_task(dev_sync_all, "sync-all")
 
 
 @task(name="test-up")
-def test_up(c):
-    docker_compose_up(c, paths.DOCKER_COMPOSE_TEST_PATH)
+def test_up(c: Context) -> None:
+    docker_compose_up(c, "test")
 
 
 @task(name="test-down")
-def test_down(c):
-    docker_compose_down(c, paths.DOCKER_COMPOSE_TEST_PATH)
+def test_down(c: Context) -> None:
+    docker_compose_down(c, "test")
 
 
 @task(name="test-logs")
-def test_logs(c):
-    docker_compose_logs(c, paths.DOCKER_COMPOSE_TEST_PATH)
+def test_logs(c: Context) -> None:
+    docker_compose_logs(c, "test")
 
 
 @task(name="test-ps")
-def test_ps(c):
-    docker_compose_ps(c, paths.DOCKER_COMPOSE_TEST_PATH)
+def test_ps(c: Context) -> None:
+    docker_compose_ps(c, "test")
 
 
 @task(name="test-restart")
-def test_restart(c):
-    docker_compose_restart(c, paths.DOCKER_COMPOSE_TEST_PATH)
+def test_restart(c: Context) -> None:
+    docker_compose_restart(c, "test")
 
 
 @task(name="test-stop")
-def test_stop(c):
-    docker_compose_stop(c, paths.DOCKER_COMPOSE_TEST_PATH)
+def test_stop(c: Context) -> None:
+    docker_compose_stop(c, "test")
 
 
 @task(name="test-build")
-def test_build(c):
-    docker_compose_build(c, paths.DOCKER_COMPOSE_TEST_PATH)
+def test_build(c: Context) -> None:
+    docker_compose_build(c, "test")
 
 
 @task(name="test-pull")
-def test_pull(c):
-    docker_compose_pull(c, paths.DOCKER_COMPOSE_TEST_PATH)
+def test_pull(c: Context) -> None:
+    docker_compose_pull(c, "test")
 
 
 @task(name="test-top")
-def test_top(c):
-    docker_compose_top(c, paths.DOCKER_COMPOSE_TEST_PATH)
+def test_top(c: Context) -> None:
+    docker_compose_top(c, "test")
 
 
 @task(name="test-exec")
-def test_exec(c, service, cmd):
-    docker_compose_exec(c, paths.DOCKER_COMPOSE_TEST_PATH, service, cmd)
+def test_exec(c: Context, service: str, cmd: str) -> None:
+    docker_compose_exec(c, "test", service, cmd)
 
 
 @task(name="test-run")
-def test_run(c, service="backend", cmd=""):
+def test_run(c: Context, service: str = "backend", cmd: str = "") -> None:
     """Run a one-off command in test environment. Example: inv test.run --cmd 'python manage.py test app.tests -v 2'"""
-    docker_compose_run(c, paths.DOCKER_COMPOSE_TEST_PATH, service, cmd, entrypoint="")
+    docker_compose_run(c, "test", service, cmd, entrypoint="")
 
 
 @task(name="test-upd")
-def test_upd(c):
+def test_upd(c: Context) -> None:
     """Start test environment in detached mode."""
-    docker_compose_up(c, paths.DOCKER_COMPOSE_TEST_PATH, detach=True)
+    docker_compose_up(c, "test", detach=True)
 
 
 ns_test.add_task(test_up, "up")
@@ -534,65 +435,65 @@ ns_test.add_task(test_run, "run")
 
 # Prod environment tasks (uses docker-compose.prod.yaml)
 @task
-def prod_up(c):
-    docker_compose_up(c, paths.DOCKER_COMPOSE_PROD_PATH)
+def prod_up(c: Context) -> None:
+    docker_compose_up(c, "prod")
 
 
 @task
-def prod_down(c):
-    docker_compose_down(c, paths.DOCKER_COMPOSE_PROD_PATH)
+def prod_down(c: Context) -> None:
+    docker_compose_down(c, "prod")
 
 
 @task
-def prod_logs(c):
-    docker_compose_logs(c, paths.DOCKER_COMPOSE_PROD_PATH)
+def prod_logs(c: Context) -> None:
+    docker_compose_logs(c, "prod")
 
 
 @task
-def prod_ps(c):
-    docker_compose_ps(c, paths.DOCKER_COMPOSE_PROD_PATH)
+def prod_ps(c: Context) -> None:
+    docker_compose_ps(c, "prod")
 
 
 @task
-def prod_restart(c):
-    docker_compose_restart(c, paths.DOCKER_COMPOSE_PROD_PATH)
+def prod_restart(c: Context) -> None:
+    docker_compose_restart(c, "prod")
 
 
 @task
-def prod_stop(c):
-    docker_compose_stop(c, paths.DOCKER_COMPOSE_PROD_PATH)
+def prod_stop(c: Context) -> None:
+    docker_compose_stop(c, "prod")
 
 
 @task
-def prod_build(c):
-    docker_compose_build(c, paths.DOCKER_COMPOSE_PROD_PATH)
+def prod_build(c: Context) -> None:
+    docker_compose_build(c, "prod")
 
 
 @task
-def prod_pull(c):
-    docker_compose_pull(c, paths.DOCKER_COMPOSE_PROD_PATH)
+def prod_pull(c: Context) -> None:
+    docker_compose_pull(c, "prod")
 
 
 @task
-def prod_top(c):
-    docker_compose_top(c, paths.DOCKER_COMPOSE_PROD_PATH)
+def prod_top(c: Context) -> None:
+    docker_compose_top(c, "prod")
 
 
 @task
-def prod_exec(c, service, cmd):
-    docker_compose_exec(c, paths.DOCKER_COMPOSE_PROD_PATH, service, cmd)
+def prod_exec(c: Context, service: str, cmd: str) -> None:
+    docker_compose_exec(c, "prod", service, cmd)
 
 
 @task
-def prod_run(c, service="backend", cmd=""):
+def prod_run(c: Context, service: str = "backend", cmd: str = "") -> None:
     """Run a one-off command in prod environment. Example: inv prod.run --cmd 'python manage.py shell'"""
-    docker_compose_run(c, paths.DOCKER_COMPOSE_PROD_PATH, service, cmd)
+    docker_compose_run(c, "prod", service, cmd)
 
 
 @task
-def prod_upd(c):
+def prod_upd(c: Context) -> None:
     """Start prod environment in detached mode."""
-    docker_compose_up(c, paths.DOCKER_COMPOSE_PROD_PATH, detach=True)
+    docker_compose_up(c, "prod", detach=True)
 
 
 ns_prod.add_task(prod_up, "up")
@@ -617,7 +518,7 @@ ns_discord = Collection("discord")
 
 
 @task
-def discord_ngrok(c, port=443):
+def discord_ngrok(c: Context, port: int = 443) -> None:
     """Start ngrok tunnel for Discord bot interactions.
 
     This exposes the local server to the internet so Discord can send
@@ -642,10 +543,14 @@ def discord_ngrok(c, port=443):
 
 
 @task
-def discord_logs(c):
-    """Show logs from the Discord bot container."""
-    c.run(
-        "docker logs -f captain-user-popover-discord-bot-1 2>&1 | tail -100", pty=True
+def discord_logs(c: Context, stack: str = "dev") -> None:
+    """Show logs from the Discord bot container (default: the dev stack ngrok serves)."""
+    if stack not in STACKS:
+        raise _fail(
+            SlotError(f"--stack must be one of {', '.join(STACKS)}, not {stack}")
+        )
+    run_compose(
+        c, cast(Stack, stack), "logs", "-f", "--tail=100", "discord-bot", pty=True
     )
 
 

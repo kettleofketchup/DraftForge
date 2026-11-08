@@ -59,7 +59,7 @@ pip install -r requirements.txt
 
 # Running commands - OK
 make build
-docker compose up -d
+just test::upd
 pytest tests/
 
 # Directory operations - OK

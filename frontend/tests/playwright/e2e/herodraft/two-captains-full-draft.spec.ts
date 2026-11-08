@@ -1,9 +1,8 @@
+import { API_URL, BASE_URL } from '../../fixtures/base-url';
 import { test, expect, chromium, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import { loginAsDiscordId, waitForHydration } from '../../fixtures/auth';
 import { HeroDraftPage } from '../../helpers/HeroDraftPage';
 
-const API_URL = 'https://localhost/api';
-const BASE_URL = 'https://localhost';
 
 /**
  * Wait for server to be ready with retries.

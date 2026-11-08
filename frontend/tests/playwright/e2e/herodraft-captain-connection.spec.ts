@@ -1,9 +1,9 @@
+import { BASE_URL } from '../fixtures/base-url';
 import { test as base, expect } from '@playwright/test';
 import type { BrowserContext, Page } from '@playwright/test';
 import {
   loginAsUser,
   waitForHydration,
-  DOCKER_HOST,
   API_URL,
 } from '../fixtures/auth';
 import { getHeroDraftByKey, resetHeroDraft } from '../fixtures/herodraft';
@@ -44,7 +44,7 @@ test.describe('HeroDraft Captain Connection Management', () => {
   }) => {
     // Get captain info
     const captainPk = heroDraft.draft_teams[0].captain.pk;
-    const draftUrl = `https://${DOCKER_HOST}/herodraft/${heroDraft.pk}`;
+    const draftUrl = `${BASE_URL}/herodraft/${heroDraft.pk}`;
 
     // === First Context (Tab 1) ===
     const context1 = await browser.newContext({
@@ -141,7 +141,7 @@ test.describe('HeroDraft Captain Connection Management', () => {
     heroDraft,
   }) => {
     const captainPk = heroDraft.draft_teams[0].captain.pk;
-    const draftUrl = `https://${DOCKER_HOST}/herodraft/${heroDraft.pk}`;
+    const draftUrl = `${BASE_URL}/herodraft/${heroDraft.pk}`;
 
     // === First Context ===
     const context1 = await browser.newContext({
@@ -212,7 +212,7 @@ test.describe('HeroDraft Captain Connection Management', () => {
   }) => {
     const captainPk = heroDraft.draft_teams[0].captain.pk;
     const otherCaptainPk = heroDraft.draft_teams[1].captain.pk;
-    const draftUrl = `https://${DOCKER_HOST}/herodraft/${heroDraft.pk}`;
+    const draftUrl = `${BASE_URL}/herodraft/${heroDraft.pk}`;
 
     // === Captain A Context ===
     const captainAContext = await browser.newContext({

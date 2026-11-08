@@ -1,6 +1,6 @@
 ---
 name: inv-runner
-description: Python Invoke task automation for DTX website. This skill should be used when running repo commands, backend tests via Docker, database migrations, updating invoke tasks, Docker operations, or workflow automation. Supports dev/test/prod environments with run, exec, up, down commands. References docs/development/invoke-tasks.md for complete command reference.
+description: Python Invoke task automation for DTX website. This skill should be used when running repo commands, backend tests via Docker, database migrations, updating invoke tasks, Docker operations, or workflow automation. Supports dev/test/prod environments with run, exec, up, down commands, and per-worktree test stack slots. References docs/development/invoke-tasks.md for complete command reference.
 ---
 
 # Invoke Runner Skill
@@ -113,15 +113,27 @@ inv test.headless        # All tests headless
 
 ## Worktree Workflow
 
-From worktree root:
+Each worktree has its own test stack slot (project `df` for slot 0, `df-sN`
+otherwise). Prefer the just recipes, which target the worktree they live in:
 ```bash
-cd /path/to/worktree
-PATH=".venv/bin:$PATH" inv test.down
-PATH=".venv/bin:$PATH" inv test.setup
-PATH=".venv/bin:$PATH" inv db.migrate.test
-PATH=".venv/bin:$PATH" inv db.populate.all
-PATH=".venv/bin:$PATH" inv test.up
+just -f /path/to/worktree/justfile -d /path/to/worktree test::slot    # slot, project, URL
+just -f /path/to/worktree/justfile -d /path/to/worktree test::down    # this slot only
+just -f /path/to/worktree/justfile -d /path/to/worktree test::setup
+just -f /path/to/worktree/justfile -d /path/to/worktree db::migrate::test
+just -f /path/to/worktree/justfile -d /path/to/worktree db::populate::all
+just -f /path/to/worktree/justfile -d /path/to/worktree test::upd
 ```
+
+## Compose Helper
+
+All compose calls go through `scripts/slots.py` (`compose_cmd(stack, ...)`, with
+`stack` one of `test`, `dev`, `dev-m1`, `prod`, `release`). It always passes `-p` and
+absolute `-f` paths; `docker_stop_all` (which stopped every container on the host)
+was removed. For ad-hoc compose commands use `just test::compose <args>`
+(`--stack dev` for `df-dev`), never raw `docker compose`. `just test::slot-reap`,
+`test::slot-claim` and `test::slot-release --slot N` need no approval, but check first
+that no other agent is using that slot (see the doc's pre-checks); if in doubt, don't.
+See `docs/development/test-stack-slots.md`.
 
 ## Common Issues
 
@@ -131,6 +143,8 @@ PATH=".venv/bin:$PATH" inv test.up
 | Redis connection errors | Use Docker: `inv test.run --cmd '...'` |
 | Tests hang on cleanup | Use Docker: `inv test.run --cmd '...'` |
 | Module not found | Ensure correct venv is activated |
+| `No test-stack slot for this worktree` | Run `just test::slot` |
+| `slot N now belongs to <path>` | Slot was taken by another worktree; `just test::slot` re-allocates |
 
 ## When Modifying Tasks
 

@@ -1,3 +1,4 @@
+import { BASE_URL } from './tests/playwright/fixtures/base-url';
 import { defineConfig, devices } from '@playwright/test';
 
 /**
@@ -53,7 +54,7 @@ export default defineConfig({
   ],
 
   use: {
-    baseURL: 'https://localhost',
+    baseURL: BASE_URL,
     // Record traces for every test, keep them only when the test fails. This
     // captures the *failing* attempt itself, not just the retry — critical for
     // diagnosing first-attempt timeouts that pass on retry. (Was

@@ -1,6 +1,6 @@
 ---
 name: testing
-description: DraftForge test infrastructure for writing backend unit tests, Playwright E2E tests, and managing test data population. This skill should be used when writing new tests, adding test fixtures, creating populate functions for new features, adding Playwright E2E specs, using login/auth fixtures, creating test users/orgs/leagues/tournaments, or understanding the test data architecture. Covers backend Django tests via Docker, Playwright config (projects, workers, sharding), test auth endpoints that expose backend login to frontend, and feature-isolated test data patterns.
+description: DraftForge test infrastructure for writing backend unit tests, Playwright E2E tests, and managing test data population. This skill should be used when writing new tests, adding test fixtures, creating populate functions for new features, adding Playwright E2E specs, using login/auth fixtures, creating test users/orgs/leagues/tournaments, or understanding the test data architecture. Covers backend Django tests via Docker, Playwright config (projects, workers, sharding), test auth endpoints that expose backend login to frontend, feature-isolated test data patterns, and per-worktree test stack slots (which port, two worktrees, test stack slot, which URL, slot-reap).
 ---
 
 # DraftForge Testing Infrastructure
@@ -32,9 +32,10 @@ See [references/feature-isolation.md](references/feature-isolation.md) for the f
 ## Running Tests
 
 ```bash
-# Backend (Docker - use --entrypoint "" to bypass daphne)
-docker compose -f docker/docker-compose.test.yaml run --rm --entrypoint "" backend \
-  python manage.py test app.tests.test_csv_import -v 2
+# Backend (Docker; test::run passes --entrypoint "" to bypass daphne)
+just test::run 'python manage.py test app.tests.test_csv_import -v 2'
+# Same thing through the slot-aware compose wrapper (never raw docker compose)
+just test::compose run --rm --entrypoint "" backend python manage.py test app.tests.test_csv_import -v 2
 
 # Playwright
 just test::pw::headless              # All tests
@@ -47,6 +48,19 @@ just test::setup
 # Repopulate test data only
 just db::populate::all
 ```
+
+## Test Stack Slots (which port, two worktrees)
+
+Every worktree runs its own test stack in a slot: slot 0 is project `df` on
+`https://localhost`, slot N ≥ 1 is `df-sN` on `https://localhost:1N443`.
+
+- Run `just test::slots` (read-only) or `just test::slot` to find the URL. **Never hardcode `https://localhost`** in tests, fixtures or commands; Playwright imports `BASE_URL` / `API_URL` from `fixtures/base-url.ts`.
+- Use `just test::compose <args>` for any compose command, never raw `docker compose` or `docker exec <name>`.
+- Slots N ≥ 1 run without the Discord bot, celery beat and real Discord/Steam tokens unless `just test::background on`.
+- `just test::slot-reap`, `just test::slot-claim` and `just test::slot-release --slot N` need no user approval. Before using one on another worktree's slot, verify no agent is working in or testing against it (owner worktree activity, the project's containers and logs, test processes with that cwd, peer Claude sessions). If in doubt, don't touch it.
+- Slots idle more than 12h are reaped automatically on the next allocation; `just test::slot-reap --stale` does it now.
+
+Commands, externals policy and troubleshooting: [test-stack-slots.md](references/test-stack-slots.md).
 
 ## Cacheops and Test State Resets
 

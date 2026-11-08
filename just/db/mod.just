@@ -1,6 +1,7 @@
 # Database commands
 
 root := source_directory() / "../.."
+image := env("DF_TEST_DB_IMAGE", "draftforge/test-db")
 inv := ". " + root / ".venv/bin/activate && cd " + root + " && inv"
 
 mod migrate 'migrate.just'
@@ -20,9 +21,10 @@ reset-test:
     set -euo pipefail
     cd {{root}}
 
-    IMAGE="draftforge/test-db:latest"
+    HASH=$(./scripts/hash-test-db-sources.sh)
+    IMAGE="{{image}}:$HASH"
     if ! docker image inspect "$IMAGE" &>/dev/null; then
-        echo "No cached test-db image. Run 'just docker::db::build' first."
+        echo "No test-db image for this worktree's sources ($IMAGE). Run 'just docker::db::build' first." >&2
         exit 1
     fi
 

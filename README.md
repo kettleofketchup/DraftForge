@@ -89,7 +89,9 @@ poetry install     # Install Python dependencies
 just test::setup   # Build images, migrate, populate test data, start stack
 ```
 
-Open `https://localhost` when ready.
+Open the URL that `just test::slot` prints when ready: `https://localhost` for the
+first worktree (slot 0), `https://localhost:1N443` for slot N. Each git worktree gets
+its own test stack; see `docs/development/test-stack-slots.md`.
 
 ## Screenshots
 

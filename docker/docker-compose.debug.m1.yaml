@@ -1,7 +1,7 @@
-name: df
+name: df-dev
 services:
   frontend:
-    container_name: frontend
+    container_name: frontend-dev
     image: ghcr.io/kettleofketchup/draftforge/frontend-dev:latest
     env_file: "./docker/.env.dev"
     build:
@@ -14,7 +14,7 @@ services:
     restart: always
 
   backend:
-    container_name: backend
+    container_name: backend-dev
     env_file: "./docker/.env.dev"
     image: ghcr.io/kettleofketchup/draftforge/backend-dev:latest
     restart: always
@@ -25,14 +25,14 @@ services:
 
   redis:
     image: redis:8.2.1-alpine
-    container_name: redis
+    container_name: redis-dev
     volumes:
-      - ./backend/.redis_data:/data
+      - ./backend/.redis_data-dev:/data
     restart: always
 
   nginx:
     image: ghcr.io/kettleofketchup/draftforge/nginx:latest
-    container_name: nginx
+    container_name: nginx-dev
     restart: always
     env_file: "./docker/.env.dev"
     ports:
@@ -64,7 +64,7 @@ services:
   celery-beat:
     image: ghcr.io/kettleofketchup/draftforge/backend-dev:latest
     entrypoint: ["celery"]
-    command: ["-A", "config.celery_light", "beat", "-l", "info"]
+    command: ["-A", "config.celery_light", "beat", "-l", "info", "-s", "/app/backend/celerybeat-schedule-dev"]
     volumes:
       - ./backend:/app/backend
     env_file: "./docker/.env.dev"

@@ -250,6 +250,11 @@ jobs:
           docker compose --project-directory . -f docker/docker-compose.test.yaml -f docker/docker-compose.ci.override.yaml exec -T frontend \
             npm test -- --run
 
+      - name: Run slot guards on the runner
+        run: |
+          npm --prefix frontend exec -- vitest run --root frontend tests/unit/playwright-literal-guard.test.ts
+          just test::slots-unit
+
       - name: Dump container logs on failure
         if: failure()
         run: |

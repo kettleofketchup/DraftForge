@@ -1,3 +1,4 @@
+import { API_URL } from '../../fixtures/base-url';
 import {
   expect,
   getEventsTestData,
@@ -7,8 +8,6 @@ import {
   test,
 } from '../../fixtures';
 
-const DOCKER_HOST = process.env.DOCKER_HOST || 'localhost';
-const API_URL = `https://${DOCKER_HOST}/api`;
 
 test.describe('Event staff permissions — league staff @cicd', () => {
   test.beforeEach(async ({ context }) => {

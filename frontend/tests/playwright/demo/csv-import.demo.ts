@@ -13,8 +13,9 @@
  * Pipeline: just demo::csv → just demo::trim → just demo::gifs
  */
 
+import { BASE_URL } from '../fixtures/base-url';
 import { test, chromium, type Page, type Locator } from '@playwright/test';
-import { loginAdmin, waitForHydration, DOCKER_HOST, API_URL } from '../fixtures/auth';
+import { loginAdmin, waitForHydration, API_URL } from '../fixtures/auth';
 import { waitForDemoReady } from '../fixtures/demo-utils';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -23,7 +24,6 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const BASE_URL = `https://${DOCKER_HOST}`;
 const VIDEO_OUTPUT_DIR = 'demo-results/videos';
 const DEMO_METADATA_FILE = path.join(VIDEO_OUTPUT_DIR, 'csv_import.demo.yaml');
 const CSV_FIXTURE = path.resolve(__dirname, '../fixtures/csv/demo-import.csv');

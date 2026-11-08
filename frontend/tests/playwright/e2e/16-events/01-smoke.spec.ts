@@ -15,6 +15,7 @@
  * - event_player_1-3 (pk=5001-5003) - regular players
  */
 
+import { API_URL } from '../../fixtures/base-url';
 import {
   test,
   expect,
@@ -27,7 +28,6 @@ import {
   type EventInfo,
 } from '../../fixtures';
 
-const API_URL = 'https://localhost/api';
 
 let eventInfo: EventInfo;
 

@@ -1,3 +1,4 @@
+import { API_URL } from '../../fixtures/base-url';
 import {
   test,
   expect,
@@ -26,7 +27,7 @@ test.beforeAll(async ({ browser }) => {
   // No fixture exposes a repeater id, and "Weekly Inhouse" is created without
   // an explicit pk, so resolve it by name instead of hard-coding one.
   const repResp = await ctx.request.get(
-    `https://${process.env.DOCKER_HOST || 'localhost'}/api/events/repeaters/?organization=${events.orgPk}`,
+    `${API_URL}/events/repeaters/?organization=${events.orgPk}`,
   );
   const repeaters = await repResp.json();
   const series = repeaters.find((r: { name: string }) => r.name === 'Weekly Inhouse');
