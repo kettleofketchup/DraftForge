@@ -144,9 +144,10 @@ Discord run.
 Playwright never allocates a slot. `frontend/tests/playwright/fixtures/base-url.ts`
 exports `BASE_URL` and `API_URL` and resolves them at import time:
 
-1. `DF_BASE_URL` from the environment. Invoke tasks set it (`https://nginx` inside a
-   container). A stale export that disagrees with this worktree's slot file is
-   rejected.
+1. `DF_BASE_URL` from the environment. `just test::pw::*` and `just demo::*` set it
+   from `python -m scripts.compose env` with `DF_BASE_URL_SOURCE=runner`
+   (`https://nginx` with source `container` inside a container). Any other export that
+   disagrees with this worktree's slot file is rejected.
 2. Otherwise `docker/.env.slot`, after checking that it belongs to this worktree and
    that the registry still gives this worktree that slot.
 3. Otherwise `https://localhost` when `GITHUB_ACTIONS=true` (CI).

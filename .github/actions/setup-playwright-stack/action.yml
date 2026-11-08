@@ -72,7 +72,7 @@ runs:
           echo "Images pulled successfully"
         else
           echo "Pull failed, building with buildx + registry cache..."
-          poetry run inv docker.test-build
+          just docker::frontend::build-dev
         fi
 
     - name: Rebuild frontend-dev image if pulled :latest is stale
@@ -86,7 +86,7 @@ runs:
           echo "frontend-dev:${FRONTEND_HASH:0:12} present (deps in sync)"
         else
           echo "frontend-dev image lacks current package-lock hash; rebuilding"
-          poetry run inv docker.frontend.build-dev
+          just docker::frontend::build-dev
         fi
 
     - name: Get test database

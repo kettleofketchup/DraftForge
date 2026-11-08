@@ -1,7 +1,7 @@
 export const NO_SLOT_MESSAGE = 'No test-stack slot for this worktree. Run "just test::slot".';
 
 const SLOT_FILE_REL = 'docker/.env.slot';
-const TRUSTED_SOURCES = new Set(['invoke', 'container']);
+const TRUSTED_SOURCES = new Set(['runner', 'container']);
 
 export interface ResolveInput {
   env: Record<string, string | undefined>;

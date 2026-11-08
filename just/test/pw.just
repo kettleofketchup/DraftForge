@@ -1,86 +1,112 @@
-# Playwright test commands
+# Playwright test commands (against this worktree's test stack slot)
 
-root := source_directory() / "../.."
-inv := ". " + root / ".venv/bin/activate && cd " + root + " && inv"
+set shell := ["bash", "-euo", "pipefail", "-c"]
+set positional-arguments
 
+root := clean(source_directory() / "../..")
+python := env("DF_JUST_PYTHON", root / ".venv/bin/python")
+just := quote(just_executable()) + " --justfile " + quote(root / "justfile")
+pw := just + " test::pw::run"
+cicd := pw + " --grep @cicd"
+
+# npx playwright test <args> with DF_BASE_URL set for this slot, after flushing the test Redis
+[group('test::pw')]
+run *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd {{quote(root)}}
+    pw_env=$({{quote(python)}} -m scripts.compose env)
+    eval "$pw_env"
+    {{quote(python)}} -m scripts.compose flush-redis
+    cd frontend
+    exec npx playwright test "$@"
+
+# All suites except demos (chromium, herodraft, events-sequential)
 [group('test::pw')]
 headless *args:
-    {{inv}} test.playwright.headless {{ if args != "" { "--args='" + args + "'" } else { "" } }}
+    {{pw}} --project=chromium --project=herodraft --project=events-sequential "$@"
 
 [group('test::pw')]
 ui:
-    {{inv}} test.playwright.ui
+    {{pw}} --ui
 
 [group('test::pw')]
 debug:
-    {{inv}} test.playwright.debug
+    {{pw}} --debug
+
+# Spec files whose path matches a pattern, without project dependencies
+[group('test::pw')]
+spec pattern *args:
+    {{pw}} "$1" --no-deps "${@:2}"
 
 [group('test::pw')]
-spec pattern:
-    {{inv}} test.playwright.spec --spec '{{pattern}}'
+file path *args:
+    {{pw}} "$1" --no-deps "${@:2}"
 
+# Tests whose title matches a pattern, without project dependencies
 [group('test::pw')]
-file path:
-    {{inv}} test.playwright.spec --file '{{path}}'
+grep pattern *args:
+    {{pw}} --grep "$1" --no-deps "${@:2}"
 
 [group('test::pw')]
 install:
-    {{inv}} test.playwright.install
+    cd {{quote(root / "frontend")}} && npx playwright install
 
 [group('test::pw')]
 report:
-    {{inv}} test.playwright.report
+    cd {{quote(root / "frontend")}} && npx playwright show-report
 
 [group('test::pw')]
 navigation *args:
-    {{inv}} test.playwright.navigation {{ if args != "" { "--args='" + args + "'" } else { "" } }}
+    {{pw}} tests/playwright/e2e/00-hydration-handling.spec.ts tests/playwright/e2e/01-navigation.spec.ts "$@"
 
 [group('test::pw')]
 tournament *args:
-    {{inv}} test.playwright.tournament {{ if args != "" { "--args='" + args + "'" } else { "" } }}
+    {{pw}} tests/playwright/e2e/03-tournaments/ tests/playwright/e2e/04-tournament/ "$@"
 
 [group('test::pw')]
 draft *args:
-    {{inv}} test.playwright.draft {{ if args != "" { "--args='" + args + "'" } else { "" } }}
+    {{pw}} tests/playwright/e2e/07-draft/ tests/playwright/e2e/08-shuffle-draft/ "$@"
 
 [group('test::pw')]
 bracket *args:
-    {{inv}} test.playwright.bracket {{ if args != "" { "--args='" + args + "'" } else { "" } }}
+    {{pw}} tests/playwright/e2e/09-bracket/ "$@"
 
 [group('test::pw')]
 league *args:
-    {{inv}} test.playwright.league {{ if args != "" { "--args='" + args + "'" } else { "" } }}
+    {{pw}} tests/playwright/e2e/10-leagues/ "$@"
 
 [group('test::pw')]
 herodraft *args:
-    {{inv}} test.playwright.herodraft {{ if args != "" { "--args='" + args + "'" } else { "" } }}
+    {{pw}} tests/playwright/e2e/herodraft/ "$@"
 
 [group('test::pw')]
 all *args:
-    {{inv}} test.playwright.all {{ if args != "" { "--args='" + args + "'" } else { "" } }}
+    {{pw}} "$@"
 
 # Run only @cicd tagged tests (fast smoke tests for CI/CD)
 [group('test::pw')]
 cicd *args:
-    {{inv}} test.playwright.cicd {{ if args != "" { "--args='" + args + "'" } else { "" } }}
+    {{cicd}} --project=chromium --project=mobile-pixel5 --project=mobile-iphone13 --project=mobile-iphone-se --project=herodraft --project=events-sequential --no-deps "$@"
 
 # CI/CD per-project runners — used by the matrix shards in
 # .github/workflows/playwright.yml. Local devs typically just use `cicd`.
 [group('test::pw')]
 cicd-chromium *args:
-    {{inv}} test.playwright.cicd-chromium {{ if args != "" { "--args='" + args + "'" } else { "" } }}
+    {{cicd}} --project=chromium --no-deps "$@"
 
 [group('test::pw')]
 cicd-mobile *args:
-    {{inv}} test.playwright.cicd-mobile {{ if args != "" { "--args='" + args + "'" } else { "" } }}
+    {{cicd}} --project=mobile-pixel5 --project=mobile-iphone13 --project=mobile-iphone-se --no-deps "$@"
 
 [group('test::pw')]
 cicd-herodraft *args:
-    {{inv}} test.playwright.cicd-herodraft {{ if args != "" { "--args='" + args + "'" } else { "" } }}
+    {{cicd}} --project=herodraft --no-deps "$@"
 
+# The 16-events specs share one seeded event PK, so events-sequential runs them in order
 [group('test::pw')]
 cicd-events *args:
-    {{inv}} test.playwright.cicd-events {{ if args != "" { "--args='" + args + "'" } else { "" } }}
+    {{cicd}} --project=events-sequential --no-deps "$@"
 
 # Run the headless suite while streaming backend logs + health probes to
 # frontend/test-results/run-logs/ for diagnosing transient first-attempt
@@ -90,13 +116,13 @@ cicd-events *args:
 headless-with-logs *args:
     #!/usr/bin/env bash
     set -euo pipefail
-    cd {{root}}
+    cd {{quote(root)}}
     LOG_DIR="frontend/test-results/run-logs"
     mkdir -p "$LOG_DIR"
     STAMP=$(date -u +"%Y%m%dT%H%M%SZ")
     BACKEND_LOG="$LOG_DIR/backend-$STAMP.log"
     echo "[run-logs] backend logs streaming to $BACKEND_LOG"
-    "{{root}}/.venv/bin/python" -m scripts.slots --root "{{root}}" compose logs -f --no-log-prefix --tail=0 backend > "$BACKEND_LOG" 2>&1 &
+    {{quote(python)}} -m scripts.slots --root {{quote(root)}} compose logs -f --no-log-prefix --tail=0 backend > "$BACKEND_LOG" 2>&1 &
     LOG_PID=$!
     trap 'kill "$LOG_PID" 2>/dev/null || true' EXIT
-    just test::pw::headless {{ args }}
+    {{just}} test::pw::headless "$@"

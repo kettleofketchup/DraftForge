@@ -52,10 +52,12 @@ bootstrap *args:
     if [[ ! -d "{{root}}/.venv" ]]; then
         echo "Creating Python virtual environment..."
         python3 -m venv "{{root}}/.venv"
+        # shellcheck source=/dev/null
         source "{{venv}}"
         pip install -q poetry
         poetry install -q
     else
+        # shellcheck source=/dev/null
         source "{{venv}}"
     fi
     if [[ ! -d "{{frontend}}/node_modules" ]]; then
@@ -85,9 +87,9 @@ bootstrap *args:
     # Use M1 compose on macOS ARM, standard compose elsewhere
     if [[ "$(uname -s)" == "Darwin" && "$(uname -m)" == "arm64" ]]; then
         echo "Detected macOS ARM — using M1 Docker Compose config"
-        inv dev.mac "${passthrough_args[@]}"
+        exec "{{just_executable()}}" --justfile "{{root}}/justfile" dev::mac ${passthrough_args[@]+"${passthrough_args[@]}"}
     else
-        inv dev.debug "${passthrough_args[@]}"
+        exec "{{just_executable()}}" --justfile "{{root}}/justfile" dev::debug ${passthrough_args[@]+"${passthrough_args[@]}"}
     fi
 
 # Modules (namespaced with ::)

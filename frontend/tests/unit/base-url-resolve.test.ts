@@ -13,8 +13,8 @@ const input = (env: Record<string, string | undefined>, fsMap: Record<string, st
 };
 
 describe('resolveBaseUrl', () => {
-  it('env with marker=invoke wins and never reads files', () => {
-    const i = input({ DF_BASE_URL: 'https://localhost:15443', DF_BASE_URL_SOURCE: 'invoke' }, OK);
+  it('env with marker=runner wins and never reads files', () => {
+    const i = input({ DF_BASE_URL: 'https://localhost:15443', DF_BASE_URL_SOURCE: 'runner' }, OK);
     expect(resolveBaseUrl(i)).toBe('https://localhost:15443');
     expect(i.readFile).not.toHaveBeenCalled();
   });

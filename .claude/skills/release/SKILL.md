@@ -5,7 +5,7 @@ description: Cut a DraftForge release with `just version::set X.Y.Z`. It checks 
 
 # Release
 
-A release is one command, `just version::set X.Y.Z` (wraps `inv version.set`,
+A release is one command, `just version::set X.Y.Z` (runs `python -m scripts.version set`,
 `scripts/version.py`). It writes the version, turns the pending changelog fragments
 into the release's `CHANGELOG.md` section, commits, tags and pushes. The pushed tag
 builds the images. Your job: pick the version, check the notes that will ship, run
@@ -14,7 +14,7 @@ it on an up-to-date `main`, and report the CI result.
 ## What `just version::set X.Y.Z` does
 
 1. **Preflight** (`changelog.release_preflight`). It refuses, changing nothing, when:
-   - the version is not `MAJOR.MINOR.PATCH` (or `inv version.set` got `--no-tag-version`);
+   - the version is not `MAJOR.MINOR.PATCH` (or `just version::set` got `--no-tag-version`);
    - the current branch is not `main`, or tracked files have uncommitted changes;
    - there are untracked files under `changelog.d/` (they would miss the release);
    - `HEAD` is not `origin/main` after `git fetch --tags origin`;
@@ -90,8 +90,7 @@ is created and nothing deploys automatically.
 
 - Never hand-roll the edits, commit or tag, and never edit `CHANGELOG.md` on `main`:
   the `changelog` CI job fails a push that does, unless it is the release commit.
-- The just recipe takes only the version. For a local bump without releasing, call
-  invoke directly from the activated `.venv`: `inv version.set X.Y.Z --no-commit` only
+- For a local bump without releasing, `just version::set X.Y.Z --no-commit` only
   rewrites the version files (and makes a local tag unless `--no-tag-version`).
 - No attribution lines; the recipe writes its own commit message.
 - Fragment format, sections and the CI gate: the `changelog` skill and

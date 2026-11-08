@@ -35,14 +35,21 @@ jobs:
         registry-token: ${{ secrets.GITHUB_TOKEN }}
         github-actor: ${{ github.actor }}
 
+    # demo::gifs needs ffmpeg on PATH; the runner image has none.
+    - name: Install ffmpeg
+      run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+
     - name: Record demo videos
-      run: |
-        poetry run inv demo.${{ inputs.demo }}
-        poetry run inv demo.gifs
+      run: just demo::${{ inputs.demo }}
       env:
         CI: true
 
+    - name: Convert videos to GIFs
+      run: just demo::gifs
+
+    # Keep the recorded videos even if GIF conversion failed.
     - name: Upload demo artifacts
+      if: ${{ !cancelled() }}
       uses: actions/upload-artifact@v4
       with:
         name: demo-videos

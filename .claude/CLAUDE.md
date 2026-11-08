@@ -222,7 +222,7 @@ just update::all         # Update everything (git, deps, images)
 
 # Version
 just version::set 1.2.3  # Release: assemble changelog, commit, tag, push (docs/development/changelog.md)
-just version::tag        # Tag and bump version
+just version::set 1.2.3 --no-commit  # Only rewrite the version files (+ local tag)
 
 # Tests (Playwright)
 just test::pw::install   # Install Playwright browsers

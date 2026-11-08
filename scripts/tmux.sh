@@ -16,7 +16,7 @@ tmux send-keys -t "$SESSION" "\"$nginx/.venv/bin/python\" -m scripts.slots --roo
 
 tmux split-window -v -t "$SESSION"
 tmux send-keys -t "$SESSION" "cd $BACKEND_DIR" C-m
-tmux send-keys -t "$SESSION" "python manage.py runserver 0.0.0.0:8000" C-m
+tmux send-keys -t "$SESSION" "\"$nginx/.venv/bin/python\" manage.py runserver 0.0.0.0:8000" C-m
 
 tmux split-window -v -t "$SESSION"
 tmux send-keys -t "$SESSION" "cd $FRONTEND_DIR" C-m

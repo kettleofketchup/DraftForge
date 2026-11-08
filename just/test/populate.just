@@ -1,55 +1,51 @@
-# Test database population commands
-# These commands run against the TEST environment
+# Test database population commands (aliases of db::populate::*, test env)
 
-root := source_directory() / "../.."
-inv := ". " + root / ".venv/bin/activate && cd " + root + " && inv"
+set shell := ["bash", "-euo", "pipefail", "-c"]
+set positional-arguments
 
-# Populate all test data (resets test database)
+root := clean(source_directory() / "../..")
+just := quote(just_executable()) + " --justfile " + quote(root / "justfile")
+
+# Reset the test database and populate everything (db::populate::fresh)
 [group('test::populate')]
 all:
-    {{inv}} db.populate.all
+    {{just}} db::populate::fresh
 
 # Populate organizations and leagues
 [group('test::populate')]
-organizations:
-    {{inv}} db.populate.organizations
+organizations *flags:
+    {{just}} db::populate::organizations "$@"
 
-# Populate users
 [group('test::populate')]
-users:
-    {{inv}} db.populate.users
+users *flags:
+    {{just}} db::populate::users "$@"
 
-# Populate test auth users (for Playwright/Cypress E2E tests)
+# Populate test auth users (for Playwright E2E tests)
 [group('test::populate')]
-test-auth-users:
-    {{inv}} db.populate.test-auth-users
+test-auth-users *flags:
+    {{just}} db::populate::test-auth-users "$@"
 
-# Populate tournaments
 [group('test::populate')]
-tournaments:
-    {{inv}} db.populate.tournaments
+tournaments *flags:
+    {{just}} db::populate::tournaments "$@"
 
 # Populate test scenario tournaments (for E2E tests)
 [group('test::populate')]
-test-tournaments:
-    {{inv}} db.populate.test-tournaments
+test-tournaments *flags:
+    {{just}} db::populate::test-tournaments "$@"
 
-# Populate demo tournaments
 [group('test::populate')]
-demo-tournaments:
-    {{inv}} db.populate.demo-tournaments
+demo-tournaments *flags:
+    {{just}} db::populate::demo-tournaments "$@"
 
-# Populate bracket linking scenarios
 [group('test::populate')]
-bracket-linking:
-    {{inv}} db.populate.bracket-linking
+bracket-linking *flags:
+    {{just}} db::populate::bracket-linking "$@"
 
-# Populate real tournament data
 [group('test::populate')]
-real-tournament:
-    {{inv}} db.populate.real-tournament
+real-tournament *flags:
+    {{just}} db::populate::real-tournament "$@"
 
-# Populate mock Steam data
 [group('test::populate')]
-steam-mock:
-    {{inv}} db.populate.steam-mock
+steam-mock *flags:
+    {{just}} db::populate::steam-mock "$@"

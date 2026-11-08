@@ -26,7 +26,7 @@ docs/
 │   ├── backend.md              # Django backend
 │   └── frontend.md             # React frontend
 ├── development/
-│   ├── invoke-tasks.md         # Invoke task reference
+│   ├── just-commands.md        # Just command reference
 │   ├── testing.md              # Testing guide
 │   └── contributing.md         # Contribution guide
 └── api/
@@ -112,13 +112,11 @@ def hello():
 ## Local Development
 
 ```bash
-source .venv/bin/activate
-
 # Serve locally with hot reload
-inv docs.serve
+just docs::serve
 
 # Build static site
-inv docs.build
+just docs::build
 ```
 
 Site available at http://127.0.0.1:8000
@@ -137,7 +135,7 @@ Docs auto-deploy to GitHub Pages on push to `main` when changes are made to:
 
 When other agents make changes requiring documentation updates:
 
-1. **inv-runner agent**: Updates to invoke tasks → Update `docs/development/invoke-tasks.md`
+1. **just recipes**: Changes under `justfile` or `just/` → Update `docs/development/just-commands.md`
 2. **docker-ops agent**: Docker changes → Update `docs/architecture/docker.md`
 3. **python-backend agent**: API changes → Update `docs/api/endpoints.md`
 4. **typescript-frontend agent**: Component changes → Update `docs/architecture/frontend.md`
@@ -148,7 +146,7 @@ Always update these files together:
 
 - `CLAUDE.md` - Quick reference for Claude Code
 - `docs/getting-started/quick-start.md` - User quick start
-- `docs/development/invoke-tasks.md` - Full task reference
+- `docs/development/just-commands.md` - Full command reference
 
 ## Documentation Standards
 

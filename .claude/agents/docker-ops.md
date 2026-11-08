@@ -261,9 +261,9 @@ just test::compose logs -f nginx
 
 ## Agent Collaboration
 
-### With inv-runner Agent
+### With just recipes
 
-When invoke docker tasks are modified:
+When the docker recipes in `just/docker/` are modified:
 - Ensure Docker Compose files are updated
 - Verify image tags are correct
 - Test the workflow
