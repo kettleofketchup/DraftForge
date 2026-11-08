@@ -247,6 +247,10 @@ jobs:
               app.tests.test_shuffle_draft \
               app.tests.test_draft_tick \
               app.tests.test_draft_consumers_base \
+              app.tests.test_draft_options \
+              app.tests.test_teamdraft_timer \
+              app.tests.test_teamdraft_timeout \
+              app.tests.test_draft_events \
               tests.test_populate \
               discordbot.tests.test_signup_logging \
               events.tests.test_modal_config_contract \
