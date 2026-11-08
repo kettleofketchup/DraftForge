@@ -189,7 +189,11 @@ async def check_captain_heartbeats(draft_id: int) -> str | None:
         rnd = draft.active_round
         if rnd is None:
             return None
-        team = team_for_round(draft, rnd)
+        team = (
+            Team.objects.nocache()
+            .filter(tournament=draft.tournament, captain_id=rnd.captain_id)
+            .first()
+        )
         captain = team.captain if team else None
         if team is None or captain is None:
             return None
