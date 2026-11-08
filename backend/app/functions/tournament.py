@@ -685,6 +685,20 @@ def undo_last_pick(request):
             prev_active.timed_out_at = None
             prev_active.save(update_fields=["started_at", "timed_out_at"])
 
+        undone_event = DraftEvent.objects.create(
+            draft=draft,
+            event_type="pick_undone",
+            actor=request.user,
+            payload={
+                "pick_number": last_round.pick_number,
+                "undone_player_id": player.pk,
+                "undone_player_name": player.username,
+                "team_id": team.pk if team else None,
+                "team_name": team.name if team else None,
+            },
+        )
+        transaction.on_commit(lambda e=undone_event: broadcast_event(e))
+
         timed_undo = options.timer_enabled and undone_round_had_completed_at
         if timed_undo and draft.state in (
             TeamDraftState.DRAFTING,
@@ -724,19 +738,6 @@ def undo_last_pick(request):
                 next_round.tie_roll_data = None
                 next_round.save()
 
-        undone_event = DraftEvent.objects.create(
-            draft=draft,
-            event_type="pick_undone",
-            actor=request.user,
-            payload={
-                "pick_number": last_round.pick_number,
-                "undone_player_id": player.pk,
-                "undone_player_name": player.username,
-                "team_id": team.pk if team else None,
-                "team_name": team.name if team else None,
-            },
-        )
-        transaction.on_commit(lambda e=undone_event: broadcast_event(e))
         draft.save()
         invalidate_after_commit(tournament, draft)
 
