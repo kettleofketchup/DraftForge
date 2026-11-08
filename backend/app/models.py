@@ -1113,7 +1113,11 @@ class Draft(models.Model):
 
     @property
     def active_round(self) -> "DraftRound | None":
-        return self.draft_rounds.filter(choice__isnull=True).order_by("pick_number").first()
+        return (
+            self.draft_rounds.filter(choice__isnull=True)
+            .order_by("pick_number")
+            .first()
+        )
 
     def lock_active_round(self) -> "DraftRound | None":
         return (
