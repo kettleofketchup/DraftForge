@@ -238,6 +238,14 @@ jobs:
               events.tests.test_sync_discord_scheduled_event_window \
               app.tests.test_task_schedule \
               app.tests.test_build_users_dict \
+              app.tests.test_herodraft_tick \
+              app.tests.test_herodraft_consumers \
+              app.tests.test_consumers_base \
+              app.tests.test_stale_connection \
+              app.tests.test_draft_consumers \
+              app.tests.test_shuffle_draft \
+              app.tests.test_draft_tick \
+              app.tests.test_draft_consumers_base \
               tests.test_populate \
               app.tests.test_env_utils \
               app.tests.test_settings_env_overrides \
