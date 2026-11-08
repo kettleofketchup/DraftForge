@@ -150,9 +150,7 @@ def playwright_headless(c: Context, args: str = "") -> None:
         # Exclude demo project - demos are run separately via inv demo.* commands
         _playwright(
             c,
-            f""
-            f"--project=chromium --project=herodraft --project=events-sequential "
-            f"{args}".strip(),
+            f"--project=chromium --project=herodraft --project=events-sequential {args}",
         )
 
 
@@ -197,13 +195,13 @@ def playwright_spec(
         # but when running a specific spec we don't want to run all chromium tests first)
         no_deps = "--no-deps" if pattern or grep else ""
         if pattern and grep:
-            _playwright(c, f'{pattern} --grep "{grep}" {no_deps} {args}'.strip())
+            _playwright(c, f'{pattern} --grep "{grep}" {no_deps} {args}')
         elif pattern:
-            _playwright(c, f"{pattern} {no_deps} {args}".strip())
+            _playwright(c, f"{pattern} {no_deps} {args}")
         elif grep:
-            _playwright(c, f'--grep "{grep}" {no_deps} {args}'.strip())
+            _playwright(c, f'--grep "{grep}" {no_deps} {args}')
         else:
-            _playwright(c, f"{args}".strip())
+            _playwright(c, args)
 
 
 @task
@@ -224,7 +222,7 @@ def playwright_navigation(c: Context, args: str = "") -> None:
     with c.cd(paths.FRONTEND_PATH):
         _playwright(
             c,
-            f"tests/playwright/e2e/00-hydration-handling.spec.ts tests/playwright/e2e/01-navigation.spec.ts {args}".strip(),
+            f"tests/playwright/e2e/00-hydration-handling.spec.ts tests/playwright/e2e/01-navigation.spec.ts {args}",
         )
 
 
@@ -239,7 +237,7 @@ def playwright_tournament(c: Context, args: str = "") -> None:
     with c.cd(paths.FRONTEND_PATH):
         _playwright(
             c,
-            f"tests/playwright/e2e/03-tournaments/ tests/playwright/e2e/04-tournament/ {args}".strip(),
+            f"tests/playwright/e2e/03-tournaments/ tests/playwright/e2e/04-tournament/ {args}",
         )
 
 
@@ -254,7 +252,7 @@ def playwright_draft(c: Context, args: str = "") -> None:
     with c.cd(paths.FRONTEND_PATH):
         _playwright(
             c,
-            f"tests/playwright/e2e/07-draft/ tests/playwright/e2e/08-shuffle-draft/ {args}".strip(),
+            f"tests/playwright/e2e/07-draft/ tests/playwright/e2e/08-shuffle-draft/ {args}",
         )
 
 
@@ -267,7 +265,7 @@ def playwright_bracket(c: Context, args: str = "") -> None:
     """
     flush_test_redis(c)
     with c.cd(paths.FRONTEND_PATH):
-        _playwright(c, f"tests/playwright/e2e/09-bracket/ {args}".strip())
+        _playwright(c, f"tests/playwright/e2e/09-bracket/ {args}")
 
 
 @task
@@ -279,7 +277,7 @@ def playwright_league(c: Context, args: str = "") -> None:
     """
     flush_test_redis(c)
     with c.cd(paths.FRONTEND_PATH):
-        _playwright(c, f"tests/playwright/e2e/10-leagues/ {args}".strip())
+        _playwright(c, f"tests/playwright/e2e/10-leagues/ {args}")
 
 
 @task
@@ -291,7 +289,7 @@ def playwright_herodraft(c: Context, args: str = "") -> None:
     """
     flush_test_redis(c)
     with c.cd(paths.FRONTEND_PATH):
-        _playwright(c, f"tests/playwright/e2e/herodraft/ {args}".strip())
+        _playwright(c, f"tests/playwright/e2e/herodraft/ {args}")
 
 
 @task
@@ -303,7 +301,7 @@ def playwright_all(c: Context, args: str = "") -> None:
     """
     flush_test_redis(c)
     with c.cd(paths.FRONTEND_PATH):
-        _playwright(c, f"{args}".strip())
+        _playwright(c, args)
 
 
 @task
@@ -320,10 +318,10 @@ def playwright_cicd(c: Context, args: str = "") -> None:
     with c.cd(paths.FRONTEND_PATH):
         _playwright(
             c,
-            f'--grep "@cicd" '
-            f"--project=chromium --project=mobile-pixel5 --project=mobile-iphone13 "
-            f"--project=mobile-iphone-se --project=herodraft "
-            f"--project=events-sequential --no-deps {args}".strip(),
+            '--grep "@cicd" '
+            "--project=chromium --project=mobile-pixel5 --project=mobile-iphone13 "
+            "--project=mobile-iphone-se --project=herodraft "
+            f"--project=events-sequential --no-deps {args}",
         )
 
 
@@ -332,9 +330,7 @@ def playwright_cicd_chromium(c: Context, args: str = "") -> None:
     """Run @cicd tagged tests for the chromium project only."""
     flush_test_redis(c)
     with c.cd(paths.FRONTEND_PATH):
-        _playwright(
-            c, f'--grep "@cicd" ' f"--project=chromium --no-deps {args}".strip()
-        )
+        _playwright(c, f'--grep "@cicd" --project=chromium --no-deps {args}')
 
 
 @task
@@ -344,9 +340,9 @@ def playwright_cicd_mobile(c: Context, args: str = "") -> None:
     with c.cd(paths.FRONTEND_PATH):
         _playwright(
             c,
-            f'--grep "@cicd" '
-            f"--project=mobile-pixel5 --project=mobile-iphone13 "
-            f"--project=mobile-iphone-se --no-deps {args}".strip(),
+            '--grep "@cicd" '
+            "--project=mobile-pixel5 --project=mobile-iphone13 "
+            f"--project=mobile-iphone-se --no-deps {args}",
         )
 
 
@@ -355,9 +351,7 @@ def playwright_cicd_herodraft(c: Context, args: str = "") -> None:
     """Run @cicd tagged tests for the herodraft project only (sequential)."""
     flush_test_redis(c)
     with c.cd(paths.FRONTEND_PATH):
-        _playwright(
-            c, f'--grep "@cicd" ' f"--project=herodraft --no-deps {args}".strip()
-        )
+        _playwright(c, f'--grep "@cicd" --project=herodraft --no-deps {args}')
 
 
 @task
@@ -370,10 +364,7 @@ def playwright_cicd_events(c: Context, args: str = "") -> None:
     """
     flush_test_redis(c)
     with c.cd(paths.FRONTEND_PATH):
-        _playwright(
-            c,
-            f'--grep "@cicd" ' f"--project=events-sequential --no-deps {args}".strip(),
-        )
+        _playwright(c, f'--grep "@cicd" --project=events-sequential --no-deps {args}')
 
 
 # Add tasks to playwright collection
