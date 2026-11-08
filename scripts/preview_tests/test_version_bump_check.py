@@ -77,6 +77,27 @@ class VersionBumpCheckTest(unittest.TestCase):
         self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
         self.assertIn(MESSAGE, r.stdout + r.stderr)
 
+    def test_downgrade_fails(self):
+        base = self.base_with_chart()
+        self.write("helm/templates/backend.yaml", "kind: Deployment\n# changed\n")
+        self.write("helm/Chart.yaml", CHART.format(version="0.0.9"))
+        self.commit("chart change with a lower version")
+        r = self.check(base)
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn("version went down", r.stdout + r.stderr)
+
+    def test_numeric_not_lexical_order(self):
+        # 0.10.0 sorts before 0.9.0 lexically but is the higher version.
+        self.write("README.md", "app\n")
+        self.write("helm/Chart.yaml", CHART.format(version="0.9.0"))
+        self.write("helm/templates/backend.yaml", "kind: Deployment\n")
+        base = self.commit("base")
+        self.write("helm/templates/backend.yaml", "kind: Deployment\n# changed\n")
+        self.write("helm/Chart.yaml", CHART.format(version="0.10.0"))
+        self.commit("bump past 0.9")
+        r = self.check(base)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
     def test_tests_and_readme_only_pass_without_bump(self):
         # helm/tests/ is .helmignored and README.md does not render, so neither
         # changes what a deployer renders.

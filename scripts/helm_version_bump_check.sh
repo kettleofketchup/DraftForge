@@ -5,7 +5,8 @@
 #
 # Run from inside the repository. Exits 1 if anything under helm/ other than
 # helm/tests/ and helm/README.md differs between <base_sha> and HEAD while
-# helm/Chart.yaml `version` is unchanged.
+# helm/Chart.yaml `version` is not higher than at <base_sha> (compared with
+# sort -V, so a downgrade fails too).
 # A base without helm/Chart.yaml counts as bumped (the chart is new).
 # Each chart version names one chart tag (chart-v<version>), so every rendered
 # helm/ change needs its own version.
@@ -39,6 +40,12 @@ head_version=$(git show HEAD:helm/Chart.yaml | "$YQ" '.version')
 
 if [[ $base_version == "$head_version" ]]; then
   echo "FAIL: helm/ changed but Chart.yaml version was not bumped (still $head_version)" >&2
+  exit 1
+fi
+# Chart tags are monotonic: the head version must sort after the base version.
+highest=$(printf '%s\n%s\n' "$base_version" "$head_version" | sort -V | tail -n 1)
+if [[ $highest != "$head_version" ]]; then
+  echo "FAIL: Chart.yaml version went down ($base_version -> $head_version)" >&2
   exit 1
 fi
 echo "OK: chart version $base_version -> $head_version"
