@@ -293,7 +293,6 @@ if os.environ.get("SQLITE_PATH"):
     DATABASES["default"]["NAME"] = Path(os.environ["SQLITE_PATH"])
 
 
-# Docker environment detection
 @functools.lru_cache(maxsize=1)
 def is_docker(root: Path = Path("/")) -> bool:
     """Check if running inside a Docker or podman container."""

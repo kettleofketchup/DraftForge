@@ -30,7 +30,6 @@ def get_docker_host() -> str:
     if Path("/.dockerenv").exists() or Path("/run/.containerenv").exists():
         return "nginx"
 
-    # Check /proc/1/cgroup for 'docker' (Linux containers)
     cgroup_path = Path("/proc/1/cgroup")
     if cgroup_path.exists():
         try:
