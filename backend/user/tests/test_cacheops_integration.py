@@ -12,8 +12,6 @@ Without this test, the `@cached_as(..., BaseUserProfile, ...)` dependency
 declarations could silently drift to wrong models and CI wouldn't catch it.
 """
 
-import unittest
-
 import redis
 from django.conf import settings
 from django.test import TransactionTestCase
@@ -44,16 +42,11 @@ def _redis_reachable() -> bool:
         return False
 
 
-@unittest.skip(
-    "Live-Redis behavioral verification is more subtle than expected — under "
-    "TransactionTestCase + autocommit + cacheops `keep_fresh=True`, the eviction "
-    "(or refresh) sometimes lags the re-fetch in CI. The static grep guardrail "
-    "in test_cacheops.py already verifies the @cached_as dep declarations are "
-    "correct. Re-enable in a T1.x follow-up once the keep_fresh vs eviction "
-    "timing is understood — likely needs `cache.clear()` between warm/re-fetch, "
-    "or to drop keep_fresh entirely on the @cached_as blocks. See PR #250 "
-    "post-rebase review notes for context."
-)
+# Un-skipped: the lag these tests hit was never keep_fresh (the @cached_as
+# blocks carry none). UserView's queryset select_related()s base_profile, and
+# cacheops invalidates a cached JOIN only on its base table — so the outer
+# entry was evicted correctly, then instantly repopulated from the stale inner
+# join. `.nocache()` on that queryset is the fix these tests now guard.
 class CacheopsInvalidationOnBaseProfilePatchTests(TransactionTestCase):
     """Verify PATCH /users/me/profile/base/ evicts cached user payloads.
 

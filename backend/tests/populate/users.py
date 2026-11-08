@@ -6,13 +6,13 @@ import random
 
 from django.conf import settings
 
-from app.models import CustomUser
+from app.models import CustomUser, Organization
 
 from .constants import DTX_ORG_NAME
 from .utils import create_user, ensure_org_user, generate_mock_discord_members
 
 
-def populate_users(force=False):
+def populate_users(force: bool = False) -> None:
     """
     Populates the database with Discord users.
     - Grabs a random number of discord users (40-100).
@@ -23,7 +23,7 @@ def populate_users(force=False):
     Args:
         force (bool): If True, populate users even if there are already more than 100 users.
     """
-    from app.models import Organization
+    # local: tests.test_auth imports tests.populate.bracket, which cycles back through tests.populate
     from tests.test_auth import createTestStaffUser, createTestSuperUser, createTestUser
 
     current_count = CustomUser.objects.count()
@@ -50,6 +50,7 @@ def populate_users(force=False):
 
     if discord_bot_token:
         try:
+            # local: import failure must fall back to mock members
             from discordbot.services.users import get_discord_members_data
 
             discord_users = get_discord_members_data()
@@ -68,9 +69,14 @@ def populate_users(force=False):
 
     # Create users with OrgUser records
     users_created = 0
+    taken_steam_ids: set[int] = set(
+        CustomUser.objects.exclude(steam_account_id=None).values_list(
+            "steam_account_id", flat=True
+        )
+    )
 
     for user in users_to_create:
-        create_user(user, organization=dtx_org)
+        create_user(user, organization=dtx_org, taken_steam_ids=taken_steam_ids)
         users_created += 1
 
     print(

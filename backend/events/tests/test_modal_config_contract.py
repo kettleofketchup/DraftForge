@@ -32,12 +32,16 @@ class ModalConfigKindTest(SimpleTestCase):
 
 class DotaRequireScreenshotTest(SimpleTestCase):
     def test_truth_table(self):
-        on = DotaModalConfig(require_rank_screenshot=True, require_battlecup_screenshot=True)
+        on = DotaModalConfig(
+            require_rank_screenshot=True, require_battlecup_screenshot=True
+        )
         self.assertTrue(dota_require_screenshot("active", on))
         self.assertTrue(dota_require_screenshot("never", on))
         self.assertFalse(dota_require_screenshot("previous", on))
 
-        off = DotaModalConfig(require_rank_screenshot=False, require_battlecup_screenshot=False)
+        off = DotaModalConfig(
+            require_rank_screenshot=False, require_battlecup_screenshot=False
+        )
         self.assertFalse(dota_require_screenshot("active", off))
         self.assertFalse(dota_require_screenshot("never", off))
 

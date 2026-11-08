@@ -13,17 +13,18 @@ Pinning the contract that surfaced after the prod 0.9.49 incident:
   response_data JSON to find out what went wrong.
 """
 
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
+
+from events.tasks import create_discord_scheduled_event
 
 
 class CreateDiscordScheduledEventTest(TestCase):
     """The task must NOT silently swallow Discord API non-success responses."""
 
-    def _mock_event(self):
-        from datetime import datetime, timezone
-
+    def _mock_event(self, start_offset: timedelta = timedelta(days=1)) -> MagicMock:
         event = MagicMock()
         event.pk = 12
         event.discord_create_event = True
@@ -32,7 +33,7 @@ class CreateDiscordScheduledEventTest(TestCase):
         event.description = "Test"
         event.discord_event_description = ""
         event.name = "Sunday Turbo Tournament"
-        event.scheduled_at = datetime(2026, 5, 17, 23, 0, tzinfo=timezone.utc)
+        event.scheduled_at = datetime.now(timezone.utc) + start_offset
         return event
 
     @patch("events.tasks.req.post")
@@ -53,8 +54,6 @@ class CreateDiscordScheduledEventTest(TestCase):
         """The exact prod scenario: bot lacks MANAGE_EVENTS in the guild.
         Discord returns 403 with code 50013. The task MUST raise so the
         caller knows to emit a 'failed' log, not 'created'."""
-        from events.tasks import create_discord_scheduled_event
-
         mock_get_event.return_value = self._mock_event()
         mock_get_de.return_value = MagicMock(
             ok=True, json=lambda: {"id": 17}
@@ -93,8 +92,6 @@ class CreateDiscordScheduledEventTest(TestCase):
     ):
         """The DiscordEventLog row for the failed attempt must carry the
         Discord error message in `error_message`, not just response_data."""
-        from events.tasks import create_discord_scheduled_event
-
         mock_get_event.return_value = self._mock_event()
         mock_get_de.return_value = MagicMock(
             ok=True, json=lambda: {"id": 17}
@@ -122,6 +119,78 @@ class CreateDiscordScheduledEventTest(TestCase):
     @patch("events.tasks.update_discord_event")
     @patch("events.tasks.get_or_create_discord_event")
     @patch("events.tasks.get_event_for_task")
+    def test_error_message_includes_nested_form_errors(
+        self,
+        mock_get_event,
+        mock_get_de,
+        mock_update,
+        mock_message_log,
+        mock_event_log,
+        mock_post,
+    ):
+        """50035 Invalid Form Body hides the real reason in `errors`; the
+        audit log must carry it so the activity log is self-explanatory."""
+        mock_get_event.return_value = self._mock_event()
+        mock_get_de.return_value = MagicMock(
+            ok=True, json=lambda: {"id": 17}
+        )
+        resp = MagicMock()
+        resp.status_code = 400
+        resp.json.return_value = {
+            "message": "Invalid Form Body",
+            "code": 50035,
+            "errors": {
+                "name": {
+                    "_errors": [
+                        {
+                            "code": "BASE_TYPE_MAX_LENGTH",
+                            "message": "Must be 100 or fewer in length.",
+                        }
+                    ]
+                }
+            },
+        }
+        mock_post.return_value = resp
+
+        with self.assertRaises(Exception):
+            create_discord_scheduled_event(12)
+
+        error_message = mock_event_log.call_args.kwargs["error_message"]
+        self.assertIn("Invalid Form Body (code 50035, HTTP 400)", error_message)
+        self.assertIn("name: Must be 100 or fewer in length.", error_message)
+
+    @patch("events.tasks.req.post")
+    @patch("events.tasks.create_event_log")
+    @patch("events.tasks.create_message_log")
+    @patch("events.tasks.update_discord_event")
+    @patch("events.tasks.get_or_create_discord_event")
+    @patch("events.tasks.get_event_for_task")
+    def test_skips_without_calling_discord_when_start_has_passed(
+        self,
+        mock_get_event,
+        mock_get_de,
+        mock_update,
+        mock_message_log,
+        mock_event_log,
+        mock_post,
+    ):
+        """Discord rejects a past start with GUILD_SCHEDULED_EVENT_SCHEDULE_PAST;
+        the task must not make the doomed call or write failure rows."""
+        mock_get_event.return_value = self._mock_event(timedelta(hours=-2))
+
+        result = create_discord_scheduled_event(12)
+
+        self.assertTrue(result.startswith("Skipped"))
+        mock_post.assert_not_called()
+        mock_get_de.assert_not_called()
+        mock_event_log.assert_not_called()
+
+    @patch("events.tasks.req.post")
+    @patch("events.tasks.create_event_log")
+    @patch("events.tasks.create_message_log")
+    @patch("events.tasks.update_discord_event")
+    @patch("events.tasks.get_or_create_discord_event")
+    @patch("events.tasks.get_event_for_task")
     def test_success_path_persists_scheduled_event_id(
         self,
         mock_get_event,
@@ -133,8 +202,6 @@ class CreateDiscordScheduledEventTest(TestCase):
     ):
         """On 201 Created, the task should persist the new scheduled_event_id
         and NOT raise — this is the happy path."""
-        from events.tasks import create_discord_scheduled_event
-
         mock_get_event.return_value = self._mock_event()
         mock_get_de.return_value = MagicMock(
             ok=True, json=lambda: {"id": 17}

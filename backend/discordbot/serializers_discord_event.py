@@ -1,5 +1,7 @@
-from app.models import CustomUser
 from rest_framework import serializers
+
+from app.models import CustomUser
+from user.querysets import with_user_profiles
 
 from .models import (
     DiscordEvent,
@@ -159,9 +161,9 @@ class DiscordEventDetailSerializer(serializers.ModelSerializer):
         }
         user_map: dict[str, CustomUser] = {}
         if discord_ids:
-            users = CustomUser.objects.filter(
-                discordId__in=discord_ids
-            ).select_related("base_profile")
+            users = with_user_profiles(
+                CustomUser.objects.filter(discordId__in=discord_ids)
+            )
             user_map = {user.discordId: user for user in users}
         self.context["discord_user_map"] = user_map
         return super().to_representation(instance)

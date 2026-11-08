@@ -1,8 +1,6 @@
 import { ChevronDown } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
-import type { LeagueType } from '~/components/league/schemas';
-import type { OrganizationType } from '~/components/organization/schemas';
 import type { UserClassType, UserType } from '~/components/user';
 import { GAME_TYPE } from '~/components/game/constants';
 import { brandErrorBg, brandErrorCard } from '~/components/ui/buttons';
@@ -12,7 +10,11 @@ import {
   CollapsibleTrigger,
 } from '~/components/ui/collapsible';
 import UserEditModal from '~/components/user/userCard/editModal';
-import type { EditUserScope } from '~/components/user/userCard/editUserSchema';
+import {
+  resolveEditScope,
+  resolveOrgUserLink,
+  type EditUserScope,
+} from '~/components/user/userCard/editUserSchema';
 import { getLogger } from '~/lib/logger';
 import { cn } from '~/lib/utils';
 import { useLeagueStore } from '~/store/leagueStore';
@@ -21,38 +23,21 @@ import type { PositionsType, UserEntry } from '~/store/userCacheTypes';
 import { useUserCacheStore } from '~/store/userCacheStore';
 import { selectPositions } from '~/store/selectPositions';
 import { useUserStore } from '~/store/userStore';
+import { tournamentEditContext } from './tournamentEditContext';
 const log = getLogger('hasErrors');
-
-/**
- * Derive the EditUserModal scope for the tournament-edit panel.
- * Order: league > org > global. Falls back to global only when neither
- * is loaded — callers should ensure currentOrg is populated before render
- * (TournamentDetailPage calls getOrganization in a useEffect on mount).
- */
-export function deriveEditScope({
-  league,
-  currentOrg,
-}: {
-  league: LeagueType | null;
-  currentOrg: OrganizationType | null;
-}): EditUserScope {
-  if (league) return { kind: 'league', league };
-  if (currentOrg) return { kind: 'org', organization: currentOrg };
-  return { kind: 'global' };
-}
 
 interface UserIssue {
   user: UserClassType;
+  scope: EditUserScope;
   issues: string[];
 }
 
 /** Convert a UserEntry to a UserType-like object with org-scoped fields flattened. */
-function toUserType(entry: UserEntry, orgId?: number): UserClassType {
-  const orgData = orgId ? entry.orgData[orgId] : undefined;
+function toUserType(entry: UserEntry, orgId?: number, leagueId?: number): UserClassType {
   return {
     ...entry,
-    orgUserPk: orgData?.id,
-    mmr: orgData?.mmr,
+    orgUserPk: resolveOrgUserLink(entry, { organizationId: orgId, leagueId }),
+    mmr: orgId ? entry.orgData[orgId]?.mmr : undefined,
   } as unknown as UserClassType;
 }
 
@@ -79,7 +64,7 @@ export const hasErrors = () => {
     }
   }, []);
 
-  const orgId = tournament?.organization_pk ?? undefined;
+  const { organizationId: orgId, leagueId } = tournamentEditContext(tournament);
 
   const currentOrg = useOrgStore((state) => state.currentOrg);
 
@@ -99,11 +84,6 @@ export const hasErrors = () => {
       }
       return rec;
     }),
-  );
-
-  const editScope = useMemo<EditUserScope>(
-    () => deriveEditScope({ league, currentOrg }),
-    [league?.pk, currentOrg?.pk],
   );
 
   // Resolve users from entity cache — the single source of truth
@@ -134,13 +114,20 @@ export const hasErrors = () => {
       }
 
       if (userIssues.length > 0) {
-        issues.push({ user: toUserType(cached, orgId), issues: userIssues });
+        const user = toUserType(cached, orgId, leagueId);
+        const scope = resolveEditScope(user, {
+          organizationId: orgId,
+          leagueId,
+          currentOrg,
+          currentLeague: league,
+        });
+        issues.push({ user, scope, issues: userIssues });
       }
     }
 
     log.debug('Users with issues:', issues.length, issues);
     return issues;
-  }, [tournament?.users, entities, orgId, positionsByPk]);
+  }, [tournament?.users, entities, orgId, leagueId, currentOrg, league, positionsByPk]);
 
   if (usersWithIssues.length === 0) return null;
 
@@ -174,7 +161,7 @@ export const hasErrors = () => {
         data-testid="incomplete-profiles-list"
       >
         <div className="grid grid-cols-1 min-[420px]:grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 p-3 sm:p-4 pt-0 sm:pt-0">
-          {usersWithIssues.map(({ user, issues }) => (
+          {usersWithIssues.map(({ user, scope, issues }) => (
             <div
               className={cn('flex flex-col p-3 rounded-lg h-full', brandErrorCard)}
               key={user.pk}
@@ -190,7 +177,7 @@ export const hasErrors = () => {
               <div className="flex justify-center mt-auto pt-3">
                 <UserEditModal
                   user={user}
-                  scope={editScope}
+                  scope={scope}
                   key={`UserEditModal-${user.pk}`}
                 />
               </div>

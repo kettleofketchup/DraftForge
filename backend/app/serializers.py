@@ -1,10 +1,14 @@
 import nh3
 from django.db import transaction
+from django.db.models import Prefetch
 from rest_framework import serializers
 from rest_framework.validators import UniqueValidator
 
 from app.cache_utils import invalidate_after_commit
+from league.models import LeagueUser
+from org.models import OrgUser
 from telemetry.logging import get_logger
+from user.querysets import with_user_profiles
 
 log = get_logger(__name__)
 
@@ -105,10 +109,7 @@ def _tournament_organization(tournament) -> Organization | None:
 
 def _serialize_users_with_mmr(users_qs, tournament):
     """Serialize users with org-scoped MMR if tournament has a league/org."""
-    from django.db.models import Prefetch
-
-    from league.models import LeagueUser
-    from org.models import OrgUser
+    # local: org.serializers imports app.serializers
     from org.serializers import OrgUserSerializer
 
     league = tournament.league if tournament else None
@@ -130,20 +131,14 @@ def _serialize_users_with_mmr(users_qs, tournament):
             ignore_conflicts=True,
         )
 
-    org_users = (
-        OrgUser.objects.filter(user__in=users_qs, organization=org)
-        .select_related(
-            "user",
-            "user__base_profile",
-            "user__base_profile__dota_user_profile__positions",
-        )
-        .prefetch_related(
-            Prefetch(
-                "league_memberships",
-                queryset=LeagueUser.objects.filter(
-                    league_id=league.pk if league else None
-                ),
-            )
+    org_users = with_user_profiles(
+        OrgUser.objects.filter(user__in=users_qs, organization=org),
+        "user",
+        dota=True,
+    ).prefetch_related(
+        Prefetch(
+            "league_memberships",
+            queryset=LeagueUser.objects.filter(league_id=league.pk if league else None),
         )
     )
     return OrgUserSerializer(
@@ -198,10 +193,7 @@ def _collect_context_mmr(tournament, seen_pks) -> dict:
     tournaments carry no MMR). Reuses OrgUserSerializer so the values and the
     league_mmr computation are identical to the legacy path.
     """
-    from django.db.models import Prefetch
-
-    from league.models import LeagueUser
-    from org.models import OrgUser
+    # local: org.serializers imports app.serializers
     from org.serializers import OrgUserSerializer
 
     league = tournament.league if tournament else None
@@ -225,20 +217,14 @@ def _collect_context_mmr(tournament, seen_pks) -> dict:
             ignore_conflicts=True,
         )
 
-    org_users = (
-        OrgUser.objects.filter(user__in=user_qs, organization=org)
-        .select_related(
-            "user",
-            "user__base_profile",
-            "user__base_profile__dota_user_profile__positions",
-        )
-        .prefetch_related(
-            Prefetch(
-                "league_memberships",
-                queryset=LeagueUser.objects.filter(
-                    league_id=league.pk if league else None
-                ),
-            )
+    org_users = with_user_profiles(
+        OrgUser.objects.filter(user__in=user_qs, organization=org),
+        "user",
+        dota=True,
+    ).prefetch_related(
+        Prefetch(
+            "league_memberships",
+            queryset=LeagueUser.objects.filter(league_id=league.pk if league else None),
         )
     )
     serialized = OrgUserSerializer(
