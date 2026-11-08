@@ -18,6 +18,7 @@ from social_core.backends.oauth import BaseOAuth1, BaseOAuth2
 from social_django.utils import load_strategy, psa
 
 # Create your views here.
+from app.functions.teamdraft import apply_draft_options
 from app.permissions_org import has_org_staff_access
 from league.models import LeagueUser
 from league.serializers import LeagueUserSerializer
@@ -477,6 +478,13 @@ class TournamentView(viewsets.ModelViewSet):
 
     def patch(self, request, *args, **kwargs):
         return self.partial_update(request, *args, **kwargs)
+
+    def perform_update(self, serializer: TournamentSerializer) -> None:
+        opts = serializer.validated_data.pop("draft_options", None)
+        with transaction.atomic():
+            serializer.save()
+            if opts is not None:
+                apply_draft_options(serializer.instance, opts)
 
     def get_permissions(self):
         if self.request.method == "GET":

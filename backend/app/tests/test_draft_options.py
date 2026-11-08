@@ -1,7 +1,7 @@
 """DraftOptions model, lazy creation, Draft state/clock_armed, migration state rule (spec §2)."""
 
 import importlib
-from datetime import date
+from datetime import date, timedelta
 from unittest.mock import PropertyMock, patch
 
 from django.apps import apps as global_apps
@@ -9,8 +9,11 @@ from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.test import TestCase
 from django.utils import timezone
+from rest_framework.test import APIClient
 
 from app.management.commands import sync_prod_tournaments
+from app.serializers import DraftSerializerSlim, TournamentSerializer
+from app.tests.teamdraft_fixtures import TimedDraftFixture
 from app.models import (
     Draft,
     DraftOptions,
@@ -207,3 +210,109 @@ class LegacyStateDerivationTests(TestCase):
         cmd = sync_prod_tournaments.Command()
         draft = cmd._create_draft(t, {"draft_style": "snake", "draft_rounds": []}, {})
         self.assertEqual(Draft.objects.get(pk=draft.pk).state, "pending")
+
+
+class SerializerFieldTests(TestCase):
+    def test_slim_draft_carries_timer_fields(self):
+        fx = TimedDraftFixture()
+        data = DraftSerializerSlim(fx.draft).data
+        for key in ("state", "clock_armed", "paused_at", "resuming_until", "is_manual_pause", "draft_options"):
+            self.assertIn(key, data)
+        self.assertEqual(data["state"], "pending")
+        self.assertFalse(data["clock_armed"])
+        self.assertEqual(data["draft_options"]["reserve_time_ms"], 30000)
+        rnd = data["draft_rounds"][0]
+        for key in ("started_at", "timed_out_at", "pick_duration_ms", "reserve_used_ms", "skip_count"):
+            self.assertIn(key, rnd)
+        team = data["tournament"]["teams"][0]
+        for key in ("draft_reserve_ms", "draft_is_ready", "draft_is_connected"):
+            self.assertIn(key, team)
+
+    def test_tournament_serializer_exposes_options_lazily(self):
+        t = make_tournament(1, "ser")
+        t.refresh_from_db()
+        data = TournamentSerializer(t).data
+        self.assertEqual(data["draft_options"]["timer_enabled"], False)
+        self.assertTrue(DraftOptions.objects.filter(tournament=t).exists())
+
+
+class SettingsWriteTests(TestCase):
+    def setUp(self):
+        self.fx = TimedDraftFixture()
+        self.client = APIClient()
+        self.client.force_authenticate(self.fx.staff)
+        self.url = f"/api/tournaments/{self.fx.tournament.pk}/"
+
+    def test_staff_patch_writes_options_and_reseeds_pending_pools(self):
+        r = self.client.patch(self.url, {"draft_options": {"reserve_time_ms": 15000, "grace_time_ms": 10000}}, format="json")
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertEqual(r.data["draft_options"]["reserve_time_ms"], 15000)
+        self.assertEqual(Team.objects.get(pk=self.fx.teams[0].pk).draft_reserve_ms, 15000)
+
+    def test_non_staff_patch_is_forbidden(self):
+        self.client.force_authenticate(self.fx.captains[0])
+        r = self.client.patch(self.url, {"draft_options": {"timer_enabled": False}}, format="json")
+        self.assertEqual(r.status_code, 403)
+
+    def test_invalid_values_are_rejected_without_write(self):
+        r = self.client.patch(self.url, {"draft_options": {"grace_time_ms": 0}}, format="json")
+        self.assertEqual(r.status_code, 400)
+        r = self.client.patch(self.url, {"draft_options": {"reserve_time_ms": -1}}, format="json")
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(DraftOptions.objects.get(pk=self.fx.options.pk).grace_time_ms, 30000)
+
+    def test_timeout_action_is_read_only(self):
+        r = self.client.patch(self.url, {"draft_options": {"timeout_action": "other"}}, format="json")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["draft_options"]["timeout_action"], "skip_turn")
+
+    def test_mid_draft_change_does_not_touch_active_round_or_reserve(self):
+        with self.captureOnCommitCallbacks(execute=True):
+            rnd = self.fx.start()
+        self.client.patch(self.url, {"draft_options": {"grace_time_ms": 5000, "reserve_time_ms": 1000}}, format="json")
+        rnd.refresh_from_db()
+        self.assertEqual(rnd.grace_time_ms, 30000)
+        self.assertEqual(Team.objects.get(pk=self.fx.team_of(rnd.captain).pk).draft_reserve_ms, 30000)
+
+    def _disable_and_assert_drafting_unarmed(self):
+        with self.captureOnCommitCallbacks(execute=True):
+            r = self.client.patch(self.url, {"draft_options": {"timer_enabled": False}}, format="json")
+        self.assertEqual(r.status_code, 200, r.data)
+        self.fx.draft.refresh_from_db()
+        self.assertEqual(self.fx.draft.state, TeamDraftState.DRAFTING)
+        self.assertFalse(self.fx.draft.clock_armed)
+        self.assertIsNone(self.fx.draft.paused_at)
+        self.assertIsNone(self.fx.draft.active_round.started_at)
+        self.assertEqual(self.fx.pick(self.fx.draft.active_round, self.fx.draft.active_round.captain).status_code, 201)
+
+    def test_timer_off_from_pending(self):
+        self._disable_and_assert_drafting_unarmed()
+        self.assertFalse(self.fx.events("draft_resumed").exists())
+
+    def test_timer_off_from_drafting_armed(self):
+        with self.captureOnCommitCallbacks(execute=True):
+            self.fx.start()
+        self._disable_and_assert_drafting_unarmed()
+
+    def test_timer_off_from_paused_emits_draft_resumed(self):
+        with self.captureOnCommitCallbacks(execute=True):
+            self.fx.start()
+        self.fx.draft.state = TeamDraftState.PAUSED
+        self.fx.draft.paused_at = timezone.now()
+        self.fx.draft.is_manual_pause = True
+        self.fx.draft.save()
+        self._disable_and_assert_drafting_unarmed()
+        self.assertEqual(self.fx.events("draft_resumed").count(), 1)
+        self.fx.draft.refresh_from_db()
+        self.assertFalse(self.fx.draft.is_manual_pause)
+
+    def test_timer_off_from_resuming_emits_draft_resumed(self):
+        with self.captureOnCommitCallbacks(execute=True):
+            self.fx.start()
+        self.fx.draft.state = TeamDraftState.RESUMING
+        self.fx.draft.resuming_until = timezone.now() + timedelta(seconds=3)
+        self.fx.draft.save()
+        self._disable_and_assert_drafting_unarmed()
+        self.assertEqual(self.fx.events("draft_resumed").count(), 1)
+        self.fx.draft.refresh_from_db()
+        self.assertIsNone(self.fx.draft.resuming_until)
