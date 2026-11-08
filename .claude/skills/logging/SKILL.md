@@ -33,7 +33,10 @@ Every log MUST include `system` and `subsystem` kwargs. These are the primary Gr
 | `websocket` | `heartbeat` | — | `consumers_base.py` | Heartbeat receive, captain register/unregister (generic WS infra) |
 | `websocket` | `connection` | — | `telemetry/websocket.py`, `consumers_base.py` | Generic WS connect/disconnect/receive instrumentation; captain kick send/failure (captain_kicked, captain_kick_failed) |
 | `websocket` | `timer` | — | `app/tasks/draft_tick.py` | Shared tick runner: connection counts (connection_count_incremented, connection_count_decremented), registry shutdown (tick_broadcasters_shutdown) |
-| `teamdraft` | `connection` | — | `consumers.py` (DraftConsumer) | Team-draft WS connect/disconnect, heartbeat frames, malformed messages |
+| `teamdraft` | `connection` | — | `consumers.py` (DraftConsumer) | Team-draft WS connect/disconnect, heartbeat frames, malformed messages; captain presence (teamdraft_captain_connected, teamdraft_captain_disconnected, teamdraft_captain_presence_restored, captain_conn_count_negative) |
+| `teamdraft` | `timer` | — | `app/tasks/teamdraft_tick.py`, `app/functions/teamdraft.py`, `app/functions/teamdraft_timeout.py`, `app/tasks/draft_tick.py` (evaluate_client_pick_time) | Team-draft tick loop, round activation, pick timing, timeout skip; client pick-time rejects (pick_time_naive_datetime, pick_time_in_future, pick_time_too_old) |
+| `teamdraft` | `heartbeat` | — | `app/tasks/teamdraft_tick.py` | Active-captain heartbeat staleness → auto-pause |
+| `teamdraft` | `view` | — | `app/functions/teamdraft_views.py` | ready/start/pause/resume HTTP actions |
 | `herodraft` | `view` | — | `app/functions/herodraft_views.py` | HeroDraft HTTP actions: create, roll, choice/pick submit, abandon, reset |
 | `celery` | `task` | — | `telemetry/celery.py` | Generic Celery task lifecycle bookends (started/completed/failed) |
 | `events` | `discord` | — | `events/tasks.py` (cron sync, non-interaction tasks like `sync_discord_events`) | Cron-driven event sync to Discord that isn't triggered by an interaction |
