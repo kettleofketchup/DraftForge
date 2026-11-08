@@ -8,5 +8,5 @@ ngrok port="443":
     {{inv}} discord.ngrok --port {{port}}
 
 [group('discord')]
-logs:
-    {{inv}} discord.logs
+logs stack="dev":
+    {{inv}} discord.logs --stack {{stack}}

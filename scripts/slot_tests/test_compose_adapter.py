@@ -456,3 +456,30 @@ def test_dev_prod_refuses_over_test_stack(
     with pytest.raises(Exit):
         tasks.dev_prod(c)
     assert c.cmds == []
+
+
+def test_discord_logs_defaults_to_dev(slotless: tuple[Path, FakeHost]) -> None:
+    c = RecCtx()
+    tasks.discord_logs(c)
+    argv = shlex.split(c.cmds[0])
+    assert argv[argv.index("-p") + 1] == "df-dev"
+    assert argv[argv.index("logs") :] == ["logs", "-f", "--tail=100", "discord-bot"]
+
+
+def test_discord_logs_follows_the_test_slot(
+    slotless: tuple[Path, FakeHost], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DF_SLOT", "3")
+    slots.ensure_slot()
+    c = RecCtx()
+    tasks.discord_logs(c, stack="test")
+    assert " -p df-s3 " in c.cmds[0]
+
+
+def test_discord_logs_rejects_unknown_stack(
+    slotless: tuple[Path, FakeHost], capsys: pytest.CaptureFixture[str]
+) -> None:
+    c = RecCtx()
+    with pytest.raises(Exit):
+        tasks.discord_logs(c, stack="staging")
+    assert c.cmds == [] and "staging" in capsys.readouterr().err

@@ -1,4 +1,5 @@
 import time
+from typing import cast
 
 import invoke
 from dotenv import load_dotenv
@@ -10,10 +11,10 @@ from rich.traceback import install
 
 import paths
 from backend.tasks import db_migrate, db_populate_steam, ns_db
-from scripts.compose import run_compose, run_compose_one_off, shell_argv
+from scripts.compose import _fail, run_compose, run_compose_one_off, shell_argv
 from scripts.docker import docker_release_pull, ns_docker
 from scripts.docs import ns_docs
-from scripts.slots import SlotError, Stack
+from scripts.slots import STACKS, SlotError, Stack
 from scripts.sync_version import (
     get_version_from_env,
 )
@@ -569,9 +570,15 @@ def discord_ngrok(c: Context, port: int = 443) -> None:
 
 
 @task
-def discord_logs(c: Context) -> None:
-    """Show logs from the Discord bot container."""
-    run_compose(c, "test", "logs", "-f", "--tail=100", "discord-bot", pty=True)
+def discord_logs(c: Context, stack: str = "dev") -> None:
+    """Show logs from the Discord bot container (default: the dev stack ngrok serves)."""
+    if stack not in STACKS:
+        raise _fail(
+            SlotError(f"--stack must be one of {', '.join(STACKS)}, not {stack}")
+        )
+    run_compose(
+        c, cast(Stack, stack), "logs", "-f", "--tail=100", "discord-bot", pty=True
+    )
 
 
 ns_discord.add_task(discord_ngrok, "ngrok")
