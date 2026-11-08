@@ -3,6 +3,7 @@ WebSocket consumers for draft event broadcasting.
 """
 
 import json
+from typing import TYPE_CHECKING
 
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
@@ -12,87 +13,33 @@ from app.consumers_base import BaseDraftConsumer
 from telemetry.logging import get_logger
 from telemetry.websocket import TelemetryConsumerMixin
 
+if TYPE_CHECKING:
+    from app.models import Team
+
 log = get_logger(__name__)
 
 
-class DraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
+class DraftConsumer(BaseDraftConsumer):
     """WebSocket consumer for draft-specific events."""
 
-    async def connect(self):
-        await self.telemetry_connect()
-        self.draft_id = self.scope["url_route"]["kwargs"]["draft_id"]
-        self.room_group_name = f"draft_{self.draft_id}"
+    PING_ENABLED = False
+    kick_duplicate_captain_connections = False
+    clear_heartbeat_on_disconnect = False
 
-        # Validate draft exists
-        draft_exists = await self.draft_exists(self.draft_id)
-        if not draft_exists:
-            await self.close()
-            return
+    def get_room_group_prefix(self) -> str:
+        return "draft"
 
-        # Join draft group
-        await self.channel_layer.group_add(self.room_group_name, self.channel_name)
-        await self.accept()
-
-        # Send recent events and current draft state on connect
-        recent_events = await self.get_recent_events(self.draft_id)
-        draft_state = await self.get_draft_state(self.draft_id)
-        await self.send(
-            text_data=json.dumps(
-                {
-                    "type": "initial_events",
-                    "events": recent_events,
-                    "draft_state": draft_state,
-                }
-            )
-        )
-
-    async def disconnect(self, close_code):
-        await self.telemetry_disconnect(close_code)
-        # Leave draft group
-        await self.channel_layer.group_discard(self.room_group_name, self.channel_name)
-
-    async def receive(self, text_data):
-        # Read-only WebSocket - ignore incoming messages
-        pass
-
-    async def draft_event(self, event):
-        """Handle draft.event messages from channel layer."""
-        log.debug(
-            "draft_event_send",
-            system="herodraft",
-            subsystem="connection",
-            draft_id=self.draft_id,
-            channel_name=self.channel_name,
-        )
-        message = {
-            "type": "draft_event",
-            "event": event["payload"],
-        }
-        # Include draft state if available (allows clients to update without API calls)
-        if "draft_state" in event:
-            message["draft_state"] = event["draft_state"]
-        await self.send(text_data=json.dumps(message))
-
-    async def force_disconnect(self, event):
-        """Test-only: server-initiated connection close."""
-        await self.close(code=1012)  # Service Restart
+    def get_redis_prefix(self) -> str:
+        return "teamdraft"
 
     @database_sync_to_async
-    def draft_exists(self, draft_id):
+    def draft_exists(self, draft_id: int) -> bool:
         from app.models import Draft
 
         return Draft.objects.filter(pk=draft_id).exists()
 
     @database_sync_to_async
-    def get_recent_events(self, draft_id, limit=20):
-        from app.models import DraftEvent
-        from app.serializers import DraftEventSerializer
-
-        events = DraftEvent.objects.filter(draft_id=draft_id)[:limit]
-        return DraftEventSerializer(events, many=True).data
-
-    @database_sync_to_async
-    def get_draft_state(self, draft_id):
+    def get_initial_state_data(self, draft_id: int) -> dict | None:
         from app.models import Draft
         from app.serializers import DraftSerializerSlim, _build_users_dict
 
@@ -116,6 +63,105 @@ class DraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
             return data
         except Draft.DoesNotExist:
             return None
+
+    @database_sync_to_async
+    def get_captain_draft_team(self, draft_id: int, user) -> "Team | None":
+        from app.models import Team
+
+        return Team.objects.filter(tournament__draft__pk=draft_id, captain=user).first()
+
+    def get_active_draft_state_values(self) -> list[str]:
+        return []
+
+    async def send_initial_messages(self, initial_state: dict | None) -> None:
+        await self.send(
+            text_data=json.dumps(
+                {
+                    "type": "initial_events",
+                    "events": await self.get_recent_events(self.draft_id),
+                    "draft_state": initial_state,
+                }
+            )
+        )
+
+    async def connect(self) -> None:
+        result = await self.base_connect()
+        if result:
+            log.info(
+                "teamdraft_connected",
+                system="teamdraft",
+                subsystem="connection",
+                draft_id=self.draft_id,
+                user_id=(
+                    self.user.id if self.user and self.user.is_authenticated else None
+                ),
+                is_captain=self._is_captain,
+            )
+
+    async def disconnect(self, close_code) -> None:
+        log.info(
+            "teamdraft_disconnected",
+            system="teamdraft",
+            subsystem="connection",
+            draft_id=getattr(self, "draft_id", None),
+            user_id=(
+                self.user.id
+                if getattr(self, "user", None) and self.user.is_authenticated
+                else None
+            ),
+            is_captain=getattr(self, "_is_captain", False),
+            close_code=close_code,
+        )
+        await self.base_disconnect(close_code)
+
+    async def receive(self, text_data) -> None:
+        if not self._is_captain:
+            return
+
+        try:
+            data = json.loads(text_data)
+            msg_type = data.get("type", "unknown")
+
+            async with self.traced_message(msg_type):
+                if msg_type == "heartbeat":
+                    await self.handle_heartbeat()
+        except json.JSONDecodeError:
+            log.warning(
+                "ws_malformed_message",
+                system="teamdraft",
+                subsystem="connection",
+                draft_id=getattr(self, "draft_id", None),
+            )
+
+    async def draft_event(self, event) -> None:
+        """Handle draft.event messages from channel layer."""
+        log.debug(
+            "draft_event_send",
+            system="teamdraft",
+            subsystem="connection",
+            draft_id=self.draft_id,
+            channel_name=self.channel_name,
+        )
+        message = {
+            "type": "draft_event",
+            "event": event["payload"],
+        }
+        # Include draft state if available (allows clients to update without API calls)
+        if "draft_state" in event:
+            message["draft_state"] = event["draft_state"]
+        await self.send(text_data=json.dumps(message))
+
+    async def force_disconnect(self, event) -> None:
+        """Test-only: server-initiated connection close."""
+        await self.close(code=1012)  # Service Restart
+
+    @database_sync_to_async
+    def get_recent_events(self, draft_id: int, limit: int = 20) -> list[dict]:
+        from app.models import DraftEvent
+        from app.serializers import DraftEventSerializer
+
+        events = DraftEvent.objects.filter(draft_id=draft_id)[:limit]
+        return DraftEventSerializer(events, many=True).data
 
 
 class TournamentConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
