@@ -44,12 +44,20 @@ ns.add_collection(ns_demo, "demo")
 from dotenv import load_dotenv
 
 
+COMPOSE_PROJECT_NAME = "df"
+_PROJECT_FILTER = f"--filter label=com.docker.compose.project={COMPOSE_PROJECT_NAME}"
+
+
 def docker_stop_all(c):
-    """Stop and remove all Docker containers."""
-    result = c.run("docker ps -aq", hide=True, warn=True)
+    """Stop and remove this project's Docker containers.
+
+    Scoped to the compose project label so unrelated containers running on the
+    same host (other projects, local services) are left alone.
+    """
+    result = c.run(f"docker ps -aq {_PROJECT_FILTER}", hide=True, warn=True)
     if result.stdout.strip():
-        c.run("docker stop $(docker ps -aq)", warn=True)
-        c.run("docker rm $(docker ps -aq)", warn=True)
+        c.run(f"docker stop $(docker ps -aq {_PROJECT_FILTER})", warn=True)
+        c.run(f"docker rm $(docker ps -aq {_PROJECT_FILTER})", warn=True)
 
 
 def docker_compose_down(c, compose_file: Path):
