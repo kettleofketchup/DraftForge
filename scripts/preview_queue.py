@@ -1,4 +1,4 @@
-"""Level-triggered queue for the `preview-env` label (spec §5.6).
+"""Level-triggered queue for the `preview-env` label.
 
 `plan()` is a pure function: given the GitHub state of every open PR it
 returns the label removals, label additions and `preview-queue` commit
@@ -25,7 +25,9 @@ from datetime import datetime, timedelta, timezone
 LABEL = "preview-env"
 OPT_OUT = "no-preview"
 NO_BUILD_GRACE = timedelta(hours=2)
-MAX_CAP = 10
+# Raising the ceiling is a reviewed code change, not a repo-variable edit: the
+# deploying cluster budgets capacity for this many previews.
+MAX_CAP = 3
 
 # PREVIEW_AUTHORS entries are compared exactly and case-sensitively with
 # `user.login`, so they must use the canonical case GitHub returns. The
@@ -56,12 +58,13 @@ class PR:
     author: str
     head_repo: str
     head_sha: str
-    draft: bool
     labels: frozenset[str]
     created_at: datetime
-    # (state, description) of the `preview-images` status on head_sha.
+    # (state, description) of the latest `preview-images` status on head_sha
+    # whose description is this PR's tag. Statuses attach to a SHA repo-wide, so
+    # another PR on the same head posts its own tag there.
     images_status: tuple[str, str] | None
-    # (created_at, state, description) of every `preview-queue` status on head_sha.
+    # (created_at, state, description) of every queue_context(number) status on head_sha.
     queue_statuses: tuple[tuple[datetime, str, str], ...]
     # Latest `labeled` event for preview-env; None if unknown.
     grant_time: datetime | None
@@ -121,8 +124,8 @@ def _grant_key(pr: PR):
 
 def plan(prs: list[PR], closed_labelled: list[int], now: datetime, cap: int,
          authors: frozenset[str], idle_days: int, base_repo: str) -> Plan:
-    # Step 2: closed PRs still carrying the label lose it, and never count
-    # as open even if the open list lags.
+    # Closed PRs still carrying the label lose it, and never count as open
+    # even if the open list lags.
     closed = list(dict.fromkeys(closed_labelled))
     closed_set = set(closed)
     open_prs = [p for p in prs if p.number not in closed_set]
@@ -149,26 +152,26 @@ def plan(prs: list[PR], closed_labelled: list[int], now: datetime, cap: int,
         seen = _first_seen(p)
         return p.images_status is None and seen is not None and now - seen > NO_BUILD_GRACE
 
-    # Step 3: eligibility.
+    # Eligibility.
     eligible = [p for p in open_prs if allowed(p)]
     ineligible = [p for p in open_prs if not allowed(p)]
 
-    # Steps 4-5: holders; over cap, incumbents (earliest grant) win.
+    # Holders; over cap, incumbents (earliest grant) win.
     holders = sorted((p for p in eligible if LABEL in p.labels), key=_grant_key)
     keep = holders[:cap]
     keep_nums = {p.number for p in keep}
 
-    # Steps 6-7: waiters are built, non-failed eligible PRs without a slot.
+    # Waiters are built, non-failed eligible PRs without a slot.
     waiting = sorted(
         (p for p in eligible
          if p.number not in keep_nums and built(p) and not failed(p)),
         key=lambda p: (idle(p), p.created_at, p.number),
     )
 
-    # Step 8: while waiters outnumber free slots, evict stale holders, one per
+    # While waiters outnumber free slots, evict stale holders, one per
     # otherwise-unserved waiter: failed holders first, then idle ones, oldest
     # head first within each. Free and freed slots go to non-idle waiters
-    # first (step 7 order), so an idle holder is evicted only for a non-idle
+    # first (waiter order), so an idle holder is evicted only for a non-idle
     # waiter that a free or failed slot does not already serve. Otherwise an
     # idle waiter would take an idle holder's slot, the evicted PR would be
     # the idle waiter on the next run, and the two would trade the slot every
@@ -188,19 +191,19 @@ def plan(prs: list[PR], closed_labelled: list[int], now: datetime, cap: int,
     evicted_nums = {p.number for p in evicted}
     keep = [p for p in keep if p.number not in evicted_nums]
 
-    # Step 9: free slots go to the first waiters.
+    # Free slots go to the first waiters.
     free = cap - len(keep)
     promoted = waiting[:free]
     still_waiting = waiting[free:]
     desired = {p.number for p in keep} | {p.number for p in promoted}
 
-    # Step 10: removals (closed first) precede additions.
+    # Removals (closed first) precede additions.
     others = sorted(p.number for p in open_prs
                     if LABEL in p.labels and p.number not in desired)
     remove = closed + [n for n in others if n not in closed_set]
     add = [p.number for p in promoted if LABEL not in p.labels]
 
-    # Step 11: statuses.
+    # Statuses.
     position = {p.number: i for i, p in enumerate(still_waiting, start=1)}
     wanted: dict[int, tuple[str, str]] = {}
     for p in eligible:
@@ -236,6 +239,11 @@ def plan(prs: list[PR], closed_labelled: list[int], now: datetime, cap: int,
 API = "https://api.github.com"
 GHCR = "https://ghcr.io"
 QUEUE_CONTEXT = "preview-queue"
+
+
+def queue_context(n: int) -> str:
+    """Per-PR status context: two PRs on one head SHA must not share statuses."""
+    return f"{QUEUE_CONTEXT}/pr-{n}"
 IMAGES_CONTEXT = "preview-images"
 PREVIEW_IMAGES = (
     "kettleofketchup/draftforge-preview/backend",
@@ -387,11 +395,13 @@ class GitHub:
                       and (e.get("label") or {}).get("name") == LABEL]
             grant = max(grants, default=None)
         statuses = self._get_all(f"repos/{self.repo}/commits/{head}/statuses")
-        images = [s for s in statuses if s.get("context") == IMAGES_CONTEXT]
+        tag = tag_for(n, head)
+        images = [s for s in statuses if s.get("context") == IMAGES_CONTEXT
+                  and (s.get("description") or "") == tag]
         # Newest first from the API; max() keeps the first of equal timestamps.
         latest = max(images, key=lambda s: _time(s["created_at"]), default=None)
         queue = tuple((_time(s["created_at"]), s["state"], s.get("description") or "")
-                      for s in statuses if s.get("context") == QUEUE_CONTEXT)
+                      for s in statuses if s.get("context") == queue_context(n))
         detail = self._get_one(f"repos/{self.repo}/pulls/{n}")
         head_repo = (raw["head"].get("repo") or {}).get("full_name", "")
         return PR(
@@ -399,7 +409,6 @@ class GitHub:
             author=raw["user"]["login"],
             head_repo=head_repo,
             head_sha=head,
-            draft=bool(raw.get("draft")),
             labels=labels,
             created_at=_time(raw["created_at"]),
             images_status=(latest["state"], latest.get("description") or "") if latest else None,
@@ -425,9 +434,9 @@ class GitHub:
     def add_label(self, n: int) -> None:
         self._write("POST", f"repos/{self.repo}/issues/{n}/labels", {"labels": [LABEL]})
 
-    def set_status(self, sha: str, state: str, desc: str) -> None:
+    def set_status(self, n: int, sha: str, state: str, desc: str) -> None:
         self._write("POST", f"repos/{self.repo}/statuses/{sha}",
-                    {"state": state, "description": desc, "context": QUEUE_CONTEXT})
+                    {"state": state, "description": desc, "context": queue_context(n)})
 
 
 def manifest_exists(image: str, tag: str, opener: Opener = default_opener) -> bool:
@@ -476,7 +485,8 @@ def main(env: Mapping[str, str], gh: GitHub, manifest_exists=manifest_exists) ->
     # Fetch everything before the first write.
     try:
         prs = [p for p in gh.open_prs() if str(p.number) != closed_pr]
-        closed = gh.closed_labelled()
+        # The search index lags; the PR that just closed loses its label now.
+        closed = list(dict.fromkeys(gh.closed_labelled() + ([int(closed_pr)] if closed_pr else [])))
         checked = []
         for p in prs:
             tag = tag_for(p.number, p.head_sha)
@@ -497,7 +507,7 @@ def main(env: Mapping[str, str], gh: GitHub, manifest_exists=manifest_exists) ->
             gh.add_label(n)
         for n, sha, state, desc in result.statuses:
             print(f"#{n} {sha[:7]}: {state} {desc}")
-            gh.set_status(sha, state, desc)
+            gh.set_status(n, sha, state, desc)
     except GitHubError as exc:
         _log(f"write failed; the next run reconciles: {exc}")
         return 1

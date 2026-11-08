@@ -1,4 +1,4 @@
-"""Tests for the preview queue (spec §5.6).
+"""Tests for the preview queue.
 
 The planner cases build `PR` records by hand and call `plan()` directly. The
 I/O cases drive the real `GitHub` client and `manifest_exists` through a
@@ -44,7 +44,7 @@ def sha(n, rev=0):
 
 
 def mk(n, *, built=True, labelled=False, author=OWNER, head_repo=BASE, rev=0,
-       labels=(), draft=False, created=None, images=None, manifests=None,
+       labels=(), created=None, images=None, manifests=None,
        queue=(), grant=None, mergeable=True):
     """One open PR. `built=True` means a success status with this PR's tag and
     both manifests present; `images`/`manifests` override that explicitly."""
@@ -63,7 +63,6 @@ def mk(n, *, built=True, labelled=False, author=OWNER, head_repo=BASE, rev=0,
         author=author,
         head_repo=head_repo,
         head_sha=head,
-        draft=draft,
         labels=frozenset(lbls),
         created_at=created or (NOW - timedelta(days=30) + timedelta(hours=n)),
         images_status=images,
@@ -180,9 +179,16 @@ class Eligibility(unittest.TestCase):
         self.assertEqual(p.add, [])
         self.assertEqual(p.remove, [1])
 
-    def test_draft_pr_allowed(self):
-        p = run([mk(1, draft=True)], cap=3)
+    def test_two_prs_on_one_head_plan_independently(self):
+        # Statuses are per SHA repo-wide; each PR reads only its own queue context
+        # and its own image tag, so both are planned as if alone.
+        a = mk(1)
+        b = replace(mk(2), head_sha=a.head_sha,
+                    images_status=("success", tag_for(2, a.head_sha)))
+        p = run([a, b], cap=1)
         self.assertEqual(p.add, [1])
+        self.assertEqual(status_of(p, 1), HELD)
+        self.assertEqual(status_of(p, 2), queued(1, 1))
 
     def test_ineligible_with_queue_status_gets_not_eligible(self):
         was_queued = mk(1, labels=("no-preview",), queue=fresh_queue())
@@ -485,7 +491,7 @@ class Writes(unittest.TestCase):
 class Config(unittest.TestCase):
     def test_parse_config_rejects(self):
         bad = [
-            ("-1", OWNER, "7"), ("11", OWNER, "7"), ("x", OWNER, "7"), ("", OWNER, "7"),
+            ("-1", OWNER, "7"), ("4", OWNER, "7"), ("11", OWNER, "7"), ("x", OWNER, "7"), ("", OWNER, "7"),
             ("3", "a, b", "7"), ("3", "a,,b", "7"), ("3", "", "7"), ("3", "bad_login", "7"),
             ("3", OWNER, "0"), ("3", OWNER, "x"), ("3", OWNER, ""), ("3", OWNER, "366"),
             ("3", "a,b\n", "7"), ("3", "kettleofketchup\n", "7"),
@@ -498,8 +504,8 @@ class Config(unittest.TestCase):
     def test_parse_config_accepts_zero(self):
         self.assertEqual(parse_config("0", OWNER, "7"), (0, frozenset({OWNER}), 7))
         self.assertEqual(
-            parse_config("10", "kettleofketchup,other-user", "365"),
-            (10, frozenset({"kettleofketchup", "other-user"}), 365),
+            parse_config("3", "kettleofketchup,other-user", "365"),
+            (3, frozenset({"kettleofketchup", "other-user"}), 365),
         )
 
 
@@ -608,8 +614,8 @@ class RealClient(unittest.TestCase):
                                       head_repo="fork/DraftForge", draft=True,
                                       created="2026-10-02T03:04:05Z")])] + per_pr(4))
         (pr,) = gh.open_prs()
-        self.assertEqual((pr.number, pr.author, pr.head_repo, pr.head_sha, pr.draft),
-                         (4, "someone", "fork/DraftForge", sha(4), True))
+        self.assertEqual((pr.number, pr.author, pr.head_repo, pr.head_sha),
+                         (4, "someone", "fork/DraftForge", sha(4)))
         self.assertEqual(pr.labels, frozenset({"no-preview"}))
         self.assertEqual(pr.created_at, dt("2026-10-02T03:04:05Z"))
         self.assertIsNone(pr.images_status)
@@ -634,10 +640,11 @@ class RealClient(unittest.TestCase):
     def test_earliest_queue_status_from_last_statuses_page(self):
         nxt = f"{API}/repos/{BASE}/commits/{sha(6)}/statuses?per_page=100&page=2"
         statuses = [
-            ([status_json("preview-queue", "success", "Preview slot held", "2026-10-05T00:00:00Z"),
-              status_json("preview-queue", "pending", "Waiting for preview images",
+            ([status_json("preview-queue/pr-6", "success", "Preview slot held",
+                          "2026-10-05T00:00:00Z"),
+              status_json("preview-queue/pr-6", "pending", "Waiting for preview images",
                           "2026-10-04T00:00:00Z")], nxt),
-            ([status_json("preview-queue", "pending", "Waiting for preview images",
+            ([status_json("preview-queue/pr-6", "pending", "Waiting for preview images",
                           "2026-10-01T00:00:00Z")], None),
         ]
         gh, _ = client([page([pr_json(6, sha(6))])] + per_pr(6, statuses=statuses))
@@ -651,21 +658,43 @@ class RealClient(unittest.TestCase):
         tag = tag_for(7, sha(7))
         statuses = [[
             status_json("preview-images", "success", tag, "2026-10-03T00:00:00Z"),
-            status_json("preview-queue", "pending", "Waiting for preview images",
+            status_json("preview-queue/pr-7", "pending", "Waiting for preview images",
                         "2026-10-02T12:00:00Z"),
             status_json("preview-images", "failure", tag, "2026-10-02T00:00:00Z"),
-            status_json("preview-queue", "pending", "Waiting for preview images",
+            status_json("preview-queue/pr-7", "pending", "Waiting for preview images",
                         "2026-10-01T00:00:00Z"),
         ]]
         gh, _ = client([page([pr_json(7, sha(7))])] + per_pr(7, statuses=statuses))
         (pr,) = gh.open_prs()
         self.assertEqual(pr.images_status, ("success", tag))
 
-    def test_queue_statuses_filtered_to_context(self):
+    def test_images_status_ignores_another_prs_tag(self):
+        # PR 9 shares the head with another PR whose build posted last.
+        tag = tag_for(9, sha(9))
+        statuses = [[
+            status_json("preview-images", "success", tag_for(10, sha(9)), "2026-10-03T00:00:00Z"),
+            status_json("preview-images", "failure", tag, "2026-10-02T00:00:00Z"),
+        ]]
+        gh, _ = client([page([pr_json(9, sha(9))])] + per_pr(9, statuses=statuses))
+        (pr,) = gh.open_prs()
+        self.assertEqual(pr.images_status, ("failure", tag))
+
+    def test_queue_statuses_ignore_another_prs_context(self):
+        statuses = [[
+            status_json("preview-queue/pr-10", "success", "Preview slot held",
+                        "2026-10-01T00:00:00Z"),
+            status_json("preview-queue", "success", "Preview slot held", "2026-09-01T00:00:00Z"),
+        ]]
+        gh, _ = client([page([pr_json(9, sha(9))])] + per_pr(9, statuses=statuses))
+        (pr,) = gh.open_prs()
+        self.assertEqual(pr.queue_statuses, ())
+
+    def test_queue_statuses_filtered_to_own_context(self):
         statuses = [[
             status_json("preview-images", "success", "pr-8-x", "2026-10-03T00:00:00Z"),
             status_json("ci/test", "success", "ok", "2026-10-02T00:00:00Z"),
-            status_json("preview-queue", "success", "Preview slot held", "2026-10-01T00:00:00Z"),
+            status_json("preview-queue/pr-8", "success", "Preview slot held",
+                        "2026-10-01T00:00:00Z"),
         ]]
         gh, _ = client([page([pr_json(8, sha(8))])] + per_pr(8, statuses=statuses))
         (pr,) = gh.open_prs()
@@ -711,7 +740,7 @@ class RealClient(unittest.TestCase):
     def test_set_status_and_label_request_shapes(self):
         gh, opener = client([(201, {}, b"{}"), (200, {}, b"[]"), (200, {}, b"[]"),
                              (404, {}, b"{}"), error(500)])
-        gh.set_status(sha(1), "success", "Preview slot held")
+        gh.set_status(1, sha(1), "success", "Preview slot held")
         gh.add_label(5)
         gh.remove_label(5)
         gh.remove_label(6)  # 404: already gone, success
@@ -722,7 +751,7 @@ class RealClient(unittest.TestCase):
         self.assertEqual(shapes, [
             ("POST", f"{API}/repos/{BASE}/statuses/{sha(1)}",
              {"state": "success", "description": "Preview slot held",
-              "context": "preview-queue"}),
+              "context": "preview-queue/pr-1"}),
             ("POST", f"{API}/repos/{BASE}/issues/5/labels", {"labels": ["preview-env"]}),
             ("DELETE", f"{API}/repos/{BASE}/issues/5/labels/preview-env", None),
             ("DELETE", f"{API}/repos/{BASE}/issues/6/labels/preview-env", None),
@@ -732,7 +761,7 @@ class RealClient(unittest.TestCase):
             self.assertEqual(req.get_header("Content-type"), "application/json")
 
     def test_write_error_raises(self):
-        for call in (lambda gh: gh.set_status(sha(1), "success", "x"),
+        for call in (lambda gh: gh.set_status(1, sha(1), "success", "x"),
                      lambda gh: gh.add_label(1)):
             gh, _ = client([error(422)])
             with self.assertRaises(GitHubError):
@@ -816,7 +845,7 @@ class FakeGitHub:
     def add_label(self, n):
         self.writes.append(("add", n))
 
-    def set_status(self, head, state, desc):
+    def set_status(self, n, head, state, desc):
         self.writes.append(("status", head, state, desc))
 
 
@@ -838,7 +867,7 @@ def as_listed(p: PR) -> PR:
 
 class Main(unittest.TestCase):
     def test_main_bad_cap_no_writes(self):
-        bad = [dict(ENV, CAP="x"), dict(ENV, CAP="11"), dict(ENV, CAP=""),
+        bad = [dict(ENV, CAP="x"), dict(ENV, CAP="4"), dict(ENV, CAP=""),
                dict(ENV, PREVIEW_AUTHORS="a, b"), dict(ENV, PREVIEW_IDLE_DAYS="0"),
                dict(ENV, CLOSED_PR="abc"), {k: v for k, v in ENV.items() if k != "CAP"}]
         for env in bad:
@@ -888,7 +917,10 @@ class Main(unittest.TestCase):
         rc, _, _ = run_main(dict(ENV, CAP="1", CLOSED_PR="4"), gh)
         self.assertEqual(rc, 0)
         self.assertIn(("add", 5), gh.writes)
-        self.assertFalse([w for w in gh.writes if 4 in w or holder.head_sha in w])
+        # The closed PR loses its label in the same run, even before search sees it.
+        self.assertEqual([w for w in gh.writes if 4 in w or holder.head_sha in w],
+                         [("remove", 4)])
+        self.assertLess(gh.writes.index(("remove", 4)), gh.writes.index(("add", 5)))
         # Without CLOSED_PR the holder keeps the only slot.
         gh = FakeGitHub([holder, waiter])
         run_main(dict(ENV, CAP="1"), gh)
