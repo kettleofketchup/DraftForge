@@ -1135,9 +1135,17 @@ class TournamentSerializer(serializers.ModelSerializer):
     def to_representation(self, instance: Tournament) -> dict:
         data = super().to_representation(instance)
         data["draft_options"] = DraftOptionsSerializer(
-            instance.get_draft_options()
+            self._options_for(instance)
         ).data
         return data
+
+    def _options_for(self, instance: Tournament) -> DraftOptions:
+        if isinstance(self.parent, serializers.ListSerializer):
+            try:
+                return instance.draft_options
+            except DraftOptions.DoesNotExist:
+                return DraftOptions(tournament=instance)
+        return instance.get_draft_options()
 
     def update(self, instance, validated_data):
         """

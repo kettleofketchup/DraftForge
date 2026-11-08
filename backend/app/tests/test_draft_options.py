@@ -235,6 +235,13 @@ class SerializerFieldTests(TestCase):
         self.assertEqual(data["draft_options"]["timer_enabled"], False)
         self.assertTrue(DraftOptions.objects.filter(tournament=t).exists())
 
+    def test_list_serialization_does_not_create_options(self):
+        t = make_tournament(1, "ser-list")
+        t.refresh_from_db()
+        data = TournamentSerializer([t], many=True).data
+        self.assertEqual(data[0]["draft_options"]["timer_enabled"], False)
+        self.assertFalse(DraftOptions.objects.filter(tournament=t).exists())
+
 
 class SettingsWriteTests(TestCase):
     def setUp(self):
