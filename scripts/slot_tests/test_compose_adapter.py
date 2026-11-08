@@ -120,11 +120,7 @@ def test_playwright_env_container(
     assert slotless[1].calls == []
 
 
-def test_test_run_splits_cmd(
-    slotless: tuple[Path, FakeHost], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setenv("DF_SLOT", "3")
-    slots.ensure_slot()
+def _capture_one_off(monkeypatch: pytest.MonkeyPatch) -> list[list[str]]:
     seen: list[list[str]] = []
 
     def fake_run_one_off(args: list[str], **_: object) -> int:
@@ -132,9 +128,41 @@ def test_test_run_splits_cmd(
         return 0
 
     monkeypatch.setattr(scripts.compose, "run_one_off", fake_run_one_off)
-    tasks.test_run(RecCtx(), cmd="python manage.py test x -v 2")
-    assert seen[0][:3] == ["--rm", "--entrypoint", ""]
-    assert seen[0][-7:] == ["backend", "python", "manage.py", "test", "x", "-v", "2"]
+    return seen
+
+
+@pytest.mark.parametrize(
+    "cmd",
+    [
+        "python manage.py test x -v 2",
+        "python manage.py test x 2>&1 | tee /tmp/out && echo $HOME",
+        "echo 'unbalanced",
+    ],
+)
+def test_test_run_keeps_shell_semantics(
+    slotless: tuple[Path, FakeHost], monkeypatch: pytest.MonkeyPatch, cmd: str
+) -> None:
+    monkeypatch.setenv("DF_SLOT", "3")
+    slots.ensure_slot()
+    seen = _capture_one_off(monkeypatch)
+    tasks.test_run(RecCtx(), cmd=cmd)
+    assert seen[0] == ["--rm", "--entrypoint", "", "backend", "sh", "-c", cmd]
+
+
+def test_test_run_empty_cmd_uses_image_default(
+    slotless: tuple[Path, FakeHost], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen = _capture_one_off(monkeypatch)
+    tasks.test_run(RecCtx(), cmd="")
+    assert seen[0] == ["--rm", "--entrypoint", "", "backend"]
+
+
+def test_dev_run_keeps_shell_semantics(slotless: tuple[Path, FakeHost]) -> None:
+    c = RecCtx()
+    tasks.dev_run(c, cmd="ls | wc -l > /tmp/n")
+    argv = shlex.split(c.cmds[0])
+    i = argv.index("run")
+    assert argv[i:] == ["run", "--rm", "backend", "sh", "-c", "ls | wc -l > /tmp/n"]
 
 
 def test_test_run_failure_exits_nonzero(
@@ -146,14 +174,18 @@ def test_test_run_failure_exits_nonzero(
     assert exc.value.code == 3
 
 
-def test_test_exec_splits_cmd(
-    slotless: tuple[Path, FakeHost], monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize(
+    "cmd", ["python manage.py shell", "cat a > b && echo $X | wc", "echo 'unbalanced"]
+)
+def test_test_exec_keeps_shell_semantics(
+    slotless: tuple[Path, FakeHost], monkeypatch: pytest.MonkeyPatch, cmd: str
 ) -> None:
     monkeypatch.setenv("DF_SLOT", "3")
     slots.ensure_slot()
     c = RecCtx()
-    tasks.test_exec(c, service="backend", cmd="python manage.py shell")
-    assert c.cmds[0].endswith(" exec backend python manage.py shell")
+    tasks.test_exec(c, service="backend", cmd=cmd)
+    argv = shlex.split(c.cmds[0])
+    assert argv[argv.index("exec") :] == ["exec", "backend", "sh", "-c", cmd]
     assert c.kws[0].get("pty") is True
 
 

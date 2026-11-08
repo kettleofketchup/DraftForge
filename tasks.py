@@ -1,4 +1,3 @@
-import shlex
 import time
 
 import invoke
@@ -10,7 +9,7 @@ from rich.traceback import install
 
 import paths
 from backend.tasks import db_migrate, db_populate_steam, ns_db
-from scripts.compose import run_compose, run_compose_one_off
+from scripts.compose import run_compose, run_compose_one_off, shell_argv
 from scripts.docker import docker_release_pull, ns_docker
 from scripts.docs import ns_docs
 from scripts.slots import Stack
@@ -77,7 +76,7 @@ def docker_compose_top(c: Context, stack: Stack) -> None:
 
 
 def docker_compose_exec(c: Context, stack: Stack, service: str, cmd_str: str) -> None:
-    run_compose(c, stack, "exec", service, *shlex.split(cmd_str), pty=True)
+    run_compose(c, stack, "exec", service, *shell_argv(cmd_str), pty=True)
 
 
 def docker_compose_run(

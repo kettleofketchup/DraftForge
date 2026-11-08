@@ -16,6 +16,10 @@ def _fail(exc: SlotError) -> Exit:
     return Exit(code=1)
 
 
+def shell_argv(cmd: str) -> list[str]:
+    return ["sh", "-c", cmd] if cmd.strip() else []
+
+
 def run_compose(
     c: Context,
     stack: Stack,
@@ -39,7 +43,7 @@ def run_compose_one_off(
         "--rm",
         *(["--entrypoint", entrypoint] if entrypoint is not None else []),
         service,
-        *shlex.split(cmd),
+        *shell_argv(cmd),
     ]
     if stack != "test":
         run_compose(c, stack, "run", *args, pty=True)
