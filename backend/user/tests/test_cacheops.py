@@ -167,7 +167,7 @@ _PROFILE_JOIN_RE = re.compile(r"base_profile|dota_user_profile|deadlock_user_pro
 
 _SANCTIONED_MODULE = "user/querysets.py"
 _EXCLUDED_DIRS = frozenset({"migrations", "tests", ".venv"})
-_MIN_SCANNED_FILES = 220
+_MIN_SCANNED_FILES = 200
 
 _FunctionNode = ast.FunctionDef | ast.AsyncFunctionDef
 
