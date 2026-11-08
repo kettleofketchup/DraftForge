@@ -206,26 +206,6 @@ def dev_release(c: Context) -> None:
         run_compose(c, "release", "up", "-d")
 
 
-@task
-def certbot(c: Context) -> None:
-    cmd = "certbot certonly --register-unsafely-without-email"
-    cmd += " --agree-tos --force-renewal"
-
-    cmd += f" --webroot --webroot-path {str(paths.CERTBOT_WEBROOT.absolute())}"
-    cmd += f" --work-dir {str(paths.CERTBOT_WORK.absolute())}"
-
-    cmd += f" --config-dir {str(paths.CERTBOT_CONFIGS.absolute())}"
-    cmd += f" --logs-dir {str(paths.CERTBOT_LOGS.absolute())}"
-
-    for domain in paths.domains:
-        cmd += f" -d {domain}"
-    print(cmd)
-    print()
-    c.run(cmd)
-
-
-ns_prod.add_task(certbot, "certbot")
-
 ns_dev.add_task(dev_live, "live")
 ns_dev.add_task(dev_debug, "debug")
 ns_dev.add_task(dev_test, "test")
@@ -280,29 +260,22 @@ def dev_up(c: Context, sync: bool = True) -> None:
               Use --no-sync to skip syncing and just start containers.
     """
     if sync:
-        # Start containers in detached mode first
         docker_compose_up(c, "dev", detach=True)
 
-        # Wait for backend to be ready
         _wait_for_backend(c, "dev")
 
-        # Sync users and tournaments from production
         print("\n=== Syncing data from production ===")
         dev_sync_all(c)
 
-        # Pull Steam matchmaking stats
         print("\n=== Pulling Steam matchmaking stats ===")
         db_populate_steam(c, paths.DEBUG_ENV_FILE, full_sync=False, relink=True)
 
-        # Auto-link tournament games to Steam matches
         print("\n=== Auto-linking tournament games ===")
         _auto_link_all_tournaments(c, "dev")
 
-        # Attach to logs
         print("\n=== Sync complete, attaching to logs ===")
         docker_compose_logs(c, "dev")
     else:
-        # Just start containers normally
         docker_compose_up(c, "dev")
 
 

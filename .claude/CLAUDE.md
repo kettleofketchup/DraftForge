@@ -131,8 +131,7 @@ just test::pw::headless
 ### Nginx Configuration
 - Routes `/api/` to backend
 - Routes all other requests to frontend
-- SSL certificates at `nginx/data/ssl/`
-- Certbot integration for Let's Encrypt
+- Dev/test stacks mount the self-signed cert from `nginx/data/ssl/`; the release stack reads its cert from `nginx/data/certbot/configs/live/dota.kettle.sh/` on the host
 
 ## Building & Pushing Images
 

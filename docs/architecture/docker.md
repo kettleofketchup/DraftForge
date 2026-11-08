@@ -337,7 +337,6 @@ pinned.
 
 Development uses self-signed certificates in `nginx/data/ssl/`.
 
-Production uses Let's Encrypt via Certbot:
-```bash
-just prod::certbot
-```
+The release stack (`docker/docker-compose.release.yaml`) reads its certificate from
+`nginx/data/certbot/configs/live/dota.kettle.sh/` on the host. The repo no longer
+ships any tooling to issue or renew it.

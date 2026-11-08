@@ -165,7 +165,6 @@ just version::tag            # Git tag and bump
 ## Production Commands (`just prod::*`)
 
 ```bash
-just prod::certbot    # SSL certificate renewal
 just prod::up         # Start production environment
 just prod::down       # Stop production environment
 ```
