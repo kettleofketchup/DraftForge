@@ -81,6 +81,9 @@ COPY --chown=node:node . /app/
 # ---- Builder ----
 FROM source AS builder
 USER node
+# Preview images build with true to show the test login menu; prod keeps false.
+ARG VITE_PREVIEW_TEST_FEATURES=false
+ENV VITE_PREVIEW_TEST_FEATURES=$VITE_PREVIEW_TEST_FEATURES
 RUN npm run build
 
 # ---- Runtime (production) ----

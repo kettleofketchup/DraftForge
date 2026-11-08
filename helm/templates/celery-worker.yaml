@@ -1,0 +1,70 @@
+{{- include "draftforge.previewGuard" . -}}
+{{- if .Values.celeryWorker.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "draftforge.fullname" . }}-celery-worker
+  labels:
+    {{- include "draftforge.labels" . | nindent 4 }}
+    app.kubernetes.io/component: celery-worker
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  replicas: 1
+  progressDeadlineSeconds: {{ .Values.celeryWorker.progressDeadlineSeconds }}
+  strategy:
+    # No user-facing surface, and no surge pod keeps a rollout inside the preview quota.
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      {{- include "draftforge.selectorLabels" (dict "root" . "component" "celery-worker") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "draftforge.selectorLabels" (dict "root" . "component" "celery-worker") | nindent 8 }}
+      annotations:
+        {{- include "draftforge.podAnnotations" . | nindent 8 }}
+    spec:
+      {{- include "draftforge.podCommon" . | nindent 6 }}
+      containers:
+        # Backend image: the ENTRYPOINT is daphne, so set command, never args.
+        # No data volume: the worker reaches the backend over HTTP.
+        - name: celery-worker
+          image: {{ include "draftforge.image" (dict "root" . "img" "backend") }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - celery
+            - -A
+            - config.celery_light
+            - worker
+            - -l
+            - info
+            - --pool=gevent
+            - --concurrency={{ .Values.celeryWorker.concurrency }}
+            - --prefetch-multiplier=1
+          env:
+            - name: DJANGO_SETTINGS_MODULE
+              value: config.settings_celery
+          envFrom:
+            {{- include "draftforge.envFrom" . | nindent 12 }}
+          livenessProbe:
+            # Broker-only remote-control ping. No -A: loading the app would run
+            # django.setup() and task autodiscovery in a second process inside
+            # the worker's cgroup.
+            exec:
+              command:
+                - sh
+                - -c
+                - celery --broker "$CELERY_BROKER_URL" inspect ping --timeout 5 -d celery@$HOSTNAME
+            initialDelaySeconds: 60
+            periodSeconds: 60
+            timeoutSeconds: 20
+            failureThreshold: 3
+          resources:
+            {{- include "draftforge.requireResources" (dict "name" "celery-worker" "res" .Values.celeryWorker.resources) | nindent 12 }}
+          securityContext:
+            {{- include "draftforge.containerSecurity" (list 1000 1000) | nindent 12 }}
+{{- end }}

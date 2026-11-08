@@ -1,0 +1,4 @@
+# The least a non-preview release adds to the chart defaults: a Secret that
+# holds DJANGO_SECRET_KEY. The guard refuses a non-preview render without
+# secrets.create or extraEnvSecrets.
+extraEnvSecrets: [draftforge-prod-env]

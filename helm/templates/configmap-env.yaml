@@ -1,0 +1,20 @@
+{{- include "draftforge.previewGuard" . -}}
+{{- /*
+env.extra only adds keys: the guard refuses one that names a chart key. merge,
+not mergeOverwrite, keeps the chart's value even if that check is ever removed.
+*/ -}}
+{{- $data := merge (include "draftforge.envChartData" . | fromYaml) (.Values.env.extra | default dict) -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "draftforge.fullname" . }}-env
+  labels:
+    {{- include "draftforge.labels" . | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+# Broker and result backend use redis db 3: cacheops/CACHES use db 1, which the
+# backend flushes on every start in test/dev envs, and db 0 is the channels layer.
+data:
+  {{- range $k := keys $data | sortAlpha }}
+  {{ $k }}: {{ index $data $k | toString | quote }}
+  {{- end }}

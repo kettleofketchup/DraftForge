@@ -1,0 +1,140 @@
+suite: sync waves and annotations
+# templates lists every template file; a new template must be added here.
+# The "every document" checks name no template: they run on every listed
+# template and, through the documentSelector, on every document it renders.
+# skipEmptyTemplates skips a template that renders nothing under a profile.
+# Wave -1: namespace controls. Wave 0: kinds healthy on apply. Wave 1 (last):
+# every Deployment. No resource hooks and no sync-options annotation.
+values:
+  - fixtures/prod-values.yaml
+templates:
+  - templates/namespace.yaml
+  - templates/resourcequota.yaml
+  - templates/limitrange.yaml
+  - templates/networkpolicy.yaml
+  - templates/serviceaccount.yaml
+  - templates/secret.yaml
+  - templates/configmap-env.yaml
+  - templates/pvc.yaml
+  - templates/redis.yaml
+  - templates/backend.yaml
+  - templates/celery-worker.yaml
+  - templates/celery-beat.yaml
+  - templates/discord-bot.yaml
+  - templates/frontend.yaml
+  - templates/ingressroute.yaml
+tests:
+  # ---- every document, under each profile ----
+  - it: "preview: every document has a sync-wave of -1, 0 or 1 and no hook or sync-options"
+    release:
+      name: draftforge-pr-1
+      namespace: draftforge-pr-1
+    values:
+      - ../values-preview.yaml
+      - fixtures/preview-appset-values.yaml
+    asserts: &everyDocument
+      - exists: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]"}
+        documentSelector: &allDocs {path: metadata.name, matchMany: true, skipEmptyTemplates: true}
+      - matchRegex: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", pattern: "^(-1|0|1)$"}
+        documentSelector: *allDocs
+      - notExists: {path: "metadata.annotations[\"helm.sh/hook\"]"}
+        documentSelector: *allDocs
+      - notExists: {path: "metadata.annotations[\"argocd.argoproj.io/hook\"]"}
+        documentSelector: *allDocs
+      - notExists: {path: "metadata.annotations[\"argocd.argoproj.io/sync-options\"]"}
+        documentSelector: *allDocs
+
+  - it: "defaults: every document has a sync-wave of -1, 0 or 1 and no hook or sync-options"
+    asserts: *everyDocument
+
+  - it: "defaults with secrets.create: every document has a sync-wave of -1, 0 or 1 and no hook or sync-options"
+    set:
+      secrets.create: true
+      secrets.djangoSecretKey: test-key
+      secrets.internalServiceToken: test-token
+    asserts: *everyDocument
+
+  # ---- waves per kind ----
+  - it: "preview: waves per kind"
+    release:
+      name: draftforge-pr-1
+      namespace: draftforge-pr-1
+    values:
+      - ../values-preview.yaml
+      - fixtures/preview-appset-values.yaml
+    asserts:
+      - equal: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", value: "-1"}
+        template: templates/namespace.yaml
+      - equal: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", value: "-1"}
+        template: templates/resourcequota.yaml
+      - equal: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", value: "-1"}
+        template: templates/limitrange.yaml
+      - equal: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", value: "-1"}
+        template: templates/networkpolicy.yaml
+      - equal: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", value: "0"}
+        template: templates/serviceaccount.yaml
+      - equal: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", value: "0"}
+        template: templates/secret.yaml
+      - equal: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", value: "0"}
+        template: templates/configmap-env.yaml
+      - equal: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", value: "0"}
+        template: templates/backend.yaml
+        documentSelector: {path: kind, value: Service}
+      - equal: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", value: "0"}
+        template: templates/frontend.yaml
+        documentSelector: {path: kind, value: Service}
+      - equal: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", value: "0"}
+        template: templates/redis.yaml
+        documentSelector: {path: kind, value: Service}
+      - equal: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", value: "0"}
+        template: templates/ingressroute.yaml
+        documentSelector: {path: metadata.name, value: draftforge}
+      - equal: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", value: "0"}
+        template: templates/ingressroute.yaml
+        documentSelector: {path: metadata.name, value: draftforge-discord-rewrite}
+      - equal: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", value: "0"}
+        template: templates/ingressroute.yaml
+        documentSelector: {path: metadata.name, value: draftforge-internal-deny}
+      - equal: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", value: "0"}
+        template: templates/ingressroute.yaml
+        documentSelector: {path: metadata.name, value: draftforge-strip-identity}
+      - equal: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", value: "1"}
+        documentSelector: &deployments {path: kind, value: Deployment, matchMany: true, skipEmptyTemplates: true}
+
+  - it: "defaults: waves per kind"
+    asserts:
+      - equal: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", value: "0"}
+        template: templates/serviceaccount.yaml
+      - equal: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", value: "0"}
+        template: templates/configmap-env.yaml
+      - equal: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", value: "0"}
+        template: templates/pvc.yaml
+      - equal: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", value: "0"}
+        template: templates/backend.yaml
+        documentSelector: {path: kind, value: Service}
+      - equal: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", value: "0"}
+        template: templates/frontend.yaml
+        documentSelector: {path: kind, value: Service}
+      - equal: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", value: "0"}
+        template: templates/redis.yaml
+        documentSelector: {path: kind, value: Service}
+      - equal: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", value: "0"}
+        template: templates/ingressroute.yaml
+        documentSelector: {path: metadata.name, value: draftforge}
+      - equal: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", value: "0"}
+        template: templates/ingressroute.yaml
+        documentSelector: {path: metadata.name, value: draftforge-discord-rewrite}
+      - equal: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", value: "0"}
+        template: templates/ingressroute.yaml
+        documentSelector: {path: metadata.name, value: draftforge-internal-deny}
+      - equal: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", value: "1"}
+        documentSelector: *deployments
+
+  - it: "defaults: the env Secret is wave 0 when created"
+    template: templates/secret.yaml
+    set:
+      secrets.create: true
+      secrets.djangoSecretKey: test-key
+      secrets.internalServiceToken: test-token
+    asserts:
+      - equal: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", value: "0"}

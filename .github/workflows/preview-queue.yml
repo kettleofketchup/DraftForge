@@ -1,0 +1,79 @@
+# Level-triggered owner of the `preview-env` label. Every run of
+# `reconcile` recomputes the whole desired label set from GitHub state, so a
+# missed, duplicated or cancelled run loses nothing. `release-closed` is the
+# one edge-triggered step; the reconcile run's closed-PR search backs it up.
+# Label and status writes made with GITHUB_TOKEN trigger no workflows, so the
+# queue cannot loop. This workflow never checks out or runs PR code.
+name: preview-queue
+
+on:
+  # A head's images became ready.
+  workflow_run:
+    workflows: [preview-images]
+    types: [completed]
+  # A slot was freed or the opt-out changed. No branches filter: since
+  # 2025-12-08 pull_request_target always runs the default branch's copy,
+  # whatever the base, so a filter adds no safety and would only drop events
+  # for stacked PRs (the schedule picks those up otherwise).
+  pull_request_target:
+    types: [closed, reopened, labeled, unlabeled]
+  # Backstop for anything missed.
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}
+
+permissions: {}
+
+jobs:
+  release-closed:
+    # No concurrency group: a pending run in a shared group can be replaced
+    # by a newer one and dropped.
+    if: github.event_name == 'pull_request_target' && github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      PR: ${{ github.event.pull_request.number }}
+    steps:
+      # 404 means the label is already gone (most closed PRs never had it).
+      - name: Remove preview-env from the closed PR
+        run: |
+          out=$(gh api -X DELETE "repos/$GH_REPO/issues/$PR/labels/preview-env" 2>&1) || { grep -q 'HTTP 404' <<<"$out" || { echo "$out"; exit 1; }; }
+
+  reconcile:
+    needs: release-closed
+    if: always()
+    concurrency:
+      group: preview-queue
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: read
+      statuses: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      # Unset PREVIEW_CAP means 0: a repo that has not opted in grants no slots.
+      CAP: ${{ vars.PREVIEW_CAP || '0' }}
+      PREVIEW_AUTHORS: ${{ vars.PREVIEW_AUTHORS || 'kettleofketchup' }}
+      PREVIEW_IDLE_DAYS: ${{ vars.PREVIEW_IDLE_DAYS || '7' }}
+      PREVIEW_REQUIRE_VERIFIED: ${{ vars.PREVIEW_REQUIRE_VERIFIED || 'false' }}
+      CLOSED_PR: ${{ github.event.action == 'closed' && github.event.pull_request.number || '' }}
+    steps:
+      # Always the default branch, never the PR: pull_request_target has a
+      # write token. The 'main' fallback is required because the `schedule`
+      # payload has no `repository` object.
+      - name: Checkout default branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch || 'main' }}
+          persist-credentials: false
+
+      - name: Reconcile preview-env labels and statuses
+        run: python3 -I scripts/preview_queue.py

@@ -236,6 +236,8 @@ jobs:
               events.tests.test_provider_registry \
               app.tests.test_build_users_dict \
               tests.test_populate \
+              app.tests.test_env_utils \
+              app.tests.test_settings_env_overrides \
               -v 2
 
       - name: Run frontend Vitest

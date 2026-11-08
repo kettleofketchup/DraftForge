@@ -1,0 +1,16 @@
+persistence: { enabled: false }          # emptyDir SQLite; nothing to leak
+seed: { enabled: true }
+celeryWorker: { concurrency: 4, progressDeadlineSeconds: 1500 }
+backend:  { progressDeadlineSeconds: 1500 }
+frontend: { progressDeadlineSeconds: 1500 }
+redis:    { progressDeadlineSeconds: 1500 }
+celeryBeat: { enabled: false }           # polls Discord/Steam every 30–60s with no creds
+discordBot: { enabled: false }
+env: { nodeEnv: test, debug: true, test: true, release: false, ci: true, logLevel: INFO }
+secrets:
+  create: true
+  djangoSecretKey: preview-dummy-not-secret
+  internalServiceToken: preview-dummy-not-secret
+# Preview mode: the guard then requires every value the deploying ApplicationSet
+# must set, and a draftforge-pr-* namespace refuses to render without it.
+preview: { enabled: true }
