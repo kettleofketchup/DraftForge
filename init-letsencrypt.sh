@@ -47,19 +47,16 @@ echo
 
 
 echo "### Requesting Let's Encrypt certificate for $domain ..."
-#Join $domains to -d args
 domain_args=""
 for d in "${domains[@]}"; do
   domain_args="$domain_args -d $d"
 done
 
-# Select appropriate email arg
 case "$email" in
   "") email_arg="--register-unsafely-without-email" ;;
   *) email_arg="--email $email" ;;
 esac
 
-# Enable staging mode if needed
 staging_arg=""
 if [ "$staging" != "0" ]; then staging_arg="--staging"; fi
 
