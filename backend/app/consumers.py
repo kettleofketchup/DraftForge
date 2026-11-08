@@ -9,14 +9,17 @@ from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
 from django.utils import timezone
 
+from app.cache_utils import invalidate_obj
 from app.consumers_base import BaseDraftConsumer
+from app.functions.teamdraft import emit_event, team_payload
+from app.models import Draft, Team
+from app.tasks.draft_tick import CAPTAIN_CHANNEL_TTL, TickDriver
+from app.tasks.teamdraft_tick import TEAM_TICK_DRIVER, captain_conn_key
 from telemetry.logging import get_logger
 from telemetry.websocket import TelemetryConsumerMixin
 
 if TYPE_CHECKING:
     from django.contrib.auth.base_user import AbstractBaseUser
-
-    from app.models import Team
 
 log = get_logger(__name__)
 
@@ -36,13 +39,10 @@ class DraftConsumer(BaseDraftConsumer):
 
     @database_sync_to_async
     def draft_exists(self, draft_id: int) -> bool:
-        from app.models import Draft
-
         return Draft.objects.filter(pk=draft_id).exists()
 
     @database_sync_to_async
     def get_initial_state_data(self, draft_id: int) -> dict | None:
-        from app.models import Draft
         from app.serializers import DraftSerializerSlim, _build_users_dict
 
         try:
@@ -70,12 +70,114 @@ class DraftConsumer(BaseDraftConsumer):
     def get_captain_draft_team(
         self, draft_id: int, user: "AbstractBaseUser"
     ) -> "Team | None":
-        from app.models import Team
-
         return Team.objects.filter(tournament__draft__pk=draft_id, captain=user).first()
 
     def get_active_draft_state_values(self) -> list[str]:
-        return []
+        return ["drafting", "resuming"]
+
+    def get_tick_driver(self) -> TickDriver | None:
+        return TEAM_TICK_DRIVER
+
+    def should_start_tick_broadcaster(self, initial_state: dict | None) -> bool:
+        return bool(initial_state and initial_state.get("clock_armed"))
+
+    @database_sync_to_async
+    def _set_presence(
+        self, draft_id: int, user: "AbstractBaseUser", is_connected: bool
+    ) -> None:
+        team = Team.objects.filter(
+            tournament__draft__pk=draft_id, captain=user
+        ).first()
+        if team is None:
+            return
+        draft = Draft.objects.get(pk=draft_id)
+        active = draft.active_round
+        payload = {
+            "pick_number": active.pick_number if active else None,
+            **team_payload(team),
+            "is_active_captain": bool(active and active.captain_id == user.pk),
+        }
+        if is_connected:
+            team.draft_is_connected = True
+            team.draft_has_connected = True
+            team.save(update_fields=["draft_is_connected", "draft_has_connected"])
+            invalidate_obj(team.tournament)
+            emit_event(draft, "captain_connected", payload)
+            event_name = "teamdraft_captain_connected"
+        else:
+            team.draft_is_connected = False
+            team.save(update_fields=["draft_is_connected"])
+            invalidate_obj(team.tournament)
+            emit_event(draft, "captain_disconnected", payload)
+            event_name = "teamdraft_captain_disconnected"
+        log.info(
+            event_name,
+            system="teamdraft",
+            subsystem="connection",
+            draft_id=draft_id,
+            user_id=user.pk,
+        )
+
+    async def on_captain_state_change(
+        self, draft_id: int, user: "AbstractBaseUser", is_connected: bool
+    ) -> None:
+        r = self._redis()
+        key = captain_conn_key(draft_id, user.id)
+        if is_connected:
+            r.incr(key)
+            r.expire(key, CAPTAIN_CHANNEL_TTL)
+        else:
+            count = r.decr(key)
+            if count <= 0:
+                r.delete(key)
+            if count < 0:
+                log.warning(
+                    "captain_conn_count_negative",
+                    system="teamdraft",
+                    subsystem="connection",
+                    draft_id=draft_id,
+                    user_id=user.id,
+                )
+            if count > 0:
+                return
+        await self._set_presence(draft_id, user, is_connected)
+
+    @database_sync_to_async
+    def _restore_presence(self, draft_id: int, user: "AbstractBaseUser") -> None:
+        team = Team.objects.filter(
+            tournament__draft__pk=draft_id, captain=user
+        ).first()
+        if team is None or team.draft_has_connected:
+            return
+        team.draft_is_connected = True
+        team.draft_has_connected = True
+        team.save(update_fields=["draft_is_connected", "draft_has_connected"])
+        invalidate_obj(team.tournament)
+        log.info(
+            "teamdraft_captain_presence_restored",
+            system="teamdraft",
+            subsystem="connection",
+            draft_id=draft_id,
+            user_id=user.pk,
+        )
+
+    async def handle_heartbeat(self) -> None:
+        await super().handle_heartbeat()
+        if not self._is_captain:
+            return
+        r = self._redis()
+        key = captain_conn_key(self.draft_id, self.user.id)
+        if not r.exists(key):
+            return
+        r.expire(key, CAPTAIN_CHANNEL_TTL)
+        await self._restore_presence(self.draft_id, self.user)
+
+    async def draft_tick(self, event: dict[str, Any]) -> None:
+        await self.send(
+            text_data=json.dumps(
+                {"type": "draft_tick", **{k: v for k, v in event.items() if k != "type"}}
+            )
+        )
 
     async def send_initial_messages(self, initial_state: dict | None) -> None:
         await self.send(
