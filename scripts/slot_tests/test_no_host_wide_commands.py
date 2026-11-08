@@ -1,4 +1,5 @@
 import re
+import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -12,26 +13,53 @@ def test_no_docker_stop_all() -> None:
         assert "docker ps -aq" not in text, rel
 
 
-RAW_COMPOSE = re.compile(r"docker compose(?![^\n]*scripts\.slots)")
-RAW_COMPOSE_SCANNED = [
-    "tasks.py",
-    "scripts/tests.py",
-    "scripts/docker.py",
-    "scripts/update.py",
-    "just/test/pw.just",
-    "just/test/mod.just",
-    "just/dev.just",
-]
+RAW_COMPOSE = re.compile(
+    r"(?:docker[ -]compose(?![.\w-])|[\"']docker[\"'],\s*[\"']compose[\"'])"
+    r"(?![^\n]*scripts\.slots)"
+)
+RAW_COMPOSE_EXEMPT: dict[str, str] = {
+    "scripts/slots.py": "the slot-aware compose helper itself",
+    "scripts/slot_tests/_helpers.py": "integration fixture probes and renders compose directly",
+    "scripts/slot_tests/test_slots_allocate.py": "asserts the helper's printed down hint",
+    "scripts/slot_tests/test_slots_lifecycle.py": "asserts the helper's down argv",
+    "init-letsencrypt.sh": "one-time cert bootstrap run on the prod host, not a worktree",
+    "scripts/version.py": "version.build only builds images, never up/down/stop",
+}
+
+
+def _tracked_sources() -> list[str]:
+    out = subprocess.run(
+        ["git", "ls-files", "*.py", "*.sh", "*.just", "justfile"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    return out.split()
+
+
+def _raw_compose_hits(rel: str) -> list[str]:
+    return [
+        line
+        for line in (ROOT / rel).read_text(errors="replace").splitlines()
+        if RAW_COMPOSE.search(line)
+    ]
 
 
 def test_no_raw_compose_outside_helper() -> None:
-    for rel in RAW_COMPOSE_SCANNED:
-        hits = [
-            line
-            for line in (ROOT / rel).read_text().splitlines()
-            if RAW_COMPOSE.search(line)
-        ]
-        assert hits == [], (rel, hits)
+    files = _tracked_sources()
+    assert "tasks.py" in files and "justfile" in files
+    hits = {
+        rel: h
+        for rel in files
+        if rel not in RAW_COMPOSE_EXEMPT and (h := _raw_compose_hits(rel))
+    }
+    assert hits == {}
+
+
+def test_raw_compose_exemptions_are_live() -> None:
+    stale = [rel for rel in RAW_COMPOSE_EXEMPT if not _raw_compose_hits(rel)]
+    assert stale == []
 
 
 def test_no_localhost_literal_in_scripts_tests() -> None:
