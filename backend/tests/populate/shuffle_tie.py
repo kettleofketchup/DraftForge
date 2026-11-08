@@ -27,6 +27,7 @@ from datetime import date
 from app.models import (
     CustomUser,
     Draft,
+    DraftOptions,
     League,
     Organization,
     PositionsModel,
@@ -172,6 +173,7 @@ def populate_shuffle_tie_data(force=False):
         team.members.set([captain])  # Captain only -- room for 4 draft picks
 
     # 8. Create shuffle draft (build_shuffle_rounds assigns first captain)
+    DraftOptions.ensure_for(tournament, timer_enabled=False)
     draft = Draft.objects.create(
         tournament=tournament,
         draft_style="shuffle",
