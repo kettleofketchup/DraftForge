@@ -45,6 +45,15 @@ services:
       - frontend
       - backend
 
+  certbot:
+    image: certbot/certbot:v5.1.0
+    profiles: ["certbot"]
+    volumes:
+      - ./nginx/data/certbot/webroot/:/var/www/certbot/
+      - ./nginx/data/certbot/work/:/lib/letsencrypt/
+      - ./nginx/data/certbot/configs/:/etc/letsencrypt/
+      - ./nginx/data/certbot/logs/:/var/log/letsencrypt/
+
   celery-worker:
     image: ghcr.io/kettleofketchup/draftforge/backend:${VERSION}
     user: "1000:1000"

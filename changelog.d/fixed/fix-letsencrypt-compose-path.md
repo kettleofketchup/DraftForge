@@ -1,0 +1,1 @@
+- `init-letsencrypt.sh` works from a checkout again: it resolves `docker/docker-compose.release.yaml` from its own location, uses the restored `certbot` service (profile `certbot`), and writes certs under `nginx/data/certbot/configs/` where nginx mounts them (#325).
