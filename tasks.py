@@ -44,16 +44,34 @@ ns.add_collection(ns_demo, "demo")
 from dotenv import load_dotenv
 
 
-def docker_stop_all(c):
-    """Stop and remove all Docker containers."""
-    result = c.run("docker ps -aq", hide=True, warn=True)
-    if result.stdout.strip():
-        c.run("docker stop $(docker ps -aq)", warn=True)
-        c.run("docker rm $(docker ps -aq)", warn=True)
+# Every compose file sets `name: df`, so this label identifies all of this
+# project's containers regardless of which compose file started them, and
+# nothing else running on the host.
+COMPOSE_PROJECT_NAME = "df"
+_PROJECT_FILTER = f"--filter label=com.docker.compose.project={COMPOSE_PROJECT_NAME}"
+
+
+def _project_container_ids(c) -> list[str]:
+    result = c.run(f"docker ps -aq {_PROJECT_FILTER}", hide=True, warn=True)
+    return result.stdout.split() if result.ok else []
+
+
+def docker_stop_project(c):
+    """Stop this project's containers, including ones from other compose files."""
+    ids = _project_container_ids(c)
+    if ids:
+        c.run(f"docker stop {' '.join(ids)}", warn=True)
+
+
+def docker_remove_project(c):
+    """Stop and remove this project's containers, including ones from other compose files."""
+    ids = _project_container_ids(c)
+    if ids:
+        c.run(f"docker rm -f {' '.join(ids)}", warn=True)
 
 
 def docker_compose_down(c, compose_file: Path):
-    docker_stop_all(c)
+    docker_remove_project(c)
     with c.cd(paths.PROJECT_PATH):
         cmd = (
             f"docker compose --project-directory {paths.PROJECT_PATH.resolve()} "
@@ -100,7 +118,7 @@ def docker_compose_restart(c, compose_file: Path):
 
 
 def docker_compose_stop(c, compose_file: Path):
-    docker_stop_all(c)
+    docker_stop_project(c)
     with c.cd(paths.PROJECT_PATH):
         cmd = (
             f"docker compose --project-directory {paths.PROJECT_PATH.resolve()} "
