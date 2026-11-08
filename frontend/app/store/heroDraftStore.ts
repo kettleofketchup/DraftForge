@@ -6,6 +6,7 @@
  */
 
 import { create } from 'zustand';
+import { captureClockOffset, serverNowISO, startHeartbeatLoop } from '~/lib/draftClock';
 import { getLogger } from '~/lib/logger';
 import { getWebSocketManager } from '~/lib/websocket';
 import type { ConnectionStatus, Unsubscribe } from '~/lib/websocket';
@@ -44,7 +45,7 @@ interface HeroDraftState {
   _connectionId: string | null;
   _unsubscribe: Unsubscribe | null;
   _currentDraftId: number | null;
-  _heartbeatInterval: ReturnType<typeof setInterval> | null;
+  _stopHeartbeat: (() => void) | null;
   // Receive-side tick gap detection. Server logs `tick_loop_stalled`
   // when the broadcaster itself stalls; this catches the COMPLEMENTARY
   // case where the broadcast happened but didn't reach this client
@@ -82,7 +83,7 @@ const initialState = {
   _connectionId: null,
   _unsubscribe: null,
   _currentDraftId: null,
-  _heartbeatInterval: null,
+  _stopHeartbeat: null,
   _lastTickReceivedAtMs: null,
 };
 
@@ -243,10 +244,7 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
           // server-receive — that's the desired behaviour (the server's
           // 2s sanity window absorbs it cleanly).
           const tickReceivedAtMs = Date.now();
-          const serverTimeMs = new Date(message.server_time).getTime();
-          const serverClockOffsetMs = Number.isFinite(serverTimeMs)
-            ? serverTimeMs - tickReceivedAtMs
-            : 0;
+          const serverClockOffsetMs = captureClockOffset(message.server_time, tickReceivedAtMs);
 
           // Gap detection — expected cadence is 1Hz. If we go >2s without
           // a tick, log it. This catches client-side delivery problems
@@ -359,38 +357,27 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
   },
 
   startHeartbeat: () => {
-    const { _connectionId, _heartbeatInterval } = get();
-
-    // Already running
-    if (_heartbeatInterval) return;
-
-    if (!_connectionId) {
+    if (get()._stopHeartbeat) return;
+    if (!get()._connectionId) {
       log.warn('Cannot start heartbeat: not connected');
       return;
     }
 
     log.debug('Starting captain heartbeat');
     const manager = getWebSocketManager();
-
-    // Send immediate heartbeat
-    manager.send(_connectionId, { type: 'heartbeat' });
-
-    // Send heartbeat every 3 seconds
-    const interval = setInterval(() => {
-      const currentConnId = get()._connectionId;
-      if (currentConnId) {
-        manager.send(currentConnId, { type: 'heartbeat' });
-      }
-    }, 3000);
-
-    set({ _heartbeatInterval: interval });
+    set({
+      _stopHeartbeat: startHeartbeatLoop(() => {
+        const cur = get()._connectionId;
+        if (cur) manager.send(cur, { type: 'heartbeat' });
+      }),
+    });
   },
 
   stopHeartbeat: () => {
-    const { _heartbeatInterval } = get();
-    if (_heartbeatInterval) {
-      clearInterval(_heartbeatInterval);
-      set({ _heartbeatInterval: null });
+    const stop = get()._stopHeartbeat;
+    if (stop) {
+      stop();
+      set({ _stopHeartbeat: null });
     }
   },
 
@@ -494,6 +481,5 @@ export const heroDraftSelectors = {
  * 2s sanity window then degrades cleanly to receive-time.
  */
 export function getServerNowISO(): string {
-  const { serverClockOffsetMs } = useHeroDraftStore.getState();
-  return new Date(Date.now() + serverClockOffsetMs).toISOString();
+  return serverNowISO(useHeroDraftStore.getState().serverClockOffsetMs);
 }
