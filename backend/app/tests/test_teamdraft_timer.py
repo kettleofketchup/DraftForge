@@ -592,3 +592,130 @@ class PickTimingTests(TestCase):
         self.assertEqual(fx.draft.state, TeamDraftState.COMPLETED)
         self.assertEqual(fx.events("draft_completed").count(), 1)
         self.assertIsNone(fx.draft.active_round)
+
+
+class UndoTests(TestCase):
+    def armed_fixture(self, **kw: object) -> TimedDraftFixture:
+        fx = TimedDraftFixture(**kw)
+        with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True), self.captureOnCommitCallbacks(execute=True):
+            fx.start()
+        return fx
+
+    def test_undo_on_pending_is_409(self) -> None:
+        fx = TimedDraftFixture()
+        r = fx.undo(fx.staff)
+        self.assertEqual(r.status_code, 409)
+        self.assertEqual(r.data["code"], "no_picks_to_undo")
+
+    def test_snake_undo_keeps_next_round_captain(self) -> None:
+        fx = self.armed_fixture()
+        with self.captureOnCommitCallbacks(execute=True):
+            fx.pick(fx.draft.active_round, fx.staff)
+        rnd2_captain = fx.round(2).captain_id
+        with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True), self.captureOnCommitCallbacks(execute=True):
+            r = fx.undo(fx.staff)
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertEqual(fx.round(2).captain_id, rnd2_captain)
+        self.assertIsNone(fx.round(2).started_at)
+        rnd1 = fx.round(1)
+        self.assertIsNone(rnd1.choice)
+        self.assertIsNone(rnd1.completed_at)
+        self.assertIsNotNone(rnd1.started_at, "re-armed because the undone pick was timed")
+        self.assertEqual(fx.events("round_started").filter(payload__pick_number=1).count(), 2)
+
+    def test_untimed_undo_leaves_round_unarmed(self) -> None:
+        fx = TimedDraftFixture(timer_enabled=False, prefix="untimed")
+        with self.captureOnCommitCallbacks(execute=True):
+            fx.pick(fx.round(1), fx.staff)
+        with self.captureOnCommitCallbacks(execute=True):
+            self.assertEqual(fx.undo(fx.staff).status_code, 200)
+        self.assertIsNone(fx.round(1).started_at)
+        self.assertFalse(fx.events("round_started").exists())
+
+    def test_undo_last_pick_of_completed_timed_draft_restarts_clock(self) -> None:
+        fx = self.armed_fixture(num_teams=1, prefix="done")
+        for _ in range(4):
+            with self.captureOnCommitCallbacks(execute=True):
+                fx.pick(fx.draft.active_round, fx.staff)
+        fx.draft.refresh_from_db()
+        self.assertEqual(fx.draft.state, TeamDraftState.COMPLETED)
+        with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True) as mock_start, self.captureOnCommitCallbacks(execute=True):
+            self.assertEqual(fx.undo(fx.staff).status_code, 200)
+        fx.draft.refresh_from_db()
+        self.assertEqual(fx.draft.state, TeamDraftState.DRAFTING)
+        self.assertTrue(fx.draft.clock_armed)
+        mock_start.assert_called_once()
+        with self.captureOnCommitCallbacks(execute=True):
+            self.assertEqual(fx.pick(fx.draft.active_round, fx.draft.active_round.captain).status_code, 201)
+
+    def test_undo_completed_untimed_draft_is_drafting_unarmed(self) -> None:
+        fx = TimedDraftFixture(timer_enabled=False, num_teams=1, prefix="udone")
+        for _ in range(4):
+            with self.captureOnCommitCallbacks(execute=True):
+                fx.pick(fx.draft.active_round, fx.staff)
+        with self.captureOnCommitCallbacks(execute=True):
+            fx.undo(fx.staff)
+        fx.draft.refresh_from_db()
+        self.assertEqual(fx.draft.state, TeamDraftState.DRAFTING)
+        self.assertFalse(fx.draft.clock_armed)
+
+    def test_undo_does_not_refund_reserve(self) -> None:
+        fx = self.armed_fixture(grace_time_ms=1000)
+        rnd = fx.draft.active_round
+        rnd.started_at = timezone.now() - timedelta(seconds=4)
+        rnd.save()
+        with self.captureOnCommitCallbacks(execute=True):
+            fx.pick(rnd, fx.staff)
+        team = Team.objects.get(pk=fx.team_of(rnd.captain).pk)
+        spent = team.draft_reserve_ms
+        self.assertLess(spent, 30000)
+        with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True), self.captureOnCommitCallbacks(execute=True):
+            fx.undo(fx.staff)
+        self.assertEqual(Team.objects.get(pk=team.pk).draft_reserve_ms, spent)
+
+    def test_undo_during_resuming_keeps_clock_armed(self) -> None:
+        fx = self.armed_fixture(prefix="ur")
+        with self.captureOnCommitCallbacks(execute=True):
+            fx.pick(fx.draft.active_round, fx.staff)
+        fx.draft.state = TeamDraftState.RESUMING
+        fx.draft.resuming_until = timezone.now() + timedelta(seconds=3)
+        fx.draft.save()
+        with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True) as mock_start, self.captureOnCommitCallbacks(execute=True):
+            self.assertEqual(fx.undo(fx.staff).status_code, 200)
+        fx.draft.refresh_from_db()
+        self.assertEqual(fx.draft.state, TeamDraftState.RESUMING)
+        rnd1 = fx.round(1)
+        self.assertEqual(rnd1.started_at, fx.draft.resuming_until)
+        self.assertIsNone(fx.round(2).started_at)
+        self.assertTrue(fx.draft.clock_armed)
+        mock_start.assert_called_once()
+
+    def test_undo_during_pause_leaves_round_unarmed_until_resume(self) -> None:
+        fx = self.armed_fixture(prefix="up")
+        with self.captureOnCommitCallbacks(execute=True):
+            fx.pick(fx.draft.active_round, fx.staff)
+        fx.draft.state = TeamDraftState.PAUSED
+        fx.draft.paused_at = timezone.now()
+        fx.draft.save()
+        with self.captureOnCommitCallbacks(execute=True):
+            self.assertEqual(fx.undo(fx.staff).status_code, 200)
+        rnd1 = fx.round(1)
+        self.assertEqual((rnd1.started_at, rnd1.grace_time_ms), (None, 30000))
+        self.assertEqual(fx.events("round_started").filter(payload__pick_number=1).count(), 1, "no new round_started while paused")
+        client = APIClient()
+        client.force_authenticate(fx.staff)
+        with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True), self.captureOnCommitCallbacks(execute=True):
+            self.assertEqual(client.post(f"/api/draft/{fx.draft.pk}/resume/", {}, format="json").status_code, 200)
+        fx.draft.refresh_from_db()
+        self.assertEqual(fx.round(1).started_at, fx.draft.resuming_until)
+        self.assertTrue(fx.draft.clock_armed)
+
+    def test_directly_built_untimed_pending_draft_undo_after_pick_is_200(self) -> None:
+        fx = TimedDraftFixture(timer_enabled=False, prefix="direct")
+        fx.draft.state = TeamDraftState.PENDING   # models a Draft whose rounds were created without build_rounds
+        fx.draft.save()
+        with self.captureOnCommitCallbacks(execute=True):
+            self.assertEqual(fx.pick(fx.round(1), fx.staff).status_code, 201)
+        with self.captureOnCommitCallbacks(execute=True):
+            self.assertEqual(fx.undo(fx.staff).status_code, 200)
+        self.assertIsNone(fx.round(1).choice)

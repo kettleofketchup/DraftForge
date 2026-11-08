@@ -25,7 +25,11 @@ from social_django.utils import load_strategy, psa
 from app.broadcast import broadcast_event
 from app.cache_utils import invalidate_after_commit, invalidate_obj
 from app.functions.shuffle_draft import assign_next_shuffle_captain
-from app.functions.teamdraft import advance_after_pick, record_pick_timing
+from app.functions.teamdraft import (
+    activate_round,
+    advance_after_pick,
+    record_pick_timing,
+)
 from app.models import (
     CustomUser,
     Draft,
@@ -48,6 +52,7 @@ from app.serializers import (
     _build_users_dict,
 )
 from app.tasks.draft_tick import evaluate_client_pick_time
+from app.tasks.teamdraft_tick import start_team_tick_broadcaster_after_commit
 from backend import settings
 from telemetry.logging import get_logger
 
@@ -623,83 +628,116 @@ def undo_last_pick(request):
     except Draft.DoesNotExist:
         return Response({"error": "Draft not found"}, status=404)
 
-    # Check tournament staff permission
     if not draft.tournament or not can_edit_tournament(request.user, draft.tournament):
         return Response(
             {"error": "You do not have permission to undo picks in this draft"},
             status=403,
         )
 
-    # Find the last round with a choice
-    last_round_with_choice = (
-        draft.draft_rounds.filter(choice__isnull=False).order_by("-pick_number").first()
-    )
+    with transaction.atomic():
+        draft = Draft.objects.select_for_update().get(pk=draft_pk)
+        tournament = draft.tournament
+        options = tournament.get_draft_options(fresh=True)
 
-    if not last_round_with_choice:
-        return Response({"error": "No picks to undo"}, status=400)
+        if options.timer_enabled and draft.state == TeamDraftState.PENDING:
+            return Response({"code": "no_picks_to_undo"}, status=409)
 
-    # Get the player that was picked
-    player = last_round_with_choice.choice
-    team = last_round_with_choice.team
+        prev_active = draft.lock_active_round()
+        last_round = (
+            draft.draft_rounds.select_for_update()
+            .filter(choice__isnull=False)
+            .order_by("-pick_number")
+            .first()
+        )
+        if last_round is None:
+            return Response({"error": "No picks to undo"}, status=400)
 
-    log.info(
-        "pick_undone",
-        system="tournament",
-        subsystem="draft",
-        draft_id=draft.pk,
-        player_id=player.pk,
-        player_username=player.username,
-        team_id=team.pk if team else None,
-        team_name=team.name if team else None,
-    )
+        player = last_round.choice
+        team = last_round.team
 
-    # Remove player from team
-    if team and player:
-        team.members.remove(player)
-        team.save()
+        log.info(
+            "pick_undone",
+            system="tournament",
+            subsystem="draft",
+            draft_id=draft.pk,
+            player_id=player.pk,
+            player_username=player.username,
+            team_id=team.pk if team else None,
+            team_name=team.name if team else None,
+        )
 
-    # Note: users_remaining is a computed property, not a field.
-    # Clearing the choice below will automatically make the player
-    # appear in users_remaining again.
+        if team and player:
+            team.members.remove(player)
+            team.save()
 
-    # Clear the choice and reset the round
-    last_round_with_choice.choice = None
-    last_round_with_choice.save()
+        undone_round_had_completed_at = last_round.completed_at is not None
+        last_round.choice = None
+        last_round.completed_at = None
 
-    # Clear the next round's captain so it gets recalculated on next pick
-    next_round = (
-        draft.draft_rounds.filter(pick_number__gt=last_round_with_choice.pick_number)
-        .order_by("pick_number")
-        .first()
-    )
-    if next_round and next_round.choice is None:
-        next_round.captain = None
-        next_round.was_tie = False
-        next_round.tie_roll_data = None
-        next_round.save()
+        if draft.state == TeamDraftState.COMPLETED:
+            draft.state = TeamDraftState.DRAFTING
+            draft.paused_at = None
+            draft.resuming_until = None
+            draft.is_manual_pause = False
 
-    # Note: latest_round is a computed property that automatically returns
-    # the first round without a choice. No need to set it manually.
+        if prev_active is not None:
+            prev_active.started_at = None
+            prev_active.timed_out_at = None
+            prev_active.save(update_fields=["started_at", "timed_out_at"])
 
-    # Create pick_undone event
-    undone_event = DraftEvent.objects.create(
-        draft=draft,
-        event_type="pick_undone",
-        actor=request.user,
-        payload={
-            "pick_number": last_round_with_choice.pick_number,
-            "undone_player_id": player.pk,
-            "undone_player_name": player.username,
-            "team_id": team.pk if team else None,
-            "team_name": team.name if team else None,
-        },
-    )
-    broadcast_event(undone_event)
+        timed_undo = options.timer_enabled and undone_round_had_completed_at
+        if timed_undo and draft.state in (
+            TeamDraftState.DRAFTING,
+            TeamDraftState.RESUMING,
+        ):
+            last_round.save()
+            activate_round(
+                draft,
+                last_round,
+                options,
+                now=(
+                    draft.resuming_until
+                    if draft.state == TeamDraftState.RESUMING
+                    else timezone.now()
+                ),
+                armed=True,
+            )
+            start_team_tick_broadcaster_after_commit(draft.pk)
+        elif timed_undo and draft.state == TeamDraftState.PAUSED:
+            last_round.save()
+            activate_round(draft, last_round, options, now=timezone.now(), armed=False)
+        else:
+            last_round.started_at = None
+            last_round.timed_out_at = None
+            last_round.save()
 
-    tournament = draft.tournament
+        if draft.draft_style == "shuffle":
+            next_round = (
+                draft.draft_rounds.select_for_update()
+                .filter(pick_number__gt=last_round.pick_number, choice__isnull=True)
+                .order_by("pick_number")
+                .first()
+            )
+            if next_round is not None:
+                next_round.captain = None
+                next_round.was_tie = False
+                next_round.tie_roll_data = None
+                next_round.save()
 
-    # Invalidate specific objects
-    invalidate_obj(tournament)
-    invalidate_obj(draft)
+        undone_event = DraftEvent.objects.create(
+            draft=draft,
+            event_type="pick_undone",
+            actor=request.user,
+            payload={
+                "pick_number": last_round.pick_number,
+                "undone_player_id": player.pk,
+                "undone_player_name": player.username,
+                "team_id": team.pk if team else None,
+                "team_name": team.name if team else None,
+            },
+        )
+        transaction.on_commit(lambda e=undone_event: broadcast_event(e))
+        draft.save()
+        invalidate_after_commit(tournament, draft)
 
     return Response(_serialize_tournament(tournament), status=200)
