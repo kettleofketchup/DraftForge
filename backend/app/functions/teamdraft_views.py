@@ -108,7 +108,7 @@ def teamdraft_start(request: Request, draft_pk: int) -> Response:
             return _error("timer_disabled", status.HTTP_400_BAD_REQUEST)
         active = draft.lock_active_round()
 
-        if draft.state == TeamDraftState.PENDING:
+        if draft.state == TeamDraftState.PENDING and active is not None:
             teams = list(
                 Team.objects.select_related("captain").filter(
                     tournament=draft.tournament, captain__isnull=False

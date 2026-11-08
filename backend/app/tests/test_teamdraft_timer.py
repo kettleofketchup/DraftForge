@@ -319,6 +319,14 @@ class StartEndpointTests(EndpointTestBase):
         self.fx.draft.refresh_from_db()
         self.assertIsNotNone(self.fx.draft.active_round.started_at)
 
+    def test_start_pending_without_rounds_is_400(self):
+        self.fx.draft.draft_rounds.all().delete()
+        r = self.post(self.fx.staff, "start")
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.data["code"], "wrong_state")
+        self.fx.draft.refresh_from_db()
+        self.assertEqual(self.fx.draft.state, TeamDraftState.PENDING)
+
     def test_captain_cannot_start(self):
         self.assertEqual(self.post(self.fx.captains[0], "start").status_code, 403)
 
