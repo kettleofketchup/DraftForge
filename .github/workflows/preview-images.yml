@@ -1,5 +1,5 @@
-# Build per-PR preview images and report a `preview-images` commit status
-# (spec 5.5). Images go only to ghcr.io/kettleofketchup/draftforge-preview/*,
+# Build per-PR preview images and report a `preview-images` commit status.
+# Images go only to ghcr.io/kettleofketchup/draftforge-preview/*,
 # tagged pr-<n>-<sha7>; an existing tag is never rebuilt or re-pushed.
 # Not a security boundary: this runs from the PR head's copy of the workflow.
 name: preview-images
@@ -107,8 +107,8 @@ jobs:
         if: steps.exists.outputs.found != 'true'
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
-      # cache-from reads the prod cache only. No cache-to: a preview cache would
-      # be written by PR code, and reading it would let one PR poison another's build.
+      # No build cache: a preview cache would be written by PR code, and reading
+      # it would let one PR poison another's build.
       - name: Build and push
         if: steps.exists.outputs.found != 'true'
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
@@ -122,7 +122,6 @@ jobs:
           labels: |
             org.opencontainers.image.revision=${{ github.event.pull_request.head.sha }}
             org.opencontainers.image.source=https://github.com/kettleofketchup/DraftForge
-          cache-from: type=registry,ref=ghcr.io/kettleofketchup/draftforge/${{ matrix.name }}:buildcache
           build-args: ${{ matrix.args }}
 
   report:

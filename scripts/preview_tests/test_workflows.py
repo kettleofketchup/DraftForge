@@ -1,6 +1,6 @@
 """Structure and behaviour tests for the preview GitHub Actions workflows.
 
-Workflows are read with `yq -o=json` (spec 5.5). Where a step's shell script
+Workflows are read with `yq -o=json`. Where a step's shell script
 carries real logic (tag, exists check, comments) the script is executed with
 shimmed `docker`/`gh` binaries, so the test exercises behaviour and not only
 its spelling.
@@ -178,15 +178,11 @@ class PreviewImagesStructureTest(unittest.TestCase):
         for path, _ in strings_with_paths(self.wf):
             self.assertNotIn("cache-to", path)
 
-    def test_prod_path_only_in_cache_from(self):
-        hits = [(p, v) for p, v in strings_with_paths(self.wf) if PROD_REPO in v]
-        self.assertTrue(hits, "expected the prod cache in cache-from")
-        for path, value in hits:
-            self.assertEqual(path[-1], "cache-from", (path, value))
-        self.assertEqual(
-            self.build_push["with"]["cache-from"],
-            "type=registry,ref=ghcr.io/kettleofketchup/draftforge/${{ matrix.name }}:buildcache")
-        self.assertNotIn(PROD_REPO, self.build_push["with"]["tags"])
+    def test_no_build_cache_and_no_prod_path(self):
+        self.assertNotIn("cache-from", self.build_push["with"])
+        for path, value in strings_with_paths(self.wf):
+            self.assertNotIn("cache-from", path)
+            self.assertNotIn(PROD_REPO, value, path)
 
     def test_build_tags_use_tag_output(self):
         self.assertEqual(

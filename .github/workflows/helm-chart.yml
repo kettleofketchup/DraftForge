@@ -1,11 +1,11 @@
 # Lint, unit-test, schema-check and budget-check the DraftForge Helm chart.
-# Tool versions match just/helm.just. Helm is v3.19.4 because that is what the
-# ArgoCD v3.3.4 repo-server renders the chart with.
+# Tool versions match just/helm.just. Helm is v3.19.4 because that is the Helm
+# bundled in the ArgoCD repo-server that renders the chart.
 name: helm-chart
 
 on:
   pull_request:
-    paths:
+    paths: &chart-paths
       - "helm/**"
       - "scripts/helm_budget_check.py"
       - "scripts/helm_render_safety.sh"
@@ -17,16 +17,7 @@ on:
       - ".github/workflows/preview-queue.yml"
   push:
     branches: [main]
-    paths:
-      - "helm/**"
-      - "scripts/helm_budget_check.py"
-      - "scripts/helm_render_safety.sh"
-      - "scripts/helm_version_bump_check.sh"
-      - "scripts/preview_queue.py"
-      - "scripts/preview_tests/**"
-      - ".github/workflows/helm-chart.yml"
-      - ".github/workflows/preview-images.yml"
-      - ".github/workflows/preview-queue.yml"
+    paths: *chart-paths
 
 permissions:
   contents: read
@@ -57,7 +48,7 @@ jobs:
       - name: Set up Helm
         uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
         with:
-          version: v3.19.4
+          version: ${{ env.HELM_VERSION }}
 
       - name: Check Helm version
         run: |

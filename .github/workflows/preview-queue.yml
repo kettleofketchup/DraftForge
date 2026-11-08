@@ -1,4 +1,4 @@
-# Level-triggered owner of the `preview-env` label (spec 5.6). Every run of
+# Level-triggered owner of the `preview-env` label. Every run of
 # `reconcile` recomputes the whole desired label set from GitHub state, so a
 # missed, duplicated or cancelled run loses nothing. `release-closed` is the
 # one edge-triggered step; the reconcile run's closed-PR search backs it up.

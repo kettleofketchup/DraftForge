@@ -1,8 +1,8 @@
 """Regression guards: the app release tooling must stay clear of the chart.
 
 The release tooling commits `Updated version to X` straight to main. If it ever
-touched helm/, every app release would trip the chart version-bump check
-(spec 5.2/5.4). The labeler must never set the queue's own labels.
+touched helm/, every app release would trip the chart version-bump check.
+The labeler must never set the queue's own labels.
 """
 import shutil
 import tempfile
