@@ -52,11 +52,11 @@ def run_compose_one_off(
         raise Exit(code=code)
 
 
-def in_container() -> bool:
-    if Path("/.dockerenv").exists():
+def in_container(root: Path = Path("/")) -> bool:
+    if (root / ".dockerenv").exists() or (root / "run/.containerenv").exists():
         return True
     try:
-        return "docker" in Path("/proc/1/cgroup").read_text()
+        return "docker" in (root / "proc/1/cgroup").read_text()
     except OSError:
         return False
 

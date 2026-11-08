@@ -58,6 +58,7 @@ def slotless(
     root = make_worktree("a")
     monkeypatch.setattr(slots, "MODULE_ROOT", root)
     monkeypatch.setattr(slots, "REAL_HOST", fake_host)
+    monkeypatch.setattr(st, "in_container", lambda: False)
     return root, fake_host
 
 
@@ -268,6 +269,7 @@ def test_flush_test_redis_uses_fixture_slot(
 
 def test_flush_test_redis_ci_argv(monkeypatch: pytest.MonkeyPatch) -> None:
     _ci(monkeypatch)
+    monkeypatch.setattr(st, "in_container", lambda: False)
     c = RecCtx()
     flush_test_redis(c)
     assert " -p df " in c.cmds[0] and "docker-compose.ci.override.yaml" in c.cmds[0]
@@ -282,3 +284,66 @@ def test_flush_test_redis_is_fatal(
     c = RecCtx()
     flush_test_redis(c)
     assert not c.kws[0].get("warn")
+
+
+@pytest.mark.parametrize("marker", [".dockerenv", "run/.containerenv"])
+def test_in_container_detects_docker_and_podman(tmp_path: Path, marker: str) -> None:
+    (tmp_path / marker).parent.mkdir(parents=True, exist_ok=True)
+    (tmp_path / marker).touch()
+    assert scripts.compose.in_container(tmp_path)
+
+
+def test_in_container_false_on_bare_host(tmp_path: Path) -> None:
+    (tmp_path / "proc/1").mkdir(parents=True)
+    (tmp_path / "proc/1/cgroup").write_text("0::/init.scope\n")
+    assert not scripts.compose.in_container(tmp_path)
+
+
+class FakeSock:
+    def __init__(self, reply: bytes) -> None:
+        self.sent = b""
+        self.reply = reply
+
+    def __enter__(self) -> "FakeSock":
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        return None
+
+    def sendall(self, data: bytes) -> None:
+        self.sent += data
+
+    def recv(self, _: int) -> bytes:
+        return self.reply
+
+
+def test_flush_test_redis_in_container_skips_slot_and_compose(
+    slotless: tuple[Path, FakeHost], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sock = FakeSock(b"+OK\r\n")
+    addrs: list[tuple[str, int]] = []
+
+    def connect(addr: tuple[str, int], timeout: float) -> FakeSock:
+        addrs.append(addr)
+        return sock
+
+    monkeypatch.setattr(st, "in_container", lambda: True)
+    monkeypatch.setattr(st.socket, "create_connection", connect)
+    c = RecCtx()
+    flush_test_redis(c)
+    assert c.cmds == [] and slotless[1].calls == []
+    assert addrs == [("redis", 6379)] and b"FLUSHALL" in sock.sent
+
+
+def test_flush_test_redis_in_container_unreachable_warns(
+    slotless: tuple[Path, FakeHost],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def refuse(addr: tuple[str, int], timeout: float) -> FakeSock:
+        raise OSError("connection refused")
+
+    monkeypatch.setattr(st, "in_container", lambda: True)
+    monkeypatch.setattr(st.socket, "create_connection", refuse)
+    flush_test_redis(RecCtx())
+    assert "connection refused" in capsys.readouterr().err

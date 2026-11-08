@@ -1,4 +1,6 @@
 import shutil
+import socket
+import sys
 import tempfile
 import time
 from pathlib import Path
@@ -15,7 +17,7 @@ import paths
 from backend.tasks import populate_all
 from backend.tests.tasks import ns_dbtest
 from backend.tests.tasks import run_tests as run_db_tests
-from scripts.compose import base_url, playwright_env, run_compose
+from scripts.compose import base_url, in_container, playwright_env, run_compose
 from scripts.docker import docker_build_all
 from scripts.slots import SlotEnv, ensure_slot
 from scripts.update import update_for_test
@@ -40,7 +42,27 @@ def _playwright(c: Context, args: str, warn: bool = False) -> None:
 def flush_test_redis(c: Context) -> None:
     """Flush Redis cache in test environment to ensure fresh data."""
     print("Flushing Redis cache...")
+    if in_container():
+        _flush_redis_service()
+        return
     run_compose(c, "test", "exec", "-T", "redis", "redis-cli", "FLUSHALL", hide=True)
+
+
+def _flush_redis_service(host: str = "redis", port: int = 6379) -> None:
+    try:
+        with socket.create_connection((host, port), timeout=5) as sock:
+            sock.sendall(b"*1\r\n$8\r\nFLUSHALL\r\n")
+            reply = sock.recv(64)
+    except OSError as exc:
+        print(
+            f"warning: redis FLUSHALL via {host}:{port} failed: {exc}", file=sys.stderr
+        )
+        return
+    if not reply.startswith(b"+OK"):
+        print(
+            f"warning: redis FLUSHALL via {host}:{port} replied {reply!r}",
+            file=sys.stderr,
+        )
 
 
 def _start_test_stack(c: Context, slot: SlotEnv) -> None:
