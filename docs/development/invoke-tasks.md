@@ -139,7 +139,7 @@ inv update.all_test  # Test environment
 inv version.set 1.2.3     # Release: assemble changelog, commit, tag, push (see changelog.md)
 inv version.from-env      # Sync from .env.release
 inv version.from-pyproject # Sync from pyproject.toml
-inv version.build         # Build with version
+inv version.build         # Sync version, then build release images (docker.release.build)
 inv version.tag           # Git tag and bump
 ```
 
