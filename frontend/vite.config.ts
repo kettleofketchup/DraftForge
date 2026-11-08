@@ -65,12 +65,29 @@ export default defineConfig({
   },
   optimizeDeps: {
     // Pre-bundle these dependencies for faster cold starts
+    // Anything missing here that a route imports gets discovered after the
+    // initial crawl, and Vite then re-optimizes and bumps the ?v= hash on
+    // EVERY dep. Requests already in flight for the old hash 504 with
+    // "Outdated Optimize Dep", so the route chunk never loads and the page
+    // renders the navbar and nothing else. CI hit exactly that in
+    // 15-edit-user/02 as a 30s timeout, with the frontend log showing
+    // "new dependencies optimized: i18next / optimized dependencies changed.
+    // reloading" and 504s on react-dom_client.js and react-router_dom.js.
     include: [
-      // React core
+      // React core. Subpath entries matter as much as the bare package names —
+      // Vite gives each its own optimizer entry (react-dom_client.js).
       'react',
       'react-dom',
+      'react-dom/client',
+      'react/jsx-runtime',
+      'react/jsx-dev-runtime',
       'react-router',
       'react-router-dom',
+      // i18n — imported from entry.client.tsx and the navbar, but was absent
+      // here and so was always discovered late. This is the one that fired.
+      'i18next',
+      'react-i18next',
+      'remix-i18next/react',
       // Heavy UI libraries
       '@xyflow/react',
       'framer-motion',

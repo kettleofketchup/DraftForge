@@ -19,6 +19,10 @@ from social_django.utils import load_strategy, psa
 
 # Create your views here.
 from app.permissions_org import has_org_staff_access
+from league.models import LeagueUser
+from league.serializers import LeagueUserSerializer
+from org.models import OrgUser
+from org.serializers import OrgUserSerializer
 from telemetry.logging import get_logger
 
 # BaseUserProfile owns nickname/avatar (T1 epic); DotaUserProfile owns
@@ -27,6 +31,7 @@ from telemetry.logging import get_logger
 # /api/users/me/profile/base/ or /game/dota/ won't invalidate the cached
 # response. See backend/user/tests/test_cacheops.py for the grep guardrail.
 from user.models import BaseUserProfile, DotaUserProfile
+from user.querysets import with_user_profiles
 
 from .decorators import render_to
 from .models import (
@@ -172,9 +177,7 @@ class UserView(viewsets.ModelViewSet):
     # base_profile is required because nickname/avatar now resolve via the
     # @property on CustomUser, which reads self.base_profile.* (T1 epic).
     queryset = (
-        CustomUser.objects.select_related(
-            "base_profile", "base_profile__dota_user_profile__positions"
-        )
+        with_user_profiles(CustomUser.objects.all(), dota=True)
         .prefetch_related(
             "owned_organizations",
             "admin_organizations",
@@ -1142,9 +1145,6 @@ class OrganizationView(viewsets.ModelViewSet):
     @action(detail=True, methods=["get"])
     def users(self, request, pk=None):
         """Get all users who are members of this organization (via OrgUser)."""
-        from org.models import OrgUser
-        from org.serializers import OrgUserSerializer
-
         org = self.get_object()
         cache_key = f"organization_users:{pk}"
 
@@ -1157,10 +1157,8 @@ class OrganizationView(viewsets.ModelViewSet):
             timeout=60 * 10,
         )
         def get_data():
-            org_users = OrgUser.objects.filter(organization=org).select_related(
-                "user",
-                "user__base_profile",
-                "user__base_profile__dota_user_profile__positions",
+            org_users = with_user_profiles(
+                OrgUser.objects.filter(organization=org), "user", dota=True
             )
             serializer = OrgUserSerializer(org_users, many=True)
             return serializer.data
@@ -1298,9 +1296,6 @@ class LeagueView(viewsets.ModelViewSet):
     @action(detail=True, methods=["get"])
     def users(self, request, pk=None):
         """Get all users who are members of this league (via LeagueUser)."""
-        from league.models import LeagueUser
-        from league.serializers import LeagueUserSerializer
-
         league = self.get_object()
         cache_key = f"league_users:{pk}"
 
@@ -1313,10 +1308,8 @@ class LeagueView(viewsets.ModelViewSet):
             timeout=60 * 10,
         )
         def get_data():
-            league_users = LeagueUser.objects.filter(league=league).select_related(
-                "user",
-                "user__base_profile",
-                "user__base_profile__dota_user_profile__positions",
+            league_users = with_user_profiles(
+                LeagueUser.objects.filter(league=league), "user", dota=True
             )
             serializer = LeagueUserSerializer(league_users, many=True)
             return serializer.data

@@ -2,6 +2,8 @@
 Constants used for test database population.
 """
 
+from typing import Final
+
 # Re-export from centralized test data
 from tests.data import (
     DTX_LEAGUE_NAME,
@@ -12,6 +14,10 @@ from tests.data import (
     TEST_STEAM_LEAGUE_ID,
     TOURNAMENT_USERS,
 )
+
+# populate_bracket_linking_scenario holds these Friend IDs.
+BRACKET_STEAM_ID_BASE: Final[int] = 34272
+BRACKET_USER_COUNT: Final[int] = 20
 
 # Dota 2 themed usernames for mock data
 MOCK_USERNAMES = [

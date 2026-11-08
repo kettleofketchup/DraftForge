@@ -10,7 +10,7 @@ export interface OrgUserData {
 }
 
 export interface LeagueUserData {
-  id: number; // LeagueUser.pk
+  id: number; // OrgUser.pk of the league's parent org
   mmr: number; // League-scoped MMR snapshot
   _fetchedAt: number;
 }
