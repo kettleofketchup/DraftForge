@@ -3,7 +3,7 @@ WebSocket consumers for draft event broadcasting.
 """
 
 import json
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
@@ -14,6 +14,8 @@ from telemetry.logging import get_logger
 from telemetry.websocket import TelemetryConsumerMixin
 
 if TYPE_CHECKING:
+    from django.contrib.auth.base_user import AbstractBaseUser
+
     from app.models import Team
 
 log = get_logger(__name__)
@@ -65,7 +67,9 @@ class DraftConsumer(BaseDraftConsumer):
             return None
 
     @database_sync_to_async
-    def get_captain_draft_team(self, draft_id: int, user) -> "Team | None":
+    def get_captain_draft_team(
+        self, draft_id: int, user: "AbstractBaseUser"
+    ) -> "Team | None":
         from app.models import Team
 
         return Team.objects.filter(tournament__draft__pk=draft_id, captain=user).first()
@@ -98,7 +102,7 @@ class DraftConsumer(BaseDraftConsumer):
                 is_captain=self._is_captain,
             )
 
-    async def disconnect(self, close_code) -> None:
+    async def disconnect(self, close_code: int | None) -> None:
         log.info(
             "teamdraft_disconnected",
             system="teamdraft",
@@ -114,7 +118,7 @@ class DraftConsumer(BaseDraftConsumer):
         )
         await self.base_disconnect(close_code)
 
-    async def receive(self, text_data) -> None:
+    async def receive(self, text_data: str | None) -> None:
         if not self._is_captain:
             return
 
@@ -133,7 +137,7 @@ class DraftConsumer(BaseDraftConsumer):
                 draft_id=getattr(self, "draft_id", None),
             )
 
-    async def draft_event(self, event) -> None:
+    async def draft_event(self, event: dict[str, Any]) -> None:
         """Handle draft.event messages from channel layer."""
         log.debug(
             "draft_event_send",
@@ -151,7 +155,7 @@ class DraftConsumer(BaseDraftConsumer):
             message["draft_state"] = event["draft_state"]
         await self.send(text_data=json.dumps(message))
 
-    async def force_disconnect(self, event) -> None:
+    async def force_disconnect(self, event: dict[str, Any]) -> None:
         """Test-only: server-initiated connection close."""
         await self.close(code=1012)  # Service Restart
 
