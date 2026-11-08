@@ -3,7 +3,7 @@ from typing import Any
 from django.utils import timezone
 
 from app.models import CustomUser
-from steam.constants import REQUIRED_PLAYER_FIELDS
+from steam.constants import REQUIRED_MATCH_FIELDS, REQUIRED_PLAYER_FIELDS
 from steam.models import LeagueSyncState, Match, PlayerMatchStats
 from steam.utils.retry import retry_with_backoff
 from steam.utils.steam_api_caller import SteamAPI
@@ -65,11 +65,11 @@ def relink_all_users() -> int:
 
 
 def missing_required_fields(data: dict[str, Any]) -> list[str]:
-    """Required match/player fields absent from a Steam match payload."""
-    missing = set() if "radiant_win" in data else {"radiant_win"}
+    """Required match/player fields absent or null in a Steam match payload."""
+    missing = {f for f in REQUIRED_MATCH_FIELDS if data.get(f) is None}
     for player in data.get("players", []):
         if player.get("account_id") is not None:
-            missing.update(f for f in REQUIRED_PLAYER_FIELDS if f not in player)
+            missing.update(f for f in REQUIRED_PLAYER_FIELDS if player.get(f) is None)
     return sorted(missing)
 
 
@@ -132,7 +132,7 @@ def process_match(
         log.info(
             "steam_league_sync_match_unparsed",
             system="steam",
-            subsystem="ingest",
+            subsystem="league_sync",
             match_id=match_id,
             league_id=league_id,
             missing_fields=missing,
@@ -144,10 +144,10 @@ def process_match(
         match_id=data["match_id"],
         defaults={
             "radiant_win": data["radiant_win"],
-            "duration": data.get("duration", 0),
-            "start_time": data.get("start_time", 0),
-            "game_mode": data.get("game_mode", 0),
-            "lobby_type": data.get("lobby_type", 0),
+            "duration": data["duration"],
+            "start_time": data["start_time"],
+            "game_mode": data["game_mode"],
+            "lobby_type": data["lobby_type"],
             "league_id": league_id,
         },
     )
@@ -279,6 +279,8 @@ def sync_league_matches(league_id: int, full_sync: bool = False) -> dict[str, An
 
                 if match:
                     synced_count += 1
+                    if match_id in failed_ids:
+                        failed_ids.remove(match_id)
                     if new_last_match_id is None or match_id > new_last_match_id:
                         new_last_match_id = match_id
                 else:
