@@ -370,7 +370,8 @@ The dev stack is separate (project `df-dev`, one per machine).
 - `just test::slot` shows this worktree's slot and URL; `just test::slots` lists every slot and stack (read-only).
 - **Never hardcode `https://localhost`** — Playwright reads the slot file; use `just test::compose <args>` instead of raw `docker compose`.
 - Discord bot + celery beat run only on slot 0; `just test::background on` enables them for one N ≥ 1 stack.
-- **Ask the user before** `just test::slot-reap`, `just test::slot-claim` or `just test::slot-release --slot N` — they act on other worktrees.
+- `just test::slot-reap`, `just test::slot-claim` and `just test::slot-release --slot N` need no user approval, but they act on other worktrees. Before running one on a slot you don't own, verify no other agent is working in or testing against it: the owner worktree's recent activity (`git -C <owner> --no-optional-locks status`, last commit, recently modified files), the project's containers and their recent log lines, Playwright/test processes whose cwd is in that worktree, and peer Claude sessions (ListAgents; a busy session may own the worktree). If in doubt, don't touch it. Commands: docs "Before touching another worktree's slot".
+- Slots whose last activity (reservation lease, container start/log times, owner-worktree git and file mtimes) is older than 12h are reaped automatically when a worktree needs a new slot; `just test::slot-reap --stale` does it now. `DF_SLOT_STALE_HOURS` changes the threshold.
 - Worktrees on branches without this feature can still kill or hijack slot stacks: merge main into a worktree before using its test stack.
 
 See `docs/development/test-stack-slots.md`.

@@ -130,8 +130,9 @@ All compose calls go through `scripts/slots.py` (`compose_cmd(stack, ...)`, with
 `stack` one of `test`, `dev`, `dev-m1`, `prod`, `release`). It always passes `-p` and
 absolute `-f` paths; `docker_stop_all` (which stopped every container on the host)
 was removed. For ad-hoc compose commands use `just test::compose <args>`
-(`--stack dev` for `df-dev`), never raw `docker compose`. Ask the user before
-`just test::slot-reap`, `test::slot-claim` or `test::slot-release --slot N`.
+(`--stack dev` for `df-dev`), never raw `docker compose`. `just test::slot-reap`,
+`test::slot-claim` and `test::slot-release --slot N` need no approval, but check first
+that no other agent is using that slot (see the doc's pre-checks); if in doubt, don't.
 See `docs/development/test-stack-slots.md`.
 
 ## Common Issues

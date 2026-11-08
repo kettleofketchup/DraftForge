@@ -32,9 +32,10 @@ not be your worktree. Never hardcode `https://localhost`: Playwright code import
 | `just test::compose <args>` | Compose against this slot; `--stack dev` for `df-dev`. Use instead of raw `docker compose` / `docker exec <name>` |
 | `just test::background on\|off` | Discord bot + celery beat + real tokens for this N ≥ 1 slot (one project at a time) |
 | `just test::slot-release` | Release own slot (stack must be down) |
-| `just test::slot-release --slot N` | Release someone else's idle slot. **Ask the user first** |
-| `just test::slot-claim N` | Take slot N (owner must have no containers). **Ask the user first** |
-| `just test::slot-reap <project>` | Remove an orphaned `df*` stack whose worktree is gone. **Ask the user first** |
+| `just test::slot-release --slot N` | Release someone else's idle slot. Pre-checks first (Rules) |
+| `just test::slot-claim N` | Take slot N (owner must have no containers). Pre-checks first (Rules) |
+| `just test::slot-reap <project>` | Remove an orphaned `df*` stack whose worktree is gone. Pre-checks first (Rules) |
+| `just test::slot-reap --stale` | Reap every other slot whose last activity is older than 12h (`DF_SLOT_STALE_HOURS`) |
 | `just test::slots-unit` | pytest for `scripts/slots.py` |
 
 From another directory: `just -f <wt>/justfile -d <wt> <recipe>`.
@@ -51,7 +52,20 @@ Discord. Backend `events.tests.test_discord_integration` skips without the token
 
 ## Rules
 
-- Ask the user before `slot-reap`, `slot-claim`, `slot-release --slot N`.
+- `slot-reap`, `slot-claim` and `slot-release --slot N` need no user approval. Before
+  using one on another worktree's slot, check that nobody is using it:
+  - owner worktree: `git -C <owner> --no-optional-locks status --short`, last commit,
+    `find <owner> ... -mmin -120` for recent edits;
+  - containers: `docker ps -a --filter label=com.docker.compose.project=<p>` start
+    times, `docker logs --since 30m --tail 5 <name>`;
+  - test processes: `pgrep -f 'playwright|pytest|manage.py test'` with
+    `readlink /proc/<pid>/cwd` inside the owner worktree;
+  - other Claude sessions: ListAgents; a busy peer may own the worktree.
+
+  If in doubt, don't touch it. Full commands: `docs/development/test-stack-slots.md`.
+- Slots whose last activity (lease, container start/log times, owner-worktree git and
+  file mtimes) is older than 12h are reaped automatically when a worktree needs a new
+  slot, with a notice on stderr.
 - No host-wide docker commands (`docker stop $(docker ps -aq)`, `docker system prune`).
 - Tear down only what you started, with `just test::down` in that worktree.
 - Old-code worktrees (branches without slots) can kill or hijack slot stacks; merge

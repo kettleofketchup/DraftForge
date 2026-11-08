@@ -55,8 +55,11 @@ or `just test::slot`) picks a slot, in this order:
    how a pre-slots `df` stack becomes slot 0 for the worktree that started it);
 3. the lowest free slot: no live reservation, no foreign containers, ports free.
 
-If no slot is free, an N ≥ 1 reservation with **zero containers** and a lease older
-than **7 days** is reclaimed (oldest first). Slot 0 is never reclaimed automatically.
+Before steps 2 and 3, allocation reaps every other worktree's slot (0 included) whose
+**last activity is older than 12 hours** (see [Auto-reap](#auto-reap)).
+
+If no slot is free after that, an N ≥ 1 reservation with **zero containers** and a
+lease older than **7 days** is reclaimed (oldest first).
 Otherwise allocation fails and lists every reservation with its owner, container count
 and lease age. `DF_SLOT=<n>` in the environment requests one specific slot.
 
@@ -75,9 +78,10 @@ that is removed afterwards.
 | `just test::slot` | Allocate or re-adopt this worktree's slot and print it (slot, project, URL, ports, background) |
 | `just test::slots` | List every reservation and every `df`, `df-sN`, `df-dev`, `df-run-*` project on the host, with owners, container counts and lease ages. Read-only; safe from any checkout |
 | `just test::slot-release` | Release this worktree's slot. Refuses while its containers exist; run `just test::down` first |
-| `just test::slot-release --slot N` | Release another worktree's reservation N, only if `df-sN` (or `df`) has zero containers. **Ask the user first** |
-| `just test::slot-claim N` | Move slot N to this worktree (releases this worktree's current slot first). Needs the current owner to have zero containers and the ports free. **Ask the user first** |
-| `just test::slot-reap <project>` | `down -v --remove-orphans` an orphaned `df`, `df-sN`, `df-dev` or `df-run-<hex>` project whose owner worktree no longer exists, and drop its reservation. Refuses while the owner is a live worktree. **Ask the user first** |
+| `just test::slot-release --slot N` | Release another worktree's reservation N, only if `df-sN` (or `df`) has zero containers. Run the [pre-checks](#before-touching-another-worktrees-slot) first |
+| `just test::slot-claim N` | Move slot N to this worktree (releases this worktree's current slot first). Needs the current owner to have zero containers and the ports free. Run the [pre-checks](#before-touching-another-worktrees-slot) first |
+| `just test::slot-reap <project>` | `down -v --remove-orphans` an orphaned `df`, `df-sN`, `df-dev` or `df-run-<hex>` project whose owner worktree no longer exists, and drop its reservation. Refuses while the owner is a live worktree. Run the [pre-checks](#before-touching-another-worktrees-slot) first |
+| `just test::slot-reap --stale` | Run the [auto-reap](#auto-reap) sweep now and print what it removed |
 | `just test::background on\|off` | Enable or disable the Discord bot and celery beat (and real tokens) for this slot. `on` refuses if a bot or beat already runs in another project. Takes effect on the next `test::upd` |
 | `just test::compose <args>` | Run `docker compose` against this worktree's slot with the right `-p` and `-f` files. `--stack dev` targets `df-dev`; `--as-slot 0 config` renders slot 0's config without allocating |
 | `just test::slots-unit` | Slot helper unit tests (pytest, no containers) |
@@ -196,14 +200,95 @@ workflow files are unchanged.
 - `DOCKER_HOST` no longer sets the Playwright host. Unset any `DF_BASE_URL` you exported
   by hand.
 
+## Auto-reap
+
+A slot's **last activity** is the latest of:
+
+- the reservation's `last_used` (written on every allocation, `test::up`/`upd` and
+  `test::run`);
+- the project's containers: each one's start and finish time, plus the timestamp of
+  the last log line of each running container;
+- the owner worktree (and the working dir of each container): mtimes of its git
+  `index`, `HEAD` and `logs/HEAD`, `docker/.env.slot`, `frontend/test-results`,
+  `frontend/playwright-report`, and every modified or untracked file
+  (`git ls-files -m -o --exclude-standard`, first 500).
+
+When an allocating verb (`test::up`, `upd`, `setup`, `build`, `pull`, `just test::slot`)
+needs a new slot, it reaps every other worktree's slot whose last activity is older
+than 12 hours: `docker compose -p <project> down -v --remove-orphans` when the project
+has containers, then the reservation is removed. Each reap prints a notice:
+
+```text
+auto-reaped slot 3 (df-s3), owner /path/to/wt: idle 20.1h > 12h (last activity: containers); 4 container(s) and volumes removed
+```
+
+A slot is never auto-reaped when:
+
+- any signal above is within 12 hours (this protects slot 0's live stack too);
+- the project has containers but their activity cannot be read;
+- any container in it comes from a non-test compose file (a legacy dev or prod stack
+  in `df`);
+- it belongs to this worktree.
+
+`DF_SLOT_STALE_HOURS` overrides the 12-hour threshold. `just test::slot-reap --stale`
+runs the sweep on demand. `just test::slots` stays read-only and only notes when a
+reservation's lease is past the threshold. CI never reaps.
+
+## Before touching another worktree's slot
+
+`just test::slot-reap`, `just test::slot-claim` and `just test::slot-release --slot N`
+run without user approval. Before running one against a slot this worktree does not
+own, verify that no other agent is working in or testing against it. If any check
+shows recent activity, or you are unsure, leave the slot alone and use another one.
+
+1. **Owner worktree.** Take the owner from `just test::slots`, then:
+
+    ```bash
+    git -C <owner> --no-optional-locks status --short
+    git -C <owner> log -1 --format='%cr  %s'
+    find <owner> \( -name node_modules -o -name .git \) -prune -o -type f -mmin -120 -print | head
+    ```
+
+    Uncommitted changes, a recent commit or files modified in the last hours mean
+    someone is working there. `--no-optional-locks` keeps `git status` from touching
+    the index (which auto-reap counts as activity).
+
+2. **Containers in the project.**
+
+    ```bash
+    docker ps -a --filter label=com.docker.compose.project=<project> --format '{{.Names}}  {{.Status}}  {{.RunningFor}}'
+    docker logs --since 30m --tail 5 <container>
+    ```
+
+    Recently started containers or fresh log lines (requests hitting nginx or the
+    backend) mean a stack is in use.
+
+3. **Test processes in that worktree.**
+
+    ```bash
+    for p in $(pgrep -f 'playwright|pytest|manage.py test|vitest'); do
+      printf '%s %s\n' "$p" "$(readlink /proc/$p/cwd)"
+    done | grep -F <owner>
+    ```
+
+    Any hit means a test run is going on against that worktree's slot.
+
+4. **Other Claude sessions.** ListAgents shows peer sessions. A busy session may own
+   the worktree even when the checks above look quiet (it may be between runs).
+   Also look for a `claude` process whose cwd is the owner worktree:
+   `for p in $(pgrep -x claude); do readlink /proc/$p/cwd; done | grep -F <owner>`.
+
+If in doubt, don't touch it.
+
 ## Rules for agents
 
 - Find URLs and ports with `just test::slots` / `just test::slot`; never hardcode
   `https://localhost`.
 - Use `just test::compose` for compose commands; never raw `docker compose`,
   `docker exec <name>` or host-wide commands such as `docker stop $(docker ps -aq)`.
-- **Ask the user before running `just test::slot-reap`, `just test::slot-claim` or
-  `just test::slot-release --slot N`.** They act on other worktrees' state.
+- `just test::slot-reap`, `just test::slot-claim` and `just test::slot-release --slot N`
+  need no user approval, but they act on another worktree's state: run the
+  [pre-checks](#before-touching-another-worktrees-slot) first.
 - Tear down what you start with `just test::down` in the same worktree.
 
 ## Troubleshooting
@@ -213,8 +298,8 @@ workflow files are unchanged.
 | `No test-stack slot for this worktree` | `just test::slot` |
 | `slot N now belongs to <owner>` / `slot N was reclaimed while idle` | Another worktree took the slot. `just test::slot` allocates a new one if this worktree has no containers left in the old project |
 | `` `df` was taken over by <path> `` | An old-code worktree ran `test::upd`. Merge main into that worktree |
-| No free slot | `just test::slots`; release idle slots you own, or ask the user about `slot-release --slot N` |
+| No free slot | `just test::slots`; release idle slots you own, or run the [pre-checks](#before-touching-another-worktrees-slot) and `just test::slot-release --slot N` |
 | Port already in use on `up` | `just test::slots` shows which project holds it; dev and test slot 0 cannot run together |
 | Redis fails to start, permission denied on `dump.rdb` | Rootless podman: `backend/.redis_data*/dump.rdb` is owned by the container's uid 999 (a subuid on the host). Remove that slot's directory without sudo: `podman unshare rm -rf backend/.redis_data-sN` (`.redis_data` for slot 0). If that fails, ask the user |
 | Frontend `EACCES` writing the worktree | Rootless podman maps the frontend user to uid 100999. Run `setfacl -R -m u:100999:rwX -m d:u:100999:rwX <worktree>`, then `just test::compose restart frontend nginx` (restart **both**: nginx caches the frontend upstream IP) |
-| Orphan stacks (owner worktree deleted) | `just test::slots` flags them; ask the user, then `just test::slot-reap <project>` |
+| Orphan stacks (owner worktree deleted) | `just test::slots` flags them; run the [pre-checks](#before-touching-another-worktrees-slot), then `just test::slot-reap <project>` |

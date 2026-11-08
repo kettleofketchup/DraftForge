@@ -57,7 +57,8 @@ Every worktree runs its own test stack in a slot: slot 0 is project `df` on
 - Run `just test::slots` (read-only) or `just test::slot` to find the URL. **Never hardcode `https://localhost`** in tests, fixtures or commands; Playwright imports `BASE_URL` / `API_URL` from `fixtures/base-url.ts`.
 - Use `just test::compose <args>` for any compose command, never raw `docker compose` or `docker exec <name>`.
 - Slots N ≥ 1 run without the Discord bot, celery beat and real Discord/Steam tokens unless `just test::background on`.
-- **Ask the user before** `just test::slot-reap`, `just test::slot-claim` or `just test::slot-release --slot N`.
+- `just test::slot-reap`, `just test::slot-claim` and `just test::slot-release --slot N` need no user approval. Before using one on another worktree's slot, verify no agent is working in or testing against it (owner worktree activity, the project's containers and logs, test processes with that cwd, peer Claude sessions). If in doubt, don't touch it.
+- Slots idle more than 12h are reaped automatically on the next allocation; `just test::slot-reap --stale` does it now.
 
 Commands, externals policy and troubleshooting: [test-stack-slots.md](references/test-stack-slots.md).
 
