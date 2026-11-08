@@ -9,15 +9,23 @@ Diagnostic events when ticks misbehave:
   tick_slow           - whole iteration >1.5s
 """
 
+import asyncio
+import atexit
 import threading
-from typing import NamedTuple, Protocol, runtime_checkable
+import time
+from collections.abc import Coroutine
+from typing import Any, NamedTuple, Protocol, runtime_checkable
 
 import redis
+from asgiref.sync import sync_to_async
+from channels.db import database_sync_to_async
 from django.conf import settings
+from opentelemetry import trace
 
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
+tracer = trace.get_tracer(__name__)
 
 TICK_STEP_SLOW_THRESHOLD_S: float = 0.3
 TICK_GAP_STALL_THRESHOLD_S: float = 1.5
@@ -119,3 +127,242 @@ class TickDriver(Protocol):
     async def check_timeout(self, draft_id: int) -> None: ...
 
     def should_continue(self, draft_id: int) -> tuple[bool, str]: ...
+
+
+_lock = threading.Lock()
+_registries: dict[str, dict[int, TaskInfo]] = {}
+
+
+def registry_for(prefix: str) -> dict[int, TaskInfo]:
+    return _registries.setdefault(prefix, {})
+
+
+async def run_tick_loop(driver: TickDriver, draft_id: int, stop_event: threading.Event) -> None:
+    """Run tick broadcasts every second while draft is active and has connections."""
+    r = get_redis_client()
+    key = lock_key(driver.prefix, draft_id)
+
+    @database_sync_to_async
+    def check_continue() -> tuple[bool, str]:
+        return driver.should_continue(draft_id)
+
+    @sync_to_async(thread_sensitive=False)
+    def extend_lock() -> None:
+        r.expire(key, LOCK_TIMEOUT)
+
+    log.info("tick_loop_started", system=driver.system, subsystem="timer", draft_id=draft_id)
+    tick_count = 0
+    last_tick_start: float | None = None
+
+    async def _timed_step(step_name: str, coro: Coroutine[Any, Any, None]) -> None:
+        """Span + duration log per sub-step. Warns past TICK_STEP_SLOW_THRESHOLD_S."""
+        with tracer.start_as_current_span(
+            f"{driver.prefix}.tick.{step_name}",
+            attributes={
+                "ws.draft_id": draft_id,
+                "tick.step": step_name,
+                "tick.iteration": tick_count + 1,
+            },
+        ) as span:
+            step_start = time.time()
+            await coro
+            step_duration = time.time() - step_start
+            span.set_attribute("tick.step_duration_s", round(step_duration, 4))
+            if step_duration > TICK_STEP_SLOW_THRESHOLD_S:
+                log.warning(
+                    "tick_step_slow",
+                    system=driver.system,
+                    subsystem="timer",
+                    draft_id=draft_id,
+                    tick_step=step_name,
+                    tick_count=tick_count + 1,
+                    duration_s=round(step_duration, 3),
+                )
+
+    while not stop_event.is_set():
+        tick_start = time.time()
+
+        if last_tick_start is not None:
+            gap = tick_start - last_tick_start
+            if gap > TICK_GAP_STALL_THRESHOLD_S:
+                log.error(
+                    "tick_loop_stalled",
+                    system=driver.system,
+                    subsystem="timer",
+                    draft_id=draft_id,
+                    tick_count=tick_count,
+                    expected_gap_s=1.0,
+                    actual_gap_s=round(gap, 3),
+                    stall_s=round(gap - 1.0, 3),
+                )
+
+        with tracer.start_as_current_span(
+            f"{driver.prefix}.tick.iteration",
+            attributes={
+                "ws.draft_id": draft_id,
+                "tick.iteration": tick_count + 1,
+            },
+        ) as iter_span:
+            should_continue, reason = await check_continue()
+            if not should_continue:
+                iter_span.set_attribute("tick.outcome", "stopping")
+                iter_span.set_attribute("tick.stop_reason", reason)
+                log.info(
+                    "tick_loop_stopping",
+                    system=driver.system,
+                    subsystem="timer",
+                    draft_id=draft_id,
+                    reason=reason,
+                    tick_count=tick_count,
+                )
+                break
+
+            await _timed_step("resume_countdown", driver.check_resume_countdown(draft_id))
+            await _timed_step("captain_heartbeats", driver.check_captain_heartbeats(draft_id))
+            await _timed_step("broadcast_tick", driver.broadcast_tick(draft_id))
+            await _timed_step("check_timeout", driver.check_timeout(draft_id))
+            await _timed_step("extend_lock", extend_lock())
+
+            tick_duration = time.time() - tick_start
+            tick_count += 1
+            iter_span.set_attribute("tick.duration_s", round(tick_duration, 4))
+            iter_span.set_attribute("tick.outcome", "completed")
+
+            if tick_duration > TICK_ITERATION_SLOW_THRESHOLD_S:
+                log.warning(
+                    "tick_slow",
+                    system=driver.system,
+                    subsystem="timer",
+                    draft_id=draft_id,
+                    tick_count=tick_count,
+                    duration_s=round(tick_duration, 2),
+                )
+            elif tick_count % 30 == 0:
+                log.info(
+                    "tick_loop_healthy",
+                    system=driver.system,
+                    subsystem="timer",
+                    draft_id=draft_id,
+                    tick_count=tick_count,
+                    duration_s=round(tick_duration, 3),
+                )
+
+        last_tick_start = tick_start
+        # Hold a 1Hz start-to-start cadence; a slow tick fires the next immediately.
+        await asyncio.sleep(max(0.0, 1.0 - tick_duration))
+
+    log.info(
+        "tick_loop_ended",
+        system=driver.system,
+        subsystem="timer",
+        draft_id=draft_id,
+        tick_count=tick_count,
+    )
+
+
+def start_tick_broadcaster(driver: TickDriver, draft_id: int) -> bool:
+    """Start the tick broadcaster for a draft under a Redis lock.
+
+    Returns True if started, False if already running (here or on another instance).
+    """
+    r = get_redis_client()
+    key = lock_key(driver.prefix, draft_id)
+    reg = registry_for(driver.prefix)
+    stop_event = threading.Event()
+
+    acquired = r.set(key, "locked", nx=True, ex=LOCK_TIMEOUT)
+
+    if not acquired:
+        log.debug(
+            "tick_broadcaster_already_running",
+            system=driver.system,
+            subsystem="timer",
+            draft_id=draft_id,
+            reason="lock_held",
+        )
+        return False
+
+    def run_in_thread() -> None:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            loop.run_until_complete(run_tick_loop(driver, draft_id, stop_event))
+        except Exception as e:
+            log.error(
+                "tick_broadcaster_error",
+                system=driver.system,
+                subsystem="timer",
+                draft_id=draft_id,
+                error=str(e),
+            )
+        finally:
+            loop.close()
+            try:
+                r.delete(key)
+            except Exception as e:
+                log.debug(
+                    "tick_lock_release_failed",
+                    system=driver.system,
+                    subsystem="timer",
+                    draft_id=draft_id,
+                    phase="run_in_thread",
+                    error=str(e),
+                )
+            with _lock:
+                reg.pop(draft_id, None)
+
+    with _lock:
+        if draft_id in reg:
+            r.delete(key)
+            return False
+
+        thread = threading.Thread(target=run_in_thread, daemon=True)
+        reg[draft_id] = TaskInfo(stop_event, thread)
+
+    thread.start()
+    log.info("tick_broadcaster_started", system=driver.system, subsystem="timer", draft_id=draft_id)
+    return True
+
+
+def stop_tick_broadcaster(prefix: str, draft_id: int) -> None:
+    """Stop the tick broadcaster for a draft."""
+    r = get_redis_client()
+    key = lock_key(prefix, draft_id)
+    reg = registry_for(prefix)
+
+    with _lock:
+        task_info = reg.get(draft_id)
+
+    if task_info:
+        log.info("tick_broadcaster_stopping", system=prefix, subsystem="timer", draft_id=draft_id)
+        task_info.stop_event.set()
+        task_info.thread.join(timeout=2.0)
+
+    try:
+        r.delete(key)
+    except Exception as e:
+        log.debug(
+            "tick_lock_release_failed",
+            system=prefix,
+            subsystem="timer",
+            draft_id=draft_id,
+            phase="stop_tick_broadcaster",
+            error=str(e),
+        )
+
+    with _lock:
+        reg.pop(draft_id, None)
+
+
+def stop_all_broadcasters() -> None:
+    """Stop every active tick broadcaster across all prefixes. Called on shutdown."""
+    with _lock:
+        targets = [(prefix, draft_id) for prefix, reg in _registries.items() for draft_id in reg]
+
+    for prefix, draft_id in targets:
+        stop_tick_broadcaster(prefix, draft_id)
+
+    log.info("tick_broadcasters_shutdown", system="websocket", subsystem="timer", count=len(targets))
+
+
+atexit.register(stop_all_broadcasters)
