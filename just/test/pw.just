@@ -103,7 +103,7 @@ cicd-mobile *args:
 cicd-herodraft *args:
     {{cicd}} --project=herodraft --no-deps "$@"
 
-# The 16-events specs share one seeded event PK, so events-sequential runs them in order
+# The 16-events specs in order (events-sequential): they share one seeded event PK
 [group('test::pw')]
 cicd-events *args:
     {{cicd}} --project=events-sequential --no-deps "$@"
