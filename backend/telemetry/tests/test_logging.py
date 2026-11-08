@@ -61,13 +61,19 @@ class ConfigureLoggingTest(TestCase):
         self.assertEqual(root_logger.level, logging.DEBUG)
 
     def test_configure_logging_quiets_noisy_loggers(self):
-        """configure_logging sets third-party loggers to WARNING."""
+        """configure_logging sets third-party loggers to ERROR."""
         configure_logging(level="DEBUG", format="json")
 
-        # These loggers should be quieted to WARNING
-        for logger_name in ["urllib3", "requests", "httpx", "httpcore"]:
+        for logger_name in [
+            "urllib3",
+            "requests",
+            "httpx",
+            "httpcore",
+            "opentelemetry.attributes",
+            "opentelemetry.exporter.otlp.proto.http._log_exporter",
+        ]:
             logger = logging.getLogger(logger_name)
-            self.assertEqual(logger.level, logging.WARNING)
+            self.assertEqual(logger.level, logging.ERROR, logger_name)
 
 
 class GetLoggerTest(TestCase):
