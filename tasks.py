@@ -181,7 +181,7 @@ def _wait_for_backend(c, compose_file: Path, timeout: int = 120):
                 warn=True,
             )
             if result.ok and "running" in result.stdout.lower():
-                # Try to hit the health endpoint
+                # Probe /api/ from inside the container
                 health_result = c.run(
                     f"docker compose --project-directory {paths.PROJECT_PATH.resolve()} "
                     f"-f {compose_file.resolve()} exec -T backend "
@@ -341,29 +341,22 @@ def dev_up(c, sync: bool = True):
               Use --no-sync to skip syncing and just start containers.
     """
     if sync:
-        # Start containers in detached mode first
         docker_compose_up(c, paths.DOCKER_COMPOSE_DEBUG_PATH, detach=True)
 
-        # Wait for backend to be ready
         _wait_for_backend(c, paths.DOCKER_COMPOSE_DEBUG_PATH)
 
-        # Sync users and tournaments from production
         print("\n=== Syncing data from production ===")
         dev_sync_all(c)
 
-        # Pull Steam matchmaking stats
         print("\n=== Pulling Steam matchmaking stats ===")
         db_populate_steam(c, paths.DEBUG_ENV_FILE, full_sync=False, relink=True)
 
-        # Auto-link tournament games to Steam matches
         print("\n=== Auto-linking tournament games ===")
         _auto_link_all_tournaments(c, paths.DOCKER_COMPOSE_DEBUG_PATH)
 
-        # Attach to logs
         print("\n=== Sync complete, attaching to logs ===")
         docker_compose_logs(c, paths.DOCKER_COMPOSE_DEBUG_PATH)
     else:
-        # Just start containers normally
         docker_compose_up(c, paths.DOCKER_COMPOSE_DEBUG_PATH)
 
 
