@@ -4,6 +4,7 @@ import invoke
 from dotenv import load_dotenv
 from invoke.collection import Collection
 from invoke.context import Context
+from invoke.exceptions import Exit
 from invoke.tasks import task
 from rich.traceback import install
 
@@ -12,7 +13,7 @@ from backend.tasks import db_migrate, db_populate_steam, ns_db
 from scripts.compose import run_compose, run_compose_one_off, shell_argv
 from scripts.docker import docker_release_pull, ns_docker
 from scripts.docs import ns_docs
-from scripts.slots import Stack
+from scripts.slots import SlotError, Stack
 from scripts.sync_version import (
     get_version_from_env,
 )
@@ -104,31 +105,39 @@ AUTO_LINK_CODE = (
 )
 
 
+def _backend_healthy(c: Context, stack: Stack) -> bool:
+    result = run_compose(
+        c, stack, "ps", "backend", "--format", "json", hide=True, warn=True
+    )
+    if result is None or not result.ok or "running" not in result.stdout.lower():
+        return False
+    health_result = run_compose(
+        c,
+        stack,
+        "exec",
+        "-T",
+        "backend",
+        "python",
+        "-c",
+        HEALTH_CHECK_CODE,
+        hide=True,
+        warn=True,
+    )
+    return health_result is not None and health_result.ok
+
+
 def _wait_for_backend(c: Context, stack: Stack, timeout: int = 120) -> bool:
     """Wait for backend container to be healthy and accepting requests."""
     print("Waiting for backend to be ready...")
     start_time = time.time()
 
     while time.time() - start_time < timeout:
-        result = run_compose(
-            c, stack, "ps", "backend", "--format", "json", hide=True, warn=True
-        )
-        if result is not None and result.ok and "running" in result.stdout.lower():
-            health_result = run_compose(
-                c,
-                stack,
-                "exec",
-                "-T",
-                "backend",
-                "python",
-                "-c",
-                HEALTH_CHECK_CODE,
-                hide=True,
-                warn=True,
-            )
-            if health_result is not None and health_result.ok:
+        try:
+            if _backend_healthy(c, stack):
                 print("Backend is ready!")
                 return True
+        except (SlotError, Exit):
+            pass
         time.sleep(2)
 
     print("Warning: Backend health check timed out, proceeding anyway...")

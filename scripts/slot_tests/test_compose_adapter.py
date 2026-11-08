@@ -379,3 +379,33 @@ def test_flush_test_redis_in_container_unreachable_warns(
     monkeypatch.setattr(st.socket, "create_connection", refuse)
     flush_test_redis(RecCtx())
     assert "connection refused" in capsys.readouterr().err
+
+
+def test_wait_for_backend_retries_transient_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+    errors: list[BaseException] = [Exit(code=1), slots.SlotError("busy")]
+
+    def flaky(c: object, stack: str, *args: str, **kw: object) -> Result:
+        calls.append(args[0])
+        if errors:
+            raise errors.pop(0)
+        return Result(stdout="running" if args[0] == "ps" else "")
+
+    monkeypatch.setattr(tasks, "run_compose", flaky)
+    monkeypatch.setattr(tasks.time, "sleep", lambda _: None)
+    assert tasks._wait_for_backend(RecCtx(), "dev", timeout=60) is True
+    assert calls == ["ps", "ps", "ps", "exec"]
+
+
+def test_wait_for_backend_gives_up_at_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    clock = iter(range(0, 1000, 10))
+
+    def always_fail(*a: object, **k: object) -> Result:
+        raise Exit(code=1)
+
+    monkeypatch.setattr(tasks, "run_compose", always_fail)
+    monkeypatch.setattr(tasks.time, "sleep", lambda _: None)
+    monkeypatch.setattr(tasks.time, "time", lambda: next(clock))
+    assert tasks._wait_for_backend(RecCtx(), "dev", timeout=30) is False
