@@ -1,15 +1,17 @@
 # Helm chart commands (helm/). Same tool versions as .github/workflows/helm-chart.yml.
-# Helm must be v3.19.4, the version the ArgoCD v3.3.4 repo-server renders with;
-# the helm on PATH may be Helm 4, so HELM is the mise-installed v3.19.4 binary.
+# Helm must be v3.19.4, the Helm bundled in the ArgoCD repo-server that renders the
+# chart; the helm on PATH may be Helm 4, so the recipes run the mise-managed v3.19.4.
 
 root := source_directory() / ".."
 chart := root / "helm"
 
 HELM_VERSION := "3.19.4"
 HELM_UNITTEST_VERSION := "v1.2.1"
-# just evaluates this for every recipe in every module, so a missing mise Helm must
-# not break unrelated recipes: HELM then names a command that fails with the fix.
-export HELM := shell('d=$(mise where "helm@$1" 2>/dev/null) && echo "$d/linux-amd64/helm" || echo "helm-$1-missing-run-mise-install-helm@$1"', HELM_VERSION)
+
+# Shell prelude for each recipe: export HELM as the mise-managed Helm binary
+# (any OS/arch), unless HELM is already set. Resolved per recipe, not globally,
+# so recipes in other modules never pay for it.
+use_helm := 'if [ -z "${HELM:-}" ]; then HELM=$(find "$(mise where "helm@' + HELM_VERSION + '")" -maxdepth 2 -type f -name helm | head -n 1); [ -n "$HELM" ] || { echo "FAIL: Helm ' + HELM_VERSION + ' missing; run: mise install helm@' + HELM_VERSION + '" >&2; exit 1; }; fi; export HELM'
 
 preview_values := "-f " + chart / "values-preview.yaml" + " -f " + chart / "tests/fixtures/preview-appset-values.yaml" + " --namespace draftforge-pr-1"
 
@@ -18,6 +20,7 @@ preview_values := "-f " + chart / "values-preview.yaml" + " -f " + chart / "test
 plugins:
     #!/usr/bin/env bash
     set -euo pipefail
+    {{use_helm}}
     if "$HELM" plugin list | awk 'NR>1 {print $1, $2}' | grep -qx "unittest {{ trim_start_match(HELM_UNITTEST_VERSION, 'v') }}"; then
         echo "helm-unittest {{HELM_UNITTEST_VERSION}} already installed"
         exit 0
@@ -29,6 +32,7 @@ plugins:
 lint:
     #!/usr/bin/env bash
     set -euo pipefail
+    {{use_helm}}
     "$HELM" lint --strict {{chart}}
     "$HELM" lint --strict {{chart}} {{preview_values}}
 
@@ -37,6 +41,7 @@ lint:
 template profile="default":
     #!/usr/bin/env bash
     set -euo pipefail
+    {{use_helm}}
     case "{{profile}}" in
         default) "$HELM" template draftforge {{chart}} ;;
         preview) "$HELM" template draftforge-pr-1 {{chart}} {{preview_values}} ;;
@@ -48,6 +53,7 @@ template profile="default":
 test:
     #!/usr/bin/env bash
     set -euo pipefail
+    {{use_helm}}
     cd {{root}}
     if ! "$HELM" plugin list | awk 'NR>1 {print $1}' | grep -qx unittest; then
         echo "FAIL: helm-unittest is not installed for $HELM; run: just helm::plugins" >&2

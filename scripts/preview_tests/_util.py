@@ -55,5 +55,5 @@ def helm() -> str:
     if not out.startswith(HELM_VERSION + "+") and out != HELM_VERSION:
         raise AssertionError(
             f"HELM={binary} reports {out}, need {HELM_VERSION}; run "
-            f'export HELM="$(mise where helm@3.19.4)/linux-amd64/helm"')
+            'export HELM="$(find "$(mise where helm@3.19.4)" -maxdepth 2 -type f -name helm)"')
     return binary
