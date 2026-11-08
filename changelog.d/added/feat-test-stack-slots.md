@@ -1,3 +1,0 @@
-- Each git worktree gets its own test stack ("slot"): slot 0 stays project `df` on `https://localhost`, slot N runs as `df-sN` on `https://localhost:1N443`. `just test::slot` shows a worktree's slot and URL, and `just test::slots` lists them all.
-- `just test::slot-release`, `test::slot-claim` and `test::slot-reap` manage slots. Slots idle for more than 12 hours (`DF_SLOT_STALE_HOURS`) are reaped automatically when a slot is needed.
-- The Discord bot and celery-beat run only on slot 0; `just test::background on` opts one other stack in.

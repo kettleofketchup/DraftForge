@@ -1,1 +1,0 @@
-Merge `main` into every existing worktree before using its test stack. Worktrees on older branches still run the old `test::down`, which stops every container on the host, including other worktrees' slot stacks.
