@@ -12,6 +12,7 @@ from django.urls import re_path
 
 from app.consumers import DraftConsumer
 from app.models import Draft, Team, Tournament
+from app.tasks import teamdraft_tick
 from app.tasks.draft_tick import (
     captain_channel_key,
     conn_count_key,
@@ -49,6 +50,7 @@ class DraftConsumerBaseTestCase(TransactionTestCase):
             conn_count_key("herodraft", self.draft.pk),
             heartbeat_key("teamdraft", self.draft.pk, self.captain.pk),
             captain_channel_key("teamdraft", self.draft.pk, self.captain.pk),
+            teamdraft_tick.captain_conn_key(self.draft.pk, self.captain.pk),
         )
 
     def app(self):
@@ -63,6 +65,8 @@ class DraftConsumerBaseTestCase(TransactionTestCase):
         connected, _ = await comm.connect()
         self.assertTrue(connected)
         first = await comm.receive_json_from(timeout=5)
+        if user is not None and user.pk == self.captain.pk:
+            await asyncio.wait_for(comm.receive_json_from(), timeout=5)
         return comm, first
 
     async def test_spectator_gets_single_initial_events_frame_and_counts_under_teamdraft(
@@ -106,6 +110,7 @@ class DraftConsumerBaseTestCase(TransactionTestCase):
     async def test_two_sockets_same_captain_both_stay_connected(self):
         comm1, _ = await self.connect(self.captain)
         comm2, _ = await self.connect(self.captain)
+        await asyncio.wait_for(comm1.receive_json_from(), timeout=5)
         for comm in (comm1, comm2):
             self.assertTrue(await comm.receive_nothing(timeout=0.5, interval=0.05))
         self.assertEqual(self.r.get(conn_count_key("teamdraft", self.draft.pk)), "2")

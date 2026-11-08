@@ -1,19 +1,33 @@
 """Team-draft timer lifecycle: helpers, endpoints, pick matrix, undo, auto-pause, tick payload (spec §2)."""
 
+import asyncio
 import time
 from datetime import timedelta
 from unittest.mock import PropertyMock, patch
 
 from asgiref.sync import async_to_sync
+from channels.db import database_sync_to_async
+from channels.layers import get_channel_layer
+from channels.routing import URLRouter
+from channels.testing import WebsocketCommunicator
 from django.test import TestCase, TransactionTestCase
-from django.urls import resolve
+from django.urls import re_path, resolve
 from django.utils import timezone
 from rest_framework.test import APIClient
 
+from app.consumers import DraftConsumer
 from app.functions import teamdraft
 from app.models import Draft, DraftEvent, DraftOptions, Team, TeamDraftState
 from app.tasks import teamdraft_tick
-from app.tasks.draft_tick import TickDriver, evaluate_client_pick_time, get_redis_client, heartbeat_key
+from app.tasks.draft_tick import (
+    TickDriver,
+    captain_channel_key,
+    conn_count_key,
+    evaluate_client_pick_time,
+    get_redis_client,
+    heartbeat_key,
+    registry_for,
+)
 from app.tests.teamdraft_fixtures import TimedDraftFixture
 
 
@@ -891,3 +905,184 @@ class AutoPauseTests(TransactionTestCase):
         draft.refresh_from_db()
         self.assertEqual(draft.state, TeamDraftState.DRAFTING)
         self.assertTrue(draft.clock_armed)
+
+
+class DraftConsumerTimerTests(TransactionTestCase):
+    def setUp(self):
+        self.fx = TimedDraftFixture(prefix="ws")
+        self.r = get_redis_client()
+        self.cap = self.fx.captains[0]
+        self._clear()
+
+    def tearDown(self):
+        self._clear()
+
+    def _clear(self):
+        self.r.delete(
+            conn_count_key("teamdraft", self.fx.draft.pk),
+            heartbeat_key("teamdraft", self.fx.draft.pk, self.cap.pk),
+            captain_channel_key("teamdraft", self.fx.draft.pk, self.cap.pk),
+            teamdraft_tick.captain_conn_key(self.fx.draft.pk, self.cap.pk),
+        )
+
+    def app(self):
+        return URLRouter(
+            [re_path(r"api/draft/(?P<draft_id>\d+)/$", DraftConsumer.as_asgi())]
+        )
+
+    async def connect(self, user):
+        comm = WebsocketCommunicator(self.app(), f"/api/draft/{self.fx.draft.pk}/")
+        comm.scope["user"] = user
+        connected, _ = await comm.connect()
+        self.assertTrue(connected)
+        await asyncio.wait_for(comm.receive_json_from(), timeout=5)  # initial_events
+        return comm
+
+    @patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True)
+    async def test_captain_connect_emits_event_and_sets_flags(self, mock_start):
+        comm = await self.connect(self.cap)
+        frame = await asyncio.wait_for(comm.receive_json_from(), timeout=5)
+        self.assertEqual(frame["type"], "draft_event")
+        self.assertEqual(frame["event"]["event_type"], "captain_connected")
+        self.assertEqual(frame["event"]["payload"]["captain_id"], self.cap.pk)
+        self.assertTrue(frame["event"]["payload"]["is_active_captain"])
+        team = await database_sync_to_async(Team.objects.get)(pk=self.fx.teams[0].pk)
+        self.assertTrue(team.draft_is_connected)
+        self.assertTrue(team.draft_has_connected)
+        mock_start.assert_not_called()
+        await comm.disconnect()
+
+    @patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True)
+    async def test_armed_draft_starts_team_driver(self, mock_start):
+        await database_sync_to_async(self.fx.start)()
+        comm = await self.connect(self.fx.players[0])
+        for _ in range(50):
+            if mock_start.called:
+                break
+            await asyncio.sleep(0.05)
+        mock_start.assert_called_once()
+        self.assertIs(mock_start.call_args.args[0], teamdraft_tick.TEAM_TICK_DRIVER)
+        await comm.disconnect()
+
+    @patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True)
+    async def test_unarmed_drafting_draft_starts_nothing(self, mock_start):
+        draft = await database_sync_to_async(Draft.objects.get)(pk=self.fx.draft.pk)
+        draft.state = TeamDraftState.DRAFTING
+        await database_sync_to_async(draft.save)()
+        comm = await self.connect(self.fx.players[0])
+        mock_start.assert_not_called()
+        await comm.disconnect()
+
+    def _disconnected_count(self) -> int:
+        return DraftEvent.objects.filter(
+            draft_id=self.fx.draft.pk, event_type="captain_disconnected"
+        ).count()
+
+    @patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True)
+    async def test_second_tab_closing_is_silent_last_tab_emits_disconnected(
+        self, mock_start
+    ):
+        comm1 = await self.connect(self.cap)
+        await asyncio.wait_for(comm1.receive_json_from(), timeout=5)
+        comm2 = await self.connect(self.cap)
+        await asyncio.wait_for(comm2.receive_json_from(), timeout=5)
+        await asyncio.wait_for(comm1.receive_json_from(), timeout=5)
+        await comm2.disconnect()
+        self.assertTrue(await comm1.receive_nothing(timeout=1.0, interval=0.05))
+        count = await database_sync_to_async(self._disconnected_count)()
+        self.assertEqual(count, 0)
+        await comm1.disconnect()
+        count = await database_sync_to_async(self._disconnected_count)()
+        self.assertEqual(count, 1)
+        team = await database_sync_to_async(Team.objects.get)(pk=self.fx.teams[0].pk)
+        self.assertFalse(team.draft_is_connected)
+        self.assertTrue(team.draft_has_connected)
+
+    async def test_draft_tick_frame_is_forwarded(self):
+        comm = await self.connect(self.fx.players[0])
+        layer = get_channel_layer()
+        await layer.group_send(
+            f"draft_{self.fx.draft.pk}",
+            {
+                "type": "draft.tick",
+                "draft_state": "drafting",
+                "server_time": "t",
+                "teams": [],
+            },
+        )
+        frame = await asyncio.wait_for(comm.receive_json_from(), timeout=5)
+        self.assertEqual(
+            frame,
+            {
+                "type": "draft_tick",
+                "draft_state": "drafting",
+                "server_time": "t",
+                "teams": [],
+            },
+        )
+        await comm.disconnect()
+
+    async def test_conn_key_ttl_is_refreshed_by_heartbeat(self):
+        comm = await self.connect(self.cap)
+        await asyncio.wait_for(comm.receive_json_from(), timeout=5)
+        key = teamdraft_tick.captain_conn_key(self.fx.draft.pk, self.cap.pk)
+        self.r.expire(key, 5)
+        await comm.send_json_to({"type": "heartbeat"})
+        for _ in range(50):
+            if self.r.ttl(key) > 5:
+                break
+            await asyncio.sleep(0.05)
+        self.assertGreater(self.r.ttl(key), 5)
+        await comm.disconnect()
+
+    @patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True)
+    async def test_heartbeat_after_rebuild_restores_presence_and_auto_pause(
+        self, mock_start
+    ):
+        comm = await self.connect(self.cap)
+        await asyncio.wait_for(comm.receive_json_from(), timeout=5)
+        await database_sync_to_async(self.fx.draft.build_rounds)()
+        team = await database_sync_to_async(Team.objects.get)(pk=self.fx.teams[0].pk)
+        self.assertFalse(team.draft_has_connected)
+        await comm.send_json_to({"type": "heartbeat"})
+        for _ in range(50):
+            team = await database_sync_to_async(Team.objects.get)(
+                pk=self.fx.teams[0].pk
+            )
+            if team.draft_has_connected:
+                break
+            await asyncio.sleep(0.05)
+        self.assertTrue(team.draft_has_connected and team.draft_is_connected)
+        await database_sync_to_async(self.fx.draft.refresh_from_db)()
+        await database_sync_to_async(self.fx.start)()
+        self.r.delete(heartbeat_key("teamdraft", self.fx.draft.pk, self.cap.pk))
+        self.assertEqual(
+            await teamdraft_tick.check_captain_heartbeats(self.fx.draft.pk),
+            self.cap.username,
+        )
+        draft = await database_sync_to_async(Draft.objects.get)(pk=self.fx.draft.pk)
+        self.assertEqual(draft.state, TeamDraftState.PAUSED)
+        await comm.disconnect()
+
+    async def test_legacy_untimed_draft_disconnect_changes_nothing(self):
+        fx = await database_sync_to_async(
+            lambda: TimedDraftFixture(timer_enabled=False, prefix="wsl")
+        )()
+        cap = fx.captains[0]
+        self.addCleanup(
+            lambda: self.r.delete(
+                conn_count_key("teamdraft", fx.draft.pk),
+                heartbeat_key("teamdraft", fx.draft.pk, cap.pk),
+                captain_channel_key("teamdraft", fx.draft.pk, cap.pk),
+                teamdraft_tick.captain_conn_key(fx.draft.pk, cap.pk),
+            )
+        )
+        comm = WebsocketCommunicator(self.app(), f"/api/draft/{fx.draft.pk}/")
+        comm.scope["user"] = cap
+        await comm.connect()
+        await asyncio.wait_for(comm.receive_json_from(), timeout=5)
+        await asyncio.wait_for(comm.receive_json_from(), timeout=5)
+        await comm.disconnect()
+        draft = await database_sync_to_async(Draft.objects.get)(pk=fx.draft.pk)
+        self.assertEqual(draft.state, TeamDraftState.DRAFTING)
+        self.assertNotIn(fx.draft.pk, registry_for("teamdraft"))
