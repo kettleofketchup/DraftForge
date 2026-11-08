@@ -9,7 +9,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from app.functions import teamdraft
-from app.models import Draft, DraftOptions, Team, TeamDraftState
+from app.models import Draft, DraftEvent, DraftOptions, Team, TeamDraftState
 from app.tasks.draft_tick import evaluate_client_pick_time
 from app.tests.teamdraft_fixtures import TimedDraftFixture
 
@@ -600,6 +600,17 @@ class UndoTests(TestCase):
         with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True), self.captureOnCommitCallbacks(execute=True):
             fx.start()
         return fx
+
+    def test_undo_emits_pick_undone_before_round_started(self) -> None:
+        fx = self.armed_fixture(prefix="order")
+        with self.captureOnCommitCallbacks(execute=True):
+            fx.pick(fx.draft.active_round, fx.staff)
+        with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True), self.captureOnCommitCallbacks(execute=True):
+            fx.undo(fx.staff)
+        types = list(
+            DraftEvent.objects.nocache().filter(draft=fx.draft).order_by("pk").values_list("event_type", flat=True)
+        )
+        self.assertEqual(types[-2:], ["pick_undone", "round_started"])
 
     def test_undo_on_pending_is_409(self) -> None:
         fx = TimedDraftFixture()
