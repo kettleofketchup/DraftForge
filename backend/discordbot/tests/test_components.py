@@ -10,6 +10,7 @@ from django.test import TestCase
 
 from app.models import GameType
 from discordbot.components import (
+    BattleCupTierSelect,
     DeadlockComponents,
     DeclineButton,
     DotaComponents,
@@ -300,7 +301,7 @@ class PositionConfirmButtonCallbackTest(TestCase):
             interaction.user = MagicMock()
             interaction.user.id = "100000000000000001"
             interaction.response = MagicMock()
-            interaction.response.defer = AsyncMock()
+            interaction.response.edit_message = AsyncMock()
             interaction.edit_original_response = AsyncMock()
 
             fake_event = MagicMock()
@@ -366,4 +367,166 @@ class DeclineButtonCallbackTest(IsolatedAsyncioTestCase):
             await DeclineButton(1).callback(interaction)
         mock_decline.assert_called_once_with(
             event_id=1, discord_user_id="5", discord_username="alice"
+        )
+
+
+def _component_interaction() -> MagicMock:
+    interaction = MagicMock()
+    interaction.user.id = 7
+    interaction.response.is_done = MagicMock(return_value=False)
+    interaction.response.edit_message = AsyncMock()
+    interaction.response.defer = AsyncMock()
+    interaction.response.send_message = AsyncMock()
+    interaction.edit_original_response = AsyncMock()
+    return interaction
+
+
+class SubmitOnceGuardTest(IsolatedAsyncioTestCase):
+    """Submitting components ACK with the disabled view and run the backend
+    call at most once per view, even when discord.py dispatches a second click
+    (View._scheduled_task never checks ``item.disabled``)."""
+
+    async def test_position_confirm_double_click_saves_once(self) -> None:
+        view = PositionSelectView(event_id=42, rank_status="active")
+        view.pos_1._values = ["1"]
+        view.pos_2._values = ["2"]
+        button = next(c for c in view.children if isinstance(c, PositionConfirmButton))
+        first, second = _component_interaction(), _component_interaction()
+
+        with (
+            mock_patch(
+                "discordbot.components.dota.save_positions",
+                return_value={"action": "positions_saved"},
+            ) as save,
+            mock_patch(
+                "discordbot.components.dota.discord_log_context", _fake_log_context
+            ),
+        ):
+            await asyncio.gather(button.callback(first), button.callback(second))
+
+        save.assert_called_once()
+        first.response.edit_message.assert_awaited_once_with(view=view)
+        self.assertTrue(all(item.disabled for item in view.children))
+        second.response.edit_message.assert_not_called()
+        second.response.defer.assert_awaited_once()
+
+    async def test_battle_cup_double_click_submits_once(self) -> None:
+        view = RankDetailsView(event_id=42, rank_status="never")
+        select = next(c for c in view.children if isinstance(c, BattleCupTierSelect))
+        select._values = ["3"]
+        first, second = _component_interaction(), _component_interaction()
+
+        with (
+            mock_patch(
+                "discordbot.components.dota.battle_cup_submit",
+                return_value={"action": "signed_up", "status": "accepted"},
+            ) as submit,
+            mock_patch(
+                "discordbot.components.dota.discord_log_context", _fake_log_context
+            ),
+        ):
+            await select.callback(first)
+            await select.callback(second)
+
+        submit.assert_called_once()
+        first.response.edit_message.assert_awaited_once_with(view=view)
+        second.response.defer.assert_awaited_once()
+
+    async def test_star_select_double_click_submits_once(self) -> None:
+        view = RankDetailsView(
+            event_id=42, rank_status="active", selected_medal="Archon"
+        )
+        star = next(c for c in view.children if isinstance(c, StarSelect))
+        star._values = ["2"]
+        first, second = _component_interaction(), _component_interaction()
+
+        with (
+            mock_patch(
+                "discordbot.components.dota.rank_medal_select",
+                return_value={"action": "signed_up", "status": "accepted"},
+            ) as submit,
+            mock_patch(
+                "discordbot.components.dota.discord_log_context", _fake_log_context
+            ),
+        ):
+            await star.callback(first)
+            await star.callback(second)
+
+        submit.assert_called_once_with(
+            event_id=42, discord_user_id="7", medal="Archon 2"
+        )
+        second.response.defer.assert_awaited_once()
+
+    async def test_backend_failure_after_ack_reports_error(self) -> None:
+        view = RankDetailsView(event_id=42, rank_status="never")
+        select = next(c for c in view.children if isinstance(c, BattleCupTierSelect))
+        select._values = ["3"]
+        interaction = _component_interaction()
+
+        with (
+            mock_patch(
+                "discordbot.components.dota.battle_cup_submit",
+                side_effect=RuntimeError("backend down"),
+            ),
+            mock_patch(
+                "discordbot.components.dota.discord_log_context", _fake_log_context
+            ),
+        ):
+            with self.assertRaises(RuntimeError):
+                await select.callback(interaction)
+
+        interaction.edit_original_response.assert_awaited_once_with(
+            content="❌ Something went wrong. Please try again.", view=None
+        )
+
+
+class UnexpectedModalResultTest(IsolatedAsyncioTestCase):
+    """A modal that gets an action it has no branch for (event game changed
+    after the modal opened) still ACKs with a "press Sign Up again" reply."""
+
+    async def test_deadlock_modal_replies_on_dota_only_action(self) -> None:
+        from discordbot.components.base import STALE_SIGNUP_MESSAGE
+        from discordbot.components.deadlock import DeadlockSignupModal
+
+        modal = DeadlockSignupModal(event_id=9, prefill={}, config={})
+        interaction = _component_interaction()
+
+        with (
+            mock_patch(
+                "discordbot.components.deadlock.signup_modal_submit",
+                return_value={"action": "needs_rank_status"},
+            ),
+            mock_patch(
+                "discordbot.components.deadlock.discord_log_context",
+                _fake_log_context,
+            ),
+        ):
+            await modal.on_submit(interaction)
+
+        interaction.response.send_message.assert_awaited_once_with(
+            STALE_SIGNUP_MESSAGE, ephemeral=True
+        )
+
+    async def test_default_modal_replies_on_unknown_action(self) -> None:
+        from discordbot.components.base import STALE_SIGNUP_MESSAGE
+        from discordbot.components.default import DefaultSignupModal
+
+        modal = DefaultSignupModal(event_id=9, prefill={}, config={})
+        interaction = _component_interaction()
+
+        with (
+            mock_patch(
+                "discordbot.components.default.signup_modal_submit",
+                return_value={"action": "needs_rank_details"},
+            ) as submit,
+            mock_patch(
+                "discordbot.components.default.discord_log_context",
+                _fake_log_context,
+            ),
+        ):
+            await modal.on_submit(interaction)
+
+        self.assertIsNone(submit.call_args.kwargs["game_type"])
+        interaction.response.send_message.assert_awaited_once_with(
+            STALE_SIGNUP_MESSAGE, ephemeral=True
         )

@@ -1,6 +1,6 @@
 """Game-type -> signup-handler registry (the ORM-logic side of the split).
 
-Adding a game type (mirror of the spec's extension checklist):
+Adding a game type (canonical checklist; other modules link here):
 
 1. ``discordbot/components/<game>.py`` — ``<Game>Components`` (build_signup_modal,
    ``bare_select_ids``, operation methods + any follow-up View classes).
@@ -37,7 +37,7 @@ SIGNUP_HANDLERS: dict[GameType, GameSignupHandler] = {
 _DEFAULT = DefaultHandler()
 
 
-def get_signup_handler(game_type: int) -> GameSignupHandler:
+def get_signup_handler(game_type: GameType | int) -> GameSignupHandler:
     """Resolve the handler for a game type, falling back to DefaultHandler."""
     handler = SIGNUP_HANDLERS.get(game_type)
     if handler is None:

@@ -15,6 +15,7 @@ from discordbot.components.base import (
     GameComponentProvider,
     build_friend_id_input,
     respond_to_signup_user,
+    send_unexpected_modal_result,
 )
 from discordbot.custom_ids import (
     CustomId,
@@ -31,7 +32,7 @@ log = get_logger(__name__)
 class DeadlockComponents(GameComponentProvider):
     """Stateless singleton. Owns Deadlock's modal. No ORM, no follow-up views."""
 
-    bare_select_ids: tuple = ()
+    bare_select_ids: tuple[type[CustomId], ...] = ()
 
     def build_signup_modal(
         self, event_id: int, prefill: dict, config: dict
@@ -118,6 +119,8 @@ class DeadlockSignupModal(ui.Modal):
                     f"❌ {result['message']}",
                     ephemeral=True,
                 )
+            else:
+                await send_unexpected_modal_result(interaction)
 
     async def on_error(
         self, interaction: discord.Interaction, error: Exception

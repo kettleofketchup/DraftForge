@@ -101,6 +101,24 @@ def build_friend_id_input(
     )
 
 
+STALE_SIGNUP_MESSAGE = (
+    "❌ This event changed since you opened the form. Please press Sign Up again."
+)
+
+
+async def send_unexpected_modal_result(interaction: discord.Interaction) -> None:
+    """Reply to a signup-modal result this modal has no branch for.
+
+    A modal's shape is fixed when it opens, but the backend dispatches on the
+    event's current game type, so a game-type change between open and submit
+    can return an action meant for another game's flow. Without a reply the
+    interaction is never ACKed and the user sees "Something went wrong".
+    """
+    if interaction.response.is_done():
+        return
+    await interaction.response.send_message(STALE_SIGNUP_MESSAGE, ephemeral=True)
+
+
 @runtime_checkable
 class GameComponentProvider(Protocol):
     """UI-layer provider protocol (stateless singleton, no ORM).
@@ -307,6 +325,10 @@ class DeclineButton(ui.Button):
 
 # ---------------------------------------------------------------------------
 # Screenshot upload flow (V2 modals)
+#
+# Dota-only today: the backend endpoint (handle_screenshot_upload) is gated on
+# DotaHandler. It lives here, not in dota.py, because the button and modal are
+# routed generically and carry no game-specific UI.
 # ---------------------------------------------------------------------------
 
 SCREENSHOT_EXAMPLE_URLS = {

@@ -97,7 +97,9 @@ class SignupButtonRequest(BaseModel):
 class SignupModalSubmitRequest(BaseModel):
     event_id: int
     discord_user_id: str
-    game_type: int
+    # Game the modal was built for; the handler rejects a mismatch with the
+    # event's current game. Optional so callers without a modal can omit it.
+    game_type: int | None = None
     values: dict
     model_config = {"extra": "ignore"}
 

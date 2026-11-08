@@ -236,6 +236,10 @@ jobs:
               events.tests.test_provider_registry \
               app.tests.test_build_users_dict \
               tests.test_populate \
+              discordbot.tests.test_signup_logging \
+              events.tests.test_modal_config_contract \
+              events.tests.test_discord \
+              events.tests.test_reaction_signup \
               -v 2
 
       - name: Run frontend Vitest

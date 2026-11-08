@@ -29,31 +29,36 @@ from events.discord._shared import (
     _log_interaction,
     _log_signup,
 )
-
-# Re-exported for back-compat: callers/tests import these private helpers from
-# events.discord.handlers (and from the package __init__).
-from events.discord.providers.deadlock import (  # noqa: F401
-    _check_deadlock_profile_complete,
-)
-from events.discord.providers.dota import (
-    DotaHandler,
-    _check_dota_profile_complete,  # noqa: F401
-)
+from events.discord.providers.dota import DotaHandler
 from events.discord.providers.registry import get_signup_handler
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
 
+STALE_MODAL_MESSAGE = (
+    "This event changed since you opened the form. Please press Sign Up again."
+)
 
-def _log_not_applicable(handler: str, event_id: int, game_type: int) -> None:
+
+def _dota_handler(event: Any, event_id: int, handler_name: str) -> DotaHandler | None:
+    """Return the event's handler if it runs the Dota rank/position flow.
+
+    The rank, position and screenshot endpoints exist only for Dota. For any
+    other game this logs ``handler_not_applicable`` and returns None; each
+    caller then returns its own endpoint-shaped "not applicable" payload.
+    """
+    handler = get_signup_handler(event.game_type)
+    if isinstance(handler, DotaHandler):
+        return handler
     log.warning(
         "handler_not_applicable",
         system="discord",
         subsystem="interaction",
-        handler=handler,
+        handler=handler_name,
         event_id=event_id,
-        game_type=game_type,
+        game_type=event.game_type,
     )
+    return None
 
 
 def handle_signup_button(
@@ -137,14 +142,16 @@ def handle_signup_button(
 def handle_signup_modal_submit(
     event_id: int,
     discord_user_id: str,
-    game_type: int,
-    values: dict,
+    game_type: int | None = None,
+    values: dict | None = None,
 ) -> dict[str, Any]:
     """Handle modal form submission. Delegates to the per-game handler.
 
-    ``game_type`` is accepted-but-ignored: dispatch resolves from
-    ``event.game_type`` (server truth), removing the modal-open-vs-submit drift
-    window.
+    Dispatch resolves from ``event.game_type`` (server truth). ``game_type`` is
+    the game the modal was built for when it opened; if the event's game
+    changed since then the modal's fields no longer match the handler, so the
+    submit is rejected with a "press Sign Up again" error instead of feeding
+    one game's values to another game's handler. ``None`` skips the check.
     """
     log.info(
         "handler_invoked",
@@ -165,8 +172,20 @@ def handle_signup_modal_submit(
     if not org_user:
         return {"action": "error", "message": "User not found."}
 
+    if game_type is not None and game_type != event.game_type:
+        log.warning(
+            "modal_game_type_mismatch",
+            system="discord",
+            subsystem="interaction",
+            handler="signup_modal_submit",
+            event_id=event_id,
+            modal_game_type=game_type,
+            event_game_type=event.game_type,
+        )
+        return {"action": "error", "message": STALE_MODAL_MESSAGE}
+
     handler = get_signup_handler(event.game_type)
-    return handler.apply_modal_submit(event, org_user, user, values)
+    return handler.apply_modal_submit(event, org_user, user, values or {})
 
 
 def handle_rank_status_select(
@@ -184,9 +203,8 @@ def handle_rank_status_select(
     event = _load_event(event_id)
     if event is None:
         return
-    handler = get_signup_handler(event.game_type)
-    if not isinstance(handler, DotaHandler):
-        _log_not_applicable("rank_status_select", event_id, event.game_type)
+    handler = _dota_handler(event, event_id, "rank_status_select")
+    if handler is None:
         return None
     return handler.rank_status_select(event, discord_user_id, rank_status)
 
@@ -206,9 +224,8 @@ def handle_rank_medal_select(
     event = _load_event(event_id)
     if event is None:
         return {"action": "error", "message": "Not found."}
-    handler = get_signup_handler(event.game_type)
-    if not isinstance(handler, DotaHandler):
-        _log_not_applicable("rank_medal_select", event_id, event.game_type)
+    handler = _dota_handler(event, event_id, "rank_medal_select")
+    if handler is None:
         return {"action": "error", "message": "Not applicable."}
     return handler.rank_medal_select(event, discord_user_id, medal)
 
@@ -229,9 +246,8 @@ def handle_previous_rank_submit(
     event = _load_event(event_id)
     if event is None:
         return {"action": "error", "message": "Not found."}
-    handler = get_signup_handler(event.game_type)
-    if not isinstance(handler, DotaHandler):
-        _log_not_applicable("previous_rank_submit", event_id, event.game_type)
+    handler = _dota_handler(event, event_id, "previous_rank_submit")
+    if handler is None:
         return {"action": "error", "message": "Not applicable."}
     return handler.previous_rank_submit(event, discord_user_id, medal, date_text)
 
@@ -251,9 +267,8 @@ def handle_battle_cup_submit(
     event = _load_event(event_id)
     if event is None:
         return {"action": "error", "message": "Not found."}
-    handler = get_signup_handler(event.game_type)
-    if not isinstance(handler, DotaHandler):
-        _log_not_applicable("battle_cup_submit", event_id, event.game_type)
+    handler = _dota_handler(event, event_id, "battle_cup_submit")
+    if handler is None:
         return {"action": "error", "message": "Not applicable."}
     return handler.battle_cup_submit(event, discord_user_id, tier)
 
@@ -274,9 +289,8 @@ def handle_screenshot_upload(
     event = _load_event(event_id)
     if event is None:
         return {"success": False, "message": "Event not found."}
-    handler = get_signup_handler(event.game_type)
-    if not isinstance(handler, DotaHandler):
-        _log_not_applicable("screenshot_upload", event_id, event.game_type)
+    handler = _dota_handler(event, event_id, "screenshot_upload")
+    if handler is None:
         return {"success": False, "message": "Not applicable."}
     return handler.screenshot_upload(
         event, discord_user_id, screenshot_type, attachment_url
@@ -432,9 +446,8 @@ def handle_set_position(
     event = _load_event(event_id)
     if event is None:
         return {"action": "error", "message": "Event not found."}
-    handler = get_signup_handler(event.game_type)
-    if not isinstance(handler, DotaHandler):
-        _log_not_applicable("set_position", event_id, event.game_type)
+    handler = _dota_handler(event, event_id, "set_position")
+    if handler is None:
         return {"action": "error", "message": "Not applicable."}
     return handler.set_position(event, discord_user_id, position)
 
@@ -453,9 +466,8 @@ def handle_get_rank_flow_state(
     event = _load_event(event_id)
     if event is None:
         return {"error": "event_not_found", "message": "Event not found."}
-    handler = get_signup_handler(event.game_type)
-    if not isinstance(handler, DotaHandler):
-        _log_not_applicable("get_rank_flow_state", event_id, event.game_type)
+    handler = _dota_handler(event, event_id, "get_rank_flow_state")
+    if handler is None:
         return {"error": "not_applicable", "message": "Not applicable."}
     return handler.get_rank_flow_state(event, discord_user_id)
 
@@ -475,8 +487,7 @@ def handle_save_positions(
     event = _load_event(event_id)
     if event is None:
         return {"action": "error", "message": "Event not found."}
-    handler = get_signup_handler(event.game_type)
-    if not isinstance(handler, DotaHandler):
-        _log_not_applicable("save_positions", event_id, event.game_type)
+    handler = _dota_handler(event, event_id, "save_positions")
+    if handler is None:
         return {"action": "error", "message": "Not applicable."}
     return handler.save_positions(event, discord_user_id, positions)

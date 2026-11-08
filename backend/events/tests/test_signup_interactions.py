@@ -1,10 +1,8 @@
-from django.test import TestCase
 from structlog.contextvars import clear_contextvars
 
-from app.models import CustomUser, GameType, Organization, PositionsModel
-from discordbot.models import DiscordMessageLog
-from events.constants import EventState, SignupStatus
-from events.models import Event, EventSignup
+from app.models import CustomUser, GameType
+from events.constants import EventState
+from events.models import EventSignup
 from events.tests.base import EventTestCase
 from org.models import OrgUser
 from org.models_profiles import PlayerDotaProfile
@@ -55,7 +53,6 @@ class HandleSignupButtonTest(EventTestCase):
         self.assertEqual(result["game_type"], GameType.DOTA2)
 
     def test_unknown_discord_user_auto_creates_account(self):
-        from app.models import CustomUser
         from events.discord import handle_signup_button
 
         result = handle_signup_button(
@@ -223,6 +220,36 @@ class HandleSignupModalSubmitTest(EventTestCase):
             result["message"],
             "This event does not accept active MMR signups.",
         )
+
+    def test_modal_built_for_other_game_is_rejected_without_writes(self):
+        """A modal opened for Deadlock but submitted after the event became
+        Dota must not feed Deadlock fields to DotaHandler; the user is told to
+        press Sign Up again."""
+        from unittest.mock import patch as mock_patch
+
+        from events.discord import handle_signup_modal_submit
+        from events.discord.handlers import STALE_MODAL_MESSAGE
+
+        with mock_patch("events.services.apply_signup_input") as spy:
+            result = handle_signup_modal_submit(
+                event_id=self.event.pk,
+                discord_user_id="100000000000000001",
+                game_type=GameType.DEADLOCK,
+                values={"deadlock_rank": "Phantom IV"},
+            )
+        self.assertEqual(result, {"action": "error", "message": STALE_MODAL_MESSAGE})
+        spy.assert_not_called()
+
+    def test_modal_without_game_type_dispatches_on_event(self):
+        """game_type=None (fallback modal, test endpoints) skips the check."""
+        from events.discord import handle_signup_modal_submit
+
+        result = handle_signup_modal_submit(
+            event_id=self.event.pk,
+            discord_user_id="100000000000000001",
+            values={"unverified_friend_id": "12345", "rank_status": "active"},
+        )
+        self.assertEqual(result["action"], "needs_rank_details")
 
 
 class HandleRankMedalSelectTest(EventTestCase):
@@ -492,9 +519,7 @@ class HandleSetPositionTest(EventTestCase):
         """Calling handle_set_position(position=2) sets pos_2=True on the profile."""
         from events.discord.handlers import handle_set_position
 
-        result = handle_set_position(
-            self.event.pk, "100000000000000001", position=2
-        )
+        result = handle_set_position(self.event.pk, "100000000000000001", position=2)
         self.assertEqual(result["action"], "position_set")
         profile = PlayerDotaProfile.objects.get(org_user=self.org_user)
         self.assertTrue(profile.pos_2)
@@ -505,9 +530,7 @@ class HandleSetPositionTest(EventTestCase):
     def test_handle_set_position_rejects_out_of_range(self):
         from events.discord.handlers import handle_set_position
 
-        result = handle_set_position(
-            self.event.pk, "100000000000000001", position=99
-        )
+        result = handle_set_position(self.event.pk, "100000000000000001", position=99)
         self.assertEqual(result["action"], "error")
 
 
