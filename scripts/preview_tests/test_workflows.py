@@ -471,10 +471,10 @@ class PreviewQueueStructureTest(unittest.TestCase):
         self.assertEqual(self.reconcile["concurrency"],
                          {"group": "preview-queue", "cancel-in-progress": False})
         self.assertEqual(self.reconcile["permissions"], {
-            "contents": "read", "issues": "write", "pull-requests": "read",
+            "contents": "read", "issues": "write", "pull-requests": "write",
             "statuses": "write"})
         self.assertNotIn("concurrency", self.release)
-        self.assertEqual(self.release["permissions"], {"issues": "write"})
+        self.assertEqual(self.release["permissions"], {"pull-requests": "write"})
         self.assertEqual(
             self.release["if"],
             "github.event_name == 'pull_request_target' && github.event.action == 'closed'")

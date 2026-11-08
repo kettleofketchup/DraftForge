@@ -31,8 +31,10 @@ jobs:
     if: github.event_name == 'pull_request_target' && github.event.action == 'closed'
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # Label writes on a pull request need pull-requests: write; issues: write
+    # alone gets "Resource not accessible by integration" (HTTP 403).
     permissions:
-      issues: write
+      pull-requests: write
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
@@ -54,7 +56,7 @@ jobs:
     permissions:
       contents: read
       issues: write
-      pull-requests: read
+      pull-requests: write
       statuses: write
     env:
       GH_TOKEN: ${{ github.token }}

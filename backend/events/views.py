@@ -52,6 +52,7 @@ from events.services import (
     teardown_event,
     unconfirm_signup,
 )
+from events.utils import starts_in_future
 
 
 class IsOrgStaff(permissions.BasePermission):
@@ -1181,6 +1182,16 @@ def get_event_task_schedule(request, event_id):
         else:
             s = "ready"
 
+        # Discord rejects scheduled events that start in the past, and both the
+        # sync and the task skip them, so an unfired one can never fire now.
+        if (
+            task == "scheduled_event"
+            and s == "ready"
+            and not starts_in_future(event.scheduled_at, now)
+        ):
+            s = "disabled"
+            entry["description"] = "Start time has passed; Discord rejects past starts"
+
         entry["status"] = s
         # signup_post + announcement support re-firing as "Repost" when the
         # Discord post is missing (deleted externally) or to push a fresh
@@ -1350,6 +1361,12 @@ def fire_event_task(request, event_id, task_name):
     if task_name not in FIREABLE_TASKS:
         return Response(
             {"error": f"Unknown task: {task_name}"}, status=status.HTTP_400_BAD_REQUEST
+        )
+
+    if task_name == "scheduled_event" and not starts_in_future(event.scheduled_at):
+        return Response(
+            {"error": "Event start time has passed"},
+            status=status.HTTP_400_BAD_REQUEST,
         )
 
     # Idempotency: prevent double-fire for one-shot tasks (DMs). Repostable

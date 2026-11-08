@@ -234,6 +234,9 @@ jobs:
               discordbot.tests.test_log_context \
               events.tests.test_discord_decline_button \
               events.tests.test_provider_registry \
+              events.tests.test_create_discord_scheduled_event \
+              events.tests.test_sync_discord_scheduled_event_window \
+              app.tests.test_task_schedule \
               app.tests.test_build_users_dict \
               tests.test_populate \
               app.tests.test_env_utils \
