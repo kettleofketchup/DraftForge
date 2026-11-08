@@ -22,6 +22,15 @@ log = get_logger(__name__)
 
 RESUME_COUNTDOWN_SECONDS: int = 3
 
+_TIMER_OFF_STATES: frozenset[str] = frozenset(
+    {
+        TeamDraftState.PENDING,
+        TeamDraftState.PAUSED,
+        TeamDraftState.RESUMING,
+        TeamDraftState.DRAFTING,
+    }
+)
+
 
 def team_payload(team: Team | None, role: str = "") -> dict:
     p = f"{role}_" if role else ""
@@ -212,4 +221,56 @@ def advance_after_pick(
 
 
 def apply_draft_options(tournament: Tournament, data: dict) -> DraftOptions:
-    raise NotImplementedError
+    with transaction.atomic():
+        draft = Draft.objects.select_for_update().filter(tournament=tournament).first()
+        opts = tournament.get_draft_options(fresh=True)
+        was_enabled = opts.timer_enabled
+        for key, value in data.items():
+            setattr(opts, key, value)
+        opts.save()
+        if draft is None:
+            return opts
+        if draft.state == TeamDraftState.PENDING and (
+            "grace_time_ms" in data or "reserve_time_ms" in data
+        ):
+            for team in Team.objects.select_for_update().filter(tournament=tournament):
+                team.draft_reserve_ms = opts.reserve_time_ms
+                team.save(update_fields=["draft_reserve_ms"])
+        if (
+            was_enabled
+            and not opts.timer_enabled
+            and draft.state in _TIMER_OFF_STATES
+        ):
+            from_state = draft.state
+            was_paused = from_state in (TeamDraftState.PAUSED, TeamDraftState.RESUMING)
+            draft.state = TeamDraftState.DRAFTING
+            draft.paused_at = None
+            draft.resuming_until = None
+            draft.is_manual_pause = False
+            draft.save(
+                update_fields=["state", "paused_at", "resuming_until", "is_manual_pause"]
+            )
+            rnd = draft.lock_active_round()
+            if rnd is not None:
+                rnd.started_at = None
+                rnd.timed_out_at = None
+                rnd.save(update_fields=["started_at", "timed_out_at"])
+            if was_paused:
+                emit_event(
+                    draft,
+                    "draft_resumed",
+                    {
+                        "resumed_by_id": None,
+                        "resumed_by_name": None,
+                        "resuming_until": None,
+                    },
+                )
+            log.info(
+                "timer_disabled_transition",
+                system="teamdraft",
+                subsystem="timer",
+                draft_id=draft.pk,
+                from_state=from_state,
+            )
+        invalidate_after_commit(tournament, draft)
+        return opts
