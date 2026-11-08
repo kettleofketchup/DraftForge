@@ -4,10 +4,12 @@ from datetime import timedelta
 from unittest.mock import patch
 
 from django.test import TestCase
+from django.urls import resolve
 from django.utils import timezone
+from rest_framework.test import APIClient
 
 from app.functions import teamdraft
-from app.models import Team, TeamDraftState
+from app.models import DraftOptions, Team, TeamDraftState
 from app.tasks.draft_tick import evaluate_client_pick_time
 from app.tests.teamdraft_fixtures import TimedDraftFixture
 
@@ -214,3 +216,212 @@ class LifecycleHelperTests(TestCase):
             (mock_log.warning.call_args.args[0], kwargs["system"], kwargs["subsystem"]),
             ("pick_time_in_future", "teamdraft", "timer"),
         )
+
+
+class EndpointTestBase(TestCase):
+    def setUp(self):
+        self.fx = TimedDraftFixture()
+        self.client = APIClient()
+
+    def post(self, user, path, body=None):
+        self.client.force_authenticate(user)
+        with self.captureOnCommitCallbacks(execute=True):
+            return self.client.post(
+                f"/api/draft/{self.fx.draft.pk}/{path}/", body or {}, format="json"
+            )
+
+    def armed(self, path="start", user=None):
+        """POST start/ or resume/ with the real broadcaster patched out (no tick thread from inside a TestCase)."""
+        with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True):
+            return self.post(user or self.fx.staff, path)
+
+
+class RouteResolutionTests(TestCase):
+    def test_hero_and_team_routes_resolve_to_their_own_views(self):
+        for path in (
+            "/api/herodraft/1/set-ready/",
+            "/api/herodraft/1/pause/",
+            "/api/herodraft/1/resume/",
+        ):
+            self.assertEqual(
+                resolve(path).func.__module__, "app.functions.herodraft_views", path
+            )
+        for path, name in (
+            ("ready", "teamdraft_set_ready"),
+            ("start", "teamdraft_start"),
+            ("pause", "teamdraft_pause"),
+            ("resume", "teamdraft_resume"),
+        ):
+            func = resolve(f"/api/draft/1/{path}/").func
+            self.assertEqual(
+                (func.__module__, func.cls.__name__),
+                ("app.functions.teamdraft_views", name),
+                path,
+            )
+
+
+class ReadyEndpointTests(EndpointTestBase):
+    def test_captain_toggles_ready_and_unready(self):
+        cap = self.fx.captains[0]
+        r = self.post(cap, "ready", {"ready": True})
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertTrue(Team.objects.get(pk=self.fx.team_of(cap).pk).draft_is_ready)
+        self.assertEqual(self.fx.events("captain_ready").get().payload["captain_id"], cap.pk)
+        r = self.post(cap, "ready", {"ready": False})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(self.fx.events("captain_unready").count(), 1)
+        self.fx.draft.refresh_from_db()
+        self.assertEqual(self.fx.draft.state, TeamDraftState.PENDING, "ready never starts the draft")
+
+    def test_all_ready_does_not_start_draft(self):
+        for cap in self.fx.captains:
+            self.post(cap, "ready", {"ready": True})
+        self.fx.draft.refresh_from_db()
+        self.assertEqual(self.fx.draft.state, TeamDraftState.PENDING)
+
+    def test_spectator_and_staff_cannot_ready(self):
+        self.assertEqual(self.post(self.fx.players[0], "ready", {"ready": True}).status_code, 403)
+        self.assertEqual(self.post(self.fx.staff, "ready", {"ready": True}).status_code, 403)
+        self.assertFalse(self.fx.events("captain_ready").exists())
+
+    def test_ready_outside_pending_is_400(self):
+        self.armed()
+        r = self.post(self.fx.captains[0], "ready", {"ready": True})
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.data["code"], "wrong_state")
+
+
+class StartEndpointTests(EndpointTestBase):
+    @patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True)
+    def test_start_all_ready_emits_started_by_staff(self, mock_start):
+        for cap in self.fx.captains:
+            self.post(cap, "ready", {"ready": True})
+        r = self.post(self.fx.staff, "start")
+        self.assertEqual(r.status_code, 200, r.data)
+        self.fx.draft.refresh_from_db()
+        self.assertEqual(self.fx.draft.state, TeamDraftState.DRAFTING)
+        self.assertTrue(self.fx.draft.clock_armed)
+        ev = self.fx.events("draft_started_by_staff").get()
+        self.assertEqual(ev.payload["actor_id"], self.fx.staff.pk)
+        self.assertFalse(self.fx.events("draft_force_started").exists())
+        self.assertEqual(self.fx.events("round_started").count(), 1)
+        mock_start.assert_called_once()
+        self.assertEqual(mock_start.call_args.args[1], self.fx.draft.pk)
+
+    @patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True)
+    def test_force_start_lists_not_ready_and_arms_first_round(self, mock_start):
+        self.post(self.fx.captains[0], "ready", {"ready": True})
+        r = self.post(self.fx.staff, "start")
+        self.assertEqual(r.status_code, 200, r.data)
+        ev = self.fx.events("draft_force_started").get()
+        self.assertEqual({x["captain_id"] for x in ev.payload["not_ready"]}, {c.pk for c in self.fx.captains[1:]})
+        self.assertEqual(set(ev.payload["not_ready"][0]), {"team_id", "team_name", "captain_id", "captain_name"})
+        self.fx.draft.refresh_from_db()
+        self.assertIsNotNone(self.fx.draft.active_round.started_at)
+
+    def test_captain_cannot_start(self):
+        self.assertEqual(self.post(self.fx.captains[0], "start").status_code, 403)
+
+    def test_start_with_timer_disabled_is_400(self):
+        DraftOptions.ensure_for(self.fx.tournament, timer_enabled=False)
+        r = self.post(self.fx.staff, "start")
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.data["code"], "timer_disabled")
+
+    @patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True)
+    def test_start_arms_legacy_unarmed_drafting_draft(self, mock_start):
+        self.fx.draft.state = TeamDraftState.DRAFTING
+        self.fx.draft.save()
+        r = self.post(self.fx.staff, "start")
+        self.assertEqual(r.status_code, 200, r.data)
+        self.fx.draft.refresh_from_db()
+        self.assertTrue(self.fx.draft.clock_armed)
+        self.assertEqual(self.fx.events("round_started").count(), 1)
+        r = self.post(self.fx.staff, "start")
+        self.assertEqual(r.status_code, 409)
+        self.assertEqual(r.data["code"], "already_armed")
+
+    @patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True)
+    def test_start_seeds_null_reserve_pools(self, mock_start):
+        self.fx.draft.state = TeamDraftState.DRAFTING
+        self.fx.draft.save()
+        Team.objects.filter(tournament=self.fx.tournament).update(draft_reserve_ms=None)
+        r = self.post(self.fx.staff, "start")
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertEqual(set(Team.objects.filter(tournament=self.fx.tournament).values_list("draft_reserve_ms", flat=True)), {30000})
+        self.assertEqual(self.fx.events("round_started").get().payload["reserve_ms"], 30000)
+
+
+class PauseResumeEndpointTests(EndpointTestBase):
+    def setUp(self):
+        super().setUp()
+        self.armed()
+
+    def test_captain_pause_then_staff_resume_pushes_started_at(self):
+        rnd = self.fx.draft.active_round
+        started = rnd.started_at
+        r = self.post(self.fx.captains[2], "pause")
+        self.assertEqual(r.status_code, 200, r.data)
+        self.fx.draft.refresh_from_db()
+        self.assertEqual(self.fx.draft.state, TeamDraftState.PAUSED)
+        self.assertTrue(self.fx.draft.is_manual_pause)
+        ev = self.fx.events("draft_paused").get()
+        self.assertEqual(ev.payload["reason"], "manual")
+        self.assertEqual(ev.payload["paused_by_id"], self.fx.captains[2].pk)
+        self.assertEqual(ev.payload["captain_id"], rnd.captain_id)
+        self.assertEqual(ev.payload["pick_number"], 1)
+
+        with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True) as mock_start:
+            r = self.post(self.fx.staff, "resume")
+        self.assertEqual(r.status_code, 200, r.data)
+        self.fx.draft.refresh_from_db(); rnd.refresh_from_db()
+        self.assertEqual(self.fx.draft.state, TeamDraftState.RESUMING)
+        self.assertIsNone(self.fx.draft.paused_at)
+        self.assertFalse(self.fx.draft.is_manual_pause)
+        self.assertGreaterEqual(rnd.started_at - started, timedelta(seconds=3))
+        self.assertEqual(self.fx.events("draft_resumed").get().payload["resumed_by_id"], self.fx.staff.pk)
+        mock_start.assert_called_once()
+
+    def test_resume_with_null_started_at_sets_resuming_until(self):
+        self.post(self.fx.staff, "pause")
+        rnd = self.fx.draft.active_round
+        rnd.started_at = None
+        rnd.save()
+        with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True):
+            r = self.post(self.fx.staff, "resume")
+        self.assertEqual(r.status_code, 200, r.data)
+        self.fx.draft.refresh_from_db(); rnd.refresh_from_db()
+        self.assertEqual(rnd.started_at, self.fx.draft.resuming_until)
+
+    def test_resume_fills_missing_grace(self):
+        self.post(self.fx.staff, "pause")
+        rnd = self.fx.draft.active_round
+        rnd.grace_time_ms = None
+        rnd.save()
+        self.assertEqual(self.armed("resume").status_code, 200)
+        rnd.refresh_from_db()
+        self.assertEqual(rnd.grace_time_ms, 30000)
+
+    def test_pause_during_resuming_is_400(self):
+        self.post(self.fx.staff, "pause")
+        with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True):
+            self.post(self.fx.staff, "resume")
+        r = self.post(self.fx.staff, "pause")
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.data["code"], "clock_not_running")
+
+    def test_resume_while_drafting_is_400(self):
+        r = self.post(self.fx.staff, "resume")
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.data["code"], "clock_not_running")
+
+    def test_pause_unarmed_draft_is_400(self):
+        rnd = self.fx.draft.active_round
+        rnd.started_at = None
+        rnd.save()
+        self.assertEqual(self.post(self.fx.captains[0], "pause").status_code, 400)
+
+    def test_spectator_cannot_pause_or_resume(self):
+        self.assertEqual(self.post(self.fx.players[0], "pause").status_code, 403)
+        self.post(self.fx.staff, "pause")
+        self.assertEqual(self.post(self.fx.players[0], "resume").status_code, 403)

@@ -23,6 +23,12 @@ from app.functions.herodraft_views import (
     resume_draft,
     set_ready,
 )
+from app.functions.teamdraft_views import (
+    teamdraft_pause,
+    teamdraft_resume,
+    teamdraft_set_ready,
+    teamdraft_start,
+)
 from app.functions.tournament import (
     create_team_from_captain,
     generate_draft_rounds,
@@ -167,6 +173,10 @@ urlpatterns = [
         undo_last_pick,
         name="undo-pick",
     ),
+    path("api/draft/<int:draft_pk>/ready/", teamdraft_set_ready, name="teamdraft_ready"),
+    path("api/draft/<int:draft_pk>/start/", teamdraft_start, name="teamdraft_start"),
+    path("api/draft/<int:draft_pk>/pause/", teamdraft_pause, name="teamdraft_pause"),
+    path("api/draft/<int:draft_pk>/resume/", teamdraft_resume, name="teamdraft_resume"),
     path("api/avatars/refresh/", app_views.refresh_all_avatars, name="refresh-avatars"),
     path("api/profile_update", profile_update, name="profile_update"),
     path("api/jokes/tangoes/", get_tangoes, name="get-tangoes"),
