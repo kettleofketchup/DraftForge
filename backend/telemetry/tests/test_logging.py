@@ -71,6 +71,7 @@ class ConfigureLoggingTest(TestCase):
             "httpcore",
             "opentelemetry.attributes",
             "opentelemetry.exporter.otlp.proto.http._log_exporter",
+            "opentelemetry.sdk.metrics._internal.export",
         ]:
             logger = logging.getLogger(logger_name)
             self.assertEqual(logger.level, logging.ERROR, logger_name)
