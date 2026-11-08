@@ -17,6 +17,7 @@ This project uses [just](https://github.com/casey/just) as the task runner. Just
 | `test::*` | Testing commands |
 | `update::*` | Dependency updates |
 | `version::*` | Version management |
+| `ci::*` | CI entry points (`ci::changelog-check`) |
 | `prod::*` | Production commands |
 | `demo::*` | Demo video recording |
 | `docs::*` | Documentation commands |
@@ -139,7 +140,7 @@ just update::all       # Everything (git, deps, images)
 ## Version Commands (`just version::*`)
 
 ```bash
-just version::set 1.2.3     # Set version
+just version::set 1.2.3     # Release: assemble changelog, commit, tag, push (see changelog.md)
 just version::tag            # Git tag and bump
 ```
 
