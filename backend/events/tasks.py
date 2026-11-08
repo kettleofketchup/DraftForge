@@ -126,16 +126,24 @@ def _run_with_bookends(
 
 
 def _starts_in_future(scheduled_at: str | datetime) -> bool:
-    if isinstance(scheduled_at, str):
-        scheduled_at = datetime.fromisoformat(scheduled_at)
-    return scheduled_at > datetime.now(tz.utc)
+    # A value that can't be parsed or compared counts as not eligible, so one
+    # bad row can't abort the whole sync loop.
+    try:
+        if isinstance(scheduled_at, str):
+            scheduled_at = datetime.fromisoformat(scheduled_at)
+        return scheduled_at > datetime.now(tz.utc)
+    except (TypeError, ValueError):
+        return False
 
 
 def _flatten_discord_form_errors(errors: dict, path: str = "") -> list[str]:
     found: list[str] = []
     for key, value in errors.items():
         if key == "_errors" and isinstance(value, list):
-            found.extend(f"{path}: {e.get('message', e)}" for e in value)
+            found.extend(
+                f"{path}: {e.get('message', e) if isinstance(e, dict) else e}"
+                for e in value
+            )
         elif isinstance(value, dict):
             found.extend(
                 _flatten_discord_form_errors(value, f"{path}.{key}" if path else key)
@@ -915,6 +923,12 @@ def _create_discord_scheduled_event_impl(event_id):
     if not guild_id:
         return "Skipped: no discord_server_id on organization"
     if not _starts_in_future(event.scheduled_at):
+        log.info(
+            "discord_scheduled_event_skipped_past_start",
+            system="events",
+            subsystem="discord",
+            event_id=event_id,
+        )
         return "Skipped: event start time has passed"
 
     title = event.discord_event_title or event.name
