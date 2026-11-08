@@ -29,7 +29,7 @@ def test_no_raw_compose_outside_helper() -> None:
         hits = [
             line
             for line in (ROOT / rel).read_text().splitlines()
-            if RAW_COMPOSE.search(line) and "-p ." not in line
+            if RAW_COMPOSE.search(line)
         ]
         assert hits == [], (rel, hits)
 

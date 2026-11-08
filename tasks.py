@@ -172,8 +172,7 @@ def dev_prod(c: Context) -> None:
     with c.cd(paths.PROJECT_PATH):
         load_dotenv(paths.PROD_ENV_FILE)
         db_migrate(c, paths.PROD_ENV_FILE)
-    cmd = f"docker compose -p . -f {paths.DOCKER_COMPOSE_PROD_PATH.resolve()} up"
-    c.run(cmd)
+    run_compose(c, "prod", "up")
 
 
 @task

@@ -428,3 +428,31 @@ def test_slot_allocation_error_is_a_clean_exit(
         task_fn(c)
     assert exc.value.code == 1 and c.cmds == []
     assert capsys.readouterr().err == "all 10 slots are held\n"
+
+
+def test_dev_prod_runs_through_helper(
+    slotless: tuple[Path, FakeHost], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _stub_release(monkeypatch)
+    c = RecCtx()
+    tasks.dev_prod(c)
+    prod = f"-p df -f {slots.MODULE_ROOT}/docker/docker-compose.prod.yaml"
+    assert len(c.cmds) == 1 and prod in c.cmds[0] and c.cmds[0].endswith(" up")
+
+
+def test_dev_prod_refuses_over_test_stack(
+    slotless: tuple[Path, FakeHost], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root, h = slotless
+    h.projects["df"] = [
+        owner(
+            service="nginx",
+            wd=root,
+            config_files=("/x/docker/docker-compose.test.yaml",),
+        )
+    ]
+    _stub_release(monkeypatch)
+    c = RecCtx()
+    with pytest.raises(Exit):
+        tasks.dev_prod(c)
+    assert c.cmds == []
