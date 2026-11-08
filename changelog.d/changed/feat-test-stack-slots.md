@@ -1,0 +1,6 @@
+- `just test::down` and `test::stop` stop only this worktree's stack instead of every container on the host.
+- The dev stack runs as its own compose project, `df-dev`, so it no longer takes over the test stack.
+- `just dev::exec` and `test::run` run their command through `sh -c` inside the container: a `> file` redirect now writes inside the container.
+- `just dev::prod` uses project `df` and refuses to start while a test or dev stack holds it.
+- Playwright resolves its base URL from the worktree's slot instead of a hardcoded `https://localhost`.
+- Test-db images are tagged by content hash instead of a shared `:latest`.
