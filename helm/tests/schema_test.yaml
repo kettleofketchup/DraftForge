@@ -95,6 +95,6 @@ tests:
 
   - it: accepts a header name as ingress.rateLimit.sourceHeader
     set:
-      ingress.rateLimit.sourceHeader: Cf-Connecting-Ip
+      ingress.rateLimit.sourceHeader: X-Real-Ip
     asserts:
       - notFailedTemplate: {}
