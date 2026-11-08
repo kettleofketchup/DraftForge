@@ -41,7 +41,6 @@ def sync_version_from_pyproject(c: Context) -> None:
     version = get_version_from_pyproject()
     print(f"Syncing to version: {version}")
 
-    # Update environment files
     for env_file in [paths.PROD_ENV_FILE, paths.RELEASE_ENV_FILE]:
         update_env_version(env_file, version)
 
