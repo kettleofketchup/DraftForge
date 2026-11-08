@@ -43,3 +43,44 @@ tests:
     asserts:
       - failedTemplate:
           errorPattern: "limits\\.memory"
+
+  - it: fails when a container has no ephemeral-storage limit
+    template: templates/frontend.yaml
+    set:
+      frontend.resources.limits.ephemeral-storage: null
+    asserts:
+      - failedTemplate:
+          errorPattern: "limits\\.ephemeral-storage"
+
+  - it: fails when a container has no cpu limit
+    template: templates/backend.yaml
+    set:
+      backend.resources.limits.cpu: null
+    asserts:
+      - failedTemplate:
+          errorPattern: "limits\\.cpu"
+
+  # Closed preview objects: a misspelled limit key fails instead of being ignored.
+  - it: rejects an unknown preview key
+    set:
+      preview.quota.pods: "8"
+    asserts:
+      - failedTemplate: {}
+
+  - it: rejects an unknown preview.limitRange key
+    set:
+      preview.limitRange.min.cpu: 10m
+    asserts:
+      - failedTemplate: {}
+
+  - it: rejects an unknown preview.limitRange.max resource
+    set:
+      preview.limitRange.max.gpu: "1"
+    asserts:
+      - failedTemplate: {}
+
+  - it: rejects an unknown ingress.rateLimit key
+    set:
+      ingress.rateLimit.averge: 10
+    asserts:
+      - failedTemplate: {}

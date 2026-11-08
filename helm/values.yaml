@@ -1,5 +1,6 @@
-# Prod-oriented defaults. Previews layer values-preview.yaml and the home
-# ApplicationSet's valuesObject on top (preview.enabled: true).
+# Prod-oriented defaults. Previews layer values-preview.yaml and the deploying
+# ApplicationSet's valuesObject on top. The deploying cluster sets every preview
+# limit (quota, LimitRange, rate limit); the chart only enforces that they are set.
 fullnameOverride: ""      # resource name prefix; defaults to the constant "draftforge", never the release name
 image:
   registry: ghcr.io/kettleofketchup/draftforge
@@ -8,19 +9,21 @@ image:
   pullSecrets: []
 priorityClassName: ""
 previewCommit: ""         # set by the ApplicationSet; becomes pod annotation draftforge.kettle.sh/commit
-backend:   { replicas: 1, progressDeadlineSeconds: 900, resources: {requests: {cpu: 200m, memory: 512Mi}, limits: {cpu: "1", memory: 1Gi}} }
-frontend:  { replicas: 1, progressDeadlineSeconds: 300, resources: {requests: {cpu: 100m, memory: 192Mi}, limits: {cpu: 500m, memory: 512Mi}} }
-celeryWorker: { enabled: true, concurrency: 20, progressDeadlineSeconds: 300, resources: {requests: {cpu: 100m, memory: 256Mi}, limits: {cpu: 500m, memory: 512Mi}} }
-celeryBeat:   { enabled: true, resources: {requests: {cpu: 50m, memory: 128Mi}, limits: {cpu: 250m, memory: 256Mi}} }
-discordBot:   { enabled: true, resources: {requests: {cpu: 50m, memory: 128Mi}, limits: {cpu: 250m, memory: 256Mi}} }
+# ephemeral-storage bounds the writable layer, logs and emptyDirs of each pod.
+backend:   { replicas: 1, progressDeadlineSeconds: 900, resources: {requests: {cpu: 200m, memory: 512Mi, ephemeral-storage: 256Mi}, limits: {cpu: "1", memory: 1Gi, ephemeral-storage: 2Gi}} }
+frontend:  { replicas: 1, progressDeadlineSeconds: 300, resources: {requests: {cpu: 100m, memory: 192Mi, ephemeral-storage: 64Mi}, limits: {cpu: 500m, memory: 512Mi, ephemeral-storage: 512Mi}} }
+celeryWorker: { enabled: true, concurrency: 20, progressDeadlineSeconds: 300, resources: {requests: {cpu: 100m, memory: 256Mi, ephemeral-storage: 64Mi}, limits: {cpu: 500m, memory: 512Mi, ephemeral-storage: 512Mi}} }
+celeryBeat:   { enabled: true, resources: {requests: {cpu: 50m, memory: 128Mi, ephemeral-storage: 64Mi}, limits: {cpu: 250m, memory: 256Mi, ephemeral-storage: 256Mi}} }
+discordBot:   { enabled: true, resources: {requests: {cpu: 50m, memory: 128Mi, ephemeral-storage: 64Mi}, limits: {cpu: 250m, memory: 256Mi, ephemeral-storage: 256Mi}} }
 redis:
   enabled: true
   image: redis:8.2.1-alpine
   progressDeadlineSeconds: 300
-  resources: {requests: {cpu: 50m, memory: 64Mi}, limits: {cpu: 200m, memory: 128Mi}}
-persistence: { enabled: true, size: 2Gi, storageClass: ceph-block, accessMode: ReadWriteOnce }
-migrations: { enabled: true, resources: {requests: {cpu: 100m, memory: 256Mi}, limits: {cpu: "1", memory: 512Mi}} }
-seed: { enabled: false, commands: ["populate_all --force"], resources: {requests: {cpu: 200m, memory: 512Mi}, limits: {cpu: "1", memory: 1Gi}} }
+  dataSizeLimit: 256Mi    # emptyDir sizeLimit for /data
+  resources: {requests: {cpu: 50m, memory: 64Mi, ephemeral-storage: 64Mi}, limits: {cpu: 200m, memory: 128Mi, ephemeral-storage: 512Mi}}
+persistence: { enabled: true, size: 2Gi, storageClass: "", accessMode: ReadWriteOnce }
+migrations: { enabled: true, resources: {requests: {cpu: 100m, memory: 256Mi, ephemeral-storage: 256Mi}, limits: {cpu: "1", memory: 512Mi, ephemeral-storage: 2Gi}} }
+seed: { enabled: false, commands: ["populate_all --force"], resources: {requests: {cpu: 200m, memory: 512Mi, ephemeral-storage: 256Mi}, limits: {cpu: "1", memory: 1Gi, ephemeral-storage: 2Gi}} }
 env:
   nodeEnv: production     # NODE_ENV, matches docker/.env.prod
   debug: false            # DEBUG
@@ -42,12 +45,37 @@ ingress:
   host: dota.kettle.sh
   entryPoint: websecure
   tls: { secretName: "" }
-  authentik: { enabled: false, middlewareName: authentik-forwardauth, middlewareNamespace: authentik }
+  authentik: { enabled: false, middlewareName: "", middlewareNamespace: "" }
   blockInternalApi: true
   stripIdentityHeaders: false
+  # Headers the strip-identity middleware removes. Set it to at least the
+  # forward-auth middleware's authResponseHeaders.
+  identityHeaders:
+    - X-authentik-username
+    - X-authentik-groups
+    - X-authentik-entitlements
+    - X-authentik-email
+    - X-authentik-name
+    - X-authentik-uid
+    - X-authentik-jwt
+    - X-authentik-meta-jwks
+    - X-authentik-meta-outpost
+    - X-authentik-meta-provider
+    - X-authentik-meta-app
+    - X-authentik-meta-version
+  # Traefik RateLimit, first middleware on every route. sourceHeader names the
+  # header holding the client IP when a proxy sits in front of Traefik; empty
+  # uses the connection's remote address.
+  rateLimit: { enabled: false, average: 0, burst: 0, period: 1s, sourceHeader: "" }
 preview:
-  enabled: false          # true only from the home ApplicationSet
-  hostSuffix: ""          # e.g. home.kettle.sh; host must be <namespace>.<hostSuffix>
-  quota: { pods: "", requestsCpu: "", requestsMemory: "", limitsMemory: "" }
+  enabled: false          # values-preview.yaml sets true; any draftforge-pr-* namespace requires it
+  hostSuffix: ""          # e.g. preview.example.test; host must be <namespace>.<hostSuffix>
+  # ResourceQuota spec.hard, set by the deploying cluster. The guard requires the
+  # compute, ephemeral-storage and object-count keys it lists; the template pins
+  # PVCs, storage, LoadBalancer/NodePort Services, Jobs and CronJobs to 0.
+  resourceQuota: { hard: {} }
+  # Container LimitRange, set by the deploying cluster. Each of default,
+  # defaultRequest and max needs cpu, memory and ephemeral-storage.
+  limitRange: { default: {}, defaultRequest: {}, max: {} }
   networkPolicy: { ingressNamespace: "" }   # namespace Traefik runs in
 podSecurityContext: { fsGroup: 1000, runAsUser: 1000, runAsGroup: 1000, runAsNonRoot: true, seccompProfile: {type: RuntimeDefault} }

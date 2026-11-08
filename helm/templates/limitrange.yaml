@@ -1,5 +1,6 @@
 {{- include "draftforge.previewGuard" . -}}
 {{- if .Values.preview.enabled }}
+{{- $lr := .Values.preview.limitRange }}
 apiVersion: v1
 kind: LimitRange
 metadata:
@@ -9,13 +10,14 @@ metadata:
   annotations:
     argocd.argoproj.io/sync-wave: "-1"
 spec:
-  # A safety net only: every chart container sets explicit resources.
+  # Set by the deploying cluster. Every chart container sets explicit resources,
+  # so default/defaultRequest are a safety net and max caps each container.
   limits:
     - type: Container
       default:
-        cpu: 500m
-        memory: 512Mi
+        {{- toYaml $lr.default | nindent 8 }}
       defaultRequest:
-        cpu: 50m
-        memory: 128Mi
+        {{- toYaml $lr.defaultRequest | nindent 8 }}
+      max:
+        {{- toYaml $lr.max | nindent 8 }}
 {{- end }}

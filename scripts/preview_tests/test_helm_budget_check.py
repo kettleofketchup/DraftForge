@@ -44,14 +44,21 @@ def run_check(docs):
 
 def quota(**hard):
     base = {"requests.cpu": "1", "requests.memory": "2Gi",
-            "limits.memory": "4Gi", "pods": "8"}
+            "requests.ephemeral-storage": "1Gi", "limits.cpu": "4",
+            "limits.memory": "4Gi", "limits.ephemeral-storage": "4Gi", "pods": "8"}
     base.update(hard)
     return {"apiVersion": "v1", "kind": "ResourceQuota",
             "metadata": {"name": "q"}, "spec": {"hard": base}}
 
 
-def res(cpu, mem, lim):
-    return {"requests": {"cpu": cpu, "memory": mem}, "limits": {"memory": lim}}
+def res(cpu, mem, lim, lim_cpu="500m", eph="64Mi", lim_eph="256Mi"):
+    return {"requests": {"cpu": cpu, "memory": mem, "ephemeral-storage": eph},
+            "limits": {"cpu": lim_cpu, "memory": lim, "ephemeral-storage": lim_eph}}
+
+
+def limit_range(**maxes):
+    return {"apiVersion": "v1", "kind": "LimitRange", "metadata": {"name": "lr"},
+            "spec": {"limits": [{"type": "Container", "max": maxes}]}}
 
 
 def deployment(containers, init=None, replicas=1, strategy=None):
@@ -73,7 +80,10 @@ class PreviewRenderTest(unittest.TestCase):
         self.assertEqual(r.stdout.splitlines(), [
             "requests.cpu 750m/1000m",
             "requests.memory 1728Mi/2048Mi",
+            "requests.ephemeral-storage 768Mi/1024Mi",
+            "limits.cpu 3700m/4000m",
             "limits.memory 3712Mi/4096Mi",
+            "limits.ephemeral-storage 6144Mi/7168Mi",
             "pods 6/8",
         ])
 
@@ -104,7 +114,10 @@ class SyntheticBudgetTest(unittest.TestCase):
         self.assertEqual(r.stdout.splitlines(), [
             "requests.cpu 400m/1000m",
             "requests.memory 512Mi/2048Mi",
+            "requests.ephemeral-storage 64Mi/1024Mi",
+            "limits.cpu 500m/4000m",
             "limits.memory 1024Mi/4096Mi",
+            "limits.ephemeral-storage 256Mi/4096Mi",
             "pods 1/8",
         ])
 
@@ -158,12 +171,61 @@ class SyntheticBudgetTest(unittest.TestCase):
         self.assertEqual(bc.surge_pods(d(1, {"type": "Recreate"})), 0)
 
     def test_container_missing_limit_fails(self):
-        docs = [quota(), deployment(
-            [dict(name="c", resources={"requests": {"cpu": "1m", "memory": "1Mi"}})],
-            strategy={"type": "Recreate"})]
+        r = res("1m", "1Mi", "1Mi")
+        del r["limits"]["memory"]
+        docs = [quota(), deployment([dict(name="c", resources=r)],
+                                    strategy={"type": "Recreate"})]
         r = run_check(docs)
         self.assertEqual(r.returncode, 1)
         self.assertIn("limits.memory", r.stderr)
+
+    def test_container_missing_ephemeral_limit_fails(self):
+        r = res("1m", "1Mi", "1Mi")
+        del r["limits"]["ephemeral-storage"]
+        docs = [quota(), deployment([dict(name="c", resources=r)],
+                                    strategy={"type": "Recreate"})]
+        out = run_check(docs)
+        self.assertEqual(out.returncode, 1)
+        self.assertIn("limits.ephemeral-storage", out.stderr)
+
+    def test_quota_without_ephemeral_key_fails(self):
+        q = quota()
+        del q["spec"]["hard"]["limits.ephemeral-storage"]
+        out = run_check([q])
+        self.assertEqual(out.returncode, 1)
+        self.assertIn("limits.ephemeral-storage", out.stderr)
+
+    def test_ephemeral_over_quota_fails(self):
+        docs = [quota(**{"limits.ephemeral-storage": "128Mi"}), deployment(
+            [dict(name="c", resources=res("1m", "1Mi", "1Mi"))],
+            strategy={"type": "Recreate"})]
+        out = run_check(docs)
+        self.assertEqual(out.returncode, 1)
+        self.assertIn("limits.ephemeral-storage 256Mi/128Mi", out.stdout.splitlines())
+
+    def test_container_above_limit_range_max_fails(self):
+        docs = [quota(), limit_range(cpu="250m"), deployment(
+            [dict(name="c", resources=res("100m", "1Mi", "1Mi", lim_cpu="500m"))],
+            strategy={"type": "Recreate"})]
+        out = run_check(docs)
+        self.assertEqual(out.returncode, 1)
+        self.assertIn("exceeds the LimitRange max", out.stderr)
+
+    def test_init_container_above_limit_range_max_fails(self):
+        docs = [quota(), limit_range(memory="64Mi"), deployment(
+            [dict(name="c", resources=res("1m", "1Mi", "32Mi"))],
+            init=[dict(name="i", resources=res("1m", "1Mi", "128Mi"))],
+            strategy={"type": "Recreate"})]
+        out = run_check(docs)
+        self.assertEqual(out.returncode, 1)
+        self.assertIn("'i'", out.stderr)
+
+    def test_container_within_limit_range_max_passes(self):
+        docs = [quota(), limit_range(cpu="500m", memory="1Gi", **{"ephemeral-storage": "256Mi"}),
+                deployment([dict(name="c", resources=res("100m", "1Mi", "1Mi"))],
+                           strategy={"type": "Recreate"})]
+        out = run_check(docs)
+        self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
 
     def test_unbudgeted_workload_kind_fails(self):
         r = run_check([quota(), {"kind": "StatefulSet", "metadata": {"name": "s"}}])

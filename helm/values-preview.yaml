@@ -11,3 +11,6 @@ secrets:
   create: true
   djangoSecretKey: preview-dummy-not-secret
   internalServiceToken: preview-dummy-not-secret
+# Preview mode: the guard then requires every value the deploying ApplicationSet
+# must set, and a draftforge-pr-* namespace refuses to render without it.
+preview: { enabled: true }

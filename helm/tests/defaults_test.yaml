@@ -22,7 +22,8 @@ tests:
       - isKind: {of: PersistentVolumeClaim}
       - equal: {path: metadata.name, value: draftforge-data}
       - equal: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", value: "0"}
-      - equal: {path: spec.storageClassName, value: ceph-block}
+      # Empty storageClass: the field is omitted and the cluster default applies.
+      - notExists: {path: spec.storageClassName}
       - equal: {path: spec.accessModes, value: [ReadWriteOnce]}
       - equal: {path: spec.resources.requests.storage, value: 2Gi}
 
@@ -212,7 +213,8 @@ tests:
       - equal: {path: "spec.template.spec.containers[?(@.name == \"redis\")].image", value: "redis:8.2.1-alpine"}
       - equal: {path: "spec.template.spec.containers[?(@.name == \"redis\")].args", value: ["--save", "", "--appendonly", "no"]}
       - equal: {path: "spec.template.spec.containers[?(@.name == \"redis\")].securityContext.runAsUser", value: 999}
-      - equal: {path: "spec.template.spec.volumes[?(@.name == \"data\")].emptyDir", value: {}}
+      - equal: {path: "spec.template.spec.volumes[?(@.name == \"data\")].emptyDir", value: {sizeLimit: 256Mi}}
+      - notExists: {path: spec.template.metadata.annotations}
 
   - it: renders the Service redis on 6379
     template: templates/redis.yaml
@@ -275,3 +277,10 @@ tests:
       - isKind: {of: Job}
         not: true
         documentSelector: {path: metadata.name, matchMany: true, skipEmptyTemplates: true}
+
+  - it: renders the PVC with an explicit storageClass when one is set
+    template: templates/pvc.yaml
+    set:
+      persistence.storageClass: fast-rwo
+    asserts:
+      - equal: {path: spec.storageClassName, value: fast-rwo}

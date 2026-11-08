@@ -5,10 +5,12 @@ Reads a JSON array of rendered documents on stdin:
 
     "$HELM" template ... | yq -o=json ea '[.]' | python3 -I scripts/helm_budget_check.py
 
-Sums requests.cpu, requests.memory and limits.memory over every Deployment pod,
-plus one Deployment pod per surge pod, and compares them with the `hard` of the
-single rendered ResourceQuota. Exit 0 when every total fits, 1 otherwise or
-when there is no ResourceQuota.
+Sums cpu, memory and ephemeral-storage requests and limits over every
+Deployment pod, plus one Deployment pod per surge pod, and compares them with
+the `hard` of the single rendered ResourceQuota. When a LimitRange is rendered,
+also checks every container's requests and limits against its Container `max`,
+since admission rejects a pod above it. Exit 0 when everything fits, 1
+otherwise or when there is no ResourceQuota.
 """
 import json
 import math
@@ -16,7 +18,9 @@ import re
 import sys
 from decimal import Decimal
 
-KEYS = ("requests.cpu", "requests.memory", "limits.memory", "pods")
+RESOURCE_KEYS = ("requests.cpu", "requests.memory", "requests.ephemeral-storage",
+                 "limits.cpu", "limits.memory", "limits.ephemeral-storage")
+KEYS = RESOURCE_KEYS + ("pods",)
 # Kinds that create pods; this check only knows how to charge Deployments.
 POD_KINDS = {"Pod", "ReplicaSet", "ReplicationController", "StatefulSet",
              "DaemonSet", "Job", "CronJob"}
@@ -46,13 +50,41 @@ def parse_quantity(s) -> Decimal:
 def container_charge(c: dict, where: str) -> dict:
     res = c.get("resources") or {}
     out = {}
-    for key in KEYS[:3]:
+    for key in RESOURCE_KEYS:
         section, name = key.split(".")
         value = (res.get(section) or {}).get(name)
         if value is None:
             raise BudgetError(f"{where} container {c.get('name')!r} has no {key}")
         out[key] = parse_quantity(value)
     return out
+
+
+def check_limit_range_max(docs: list) -> None:
+    """Raise when a container's request or limit exceeds the LimitRange Container max."""
+    maxes = {}
+    for d in docs:
+        if d.get("kind") != "LimitRange":
+            continue
+        for item in d.get("spec", {}).get("limits") or []:
+            if item.get("type") == "Container":
+                for name, value in (item.get("max") or {}).items():
+                    q = parse_quantity(value)
+                    maxes[name] = min(q, maxes.get(name, q))
+    if not maxes:
+        return
+    for d in docs:
+        if d.get("kind") != "Deployment":
+            continue
+        name = d.get("metadata", {}).get("name")
+        spec = d.get("spec", {}).get("template", {}).get("spec", {})
+        for c in (spec.get("initContainers") or []) + (spec.get("containers") or []):
+            res = c.get("resources") or {}
+            for section in ("requests", "limits"):
+                for res_name, value in (res.get(section) or {}).items():
+                    if res_name in maxes and parse_quantity(value) > maxes[res_name]:
+                        raise BudgetError(
+                            f"Deployment {name} container {c.get('name')!r} {section}.{res_name} "
+                            f"{value} exceeds the LimitRange max")
 
 
 def pod_charge(deploy: dict) -> dict:
@@ -64,7 +96,7 @@ def pod_charge(deploy: dict) -> dict:
     return {
         k: max(sum((c[k] for c in main), Decimal(0)),
                max((c[k] for c in init), default=Decimal(0)))
-        for k in KEYS[:3]
+        for k in RESOURCE_KEYS
     }
 
 
@@ -113,9 +145,10 @@ def budget(docs: list) -> dict:
             continue
         pods = int(d.get("spec", {}).get("replicas", 1)) + surge_pods(d)
         charge = pod_charge(d)
-        for k in KEYS[:3]:
+        for k in RESOURCE_KEYS:
             totals[k] += charge[k] * pods
         totals["pods"] += pods
+    check_limit_range_max(docs)
     return {k: (totals[k], hard[k]) for k in KEYS}
 
 
@@ -125,7 +158,7 @@ def _num(d: Decimal) -> str:
 
 
 def fmt(key: str, value: Decimal) -> str:
-    if key == "requests.cpu":
+    if key.endswith(".cpu"):
         return _num(value * 1000) + "m"
     if key == "pods":
         return _num(value)

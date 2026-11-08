@@ -20,10 +20,10 @@ spec:
       {{- include "draftforge.selectorLabels" (dict "root" . "component" "redis") | nindent 6 }}
   template:
     metadata:
+      # No checksum or commit annotations: redis uses neither the ConfigMap nor
+      # the PR image, so a new commit must not restart it and drop the broker.
       labels:
         {{- include "draftforge.selectorLabels" (dict "root" . "component" "redis") | nindent 8 }}
-      annotations:
-        {{- include "draftforge.podAnnotations" . | nindent 8 }}
     spec:
       {{- include "draftforge.podCommon" . | nindent 6 }}
       containers:
@@ -54,7 +54,8 @@ spec:
             {{- include "draftforge.containerSecurity" (list 999 1000) | nindent 12 }}
       volumes:
         - name: data
-          emptyDir: {}
+          emptyDir:
+            sizeLimit: {{ .Values.redis.dataSizeLimit }}
 ---
 apiVersion: v1
 kind: Service

@@ -1,0 +1,29 @@
+suite: preview guard without the ApplicationSet values
+# A draftforge-pr-* namespace must never render without the full preview
+# values, whatever subset of them arrives.
+release:
+  name: draftforge-pr-1
+  namespace: draftforge-pr-1
+templates:
+  - templates/namespace.yaml
+tests:
+  - it: fails with only values-preview.yaml
+    values:
+      - ../values-preview.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "preview guard: "
+
+  - it: fails with only values-preview.yaml and preview.enabled false
+    values:
+      - ../values-preview.yaml
+    set:
+      preview.enabled: false
+    asserts:
+      - failedTemplate:
+          errorPattern: "preview namespace, so preview\\.enabled must be true"
+
+  - it: fails with the default values
+    asserts:
+      - failedTemplate:
+          errorPattern: "preview namespace, so preview\\.enabled must be true"

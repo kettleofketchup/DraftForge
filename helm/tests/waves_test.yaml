@@ -1,4 +1,4 @@
-suite: sync waves and annotations (spec 5.4 test 3)
+suite: sync waves and annotations
 # templates lists every template file; a new template must be added here.
 # The "every document" checks name no template: they run on every listed
 # template and, through the documentSelector, on every document it renders.

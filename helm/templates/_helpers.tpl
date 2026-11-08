@@ -113,14 +113,14 @@ draftforge.kettle.sh/commit: {{ . | quote }}
 {{- end -}}
 
 {{/*
-Fail the render unless a container sets requests.cpu, requests.memory and
-limits.memory (the preview quota covers those keys, and admission rejects a pod
-without them). Emits the resources block.
+Fail the render unless a container sets cpu, memory and ephemeral-storage
+requests and limits (the preview quota covers those keys, and admission rejects
+a pod without them). Emits the resources block.
 Usage: include "draftforge.requireResources" (dict "name" "backend" "res" .Values.backend.resources)
 */}}
 {{- define "draftforge.requireResources" -}}
 {{- $res := .res | default dict -}}
-{{- range $key := list "requests.cpu" "requests.memory" "limits.memory" -}}
+{{- range $key := list "requests.cpu" "requests.memory" "requests.ephemeral-storage" "limits.cpu" "limits.memory" "limits.ephemeral-storage" -}}
 {{- $parts := splitList "." $key -}}
 {{- if not (dig (index $parts 0) (index $parts 1) "" $res) -}}
 {{- fail (printf "draftforge: container %q must set resources.%s" $.name $key) -}}

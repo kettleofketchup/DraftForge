@@ -21,7 +21,7 @@ templates:
   - templates/discord-bot.yaml
   - templates/frontend.yaml
 tests:
-  # --- workloads (spec 5.4 test 2) ---------------------------------------
+  # --- workloads ---------------------------------------
   - it: renders no PVC, celery beat or discord bot
     asserts:
       - hasDocuments: {count: 0}
@@ -78,11 +78,11 @@ tests:
         template: templates/redis.yaml
         documentSelector: {path: kind, value: Deployment}
 
-  # --- pods (spec 5.4 test 7) ----------------------------------------------
-  - it: gives every pod preview-low, no API token and the commit annotation
+  # --- pods ----------------------------------------------
+  - it: gives every pod the priority class and no API token, and app pods the commit annotation
     asserts:
       # backend
-      - equal: {path: spec.template.spec.priorityClassName, value: preview-low}
+      - equal: {path: spec.template.spec.priorityClassName, value: preview-priority}
         template: templates/backend.yaml
         documentSelector: {path: kind, value: Deployment}
       - equal: {path: spec.template.spec.automountServiceAccountToken, value: false}
@@ -92,7 +92,7 @@ tests:
         template: templates/backend.yaml
         documentSelector: {path: kind, value: Deployment}
       # frontend
-      - equal: {path: spec.template.spec.priorityClassName, value: preview-low}
+      - equal: {path: spec.template.spec.priorityClassName, value: preview-priority}
         template: templates/frontend.yaml
         documentSelector: {path: kind, value: Deployment}
       - equal: {path: spec.template.spec.automountServiceAccountToken, value: false}
@@ -102,20 +102,21 @@ tests:
         template: templates/frontend.yaml
         documentSelector: {path: kind, value: Deployment}
       # celery worker
-      - equal: {path: spec.template.spec.priorityClassName, value: preview-low}
+      - equal: {path: spec.template.spec.priorityClassName, value: preview-priority}
         template: templates/celery-worker.yaml
       - equal: {path: spec.template.spec.automountServiceAccountToken, value: false}
         template: templates/celery-worker.yaml
       - equal: {path: "spec.template.metadata.annotations[\"draftforge.kettle.sh/commit\"]", value: "0123456789abcdef0123456789abcdef01234567"}
         template: templates/celery-worker.yaml
       # redis
-      - equal: {path: spec.template.spec.priorityClassName, value: preview-low}
+      - equal: {path: spec.template.spec.priorityClassName, value: preview-priority}
         template: templates/redis.yaml
         documentSelector: {path: kind, value: Deployment}
       - equal: {path: spec.template.spec.automountServiceAccountToken, value: false}
         template: templates/redis.yaml
         documentSelector: {path: kind, value: Deployment}
-      - equal: {path: "spec.template.metadata.annotations[\"draftforge.kettle.sh/commit\"]", value: "0123456789abcdef0123456789abcdef01234567"}
+      # redis runs neither the ConfigMap nor the PR image: a new commit must not restart it
+      - notExists: {path: spec.template.metadata.annotations}
         template: templates/redis.yaml
         documentSelector: {path: kind, value: Deployment}
 
@@ -198,13 +199,13 @@ tests:
       - notExists: {path: spec.template.spec.imagePullSecrets}
       - equal:
           path: spec.template.spec.volumes
-          value: [{name: data, emptyDir: {}}]
+          value: [{name: data, emptyDir: {sizeLimit: 256Mi}}]
       - notExists: {path: spec.template.spec.initContainers}
       - lengthEqual: {path: spec.template.spec.containers, count: 1}
       - notExists: {path: "spec.template.spec.containers[?(@.name == \"redis\")].envFrom"}
       - notExists: {path: "spec.template.spec.containers[?(@.name == \"redis\")].env"}
 
-  # --- namespace controls (spec 5.4 test 8) --------------------------------
+  # --- namespace controls --------------------------------
   - it: renders the Namespace draftforge-pr-1 with Pod Security restricted
     template: templates/namespace.yaml
     asserts:
@@ -217,7 +218,7 @@ tests:
       - equal: {path: "metadata.labels[\"pod-security.kubernetes.io/enforce-version\"]", value: latest}
       - equal: {path: "metadata.labels[\"kettle.sh/draftforge-preview\"]", value: "true"}
 
-  - it: renders the ResourceQuota from preview.quota plus the fixed zeros
+  - it: renders the ResourceQuota from preview.resourceQuota.hard plus the fixed zeros
     template: templates/resourcequota.yaml
     asserts:
       - hasDocuments: {count: 1}
@@ -229,13 +230,33 @@ tests:
             pods: "8"
             requests.cpu: "1"
             requests.memory: 2Gi
+            requests.ephemeral-storage: 1Gi
+            limits.cpu: "4"
             limits.memory: 4Gi
+            limits.ephemeral-storage: 7Gi
+            services: "3"
+            secrets: "2"
+            configmaps: "3"
+            count/deployments.apps: "4"
+            count/replicasets.apps: "48"
+            count/serviceaccounts: "2"
+            count/ingressroutes.traefik.io: "1"
+            count/middlewares.traefik.io: "4"
             count/persistentvolumeclaims: "0"
             requests.storage: "0"
             services.loadbalancers: "0"
             services.nodeports: "0"
+            count/jobs.batch: "0"
+            count/cronjobs.batch: "0"
 
-  - it: renders the LimitRange safety net
+  - it: keeps the fixed zeros when the valuesObject repeats them as 0
+    template: templates/resourcequota.yaml
+    set:
+      preview.resourceQuota.hard: {"count/jobs.batch": 0}
+    asserts:
+      - equal: {path: "spec.hard[\"count/jobs.batch\"]", value: "0"}
+
+  - it: renders the LimitRange from preview.limitRange
     template: templates/limitrange.yaml
     asserts:
       - hasDocuments: {count: 1}
@@ -243,8 +264,9 @@ tests:
       - equal: {path: metadata.name, value: draftforge-preview-limits}
       - lengthEqual: {path: spec.limits, count: 1}
       - equal: {path: "spec.limits[0].type", value: Container}
-      - equal: {path: "spec.limits[0].default", value: {cpu: 500m, memory: 512Mi}}
-      - equal: {path: "spec.limits[0].defaultRequest", value: {cpu: 50m, memory: 128Mi}}
+      - equal: {path: "spec.limits[0].default", value: {cpu: 500m, memory: 512Mi, ephemeral-storage: 512Mi}}
+      - equal: {path: "spec.limits[0].defaultRequest", value: {cpu: 50m, memory: 128Mi, ephemeral-storage: 64Mi}}
+      - equal: {path: "spec.limits[0].max", value: {cpu: "1", memory: 1Gi, ephemeral-storage: 2Gi}}
 
   - it: renders exactly four NetworkPolicies
     template: templates/networkpolicy.yaml
@@ -304,7 +326,7 @@ tests:
       - equal:
           path: "spec.ingress[0].from"
           value:
-            - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: traefik}}
+            - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: ingress-system}}
               podSelector: {matchLabels: {app.kubernetes.io/name: traefik}}
       - equal:
           path: "spec.ingress[0].ports"
@@ -313,7 +335,7 @@ tests:
             - {port: 3000, protocol: TCP}
 
   # One peer carrying both selectors means namespace AND pod. Two peers would
-  # mean OR and admit every pod in the traefik namespace.
+  # mean OR and admit every pod in the ingress namespace.
   - it: test_traefik_peer_is_single_and_selector
     template: templates/networkpolicy.yaml
     documentSelector: {path: metadata.name, value: allow-ingress-traefik}

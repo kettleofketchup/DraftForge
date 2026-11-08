@@ -1,12 +1,13 @@
-suite: ingressroute and middlewares (spec 5.4 test 9)
+suite: ingressroute and middlewares
 # Preview cases use the preview fixture; the "defaults" cases override release
-# and values per test. The template renders four documents: the IngressRoute
-# and the discord-rewrite, internal-deny and strip-identity Middlewares.
+# and values per test. In preview the template renders five documents: the
+# IngressRoute and the discord-rewrite, internal-deny, strip-identity and
+# ratelimit Middlewares.
 templates:
   - templates/ingressroute.yaml
 tests:
   # ---- preview fixture ----
-  - it: "preview: renders the IngressRoute and three Middlewares as traefik.io/v1alpha1"
+  - it: "preview: renders the IngressRoute and four Middlewares as traefik.io/v1alpha1"
     release: &previewRelease
       name: draftforge-pr-1
       namespace: draftforge-pr-1
@@ -14,7 +15,7 @@ tests:
       - ../values-preview.yaml
       - fixtures/preview-appset-values.yaml
     asserts:
-      - hasDocuments: {count: 4}
+      - hasDocuments: {count: 5}
       - isAPIVersion: {of: traefik.io/v1alpha1}
       - isKind: {of: IngressRoute}
         documentSelector: {path: metadata.name, value: draftforge}
@@ -24,6 +25,8 @@ tests:
         documentSelector: {path: metadata.name, value: draftforge-internal-deny}
       - isKind: {of: Middleware}
         documentSelector: {path: metadata.name, value: draftforge-strip-identity}
+      - isKind: {of: Middleware}
+        documentSelector: {path: metadata.name, value: draftforge-ratelimit}
 
   - it: "preview: websecure entry point and the preview host in every route"
     release: *previewRelease
@@ -32,10 +35,10 @@ tests:
     asserts:
       - equal: {path: spec.entryPoints, value: [websecure]}
       - lengthEqual: {path: spec.routes, count: 4}
-      - matchRegex: {path: "spec.routes[0].match", pattern: "^Host\\(`draftforge-pr-1\\.home\\.kettle\\.sh`\\) && "}
-      - matchRegex: {path: "spec.routes[1].match", pattern: "^Host\\(`draftforge-pr-1\\.home\\.kettle\\.sh`\\) && "}
-      - matchRegex: {path: "spec.routes[2].match", pattern: "^Host\\(`draftforge-pr-1\\.home\\.kettle\\.sh`\\) && "}
-      - equal: {path: "spec.routes[3].match", value: "Host(`draftforge-pr-1.home.kettle.sh`)"}
+      - matchRegex: {path: "spec.routes[0].match", pattern: "^Host\\(`draftforge-pr-1\\.preview\\.example\\.test`\\) && "}
+      - matchRegex: {path: "spec.routes[1].match", pattern: "^Host\\(`draftforge-pr-1\\.preview\\.example\\.test`\\) && "}
+      - matchRegex: {path: "spec.routes[2].match", pattern: "^Host\\(`draftforge-pr-1\\.preview\\.example\\.test`\\) && "}
+      - equal: {path: "spec.routes[3].match", value: "Host(`draftforge-pr-1.preview.example.test`)"}
 
   - it: "preview: routes are in priority order 300, 250, 200, 100"
     release: *previewRelease
@@ -89,26 +92,48 @@ tests:
     asserts:
       - equal: {path: "spec.routes[3].services", value: [{name: frontend, port: 3000}]}
 
-  - it: "preview: every route lists authentik forward-auth first, then strip-identity"
+  - it: "preview: every route lists the rate limit, forward-auth, then strip-identity first"
     release: *previewRelease
     values: *previewValues
     documentSelector: *ingressRoute
     asserts:
-      - equal: {path: "spec.routes[0].middlewares[0]", value: {name: authentik-forwardauth, namespace: authentik}}
-      - equal: {path: "spec.routes[1].middlewares[0]", value: {name: authentik-forwardauth, namespace: authentik}}
-      - equal: {path: "spec.routes[2].middlewares[0]", value: {name: authentik-forwardauth, namespace: authentik}}
-      - equal: {path: "spec.routes[3].middlewares[0]", value: {name: authentik-forwardauth, namespace: authentik}}
-      - equal: {path: "spec.routes[0].middlewares[1]", value: {name: draftforge-strip-identity}}
-      - equal: {path: "spec.routes[1].middlewares[1]", value: {name: draftforge-strip-identity}}
-      - equal: {path: "spec.routes[2].middlewares[1]", value: {name: draftforge-strip-identity}}
-      - equal: {path: "spec.routes[3].middlewares[1]", value: {name: draftforge-strip-identity}}
+      - equal: {path: "spec.routes[0].middlewares[0]", value: {name: draftforge-ratelimit}}
+      - equal: {path: "spec.routes[1].middlewares[0]", value: {name: draftforge-ratelimit}}
+      - equal: {path: "spec.routes[2].middlewares[0]", value: {name: draftforge-ratelimit}}
+      - equal: {path: "spec.routes[3].middlewares[0]", value: {name: draftforge-ratelimit}}
+      - equal: {path: "spec.routes[0].middlewares[1]", value: {name: forward-auth, namespace: auth-system}}
+      - equal: {path: "spec.routes[1].middlewares[1]", value: {name: forward-auth, namespace: auth-system}}
+      - equal: {path: "spec.routes[2].middlewares[1]", value: {name: forward-auth, namespace: auth-system}}
+      - equal: {path: "spec.routes[3].middlewares[1]", value: {name: forward-auth, namespace: auth-system}}
+      - equal: {path: "spec.routes[0].middlewares[2]", value: {name: draftforge-strip-identity}}
+      - equal: {path: "spec.routes[1].middlewares[2]", value: {name: draftforge-strip-identity}}
+      - equal: {path: "spec.routes[2].middlewares[2]", value: {name: draftforge-strip-identity}}
+      - equal: {path: "spec.routes[3].middlewares[2]", value: {name: draftforge-strip-identity}}
 
-  - it: "preview: uses the home-kettle-sh-tls secret"
+  - it: "preview: rate limits per client IP header"
+    release: *previewRelease
+    values: *previewValues
+    documentSelector: {path: metadata.name, value: draftforge-ratelimit}
+    asserts:
+      - equal:
+          path: spec.rateLimit
+          value: {average: 50, burst: 100, period: 1s, sourceCriterion: {requestHeaderName: X-Client-IP}}
+
+  - it: "preview: rate limit without sourceHeader uses the default source"
+    release: *previewRelease
+    values: *previewValues
+    set:
+      ingress.rateLimit.sourceHeader: ""
+    documentSelector: {path: metadata.name, value: draftforge-ratelimit}
+    asserts:
+      - notExists: {path: spec.rateLimit.sourceCriterion}
+
+  - it: "preview: uses the configured TLS secret"
     release: *previewRelease
     values: *previewValues
     documentSelector: *ingressRoute
     asserts:
-      - equal: {path: spec.tls, value: {secretName: home-kettle-sh-tls}}
+      - equal: {path: spec.tls, value: {secretName: preview-tls}}
 
   - it: "preview: discord-rewrite maps /discord/<x> to /api/discord/<x>"
     release: *previewRelease
@@ -126,7 +151,7 @@ tests:
     asserts:
       - equal: {path: spec.ipAllowList.sourceRange, value: [127.0.0.1/32]}
 
-  - it: "preview: strip-identity empties the five X-authentik-* headers"
+  - it: "preview: strip-identity empties every ingress.identityHeaders header"
     release: *previewRelease
     values: *previewValues
     documentSelector: {path: metadata.name, value: draftforge-strip-identity}
@@ -136,9 +161,27 @@ tests:
           value:
             X-authentik-username: ""
             X-authentik-groups: ""
+            X-authentik-entitlements: ""
             X-authentik-email: ""
             X-authentik-name: ""
             X-authentik-uid: ""
+            X-authentik-jwt: ""
+            X-authentik-meta-jwks: ""
+            X-authentik-meta-outpost: ""
+            X-authentik-meta-provider: ""
+            X-authentik-meta-app: ""
+            X-authentik-meta-version: ""
+
+  - it: "preview: strip-identity follows an overridden ingress.identityHeaders"
+    release: *previewRelease
+    values: *previewValues
+    set:
+      ingress.identityHeaders: [X-Auth-User, X-Auth-Token]
+    documentSelector: {path: metadata.name, value: draftforge-strip-identity}
+    asserts:
+      - equal:
+          path: spec.headers.customRequestHeaders
+          value: {X-Auth-User: "", X-Auth-Token: ""}
 
   # ---- defaults (prod-shaped) ----
   - it: "defaults: no tls key and no authentik or strip-identity middleware"

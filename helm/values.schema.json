@@ -4,6 +4,16 @@
   "type": "object",
   "additionalProperties": false,
   "definitions": {
+    "quantity": { "type": ["string", "integer", "null"] },
+    "containerLimits": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "cpu": { "$ref": "#/definitions/quantity" },
+        "memory": { "$ref": "#/definitions/quantity" },
+        "ephemeral-storage": { "$ref": "#/definitions/quantity" }
+      }
+    },
     "resources": {
       "type": "object",
       "properties": {
@@ -49,7 +59,12 @@
     "redis": {
       "allOf": [
         { "$ref": "#/definitions/component" },
-        { "properties": { "image": { "type": "string", "minLength": 1 } } }
+        {
+          "properties": {
+            "image": { "type": "string", "minLength": 1 },
+            "dataSizeLimit": { "type": "string", "minLength": 1 }
+          }
+        }
       ]
     },
     "persistence": {
@@ -119,7 +134,22 @@
           }
         },
         "blockInternalApi": { "type": "boolean" },
-        "stripIdentityHeaders": { "type": "boolean" }
+        "stripIdentityHeaders": { "type": "boolean" },
+        "identityHeaders": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[A-Za-z0-9-]+$" }
+        },
+        "rateLimit": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "average": { "type": "integer", "minimum": 0 },
+            "burst": { "type": "integer", "minimum": 0 },
+            "period": { "type": "string", "minLength": 1 },
+            "sourceHeader": { "type": "string" }
+          }
+        }
       },
       "if": {
         "properties": { "enabled": { "const": true } },
@@ -132,20 +162,29 @@
     },
     "preview": {
       "type": "object",
+      "additionalProperties": false,
       "properties": {
         "enabled": { "type": "boolean" },
         "hostSuffix": { "type": "string" },
-        "quota": {
+        "resourceQuota": {
           "type": "object",
+          "additionalProperties": false,
           "properties": {
-            "pods": { "type": "string" },
-            "requestsCpu": { "type": "string" },
-            "requestsMemory": { "type": "string" },
-            "limitsMemory": { "type": "string" }
+            "hard": { "type": "object", "additionalProperties": { "$ref": "#/definitions/quantity" } }
+          }
+        },
+        "limitRange": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "default": { "$ref": "#/definitions/containerLimits" },
+            "defaultRequest": { "$ref": "#/definitions/containerLimits" },
+            "max": { "$ref": "#/definitions/containerLimits" }
           }
         },
         "networkPolicy": {
           "type": "object",
+          "additionalProperties": false,
           "properties": { "ingressNamespace": { "type": "string" } }
         }
       }
