@@ -295,13 +295,12 @@ if os.environ.get("SQLITE_PATH"):
 
 # Docker environment detection
 @functools.lru_cache(maxsize=1)
-def is_docker() -> bool:
-    """Check if running inside Docker container."""
-    if os.path.exists("/.dockerenv"):
+def is_docker(root: Path = Path("/")) -> bool:
+    """Check if running inside a Docker or podman container."""
+    if (root / ".dockerenv").exists() or (root / "run/.containerenv").exists():
         return True
     try:
-        with open("/proc/1/cgroup", "r") as f:
-            return "docker" in f.read()
+        return "docker" in (root / "proc/1/cgroup").read_text()
     except Exception:
         return False
 
