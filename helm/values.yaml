@@ -34,11 +34,18 @@ env:
   otelEnabled: false      # differs from .env.prod (true): the chart ships no collector endpoint; a prod cutover sets both
   logFormat: json
   logLevel: INFO
+  # Extra ConfigMap keys. They may only add keys: setting a key the chart
+  # manages (TEST, DEBUG, CI, NODE_ENV, SITE_URL, REDIS_HOST, ...) fails the
+  # render; use the env.* value instead.
   extra: {}
 secrets:
   create: false
   djangoSecretKey: ""
   internalServiceToken: ""
+# Secrets loaded with envFrom after the ConfigMap, so their keys win. Outside
+# preview mode one of secrets.create or extraEnvSecrets is required, and the
+# Secret must hold DJANGO_SECRET_KEY. The chart cannot see Secret contents: a
+# key such as TEST in one of these Secrets reaches the pods unchecked.
 extraEnvSecrets: []
 ingress:
   enabled: true
@@ -63,10 +70,20 @@ ingress:
     - X-authentik-meta-provider
     - X-authentik-meta-app
     - X-authentik-meta-version
-  # Traefik RateLimit, first middleware on every route. sourceHeader names the
-  # header holding the client IP when a proxy sits in front of Traefik; empty
-  # uses the connection's remote address.
-  rateLimit: { enabled: false, average: 0, burst: 0, period: 1s, sourceHeader: "" }
+  # Traefik RateLimit, first on every route. The aggregate limit (when
+  # aggregate.average > 0) is keyed on the TCP peer and runs first; the
+  # per-client limit after it is keyed on sourceHeader, or on the remote address
+  # when sourceHeader is empty. Set sourceHeader only to a header the fronting
+  # proxy always overwrites, and only if these hosts cannot reach Traefik
+  # without that proxy: a client that sets the header itself gets a new bucket
+  # per value. Preview mode requires both limits.
+  rateLimit:
+    enabled: false
+    average: 0
+    burst: 0
+    period: 1s
+    sourceHeader: ""
+    aggregate: { average: 0, burst: 0 }
 preview:
   enabled: false          # values-preview.yaml sets true; any draftforge-pr-* namespace requires it
   hostSuffix: ""          # e.g. preview.example.test; host must be <namespace>.<hostSuffix>

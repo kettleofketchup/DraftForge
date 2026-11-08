@@ -4,6 +4,12 @@ Preview-mode guard rails. Fails the render when:
   is false, so a valuesObject that drops the flag cannot render an unguarded app;
 - env.test is true outside preview mode, because TEST exposes the test-login
   endpoints;
+- env.extra names a key the chart manages: TEST, DEBUG, CI and NODE_ENV set
+  there would turn the test-login endpoints on around the env.test check, and
+  in preview mode SQLITE_PATH, REDIS_HOST or the host keys would change;
+- outside preview mode, neither secrets.create nor extraEnvSecrets is set, so
+  DJANGO_SECRET_KEY would be unset and the backend would fall back to the
+  development key that is public in this repository;
 - preview.enabled is true and any security-relevant value the deploying
   ApplicationSet must set is missing.
 It protects against a misconfigured ApplicationSet, not against the chart itself.
@@ -18,6 +24,15 @@ Emits nothing. Takes the root context.
 {{- end -}}
 {{- if and $v.env.test (not $v.preview.enabled) -}}
 {{- fail "draftforge preview guard: env.test exposes the test-login endpoints and is allowed only with preview.enabled" -}}
+{{- end -}}
+{{- $chartEnv := include "draftforge.envChartData" . | fromYaml -}}
+{{- range $k := keys ($v.env.extra | default dict) | sortAlpha -}}
+{{- if hasKey $chartEnv $k -}}
+{{- fail (printf "draftforge guard: env.extra must not set the chart-managed key %q; use the matching env.* value" $k) -}}
+{{- end -}}
+{{- end -}}
+{{- if and (not $v.preview.enabled) (not $v.secrets.create) (not $v.extraEnvSecrets) -}}
+{{- fail "draftforge guard: set secrets.create or extraEnvSecrets (with DJANGO_SECRET_KEY); without one the backend uses the public development secret key" -}}
 {{- end -}}
 {{- if $v.preview.enabled -}}
 {{- if not (regexMatch "^draftforge-pr-[0-9]+$" $ns) -}}
@@ -59,6 +74,9 @@ Emits nothing. Takes the root context.
 {{- range $key := list "average" "burst" -}}
 {{- if le (int (index $rl $key)) 0 -}}
 {{- fail (printf "draftforge preview guard: ingress.rateLimit.%s must be greater than 0" $key) -}}
+{{- end -}}
+{{- if le (int (index ($rl.aggregate | default dict) $key | default 0)) 0 -}}
+{{- fail (printf "draftforge preview guard: ingress.rateLimit.aggregate.%s must be greater than 0" $key) -}}
 {{- end -}}
 {{- end -}}
 {{- if $v.persistence.enabled -}}

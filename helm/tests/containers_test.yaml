@@ -1,4 +1,6 @@
 suite: containers (command, resources, securityContext)
+values:
+  - fixtures/prod-values.yaml
 templates:
   - templates/configmap-env.yaml
   - templates/secret.yaml

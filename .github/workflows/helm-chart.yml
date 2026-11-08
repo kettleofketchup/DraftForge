@@ -90,8 +90,9 @@ jobs:
       - name: actionlint
         run: actionlint .github/workflows/helm-chart.yml .github/workflows/preview-images.yml .github/workflows/preview-queue.yml
 
+      # The prod fixture adds the env Secret the guard requires outside preview mode.
       - name: Lint (default values)
-        run: '"$HELM" lint --strict helm'
+        run: '"$HELM" lint --strict helm -f helm/tests/fixtures/prod-values.yaml'
 
       - name: Lint (preview profile)
         run: >-
@@ -103,7 +104,7 @@ jobs:
       - name: Render both profiles
         run: |
           mkdir -p "$RUNNER_TEMP/render"
-          "$HELM" template draftforge helm > "$RUNNER_TEMP/render/default.yaml"
+          "$HELM" template draftforge helm -f helm/tests/fixtures/prod-values.yaml > "$RUNNER_TEMP/render/default.yaml"
           "$HELM" template draftforge-pr-1 helm \
             -f helm/values-preview.yaml \
             -f helm/tests/fixtures/preview-appset-values.yaml \

@@ -1,4 +1,6 @@
 suite: celery worker, celery beat and discord bot
+values:
+  - fixtures/prod-values.yaml
 templates:
   - templates/configmap-env.yaml
   - templates/secret.yaml

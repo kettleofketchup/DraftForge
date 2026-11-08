@@ -46,19 +46,20 @@ Render either profile locally with `just helm::template default` or
 | `persistence.enabled` / `.size` / `.storageClass` / `.accessMode` | `true` / `2Gi` / `""` (cluster default) / `ReadWriteOnce` | Previews: `false`, which gives an `emptyDir` with a 1Gi limit. Must be `false` in preview mode. |
 | `migrations.enabled` | `true` | Runs the `migrate` init container. |
 | `seed.enabled` / `.commands` | `false` / `["populate_all --force"]` | Previews: `true`. |
-| `env.*` | `nodeEnv: production`, `debug/test/release/ci: false`, `siteUrl: ""`, `otelEnabled: false`, `logFormat: json`, `logLevel: INFO`, `extra: {}` | Populates ConfigMap `draftforge-env`. `siteUrl` defaults to `https://<ingress.host>`. |
-| `secrets.create` / `.djangoSecretKey` / `.internalServiceToken` | `false` / `""` / `""` | Previews create the Secret with dummy values. Prod uses `extraEnvSecrets`. |
-| `extraEnvSecrets` | `[]` | Extra Secrets loaded with `envFrom` (prod). Previews leave this empty. |
+| `env.*` | `nodeEnv: production`, `debug/test/release/ci: false`, `siteUrl: ""`, `otelEnabled: false`, `logFormat: json`, `logLevel: INFO`, `extra: {}` | Populates ConfigMap `draftforge-env`. `siteUrl` defaults to `https://<ingress.host>`. `extra` may only add keys: a key the chart manages (`TEST`, `DEBUG`, `CI`, `NODE_ENV`, `SITE_URL`, `REDIS_HOST`, ...) fails the render, so `env.extra` cannot turn on the test-login endpoints around the `env.test` check. |
+| `secrets.create` / `.djangoSecretKey` / `.internalServiceToken` | `false` / `""` / `""` | Previews create the Secret with dummy values. Prod uses `extraEnvSecrets`. Outside preview mode one of `secrets.create` or `extraEnvSecrets` is required, or the render fails: without `DJANGO_SECRET_KEY` the backend falls back to the development key, which is public in this repo. |
+| `extraEnvSecrets` | `[]` | Extra Secrets loaded with `envFrom` after the ConfigMap, so their keys win (prod). Previews leave this empty. The chart cannot see Secret contents: keep `TEST`, `DEBUG` and `CI` out of them. |
 | `ingress.enabled` / `.host` / `.entryPoint` | `true` / `dota.kettle.sh` / `websecure` | Previews: the host must be `<namespace>.<preview.hostSuffix>`. |
 | `ingress.tls.secretName` | `""` | The `tls` key is emitted only when this is set. |
 | `ingress.authentik.enabled` / `.middlewareName` / `.middlewareNamespace` | `false` / `""` / `""` | The forward-auth middleware, listed on every route after the rate limit. All three are required in preview mode. |
 | `ingress.blockInternalApi` | `true` | Denies `/api/internal` from outside (see below). Required in preview mode. |
 | `ingress.stripIdentityHeaders` | `false` | Removes the `ingress.identityHeaders` headers before they reach the app. Required in preview mode. |
 | `ingress.identityHeaders` | the `X-authentik-*` identity headers | Must cover the forward-auth middleware's `authResponseHeaders`. Must be non-empty in preview mode. |
-| `ingress.rateLimit.{enabled,average,burst,period,sourceHeader}` | `false` / `0` / `0` / `1s` / `""` | Traefik `rateLimit`, the first middleware on every route. `sourceHeader` names the client-IP header set by a proxy in front of Traefik; empty uses the remote address. Preview mode requires `enabled` and positive `average` and `burst`. |
+| `ingress.rateLimit.{enabled,average,burst,period,sourceHeader}` | `false` / `0` / `0` / `1s` / `""` | Traefik `rateLimit` per client, listed on every route after the aggregate limit. It keys on `sourceHeader` (a header name, `^[A-Za-z0-9-]+$`), or on the remote address when that is empty. Set `sourceHeader` only to a header the fronting proxy always overwrites, and only when these hosts cannot reach Traefik without that proxy: a client that reaches Traefik directly can send a new value per request and get a new bucket each time, and requests without the header share one bucket. Preview mode requires `enabled` and positive `average` and `burst`. |
+| `ingress.rateLimit.aggregate.{average,burst}` | `0` / `0` | A second `rateLimit`, first on every route, keyed on the TCP peer, so it caps traffic however `sourceHeader` is set or forged. Rendered when `average` is above 0; preview mode requires both above 0. Count it in `count/middlewares.traefik.io`. |
 | `preview.enabled` | `false` | `values-preview.yaml` sets `true`. A `draftforge-pr-*` namespace fails to render without it, and `env.test` is allowed only with it. |
 | `preview.hostSuffix` | `""` | For example `preview.example.test`. |
-| `preview.resourceQuota.hard` | `{}` | The ResourceQuota `spec.hard`. Preview mode requires `pods`, `requests.cpu`, `requests.memory`, `requests.ephemeral-storage`, `limits.cpu`, `limits.memory`, `limits.ephemeral-storage`, `services`, `secrets`, `configmaps` and `count/deployments.apps`; any other quota key may be added. The chart pins PVCs, `requests.storage`, LoadBalancer and NodePort Services, Jobs and CronJobs at `0` and fails a render that sets them to anything else. The budget check compares the rendered pods, rollout surge included, with this quota. |
+| `preview.resourceQuota.hard` | `{}` | The ResourceQuota `spec.hard`. Preview mode requires `pods`, `requests.cpu`, `requests.memory`, `requests.ephemeral-storage`, `limits.cpu`, `limits.memory`, `limits.ephemeral-storage`, `services`, `secrets`, `configmaps` and `count/deployments.apps`; any other quota key may be added. The chart pins PVCs, `requests.storage`, LoadBalancer and NodePort Services, Jobs and CronJobs at `0` and fails a render that sets them to anything else. The budget check compares the rendered pods, rollout surge included, with this quota, and counts the rendered objects (plus the `kube-root-ca.crt` ConfigMap and `default` ServiceAccount every namespace gets) against each object-count key. |
 | `preview.limitRange.{default,defaultRequest,max}` | `{}` | The Container LimitRange. Each needs `cpu`, `memory` and `ephemeral-storage` in preview mode. The budget check fails when a chart container exceeds `max`. |
 | `preview.networkPolicy.ingressNamespace` | `""` | The namespace Traefik runs in. Required in preview mode. |
 | `podSecurityContext` | `fsGroup/runAsUser/runAsGroup: 1000`, `runAsNonRoot`, `RuntimeDefault` | Every container is PSA-`restricted` compliant. |
@@ -145,11 +146,22 @@ just helm::test               # unittest, budget, render-safety, kubeconform, sc
 
 The DraftForge side of the preview queue is controlled from this repo:
 
-- `PREVIEW_CAP` (repo variable, 0 to 3) is the number of preview slots. `0` pauses previews.
-  The next queue run trims holders to the cap and keeps the longest-standing ones.
+Repo variables and their defaults when unset:
+
+- `PREVIEW_CAP` (0 to 3, default `0`) is the number of preview slots. `0`, or leaving it
+  unset, pauses previews. The next queue run trims holders to the cap and keeps the
+  longest-standing ones.
+- `PREVIEW_AUTHORS` (default `kettleofketchup`) is the comma-separated list of logins whose
+  PRs get images and slots. Every commit on the head must also be authored and committed by
+  one of them (GitHub's `web-flow` committer counts, for web UI commits), or the PR gets no
+  slot.
+- `PREVIEW_REQUIRE_VERIFIED` (default `false`). GitHub maps commit logins from the commit
+  e-mail, which anyone can set; `true` also requires a verified signature on every commit,
+  which is what makes the commit check hold.
 - The `no-preview` label opts a PR out. Removing `preview-env` by hand does not last; the
   queue adds it back.
-- Idle or failed holders are evicted while someone waits (`PREVIEW_IDLE_DAYS`, default 7).
+- Idle or failed holders are evicted while someone waits (`PREVIEW_IDLE_DAYS`, 1 to 365,
+  default 7).
 - If the queue is not moving, run `preview-queue` with `workflow_dispatch`, and re-enable the
   cron in the Actions tab if GitHub disabled it after 60 days of inactivity.
 
@@ -164,6 +176,16 @@ Previews run PR-built code behind forward-auth. Two limits of that model:
   (`authResponseHeaders`), or PR code receives it. The deploying cluster sets the list and
   should check it against the middleware.
 - A preview host that shares a registrable domain with other internal apps is same-site with
-  them, so their `SameSite=Lax` cookies reach PR code, and so does the forward-auth session
-  cookie. Previews are therefore limited to the repo owner's PRs; serve them from a separate
-  registrable domain before widening that.
+  them. strip-identity removes headers, not cookies, so the forward-auth session cookie for
+  that domain reaches PR code (the backend and frontend SSR), and PR JavaScript can send
+  same-site requests to the other apps and set cookies on the parent domain. Serve previews
+  from a registrable domain of their own, with its own forward-auth provider and cookie
+  domain, so no cookie of the other apps ever reaches a preview.
+- The allowlist is not a security boundary against anyone with write access to this repo.
+  `preview-images` runs from the PR head's copy of the workflow with `packages: write`, so a
+  collaborator's PR can push over another PR's `pr-<n>-<sha7>` tag or post its
+  `preview-images` status, and the chart deploys by tag. The queue's commit check stops a
+  collaborator's commit on an allowlisted author's branch from getting a slot, but without
+  `PREVIEW_REQUIRE_VERIFIED=true` commit logins can be forged. Treat every write
+  collaborator as able to run code in a preview until images are deployed by a digest that a
+  trusted workflow records.

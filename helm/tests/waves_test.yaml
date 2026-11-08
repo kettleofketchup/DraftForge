@@ -5,6 +5,8 @@ suite: sync waves and annotations
 # skipEmptyTemplates skips a template that renders nothing under a profile.
 # Wave -1: namespace controls. Wave 0: kinds healthy on apply. Wave 1 (last):
 # every Deployment. No resource hooks and no sync-options annotation.
+values:
+  - fixtures/prod-values.yaml
 templates:
   - templates/namespace.yaml
   - templates/resourcequota.yaml

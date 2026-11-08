@@ -1,4 +1,6 @@
 suite: values schema and required resources
+values:
+  - fixtures/prod-values.yaml
 templates:
   - templates/configmap-env.yaml
   - templates/backend.yaml
@@ -84,3 +86,15 @@ tests:
       ingress.rateLimit.averge: 10
     asserts:
       - failedTemplate: {}
+
+  - it: rejects an ingress.rateLimit.sourceHeader that is not a header name
+    set:
+      ingress.rateLimit.sourceHeader: "X-Client-IP: 1"
+    asserts:
+      - failedTemplate: {}
+
+  - it: accepts a header name as ingress.rateLimit.sourceHeader
+    set:
+      ingress.rateLimit.sourceHeader: Cf-Connecting-Ip
+    asserts:
+      - notFailedTemplate: {}

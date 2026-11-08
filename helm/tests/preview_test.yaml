@@ -241,7 +241,7 @@ tests:
             count/replicasets.apps: "48"
             count/serviceaccounts: "2"
             count/ingressroutes.traefik.io: "1"
-            count/middlewares.traefik.io: "4"
+            count/middlewares.traefik.io: "5"
             count/persistentvolumeclaims: "0"
             requests.storage: "0"
             services.loadbalancers: "0"

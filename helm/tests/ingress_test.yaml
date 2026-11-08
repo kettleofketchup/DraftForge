@@ -1,13 +1,15 @@
 suite: ingressroute and middlewares
 # Preview cases use the preview fixture; the "defaults" cases override release
-# and values per test. In preview the template renders five documents: the
-# IngressRoute and the discord-rewrite, internal-deny, strip-identity and
-# ratelimit Middlewares.
+# and values per test. In preview the template renders six documents: the
+# IngressRoute and the discord-rewrite, internal-deny, strip-identity,
+# ratelimit and ratelimit-aggregate Middlewares.
+values:
+  - fixtures/prod-values.yaml
 templates:
   - templates/ingressroute.yaml
 tests:
   # ---- preview fixture ----
-  - it: "preview: renders the IngressRoute and four Middlewares as traefik.io/v1alpha1"
+  - it: "preview: renders the IngressRoute and five Middlewares as traefik.io/v1alpha1"
     release: &previewRelease
       name: draftforge-pr-1
       namespace: draftforge-pr-1
@@ -15,7 +17,7 @@ tests:
       - ../values-preview.yaml
       - fixtures/preview-appset-values.yaml
     asserts:
-      - hasDocuments: {count: 5}
+      - hasDocuments: {count: 6}
       - isAPIVersion: {of: traefik.io/v1alpha1}
       - isKind: {of: IngressRoute}
         documentSelector: {path: metadata.name, value: draftforge}
@@ -27,6 +29,8 @@ tests:
         documentSelector: {path: metadata.name, value: draftforge-strip-identity}
       - isKind: {of: Middleware}
         documentSelector: {path: metadata.name, value: draftforge-ratelimit}
+      - isKind: {of: Middleware}
+        documentSelector: {path: metadata.name, value: draftforge-ratelimit-aggregate}
 
   - it: "preview: websecure entry point and the preview host in every route"
     release: *previewRelease
@@ -92,23 +96,27 @@ tests:
     asserts:
       - equal: {path: "spec.routes[3].services", value: [{name: frontend, port: 3000}]}
 
-  - it: "preview: every route lists the rate limit, forward-auth, then strip-identity first"
+  - it: "preview: every route lists the aggregate limit, the rate limit, forward-auth, then strip-identity first"
     release: *previewRelease
     values: *previewValues
     documentSelector: *ingressRoute
     asserts:
-      - equal: {path: "spec.routes[0].middlewares[0]", value: {name: draftforge-ratelimit}}
-      - equal: {path: "spec.routes[1].middlewares[0]", value: {name: draftforge-ratelimit}}
-      - equal: {path: "spec.routes[2].middlewares[0]", value: {name: draftforge-ratelimit}}
-      - equal: {path: "spec.routes[3].middlewares[0]", value: {name: draftforge-ratelimit}}
-      - equal: {path: "spec.routes[0].middlewares[1]", value: {name: forward-auth, namespace: auth-system}}
-      - equal: {path: "spec.routes[1].middlewares[1]", value: {name: forward-auth, namespace: auth-system}}
-      - equal: {path: "spec.routes[2].middlewares[1]", value: {name: forward-auth, namespace: auth-system}}
-      - equal: {path: "spec.routes[3].middlewares[1]", value: {name: forward-auth, namespace: auth-system}}
-      - equal: {path: "spec.routes[0].middlewares[2]", value: {name: draftforge-strip-identity}}
-      - equal: {path: "spec.routes[1].middlewares[2]", value: {name: draftforge-strip-identity}}
-      - equal: {path: "spec.routes[2].middlewares[2]", value: {name: draftforge-strip-identity}}
-      - equal: {path: "spec.routes[3].middlewares[2]", value: {name: draftforge-strip-identity}}
+      - equal: {path: "spec.routes[0].middlewares[0]", value: {name: draftforge-ratelimit-aggregate}}
+      - equal: {path: "spec.routes[1].middlewares[0]", value: {name: draftforge-ratelimit-aggregate}}
+      - equal: {path: "spec.routes[2].middlewares[0]", value: {name: draftforge-ratelimit-aggregate}}
+      - equal: {path: "spec.routes[3].middlewares[0]", value: {name: draftforge-ratelimit-aggregate}}
+      - equal: {path: "spec.routes[0].middlewares[1]", value: {name: draftforge-ratelimit}}
+      - equal: {path: "spec.routes[1].middlewares[1]", value: {name: draftforge-ratelimit}}
+      - equal: {path: "spec.routes[2].middlewares[1]", value: {name: draftforge-ratelimit}}
+      - equal: {path: "spec.routes[3].middlewares[1]", value: {name: draftforge-ratelimit}}
+      - equal: {path: "spec.routes[0].middlewares[2]", value: {name: forward-auth, namespace: auth-system}}
+      - equal: {path: "spec.routes[1].middlewares[2]", value: {name: forward-auth, namespace: auth-system}}
+      - equal: {path: "spec.routes[2].middlewares[2]", value: {name: forward-auth, namespace: auth-system}}
+      - equal: {path: "spec.routes[3].middlewares[2]", value: {name: forward-auth, namespace: auth-system}}
+      - equal: {path: "spec.routes[0].middlewares[3]", value: {name: draftforge-strip-identity}}
+      - equal: {path: "spec.routes[1].middlewares[3]", value: {name: draftforge-strip-identity}}
+      - equal: {path: "spec.routes[2].middlewares[3]", value: {name: draftforge-strip-identity}}
+      - equal: {path: "spec.routes[3].middlewares[3]", value: {name: draftforge-strip-identity}}
 
   - it: "preview: rate limits per client IP header"
     release: *previewRelease
@@ -118,6 +126,28 @@ tests:
       - equal:
           path: spec.rateLimit
           value: {average: 50, burst: 100, period: 1s, sourceCriterion: {requestHeaderName: X-Client-IP}}
+
+  - it: "preview: the aggregate limit has no sourceCriterion, so it keys on the TCP peer"
+    release: *previewRelease
+    values: *previewValues
+    documentSelector: {path: metadata.name, value: draftforge-ratelimit-aggregate}
+    asserts:
+      - equal:
+          path: spec.rateLimit
+          value: {average: 200, burst: 400, period: 1s}
+
+  - it: "defaults: renders no aggregate limit when aggregate.average is 0"
+    set:
+      ingress.rateLimit: {enabled: true, average: 10, burst: 20}
+    asserts:
+      - notContains:
+          path: spec.routes[0].middlewares
+          content: {name: draftforge-ratelimit-aggregate}
+        documentSelector: *ingressRoute
+      - equal:
+          path: spec.routes[0].middlewares[0]
+          value: {name: draftforge-ratelimit}
+        documentSelector: *ingressRoute
 
   - it: "preview: rate limit without sourceHeader uses the default source"
     release: *previewRelease

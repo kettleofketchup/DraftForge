@@ -141,6 +141,20 @@ tests:
       - failedTemplate:
           errorPattern: "preview guard: ingress\\.rateLimit\\.burst must"
 
+  - it: fails when ingress.rateLimit.aggregate.average is 0
+    set:
+      ingress.rateLimit.aggregate.average: 0
+    asserts:
+      - failedTemplate:
+          errorPattern: "preview guard: ingress\\.rateLimit\\.aggregate\\.average must"
+
+  - it: fails when ingress.rateLimit.aggregate.burst is 0
+    set:
+      ingress.rateLimit.aggregate.burst: 0
+    asserts:
+      - failedTemplate:
+          errorPattern: "preview guard: ingress\\.rateLimit\\.aggregate\\.burst must"
+
   - it: fails when ingress.identityHeaders is empty
     set:
       ingress.identityHeaders: []

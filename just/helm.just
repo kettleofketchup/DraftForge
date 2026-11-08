@@ -1,5 +1,6 @@
-# Helm chart commands (helm/). Same tool versions as .github/workflows/helm-chart.yml.
-# Helm must be v3.19.4, the Helm bundled in the ArgoCD repo-server that renders the
+# Helm chart commands (helm/). Helm and helm-unittest are pinned to the versions in
+# .github/workflows/helm-chart.yml; kubeconform and yq come from PATH unpinned, and
+# actionlint runs only in CI. Helm must be v3.19.4, the Helm bundled in the ArgoCD repo-server that renders the
 # chart; the helm on PATH may be Helm 4, so the recipes run the mise-managed v3.19.4.
 
 root := source_directory() / ".."
@@ -33,7 +34,7 @@ lint:
     #!/usr/bin/env bash
     set -euo pipefail
     {{use_helm}}
-    "$HELM" lint --strict {{chart}}
+    "$HELM" lint --strict {{chart}} -f {{chart}}/tests/fixtures/prod-values.yaml
     "$HELM" lint --strict {{chart}} {{preview_values}}
 
 # Render the chart: profile is default or preview
@@ -43,7 +44,7 @@ template profile="default":
     set -euo pipefail
     {{use_helm}}
     case "{{profile}}" in
-        default) "$HELM" template draftforge {{chart}} ;;
+        default) "$HELM" template draftforge {{chart}} -f {{chart}}/tests/fixtures/prod-values.yaml ;;
         preview) "$HELM" template draftforge-pr-1 {{chart}} {{preview_values}} ;;
         *) echo "unknown profile '{{profile}}' (use default or preview)" >&2; exit 2 ;;
     esac

@@ -1,4 +1,6 @@
 suite: default (prod-shaped) values
+values:
+  - fixtures/prod-values.yaml
 templates:
   - templates/serviceaccount.yaml
   - templates/secret.yaml
@@ -62,13 +64,14 @@ tests:
     asserts:
       - equal: {path: data.DEPLOY_VERSION, value: pr-7-abcdef1}
 
-  - it: appends env.extra after the chart keys
+  - it: adds env.extra keys next to the chart keys
     template: templates/configmap-env.yaml
     set:
       env.extra:
         FOO: bar
     asserts:
       - equal: {path: data.FOO, value: bar}
+      - equal: {path: data.TEST, value: "false"}
 
   - it: renders no Secret when secrets.create is false
     template: templates/secret.yaml

@@ -147,7 +147,15 @@
             "average": { "type": "integer", "minimum": 0 },
             "burst": { "type": "integer", "minimum": 0 },
             "period": { "type": "string", "minLength": 1 },
-            "sourceHeader": { "type": "string" }
+            "sourceHeader": { "type": "string", "pattern": "^([A-Za-z0-9-]+)?$" },
+            "aggregate": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "average": { "type": "integer", "minimum": 0 },
+                "burst": { "type": "integer", "minimum": 0 }
+              }
+            }
           }
         }
       },

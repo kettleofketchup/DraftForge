@@ -128,3 +128,35 @@ Usage: include "draftforge.requireResources" (dict "name" "backend" "res" .Value
 {{- end -}}
 {{- toYaml $res -}}
 {{- end -}}
+
+{{/*
+The env ConfigMap keys the chart manages, as YAML. configmap-env.yaml renders
+them, and the guard refuses an env.extra key that names one. Takes the root
+context.
+*/}}
+{{- define "draftforge.envChartData" -}}
+{{- $host := .Values.ingress.host | default "" -}}
+{{- $siteUrl := .Values.env.siteUrl | default (ternary (printf "https://%s" $host) "" (ne $host "")) -}}
+{{- $data := dict
+  "NODE_ENV" .Values.env.nodeEnv
+  "DEBUG" .Values.env.debug
+  "TEST" .Values.env.test
+  "RELEASE" .Values.env.release
+  "CI" .Values.env.ci
+  "SITE_URL" $siteUrl
+  "OTEL_ENABLED" .Values.env.otelEnabled
+  "LOG_FORMAT" .Values.env.logFormat
+  "LOG_LEVEL" .Values.env.logLevel
+  "REDIS_HOST" "redis"
+  "CELERY_BROKER_URL" "redis://redis:6379/3"
+  "CELERY_RESULT_BACKEND" "redis://redis:6379/3"
+  "INTERNAL_API_URL" "http://backend:8000/api/internal"
+  "API_BASE_URL" "http://backend:8000/api"
+  "SQLITE_PATH" "/data/db.sqlite3"
+  "EXTRA_ALLOWED_HOSTS" $host
+  "EXTRA_CSRF_TRUSTED_ORIGINS" (ternary (printf "https://%s" $host) "" (ne $host ""))
+  "TRUST_X_FORWARDED_PROTO" "true"
+  "DEPLOY_VERSION" (include "draftforge.imageTag" .)
+-}}
+{{- toYaml $data -}}
+{{- end -}}

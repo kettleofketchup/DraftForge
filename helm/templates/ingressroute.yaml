@@ -4,12 +4,17 @@
 {{- $ing := .Values.ingress -}}
 {{- $host := printf "Host(`%s`)" $ing.host -}}
 {{- /*
-Middlewares every route lists first: the rate limit (ahead of forward-auth, so
+Middlewares every route lists first: the rate limits (ahead of forward-auth, so
 a flood never reaches the auth outpost), authentik forward-auth (other
 namespace), then strip-identity, so PR code never sees the reviewer's
-identity headers.
+identity headers. The aggregate limit is keyed on the TCP peer, so it still
+caps traffic when a client rotates or omits the per-client sourceHeader.
 */ -}}
 {{- $common := list -}}
+{{- $aggregate := and $ing.rateLimit.enabled (gt (int (($ing.rateLimit.aggregate | default dict).average | default 0)) 0) -}}
+{{- if $aggregate -}}
+{{- $common = append $common (dict "name" (printf "%s-ratelimit-aggregate" $fullname)) -}}
+{{- end -}}
 {{- if $ing.rateLimit.enabled -}}
 {{- $common = append $common (dict "name" (printf "%s-ratelimit" $fullname)) -}}
 {{- end -}}
@@ -144,7 +149,25 @@ spec:
     period: {{ $ing.rateLimit.period | quote }}
     {{- with $ing.rateLimit.sourceHeader }}
     sourceCriterion:
-      requestHeaderName: {{ . }}
+      requestHeaderName: {{ . | quote }}
     {{- end }}
+{{- end }}
+{{- if $aggregate }}
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: {{ $fullname }}-ratelimit-aggregate
+  labels:
+    {{- include "draftforge.labels" . | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+# No sourceCriterion: Traefik keys on the request's remote address (the TCP
+# peer), which a client cannot set with a header.
+spec:
+  rateLimit:
+    average: {{ int $ing.rateLimit.aggregate.average }}
+    burst: {{ int $ing.rateLimit.aggregate.burst }}
+    period: {{ $ing.rateLimit.period | quote }}
 {{- end }}
 {{- end }}

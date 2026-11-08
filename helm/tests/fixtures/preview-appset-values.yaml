@@ -17,7 +17,7 @@ ingress:
   authentik: { enabled: true, middlewareName: forward-auth, middlewareNamespace: auth-system }
   blockInternalApi: true
   stripIdentityHeaders: true
-  rateLimit: { enabled: true, average: 50, burst: 100, period: 1s, sourceHeader: X-Client-IP }
+  rateLimit: { enabled: true, average: 50, burst: 100, period: 1s, sourceHeader: X-Client-IP, aggregate: { average: 200, burst: 400 } }
 preview:
   enabled: true
   hostSuffix: preview.example.test
@@ -37,7 +37,7 @@ preview:
       count/replicasets.apps: "48"
       count/serviceaccounts: "2"
       count/ingressroutes.traefik.io: "1"
-      count/middlewares.traefik.io: "4"
+      count/middlewares.traefik.io: "5"
   limitRange:
     default: { cpu: 500m, memory: 512Mi, ephemeral-storage: 512Mi }
     defaultRequest: { cpu: 50m, memory: 128Mi, ephemeral-storage: 64Mi }
