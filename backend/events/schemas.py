@@ -348,8 +348,9 @@ class RankFlowStateResponse(BaseModel):
     """Response of /api/internal/discord/rank-flow-state/.
 
     Built by ``DotaHandler.get_rank_flow_state`` so a client can construct the
-    next ``RankDetailsView`` (``discordbot/components/dota.py``). ``error``/``message`` populated only on lookup failure;
-    otherwise the rank_status + require_screenshot + min_mmr fields drive UI.
+    next ``RankDetailsView`` (``discordbot/components/dota.py``).
+    ``error``/``message`` are populated only on lookup failure; otherwise the
+    rank_status + require_screenshot + min_mmr fields drive the UI.
     """
 
     rank_status: str | None = None  # "active" | "previous" | "never"

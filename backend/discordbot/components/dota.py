@@ -222,7 +222,7 @@ class DotaComponents(GameComponentProvider):
                 if isinstance(item, ui.Select) and item.values:
                     positions.extend(item.values)
 
-            # ACK before the slow backend call (bug-2) and lock the view.
+            # ACK before the slow backend call and lock the view.
             if not await _lock_view_and_ack(interaction, view):
                 ctx.set_outcome("duplicate_submit_ignored")
                 return
@@ -329,7 +329,7 @@ class DotaComponents(GameComponentProvider):
             star = values[0] if values else "1"
             medal_with_star = f"{medal} {star}" if medal != "Immortal" else "Immortal"
 
-            # ACK before the slow backend call (bug-2) and lock the view.
+            # ACK before the slow backend call and lock the view.
             if not await _lock_view_and_ack(interaction, view):
                 ctx.set_outcome("duplicate_submit_ignored")
                 return
@@ -382,7 +382,7 @@ class DotaComponents(GameComponentProvider):
         ) as ctx:
             tier = values[0] if values else "1"
 
-            # ACK before the slow backend call (bug-2) and lock the view.
+            # ACK before the slow backend call and lock the view.
             if not await _lock_view_and_ack(interaction, view):
                 ctx.set_outcome("duplicate_submit_ignored")
                 return
