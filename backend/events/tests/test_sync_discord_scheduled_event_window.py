@@ -12,7 +12,11 @@ from unittest.mock import MagicMock, patch
 
 from django.test import SimpleTestCase
 
-from events.tasks import sync_discord_events
+from events.tasks import (
+    _flatten_discord_form_errors,
+    sync_discord_events,
+)
+from events.utils import starts_in_future
 
 
 def _sync_state(scheduled_at: datetime) -> SimpleNamespace:
@@ -62,3 +66,35 @@ class SyncScheduledEventStartWindowTest(SimpleTestCase):
         sync_discord_events()
 
         mock_create.assert_called_once_with(2)
+
+    def test_unparseable_start_is_skipped_without_aborting_sync(
+        self, mock_state: MagicMock, mock_create: MagicMock
+    ) -> None:
+        state = _sync_state(datetime.now(timezone.utc) + timedelta(hours=2))
+        state.active_events[0]["scheduled_at"] = "not-a-date"
+        mock_state.return_value = state
+
+        sync_discord_events()
+
+        mock_create.assert_not_called()
+
+
+class StartsInFutureTest(SimpleTestCase):
+    def test_naive_datetime_is_not_eligible(self) -> None:
+        self.assertFalse(starts_in_future(datetime.now() + timedelta(hours=2)))
+
+    def test_date_only_string_is_not_eligible(self) -> None:
+        self.assertFalse(starts_in_future("2999-01-01"))
+
+    def test_aware_iso_string_in_future_is_eligible(self) -> None:
+        later = datetime.now(timezone.utc) + timedelta(hours=2)
+        self.assertTrue(starts_in_future(later.isoformat().replace("+00:00", "Z")))
+
+
+class FlattenDiscordFormErrorsTest(SimpleTestCase):
+    def test_non_dict_error_entries_are_kept_as_text(self) -> None:
+        errors = {"name": {"_errors": ["too long", {"message": "bad"}]}}
+        self.assertEqual(
+            _flatten_discord_form_errors(errors),
+            ["name: too long", "name: bad"],
+        )

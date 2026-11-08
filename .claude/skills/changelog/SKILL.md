@@ -77,7 +77,7 @@ only. A `CHANGELOG.md` change there fails unless HEAD is the release commit
 
 ## Release assembly (`just version::set X.Y.Z`)
 
-Run on a clean, up-to-date `main`. The preflight refusals, the rollback rules and the
+To cut a release, follow the `release` skill. Run on a clean, up-to-date `main`. The preflight refusals, the rollback rules and the
 one-time admin setup (label and ruleset) are in `docs/development/changelog.md`; read
 it before cutting a release. If the tag push fails after `main` was pushed, there is
 no rollback; push the tag by hand with `git push origin refs/tags/X.Y.Z`.

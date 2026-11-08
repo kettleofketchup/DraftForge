@@ -20,17 +20,16 @@ ns_test.add_collection(ns_runner, "runner")
 import paths
 
 
-def get_docker_host():
+def get_docker_host() -> str:
     """Detect DOCKER_HOST based on environment.
 
-    Returns 'nginx' if running inside a Docker container, 'localhost' otherwise.
-    Detection checks for /.dockerenv file or 'docker' in /proc/1/cgroup.
+    Returns 'nginx' if running inside a Docker or podman container, 'localhost'
+    otherwise. Detection checks for /.dockerenv, /run/.containerenv (podman),
+    or 'docker' in /proc/1/cgroup.
     """
-    # Check for /.dockerenv (created by Docker)
-    if Path("/.dockerenv").exists():
+    if Path("/.dockerenv").exists() or Path("/run/.containerenv").exists():
         return "nginx"
 
-    # Check /proc/1/cgroup for 'docker' (Linux containers)
     cgroup_path = Path("/proc/1/cgroup")
     if cgroup_path.exists():
         try:
