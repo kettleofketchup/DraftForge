@@ -1,6 +1,9 @@
+from typing import Any
+
 from django.utils import timezone
 
 from app.models import CustomUser
+from steam.constants import REQUIRED_PLAYER_FIELDS
 from steam.models import LeagueSyncState, Match, PlayerMatchStats
 from steam.utils.retry import retry_with_backoff
 from steam.utils.steam_api_caller import SteamAPI
@@ -9,7 +12,7 @@ from telemetry.logging import get_logger
 log = get_logger(__name__)
 
 
-def link_user_to_stats(player_stats):
+def link_user_to_stats(player_stats: PlayerMatchStats) -> bool:
     """
     Attempt to link a PlayerMatchStats record to a CustomUser via steamid.
 
@@ -38,7 +41,7 @@ def link_user_to_stats(player_stats):
         return False
 
 
-def relink_all_users():
+def relink_all_users() -> int:
     """
     Re-scan all PlayerMatchStats and attempt to link unlinked records to users.
 
@@ -61,7 +64,20 @@ def relink_all_users():
     return linked_count
 
 
-def process_match(match_id, league_id=None, match_seq_num=None):
+def missing_required_fields(data: dict[str, Any]) -> list[str]:
+    """Required match/player fields absent from a Steam match payload."""
+    missing = set() if "radiant_win" in data else {"radiant_win"}
+    for player in data.get("players", []):
+        if player.get("account_id") is not None:
+            missing.update(f for f in REQUIRED_PLAYER_FIELDS if f not in player)
+    return sorted(missing)
+
+
+def process_match(
+    match_id: int,
+    league_id: int | None = None,
+    match_seq_num: int | None = None,
+) -> Match | None:
     """
     Fetch single match details from Steam API, store in DB, link users.
 
@@ -78,7 +94,7 @@ def process_match(match_id, league_id=None, match_seq_num=None):
     """
     api = SteamAPI()
 
-    def fetch():
+    def fetch() -> dict[str, Any] | None:
         if match_seq_num:
             # Use GetMatchHistoryBySequenceNum - more reliable for detailed stats
             result = api.get_match_history_by_seq_num(
@@ -111,10 +127,23 @@ def process_match(match_id, league_id=None, match_seq_num=None):
 
     data = result["result"]
 
+    missing = missing_required_fields(data)
+    if missing:
+        log.info(
+            "steam_league_sync_match_unparsed",
+            system="steam",
+            subsystem="ingest",
+            match_id=match_id,
+            league_id=league_id,
+            missing_fields=missing,
+            reason="steam_api_match_not_yet_parsed",
+        )
+        return None
+
     match, created = Match.objects.update_or_create(
         match_id=data["match_id"],
         defaults={
-            "radiant_win": data.get("radiant_win", False),
+            "radiant_win": data["radiant_win"],
             "duration": data.get("duration", 0),
             "start_time": data.get("start_time", 0),
             "game_mode": data.get("game_mode", 0),
@@ -148,18 +177,18 @@ def process_match(match_id, league_id=None, match_seq_num=None):
             match=match,
             steam_id=steam_id_64,
             defaults={
-                "player_slot": player_data.get("player_slot", 0),
-                "hero_id": player_data.get("hero_id", 0),
-                "kills": player_data.get("kills", 0),
-                "deaths": player_data.get("deaths", 0),
-                "assists": player_data.get("assists", 0),
-                "gold_per_min": player_data.get("gold_per_min", 0),
-                "xp_per_min": player_data.get("xp_per_min", 0),
-                "last_hits": player_data.get("last_hits", 0),
-                "denies": player_data.get("denies", 0),
-                "hero_damage": player_data.get("hero_damage", 0),
-                "tower_damage": player_data.get("tower_damage", 0),
-                "hero_healing": player_data.get("hero_healing", 0),
+                "player_slot": player_data["player_slot"],
+                "hero_id": player_data["hero_id"],
+                "kills": player_data["kills"],
+                "deaths": player_data["deaths"],
+                "assists": player_data["assists"],
+                "gold_per_min": player_data["gold_per_min"],
+                "xp_per_min": player_data["xp_per_min"],
+                "last_hits": player_data["last_hits"],
+                "denies": player_data["denies"],
+                "hero_damage": player_data["hero_damage"],
+                "tower_damage": player_data["tower_damage"],
+                "hero_healing": player_data["hero_healing"],
             },
         )
         link_user_to_stats(stats)
@@ -167,7 +196,7 @@ def process_match(match_id, league_id=None, match_seq_num=None):
     return match
 
 
-def sync_league_matches(league_id, full_sync=False):
+def sync_league_matches(league_id: int, full_sync: bool = False) -> dict[str, Any]:
     """
     Main sync entry point. Fetches matches from Steam API and stores them.
 
@@ -288,7 +317,7 @@ def sync_league_matches(league_id, full_sync=False):
     }
 
 
-def retry_failed_matches(league_id):
+def retry_failed_matches(league_id: int) -> dict[str, int]:
     """
     Attempt to re-process matches in failed_match_ids.
     Clears successful ones from the list.
