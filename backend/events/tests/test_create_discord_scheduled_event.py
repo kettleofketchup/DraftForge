@@ -55,9 +55,7 @@ class CreateDiscordScheduledEventTest(TestCase):
         Discord returns 403 with code 50013. The task MUST raise so the
         caller knows to emit a 'failed' log, not 'created'."""
         mock_get_event.return_value = self._mock_event()
-        mock_get_de.return_value = MagicMock(
-            ok=True, json=lambda: {"id": 17}
-        )
+        mock_get_de.return_value = MagicMock(ok=True, json=lambda: {"id": 17})
         resp = MagicMock()
         resp.status_code = 403
         resp.json.return_value = {
@@ -93,9 +91,7 @@ class CreateDiscordScheduledEventTest(TestCase):
         """The DiscordEventLog row for the failed attempt must carry the
         Discord error message in `error_message`, not just response_data."""
         mock_get_event.return_value = self._mock_event()
-        mock_get_de.return_value = MagicMock(
-            ok=True, json=lambda: {"id": 17}
-        )
+        mock_get_de.return_value = MagicMock(ok=True, json=lambda: {"id": 17})
         resp = MagicMock()
         resp.status_code = 403
         resp.json.return_value = {
@@ -131,9 +127,7 @@ class CreateDiscordScheduledEventTest(TestCase):
         """50035 Invalid Form Body hides the real reason in `errors`; the
         audit log must carry it so the activity log is self-explanatory."""
         mock_get_event.return_value = self._mock_event()
-        mock_get_de.return_value = MagicMock(
-            ok=True, json=lambda: {"id": 17}
-        )
+        mock_get_de.return_value = MagicMock(ok=True, json=lambda: {"id": 17})
         resp = MagicMock()
         resp.status_code = 400
         resp.json.return_value = {
@@ -203,9 +197,7 @@ class CreateDiscordScheduledEventTest(TestCase):
         """On 201 Created, the task should persist the new scheduled_event_id
         and NOT raise — this is the happy path."""
         mock_get_event.return_value = self._mock_event()
-        mock_get_de.return_value = MagicMock(
-            ok=True, json=lambda: {"id": 17}
-        )
+        mock_get_de.return_value = MagicMock(ok=True, json=lambda: {"id": 17})
         resp = MagicMock()
         resp.status_code = 201
         resp.json.return_value = {"id": "1505242926014402792"}
