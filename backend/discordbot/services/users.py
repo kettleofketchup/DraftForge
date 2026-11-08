@@ -3,7 +3,6 @@ from django.http import JsonResponse
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 
-# Create your views here.
 from app.models import (
     CustomUser,
     Organization,
@@ -167,7 +166,6 @@ def get_discord_voice_channel_activity(request):
             {"error": f"Error communicating with Discord API: {str(e)}"}, status=500
         )
     except Exception as e:
-        # Catch any other unexpected errors during processing
         return JsonResponse(
             {"error": f"An unexpected error occurred: {str(e)}"}, status=500
         )
@@ -252,7 +250,7 @@ def search_discord_members(request):
             {"error": "Organization has no Discord server configured"}, status=400
         )
 
-    # Use SEPARATE cache key from get_discord_members_data's internal 15s cache
+    # Separate key from get_discord_members_data's own per-guild member cache
     cache_key = f"discord_members_search_{org.discord_server_id}"
     members = cache.get(cache_key)
 
