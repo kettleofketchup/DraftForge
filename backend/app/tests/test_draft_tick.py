@@ -21,10 +21,14 @@ from app.tasks.draft_tick import (
 
 class KeyHelperTests(SimpleTestCase):
     def test_heartbeat_key_matches_hero_literal(self) -> None:
-        self.assertEqual(heartbeat_key("herodraft", 1, 2), "herodraft:1:captain:2:heartbeat")
+        self.assertEqual(
+            heartbeat_key("herodraft", 1, 2), "herodraft:1:captain:2:heartbeat"
+        )
 
     def test_captain_channel_key_matches_hero_literal(self) -> None:
-        self.assertEqual(captain_channel_key("herodraft", 1, 2), "herodraft:1:captain:2:channel")
+        self.assertEqual(
+            captain_channel_key("herodraft", 1, 2), "herodraft:1:captain:2:channel"
+        )
 
     def test_conn_count_key_matches_hero_literal(self) -> None:
         self.assertEqual(conn_count_key("herodraft", 7), "herodraft:connections:7")
@@ -33,7 +37,9 @@ class KeyHelperTests(SimpleTestCase):
         self.assertEqual(lock_key("herodraft", 7), "herodraft:tick_lock:7")
 
     def test_team_prefix_keys_are_distinct_from_hero(self) -> None:
-        self.assertNotEqual(heartbeat_key("teamdraft", 1, 2), heartbeat_key("herodraft", 1, 2))
+        self.assertNotEqual(
+            heartbeat_key("teamdraft", 1, 2), heartbeat_key("herodraft", 1, 2)
+        )
         self.assertEqual(conn_count_key("teamdraft", 7), "teamdraft:connections:7")
 
     def test_constants_match_hero_values(self) -> None:
@@ -49,7 +55,10 @@ class ConnectionCountTests(TransactionTestCase):
 
     def tearDown(self) -> None:
         r = get_redis_client()
-        r.delete(conn_count_key("herodraft", self.DRAFT_ID), conn_count_key("teamdraft", self.DRAFT_ID))
+        r.delete(
+            conn_count_key("herodraft", self.DRAFT_ID),
+            conn_count_key("teamdraft", self.DRAFT_ID),
+        )
 
     def test_counts_are_isolated_per_prefix(self) -> None:
         self.assertEqual(increment_connection_count("teamdraft", self.DRAFT_ID), 1)
@@ -61,7 +70,9 @@ class ConnectionCountTests(TransactionTestCase):
         increment_connection_count("teamdraft", self.DRAFT_ID)
         self.assertEqual(decrement_connection_count("teamdraft", self.DRAFT_ID), 0)
         self.assertEqual(decrement_connection_count("teamdraft", self.DRAFT_ID), 0)
-        self.assertIsNone(get_redis_client().get(conn_count_key("teamdraft", self.DRAFT_ID)))
+        self.assertIsNone(
+            get_redis_client().get(conn_count_key("teamdraft", self.DRAFT_ID))
+        )
 
     def test_increment_sets_300s_expiry(self) -> None:
         increment_connection_count("teamdraft", self.DRAFT_ID)
@@ -117,13 +128,19 @@ class RegistryTests(TransactionTestCase):
         with draft_tick._lock:
             for reg in draft_tick._registries.values():
                 reg.clear()
-        get_redis_client().delete(lock_key("herodraft", self.DRAFT_ID), lock_key("teamdraft", self.DRAFT_ID))
+        get_redis_client().delete(
+            lock_key("herodraft", self.DRAFT_ID), lock_key("teamdraft", self.DRAFT_ID)
+        )
 
     tearDown = setUp
 
     def test_registry_for_returns_same_dict_object(self):
-        self.assertIs(draft_tick.registry_for("herodraft"), draft_tick.registry_for("herodraft"))
-        self.assertIsNot(draft_tick.registry_for("herodraft"), draft_tick.registry_for("teamdraft"))
+        self.assertIs(
+            draft_tick.registry_for("herodraft"), draft_tick.registry_for("herodraft")
+        )
+        self.assertIsNot(
+            draft_tick.registry_for("herodraft"), draft_tick.registry_for("teamdraft")
+        )
 
     def test_registry_for_callable_while_holding_lock(self):
         result: list[dict] = []
@@ -148,13 +165,17 @@ class RegistryTests(TransactionTestCase):
         self.assertTrue(draft_tick.start_tick_broadcaster(team, self.DRAFT_ID))
         self.assertIn(self.DRAFT_ID, draft_tick.registry_for("herodraft"))
         self.assertIn(self.DRAFT_ID, draft_tick.registry_for("teamdraft"))
-        self.assertEqual(get_redis_client().get(lock_key("teamdraft", self.DRAFT_ID)), "locked")
+        self.assertEqual(
+            get_redis_client().get(lock_key("teamdraft", self.DRAFT_ID)), "locked"
+        )
 
         draft_tick.stop_tick_broadcaster("herodraft", self.DRAFT_ID)
         self.assertNotIn(self.DRAFT_ID, draft_tick.registry_for("herodraft"))
         self.assertIn(self.DRAFT_ID, draft_tick.registry_for("teamdraft"))
         self.assertIsNone(get_redis_client().get(lock_key("herodraft", self.DRAFT_ID)))
-        self.assertEqual(get_redis_client().get(lock_key("teamdraft", self.DRAFT_ID)), "locked")
+        self.assertEqual(
+            get_redis_client().get(lock_key("teamdraft", self.DRAFT_ID)), "locked"
+        )
         draft_tick.stop_tick_broadcaster("teamdraft", self.DRAFT_ID)
 
     def test_duplicate_start_same_prefix_returns_false(self):
@@ -169,7 +190,12 @@ class RegistryTests(TransactionTestCase):
         _wait_for_thread("teamdraft", self.DRAFT_ID)
         self.assertEqual(
             driver.calls,
-            ["resume_countdown", "captain_heartbeats", "broadcast_tick", "check_timeout"],
+            [
+                "resume_countdown",
+                "captain_heartbeats",
+                "broadcast_tick",
+                "check_timeout",
+            ],
         )
         self.assertNotIn(self.DRAFT_ID, draft_tick.registry_for("teamdraft"))
         self.assertIsNone(get_redis_client().get(lock_key("teamdraft", self.DRAFT_ID)))
@@ -186,8 +212,12 @@ class RegistryTests(TransactionTestCase):
         draft_tick.stop_tick_broadcaster("teamdraft", 424242)
 
     def test_stop_all_covers_every_prefix(self):
-        draft_tick.start_tick_broadcaster(RecordingDriver("herodraft", 10_000), self.DRAFT_ID)
-        draft_tick.start_tick_broadcaster(RecordingDriver("teamdraft", 10_000), self.DRAFT_ID)
+        draft_tick.start_tick_broadcaster(
+            RecordingDriver("herodraft", 10_000), self.DRAFT_ID
+        )
+        draft_tick.start_tick_broadcaster(
+            RecordingDriver("teamdraft", 10_000), self.DRAFT_ID
+        )
         draft_tick.stop_all_broadcasters()
         self.assertEqual(draft_tick.registry_for("herodraft"), {})
         self.assertEqual(draft_tick.registry_for("teamdraft"), {})
@@ -195,7 +225,9 @@ class RegistryTests(TransactionTestCase):
 
 class HeroDriverAliasTests(SimpleTestCase):
     def test_active_tick_tasks_is_the_hero_registry(self) -> None:
-        self.assertIs(herodraft_tick._active_tick_tasks, draft_tick.registry_for("herodraft"))
+        self.assertIs(
+            herodraft_tick._active_tick_tasks, draft_tick.registry_for("herodraft")
+        )
         self.assertIs(herodraft_tick._lock, draft_tick._lock)
 
     def test_hero_driver_satisfies_protocol_with_hero_prefix(self) -> None:
@@ -204,15 +236,25 @@ class HeroDriverAliasTests(SimpleTestCase):
         self.assertEqual(herodraft_tick.HeroDraftTickDriver.system, "herodraft")
 
     def test_hero_constants_still_exported(self) -> None:
-        self.assertEqual(herodraft_tick.CONN_COUNT_KEY.format(draft_id=3), conn_count_key("herodraft", 3))
-        self.assertEqual(herodraft_tick.LOCK_KEY.format(draft_id=3), lock_key("herodraft", 3))
+        self.assertEqual(
+            herodraft_tick.CONN_COUNT_KEY.format(draft_id=3),
+            conn_count_key("herodraft", 3),
+        )
+        self.assertEqual(
+            herodraft_tick.LOCK_KEY.format(draft_id=3), lock_key("herodraft", 3)
+        )
         self.assertEqual(
             herodraft_tick.CAPTAIN_HEARTBEAT_KEY.format(draft_id=3, user_id=4),
             heartbeat_key("herodraft", 3, 4),
         )
         self.assertIs(herodraft_tick.get_redis_client, get_redis_client)
 
-    @patch("app.tasks.herodraft_tick.should_continue_ticking", return_value=(False, "patched"))
+    @patch(
+        "app.tasks.herodraft_tick.should_continue_ticking",
+        return_value=(False, "patched"),
+    )
     def test_driver_should_continue_is_patchable_at_module_level(self, mocked) -> None:
-        self.assertEqual(herodraft_tick.HERO_TICK_DRIVER.should_continue(5), (False, "patched"))
+        self.assertEqual(
+            herodraft_tick.HERO_TICK_DRIVER.should_continue(5), (False, "patched")
+        )
         mocked.assert_called_once()

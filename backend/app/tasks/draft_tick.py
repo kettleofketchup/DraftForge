@@ -46,7 +46,9 @@ def get_redis_client() -> redis.Redis:
     global _redis_client
     if _redis_client is None:
         redis_host = getattr(settings, "REDIS_HOST", "localhost")
-        _redis_client = redis.Redis(host=redis_host, port=6379, db=2, decode_responses=True)
+        _redis_client = redis.Redis(
+            host=redis_host, port=6379, db=2, decode_responses=True
+        )
     return _redis_client
 
 
@@ -137,7 +139,9 @@ def registry_for(prefix: str) -> dict[int, TaskInfo]:
     return _registries.setdefault(prefix, {})
 
 
-async def run_tick_loop(driver: TickDriver, draft_id: int, stop_event: threading.Event) -> None:
+async def run_tick_loop(
+    driver: TickDriver, draft_id: int, stop_event: threading.Event
+) -> None:
     """Run tick broadcasts every second while draft is active and has connections."""
     r = get_redis_client()
     key = lock_key(driver.prefix, draft_id)
@@ -150,7 +154,9 @@ async def run_tick_loop(driver: TickDriver, draft_id: int, stop_event: threading
     def extend_lock() -> None:
         r.expire(key, LOCK_TIMEOUT)
 
-    log.info("tick_loop_started", system=driver.system, subsystem="timer", draft_id=draft_id)
+    log.info(
+        "tick_loop_started", system=driver.system, subsystem="timer", draft_id=draft_id
+    )
     tick_count = 0
     last_tick_start: float | None = None
 
@@ -217,8 +223,12 @@ async def run_tick_loop(driver: TickDriver, draft_id: int, stop_event: threading
                 )
                 break
 
-            await _timed_step("resume_countdown", driver.check_resume_countdown(draft_id))
-            await _timed_step("captain_heartbeats", driver.check_captain_heartbeats(draft_id))
+            await _timed_step(
+                "resume_countdown", driver.check_resume_countdown(draft_id)
+            )
+            await _timed_step(
+                "captain_heartbeats", driver.check_captain_heartbeats(draft_id)
+            )
             await _timed_step("broadcast_tick", driver.broadcast_tick(draft_id))
             await _timed_step("check_timeout", driver.check_timeout(draft_id))
             await _timed_step("extend_lock", extend_lock())
@@ -320,7 +330,12 @@ def start_tick_broadcaster(driver: TickDriver, draft_id: int) -> bool:
         reg[draft_id] = TaskInfo(stop_event, thread)
 
     thread.start()
-    log.info("tick_broadcaster_started", system=driver.system, subsystem="timer", draft_id=draft_id)
+    log.info(
+        "tick_broadcaster_started",
+        system=driver.system,
+        subsystem="timer",
+        draft_id=draft_id,
+    )
     return True
 
 
@@ -334,7 +349,12 @@ def stop_tick_broadcaster(prefix: str, draft_id: int) -> None:
         task_info = reg.get(draft_id)
 
     if task_info:
-        log.info("tick_broadcaster_stopping", system=prefix, subsystem="timer", draft_id=draft_id)
+        log.info(
+            "tick_broadcaster_stopping",
+            system=prefix,
+            subsystem="timer",
+            draft_id=draft_id,
+        )
         task_info.stop_event.set()
         task_info.thread.join(timeout=2.0)
 
@@ -357,12 +377,21 @@ def stop_tick_broadcaster(prefix: str, draft_id: int) -> None:
 def stop_all_broadcasters() -> None:
     """Stop every active tick broadcaster across all prefixes. Called on shutdown."""
     with _lock:
-        targets = [(prefix, draft_id) for prefix, reg in _registries.items() for draft_id in reg]
+        targets = [
+            (prefix, draft_id)
+            for prefix, reg in _registries.items()
+            for draft_id in reg
+        ]
 
     for prefix, draft_id in targets:
         stop_tick_broadcaster(prefix, draft_id)
 
-    log.info("tick_broadcasters_shutdown", system="websocket", subsystem="timer", count=len(targets))
+    log.info(
+        "tick_broadcasters_shutdown",
+        system="websocket",
+        subsystem="timer",
+        count=len(targets),
+    )
 
 
 atexit.register(stop_all_broadcasters)

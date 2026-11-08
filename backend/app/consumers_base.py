@@ -42,7 +42,7 @@ from opentelemetry import trace
 from opentelemetry.trace import Status, StatusCode
 
 from app.tasks import draft_tick
-from app.tasks import herodraft_tick as legacy_tick  # attribute lookup at call time keeps mock.patch("app.tasks.herodraft_tick.*") effective
+from app.tasks import herodraft_tick as legacy_tick  # late lookup keeps patches working
 from app.tasks.draft_tick import (
     CAPTAIN_CHANNEL_TTL,
     HEARTBEAT_TTL,

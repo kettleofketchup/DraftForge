@@ -25,10 +25,18 @@ User = get_user_model()
 class DraftConsumerBaseTestCase(TransactionTestCase):
     def setUp(self):
         self.captain = User.objects.create_user(username="tdc_captain", password="x")
-        self.spectator = User.objects.create_user(username="tdc_spectator", password="x")
-        self.tournament = Tournament.objects.create(name="TDC", date_played=date.today())
-        self.team = Team.objects.create(tournament=self.tournament, name="T1", captain=self.captain, draft_order=1)
-        self.draft = Draft.objects.create(tournament=self.tournament, draft_style="snake")
+        self.spectator = User.objects.create_user(
+            username="tdc_spectator", password="x"
+        )
+        self.tournament = Tournament.objects.create(
+            name="TDC", date_played=date.today()
+        )
+        self.team = Team.objects.create(
+            tournament=self.tournament, name="T1", captain=self.captain, draft_order=1
+        )
+        self.draft = Draft.objects.create(
+            tournament=self.tournament, draft_style="snake"
+        )
         self.r = get_redis_client()
         self._clear_keys()
 
@@ -44,7 +52,9 @@ class DraftConsumerBaseTestCase(TransactionTestCase):
         )
 
     def app(self):
-        return URLRouter([re_path(r"api/draft/(?P<draft_id>\d+)/$", DraftConsumer.as_asgi())])
+        return URLRouter(
+            [re_path(r"api/draft/(?P<draft_id>\d+)/$", DraftConsumer.as_asgi())]
+        )
 
     async def connect(self, user=None):
         comm = WebsocketCommunicator(self.app(), f"/api/draft/{self.draft.pk}/")
@@ -55,7 +65,9 @@ class DraftConsumerBaseTestCase(TransactionTestCase):
         first = await comm.receive_json_from(timeout=5)
         return comm, first
 
-    async def test_spectator_gets_single_initial_events_frame_and_counts_under_teamdraft(self):
+    async def test_spectator_gets_single_initial_events_frame_and_counts_under_teamdraft(
+        self,
+    ):
         comm, first = await self.connect(self.spectator)
         self.assertEqual(first["type"], "initial_events")
         self.assertIn("events", first)
@@ -70,7 +82,9 @@ class DraftConsumerBaseTestCase(TransactionTestCase):
         comm, _ = await self.connect(self.captain)
         hb = heartbeat_key("teamdraft", self.draft.pk, self.captain.pk)
         self.assertIsNotNone(self.r.get(hb))
-        self.assertIsNotNone(self.r.get(captain_channel_key("teamdraft", self.draft.pk, self.captain.pk)))
+        self.assertIsNotNone(
+            self.r.get(captain_channel_key("teamdraft", self.draft.pk, self.captain.pk))
+        )
         before = float(self.r.get(hb))
         await asyncio.sleep(0.05)
         await comm.send_json_to({"type": "heartbeat"})
@@ -82,8 +96,12 @@ class DraftConsumerBaseTestCase(TransactionTestCase):
         comm, _ = await self.connect(self.captain)
         hb = heartbeat_key("teamdraft", self.draft.pk, self.captain.pk)
         await comm.disconnect()
-        self.assertIsNotNone(self.r.get(hb), "clear_heartbeat_on_disconnect=False keeps the key")
-        self.assertIsNone(self.r.get(captain_channel_key("teamdraft", self.draft.pk, self.captain.pk)))
+        self.assertIsNotNone(
+            self.r.get(hb), "clear_heartbeat_on_disconnect=False keeps the key"
+        )
+        self.assertIsNone(
+            self.r.get(captain_channel_key("teamdraft", self.draft.pk, self.captain.pk))
+        )
 
     async def test_two_sockets_same_captain_both_stay_connected(self):
         comm1, _ = await self.connect(self.captain)
@@ -96,7 +114,9 @@ class DraftConsumerBaseTestCase(TransactionTestCase):
 
     async def test_no_ping_frames(self):
         comm, _ = await self.connect(self.spectator)
-        self.assertTrue(await comm.receive_nothing(timeout=2.5, interval=0.05))  # > 2x PING_INTERVAL
+        self.assertTrue(
+            await comm.receive_nothing(timeout=2.5, interval=0.05)
+        )  # > 2x PING_INTERVAL
         await comm.disconnect()
 
     @patch("app.tasks.draft_tick.start_tick_broadcaster")

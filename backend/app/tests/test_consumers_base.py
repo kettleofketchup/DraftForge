@@ -176,9 +176,7 @@ class TestSpanInstrumentation(SimpleTestCase):
 
     def test_handle_heartbeat_emits_span_with_conn_id(self):
         """ws.heartbeat span carries ws.conn_id + ws.draft_id + user.id."""
-        with mock.patch(
-            "app.tasks.herodraft_tick.get_redis_client"
-        ) as mock_get_redis:
+        with mock.patch("app.tasks.herodraft_tick.get_redis_client") as mock_get_redis:
             mock_get_redis.return_value = mock.MagicMock()
             asyncio.run(self.consumer.handle_heartbeat())
 
@@ -283,13 +281,25 @@ class TestBaseHooks(SimpleTestCase):
     """Non-abstract hooks added for the team draft (spec §1)."""
 
     def test_new_hooks_are_not_abstract(self):
-        for name in ("get_redis_prefix", "get_tick_driver", "should_start_tick_broadcaster", "send_initial_messages"):
-            self.assertFalse(getattr(getattr(BaseDraftConsumer, name), "__isabstractmethod__", False), name)
+        for name in (
+            "get_redis_prefix",
+            "get_tick_driver",
+            "should_start_tick_broadcaster",
+            "send_initial_messages",
+        ):
+            self.assertFalse(
+                getattr(
+                    getattr(BaseDraftConsumer, name), "__isabstractmethod__", False
+                ),
+                name,
+            )
 
     def test_redis_prefix_defaults_to_group_prefix(self):
         consumer = ConcreteDraftConsumer()
         self.assertEqual(consumer.get_redis_prefix(), consumer.get_room_group_prefix())
-        self.assertEqual(consumer._heartbeat_key(1, 2), "testdraft:1:captain:2:heartbeat")
+        self.assertEqual(
+            consumer._heartbeat_key(1, 2), "testdraft:1:captain:2:heartbeat"
+        )
 
     def test_redis_prefix_override_changes_keys_but_not_group(self):
         class SplitPrefixConsumer(ConcreteDraftConsumer):
@@ -298,8 +308,12 @@ class TestBaseHooks(SimpleTestCase):
 
         consumer = SplitPrefixConsumer()
         self.assertEqual(consumer.get_room_group_prefix(), "testdraft")
-        self.assertEqual(consumer._heartbeat_key(1, 2), "teamdraft:1:captain:2:heartbeat")
-        self.assertEqual(consumer._captain_channel_key(1, 2), "teamdraft:1:captain:2:channel")
+        self.assertEqual(
+            consumer._heartbeat_key(1, 2), "teamdraft:1:captain:2:heartbeat"
+        )
+        self.assertEqual(
+            consumer._captain_channel_key(1, 2), "teamdraft:1:captain:2:channel"
+        )
 
     def test_tick_driver_defaults_to_none(self):
         self.assertIsNone(ConcreteDraftConsumer().get_tick_driver())
