@@ -1,36 +1,15 @@
 import shlex
+import subprocess
 from collections.abc import Callable
 from pathlib import Path
 
 import pytest
-from invoke import MockContext, Result
-from invoke.exceptions import Exit
 
 import scripts.compose
 import scripts.slots as slots
-import scripts.tests as st
-import tasks
-from scripts.compose import playwright_env, run_compose
-from scripts.slot_tests._helpers import FakeHost, owner
-from scripts.slots import SLOT_FILE_REL, NoSlotFile
-from scripts.tests import flush_test_redis
-
-
-class RecCtx(MockContext):
-    # invoke's Context is a DataProxy: plain attribute writes copy into the config
-    def __init__(self, log: list[str] | None = None) -> None:
-        super().__init__()
-        object.__setattr__(self, "cmds", [])
-        object.__setattr__(self, "envs", [])
-        object.__setattr__(self, "kws", [])
-        object.__setattr__(self, "log", log if log is not None else [])
-
-    def run(self, command: str, **kw: object) -> Result:
-        self.cmds.append(command)
-        self.envs.append(dict(kw.get("env") or {}))
-        self.kws.append(dict(kw))
-        self.log.append(command)
-        return Result(command=command)
+from scripts.compose import flush_test_redis, main, playwright_env
+from scripts.slot_tests._helpers import FakeHost
+from scripts.slots import NoSlotFile, SlotError
 
 
 def _ci(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -42,13 +21,6 @@ def _ci(monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv(k, v)
 
 
-def test_recctx_shares_the_callers_list() -> None:
-    shared: list[str] = []
-    c = RecCtx(shared)
-    c.run("echo hi")
-    assert c.log is shared and shared == ["echo hi"] and c.cmds == ["echo hi"]
-
-
 @pytest.fixture
 def slotless(
     monkeypatch: pytest.MonkeyPatch,
@@ -58,26 +30,30 @@ def slotless(
     root = make_worktree("a")
     monkeypatch.setattr(slots, "MODULE_ROOT", root)
     monkeypatch.setattr(slots, "REAL_HOST", fake_host)
-    monkeypatch.setattr(st, "in_container", lambda: False)
+    monkeypatch.setattr(scripts.compose, "in_container", lambda: False)
     return root, fake_host
 
 
-def test_run_compose_down_without_slot_never_runs(
-    slotless: tuple[Path, FakeHost],
-) -> None:
-    with pytest.raises(Exit):
-        run_compose(MockContext(), "test", "down")
+class RecordedRun:
+    def __init__(self) -> None:
+        self.argvs: list[list[str]] = []
+        self.kws: list[dict[str, object]] = []
+
+    def __call__(self, argv: list[str], **kw: object) -> subprocess.CompletedProcess[str]:
+        self.argvs.append(list(argv))
+        self.kws.append(kw)
+        return subprocess.CompletedProcess(argv, 0)
+
+    @property
+    def cmds(self) -> list[str]:
+        return [shlex.join(a) for a in self.argvs]
 
 
-def test_test_down_is_scoped(
-    slotless: tuple[Path, FakeHost], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setenv("DF_SLOT", "3")
-    slots.ensure_slot()
-    c = RecCtx()
-    run_compose(c, "test", "down", "--remove-orphans")
-    assert " -p df-s3 " in c.cmds[0] and c.cmds[0].endswith("down --remove-orphans")
-    assert c.envs[0]["COMPOSE_PROJECT_NAME"] == "df-s3"
+@pytest.fixture
+def recorded(monkeypatch: pytest.MonkeyPatch) -> RecordedRun:
+    rec = RecordedRun()
+    monkeypatch.setattr(scripts.compose.subprocess, "run", rec)
+    return rec
 
 
 def test_playwright_env_ci(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -85,7 +61,7 @@ def test_playwright_env_ci(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(scripts.compose, "in_container", lambda: False)
     assert playwright_env() == {
         "DF_BASE_URL": "https://localhost",
-        "DF_BASE_URL_SOURCE": "invoke",
+        "DF_BASE_URL_SOURCE": "runner",
     }
 
 
@@ -94,18 +70,16 @@ def test_playwright_env_local_slot(
 ) -> None:
     monkeypatch.setenv("DF_SLOT", "3")
     slots.ensure_slot()
-    monkeypatch.setattr(scripts.compose, "in_container", lambda: False)
     assert playwright_env() == {
         "DF_BASE_URL": "https://localhost:13443",
-        "DF_BASE_URL_SOURCE": "invoke",
+        "DF_BASE_URL_SOURCE": "runner",
     }
 
 
 def test_playwright_env_local_without_slot_refuses(
-    slotless: tuple[Path, FakeHost], monkeypatch: pytest.MonkeyPatch
+    slotless: tuple[Path, FakeHost],
 ) -> None:
-    monkeypatch.setattr(scripts.compose, "in_container", lambda: False)
-    with pytest.raises((NoSlotFile, Exit)):
+    with pytest.raises(NoSlotFile):
         playwright_env()
 
 
@@ -120,202 +94,86 @@ def test_playwright_env_container(
     assert slotless[1].calls == []
 
 
-def _capture_one_off(monkeypatch: pytest.MonkeyPatch) -> list[list[str]]:
-    seen: list[list[str]] = []
-
-    def fake_run_one_off(args: list[str], **_: object) -> int:
-        seen.append(list(args))
-        return 0
-
-    monkeypatch.setattr(scripts.compose, "run_one_off", fake_run_one_off)
-    return seen
-
-
-@pytest.mark.parametrize(
-    "cmd",
-    [
-        "python manage.py test x -v 2",
-        "python manage.py test x 2>&1 | tee /tmp/out && echo $HOME",
-        "echo 'unbalanced",
-    ],
-)
-def test_test_run_keeps_shell_semantics(
-    slotless: tuple[Path, FakeHost], monkeypatch: pytest.MonkeyPatch, cmd: str
+def test_env_cli_prints_shell_quoted_exports(
+    slotless: tuple[Path, FakeHost],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     monkeypatch.setenv("DF_SLOT", "3")
     slots.ensure_slot()
-    seen = _capture_one_off(monkeypatch)
-    tasks.test_run(RecCtx(), cmd=cmd)
-    assert seen[0] == ["--rm", "--entrypoint", "", "backend", "sh", "-c", cmd]
-
-
-def test_test_run_empty_cmd_uses_image_default(
-    slotless: tuple[Path, FakeHost], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    seen = _capture_one_off(monkeypatch)
-    tasks.test_run(RecCtx(), cmd="")
-    assert seen[0] == ["--rm", "--entrypoint", "", "backend"]
-
-
-def test_dev_run_keeps_shell_semantics(slotless: tuple[Path, FakeHost]) -> None:
-    c = RecCtx()
-    tasks.dev_run(c, cmd="ls | wc -l > /tmp/n")
-    argv = shlex.split(c.cmds[0])
-    i = argv.index("run")
-    assert argv[i:] == ["run", "--rm", "backend", "sh", "-c", "ls | wc -l > /tmp/n"]
-
-
-def test_test_run_failure_exits_nonzero(
-    slotless: tuple[Path, FakeHost], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(scripts.compose, "run_one_off", lambda args, **_: 3)
-    with pytest.raises(Exit) as exc:
-        tasks.test_run(RecCtx(), cmd="false")
-    assert exc.value.code == 3
-
-
-@pytest.mark.parametrize(
-    "cmd", ["python manage.py shell", "cat a > b && echo $X | wc", "echo 'unbalanced"]
-)
-def test_test_exec_keeps_shell_semantics(
-    slotless: tuple[Path, FakeHost], monkeypatch: pytest.MonkeyPatch, cmd: str
-) -> None:
-    monkeypatch.setenv("DF_SLOT", "3")
-    slots.ensure_slot()
-    c = RecCtx()
-    tasks.test_exec(c, service="backend", cmd=cmd)
-    argv = shlex.split(c.cmds[0])
-    assert argv[argv.index("exec") :] == ["exec", "backend", "sh", "-c", cmd]
-    assert c.kws[0].get("pty") is True
-
-
-def test_auto_link_argv(slotless: tuple[Path, FakeHost]) -> None:
-    c = RecCtx()
-    tasks._auto_link_all_tournaments(c, "dev")
-    argv = shlex.split(c.cmds[0])
-    i = argv.index("exec")
-    assert argv[argv.index("-p") + 1] == "df-dev"
-    assert argv[i : i + 5] == ["exec", "-T", "backend", "python", "-c"]
-    assert "django.setup()" in argv[i + 5] and "{linked}" in argv[i + 5]
-
-
-def _stub_release(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(tasks, "load_dotenv", lambda *a, **k: True)
-    monkeypatch.setattr(tasks, "db_migrate", lambda *a, **k: None)
-    monkeypatch.setattr(tasks, "docker_release_pull", lambda *a, **k: None)
-
-
-def test_release_task_argv(
-    slotless: tuple[Path, FakeHost], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _stub_release(monkeypatch)
-    c = RecCtx()
-    tasks.dev_release(c)
-    rel = f"-p df -f {slots.MODULE_ROOT}/docker/docker-compose.release.yaml"
-    assert any(rel in x and x.endswith(" down") for x in c.cmds)
-    assert any(rel in x and x.endswith(" up -d") for x in c.cmds)
-
-
-def test_release_task_refuses_over_test_stack(
-    slotless: tuple[Path, FakeHost], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    root, h = slotless
-    h.projects["df"] = [
-        owner(
-            service="nginx",
-            wd=root,
-            config_files=("/x/docker/docker-compose.test.yaml",),
-        )
+    assert main(["env"]) == 0
+    assert capsys.readouterr().out.splitlines() == [
+        "export DF_BASE_URL=https://localhost:13443",
+        "export DF_BASE_URL_SOURCE=runner",
     ]
-    _stub_release(monkeypatch)
-    c = RecCtx()
-    with pytest.raises(Exit):
-        tasks.dev_release(c)
-    assert c.cmds == []
 
 
-def _stub_setup_steps(monkeypatch: pytest.MonkeyPatch) -> None:
-    for name in (
-        "populate_all",
-        "update_for_test",
-        "docker_build_all",
-    ):
-        monkeypatch.setattr(st, name, lambda *a, **k: None)
-    monkeypatch.setattr(st, "load_dotenv", lambda *a, **k: True)
-
-
-def test_setup_allocates_before_down(
-    slotless: tuple[Path, FakeHost], monkeypatch: pytest.MonkeyPatch
+def test_env_cli_without_slot_exits_1(
+    slotless: tuple[Path, FakeHost], capsys: pytest.CaptureFixture[str]
 ) -> None:
-    monkeypatch.setenv("DF_SLOT", "3")
-    _stub_setup_steps(monkeypatch)
-    ctx = RecCtx()
-    real = st.ensure_slot
-
-    def logged_ensure(*a: object, **k: object) -> slots.SlotEnv:
-        ctx.log.append("ENSURE")
-        return real(*a, **k)
-
-    monkeypatch.setattr(st, "ensure_slot", logged_ensure)
-    st.setup(ctx)
-    log = ctx.log
-    downs = [i for i, x in enumerate(log) if " down" in x]
-    ups = [x for x in log if " up" in x]
-    assert log[0] == "ENSURE" and log.count("ENSURE") == 1 and downs and downs[0] > 0
-    assert " -p df-s3 " in ups[-1]
-    assert "--scale celery-beat=0 --scale discord-bot=0" in ups[-1]
-
-
-def test_dev_test_allocates_in_fresh_worktree(
-    slotless: tuple[Path, FakeHost], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    root, _ = slotless
-    monkeypatch.setenv("DF_SLOT", "3")
-    monkeypatch.setattr(st, "load_dotenv", lambda *a, **k: True)
-    c = RecCtx()
-    st.dev_test(c)
-    assert (root / SLOT_FILE_REL).exists()
-    assert " -p df-s3 " in c.cmds[0] and " down" in c.cmds[0]
-    assert " -p df-s3 " in c.cmds[-1] and " up --scale " in c.cmds[-1]
-    assert c.cmds[-1].endswith(" -d")
+    assert main(["env"]) == 1
+    captured = capsys.readouterr()
+    assert captured.out == "" and "just test::slot" in captured.err
 
 
 def test_flush_test_redis_refuses_without_slot(
-    slotless: tuple[Path, FakeHost], capsys: pytest.CaptureFixture[str]
+    slotless: tuple[Path, FakeHost], recorded: RecordedRun
 ) -> None:
-    with pytest.raises(Exit):
-        flush_test_redis(MockContext())
-    assert "just test::slot" in capsys.readouterr().err
+    with pytest.raises(SlotError, match="just test::slot"):
+        flush_test_redis()
+    assert recorded.argvs == []
 
 
 def test_flush_test_redis_uses_fixture_slot(
-    slotless: tuple[Path, FakeHost], monkeypatch: pytest.MonkeyPatch
+    slotless: tuple[Path, FakeHost],
+    monkeypatch: pytest.MonkeyPatch,
+    recorded: RecordedRun,
 ) -> None:
     monkeypatch.setenv("DF_SLOT", "3")
     slots.ensure_slot()
-    c = RecCtx()
-    flush_test_redis(c)
-    assert " -p df-s3 " in c.cmds[0]
-    assert c.cmds[0].endswith("exec -T redis redis-cli FLUSHALL")
+    flush_test_redis()
+    assert " -p df-s3 " in recorded.cmds[0]
+    assert recorded.cmds[0].endswith("exec -T redis redis-cli FLUSHALL")
+    env = recorded.kws[0]["env"]
+    assert isinstance(env, dict) and env["COMPOSE_PROJECT_NAME"] == "df-s3"
 
 
-def test_flush_test_redis_ci_argv(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_flush_test_redis_ci_argv(
+    monkeypatch: pytest.MonkeyPatch, recorded: RecordedRun
+) -> None:
     _ci(monkeypatch)
-    monkeypatch.setattr(st, "in_container", lambda: False)
-    c = RecCtx()
-    flush_test_redis(c)
-    assert " -p df " in c.cmds[0] and "docker-compose.ci.override.yaml" in c.cmds[0]
-    assert c.cmds[0].endswith("exec -T redis redis-cli FLUSHALL")
+    monkeypatch.setattr(scripts.compose, "in_container", lambda: False)
+    flush_test_redis()
+    assert " -p df " in recorded.cmds[0]
+    assert "docker-compose.ci.override.yaml" in recorded.cmds[0]
+    assert recorded.cmds[0].endswith("exec -T redis redis-cli FLUSHALL")
 
 
 def test_flush_test_redis_is_fatal(
-    slotless: tuple[Path, FakeHost], monkeypatch: pytest.MonkeyPatch
+    slotless: tuple[Path, FakeHost],
+    monkeypatch: pytest.MonkeyPatch,
+    recorded: RecordedRun,
 ) -> None:
     monkeypatch.setenv("DF_SLOT", "3")
     slots.ensure_slot()
-    c = RecCtx()
-    flush_test_redis(c)
-    assert not c.kws[0].get("warn")
+    flush_test_redis()
+    assert recorded.kws[0]["check"] is True
+
+
+def test_flush_cli_reports_compose_failure(
+    slotless: tuple[Path, FakeHost],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setenv("DF_SLOT", "3")
+    slots.ensure_slot()
+
+    def fail(argv: list[str], **_: object) -> None:
+        raise subprocess.CalledProcessError(4, argv)
+
+    monkeypatch.setattr(scripts.compose.subprocess, "run", fail)
+    assert main(["flush-redis"]) == 4
+    assert "FLUSHALL failed (exit 4)" in capsys.readouterr().err
 
 
 @pytest.mark.parametrize("marker", [".dockerenv", "run/.containerenv"])
@@ -350,7 +208,9 @@ class FakeSock:
 
 
 def test_flush_test_redis_in_container_skips_slot_and_compose(
-    slotless: tuple[Path, FakeHost], monkeypatch: pytest.MonkeyPatch
+    slotless: tuple[Path, FakeHost],
+    monkeypatch: pytest.MonkeyPatch,
+    recorded: RecordedRun,
 ) -> None:
     sock = FakeSock(b"+OK\r\n")
     addrs: list[tuple[str, int]] = []
@@ -359,11 +219,10 @@ def test_flush_test_redis_in_container_skips_slot_and_compose(
         addrs.append(addr)
         return sock
 
-    monkeypatch.setattr(st, "in_container", lambda: True)
-    monkeypatch.setattr(st.socket, "create_connection", connect)
-    c = RecCtx()
-    flush_test_redis(c)
-    assert c.cmds == [] and slotless[1].calls == []
+    monkeypatch.setattr(scripts.compose, "in_container", lambda: True)
+    monkeypatch.setattr(scripts.compose.socket, "create_connection", connect)
+    flush_test_redis()
+    assert recorded.argvs == [] and slotless[1].calls == []
     assert addrs == [("redis", 6379)] and b"FLUSHALL" in sock.sent
 
 
@@ -375,111 +234,7 @@ def test_flush_test_redis_in_container_unreachable_warns(
     def refuse(addr: tuple[str, int], timeout: float) -> FakeSock:
         raise OSError("connection refused")
 
-    monkeypatch.setattr(st, "in_container", lambda: True)
-    monkeypatch.setattr(st.socket, "create_connection", refuse)
-    flush_test_redis(RecCtx())
+    monkeypatch.setattr(scripts.compose, "in_container", lambda: True)
+    monkeypatch.setattr(scripts.compose.socket, "create_connection", refuse)
+    flush_test_redis()
     assert "connection refused" in capsys.readouterr().err
-
-
-def test_wait_for_backend_retries_transient_errors(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    calls: list[str] = []
-    errors: list[BaseException] = [Exit(code=1), slots.SlotError("busy")]
-
-    def flaky(c: object, stack: str, *args: str, **kw: object) -> Result:
-        calls.append(args[0])
-        if errors:
-            raise errors.pop(0)
-        return Result(stdout="running" if args[0] == "ps" else "")
-
-    monkeypatch.setattr(tasks, "run_compose", flaky)
-    monkeypatch.setattr(tasks.time, "sleep", lambda _: None)
-    assert tasks._wait_for_backend(RecCtx(), "dev", timeout=60) is True
-    assert calls == ["ps", "ps", "ps", "exec"]
-
-
-def test_wait_for_backend_gives_up_at_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
-    clock = iter(range(0, 1000, 10))
-
-    def always_fail(*a: object, **k: object) -> Result:
-        raise Exit(code=1)
-
-    monkeypatch.setattr(tasks, "run_compose", always_fail)
-    monkeypatch.setattr(tasks.time, "sleep", lambda _: None)
-    monkeypatch.setattr(tasks.time, "time", lambda: next(clock))
-    assert tasks._wait_for_backend(RecCtx(), "dev", timeout=30) is False
-
-
-@pytest.mark.parametrize("task_fn", [st.dev_test, st.setup])
-def test_slot_allocation_error_is_a_clean_exit(
-    slotless: tuple[Path, FakeHost],
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-    task_fn: Callable[[RecCtx], None],
-) -> None:
-    def exhausted(*a: object, **k: object) -> slots.SlotEnv:
-        raise slots.SlotError("all 10 slots are held")
-
-    _stub_setup_steps(monkeypatch)
-    monkeypatch.setattr(st, "ensure_slot", exhausted)
-    c = RecCtx()
-    with pytest.raises(Exit) as exc:
-        task_fn(c)
-    assert exc.value.code == 1 and c.cmds == []
-    assert capsys.readouterr().err == "all 10 slots are held\n"
-
-
-def test_dev_prod_runs_through_helper(
-    slotless: tuple[Path, FakeHost], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _stub_release(monkeypatch)
-    c = RecCtx()
-    tasks.dev_prod(c)
-    prod = f"-p df -f {slots.MODULE_ROOT}/docker/docker-compose.prod.yaml"
-    assert len(c.cmds) == 1 and prod in c.cmds[0] and c.cmds[0].endswith(" up")
-
-
-def test_dev_prod_refuses_over_test_stack(
-    slotless: tuple[Path, FakeHost], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    root, h = slotless
-    h.projects["df"] = [
-        owner(
-            service="nginx",
-            wd=root,
-            config_files=("/x/docker/docker-compose.test.yaml",),
-        )
-    ]
-    _stub_release(monkeypatch)
-    c = RecCtx()
-    with pytest.raises(Exit):
-        tasks.dev_prod(c)
-    assert c.cmds == []
-
-
-def test_discord_logs_defaults_to_dev(slotless: tuple[Path, FakeHost]) -> None:
-    c = RecCtx()
-    tasks.discord_logs(c)
-    argv = shlex.split(c.cmds[0])
-    assert argv[argv.index("-p") + 1] == "df-dev"
-    assert argv[argv.index("logs") :] == ["logs", "-f", "--tail=100", "discord-bot"]
-
-
-def test_discord_logs_follows_the_test_slot(
-    slotless: tuple[Path, FakeHost], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setenv("DF_SLOT", "3")
-    slots.ensure_slot()
-    c = RecCtx()
-    tasks.discord_logs(c, stack="test")
-    assert " -p df-s3 " in c.cmds[0]
-
-
-def test_discord_logs_rejects_unknown_stack(
-    slotless: tuple[Path, FakeHost], capsys: pytest.CaptureFixture[str]
-) -> None:
-    c = RecCtx()
-    with pytest.raises(Exit):
-        tasks.discord_logs(c, stack="staging")
-    assert c.cmds == [] and "staging" in capsys.readouterr().err

@@ -29,19 +29,13 @@ docker push ghcr.io/kettleofketchup/dtx_website/frontend
 docker push ghcr.io/kettleofketchup/znx
 ```
 
-### 4. Using the invoke script
+### 4. Using just
 
-If you have an invoke or tasks.py script for automation, you can run:
-
-```sh
-invoke build
-invoke push
-```
-
-Or, if using Python directly:
+The repo's just recipes build and push every image with the right tags:
 
 ```sh
-python paths.py  # (if you have CLI logic in paths.py)
+just docker::all-build   # build backend, frontend and nginx
+just docker::all-push    # build and push them
 ```
 
 Refer to your `paths.py` for tag and path variables to use in your scripts or CI/CD.

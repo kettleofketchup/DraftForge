@@ -1,14 +1,17 @@
 # Test database image commands
 
-root := source_directory() / "../.."
+set shell := ["bash", "-euo", "pipefail", "-c"]
+
+root := clean(source_directory() / "../..")
 image := env("DF_TEST_DB_IMAGE", "draftforge/test-db")
 registry := env("DF_TEST_DB_REGISTRY", "ghcr.io/kettleofketchup/draftforge/test-db")
-inv := ". " + root / ".venv/bin/activate && cd " + root + " && inv"
+just := quote(just_executable()) + " --justfile " + quote(root / "justfile")
 
 # Output content hash for test-db sources
 [group('docker::db')]
 hash:
     #!/usr/bin/env bash
+    set -euo pipefail
     cd {{root}}
     ./scripts/hash-test-db-sources.sh
 
@@ -27,8 +30,8 @@ build:
     fi
 
     echo "Hash changed, rebuilding test DB..."
-    # Run populate directly (not via just, to avoid circular dependency)
-    {{inv}} db.populate.all
+    # db::populate::fresh, not ::all: ::all builds this image
+    {{just}} db::populate::fresh
 
     # Build using temp context to avoid .dockerignore excluding sqlite files
     CTX=$(mktemp -d)

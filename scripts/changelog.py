@@ -5,7 +5,7 @@
     scripts/changelog.py slug [BRANCH]   # the conventional fragment slug (default: current branch)
     scripts/changelog.py has-label NAME  # exit 0 if the PR has NAME, 1 if not, 2 on API error
 
-The release (`inv version.set`, scripts/version.py) calls release_preflight(),
+The release (`just version::set`, scripts/version.py) calls release_preflight(),
 fragment_paths() and release(); there is deliberately no CLI for assembling, since
 that would leave the consumed fragments in place.
 
@@ -512,7 +512,7 @@ def has_label(name: str, env: Mapping[str, str] | None = None) -> bool:
     return any(label["name"] == name for label in labels)
 
 
-# --- release: called by `inv version.set` (scripts/version.py) -----------------
+# --- release: called by `just version::set` (scripts/version.py) -----------------
 
 VERSION_FILES: tuple[str, ...] = (
     "pyproject.toml",

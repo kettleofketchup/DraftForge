@@ -3,7 +3,13 @@ import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-SCANNED = ["tasks.py", "scripts/tests.py", "scripts/docker.py", "scripts/update.py"]
+SCANNED = [
+    "justfile",
+    *sorted(str(p.relative_to(ROOT)) for p in (ROOT / "just").rglob("*.just")),
+    "scripts/compose.py",
+    "scripts/demo.py",
+    "scripts/in-env.sh",
+]
 
 
 def test_no_docker_stop_all() -> None:
@@ -23,7 +29,7 @@ RAW_COMPOSE_EXEMPT: dict[str, str] = {
     "scripts/slot_tests/test_slots_allocate.py": "asserts the helper's printed down hint",
     "scripts/slot_tests/test_slots_lifecycle.py": "asserts the helper's down argv",
     "scripts/slot_tests/test_slots_stale.py": "asserts the stale reaper's down argv",
-    "scripts/version.py": "version.build only builds images, never up/down/stop",
+    "scripts/test_version.py": "matches compose file names to check they exist",
 }
 
 
@@ -48,7 +54,7 @@ def _raw_compose_hits(rel: str) -> list[str]:
 
 def test_no_raw_compose_outside_helper() -> None:
     files = _tracked_sources()
-    assert "tasks.py" in files and "justfile" in files
+    assert "justfile" in files and "just/test/mod.just" in files
     hits = {
         rel: h
         for rel in files
@@ -62,10 +68,11 @@ def test_raw_compose_exemptions_are_live() -> None:
     assert stale == []
 
 
-def test_no_localhost_literal_in_scripts_tests() -> None:
-    assert "https://localhost" not in (ROOT / "scripts/tests.py").read_text()
+def test_no_localhost_literal_in_demo_or_playwright_recipes() -> None:
+    for rel in ["scripts/demo.py", "just/test/pw.just"]:
+        assert "https://localhost" not in (ROOT / rel).read_text(), rel
 
 
 def test_no_docker_host_in_scripts() -> None:
-    for rel in ["scripts/tests.py", "scripts/compose.py"]:
+    for rel in ["scripts/demo.py", "scripts/compose.py", "just/test/pw.just"]:
         assert "DOCKER_HOST" not in (ROOT / rel).read_text(), rel

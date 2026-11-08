@@ -33,7 +33,7 @@ LABEL org.opencontainers.image.source="https://github.com/kettleofketchup/draftf
 WORKDIR /app
 
 # Copy with ownership set directly (avoids slow recursive chown)
-COPY --chown=appuser:appuser __init__.py paths.py tasks.py /app/
+COPY --chown=appuser:appuser __init__.py paths.py /app/
 COPY --chown=appuser:appuser ./scripts /app/scripts
 COPY --chown=appuser:appuser ./backend /app/backend
 
@@ -49,7 +49,7 @@ LABEL org.opencontainers.image.source="https://github.com/kettleofketchup/draftf
 WORKDIR /app
 
 # Copy with ownership set directly (avoids slow recursive chown)
-COPY --chown=appuser:appuser __init__.py paths.py tasks.py /app/
+COPY --chown=appuser:appuser __init__.py paths.py /app/
 COPY --chown=appuser:appuser ./scripts /app/scripts
 COPY --chown=appuser:appuser ./backend /app/backend
 

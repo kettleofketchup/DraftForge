@@ -131,7 +131,7 @@ test.describe('HeroDraft Timeout Auto-Random Pick', () => {
       const errorText = await response.text();
       throw new Error(
         `Failed to get HeroDraft test data: ${response.status()} - ${errorText}\n` +
-        `Make sure to run 'inv db.populate.all' to create test data.`
+        `Make sure to run 'just db::populate::all' to create test data.`
       );
     }
 
