@@ -30,14 +30,11 @@ from events.discord._shared import (
     _log_signup,
 )
 from events.discord.providers.dota import DotaHandler
-from events.discord.providers.registry import get_signup_handler
+from events.discord.providers.registry import SIGNUP_HANDLERS, get_signup_handler
+from events.schemas import STALE_MODAL_MESSAGE
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
-
-STALE_MODAL_MESSAGE = (
-    "This event changed since you opened the form. Please press Sign Up again."
-)
 
 
 def _dota_handler(event: Any, event_id: int, handler_name: str) -> DotaHandler | None:
@@ -142,8 +139,9 @@ def handle_signup_button(
 def handle_signup_modal_submit(
     event_id: int,
     discord_user_id: str,
+    *,
+    values: dict,
     game_type: int | None = None,
-    values: dict | None = None,
 ) -> dict[str, Any]:
     """Handle modal form submission. Delegates to the per-game handler.
 
@@ -151,7 +149,12 @@ def handle_signup_modal_submit(
     the game the modal was built for when it opened; if the event's game
     changed since then the modal's fields no longer match the handler, so the
     submit is rejected with a "press Sign Up again" error instead of feeding
-    one game's values to another game's handler. ``None`` skips the check.
+    one game's values to another game's handler.
+
+    ``None`` means the modal came from the fallback provider (a game with no
+    dedicated handler). It is accepted only while the event still resolves to
+    the fallback handler; once the event belongs to a registered game, the
+    fallback modal's fields are stale and the submit is rejected the same way.
     """
     log.info(
         "handler_invoked",
@@ -172,7 +175,11 @@ def handle_signup_modal_submit(
     if not org_user:
         return {"action": "error", "message": "User not found."}
 
-    if game_type is not None and game_type != event.game_type:
+    if game_type is None:
+        stale = event.game_type in SIGNUP_HANDLERS
+    else:
+        stale = game_type != event.game_type
+    if stale:
         log.warning(
             "modal_game_type_mismatch",
             system="discord",
@@ -185,7 +192,7 @@ def handle_signup_modal_submit(
         return {"action": "error", "message": STALE_MODAL_MESSAGE}
 
     handler = get_signup_handler(event.game_type)
-    return handler.apply_modal_submit(event, org_user, user, values or {})
+    return handler.apply_modal_submit(event, org_user, user, values)
 
 
 def handle_rank_status_select(

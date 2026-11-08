@@ -78,7 +78,9 @@ class DefaultSignupModal(ui.Modal):
             result = await sync_to_async(signup_modal_submit, thread_sensitive=False)(
                 event_id=self.event_id,
                 discord_user_id=str(interaction.user.id),
-                game_type=None,  # fallback modal: no game-specific fields to mismatch
+                # None marks the fallback modal; the backend rejects it once
+                # the event belongs to a game with its own handler.
+                game_type=None,
                 values=values,
             )
             ctx.set_outcome(result["action"])

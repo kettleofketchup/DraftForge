@@ -32,6 +32,13 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 if TYPE_CHECKING:
     from app.schemas import TournamentUserSchema
 
+# Error ``message`` returned by ``handle_signup_modal_submit`` when the modal
+# was built for a different game than the event's current one. The bot's
+# modals prefix it with "❌ " like every other error message.
+STALE_MODAL_MESSAGE = (
+    "This event changed since you opened the form. Please press Sign Up again."
+)
+
 
 class OrgProxy:
     """Proxy for event.organization attribute access in embed builders.
@@ -41,13 +48,13 @@ class OrgProxy:
     Also truthful (bool(proxy) == True) so `if event.organization:` works.
     """
 
-    def __init__(self, pk: int, name: str, discord_server_id: str, logo: str):
+    def __init__(self, pk: int, name: str, discord_server_id: str, logo: str) -> None:
         self.pk = pk
         self.name = name
         self.discord_server_id = discord_server_id
         self.logo = logo
 
-    def __bool__(self):
+    def __bool__(self) -> bool:
         return True
 
 
@@ -245,7 +252,9 @@ class SignupInputPatch(BaseModel):
 
     @field_validator("positions")
     @classmethod
-    def _validate_positions_range(cls, v):
+    def _validate_positions_range(
+        cls, v: PositionPriorities | list[int] | None
+    ) -> PositionPriorities | list[int] | None:
         # PositionPriorities already validates 0..5 per field; only the legacy
         # list[int] form needs the role-number range check here.
         if v is None or isinstance(v, PositionPriorities):

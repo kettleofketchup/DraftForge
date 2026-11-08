@@ -98,7 +98,8 @@ class SignupModalSubmitRequest(BaseModel):
     event_id: int
     discord_user_id: str
     # Game the modal was built for; the handler rejects a mismatch with the
-    # event's current game. Optional so callers without a modal can omit it.
+    # event's current game. None (or omitted) marks the fallback modal, which
+    # is rejected once the event belongs to a game with its own handler.
     game_type: int | None = None
     values: dict
     model_config = {"extra": "ignore"}

@@ -62,7 +62,7 @@ def signup_modal_submit(
     *,
     event_id: int,
     discord_user_id: str,
-    game_type: int,
+    game_type: int | None,
     values: dict[str, Any] | None,
 ) -> dict[str, Any]:
     return _validated(

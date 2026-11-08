@@ -38,6 +38,7 @@ from discordbot.internal_client.signup_actions import (
 )
 from discordbot.log_context import discord_log_context
 from discordbot.signup_responses import respond_to_signup_user
+from events.schemas import STALE_MODAL_MESSAGE
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
@@ -101,18 +102,18 @@ def build_friend_id_input(
     )
 
 
-STALE_SIGNUP_MESSAGE = (
-    "❌ This event changed since you opened the form. Please press Sign Up again."
-)
+STALE_SIGNUP_MESSAGE = f"❌ {STALE_MODAL_MESSAGE}"
 
 
 async def send_unexpected_modal_result(interaction: discord.Interaction) -> None:
     """Reply to a signup-modal result this modal has no branch for.
 
-    A modal's shape is fixed when it opens, but the backend dispatches on the
-    event's current game type, so a game-type change between open and submit
-    can return an action meant for another game's flow. Without a reply the
-    interaction is never ACKed and the user sees "Something went wrong".
+    Defensive catch-all. The backend already rejects a modal whose game no
+    longer matches the event (``handle_signup_modal_submit`` returns an
+    ``error`` with ``STALE_MODAL_MESSAGE``), so this fires only on protocol
+    drift between bot and backend builds, such as a new action this modal
+    does not know. Without a reply the interaction is never ACKed and the
+    user sees "Something went wrong".
     """
     if interaction.response.is_done():
         return

@@ -60,7 +60,9 @@ def simulate_discord_signup(request, event_pk):
         "positions": data.get("positions", []),
         "rank_status": data.get("rank_status", "active"),
     }
-    result = handle_signup_modal_submit(event_pk, discord_user_id, values=values)
+    result = handle_signup_modal_submit(
+        event_pk, discord_user_id, values=values, game_type=result["game_type"]
+    )
     if result["action"] == "error":
         return Response({"step": "modal_submit", "result": result}, status=400)
     if result["action"] == "signed_up":

@@ -11,6 +11,7 @@ import discord
 from asgiref.sync import sync_to_async
 from discord import ui
 
+from app.models import GameType
 from discordbot.components.base import (
     GameComponentProvider,
     build_friend_id_input,
@@ -104,7 +105,7 @@ class DeadlockSignupModal(ui.Modal):
             result = await sync_to_async(signup_modal_submit, thread_sensitive=False)(
                 event_id=self.event_id,
                 discord_user_id=str(interaction.user.id),
-                game_type=2,
+                game_type=GameType.DEADLOCK,
                 values=values,
             )
             ctx.set_outcome(result["action"])

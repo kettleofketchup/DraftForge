@@ -1,3 +1,5 @@
+from django.test import override_settings
+from rest_framework.test import APIClient
 from structlog.contextvars import clear_contextvars
 
 from app.models import CustomUser, GameType
@@ -121,7 +123,7 @@ class HandleSignupModalSubmitTest(EventTestCase):
         result = handle_signup_modal_submit(
             event_id=self.event.pk,
             discord_user_id="100000000000000001",
-            game_type=1,
+            game_type=GameType.DOTA2,
             values={
                 "unverified_friend_id": "12345",
                 "rank_status": "active",
@@ -178,7 +180,7 @@ class HandleSignupModalSubmitTest(EventTestCase):
         result = handle_signup_modal_submit(
             event_id=self.event.pk,
             discord_user_id="100000000000000001",
-            game_type=2,
+            game_type=GameType.DEADLOCK,
             values={
                 "unverified_friend_id": "12345",
                 "deadlock_rank": "Phantom IV",
@@ -228,7 +230,7 @@ class HandleSignupModalSubmitTest(EventTestCase):
         from unittest.mock import patch as mock_patch
 
         from events.discord import handle_signup_modal_submit
-        from events.discord.handlers import STALE_MODAL_MESSAGE
+        from events.schemas import STALE_MODAL_MESSAGE
 
         with mock_patch("events.services.apply_signup_input") as spy:
             result = handle_signup_modal_submit(
@@ -240,16 +242,57 @@ class HandleSignupModalSubmitTest(EventTestCase):
         self.assertEqual(result, {"action": "error", "message": STALE_MODAL_MESSAGE})
         spy.assert_not_called()
 
-    def test_modal_without_game_type_dispatches_on_event(self):
-        """game_type=None (fallback modal, test endpoints) skips the check."""
+    def test_fallback_modal_rejected_once_event_has_a_registered_game(self):
+        """game_type=None marks the fallback modal. Submitted against an event
+        that now belongs to Dota, its fields must not reach DotaHandler."""
+        from unittest.mock import patch as mock_patch
+
         from events.discord import handle_signup_modal_submit
+        from events.schemas import STALE_MODAL_MESSAGE
+
+        with mock_patch("events.services.apply_signup_input") as spy:
+            result = handle_signup_modal_submit(
+                event_id=self.event.pk,
+                discord_user_id="100000000000000001",
+                values={"unverified_friend_id": "12345"},
+            )
+        self.assertEqual(result, {"action": "error", "message": STALE_MODAL_MESSAGE})
+        spy.assert_not_called()
+        self.assertFalse(
+            PlayerDotaProfile.objects.filter(
+                org_user=self.org_user, unverified_friend_id="12345"
+            ).exists()
+        )
+
+    def test_fallback_modal_dispatches_for_unregistered_game(self):
+        """game_type=None passes the check while the event still resolves to
+        the fallback handler."""
+        from events.discord import handle_signup_modal_submit
+
+        self.event.game_type = 99  # no SIGNUP_HANDLERS entry
+        self.event.save()
 
         result = handle_signup_modal_submit(
             event_id=self.event.pk,
             discord_user_id="100000000000000001",
+            values={"unverified_friend_id": "12345"},
+        )
+        self.assertEqual(result, {"action": "error", "message": "Unknown game type."})
+
+    def test_registered_modal_rejected_after_event_moves_to_unregistered_game(self):
+        from events.discord import handle_signup_modal_submit
+        from events.schemas import STALE_MODAL_MESSAGE
+
+        self.event.game_type = 99
+        self.event.save()
+
+        result = handle_signup_modal_submit(
+            event_id=self.event.pk,
+            discord_user_id="100000000000000001",
+            game_type=GameType.DOTA2,
             values={"unverified_friend_id": "12345", "rank_status": "active"},
         )
-        self.assertEqual(result["action"], "needs_rank_details")
+        self.assertEqual(result, {"action": "error", "message": STALE_MODAL_MESSAGE})
 
 
 class HandleRankMedalSelectTest(EventTestCase):
@@ -574,3 +617,70 @@ class HandleGetRankFlowStateTest(EventTestCase):
 
         result = handle_get_rank_flow_state(999999, "100000000000000001")
         self.assertEqual(result.get("error"), "event_not_found")
+
+
+_INTERNAL_TOKEN = "test-internal-token"
+
+
+@override_settings(INTERNAL_SERVICE_TOKEN=_INTERNAL_TOKEN)
+class SignupModalSubmitEndpointTest(EventTestCase):
+    """The bot's wire path: ``game_type`` null/omitted/mismatched over the
+    internal endpoint validates and reaches the stale-modal check."""
+
+    URL = "/api/internal/discord/signup-modal-submit/"
+
+    def setUp(self):
+        super().setUp()
+        clear_contextvars()
+        self.event.state = EventState.SIGNUPS_OPEN
+        self.event.game_type = GameType.DOTA2
+        self.event.auto_approve = True
+        self.event.save()
+        self.user.discordId = "100000000000000001"
+        self.user.save()
+        self.org_user = OrgUser.objects.create(
+            user=self.user, organization=self.event.organization
+        )
+        self.client = APIClient()
+        self.client.credentials(HTTP_X_INTERNAL_TOKEN=_INTERNAL_TOKEN)
+
+    def tearDown(self):
+        clear_contextvars()
+        super().tearDown()
+
+    def _post(self, **extra):
+        body = {
+            "event_id": self.event.pk,
+            "discord_user_id": "100000000000000001",
+            "values": {"unverified_friend_id": "12345", "rank_status": "active"},
+            **extra,
+        }
+        return self.client.post(self.URL, data=body, format="json")
+
+    def _assert_stale_and_no_writes(self, resp):
+        from events.schemas import STALE_MODAL_MESSAGE
+
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertEqual(
+            resp.json(), {"action": "error", "message": STALE_MODAL_MESSAGE}
+        )
+        self.assertFalse(EventSignup.objects.filter(event=self.event).exists())
+        self.assertFalse(
+            PlayerDotaProfile.objects.filter(
+                org_user=self.org_user, unverified_friend_id="12345"
+            ).exists()
+        )
+
+    def test_null_game_type_on_registered_game_is_stale(self):
+        self._assert_stale_and_no_writes(self._post(game_type=None))
+
+    def test_omitted_game_type_on_registered_game_is_stale(self):
+        self._assert_stale_and_no_writes(self._post())
+
+    def test_mismatched_game_type_is_stale(self):
+        self._assert_stale_and_no_writes(self._post(game_type=GameType.DEADLOCK))
+
+    def test_matching_game_type_dispatches(self):
+        resp = self._post(game_type=GameType.DOTA2)
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertEqual(resp.json()["action"], "needs_rank_details")

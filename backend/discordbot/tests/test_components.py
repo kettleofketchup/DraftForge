@@ -229,7 +229,11 @@ class RankDetailsViewTest(TestCase):
 class TestMedalSelectRebuildsView(IsolatedAsyncioTestCase):
     async def test_callback_rebuilds_view_with_medal_in_star_custom_id(self):
         event_id = 42
-        medal = MedalSelect(event_id, rank_status="active", require_screenshot=False)
+        medal = next(
+            c
+            for c in RankDetailsView(event_id, rank_status="active").children
+            if isinstance(c, MedalSelect)
+        )
         # discord.py populates `values` from the user's selection before callback fires
         medal._values = ["Crusader"]  # private attr used by ui.Select
 
@@ -254,7 +258,11 @@ class TestMedalSelectRebuildsView(IsolatedAsyncioTestCase):
 
     async def test_callback_preserves_previous_rank_status(self):
         event_id = 99
-        medal = MedalSelect(event_id, rank_status="previous", require_screenshot=False)
+        medal = next(
+            c
+            for c in RankDetailsView(event_id, rank_status="previous").children
+            if isinstance(c, MedalSelect)
+        )
         medal._values = ["Divine"]
 
         interaction = MagicMock()
@@ -479,12 +487,71 @@ class SubmitOnceGuardTest(IsolatedAsyncioTestCase):
             content="❌ Something went wrong. Please try again.", view=None
         )
 
+    async def test_failed_ack_unlocks_view_so_retry_submits(self) -> None:
+        """If the type-7 ACK raises (10062 after the 3s window), nothing
+        reached the client, so the retry must run the backend call rather
+        than hit the duplicate-submit branch."""
+        view = RankDetailsView(event_id=42, rank_status="never")
+        select = next(c for c in view.children if isinstance(c, BattleCupTierSelect))
+        select._values = ["3"]
+        first, second = _component_interaction(), _component_interaction()
+        first.response.edit_message.side_effect = discord.NotFound(
+            MagicMock(status=404, reason="Not Found"), "Unknown interaction"
+        )
+
+        with (
+            mock_patch(
+                "discordbot.components.dota.battle_cup_submit",
+                return_value={"action": "signed_up", "status": "accepted"},
+            ) as submit,
+            mock_patch(
+                "discordbot.components.dota.discord_log_context", _fake_log_context
+            ),
+        ):
+            with self.assertRaises(discord.NotFound):
+                await select.callback(first)
+            self.assertFalse(view._submitted)
+            self.assertFalse(any(item.disabled for item in view.children))
+            await select.callback(second)
+
+        submit.assert_called_once()
+        second.response.edit_message.assert_awaited_once_with(view=view)
+        second.response.defer.assert_not_called()
+
+    async def test_medal_pick_after_star_submit_does_not_rearm_view(self) -> None:
+        view = RankDetailsView(
+            event_id=42, rank_status="active", selected_medal="Archon"
+        )
+        star = next(c for c in view.children if isinstance(c, StarSelect))
+        medal = next(c for c in view.children if isinstance(c, MedalSelect))
+        star._values = ["2"]
+        medal._values = ["Legend"]
+        first, second = _component_interaction(), _component_interaction()
+
+        with (
+            mock_patch(
+                "discordbot.components.dota.rank_medal_select",
+                return_value={"action": "signed_up", "status": "accepted"},
+            ),
+            mock_patch(
+                "discordbot.components.dota.discord_log_context", _fake_log_context
+            ),
+        ):
+            await star.callback(first)
+            await medal.callback(second)
+
+        second.response.edit_message.assert_not_called()
+        second.response.defer.assert_awaited_once()
+
 
 class UnexpectedModalResultTest(IsolatedAsyncioTestCase):
-    """A modal that gets an action it has no branch for (event game changed
-    after the modal opened) still ACKs with a "press Sign Up again" reply."""
+    """Defensive catch-all: a modal that gets an action it has no branch for
+    (bot/backend protocol drift) still ACKs with a "press Sign Up again"
+    reply. A game change between open and submit is rejected by the backend
+    before dispatch, so these mock an action the real backend would not send
+    to that modal."""
 
-    async def test_deadlock_modal_replies_on_dota_only_action(self) -> None:
+    async def test_deadlock_modal_replies_on_unknown_action(self) -> None:
         from discordbot.components.base import STALE_SIGNUP_MESSAGE
         from discordbot.components.deadlock import DeadlockSignupModal
 
@@ -495,7 +562,7 @@ class UnexpectedModalResultTest(IsolatedAsyncioTestCase):
             mock_patch(
                 "discordbot.components.deadlock.signup_modal_submit",
                 return_value={"action": "needs_rank_status"},
-            ),
+            ) as submit,
             mock_patch(
                 "discordbot.components.deadlock.discord_log_context",
                 _fake_log_context,
@@ -503,9 +570,40 @@ class UnexpectedModalResultTest(IsolatedAsyncioTestCase):
         ):
             await modal.on_submit(interaction)
 
+        self.assertEqual(submit.call_args.kwargs["game_type"], GameType.DEADLOCK)
         interaction.response.send_message.assert_awaited_once_with(
             STALE_SIGNUP_MESSAGE, ephemeral=True
         )
+
+    async def test_dota_modal_replies_on_unknown_action(self) -> None:
+        from discordbot.components.base import STALE_SIGNUP_MESSAGE
+        from discordbot.components.dota import DotaSignupModal
+
+        modal = DotaSignupModal(event_id=9, prefill={}, config={})
+        interaction = _component_interaction()
+
+        with (
+            mock_patch(
+                "discordbot.components.dota.signup_modal_submit",
+                return_value={"action": "needs_modal"},
+            ) as submit,
+            mock_patch(
+                "discordbot.components.dota.discord_log_context",
+                _fake_log_context,
+            ),
+        ):
+            await modal.on_submit(interaction)
+
+        self.assertEqual(submit.call_args.kwargs["game_type"], GameType.DOTA2)
+        interaction.response.send_message.assert_awaited_once_with(
+            STALE_SIGNUP_MESSAGE, ephemeral=True
+        )
+
+    def test_stale_messages_share_one_text(self) -> None:
+        from discordbot.components.base import STALE_SIGNUP_MESSAGE
+        from events.schemas import STALE_MODAL_MESSAGE
+
+        self.assertEqual(STALE_SIGNUP_MESSAGE, f"❌ {STALE_MODAL_MESSAGE}")
 
     async def test_default_modal_replies_on_unknown_action(self) -> None:
         from discordbot.components.base import STALE_SIGNUP_MESSAGE

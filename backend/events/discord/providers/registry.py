@@ -17,6 +17,10 @@ Adding a game type (canonical checklist; other modules link here):
    (Steps 5+6 are guarded by the keyset-equality test — miss one and it goes red.)
 7. ``discordbot/custom_ids.py`` — only if the game has unique interaction flows
    needing new codecs (a text-field game like Deadlock needs none).
+8. The game's signup modal must send its own ``GameType`` member as
+   ``game_type`` to ``signup_modal_submit``. ``handle_signup_modal_submit``
+   rejects a modal built for another game; ``None`` is reserved for the
+   fallback modal and is rejected for any game registered above.
 """
 
 from __future__ import annotations
