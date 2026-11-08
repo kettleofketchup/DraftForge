@@ -409,3 +409,22 @@ def test_wait_for_backend_gives_up_at_timeout(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setattr(tasks.time, "sleep", lambda _: None)
     monkeypatch.setattr(tasks.time, "time", lambda: next(clock))
     assert tasks._wait_for_backend(RecCtx(), "dev", timeout=30) is False
+
+
+@pytest.mark.parametrize("task_fn", [st.dev_test, st.setup])
+def test_slot_allocation_error_is_a_clean_exit(
+    slotless: tuple[Path, FakeHost],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    task_fn: Callable[[RecCtx], None],
+) -> None:
+    def exhausted(*a: object, **k: object) -> slots.SlotEnv:
+        raise slots.SlotError("all 10 slots are held")
+
+    _stub_setup_steps(monkeypatch)
+    monkeypatch.setattr(st, "ensure_slot", exhausted)
+    c = RecCtx()
+    with pytest.raises(Exit) as exc:
+        task_fn(c)
+    assert exc.value.code == 1 and c.cmds == []
+    assert capsys.readouterr().err == "all 10 slots are held\n"

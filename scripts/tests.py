@@ -17,9 +17,9 @@ import paths
 from backend.tasks import populate_all
 from backend.tests.tasks import ns_dbtest
 from backend.tests.tasks import run_tests as run_db_tests
-from scripts.compose import base_url, in_container, playwright_env, run_compose
+from scripts.compose import _fail, base_url, in_container, playwright_env, run_compose
 from scripts.docker import docker_build_all
-from scripts.slots import SlotEnv, ensure_slot
+from scripts.slots import SlotEnv, SlotError, ensure_slot
 from scripts.update import update_for_test
 
 ns_test = Collection("test")
@@ -65,6 +65,13 @@ def _flush_redis_service(host: str = "redis", port: int = 6379) -> None:
         )
 
 
+def _held_slot() -> SlotEnv:
+    try:
+        return ensure_slot()
+    except SlotError as exc:
+        raise _fail(exc) from exc
+
+
 def _start_test_stack(c: Context, slot: SlotEnv) -> None:
     run_compose(c, "test", "down", slot=slot)
     run_compose(c, "test", "--ansi", "always", "up", "-d", slot=slot)
@@ -73,13 +80,13 @@ def _start_test_stack(c: Context, slot: SlotEnv) -> None:
 @task
 def dev_test(c: Context) -> None:
     load_dotenv(paths.TEST_ENV_FILE)
-    _start_test_stack(c, ensure_slot())
+    _start_test_stack(c, _held_slot())
 
 
 @task
 def setup(c: Context) -> None:
     load_dotenv(paths.TEST_ENV_FILE)
-    held = ensure_slot()
+    held = _held_slot()
     if held.slot >= 1:
         print(SHARED_IMAGES_WARNING)
 
