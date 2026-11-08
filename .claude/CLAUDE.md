@@ -27,6 +27,7 @@ website/
   backend/          # Django REST API
   frontend/         # React + TypeScript + Vite
   docker/           # Docker Compose configurations
+  helm/             # Helm chart (per-PR preview environments); see helm/README.md
   nginx/            # Nginx reverse proxy config
   scripts/          # Utility scripts
 ```
@@ -177,6 +178,12 @@ just test::down          # Stop test environment
 just prod::up            # Start prod environment
 just prod::down          # Stop prod environment
 # ... (same commands as dev::)
+
+# Helm chart (helm/, see helm/README.md)
+just helm::plugins            # Install the pinned helm-unittest plugin
+just helm::lint               # Lint the default and preview profiles
+just helm::template preview   # Render a profile (default or preview)
+just helm::test               # Unit tests, budget, render-safety, kubeconform, script tests
 
 # Database Migrations
 just db::run-migrate           # Run migrations for dev (default)
