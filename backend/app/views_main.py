@@ -404,6 +404,7 @@ class TournamentView(viewsets.ModelViewSet):
         return queryset.prefetch_related(
             "source_event",
             "source_event__event_repeater",
+            "draft_options",
             "users",
             "users__base_profile__dota_user_profile__positions",
             "teams__members",

@@ -230,17 +230,19 @@ def apply_draft_options(tournament: Tournament, data: dict) -> DraftOptions:
         opts.save()
         if draft is None:
             return opts
+        turning_off = (
+            was_enabled
+            and not opts.timer_enabled
+            and draft.state in _TIMER_OFF_STATES
+        )
+        rnd = draft.lock_active_round() if turning_off else None
         if draft.state == TeamDraftState.PENDING and (
             "grace_time_ms" in data or "reserve_time_ms" in data
         ):
             for team in Team.objects.select_for_update().filter(tournament=tournament):
                 team.draft_reserve_ms = opts.reserve_time_ms
                 team.save(update_fields=["draft_reserve_ms"])
-        if (
-            was_enabled
-            and not opts.timer_enabled
-            and draft.state in _TIMER_OFF_STATES
-        ):
+        if turning_off:
             from_state = draft.state
             was_paused = from_state in (TeamDraftState.PAUSED, TeamDraftState.RESUMING)
             draft.state = TeamDraftState.DRAFTING
@@ -250,7 +252,6 @@ def apply_draft_options(tournament: Tournament, data: dict) -> DraftOptions:
             draft.save(
                 update_fields=["state", "paused_at", "resuming_until", "is_manual_pause"]
             )
-            rnd = draft.lock_active_round()
             if rnd is not None:
                 rnd.started_at = None
                 rnd.timed_out_at = None
