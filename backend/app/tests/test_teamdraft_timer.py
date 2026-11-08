@@ -13,7 +13,7 @@ from channels.testing import WebsocketCommunicator
 from django.test import TestCase, TransactionTestCase
 from django.urls import re_path, resolve
 from django.utils import timezone
-from rest_framework.test import APIClient
+from rest_framework.test import APIClient, APIRequestFactory
 
 from app.consumers import DraftConsumer
 from app.functions import teamdraft
@@ -29,6 +29,7 @@ from app.tasks.draft_tick import (
     registry_for,
 )
 from app.tests.teamdraft_fixtures import TimedDraftFixture
+from tests.test_teamdraft import expire_draft_clock, stale_draft_heartbeat
 
 
 class LifecycleHelperTests(TestCase):
@@ -1086,3 +1087,38 @@ class DraftConsumerTimerTests(TransactionTestCase):
         draft = await database_sync_to_async(Draft.objects.get)(pk=fx.draft.pk)
         self.assertEqual(draft.state, TeamDraftState.DRAFTING)
         self.assertNotIn(fx.draft.pk, registry_for("teamdraft"))
+
+
+@patch("tests.test_teamdraft.isTestEnvironment", return_value=True)
+class TestEndpointTests(TestCase):
+    def setUp(self):
+        self.fx = TimedDraftFixture(prefix="te")
+        with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True), self.captureOnCommitCallbacks(execute=True):
+            self.rnd = self.fx.start()
+        self.factory = APIRequestFactory()
+        self.r = get_redis_client()
+
+    def call(self, view, body: dict):
+        return view(self.factory.post("/", body, format="json"), draft_pk=self.fx.draft.pk)
+
+    def test_expire_clock_backdates_started_at(self, _env):
+        before = self.rnd.started_at
+        r = self.call(expire_draft_clock, {"ms": 70000})
+        self.assertEqual(r.status_code, 200, r.data)
+        self.rnd.refresh_from_db()
+        self.assertEqual(before - self.rnd.started_at, timedelta(milliseconds=70000))
+
+    def test_stale_heartbeat_deletes_or_backdates_key(self, _env):
+        cap = self.rnd.captain
+        key = heartbeat_key("teamdraft", self.fx.draft.pk, cap.pk)
+        self.r.set(key, str(time.time()))
+        r = self.call(stale_draft_heartbeat, {"user_pk": cap.pk})
+        self.assertEqual(r.status_code, 200)
+        self.assertIsNone(self.r.get(key))
+        self.call(stale_draft_heartbeat, {"user_pk": cap.pk, "mode": "backdate"})
+        self.assertLess(float(self.r.get(key)), time.time() - 9)
+        self.r.delete(key)
+
+    def test_views_404_outside_test_environment(self, env):
+        env.return_value = False
+        self.assertEqual(self.call(expire_draft_clock, {"ms": 1000}).status_code, 404)

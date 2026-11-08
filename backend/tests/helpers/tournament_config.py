@@ -12,7 +12,7 @@ import logging
 from datetime import date
 from typing import List, Literal, Optional
 
-from pydantic import BaseModel, Field, PrivateAttr
+from pydantic import BaseModel, Field, PrivateAttr, model_validator
 
 log = logging.getLogger(__name__)
 
@@ -66,9 +66,12 @@ class TestTournamentConfig(BaseModel):
     )
 
     # Draft settings
-    draft_state: Literal["not_started", "in_progress", "completed"] = Field(
+    draft_state: Literal["not_started", "pending", "in_progress", "completed"] = Field(
         default="not_started",
-        description="Draft progress: not_started=no draft, in_progress=some picks, completed=all picks",
+        description="Draft progress: not_started=no draft, pending=lobby (needs timer_enabled), in_progress=some picks, completed=all picks",
+    )
+    timer_enabled: bool = Field(
+        default=False, description="Write DraftOptions.timer_enabled explicitly"
     )
     draft_style: Literal["snake", "normal", "shuffle"] = Field(default="snake")
     picks_completed: int = Field(
@@ -101,6 +104,12 @@ class TestTournamentConfig(BaseModel):
     class Config:
         arbitrary_types_allowed = True
 
+    @model_validator(mode="after")
+    def _pending_requires_timer(self) -> "TestTournamentConfig":
+        if self.draft_state == "pending" and not self.timer_enabled:
+            raise ValueError("draft_state='pending' requires timer_enabled=True")
+        return self
+
     def create(self):
         """
         Create the tournament with all configured settings.
@@ -108,7 +117,7 @@ class TestTournamentConfig(BaseModel):
         Returns:
             Tournament instance with teams, draft, and bracket games configured
         """
-        from app.models import Tournament
+        from app.models import DraftOptions, Tournament
 
         self._tournament = Tournament.objects.create(
             name=self.name,
@@ -118,6 +127,11 @@ class TestTournamentConfig(BaseModel):
         )
 
         self._create_teams()
+
+        DraftOptions.objects.update_or_create(
+            tournament=self._tournament,
+            defaults={"timer_enabled": self.timer_enabled},
+        )
 
         if self.draft_state != "not_started":
             self._create_draft()
@@ -159,7 +173,9 @@ class TestTournamentConfig(BaseModel):
 
     def _create_draft(self) -> None:
         """Create draft with rounds and apply picks."""
-        from app.models import Draft
+        from django.utils import timezone
+
+        from app.models import Draft, TeamDraftState
 
         draft = Draft.objects.create(
             tournament=self._tournament,
@@ -167,16 +183,40 @@ class TestTournamentConfig(BaseModel):
         )
         draft.build_rounds()
 
-        if self.picks_completed > 0:
+        if self.draft_state == "pending":
+            return
+
+        picks = (
+            draft.draft_rounds.count()
+            if self.draft_state == "completed"
+            else self.picks_completed
+        )
+        if picks > 0:
             captain_pks = list(
                 self._tournament.teams.values_list("captain__pk", flat=True)
             )
             available = list(self._tournament.users.exclude(pk__in=captain_pks))
 
-            for round in draft.draft_rounds.all()[: self.picks_completed]:
+            for round in draft.draft_rounds.all()[:picks]:
                 if available:
                     player = available.pop(0)
                     round.pick_player(player)
+
+        draft.refresh_from_db()
+        if self.draft_state == "completed":
+            draft.state = TeamDraftState.COMPLETED
+            draft.save(update_fields=["state"])
+            return
+
+        draft.state = TeamDraftState.DRAFTING
+        draft.save(update_fields=["state"])
+        if self.timer_enabled:
+            options = self._tournament.get_draft_options(fresh=True)
+            active = draft.active_round
+            if active is not None:
+                active.started_at = timezone.now()
+                active.grace_time_ms = options.grace_time_ms
+                active.save(update_fields=["started_at", "grace_time_ms"])
 
     def _create_bracket_games(self) -> None:
         """Create bracket games with steam match results."""

@@ -14,6 +14,7 @@ from rest_framework.test import APIClient
 from app.management.commands import sync_prod_tournaments
 from app.serializers import DraftSerializerSlim, TournamentSerializer
 from app.tests.teamdraft_fixtures import TimedDraftFixture
+from tests.helpers.tournament_config import TestTournamentConfig
 from app.models import (
     Draft,
     DraftOptions,
@@ -323,3 +324,42 @@ class SettingsWriteTests(TestCase):
         self.assertEqual(self.fx.events("draft_resumed").count(), 1)
         self.fx.draft.refresh_from_db()
         self.assertIsNone(self.fx.draft.resuming_until)
+
+
+class FixtureConfigTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        for i in range(20):
+            User.objects.create_user(username=f"fixture_u{i}", password="x")
+
+    def test_default_config_writes_untimed_options_even_without_draft(self):
+        t = TestTournamentConfig(key="k1", name="K1", description="d", draft_state="not_started").create()
+        # checked before any get_draft_options() call, which would lazily create the row itself
+        self.assertTrue(DraftOptions.objects.filter(tournament=t, timer_enabled=False).exists())
+        self.assertEqual(DraftOptions.objects.filter(tournament=t).count(), 1)
+
+    def test_config_writes_timer_enabled_explicitly_not_via_field_default(self):
+        field = DraftOptions._meta.get_field("timer_enabled")
+        with patch.object(field, "get_default", return_value=True):  # PR 3 flips the default; fixtures must not follow it
+            t = TestTournamentConfig(key="k1b", name="K1b", description="d", draft_state="not_started").create()
+        self.assertTrue(DraftOptions.objects.filter(tournament=t, timer_enabled=False).exists())
+
+    def test_in_progress_untimed_is_drafting_unarmed(self):
+        t = TestTournamentConfig(key="k2", name="K2", description="d", draft_state="in_progress", picks_completed=2).create()
+        self.assertEqual(t.draft.state, "drafting")
+        self.assertIsNone(t.draft.active_round.started_at)
+
+    def test_in_progress_timed_arms_active_round(self):
+        t = TestTournamentConfig(key="k3", name="K3", description="d", draft_state="in_progress", timer_enabled=True).create()
+        self.assertEqual(t.draft.state, "drafting")
+        self.assertTrue(t.draft.clock_armed)
+
+    def test_pending_requires_timer(self):
+        t = TestTournamentConfig(key="k4", name="K4", description="d", draft_state="pending", timer_enabled=True).create()
+        self.assertEqual(t.draft.state, "pending")
+        with self.assertRaises(ValueError):
+            TestTournamentConfig(key="k5", name="K5", description="d", draft_state="pending")
+
+    def test_completed_is_completed(self):
+        t = TestTournamentConfig(key="k6", name="K6", description="d", draft_state="completed", picks_completed=16).create()
+        self.assertEqual(t.draft.state, "completed")
