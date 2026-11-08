@@ -12,9 +12,11 @@ permissions:
   contents: read
   pull-requests: read # reads the PR's labels live
 
+# Only PR runs are superseded: the push check reads HEAD~1..HEAD, so a cancelled
+# push run would never report that commit.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event_name == 'push' && github.sha || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   changelog:
@@ -27,12 +29,13 @@ jobs:
         with:
           fetch-depth: 0
           filter: blob:none
+          persist-credentials: false
 
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
-      - uses: extractions/setup-just@v2
+      - uses: extractions/setup-just@dd310ad5a97d8e7b41793f8ef055398d51ad4de6 # v2.0.0
 
       - name: Changelog fragments gate
         env:

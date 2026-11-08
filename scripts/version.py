@@ -1,5 +1,4 @@
 from datetime import date
-from pathlib import Path
 
 from invoke.collection import Collection
 from invoke.context import Context
@@ -14,7 +13,6 @@ from scripts.sync_version import (
     update_env_version,
     update_pyproject_version,
 )
-from scripts.update import ns_update
 from scripts.utils import crun
 
 config = None
@@ -28,8 +26,6 @@ ns_version = Collection("version")
 def sync_version_from_env(c, env_file=".env.release"):
     """Sync version from environment file to pyproject.toml"""
     # Import functions locally to avoid import issues
-    import os
-    import sys
 
     print(f"Syncing version from {env_file}...")
     version = get_version_from_env(env_file)
@@ -42,10 +38,8 @@ def sync_version_from_env(c, env_file=".env.release"):
 def sync_version_from_pyproject(c):
     """Sync version from pyproject.toml to environment files"""
     # Import functions locally to avoid import issues
-    import os
-    import sys
 
-    from scripts.sync_version import get_version_from_pyproject, update_env_version
+    from scripts.sync_version import update_env_version
 
     print("Syncing version from pyproject.toml...")
     version = get_version_from_pyproject()
@@ -103,44 +97,22 @@ def set_version(
                 print(f"Warning: Failed to create tag {version} (may already exist).")
         return
 
-    def rollback(reason: str) -> None:
-        changelog.rollback_release(root)
-        raise Exit(f"version.set: {reason}; rolled back, nothing committed.", code=1)
-
     try:
         consumed = changelog.assemble_release(root, version, date.today().isoformat())
     except changelog.ChangelogError as exc:
         print(exc)
-        rollback("assembling CHANGELOG.md failed")
+        changelog.rollback_release(root)
+        raise Exit(
+            "version.set: assembling CHANGELOG.md failed; rolled back, nothing committed.",
+            code=1,
+        )
     print(f"Assembled {len(consumed)} changelog fragment(s) into CHANGELOG.md.")
 
-    release_files = "pyproject.toml docker/.env.release docker/.env.prod CHANGELOG.md"
-    if not crun(c, f"git add {release_files}", warn=True).ok:
-        rollback("git add failed")
-    subject = changelog.release_subject(version)
-    only = " ".join(changelog.RELEASE_PATHS)
-    if not crun(c, f'git commit -m "{subject}" -- {only}', warn=True).ok:
-        rollback("git commit failed")
-
-    if not crun(c, f"git tag {version}", warn=True).ok:
-        crun(c, "git reset --keep HEAD~1", warn=True)
-        raise Exit(f"version.set: git tag {version} failed; commit undone.", code=1)
-
-    if not crun(c, "git push origin main", warn=True).ok:
-        crun(c, f"git tag -d {version}", warn=True)
-        crun(c, "git reset --keep HEAD~1", warn=True)
-        raise Exit(
-            "version.set: the push of main was rejected; tag and commit undone. "
-            "Update main and retry. A ruleset on main rejects this push unless the "
-            "releaser is on its bypass list.",
-            code=1,
-        )
-    if not crun(c, f"git push origin refs/tags/{version}", warn=True).ok:
-        raise Exit(
-            f"version.set: main is pushed but tag {version} is not, so no images "
-            f"were built. Recover with: git push origin refs/tags/{version}",
-            code=1,
-        )
+    print(f"Committing, tagging and pushing {version}...")
+    try:
+        changelog.release_commit_tag_push(root, version)
+    except changelog.ChangelogError as exc:
+        raise Exit(f"version.set: {exc}", code=1)
     print(f"Released {version}: pushed main and tag {version}.")
 
 
@@ -148,7 +120,6 @@ def set_version(
 def build_with_version(c, version=None, env_file=None):
     """Build Docker images with version sync"""
     import os
-    import sys
 
     from scripts.sync_version import (
         get_version_from_env,

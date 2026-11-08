@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 """Changelog fragments: validate changelog.d/ and assemble it into CHANGELOG.md.
 
-    scripts/changelog.py check                  # every fragment rule; exit 1 on a problem
-    scripts/changelog.py assemble VERSION DATE  # write ## [VERSION] - DATE, print paths
-    scripts/changelog.py has-label NAME         # exit 0 if the PR has NAME, 1 if not, 2 on API error
+    scripts/changelog.py check           # every fragment rule; exit 1 on a problem
+    scripts/changelog.py slug [BRANCH]   # the conventional fragment slug (default: current branch)
+    scripts/changelog.py has-label NAME  # exit 0 if the PR has NAME, 1 if not, 2 on API error
+
+The release (`inv version.set`, scripts/version.py) calls assemble_release() and
+release_commit_tag_push(); there is deliberately no CLI for assembling, since that
+would leave the consumed fragments in place.
 
 PRs add files under changelog.d/<section>/ and never edit CHANGELOG.md, so a branch
 that merges after a release cannot drop its notes under the version already released.
@@ -33,6 +37,8 @@ RELEASE_HEADING = re.compile(r"^## \[([^\]]+)\]")
 SUB_HEADING = re.compile(r"^### (.+?)\s*$")
 LINK_DEFINITION = re.compile(r"^\[[^\]]+\]:\s")
 FENCE = re.compile(r"^\s*(```|~~~)")
+# An ATX heading: 1-6 '#' then whitespace or end of line. "#302 was the cause" is not one.
+ATX_HEADING = re.compile(r"#{1,6}(\s|$)")
 # Also in just/ci.just (push exemption); keep the two in sync.
 RELEASE_SUBJECT_RE = re.compile(r"^Updated version to [0-9]+\.[0-9]+\.[0-9]+$")
 # A prose fragment shorter than this is not compared with released text: one short
@@ -282,7 +288,7 @@ def _check_fragment(
         if inside:
             continue
         stripped = line.lstrip()
-        if stripped.startswith("#"):
+        if ATX_HEADING.match(stripped):
             problems.append(
                 f"{path}:{n}: no headings in a fragment; the section comes from its directory"
             )
@@ -389,7 +395,14 @@ def render(root: Path, paths: list[str]) -> str:
             (p for p in paths if p.startswith(prefix)),
             key=lambda p: p.rsplit("/", 1)[1],
         )
-        texts = [(root / p).read_text(encoding="utf-8").strip() for p in mine]
+        # Trailing spaces would trip the release commit's trailing-whitespace hook.
+        texts = [
+            "\n".join(
+                line.rstrip()
+                for line in (root / p).read_text(encoding="utf-8").strip().splitlines()
+            )
+            for p in mine
+        ]
         texts = [t for t in texts if t]
         if texts:
             joined = ("\n\n" if section["prose"] else "\n").join(texts)
@@ -468,13 +481,13 @@ def has_label(name: str, env: Mapping[str, str] | None = None) -> bool:
 
 # --- release: called by `inv version.set` (scripts/version.py) -----------------
 
-RELEASE_PATHS: tuple[str, ...] = (
+VERSION_FILES: tuple[str, ...] = (
     "pyproject.toml",
     "docker/.env.prod",
     "docker/.env.release",
-    "CHANGELOG.md",
-    FRAGMENT_DIR,
 )
+# FRAGMENT_DIR's deletions are staged by assemble_release's git rm.
+RELEASE_PATHS: tuple[str, ...] = (*VERSION_FILES, "CHANGELOG.md", FRAGMENT_DIR)
 
 
 def release_subject(version: str) -> str:
@@ -575,6 +588,52 @@ def rollback_release(root: Path) -> None:
         raise ChangelogError(f"rollback failed: {result.stderr.strip()}")
 
 
+def release_commit_tag_push(
+    root: Path, version: str, remote: str = "origin", branch: str = "main"
+) -> None:
+    """Commit the assembled release, tag it, push branch then tag.
+
+    Undoes everything before the branch push on failure; raises ChangelogError.
+    """
+    root = Path(root)
+    add = _git(root, "add", "--", *VERSION_FILES, "CHANGELOG.md")
+    if add.returncode != 0:
+        rollback_release(root)
+        raise ChangelogError(f"git add failed: {add.stderr.strip()}; rolled back")
+    commit = _git(
+        root, "commit", "-q", "-m", release_subject(version), "--", *RELEASE_PATHS
+    )
+    if commit.returncode != 0:
+        rollback_release(root)
+        detail = (commit.stderr or commit.stdout).strip()
+        raise ChangelogError(f"git commit failed: {detail}; rolled back")
+    tag = _git(root, "tag", version)
+    if tag.returncode != 0:
+        _git(root, "reset", "--keep", "HEAD~1")
+        raise ChangelogError(
+            f"git tag {version} failed: {tag.stderr.strip()}; commit undone"
+        )
+    push = _git(root, "push", remote, branch)
+    if push.returncode != 0:
+        _git(root, "tag", "-d", version)
+        _git(root, "reset", "--keep", "HEAD~1")
+        raise ChangelogError(
+            f"the push of {branch} was rejected ({push.stderr.strip()}); tag and "
+            f"commit undone. Update {branch} and retry. A ruleset on {branch} rejects "
+            "this push unless the releaser is on its bypass list."
+        )
+    push_tag = _git(root, "push", remote, f"refs/tags/{version}")
+    if push_tag.returncode != 0:
+        raise ChangelogError(
+            f"{branch} is pushed but tag {version} is not ({push_tag.stderr.strip()}), "
+            f"so no images were built. Recover with: git push {remote} refs/tags/{version}"
+        )
+
+
+def current_branch(root: Path) -> str:
+    return _git(root, "branch", "--show-current").stdout.strip()
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
@@ -582,9 +641,8 @@ def main(argv: list[str]) -> int:
     )
     sub = parser.add_subparsers(dest="cmd", required=True)
     sub.add_parser("check")
-    asm = sub.add_parser("assemble")
-    asm.add_argument("version")
-    asm.add_argument("date")
+    slug = sub.add_parser("slug")
+    slug.add_argument("branch", nargs="?")
     lab = sub.add_parser("has-label")
     lab.add_argument("name")
     args = parser.parse_args(argv)
@@ -601,10 +659,14 @@ def main(argv: list[str]) -> int:
                     file=sys.stderr,
                 )
             return 1 if problems else 0
-        if args.cmd == "assemble":
-            for path in assemble(args.root, args.version, args.date):
-                print(path)
+        if args.cmd == "slug":
+            print(suggest_slug(args.branch or current_branch(args.root)))
             return 0
+    except ChangelogError as exc:
+        print(f"changelog.py: {exc}", file=sys.stderr)
+        return 1
+    # has-label: exit 1 means "label absent", so every other failure must be 2.
+    try:
         return 0 if has_label(args.name) else 1
     except urllib.error.HTTPError as exc:
         print(f"has-label: API error {exc.code}: {exc.reason}", file=sys.stderr)
@@ -612,9 +674,10 @@ def main(argv: list[str]) -> int:
     except (urllib.error.URLError, TimeoutError) as exc:
         print(f"has-label: API error: {getattr(exc, 'reason', exc)}", file=sys.stderr)
         return 2
-    except ChangelogError as exc:
-        print(f"changelog.py: {exc}", file=sys.stderr)
-        return 1
+    except (ChangelogError, OSError, ValueError, KeyError) as exc:
+        # e.g. RemoteDisconnected, a bad JSON body, or an unset GITHUB_* variable.
+        print(f"has-label: error: {exc!r}", file=sys.stderr)
+        return 2
 
 
 if __name__ == "__main__":

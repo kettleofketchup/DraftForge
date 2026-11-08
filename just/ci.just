@@ -9,7 +9,7 @@ root := source_directory() / ".."
 # labelled changelog:edit, and a warning when the PR adds no fragment. Every check
 # reports before the recipe exits, so one run shows all problems.
 #
-# Changelog fragments gate (the `changelog` CI job); locally, fragment checks only
+# Changelog fragments gate (the `changelog` CI job); locally: fragment checks and the checker's tests
 [group('ci')]
 changelog-check:
     #!/usr/bin/env bash
@@ -44,7 +44,7 @@ changelog-check:
     fi
 
     if [ "$event" != "pull_request" ]; then
-        echo "event '${event:-local}': fragment checks only"
+        echo "event '${event:-local}': fragment checks and tests only"
         exit "$fail"
     fi
 

@@ -13,21 +13,25 @@ fragments into a `## [X.Y.Z] - DATE` section and removes them in the version com
 ## Adding a fragment
 
 1. Pick a section (table below).
-2. Name the file after your branch: lowercase it and turn `/` and any other character
-   outside `a-z 0-9 . _ -` into `-`. `feat/event-reminders` becomes
+2. Name the file after your branch: `python3 scripts/changelog.py slug` prints the
+   conventional slug (lowercased; each run of characters outside `a-z 0-9 . _ -`
+   becomes `-`). `feat/event-reminders` becomes
    `changelog.d/added/feat-event-reminders.md`. The name is a convention, not a rule: if
    a release already used that path (a reused branch name such as `fix/typo`), add a
    suffix, e.g. `fix-typo-2.md`.
-3. Write it and check it (it reads new files before `git add` too), then commit it with
-   your change:
+3. Create the section directory if it is missing (`mkdir -p changelog.d/added`; a
+   release removes emptied section directories because git does not track them),
+   write the file and check it (it reads new files before `git add` too), then commit
+   it with your change:
 
     ```bash
     python3 scripts/changelog.py check
     ```
 
 Chore, CI and test-only PRs can skip the fragment; the `changelog` check only warns.
-The full rules are in
-[changelog.d/README.md](https://github.com/kettleofketchup/DraftForge/blob/main/changelog.d/README.md).
+This page is the full reference;
+[changelog.d/README.md](https://github.com/kettleofketchup/DraftForge/blob/main/changelog.d/README.md)
+is the short version next to the fragments.
 
 | Section | Heading | Use it for |
 |---------|---------|------------|
@@ -64,7 +68,8 @@ Set `REMINDER_LEAD_MINUTES` in `docker/.env.prod` (default `30`).
 ````
 
 Fragments take no `#` headings, HTML comments or link-reference definitions. Inline
-links are fine.
+links and issue references such as `#303` are fine. Trailing whitespace is stripped
+when the release is assembled.
 
 ## The `changelog` check
 
@@ -101,16 +106,21 @@ check on `main` red.
 
 `just version::set X.Y.Z` (on an up-to-date, clean `main`):
 
-1. Refuses to start off `main`, with tracked changes, with untracked files under
-   `changelog.d/`, when `main` differs from `origin/main`, or when the tag already
-   exists locally or on `origin`.
+1. Refuses, before any file changes: a version that is not `X.Y.Z`;
+   `--no-tag-version` without `--no-commit`; a missing `CHANGELOG.md`; a branch other
+   than `main`; any staged or unstaged tracked change; untracked files under
+   `changelog.d/`; `HEAD` not equal to `origin/main` after `git fetch --tags origin`;
+   a tag `X.Y.Z` on `origin` or locally (a leftover local tag from a `--no-commit`
+   run: `git tag -d X.Y.Z`). Other untracked files are fine.
 2. Asks for confirmation when there are no fragments.
 3. Rewrites the version files, assembles `CHANGELOG.md` and `git rm`s the fragments.
 4. Commits `Updated version to X.Y.Z` (release paths only), tags `X.Y.Z`, pushes `main`,
    then pushes the tag, which builds the release images.
 
-Any failure before the push of `main` rolls everything back. If the tag push fails
-after `main` was pushed, push the tag by hand:
+Any failure before the push of `main` rolls everything back (`git checkout HEAD --`
+on the release paths, or `git reset --keep HEAD~1` and `git tag -d` once committed).
+A rejected `main` push means `main` moved or a ruleset rejected you: update `main` and
+retry. If the tag push fails after `main` was pushed, push the tag by hand:
 
 ```bash
 git push origin refs/tags/X.Y.Z
@@ -121,13 +131,8 @@ makes a local tag unless `--no-tag-version`).
 
 ## One-time admin setup
 
-1. Create the label:
-
-    ```bash
-    gh label create changelog:edit --color D93F0B \
-      --description "PR deliberately edits CHANGELOG.md (corrections to released sections)"
-    ```
-
+1. The `changelog:edit` label (already created on the repository; recreate it with
+   `gh label create changelog:edit --color D93F0B` if it is ever deleted).
 2. Refresh open PRs. A PR opened before the workflow landed gets its first `changelog`
    check only on its next push (for example, merging `main` into it) or a close and
    reopen. Re-running its old runs does not add the check.

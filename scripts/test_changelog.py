@@ -253,24 +253,19 @@ class AssembleTests(RepoCase):
         )
         assert self.repo.text() == before
 
-    def test_cli_prints_consumed_paths(self):
-        self.repo.fragment("added/a.md", "- A.\n")
-        self.repo.fragment("fixed/b.md", "- B.\n")
-        out = subprocess.run(
-            [
-                sys.executable,
-                str(SCRIPT),
-                "--root",
-                str(self.repo.root),
-                "assemble",
-                "0.3.0",
-                "2026-10-03",
-            ],
-            check=True,
+    def test_trailing_whitespace_is_stripped_from_every_line(self):
+        self.repo.fragment("added/a.md", "- One.  \n  wraps here \n- Two.\t\n")
+        changelog.assemble(self.repo.root, "0.3.0", "2026-10-03")
+        assert "### Added\n\n- One.\n  wraps here\n- Two.\n" in self.repo.text()
+
+    def test_there_is_no_assemble_cli(self):
+        # Assembling without the release's git rm would leave the fragments behind.
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), "--root", str(self.repo.root), "assemble"],
             capture_output=True,
             text=True,
-        ).stdout
-        assert out.splitlines() == ["changelog.d/added/a.md", "changelog.d/fixed/b.md"]
+        )
+        assert result.returncode == 2
 
 
 class CheckTests(RepoCase):
@@ -309,6 +304,24 @@ class CheckTests(RepoCase):
     def test_heading_line_is_rejected(self):
         self.repo.fragment("upgrading/a.md", "Note.\n\n### Sneaky heading\n")
         self.expect_problem("changelog.d/upgrading/a.md:3:")
+
+    def test_bare_and_level_six_headings_are_rejected(self):
+        self.repo.fragment("added/a.md", "- One.\n  #\n")
+        self.repo.fragment("fixed/b.md", "- One.\n  ###### Six\n")
+        self.expect_problem("changelog.d/added/a.md:2: no headings")
+        self.expect_problem("changelog.d/fixed/b.md:2: no headings")
+
+    def test_issue_reference_continuation_is_not_a_heading(self):
+        self.repo.fragment(
+            "added/a.md", "- **Thing.** It works now.\n  #303 follows up.\n"
+        )
+        self.expect_clean()
+
+    def test_issue_reference_prose_line_is_not_a_heading(self):
+        self.repo.fragment(
+            "upgrading/a.md", "#302 changed the env var; set `NEW_NAME` instead.\n"
+        )
+        self.expect_clean()
 
     def test_html_comment_is_rejected(self):
         self.repo.fragment("upgrading/a.md", "Note.\n<!-- hidden -->\n")
@@ -369,6 +382,32 @@ class CheckTests(RepoCase):
         assert any(
             "changelog.d/added/Bad.md:1: a Added" in p for p in problems
         ), problems
+
+    def test_slug_cli_matches_suggest_slug(self):
+        out = subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "--root",
+                str(self.repo.root),
+                "slug",
+                "fix/issue #12",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+        assert out == "fix-issue-12\n"
+
+    def test_slug_cli_defaults_to_the_current_branch(self):
+        git(self.repo.root, "switch", "-q", "-c", "Feat/Event_Reminders")
+        out = subprocess.run(
+            [sys.executable, str(SCRIPT), "--root", str(self.repo.root), "slug"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+        assert out == "feat-event_reminders\n"
 
     def test_suggest_slug(self):
         assert changelog.suggest_slug("fix/issue#12") == "fix-issue-12"
@@ -581,6 +620,14 @@ class _Forbidden(BaseHTTPRequestHandler):
         pass
 
 
+class _Hangup(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.close_connection = True  # no response at all: RemoteDisconnected
+
+    def log_message(self, *args):
+        pass
+
+
 def serve(handler, case):
     server = HTTPServer(("127.0.0.1", 0), handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
@@ -630,6 +677,25 @@ class HasLabelTests(unittest.TestCase):
             code = changelog.main(["has-label", "changelog:edit"])
         assert code == 2
         assert "has-label: API error 403: Forbidden" in err.getvalue()
+
+    def test_dropped_connection_exits_2_not_1(self):
+        env = self.env(serve(_Hangup, self))
+        err = io.StringIO()
+        with mock.patch.dict(os.environ, env), contextlib.redirect_stderr(err):
+            code = changelog.main(["has-label", "changelog:edit"])
+        assert code == 2, err.getvalue()
+        assert "RemoteDisconnected" in err.getvalue()
+
+    def test_missing_github_env_exits_2_not_1(self):
+        err = io.StringIO()
+        env = {k: v for k, v in os.environ.items() if not k.startswith("GITHUB_")}
+        with (
+            mock.patch.dict(os.environ, env, clear=True),
+            contextlib.redirect_stderr(err),
+        ):
+            code = changelog.main(["has-label", "changelog:edit"])
+        assert code == 2
+        assert "GITHUB_EVENT_PATH" in err.getvalue()
 
 
 class ReleaseRepo(Repo):
@@ -743,6 +809,78 @@ class ReleaseFlowTests(unittest.TestCase):
         changelog.assemble_release(self.repo.root, "0.3.0", "2026-10-03")
         changelog.rollback_release(self.repo.root)
         assert self.repo.status() == "?? notes.txt\n"
+
+    def release(self, version="0.3.0"):
+        changelog.assemble_release(self.repo.root, version, "2026-10-03")
+        # changelog._git runs plain git: give it an identity and no signing.
+        env = {
+            **GIT_ENV,
+            "GIT_CONFIG_COUNT": "2",
+            "GIT_CONFIG_KEY_0": "commit.gpgsign",
+            "GIT_CONFIG_VALUE_0": "false",
+            "GIT_CONFIG_KEY_1": "tag.gpgsign",
+            "GIT_CONFIG_VALUE_1": "false",
+        }
+        with mock.patch.dict(os.environ, env):
+            changelog.release_commit_tag_push(self.repo.root, version)
+
+    def origin_has(self, ref):
+        return git(self.repo.origin, "for-each-ref", ref).stdout.strip() != ""
+
+    def reject_pushes_to(self, ref):
+        hook = self.repo.origin / "hooks" / "pre-receive"
+        hook.write_text(
+            f'#!/bin/sh\nwhile read old new ref; do [ "$ref" = {ref} ] && exit 1; done\nexit 0\n'
+        )
+        hook.chmod(0o755)
+
+    def test_release_commits_tags_and_pushes_main_then_the_tag(self):
+        before = git(self.repo.root, "rev-parse", "HEAD").stdout.strip()
+        self.release()
+        log = git(self.repo.root, "log", "-1", "--format=%s", "--name-status").stdout
+        assert log.splitlines()[0] == "Updated version to 0.3.0"
+        assert "D\tchangelog.d/added/a.md" in log
+        assert "M\tCHANGELOG.md" in log
+        assert git(self.repo.root, "rev-parse", "HEAD~1").stdout.strip() == before
+        head = git(self.repo.root, "rev-parse", "HEAD").stdout.strip()
+        assert git(self.repo.origin, "rev-parse", "main").stdout.strip() == head
+        assert (
+            git(self.repo.origin, "rev-parse", "0.3.0^{commit}").stdout.strip() == head
+        )
+        assert self.repo.status() == ""
+
+    def test_release_commit_leaves_unrelated_staged_files_out(self):
+        self.repo.write("notes.txt", "staged scratch\n")
+        self.release()
+        files = git(self.repo.root, "show", "--name-only", "--format=", "HEAD").stdout
+        assert "notes.txt" not in files
+        assert self.repo.status() == "A  notes.txt\n"
+
+    def test_rejected_main_push_undoes_tag_and_commit(self):
+        before = git(self.repo.root, "rev-parse", "HEAD").stdout.strip()
+        self.reject_pushes_to("refs/heads/main")
+        refused(self.release, "push of main was rejected")
+        assert git(self.repo.root, "rev-parse", "HEAD").stdout.strip() == before
+        assert git(self.repo.root, "tag", "-l", "0.3.0").stdout == ""
+        assert not self.origin_has("refs/tags/0.3.0")
+        assert self.repo.status() == ""
+        assert (self.repo.root / "changelog.d/added/a.md").exists()
+
+    def test_rejected_tag_push_keeps_main_and_says_how_to_recover(self):
+        self.reject_pushes_to("refs/tags/0.3.0")
+        refused(self.release, r"Recover with: git push origin refs/tags/0\.3\.0")
+        head = git(self.repo.root, "rev-parse", "HEAD").stdout.strip()
+        assert git(self.repo.origin, "rev-parse", "main").stdout.strip() == head
+        assert git(self.repo.root, "tag", "-l", "0.3.0").stdout.strip() == "0.3.0"
+
+    def test_failed_commit_rolls_back(self):
+        hook = self.repo.root / ".git" / "hooks" / "pre-commit"
+        hook.write_text("#!/bin/sh\necho hook says no >&2\nexit 1\n")
+        hook.chmod(0o755)
+        before = git(self.repo.root, "rev-parse", "HEAD").stdout.strip()
+        refused(self.release, "git commit failed: hook says no; rolled back")
+        assert git(self.repo.root, "rev-parse", "HEAD").stdout.strip() == before
+        assert self.repo.status() == ""
 
     def test_release_subject_matches_the_release_regex(self):
         assert changelog.RELEASE_SUBJECT_RE.match(changelog.release_subject("1.2.3"))
