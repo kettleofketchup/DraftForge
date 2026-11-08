@@ -46,7 +46,7 @@ test.describe('Team Draft - Full Lifecycle Sanity', () => {
     await context.clearCookies();
   });
 
-  test('non-staff sees waiting message when draft not started', async ({
+  test('@cicd non-staff sees waiting message when draft not started', async ({
     page,
     loginUser,
   }) => {
@@ -69,7 +69,7 @@ test.describe('Team Draft - Full Lifecycle Sanity', () => {
     await expect(dialog.locator('[data-testid="start-draft-button"]')).not.toBeVisible();
   });
 
-  test('staff can start and complete a full snake draft', async ({
+  test('@cicd staff can start and complete a full snake draft', async ({
     page,
     loginAdmin,
   }) => {
