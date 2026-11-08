@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { hydrateRoot } from 'react-dom/client';
+import { renderToString } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PreviewLoginMenu } from '../PreviewLoginMenu';
 
@@ -49,4 +51,46 @@ describe('PreviewLoginMenu', () => {
       );
     },
   );
+
+  // The server cannot see window.playwright, so it may decide differently from
+  // the client. The menu must render nothing until hydration completes.
+  it('hydrates without a mismatch when the client hides test features', async () => {
+    shouldShowTestFeatures.mockReturnValue(true);
+    const host = document.createElement('div');
+    host.innerHTML = renderToString(<PreviewLoginMenu />);
+    document.body.appendChild(host);
+
+    shouldShowTestFeatures.mockReturnValue(false);
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const recoverable = vi.fn();
+    const root = await act(async () =>
+      hydrateRoot(host, <PreviewLoginMenu />, { onRecoverableError: recoverable }),
+    );
+
+    expect(recoverable).not.toHaveBeenCalled();
+    expect(consoleError).not.toHaveBeenCalledWith(
+      expect.stringContaining('Hydration failed'),
+      expect.anything(),
+    );
+    expect(host).toBeEmptyDOMElement();
+    act(() => root.unmount());
+    host.remove();
+    consoleError.mockRestore();
+  });
+
+  it('shows the buttons after hydration when test features are on', async () => {
+    shouldShowTestFeatures.mockReturnValue(true);
+    const host = document.createElement('div');
+    host.innerHTML = renderToString(<PreviewLoginMenu />);
+    document.body.appendChild(host);
+    const recoverable = vi.fn();
+    const root = await act(async () =>
+      hydrateRoot(host, <PreviewLoginMenu />, { onRecoverableError: recoverable }),
+    );
+
+    expect(recoverable).not.toHaveBeenCalled();
+    expect(within(host).getByTestId('preview-login-admin')).toBeInTheDocument();
+    act(() => root.unmount());
+    host.remove();
+  });
 });

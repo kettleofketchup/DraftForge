@@ -7,8 +7,12 @@
  * shouldShowTestFeatures() is true: dev mode, or a build made with
  * VITE_PREVIEW_TEST_FEATURES=true (PR preview images). Production images
  * build with the flag false, so the menu renders nothing there.
+ *
+ * The server cannot see window.playwright, so it renders nothing and the
+ * client decides after hydration; rendering on the server would make the
+ * hydrated tree differ whenever the client-only check hides the menu.
  */
-import type { JSX } from 'react';
+import { type JSX, useSyncExternalStore } from 'react';
 import { Button } from '~/components/ui/button';
 import { getLogger } from '~/lib/logger';
 import { shouldShowTestFeatures } from '~/lib/test-utils';
@@ -18,6 +22,8 @@ const log = getLogger('PreviewLoginMenu');
 type PreviewRole = 'admin' | 'staff' | 'user';
 
 const ROLES: readonly PreviewRole[] = ['admin', 'staff', 'user'];
+
+const subscribeNoop = () => () => {};
 
 async function loginAs(role: PreviewRole): Promise<void> {
   const response = await fetch(`/api/tests/login-${role}/`, {
@@ -32,7 +38,12 @@ async function loginAs(role: PreviewRole): Promise<void> {
 }
 
 export function PreviewLoginMenu(): JSX.Element | null {
-  if (!shouldShowTestFeatures()) return null;
+  const hydrated = useSyncExternalStore(
+    subscribeNoop,
+    () => true,
+    () => false,
+  );
+  if (!hydrated || !shouldShowTestFeatures()) return null;
 
   return (
     <div className="flex items-center gap-1 mr-1 md:mr-2">

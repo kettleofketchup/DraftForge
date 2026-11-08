@@ -3,7 +3,8 @@
  *
  * DEV/PREVIEW ONLY: Small red icon button that allows logging in as a specific user.
  * Only visible when:
- * 1. import.meta.env.DEV (development mode, tree-shaken from production)
+ * 1. shouldShowTestFeatures(): dev mode, or a build with
+ *    VITE_PREVIEW_TEST_FEATURES=true (preview images)
  * 2. NOT running under Playwright (hidden during demos/recordings)
  * 3. User has a Discord ID (required for login)
  *
