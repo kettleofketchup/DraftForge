@@ -175,7 +175,7 @@ Shuffle drafts have no fixed order: `skip_turn` calls `reassign_round_captain(dr
 
 ### Events
 
-All carry `pick_number` (the lowest unpicked round, or `null`). Captain references are denormalised as `<role>_captain_id`, `_captain_name`, `_captain_avatar_url`, `_team_id`, `_team_name` (role is empty, `skipped` or `next`).
+All carry `pick_number` (the lowest unpicked round, or `null`) except `draft_lobby_opened`, which has only the keys below. Captain references are denormalised as `<role>_captain_id`, `_captain_name`, `_captain_avatar_url`, `_team_id`, `_team_name` (role is empty, `skipped` or `next`).
 
 | Event | Payload (beyond `pick_number`) |
 |-------|--------------------------------|
@@ -186,7 +186,7 @@ All carry `pick_number` (the lowest unpicked round, or `null`). Captain referenc
 | `draft_force_started` | `actor_id`, `actor_name`, `not_ready: [{team_id, team_name, captain_id, captain_name}]` |
 | `round_started` | `captain_*`, `team_*`, `started_at`, `grace_time_ms`, `reserve_ms` |
 | `draft_paused` | `reason` (`manual` / `captain_disconnected`), `paused_by_id`, `paused_by_name` (null for auto), `captain_*` |
-| `draft_resumed` | `resumed_by_id`, `resumed_by_name`, `resuming_until` |
+| `draft_resumed` | `resumed_by_id`, `resumed_by_name`, `resuming_until` (all `null` when the timer is switched off mid-pause) |
 | `pick_timed_out` | `captain_*`, `team_*`, `elapsed_ms`, `reserve_used_ms` |
 | `pick_skipped` | `skipped_captain_*`, `skipped_team_*`, `next_captain_*`, `next_team_*`, `from_pick_number`, `to_pick_number`, `deferred_to_pick_number` (null for shuffle), `pick_duration_ms`, `reserve_used_ms` |
 | `pick_skip_unavailable` | `captain_*`, `team_*` |
