@@ -241,6 +241,8 @@ class Command(BaseCommand):
                     pick_phase=round_data.get("pick_phase", 1),
                 )
 
+        draft.state = draft.derive_legacy_state()
+        draft.save(update_fields=["state"])
         return draft
 
     def _create_game(
