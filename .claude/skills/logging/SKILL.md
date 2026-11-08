@@ -27,11 +27,13 @@ Every log MUST include `system` and `subsystem` kwargs. These are the primary Gr
 
 | system | subsystem | tags | Where | What |
 |--------|-----------|------|-------|------|
-| `herodraft` | `connection` | — | `consumers.py` | WS connect/disconnect, captain state, kicks |
+| `herodraft` | `connection` | — | `consumers.py` | WS connect/disconnect, captain state (kicks now under websocket/connection) |
 | `herodraft` | `heartbeat` | — | `herodraft_tick.py` | Heartbeat staleness checks, heartbeat-triggered pauses |
-| `herodraft` | `timer` | — | `herodraft_tick.py` | Tick loop lifecycle, tick broadcast, timeout auto-pick, resume |
+| `herodraft` | `timer` | — | `herodraft_tick.py` (driver) + `draft_tick.py` (loop) | Tick loop lifecycle, tick broadcast, timeout auto-pick, resume |
 | `websocket` | `heartbeat` | — | `consumers_base.py` | Heartbeat receive, captain register/unregister (generic WS infra) |
-| `websocket` | `connection` | — | `telemetry/websocket.py` | Generic WS connect/disconnect/receive instrumentation |
+| `websocket` | `connection` | — | `telemetry/websocket.py`, `consumers_base.py` | Generic WS connect/disconnect/receive instrumentation; captain kick send/failure (captain_kicked, captain_kick_failed) |
+| `websocket` | `timer` | — | `app/tasks/draft_tick.py` | Shared tick runner: connection counts (connection_count_incremented, connection_count_decremented), registry shutdown (tick_broadcasters_shutdown) |
+| `teamdraft` | `connection` | — | `consumers.py` (DraftConsumer) | Team-draft WS connect/disconnect, heartbeat frames, malformed messages |
 | `herodraft` | `view` | — | `app/functions/herodraft_views.py` | HeroDraft HTTP actions: create, roll, choice/pick submit, abandon, reset |
 | `celery` | `task` | — | `telemetry/celery.py` | Generic Celery task lifecycle bookends (started/completed/failed) |
 | `events` | `discord` | — | `events/tasks.py` (cron sync, non-interaction tasks like `sync_discord_events`) | Cron-driven event sync to Discord that isn't triggered by an interaction |
