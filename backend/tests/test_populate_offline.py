@@ -13,7 +13,7 @@ import socket
 import traceback
 from unittest.mock import patch
 
-from django.test import TransactionTestCase, override_settings
+from django.test import TestCase, override_settings
 
 
 def _is_internal(address):
@@ -33,7 +33,7 @@ def _is_internal(address):
     SOCIAL_AUTH_DISCORD_KEY=None,
     SOCIAL_AUTH_DISCORD_SECRET=None,
 )
-class PopulateAllOfflineTest(TransactionTestCase):
+class PopulateAllOfflineTest(TestCase):
     def test_populate_all_makes_no_outbound_connection(self):
         import tests.populate.utils as populate_utils
         from tests.populate import populate_all
