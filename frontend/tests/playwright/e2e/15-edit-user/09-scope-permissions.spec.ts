@@ -7,13 +7,13 @@
  * (global scope = superuser-only).
  */
 
+import { API_URL } from '../../fixtures/base-url';
 import {
   test,
   expect,
   visitAndWaitForHydration,
 } from '../../fixtures';
 
-const API_URL = 'https://localhost/api';
 const USER_EDIT_ORG_NAME = 'User Edit Org';
 // Pin to a specific dedicated user so the test is deterministic instead of
 // depending on whatever happens to be at index 0 in the org's users list.

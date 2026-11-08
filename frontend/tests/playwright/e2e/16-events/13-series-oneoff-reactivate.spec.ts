@@ -11,6 +11,7 @@
  * that one would poison later specs in the events-sequential project.
  */
 
+import { API_URL } from '../../fixtures/base-url';
 import {
   test,
   expect,
@@ -23,8 +24,6 @@ import {
   type EventInfo,
 } from '../../fixtures';
 
-const DOCKER_HOST = process.env.DOCKER_HOST || 'localhost';
-const API_URL = `https://${DOCKER_HOST}/api`;
 
 /** Today's date as YYYY-MM-DD (UTC — every series here is timezone: 'UTC'). */
 function todayISO(): string {

@@ -1,38 +1,43 @@
-# Python/Django commands
+# Python/Django commands (run in backend/ with the project venv)
 
-root := source_directory() / ".."
+set shell := ["bash", "-euo", "pipefail", "-c"]
+set positional-arguments
+
+root := clean(source_directory() / "..")
 backend := root / "backend"
-py := ". " + root / ".venv/bin/activate && cd " + backend + " && python"
+python := env("DF_JUST_PYTHON", root / ".venv/bin/python")
+py := "cd " + quote(backend) + " && " + quote(python)
+nocache := "cd " + quote(backend) + " && DISABLE_CACHE=true " + quote(python)
 
 [group('py')]
 manage *args:
-    {{py}} manage.py {{args}}
+    {{py}} manage.py "$@"
 
 [group('py')]
 migrate *args:
-    DISABLE_CACHE=true {{py}} manage.py migrate {{args}}
+    {{nocache}} manage.py migrate "$@"
 
 [group('py')]
 makemigrations *args:
-    {{py}} manage.py makemigrations {{args}}
+    {{py}} manage.py makemigrations "$@"
 
 [group('py')]
 shell:
-    DISABLE_CACHE=true {{py}} manage.py shell
+    {{nocache}} manage.py shell
 
 [group('py')]
 runserver *args:
-    {{py}} manage.py runserver {{args}}
+    {{py}} manage.py runserver "$@"
 
 [group('py')]
 run *args:
-    {{py}} {{args}}
+    {{py}} "$@"
 
 # Run a Python script with Django configured (auto-sets DJANGO_SETTINGS_MODULE, DISABLE_CACHE, PYTHONPATH)
 [group('py')]
 script *args:
-    . {{root}}/.venv/bin/activate && cd {{backend}} && PYTHONPATH={{backend}} DJANGO_SETTINGS_MODULE=backend.settings DISABLE_CACHE=true python {{args}}
+    cd {{quote(backend)}} && PYTHONPATH={{quote(backend)}} DJANGO_SETTINGS_MODULE=backend.settings DISABLE_CACHE=true {{quote(python)}} "$@"
 
 [group('py')]
 test *args:
-    DISABLE_CACHE=true {{py}} -m pytest {{args}}
+    {{nocache}} -m pytest "$@"

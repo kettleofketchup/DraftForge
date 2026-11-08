@@ -27,6 +27,7 @@ website/
   backend/          # Django REST API
   frontend/         # React + TypeScript + Vite
   docker/           # Docker Compose configurations
+  helm/             # Helm chart (per-PR preview environments); see helm/README.md
   nginx/            # Nginx reverse proxy config
   scripts/          # Utility scripts
 ```
@@ -130,8 +131,7 @@ just test::pw::headless
 ### Nginx Configuration
 - Routes `/api/` to backend
 - Routes all other requests to frontend
-- SSL certificates at `nginx/data/ssl/`
-- Certbot integration for Let's Encrypt
+- Dev/test stacks mount the self-signed cert from `nginx/data/ssl/`; the release stack reads its cert from `nginx/data/certbot/configs/live/dota.kettle.sh/` on the host
 
 ## Building & Pushing Images
 
@@ -178,6 +178,12 @@ just prod::up            # Start prod environment
 just prod::down          # Stop prod environment
 # ... (same commands as dev::)
 
+# Helm chart (helm/, see helm/README.md)
+just helm::plugins            # Install the pinned helm-unittest plugin
+just helm::lint               # Lint the default and preview profiles
+just helm::template preview   # Render a profile (default or preview)
+just helm::test               # Unit tests, budget, render-safety, kubeconform, script tests
+
 # Database Migrations
 just db::run-migrate           # Run migrations for dev (default)
 just db::migrate::dev          # Run migrations for dev environment
@@ -215,8 +221,8 @@ just docs::build         # Build static docs site
 just update::all         # Update everything (git, deps, images)
 
 # Version
-just version::set 1.2.3  # Set version
-just version::tag        # Tag and bump version
+just version::set 1.2.3  # Release: assemble changelog, commit, tag, push (docs/development/changelog.md)
+just version::set 1.2.3 --no-commit  # Only rewrite the version files (+ local tag)
 
 # Tests (Playwright)
 just test::pw::install   # Install Playwright browsers
@@ -355,6 +361,27 @@ just dev::debug
 just test::run 'python manage.py test app.tests -v 2'
 ```
 
+### Test Stack Slots (one test stack per worktree)
+
+Each worktree gets its own test stack. The first `just test::up|upd|setup` in a
+worktree allocates a **slot** (0-9) and writes `docker/.env.slot`:
+
+| Slot | Compose project | URL |
+|------|-----------------|-----|
+| 0 | `df` | `https://localhost` (ports 80/443) |
+| N ≥ 1 | `df-sN` | `https://localhost:1N443` (HTTPS only) |
+
+The dev stack is separate (project `df-dev`, one per machine).
+
+- `just test::slot` shows this worktree's slot and URL; `just test::slots` lists every slot and stack (read-only).
+- **Never hardcode `https://localhost`** — Playwright reads the slot file; use `just test::compose <args>` instead of raw `docker compose`.
+- Discord bot + celery beat run only on slot 0; `just test::background on` enables them for one N ≥ 1 stack.
+- `just test::slot-reap`, `just test::slot-claim` and `just test::slot-release --slot N` need no user approval, but they act on other worktrees. Before running one on a slot you don't own, verify no other agent is working in or testing against it: the owner worktree's recent activity (`git -C <owner> --no-optional-locks status`, last commit, recently modified files), the project's containers and their recent log lines, Playwright/test processes whose cwd is in that worktree, and peer Claude sessions (ListAgents; a busy session may own the worktree). If in doubt, don't touch it. Commands: docs "Before touching another worktree's slot".
+- Slots whose last activity (reservation lease, container start/log times, owner-worktree git and file mtimes) is older than 12h are reaped automatically when a worktree needs a new slot; `just test::slot-reap --stale` does it now. `DF_SLOT_STALE_HOURS` changes the threshold.
+- Worktrees on branches without this feature can still kill or hijack slot stacks: merge main into a worktree before using its test stack.
+
+See `docs/development/test-stack-slots.md`.
+
 ## Agents Available
 
 - `python-backend` - Django/Python backend expertise
@@ -367,6 +394,8 @@ just test::run 'python manage.py test app.tests -v 2'
 - `just` - Just command runner (auto-activates venv, works in worktrees)
 - `testing` - Test infrastructure (populate system, Playwright fixtures, feature-isolated test data)
 - `visual-debugging` - Chrome MCP browser automation for debugging
+- `changelog` - Changelog fragments (`changelog.d/`), the `changelog` CI check and release assembly
+- `release` - Cutting a release with `just version::set X.Y.Z`: preflight, changelog assembly, tag, image CI
 
 ## Demo Video Recording
 

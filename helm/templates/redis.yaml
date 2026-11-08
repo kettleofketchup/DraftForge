@@ -1,0 +1,78 @@
+{{- include "draftforge.previewGuard" . -}}
+{{- if .Values.redis.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "draftforge.fullname" . }}-redis
+  labels:
+    {{- include "draftforge.labels" . | nindent 4 }}
+    app.kubernetes.io/component: redis
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  replicas: 1
+  progressDeadlineSeconds: {{ .Values.redis.progressDeadlineSeconds }}
+  strategy:
+    # Single emptyDir instance; no surge pod (the preview quota budget assumes none).
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "draftforge.selectorLabels" (dict "root" . "component" "redis") | nindent 6 }}
+  template:
+    metadata:
+      # No checksum or commit annotations: redis uses neither the ConfigMap nor
+      # the PR image, so a new commit must not restart it and drop the broker.
+      labels:
+        {{- include "draftforge.selectorLabels" (dict "root" . "component" "redis") | nindent 8 }}
+    spec:
+      {{- include "draftforge.podCommon" . | nindent 6 }}
+      containers:
+        - name: redis
+          image: {{ .Values.redis.image }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          # No RDB snapshots and no AOF: the data is a cache and a broker for one pod's life.
+          args:
+            - --save
+            - ""
+            - --appendonly
+            - "no"
+          ports:
+            - name: redis
+              containerPort: 6379
+              protocol: TCP
+          readinessProbe:
+            tcpSocket:
+              port: 6379
+            periodSeconds: 10
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          resources:
+            {{- include "draftforge.requireResources" (dict "name" "redis" "res" .Values.redis.resources) | nindent 12 }}
+          securityContext:
+            # uid 999 / gid 1000 is the redis user of the official alpine image.
+            {{- include "draftforge.containerSecurity" (list 999 1000) | nindent 12 }}
+      volumes:
+        - name: data
+          emptyDir:
+            sizeLimit: {{ .Values.redis.dataSizeLimit }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  labels:
+    {{- include "draftforge.labels" . | nindent 4 }}
+    app.kubernetes.io/component: redis
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "draftforge.selectorLabels" (dict "root" . "component" "redis") | nindent 4 }}
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: redis
+      protocol: TCP
+{{- end }}

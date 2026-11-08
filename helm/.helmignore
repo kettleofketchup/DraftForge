@@ -1,0 +1,13 @@
+# Patterns to ignore when packaging the chart.
+.DS_Store
+.git/
+.gitignore
+*.swp
+*.bak
+*.tmp
+*.orig
+*~
+.idea/
+.vscode/
+# helm-unittest suites and fixtures are not part of the packaged chart.
+tests/

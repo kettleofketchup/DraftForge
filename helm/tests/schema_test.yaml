@@ -1,0 +1,124 @@
+suite: values schema and required resources
+values:
+  - fixtures/prod-values.yaml
+templates:
+  - templates/configmap-env.yaml
+  - templates/backend.yaml
+  - templates/frontend.yaml
+tests:
+  - it: renders with the default values
+    asserts:
+      - notFailedTemplate: {}
+
+  - it: rejects backend.replicas other than 1
+    set:
+      backend.replicas: 2
+    asserts:
+      - failedTemplate: {}
+
+  - it: rejects an empty ingress.host when ingress is enabled
+    set:
+      ingress.enabled: true
+      ingress.host: ""
+    asserts:
+      - failedTemplate: {}
+
+  - it: allows an empty ingress.host when ingress is disabled
+    set:
+      ingress.enabled: false
+      ingress.host: ""
+    asserts:
+      - notFailedTemplate: {}
+
+  - it: fails when the migrate init container has no memory limit
+    template: templates/backend.yaml
+    set:
+      migrations.resources.limits.memory: null
+    asserts:
+      - failedTemplate:
+          errorPattern: "limits\\.memory"
+
+  - it: fails when the frontend container has no memory limit
+    template: templates/frontend.yaml
+    set:
+      frontend.resources.limits.memory: null
+    asserts:
+      - failedTemplate:
+          errorPattern: "limits\\.memory"
+
+  - it: fails when a container has no ephemeral-storage limit
+    template: templates/frontend.yaml
+    set:
+      frontend.resources.limits.ephemeral-storage: null
+    asserts:
+      - failedTemplate:
+          errorPattern: "limits\\.ephemeral-storage"
+
+  - it: fails when a container has no cpu limit
+    template: templates/backend.yaml
+    set:
+      backend.resources.limits.cpu: null
+    asserts:
+      - failedTemplate:
+          errorPattern: "limits\\.cpu"
+
+  # Closed preview objects: a misspelled limit key fails instead of being ignored.
+  - it: rejects an unknown preview key
+    set:
+      preview.quota.pods: "8"
+    asserts:
+      - failedTemplate: {}
+
+  - it: rejects an unknown preview.limitRange key
+    set:
+      preview.limitRange.min.cpu: 10m
+    asserts:
+      - failedTemplate: {}
+
+  - it: rejects an unknown preview.limitRange.max resource
+    set:
+      preview.limitRange.max.gpu: "1"
+    asserts:
+      - failedTemplate: {}
+
+  - it: rejects an unknown ingress.rateLimit key
+    set:
+      ingress.rateLimit.averge: 10
+    asserts:
+      - failedTemplate: {}
+
+  - it: rejects an ingress.rateLimit.sourceHeader that is not a header name
+    set:
+      ingress.rateLimit.sourceHeader: "X-Client-IP: 1"
+    asserts:
+      - failedTemplate: {}
+
+  - it: accepts a header name as ingress.rateLimit.sourceHeader
+    set:
+      ingress.rateLimit.sourceHeader: X-Real-Ip
+    asserts:
+      - notFailedTemplate: {}
+
+  - it: rejects an ingress.entryPoints that is not a list
+    set:
+      ingress.entryPoints: websecure
+    asserts:
+      - failedTemplate: {}
+
+  - it: rejects an empty name in ingress.entryPoints
+    set:
+      ingress.entryPoints: [websecure, ""]
+    asserts:
+      - failedTemplate: {}
+
+  - it: rejects a repeated name in ingress.entryPoints
+    set:
+      ingress.entryPoints: [websecure, websecure]
+    asserts:
+      - failedTemplate: {}
+
+  - it: accepts a list of entry points in ingress.entryPoints
+    set:
+      ingress.entryPoints: [websecure, tunnel]
+    asserts:
+      - notFailedTemplate: {}

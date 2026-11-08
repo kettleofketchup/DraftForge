@@ -22,7 +22,10 @@ out children horizontally, anything touching `@layer base` resets.
 Each pass is one orientation around the same axis. Run from repo root.
 
 1. **Bring up the stack (once):** `just test::upd`. Use `just test::setup` if
-   deps changed or this is a first run. Never raw `docker compose`.
+   deps changed or this is a first run. This worktree's stack runs in its own
+   slot; `just test::slot` prints its URL (Playwright picks it up from
+   `docker/.env.slot`). For other compose commands use `just test::compose`,
+   not raw compose.
 
 2. **Pick the surface:** start with `mobile-iphone-se` (320px) — anything that
    survives 320px survives the other two. Drop down to a single route to

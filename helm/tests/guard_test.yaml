@@ -1,0 +1,313 @@
+suite: preview guard
+# Each case breaks one value of the preview fixture. The guard is included at
+# the top of every template, and a fail aborts the whole render, so one template
+# is enough to observe it.
+release:
+  name: draftforge-pr-1
+  namespace: draftforge-pr-1
+values:
+  - ../values-preview.yaml
+  - fixtures/preview-appset-values.yaml
+templates:
+  - templates/namespace.yaml
+tests:
+  - it: renders with the unmodified preview fixture
+    asserts:
+      - notFailedTemplate: {}
+      - hasDocuments: {count: 1}
+
+  - it: fails when the release namespace is default
+    release:
+      namespace: default
+    asserts:
+      - failedTemplate:
+          errorPattern: "preview guard: release namespace \"default\" must match"
+
+  - it: fails when ingress.authentik.enabled is false
+    set:
+      ingress.authentik.enabled: false
+    asserts:
+      - failedTemplate:
+          errorPattern: "preview guard: ingress\\.authentik\\.enabled must"
+
+  - it: fails when ingress.host is another host
+    set:
+      ingress.host: evil.preview.example.test
+    asserts:
+      - failedTemplate:
+          errorPattern: "preview guard: ingress\\.host must"
+
+  - it: fails when persistence.enabled is true
+    set:
+      persistence.enabled: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "preview guard: persistence\\.enabled must"
+
+  - it: fails when priorityClassName is empty
+    set:
+      priorityClassName: ""
+    asserts:
+      - failedTemplate:
+          errorPattern: "preview guard: priorityClassName must"
+
+  - it: fails when ingress.stripIdentityHeaders is false
+    set:
+      ingress.stripIdentityHeaders: false
+    asserts:
+      - failedTemplate:
+          errorPattern: "preview guard: ingress\\.stripIdentityHeaders must"
+
+  - it: fails when preview.networkPolicy.ingressNamespace is empty
+    set:
+      preview.networkPolicy.ingressNamespace: ""
+    asserts:
+      - failedTemplate:
+          errorPattern: "preview guard: preview\\.networkPolicy\\.ingressNamespace must"
+
+  - it: fails when ingress.enabled is false
+    set:
+      ingress.enabled: false
+    asserts:
+      - failedTemplate:
+          errorPattern: "preview guard: ingress\\.enabled must"
+
+  - it: fails when ingress.blockInternalApi is false
+    set:
+      ingress.blockInternalApi: false
+    asserts:
+      - failedTemplate:
+          errorPattern: "preview guard: ingress\\.blockInternalApi must"
+
+  - it: fails when ingress.authentik.middlewareName is empty
+    set:
+      ingress.authentik.middlewareName: ""
+    asserts:
+      - failedTemplate:
+          errorPattern: "preview guard: ingress\\.authentik\\.middlewareName must"
+
+  - it: fails when ingress.authentik.middlewareNamespace is empty
+    set:
+      ingress.authentik.middlewareNamespace: ""
+    asserts:
+      - failedTemplate:
+          errorPattern: "preview guard: ingress\\.authentik\\.middlewareNamespace must"
+
+  # Checked on its own, so the host comparison cannot run against
+  # "draftforge-pr-1." with an empty suffix.
+  - it: fails when preview.hostSuffix is empty
+    set:
+      preview.hostSuffix: ""
+    asserts:
+      - failedTemplate:
+          errorPattern: "preview guard: preview\\.hostSuffix must"
+
+  # The guard must not depend on preview.enabled alone: an ApplicationSet that
+  # drops or typos it would render the test-mode app with no auth or limits.
+  - it: fails in a preview namespace when preview.enabled is false
+    set:
+      preview.enabled: false
+    asserts:
+      - failedTemplate:
+          errorPattern: "preview namespace, so preview\\.enabled must be true"
+
+  - it: fails when env.test is true outside preview mode
+    release:
+      namespace: staging
+    set:
+      preview.enabled: false
+    asserts:
+      - failedTemplate:
+          errorPattern: "env\\.test exposes the test-login endpoints"
+
+  - it: fails when ingress.rateLimit.enabled is false
+    set:
+      ingress.rateLimit.enabled: false
+    asserts:
+      - failedTemplate:
+          errorPattern: "preview guard: ingress\\.rateLimit\\.enabled must"
+
+  - it: fails when ingress.rateLimit.average is 0
+    set:
+      ingress.rateLimit.average: 0
+    asserts:
+      - failedTemplate:
+          errorPattern: "preview guard: ingress\\.rateLimit\\.average must"
+
+  - it: fails when ingress.rateLimit.burst is 0
+    set:
+      ingress.rateLimit.burst: 0
+    asserts:
+      - failedTemplate:
+          errorPattern: "preview guard: ingress\\.rateLimit\\.burst must"
+
+  - it: fails when ingress.rateLimit.aggregate.average is 0
+    set:
+      ingress.rateLimit.aggregate.average: 0
+    asserts:
+      - failedTemplate:
+          errorPattern: "preview guard: ingress\\.rateLimit\\.aggregate\\.average must"
+
+  - it: fails when ingress.rateLimit.aggregate.burst is 0
+    set:
+      ingress.rateLimit.aggregate.burst: 0
+    asserts:
+      - failedTemplate:
+          errorPattern: "preview guard: ingress\\.rateLimit\\.aggregate\\.burst must"
+
+  - it: fails when ingress.identityHeaders is empty
+    set:
+      ingress.identityHeaders: []
+    asserts:
+      - failedTemplate:
+          errorPattern: "preview guard: ingress\\.identityHeaders must"
+
+
+  # Every quota key the deploying cluster must set (null deletes a key).
+
+  - it: fails when preview.resourceQuota.hard has no pods
+    set:
+      preview.resourceQuota.hard: {"pods": null}
+    asserts:
+      - failedTemplate:
+          errorPattern: 'preview\.resourceQuota\.hard\["pods"\] must be set'
+
+  - it: fails when preview.resourceQuota.hard has no requests.cpu
+    set:
+      preview.resourceQuota.hard: {"requests.cpu": null}
+    asserts:
+      - failedTemplate:
+          errorPattern: 'preview\.resourceQuota\.hard\["requests\.cpu"\] must be set'
+
+  - it: fails when preview.resourceQuota.hard has no requests.memory
+    set:
+      preview.resourceQuota.hard: {"requests.memory": null}
+    asserts:
+      - failedTemplate:
+          errorPattern: 'preview\.resourceQuota\.hard\["requests\.memory"\] must be set'
+
+  - it: fails when preview.resourceQuota.hard has no requests.ephemeral-storage
+    set:
+      preview.resourceQuota.hard: {"requests.ephemeral-storage": null}
+    asserts:
+      - failedTemplate:
+          errorPattern: 'preview\.resourceQuota\.hard\["requests\.ephemeral-storage"\] must be set'
+
+  - it: fails when preview.resourceQuota.hard has no limits.cpu
+    set:
+      preview.resourceQuota.hard: {"limits.cpu": null}
+    asserts:
+      - failedTemplate:
+          errorPattern: 'preview\.resourceQuota\.hard\["limits\.cpu"\] must be set'
+
+  - it: fails when preview.resourceQuota.hard has no limits.memory
+    set:
+      preview.resourceQuota.hard: {"limits.memory": null}
+    asserts:
+      - failedTemplate:
+          errorPattern: 'preview\.resourceQuota\.hard\["limits\.memory"\] must be set'
+
+  - it: fails when preview.resourceQuota.hard has no limits.ephemeral-storage
+    set:
+      preview.resourceQuota.hard: {"limits.ephemeral-storage": null}
+    asserts:
+      - failedTemplate:
+          errorPattern: 'preview\.resourceQuota\.hard\["limits\.ephemeral-storage"\] must be set'
+
+  - it: fails when preview.resourceQuota.hard has no services
+    set:
+      preview.resourceQuota.hard: {"services": null}
+    asserts:
+      - failedTemplate:
+          errorPattern: 'preview\.resourceQuota\.hard\["services"\] must be set'
+
+  - it: fails when preview.resourceQuota.hard has no secrets
+    set:
+      preview.resourceQuota.hard: {"secrets": null}
+    asserts:
+      - failedTemplate:
+          errorPattern: 'preview\.resourceQuota\.hard\["secrets"\] must be set'
+
+  - it: fails when preview.resourceQuota.hard has no configmaps
+    set:
+      preview.resourceQuota.hard: {"configmaps": null}
+    asserts:
+      - failedTemplate:
+          errorPattern: 'preview\.resourceQuota\.hard\["configmaps"\] must be set'
+
+  - it: fails when preview.resourceQuota.hard has no count/deployments.apps
+    set:
+      preview.resourceQuota.hard: {"count/deployments.apps": null}
+    asserts:
+      - failedTemplate:
+          errorPattern: 'preview\.resourceQuota\.hard\["count/deployments\.apps"\] must be set'
+
+  - it: fails when the valuesObject raises a quota key the chart pins at 0
+    set:
+      preview.resourceQuota.hard: {"services.nodeports": "2"}
+    asserts:
+      - failedTemplate:
+          errorPattern: 'preview\.resourceQuota\.hard\["services\.nodeports"\] is fixed at "0"'
+
+  - it: fails when preview.limitRange.default has no cpu
+    set:
+      preview.limitRange.default: {"cpu": null}
+    asserts:
+      - failedTemplate:
+          errorPattern: 'preview\.limitRange\.default\["cpu"\] must be set'
+
+  - it: fails when preview.limitRange.default has no memory
+    set:
+      preview.limitRange.default: {"memory": null}
+    asserts:
+      - failedTemplate:
+          errorPattern: 'preview\.limitRange\.default\["memory"\] must be set'
+
+  - it: fails when preview.limitRange.default has no ephemeral-storage
+    set:
+      preview.limitRange.default: {"ephemeral-storage": null}
+    asserts:
+      - failedTemplate:
+          errorPattern: 'preview\.limitRange\.default\["ephemeral-storage"\] must be set'
+
+  - it: fails when preview.limitRange.defaultRequest has no cpu
+    set:
+      preview.limitRange.defaultRequest: {"cpu": null}
+    asserts:
+      - failedTemplate:
+          errorPattern: 'preview\.limitRange\.defaultRequest\["cpu"\] must be set'
+
+  - it: fails when preview.limitRange.defaultRequest has no memory
+    set:
+      preview.limitRange.defaultRequest: {"memory": null}
+    asserts:
+      - failedTemplate:
+          errorPattern: 'preview\.limitRange\.defaultRequest\["memory"\] must be set'
+
+  - it: fails when preview.limitRange.defaultRequest has no ephemeral-storage
+    set:
+      preview.limitRange.defaultRequest: {"ephemeral-storage": null}
+    asserts:
+      - failedTemplate:
+          errorPattern: 'preview\.limitRange\.defaultRequest\["ephemeral-storage"\] must be set'
+
+  - it: fails when preview.limitRange.max has no cpu
+    set:
+      preview.limitRange.max: {"cpu": null}
+    asserts:
+      - failedTemplate:
+          errorPattern: 'preview\.limitRange\.max\["cpu"\] must be set'
+
+  - it: fails when preview.limitRange.max has no memory
+    set:
+      preview.limitRange.max: {"memory": null}
+    asserts:
+      - failedTemplate:
+          errorPattern: 'preview\.limitRange\.max\["memory"\] must be set'
+
+  - it: fails when preview.limitRange.max has no ephemeral-storage
+    set:
+      preview.limitRange.max: {"ephemeral-storage": null}
+    asserts:
+      - failedTemplate:
+          errorPattern: 'preview\.limitRange\.max\["ephemeral-storage"\] must be set'

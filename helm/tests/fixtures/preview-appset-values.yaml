@@ -1,0 +1,45 @@
+# Example ApplicationSet helm.valuesObject for release namespace draftforge-pr-1,
+# with neutral placeholder names. The deploying cluster keeps its real values in
+# its own GitOps repo and renders them there; this file only has to be shaped
+# like them, so the chart tests cover every key the guard requires.
+image:
+  registry: ghcr.io/kettleofketchup/draftforge-preview
+  tag: 'pr-1-0123456'
+previewCommit: '0123456789abcdef0123456789abcdef01234567'    # the notification triggers key on this
+priorityClassName: preview-priority
+persistence: { enabled: false }
+env: { siteUrl: 'https://draftforge-pr-1.preview.example.test' }
+ingress:
+  enabled: true
+  host: 'draftforge-pr-1.preview.example.test'
+  entryPoint: websecure
+  tls: { secretName: preview-tls }
+  authentik: { enabled: true, middlewareName: forward-auth, middlewareNamespace: auth-system }
+  blockInternalApi: true
+  stripIdentityHeaders: true
+  rateLimit: { enabled: true, average: 50, burst: 100, period: 1s, sourceHeader: X-Client-IP, aggregate: { average: 200, burst: 400 } }
+preview:
+  enabled: true
+  hostSuffix: preview.example.test
+  resourceQuota:
+    hard:
+      pods: "8"
+      requests.cpu: "1"
+      requests.memory: 2Gi
+      requests.ephemeral-storage: 1Gi
+      limits.cpu: "4"
+      limits.memory: 4Gi
+      limits.ephemeral-storage: 7Gi
+      services: "3"
+      secrets: "2"
+      configmaps: "3"
+      count/deployments.apps: "4"
+      count/replicasets.apps: "48"
+      count/serviceaccounts: "2"
+      count/ingressroutes.traefik.io: "1"
+      count/middlewares.traefik.io: "5"
+  limitRange:
+    default: { cpu: 500m, memory: 512Mi, ephemeral-storage: 512Mi }
+    defaultRequest: { cpu: 50m, memory: 128Mi, ephemeral-storage: 64Mi }
+    max: { cpu: "1", memory: 1Gi, ephemeral-storage: 2Gi }
+  networkPolicy: { ingressNamespace: ingress-system }

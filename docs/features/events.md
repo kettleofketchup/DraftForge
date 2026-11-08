@@ -89,7 +89,7 @@ While a series is paused, realign is skipped entirely rather than run against a 
 
 | Feature | Description |
 |---------|-------------|
-| Create scheduled event | Automatically creates a Discord scheduled event |
+| Create scheduled event | Automatically creates a Discord scheduled event, only while the event's start time is in the future (Discord rejects past starts); once the start has passed, the Discord Tasks panel shows it as disabled and manual fire is refused |
 | Synchronize signups | Keep website and Discord event signups in sync |
 | Mark as interested | Players who sign up are marked interested on Discord |
 | Signup channel | Post an embed to a channel for reaction-based signups |

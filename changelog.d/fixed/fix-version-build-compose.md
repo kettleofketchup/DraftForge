@@ -1,0 +1,1 @@
+- `just version::build` works again: it syncs the version into `pyproject.toml` and `docker/.env.{prod,release}`, then builds the release images via `docker::release::build` instead of a nonexistent `docker-compose.local.yaml` (#324).

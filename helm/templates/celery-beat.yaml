@@ -1,0 +1,45 @@
+{{- include "draftforge.previewGuard" . -}}
+{{- if .Values.celeryBeat.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "draftforge.fullname" . }}-celery-beat
+  labels:
+    {{- include "draftforge.labels" . | nindent 4 }}
+    app.kubernetes.io/component: celery-beat
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  replicas: 1
+  progressDeadlineSeconds: {{ .Values.celeryBeat.progressDeadlineSeconds | default 300 }}
+  strategy:
+    # Never two beats at once: a rolling update would double-fire the schedules.
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "draftforge.selectorLabels" (dict "root" . "component" "celery-beat") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "draftforge.selectorLabels" (dict "root" . "component" "celery-beat") | nindent 8 }}
+      annotations:
+        {{- include "draftforge.podAnnotations" . | nindent 8 }}
+    spec:
+      {{- include "draftforge.podCommon" . | nindent 6 }}
+      containers:
+        # Backend image: the ENTRYPOINT is daphne, so set command, never args.
+        - name: celery-beat
+          image: {{ include "draftforge.image" (dict "root" . "img" "backend") }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: [celery, -A, config.celery_light, beat, -l, info]
+          env:
+            # As docker-compose: beat loads the same light celery settings as the worker.
+            - name: DJANGO_SETTINGS_MODULE
+              value: config.settings_celery
+          envFrom:
+            {{- include "draftforge.envFrom" . | nindent 12 }}
+          resources:
+            {{- include "draftforge.requireResources" (dict "name" "celery-beat" "res" .Values.celeryBeat.resources) | nindent 12 }}
+          securityContext:
+            {{- include "draftforge.containerSecurity" (list 1000 1000) | nindent 12 }}
+{{- end }}

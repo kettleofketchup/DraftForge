@@ -42,6 +42,7 @@ Before creating, verify the branch is pushed (`git rev-parse --abbrev-ref --symb
 ### Phase 2 — Create the PR (if missing)
 
 Pre-fill title/body from commits when the branch has 1–3 commits; otherwise prompt the user once for a title. Always use a HEREDOC body with `## Summary` and `## Test plan` sections, per repo convention. Full patterns and the exact `gh pr create` invocation: [references/creating-the-pr.md](references/creating-the-pr.md).
+Before pushing, add a `changelog.d/` fragment if the change is user- or operator-visible: see [.claude/skills/changelog/SKILL.md](../changelog/SKILL.md).
 
 ### Phase 3 — Request Copilot reviewer (idempotent)
 

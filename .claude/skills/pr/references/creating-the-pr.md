@@ -8,11 +8,23 @@ Before any `gh pr create`:
 branch=$(git branch --show-current)
 [ "$branch" = "main" ] && { echo "refusing: on main"; exit 1; }
 
-# Ensure pushed
-git rev-parse --abbrev-ref --symbolic-full-name @{upstream} >/dev/null 2>&1 \
-  || git push -u origin "$branch"
+# Changelog fragment (.claude/skills/changelog/SKILL.md). If the diff is user- or
+# operator-visible and has no fragment yet, write and commit it first.
+# Branches that predate the checker skip this until they merge main.
+if [ -f scripts/changelog.py ]; then
+  echo "fragment path: changelog.d/<section>/$(python3 scripts/changelog.py slug).md"
+  python3 scripts/changelog.py check || { echo "fix changelog.d/ fragments first"; exit 1; }
+fi
 
-# Confirm ahead of main
+# Push when there is no upstream, or when local commits are not on it yet
+# (a fragment committed after the first push would otherwise stay local).
+if ! git rev-parse --abbrev-ref --symbolic-full-name @{upstream} >/dev/null 2>&1; then
+  git push -u origin "$branch"
+elif [ -n "$(git rev-list @{upstream}..HEAD)" ]; then
+  git push
+fi
+
+# Confirm ahead of main (after the push)
 ahead=$(git rev-list --count "origin/main..$branch")
 [ "$ahead" -eq 0 ] && { echo "no commits ahead of main"; exit 1; }
 ```
@@ -61,6 +73,14 @@ url=$(gh pr view --json url -q .url)
 ```
 
 Then output one user-facing line: `Opened PR #<N>: <url>` — do not paste the full PR JSON.
+
+If the PR edits `CHANGELOG.md` on purpose (a correction to a released section), label it
+and re-run the failed `changelog` job, because adding a label does not re-trigger CI:
+
+```bash
+gh pr edit "$PR" --add-label changelog:edit
+gh run rerun <run-id> --failed
+```
 
 ## When NOT to create
 

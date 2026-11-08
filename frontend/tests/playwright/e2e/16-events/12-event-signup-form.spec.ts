@@ -21,6 +21,7 @@
  *     no-profile player to guarantee the modal opens.
  */
 
+import { API_URL } from '../../fixtures/base-url';
 import { test, expect, type BrowserContext } from '@playwright/test';
 import {
   loginEventPlayer,
@@ -30,7 +31,6 @@ import {
   type EventInfo,
 } from '../../fixtures';
 
-const API_URL = 'https://localhost/api';
 
 async function getEventByName(context: BrowserContext, name: string): Promise<number> {
   const resp = await context.request.get(

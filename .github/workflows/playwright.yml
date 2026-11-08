@@ -227,6 +227,7 @@ jobs:
               events.tests.test_series_oneoff \
               user.tests \
               steam.tests \
+              org.tests \
               tests.test_populate_utils \
               discordbot.tests.test_components \
               discordbot.tests.test_custom_ids \
@@ -234,12 +235,17 @@ jobs:
               discordbot.tests.test_log_context \
               events.tests.test_discord_decline_button \
               events.tests.test_provider_registry \
+              events.tests.test_create_discord_scheduled_event \
+              events.tests.test_sync_discord_scheduled_event_window \
+              app.tests.test_task_schedule \
               app.tests.test_build_users_dict \
               tests.test_populate \
               discordbot.tests.test_signup_logging \
               events.tests.test_modal_config_contract \
               events.tests.test_discord \
               events.tests.test_reaction_signup \
+              app.tests.test_env_utils \
+              app.tests.test_settings_env_overrides \
               -v 2
 
       - name: Run frontend Vitest
@@ -248,6 +254,11 @@ jobs:
         run: |
           docker compose --project-directory . -f docker/docker-compose.test.yaml -f docker/docker-compose.ci.override.yaml exec -T frontend \
             npm test -- --run
+
+      - name: Run slot guards on the runner
+        run: |
+          npm --prefix frontend exec -- vitest run --root frontend tests/unit/playwright-literal-guard.test.ts
+          just test::slots-unit
 
       - name: Dump container logs on failure
         if: failure()

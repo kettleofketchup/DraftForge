@@ -1,0 +1,11 @@
+apiVersion: v2
+name: draftforge
+description: DraftForge (backend, frontend, celery, discord bot, redis) for Kubernetes
+type: application
+# Chart semver. Bump by hand whenever a rendered file under helm/ changes
+# (helm/tests/ and helm/README.md are exempt); it names the chart tag
+# chart-v<version>.
+version: 0.2.0
+# Informational only and edited by hand together with a chart version bump. The
+# release tooling does not sync it. Deployments set image.tag explicitly.
+appVersion: "0.9.70"

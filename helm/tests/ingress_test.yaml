@@ -1,0 +1,302 @@
+suite: ingressroute and middlewares
+# Preview cases use the preview fixture; the "defaults" cases override release
+# and values per test. In preview the template renders six documents: the
+# IngressRoute and the discord-rewrite, internal-deny, strip-identity,
+# ratelimit and ratelimit-aggregate Middlewares.
+values:
+  - fixtures/prod-values.yaml
+templates:
+  - templates/ingressroute.yaml
+tests:
+  # ---- preview fixture ----
+  - it: "preview: renders the IngressRoute and five Middlewares as traefik.io/v1alpha1"
+    release: &previewRelease
+      name: draftforge-pr-1
+      namespace: draftforge-pr-1
+    values: &previewValues
+      - ../values-preview.yaml
+      - fixtures/preview-appset-values.yaml
+    asserts:
+      - hasDocuments: {count: 6}
+      - isAPIVersion: {of: traefik.io/v1alpha1}
+      - isKind: {of: IngressRoute}
+        documentSelector: {path: metadata.name, value: draftforge}
+      - isKind: {of: Middleware}
+        documentSelector: {path: metadata.name, value: draftforge-discord-rewrite}
+      - isKind: {of: Middleware}
+        documentSelector: {path: metadata.name, value: draftforge-internal-deny}
+      - isKind: {of: Middleware}
+        documentSelector: {path: metadata.name, value: draftforge-strip-identity}
+      - isKind: {of: Middleware}
+        documentSelector: {path: metadata.name, value: draftforge-ratelimit}
+      - isKind: {of: Middleware}
+        documentSelector: {path: metadata.name, value: draftforge-ratelimit-aggregate}
+
+  - it: "preview: websecure entry point and the preview host in every route"
+    release: *previewRelease
+    values: *previewValues
+    documentSelector: &ingressRoute {path: kind, value: IngressRoute}
+    asserts:
+      - equal: {path: spec.entryPoints, value: [websecure]}
+      - lengthEqual: {path: spec.routes, count: 4}
+      - matchRegex: {path: "spec.routes[0].match", pattern: "^Host\\(`draftforge-pr-1\\.preview\\.example\\.test`\\) && "}
+      - matchRegex: {path: "spec.routes[1].match", pattern: "^Host\\(`draftforge-pr-1\\.preview\\.example\\.test`\\) && "}
+      - matchRegex: {path: "spec.routes[2].match", pattern: "^Host\\(`draftforge-pr-1\\.preview\\.example\\.test`\\) && "}
+      - equal: {path: "spec.routes[3].match", value: "Host(`draftforge-pr-1.preview.example.test`)"}
+
+  - it: "preview: routes are in priority order 300, 250, 200, 100"
+    release: *previewRelease
+    values: *previewValues
+    documentSelector: *ingressRoute
+    asserts:
+      - equal: {path: "spec.routes[0].priority", value: 300}
+      - equal: {path: "spec.routes[1].priority", value: 250}
+      - equal: {path: "spec.routes[2].priority", value: 200}
+      - equal: {path: "spec.routes[3].priority", value: 100}
+
+  - it: "preview: route 300 denies /api/internal"
+    release: *previewRelease
+    values: *previewValues
+    documentSelector: *ingressRoute
+    asserts:
+      - matchRegex: {path: "spec.routes[0].match", pattern: "PathPrefix\\(`/api/internal`\\)"}
+      - contains:
+          path: "spec.routes[0].middlewares"
+          content: {name: draftforge-internal-deny}
+
+  - it: "preview: route 250 rewrites /discord/ to the backend"
+    release: *previewRelease
+    values: *previewValues
+    documentSelector: *ingressRoute
+    asserts:
+      - matchRegex: {path: "spec.routes[1].match", pattern: "PathPrefix\\(`/discord/`\\)"}
+      - contains:
+          path: "spec.routes[1].middlewares"
+          content: {name: draftforge-discord-rewrite}
+      - equal: {path: "spec.routes[1].services", value: [{name: backend, port: 8000}]}
+
+  - it: "preview: route 200 sends the backend paths to backend:8000"
+    release: *previewRelease
+    values: *previewValues
+    documentSelector: *ingressRoute
+    asserts:
+      - matchRegex: {path: "spec.routes[2].match", pattern: "PathPrefix\\(`/api`\\)"}
+      - matchRegex: {path: "spec.routes[2].match", pattern: "PathPrefix\\(`/complete`\\)"}
+      - matchRegex: {path: "spec.routes[2].match", pattern: "PathPrefix\\(`/login`\\)"}
+      - matchRegex: {path: "spec.routes[2].match", pattern: "PathPrefix\\(`/static`\\)"}
+      - matchRegex: {path: "spec.routes[2].match", pattern: "PathPrefix\\(`/admin`\\)"}
+      - matchRegex: {path: "spec.routes[2].match", pattern: "PathPrefix\\(`/logout`\\)"}
+      - matchRegex: {path: "spec.routes[2].match", pattern: "PathPrefix\\(`/disconnect`\\)"}
+      - equal: {path: "spec.routes[2].services", value: [{name: backend, port: 8000}]}
+
+  - it: "preview: route 100 sends everything else to frontend:3000"
+    release: *previewRelease
+    values: *previewValues
+    documentSelector: *ingressRoute
+    asserts:
+      - equal: {path: "spec.routes[3].services", value: [{name: frontend, port: 3000}]}
+
+  - it: "preview: every route lists the aggregate limit, the rate limit, forward-auth, then strip-identity first"
+    release: *previewRelease
+    values: *previewValues
+    documentSelector: *ingressRoute
+    asserts:
+      - equal: {path: "spec.routes[0].middlewares[0]", value: {name: draftforge-ratelimit-aggregate}}
+      - equal: {path: "spec.routes[1].middlewares[0]", value: {name: draftforge-ratelimit-aggregate}}
+      - equal: {path: "spec.routes[2].middlewares[0]", value: {name: draftforge-ratelimit-aggregate}}
+      - equal: {path: "spec.routes[3].middlewares[0]", value: {name: draftforge-ratelimit-aggregate}}
+      - equal: {path: "spec.routes[0].middlewares[1]", value: {name: draftforge-ratelimit}}
+      - equal: {path: "spec.routes[1].middlewares[1]", value: {name: draftforge-ratelimit}}
+      - equal: {path: "spec.routes[2].middlewares[1]", value: {name: draftforge-ratelimit}}
+      - equal: {path: "spec.routes[3].middlewares[1]", value: {name: draftforge-ratelimit}}
+      - equal: {path: "spec.routes[0].middlewares[2]", value: {name: forward-auth, namespace: auth-system}}
+      - equal: {path: "spec.routes[1].middlewares[2]", value: {name: forward-auth, namespace: auth-system}}
+      - equal: {path: "spec.routes[2].middlewares[2]", value: {name: forward-auth, namespace: auth-system}}
+      - equal: {path: "spec.routes[3].middlewares[2]", value: {name: forward-auth, namespace: auth-system}}
+      - equal: {path: "spec.routes[0].middlewares[3]", value: {name: draftforge-strip-identity}}
+      - equal: {path: "spec.routes[1].middlewares[3]", value: {name: draftforge-strip-identity}}
+      - equal: {path: "spec.routes[2].middlewares[3]", value: {name: draftforge-strip-identity}}
+      - equal: {path: "spec.routes[3].middlewares[3]", value: {name: draftforge-strip-identity}}
+
+  - it: "preview: rate limits per client IP header"
+    release: *previewRelease
+    values: *previewValues
+    documentSelector: {path: metadata.name, value: draftforge-ratelimit}
+    asserts:
+      - equal:
+          path: spec.rateLimit
+          value: {average: 50, burst: 100, period: 1s, sourceCriterion: {requestHeaderName: X-Client-IP}}
+
+  - it: "preview: the aggregate limit has no sourceCriterion, so it keys on the TCP peer"
+    release: *previewRelease
+    values: *previewValues
+    documentSelector: {path: metadata.name, value: draftforge-ratelimit-aggregate}
+    asserts:
+      - equal:
+          path: spec.rateLimit
+          value: {average: 200, burst: 400, period: 1s}
+
+  - it: "defaults: renders no aggregate limit when aggregate.average is 0"
+    set:
+      ingress.rateLimit: {enabled: true, average: 10, burst: 20}
+    asserts:
+      - notContains:
+          path: spec.routes[0].middlewares
+          content: {name: draftforge-ratelimit-aggregate}
+        documentSelector: *ingressRoute
+      - equal:
+          path: spec.routes[0].middlewares[0]
+          value: {name: draftforge-ratelimit}
+        documentSelector: *ingressRoute
+
+  - it: "preview: rate limit without sourceHeader uses the default source"
+    release: *previewRelease
+    values: *previewValues
+    set:
+      ingress.rateLimit.sourceHeader: ""
+    documentSelector: {path: metadata.name, value: draftforge-ratelimit}
+    asserts:
+      - notExists: {path: spec.rateLimit.sourceCriterion}
+
+  - it: "preview: uses the configured TLS secret"
+    release: *previewRelease
+    values: *previewValues
+    documentSelector: *ingressRoute
+    asserts:
+      - equal: {path: spec.tls, value: {secretName: preview-tls}}
+
+  - it: "preview: discord-rewrite maps /discord/<x> to /api/discord/<x>"
+    release: *previewRelease
+    values: *previewValues
+    documentSelector: {path: metadata.name, value: draftforge-discord-rewrite}
+    asserts:
+      - equal:
+          path: spec
+          value: {replacePathRegex: {regex: "^/discord/(.*)", replacement: "/api/discord/$1"}}
+
+  - it: "preview: internal-deny allows only 127.0.0.1/32"
+    release: *previewRelease
+    values: *previewValues
+    documentSelector: {path: metadata.name, value: draftforge-internal-deny}
+    asserts:
+      - equal: {path: spec.ipAllowList.sourceRange, value: [127.0.0.1/32]}
+
+  - it: "preview: strip-identity empties every ingress.identityHeaders header"
+    release: *previewRelease
+    values: *previewValues
+    documentSelector: {path: metadata.name, value: draftforge-strip-identity}
+    asserts:
+      - equal:
+          path: spec.headers.customRequestHeaders
+          value:
+            X-authentik-username: ""
+            X-authentik-groups: ""
+            X-authentik-entitlements: ""
+            X-authentik-email: ""
+            X-authentik-name: ""
+            X-authentik-uid: ""
+            X-authentik-jwt: ""
+            X-authentik-meta-jwks: ""
+            X-authentik-meta-outpost: ""
+            X-authentik-meta-provider: ""
+            X-authentik-meta-app: ""
+            X-authentik-meta-version: ""
+
+  - it: "preview: strip-identity follows an overridden ingress.identityHeaders"
+    release: *previewRelease
+    values: *previewValues
+    set:
+      ingress.identityHeaders: [X-Auth-User, X-Auth-Token]
+    documentSelector: {path: metadata.name, value: draftforge-strip-identity}
+    asserts:
+      - equal:
+          path: spec.headers.customRequestHeaders
+          value: {X-Auth-User: "", X-Auth-Token: ""}
+
+  # ---- defaults (prod-shaped) ----
+  - it: "defaults: no tls key and no authentik or strip-identity middleware"
+    asserts:
+      - hasDocuments: {count: 3}
+      - notExists: {path: spec.tls}
+        documentSelector: *ingressRoute
+      - equal: {path: "spec.routes[0].middlewares", value: [{name: draftforge-internal-deny}]}
+        documentSelector: *ingressRoute
+      - equal: {path: "spec.routes[1].middlewares", value: [{name: draftforge-discord-rewrite}]}
+        documentSelector: *ingressRoute
+      - notExists: {path: "spec.routes[2].middlewares"}
+        documentSelector: *ingressRoute
+      - notExists: {path: "spec.routes[3].middlewares"}
+        documentSelector: *ingressRoute
+      - equal: {path: "spec.routes[3].match", value: "Host(`dota.kettle.sh`)"}
+        documentSelector: *ingressRoute
+
+  - it: "defaults: a single websecure entry point from ingress.entryPoint"
+    documentSelector: *ingressRoute
+    asserts:
+      - equal: {path: spec.entryPoints, value: [websecure]}
+
+  - it: "defaults: ingress.entryPoint alone still sets the entry point"
+    set:
+      ingress.entryPoint: web
+    documentSelector: *ingressRoute
+    asserts:
+      - equal: {path: spec.entryPoints, value: [web]}
+
+  - it: "defaults: ingress.entryPoints lists every entry point in order"
+    set:
+      ingress.entryPoints: [websecure, tunnel]
+    documentSelector: *ingressRoute
+    asserts:
+      - equal: {path: spec.entryPoints, value: [websecure, tunnel]}
+
+  - it: "defaults: ingress.entryPoints wins over ingress.entryPoint"
+    set:
+      ingress.entryPoint: web
+      ingress.entryPoints: [tunnel]
+    documentSelector: *ingressRoute
+    asserts:
+      - equal: {path: spec.entryPoints, value: [tunnel]}
+
+  - it: "defaults: an empty ingress.entryPoints falls back to ingress.entryPoint"
+    set:
+      ingress.entryPoints: []
+    documentSelector: *ingressRoute
+    asserts:
+      - equal: {path: spec.entryPoints, value: [websecure]}
+
+  - it: "defaults: fails when neither ingress.entryPoints nor ingress.entryPoint is set"
+    set:
+      ingress.entryPoint: ""
+      ingress.entryPoints: []
+    asserts:
+      - failedTemplate:
+          errorPattern: "ingress\\.entryPoints"
+
+  - it: "preview: ingress.entryPoints keeps forward-auth on every route"
+    release: *previewRelease
+    values: *previewValues
+    set:
+      ingress.entryPoints: [websecure, tunnel]
+    documentSelector: *ingressRoute
+    asserts:
+      - equal: {path: spec.entryPoints, value: [websecure, tunnel]}
+      - contains: {path: "spec.routes[0].middlewares", content: {name: forward-auth, namespace: auth-system}}
+      - contains: {path: "spec.routes[1].middlewares", content: {name: forward-auth, namespace: auth-system}}
+      - contains: {path: "spec.routes[2].middlewares", content: {name: forward-auth, namespace: auth-system}}
+      - contains: {path: "spec.routes[3].middlewares", content: {name: forward-auth, namespace: auth-system}}
+
+  - it: "defaults: ingress.enabled false renders nothing"
+    set:
+      ingress.enabled: false
+    asserts:
+      - hasDocuments: {count: 0}
+
+  - it: "defaults: blockInternalApi false drops the /api/internal route and the deny middleware"
+    set:
+      ingress.blockInternalApi: false
+    asserts:
+      - hasDocuments: {count: 2}
+      - lengthEqual: {path: spec.routes, count: 3}
+        documentSelector: *ingressRoute
+      - equal: {path: "spec.routes[0].priority", value: 250}
+        documentSelector: *ingressRoute

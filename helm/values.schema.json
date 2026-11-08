@@ -1,0 +1,203 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "draftforge chart values",
+  "type": "object",
+  "additionalProperties": false,
+  "definitions": {
+    "quantity": { "type": ["string", "integer", "null"] },
+    "containerLimits": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "cpu": { "$ref": "#/definitions/quantity" },
+        "memory": { "$ref": "#/definitions/quantity" },
+        "ephemeral-storage": { "$ref": "#/definitions/quantity" }
+      }
+    },
+    "resources": {
+      "type": "object",
+      "properties": {
+        "requests": { "type": "object" },
+        "limits": { "type": "object" }
+      }
+    },
+    "component": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "replicas": { "type": "integer", "minimum": 0 },
+        "concurrency": { "type": "integer", "minimum": 1 },
+        "progressDeadlineSeconds": { "type": "integer", "minimum": 1 },
+        "resources": { "$ref": "#/definitions/resources" }
+      }
+    }
+  },
+  "properties": {
+    "global": { "type": "object" },
+    "fullnameOverride": { "type": "string" },
+    "image": {
+      "type": "object",
+      "properties": {
+        "registry": { "type": "string", "minLength": 1 },
+        "tag": { "type": "string" },
+        "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] },
+        "pullSecrets": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "priorityClassName": { "type": "string" },
+    "previewCommit": { "type": "string" },
+    "backend": {
+      "allOf": [
+        { "$ref": "#/definitions/component" },
+        { "properties": { "replicas": { "const": 1 } } }
+      ]
+    },
+    "frontend": { "$ref": "#/definitions/component" },
+    "celeryWorker": { "$ref": "#/definitions/component" },
+    "celeryBeat": { "$ref": "#/definitions/component" },
+    "discordBot": { "$ref": "#/definitions/component" },
+    "redis": {
+      "allOf": [
+        { "$ref": "#/definitions/component" },
+        {
+          "properties": {
+            "image": { "type": "string", "minLength": 1 },
+            "dataSizeLimit": { "type": "string", "minLength": 1 }
+          }
+        }
+      ]
+    },
+    "persistence": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "size": { "type": "string" },
+        "storageClass": { "type": "string" },
+        "accessMode": { "type": "string" }
+      }
+    },
+    "migrations": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "resources": { "$ref": "#/definitions/resources" }
+      }
+    },
+    "seed": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "commands": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "resources": { "$ref": "#/definitions/resources" }
+      }
+    },
+    "env": {
+      "type": "object",
+      "properties": {
+        "nodeEnv": { "type": "string" },
+        "debug": { "type": "boolean" },
+        "test": { "type": "boolean" },
+        "release": { "type": "boolean" },
+        "ci": { "type": "boolean" },
+        "siteUrl": { "type": "string" },
+        "otelEnabled": { "type": "boolean" },
+        "logFormat": { "type": "string" },
+        "logLevel": { "type": "string" },
+        "extra": { "type": "object" }
+      }
+    },
+    "secrets": {
+      "type": "object",
+      "properties": {
+        "create": { "type": "boolean" },
+        "djangoSecretKey": { "type": "string" },
+        "internalServiceToken": { "type": "string" }
+      }
+    },
+    "extraEnvSecrets": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "ingress": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "host": { "type": "string" },
+        "entryPoint": { "type": "string" },
+        "entryPoints": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+        "tls": {
+          "type": "object",
+          "properties": { "secretName": { "type": "string" } }
+        },
+        "authentik": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "middlewareName": { "type": "string" },
+            "middlewareNamespace": { "type": "string" }
+          }
+        },
+        "blockInternalApi": { "type": "boolean" },
+        "stripIdentityHeaders": { "type": "boolean" },
+        "identityHeaders": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[A-Za-z0-9-]+$" }
+        },
+        "rateLimit": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "average": { "type": "integer", "minimum": 0 },
+            "burst": { "type": "integer", "minimum": 0 },
+            "period": { "type": "string", "minLength": 1 },
+            "sourceHeader": { "type": "string", "pattern": "^([A-Za-z0-9-]+)?$" },
+            "aggregate": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "average": { "type": "integer", "minimum": 0 },
+                "burst": { "type": "integer", "minimum": 0 }
+              }
+            }
+          }
+        }
+      },
+      "if": {
+        "properties": { "enabled": { "const": true } },
+        "required": ["enabled"]
+      },
+      "then": {
+        "required": ["host"],
+        "properties": { "host": { "type": "string", "minLength": 1 } }
+      }
+    },
+    "preview": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "hostSuffix": { "type": "string" },
+        "resourceQuota": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "hard": { "type": "object", "additionalProperties": { "$ref": "#/definitions/quantity" } }
+          }
+        },
+        "limitRange": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "default": { "$ref": "#/definitions/containerLimits" },
+            "defaultRequest": { "$ref": "#/definitions/containerLimits" },
+            "max": { "$ref": "#/definitions/containerLimits" }
+          }
+        },
+        "networkPolicy": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "ingressNamespace": { "type": "string" } }
+        }
+      }
+    },
+    "podSecurityContext": { "type": "object" }
+  }
+}

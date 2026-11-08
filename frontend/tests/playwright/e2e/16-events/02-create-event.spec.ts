@@ -7,6 +7,7 @@
  * Uses the dedicated Events Test Org (pk=7) infrastructure.
  */
 
+import { API_URL } from '../../fixtures/base-url';
 import {
   test,
   expect,
@@ -18,7 +19,6 @@ import {
   type EventInfo,
 } from '../../fixtures';
 
-const API_URL = 'https://localhost/api';
 
 let eventInfo: EventInfo;
 

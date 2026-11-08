@@ -255,3 +255,74 @@ class FireSignupPostRepostTest(TestCase):
         mock_app.send_task.assert_called_once_with(
             "events.tasks.send_event_announcement", args=[self.event.pk]
         )
+
+
+class ScheduledEventPastStartTest(TestCase):
+    """Once an event's start has passed, Discord rejects a scheduled event for
+    it, so the panel must not offer it and the fire endpoint must refuse it.
+    """
+
+    def setUp(self):
+        self.client = APIClient()
+        self.org = Organization.objects.create(
+            name="Past Start Org", discord_server_id="111"
+        )
+        self.admin = CustomUser.objects.create_superuser(
+            username="past_start_admin", password="x"
+        )
+        self.client.force_authenticate(user=self.admin)
+
+    def _event(self, starts_in: timedelta):
+        from events.models import Event
+
+        return Event.objects.create(
+            organization=self.org,
+            name="Past Start Event",
+            state="signups_open",
+            scheduled_at=timezone.now() + starts_in,
+            discord_create_event=True,
+        )
+
+    def _scheduled_event_row(self, event):
+        resp = self.client.get(f"/api/events/{event.pk}/task-schedule/")
+        self.assertEqual(resp.status_code, 200)
+        return next(t for t in resp.json() if t["task"] == "scheduled_event")
+
+    def test_past_start_is_disabled_and_not_fireable(self):
+        row = self._scheduled_event_row(self._event(-timedelta(hours=2)))
+        self.assertEqual(row["status"], "disabled")
+        self.assertFalse(row["can_fire"])
+        self.assertIn("Start time has passed", row["description"])
+
+    def test_fired_past_start_stays_fired(self):
+        from discordbot.models import DiscordEvent, DiscordEventLog
+
+        event = self._event(-timedelta(hours=2))
+        discord_event, _ = DiscordEvent.objects.get_or_create(
+            event=event, defaults={"guild_id": "111"}
+        )
+        DiscordEventLog.objects.create(
+            discord_event=discord_event,
+            action="create_scheduled_event",
+            success=True,
+        )
+        row = self._scheduled_event_row(event)
+        self.assertEqual(row["status"], "fired")
+        self.assertEqual(row["description"], "Creates a Discord guild scheduled event")
+
+    def test_future_start_is_ready(self):
+        row = self._scheduled_event_row(self._event(timedelta(hours=2)))
+        self.assertEqual(row["status"], "ready")
+        self.assertTrue(row["can_fire"])
+
+    def test_fire_rejects_past_start(self):
+        from unittest.mock import patch
+
+        event = self._event(-timedelta(hours=2))
+        with patch("celery.current_app") as mock_app:
+            resp = self.client.post(
+                f"/api/events/{event.pk}/task-schedule/scheduled_event/fire/"
+            )
+        self.assertEqual(resp.status_code, 400, resp.content)
+        self.assertEqual(resp.json()["error"], "Event start time has passed")
+        mock_app.send_task.assert_not_called()

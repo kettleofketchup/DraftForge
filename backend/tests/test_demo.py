@@ -2,7 +2,7 @@
 Test endpoints for Demo tournament reset (TEST ONLY).
 
 These endpoints are only available when TEST_ENDPOINTS=true in settings.
-Used by `inv demo.*` tasks to reset demo data before recording videos.
+Used by `just demo::*` tasks to reset demo data before recording videos.
 """
 
 from django.shortcuts import get_object_or_404
@@ -71,7 +71,7 @@ def reset_demo_tournament(request, key: str):
     if tournament is None:
         return Response(
             {
-                "error": f"Tournament '{tournament_name}' not found. Run 'inv db.populate.all' first."
+                "error": f"Tournament '{tournament_name}' not found. Run 'just db::populate::all' first."
             },
             status=status.HTTP_404_NOT_FOUND,
         )
@@ -358,7 +358,7 @@ def get_demo_tournament(request, key: str):
     except Tournament.DoesNotExist:
         return Response(
             {
-                "error": f"Tournament '{tournament_name}' not found. Run 'inv db.populate.all' first."
+                "error": f"Tournament '{tournament_name}' not found. Run 'just db::populate::all' first."
             },
             status=status.HTTP_404_NOT_FOUND,
         )

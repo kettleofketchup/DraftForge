@@ -1,4 +1,6 @@
 *.db.*
 .redis_data/
+.redis_data-*/
+celerybeat-schedule-*
 .env
 staticfiles/

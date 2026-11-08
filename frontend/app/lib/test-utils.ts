@@ -5,7 +5,9 @@
  * test-only features in the frontend.
  *
  * Test features (like "Login as User" button) are only shown when:
- * 1. import.meta.env.DEV is true (development mode, not production)
+ * 1. import.meta.env.DEV is true (development mode), OR the build was made
+ *    with VITE_PREVIEW_TEST_FEATURES=true (PR preview images; the frontend
+ *    Dockerfile defaults it to false, so production images never set it)
  * 2. NOT running in Playwright (window.playwright is not set)
  *
  * This ensures test helpers are:
@@ -26,13 +28,37 @@ export function isPlaywrightRunning(): boolean {
 /**
  * Check if test-only UI features should be shown.
  * Returns true only when:
- * 1. Running in dev mode (import.meta.env.DEV)
+ * 1. Running in dev mode (import.meta.env.DEV), or built with
+ *    VITE_PREVIEW_TEST_FEATURES=true (PR previews)
  * 2. NOT running under Playwright (for clean demos/screenshots)
  *
  * Same pattern used in root.tsx for react-scan.
  */
 export function shouldShowTestFeatures(): boolean {
-  return import.meta.env.DEV && !isPlaywrightRunning();
+  return (
+    (import.meta.env.DEV || import.meta.env.VITE_PREVIEW_TEST_FEATURES === 'true') &&
+    !isPlaywrightRunning()
+  );
+}
+
+export type TestLoginRole = 'admin' | 'staff' | 'user';
+
+/**
+ * Login as the seeded admin, staff or regular test user.
+ * Only works when backend has TEST_ENDPOINTS enabled.
+ *
+ * @param role - Which seeded test user to log in as
+ * @returns Promise that rejects when the backend refuses the login
+ */
+export async function loginAsTestRole(role: TestLoginRole): Promise<void> {
+  const response = await fetch(`/api/tests/login-${role}/`, {
+    method: 'POST',
+    credentials: 'include',
+  });
+  if (!response.ok) {
+    throw new Error(`Login as ${role} failed: ${response.status}`);
+  }
+  window.location.reload();
 }
 
 /**

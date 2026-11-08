@@ -1,0 +1,18 @@
+{{- include "draftforge.previewGuard" . -}}
+{{- if .Values.preview.enabled }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Release.Namespace }}
+  labels:
+    {{- include "draftforge.labels" . | nindent 4 }}
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+    kettle.sh/draftforge-preview: "true"
+  annotations:
+    # Wave -1: Pod Security labels, quota, limits and network policy exist
+    # before any pod is created.
+    argocd.argoproj.io/sync-wave: "-1"
+{{- end }}

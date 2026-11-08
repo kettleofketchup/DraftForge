@@ -4,6 +4,7 @@ import { memo } from 'react';
 import { Link } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { cn } from '~/lib/utils';
+import { PreviewLoginMenu } from '../preview/PreviewLoginMenu';
 import { useUserStore } from '../../store/userStore';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 import { LoginWithDiscordButton } from './login';
@@ -613,6 +614,7 @@ export const ResponsiveAppBar: React.FC = memo(() => {
         </div>
         <div className="navbar-end">
           <ExternalLinks className="hidden md:flex" />
+          <PreviewLoginMenu />
           <LoginWithDiscordButton />
         </div>
       </nav>
