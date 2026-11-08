@@ -9,8 +9,13 @@ Sums cpu, memory and ephemeral-storage requests and limits over every
 Deployment pod, plus one Deployment pod per surge pod, and compares them with
 the `hard` of the single rendered ResourceQuota. When a LimitRange is rendered,
 also checks every container's requests and limits against its Container `max`,
-since admission rejects a pod above it. Exit 0 when everything fits, 1
-otherwise or when there is no ResourceQuota.
+since admission rejects a pod above it. Also counts the rendered objects for
+every object-count key in `hard` (services, secrets, configmaps,
+services.loadbalancers, services.nodeports and count/<resource>[.<group>]),
+plus the objects Kubernetes adds to every namespace (the kube-root-ca.crt
+ConfigMap and the default ServiceAccount), since quota admission rejects an
+object over its count at sync time. Exit 0 when everything fits, 1 otherwise
+or when there is no ResourceQuota.
 """
 import json
 import math
@@ -33,6 +38,14 @@ SUFFIXES = {
 }
 QUANTITY = re.compile(r"^(\d+(?:\.\d+)?|\.\d+)(m|k|M|G|T|P|E|Ki|Mi|Gi|Ti|Pi|Ei)?$")
 MI = Decimal(2) ** 20
+# Short object-count quota names for core resources.
+CORE_COUNT_KEYS = {"services", "secrets", "configmaps", "persistentvolumeclaims",
+                   "replicationcontrollers", "resourcequotas"}
+# Objects every namespace gets without the chart: (resource, group) -> count.
+IMPLICIT_OBJECTS = {("configmaps", ""): 1, ("serviceaccounts", ""): 1}
+# Kinds that are not namespaced, so no namespace quota counts them.
+CLUSTER_KINDS = {"Namespace", "ClusterRole", "ClusterRoleBinding", "PriorityClass",
+                 "CustomResourceDefinition", "StorageClass", "PersistentVolume"}
 
 
 class BudgetError(Exception):
@@ -152,6 +165,61 @@ def budget(docs: list) -> dict:
     return {k: (totals[k], hard[k]) for k in KEYS}
 
 
+def resource_of(doc: dict) -> tuple[str, str]:
+    """(plural resource, API group) of a rendered object, e.g. ("middlewares", "traefik.io")."""
+    kind = doc.get("kind", "").lower()
+    if kind.endswith("y"):
+        plural = kind[:-1] + "ies"
+    elif kind.endswith("s"):
+        plural = kind + "es"
+    else:
+        plural = kind + "s"
+    api = doc.get("apiVersion", "")
+    group = api.rsplit("/", 1)[0] if "/" in api else ""
+    return plural, group
+
+
+def count_key(key: str) -> tuple[str, str] | None:
+    """(resource, group) an object-count quota key limits, or None for a compute key."""
+    if key in CORE_COUNT_KEYS:
+        return key, ""
+    if key.startswith("count/"):
+        resource, _, group = key[len("count/"):].partition(".")
+        return resource, group
+    return None
+
+
+def object_counts(docs: list) -> dict:
+    """Return {key: (count, hard)} for every object-count key in the ResourceQuota."""
+    docs = [d for d in docs if isinstance(d, dict) and d]
+    quotas = [d for d in docs if d.get("kind") == "ResourceQuota"]
+    if len(quotas) != 1:
+        raise BudgetError(f"expected one ResourceQuota, found {len(quotas)}")
+    hard_spec = quotas[0].get("spec", {}).get("hard") or {}
+    rendered: dict[tuple[str, str], int] = dict(IMPLICIT_OBJECTS)
+    service_types: dict[str, int] = {}
+    for d in docs:
+        if d.get("kind") in CLUSTER_KINDS:
+            continue
+        r = resource_of(d)
+        rendered[r] = rendered.get(r, 0) + 1
+        if d.get("kind") == "Service":
+            stype = d.get("spec", {}).get("type", "ClusterIP")
+            service_types[stype] = service_types.get(stype, 0) + 1
+    out = {}
+    for key, value in hard_spec.items():
+        if key == "services.loadbalancers":
+            n = service_types.get("LoadBalancer", 0)
+        elif key == "services.nodeports":
+            n = service_types.get("NodePort", 0) + service_types.get("LoadBalancer", 0)
+        elif (target := count_key(key)) is not None:
+            n = rendered.get(target, 0)
+        else:
+            continue
+        out[key] = (n, int(parse_quantity(value)))
+    return out
+
+
 def _num(d: Decimal) -> str:
     d = d.normalize()
     return f"{d:f}" if d != d.to_integral_value() else str(int(d))
@@ -171,6 +239,7 @@ def main() -> int:
         if not isinstance(docs, list):
             raise BudgetError("stdin must be a JSON array of rendered documents")
         result = budget(docs)
+        counts = object_counts(docs)
     except (BudgetError, ValueError) as exc:
         print(f"FAIL: {exc}", file=sys.stderr)
         return 1
@@ -179,6 +248,10 @@ def main() -> int:
         total, hard = result[key]
         print(f"{key} {fmt(key, total)}/{fmt(key, hard)}")
         ok = ok and total <= hard
+    for key in sorted(counts):
+        n, hard = counts[key]
+        print(f"{key} {n}/{hard}")
+        ok = ok and n <= hard
     return 0 if ok else 1
 
 

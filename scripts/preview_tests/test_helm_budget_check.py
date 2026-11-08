@@ -85,7 +85,29 @@ class PreviewRenderTest(unittest.TestCase):
             "limits.memory 3712Mi/4096Mi",
             "limits.ephemeral-storage 6144Mi/7168Mi",
             "pods 6/8",
+            "configmaps 2/3",
+            "count/cronjobs.batch 0/0",
+            "count/deployments.apps 4/4",
+            "count/ingressroutes.traefik.io 1/1",
+            "count/jobs.batch 0/0",
+            "count/middlewares.traefik.io 5/5",
+            "count/persistentvolumeclaims 0/0",
+            "count/replicasets.apps 0/48",
+            "count/serviceaccounts 2/2",
+            "secrets 1/2",
+            "services 3/3",
+            "services.loadbalancers 0/0",
+            "services.nodeports 0/0",
         ])
+
+    def test_one_middleware_over_its_count_fails(self):
+        docs = render_preview()
+        extra = next(copy.deepcopy(d) for d in docs
+                     if d and d.get("kind") == "Middleware")
+        extra["metadata"]["name"] = "draftforge-extra"
+        r = run_check(docs + [extra])
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn("count/middlewares.traefik.io 6/5", r.stdout.splitlines())
 
     def test_over_quota_fails(self):
         docs = render_preview()
@@ -97,7 +119,7 @@ class PreviewRenderTest(unittest.TestCase):
         self.assertIn("requests.cpu 750m/500m", r.stdout.splitlines())
 
     def test_no_quota_fails(self):
-        r = run_check(render())
+        r = run_check(render("-f", str(CHART / "tests" / "fixtures" / "prod-values.yaml")))
         self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
         self.assertIn("no ResourceQuota", r.stdout + r.stderr)
 
@@ -231,6 +253,47 @@ class SyntheticBudgetTest(unittest.TestCase):
         r = run_check([quota(), {"kind": "StatefulSet", "metadata": {"name": "s"}}])
         self.assertEqual(r.returncode, 1)
         self.assertIn("StatefulSet", r.stderr)
+
+
+class ObjectCountTest(unittest.TestCase):
+    @staticmethod
+    def mw(name):
+        return {"apiVersion": "traefik.io/v1alpha1", "kind": "Middleware",
+                "metadata": {"name": name}}
+
+    def test_fifth_middleware_fails_against_four(self):
+        docs = [quota(**{"count/middlewares.traefik.io": "4"})]
+        docs += [self.mw(f"m{i}") for i in range(5)]
+        self.assertEqual(bc.object_counts(docs)["count/middlewares.traefik.io"], (5, 4))
+        r = run_check(docs)
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn("count/middlewares.traefik.io 5/4", r.stdout.splitlines())
+
+    def test_implicit_namespace_objects_are_counted(self):
+        sa = {"apiVersion": "v1", "kind": "ServiceAccount", "metadata": {"name": "a"}}
+        cm = {"apiVersion": "v1", "kind": "ConfigMap", "metadata": {"name": "c"}}
+        counts = bc.object_counts([quota(configmaps="2", **{"count/serviceaccounts": "2"}), sa, cm])
+        self.assertEqual(counts["configmaps"], (2, 2))
+        self.assertEqual(counts["count/serviceaccounts"], (2, 2))
+
+    def test_service_types_and_cluster_kinds(self):
+        lb = {"apiVersion": "v1", "kind": "Service", "metadata": {"name": "s"},
+              "spec": {"type": "LoadBalancer"}}
+        ns = {"apiVersion": "v1", "kind": "Namespace", "metadata": {"name": "n"}}
+        counts = bc.object_counts([quota(services="1", **{
+            "services.loadbalancers": "0", "services.nodeports": "0",
+            "count/namespaces": "0"}), lb, ns])
+        self.assertEqual(counts["services"], (1, 1))
+        self.assertEqual(counts["services.loadbalancers"], (1, 0))
+        self.assertEqual(counts["services.nodeports"], (1, 0))
+        self.assertEqual(counts["count/namespaces"], (0, 0))
+
+    def test_plural_and_group(self):
+        np = {"apiVersion": "networking.k8s.io/v1", "kind": "NetworkPolicy"}
+        self.assertEqual(bc.resource_of(np), ("networkpolicies", "networking.k8s.io"))
+        self.assertEqual(bc.count_key("count/deployments.apps"), ("deployments", "apps"))
+        self.assertEqual(bc.count_key("secrets"), ("secrets", ""))
+        self.assertIsNone(bc.count_key("requests.cpu"))
 
 
 if __name__ == "__main__":
