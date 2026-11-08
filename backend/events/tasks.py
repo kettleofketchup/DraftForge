@@ -51,6 +51,7 @@ from events.discord.embeds import (
     build_announcement_v2,
     build_subscriber_dm_embed,
 )
+from events.utils import starts_in_future
 from telemetry.logging import get_logger
 
 logger = get_logger(__name__)
@@ -123,17 +124,6 @@ def _run_with_bookends(
                 **fields,
             )
         clear_contextvars()
-
-
-def _starts_in_future(scheduled_at: str | datetime) -> bool:
-    # A value that can't be parsed or compared counts as not eligible, so one
-    # bad row can't abort the whole sync loop.
-    try:
-        if isinstance(scheduled_at, str):
-            scheduled_at = datetime.fromisoformat(scheduled_at)
-        return scheduled_at > datetime.now(tz.utc)
-    except (TypeError, ValueError):
-        return False
 
 
 def _flatten_discord_form_errors(errors: dict, path: str = "") -> list[str]:
@@ -432,7 +422,7 @@ def sync_discord_events():
             event["discord_create_event"]
             and event["organization__discord_server_id"]
             and not has_scheduled
-            and _starts_in_future(event["scheduled_at"])
+            and starts_in_future(event["scheduled_at"])
         )
         if sched_eligible:
             structured_log.info(
@@ -922,7 +912,7 @@ def _create_discord_scheduled_event_impl(event_id):
     guild_id = event.organization.discord_server_id
     if not guild_id:
         return "Skipped: no discord_server_id on organization"
-    if not _starts_in_future(event.scheduled_at):
+    if not starts_in_future(event.scheduled_at):
         log.info(
             "discord_scheduled_event_skipped_past_start",
             system="events",

@@ -14,9 +14,9 @@ from django.test import SimpleTestCase
 
 from events.tasks import (
     _flatten_discord_form_errors,
-    _starts_in_future,
     sync_discord_events,
 )
+from events.utils import starts_in_future
 
 
 def _sync_state(scheduled_at: datetime) -> SimpleNamespace:
@@ -81,14 +81,14 @@ class SyncScheduledEventStartWindowTest(SimpleTestCase):
 
 class StartsInFutureTest(SimpleTestCase):
     def test_naive_datetime_is_not_eligible(self) -> None:
-        self.assertFalse(_starts_in_future(datetime.now() + timedelta(hours=2)))
+        self.assertFalse(starts_in_future(datetime.now() + timedelta(hours=2)))
 
     def test_date_only_string_is_not_eligible(self) -> None:
-        self.assertFalse(_starts_in_future("2999-01-01"))
+        self.assertFalse(starts_in_future("2999-01-01"))
 
     def test_aware_iso_string_in_future_is_eligible(self) -> None:
         later = datetime.now(timezone.utc) + timedelta(hours=2)
-        self.assertTrue(_starts_in_future(later.isoformat().replace("+00:00", "Z")))
+        self.assertTrue(starts_in_future(later.isoformat().replace("+00:00", "Z")))
 
 
 class FlattenDiscordFormErrorsTest(SimpleTestCase):

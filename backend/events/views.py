@@ -52,6 +52,7 @@ from events.services import (
     teardown_event,
     unconfirm_signup,
 )
+from events.utils import starts_in_future
 
 
 class IsOrgStaff(permissions.BasePermission):
@@ -1183,7 +1184,11 @@ def get_event_task_schedule(request, event_id):
 
         # Discord rejects scheduled events that start in the past, and both the
         # sync and the task skip them, so an unfired one can never fire now.
-        if task == "scheduled_event" and s == "ready" and event.scheduled_at <= now:
+        if (
+            task == "scheduled_event"
+            and s == "ready"
+            and not starts_in_future(event.scheduled_at, now)
+        ):
             s = "disabled"
             entry["description"] = "Start time has passed; Discord rejects past starts"
 
@@ -1358,6 +1363,12 @@ def fire_event_task(request, event_id, task_name):
             {"error": f"Unknown task: {task_name}"}, status=status.HTTP_400_BAD_REQUEST
         )
 
+    if task_name == "scheduled_event" and not starts_in_future(event.scheduled_at):
+        return Response(
+            {"error": "Event start time has passed"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
     # Idempotency: prevent double-fire for one-shot tasks (DMs). Repostable
     # tasks (signup_post, announcement) intentionally allow re-fire — the admin
     # is asking to push a fresh post — and we clear dedup state below before
@@ -1396,12 +1407,6 @@ def fire_event_task(request, event_id, task_name):
         from events.services import clear_signup_dedup_state
 
         clear_signup_dedup_state(event_id)
-
-    if task_name == "scheduled_event" and event.scheduled_at <= timezone.now():
-        return Response(
-            {"error": "Event start time has passed"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
 
     from celery import current_app
 

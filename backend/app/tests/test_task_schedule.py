@@ -294,6 +294,22 @@ class ScheduledEventPastStartTest(TestCase):
         self.assertFalse(row["can_fire"])
         self.assertIn("Start time has passed", row["description"])
 
+    def test_fired_past_start_stays_fired(self):
+        from discordbot.models import DiscordEvent, DiscordEventLog
+
+        event = self._event(-timedelta(hours=2))
+        discord_event, _ = DiscordEvent.objects.get_or_create(
+            event=event, defaults={"guild_id": "111"}
+        )
+        DiscordEventLog.objects.create(
+            discord_event=discord_event,
+            action="create_scheduled_event",
+            success=True,
+        )
+        row = self._scheduled_event_row(event)
+        self.assertEqual(row["status"], "fired")
+        self.assertEqual(row["description"], "Creates a Discord guild scheduled event")
+
     def test_future_start_is_ready(self):
         row = self._scheduled_event_row(self._event(timedelta(hours=2)))
         self.assertEqual(row["status"], "ready")
