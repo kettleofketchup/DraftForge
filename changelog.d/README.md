@@ -14,8 +14,8 @@ Never edit `CHANGELOG.md` in a PR. Add one file per section you touch instead:
 - A backfill note for an already-merged PR #N, committed on `main`, is `pr-<N>.md`.
 - Bullet sections hold `- ` bullets, with continuation lines indented 2 spaces.
 - `upgrading` is prose for operators; it also takes paragraphs and fenced code.
-- No `#` headings, HTML comments or link-reference definitions. Inline links and issue
-  references such as `#303` are fine.
+- No headings (`#` lines, or `===`/`---` under a text line), HTML comments or
+  link-reference definitions. Inline links and issue references such as `#303` are fine.
 
 Check your fragments (exit 0 and no output means clean; files not yet `git add`-ed are
 checked too, ignored files are not):

@@ -67,9 +67,10 @@ just db::migrate::all
 Set `REMINDER_LEAD_MINUTES` in `docker/.env.prod` (default `30`).
 ````
 
-Fragments take no `#` headings, HTML comments or link-reference definitions. Inline
-links and issue references such as `#303` are fine. Trailing whitespace is stripped
-when the release is assembled.
+Fragments take no headings (`#` lines, or a text line underlined with `===` or `---`),
+HTML comments or link-reference definitions. Inline links, issue references such as
+`#303` and `#` comments inside fenced or indented code are fine. Trailing whitespace
+and a UTF-8 byte-order mark are stripped when the release is assembled.
 
 ## The `changelog` check
 
@@ -81,7 +82,7 @@ The `changelog` CI job runs on every PR to `main` and every push to `main`.
 | `CHANGELOG.md`'s `[Unreleased]` holds anything but the pointer comment | Fails, even with the label |
 | A PR edits `CHANGELOG.md` without the `changelog:edit` label | Fails |
 | A fragment sits at a path a release already consumed | Fails: delete it if it is the same note, rename it (`<slug>-2.md`) if it is new |
-| A bullet is identical to one already released | Fails: remove or reword that bullet |
+| A bullet of 40 or more characters is identical to one already released | Fails: remove or reword that bullet (short stock bullets such as `- Updated dependencies.` may recur) |
 | A PR adds no fragment | Warning only |
 | A direct push to `main` edits `CHANGELOG.md` outside a release commit | Fails (report only; the commit is already on `main`) |
 

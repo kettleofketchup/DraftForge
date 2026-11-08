@@ -22,7 +22,8 @@ jobs:
   changelog:
     name: changelog
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # Headroom for setup-just retrying GitHub 5xx; the check itself takes seconds.
+    timeout-minutes: 15
     steps:
       # fetch-depth: 0: the recipe diffs against the merge base and reads release history.
       - uses: actions/checkout@v4
@@ -35,7 +36,10 @@ jobs:
         with:
           python-version: '3.12'
 
+      # Pinned so the gate cannot change behaviour without a commit.
       - uses: extractions/setup-just@dd310ad5a97d8e7b41793f8ef055398d51ad4de6 # v2.0.0
+        with:
+          just-version: '1.59.0'
 
       - name: Changelog fragments gate
         env:

@@ -78,6 +78,15 @@ GIT_ENV = {
     "GIT_COMMITTER_EMAIL": "changelog-tests@example.invalid",
 }
 GIT_FLAGS = ["-c", "commit.gpgsign=false", "-c", "tag.gpgsign=false"]
+# changelog._git runs plain git: give it the same identity and no signing.
+PLAIN_GIT_ENV = {
+    **GIT_ENV,
+    "GIT_CONFIG_COUNT": "2",
+    "GIT_CONFIG_KEY_0": "commit.gpgsign",
+    "GIT_CONFIG_VALUE_0": "false",
+    "GIT_CONFIG_KEY_1": "tag.gpgsign",
+    "GIT_CONFIG_VALUE_1": "false",
+}
 
 
 def git(root, *args):
@@ -205,6 +214,16 @@ class AssembleTests(RepoCase):
         assert "\r" not in body
         assert "### Added\n\n- One\n  wrapped.\n- Two." in body
 
+    def test_a_bom_never_reaches_the_changelog(self):
+        self.repo.fragment("upgrading/a.md", "\ufeffOperators must migrate.\n")
+        self.repo.fragment("added/a.md", "\ufeff- One.\n")
+        body = changelog.render(
+            self.repo.root, changelog.fragment_paths(self.repo.root)
+        )
+        assert "\ufeff" not in body
+        assert "### Upgrading\n\nOperators must migrate." in body
+        assert "### Added\n\n- One." in body
+
     def test_zero_fragments_writes_a_placeholder_body(self):
         consumed = changelog.assemble(self.repo.root, "0.3.0", "2026-10-03")
         assert consumed == []
@@ -282,6 +301,11 @@ class CheckTests(RepoCase):
         self.repo.fragment("added/a.md", "- One\r\n  wrapped.\r\n- Two.\r\n")
         self.expect_clean()
 
+    def test_a_bom_is_ignored_in_bullet_and_prose_fragments(self):
+        self.repo.fragment("fixed/a.md", "\ufeff- A fix.\n")
+        self.repo.fragment("upgrading/a.md", "\ufeffOperators must migrate.\n")
+        self.expect_clean()
+
     def test_empty_fragment(self):
         self.repo.fragment("added/a.md", "  \n\n")
         self.expect_problem("changelog.d/added/a.md:1: empty")
@@ -315,6 +339,31 @@ class CheckTests(RepoCase):
         self.repo.fragment(
             "added/a.md", "- **Thing.** It works now.\n  #303 follows up.\n"
         )
+        self.expect_clean()
+
+    def test_setext_headings_are_rejected(self):
+        self.repo.fragment("upgrading/a.md", "Breaking\n========\n\nText.\n")
+        self.repo.fragment("added/a.md", "- One.\n\n  Big\n  ---\n")
+        self.repo.fragment("fixed/a.md", "- One.\n  ===\n")
+        self.expect_problem("changelog.d/upgrading/a.md:2: no headings")
+        self.expect_problem("changelog.d/added/a.md:4: no headings")
+        self.expect_problem("changelog.d/fixed/a.md:2: no headings")
+
+    def test_a_thematic_break_after_a_blank_line_is_not_a_heading(self):
+        self.repo.fragment("upgrading/a.md", "Before.\n\n---\n\nAfter.\n")
+        self.expect_clean()
+
+    def test_hash_lines_in_an_indented_code_block_pass(self):
+        self.repo.fragment(
+            "upgrading/a.md", "Run this:\n\n    # back up first\n    pg_dump x\n"
+        )
+        self.repo.fragment(
+            "added/a.md", "- Back up first:\n\n      # a comment\n      pg_dump x\n"
+        )
+        self.expect_clean()
+
+    def test_an_underline_after_an_indented_code_block_is_not_a_heading(self):
+        self.repo.fragment("upgrading/a.md", "Run:\n\n    pg_dump x\n---\n")
         self.expect_clean()
 
     def test_issue_reference_prose_line_is_not_a_heading(self):
@@ -468,6 +517,20 @@ class CheckTests(RepoCase):
         assert result.returncode == 1
         assert "changelog.d/added/a.md:1:" in result.stdout + result.stderr
 
+    def test_a_newline_in_a_file_name_cannot_start_a_workflow_command(self):
+        name = "changelog.d/changed/x\n::error file=README.md,title=forged::pwned.md"
+        self.repo.write(name, "- A change.\n", add=False)
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), "--root", str(self.repo.root), "check"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == 1
+        lines = (result.stdout + result.stderr).splitlines()
+        assert not any(line.startswith("::") for line in lines), lines
+        assert any("unprintable characters" in line for line in lines), lines
+
 
 class ResurrectionTests(RepoCase):
     def test_a_released_bullet_fails_and_names_the_version(self):
@@ -525,6 +588,11 @@ class ResurrectionTests(RepoCase):
 
     def test_a_sentence_from_a_released_paragraph_passes(self):
         self.repo.fragment("upgrading/new.md", "Run the migrations after rollout.\n")
+        self.expect_clean()
+
+    def test_a_short_bullet_may_recur_across_releases(self):
+        # "First thing." shipped in 0.1.0; short stock bullets legitimately repeat.
+        self.repo.fragment("added/new.md", "- First  thing.\n")
         self.expect_clean()
 
     def test_a_long_prose_note_inside_a_released_paragraph_passes(self):
@@ -812,16 +880,7 @@ class ReleaseFlowTests(unittest.TestCase):
 
     def release(self, version="0.3.0"):
         changelog.assemble_release(self.repo.root, version, "2026-10-03")
-        # changelog._git runs plain git: give it an identity and no signing.
-        env = {
-            **GIT_ENV,
-            "GIT_CONFIG_COUNT": "2",
-            "GIT_CONFIG_KEY_0": "commit.gpgsign",
-            "GIT_CONFIG_VALUE_0": "false",
-            "GIT_CONFIG_KEY_1": "tag.gpgsign",
-            "GIT_CONFIG_VALUE_1": "false",
-        }
-        with mock.patch.dict(os.environ, env):
+        with mock.patch.dict(os.environ, PLAIN_GIT_ENV):
             changelog.release_commit_tag_push(self.repo.root, version)
 
     def origin_has(self, ref):
@@ -881,6 +940,62 @@ class ReleaseFlowTests(unittest.TestCase):
         refused(self.release, "git commit failed: hook says no; rolled back")
         assert git(self.repo.root, "rev-parse", "HEAD").stdout.strip() == before
         assert self.repo.status() == ""
+
+    def write_versions(self, version="0.3.0", fail=None):
+        def writer():
+            self.repo.write(
+                "pyproject.toml", f'[project]\nversion = "{version}"\n', add=False
+            )
+            if fail:
+                raise fail
+
+        return writer
+
+    def full_release(self, version="0.3.0", writer=None):
+        with mock.patch.dict(os.environ, PLAIN_GIT_ENV):
+            return changelog.release(
+                self.repo.root,
+                version,
+                "2026-10-03",
+                writer or self.write_versions(version),
+            )
+
+    def test_release_rewrites_versions_assembles_commits_and_pushes(self):
+        consumed = self.full_release()
+        assert consumed == ["changelog.d/added/a.md", "changelog.d/upgrading/b.md"]
+        files = git(self.repo.root, "show", "--name-only", "--format=", "HEAD").stdout
+        assert "pyproject.toml" in files.splitlines()
+        head = git(self.repo.root, "rev-parse", "HEAD").stdout.strip()
+        assert git(self.repo.origin, "rev-parse", "main").stdout.strip() == head
+        assert self.repo.status() == ""
+
+    def test_release_rolls_back_when_the_version_writer_fails(self):
+        before = git(self.repo.root, "rev-parse", "HEAD").stdout.strip()
+        writer = self.write_versions(fail=OSError("disk full"))
+        refused(
+            lambda: self.full_release(writer=writer),
+            "disk full; rolled back, nothing committed",
+        )
+        assert git(self.repo.root, "rev-parse", "HEAD").stdout.strip() == before
+        assert self.repo.status() == ""
+
+    def test_release_rolls_back_the_version_files_when_assembling_fails(self):
+        refused(lambda: self.full_release("0.2.0"), "already has a \\[0.2.0\\]")
+        assert self.repo.status() == ""
+        assert not self.origin_has("refs/tags/0.2.0")
+
+    def test_release_reports_a_failed_rollback_as_a_changelog_error(self):
+        writer = self.write_versions(fail=ValueError("bad version file"))
+        undo = mock.patch.object(
+            changelog,
+            "rollback_release",
+            side_effect=changelog.ChangelogError("rollback failed: locked"),
+        )
+        with undo:
+            refused(
+                lambda: self.full_release(writer=writer),
+                r"bad version file; rollback failed: locked\. Restore by hand",
+            )
 
     def test_release_subject_matches_the_release_regex(self):
         assert changelog.RELEASE_SUBJECT_RE.match(changelog.release_subject("1.2.3"))

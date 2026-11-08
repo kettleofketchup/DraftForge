@@ -215,7 +215,7 @@ just docs::build         # Build static docs site
 just update::all         # Update everything (git, deps, images)
 
 # Version
-just version::set 1.2.3  # Set version
+just version::set 1.2.3  # Release: assemble changelog, commit, tag, push (docs/development/changelog.md)
 just version::tag        # Tag and bump version
 
 # Tests (Playwright)

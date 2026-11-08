@@ -330,6 +330,3 @@ docs/assets/site_snapshots/
 # Git worktrees
 .worktrees/
 frontend/screenshots/
-
-# Local planning notes (design specs and implementation plans); never committed
-docs/superpowers/

@@ -28,8 +28,8 @@ version commit.
    since git does not track them), then write `changelog.d/<section>/<slug>.md`:
    - bullet sections: `- ` bullets, continuation lines indented 2 spaces;
    - `upgrading`: paragraphs and fenced code are fine;
-   - never `#` headings, HTML comments or link-reference definitions; inline links and
-     issue references such as `#303` are fine.
+   - never headings (`#` lines, or `===`/`---` under a text line), HTML comments or
+     link-reference definitions; inline links and issue references such as `#303` are fine.
 5. Run `python3 scripts/changelog.py check` (exit 0, no output). It also reads files you
    have not `git add`-ed yet (not ignored ones), so run it before or after staging.
    Then commit and push.

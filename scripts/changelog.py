@@ -5,9 +5,9 @@
     scripts/changelog.py slug [BRANCH]   # the conventional fragment slug (default: current branch)
     scripts/changelog.py has-label NAME  # exit 0 if the PR has NAME, 1 if not, 2 on API error
 
-The release (`inv version.set`, scripts/version.py) calls assemble_release() and
-release_commit_tag_push(); there is deliberately no CLI for assembling, since that
-would leave the consumed fragments in place.
+The release (`inv version.set`, scripts/version.py) calls release_preflight(),
+fragment_paths() and release(); there is deliberately no CLI for assembling, since
+that would leave the consumed fragments in place.
 
 PRs add files under changelog.d/<section>/ and never edit CHANGELOG.md, so a branch
 that merges after a release cannot drop its notes under the version already released.
@@ -22,7 +22,7 @@ import subprocess
 import sys
 import urllib.error
 import urllib.request
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -39,12 +39,16 @@ LINK_DEFINITION = re.compile(r"^\[[^\]]+\]:\s")
 FENCE = re.compile(r"^\s*(```|~~~)")
 # An ATX heading: 1-6 '#' then whitespace or end of line. "#302 was the cause" is not one.
 ATX_HEADING = re.compile(r"#{1,6}(\s|$)")
+# A setext underline; under a text line it turns that line into an h1/h2.
+SETEXT_UNDERLINE = re.compile(r"(=+|-+)\s*$")
 # Also in just/ci.just (push exemption); keep the two in sync.
 RELEASE_SUBJECT_RE = re.compile(r"^Updated version to [0-9]+\.[0-9]+\.[0-9]+$")
 # A prose fragment shorter than this is not compared with released text: one short
 # sentence ("Run the migrations.") legitimately recurs across releases. A consumed
 # fragment restored at its old path is still caught by released_paths().
 PROSE_MATCH_MIN = 60
+# Same idea for bullets: "- Updated dependencies." may appear in every release.
+BULLET_MATCH_MIN = 40
 
 Section = dict[str, Any]
 Released = list[tuple[str, str, list[str]]]
@@ -90,8 +94,16 @@ def suggest_slug(name: str) -> str:
     return slug or "note"
 
 
+def _shown(path: str) -> str:
+    """path for output: escaped if it holds a newline or other unprintable character,
+    so a crafted filename cannot start a line of its own (e.g. a ::workflow command)."""
+    return path if path.isprintable() else ascii(path)
+
+
 def _name_problem(path: str, known: list[str]) -> str | None:
     """Why path is not changelog.d/<section>/<slug>.md, with a suggested name."""
+    if not path.isprintable():
+        return "the file name has control or unprintable characters; rename it"
     parts = path.split("/")
     listed = ", ".join(known)
     if len(parts) != 3:
@@ -256,11 +268,25 @@ def _unreleased_problems(text: str) -> list[str]:
     return []
 
 
+def _content(line: str, prose: bool) -> tuple[int, str]:
+    """(indent relative to the block the line belongs to, the line without it).
+
+    A prose fragment's block is the top level; a bullet fragment's is the list item,
+    whose content starts 2 columns in. 4 or more columns of relative indent is an
+    indented code block (or a lazy continuation), never a heading.
+    """
+    if not prose and line.startswith(("- ", "  ")):
+        line = line[2:]
+    stripped = line.lstrip(" ")
+    return len(line) - len(stripped), stripped
+
+
 def _check_fragment(
     path: str, raw: bytes, section: Section, history: Released
 ) -> list[str]:
     try:
-        text = raw.decode("utf-8")
+        # utf-8-sig: a BOM from a Windows editor would otherwise hide the leading '- '.
+        text = raw.decode("utf-8-sig")
     except UnicodeDecodeError:
         return [f"{path}:1: not valid UTF-8"]
     if not text.strip():
@@ -269,8 +295,10 @@ def _check_fragment(
     problems: list[str] = []
     first = True
     inside = False
+    previous = ""  # the open paragraph's last line; a blank line or a fence closes it
     for n, line in enumerate(lines, 1):
         if not line.strip():
+            previous = ""
             continue
         if not section["prose"]:
             if first and not line.startswith("- "):
@@ -284,11 +312,19 @@ def _check_fragment(
         first = False
         if FENCE.match(line):
             inside = not inside
+            previous = ""
             continue
         if inside:
             continue
-        stripped = line.lstrip()
-        if ATX_HEADING.match(stripped):
+        indent, stripped = _content(line, section["prose"])
+        after_text = bool(previous)
+        # An indented line continues an open paragraph but cannot start one (code).
+        previous = line if indent <= 3 or after_text else ""
+        if indent > 3:
+            continue
+        if ATX_HEADING.match(stripped) or (
+            after_text and SETEXT_UNDERLINE.match(stripped)
+        ):
             problems.append(
                 f"{path}:{n}: no headings in a fragment; the section comes from its directory"
             )
@@ -330,7 +366,7 @@ def _check_resurrection(
             shipped.setdefault(bullet, version)
     problems = []
     for n, bullet in _bullets(lines):
-        if bullet in shipped:
+        if len(bullet) >= BULLET_MATCH_MIN and bullet in shipped:
             quote = bullet if len(bullet) <= 70 else bullet[:67] + "..."
             problems.append(
                 f"{path}:{n}: this bullet is identical to one released in "
@@ -359,9 +395,10 @@ def check(root: Path) -> list[str]:
     for path in sorted(set(_tracked(root)) | set(_untracked(root))):
         if path in (f"{FRAGMENT_DIR}/sections.json", f"{FRAGMENT_DIR}/README.md"):
             continue
+        shown = _shown(path)
         misnamed = _name_problem(path, list(by_dir))
         if misnamed:
-            problems.append(f"{path}:1: {misnamed}")
+            problems.append(f"{shown}:1: {misnamed}")
             parts = path.split("/")
             # A misnamed .md in a known section still gets its content checked, so
             # one round of fixes covers both.
@@ -369,19 +406,19 @@ def check(root: Path) -> list[str]:
                 continue
         full = root / path
         if not full.exists():
-            problems.append(f"{path}:1: tracked but missing from the working tree")
+            problems.append(f"{shown}:1: tracked but missing from the working tree")
             continue
         if path in gone:
             version, sha = gone[path]
             slug = path.rsplit("/", 1)[1].removesuffix(".md")
             problems.append(
-                f"{path}:1: this path was already released in {version} ({sha}). "
+                f"{shown}:1: this path was already released in {version} ({sha}). "
                 "If it is the same note, delete it; if it is a new note, rename the "
                 f"file, e.g. {slug}-2.md"
             )
             continue
         section = by_dir[path.split("/")[1]]
-        problems += _check_fragment(path, full.read_bytes(), section, history)
+        problems += _check_fragment(shown, full.read_bytes(), section, history)
     return problems
 
 
@@ -396,13 +433,9 @@ def render(root: Path, paths: list[str]) -> str:
             key=lambda p: p.rsplit("/", 1)[1],
         )
         # Trailing spaces would trip the release commit's trailing-whitespace hook.
-        texts = [
-            "\n".join(
-                line.rstrip()
-                for line in (root / p).read_text(encoding="utf-8").strip().splitlines()
-            )
-            for p in mine
-        ]
+        # utf-8-sig: a BOM would land mid-file as an invisible U+FEFF.
+        raw = [(root / p).read_text(encoding="utf-8-sig").strip() for p in mine]
+        texts = ["\n".join(line.rstrip() for line in t.splitlines()) for t in raw]
         texts = [t for t in texts if t]
         if texts:
             joined = ("\n\n" if section["prose"] else "\n").join(texts)
@@ -628,6 +661,36 @@ def release_commit_tag_push(
             f"{branch} is pushed but tag {version} is not ({push_tag.stderr.strip()}), "
             f"so no images were built. Recover with: git push {remote} refs/tags/{version}"
         )
+
+
+def release(
+    root: Path,
+    version: str,
+    date: str,
+    write_version_files: Callable[[], None],
+    remote: str = "origin",
+    branch: str = "main",
+) -> list[str]:
+    """The release after release_preflight(): rewrite the version files, assemble,
+    commit, tag, push. Returns the consumed fragment paths.
+
+    Any failure before the push of branch restores RELEASE_PATHS; raises ChangelogError.
+    """
+    root = Path(root)
+    try:
+        write_version_files()
+        consumed = assemble_release(root, version, date)
+    except Exception as exc:  # the writer may raise OSError, ValueError, ...
+        try:
+            rollback_release(root)
+        except ChangelogError as undo:
+            raise ChangelogError(
+                f"{exc}; {undo}. Restore by hand with: git checkout HEAD -- "
+                + " ".join(RELEASE_PATHS)
+            ) from exc
+        raise ChangelogError(f"{exc}; rolled back, nothing committed") from exc
+    release_commit_tag_push(root, version, remote, branch)
+    return consumed
 
 
 def current_branch(root: Path) -> str:

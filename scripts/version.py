@@ -23,10 +23,8 @@ ns_version = Collection("version")
 
 
 @task
-def sync_version_from_env(c, env_file=".env.release"):
+def sync_version_from_env(c: Context, env_file: str = ".env.release") -> None:
     """Sync version from environment file to pyproject.toml"""
-    # Import functions locally to avoid import issues
-
     print(f"Syncing version from {env_file}...")
     version = get_version_from_env(env_file)
     print(f"Syncing to version: {version}")
@@ -35,12 +33,8 @@ def sync_version_from_env(c, env_file=".env.release"):
 
 
 @task
-def sync_version_from_pyproject(c):
+def sync_version_from_pyproject(c: Context) -> None:
     """Sync version from pyproject.toml to environment files"""
-    # Import functions locally to avoid import issues
-
-    from scripts.sync_version import update_env_version
-
     print("Syncing version from pyproject.toml...")
     version = get_version_from_pyproject()
     print(f"Syncing to version: {version}")
@@ -84,48 +78,41 @@ def set_version(
             if answer.strip().lower() != "y":
                 raise Exit("Cancelled; nothing was changed.", code=1)
 
-    print(f"Setting version to {version}...")
-    update_pyproject_version(version)
-    for env_file in [paths.PROD_ENV_FILE, paths.RELEASE_ENV_FILE]:
-        update_env_version(env_file, version)
-    print("Version sync complete!")
+    def write_version_files() -> None:
+        print(f"Setting version to {version}...")
+        update_pyproject_version(version)
+        for env_file in [paths.PROD_ENV_FILE, paths.RELEASE_ENV_FILE]:
+            update_env_version(env_file, version)
+        print("Version sync complete!")
 
     if not commit:
+        write_version_files()
         if tag_version:
             print(f"Creating local git tag {version}...")
             if not crun(c, f"git tag {version}", warn=True).ok:
                 print(f"Warning: Failed to create tag {version} (may already exist).")
         return
 
+    print(
+        f"Releasing {version}: assembling CHANGELOG.md, committing, tagging, pushing..."
+    )
     try:
-        consumed = changelog.assemble_release(root, version, date.today().isoformat())
-    except changelog.ChangelogError as exc:
-        print(exc)
-        changelog.rollback_release(root)
-        raise Exit(
-            "version.set: assembling CHANGELOG.md failed; rolled back, nothing committed.",
-            code=1,
+        consumed = changelog.release(
+            root, version, date.today().isoformat(), write_version_files
         )
-    print(f"Assembled {len(consumed)} changelog fragment(s) into CHANGELOG.md.")
-
-    print(f"Committing, tagging and pushing {version}...")
-    try:
-        changelog.release_commit_tag_push(root, version)
     except changelog.ChangelogError as exc:
         raise Exit(f"version.set: {exc}", code=1)
-    print(f"Released {version}: pushed main and tag {version}.")
+    print(
+        f"Released {version} ({len(consumed)} changelog fragment(s)): pushed main and tag {version}."
+    )
 
 
 @task
-def build_with_version(c, version=None, env_file=None):
+def build_with_version(
+    c: Context, version: str | None = None, env_file: str | None = None
+) -> None:
     """Build Docker images with version sync"""
     import os
-
-    from scripts.sync_version import (
-        get_version_from_env,
-        update_env_version,
-        update_pyproject_version,
-    )
 
     # Determine the version to use
     if version:
