@@ -1,12 +1,11 @@
 """Shuffle draft logic - lowest MMR picks first."""
 
 import random
-from typing import Optional
 
 from django.db import transaction
 
 from app.broadcast import broadcast_event
-from app.models import DraftEvent
+from app.models import Draft, DraftEvent, DraftRound
 
 # Maximum team size (captain + 4 drafted players)
 MAX_TEAM_SIZE = 5
@@ -123,8 +122,6 @@ def build_shuffle_rounds(draft) -> None:
     Args:
         draft: Draft model instance
     """
-    from app.models import DraftRound
-
     teams = list(draft.tournament.teams.all())
     num_teams = len(teams)
     total_picks = num_teams * 4
@@ -163,68 +160,73 @@ def build_shuffle_rounds(draft) -> None:
     broadcast_event(event)
 
 
-def assign_next_shuffle_captain(draft) -> Optional[dict]:
-    """
-    After a pick, assign captain to next round.
-
-    Args:
-        draft: Draft model instance
-
-    Returns:
-        tie_resolution data if tie occurred, else None
-    """
-    next_round = (
-        draft.draft_rounds.filter(captain__isnull=True).order_by("pick_number").first()
-    )
-    if not next_round:
+def reassign_round_captain(
+    draft: Draft,
+    round: DraftRound,
+    exclude_team_ids: set[int],
+    *,
+    reason: str | None = None,
+) -> dict | None:
+    """Assign the lowest-MMR eligible team's captain to `round`; None if no team is eligible."""
+    eligible_teams = [
+        t
+        for t in draft.tournament.teams.all()
+        if t.members.count() < MAX_TEAM_SIZE and t.pk not in exclude_team_ids
+    ]
+    if not eligible_teams:
         return None
 
-    teams = list(draft.tournament.teams.all())
-
-    # Filter out teams that have reached max size (5 members)
-    eligible_teams = [t for t in teams if t.members.count() < MAX_TEAM_SIZE]
-
-    if not eligible_teams:
-        return None  # All teams full, draft complete
-
+    round.was_tie = False
+    round.tie_roll_data = None
     next_team, tie_data = get_lowest_mmr_team(eligible_teams)
-
-    next_round.captain = next_team.captain
+    round.captain = next_team.captain
     if tie_data:
-        next_round.was_tie = True
-        next_round.tie_roll_data = tie_data
-    next_round.save()
+        round.was_tie = True
+        round.tie_roll_data = tie_data
+    round.save()
 
-    # Create captain_assigned event
     captain = next_team.captain
+    payload: dict = {
+        "pick_number": round.pick_number,
+        "captain_id": captain.pk,
+        "captain_name": captain.username,
+        "captain_avatar_url": captain.avatarUrl,
+        "team_id": next_team.pk,
+        "team_name": next_team.name,
+        "team_mmr": get_team_total_mmr(next_team),
+    }
+    if reason is not None:
+        payload["reason"] = reason
     captain_event = DraftEvent.objects.create(
-        draft=draft,
-        event_type="captain_assigned",
-        payload={
-            "pick_number": next_round.pick_number,
-            "captain_id": captain.pk,
-            "captain_name": captain.username,
-            "captain_avatar_url": captain.avatarUrl,
-            "team_id": next_team.pk,
-            "team_name": next_team.name,
-            "team_mmr": get_team_total_mmr(next_team),
-        },
+        draft=draft, event_type="captain_assigned", payload=payload
     )
     transaction.on_commit(lambda e=captain_event: broadcast_event(e))
 
-    # If there was a tie, also create a tie_roll event
     if tie_data:
         tie_event = DraftEvent.objects.create(
             draft=draft,
             event_type="tie_roll",
             payload={
-                "pick_number": next_round.pick_number,
+                "pick_number": round.pick_number,
                 "tied_teams": tie_data["tied_teams"],
                 "roll_rounds": tie_data["roll_rounds"],
                 "winner_id": tie_data["winner_id"],
-                "winner_name": next_team.captain.username,
+                "winner_name": captain.username,
             },
         )
         transaction.on_commit(lambda e=tie_event: broadcast_event(e))
 
     return tie_data
+
+
+def assign_next_shuffle_captain(draft: Draft) -> dict | None:
+    """After a pick, assign captain to the next captain-less round.
+
+    Returns tie resolution data if a tie occurred, else None.
+    """
+    next_round = (
+        draft.draft_rounds.filter(captain__isnull=True).order_by("pick_number").first()
+    )
+    if next_round is None:
+        return None
+    return reassign_round_captain(draft, next_round, set())
