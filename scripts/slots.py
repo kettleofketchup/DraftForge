@@ -15,6 +15,7 @@ import time
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
+from datetime import datetime
 from pathlib import Path
 from typing import Final, Literal, cast
 
@@ -95,6 +96,8 @@ class Host:
     run: Callable[[list[str], Mapping[str, str], bool], tuple[int, str]]
     clock: Callable[[], float]
     new_token: Callable[[], str]
+    container_activity: Callable[[str], float | None]
+    worktree_activity: Callable[[Path], float | None]
 
 
 def is_ci() -> bool:
@@ -317,6 +320,91 @@ def _run(argv: list[str], env: Mapping[str, str], capture: bool) -> tuple[int, s
     return r.returncode, r.stdout if capture else ""
 
 
+TS_RE: Final = re.compile(
+    r"^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}:\d{2})(?:\.(\d+))?\s*(Z|[+-]\d{2}:?\d{2})?"
+)
+
+
+def parse_ts(text: str) -> float | None:
+    m = TS_RE.match(text.strip())
+    if m is None:
+        return None
+    date, clock, frac, tz = m.groups()
+    if tz is None or tz == "Z":
+        tz = "+00:00"
+    elif ":" not in tz:
+        tz = f"{tz[:3]}:{tz[3:]}"
+    iso = f"{date}T{clock}{'.' + frac[:6].ljust(6, '0') if frac else ''}{tz}"
+    try:
+        ts = datetime.fromisoformat(iso).timestamp()
+    except ValueError:
+        return None
+    return ts if ts > 0 else None
+
+
+def _docker(args: list[str]) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["docker", *args], capture_output=True, text=True, check=False
+    )
+
+
+def _container_activity(project: str) -> float | None:
+    r = _docker(
+        ["ps", "-aq", "--filter", f"label=com.docker.compose.project={project}"]
+    )
+    if r.returncode != 0:
+        raise SlotError(f"docker ps failed ({r.returncode}): {r.stderr.strip()}")
+    ids = r.stdout.split()
+    if not ids:
+        return None
+    fmt = "{{.Id}}\t{{.State.Running}}\t{{.State.StartedAt}}\t{{.State.FinishedAt}}"
+    r = _docker(["inspect", "--format", fmt, *ids])
+    if r.returncode != 0:
+        raise SlotError(f"docker inspect failed ({r.returncode}): {r.stderr.strip()}")
+    stamps: list[float] = []
+    for line in r.stdout.splitlines():
+        fields = line.split("\t")
+        if len(fields) < 4:
+            continue
+        cid, running, started, finished = fields[:4]
+        stamps += [t for t in (parse_ts(started), parse_ts(finished)) if t is not None]
+        if running.strip().lower() == "true":
+            logs = _docker(["logs", "--timestamps", "--tail", "1", cid])
+            for out in (logs.stdout, logs.stderr):
+                stamps += [
+                    t for ln in out.splitlines() if (t := parse_ts(ln)) is not None
+                ]
+    return max(stamps, default=None)
+
+
+WORKTREE_MARKERS: Final = (
+    SLOT_FILE_REL,
+    Path("frontend/test-results"),
+    Path("frontend/playwright-report"),
+)
+CHANGED_FILES_CAP: Final = 500
+
+
+def _worktree_activity(path: Path) -> float | None:
+    if not path.is_dir():
+        return None
+    candidates = [path / m for m in WORKTREE_MARKERS]
+    try:
+        gitdir = Path(_git(path, "rev-parse", "--absolute-git-dir").strip())
+        candidates += [gitdir / "index", gitdir / "HEAD", gitdir / "logs" / "HEAD"]
+        changed = _git(path, "ls-files", "-m", "-o", "--exclude-standard", "-z")
+        candidates += [path / f for f in changed.split("\0")[:CHANGED_FILES_CAP] if f]
+    except SlotError:
+        pass
+    mtimes: list[float] = []
+    for p in candidates:
+        try:
+            mtimes.append(p.stat().st_mtime)
+        except OSError:
+            continue
+    return max(mtimes, default=None)
+
+
 REAL_HOST: Host = Host(
     port_busy=port_busy,
     containers=_containers,
@@ -327,6 +415,8 @@ REAL_HOST: Host = Host(
     run=_run,
     clock=time.time,
     new_token=lambda: secrets.token_hex(8),
+    container_activity=_container_activity,
+    worktree_activity=_worktree_activity,
 )
 
 
@@ -618,6 +708,8 @@ def ensure_slot(
         if kept is not None:
             n, token = kept
         else:
+            if _reap_stale_locked(root, host, registry):
+                alloc = _Allocator(root, host, registry, requested)
             found = alloc.adopt()
             if found is None:
                 found = alloc.fresh()
@@ -851,6 +943,144 @@ def reap_project(
             (registry / f"slot-{n}").unlink(missing_ok=True)
 
 
+STALE_HOURS_DEFAULT: Final = 12.0
+TEST_STACK_FILES: Final = frozenset(
+    {
+        "docker-compose.test.yaml",
+        "docker-compose.slot.yaml",
+        "docker-compose.slot-offline.yaml",
+        "docker-compose.run.yaml",
+    }
+)
+
+
+def stale_after_s() -> float:
+    raw = os.environ.get("DF_SLOT_STALE_HOURS", "")
+    if not raw:
+        return STALE_HOURS_DEFAULT * 3600
+    try:
+        hours = float(raw)
+    except ValueError as exc:
+        raise SlotError(f"DF_SLOT_STALE_HOURS={raw!r} is not a number") from exc
+    if hours <= 0:
+        raise SlotError(f"DF_SLOT_STALE_HOURS={raw!r} must be positive")
+    return hours * 3600
+
+
+@dataclass(frozen=True)
+class StaleSlot:
+    slot: int
+    project: str
+    owner: Path | None
+    containers: int
+    last_activity: float
+    source: str
+
+
+def _idle_since(
+    project: str,
+    res: Reservation | None,
+    owners: list[ContainerOwner],
+    host: Host,
+    cutoff: float,
+) -> tuple[float, str] | None:
+    signals: list[tuple[float, str]] = []
+    if res is not None:
+        if res.last_used >= cutoff:
+            return None
+        signals.append((float(res.last_used), "reservation"))
+    if owners:
+        t = host.container_activity(project)
+        if t is None or t >= cutoff:
+            return None
+        signals.append((t, "containers"))
+    paths = {o.working_dir for o in owners if o.working_dir is not None}
+    if res is not None:
+        paths.add(res.owner)
+    for p in sorted(paths):
+        t = host.worktree_activity(p)
+        if t is not None:
+            if t >= cutoff:
+                return None
+            signals.append((t, f"worktree {p}"))
+    return max(signals, default=None)
+
+
+def _reap_stale_locked(root: Path, host: Host, registry: Path) -> list[StaleSlot]:
+    limit = stale_after_s()
+    now = host.clock()
+    reaped: list[StaleSlot] = []
+    for n in range(SLOT_COUNT):
+        project = _project(n)
+        res = _read_reservation(registry, n)
+        owners = host.containers(project)
+        if res is None and not owners:
+            continue
+        if (res is not None and res.owner == root) or any(
+            o.working_dir == root for o in owners
+        ):
+            continue
+        if any(
+            Path(f).name not in TEST_STACK_FILES for o in owners for f in o.config_files
+        ):
+            continue
+        try:
+            idle = _idle_since(project, res, owners, host, now - limit)
+        except SlotError as exc:
+            print(f"slot {n}: not reaping, activity unknown: {exc}", file=sys.stderr)
+            continue
+        if idle is None:
+            continue
+        if owners:
+            argv = [
+                "docker",
+                "compose",
+                "-p",
+                project,
+                "down",
+                "-v",
+                "--remove-orphans",
+            ]
+            code, _ = host.run(argv, {}, False)
+            if code != 0:
+                print(
+                    f"slot {n}: not reaping, `{' '.join(argv)}` exited {code}",
+                    file=sys.stderr,
+                )
+                continue
+        (registry / f"slot-{n}").unlink(missing_ok=True)
+        stale = StaleSlot(
+            slot=n,
+            project=project,
+            owner=res.owner if res is not None else owners[0].working_dir,
+            containers=len(owners),
+            last_activity=idle[0],
+            source=idle[1],
+        )
+        removed = (
+            f"; {stale.containers} container(s) and volumes removed"
+            if stale.containers
+            else ""
+        )
+        print(
+            f"auto-reaped slot {n} ({project}), owner {stale.owner}: "
+            f"idle {(now - stale.last_activity) / 3600:.1f}h > {limit / 3600:g}h "
+            f"(last activity: {stale.source}){removed}",
+            file=sys.stderr,
+        )
+        reaped.append(stale)
+    return reaped
+
+
+def reap_stale(root: Path | None = None, host: Host | None = None) -> list[StaleSlot]:
+    root = (root or MODULE_ROOT).resolve()
+    _refuse_in_ci("slot reap")
+    host = host or REAL_HOST
+    registry = registry_dir(root, host)
+    with registry_lock(registry):
+        return _reap_stale_locked(root, host, registry)
+
+
 def check_background_free(slot: SlotEnv | None, project: str, host: Host) -> None:
     if (
         os.environ.get("DF_BACKGROUND_PROOF") == "1"
@@ -945,6 +1175,12 @@ def status_report(root: Path | None = None, host: Host | None = None) -> str:
         lines.append(f"project {project} containers={len(owners)} {label}")
         lines.append(f"  working_dir: {', '.join(wds) or '-'}")
         lines.append(f"  config_files: {', '.join(files) or '-'}")
+    limit = stale_after_s()
+    if any(now - r.last_used > limit for r in reservations.values()):
+        lines.append(
+            f"reservations idle over {limit / 3600:g}h are reaped on the next allocation unless "
+            f"their containers or worktree were active since; `just test::slot-reap --stale` now"
+        )
     return "\n".join(lines) + "\n"
 
 
@@ -1308,7 +1544,8 @@ def _sub(cmd: str, rest: Sequence[str]) -> argparse.Namespace:
     elif cmd == "claim":
         p.add_argument("n", type=int)
     elif cmd == "reap":
-        p.add_argument("project")
+        p.add_argument("project", nargs="?")
+        p.add_argument("--stale", action="store_true")
     elif cmd == "background":
         p.add_argument("state", choices=["on", "off"])
     return p.parse_args(list(rest))
@@ -1387,7 +1624,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         elif ns.cmd == "claim":
             print(render_slot_file(claim_slot(sub.n, root, host)), end="")
         elif ns.cmd == "reap":
-            reap_project(sub.project, root, host)
+            if (sub.project is None) == (not sub.stale):
+                raise SlotError("slot reap takes either a project or --stale")
+            if sub.project is not None:
+                reap_project(sub.project, root, host)
+            elif not reap_stale(root, host):
+                print(
+                    f"no slot idle longer than {stale_after_s() / 3600:g}h",
+                    file=sys.stderr,
+                )
         elif ns.cmd == "background":
             env = set_background(sub.state == "on", root, host)
             print(f"slot {env.slot} background {'on' if env.background else 'off'}")

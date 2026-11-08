@@ -93,10 +93,10 @@ slot-release *args:
 slot-claim n:
     {{slots_py}} claim {{n}}
 
-# Tear down an orphaned df* project whose worktree is gone
+# Tear down an orphaned df* project, or every slot idle past 12h with --stale
 [group('test')]
-slot-reap project:
-    {{slots_py}} reap {{project}}
+slot-reap *args:
+    {{slots_py}} reap {{args}}
 
 # Turn the Discord bot and celery beat on or off for this slot
 [group('test')]

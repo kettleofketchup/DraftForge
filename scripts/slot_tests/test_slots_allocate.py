@@ -26,6 +26,11 @@ def _reg(h: FakeHost) -> Path:
     return h.common / "df-slots"
 
 
+def _busy(h: FakeHost) -> None:
+    for w in h.worktrees:
+        h.worktree_active[w] = h.clock_value[0]
+
+
 def _res(h: FakeHost, n: int) -> dict[str, str]:
     return parse_kv((_reg(h) / f"slot-{n}").read_text())
 
@@ -135,6 +140,7 @@ def test_slot0_never_idle_reclaimed(
     assert ensure_slot(a, fake_host).slot == 0
     fill_slots(fake_host, make_worktree, monkeypatch, range(1, 10), t0)
     fake_host.clock_value[0] = t0 + 30 * DAY
+    _busy(fake_host)
     assert ensure_slot(make_worktree("new"), fake_host).slot == 1
     assert read_slot(a, fake_host).slot == 0
 
@@ -273,6 +279,7 @@ def _expire_all_but(
     for n, wt in fillers.items():
         tok = _slot_kv(wt)["DF_SLOT_TOKEN"]
         reserve(_reg(fake_host), n, wt, tok, int(now - ages.get(n, 1 * DAY)))
+    _busy(fake_host)
 
 
 def test_idle_reclaim_oldest_expired_first(
@@ -434,6 +441,7 @@ def test_requested_slot_never_idle_reclaims(
     other = make_worktree("other")
     assert ensure_slot(other, fake_host, requested=3).slot == 3
     fake_host.clock_value[0] += 30 * DAY
+    _busy(fake_host)
     with pytest.raises(SlotError, match="slot 3 is not free"):
         ensure_slot(make_worktree("me"), fake_host, requested=3)
     assert _res(fake_host, 3)["owner"] == str(other)

@@ -53,7 +53,17 @@ class FakeHost:
         self.run_envs: list[dict[str, str]] = []
         self.run_outputs: list[tuple[int, str]] = []
         self.common = common
+        self.container_active: dict[str, float] = {}
+        self.worktree_active: dict[Path, float] = {}
         self._tok = itertools.count()
+
+    def container_activity(self, project: str) -> float | None:
+        self.calls.append("container_activity")
+        return self.container_active.get(project)
+
+    def worktree_activity(self, path: Path) -> float | None:
+        self.calls.append("worktree_activity")
+        return self.worktree_active.get(path)
 
     def port_busy(self, port: int) -> bool:
         self.calls.append("port_busy")

@@ -22,6 +22,7 @@ RAW_COMPOSE_EXEMPT: dict[str, str] = {
     "scripts/slot_tests/_helpers.py": "integration fixture probes and renders compose directly",
     "scripts/slot_tests/test_slots_allocate.py": "asserts the helper's printed down hint",
     "scripts/slot_tests/test_slots_lifecycle.py": "asserts the helper's down argv",
+    "scripts/slot_tests/test_slots_stale.py": "asserts the stale reaper's down argv",
     "init-letsencrypt.sh": "one-time cert bootstrap run on the prod host, not a worktree",
     "scripts/version.py": "version.build only builds images, never up/down/stop",
 }
