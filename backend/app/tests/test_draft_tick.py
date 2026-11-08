@@ -1,10 +1,11 @@
 """Tests for the shared tick runner (app.tasks.draft_tick)."""
 
 import threading
+from unittest.mock import patch
 
 from django.test import SimpleTestCase, TransactionTestCase
 
-from app.tasks import draft_tick
+from app.tasks import draft_tick, herodraft_tick
 from app.tasks.draft_tick import (
     TickDriver,
     captain_channel_key,
@@ -190,3 +191,28 @@ class RegistryTests(TransactionTestCase):
         draft_tick.stop_all_broadcasters()
         self.assertEqual(draft_tick.registry_for("herodraft"), {})
         self.assertEqual(draft_tick.registry_for("teamdraft"), {})
+
+
+class HeroDriverAliasTests(SimpleTestCase):
+    def test_active_tick_tasks_is_the_hero_registry(self) -> None:
+        self.assertIs(herodraft_tick._active_tick_tasks, draft_tick.registry_for("herodraft"))
+        self.assertIs(herodraft_tick._lock, draft_tick._lock)
+
+    def test_hero_driver_satisfies_protocol_with_hero_prefix(self) -> None:
+        self.assertIsInstance(herodraft_tick.HERO_TICK_DRIVER, TickDriver)
+        self.assertEqual(herodraft_tick.HeroDraftTickDriver.prefix, "herodraft")
+        self.assertEqual(herodraft_tick.HeroDraftTickDriver.system, "herodraft")
+
+    def test_hero_constants_still_exported(self) -> None:
+        self.assertEqual(herodraft_tick.CONN_COUNT_KEY.format(draft_id=3), conn_count_key("herodraft", 3))
+        self.assertEqual(herodraft_tick.LOCK_KEY.format(draft_id=3), lock_key("herodraft", 3))
+        self.assertEqual(
+            herodraft_tick.CAPTAIN_HEARTBEAT_KEY.format(draft_id=3, user_id=4),
+            heartbeat_key("herodraft", 3, 4),
+        )
+        self.assertIs(herodraft_tick.get_redis_client, get_redis_client)
+
+    @patch("app.tasks.herodraft_tick.should_continue_ticking", return_value=(False, "patched"))
+    def test_driver_should_continue_is_patchable_at_module_level(self, mocked) -> None:
+        self.assertEqual(herodraft_tick.HERO_TICK_DRIVER.should_continue(5), (False, "patched"))
+        mocked.assert_called_once()
