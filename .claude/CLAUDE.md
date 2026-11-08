@@ -222,7 +222,7 @@ just docs::build         # Build static docs site
 just update::all         # Update everything (git, deps, images)
 
 # Version
-just version::set 1.2.3  # Set version
+just version::set 1.2.3  # Release: assemble changelog, commit, tag, push (docs/development/changelog.md)
 just version::tag        # Tag and bump version
 
 # Tests (Playwright)
@@ -374,6 +374,7 @@ just test::run 'python manage.py test app.tests -v 2'
 - `just` - Just command runner (auto-activates venv, works in worktrees)
 - `testing` - Test infrastructure (populate system, Playwright fixtures, feature-isolated test data)
 - `visual-debugging` - Chrome MCP browser automation for debugging
+- `changelog` - Changelog fragments (`changelog.d/`), the `changelog` CI check and release assembly
 
 ## Demo Video Recording
 

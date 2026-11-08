@@ -1,0 +1,10 @@
+[
+  { "dir": "upgrading", "heading": "Upgrading", "prose": true },
+  { "dir": "security", "heading": "Security", "prose": false },
+  { "dir": "added", "heading": "Added", "prose": false },
+  { "dir": "changed", "heading": "Changed", "prose": false },
+  { "dir": "deprecated", "heading": "Deprecated", "prose": false },
+  { "dir": "removed", "heading": "Removed", "prose": false },
+  { "dir": "fixed", "heading": "Fixed", "prose": false },
+  { "dir": "documentation", "heading": "Documentation", "prose": false }
+]
