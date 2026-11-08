@@ -146,7 +146,8 @@ inv version.tag           # Git tag and bump
 ## Production Tasks (`inv prod.*`)
 
 ```bash
-inv prod.certbot    # SSL certificate renewal
+inv prod.up         # Start production environment
+inv prod.down       # Stop production environment
 ```
 
 ## Discord Tasks (`inv discord.*`)

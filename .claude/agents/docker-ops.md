@@ -256,13 +256,10 @@ Located at `nginx/data/ssl/`:
 - `cert.crt` - Certificate
 - `cert.key` - Private key
 
-### Production (Let's Encrypt)
+### Production
 
-```bash
-inv prod.certbot
-```
-
-Certificates stored in `nginx/data/certbot/configs/`.
+The release stack reads its certificate from `nginx/data/certbot/configs/live/dota.kettle.sh/`
+on the host. The repo has no tooling to issue or renew it.
 
 ## Image Registry
 

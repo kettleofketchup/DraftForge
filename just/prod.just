@@ -50,7 +50,3 @@ exec service cmd:
 [group('prod')]
 run cmd service="backend":
     {{inv}} prod.run --service {{service}} --cmd '{{cmd}}'
-
-[group('prod')]
-certbot:
-    {{inv}} prod.certbot
