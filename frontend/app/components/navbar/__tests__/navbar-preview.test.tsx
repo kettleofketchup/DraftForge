@@ -6,7 +6,10 @@ import { TooltipProvider } from '~/components/ui/tooltip';
 import { ResponsiveAppBar } from '../navbar';
 
 const shouldShowTestFeatures = vi.hoisted(() => vi.fn<() => boolean>());
-vi.mock('~/lib/test-utils', () => ({ shouldShowTestFeatures }));
+vi.mock('~/lib/test-utils', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('~/lib/test-utils')>()),
+  shouldShowTestFeatures,
+}));
 
 // The real store fetches /current_user on rehydrate; the navbar only reads currentUser.
 vi.mock('~/store/userStore', () => ({

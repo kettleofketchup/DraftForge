@@ -8,7 +8,8 @@
  * 2. NOT running under Playwright (hidden during demos/recordings)
  * 3. User has a Discord ID (required for login)
  *
- * Uses same pattern as react-scan in root.tsx.
+ * useShowTestFeatures() hides it on the server and until hydration, so a
+ * Playwright client never hydrates a button the server rendered.
  * Reference: docs/testing/auth/fixtures.md
  */
 import { LogIn } from 'lucide-react';
@@ -16,7 +17,8 @@ import { useState } from 'react';
 import { Button } from '~/components/ui/button';
 import { FastTooltip } from '~/components/ui/tooltip';
 import type { UserClassType } from '~/components/user/types';
-import { loginAsDiscordId, shouldShowTestFeatures } from '~/lib/test-utils';
+import { useShowTestFeatures } from '~/hooks/useShowTestFeatures';
+import { loginAsDiscordId } from '~/lib/test-utils';
 
 interface Props {
   user: UserClassType;
@@ -24,9 +26,10 @@ interface Props {
 
 export function LoginAsUserButton({ user }: Props) {
   const [isLoading, setIsLoading] = useState(false);
+  const show = useShowTestFeatures();
 
   // Don't render if not in test mode or if Playwright is running
-  if (!shouldShowTestFeatures()) {
+  if (!show) {
     return null;
   }
 

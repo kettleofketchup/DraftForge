@@ -41,6 +41,26 @@ export function shouldShowTestFeatures(): boolean {
   );
 }
 
+export type TestLoginRole = 'admin' | 'staff' | 'user';
+
+/**
+ * Login as the seeded admin, staff or regular test user.
+ * Only works when backend has TEST_ENDPOINTS enabled.
+ *
+ * @param role - Which seeded test user to log in as
+ * @returns Promise that rejects when the backend refuses the login
+ */
+export async function loginAsTestRole(role: TestLoginRole): Promise<void> {
+  const response = await fetch(`/api/tests/login-${role}/`, {
+    method: 'POST',
+    credentials: 'include',
+  });
+  if (!response.ok) {
+    throw new Error(`Login as ${role} failed: ${response.status}`);
+  }
+  window.location.reload();
+}
+
 /**
  * Login as a specific user by Discord ID.
  * Only works when backend has TEST_ENDPOINTS enabled.

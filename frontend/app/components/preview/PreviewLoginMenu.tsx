@@ -8,42 +8,28 @@
  * VITE_PREVIEW_TEST_FEATURES=true (PR preview images). Production images
  * build with the flag false, so the menu renders nothing there.
  *
- * The server cannot see window.playwright, so it renders nothing and the
- * client decides after hydration; rendering on the server would make the
- * hydrated tree differ whenever the client-only check hides the menu.
+ * useShowTestFeatures() renders nothing on the server and decides after
+ * hydration, so the hydrated tree never differs from the server's.
  */
-import { type JSX, useSyncExternalStore } from 'react';
+import type { JSX } from 'react';
 import { Button } from '~/components/ui/button';
+import { useShowTestFeatures } from '~/hooks/useShowTestFeatures';
 import { getLogger } from '~/lib/logger';
-import { shouldShowTestFeatures } from '~/lib/test-utils';
+import { loginAsTestRole, type TestLoginRole } from '~/lib/test-utils';
 
 const log = getLogger('PreviewLoginMenu');
 
-type PreviewRole = 'admin' | 'staff' | 'user';
+const ROLES: readonly TestLoginRole[] = ['admin', 'staff', 'user'];
 
-const ROLES: readonly PreviewRole[] = ['admin', 'staff', 'user'];
-
-const subscribeNoop = () => () => {};
-
-async function loginAs(role: PreviewRole): Promise<void> {
-  const response = await fetch(`/api/tests/login-${role}/`, {
-    method: 'POST',
-    credentials: 'include',
+function loginAs(role: TestLoginRole): void {
+  loginAsTestRole(role).catch((error: unknown) => {
+    log.error(`Preview login failed: ${String(error)}`);
   });
-  if (!response.ok) {
-    log.error(`Preview login as ${role} failed: ${response.status}`);
-    return;
-  }
-  window.location.reload();
 }
 
 export function PreviewLoginMenu(): JSX.Element | null {
-  const hydrated = useSyncExternalStore(
-    subscribeNoop,
-    () => true,
-    () => false,
-  );
-  if (!hydrated || !shouldShowTestFeatures()) return null;
+  const show = useShowTestFeatures();
+  if (!show) return null;
 
   return (
     <div className="flex items-center gap-1 mr-1 md:mr-2">
@@ -54,7 +40,7 @@ export function PreviewLoginMenu(): JSX.Element | null {
           size="sm"
           variant="outline"
           data-testid={`preview-login-${role}`}
-          onClick={() => void loginAs(role)}
+          onClick={() => loginAs(role)}
         >
           Login as {role}
         </Button>

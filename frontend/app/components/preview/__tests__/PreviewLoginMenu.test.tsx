@@ -6,7 +6,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PreviewLoginMenu } from '../PreviewLoginMenu';
 
 const shouldShowTestFeatures = vi.hoisted(() => vi.fn<() => boolean>());
-vi.mock('~/lib/test-utils', () => ({ shouldShowTestFeatures }));
+vi.mock('~/lib/test-utils', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('~/lib/test-utils')>()),
+  shouldShowTestFeatures,
+}));
 
 describe('PreviewLoginMenu', () => {
   const fetchMock = vi.fn();
