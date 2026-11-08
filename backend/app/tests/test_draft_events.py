@@ -222,7 +222,8 @@ class ShuffleDraftEventIntegrationTest(TestCase):
         first_round.choice = self.captains[1]  # Pick someone
         first_round.save()
 
-        assign_next_shuffle_captain(self.draft)
+        with self.captureOnCommitCallbacks(execute=True):
+            assign_next_shuffle_captain(self.draft)
 
         events = DraftEvent.objects.filter(
             draft=self.draft, event_type="captain_assigned"
@@ -299,7 +300,8 @@ class TournamentEventIntegrationTest(TestCase):
         )
         request.user = self.captain
 
-        response = pick_player_for_round(request)
+        with self.captureOnCommitCallbacks(execute=True):
+            response = pick_player_for_round(request)
 
         self.assertEqual(response.status_code, 201)
 
@@ -330,7 +332,8 @@ class TournamentEventIntegrationTest(TestCase):
             format="json",
         )
         pick_request.user = self.captain
-        pick_player_for_round(pick_request)
+        with self.captureOnCommitCallbacks(execute=True):
+            pick_player_for_round(pick_request)
 
         # Clear events to isolate undo test
         DraftEvent.objects.filter(draft=self.draft).delete()
@@ -344,7 +347,8 @@ class TournamentEventIntegrationTest(TestCase):
         )
         undo_request.user = self.captain
 
-        response = undo_last_pick(undo_request)
+        with self.captureOnCommitCallbacks(execute=True):
+            response = undo_last_pick(undo_request)
 
         self.assertEqual(response.status_code, 200)
 
