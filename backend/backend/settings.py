@@ -24,6 +24,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 import logging
 import warnings
 
+from backend.container import in_container
 from backend.env_utils import env_bool, env_list
 from config.installed_apps import MODEL_APPS
 from paths import DEV_DB_PATH, PROD_DB_PATH, TEST_DB_PATH
@@ -293,17 +294,10 @@ if os.environ.get("SQLITE_PATH"):
     DATABASES["default"]["NAME"] = Path(os.environ["SQLITE_PATH"])
 
 
-# Docker environment detection
+# Docker/podman environment detection
 @functools.lru_cache(maxsize=1)
 def is_docker() -> bool:
-    """Check if running inside Docker container."""
-    if os.path.exists("/.dockerenv"):
-        return True
-    try:
-        with open("/proc/1/cgroup", "r") as f:
-            return "docker" in f.read()
-    except Exception:
-        return False
+    return in_container()
 
 
 IN_DOCKER = is_docker()

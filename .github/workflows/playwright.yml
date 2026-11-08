@@ -238,6 +238,7 @@ jobs:
               tests.test_populate \
               app.tests.test_env_utils \
               app.tests.test_settings_env_overrides \
+              app.tests.test_container_detection \
               -v 2
 
       - name: Run frontend Vitest
