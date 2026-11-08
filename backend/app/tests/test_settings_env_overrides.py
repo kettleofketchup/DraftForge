@@ -54,11 +54,15 @@ def _reload(env=None, remove=()):
     """Reload backend.settings with the override keys cleared, then `env` applied.
 
     load_dotenv is stubbed so a developer's backend/.env cannot re-inject
-    REDIS_HOST or CELERY_* during the reload.
+    REDIS_HOST or CELERY_* during the reload. init_telemetry is stubbed because
+    re-running structlog.configure() swaps the processor list that loggers cached
+    by earlier tests still hold, which breaks structlog.testing.capture_logs in
+    later tests.
     """
     with (
         mock.patch.dict(os.environ),
         mock.patch("dotenv.load_dotenv", lambda *a, **k: False),
+        mock.patch("telemetry.config.init_telemetry"),
     ):
         for key in (*OVERRIDE_KEYS, *remove):
             os.environ.pop(key, None)
