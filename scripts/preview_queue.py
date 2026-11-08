@@ -9,7 +9,16 @@ fetches that state and applies the plan (removals first, then additions).
 so an API error anywhere exits non-zero before a single write.
 
 Run by .github/workflows/preview-queue.yml as `python3 -I scripts/preview_queue.py`
-with GH_TOKEN, GH_REPO, CAP, PREVIEW_AUTHORS, PREVIEW_IDLE_DAYS and CLOSED_PR.
+with GH_TOKEN, GH_REPO, CAP, PREVIEW_AUTHORS, PREVIEW_IDLE_DAYS,
+PREVIEW_REQUIRE_VERIFIED and CLOSED_PR.
+
+A PR is eligible only if every commit on its head was authored and committed
+by a PREVIEW_AUTHORS login (GitHub's own web-flow committer is accepted for
+commits made in the web UI). GitHub maps those logins from the commit e-mail,
+which anyone can set, so the check only stops a collaborator from pushing to
+an allowlisted author's branch by accident or in plain sight; with
+PREVIEW_REQUIRE_VERIFIED=true every commit must also carry a verified
+signature, which makes the check hold.
 """
 import json
 import os
@@ -45,6 +54,14 @@ NO_BUILD = (
     "No preview build for this commit; push a commit (or close and reopen) to build",
 )
 NOT_ELIGIBLE = ("success", "Not eligible for a preview")
+OUTSIDE_COMMITS = (
+    "success",
+    "No preview: a commit on this head is not by a preview author",
+)
+# GitHub's committer for commits made in the web UI (merges, suggestions).
+WEB_FLOW = "web-flow"
+# GET /pulls/{n}/commits returns at most this many; a longer PR cannot be checked.
+MAX_PR_COMMITS = 250
 CONFLICT = ("failure", "PR has merge conflicts; resolve them to build preview images")
 
 
@@ -72,6 +89,9 @@ class PR:
     manifests_exist: bool
     # From GET /pulls/{n}; None = not yet computed (unknown, not failed).
     mergeable: bool | None
+    # A head commit not authored and committed by an allowlisted login (see
+    # commits_outside). None = not checked, which counts as outside.
+    outside_commits: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -105,6 +125,31 @@ def parse_config(cap: str, authors: str, idle_days: str) -> tuple[int, frozenset
     return int(cap), frozenset(entries), int(idle_days)
 
 
+def parse_require_verified(value: str) -> bool:
+    """PREVIEW_REQUIRE_VERIFIED: empty or "false" is off, "true" is on."""
+    if value in ("", "false"):
+        return False
+    if value == "true":
+        return True
+    raise ValueError(f"PREVIEW_REQUIRE_VERIFIED must be true or false, got {value!r}")
+
+
+def commits_outside(commits: list[tuple[str, str, bool]], authors: frozenset[str],
+                    require_verified: bool) -> bool:
+    """True unless every (author login, committer login, verified) commit is by
+    an allowlisted login. An empty or possibly truncated list counts as outside."""
+    if not commits or len(commits) >= MAX_PR_COMMITS:
+        return True
+    for author, committer, verified in commits:
+        if author not in authors:
+            return True
+        if committer not in authors and committer != WEB_FLOW:
+            return True
+        if require_verified and not verified:
+            return True
+    return False
+
+
 def _first_seen(pr: PR) -> datetime | None:
     """Earliest preview-queue status on the head: roughly when it was pushed."""
     return min((t for t, _s, _d in pr.queue_statuses), default=None)
@@ -130,9 +175,12 @@ def plan(prs: list[PR], closed_labelled: list[int], now: datetime, cap: int,
     closed_set = set(closed)
     open_prs = [p for p in prs if p.number not in closed_set]
 
-    def allowed(p: PR) -> bool:
+    def by_author(p: PR) -> bool:
         return (p.head_repo == base_repo and p.author in authors
                 and OPT_OUT not in p.labels)
+
+    def allowed(p: PR) -> bool:
+        return by_author(p) and p.outside_commits is False
 
     def built(p: PR) -> bool:
         tag = tag_for(p.number, p.head_sha)
@@ -222,7 +270,9 @@ def plan(prs: list[PR], closed_labelled: list[int], now: datetime, cap: int,
         else:
             wanted[p.number] = WAITING_IMAGES
     for p in ineligible:
-        if p.queue_statuses:
+        if by_author(p):
+            wanted[p.number] = OUTSIDE_COMMITS
+        elif p.queue_statuses:
             wanted[p.number] = NOT_ELIGIBLE
 
     by_num = {p.number: p for p in open_prs}
@@ -418,6 +468,17 @@ class GitHub:
             mergeable=detail.get("mergeable"),
         )
 
+    def pr_commits(self, n: int) -> list[tuple[str, str, bool]]:
+        """(author login, committer login, signature verified) per head commit.
+        A commit whose e-mail maps to no GitHub user has an empty login."""
+        out = []
+        for c in self._get_all(f"repos/{self.repo}/pulls/{n}/commits"):
+            verification = (c.get("commit") or {}).get("verification") or {}
+            out.append(((c.get("author") or {}).get("login") or "",
+                        (c.get("committer") or {}).get("login") or "",
+                        verification.get("verified") is True))
+        return out
+
     def open_prs(self) -> list[PR]:
         pulls = self._get_all(f"repos/{self.repo}/pulls", {"state": "open"})
         return [self._pr(raw) for raw in pulls]
@@ -475,6 +536,7 @@ def main(env: Mapping[str, str], gh: GitHub, manifest_exists=manifest_exists) ->
     try:
         cap, authors, idle_days = parse_config(
             env.get("CAP", ""), env.get("PREVIEW_AUTHORS", ""), env.get("PREVIEW_IDLE_DAYS", ""))
+        require_verified = parse_require_verified(env.get("PREVIEW_REQUIRE_VERIFIED", ""))
         closed_pr = env.get("CLOSED_PR", "")
         if closed_pr and not UINT_RE.fullmatch(closed_pr):
             raise ValueError(f"CLOSED_PR must be empty or a PR number, got {closed_pr!r}")
@@ -492,7 +554,10 @@ def main(env: Mapping[str, str], gh: GitHub, manifest_exists=manifest_exists) ->
             tag = tag_for(p.number, p.head_sha)
             exists = (p.images_status == ("success", tag)
                       and all(manifest_exists(image, tag) for image in PREVIEW_IMAGES))
-            checked.append(replace(p, manifests_exist=exists))
+            outside = None
+            if p.head_repo == gh.repo and p.author in authors:
+                outside = commits_outside(gh.pr_commits(p.number), authors, require_verified)
+            checked.append(replace(p, manifests_exist=exists, outside_commits=outside))
     except (GitHubError, RegistryError) as exc:
         _log(f"fetch failed, nothing written: {exc}")
         return 1

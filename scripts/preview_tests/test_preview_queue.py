@@ -31,6 +31,7 @@ NO_BUILD = (
     "No preview build for this commit; push a commit (or close and reopen) to build",
 )
 NOT_ELIGIBLE = ("success", "Not eligible for a preview")
+OUTSIDE = ("success", "No preview: a commit on this head is not by a preview author")
 CONFLICT = ("failure", "PR has merge conflicts; resolve them to build preview images")
 
 
@@ -45,7 +46,7 @@ def sha(n, rev=0):
 
 def mk(n, *, built=True, labelled=False, author=OWNER, head_repo=BASE, rev=0,
        labels=(), created=None, images=None, manifests=None,
-       queue=(), grant=None, mergeable=True):
+       queue=(), grant=None, mergeable=True, outside=False):
     """One open PR. `built=True` means a success status with this PR's tag and
     both manifests present; `images`/`manifests` override that explicitly."""
     head = sha(n, rev)
@@ -70,6 +71,7 @@ def mk(n, *, built=True, labelled=False, author=OWNER, head_repo=BASE, rev=0,
         grant_time=grant,
         manifests_exist=manifests,
         mergeable=mergeable,
+        outside_commits=outside,
     )
 
 
@@ -196,6 +198,46 @@ class Eligibility(unittest.TestCase):
         p = run([was_queued, never_seen], cap=3)
         self.assertEqual(status_of(p, 1), NOT_ELIGIBLE)
         self.assertIsNone(status_of(p, 2))
+
+
+class OutsideCommits(unittest.TestCase):
+    def test_outside_commit_never_labelled_and_loses_label(self):
+        p = run([mk(1, outside=True), mk(2, labelled=True, outside=True)])
+        self.assertEqual(p.add, [])
+        self.assertEqual(p.remove, [2])
+        self.assertEqual(status_of(p, 1), OUTSIDE)
+        self.assertEqual(status_of(p, 2), OUTSIDE)
+
+    def test_unchecked_commits_count_as_outside(self):
+        p = run([mk(1, outside=None)])
+        self.assertEqual(p.add, [])
+        self.assertEqual(status_of(p, 1), OUTSIDE)
+
+    def test_commits_outside(self):
+        ok = (OWNER, OWNER, False)
+        cases = [
+            ([ok], False, False),
+            ([ok, (OWNER, "web-flow", True)], False, False),
+            ([ok, ("someone", OWNER, True)], False, True),
+            ([ok, (OWNER, "someone", True)], False, True),
+            ([ok, ("", OWNER, False)], False, True),
+            ([], False, True),
+            ([ok] * preview_queue.MAX_PR_COMMITS, False, True),
+            ([ok], True, True),
+            ([(OWNER, OWNER, True)], True, False),
+        ]
+        for commits, verified, want in cases:
+            with self.subTest(commits=commits[:2], verified=verified):
+                self.assertEqual(
+                    preview_queue.commits_outside(commits, AUTHORS, verified), want)
+
+    def test_parse_require_verified(self):
+        self.assertFalse(preview_queue.parse_require_verified(""))
+        self.assertFalse(preview_queue.parse_require_verified("false"))
+        self.assertTrue(preview_queue.parse_require_verified("true"))
+        for bad in ("yes", "True", "1", "true\n"):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                preview_queue.parse_require_verified(bad)
 
 
 class Closed(unittest.TestCase):
@@ -826,11 +868,17 @@ ENV = {"CAP": "3", "PREVIEW_AUTHORS": OWNER, "PREVIEW_IDLE_DAYS": "7", "CLOSED_P
 class FakeGitHub:
     repo = BASE
 
-    def __init__(self, prs=(), closed=()):
+    def __init__(self, prs=(), closed=(), commits=None):
         self.prs = list(prs)
         self.closed = list(closed)
+        self.commits = commits or {}
+        self.commit_fetches = []
         self.fetched = False
         self.writes = []
+
+    def pr_commits(self, n):
+        self.commit_fetches.append(n)
+        return self.commits.get(n, [(OWNER, OWNER, False)])
 
     def open_prs(self):
         self.fetched = True
@@ -861,8 +909,8 @@ def run_main(env, gh, manifests=always):
 
 
 def as_listed(p: PR) -> PR:
-    """What GitHub.open_prs returns: manifests are checked later, by main."""
-    return replace(p, manifests_exist=False)
+    """What GitHub.open_prs returns: manifests and commits are checked later, by main."""
+    return replace(p, manifests_exist=False, outside_commits=None)
 
 
 class Main(unittest.TestCase):
@@ -955,6 +1003,44 @@ class Main(unittest.TestCase):
             ("kettleofketchup/draftforge-preview/frontend", tag),
         ])
         self.assertNotIn(("add", 2), gh.writes)
+
+    def test_commits_checked_for_allowlisted_same_repo_prs_only(self):
+        gh = FakeGitHub([as_listed(mk(2)), as_listed(mk(3)),
+                         as_listed(mk(5, head_repo="fork/x")),
+                         as_listed(mk(6, author="someone"))],
+                        commits={3: [(OWNER, OWNER, False), ("someone", "someone", False)]})
+        rc, _, _ = run_main(ENV, gh)
+        self.assertEqual(rc, 0)
+        self.assertEqual(sorted(gh.commit_fetches), [2, 3])
+        self.assertIn(("add", 2), gh.writes)
+        self.assertNotIn(("add", 3), gh.writes)
+        self.assertIn(("status", sha(3), *OUTSIDE), gh.writes)
+
+    def test_require_verified_refuses_unsigned_commits(self):
+        gh = FakeGitHub([as_listed(mk(2))])
+        rc, _, _ = run_main(dict(ENV, PREVIEW_REQUIRE_VERIFIED="true"), gh)
+        self.assertEqual(rc, 0)
+        self.assertNotIn(("add", 2), gh.writes)
+        gh = FakeGitHub([as_listed(mk(2))], commits={2: [(OWNER, OWNER, True)]})
+        run_main(dict(ENV, PREVIEW_REQUIRE_VERIFIED="true"), gh)
+        self.assertIn(("add", 2), gh.writes)
+
+    def test_bad_require_verified_no_writes(self):
+        gh = FakeGitHub([as_listed(mk(2))])
+        rc, _, err = run_main(dict(ENV, PREVIEW_REQUIRE_VERIFIED="yes"), gh)
+        self.assertNotEqual(rc, 0)
+        self.assertEqual(gh.writes, [])
+        self.assertFalse(gh.fetched)
+
+    def test_real_client_reads_commit_logins(self):
+        commits = [
+            {"author": {"login": OWNER}, "committer": {"login": "web-flow"},
+             "commit": {"verification": {"verified": True}}},
+            {"author": None, "committer": None, "commit": {}},
+        ]
+        gh, opener = client([page(commits)])
+        self.assertEqual(gh.pr_commits(4), [(OWNER, "web-flow", True), ("", "", False)])
+        self.assertIn(f"{API}/repos/{BASE}/pulls/4/commits", opener.urls()[0])
 
     def test_manifest_error_status_aborts(self):
         def failing(image, tag):

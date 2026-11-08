@@ -488,9 +488,10 @@ class PreviewQueueStructureTest(unittest.TestCase):
         self.assertEqual(self.reconcile["env"], {
             "GH_TOKEN": "${{ github.token }}",
             "GH_REPO": "${{ github.repository }}",
-            "CAP": "${{ vars.PREVIEW_CAP || '3' }}",
+            "CAP": "${{ vars.PREVIEW_CAP || '0' }}",
             "PREVIEW_AUTHORS": "${{ vars.PREVIEW_AUTHORS || 'kettleofketchup' }}",
             "PREVIEW_IDLE_DAYS": "${{ vars.PREVIEW_IDLE_DAYS || '7' }}",
+            "PREVIEW_REQUIRE_VERIFIED": "${{ vars.PREVIEW_REQUIRE_VERIFIED || 'false' }}",
             "CLOSED_PR": "${{ github.event.action == 'closed' && "
                          "github.event.pull_request.number || '' }}",
         })
