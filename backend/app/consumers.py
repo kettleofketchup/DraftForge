@@ -189,6 +189,10 @@ class TournamentConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
 class HeroDraftConsumer(BaseDraftConsumer):
     """WebSocket consumer for Captain's Mode hero draft."""
 
+    PING_ENABLED = True
+    kick_duplicate_captain_connections = True
+    clear_heartbeat_on_disconnect = True
+
     # --- Abstract method implementations ---
 
     def get_room_group_prefix(self) -> str:
@@ -230,16 +234,6 @@ class HeroDraftConsumer(BaseDraftConsumer):
     # --- Connect / Disconnect ---
 
     async def connect(self):
-        # Set early for kick detection (base_connect re-sets these to same values)
-        self.draft_id = self.scope["url_route"]["kwargs"]["draft_id"]
-        self.user = self.scope.get("user")
-
-        # Kick any existing captain connection BEFORE base_connect()
-        if self.user and self.user.is_authenticated:
-            existing_channel = await self._get_existing_captain_channel()
-            if existing_channel and existing_channel != self.channel_name:
-                await self._kick_channel(existing_channel)
-
         result = await self.base_connect()
         if result:
             log.info(
@@ -431,43 +425,6 @@ class HeroDraftConsumer(BaseDraftConsumer):
                     user_id=user.id,
                     error=str(e),
                 )
-
-    # --- HeroDraft-specific kick detection ---
-
-    async def _get_existing_captain_channel(self):
-        """Get the existing captain channel from Redis, if any."""
-        from app.tasks.herodraft_tick import get_redis_client
-
-        r = get_redis_client()
-        channel_key = self._captain_channel_key(self.draft_id, self.user.id)
-        return r.get(channel_key)
-
-    async def _kick_channel(self, old_channel):
-        """Send kick message to an existing captain connection."""
-        log.info(
-            "captain_kicked",
-            system="herodraft",
-            subsystem="connection",
-            draft_id=self.draft_id,
-            user_id=self.user.id,
-            old_channel=old_channel,
-            new_channel=self.channel_name,
-        )
-        try:
-            await self.channel_layer.send(
-                old_channel,
-                {"type": "herodraft.kicked", "reason": "new_connection"},
-            )
-        except Exception as e:
-            log.warning(
-                "captain_kick_failed",
-                system="herodraft",
-                subsystem="connection",
-                draft_id=self.draft_id,
-                user_id=self.user.id,
-                old_channel=old_channel,
-                error=str(e),
-            )
 
     # --- HeroDraft-specific channel layer handlers ---
 
