@@ -99,13 +99,16 @@ class TournamentUserSerializer(serializers.ModelSerializer):
         )
 
 
-def _tournament_organization(tournament: Tournament | None) -> Organization | None:
+def _tournament_organization(
+    tournament: Tournament | None, *, fresh: bool = False
+) -> Organization | None:
     """League's org, else the org of the event that spawned the tournament."""
     if tournament is None:
         return None
     if tournament.league and tournament.league.organization:
         return tournament.league.organization
-    event = tournament.source_event.select_related("organization").first()
+    events = tournament.source_event.select_related("organization")
+    event = (events.nocache() if fresh else events).first()
     return event.organization if event else None
 
 
@@ -191,7 +194,9 @@ def _collect_tournament_user_pks(tournament: Tournament) -> set[int]:
 _CONTEXT_MMR_KEYS = ("orgUserPk", "guildNickname", "mmr", "league_mmr")
 
 
-def _collect_context_mmr(tournament: Tournament | None, seen_pks: set[int]) -> dict:
+def _collect_context_mmr(
+    tournament: Tournament | None, seen_pks: set[int], *, fresh: bool = False
+) -> dict:
     """Per-request contextual org/league overlay keyed by user pk.
 
     Returns ``{pk: {orgUserPk, guildNickname, mmr, league_mmr}}`` for a
@@ -203,16 +208,21 @@ def _collect_context_mmr(tournament: Tournament | None, seen_pks: set[int]) -> d
     from org.serializers import OrgUserSerializer
 
     league = tournament.league if tournament else None
-    org = _tournament_organization(tournament)
+    org = _tournament_organization(tournament, fresh=fresh)
     if not org:
         return {}
 
     user_qs = CustomUser.objects.filter(pk__in=seen_pks)
+    org_user_qs = OrgUser.objects.all()
+    league_user_qs = LeagueUser.objects.all()
+    if fresh:
+        user_qs, org_user_qs = user_qs.nocache(), org_user_qs.nocache()
+        league_user_qs = league_user_qs.nocache()
 
     # Auto-create OrgUser records for tournament users missing from the org
     # (preserves the side-effect of the legacy _serialize_users_with_mmr path).
     existing_user_pks = set(
-        OrgUser.objects.filter(user__in=user_qs, organization=org).values_list(
+        org_user_qs.filter(user__in=user_qs, organization=org).values_list(
             "user_id", flat=True
         )
     )
@@ -230,7 +240,7 @@ def _collect_context_mmr(tournament: Tournament | None, seen_pks: set[int]) -> d
     ).prefetch_related(
         Prefetch(
             "league_memberships",
-            queryset=LeagueUser.objects.filter(league_id=league.pk if league else None),
+            queryset=league_user_qs.filter(league_id=league.pk if league else None),
         )
     )
     serialized = OrgUserSerializer(
@@ -239,7 +249,7 @@ def _collect_context_mmr(tournament: Tournament | None, seen_pks: set[int]) -> d
     return {row["pk"]: {k: row[k] for k in _CONTEXT_MMR_KEYS} for row in serialized}
 
 
-def _build_users_dict(tournament: Tournament) -> dict:
+def _build_users_dict(tournament: Tournament, *, fresh: bool = False) -> dict:
     """Build a deduplicated ``{pk: serialized_user}`` dict for a tournament.
 
     Shape-preserving: the CORE half comes from one bulk uncached query
@@ -247,14 +257,15 @@ def _build_users_dict(tournament: Tournament) -> dict:
     and the contextual MMR half is merged per-request.
     Output JSON is byte-identical to the legacy _serialize_users_with_mmr path —
     org entries carry core + MMR (orgUserPk/mmr/league_mmr/guildNickname, no
-    discordNickname); non-org entries carry core only.
+    discordNickname); non-org entries carry core only. ``fresh=True`` reads the
+    organization and MMR overlay past cacheops too.
     """
     # local: app.user_cache imports app.serializers
     from app.user_cache import serialize_users_core
 
     seen_pks = _collect_tournament_user_pks(tournament)
-    mmr_map = _collect_context_mmr(tournament, seen_pks)
-    is_org = _tournament_organization(tournament) is not None
+    mmr_map = _collect_context_mmr(tournament, seen_pks, fresh=fresh)
+    is_org = _tournament_organization(tournament, fresh=fresh) is not None
     cores = serialize_users_core(seen_pks)
 
     result: dict = {}
@@ -668,9 +679,12 @@ def _shared_draft_options(
     serializer: serializers.BaseSerializer, tournament: Tournament
 ) -> DraftOptions:
     """``get_draft_options()`` once per tournament for a whole serializer tree."""
-    memo = serializer.root.context.setdefault("_draft_options", {})
+    context = serializer.root.context
+    memo = context.setdefault("_draft_options", {})
     if tournament.pk not in memo:
-        memo[tournament.pk] = tournament.get_draft_options()
+        memo[tournament.pk] = tournament.get_draft_options(
+            fresh=context.get("fresh", False)
+        )
     return memo[tournament.pk]
 
 
@@ -1122,7 +1136,9 @@ class TournamentSerializer(serializers.ModelSerializer):
 
     def get_organization_pk(self, tournament: Tournament) -> int | None:
         """Return the primary organization's PK for this tournament."""
-        org = _tournament_organization(tournament)
+        org = _tournament_organization(
+            tournament, fresh=self.context.get("fresh", False)
+        )
         return org.pk if org else None
 
     def get_league_pk(self, tournament: Tournament) -> int | None:
@@ -1131,7 +1147,10 @@ class TournamentSerializer(serializers.ModelSerializer):
 
     def get_source_event(self, tournament: Tournament) -> dict | None:
         """Return lightweight source event data (event that spawned this tournament)."""
-        event = tournament.source_event.first()
+        events = tournament.source_event.all()
+        if self.context.get("fresh", False):
+            events = events.nocache().select_related("event_repeater")
+        event = events.first()
         if not event:
             return None
         result = {"id": event.id, "name": event.name, "event_repeater": None}

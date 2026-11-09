@@ -15,6 +15,7 @@ from datetime import timezone as dt_timezone
 from unittest.mock import patch
 
 from cacheops.conf import settings as cacheops_settings
+from cacheops.signals import cache_read
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db import connection, reset_queries, transaction
 from django.test import TestCase, TransactionTestCase, override_settings
@@ -30,6 +31,7 @@ from app.models import (
     Draft,
     DraftEvent,
     DraftRound,
+    Organization,
     Team,
     TeamDraftState,
     Tournament,
@@ -43,6 +45,9 @@ from app.serializers import (
 )
 from app.tests.teamdraft_fixtures import TimedDraftFixture
 from app.user_cache import serialize_user_core
+from events.models import Event
+from league.models import LeagueUser
+from org.models import OrgUser
 
 BASE: datetime = datetime(2026, 1, 2, 3, 4, 5, tzinfo=dt_timezone.utc)
 MMRS_4: list[int] = [1000, 2000, 3000, 4000]
@@ -276,6 +281,76 @@ class DraftStateFreshnessTests(TransactionTestCase):
         if cacheops_settings.CACHEOPS_ENABLED:
             cached = build_draft_state(fx.draft.pk, fresh=False)
             self.assertEqual(self.team_name(cached, team.pk), team.name)
+
+
+class DraftStateFreshReadTests(TransactionTestCase):
+    """fresh=True payloads never read through cacheops, at any level."""
+
+    def setUp(self) -> None:
+        if not cacheops_settings.CACHEOPS_ENABLED:
+            self.skipTest("cacheops disabled")
+
+    def cached_reads(self, fn: Callable[[], object]) -> list[str]:
+        reads: list[str] = []
+
+        def record(sender: type | None, func: object = None, **kwargs: object) -> None:
+            reads.append(getattr(sender, "__name__", None) or repr(func))
+
+        cache_read.connect(record)
+        try:
+            fn()
+        finally:
+            cache_read.disconnect(record)
+        return reads
+
+    def org_fixture(self, prefix: str) -> TimedDraftFixture:
+        fx = make_fixture(4, prefix)
+        league = fx.tournament.league
+        org_user = OrgUser.objects.get(user=fx.captains[0])
+        LeagueUser.objects.create(
+            user=fx.captains[0], org_user=org_user, league=league, mmr=1111
+        )
+        league.admins.add(fx.staff)
+        return fx
+
+    def event_fixture(self, prefix: str) -> TimedDraftFixture:
+        fx = TimedDraftFixture(prefix=prefix)
+        org = Organization.objects.create(name=f"{prefix} org")
+        Event.objects.create(
+            name=f"{prefix} event",
+            organization=org,
+            scheduled_at=timezone.now(),
+            tournament=fx.tournament,
+        )
+        return fx
+
+    def serialize_all(self, fx: TimedDraftFixture) -> None:
+        build_draft_state(fx.draft.pk, fresh=True)
+        _serialize_tournament(fx.tournament)
+
+    def test_fresh_payloads_make_no_cached_reads(self) -> None:
+        for label, make in (("org", self.org_fixture), ("event", self.event_fixture)):
+            with self.subTest(fixture=label):
+                fx = make(f"fr{label}")
+                build_draft_state(fx.draft.pk, fresh=False)
+                self.assertEqual(self.cached_reads(lambda: self.serialize_all(fx)), [])
+
+    def test_fresh_state_sees_raw_sql_draft_options_change(self) -> None:
+        fx = self.org_fixture("frdo")
+        tournament_pk = fx.tournament.pk
+        build_draft_state(fx.draft.pk, fresh=False)
+        _serialize_tournament(fx.tournament)
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "UPDATE app_draftoptions SET grace_time_ms = %s "
+                "WHERE tournament_id = %s",
+                [12345, tournament_pk],
+            )
+        state = build_draft_state(fx.draft.pk, fresh=True)
+        self.assertEqual(state["draft_options"]["grace_time_ms"], 12345)
+        response = _serialize_tournament(fx.tournament)
+        self.assertEqual(response["draft_options"]["grace_time_ms"], 12345)
+        self.assertEqual(response["draft"]["draft_options"]["grace_time_ms"], 12345)
 
 
 class ReadyEndpointQueryTests(TestCase):

@@ -46,8 +46,8 @@ def _serialize_tournament(tournament: Tournament) -> dict:
     after a write, and the plan keeps the query count independent of size.
     """
     tournament = tournament_state_queryset(fresh=True).get(pk=tournament.pk)
-    data = TournamentSerializer(tournament).data
-    data["_users"] = _build_users_dict(tournament)
+    data = TournamentSerializer(tournament, context={"fresh": True}).data
+    data["_users"] = _build_users_dict(tournament, fresh=True)
     return data
 
 
