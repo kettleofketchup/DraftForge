@@ -405,6 +405,44 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
         with tracer.start_as_current_span("ws.message", attributes=attrs) as span:
             yield span
 
+    # TEMP-DIAG
+    async def dispatch(self, message: dict[str, Any]) -> None:
+        from channels.db import aclose_old_connections
+        from channels.consumer import get_handler_name
+
+        mtype = message.get("type")
+        t0 = time.monotonic()
+        t1 = t0
+        try:
+            handler = getattr(self, get_handler_name(message), None)
+            await aclose_old_connections()
+            t1 = time.monotonic()
+            if handler is None:
+                raise ValueError(f"No handler for message type {mtype}")
+            await handler(message)
+        finally:
+            dt = time.monotonic() - t0
+            if mtype not in ("draft.tick",) or dt > 0.3:
+                log.debug(
+                    "diag_dispatch",
+                    system="websocket",
+                    subsystem="diag",
+                    draft_id=getattr(self, "draft_id", None),
+                    channel_name=self.channel_name,
+                    msg_type=mtype,
+                    duration_ms=round(dt * 1000, 1),
+                    close_conn_wait_ms=round((t1 - t0) * 1000, 1),
+                )
+            if mtype == "draft.tick":
+                log.debug(
+                    "diag_tick_recv",
+                    system="websocket",
+                    subsystem="diag",
+                    draft_id=getattr(self, "draft_id", None),
+                    channel_name=self.channel_name,
+                    duration_ms=round(dt * 1000, 1),
+                )
+
     # --- Base connect/disconnect ---
 
     async def base_connect(self) -> bool:
@@ -470,6 +508,14 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
 
             # Join room group
             await self.channel_layer.group_add(self.room_group_name, self.channel_name)
+            log.debug(  # TEMP-DIAG
+                "diag_group_add",
+                system="websocket",
+                subsystem="diag",
+                draft_id=self.draft_id,
+                channel_name=self.channel_name,
+                user_id=getattr(self.user, "id", None),
+            )
             await self.accept()
 
             # Track connection count
@@ -585,4 +631,11 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
             if hasattr(self, "room_group_name"):
                 await self.channel_layer.group_discard(
                     self.room_group_name, self.channel_name
+                )
+                log.debug(  # TEMP-DIAG
+                    "diag_group_discard",
+                    system="websocket",
+                    subsystem="diag",
+                    draft_id=getattr(self, "draft_id", None),
+                    channel_name=self.channel_name,
                 )

@@ -167,9 +167,27 @@ def broadcast_event(event: "DraftEvent", include_draft_state: bool = True) -> No
             message["draft_state"] = draft_state
 
         # Send to draft-specific channel
+        import time as _t  # TEMP-DIAG
+
+        import redis as _redis
+
+        _g0 = _t.monotonic()
         async_to_sync(channel_layer.group_send)(
             f"draft_{event.draft_id}",
             message,
+        )
+        try:
+            _members = _redis.Redis(host=__import__("django.conf").conf.settings.REDIS_HOST, port=6379, db=0).zrange(channel_layer._group_key(f"draft_{event.draft_id}"), 0, -1)
+        except Exception as _e:
+            _members = [f"err:{_e}"]
+        log.debug(
+            "diag_group_send",
+            system="websocket",
+            subsystem="diag",
+            draft_id=event.draft_id,
+            event_type=event.event_type,
+            duration_ms=round((_t.monotonic() - _g0) * 1000, 1),
+            members=[m.decode() if isinstance(m, bytes) else m for m in _members],
         )
 
         # Send to tournament channel
