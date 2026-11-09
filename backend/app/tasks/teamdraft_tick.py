@@ -105,9 +105,19 @@ def build_tick_payload(draft: Draft, now: datetime, r: redis.Redis) -> dict | No
 
 
 def should_continue_ticking(draft_id: int) -> tuple[bool, str]:
+    return read_loop_state(draft_id)[:2]
+
+
+def read_loop_state(draft_id: int) -> tuple[bool, str, str | None]:
+    """(continue, stop reason, draft state) from one Draft read."""
     draft = Draft.objects.filter(pk=draft_id).first()
     if draft is None:
-        return False, "draft_not_found"
+        return False, "draft_not_found", None
+    return (*_continue_for(draft), draft.state)
+
+
+def _continue_for(draft: Draft) -> tuple[bool, str]:
+    draft_id = draft.pk
     if draft.state == TeamDraftState.PAUSED:
         # Keeps captain freshness live for the Resume gate (broadcast_paused_freshness).
         if get_connection_count(PREFIX, draft_id) <= 0:
@@ -195,7 +205,11 @@ async def broadcast_paused_freshness(draft_id: int) -> None:
         if channel_layer is not None:
             await channel_layer.group_send(
                 f"draft_{draft_id}",
-                {"type": "captain.heartbeat", "captain_id": captain_id, "fresh": is_fresh},
+                {
+                    "type": "captain.heartbeat",
+                    "captain_id": captain_id,
+                    "fresh": is_fresh,
+                },
             )
     _paused_freshness[draft_id] = fresh
 
@@ -203,6 +217,18 @@ async def broadcast_paused_freshness(draft_id: int) -> None:
 async def check_resume_countdown(draft_id: int) -> bool:
     @database_sync_to_async
     def flip() -> bool:
+        # Read first: BEGIN IMMEDIATE takes SQLite's write lock, so only lock
+        # when the countdown is actually due.
+        seen = (
+            Draft.objects.nocache()
+            .filter(pk=draft_id)
+            .values_list("state", "resuming_until")
+            .first()
+        )
+        if seen is None or seen[0] != TeamDraftState.RESUMING:
+            return False
+        if seen[1] is None or timezone.now() < seen[1]:
+            return False
         with transaction.atomic():
             draft = Draft.objects.select_for_update().filter(pk=draft_id).first()
             if draft is None or draft.state != TeamDraftState.RESUMING:
@@ -411,25 +437,54 @@ async def check_timeout(draft_id: int) -> DraftRound | None:
     return await database_sync_to_async(_check_timeout_sync)(draft_id)
 
 
+PAUSED_FRESHNESS_EVERY_TICKS: int = 3
+
+
 class TeamDraftTickDriver:
+    """Steps skip by the state should_continue read at the top of each tick.
+
+    While paused only the freshness check runs, every few ticks: no clock, no
+    timeout, no heartbeat pause, and no write lock.
+    """
+
     prefix: str = PREFIX
     system: str = "teamdraft"
 
+    def __init__(self) -> None:
+        self._state: dict[int, str | None] = {}
+        self._paused_ticks: dict[int, int] = {}
+
+    def _paused(self, draft_id: int) -> bool:
+        return self._state.get(draft_id) == TeamDraftState.PAUSED
+
     async def check_resume_countdown(self, draft_id: int) -> None:
-        await check_resume_countdown(draft_id)
+        if self._state.get(draft_id) == TeamDraftState.RESUMING:
+            await check_resume_countdown(draft_id)
 
     async def check_captain_heartbeats(self, draft_id: int) -> None:
-        await check_captain_heartbeats(draft_id)
+        if not self._paused(draft_id):
+            await check_captain_heartbeats(draft_id)
 
     async def broadcast_tick(self, draft_id: int) -> None:
-        await broadcast_tick(draft_id)
-        await broadcast_paused_freshness(draft_id)
+        if not self._paused(draft_id):
+            await broadcast_tick(draft_id)
+            return
+        ticks = self._paused_ticks.get(draft_id, 0)
+        self._paused_ticks[draft_id] = ticks + 1
+        if ticks % PAUSED_FRESHNESS_EVERY_TICKS == 0:
+            await broadcast_paused_freshness(draft_id)
 
     async def check_timeout(self, draft_id: int) -> None:
-        await check_timeout(draft_id)
+        if not self._paused(draft_id):
+            await check_timeout(draft_id)
 
     def should_continue(self, draft_id: int) -> tuple[bool, str]:
-        return should_continue_ticking(draft_id)
+        keep_going, reason, state = read_loop_state(draft_id)
+        self._state[draft_id] = state
+        if state != TeamDraftState.PAUSED:
+            self._paused_ticks.pop(draft_id, None)
+            _paused_freshness.pop(draft_id, None)
+        return keep_going, reason
 
 
 TEAM_TICK_DRIVER: TeamDraftTickDriver = TeamDraftTickDriver()
