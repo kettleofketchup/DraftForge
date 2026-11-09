@@ -33,6 +33,6 @@ class Migration(migrations.Migration):
         migrations.AlterField(
             model_name='game',
             name='gameid',
-            field=models.BigIntegerField(blank=True, db_index=True, null=True),
+            field=models.BigIntegerField(blank=True, null=True),
         ),
     ]

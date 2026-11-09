@@ -1040,7 +1040,7 @@ class Game(models.Model):
     )
 
     # Steam match ID if it exists (64-bit)
-    gameid = models.BigIntegerField(null=True, blank=True, db_index=True)
+    gameid = models.BigIntegerField(null=True, blank=True)
 
     radiant_team = models.ForeignKey(
         Team,

@@ -1,5 +1,7 @@
 import unittest
 
+from django.db import connection
+
 # django-test-migrations is a dev dep; a stale CI image may lack it.
 try:
     from django_test_migrations.contrib.unittest_case import MigratorTestCase
@@ -41,3 +43,15 @@ class TournamentDotaLobbyFieldsMigrationTest(MigratorTestCase):
 
         Game.objects.create(tournament=tournament, gameid=2**62)
         self.assertTrue(Game.objects.filter(gameid=2**62).exists())
+
+    def test_gameid_has_one_index(self):
+        # Game.Meta.indexes already indexes gameid; widening must not add a
+        # second, field-level index.
+        with connection.cursor() as cursor:
+            constraints = connection.introspection.get_constraints(cursor, "app_game")
+        gameid_indexes = [
+            name
+            for name, info in constraints.items()
+            if info["index"] and info["columns"] == ["gameid"]
+        ]
+        self.assertEqual(len(gameid_indexes), 1, gameid_indexes)
