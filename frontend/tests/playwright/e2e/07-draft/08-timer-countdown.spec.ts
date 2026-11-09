@@ -1,7 +1,8 @@
 /**
  * Team draft timer countdown and undo reactivation
  *
- * Tournament: 'draft_timer_countdown' (timer-enabled, 20 s grace, 60 s reserve, 4 teams).
+ * Tournament: 'draft_timer_countdown' (timer-enabled, 90 s grace, 60 s reserve, 4 teams).
+ * Team A's round runs from beforeAll through test 3, so the grace must outlast tests 1-3 on a slow runner.
  * Serial: beforeAll readies every captain over HTTP and starts the draft as admin, so
  * the clock is already running and no captain has connected. Each test that leaves the
  * clock running must end by picking or pausing.
@@ -85,6 +86,8 @@ test.describe.serial('Team draft timer countdown', () => {
 
     const teamA = teamsInOrder(t)[0];
     await expect(a.page.getByTestId(`draft-clock-reserve-${teamA.pk}`)).toHaveText('1:00');
+    // Grace is still running after the reserve check, so the reserve was full before grace ended.
+    expect(parseClock(await grace.textContent())).toBeGreaterThan(0);
     await expect(a.page.getByTestId('draft-clock-your-turn')).toBeVisible();
     await expect(a.page.getByTestId('turn-indicator')).toContainText('YOUR turn');
   });
@@ -112,7 +115,7 @@ test.describe.serial('Team draft timer countdown', () => {
     await a.page.getByTestId('confirmPickButton').click();
 
     await expect(active).not.toHaveText(before);
-    await expect(a.page.getByTestId('draft-clock-grace')).toHaveText(/^0:(1\d|20)$/);
+    await expect(a.page.getByTestId('draft-clock-grace')).toHaveText(/^1:(2\d|30)$/);
     await a.context.close();
   });
 
@@ -130,7 +133,7 @@ test.describe.serial('Team draft timer countdown', () => {
     const reserveA = page.getByTestId(`draft-clock-reserve-${teamA.pk}`);
     await expect(reserveA).toHaveText(/^\d+:\d{2}$/);
     const reserveABefore = (await reserveA.textContent()) ?? '';
-    await expireDraftClock(context, t.draft.pk, 18_000);
+    await expireDraftClock(context, t.draft.pk, 88_000);
 
     await expect(page.getByTestId('draft-clock-grace')).toHaveText('0:00', { timeout: 6_000 });
     await expect(page.getByTestId(`draft-clock-reserve-${teamB.pk}`)).not.toHaveText('1:00', {

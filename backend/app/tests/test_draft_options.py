@@ -417,7 +417,7 @@ class FixtureConfigTests(TestCase):
     def test_timer_configs_build_pending_lobbies_with_per_spec_clocks(self):
         clocks = {
             "draft_timer_ready": (20000, 10000),
-            "draft_timer_countdown": (20000, 60000),
+            "draft_timer_countdown": (90000, 60000),
             "draft_timer_skip": (20000, 60000),
             "draft_timer_pause": (120000, 30000),
             "shuffle_timer_skip": (20000, 60000),
