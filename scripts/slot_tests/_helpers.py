@@ -111,14 +111,18 @@ class FakeHost:
 
 
 def render_raw(
-    files: list[str], env: dict[str, str], *, project: str | None = "df-s3"
+    files: list[str],
+    env: dict[str, str],
+    *,
+    project: str | None = "df-s3",
+    project_dir: Path = ROOT,
 ) -> subprocess.CompletedProcess[str]:
     if subprocess.run(["docker", "compose", "version"], capture_output=True).returncode:
         pytest.skip("docker compose unavailable")
     clean = {
         k: v for k, v in os.environ.items() if not k.startswith(("DF_", "COMPOSE_"))
     } | env
-    argv = ["docker", "compose", "--project-directory", str(ROOT)]
+    argv = ["docker", "compose", "--project-directory", str(project_dir)]
     argv += ["-p", project] if project else []
     argv += [a for f in files for a in ("-f", str(ROOT / "docker" / f))]
     return subprocess.run(
@@ -127,8 +131,12 @@ def render_raw(
 
 
 def render(
-    files: list[str], env: dict[str, str], *, project: str | None = "df-s3"
+    files: list[str],
+    env: dict[str, str],
+    *,
+    project: str | None = "df-s3",
+    project_dir: Path = ROOT,
 ) -> dict:
-    r = render_raw(files, env, project=project)
+    r = render_raw(files, env, project=project, project_dir=project_dir)
     assert r.returncode == 0, r.stderr
     return json.loads(r.stdout)

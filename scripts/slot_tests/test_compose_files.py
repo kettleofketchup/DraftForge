@@ -1,6 +1,9 @@
+import shutil
+from pathlib import Path
+
 import pytest
 
-from scripts.slot_tests._helpers import render, render_raw
+from scripts.slot_tests._helpers import ROOT, render, render_raw
 
 SLOT3 = {
     "DF_SUFFIX": "-s3",
@@ -29,7 +32,9 @@ def test_slot_render() -> None:
         s["backend"]["environment"]["DF_EXTRA_CSRF_ORIGINS"]
         == "https://localhost:13443"
     )
-    assert s["redis"]["volumes"][0]["source"].endswith("backend/.redis_data-s3")
+    assert [(v["type"], v["source"]) for v in s["redis"]["volumes"]] == [
+        ("volume", "redis_data")
+    ]
     assert s["celery-beat"]["command"][-1] == "/app/backend/celerybeat-schedule-s3"
 
 
@@ -58,6 +63,24 @@ def test_run_redis_tmpfs() -> None:
         SLOT3,
     )["services"]["redis"]
     assert r.get("volumes", []) == [] and r["tmpfs"] == ["/data"]
+
+
+@pytest.mark.parametrize(
+    ("files", "env", "project"),
+    [
+        (["docker-compose.test.yaml"], {}, "df"),
+        (["docker-compose.test.yaml", "docker-compose.slot.yaml"], SLOT3, "df-s3"),
+    ],
+)
+def test_redis_definition_is_worktree_independent(
+    files: list[str], env: dict[str, str], project: str, tmp_path: Path
+) -> None:
+    (tmp_path / "docker").mkdir()
+    shutil.copy(ROOT / "docker" / ".env.test", tmp_path / "docker" / ".env.test")
+    here = render(files, env, project=project)
+    there = render(files, env, project=project, project_dir=tmp_path)
+    assert here["services"]["redis"] == there["services"]["redis"]
+    assert here["volumes"]["redis_data"]["name"] == f"{project}_redis_data"
 
 
 def test_slot_file_requires_helper_env() -> None:
