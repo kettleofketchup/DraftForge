@@ -16,6 +16,7 @@ from app.tasks import teamdraft_tick
 from app.tasks.draft_tick import (
     captain_channel_key,
     conn_count_key,
+    get_connection_count,
     get_redis_client,
     heartbeat_key,
 )
@@ -80,11 +81,11 @@ class DraftConsumerBaseTestCase(TransactionTestCase):
         self.assertIn("events", events_frame)
         self.assertNotIn("draft_state", events_frame)
         self.assertEqual(state_frame["draft_state"]["pk"], self.draft.pk)
-        self.assertEqual(self.r.get(conn_count_key("teamdraft", self.draft.pk)), "1")
-        self.assertIsNone(self.r.get(conn_count_key("herodraft", self.draft.pk)))
+        self.assertEqual(get_connection_count("teamdraft", self.draft.pk), 1)
+        self.assertEqual(get_connection_count("herodraft", self.draft.pk), 0)
         await assert_no_frame_except_ping(comm, 0.5)
         await comm.disconnect()
-        self.assertIsNone(self.r.get(conn_count_key("teamdraft", self.draft.pk)))
+        self.assertEqual(get_connection_count("teamdraft", self.draft.pk), 0)
 
     async def test_captain_registers_heartbeat_and_channel_under_teamdraft(self):
         comm, _, _ = await self.connect(self.captain)
@@ -117,9 +118,17 @@ class DraftConsumerBaseTestCase(TransactionTestCase):
         await read_until_type(comm1, "draft_event")
         for comm in (comm1, comm2):
             await assert_no_frame_except_ping(comm, 0.5)
-        self.assertEqual(self.r.get(conn_count_key("teamdraft", self.draft.pk)), "2")
+        self.assertEqual(get_connection_count("teamdraft", self.draft.pk), 2)
         await comm1.disconnect()
         await comm2.disconnect()
+
+    async def test_open_socket_reregisters_after_its_count_key_is_lost(self):
+        with patch("app.tasks.draft_tick.CONN_REFRESH_SECONDS", 0):
+            comm, _, _ = await self.connect(self.spectator)
+            self.r.delete(conn_count_key("teamdraft", self.draft.pk))
+            await asyncio.sleep(1.5)
+            self.assertEqual(get_connection_count("teamdraft", self.draft.pk), 1)
+            await comm.disconnect()
 
     async def test_ping_frames_arrive_within_2s(self):
         comm, _, _ = await self.connect(self.spectator)
