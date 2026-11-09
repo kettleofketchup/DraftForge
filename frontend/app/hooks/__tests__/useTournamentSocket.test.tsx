@@ -20,11 +20,15 @@ const { manager, captured } = vi.hoisted(() => {
 });
 vi.mock('~/lib/websocket', () => ({ getWebSocketManager: () => manager }));
 
-const { useTournamentSocket, TOURNAMENT_REFETCH_DEBOUNCE_MS } = await import('../useTournamentSocket');
+const { useTournamentSocket, TOURNAMENT_REFETCH_WINDOW_MS } = await import('../useTournamentSocket');
 const { useDraftWebSocketStore } = await import('~/store/draftWebSocketStore');
 
 const emit = (msg: unknown) => captured.handler!(msg);
-const draftEvent = (draftPk: number) => ({ type: 'draft_event', event: { pk: 1 }, draft_state: { pk: draftPk } });
+const draftEvent = (draftPk: number, event_type = 'player_picked') => ({
+  type: 'draft_event',
+  event: { pk: 1, event_type },
+  draft_state: { pk: draftPk },
+});
 
 describe('useTournamentSocket', () => {
   let client: QueryClient;
@@ -45,7 +49,7 @@ describe('useTournamentSocket', () => {
   it('refetches the tournament once for a burst of events', () => {
     for (let i = 0; i < 5; i++) emit(draftEvent(9));
     expect(invalidate).not.toHaveBeenCalled();
-    vi.advanceTimersByTime(TOURNAMENT_REFETCH_DEBOUNCE_MS);
+    vi.advanceTimersByTime(TOURNAMENT_REFETCH_WINDOW_MS);
     expect(invalidate).toHaveBeenCalledTimes(1);
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['tournament', 5] });
   });
@@ -53,14 +57,21 @@ describe('useTournamentSocket', () => {
   it('skips the refetch when the open draft socket already applies the event state', () => {
     useDraftWebSocketStore.setState({ _currentDraftId: 9, status: 'connected' });
     emit(draftEvent(9));
-    vi.advanceTimersByTime(TOURNAMENT_REFETCH_DEBOUNCE_MS);
+    vi.advanceTimersByTime(TOURNAMENT_REFETCH_WINDOW_MS);
     expect(invalidate).not.toHaveBeenCalled();
   });
 
   it('still refetches for an event without draft state', () => {
     useDraftWebSocketStore.setState({ _currentDraftId: 9, status: 'connected' });
     emit({ type: 'draft_event', event: { pk: 2 } });
-    vi.advanceTimersByTime(TOURNAMENT_REFETCH_DEBOUNCE_MS);
+    vi.advanceTimersByTime(TOURNAMENT_REFETCH_WINDOW_MS);
+    expect(invalidate).toHaveBeenCalledTimes(1);
+  });
+
+  it('refetches when the draft completes even though the draft socket carries the state', () => {
+    useDraftWebSocketStore.setState({ _currentDraftId: 9, status: 'connected' });
+    emit(draftEvent(9, 'draft_completed'));
+    vi.advanceTimersByTime(TOURNAMENT_REFETCH_WINDOW_MS);
     expect(invalidate).toHaveBeenCalledTimes(1);
   });
 });

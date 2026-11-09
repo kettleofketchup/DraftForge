@@ -6,17 +6,29 @@ import { useDraftWebSocketStore } from '~/store/draftWebSocketStore';
 
 const log = getLogger('useTournamentSocket');
 
-/** A burst of events (a timeout fires up to five) costs one refetch. */
-export const TOURNAMENT_REFETCH_DEBOUNCE_MS = 300;
+/**
+ * Throttle window: the first event schedules one refetch this long after it,
+ * and events inside the window share it (a timeout sends up to five).
+ */
+export const TOURNAMENT_REFETCH_WINDOW_MS = 300;
+
+/** Events whose effect reaches past the draft state (the draft ends). */
+const TOURNAMENT_LEVEL_EVENTS = new Set(['draft_completed']);
 
 type TournamentSocketMessage = {
   type: string;
+  event?: { event_type?: string } | null;
   draft_state?: { pk?: number } | null;
 };
 
-/** The open draft socket already applies this event's draft_state to the stores. */
+/**
+ * True when the open draft socket applies everything this event changed: its
+ * draft_state carries the draft and the tournament's teams, and picks, pauses
+ * and clock events change nothing else on the tournament.
+ */
 function appliedByDraftSocket(msg: TournamentSocketMessage): boolean {
   if (msg.type !== 'draft_event' || !msg.draft_state?.pk) return false;
+  if (TOURNAMENT_LEVEL_EVENTS.has(msg.event?.event_type ?? '')) return false;
   const ws = useDraftWebSocketStore.getState();
   return ws._currentDraftId === msg.draft_state.pk && ws.status === 'connected';
 }
@@ -54,7 +66,7 @@ export function useTournamentSocket(tournamentId: number | null) {
       timer = setTimeout(() => {
         timer = null;
         queryClient.invalidateQueries({ queryKey: ['tournament', tournamentId] });
-      }, TOURNAMENT_REFETCH_DEBOUNCE_MS);
+      }, TOURNAMENT_REFETCH_WINDOW_MS);
     });
 
     return () => {
