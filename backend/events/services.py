@@ -405,8 +405,7 @@ def apply_signup_input(*, org_user, event, patch):
     if "unverified_friend_id" in set_fields:
         fid = set_fields["unverified_friend_id"]
         if fid:
-            # Global scope (matches handlers.py:234 — Friend ID is unique site-wide,
-            # not per-org).
+            # Global scope: Friend ID is unique site-wide, not per-org.
             collision = (
                 PlayerDotaProfile.objects.filter(unverified_friend_id=fid)
                 .exclude(org_user=org_user)

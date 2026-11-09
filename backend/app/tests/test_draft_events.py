@@ -299,7 +299,7 @@ class TournamentEventIntegrationTest(TestCase):
         """Picking a player creates a player_picked event."""
         from rest_framework.test import APIRequestFactory
 
-        from app.functions.tournament import pick_player_for_round
+        from app.functions.draft_picks import pick_player_for_round
 
         factory = APIRequestFactory()
         request = factory.post(
@@ -330,7 +330,7 @@ class TournamentEventIntegrationTest(TestCase):
         """Undoing a pick creates a pick_undone event."""
         from rest_framework.test import APIRequestFactory
 
-        from app.functions.tournament import pick_player_for_round, undo_last_pick
+        from app.functions.draft_picks import pick_player_for_round, undo_last_pick
 
         factory = APIRequestFactory()
 

@@ -615,7 +615,7 @@ class PickTimingTests(TestCase):
     def test_client_picked_at_within_window_is_honoured(self):
         early = (self.rnd.started_at + timedelta(milliseconds=500)).isoformat()
         with patch(
-            "app.functions.tournament.timezone.now",
+            "app.functions.draft_picks.timezone.now",
             return_value=self.rnd.started_at + timedelta(seconds=1),
         ):
             with self.captureOnCommitCallbacks(execute=True):
