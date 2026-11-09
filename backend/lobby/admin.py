@@ -6,6 +6,8 @@ from lobby.models import GameLobby, GameLobbyEvent
 
 @admin.register(GameLobby)
 class GameLobbyAdmin(admin.ModelAdmin):
+    """Mostly read-only: the lobby's lifecycle belongs to dota_lobby."""
+
     list_display = (
         "external_ref",
         "lobby_id",
@@ -26,7 +28,26 @@ class GameLobbyAdmin(admin.ModelAdmin):
         "dire_team",
         "provisional_winner_team",
     )
-    readonly_fields = ("ended", "created_at", "updated_at")
+    # Lifecycle fields mirror dota_lobby and only its events and the reconcile
+    # task may change them. Editing `state` here would also recompute `ended`
+    # behind the form's back and could break lobby_one_active_per_game.
+    readonly_fields = (
+        "external_ref",
+        "lobby_id",
+        "state",
+        "state_reason",
+        "ended",
+        "last_seq",
+        "created_at",
+        "updated_at",
+        "accepted_at",
+        "ended_at",
+        "password_key_id",
+    )
+
+    def has_add_permission(self, request: HttpRequest) -> bool:
+        # Lobbies are created through dota_lobby, never by hand.
+        return False
 
 
 @admin.register(GameLobbyEvent)
