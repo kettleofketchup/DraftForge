@@ -216,7 +216,6 @@ def pick_player_for_round(request: Request) -> Response:
                 )
 
             captain = draft_round.captain
-            round_team = team
             picked_event = DraftEvent.objects.create(
                 draft=draft,
                 event_type="player_picked",
@@ -229,8 +228,8 @@ def pick_player_for_round(request: Request) -> Response:
                     "picked_id": user.pk,
                     "picked_name": user.username,
                     "picked_avatar_url": user.avatarUrl,
-                    "team_id": round_team.pk if round_team else None,
-                    "team_name": round_team.name if round_team else None,
+                    "team_id": team.pk if team else None,
+                    "team_name": team.name if team else None,
                 },
             )
             transaction.on_commit(lambda e=picked_event: broadcast_event(e))
