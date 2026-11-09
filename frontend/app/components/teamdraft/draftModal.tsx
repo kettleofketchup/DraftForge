@@ -655,9 +655,12 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
             <div className="w-[120px]" />
           </div>
 
-          {/* Main content area */}
-          <div className="flex-1 overflow-auto p-2 md:p-4">
-            {mainView()}
+          {/* Main content area; the pause overlay covers only this, leaving the footer usable */}
+          <div className="relative flex-1 min-h-0 flex flex-col">
+            <LiveDraftPauseOverlay {...timer.pauseOverlayProps} />
+            <div className="flex-1 overflow-auto p-2 md:p-4">
+              {mainView()}
+            </div>
           </div>
 
           {/* Footer - fixed at bottom, hidden when no draft */}
@@ -793,8 +796,6 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
           </div>
           )}
         </div>
-
-        <LiveDraftPauseOverlay {...timer.pauseOverlayProps} />
 
         {/* Tie Resolution Overlay - shown to all users on WebSocket tie_roll event */}
         {showTieOverlay && tieResolution && (
