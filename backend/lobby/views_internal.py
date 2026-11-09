@@ -97,6 +97,7 @@ def _row_summary(row: GameLobby) -> dict[str, Any]:
             services.team_ref(row.dire_team_id) if row.dire_team_id else None
         ),
         "wants_flip": services.wants_flip(row),
+        "close_pending": row.close_pending,
     }
 
 
@@ -382,6 +383,53 @@ def active(request: Request) -> Response:
     """Every lobby that has not ended, for the reconcile task."""
     rows = GameLobby.objects.filter(ended=False).select_related("game").order_by("pk")
     return Response([_row_summary(row) for row in rows])
+
+
+@api_view(["GET"])
+@authentication_classes(_auth)
+@permission_classes(_perm)
+def close_pending(request: Request) -> Response:
+    """Ended lobbies dota_lobby has not confirmed closed, for the reconcile task."""
+    rows = (
+        GameLobby.objects.filter(close_pending=True)
+        .select_related("game")
+        .order_by("pk")
+    )
+    return Response([_row_summary(row) for row in rows])
+
+
+@api_view(["POST"])
+@authentication_classes(_auth)
+@permission_classes(_perm)
+def close_done(request: Request, pk: int) -> Response:
+    """The close task closed what dota_lobby held for the row. Body: `{found}`.
+
+    Clears `close_pending`, except while a row without a lobby ID still has
+    a create attempt in flight (its lease has not run out) and nothing was
+    found: that create may still reach dota_lobby, so the reconcile task
+    looks again.
+    """
+    found = request.data.get("found")
+    if not isinstance(found, int) or isinstance(found, bool) or found < 0:
+        return _error("found must be a count", "invalid_request", 400)
+    with transaction.atomic():
+        row = get_object_or_404(GameLobby.objects.select_for_update(), pk=pk)
+        attempt_in_flight = (
+            not row.lobby_id
+            and row.next_attempt_at is not None
+            and timezone.now() < row.next_attempt_at
+        )
+        if row.close_pending and not (found == 0 and attempt_in_flight):
+            row.close_pending = False
+            row.save(update_fields=["close_pending", "updated_at"])
+            log.info(
+                "lobby_close_confirmed",
+                game_lobby_id=pk,
+                lobby_id=row.lobby_id,
+                found=found,
+                **_LOG_API,
+            )
+    return Response({"close_pending": row.close_pending})
 
 
 @api_view(["GET"])

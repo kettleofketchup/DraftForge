@@ -121,6 +121,10 @@ class GameLobby(models.Model):
     # task: pushed forward by every attempt and every retryable failure, so
     # a create still retrying in Celery is not started a second time.
     next_attempt_at = models.DateTimeField(null=True, blank=True)
+    # DraftForge ended the row but dota_lobby has not confirmed the close
+    # yet. The close task and then the reconcile task keep closing until it
+    # does, so a lobby DraftForge stopped tracking never keeps a bot.
+    close_pending = models.BooleanField(default=False, db_index=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

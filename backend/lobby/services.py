@@ -328,11 +328,17 @@ def end_locally(game_lobby: GameLobby, reason: str) -> None:
     """Mark a lobby ended in DraftForge before dota_lobby has closed it.
 
     The caller closes it in dota_lobby. The row stops counting as the game's
-    active lobby at once, so a replacement can be requested.
+    active lobby at once, so a replacement can be requested. It stays
+    `close_pending` until dota_lobby confirms the close whenever dota_lobby
+    may hold a lobby for it: one it accepted, or a create that was sent
+    (`next_attempt_at` is set) and whose answer may have been lost.
     """
     game_lobby.state = states.CLOSED
     game_lobby.state_reason = reason
-    game_lobby.save(update_fields=["state", "state_reason", "updated_at"])
+    game_lobby.close_pending = bool(game_lobby.lobby_id or game_lobby.next_attempt_at)
+    game_lobby.save(
+        update_fields=["state", "state_reason", "close_pending", "updated_at"]
+    )
 
 
 def desired_radiant_team_id(game: Game) -> int | None:
@@ -395,14 +401,15 @@ def close_lobby(game_lobby: GameLobby, reason: str) -> bool:
     """End a lobby that has not started and close it in dota_lobby.
 
     False when the match is already under way: dota_lobby ends such a lobby
-    with the match.
+    with the match. The close runs in Celery; until dota_lobby confirms it
+    the row stays `close_pending` and the reconcile task tries again.
     """
     if game_lobby.ended or game_lobby.state not in PREGAME_STATES:
         return False
     end_locally(game_lobby, reason)
-    if game_lobby.lobby_id:
+    if game_lobby.close_pending:
         from lobby.tasks import close_dota_lobby
 
-        pk, lobby_id = game_lobby.pk, game_lobby.lobby_id
+        pk, lobby_id = game_lobby.pk, game_lobby.lobby_id or ""
         transaction.on_commit(lambda: close_dota_lobby.delay(pk, lobby_id))
     return True

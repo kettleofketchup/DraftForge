@@ -435,6 +435,162 @@ class ReconcileTests(TaskTestBase):
         self.assertEqual(self.client.flip_teams.call_count, 1)
 
 
+class CloseConfirmationTests(TaskTestBase):
+    """A lobby DraftForge ended stays `close_pending` until dota_lobby closed it."""
+
+    def claimed_row(self, **fields):
+        """A `requested` row whose create body was handed out (lease set)."""
+        with self.captureOnCommitCallbacks(execute=False):
+            self.assertTrue(services.queue_create(self.game).ok)
+        row = self.row()
+        row.next_attempt_at = timezone.now() + timedelta(
+            seconds=services.CREATE_ATTEMPT_LEASE_SECONDS
+        )
+        for k, v in fields.items():
+            setattr(row, k, v)
+        row.save()
+        return row
+
+    def close(self, row):
+        with (
+            mock.patch("lobby.tasks.close_dota_lobby.delay") as close_delay,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            self.assertTrue(services.close_lobby(row, "closed_by_staff"))
+        row.refresh_from_db()
+        return close_delay
+
+    def expire_lease(self, row):
+        GameLobby.objects.filter(pk=row.pk).update(
+            next_attempt_at=timezone.now() - timedelta(seconds=1)
+        )
+
+    def test_row_never_sent_needs_no_close(self):
+        with self.captureOnCommitCallbacks(execute=False):
+            services.queue_create(self.game)
+        row = self.row()
+        close_delay = self.close(row)
+        self.assertFalse(row.close_pending)
+        close_delay.assert_not_called()
+
+    def test_close_confirmed_clears_pending(self):
+        row = self.claimed_row(lobby_id="lob_1", state=states.WAITING)
+        close_delay = self.close(row)
+        self.assertTrue(row.close_pending)
+        close_delay.assert_called_once_with(row.pk, "lob_1")
+        self.client.close_lobby.return_value = view(
+            external_ref=self.ref, state="closing"
+        )
+        self.assertEqual(
+            self.run_task(tasks.close_dota_lobby, row.pk, "lob_1"), "closing"
+        )
+        row.refresh_from_db()
+        self.assertFalse(row.close_pending)
+        self.assertEqual(row.state, states.CLOSED)
+
+    def test_failed_close_is_retried_by_reconcile(self):
+        # dota_lobby is down (a deploy) when staff press Close: the task gives
+        # up, the row stays pending, and the next reconcile closes the lobby.
+        row = self.claimed_row(lobby_id="lob_1", state=states.WAITING)
+        self.close(row)
+        self.client.close_lobby.side_effect = DotaLobbyUnavailable("Timeout")
+        self.assertEqual(
+            self.run_task(tasks.close_dota_lobby, row.pk, "lob_1", retries=3),
+            "unreachable",
+        )
+        row.refresh_from_db()
+        self.assertTrue(row.close_pending)
+
+        self.client.close_lobby.side_effect = None
+        self.client.close_lobby.return_value = view(
+            external_ref=self.ref, state="closed"
+        )
+        self.client.list_lobbies.return_value = iter([])
+        counts = self.run_task(tasks.reconcile_dota_lobbies)
+        self.assertEqual((counts["closes"], counts["errors"]), (1, 0))
+        self.client.close_lobby.assert_called_with("lob_1")
+        row.refresh_from_db()
+        self.assertFalse(row.close_pending)
+        self.assertFalse(GameLobby.objects.filter(close_pending=True).exists())
+
+    def test_reconcile_keeps_pending_while_dota_lobby_is_down(self):
+        row = self.claimed_row(lobby_id="lob_1", state=states.WAITING)
+        self.close(row)
+        self.client.list_lobbies.return_value = iter([])
+        self.client.close_lobby.side_effect = DotaLobbyUnavailable("Timeout")
+        counts = self.run_task(tasks.reconcile_dota_lobbies)
+        self.assertEqual((counts["closes"], counts["errors"]), (0, 1))
+        row.refresh_from_db()
+        self.assertTrue(row.close_pending)
+
+    def test_close_while_disabled_stays_pending(self):
+        # Lobbies switched off as a kill switch: the close waits for them to
+        # be switched on again, when reconcile closes it.
+        row = self.claimed_row(lobby_id="lob_1", state=states.WAITING)
+        self.close(row)
+        with override_settings(DOTA_LOBBY_ENABLED=False):
+            self.assertEqual(
+                self.run_task(tasks.close_dota_lobby, row.pk, "lob_1"), "disabled"
+            )
+        self.client.close_lobby.assert_not_called()
+        row.refresh_from_db()
+        self.assertTrue(row.close_pending)
+
+    def test_lobby_already_gone_counts_as_closed(self):
+        row = self.claimed_row(lobby_id="lob_1", state=states.WAITING)
+        self.close(row)
+        self.client.close_lobby.side_effect = DotaLobbyError("not_found", status=404)
+        self.assertEqual(
+            self.run_task(tasks.close_dota_lobby, row.pk, "lob_1"), "not_found"
+        )
+        row.refresh_from_db()
+        self.assertFalse(row.close_pending)
+
+    def test_requested_row_is_closed_by_external_ref(self):
+        # The create reached dota_lobby but its answer was lost: the row has
+        # no lobby ID. Only the lobby made for this row is closed, not a
+        # replacement for the same game.
+        row = self.claimed_row()
+        close_delay = self.close(row)
+        self.assertTrue(row.close_pending)
+        close_delay.assert_called_once_with(row.pk, "")
+        self.client.list_lobbies.return_value = iter(
+            [
+                view("lob_new", external_ref=self.ref, game_lobby_id=row.pk + 1),
+                view("lob_old", external_ref=self.ref, game_lobby_id=row.pk),
+            ]
+        )
+        self.client.close_lobby.return_value = view(
+            "lob_old", external_ref=self.ref, state="closing", game_lobby_id=row.pk
+        )
+        self.assertEqual(self.run_task(tasks.close_dota_lobby, row.pk, ""), "closing")
+        self.client.list_lobbies.assert_called_once_with(
+            external_ref=self.ref, active=True
+        )
+        self.client.close_lobby.assert_called_once_with("lob_old")
+        row.refresh_from_db()
+        self.assertEqual(row.lobby_id, "lob_old")
+        self.assertFalse(row.close_pending)
+
+    def test_requested_row_waits_out_its_create_attempt(self):
+        # Nothing in dota_lobby yet, but the create attempt may still land:
+        # keep looking until its lease has run out.
+        row = self.claimed_row()
+        self.close(row)
+        self.client.list_lobbies.return_value = iter([])
+        self.assertEqual(self.run_task(tasks.close_dota_lobby, row.pk, ""), "waiting")
+        row.refresh_from_db()
+        self.assertTrue(row.close_pending)
+        self.client.close_lobby.assert_not_called()
+
+        self.expire_lease(row)
+        self.client.list_lobbies.return_value = iter([])
+        counts = self.run_task(tasks.reconcile_dota_lobbies)
+        self.assertEqual(counts["closes"], 1)
+        row.refresh_from_db()
+        self.assertFalse(row.close_pending)
+
+
 class LobbyInfoTests(TaskTestBase):
     def setUp(self):
         super().setUp()

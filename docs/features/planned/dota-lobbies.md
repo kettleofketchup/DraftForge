@@ -121,8 +121,18 @@ was launching it) still records its own events, but never touches the game.
 **Reconcile.** `reconcile-dota-lobbies` runs every 60 seconds (in both beat schedules,
 `config/celery.py` and `config/celery_light.py`). For every lobby that has not ended it reads
 the lobby from dota_lobby, applies any events the webhooks missed, closes rows dota_lobby no
-longer knows, resends creates left `requested` with no attempt in flight, queues pending side flips, and creates lobbies
-for eligible games. It does nothing while `DOTA_LOBBY_ENABLED` is off.
+longer knows, resends creates left `requested` with no attempt in flight, queues pending side flips, finishes
+closes dota_lobby has not confirmed, and creates lobbies for eligible games. It does nothing
+while `DOTA_LOBBY_ENABLED` is off.
+
+**Closing.** Closing a lobby (staff, a replace, changed teams, a completed game) ends the row in
+DraftForge at once, so a new lobby can be requested, and closes it in dota_lobby from Celery.
+The row stays `close_pending` until dota_lobby confirms the close (or answers that the lobby is
+gone or already in its match). If the close task gives up, for example while dota_lobby is
+restarting or `DOTA_LOBBY_ENABLED` is off, the reconcile task tries again every minute. A row
+that ended before dota_lobby's answer to its create was recorded has no lobby ID: it is closed
+by its reference, only the lobby whose metadata names that row, and the reconcile task keeps
+looking until the create attempt's lease has run out.
 
 **Live updates.** The tournament websocket (`/api/tournament/<id>/`) gets a `lobby_event`
 message (`game_id`, `state`, `match_id`, `provisional_winner_side`; never the password) when a

@@ -81,6 +81,14 @@ def active() -> list[dict[str, Any]] | None:
     return _json(ic._get(f"{BASE}/active/"))
 
 
+def close_pending() -> list[dict[str, Any]] | None:
+    return _json(ic._get(f"{BASE}/close-pending/"))
+
+
+def close_done(pk: int, *, found: int) -> Any:
+    return _json(ic._post(f"{BASE}/{pk}/close-done/", {"found": found}))
+
+
 def detail(pk: int) -> dict[str, Any] | None:
     return _json(ic._get(f"{BASE}/{pk}/"))
 

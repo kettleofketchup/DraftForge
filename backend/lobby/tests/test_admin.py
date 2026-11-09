@@ -21,6 +21,7 @@ class GameLobbyAdminTests(TestCase):
         for field in (
             "state",
             "ended",
+            "close_pending",
             "last_seq",
             "lobby_id",
             "external_ref",

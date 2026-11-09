@@ -9,7 +9,8 @@ with lobby.client. Every task does nothing while DOTA_LOBBY_ENABLED is off.
 - reconcile_dota_lobbies (beat, every 60 s): catch up on anything webhooks
   missed, resend creates that never got an answer and are no longer being
   retried (the backend's `resend_due`), flip sides the hero draft
-  decided, and create lobbies for games that should have one.
+  decided, finish closes dota_lobby has not confirmed (`close_pending`),
+  and create lobbies for games that should have one.
 - backfill_lobby_events: read the events a webhook gap skipped.
 - close_dota_lobby, flip_lobby_sides: one dota_lobby action each.
 - send_lobby_info: the opt-in Discord DM with the lobby name and password.
@@ -37,6 +38,8 @@ _LOG_TASKS = {"system": "lobby", "subsystem": "tasks"}
 _LOG_RECONCILE = {"system": "lobby", "subsystem": "reconcile"}
 
 CONFLICT_RETRY_SECONDS = 15
+# Close answers meaning there is nothing left to close.
+CLOSE_DONE_CODES = frozenset({"not_found", "invalid_state"})
 MAX_RETRY_COUNTDOWN = 600
 
 
@@ -216,9 +219,60 @@ def _resolve_conflict(task: Task, retry: RetryFn, pk: int, body: dict[str, Any])
     return "conflict"
 
 
+def _close_in_dota_lobby(
+    client: DotaLobbyClient,
+    pk: int,
+    lobby_id: str,
+    external_ref: str | None = None,
+) -> str:
+    """Close what dota_lobby holds for row `pk`, then report back.
+
+    By lobby ID when the row has one. Otherwise by external_ref: only the
+    active lobbies whose metadata names this row, so a replacement lobby for
+    the same game is left alone. `not_found` and `invalid_state` (the match
+    started after all) count as closed. Raises DotaLobbyError on anything
+    else; the row then stays `close_pending` for the reconcile task.
+    """
+    if lobby_id:
+        targets = [lobby_id]
+    elif external_ref:
+        targets = [
+            view.id
+            for view in client.list_lobbies(external_ref=external_ref, active=True)
+            if view.metadata.get("game_lobby_id") == str(pk)
+        ]
+    else:
+        targets = []
+    outcome = "nothing_to_close"
+    found = 0
+    for target in targets:
+        try:
+            view = client.close_lobby(target)
+        except DotaLobbyError as exc:
+            if exc.code not in CLOSE_DONE_CODES:
+                raise
+            log.info(
+                "lobby_close_not_needed",
+                game_lobby_id=pk,
+                lobby_id=target,
+                code=exc.code,
+                **_LOG_TASKS,
+            )
+            outcome = exc.code
+            continue
+        found += 1
+        outcome = view.state
+        internal_api.sync(pk, lobby=_view_json(view))
+    answer = internal_api.close_done(pk, found=found)
+    if answer and answer.get("close_pending"):
+        # A create for this row may still land; reconcile looks again.
+        return "waiting"
+    return outcome
+
+
 def _close(client: DotaLobbyClient, pk: int, lobby_id: str) -> None:
     try:
-        view = client.close_lobby(lobby_id)
+        _close_in_dota_lobby(client, pk, lobby_id)
     except DotaLobbyError as exc:
         log.warning(
             "lobby_close_failed",
@@ -227,18 +281,29 @@ def _close(client: DotaLobbyClient, pk: int, lobby_id: str) -> None:
             code=exc.code,
             **_LOG_TASKS,
         )
-        return
-    internal_api.sync(pk, lobby=_view_json(view))
 
 
 @shared_task(bind=True, max_retries=3)
-def close_dota_lobby(self: Task, game_lobby_id: int, lobby_id: str) -> str:
-    """Close a lobby DraftForge no longer wants (DELETE is safe to repeat)."""
+def close_dota_lobby(self: Task, game_lobby_id: int, lobby_id: str = "") -> str:
+    """Close a lobby DraftForge no longer wants (DELETE is safe to repeat).
+
+    Without `lobby_id` (the row ended before dota_lobby's answer was
+    recorded) the row's external_ref is used. A close that does not get
+    through stays pending on the row; the reconcile task tries again.
+    """
     if not _enabled():
         return "disabled"
+    external_ref = None
+    if not lobby_id:
+        row = internal_api.detail(game_lobby_id)
+        if not row:
+            return "unknown"
+        lobby_id = row.get("lobby_id") or ""
+        external_ref = row.get("external_ref")
     try:
-        client = DotaLobbyClient()
-        view = client.close_lobby(lobby_id)
+        return _close_in_dota_lobby(
+            DotaLobbyClient(), game_lobby_id, lobby_id, external_ref
+        )
     except DotaLobbyError as exc:
         if exc.retryable and self.request.retries < self.max_retries:
             raise self.retry(countdown=_countdown(self.request.retries)) from exc
@@ -250,8 +315,6 @@ def close_dota_lobby(self: Task, game_lobby_id: int, lobby_id: str) -> str:
             **_LOG_TASKS,
         )
         return exc.code
-    internal_api.sync(game_lobby_id, lobby=_view_json(view))
-    return view.state
 
 
 @shared_task(bind=True, max_retries=3)
@@ -360,6 +423,7 @@ def reconcile_dota_lobbies() -> dict[str, int] | str:
         "flips": 0,
         "errors": 0,
         "eligible": 0,
+        "closes": 0,
     }
     try:
         client = DotaLobbyClient()
@@ -406,6 +470,24 @@ def reconcile_dota_lobbies() -> dict[str, int] | str:
         if row.get("wants_flip") and row.get("dire_team_ref"):
             flip_lobby_sides.delay(row["id"], row["lobby_id"], row["dire_team_ref"])
             counts["flips"] += 1
+
+    for row in internal_api.close_pending() or []:
+        try:
+            _close_in_dota_lobby(
+                client, row["id"], row.get("lobby_id") or "", row["external_ref"]
+            )
+        except DotaLobbyError as exc:
+            counts["errors"] += 1
+            log.warning(
+                "lobby_reconcile_close_failed",
+                game_lobby_id=row["id"],
+                lobby_id=row.get("lobby_id"),
+                code=exc.code,
+                retryable=exc.retryable,
+                **_LOG_RECONCILE,
+            )
+            continue
+        counts["closes"] += 1
 
     for game in internal_api.eligible_games() or []:
         create_dota_lobby.delay(game["id"], trigger="auto")
