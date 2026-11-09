@@ -1,3 +1,4 @@
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
@@ -271,3 +272,254 @@ class RetryFailedMatchesTest(TestCase):
 
         state = LeagueSyncState.objects.get(league_id=17929)
         self.assertEqual(state.failed_match_ids, [7000000402])
+
+
+UNPARSED_MATCH_ID = 7000000500
+UNPARSED_LEAGUE_ID = 17929
+
+
+def _full_player(account_id: int, player_slot: int) -> dict[str, Any]:
+    return {
+        "account_id": account_id,
+        "player_slot": player_slot,
+        "hero_id": 1,
+        "kills": 10,
+        "deaths": 2,
+        "assists": 15,
+        "gold_per_min": 600,
+        "xp_per_min": 700,
+        "last_hits": 200,
+        "denies": 10,
+        "hero_damage": 25000,
+        "tower_damage": 5000,
+        "hero_healing": 0,
+    }
+
+
+def _match_payload(
+    players: list[dict[str, Any]],
+    match_id: int = UNPARSED_MATCH_ID,
+    **overrides: Any,
+) -> dict[str, Any]:
+    result = {
+        "match_id": match_id,
+        "radiant_win": True,
+        "duration": 2400,
+        "start_time": 1704067200,
+        "game_mode": 22,
+        "lobby_type": 1,
+        "players": players,
+    }
+    result.update(overrides)
+    return {"result": result}
+
+
+class ProcessMatchMissingFieldsTest(TestCase):
+    """Issue #310: never store guessed values for missing required fields."""
+
+    def _run(self, payload: dict[str, Any]) -> Match | None:
+        with patch("steam.functions.league_sync.SteamAPI") as mock_api_class:
+            mock_api = MagicMock()
+            mock_api.get_match_details.return_value = payload
+            mock_api_class.return_value = mock_api
+            return process_match(UNPARSED_MATCH_ID, league_id=UNPARSED_LEAGUE_ID)
+
+    def test_missing_player_slot_is_not_stored_as_radiant(self) -> None:
+        dire = _full_player(40000002, 128)
+        del dire["player_slot"]
+
+        result = self._run(_match_payload([_full_player(40000001, 0), dire]))
+
+        self.assertIsNone(result)
+        self.assertFalse(Match.objects.filter(match_id=UNPARSED_MATCH_ID).exists())
+        self.assertFalse(
+            PlayerMatchStats.objects.filter(match_id=UNPARSED_MATCH_ID).exists()
+        )
+
+    def test_missing_stat_on_later_player_stores_nothing(self) -> None:
+        late = _full_player(40000002, 128)
+        del late["hero_healing"]
+
+        result = self._run(_match_payload([_full_player(40000001, 0), late]))
+
+        self.assertIsNone(result)
+        self.assertFalse(PlayerMatchStats.objects.exists())
+
+    def test_missing_radiant_win_is_not_stored(self) -> None:
+        payload = _match_payload([_full_player(40000001, 0)])
+        del payload["result"]["radiant_win"]
+
+        self.assertIsNone(self._run(payload))
+        self.assertFalse(Match.objects.filter(match_id=UNPARSED_MATCH_ID).exists())
+
+    def test_partial_refetch_keeps_previously_stored_stats(self) -> None:
+        self.assertIsNotNone(self._run(_match_payload([_full_player(40000001, 128)])))
+        partial = _full_player(40000001, 128)
+        del partial["player_slot"]
+        partial["kills"] = 0
+
+        self.assertIsNone(self._run(_match_payload([partial])))
+
+        stats = PlayerMatchStats.objects.get(match_id=UNPARSED_MATCH_ID)
+        self.assertEqual(stats.player_slot, 128)
+        self.assertEqual(stats.kills, 10)
+
+    def test_null_player_slot_is_treated_as_missing(self) -> None:
+        player = _full_player(40000001, 0)
+        player["player_slot"] = None
+
+        self.assertIsNone(self._run(_match_payload([player])))
+        self.assertFalse(Match.objects.filter(match_id=UNPARSED_MATCH_ID).exists())
+
+    def test_null_radiant_win_is_treated_as_missing(self) -> None:
+        payload = _match_payload([_full_player(40000001, 0)], radiant_win=None)
+
+        self.assertIsNone(self._run(payload))
+        self.assertFalse(Match.objects.filter(match_id=UNPARSED_MATCH_ID).exists())
+
+    def test_missing_start_time_is_not_stored_as_epoch(self) -> None:
+        payload = _match_payload([_full_player(40000001, 0)])
+        del payload["result"]["start_time"]
+
+        self.assertIsNone(self._run(payload))
+        self.assertFalse(Match.objects.filter(match_id=UNPARSED_MATCH_ID).exists())
+
+    def test_missing_fields_logged_under_steam_league_sync(self) -> None:
+        player = _full_player(40000001, 0)
+        del player["player_slot"]
+
+        with patch("steam.functions.league_sync.log") as mock_log:
+            self._run(_match_payload([player]))
+
+        events = [c for c in mock_log.info.call_args_list if c.args]
+        unparsed = [
+            c for c in events if c.args[0] == "steam_league_sync_match_unparsed"
+        ]
+        self.assertEqual(len(unparsed), 1)
+        kwargs = unparsed[0].kwargs
+        self.assertEqual(kwargs["system"], "steam")
+        self.assertEqual(kwargs["subsystem"], "league_sync")
+        self.assertEqual(kwargs["match_id"], UNPARSED_MATCH_ID)
+        self.assertEqual(kwargs["missing_fields"], ["player_slot"])
+
+
+class UnparsedMatchRetryTest(TestCase):
+    """Issue #310: an unparsed match is retried later, not skipped or dropped."""
+
+    def _history(self, *match_ids: int) -> dict[str, Any]:
+        return {
+            "result": {
+                "status": 1,
+                "matches": [{"match_id": m} for m in match_ids],
+            }
+        }
+
+    @patch("steam.functions.league_sync.SteamAPI")
+    def test_unparsed_newest_match_holds_cursor_until_parsed(
+        self, mock_api_class: MagicMock
+    ) -> None:
+        LeagueSyncState.objects.create(
+            league_id=UNPARSED_LEAGUE_ID, last_match_id=7000000499
+        )
+        partial = _full_player(40000001, 0)
+        del partial["player_slot"]
+        mock_api = MagicMock()
+        mock_api.get_match_history.return_value = self._history(
+            UNPARSED_MATCH_ID, 7000000499
+        )
+        mock_api.get_match_details.return_value = _match_payload([partial])
+        mock_api_class.return_value = mock_api
+
+        first = sync_league_matches(UNPARSED_LEAGUE_ID)
+
+        self.assertEqual(first["failed_count"], 1)
+        state = LeagueSyncState.objects.get(league_id=UNPARSED_LEAGUE_ID)
+        self.assertEqual(state.last_match_id, 7000000499)
+        self.assertIn(UNPARSED_MATCH_ID, state.failed_match_ids)
+
+        mock_api.get_match_details.return_value = _match_payload(
+            [_full_player(40000001, 128)]
+        )
+
+        second = sync_league_matches(UNPARSED_LEAGUE_ID)
+
+        self.assertEqual(second["synced_count"], 1)
+        state.refresh_from_db()
+        self.assertEqual(state.last_match_id, UNPARSED_MATCH_ID)
+        self.assertEqual(state.failed_match_ids, [])
+        stats = PlayerMatchStats.objects.get(match_id=UNPARSED_MATCH_ID)
+        self.assertEqual(stats.player_slot, 128)
+
+    @patch("steam.functions.league_sync.SteamAPI")
+    def test_unparsed_match_behind_newer_match_recovers_via_retry(
+        self, mock_api_class: MagicMock
+    ) -> None:
+        newer_id = UNPARSED_MATCH_ID + 1
+        LeagueSyncState.objects.create(
+            league_id=UNPARSED_LEAGUE_ID, last_match_id=7000000499
+        )
+        partial = _full_player(40000001, 0)
+        del partial["player_slot"]
+        payloads = {
+            newer_id: _match_payload([_full_player(40000002, 0)], match_id=newer_id),
+            UNPARSED_MATCH_ID: _match_payload([partial]),
+        }
+        mock_api = MagicMock()
+        mock_api.get_match_history.return_value = self._history(
+            newer_id, UNPARSED_MATCH_ID, 7000000499
+        )
+        mock_api.get_match_details.side_effect = lambda mid: payloads[mid]
+        mock_api_class.return_value = mock_api
+
+        sync_league_matches(UNPARSED_LEAGUE_ID)
+
+        # The cursor moves past the unparsed match; failed_match_ids is the
+        # only path back to it.
+        state = LeagueSyncState.objects.get(league_id=UNPARSED_LEAGUE_ID)
+        self.assertEqual(state.last_match_id, newer_id)
+        self.assertEqual(state.failed_match_ids, [UNPARSED_MATCH_ID])
+
+        payloads[UNPARSED_MATCH_ID] = _match_payload([_full_player(40000001, 128)])
+        mock_api.get_match_details.reset_mock()
+
+        again = sync_league_matches(UNPARSED_LEAGUE_ID)
+
+        self.assertEqual(again["synced_count"], 0)
+        mock_api.get_match_details.assert_not_called()
+
+        retried = retry_failed_matches(UNPARSED_LEAGUE_ID)
+
+        self.assertEqual(retried["retried_count"], 1)
+        state.refresh_from_db()
+        self.assertEqual(state.failed_match_ids, [])
+        stats = PlayerMatchStats.objects.get(match_id=UNPARSED_MATCH_ID)
+        self.assertEqual(stats.player_slot, 128)
+
+    @patch("steam.functions.league_sync.SteamAPI")
+    def test_retry_keeps_unparsed_match_until_parsed(
+        self, mock_api_class: MagicMock
+    ) -> None:
+        LeagueSyncState.objects.create(
+            league_id=UNPARSED_LEAGUE_ID, failed_match_ids=[UNPARSED_MATCH_ID]
+        )
+        partial = _full_player(40000001, 0)
+        del partial["hero_damage"]
+        mock_api = MagicMock()
+        mock_api.get_match_details.return_value = _match_payload([partial])
+        mock_api_class.return_value = mock_api
+
+        first = retry_failed_matches(UNPARSED_LEAGUE_ID)
+
+        self.assertEqual(first["still_failed_count"], 1)
+        state = LeagueSyncState.objects.get(league_id=UNPARSED_LEAGUE_ID)
+        self.assertEqual(state.failed_match_ids, [UNPARSED_MATCH_ID])
+
+        mock_api.get_match_details.return_value = _match_payload(
+            [_full_player(40000001, 0)]
+        )
+
+        second = retry_failed_matches(UNPARSED_LEAGUE_ID)
+
+        self.assertEqual(second["retried_count"], 1)
+        state.refresh_from_db()
+        self.assertEqual(state.failed_match_ids, [])

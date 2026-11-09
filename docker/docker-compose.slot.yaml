@@ -1,0 +1,27 @@
+services:
+  frontend:
+    container_name: frontend${DF_SUFFIX:?run via scripts.slots}
+    environment:
+      DF_HTTPS_PORT: ${DF_HTTPS_PORT:?run via scripts.slots}
+  redis:
+    container_name: redis${DF_SUFFIX:?run via scripts.slots}
+  backend:
+    container_name: backend${DF_SUFFIX:?run via scripts.slots}
+    environment:
+      SITE_URL: ${DF_BASE_URL:?run via scripts.slots}
+      DF_EXTRA_CSRF_ORIGINS: ${DF_BASE_URL:?run via scripts.slots}
+  nginx:
+    container_name: nginx${DF_SUFFIX:?run via scripts.slots}
+    ports: !override
+      - "${DF_HTTPS_PORT:?run via scripts.slots}:443"
+  celery-worker:
+    environment:
+      SITE_URL: ${DF_BASE_URL:?run via scripts.slots}
+  celery-beat:
+    command: ["-A", "config.celery_light", "beat", "-l", "info",
+              "-s", "/app/backend/celerybeat-schedule${DF_SUFFIX:?run via scripts.slots}"]
+    environment:
+      SITE_URL: ${DF_BASE_URL:?run via scripts.slots}
+  discord-bot:
+    environment:
+      SITE_URL: ${DF_BASE_URL:?run via scripts.slots}

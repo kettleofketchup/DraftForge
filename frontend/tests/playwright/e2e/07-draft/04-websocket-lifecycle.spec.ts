@@ -11,6 +11,7 @@
  * Tournament: 'draft_captain_turn' (snake draft, in-progress)
  */
 
+import { BASE_URL } from '../../fixtures/base-url';
 import {
   test,
   expect,
@@ -121,7 +122,7 @@ test.describe('WebSocket Connection Lifecycle', () => {
     await wsHelper.waitForConnection();
 
     // Navigate away
-    await page.goto('https://localhost/', { waitUntil: 'domcontentloaded' });
+    await page.goto(`${BASE_URL}/`, { waitUntil: 'domcontentloaded' });
 
     // All WS connections should be closed
     await wsHelper.waitForDisconnect();
@@ -143,7 +144,7 @@ test.describe('WebSocket Connection Lifecycle', () => {
     expect(wsHelper.connectionCount).toBe(1);
 
     // Navigate away (closes everything cleanly)
-    await page.goto('https://localhost/', { waitUntil: 'domcontentloaded' });
+    await page.goto(`${BASE_URL}/`, { waitUntil: 'domcontentloaded' });
     await wsHelper.waitForDisconnect();
 
     // Navigate back and reopen

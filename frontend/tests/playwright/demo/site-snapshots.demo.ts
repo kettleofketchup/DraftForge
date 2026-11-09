@@ -11,8 +11,9 @@
  * - Bracket view
  */
 
+import { BASE_URL } from '../fixtures/base-url';
 import { test, chromium } from '@playwright/test';
-import { loginAdmin, waitForHydration, DOCKER_HOST, API_URL } from '../fixtures/auth';
+import { loginAdmin, waitForHydration, API_URL } from '../fixtures/auth';
 import { waitForDemoReady, waitForBracketReady } from '../fixtures/demo-utils';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -22,8 +23,6 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Use centralized DOCKER_HOST from fixtures
-const BASE_URL = `https://${DOCKER_HOST}`;
 // Output to demo-results/site_snapshots/ (in mounted volume)
 // Invoke task will copy to docs/assets/site_snapshots/
 const SNAPSHOT_OUTPUT_DIR = 'demo-results/site_snapshots';
@@ -55,7 +54,7 @@ test.describe('Site Snapshots', () => {
     };
 
     console.log(`Using chromium: ${executablePath || 'bundled'}`);
-    console.log(`DOCKER_HOST: ${DOCKER_HOST}`);
+    console.log(`BASE_URL: ${BASE_URL}`);
 
     const browser = await chromium.launch(browserOptions);
     const context = await browser.newContext({

@@ -68,13 +68,19 @@ testIgnore: **/fixtures/**, **/helpers/**, **/constants.ts, **/*.d.ts
 ## Default Use Settings
 
 ```
-baseURL: https://localhost
+baseURL: BASE_URL   # from fixtures/base-url.ts (DF_BASE_URL or docker/.env.slot)
 ignoreHTTPSErrors: true
 viewport: 1280x720
 trace: on-first-retry
 screenshot: only-on-failure
 video: off (CI) / retain-on-failure (local)
 ```
+
+`BASE_URL` resolves, in order: `DF_BASE_URL` (exported by `just test::pw::run` from
+`python -m scripts.compose env`; `https://nginx` inside a container), this worktree's `docker/.env.slot` (checked against
+the slot registry), `https://localhost` when `GITHUB_ACTIONS=true`, otherwise it throws
+`No test-stack slot for this worktree. Run "just test::slot".` See
+[test-stack-slots.md](test-stack-slots.md).
 
 ## CI Sharding
 

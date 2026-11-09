@@ -190,44 +190,56 @@ When working in a git worktree (e.g., `.worktrees/feature-name`), you **must** v
 ### Why Worktrees Need Special Attention
 
 - Worktrees have isolated environments with separate databases
+- Each worktree runs its **own** test stack in a slot, so several worktrees can test at once (see [Test Stack Slots](test-stack-slots.md))
 - Unit tests alone don't catch integration issues (database, Docker, nginx routing)
 - The test environment verifies frontend-backend integration works
+
+!!! warning "Merge main first"
+    Worktrees on branches without test stack slots still run the old
+    `test::down` (stops every container on the host) and `test::upd` (takes
+    over project `df`). Merge main into a worktree before using its test stack.
 
 ### Required Verification Steps
 
 From the worktree root directory:
 
 ```bash
-cd /home/kettle/git_repos/website/.worktrees/feature-name
+cd /home/kettle/git_repos/draftforge/.worktrees/feature-name
 
-# 1. Stop any existing test environment
+# 1. See which slot and URL this worktree uses (allocates one if needed)
+just test::slot
+
+# 2. Stop this worktree's test stack, if it runs (scoped to its slot)
 just test::down
 
-# 2. Run full test setup (builds images, installs deps)
+# 3. Run full test setup (builds images, installs deps)
 just test::setup
 
-# 3. Run database migrations for test environment
+# 4. Run database migrations for test environment
 just db::migrate::test
 
-# 4. Populate test data
+# 5. Populate test data
 just db::populate::all
 
-# 5. Run backend tests in Docker
+# 6. Run backend tests in Docker
 just test::run 'python manage.py test app.tests -v 2'
 
-# 6. Start test environment
-just test::up
+# 7. Start test environment
+just test::upd
 
-# 7. Run Playwright smoke tests (recommended)
+# 8. Run Playwright smoke tests (recommended)
 just test::pw::headless
 ```
 
+Playwright reads the base URL from `docker/.env.slot`; never hardcode
+`https://localhost`.
+
 ### Quick Verification (Minimum)
 
-If full Cypress tests aren't required, at minimum:
+If full Playwright tests aren't required, at minimum:
 
-1. Run `just test::up` and verify containers start without errors
-2. Navigate to `https://localhost` in browser
+1. Run `just test::upd` and verify containers start without errors
+2. Open the URL `just test::slot` prints (`https://localhost` on slot 0, `https://localhost:1N443` on slot N), in a separate browser profile per slot
 3. Verify login works and pages load without database errors
 4. Check browser console for JavaScript errors
 
@@ -239,3 +251,6 @@ If full Cypress tests aren't required, at minimum:
 | Container won't start | Run `just test::down` then `just test::setup` |
 | WebSocket connection failed | Check nginx config routes `/api/` correctly (WebSockets use /api/ paths) |
 | Missing dependencies | Run `just test::setup` to rebuild images |
+| `No test-stack slot for this worktree` | Run `just test::slot` (Playwright never allocates a slot itself) |
+| `slot N now belongs to <path>` | Another worktree took this slot; run `just test::slot` to get a new one |
+| Which stack is on which port? | `just test::slots` |

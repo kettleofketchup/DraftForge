@@ -121,6 +121,7 @@
         "enabled": { "type": "boolean" },
         "host": { "type": "string" },
         "entryPoint": { "type": "string" },
+        "entryPoints": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
         "tls": {
           "type": "object",
           "properties": { "secretName": { "type": "string" } }

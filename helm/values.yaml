@@ -50,7 +50,10 @@ extraEnvSecrets: []
 ingress:
   enabled: true
   host: dota.kettle.sh
+  # Traefik entry points the IngressRoute binds to. A non-empty entryPoints list
+  # wins; otherwise the single entryPoint is used.
   entryPoint: websecure
+  entryPoints: []
   tls: { secretName: "" }
   authentik: { enabled: false, middlewareName: "", middlewareNamespace: "" }
   blockInternalApi: true

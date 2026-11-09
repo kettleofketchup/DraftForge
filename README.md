@@ -89,7 +89,9 @@ poetry install     # Install Python dependencies
 just test::setup   # Build images, migrate, populate test data, start stack
 ```
 
-Open `https://localhost` when ready.
+Open the URL that `just test::slot` prints when ready: `https://localhost` for the
+first worktree (slot 0), `https://localhost:1N443` for slot N. Each git worktree gets
+its own test stack; see `docs/development/test-stack-slots.md`.
 
 ## Screenshots
 
@@ -119,16 +121,14 @@ Automated demo recordings are available for key features:
 ### Generate Demos Locally
 
 ```bash
-source .venv/bin/activate
-
 # Record all demos and generate GIFs
-inv demo.quick
+just demo::quick
 
 # Or record individually
-inv demo.shuffle     # Shuffle draft
-inv demo.snake       # Snake draft
-inv demo.herodraft   # Hero draft with bracket
-inv demo.csv         # CSV import with bracket
+just demo::shuffle     # Shuffle draft
+just demo::snake       # Snake draft
+just demo::herodraft   # Hero draft with bracket
+just demo::csv         # CSV import with bracket
 ```
 
 Full videos: `https://assets.kettle.sh/draftforge/videos/` | GIF previews: `https://assets.kettle.sh/draftforge/gifs/`

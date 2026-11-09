@@ -7,9 +7,9 @@
  * Ported from Cypress: frontend/tests/cypress/e2e/05-match-stats/01-modal.cy.ts
  */
 
+import { API_URL } from '../../fixtures/base-url';
 import { test, expect, visitAndWaitForHydration } from '../../fixtures';
 
-const API_URL = 'https://localhost/api';
 
 test.describe('Match Stats Modal - Direct API Tests', () => {
   test('should create test match via API endpoint', async ({ context }) => {

@@ -45,9 +45,11 @@ __all__ = [
     "HeroDraftTickDriver",
     "TaskInfo",
     "broadcast_tick",
+    "captain_heartbeat_key",
     "check_captain_heartbeats",
     "check_resume_countdown",
     "check_timeout",
+    "conn_count_key",
     "decrement_connection_count",
     "get_connection_count",
     "get_redis_client",
@@ -57,6 +59,7 @@ __all__ = [
     "start_tick_broadcaster",
     "stop_all_broadcasters",
     "stop_tick_broadcaster",
+    "tick_lock_key",
 ]
 
 _lock = draft_tick._lock
@@ -66,6 +69,18 @@ CONN_COUNT_KEY = "herodraft:connections:{draft_id}"
 LOCK_KEY = "herodraft:tick_lock:{draft_id}"
 # Heartbeat key pattern (must match consumers.py)
 CAPTAIN_HEARTBEAT_KEY = "herodraft:{draft_id}:captain:{user_id}:heartbeat"
+
+
+def conn_count_key(draft_id: int) -> str:
+    return draft_tick.conn_count_key("herodraft", draft_id)
+
+
+def tick_lock_key(draft_id: int) -> str:
+    return draft_tick.lock_key("herodraft", draft_id)
+
+
+def captain_heartbeat_key(draft_id: int, user_id: int) -> str:
+    return draft_tick.heartbeat_key("herodraft", draft_id, user_id)
 
 
 def increment_connection_count(draft_id: int) -> int:
@@ -420,9 +435,7 @@ async def check_captain_heartbeats(draft_id: int) -> str | None:
             if not captain:
                 continue
 
-            heartbeat_key = CAPTAIN_HEARTBEAT_KEY.format(
-                draft_id=draft_id, user_id=captain.id
-            )
+            heartbeat_key = captain_heartbeat_key(draft_id, captain.id)
             last_heartbeat = r.get(heartbeat_key)
 
             if last_heartbeat is None:

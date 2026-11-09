@@ -9,11 +9,11 @@
  *
  * Uses the dedicated, MMR-linked, non-admin fixture user edit_user_tourn_mmr.
  */
+import { API_URL } from '../../fixtures/base-url';
 import {
   test, expect, openEditModal, readEditField, fillEditField, saveEditModal, restoreUserField,
 } from '../../fixtures';
 
-const API_URL = 'https://localhost/api';
 const USER_EDIT_LEAGUE_NAME = 'User Edit League';
 const USER_EDIT_TOURNAMENT_NAME = 'User Edit Tournament';
 const TARGET_USERNAME = 'edit_user_tourn_mmr';

@@ -1,3 +1,4 @@
+import { BASE_URL } from './tests/playwright/fixtures/base-url';
 import { defineConfig, devices } from '@playwright/test';
 
 /**
@@ -26,7 +27,7 @@ export default defineConfig({
   reporter: [['line'], ['html', { open: 'never' }]],
 
   use: {
-    baseURL: 'https://localhost',
+    baseURL: BASE_URL,
     ignoreHTTPSErrors: true,
 
     // 1:1 aspect ratio for demo videos (Instagram/social-friendly)

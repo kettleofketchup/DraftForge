@@ -98,3 +98,27 @@ tests:
       ingress.rateLimit.sourceHeader: X-Real-Ip
     asserts:
       - notFailedTemplate: {}
+
+  - it: rejects an ingress.entryPoints that is not a list
+    set:
+      ingress.entryPoints: websecure
+    asserts:
+      - failedTemplate: {}
+
+  - it: rejects an empty name in ingress.entryPoints
+    set:
+      ingress.entryPoints: [websecure, ""]
+    asserts:
+      - failedTemplate: {}
+
+  - it: rejects a repeated name in ingress.entryPoints
+    set:
+      ingress.entryPoints: [websecure, websecure]
+    asserts:
+      - failedTemplate: {}
+
+  - it: accepts a list of entry points in ingress.entryPoints
+    set:
+      ingress.entryPoints: [websecure, tunnel]
+    asserts:
+      - notFailedTemplate: {}

@@ -43,7 +43,8 @@ template profile="default":
     #!/usr/bin/env bash
     set -euo pipefail
     {{use_helm}}
-    case "{{profile}}" in
+    profile={{quote(profile)}}
+    case "$profile" in
         default) "$HELM" template draftforge {{chart}} -f {{chart}}/tests/fixtures/prod-values.yaml ;;
         preview) "$HELM" template draftforge-pr-1 {{chart}} {{preview_values}} ;;
         *) echo "unknown profile '{{profile}}' (use default or preview)" >&2; exit 2 ;;

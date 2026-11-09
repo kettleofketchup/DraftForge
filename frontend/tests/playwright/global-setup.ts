@@ -1,3 +1,4 @@
+import { API_URL } from './fixtures/base-url';
 import { chromium } from '@playwright/test';
 import type { FullConfig } from '@playwright/test';
 
@@ -9,7 +10,7 @@ async function globalSetup(config: FullConfig) {
 
   try {
     // Pre-fetch commonly used test data and store in env vars
-    const leaguesResponse = await context.request.get('https://localhost/api/leagues/');
+    const leaguesResponse = await context.request.get(`${API_URL}/leagues/`);
     if (leaguesResponse.ok()) {
       process.env.PLAYWRIGHT_CACHED_LEAGUES = JSON.stringify(await leaguesResponse.json());
     }

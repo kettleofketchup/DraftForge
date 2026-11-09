@@ -3,6 +3,13 @@
 {{- $fullname := include "draftforge.fullname" . -}}
 {{- $ing := .Values.ingress -}}
 {{- $host := printf "Host(`%s`)" $ing.host -}}
+{{- $entryPoints := $ing.entryPoints | default list -}}
+{{- if not $entryPoints -}}
+{{- if not $ing.entryPoint -}}
+{{- fail "ingress.entryPoints (or the single ingress.entryPoint) must name at least one Traefik entry point" -}}
+{{- end -}}
+{{- $entryPoints = list $ing.entryPoint -}}
+{{- end -}}
 {{- /*
 Middlewares every route lists first: the rate limits (ahead of forward-auth, so
 a flood never reaches the auth outpost), authentik forward-auth (other
@@ -68,7 +75,7 @@ metadata:
     argocd.argoproj.io/sync-wave: "0"
 spec:
   entryPoints:
-    - {{ $ing.entryPoint }}
+    {{- toYaml $entryPoints | nindent 4 }}
   routes:
     {{- range $routes }}
     - kind: Rule

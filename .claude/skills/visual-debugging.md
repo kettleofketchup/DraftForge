@@ -16,16 +16,20 @@ Use this skill for debugging frontend issues by visually inspecting the running 
 Ensure the application is running locally:
 
 ```bash
-# Development mode (with Docker)
-docker compose -f docker/docker-compose.debug.yaml up
+# Development mode (project df-dev, always https://localhost)
+just dev::debug
 
-# Or test mode
-docker compose -f docker/docker-compose.test.yaml up
+# Or test mode (this worktree's slot)
+just test::upd
+just test::slot      # prints DF_BASE_URL for this worktree
 ```
 
 The app will be available at:
-- Frontend: https://localhost (via nginx)
-- Backend API: https://localhost/api/
+- Dev: https://localhost (via nginx), API at https://localhost/api/
+- Test: the `DF_BASE_URL` from `just test::slot` (`https://localhost` on slot 0,
+  `https://localhost:1N443` on slot N), API at `<DF_BASE_URL>/api/`. Run
+  `just test::slots` to see which stack is on which port; never assume
+  `https://localhost` points at your worktree's stack.
 
 ## Available Chrome MCP Tools
 
@@ -95,7 +99,7 @@ Use computer tool with action: "screenshot" to capture current state
 ```
 1. tabs_context_mcp (get context)
 2. tabs_create_mcp (new tab)
-3. navigate to "https://localhost/login"
+3. navigate to "<DF_BASE_URL>/login" (from `just test::slot`)
 4. computer action: "screenshot" (initial state)
 5. find query: "login button" (locate element)
 6. read_console_messages pattern: "error|Error" (check for errors)

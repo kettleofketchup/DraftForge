@@ -111,8 +111,8 @@ nav:
   - Development:
       - Backend Quickstart: development/backend-quickstart.md
       - Just Commands: development/just-commands.md
-      - Invoke Tasks (Legacy): development/invoke-tasks.md
       - Testing: development/testing.md
+      - Test Stack Slots: development/test-stack-slots.md
       - Contributing: development/contributing.md
       - Changelog: development/changelog.md
       - Theming Guide: THEMING-GUIDE.md

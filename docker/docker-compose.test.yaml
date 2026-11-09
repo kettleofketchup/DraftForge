@@ -15,8 +15,10 @@ services:
   redis:
     image: redis:8.2.1-alpine
     container_name: redis
+    # Named volume, not a worktree-relative bind: the bind source changes the
+    # config hash, so a run from another worktree recreated the shared redis.
     volumes:
-      - ./backend/.redis_data:/data
+      - redis_data:/data
     restart: always
     networks:
       - test-network
@@ -56,10 +58,6 @@ services:
       - ./nginx/data/ssl/cert.crt:/etc/letsencrypt/live/dota.kettle.sh/fullchain.pem
       - ./nginx/data/ssl/cert.key:/etc/letsencrypt/live/dota.kettle.sh/privkey.pem
       - ./nginx/data/user_conf.d:/etc/nginx/user_conf.d
-      - ./nginx/data/certbot/webroot/:/var/www/certbot/
-      - ./nginx/data/certbot/work/:/lib/letsencrypt/
-      - ./nginx/data/certbot/configs/:/etc/letsencrypt/
-      - ./nginx/data/certbot/logs/:/var/log/letsencrypt/
     depends_on:
       - frontend
       - backend
@@ -123,6 +121,9 @@ services:
     restart: always
     networks:
       - test-network
+
+volumes:
+  redis_data:
 
 networks:
   test-network:
