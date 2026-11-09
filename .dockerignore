@@ -3,3 +3,5 @@
 .vscode
 *.sqlite3
 **/*.sqlite3
+backend/.redis_data*
+backend/celerybeat-schedule*

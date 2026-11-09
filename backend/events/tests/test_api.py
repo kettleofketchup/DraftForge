@@ -10,6 +10,7 @@ from app.models import CustomUser, League, Organization, PositionsModel
 from events.constants import EventState, SignupStatus
 from events.models import Event, EventSignup
 from events.tests.base import EventTestCase
+from tests.cache import flush_run_cache
 
 
 class EventAPITests(EventTestCase):
@@ -445,8 +446,7 @@ class EventPatchTournamentLeagueCacheTest(TransactionTestCase):
     def setUp(self):
         # cacheops Redis cache is NOT auto-flushed between TransactionTestCase runs.
         # Stale entries from prior tests in the module could pollute the assertion.
-        from cacheops import invalidate_all
-        invalidate_all()
+        flush_run_cache()
 
         self.admin = CustomUser.objects.create_user(username="eptlc_admin", password="x")
         self.admin.positions = PositionsModel.objects.create()

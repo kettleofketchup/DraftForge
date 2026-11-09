@@ -13,3 +13,97 @@ Releases made before this file was added are not listed here; see the git tags a
 ## [Unreleased]
 
 <!-- Do not edit. Unreleased changes live in changelog.d/; `just version::set` assembles them here. -->
+
+## [0.9.71] - 2026-11-08
+
+### Upgrading
+
+Invoke is gone: `inv`/`invoke` commands, `tasks.py` and `backend/tasks.py` no longer
+exist, and `invoke`, `toml`, `semver` and `alive-progress` are no longer dependencies.
+Every task has a `just` recipe of the same name with `::` separators (`inv db.migrate.all`
+is `just db::migrate::all`); `just --list --list-submodules` lists them. Run
+`poetry install --sync` (or `./dev`) after pulling to drop the removed packages.
+Deploys are unchanged: `just dev::release`.
+
+`just` recipes now load `docker/.env.<env>` by sourcing it, so a value in the env file
+overrides the same variable already exported in your shell (python-dotenv kept the
+shell's value).
+
+Merge `main` into every existing worktree before using its test stack. Worktrees on older branches still run the old `test::down`, which stops every container on the host, including other worktrees' slot stacks.
+
+The release stack still reads its TLS certificate from
+`nginx/data/certbot/configs/live/dota.kettle.sh/` on the prod host, and still serves
+`/.well-known/acme-challenge/` from `nginx/data/certbot/webroot/`. Do not delete those
+directories. `just prod::certbot` is gone, so if the host still has a `certbot renew`
+cron entry (installed by the old `certbot.sh`), it is now the only thing renewing that
+certificate; check with `sudo crontab -l` and decide whether to keep it.
+
+### Added
+
+- **Shellcheck gate.** `just ci::shellcheck` renders every just recipe with `--dry-run`
+  and runs ShellCheck 0.11.0 on it under the shell it runs with; the `shellcheck`
+  workflow runs it on every pull request.
+- **Helm chart 0.2.0: several Traefik entry points.** `ingress.entryPoints` takes a
+  list of entry points for the IngressRoute, for example a LAN entry point and a
+  tunnel entry point, with the same middlewares on each. The single
+  `ingress.entryPoint` still works when the list is empty. See `helm/README.md`.
+- **Helm chart and per-PR previews.** A `draftforge` Helm chart (`helm/`) and the CI
+  that builds preview images and queues PRs for a preview environment
+  (`draftforge-pr-<n>`). In preview mode the chart requires the deploying cluster to
+  set every resource quota, LimitRange and rate limit. See `helm/README.md`.
+- Each git worktree gets its own test stack ("slot"): slot 0 stays project `df` on `https://localhost`, slot N runs as `df-sN` on `https://localhost:1N443`. `just test::slot` shows a worktree's slot and URL, and `just test::slots` lists them all.
+- `just test::slot-release`, `test::slot-claim` and `test::slot-reap` manage slots. Slots idle for more than 12 hours (`DF_SLOT_STALE_HOURS`) are reaped automatically when a slot is needed.
+- The Discord bot and celery-beat run only on slot 0; `just test::background on` opts one other stack in.
+
+### Changed
+
+- **Task runner.** Every invoke task moved into the `just` modules under `just/`; logic
+  that needs Python is now plain CLIs (`scripts/demo.py`, `scripts/version.py`,
+  `scripts/compose.py`). Recipes pass arguments through with their quoting intact, so
+  `just test::pw::grep 'title with spaces'` and `just test::run '<cmd with | pipes>'` work.
+- **Playwright.** `DF_BASE_URL_SOURCE` is `runner` instead of `invoke`.
+- **New recipes** for tasks that were only reachable through invoke:
+  `db::populate::bracket-unset-winner`, `csv-import`, `user-edit`, `shuffle-tie`,
+  `test::pw::run`, `test::pw::grep`, `docker::*::pull` and `docker::*::run`.
+- **Demos.** `just demo::gifs`, `demo::trim` and `demo::quick` exit non-zero when ffmpeg is
+  missing or a conversion fails; the record-demos workflow installs ffmpeg.
+- **Changelog process (contributors).** PRs no longer edit `CHANGELOG.md`; they add a
+  fragment under `changelog.d/<section>/`, and `just version::set` assembles the
+  fragments into the release section. See `docs/development/changelog.md`.
+- `just test::down` and `test::stop` stop only this worktree's stack instead of every container on the host.
+- The dev stack runs as its own compose project, `df-dev`, so it no longer takes over the test stack.
+- `just dev::exec` and `test::run` run their command through `sh -c` inside the container: a `> file` redirect now writes inside the container.
+- `just dev::prod` uses project `df` and refuses to start while a test or dev stack holds it.
+- Playwright resolves its base URL from the worktree's slot instead of a hardcoded `https://localhost`.
+- Test-db images are tagged by content hash instead of a shared `:latest`.
+
+### Removed
+
+- **Let's Encrypt tooling.** Removed `init-letsencrypt.sh`, `certbot.sh`, the
+  `just prod::certbot` / `inv prod.certbot` task, the unused `certbot-nginx` Python
+  dependency, the unused `nginx/nginx_http.template.conf`, and the jonasal/nginx-certbot
+  `CERTBOT_*` settings in `docker/.env.release` (the custom nginx entrypoint never ran
+  certbot). Dev, test and `docker-compose.prod.yaml` no longer mount `nginx/data/certbot/*`;
+  the release stack drops only the unused `work/` and `logs/` mounts. Closes #325.
+
+### Fixed
+
+- `just py::migrate`, `py::shell` and `py::test` now really disable the cache: the
+  `DISABLE_CACHE=true` prefix applied only to sourcing the venv, not to Python.
+- `just db::migrate::all` migrates the dev, prod and test databases. It migrated
+  `dev.db.sqlite3` three times: python-dotenv kept the first `NODE_ENV` it loaded, and
+  `NODE_ENV` picks the SQLite file.
+- `just version::from-env` reads `docker/.env.release` by default (it looked for
+  `.env.release` in the repo root).
+- The slot guard tests (`just test::slots-unit`) pass again; on main they failed on a
+  stale `scripts/version.py` exemption and the compose-file regex in `scripts/test_version.py`.
+- Backend container detection now recognises podman (`/run/.containerenv`), so rootless podman stacks connect to the `redis` service instead of `localhost` (#323).
+- Closing or merging a pull request that holds a preview slot no longer fails the
+  `preview-queue` workflow with HTTP 403: its jobs can now remove the `preview-env` label
+  from pull requests, so the slot is released.
+- `just version::build` works again: it syncs the version into `pyproject.toml` and `docker/.env.{prod,release}`, then builds the release images via `docker::release::build` instead of a nonexistent `docker-compose.local.yaml` (#324).
+
+### Documentation
+
+- The `release` skill for coding agents covers cutting a release with `just version::set`,
+  including the changelog assembly, the preflight checks and recovery steps.

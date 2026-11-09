@@ -19,7 +19,9 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from app.models import DraftTeam, Game, HeroDraft, HeroDraftEvent
+from app.redis_keys import namespaced_key
 from app.serializers import HeroDraftSerializer
+from app.tasks.herodraft_tick import captain_heartbeat_key, get_redis_client
 from common.utils import isTestEnvironment
 from telemetry.logging import get_logger
 
@@ -178,19 +180,25 @@ def reset_herodraft(request, draft_pk):
 
     # Clear Redis captain channel/heartbeat keys to prevent stale kick triggers
     try:
-        from app.tasks.herodraft_tick import get_redis_client
-
         r = get_redis_client()
         for draft_team in draft.draft_teams.all():
             captain = draft_team.tournament_team.captain
             if captain:
                 for key_pattern in [
-                    f"herodraft:{draft.pk}:captain:{captain.pk}:channel",
-                    f"herodraft:{draft.pk}:captain:{captain.pk}:heartbeat",
+                    namespaced_key(
+                        f"herodraft:{draft.pk}:captain:{captain.pk}:channel"
+                    ),
+                    captain_heartbeat_key(draft.pk, captain.pk),
                 ]:
                     r.delete(key_pattern)
     except Exception as e:
-        log.debug("reset_herodraft_redis_cleanup_failed", draft_id=draft.pk, error=str(e))
+        log.debug(
+            "reset_herodraft_redis_cleanup_failed",
+            system="herodraft",
+            subsystem="test_reset",
+            draft_id=draft.pk,
+            error=str(e),
+        )
 
     # Log reset event
     HeroDraftEvent.objects.create(

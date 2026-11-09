@@ -23,6 +23,7 @@ from channels.db import database_sync_to_async
 from django.conf import settings
 from opentelemetry import trace
 
+from app.redis_keys import namespaced_key
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
@@ -55,19 +56,19 @@ def get_redis_client() -> redis.Redis:
 
 
 def heartbeat_key(prefix: str, draft_id: int, user_id: int) -> str:
-    return f"{prefix}:{draft_id}:captain:{user_id}:heartbeat"
+    return namespaced_key(f"{prefix}:{draft_id}:captain:{user_id}:heartbeat")
 
 
 def captain_channel_key(prefix: str, draft_id: int, user_id: int) -> str:
-    return f"{prefix}:{draft_id}:captain:{user_id}:channel"
+    return namespaced_key(f"{prefix}:{draft_id}:captain:{user_id}:channel")
 
 
 def conn_count_key(prefix: str, draft_id: int) -> str:
-    return f"{prefix}:connections:{draft_id}"
+    return namespaced_key(f"{prefix}:connections:{draft_id}")
 
 
 def lock_key(prefix: str, draft_id: int) -> str:
-    return f"{prefix}:tick_lock:{draft_id}"
+    return namespaced_key(f"{prefix}:tick_lock:{draft_id}")
 
 
 def increment_connection_count(prefix: str, draft_id: int) -> int:

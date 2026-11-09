@@ -1,44 +1,47 @@
-# Test environment demo commands
+# Test environment demo commands (same recipes as demo::*)
 
-root := source_directory() / "../.."
-inv := ". " + root / ".venv/bin/activate && cd " + root + " && inv"
+set shell := ["bash", "-euo", "pipefail", "-c"]
+set positional-arguments
+
+root := clean(source_directory() / "../..")
+just := quote(just_executable()) + " --justfile " + quote(root / "justfile")
 
 [group('test::demo')]
 all:
-    {{inv}} test.demo.all
+    {{just}} demo::all
 
 [group('test::demo')]
 create spec="":
-    {{inv}} test.demo.create {{ if spec != "" { "--spec " + spec } else { "" } }}
+    {{just}} demo::create "$1"
 
 [group('test::demo')]
 shuffle:
-    {{inv}} test.demo.shuffle
+    {{just}} demo::shuffle
 
 [group('test::demo')]
 snake:
-    {{inv}} test.demo.snake
+    {{just}} demo::snake
 
 [group('test::demo')]
 herodraft:
-    {{inv}} test.demo.herodraft
+    {{just}} demo::herodraft
 
 [group('test::demo')]
 snapshots:
-    {{inv}} test.demo.snapshots
+    {{just}} demo::snapshots
 
 [group('test::demo')]
 gifs *args:
-    {{inv}} test.demo.gifs {{args}}
+    {{just}} demo::gifs "$@"
 
 [group('test::demo')]
 trim *args:
-    {{inv}} test.demo.trim {{args}}
+    {{just}} demo::trim "$@"
 
 [group('test::demo')]
 quick *args:
-    {{inv}} test.demo.quick {{args}}
+    {{just}} demo::quick "$@"
 
 [group('test::demo')]
 clean:
-    {{inv}} test.demo.clean
+    {{just}} demo::clean

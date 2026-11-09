@@ -291,7 +291,7 @@ class CheckEventRemindersTaskTest(_DiscordTaskTestCase):
         self.event.event_repeater = repeater
         self.event.save()
 
-    @patch("discordbot.utils.sync_send_dm")
+    @patch("events.tasks.sync_send_dm")
     def test_signup_reminder_sent_when_due(self, mock_send_dm):
         mock_send_dm.return_value = {"id": "dm111"}
         self._arm_signup_reminder()
@@ -299,13 +299,13 @@ class CheckEventRemindersTaskTest(_DiscordTaskTestCase):
         from events.tasks import check_event_reminders
 
         check_event_reminders()
-        self.assertTrue(
-            DiscordMessageLog.objects.filter(
-                source="signup_reminder", source_id=self.event.pk
-            ).exists()
+        mock_send_dm.assert_called_once()
+        log = DiscordMessageLog.objects.get(
+            source="signup_reminder", source_id=self.event.pk
         )
+        self.assertTrue(log.success)
 
-    @patch("discordbot.utils.sync_send_dm")
+    @patch("events.tasks.sync_send_dm")
     def test_signup_reminder_not_sent_twice(self, mock_send_dm):
         mock_send_dm.return_value = {"id": "dm222"}
         self._arm_signup_reminder()
@@ -314,6 +314,7 @@ class CheckEventRemindersTaskTest(_DiscordTaskTestCase):
 
         check_event_reminders()
         check_event_reminders()  # Run again — should NOT send duplicate
+        mock_send_dm.assert_called_once()
         self.assertEqual(
             DiscordMessageLog.objects.filter(
                 source="signup_reminder", source_id=self.event.pk

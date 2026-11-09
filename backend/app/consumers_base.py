@@ -33,13 +33,15 @@ import contextlib
 import json
 import time
 from abc import abstractmethod
-from typing import Any
+from collections.abc import AsyncIterator
+from typing import TYPE_CHECKING, Any
 
 import redis
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
+from django.db.models import Model
 from opentelemetry import trace
-from opentelemetry.trace import Status, StatusCode
+from opentelemetry.trace import Span, Status, StatusCode
 
 from app.tasks import draft_tick
 from app.tasks import herodraft_tick as legacy_tick  # late lookup keeps patches working
@@ -52,6 +54,9 @@ from app.tasks.draft_tick import (
 )
 from telemetry.logging import get_logger
 from telemetry.websocket import TelemetryConsumerMixin
+
+if TYPE_CHECKING:
+    from django.contrib.auth.base_user import AbstractBaseUser
 
 log = get_logger(__name__)
 tracer = trace.get_tracer(__name__)
@@ -96,7 +101,9 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
         ...
 
     @abstractmethod
-    async def get_captain_draft_team(self, draft_id: int, user):
+    async def get_captain_draft_team(
+        self, draft_id: int, user: "AbstractBaseUser"
+    ) -> Model | None:
         """Return the DraftTeam for this captain, or None if not a captain."""
         ...
 
@@ -108,7 +115,9 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
         """
         ...
 
-    async def on_captain_state_change(self, draft_id, user, is_connected):
+    async def on_captain_state_change(
+        self, draft_id: int, user: "AbstractBaseUser", is_connected: bool
+    ) -> None:
         """Hook called when a captain connects/disconnects.
 
         Override in subclasses to handle pause-on-disconnect, event logging,
@@ -187,7 +196,7 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
 
     # --- Heartbeat ---
 
-    async def handle_heartbeat(self):
+    async def handle_heartbeat(self) -> None:
         """Process a heartbeat message from a captain. Updates Redis TTL."""
         with tracer.start_as_current_span(
             "ws.heartbeat",
@@ -211,7 +220,7 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
 
     # --- Captain channel registration ---
 
-    async def _register_captain(self):
+    async def _register_captain(self) -> None:
         """Register this connection as the captain's active channel in Redis."""
         with tracer.start_as_current_span(
             "ws.captain_register",
@@ -231,7 +240,7 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
                 channel=self.channel_name,
             )
 
-    async def _unregister_captain_if_current(self):
+    async def _unregister_captain_if_current(self) -> None:
         """Unregister captain channel only if it's still this connection."""
         with tracer.start_as_current_span(
             "ws.captain_unregister",
@@ -262,7 +271,7 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
     # --- Connection count tracking ---
 
     @database_sync_to_async
-    def _increment_connection_count(self):
+    def _increment_connection_count(self) -> None:
         """Increment WebSocket connection count in Redis."""
         try:
             draft_tick.increment_connection_count(
@@ -279,7 +288,7 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
             )
 
     @database_sync_to_async
-    def _decrement_connection_count(self):
+    def _decrement_connection_count(self) -> None:
         """Decrement WebSocket connection count in Redis."""
         try:
             draft_tick.decrement_connection_count(
@@ -298,7 +307,7 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
     # --- Tick broadcaster ---
 
     @database_sync_to_async
-    def _maybe_start_tick_broadcaster(self):
+    def _maybe_start_tick_broadcaster(self) -> None:
         """Start tick broadcaster if not already running."""
         try:
             driver = self.get_tick_driver()
@@ -317,7 +326,7 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
 
     # --- Server-side ping loop ---
 
-    async def _ping_loop(self):
+    async def _ping_loop(self) -> None:
         """Send periodic ping messages to keep WebSocket connections alive.
 
         This prevents proxies/load balancers from closing idle connections,
@@ -367,7 +376,9 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
         return attrs
 
     @contextlib.asynccontextmanager
-    async def traced_message(self, message_type: str, **extra_attrs: Any):
+    async def traced_message(
+        self, message_type: str, **extra_attrs: Any
+    ) -> AsyncIterator[Span]:
         """Async context manager for tracing a received WS message.
 
         Subclasses that handle messages should wrap their per-message
@@ -396,7 +407,7 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
 
     # --- Base connect/disconnect ---
 
-    async def base_connect(self):
+    async def base_connect(self) -> bool:
         """Shared connection setup. Call from subclass connect() after any
         subclass-specific pre-connection logic (e.g. kick detection).
 
@@ -501,7 +512,7 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
             span.set_attribute("ws.connect_outcome", "ok")
             return True
 
-    async def base_disconnect(self, close_code):
+    async def base_disconnect(self, close_code: int | None) -> None:
         """Shared disconnection cleanup. Call from subclass disconnect().
 
         Handles: cancel ping, kicked connections, decrement count, unregister

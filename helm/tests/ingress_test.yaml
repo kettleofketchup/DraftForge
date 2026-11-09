@@ -230,6 +230,61 @@ tests:
       - equal: {path: "spec.routes[3].match", value: "Host(`dota.kettle.sh`)"}
         documentSelector: *ingressRoute
 
+  - it: "defaults: a single websecure entry point from ingress.entryPoint"
+    documentSelector: *ingressRoute
+    asserts:
+      - equal: {path: spec.entryPoints, value: [websecure]}
+
+  - it: "defaults: ingress.entryPoint alone still sets the entry point"
+    set:
+      ingress.entryPoint: web
+    documentSelector: *ingressRoute
+    asserts:
+      - equal: {path: spec.entryPoints, value: [web]}
+
+  - it: "defaults: ingress.entryPoints lists every entry point in order"
+    set:
+      ingress.entryPoints: [websecure, tunnel]
+    documentSelector: *ingressRoute
+    asserts:
+      - equal: {path: spec.entryPoints, value: [websecure, tunnel]}
+
+  - it: "defaults: ingress.entryPoints wins over ingress.entryPoint"
+    set:
+      ingress.entryPoint: web
+      ingress.entryPoints: [tunnel]
+    documentSelector: *ingressRoute
+    asserts:
+      - equal: {path: spec.entryPoints, value: [tunnel]}
+
+  - it: "defaults: an empty ingress.entryPoints falls back to ingress.entryPoint"
+    set:
+      ingress.entryPoints: []
+    documentSelector: *ingressRoute
+    asserts:
+      - equal: {path: spec.entryPoints, value: [websecure]}
+
+  - it: "defaults: fails when neither ingress.entryPoints nor ingress.entryPoint is set"
+    set:
+      ingress.entryPoint: ""
+      ingress.entryPoints: []
+    asserts:
+      - failedTemplate:
+          errorPattern: "ingress\\.entryPoints"
+
+  - it: "preview: ingress.entryPoints keeps forward-auth on every route"
+    release: *previewRelease
+    values: *previewValues
+    set:
+      ingress.entryPoints: [websecure, tunnel]
+    documentSelector: *ingressRoute
+    asserts:
+      - equal: {path: spec.entryPoints, value: [websecure, tunnel]}
+      - contains: {path: "spec.routes[0].middlewares", content: {name: forward-auth, namespace: auth-system}}
+      - contains: {path: "spec.routes[1].middlewares", content: {name: forward-auth, namespace: auth-system}}
+      - contains: {path: "spec.routes[2].middlewares", content: {name: forward-auth, namespace: auth-system}}
+      - contains: {path: "spec.routes[3].middlewares", content: {name: forward-auth, namespace: auth-system}}
+
   - it: "defaults: ingress.enabled false renders nothing"
     set:
       ingress.enabled: false

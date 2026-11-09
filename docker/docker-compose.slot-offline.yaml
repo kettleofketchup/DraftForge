@@ -1,0 +1,9 @@
+services:
+  backend:
+    environment: { DISCORD_BOT_TOKEN: "", STEAM_API_KEY: "" }
+  celery-worker:
+    environment: { DISCORD_BOT_TOKEN: "", STEAM_API_KEY: "" }
+  discord-bot:
+    environment: { DISCORD_BOT_TOKEN: "", STEAM_API_KEY: "" }
+  celery-beat:
+    environment: { DISCORD_BOT_TOKEN: "", STEAM_API_KEY: "" }

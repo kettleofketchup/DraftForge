@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/1.10/ref/settings/
 import contextlib
 import functools
 import os
+import secrets
 import sys
 from pathlib import Path
 
@@ -26,7 +27,8 @@ import warnings
 
 from backend.env_utils import env_bool, env_list
 from config.installed_apps import MODEL_APPS
-from paths import DEV_DB_PATH, PROD_DB_PATH, TEST_DB_PATH
+from config.leagues import app_config
+from telemetry.config import init_telemetry
 
 # Show cacheops Redis connection warning only once (not on every import)
 warnings.filterwarnings("once", message=r".*cacheops cache is unreachable.*")
@@ -89,6 +91,13 @@ NODE_ENV = "dev"
 TEST = env_bool("TEST")
 RELEASE = env_bool("RELEASE")
 DEBUG = env_bool("DEBUG")
+
+# Concurrent test runs share one Redis and number their drafts from 1, so each
+# test process namespaces its channel groups, raw Redis keys and cache keys.
+RUNNING_TESTS: bool = sys.argv[1:2] == ["test"] or "pytest" in sys.modules
+REDIS_KEY_NAMESPACE: str = (
+    f"test-{os.getpid()}-{secrets.token_hex(4)}:" if RUNNING_TESTS else ""
+)
 
 # In test environments, only send Discord DMs to this user ID.
 # All other DMs return a fake success. Prevents spamming real users during testing.
@@ -282,10 +291,7 @@ DATABASES = {
             # power loss between commit and disk flush — acceptable for our
             # workload (we can resync from Steam on disaster). Requires
             # Django 5.2+ (init_command for SQLite).
-            "init_command": (
-                "PRAGMA journal_mode=WAL;"
-                "PRAGMA synchronous=NORMAL;"
-            ),
+            "init_command": "PRAGMA journal_mode=WAL;PRAGMA synchronous=NORMAL;",
         },
     }
 }
@@ -318,6 +324,8 @@ if not env_bool("DISABLE_CACHE"):
             },
         }
     }
+    if RUNNING_TESTS:
+        CACHES["default"]["KEY_PREFIX"] = REDIS_KEY_NAMESPACE
 else:
     CACHES = {
         "default": {
@@ -421,7 +429,7 @@ def _deploy_version() -> str:
 # brute `invalidate_all()` that AppConfig.ready() used to fire on every
 # boot — that wiped warm cache on every Daphne reload / worker restart /
 # OOM, with the only legitimate goal being "fresh data after a deploy".
-_CACHE_KEY_PREFIX = f"dtx-v{_deploy_version()}:"
+_CACHE_KEY_PREFIX = f"dtx-v{_deploy_version()}:{REDIS_KEY_NAMESPACE}"
 CACHEOPS_PREFIX = lambda _query: _CACHE_KEY_PREFIX  # noqa: E731
 
 # Channel Layers for WebSocket support
@@ -441,6 +449,8 @@ else:
             },
         },
     }
+    if RUNNING_TESTS:
+        CHANNEL_LAYERS["default"]["CONFIG"]["prefix"] = f"asgi:{REDIS_KEY_NAMESPACE}"
 
 
 # Password validation
@@ -476,6 +486,10 @@ AUTH_PASSWORD_VALIDATORS = [
         "NAME": NumericPasswordValidator,
     },
 ]
+
+# PBKDF2 costs ~170 ms per create_user(password=...); test fixtures make hundreds.
+if RUNNING_TESTS:
+    PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 
 
 # Internationalization
@@ -522,6 +536,7 @@ CORS_ORIGIN_WHITELIST = [
     "http://localhost:5171",
     "https://localhost:443",
     "https://localhost",
+    *env_list("DF_EXTRA_CSRF_ORIGINS"),
 ]
 
 CSRF_TRUSTED_ORIGINS = [
@@ -535,12 +550,14 @@ CSRF_TRUSTED_ORIGINS = [
     "http://dtx.kettle.sh",
     "https://kettle.sh",
     "http://kettle.sh",
+    *env_list("DF_EXTRA_CSRF_ORIGINS"),
 ]
 CSRF_TRUSTED_ORIGINS += env_list("EXTRA_CSRF_TRUSTED_ORIGINS")
 # Behind a TLS-terminating proxy (Traefik) that sets X-Forwarded-Proto.
 if env_bool("TRUST_X_FORWARDED_PROTO"):
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 AUTH_USER_MODEL = "app.CustomUser"
+TEST_RUNNER = "backend.test_runner.BackendDiscoverRunner"
 
 # Celery Configuration
 CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", f"redis://{REDIS_HOST}:6379/1")
@@ -553,13 +570,15 @@ CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = "UTC"
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_TIME_LIMIT = 300  # 5 minutes
+# Tests must never enqueue onto the broker the running test stack's worker consumes.
+if RUNNING_TESTS:
+    CELERY_TASK_ALWAYS_EAGER = True
+    CELERY_TASK_EAGER_PROPAGATES = True
 
 # League Stats Configuration
 LEAGUE_MMR_MIN_GAMES = int(os.environ.get("LEAGUE_MMR_MIN_GAMES", "5"))
 
 # League configuration
-from config.leagues import app_config
-
 LEAGUE_CHOICES = app_config.league_choices
 
 # =============================================================================
@@ -567,8 +586,6 @@ LEAGUE_CHOICES = app_config.league_choices
 # =============================================================================
 
 # Initialize telemetry (structured logging + optional OTel tracing)
-from telemetry.config import init_telemetry
-
 init_telemetry()
 
 # ============================================================================
@@ -583,13 +600,13 @@ init_telemetry()
 # ============================================================================
 
 DOTA_MEDAL_MMR_RANGES = {
-    "Herald 1":   (0,    154),
-    "Herald 2":   (154,  308),
-    "Herald 3":   (308,  462),
-    "Herald 4":   (462,  616),
-    "Herald 5":   (616,  770),
-    "Guardian 1": (770,  924),
-    "Guardian 2": (924,  1078),
+    "Herald 1": (0, 154),
+    "Herald 2": (154, 308),
+    "Herald 3": (308, 462),
+    "Herald 4": (462, 616),
+    "Herald 5": (616, 770),
+    "Guardian 1": (770, 924),
+    "Guardian 2": (924, 1078),
     "Guardian 3": (1078, 1232),
     "Guardian 4": (1232, 1386),
     "Guardian 5": (1386, 1540),
@@ -598,32 +615,32 @@ DOTA_MEDAL_MMR_RANGES = {
     "Crusader 3": (1848, 2002),
     "Crusader 4": (2002, 2156),
     "Crusader 5": (2156, 2310),
-    "Archon 1":   (2310, 2464),
-    "Archon 2":   (2464, 2618),
-    "Archon 3":   (2618, 2772),
-    "Archon 4":   (2772, 2926),
-    "Archon 5":   (2926, 3080),
-    "Legend 1":   (3080, 3234),
-    "Legend 2":   (3234, 3388),
-    "Legend 3":   (3388, 3542),
-    "Legend 4":   (3542, 3696),
-    "Legend 5":   (3696, 3850),
-    "Ancient 1":  (3850, 4004),
-    "Ancient 2":  (4004, 4158),
-    "Ancient 3":  (4158, 4312),
-    "Ancient 4":  (4312, 4466),
-    "Ancient 5":  (4466, 4620),
-    "Divine 1":   (4620, 4780),
-    "Divine 2":   (4780, 4940),
-    "Divine 3":   (4940, 5100),
-    "Divine 4":   (5100, 5260),
-    "Divine 5":   (5260, 5420),
-    "Immortal":   (5420, 8000),
+    "Archon 1": (2310, 2464),
+    "Archon 2": (2464, 2618),
+    "Archon 3": (2618, 2772),
+    "Archon 4": (2772, 2926),
+    "Archon 5": (2926, 3080),
+    "Legend 1": (3080, 3234),
+    "Legend 2": (3234, 3388),
+    "Legend 3": (3388, 3542),
+    "Legend 4": (3542, 3696),
+    "Legend 5": (3696, 3850),
+    "Ancient 1": (3850, 4004),
+    "Ancient 2": (4004, 4158),
+    "Ancient 3": (4158, 4312),
+    "Ancient 4": (4312, 4466),
+    "Ancient 5": (4466, 4620),
+    "Divine 1": (4620, 4780),
+    "Divine 2": (4780, 4940),
+    "Divine 3": (4940, 5100),
+    "Divine 4": (5100, 5260),
+    "Divine 5": (5260, 5420),
+    "Immortal": (5420, 8000),
 }
 
 DOTA_BATTLE_CUP_MMR_RANGES = {
-    1: (0,    500),
-    2: (500,  1000),
+    1: (0, 500),
+    2: (500, 1000),
     3: (1000, 2000),
     4: (2000, 3000),
     5: (3000, 4000),

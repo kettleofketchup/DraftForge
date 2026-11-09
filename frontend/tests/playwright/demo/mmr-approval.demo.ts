@@ -12,14 +12,14 @@
  * Pipeline: just demo::mmr-approval → just demo::trim → just demo::gifs
  */
 
+import { BASE_URL } from '../fixtures/base-url';
 import { test, chromium, type Page, type Locator } from '@playwright/test';
-import { loginAdmin, waitForHydration, DOCKER_HOST, API_URL } from '../fixtures/auth';
+import { loginAdmin, waitForHydration, API_URL } from '../fixtures/auth';
 import { waitForDemoReady } from '../fixtures/demo-utils';
 import { postWithCsrf, getCsrfToken } from '../fixtures/events';
 import * as path from 'path';
 import * as fs from 'fs';
 
-const BASE_URL = `https://${DOCKER_HOST}`;
 const VIDEO_OUTPUT_DIR = 'demo-results/videos/mmr_approval';
 const FINAL_VIDEO_DIR = '../docs/assets/videos';
 

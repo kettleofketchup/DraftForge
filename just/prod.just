@@ -1,56 +1,64 @@
-# Production environment commands
+# Production environment commands (docker-compose.prod.yaml, :latest images).
+# Deploys use `just dev::release`.
 
-root := source_directory() / ".."
-inv := ". " + root / ".venv/bin/activate && cd " + root + " && inv"
+set shell := ["bash", "-euo", "pipefail", "-c"]
+set positional-arguments
+
+root := clean(source_directory() / "..")
+python := env("DF_JUST_PYTHON", root / ".venv/bin/python")
+compose := quote(root / "scripts/in-env.sh") + " - . " + quote(python) + " -m scripts.slots --root " + quote(root) + " compose --stack prod"
 
 [group('prod')]
 up:
-    {{inv}} prod.up
+    {{compose}} up --remove-orphans
 
 [group('prod')]
 upd:
-    {{inv}} prod.upd
+    {{compose}} up -d --remove-orphans
 
 [group('prod')]
 down:
-    {{inv}} prod.down
+    {{compose}} down --remove-orphans
 
 [group('prod')]
 logs:
-    {{inv}} prod.logs
+    {{compose}} logs -f
 
 [group('prod')]
 ps:
-    {{inv}} prod.ps
+    {{compose}} ps
 
 [group('prod')]
 restart:
-    {{inv}} prod.restart
+    {{compose}} restart
 
 [group('prod')]
 stop:
-    {{inv}} prod.stop
+    {{compose}} stop
 
 [group('prod')]
 build:
-    {{inv}} prod.build
+    {{compose}} build
 
 [group('prod')]
 pull:
-    {{inv}} prod.pull
+    {{compose}} pull
 
 [group('prod')]
 top:
-    {{inv}} prod.top
+    {{compose}} top
 
+# Run a shell command in a running prod container
 [group('prod')]
 exec service cmd:
-    {{inv}} prod.exec --service {{service}} --cmd '{{cmd}}'
+    {{compose}} exec "$1" sh -c "$2"
 
+# Run a one-off shell command in a new prod container (default service: backend)
 [group('prod')]
 run cmd service="backend":
-    {{inv}} prod.run --service {{service}} --cmd '{{cmd}}'
-
-[group('prod')]
-certbot:
-    {{inv}} prod.certbot
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [[ -n "${1//[[:space:]]/}" ]]; then
+        exec {{compose}} run --rm "$2" sh -c "$1"
+    fi
+    exec {{compose}} run --rm "$2"

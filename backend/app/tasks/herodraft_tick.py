@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import threading
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import redis
 from channels.db import database_sync_to_async
@@ -45,9 +45,11 @@ __all__ = [
     "HeroDraftTickDriver",
     "TaskInfo",
     "broadcast_tick",
+    "captain_heartbeat_key",
     "check_captain_heartbeats",
     "check_resume_countdown",
     "check_timeout",
+    "conn_count_key",
     "decrement_connection_count",
     "get_connection_count",
     "get_redis_client",
@@ -57,6 +59,7 @@ __all__ = [
     "start_tick_broadcaster",
     "stop_all_broadcasters",
     "stop_tick_broadcaster",
+    "tick_lock_key",
 ]
 
 _lock = draft_tick._lock
@@ -66,6 +69,18 @@ CONN_COUNT_KEY = "herodraft:connections:{draft_id}"
 LOCK_KEY = "herodraft:tick_lock:{draft_id}"
 # Heartbeat key pattern (must match consumers.py)
 CAPTAIN_HEARTBEAT_KEY = "herodraft:{draft_id}:captain:{user_id}:heartbeat"
+
+
+def conn_count_key(draft_id: int) -> str:
+    return draft_tick.conn_count_key("herodraft", draft_id)
+
+
+def tick_lock_key(draft_id: int) -> str:
+    return draft_tick.lock_key("herodraft", draft_id)
+
+
+def captain_heartbeat_key(draft_id: int, user_id: int) -> str:
+    return draft_tick.heartbeat_key("herodraft", draft_id, user_id)
 
 
 def increment_connection_count(draft_id: int) -> int:
@@ -101,7 +116,7 @@ async def broadcast_tick(draft_id: int) -> None:
     room_group_name = f"herodraft_{draft_id}"
 
     @database_sync_to_async
-    def get_tick_data():
+    def get_tick_data() -> dict[str, Any] | None:
         try:
             draft = HeroDraft.objects.get(id=draft_id)
         except HeroDraft.DoesNotExist:
@@ -244,7 +259,7 @@ async def check_timeout(draft_id: int) -> HeroDraftRound | None:
     from app.models import DraftTeam, HeroDraft, HeroDraftState
 
     @database_sync_to_async
-    def check_and_auto_pick():
+    def check_and_auto_pick() -> HeroDraftRound | None:
         # Use transaction with select_for_update to prevent race conditions
         completed_round = None
 
@@ -328,7 +343,7 @@ async def check_resume_countdown(draft_id: int) -> bool:
     from app.models import HeroDraft, HeroDraftEvent, HeroDraftState
 
     @database_sync_to_async
-    def check_and_resume():
+    def check_and_resume() -> bool:
         transitioned = False
 
         with transaction.atomic():
@@ -398,7 +413,7 @@ async def check_captain_heartbeats(draft_id: int) -> str | None:
     from app.models import DraftTeam, HeroDraft, HeroDraftEvent, HeroDraftState
 
     @database_sync_to_async
-    def check_and_handle_stale():
+    def check_and_handle_stale() -> str | None:
         r = get_redis_client()
         now = time.time()
         stale_captain = None
@@ -420,9 +435,7 @@ async def check_captain_heartbeats(draft_id: int) -> str | None:
             if not captain:
                 continue
 
-            heartbeat_key = CAPTAIN_HEARTBEAT_KEY.format(
-                draft_id=draft_id, user_id=captain.id
-            )
+            heartbeat_key = captain_heartbeat_key(draft_id, captain.id)
             last_heartbeat = r.get(heartbeat_key)
 
             if last_heartbeat is None:

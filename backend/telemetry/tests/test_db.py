@@ -10,6 +10,12 @@ from django.test import RequestFactory, TestCase, override_settings
 from telemetry.db import QueryStatsMiddleware
 
 
+def _run_raw_query() -> None:
+    # Raw SQL bypasses cacheops, so it always reaches the DB whether or not Redis is up.
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT 'secret-literal'")
+
+
 @override_settings(DEBUG=True)
 class QueryStatsMiddlewareTest(TestCase):
     """Tests for QueryStatsMiddleware."""
@@ -24,10 +30,7 @@ class QueryStatsMiddlewareTest(TestCase):
         """Middleware logs query count and total time."""
 
         def handler_with_query(request):
-            from django.contrib.auth import get_user_model
-
-            User = get_user_model()
-            list(User.objects.all()[:1])
+            _run_raw_query()
             return HttpResponse("OK")
 
         middleware = QueryStatsMiddleware(handler_with_query)
@@ -47,10 +50,7 @@ class QueryStatsMiddlewareTest(TestCase):
         """Middleware logs individual queries exceeding threshold with sanitized SQL."""
 
         def handler_with_query(request):
-            from django.contrib.auth import get_user_model
-
-            User = get_user_model()
-            list(User.objects.all()[:1])
+            _run_raw_query()
             return HttpResponse("OK")
 
         with mock.patch.dict(os.environ, {"SLOW_QUERY_THRESHOLD_MS": "0"}):
@@ -70,15 +70,13 @@ class QueryStatsMiddlewareTest(TestCase):
         # SQL should be sanitized: string literals replaced with ?
         sql_value = warning_calls[0][1]["db.sql"]
         self.assertNotIn("'", sql_value)
+        self.assertNotIn("secret-literal", sql_value)
 
     def test_no_slow_query_logs_under_threshold(self):
         """Middleware does not log slow queries when all are fast."""
 
         def handler_with_query(request):
-            from django.contrib.auth import get_user_model
-
-            User = get_user_model()
-            list(User.objects.all()[:1])
+            _run_raw_query()
             return HttpResponse("OK")
 
         with mock.patch.dict(os.environ, {"SLOW_QUERY_THRESHOLD_MS": "99999"}):
@@ -106,10 +104,7 @@ class QueryStatsMiddlewareTest(TestCase):
 
     def test_resets_queries_before_request(self):
         """Middleware resets query log before processing so counts are per-request."""
-        from django.contrib.auth import get_user_model
-
-        User = get_user_model()
-        list(User.objects.all()[:1])
+        _run_raw_query()
         initial_count = len(connection.queries)
         self.assertGreaterEqual(initial_count, 1)
 

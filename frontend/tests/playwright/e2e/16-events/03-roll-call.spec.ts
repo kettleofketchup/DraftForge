@@ -9,6 +9,7 @@
  * Uses the E2E Signup Event (signups_open state after reset).
  */
 
+import { API_URL } from '../../fixtures/base-url';
 import {
   test,
   expect,
@@ -22,7 +23,6 @@ import {
   type EventInfo,
 } from '../../fixtures';
 
-const API_URL = 'https://localhost/api';
 
 let eventInfo: EventInfo;
 

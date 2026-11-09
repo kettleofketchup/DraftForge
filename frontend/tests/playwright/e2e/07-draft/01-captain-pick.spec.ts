@@ -9,6 +9,7 @@
  * Ported from Cypress: frontend/tests/cypress/e2e/07-draft/01-captain-pick.cy.ts
  */
 
+import { API_URL } from '../../fixtures/base-url';
 import {
   test,
   expect,
@@ -17,7 +18,6 @@ import {
   TournamentPage,
 } from '../../fixtures';
 
-const API_URL = 'https://localhost/api';
 
 // Tournament and captain info fetched in beforeAll
 let tournamentPk: number;

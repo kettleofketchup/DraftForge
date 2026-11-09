@@ -14,10 +14,9 @@
  * - event_player_3 (pk=5003) - regular player
  */
 
+import { API_URL } from './base-url';
 import type { BrowserContext } from '@playwright/test';
 
-const DOCKER_HOST = process.env.DOCKER_HOST || 'localhost';
-const API_URL = `https://${DOCKER_HOST}/api`;
 
 export const EVENTS_ORG_NAME = 'Events Test Org';
 export const EVENTS_EVENT_NAME = 'E2E Signup Event';

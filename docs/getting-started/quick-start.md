@@ -18,7 +18,8 @@ This starts:
 - Redis cache
 - Nginx reverse proxy
 
-Access the application at **https://localhost**
+Access the application at **https://localhost**. The dev stack runs as compose
+project `df-dev`, one per machine.
 
 ## Common Commands
 
@@ -50,9 +51,15 @@ just docker::all-pull      # Pull latest images
 
 ```bash
 just test::setup           # Full test environment setup
+just test::slot            # This worktree's test slot and URL
 just test::pw::ui          # Playwright interactive UI mode
 just test::pw::headless    # Playwright headless mode
 ```
+
+Each git worktree runs its own test stack in a slot: `https://localhost` on slot 0,
+`https://localhost:1N443` on slot N. The dev stack and test slot 0 both use ports
+80/443, so stop one before starting the other. See
+[Test Stack Slots](../development/test-stack-slots.md).
 
 ### Updates
 
