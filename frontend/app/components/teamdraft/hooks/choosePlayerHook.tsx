@@ -9,6 +9,8 @@ import { hydrateTournament } from '~/lib/hydrateTournament';
 import { getLogger } from '~/lib/logger';
 import { useDraftWebSocketStore } from '~/store/draftWebSocketStore';
 import type { TieResolution } from '../types';
+import { handlePickError } from '../pickErrors';
+import { refreshTournamentHook } from './refreshTournamentHook';
 const log = getLogger('PickPlayerHook');
 
 // Toast message component with avatar
@@ -66,6 +68,7 @@ export const choosePlayerHook = async ({
   const dataRoundUpdate: PickPlayerForRoundAPI = {
     draft_round_pk: curDraftRound.pk,
     user_pk: player.pk,
+    client_picked_at: useDraftWebSocketStore.getState().getServerNowISO(),
   };
 
   const getDraft = (tournament: TournamentType) => {
@@ -147,9 +150,13 @@ export const choosePlayerHook = async ({
       );
     },
     error: (err) => {
-      const val = err.response.data;
       log.error('Failed to update captains tournament', err);
-      return `Failed to update captains: ${val}`;
+      return handlePickError(err, {
+        jumpToPickNumber: (n) => useDraftWebSocketStore.getState().jumpToPickNumber(n),
+        refresh: () => {
+          void refreshTournamentHook({ tournament, setTournament, setDraft, curDraftRound, setCurDraftRound });
+        },
+      });
     },
   });
 };
