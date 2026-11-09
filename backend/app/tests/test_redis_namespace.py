@@ -4,14 +4,17 @@ Concurrent `manage.py test` runs share one Redis and number their drafts from 1,
 so group names and raw keys collide unless each run gets its own namespace.
 """
 
+import ast
 import importlib
 import os
 import sys
 import types
 from collections.abc import Iterator
 from contextlib import contextmanager
+from pathlib import Path
 from unittest import mock
 
+from cacheops.redis import redis_client as cacheops_redis
 from django.apps import apps
 from django.conf import settings
 from django.test import SimpleTestCase, override_settings
@@ -24,6 +27,9 @@ from app.tasks.herodraft_tick import (
     tick_lock_key,
 )
 from app.tests.test_consumers_base import ConcreteDraftConsumer
+from tests.cache import flush_run_cache
+
+BACKEND_ROOT = Path(__file__).resolve().parents[2]
 
 _MISSING = object()
 
@@ -172,3 +178,54 @@ class CacheFlushOnBootTests(SimpleTestCase):
             del settings.RUNNING_TESTS
             apps.get_app_config("app").ready()
         flush.assert_called_once_with()
+
+
+class FlushRunCacheTests(SimpleTestCase):
+    def setUp(self) -> None:
+        own_cacheops = settings.CACHEOPS_PREFIX(None)
+        self.own = [
+            f"{own_cacheops}q:flush-probe",
+            f"{own_cacheops}conj:app_league:flush-probe",
+            f"{settings.REDIS_KEY_NAMESPACE}:1:flush-probe",
+        ]
+        self.foreign = [
+            "dtx-v0.0.0:test-1-deadbeef:q:flush-probe",
+            "dtx-v0.0.0:q:flush-probe",
+            "celery-flush-probe",
+        ]
+        for key in (*self.own, *self.foreign):
+            cacheops_redis.set(key, "1", ex=60)
+        self.addCleanup(cacheops_redis.delete, *self.own, *self.foreign)
+
+    def test_deletes_only_this_runs_keys(self) -> None:
+        flush_run_cache()
+        self.assertEqual(cacheops_redis.exists(*self.own), 0)
+        self.assertEqual(cacheops_redis.exists(*self.foreign), len(self.foreign))
+
+    @override_settings(REDIS_KEY_NAMESPACE="")
+    def test_refuses_without_a_namespace(self) -> None:
+        with self.assertRaises(RuntimeError):
+            flush_run_cache()
+        self.assertEqual(cacheops_redis.exists(*self.foreign), len(self.foreign))
+
+
+class NoGlobalCacheFlushTests(SimpleTestCase):
+    """invalidate_all() is FLUSHDB on the DB the live test stack shares."""
+
+    ALLOWED: frozenset[str] = frozenset({"app/apps.py"})
+
+    def test_no_invalidate_all_outside_app_ready(self) -> None:
+        offenders: list[str] = []
+        for path in sorted(BACKEND_ROOT.rglob("*.py")):
+            rel = path.relative_to(BACKEND_ROOT).as_posix()
+            if rel in self.ALLOWED or "/migrations/" in rel:
+                continue
+            tree = ast.parse(path.read_text(), filename=rel)
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ImportFrom) and any(
+                    a.name == "invalidate_all" for a in node.names
+                ):
+                    offenders.append(f"{rel}:{node.lineno}")
+                elif isinstance(node, ast.Attribute) and node.attr == "invalidate_all":
+                    offenders.append(f"{rel}:{node.lineno}")
+        self.assertEqual(offenders, [], "use tests.cache.flush_run_cache() instead")

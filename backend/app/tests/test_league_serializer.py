@@ -1,8 +1,10 @@
 from django.test import TestCase, TransactionTestCase
 from rest_framework.exceptions import ValidationError
+from rest_framework.test import APIClient
 
 from app.models import CustomUser, League, Organization, PositionsModel
 from app.serializers import LeagueSerializer
+from tests.cache import flush_run_cache
 
 
 class ValidateSteamLeagueIdTest(TestCase):
@@ -58,9 +60,6 @@ class ValidateSteamLeagueIdTest(TestCase):
     def test_rejects_collision_on_create_no_instance(self):
         with self.assertRaises(ValidationError):
             self._validate(self.league.steam_league_id, instance=None)
-
-
-from rest_framework.test import APIClient
 
 
 class LeaguePatchSteamLeagueIdTest(TestCase):
@@ -145,8 +144,7 @@ class LeaguePatchSteamLeagueIdCacheTest(TransactionTestCase):
 
     def setUp(self):
         # Flush cacheops Redis cache to avoid stale entries from prior tests.
-        from cacheops import invalidate_all
-        invalidate_all()
+        flush_run_cache()
 
         self.admin = CustomUser.objects.create_user(username="lpc_admin", password="x")
         self.admin.positions = PositionsModel.objects.create()
