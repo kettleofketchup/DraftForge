@@ -105,11 +105,17 @@ def decrement_connection_count(prefix: str, draft_id: int, channel: str) -> int:
 
 
 def touch_connection(prefix: str, draft_id: int, channel: str) -> None:
-    """Mark ``channel`` live now; re-adds it if the set was lost or expired."""
+    """Mark ``channel`` live now; re-adds it if the set was lost or expired.
+
+    Also drops members past the stale window (sockets of a crashed process),
+    so the set can't grow without bound while live sockets keep its TTL fresh.
+    """
     r = get_redis_client()
     key = conn_count_key(prefix, draft_id)
+    now = time.time()
     pipe = r.pipeline()
-    pipe.zadd(key, {channel: time.time()})
+    pipe.zremrangebyscore(key, "-inf", now - CONN_STALE_SECONDS)
+    pipe.zadd(key, {channel: now})
     pipe.expire(key, CONN_COUNT_TTL_SECONDS)
     pipe.execute()
 

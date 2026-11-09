@@ -22,8 +22,8 @@ from app.tasks.draft_tick import (
     get_redis_client,
     heartbeat_key,
     increment_connection_count,
-    touch_connection,
     lock_key,
+    touch_connection,
 )
 
 
@@ -70,15 +70,23 @@ class ConnectionCountTests(TransactionTestCase):
         )
 
     def test_counts_are_isolated_per_prefix(self) -> None:
-        self.assertEqual(increment_connection_count("teamdraft", self.DRAFT_ID, "c1"), 1)
-        self.assertEqual(increment_connection_count("teamdraft", self.DRAFT_ID, "c2"), 2)
+        self.assertEqual(
+            increment_connection_count("teamdraft", self.DRAFT_ID, "c1"), 1
+        )
+        self.assertEqual(
+            increment_connection_count("teamdraft", self.DRAFT_ID, "c2"), 2
+        )
         self.assertEqual(get_connection_count("herodraft", self.DRAFT_ID), 0)
         self.assertEqual(get_connection_count("teamdraft", self.DRAFT_ID), 2)
 
     def test_double_disconnect_never_goes_below_zero(self) -> None:
         increment_connection_count("teamdraft", self.DRAFT_ID, "c1")
-        self.assertEqual(decrement_connection_count("teamdraft", self.DRAFT_ID, "c1"), 0)
-        self.assertEqual(decrement_connection_count("teamdraft", self.DRAFT_ID, "c1"), 0)
+        self.assertEqual(
+            decrement_connection_count("teamdraft", self.DRAFT_ID, "c1"), 0
+        )
+        self.assertEqual(
+            decrement_connection_count("teamdraft", self.DRAFT_ID, "c1"), 0
+        )
         increment_connection_count("teamdraft", self.DRAFT_ID, "c2")
         self.assertEqual(get_connection_count("teamdraft", self.DRAFT_ID), 1)
 
@@ -91,11 +99,22 @@ class ConnectionCountTests(TransactionTestCase):
 
         self.assertEqual(get_connection_count("teamdraft", self.DRAFT_ID), 1)
 
-    def test_connection_not_refreshed_within_the_stale_window_is_not_counted(self) -> None:
+    def test_connection_not_refreshed_within_the_stale_window_is_not_counted(
+        self,
+    ) -> None:
         increment_connection_count("teamdraft", self.DRAFT_ID, "c1")
         stale_at = time.time() - draft_tick.CONN_STALE_SECONDS - 1
-        get_redis_client().zadd(conn_count_key("teamdraft", self.DRAFT_ID), {"c2": stale_at})
+        get_redis_client().zadd(
+            conn_count_key("teamdraft", self.DRAFT_ID), {"c2": stale_at}
+        )
         self.assertEqual(get_connection_count("teamdraft", self.DRAFT_ID), 1)
+
+    def test_touch_prunes_members_past_the_stale_window(self) -> None:
+        key = conn_count_key("teamdraft", self.DRAFT_ID)
+        stale_at = time.time() - draft_tick.CONN_STALE_SECONDS - 1
+        get_redis_client().zadd(key, {"crashed": stale_at})
+        touch_connection("teamdraft", self.DRAFT_ID, "c1")
+        self.assertEqual(get_redis_client().zrange(key, 0, -1), ["c1"])
 
 
 class RecordingDriver:
