@@ -335,7 +335,13 @@ def start_tick_broadcaster(driver: TickDriver, draft_id: int) -> bool:
         )
         reg[draft_id] = TaskInfo(stop_event, thread)
 
-    thread.start()
+    try:
+        thread.start()
+    except Exception:
+        with _lock:
+            reg.pop(draft_id, None)
+        r.delete(key)
+        raise
     log.info(
         "tick_broadcaster_started",
         system=driver.system,

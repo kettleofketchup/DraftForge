@@ -209,6 +209,22 @@ class RegistryTests(TransactionTestCase):
         self.assertNotIn(self.DRAFT_ID, draft_tick.registry_for("teamdraft"))
         self.assertIsNone(get_redis_client().get(lock_key("teamdraft", self.DRAFT_ID)))
 
+    def test_failed_thread_start_releases_lock_and_registry(self) -> None:
+        driver = RecordingDriver("teamdraft", iterations=10_000)
+        with (
+            patch.object(
+                draft_tick.threading.Thread,
+                "start",
+                side_effect=RuntimeError("can't start new thread"),
+            ),
+            self.assertRaises(RuntimeError),
+        ):
+            draft_tick.start_tick_broadcaster(driver, self.DRAFT_ID)
+        self.assertNotIn(self.DRAFT_ID, draft_tick.registry_for("teamdraft"))
+        self.assertIsNone(get_redis_client().get(lock_key("teamdraft", self.DRAFT_ID)))
+        self.assertTrue(draft_tick.start_tick_broadcaster(driver, self.DRAFT_ID))
+        draft_tick.stop_tick_broadcaster("teamdraft", self.DRAFT_ID)
+
     def test_stop_unknown_prefix_and_id_is_safe(self):
         draft_tick.stop_tick_broadcaster("never-registered", 1)
         draft_tick.stop_tick_broadcaster("teamdraft", 424242)
