@@ -17,3 +17,6 @@
   or leaving no longer stops its clock. The connection count expired after 300 seconds and
   the tick loop then stopped with `no_connections`; open sockets now refresh their entry
   every 10 seconds.
+- While a team draft is paused, a captain whose heartbeats stop is now shown as disconnected
+  and Resume stays disabled. Freshness was only re-checked by the clock loop, which stopped
+  at the pause, so a captain who went quiet mid-pause kept showing as connected.

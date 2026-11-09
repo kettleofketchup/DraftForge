@@ -76,7 +76,10 @@ class DraftConsumer(BaseDraftConsumer):
         return TEAM_TICK_DRIVER
 
     def should_start_tick_broadcaster(self, initial_state: dict | None) -> bool:
-        return bool(initial_state and initial_state.get("clock_armed"))
+        return bool(
+            initial_state
+            and (initial_state.get("clock_armed") or initial_state.get("state") == "paused")
+        )
 
     @database_sync_to_async
     def _set_presence(
