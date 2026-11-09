@@ -14,16 +14,23 @@ from unittest.mock import patch
 
 from cacheops.conf import settings as cacheops_settings
 from django.core.serializers.json import DjangoJSONEncoder
-from django.db import connection, reset_queries
-from django.test import TestCase, TransactionTestCase
+from django.db import connection, reset_queries, transaction
+from django.test import TestCase, TransactionTestCase, override_settings
 from django.test.utils import CaptureQueriesContext
+from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.broadcast import broadcast_event
+from app.broadcast import atomic_sharing_draft_state, broadcast_event
 from app.consumers import DraftConsumer
 from app.draft_state import build_draft_state
 from app.functions.tournament import _serialize_tournament
-from app.models import Draft, DraftEvent, Tournament
+from app.models import (
+    Draft,
+    DraftEvent,
+    DraftRound,
+    TeamDraftState,
+    Tournament,
+)
 from app.serializers import (
     DraftSerializerSlim,
     TournamentSerializer,
@@ -39,14 +46,20 @@ MMRS_4: list[int] = [1000, 2000, 3000, 4000]
 MMRS_8: list[int] = [1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000]
 
 # Paused org draft: draft, tournament, rounds, teams, members, dropins, lefts,
-# users (8 prefetch), users_remaining, latest_round, draft_options (3), league +
+# users (8 prefetch), users_remaining (1), draft_options (1), league +
 # organization (2), OrgUser lookup, missing-OrgUser probe, OrgUser profiles,
-# league memberships (4), bulk _users core (1).
-DRAFT_STATE_QUERIES: int = 18
-# Ready = the post-commit broadcast (18) + the tournament response (26 with its
+# league memberships (4), bulk _users core (1). latest_round, active_round and
+# clock_armed read the prefetched rounds.
+DRAFT_STATE_QUERIES: int = 17
+# Ready = the post-commit broadcast + the tournament response (with its
 # league/source_event/games/captains/draft lookups) + the view's own captain
-# check, row locks, update and event insert (6). Measured 47 for 4 and 8 teams.
-READY_ENDPOINT_MAX_QUERIES: int = 50
+# check, row locks, update and event insert. Same for 4 and 8 teams.
+READY_ENDPOINT_QUERIES: int = 44
+# Pick, outermost transaction (TransactionTestCase, cacheops off): 26 for
+# auth, locks, the pick, timing, next-round activation and two event inserts
+# (+BEGIN/COMMIT), 17 for the one shared broadcast state behind both events,
+# 23 for the tournament response.
+PICK_QUERIES: int = 68
 
 
 def legacy_users_dict(tournament: Tournament) -> dict:
@@ -283,7 +296,106 @@ class ReadyEndpointQueryTests(TestCase):
         self.assertEqual(responses[0].status_code, 200, responses[0].content)
         return queries
 
-    def test_ready_endpoint_is_constant_and_bounded(self) -> None:
+    def test_ready_endpoint_is_constant(self) -> None:
         small, large = self.ready_queries(4), self.ready_queries(8)
         self.assertEqual(small, large)
-        self.assertLessEqual(small, READY_ENDPOINT_MAX_QUERIES)
+        self.assertEqual(small, READY_ENDPOINT_QUERIES)
+
+
+@override_settings(CACHEOPS_ENABLED=False)
+class PickEndpointQueryTests(TransactionTestCase):
+    """The pick view's outermost transaction builds the broadcast state once."""
+
+    def armed_fixture(self, num_teams: int) -> TimedDraftFixture:
+        fx = make_fixture(num_teams, f"pick{num_teams}")
+        Draft.objects.filter(pk=fx.draft.pk).update(
+            state=TeamDraftState.DRAFTING, paused_at=None, is_manual_pause=False
+        )
+        active = Draft.objects.get(pk=fx.draft.pk).active_round
+        DraftRound.objects.filter(pk=active.pk).update(started_at=timezone.now())
+        return fx
+
+    def pick(self, fx: TimedDraftFixture) -> tuple[int, FakeChannelLayer]:
+        layer = FakeChannelLayer()
+        draft = Draft.objects.get(pk=fx.draft.pk)
+        active = draft.active_round
+        player = draft.users_remaining.first()
+        responses: list = []
+        with (
+            patch("app.broadcast.get_channel_layer", return_value=layer),
+            patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True),
+        ):
+            queries = count_queries(
+                lambda: responses.append(fx.pick(active, fx.staff, player))
+            )
+        self.assertEqual(responses[0].status_code, 201, responses[0].data)
+        return queries, layer
+
+    def test_pick_is_constant_and_bounded(self) -> None:
+        small, small_layer = self.pick(self.armed_fixture(4))
+        large, large_layer = self.pick(self.armed_fixture(8))
+        self.assertEqual(small, large)
+        self.assertEqual(small, PICK_QUERIES)
+        for layer in (small_layer, large_layer):
+            # each event goes to the draft_<id> and tournament_<id> groups
+            types = [m["payload"]["event_type"] for m in layer.messages[::2]]
+            self.assertEqual(types, ["player_picked", "round_started"])
+            states = {dumps(m["draft_state"]) for m in layer.messages}
+            self.assertEqual(len(states), 1)
+
+    def test_pick_builds_the_draft_state_once(self) -> None:
+        fx = self.armed_fixture(4)
+        with patch("app.broadcast.build_draft_state", wraps=build_draft_state) as spy:
+            self.pick(fx)
+        self.assertEqual(spy.call_count, 1)
+
+
+@override_settings(CACHEOPS_ENABLED=False)
+class SharedDraftStateTests(TransactionTestCase):
+    def broadcast_twice(self, write_between: bool) -> tuple[list[dict], int]:
+        fx = TimedDraftFixture(prefix="shared")
+        team = fx.teams[0]
+        first = DraftEvent.objects.create(draft=fx.draft, event_type="captain_ready")
+        second = DraftEvent.objects.create(draft=fx.draft, event_type="captain_unready")
+        layer = FakeChannelLayer()
+
+        def rename() -> None:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE app_team SET name = %s WHERE id = %s", ["Renamed", team.pk]
+                )
+
+        with (
+            patch("app.broadcast.get_channel_layer", return_value=layer),
+            patch("app.broadcast.build_draft_state", wraps=build_draft_state) as spy,
+        ):
+            with atomic_sharing_draft_state():
+                transaction.on_commit(lambda: broadcast_event(first))
+                if write_between:
+                    transaction.on_commit(rename)
+                transaction.on_commit(lambda: broadcast_event(second))
+        return [m["draft_state"] for m in layer.messages[::2]], spy.call_count
+
+    def test_state_is_reused_without_writes(self) -> None:
+        states, builds = self.broadcast_twice(write_between=False)
+        self.assertEqual(builds, 1)
+        self.assertEqual(dumps(states[0]), dumps(states[1]))
+
+    def test_a_write_between_broadcasts_rebuilds_the_state(self) -> None:
+        states, builds = self.broadcast_twice(write_between=True)
+        self.assertEqual(builds, 2)
+        names = [s["tournament"]["teams"][0]["name"] for s in states]
+        self.assertEqual(names, ["T1", "Renamed"])
+
+    def test_nested_block_does_not_share(self) -> None:
+        fx = TimedDraftFixture(prefix="nested")
+        event = DraftEvent.objects.create(draft=fx.draft, event_type="captain_ready")
+        with (
+            patch("app.broadcast.get_channel_layer", return_value=FakeChannelLayer()),
+            patch("app.broadcast.build_draft_state", wraps=build_draft_state) as spy,
+        ):
+            with transaction.atomic():
+                with atomic_sharing_draft_state():
+                    transaction.on_commit(lambda: broadcast_event(event))
+                    transaction.on_commit(lambda: broadcast_event(event))
+        self.assertEqual(spy.call_count, 2)
