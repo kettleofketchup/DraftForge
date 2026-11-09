@@ -296,7 +296,7 @@ export const useDraftWebSocketStore = create<DraftWebSocketState>((set, get) => 
         if (message.draft_state && newEvent.pk > lastPk) {
           buf.state = message.draft_state;
           buf.statePk = newEvent.pk;
-          buf.jump = newEvent.event_type === 'pick_skipped' || newEvent.event_type === 'round_started';
+          buf.jump ||= newEvent.event_type === 'pick_skipped' || newEvent.event_type === 'round_started';
         }
         if (flushTimer === null) {
           flushTimer = setTimeout(() => get().flushDraftEvents(), DRAFT_EVENT_FLUSH_MS);

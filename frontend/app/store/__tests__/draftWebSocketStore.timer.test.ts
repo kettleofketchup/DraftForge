@@ -260,6 +260,21 @@ describe('draftWebSocketStore timer', () => {
     expect(s.forceJumpToRoundPk).toBe(24);
   });
 
+  it('keeps a forced jump when a later event in the same burst carries state', () => {
+    emit({
+      type: 'draft_event',
+      event: evt('round_started', { ...cap, pick_number: 3, started_at: new Date(T0).toISOString(), grace_time_ms: 30000, reserve_ms: null }),
+      draft_state: state({ latest_round: 23 }),
+    });
+    emit({
+      type: 'draft_event',
+      event: evt('player_picked', { captain_name: 'Ana', picked_name: 'P', pick_number: 3 }),
+      draft_state: state({ latest_round: 23 }),
+    });
+    settle();
+    expect(useDraftWebSocketStore.getState().forceJumpToRoundPk).toBe(23);
+  });
+
   it('never replaces a newer draft_state with one built for an older event', () => {
     const newer = evt('player_picked', { captain_name: 'Ana', picked_name: 'P', pick_number: 1 });
     const older = { ...evt('captain_connected', { ...cap, pick_number: 1, is_active_captain: true }), pk: newer.pk - 1 };
