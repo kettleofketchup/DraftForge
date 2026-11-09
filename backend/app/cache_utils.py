@@ -74,7 +74,7 @@ def invalidate_after_commit(*objs: Model) -> None:
             invalidate_after_commit(tournament, org_user, org_user.organization)
     """
 
-    def _do():
+    def _do() -> None:
         for obj in objs:
             invalidate_obj(obj)
 
