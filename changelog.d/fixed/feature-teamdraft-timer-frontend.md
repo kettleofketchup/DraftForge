@@ -10,3 +10,6 @@
   captain.
 - Backend tests use a fast password hasher under the test runner, cutting the team-draft
   test modules from about 6 minutes to about 35 seconds.
+- The tournament page no longer flips a captain's lobby toggle back to "Ready up" after they
+  ready up. A tournament fetch that was already reading when the ready change committed
+  cached its older copy for up to 10 minutes, and every later refetch served it.
