@@ -1,16 +1,32 @@
 # backend/discordbot/utils.py
 """Admin utility functions for sending Discord messages."""
 
+from __future__ import annotations
+
 import time as _time
+from typing import TYPE_CHECKING, Any
 
 import redis as _redis
 import requests
 from django.conf import settings
 
+from app import internal_client
 from app.redis_keys import namespaced_key
 from telemetry.logging import get_logger
 
-from .embeds import event_announcement_embed
+from .embeds import (
+    draft_ready_embed,
+    event_announcement_embed,
+    results_posted_embed,
+    tournament_created_embed,
+)
+
+if TYPE_CHECKING:
+    from app.models import Draft, Tournament
+    from discordbot.models import EventTemplate
+
+JSONDict = dict[str, Any]
+Snowflake = int | str
 
 log = get_logger(__name__)
 
@@ -26,7 +42,7 @@ DISCORD_CODE_UNKNOWN_MESSAGE = 10008
 class MessageDeletedError(Exception):
     """Raised when Discord reports the target message no longer exists (404 / 10008)."""
 
-    def __init__(self, channel_id, message_id):
+    def __init__(self, channel_id: Snowflake, message_id: Snowflake) -> None:
         self.channel_id = str(channel_id)
         self.message_id = str(message_id)
         super().__init__(
@@ -97,7 +113,9 @@ def _acquire_rate_limit_token(max_wait: float = 10.0) -> bool:
         _time.sleep(0.05)
 
 
-def _rate_limited_request(method, url, max_retries=3, **kwargs):
+def _rate_limited_request(
+    method: str, url: str, max_retries: int = 3, **kwargs: Any
+) -> requests.Response:
     """Make a rate-limited HTTP request to the Discord API.
 
     Acquires a token before each attempt and retries on 429 responses.
@@ -121,7 +139,7 @@ def _rate_limited_request(method, url, max_retries=3, **kwargs):
     return response
 
 
-def _get_headers():
+def _get_headers() -> dict[str, str]:
     """Get authorization headers for Discord API."""
     return {
         "Authorization": f"Bot {settings.DISCORD_BOT_TOKEN}",
@@ -130,28 +148,24 @@ def _get_headers():
 
 
 def _log_discord_message(
-    channel_id,
-    embed_data,
-    source,
-    source_id,
-    status_code=None,
-    response_data=None,
-    discord_message_id=None,
-    success=False,
-    fired_by_user_id=None,
-    tournament_log_id=None,
-):
+    channel_id: Snowflake,
+    embed_data: JSONDict,
+    source: str | None,
+    source_id: int | None,
+    status_code: int | None = None,
+    response_data: JSONDict | None = None,
+    discord_message_id: str | None = None,
+    success: bool = False,
+    fired_by_user_id: int | None = None,
+    tournament_log_id: int | None = None,
+) -> int | None:
     """Log a Discord message send via the internal API (HTTP, not direct DB).
 
     Retries once on failure. No direct DB fallback — all writes must go through
     the internal API to prevent SQLite lock contention.
     """
-    import time
-
-    from app.internal_client import create_message_log
-
     for attempt in range(2):
-        kwargs = dict(
+        kwargs: dict[str, Any] = dict(
             channel_id=str(channel_id),
             embed_data=embed_data,
             source=source or "unknown",
@@ -165,11 +179,11 @@ def _log_discord_message(
             kwargs["fired_by_user_id"] = fired_by_user_id
         if tournament_log_id:
             kwargs["tournament_log_id"] = tournament_log_id
-        resp = create_message_log(**kwargs)
+        resp = internal_client.create_message_log(**kwargs)
         if resp and resp.ok:
             return resp.json().get("id")
         if attempt == 0:
-            time.sleep(1)  # Brief retry delay
+            _time.sleep(1)  # Brief retry delay
 
     log.error(
         "message_log_failed",
@@ -182,15 +196,15 @@ def _log_discord_message(
 
 
 def sync_send_embed(
-    channel_id,
-    title,
-    description,
-    color,
-    fields=None,
-    footer=None,
-    source="unknown",
-    source_id=None,
-):
+    channel_id: Snowflake,
+    title: str,
+    description: str,
+    color: int,
+    fields: list[JSONDict] | None = None,
+    footer: JSONDict | None = None,
+    source: str = "unknown",
+    source_id: int | None = None,
+) -> JSONDict | None:
     """
     Send a rich embed to a Discord channel and log via internal API.
 
@@ -209,7 +223,7 @@ def sync_send_embed(
     """
     url = f"{DISCORD_API_BASE}/channels/{channel_id}/messages"
 
-    embed = {
+    embed: JSONDict = {
         "title": title,
         "description": description,
         "color": color,
@@ -283,7 +297,7 @@ def sync_send_embed(
         return None
 
 
-def sync_send_templated_embed(template):
+def sync_send_templated_embed(template: EventTemplate) -> JSONDict | None:
     """
     Send an embed using an EventTemplate.
 
@@ -303,7 +317,9 @@ def sync_send_templated_embed(template):
     )
 
 
-def sync_send_tournament_created(tournament, channel_id=None):
+def sync_send_tournament_created(
+    tournament: Tournament, channel_id: Snowflake | None = None
+) -> JSONDict | None:
     """
     Notify Discord when a tournament is created.
 
@@ -311,8 +327,6 @@ def sync_send_tournament_created(tournament, channel_id=None):
         tournament: Tournament model instance
         channel_id: Override channel (defaults to DISCORD_ADMIN_CHANNEL_ID)
     """
-    from .embeds import tournament_created_embed
-
     channel = channel_id or getattr(settings, "DISCORD_ADMIN_CHANNEL_ID", None)
     if not channel:
         log.warning("admin_channel_not_configured", system="discord", subsystem="utils")
@@ -330,10 +344,10 @@ def sync_send_tournament_created(tournament, channel_id=None):
     )
 
 
-def sync_send_draft_ready(draft, channel_id=None):
+def sync_send_draft_ready(
+    draft: Draft, channel_id: Snowflake | None = None
+) -> JSONDict | None:
     """Notify Discord when a draft is ready to start."""
-    from .embeds import draft_ready_embed
-
     channel = channel_id or getattr(settings, "DISCORD_ADMIN_CHANNEL_ID", None)
     if not channel:
         log.warning("admin_channel_not_configured", system="discord", subsystem="utils")
@@ -350,10 +364,10 @@ def sync_send_draft_ready(draft, channel_id=None):
     )
 
 
-def sync_send_results_posted(tournament, channel_id=None):
+def sync_send_results_posted(
+    tournament: Tournament, channel_id: Snowflake | None = None
+) -> JSONDict | None:
     """Notify Discord when tournament results are posted."""
-    from .embeds import results_posted_embed
-
     channel = channel_id or getattr(settings, "DISCORD_ADMIN_CHANNEL_ID", None)
     if not channel:
         log.warning("admin_channel_not_configured", system="discord", subsystem="utils")
@@ -371,13 +385,13 @@ def sync_send_results_posted(tournament, channel_id=None):
 
 
 def sync_send_embed_with_components_no_log(
-    channel_id,
-    embed,
-    components=None,
-    forum_thread_name=None,
-    content=None,
-    allowed_mentions=None,
-):
+    channel_id: Snowflake,
+    embed: JSONDict | list[JSONDict],
+    components: list[JSONDict] | None = None,
+    forum_thread_name: str | None = None,
+    content: str | None = None,
+    allowed_mentions: JSONDict | None = None,
+) -> tuple[JSONDict, int]:
     """Discord HTTP send only — no logging side effect.
 
     Caller is responsible for the lease (claim before, finalize after).
@@ -385,7 +399,7 @@ def sync_send_embed_with_components_no_log(
     on Discord error so caller can finalize with success=False.
     """
     embeds = embed if isinstance(embed, list) else [embed]
-    message_content = {"embeds": embeds}
+    message_content: JSONDict = {"embeds": embeds}
     if components:
         message_content["components"] = components
     if content:
@@ -411,16 +425,16 @@ def sync_send_embed_with_components_no_log(
 
 
 def sync_send_embed_with_components(
-    channel_id,
-    embed,
-    components=None,
-    source=None,
-    source_id=None,
-    forum_thread_name=None,
-    content=None,
-    allowed_mentions=None,
-    fired_by_user_id=None,
-):
+    channel_id: Snowflake,
+    embed: JSONDict | list[JSONDict],
+    components: list[JSONDict] | None = None,
+    source: str | None = None,
+    source_id: int | None = None,
+    forum_thread_name: str | None = None,
+    content: str | None = None,
+    allowed_mentions: JSONDict | None = None,
+    fired_by_user_id: int | None = None,
+) -> JSONDict | None:
     """Lease-wrapped Discord embed send.
 
     Acquires a pre-send lease via claim_discord_message_log (which writes a
@@ -437,11 +451,6 @@ def sync_send_embed_with_components(
         dict: API response with _message_log_id key on success
         None: lease held by another worker, OR Discord send failed
     """
-    from app.internal_client import (
-        claim_discord_message_log,
-        finalize_discord_message_log,
-    )
-
     embeds = embed if isinstance(embed, list) else [embed]
     embed_data = embeds[0] if embeds else {}
 
@@ -461,7 +470,7 @@ def sync_send_embed_with_components(
             fired_by_user_id,
         )
 
-    log_pk = claim_discord_message_log(
+    log_pk = internal_client.claim_discord_message_log(
         source=source or "unknown",
         source_id=source_id,
         channel_id=str(channel_id),
@@ -509,7 +518,7 @@ def sync_send_embed_with_components(
                 source_id=source_id,
             )
 
-        finalize_discord_message_log(
+        internal_client.finalize_discord_message_log(
             log_pk,
             success=True,
             discord_message_id=msg_id,
@@ -531,7 +540,7 @@ def sync_send_embed_with_components(
             )
         except Exception:
             pass
-        finalize_discord_message_log(
+        internal_client.finalize_discord_message_log(
             log_pk,
             success=False,
             status_code=status_code,
@@ -548,16 +557,16 @@ def sync_send_embed_with_components(
 
 
 def _send_with_post_log(
-    channel_id,
-    embed,
-    components,
-    source,
-    source_id,
-    forum_thread_name,
-    content,
-    allowed_mentions,
-    fired_by_user_id,
-):
+    channel_id: Snowflake,
+    embed: JSONDict | list[JSONDict],
+    components: list[JSONDict] | None,
+    source: str | None,
+    source_id: int | None,
+    forum_thread_name: str | None,
+    content: str | None,
+    allowed_mentions: JSONDict | None,
+    fired_by_user_id: int | None,
+) -> JSONDict | None:
     """Send + post-log path for callers without a meaningful source_id.
 
     Used by anonymous/admin sends that can't participate in the lease
@@ -626,8 +635,12 @@ def _send_with_post_log(
 
 
 def sync_send_v2_message(
-    channel_id, v2_payload, source=None, source_id=None, forum_thread_name=None
-):
+    channel_id: Snowflake,
+    v2_payload: JSONDict,
+    source: str | None = None,
+    source_id: int | None = None,
+    forum_thread_name: str | None = None,
+) -> JSONDict | None:
     """Send a Components V2 message (no embeds, full component layout).
 
     Args:
@@ -724,7 +737,9 @@ def sync_send_v2_message(
         return None
 
 
-def sync_edit_v2_message(channel_id, message_id, v2_payload):
+def sync_edit_v2_message(
+    channel_id: Snowflake, message_id: Snowflake, v2_payload: JSONDict
+) -> JSONDict | None:
     """Edit a Components V2 message.
 
     Args:
@@ -757,7 +772,12 @@ def sync_edit_v2_message(channel_id, message_id, v2_payload):
         return None
 
 
-def sync_edit_message(channel_id, message_id, embed=None, components=None):
+def sync_edit_message(
+    channel_id: Snowflake,
+    message_id: Snowflake,
+    embed: JSONDict | list[JSONDict] | None = None,
+    components: list[JSONDict] | None = None,
+) -> JSONDict | None:
     """Edit an existing Discord message (embed and/or components).
 
     Args:
@@ -771,7 +791,7 @@ def sync_edit_message(channel_id, message_id, embed=None, components=None):
     """
     url = f"{DISCORD_API_BASE}/channels/{channel_id}/messages/{message_id}"
 
-    payload = {}
+    payload: JSONDict = {}
     if embed:
         payload["embeds"] = embed if isinstance(embed, list) else [embed]
     if components is not None:
@@ -795,7 +815,7 @@ def sync_edit_message(channel_id, message_id, embed=None, components=None):
             # Message — the channel/message pair the bot tries to edit no
             # longer exists; this is the most likely "message got deleted"
             # scenario) are visible in Grafana without a DB dive.
-            body = None
+            body: Any = None
             try:
                 body = response.json()
             except Exception:
@@ -843,7 +863,7 @@ def sync_edit_message(channel_id, message_id, embed=None, components=None):
         return None
 
 
-def sync_create_dm_channel(user_id):
+def sync_create_dm_channel(user_id: Snowflake) -> str | None:
     """Create a DM channel with a Discord user.
 
     Args:
@@ -874,8 +894,12 @@ def sync_create_dm_channel(user_id):
 
 
 def sync_send_dm(
-    user_id, embed=None, content=None, components=None, tournament_log_id=None
-):
+    user_id: Snowflake,
+    embed: JSONDict | None = None,
+    content: str | None = None,
+    components: list[JSONDict] | None = None,
+    tournament_log_id: int | None = None,
+) -> JSONDict | None:
     """Send a DM to a Discord user.
 
     Creates a DM channel then sends a message with optional embed.
@@ -911,7 +935,7 @@ def sync_send_dm(
         return None
 
     url = f"{DISCORD_API_BASE}/channels/{dm_channel_id}/messages"
-    payload = {}
+    payload: JSONDict = {}
     if content:
         payload["content"] = content
     if embed:
@@ -974,7 +998,9 @@ def sync_send_dm(
         return None
 
 
-def sync_add_reactions(channel_id, message_id, emojis=None):
+def sync_add_reactions(
+    channel_id: Snowflake, message_id: Snowflake, emojis: list[str] | None = None
+) -> None:
     """
     Add reaction emojis to a message for RSVP.
 
