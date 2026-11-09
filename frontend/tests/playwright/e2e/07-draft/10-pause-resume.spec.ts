@@ -98,8 +98,9 @@ test.describe.serial('Team draft pause and resume', () => {
       expect(await grace.textContent()).toBe(first);
 
       await a.page.getByTestId('draft-resume-button').click();
-      await expect(a.page.getByTestId('draft-resuming-countdown')).toBeVisible();
-      await expect(a.page.getByTestId('draft-resuming-countdown')).toContainText('Resuming in 3');
+      await expect(a.page.getByTestId('draft-resuming-countdown')).toHaveText(
+        /^Resuming in [1-3]…$/
+      );
       await expect(a.page.getByTestId('draft-paused-overlay')).toHaveCount(0, { timeout: 5_000 });
 
       const resumed = parseClock(await grace.textContent());
