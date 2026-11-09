@@ -1,11 +1,19 @@
+from collections.abc import Iterable
+from datetime import datetime
+from typing import TYPE_CHECKING, Any, Self
+
 import requests
 from django.conf import settings
 from django.db import models
+from django.db.models import QuerySet
 from django.db.utils import IntegrityError
 from django.utils import timezone
 
 from app.cache_utils import invalidate_obj
 from telemetry.logging import get_logger
+
+if TYPE_CHECKING:
+    from user.models import DotaUserProfile
 
 User = settings.AUTH_USER_MODEL
 
@@ -37,10 +45,10 @@ class PositionsModel(models.Model):
         help_text="Rank of the hard support position from 0 (No play) to 5 (best)",
     )
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"Carry: {self.carry}, Mid: {self.mid}, Offlane: {self.offlane}, Soft Support: {self.soft_support}, Hard Support: {self.hard_support}"
 
-    def save(self, *args, **kwargs):
+    def save(self, *args: object, **kwargs: object) -> None:
         super().save(*args, **kwargs)
         from app.cache_utils import invalidate_after_commit
 
@@ -133,7 +141,7 @@ class CustomUser(AbstractUser):
     STEAM_ID_64_BASE = 76561197960265728
 
     @property
-    def nickname(self):
+    def nickname(self) -> str | None:
         """Transitional proxy — reads nickname from base_profile.
 
         Removed in a follow-up cleanup ticket once all writers migrate to
@@ -147,7 +155,7 @@ class CustomUser(AbstractUser):
         return bp.nickname
 
     @nickname.setter
-    def nickname(self, value):
+    def nickname(self, value: str | None) -> None:
         """Transitional setter — writes through to base_profile.nickname.
 
         Persists immediately so populate fixtures and incidental writers
@@ -168,14 +176,14 @@ class CustomUser(AbstractUser):
         invalidate_after_commit(bp)
 
     @property
-    def avatar(self):
+    def avatar(self) -> str | None:
         bp = getattr(self, "base_profile", None)
         if bp is None:
             return getattr(self, "_pending_avatar", None)
         return bp.avatar
 
     @avatar.setter
-    def avatar(self, value):
+    def avatar(self, value: str | None) -> None:
         from app.cache_utils import invalidate_after_commit
 
         bp = getattr(self, "base_profile", None)
@@ -187,7 +195,7 @@ class CustomUser(AbstractUser):
         invalidate_after_commit(bp)
 
     @property
-    def dota_user_profile(self):
+    def dota_user_profile(self) -> "DotaUserProfile | None":
         """Convenience accessor — the user-wide Dota profile lives one hop
         away on base_profile. Transitional sugar for the shims below and
         writers still phrasing reads as `user.dota_user_profile`. None-safe
@@ -197,7 +205,7 @@ class CustomUser(AbstractUser):
         return getattr(bp, "dota_user_profile", None) if bp else None
 
     @property
-    def positions(self):
+    def positions(self) -> PositionsModel | None:
         """Transitional proxy — reads positions from dota_user_profile.
         Removed in a cleanup ticket once writers migrate to
         PATCH /api/users/me/profile/game/dota/."""
@@ -206,7 +214,7 @@ class CustomUser(AbstractUser):
         return dp.positions if dp else None
 
     @positions.setter
-    def positions(self, value):
+    def positions(self, value: PositionsModel | None) -> None:
         from app.cache_utils import invalidate_after_commit
 
         bp = getattr(self, "base_profile", None)
@@ -219,19 +227,19 @@ class CustomUser(AbstractUser):
         invalidate_after_commit(dp)
 
     @property
-    def positions_id(self):
+    def positions_id(self) -> int | None:
         bp = getattr(self, "base_profile", None)
         dp = getattr(bp, "dota_user_profile", None) if bp else None
         return dp.positions_id if dp else None
 
     @property
-    def has_active_dota_mmr(self):
+    def has_active_dota_mmr(self) -> bool:
         bp = getattr(self, "base_profile", None)
         dp = getattr(bp, "dota_user_profile", None) if bp else None
         return dp.has_active_dota_mmr if dp else False
 
     @has_active_dota_mmr.setter
-    def has_active_dota_mmr(self, value):
+    def has_active_dota_mmr(self, value: bool) -> None:
         from app.cache_utils import invalidate_after_commit
 
         bp = getattr(self, "base_profile", None)
@@ -244,13 +252,13 @@ class CustomUser(AbstractUser):
         invalidate_after_commit(dp)
 
     @property
-    def dota_mmr_last_verified(self):
+    def dota_mmr_last_verified(self) -> datetime | None:
         bp = getattr(self, "base_profile", None)
         dp = getattr(bp, "dota_user_profile", None) if bp else None
         return dp.dota_mmr_last_verified if dp else None
 
     @dota_mmr_last_verified.setter
-    def dota_mmr_last_verified(self, value):
+    def dota_mmr_last_verified(self, value: datetime | None) -> None:
         from app.cache_utils import invalidate_after_commit
 
         bp = getattr(self, "base_profile", None)
@@ -262,7 +270,7 @@ class CustomUser(AbstractUser):
         dp.save(update_fields=["dota_mmr_last_verified"])
         invalidate_after_commit(dp)
 
-    def createFromDiscordData(self, data):
+    def createFromDiscordData(self, data: dict[str, Any]) -> Self:
         self.username = data["user"]["username"]
         self.discordId = data["user"]["id"]
         self.avatar = data["user"]["avatar"]
@@ -275,7 +283,7 @@ class CustomUser(AbstractUser):
         )
         return self
 
-    def check_and_update_avatar(self):
+    def check_and_update_avatar(self) -> bool:
         """
         Checks if the current avatar URL is valid. If not, fetches the latest
         avatar from Discord and updates the database.
@@ -299,7 +307,7 @@ class CustomUser(AbstractUser):
 
         return self._fetch_and_update_avatar_from_discord()
 
-    def _is_avatar_url_valid(self, url):
+    def _is_avatar_url_valid(self, url: str) -> bool:
         """
         Check if the avatar URL returns a valid response (not 404).
         """
@@ -316,7 +324,7 @@ class CustomUser(AbstractUser):
             )
             return False
 
-    def _fetch_and_update_avatar_from_discord(self):
+    def _fetch_and_update_avatar_from_discord(self) -> bool:
         """
         Fetch the latest avatar from Discord API and update the database.
 
@@ -398,7 +406,7 @@ class CustomUser(AbstractUser):
             )
             return False
 
-    def save(self, *args, **kwargs):
+    def save(self, *args: object, **kwargs: object) -> None:
         """Keep steam ids in sync, auto-create BaseUserProfile (which in turn
         auto-creates the game profiles + default positions), invalidate
         cacheops, and flush pending nickname/avatar/positions/mmr values
@@ -477,7 +485,7 @@ class CustomUser(AbstractUser):
                     delattr(self, attr)
 
     @property
-    def avatarUrl(self):
+    def avatarUrl(self) -> str | None:
         """
         Constructs the Discord avatar URL from the stored discordId and avatar hash.
         This property does not perform any network requests.
@@ -554,16 +562,16 @@ class Organization(models.Model):
             models.Index(fields=["created_at"]),
         ]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.name
 
-    def save(self, *args, **kwargs):
+    def save(self, *args: object, **kwargs: object) -> None:
         super().save(*args, **kwargs)
         # Cacheops post_save signal handles self-invalidation. This save()
         # exists only so the orm-defined behavior matches the call shape
         # used elsewhere; no cache work needed beyond what cacheops does.
 
-    def delete(self, *args, **kwargs):
+    def delete(self, *args: object, **kwargs: object) -> None:
         # Invalidate related leagues before deletion
 
         for league in self.leagues.all():
@@ -662,10 +670,10 @@ class League(models.Model):
             models.Index(fields=["created_at"]),
         ]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.name} ({self.steam_league_id})"
 
-    def save(self, *args, **kwargs):
+    def save(self, *args: object, **kwargs: object) -> None:
         super().save(*args, **kwargs)
         # Self-invalidation handled by cacheops post_save signal; explicit
         # cascade to organization stays so the org's cached child list
@@ -673,7 +681,7 @@ class League(models.Model):
         if self.organization:
             invalidate_obj(self.organization)
 
-    def delete(self, *args, **kwargs):
+    def delete(self, *args: object, **kwargs: object) -> None:
         # Invalidate related organization before deletion
         if self.organization:
             invalidate_obj(self.organization)
@@ -766,10 +774,10 @@ class Tournament(models.Model):
     discord_send_draft_link = models.BooleanField(default=True)
     discord_send_herodraft_link = models.BooleanField(default=True)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.name
 
-    def save(self, *args, **kwargs):
+    def save(self, *args: object, **kwargs: object) -> None:
         super().save(*args, **kwargs)
         # Self-invalidation handled by cacheops post_save signal; the
         # cascade to league + org refreshes those parents' embedded
@@ -789,7 +797,7 @@ class Tournament(models.Model):
         ]
 
     @property
-    def captains(self):
+    def captains(self) -> "list[CustomUser] | QuerySet[CustomUser]":
         """
         Returns all users who are captains in this tournament.
         This is used to populate the draft choices.
@@ -801,7 +809,7 @@ class Tournament(models.Model):
         return self.users.filter(teams_as_captain__tournament=self).distinct()
 
     @property
-    def linked_steam_league_id(self):
+    def linked_steam_league_id(self) -> int | None:
         """Steam league id resolved via the parent League FK.
 
         The legacy `Tournament.steam_league_id` field is ignored — see the
@@ -886,7 +894,7 @@ class Team(models.Model):
             models.Index(fields=["deputy_captain"]),
         ]
 
-    def clean(self):
+    def clean(self) -> None:
         from django.core.exceptions import ValidationError
 
         super().clean()
@@ -914,11 +922,11 @@ class Team(models.Model):
                 {"deputy_captain": "Deputy captain cannot be the same as captain."}
             )
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.name
 
     @property
-    def games(self):
+    def games(self) -> "QuerySet[Game]":
         return Game.objects.filter(
             models.Q(radiant_team=self) | models.Q(dire_team=self)
         )
@@ -1037,14 +1045,14 @@ class Game(models.Model):
         Team, related_name="games_won", null=True, on_delete=models.CASCADE, blank=True
     )
 
-    def __str__(self):
+    def __str__(self) -> str:
         tourn_name = self.tournament.name if self.tournament else "No Tournament"
         radiant = self.radiant_team.name if self.radiant_team else "TBD"
         dire = self.dire_team.name if self.dire_team else "TBD"
         return f"{radiant} vs {dire} in {tourn_name}"
 
     @property
-    def teams(self):
+    def teams(self) -> list[Team | None]:
         return [self.radiant_team, self.dire_team]
 
     class Meta:
@@ -1057,7 +1065,7 @@ class Game(models.Model):
             models.Index(fields=["dire_team"]),
         ]
 
-    def save(self, *args, **kwargs):
+    def save(self, *args: object, **kwargs: object) -> None:
         super().save(*args, **kwargs)
         # Self-invalidation via cacheops post_save signal. Explicit
         # cascade keeps the tournament/league cached team lists fresh.
@@ -1108,7 +1116,7 @@ class Draft(models.Model):
     resuming_until = models.DateTimeField(null=True, blank=True)
     is_manual_pause = models.BooleanField(default=False)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"Draft {self.pk} in {self.tournament.name}"
 
     @property
@@ -1180,12 +1188,14 @@ class Draft(models.Model):
         )
         broadcast_event(event)
 
-    def save(self, *args, **kwargs):
+    def save(self, *args: object, **kwargs: object) -> None:
         super().save(*args, **kwargs)
         # Invalidate tournament cache when draft is modified
         invalidate_obj(self.tournament)
 
-    def _simulate_draft(self, draft_style="snake"):
+    def _simulate_draft(
+        self, draft_style: str = "snake"
+    ) -> dict[int, list[tuple[int, int]]]:
         """
         Simulate a draft where each captain picks the highest MMR player available.
         Returns a dict with team_id -> list of picked players (including captain).
@@ -1194,7 +1204,9 @@ class Draft(models.Model):
             draft_style: "snake" or "normal"
         """
 
-        def get_simulation_data(draft_style=draft_style):
+        def get_simulation_data(
+            draft_style: str = draft_style,
+        ) -> dict[int, list[tuple[int, int]]]:
             teams = list(self.tournament.teams.order_by("draft_order"))
             log.debug(
                 "simulation_teams_loaded",
@@ -1291,7 +1303,7 @@ class Draft(models.Model):
         return data
 
     @property
-    def snake_first_pick_mmr(self):
+    def snake_first_pick_mmr(self) -> int:
         """Calculate total MMR for first pick team in snake draft simulation."""
         simulation = self._simulate_draft("snake")
         if not simulation:
@@ -1304,7 +1316,7 @@ class Draft(models.Model):
         return sum(mmr for _, mmr in simulation[first_team.id])
 
     @property
-    def snake_last_pick_mmr(self):
+    def snake_last_pick_mmr(self) -> int:
         """Calculate total MMR for last pick team in snake draft simulation."""
         simulation = self._simulate_draft("snake")
         if not simulation:
@@ -1318,7 +1330,7 @@ class Draft(models.Model):
         return sum(mmr for _, mmr in simulation[last_team.id])
 
     @property
-    def normal_first_pick_mmr(self):
+    def normal_first_pick_mmr(self) -> int:
         """Calculate total MMR for first pick team in normal draft simulation."""
         simulation = self._simulate_draft("normal")
         if not simulation:
@@ -1332,7 +1344,7 @@ class Draft(models.Model):
         return sum(mmr for _, mmr in simulation[first_team.id])
 
     @property
-    def normal_last_pick_mmr(self):
+    def normal_last_pick_mmr(self) -> int:
         """Calculate total MMR for last pick team in normal draft simulation."""
         simulation = self._simulate_draft("normal")
         if not simulation:
@@ -1346,7 +1358,7 @@ class Draft(models.Model):
         return sum(mmr for _, mmr in simulation[last_team.id])
 
     @property
-    def current_draft_first_pick_mmr(self):
+    def current_draft_first_pick_mmr(self) -> int:
         """Calculate total MMR for first pick team using current draft style."""
         simulation = self._simulate_draft(self.draft_style)
         if not simulation:
@@ -1359,7 +1371,7 @@ class Draft(models.Model):
         return sum(mmr for _, mmr in simulation[first_team.id])
 
     @property
-    def current_draft_last_pick_mmr(self):
+    def current_draft_last_pick_mmr(self) -> int:
         """Calculate total MMR for last pick team using current draft style."""
         simulation = self._simulate_draft(self.draft_style)
         if not simulation:
@@ -1372,21 +1384,21 @@ class Draft(models.Model):
         return sum(mmr for _, mmr in simulation[last_team.id])
 
     @property
-    def teams(self):
+    def teams(self) -> list[Team] | QuerySet[Team]:
         if not self.tournament.teams.exists():
             return []
 
         return self.tournament.teams.all()
 
     @property
-    def users(self):
+    def users(self) -> list[CustomUser] | QuerySet[CustomUser]:
         if not self.tournament.users.exists():
             return []
 
         return self.tournament.users.all()
 
     @property
-    def users_remaining(self):
+    def users_remaining(self) -> list[CustomUser] | QuerySet[CustomUser]:
         """
         Returns users that are not already in teams.
         This is used to populate the draft choices.
@@ -1433,14 +1445,14 @@ class Draft(models.Model):
         return users
 
     @property
-    def captains(self):
+    def captains(self) -> QuerySet[CustomUser]:
         if not self.tournament.captains.exists():
             raise ValueError("Draft must be associated with a tournament.")
 
         return self.tournament.captains.all()
 
     @property
-    def latest_round(self):
+    def latest_round(self) -> int | None:
         """
         Returns the latest draft round.
         """
@@ -1463,7 +1475,7 @@ class Draft(models.Model):
 
         return latest_round.pk
 
-    def rebuild_teams(self, clear_only=False):
+    def rebuild_teams(self, clear_only: bool = False) -> None:
         """
         Build teams based on the draft choices.
 
@@ -1535,7 +1547,7 @@ class Draft(models.Model):
                 team.members.add(draft_round.choice)
                 team.save()
 
-    def build_rounds(self):
+    def build_rounds(self) -> None:
         log.debug(
             "build_rounds_started",
             system="tournament",
@@ -1584,7 +1596,9 @@ class Draft(models.Model):
         pick_number = 1
         phase = 1
 
-        def create_draft_round(draft, captain, pick_num, phase_num):
+        def create_draft_round(
+            draft: "Draft", captain: CustomUser, pick_num: int, phase_num: int
+        ) -> bool:
             try:
                 draft_round = DraftRound.objects.create(
                     draft=draft,
@@ -1647,7 +1661,7 @@ class Draft(models.Model):
         if self.state == TeamDraftState.PENDING:
             self._emit_lobby_opened(options)
 
-    def go_back(self):
+    def go_back(self) -> bool:
         """
         Go back to the previous draft round.
         This method should be called when a captain wants to undo their last pick.
@@ -1658,7 +1672,9 @@ class Draft(models.Model):
             return True
         return False
 
-    def roll_until_winner(self, tied_teams):
+    def roll_until_winner(
+        self, tied_teams: Iterable[Team]
+    ) -> tuple[Team, list[list[dict[str, int]]]]:
         """
         Roll dice until exactly one winner emerges.
 
@@ -1687,7 +1703,9 @@ class Draft(models.Model):
 
         return remaining[0], roll_rounds
 
-    def create_next_shuffle_round(self):
+    def create_next_shuffle_round(
+        self,
+    ) -> "dict[str, DraftRound | int | dict[str, object] | None]":
         """
         Calculate which team picks next based on lowest total MMR.
         Creates a new DraftRound for the next pick.
@@ -1816,7 +1834,7 @@ class DraftRound(models.Model):
     class Meta:
         ordering = ["pick_number"]
 
-    def save(self, *args, **kwargs):
+    def save(self, *args: object, **kwargs: object) -> None:
         super().save(*args, **kwargs)
         # Invalidate specific tournament and draft when picks are made
         # Use invalidate_obj() to avoid invalidating ALL tournaments/drafts
@@ -1841,7 +1859,7 @@ class DraftRound(models.Model):
             tournament=self.draft.tournament, captain=self.captain
         ).first()
 
-    def pick_player(self, user: CustomUser):
+    def pick_player(self, user: CustomUser) -> None:
         if self.choice:
             raise ValueError("This draft round already has a choice.")
 
@@ -1910,7 +1928,7 @@ class DraftRound(models.Model):
             )
             raise ValueError("User is not available for drafting.")
 
-    def __str__(self):
+    def __str__(self) -> str:
         captain_name = self.captain.username if self.captain else "unassigned"
         choice_name = self.choice.username if self.choice else "pending"
         tournament_name = (
@@ -1933,7 +1951,7 @@ class Joke(models.Model):
         verbose_name = "Joke"
         verbose_name_plural = "Jokes"
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.user.username} - {self.tangoes_purchased} tangoes"
 
 
@@ -1988,7 +2006,7 @@ class DraftEvent(models.Model):
     class Meta:
         ordering = ["-created_at"]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.event_type} - Draft {self.draft_id} at {self.created_at}"
 
 
@@ -2010,7 +2028,7 @@ class DraftOptions(models.Model):
     def __str__(self) -> str:
         return f"DraftOptions for tournament {self.tournament_id}"
 
-    def save(self, *args, **kwargs) -> None:
+    def save(self, *args: object, **kwargs: object) -> None:
         super().save(*args, **kwargs)
         invalidate_obj(self.tournament)
 
@@ -2074,11 +2092,11 @@ class HeroDraft(models.Model):
         default=False
     )  # True if paused manually by captain/staff
 
-    def save(self, *args, **kwargs):
+    def save(self, *args: object, **kwargs: object) -> None:
         super().save(*args, **kwargs)
         # Self-invalidation handled by cacheops post_save signal.
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"HeroDraft for {self.game}"
 
 
@@ -2097,7 +2115,7 @@ class DraftTeam(models.Model):
     is_ready = models.BooleanField(default=False)
     is_connected = models.BooleanField(default=False)
 
-    def save(self, *args, **kwargs):
+    def save(self, *args: object, **kwargs: object) -> None:
         super().save(*args, **kwargs)
         # Self-invalidation via cacheops post_save. Cascade to draft so
         # the draft's cached team list refreshes when any team mutates.
@@ -2105,10 +2123,10 @@ class DraftTeam(models.Model):
             invalidate_obj(self.draft)
 
     @property
-    def captain(self):
+    def captain(self) -> CustomUser | None:
         return self.tournament_team.captain
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"DraftTeam: {self.tournament_team} in {self.draft}"
 
 
@@ -2143,14 +2161,14 @@ class HeroDraftRound(models.Model):
     class Meta:
         ordering = ["round_number"]
 
-    def save(self, *args, **kwargs):
+    def save(self, *args: object, **kwargs: object) -> None:
         super().save(*args, **kwargs)
         # Self-invalidation via cacheops post_save. Cascade to draft so
         # the draft's cached round list refreshes on each pick/ban.
         if self.draft_id:
             invalidate_obj(self.draft)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"Round {self.round_number}: {self.action_type} by {self.draft_team}"
 
 
@@ -2189,14 +2207,14 @@ class HeroDraftEvent(models.Model):
     class Meta:
         ordering = ["created_at"]
 
-    def save(self, *args, **kwargs):
+    def save(self, *args: object, **kwargs: object) -> None:
         super().save(*args, **kwargs)
         # Self-invalidation via cacheops post_save. Cascade to draft so
         # the draft's event log refreshes when a new event is recorded.
         if self.draft_id:
             invalidate_obj(self.draft)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.event_type} at {self.created_at}"
 
 
@@ -2255,16 +2273,16 @@ class LeagueRating(models.Model):
         verbose_name_plural = "League Ratings"
 
     @property
-    def total_elo(self):
+    def total_elo(self) -> float:
         """Calculate total Elo as base_mmr + positive_stats - negative_stats."""
         return self.base_mmr + self.positive_stats - self.negative_stats
 
     @property
-    def net_change(self):
+    def net_change(self) -> float:
         """Net rating change since joining the league."""
         return self.positive_stats - self.negative_stats
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.player.username} in {self.league.name}: {self.total_elo:.0f}"
 
 
@@ -2332,7 +2350,7 @@ class LeagueMatch(models.Model):
         verbose_name = "League Match"
         verbose_name_plural = "League Matches"
 
-    def __str__(self):
+    def __str__(self) -> str:
         status = "finalized" if self.is_finalized else "pending"
         return f"Match {self.pk} in {self.league.name} ({status})"
 
@@ -2405,7 +2423,7 @@ class LeagueMatchParticipant(models.Model):
         verbose_name = "League Match Participant"
         verbose_name_plural = "League Match Participants"
 
-    def __str__(self):
+    def __str__(self) -> str:
         result = "W" if self.is_winner else "L"
         return f"{self.player.username} ({result}) in Match {self.match_id}"
 
@@ -2460,7 +2478,7 @@ class OrgLog(models.Model):
         verbose_name = "Organization Log"
         verbose_name_plural = "Organization Logs"
 
-    def __str__(self):
+    def __str__(self) -> str:
         actor_name = self.actor.username if self.actor else "System"
         return f"{actor_name} {self.action} on {self.organization.name}"
 
@@ -2513,7 +2531,7 @@ class LeagueLog(models.Model):
         verbose_name = "League Log"
         verbose_name_plural = "League Logs"
 
-    def __str__(self):
+    def __str__(self) -> str:
         actor_name = self.actor.username if self.actor else "System"
         return f"{actor_name} {self.action} on {self.league.name}"
 
@@ -2589,5 +2607,5 @@ class ProfileClaimRequest(models.Model):
             )
         ]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.claimer.username} -> {self.target_user.nickname or self.target_user.steamid} ({self.status})"

@@ -1,7 +1,8 @@
 import nh3
 from django.db import transaction
-from django.db.models import Prefetch
+from django.db.models import Prefetch, QuerySet
 from rest_framework import serializers
+from rest_framework.utils.serializer_helpers import ReturnList
 from rest_framework.validators import UniqueValidator
 
 from app.cache_utils import invalidate_after_commit
@@ -37,12 +38,12 @@ class UserPkField(serializers.RelatedField):
     Handles nullable FKs (e.g., deputy_captain) via allow_null.
     """
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs: object) -> None:
         kwargs.setdefault("read_only", True)
         kwargs.setdefault("allow_null", True)
         super().__init__(**kwargs)
 
-    def to_representation(self, value):
+    def to_representation(self, value: CustomUser | None) -> int | None:
         if value is None:
             return None
         return value.pk
@@ -98,7 +99,7 @@ class TournamentUserSerializer(serializers.ModelSerializer):
         )
 
 
-def _tournament_organization(tournament) -> Organization | None:
+def _tournament_organization(tournament: Tournament | None) -> Organization | None:
     """League's org, else the org of the event that spawned the tournament."""
     if tournament is None:
         return None
@@ -108,7 +109,9 @@ def _tournament_organization(tournament) -> Organization | None:
     return event.organization if event else None
 
 
-def _serialize_users_with_mmr(users_qs, tournament):
+def _serialize_users_with_mmr(
+    users_qs: QuerySet[CustomUser], tournament: Tournament | None
+) -> ReturnList:
     """Serialize users with org-scoped MMR if tournament has a league/org."""
     # local: org.serializers imports app.serializers
     from org.serializers import OrgUserSerializer
@@ -147,7 +150,9 @@ def _serialize_users_with_mmr(users_qs, tournament):
     ).data
 
 
-def _serialize_user_with_mmr(user, tournament):
+def _serialize_user_with_mmr(
+    user: CustomUser | None, tournament: Tournament | None
+) -> dict | None:
     """Serialize a single user with org-scoped MMR. Returns None if user is None."""
     if user is None:
         return None
@@ -157,7 +162,7 @@ def _serialize_user_with_mmr(user, tournament):
     return results[0] if results else TournamentUserSerializer(user).data
 
 
-def _collect_tournament_user_pks(tournament):
+def _collect_tournament_user_pks(tournament: Tournament) -> set[int]:
     """Collect all unique user PKs from a tournament and its teams.
 
     Includes: users, team members, captains, deputy captains,
@@ -186,7 +191,7 @@ def _collect_tournament_user_pks(tournament):
 _CONTEXT_MMR_KEYS = ("orgUserPk", "guildNickname", "mmr", "league_mmr")
 
 
-def _collect_context_mmr(tournament, seen_pks) -> dict:
+def _collect_context_mmr(tournament: Tournament | None, seen_pks: set[int]) -> dict:
     """Per-request contextual org/league overlay keyed by user pk.
 
     Returns ``{pk: {orgUserPk, guildNickname, mmr, league_mmr}}`` for a
@@ -234,7 +239,7 @@ def _collect_context_mmr(tournament, seen_pks) -> dict:
     return {row["pk"]: {k: row[k] for k in _CONTEXT_MMR_KEYS} for row in serialized}
 
 
-def _build_users_dict(tournament) -> dict:
+def _build_users_dict(tournament: Tournament) -> dict:
     """Build a deduplicated ``{pk: serialized_user}`` dict for a tournament.
 
     Shape-preserving: the CORE half comes from one bulk uncached query
@@ -273,7 +278,7 @@ class TournamentSerializerBase(serializers.ModelSerializer):
     captains = UserPkField(many=True, read_only=True)
     tournament_type = serializers.CharField(read_only=False)
 
-    def get_users(self, tournament):
+    def get_users(self, tournament: Tournament) -> list[int]:
         """Return user PKs only — full data provided via _users dict."""
         return [u.pk for u in tournament.users.all()]
 
@@ -297,19 +302,19 @@ class TeamSerializerForTournament(serializers.ModelSerializer):
     deputy_captain = serializers.SerializerMethodField()
     draft_order = serializers.IntegerField()
 
-    def get_members(self, team):
+    def get_members(self, team: Team) -> ReturnList:
         return _serialize_users_with_mmr(team.members.all(), team.tournament)
 
-    def get_dropin_members(self, team):
+    def get_dropin_members(self, team: Team) -> ReturnList:
         return _serialize_users_with_mmr(team.dropin_members.all(), team.tournament)
 
-    def get_left_members(self, team):
+    def get_left_members(self, team: Team) -> ReturnList:
         return _serialize_users_with_mmr(team.left_members.all(), team.tournament)
 
-    def get_captain(self, team):
+    def get_captain(self, team: Team) -> dict | None:
         return _serialize_user_with_mmr(team.captain, team.tournament)
 
-    def get_deputy_captain(self, team):
+    def get_deputy_captain(self, team: Team) -> dict | None:
         return _serialize_user_with_mmr(team.deputy_captain, team.tournament)
 
     class Meta:
@@ -368,7 +373,7 @@ class LeagueMinimalSerializer(serializers.ModelSerializer):
         model = League
         fields = ("pk", "name", "organization_name")
 
-    def get_organization_name(self, obj):
+    def get_organization_name(self, obj: League) -> str | None:
         """Get the first organization name, if any."""
         # Use prefetched data if available, otherwise query
         orgs = getattr(obj, "_prefetched_objects_cache", {}).get("organizations")
@@ -465,13 +470,13 @@ class OrganizationSerializer(serializers.ModelSerializer):
             "users_count",
         )
 
-    def validate_description(self, value):
+    def validate_description(self, value: str | None) -> str | None:
         """Sanitize markdown to prevent XSS."""
         if value:
             return nh3.clean(value)
         return value
 
-    def validate_rules_template(self, value):
+    def validate_rules_template(self, value: str | None) -> str | None:
         """Sanitize markdown to prevent XSS."""
         if value:
             return nh3.clean(value)
@@ -558,12 +563,12 @@ class LeagueSerializer(serializers.ModelSerializer):
             "organization_name",
         )
 
-    def get_organization_name(self, obj):
+    def get_organization_name(self, obj: League) -> str | None:
         """Return first organization name for backwards compatibility."""
         first_org = obj.organization
         return first_org.name if first_org else None
 
-    def validate_steam_league_id(self, value):
+    def validate_steam_league_id(self, value: int | None) -> int | None:
         if value is None:
             return value
         if value <= 0:
@@ -582,12 +587,12 @@ class LeagueSerializer(serializers.ModelSerializer):
             )
         return value
 
-    def validate_description(self, value):
+    def validate_description(self, value: str | None) -> str | None:
         if value:
             return nh3.clean(value)
         return value
 
-    def validate_rules(self, value):
+    def validate_rules(self, value: str | None) -> str | None:
         if value:
             return nh3.clean(value)
         return value
@@ -637,7 +642,7 @@ class LeaguesSerializer(serializers.ModelSerializer):
             "staff_ids",
         )
 
-    def get_organization_name(self, obj):
+    def get_organization_name(self, obj: League) -> str | None:
         """Return first organization name for backwards compatibility."""
         first_org = obj.organization
         return first_org.name if first_org else None
@@ -667,12 +672,12 @@ class DraftRoundForDraftSerializer(serializers.ModelSerializer):
     choice = serializers.SerializerMethodField()
     team = TeamSerializerForTournament(many=False, read_only=True)
 
-    def get_captain(self, draft_round):
+    def get_captain(self, draft_round: DraftRound) -> dict | None:
         return _serialize_user_with_mmr(
             draft_round.captain, draft_round.draft.tournament
         )
 
-    def get_choice(self, draft_round):
+    def get_choice(self, draft_round: DraftRound) -> dict | None:
         return _serialize_user_with_mmr(
             draft_round.choice, draft_round.draft.tournament
         )
@@ -795,7 +800,7 @@ class TournamentSerializerDraft(serializers.ModelSerializer):
     tournament_type = serializers.CharField(read_only=False)
     captains = UserPkField(many=True, read_only=True)
 
-    def get_users(self, tournament):
+    def get_users(self, tournament: Tournament) -> list[int]:
         """Return user PKs only — full data provided via _users dict."""
         return [u.pk for u in tournament.users.all()]
 
@@ -824,7 +829,7 @@ class DraftSerializer(serializers.ModelSerializer):
         read_only=True,
     )
 
-    def get_users_remaining(self, draft):
+    def get_users_remaining(self, draft: Draft) -> list[int]:
         """Return user PKs only — full data provided via _users dict."""
         return [u.pk for u in draft.users_remaining]
 
@@ -860,7 +865,7 @@ class GameSerializerForTournament(serializers.ModelSerializer):
     winning_team = TeamSerializerSlim(many=False, read_only=True)
     herodraft_id = serializers.SerializerMethodField()
 
-    def get_herodraft_id(self, obj):
+    def get_herodraft_id(self, obj: Game) -> int | None:
         if hasattr(obj, "herodraft"):
             return obj.herodraft.id
         return None
@@ -907,12 +912,12 @@ class DraftRoundSerializer(serializers.ModelSerializer):
         required=False,
     )
 
-    def get_captain(self, draft_round):
+    def get_captain(self, draft_round: DraftRound) -> dict | None:
         return _serialize_user_with_mmr(
             draft_round.captain, draft_round.draft.tournament
         )
 
-    def get_choice(self, draft_round):
+    def get_choice(self, draft_round: DraftRound) -> dict | None:
         return _serialize_user_with_mmr(
             draft_round.choice, draft_round.draft.tournament
         )
@@ -990,16 +995,16 @@ class TeamSerializer(serializers.ModelSerializer):
     )
     total_mmr = serializers.SerializerMethodField()
 
-    def get_members(self, team):
+    def get_members(self, team: Team) -> ReturnList:
         return _serialize_users_with_mmr(team.members.all(), team.tournament)
 
-    def get_dropin_members(self, team):
+    def get_dropin_members(self, team: Team) -> ReturnList:
         return _serialize_users_with_mmr(team.dropin_members.all(), team.tournament)
 
-    def get_captain(self, team):
+    def get_captain(self, team: Team) -> dict | None:
         return _serialize_user_with_mmr(team.captain, team.tournament)
 
-    def get_deputy_captain(self, team):
+    def get_deputy_captain(self, team: Team) -> dict | None:
         return _serialize_user_with_mmr(team.deputy_captain, team.tournament)
 
     tournament_id = serializers.PrimaryKeyRelatedField(
@@ -1011,7 +1016,7 @@ class TeamSerializer(serializers.ModelSerializer):
         required=False,
     )
 
-    def get_total_mmr(self, obj):
+    def get_total_mmr(self, obj: Team) -> int:
         """Sum of captain MMR + all member MMRs (excluding captain from members to avoid double-counting)."""
         from org.models import OrgUser
 
@@ -1098,16 +1103,16 @@ class TournamentSerializer(serializers.ModelSerializer):
     league_pk = serializers.SerializerMethodField()
     source_event = serializers.SerializerMethodField()
 
-    def get_organization_pk(self, tournament):
+    def get_organization_pk(self, tournament: Tournament) -> int | None:
         """Return the primary organization's PK for this tournament."""
         org = _tournament_organization(tournament)
         return org.pk if org else None
 
-    def get_league_pk(self, tournament):
+    def get_league_pk(self, tournament: Tournament) -> int | None:
         """Return the league's PK for this tournament."""
         return tournament.league.pk if tournament.league else None
 
-    def get_source_event(self, tournament):
+    def get_source_event(self, tournament: Tournament) -> dict | None:
         """Return lightweight source event data (event that spawned this tournament)."""
         event = tournament.source_event.first()
         if not event:
@@ -1120,7 +1125,7 @@ class TournamentSerializer(serializers.ModelSerializer):
             }
         return result
 
-    def get_users(self, tournament):
+    def get_users(self, tournament: Tournament) -> list[int]:
         """Return user PKs only — full data provided via _users dict."""
         return [u.pk for u in tournament.users.all()]
 
@@ -1164,7 +1169,7 @@ class TournamentSerializer(serializers.ModelSerializer):
                 return DraftOptions(tournament=instance)
         return instance.get_draft_options()
 
-    def update(self, instance, validated_data):
+    def update(self, instance: Tournament, validated_data: dict) -> Tournament:
         """
         Override update to handle:
         1. Captain removal when users are removed (delete their team)
@@ -1327,7 +1332,7 @@ class UserSerializer(serializers.ModelSerializer):
             "staff_league_ids",
         )
 
-    def get_admin_organization_ids(self, obj):
+    def get_admin_organization_ids(self, obj: CustomUser) -> list[int]:
         # Owner counts as admin in the hierarchy; merge both reverse
         # relations so the frontend gets one canonical "I can admin this
         # org" list. Dedupe via set in case an owner is also in admins.
@@ -1335,16 +1340,16 @@ class UserSerializer(serializers.ModelSerializer):
         admin = obj.admin_organizations.values_list("pk", flat=True)
         return sorted({*owned, *admin})
 
-    def get_staff_organization_ids(self, obj):
+    def get_staff_organization_ids(self, obj: CustomUser) -> list[int]:
         return list(obj.staff_organizations.values_list("pk", flat=True))
 
-    def get_admin_league_ids(self, obj):
+    def get_admin_league_ids(self, obj: CustomUser) -> list[int]:
         return list(obj.admin_leagues.values_list("pk", flat=True))
 
-    def get_staff_league_ids(self, obj):
+    def get_staff_league_ids(self, obj: CustomUser) -> list[int]:
         return list(obj.staff_leagues.values_list("pk", flat=True))
 
-    def update(self, instance, validated_data):
+    def update(self, instance: CustomUser, validated_data: dict) -> CustomUser:
         with transaction.atomic():
             try:
                 positions_data = validated_data.pop("positions", None)
@@ -1396,7 +1401,7 @@ class UserSerializer(serializers.ModelSerializer):
 
         return instance
 
-    def create(self, validated_data):
+    def create(self, validated_data: dict) -> CustomUser:
         fields = self.Meta.fields
 
         with transaction.atomic():
@@ -1455,7 +1460,7 @@ class GameSerializer(serializers.ModelSerializer):
     )
     herodraft_id = serializers.SerializerMethodField()
 
-    def get_herodraft_id(self, obj):
+    def get_herodraft_id(self, obj: Game) -> int | None:
         if hasattr(obj, "herodraft"):
             return obj.herodraft.id
         return None
@@ -1486,7 +1491,7 @@ class BracketGameSerializer(serializers.ModelSerializer):
     winning_team = TeamSerializerForTournament(read_only=True)
     herodraft_id = serializers.SerializerMethodField()
 
-    def get_herodraft_id(self, obj):
+    def get_herodraft_id(self, obj: Game) -> int | None:
         if hasattr(obj, "herodraft"):
             return obj.herodraft.id
         return None
@@ -1615,7 +1620,7 @@ class HeroDraftRoundSerializerFull(serializers.ModelSerializer):
             "team_name",
         ]
 
-    def get_team_name(self, obj):
+    def get_team_name(self, obj: HeroDraftRound) -> str | None:
         """Get the team name from the draft team's tournament team."""
         if obj.draft_team and obj.draft_team.tournament_team:
             return obj.draft_team.tournament_team.name
@@ -1684,14 +1689,14 @@ class HeroDraftSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
 
-    def get_current_round(self, obj):
+    def get_current_round(self, obj: HeroDraft) -> int | None:
         active_round = obj.rounds.filter(state="active").first()
         if active_round:
             # Return index (0-based) into rounds array for frontend compatibility
             return active_round.round_number - 1
         return None
 
-    def get_tournament_id(self, obj):
+    def get_tournament_id(self, obj: HeroDraft) -> int | None:
         if obj.game and obj.game.tournament:
             return obj.game.tournament.id
         return None
