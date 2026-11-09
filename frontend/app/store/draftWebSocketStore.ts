@@ -79,6 +79,13 @@ function numericKeys(fresh: Record<string, boolean> | undefined): Record<number,
   return out;
 }
 
+// The tick loop flips resuming -> drafting without an event; only its ticks report it.
+function resumeEndedBy(tick: DraftTick, draftState: WebSocketDraftState | null): boolean {
+  if (draftState?.state !== 'resuming' || tick.draft_state !== 'drafting') return false;
+  const until = draftState.resuming_until ? Date.parse(draftState.resuming_until) : NaN;
+  return !Number.isNaN(until) && Date.parse(tick.server_time) >= until;
+}
+
 /** Ingest _users dict from WS draft state into entity cache. */
 function ingestDraftStateUsers(draftState: WebSocketDraftState): void {
   if (draftState._users) {
@@ -300,6 +307,9 @@ export const useDraftWebSocketStore = create<DraftWebSocketState>((set, get) => 
           serverClockOffsetMs: captureClockOffset(tick.server_time, receivedAtMs),
           _lastTickReceivedAtMs: receivedAtMs,
           captainFresh: { ...state.captainFresh, ...fresh },
+          ...(resumeEndedBy(tick, state.draftState)
+            ? { draftState: { ...state.draftState!, state: 'drafting', resuming_until: null } }
+            : {}),
         }));
       } else if (message.type === 'captain_heartbeat') {
         set((state) => ({ captainFresh: { ...state.captainFresh, [message.captain_id]: message.fresh } }));

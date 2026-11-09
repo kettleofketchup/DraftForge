@@ -229,6 +229,31 @@ describe('draftWebSocketStore timer', () => {
     expect(draftWsSelectors.activeRoundPk(useDraftWebSocketStore.getState())).toBe(22);
   });
 
+  it('a drafting tick past resuming_until ends the resuming countdown', () => {
+    const until = new Date(T0 + 3000).toISOString();
+    emit({ type: 'initial_state', draft_state: state({ state: 'resuming', resuming_until: until }) });
+    emit(tick({ draft_state: 'resuming', resuming_until: until, server_time: new Date(T0 + 1000).toISOString() }));
+    expect(draftWsSelectors.draftStatus(useDraftWebSocketStore.getState())).toBe('resuming');
+
+    emit(tick({ draft_state: 'drafting', server_time: new Date(T0 + 3200).toISOString() }));
+    const s = useDraftWebSocketStore.getState();
+    expect(draftWsSelectors.draftStatus(s)).toBe('drafting');
+    expect(s.draftState?.resuming_until).toBeNull();
+  });
+
+  it('a drafting tick from before resuming_until does not end the countdown', () => {
+    const until = new Date(T0 + 3000).toISOString();
+    emit({ type: 'initial_state', draft_state: state({ state: 'resuming', resuming_until: until }) });
+    emit(tick({ draft_state: 'drafting', server_time: new Date(T0 - 5000).toISOString() }));
+    expect(draftWsSelectors.draftStatus(useDraftWebSocketStore.getState())).toBe('resuming');
+  });
+
+  it('a drafting tick never overrides paused', () => {
+    emit({ type: 'initial_state', draft_state: state({ state: 'paused' }) });
+    emit(tick({ draft_state: 'drafting', server_time: new Date(T0 + 9000).toISOString() }));
+    expect(draftWsSelectors.draftStatus(useDraftWebSocketStore.getState())).toBe('paused');
+  });
+
   it('teamTiming returns the same empty array reference with no tick', () => {
     const s = useDraftWebSocketStore.getState();
     expect(draftWsSelectors.teamTiming(s)).toBe(draftWsSelectors.teamTiming(s));
