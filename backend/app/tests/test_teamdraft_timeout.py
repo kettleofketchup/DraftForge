@@ -9,12 +9,22 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from app.functions import shuffle_draft
-from app.functions.teamdraft_timeout import TIMEOUT_ACTIONS, find_swap_target, recompute_pick_phase, skip_turn
+from app.functions.teamdraft_timeout import (
+    TIMEOUT_ACTIONS,
+    find_swap_target,
+    recompute_pick_phase,
+    skip_turn,
+)
 from app.models import Draft, DraftRound, Team, TeamDraftState
 from app.tasks import teamdraft_tick
 from app.tests.teamdraft_fixtures import TimedDraftFixture
 
-CAPTAIN_MMRS = [1000, 2000, 3000, 4000]  # teams[0] is lowest -> shuffle's first captain, no tie roll
+CAPTAIN_MMRS = [
+    1000,
+    2000,
+    3000,
+    4000,
+]  # teams[0] is lowest -> shuffle's first captain, no tie roll
 
 
 class ReassignRoundCaptainTests(TestCase):
@@ -27,8 +37,13 @@ class ReassignRoundCaptainTests(TestCase):
         rnd.was_tie = True
         rnd.tie_roll_data = {"x": 1}
         rnd.save()
-        with patch("app.functions.shuffle_draft.broadcast_event") as mock_bc, self.captureOnCommitCallbacks(execute=True):
-            tie = shuffle_draft.reassign_round_captain(self.fx.draft, rnd, {self.fx.teams[0].pk}, reason="timeout_skip")
+        with (
+            patch("app.functions.shuffle_draft.broadcast_event") as mock_bc,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            tie = shuffle_draft.reassign_round_captain(
+                self.fx.draft, rnd, {self.fx.teams[0].pk}, reason="timeout_skip"
+            )
         rnd.refresh_from_db()
         self.assertIsNone(tie)
         self.assertEqual(rnd.captain, self.fx.teams[1].captain)
@@ -41,7 +56,9 @@ class ReassignRoundCaptainTests(TestCase):
 
     def test_no_eligible_team_returns_none_and_leaves_round(self):
         rnd = self.fx.round(1)
-        result = shuffle_draft.reassign_round_captain(self.fx.draft, rnd, {t.pk for t in self.fx.teams})
+        result = shuffle_draft.reassign_round_captain(
+            self.fx.draft, rnd, {t.pk for t in self.fx.teams}
+        )
         self.assertIsNone(result)
         rnd.refresh_from_db()
         self.assertEqual(rnd.captain, self.fx.teams[0].captain)
@@ -63,11 +80,16 @@ def expire(rnd: DraftRound) -> None:
 class SkipTurnSnakeTests(TestCase):
     def setUp(self):
         self.fx = TimedDraftFixture(style="snake")
-        with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True), self.captureOnCommitCallbacks(execute=True):
+        with (
+            patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             self.fx.start()
 
     def captain_order(self):
-        return [r.captain_id for r in self.fx.draft.draft_rounds.order_by("pick_number")]
+        return [
+            r.captain_id for r in self.fx.draft.draft_rounds.order_by("pick_number")
+        ]
 
     def test_registry_has_only_skip_turn(self):
         self.assertEqual(set(TIMEOUT_ACTIONS), {"skip_turn"})
@@ -79,7 +101,8 @@ class SkipTurnSnakeTests(TestCase):
 
     def test_first_pick_timeout_swaps_with_next_and_defers(self):
         a, b, c, d = [t.captain_id for t in self.fx.teams]
-        rnd1 = self.fx.round(1); expire(rnd1)
+        rnd1 = self.fx.round(1)
+        expire(rnd1)
         with self.captureOnCommitCallbacks(execute=True):
             nxt = skip_turn(self.fx.draft, rnd1)
         self.assertEqual(self.captain_order()[:4], [b, a, c, d])
@@ -88,22 +111,34 @@ class SkipTurnSnakeTests(TestCase):
         self.assertIsNotNone(nxt.started_at)
         rnd1.refresh_from_db()
         self.assertEqual((rnd1.pick_number, rnd1.skip_count), (2, 1))
-        self.assertIsNone(rnd1.started_at); self.assertIsNone(rnd1.timed_out_at)
+        self.assertIsNone(rnd1.started_at)
+        self.assertIsNone(rnd1.timed_out_at)
         ev = self.fx.events("pick_skipped").get()
         self.assertEqual(ev.payload["skipped_captain_id"], a)
         self.assertEqual(ev.payload["next_captain_id"], b)
-        self.assertEqual((ev.payload["from_pick_number"], ev.payload["to_pick_number"], ev.payload["deferred_to_pick_number"]), (1, 1, 2))
-        self.assertEqual(self.fx.events("round_started").filter(payload__pick_number=1).count(), 2)
+        self.assertEqual(
+            (
+                ev.payload["from_pick_number"],
+                ev.payload["to_pick_number"],
+                ev.payload["deferred_to_pick_number"],
+            ),
+            (1, 1, 2),
+        )
+        self.assertEqual(
+            self.fx.events("round_started").filter(payload__pick_number=1).count(), 2
+        )
 
     def test_double_skip_slides_again(self):
         a, b, c, d = [t.captain_id for t in self.fx.teams]
-        rnd = self.fx.round(1); expire(rnd)
+        rnd = self.fx.round(1)
+        expire(rnd)
         with self.captureOnCommitCallbacks(execute=True):
             skip_turn(self.fx.draft, rnd)
         # B picks at 1, A is active at 2 and times out again
         with self.captureOnCommitCallbacks(execute=True):
             self.fx.pick(self.fx.draft.active_round, self.fx.staff)
-        rnd.refresh_from_db(); expire(rnd)
+        rnd.refresh_from_db()
+        expire(rnd)
         with self.captureOnCommitCallbacks(execute=True):
             skip_turn(self.fx.draft, rnd)
         self.assertEqual(self.captain_order()[:4], [b, c, a, d])
@@ -116,7 +151,9 @@ class SkipTurnSnakeTests(TestCase):
             with self.captureOnCommitCallbacks(execute=True):
                 self.fx.pick(self.fx.draft.active_round, self.fx.staff)
         rnd4 = self.fx.draft.active_round
-        self.assertEqual((rnd4.pick_number, rnd4.captain_id, self.fx.round(5).captain_id), (4, d, d))
+        self.assertEqual(
+            (rnd4.pick_number, rnd4.captain_id, self.fx.round(5).captain_id), (4, d, d)
+        )
         expire(rnd4)
         with self.captureOnCommitCallbacks(execute=True):
             nxt = skip_turn(self.fx.draft, rnd4)
@@ -138,23 +175,33 @@ class SkipTurnSnakeTests(TestCase):
 
     def test_swap_then_undo_keeps_deferred_captain(self):
         a, b, c, d = [t.captain_id for t in self.fx.teams]
-        rnd1 = self.fx.round(1); expire(rnd1)
+        rnd1 = self.fx.round(1)
+        expire(rnd1)
         with self.captureOnCommitCallbacks(execute=True):
             skip_turn(self.fx.draft, rnd1)
         with self.captureOnCommitCallbacks(execute=True):
-            self.assertEqual(self.fx.pick(self.fx.draft.active_round, self.fx.staff).status_code, 201)   # B picks at 1
-        with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True), self.captureOnCommitCallbacks(execute=True):
+            self.assertEqual(
+                self.fx.pick(self.fx.draft.active_round, self.fx.staff).status_code, 201
+            )  # B picks at 1
+        with (
+            patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             self.assertEqual(self.fx.undo(self.fx.staff).status_code, 200)
         self.assertEqual(self.captain_order()[:4], [b, a, c, d])
         rnd1.refresh_from_db()
-        self.assertEqual((rnd1.pick_number, rnd1.captain_id, rnd1.skip_count), (2, a, 1))
+        self.assertEqual(
+            (rnd1.pick_number, rnd1.captain_id, rnd1.skip_count), (2, a, 1)
+        )
         self.assertIsNone(rnd1.started_at)
         self.assertIsNotNone(self.fx.round(1).started_at, "undone round re-armed")
 
     def test_staff_picked_later_round_is_skipped_over(self):
         rnd2 = self.fx.round(2)
-        rnd2.choice = self.fx.players[0]; rnd2.save()   # models a round picked before the clock was armed
-        rnd1 = self.fx.round(1); expire(rnd1)
+        rnd2.choice = self.fx.players[0]
+        rnd2.save()  # models a round picked before the clock was armed
+        rnd1 = self.fx.round(1)
+        expire(rnd1)
         with self.captureOnCommitCallbacks(execute=True):
             nxt = skip_turn(self.fx.draft, rnd1)
         self.assertEqual(nxt.captain_id, self.fx.teams[2].captain_id)
@@ -173,7 +220,10 @@ class SkipTurnSnakeTests(TestCase):
         last.refresh_from_db()
         self.assertIsNotNone(last.timed_out_at)
         self.assertEqual(last.skip_count, 0)
-        self.assertEqual(self.fx.events("pick_skip_unavailable").get().payload["captain_id"], last.captain_id)
+        self.assertEqual(
+            self.fx.events("pick_skip_unavailable").get().payload["captain_id"],
+            last.captain_id,
+        )
         self.assertFalse(self.fx.events("pick_skipped").exists())
 
     def test_only_same_captain_rounds_remain_is_noop(self):
@@ -182,7 +232,9 @@ class SkipTurnSnakeTests(TestCase):
             with self.captureOnCommitCallbacks(execute=True):
                 self.fx.pick(self.fx.draft.active_round, self.fx.staff)
         for n in range(6, 17):
-            r = self.fx.round(n); r.choice = self.fx.players[n - 1]; r.save()
+            r = self.fx.round(n)
+            r.choice = self.fx.players[n - 1]
+            r.save()
         rnd4 = self.fx.draft.active_round
         self.assertIsNone(find_swap_target(self.fx.draft, rnd4))
         expire(rnd4)
@@ -204,48 +256,77 @@ class SkipTurnSnakeTests(TestCase):
         self.fx.draft.refresh_from_db()
         self.assertEqual(self.fx.draft.state, TeamDraftState.COMPLETED)
         for team in self.fx.teams:
-            self.assertEqual(self.fx.draft.draft_rounds.filter(captain=team.captain, choice__isnull=False).count(), 4)
+            self.assertEqual(
+                self.fx.draft.draft_rounds.filter(
+                    captain=team.captain, choice__isnull=False
+                ).count(),
+                4,
+            )
 
 
 class SkipTurnShuffleTests(TestCase):
     def setUp(self):
         self.fx = TimedDraftFixture(style="shuffle", captain_mmrs=CAPTAIN_MMRS)
-        with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True), self.captureOnCommitCallbacks(execute=True):
+        with (
+            patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             self.fx.start()
 
     def test_timeout_reselects_same_round_and_resets_timing(self):
         rnd = self.fx.round(1)
         rnd.pick_duration_ms, rnd.reserve_used_ms = 31000, 1000
-        rnd.save(); expire(rnd)
+        rnd.save()
+        expire(rnd)
         with self.captureOnCommitCallbacks(execute=True):
             nxt = skip_turn(self.fx.draft, rnd)
         self.assertEqual(nxt.pk, rnd.pk)
         rnd.refresh_from_db()
         self.assertEqual(rnd.captain, self.fx.teams[1].captain)
-        self.assertEqual((rnd.pick_duration_ms, rnd.reserve_used_ms, rnd.skip_count), (0, 0, 1))
+        self.assertEqual(
+            (rnd.pick_duration_ms, rnd.reserve_used_ms, rnd.skip_count), (0, 0, 1)
+        )
         self.assertIsNotNone(rnd.started_at)
-        events = list(self.fx.draft.events.order_by("pk").values_list("event_type", flat=True))
-        last_round_started = max(i for i, e in enumerate(events) if e == "round_started")
+        events = list(
+            self.fx.draft.events.order_by("pk").values_list("event_type", flat=True)
+        )
+        last_round_started = max(
+            i for i, e in enumerate(events) if e == "round_started"
+        )
         self.assertLess(events.index("captain_assigned"), events.index("pick_skipped"))
         self.assertLess(events.index("pick_skipped"), last_round_started)
         ev = self.fx.events("pick_skipped").get()
-        self.assertEqual((ev.payload["pick_duration_ms"], ev.payload["reserve_used_ms"]), (31000, 1000))
+        self.assertEqual(
+            (ev.payload["pick_duration_ms"], ev.payload["reserve_used_ms"]),
+            (31000, 1000),
+        )
         self.assertIsNone(ev.payload["deferred_to_pick_number"])
         self.assertEqual(ev.payload["next_captain_id"], self.fx.teams[1].captain_id)
-        self.assertEqual(self.fx.events("captain_assigned").filter(payload__reason="timeout_skip").count(), 1)
+        self.assertEqual(
+            self.fx.events("captain_assigned")
+            .filter(payload__reason="timeout_skip")
+            .count(),
+            1,
+        )
 
     def test_excluded_team_is_eligible_again_next_assignment(self):
-        rnd = self.fx.round(1); expire(rnd)
+        rnd = self.fx.round(1)
+        expire(rnd)
         with self.captureOnCommitCallbacks(execute=True):
             skip_turn(self.fx.draft, rnd)
         with self.captureOnCommitCallbacks(execute=True):
             self.fx.pick(self.fx.draft.active_round, self.fx.staff)
-        self.assertEqual(self.fx.round(2).captain, self.fx.teams[0].captain, "lowest MMR team is back in")
+        self.assertEqual(
+            self.fx.round(2).captain,
+            self.fx.teams[0].captain,
+            "lowest MMR team is back in",
+        )
 
     def test_no_eligible_team_is_noop(self):
         for team in self.fx.teams[1:]:
             team.members.add(*self.fx.players[:4])
-        rnd = self.fx.round(1); expire(rnd)
+        rnd = self.fx.round(1)
+        expire(rnd)
         with self.captureOnCommitCallbacks(execute=True):
             self.assertIsNone(skip_turn(self.fx.draft, rnd))
         rnd.refresh_from_db()
@@ -255,7 +336,9 @@ class SkipTurnShuffleTests(TestCase):
 
 class CheckTimeoutTests(TransactionTestCase):
     def setUp(self):
-        self.fx = TimedDraftFixture(style="snake", grace_time_ms=1000, reserve_time_ms=2000, prefix="to")
+        self.fx = TimedDraftFixture(
+            style="snake", grace_time_ms=1000, reserve_time_ms=2000, prefix="to"
+        )
         with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True):
             self.rnd = self.fx.start(now=timezone.now() - timedelta(seconds=10))
 
@@ -275,18 +358,25 @@ class CheckTimeoutTests(TransactionTestCase):
         ev = self.fx.events("pick_timed_out").get()
         self.assertEqual(ev.payload["captain_id"], self.rnd.captain_id)
         self.assertGreaterEqual(ev.payload["elapsed_ms"], 10000)
-        self.assertEqual(ev.payload["reserve_used_ms"], 2000, "debit capped at the pool, same value as the round field")
+        self.assertEqual(
+            ev.payload["reserve_used_ms"],
+            2000,
+            "debit capped at the pool, same value as the round field",
+        )
         self.assertEqual(self.fx.events("pick_skipped").count(), 1)
 
     def test_not_yet_expired_is_noop(self):
-        self.rnd.started_at = timezone.now() - timedelta(seconds=2); self.rnd.save()
+        self.rnd.started_at = timezone.now() - timedelta(seconds=2)
+        self.rnd.save()
         self.assertIsNone(self.check())
         self.rnd.refresh_from_db()
         self.assertIsNone(self.rnd.timed_out_at)
 
     def test_paused_draft_never_fires(self):
         draft = Draft.objects.get(pk=self.fx.draft.pk)
-        draft.state = TeamDraftState.PAUSED; draft.paused_at = timezone.now(); draft.save()
+        draft.state = TeamDraftState.PAUSED
+        draft.paused_at = timezone.now()
+        draft.save()
         self.assertIsNone(self.check())
         self.rnd.refresh_from_db()
         self.assertIsNone(self.rnd.timed_out_at)
@@ -296,8 +386,11 @@ class CheckTimeoutTests(TransactionTestCase):
         for _ in range(15):
             self.fx.pick(self.fx.draft.active_round, self.fx.staff)
         last = self.fx.draft.active_round
-        last.started_at = timezone.now() - timedelta(seconds=10); last.save()
-        reserve_before = Team.objects.get(pk=self.fx.team_of(last.captain).pk).draft_reserve_ms
+        last.started_at = timezone.now() - timedelta(seconds=10)
+        last.save()
+        reserve_before = Team.objects.get(
+            pk=self.fx.team_of(last.captain).pk
+        ).draft_reserve_ms
         for _ in range(6):
             self.assertIsNone(self.check())
         self.assertEqual(self.fx.events("pick_timed_out").count(), 1)
@@ -305,13 +398,16 @@ class CheckTimeoutTests(TransactionTestCase):
         last.refresh_from_db()
         self.assertIsNotNone(last.timed_out_at)
         self.assertEqual(last.reserve_used_ms, reserve_before)
-        self.assertEqual(Team.objects.get(pk=self.fx.team_of(last.captain).pk).draft_reserve_ms, 0)
+        self.assertEqual(
+            Team.objects.get(pk=self.fx.team_of(last.captain).pk).draft_reserve_ms, 0
+        )
 
     def test_pick_after_last_slot_timeout_does_not_double_count(self):
         for _ in range(15):
             self.fx.pick(self.fx.draft.active_round, self.fx.staff)
         last = self.fx.draft.active_round
-        last.started_at = timezone.now() - timedelta(seconds=10); last.save()
+        last.started_at = timezone.now() - timedelta(seconds=10)
+        last.save()
         self.assertIsNone(self.check())
         last.refresh_from_db()
         after_timeout = (last.pick_duration_ms, last.reserve_used_ms)
@@ -319,7 +415,9 @@ class CheckTimeoutTests(TransactionTestCase):
         last.refresh_from_db()
         self.assertEqual((last.pick_duration_ms, last.reserve_used_ms), after_timeout)
         self.assertIsNotNone(last.completed_at)
-        self.assertEqual(Draft.objects.get(pk=self.fx.draft.pk).state, TeamDraftState.COMPLETED)
+        self.assertEqual(
+            Draft.objects.get(pk=self.fx.draft.pk).state, TeamDraftState.COMPLETED
+        )
 
     def test_timeout_after_staff_pick_during_pause_and_resume(self):
         client = APIClient()
@@ -334,10 +432,13 @@ class CheckTimeoutTests(TransactionTestCase):
         draft.save()
         rnd2 = draft.active_round
         self.assertEqual(rnd2.grace_time_ms, 1000)
-        rnd2.started_at = timezone.now() - timedelta(seconds=10); rnd2.save()
+        rnd2.started_at = timezone.now() - timedelta(seconds=10)
+        rnd2.save()
         nxt = self.check()
         self.assertIsNotNone(nxt)
-        self.assertEqual((nxt.pick_number, nxt.captain_id), (2, self.fx.teams[2].captain_id))
+        self.assertEqual(
+            (nxt.pick_number, nxt.captain_id), (2, self.fx.teams[2].captain_id)
+        )
 
 
 class PickTimeoutOrderingTests(TransactionTestCase):
@@ -345,7 +446,9 @@ class PickTimeoutOrderingTests(TransactionTestCase):
     (No threaded variant: the unit-test DB is shared-cache in-memory SQLite, where a second BEGIN IMMEDIATE gets SQLITE_LOCKED instead of waiting.)"""
 
     def setUp(self):
-        self.fx = TimedDraftFixture(style="snake", grace_time_ms=1000, reserve_time_ms=1000, prefix="cc")
+        self.fx = TimedDraftFixture(
+            style="snake", grace_time_ms=1000, reserve_time_ms=1000, prefix="cc"
+        )
         with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True):
             self.rnd = self.fx.start(now=timezone.now() - timedelta(seconds=5))
 
@@ -356,7 +459,9 @@ class PickTimeoutOrderingTests(TransactionTestCase):
         self.assertEqual(self.fx.pick(self.rnd, self.rnd.captain).status_code, 201)
         self.assertIsNone(self.check())
         self.assertFalse(self.fx.events("pick_skipped").exists())
-        self.assertEqual(self.fx.events("round_started").filter(payload__pick_number=2).count(), 1)
+        self.assertEqual(
+            self.fx.events("round_started").filter(payload__pick_number=2).count(), 1
+        )
 
     def test_timeout_lands_first_then_pick_on_deferred_round_is_409(self):
         self.assertIsNotNone(self.check())
@@ -365,11 +470,15 @@ class PickTimeoutOrderingTests(TransactionTestCase):
         self.rnd.refresh_from_db()
         self.assertIsNone(self.rnd.choice)
         self.assertFalse(self.fx.events("player_picked").exists())
-        self.assertEqual(self.fx.events("round_started").filter(payload__pick_number=1).count(), 2)
+        self.assertEqual(
+            self.fx.events("round_started").filter(payload__pick_number=1).count(), 2
+        )
 
     def test_stale_pre_read_writes_nothing(self):
         stale = (self.rnd.pk, self.rnd.started_at - timedelta(seconds=1))
-        with patch("app.tasks.teamdraft_tick.read_timeout_candidate", return_value=stale):
+        with patch(
+            "app.tasks.teamdraft_tick.read_timeout_candidate", return_value=stale
+        ):
             self.assertIsNone(self.check())
         self.rnd.refresh_from_db()
         self.assertIsNone(self.rnd.timed_out_at)
@@ -381,26 +490,39 @@ class ShufflePickTimeoutOrderingTests(TransactionTestCase):
 
     def setUp(self):
         self.fx = TimedDraftFixture(
-            style="shuffle", grace_time_ms=1000, reserve_time_ms=1000, prefix="sr", captain_mmrs=CAPTAIN_MMRS
+            style="shuffle",
+            grace_time_ms=1000,
+            reserve_time_ms=1000,
+            prefix="sr",
+            captain_mmrs=CAPTAIN_MMRS,
         )
         with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True):
             self.rnd = self.fx.start(now=timezone.now() - timedelta(seconds=5))
 
-    def test_skip_lands_between_auth_and_lock_then_skipped_captain_pick_is_refused(self):
+    def test_skip_lands_between_auth_and_lock_then_skipped_captain_pick_is_refused(
+        self,
+    ):
         captain_a, captain_b = self.fx.teams[0].captain, self.fx.teams[1].captain
         self.assertEqual(self.rnd.captain_id, captain_a.pk)
         b_members = set(self.fx.team_of(captain_b).members.values_list("pk", flat=True))
 
         def skip_then_deny(*_args: object) -> bool:
-            self.assertIsNotNone(async_to_sync(teamdraft_tick.check_timeout)(self.fx.draft.pk))
+            self.assertIsNotNone(
+                async_to_sync(teamdraft_tick.check_timeout)(self.fx.draft.pk)
+            )
             return False
 
-        with patch("app.functions.tournament.can_edit_tournament", side_effect=skip_then_deny):
+        with patch(
+            "app.functions.tournament.can_edit_tournament", side_effect=skip_then_deny
+        ):
             r = self.fx.pick(self.rnd, captain_a)
         self.assertEqual((r.status_code, r.data["code"]), (409, "not_active_round"))
         self.rnd.refresh_from_db()
         self.assertEqual(self.rnd.captain_id, captain_b.pk)
         self.assertIsNone(self.rnd.choice)
-        self.assertEqual(set(self.fx.team_of(captain_b).members.values_list("pk", flat=True)), b_members)
+        self.assertEqual(
+            set(self.fx.team_of(captain_b).members.values_list("pk", flat=True)),
+            b_members,
+        )
         self.assertFalse(self.fx.events("player_picked").exists())
         self.assertEqual(self.fx.events("pick_skipped").count(), 1)

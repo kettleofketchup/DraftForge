@@ -285,12 +285,16 @@ class ReadyEndpointTests(EndpointTestBase):
         r = self.post(cap, "ready", {"ready": True})
         self.assertEqual(r.status_code, 200, r.data)
         self.assertTrue(Team.objects.get(pk=self.fx.team_of(cap).pk).draft_is_ready)
-        self.assertEqual(self.fx.events("captain_ready").get().payload["captain_id"], cap.pk)
+        self.assertEqual(
+            self.fx.events("captain_ready").get().payload["captain_id"], cap.pk
+        )
         r = self.post(cap, "ready", {"ready": False})
         self.assertEqual(r.status_code, 200)
         self.assertEqual(self.fx.events("captain_unready").count(), 1)
         self.fx.draft.refresh_from_db()
-        self.assertEqual(self.fx.draft.state, TeamDraftState.PENDING, "ready never starts the draft")
+        self.assertEqual(
+            self.fx.draft.state, TeamDraftState.PENDING, "ready never starts the draft"
+        )
 
     def test_all_ready_does_not_start_draft(self):
         for cap in self.fx.captains:
@@ -299,8 +303,12 @@ class ReadyEndpointTests(EndpointTestBase):
         self.assertEqual(self.fx.draft.state, TeamDraftState.PENDING)
 
     def test_spectator_and_staff_cannot_ready(self):
-        self.assertEqual(self.post(self.fx.players[0], "ready", {"ready": True}).status_code, 403)
-        self.assertEqual(self.post(self.fx.staff, "ready", {"ready": True}).status_code, 403)
+        self.assertEqual(
+            self.post(self.fx.players[0], "ready", {"ready": True}).status_code, 403
+        )
+        self.assertEqual(
+            self.post(self.fx.staff, "ready", {"ready": True}).status_code, 403
+        )
         self.assertFalse(self.fx.events("captain_ready").exists())
 
     def test_ready_outside_pending_is_400(self):
@@ -333,8 +341,14 @@ class StartEndpointTests(EndpointTestBase):
         r = self.post(self.fx.staff, "start")
         self.assertEqual(r.status_code, 200, r.data)
         ev = self.fx.events("draft_force_started").get()
-        self.assertEqual({x["captain_id"] for x in ev.payload["not_ready"]}, {c.pk for c in self.fx.captains[1:]})
-        self.assertEqual(set(ev.payload["not_ready"][0]), {"team_id", "team_name", "captain_id", "captain_name"})
+        self.assertEqual(
+            {x["captain_id"] for x in ev.payload["not_ready"]},
+            {c.pk for c in self.fx.captains[1:]},
+        )
+        self.assertEqual(
+            set(ev.payload["not_ready"][0]),
+            {"team_id", "team_name", "captain_id", "captain_name"},
+        )
         self.fx.draft.refresh_from_db()
         self.assertIsNotNone(self.fx.draft.active_round.started_at)
 
@@ -375,8 +389,17 @@ class StartEndpointTests(EndpointTestBase):
         Team.objects.filter(tournament=self.fx.tournament).update(draft_reserve_ms=None)
         r = self.post(self.fx.staff, "start")
         self.assertEqual(r.status_code, 200, r.data)
-        self.assertEqual(set(Team.objects.filter(tournament=self.fx.tournament).values_list("draft_reserve_ms", flat=True)), {30000})
-        self.assertEqual(self.fx.events("round_started").get().payload["reserve_ms"], 30000)
+        self.assertEqual(
+            set(
+                Team.objects.filter(tournament=self.fx.tournament).values_list(
+                    "draft_reserve_ms", flat=True
+                )
+            ),
+            {30000},
+        )
+        self.assertEqual(
+            self.fx.events("round_started").get().payload["reserve_ms"], 30000
+        )
 
 
 class PauseResumeEndpointTests(EndpointTestBase):
@@ -398,15 +421,21 @@ class PauseResumeEndpointTests(EndpointTestBase):
         self.assertEqual(ev.payload["captain_id"], rnd.captain_id)
         self.assertEqual(ev.payload["pick_number"], 1)
 
-        with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True) as mock_start:
+        with patch(
+            "app.tasks.draft_tick.start_tick_broadcaster", return_value=True
+        ) as mock_start:
             r = self.post(self.fx.staff, "resume")
         self.assertEqual(r.status_code, 200, r.data)
-        self.fx.draft.refresh_from_db(); rnd.refresh_from_db()
+        self.fx.draft.refresh_from_db()
+        rnd.refresh_from_db()
         self.assertEqual(self.fx.draft.state, TeamDraftState.RESUMING)
         self.assertIsNone(self.fx.draft.paused_at)
         self.assertFalse(self.fx.draft.is_manual_pause)
         self.assertGreaterEqual(rnd.started_at - started, timedelta(seconds=3))
-        self.assertEqual(self.fx.events("draft_resumed").get().payload["resumed_by_id"], self.fx.staff.pk)
+        self.assertEqual(
+            self.fx.events("draft_resumed").get().payload["resumed_by_id"],
+            self.fx.staff.pk,
+        )
         mock_start.assert_called_once()
 
     def test_resume_with_null_started_at_sets_resuming_until(self):
@@ -417,7 +446,8 @@ class PauseResumeEndpointTests(EndpointTestBase):
         with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True):
             r = self.post(self.fx.staff, "resume")
         self.assertEqual(r.status_code, 200, r.data)
-        self.fx.draft.refresh_from_db(); rnd.refresh_from_db()
+        self.fx.draft.refresh_from_db()
+        rnd.refresh_from_db()
         self.assertEqual(rnd.started_at, self.fx.draft.resuming_until)
 
     def test_resume_fills_missing_grace(self):
@@ -456,7 +486,10 @@ class PauseResumeEndpointTests(EndpointTestBase):
 
 class PickMatrixTests(EndpointTestBase):
     def start(self):
-        with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True), self.captureOnCommitCallbacks(execute=True):
+        with (
+            patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             return self.fx.start()
 
     def test_pending_rejects_captain_and_staff(self):
@@ -488,9 +521,13 @@ class PickMatrixTests(EndpointTestBase):
         nxt = self.fx.draft.active_round
         self.assertEqual(nxt.pick_number, 2)
         self.assertIsNone(nxt.started_at)
-        self.assertEqual(nxt.grace_time_ms, 30000, "next round really activated (unarmed)")
+        self.assertEqual(
+            nxt.grace_time_ms, 30000, "next round really activated (unarmed)"
+        )
         self.assertIsNone(nxt.timed_out_at)
-        self.assertEqual(self.fx.events("round_started").filter(payload__pick_number=2).count(), 0)
+        self.assertEqual(
+            self.fx.events("round_started").filter(payload__pick_number=2).count(), 0
+        )
 
     def test_resume_after_paused_staff_pick_arms_round_with_grace(self):
         active = self.start()
@@ -500,15 +537,22 @@ class PickMatrixTests(EndpointTestBase):
         self.assertEqual(self.armed("resume").status_code, 200)
         self.fx.draft.refresh_from_db()
         rnd = self.fx.draft.active_round
-        self.assertEqual((rnd.pick_number, rnd.started_at, rnd.grace_time_ms), (2, self.fx.draft.resuming_until, 30000))
+        self.assertEqual(
+            (rnd.pick_number, rnd.started_at, rnd.grace_time_ms),
+            (2, self.fx.draft.resuming_until, 30000),
+        )
 
     def test_locked_pick_path_ignores_stale_cached_active_round(self):
         self.start()
         rnd3 = self.fx.round(3)
-        with patch.object(Draft, "active_round", new_callable=PropertyMock, return_value=rnd3):
+        with patch.object(
+            Draft, "active_round", new_callable=PropertyMock, return_value=rnd3
+        ):
             r = self.fx.pick(rnd3, rnd3.captain)
         self.assertEqual(r.status_code, 409)
-        self.assertEqual((r.data["code"], r.data["active_pick_number"]), ("not_active_round", 1))
+        self.assertEqual(
+            (r.data["code"], r.data["active_pick_number"]), ("not_active_round", 1)
+        )
 
     def test_resuming_and_completed_reject_everyone(self):
         rnd = self.start()
@@ -531,7 +575,10 @@ class PickMatrixTests(EndpointTestBase):
 
     def test_broadcasts_are_deferred_to_commit(self):
         rnd = self.start()
-        with patch("app.functions.tournament.broadcast_event") as mock_bc, patch("app.functions.teamdraft.broadcast_event") as mock_td:
+        with (
+            patch("app.functions.tournament.broadcast_event") as mock_bc,
+            patch("app.functions.teamdraft.broadcast_event") as mock_td,
+        ):
             with self.captureOnCommitCallbacks(execute=False) as callbacks:
                 self.assertEqual(self.fx.pick(rnd, rnd.captain).status_code, 201)
                 mock_bc.assert_not_called()
@@ -545,7 +592,10 @@ class PickMatrixTests(EndpointTestBase):
 class PickTimingTests(TestCase):
     def setUp(self):
         self.fx = TimedDraftFixture(grace_time_ms=1000, reserve_time_ms=5000)
-        with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True), self.captureOnCommitCallbacks(execute=True):
+        with (
+            patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             self.rnd = self.fx.start(now=timezone.now() - timedelta(seconds=3))
 
     def test_pick_records_duration_and_debits_reserve_then_activates_next(self):
@@ -562,11 +612,16 @@ class PickTimingTests(TestCase):
         self.assertEqual(nxt.pick_number, 2)
         self.assertIsNotNone(nxt.started_at)
         self.assertEqual(nxt.grace_time_ms, 1000)
-        self.assertTrue(self.fx.events("round_started").filter(payload__pick_number=2).exists())
+        self.assertTrue(
+            self.fx.events("round_started").filter(payload__pick_number=2).exists()
+        )
 
     def test_client_picked_at_within_window_is_honoured(self):
         early = (self.rnd.started_at + timedelta(milliseconds=500)).isoformat()
-        with patch("app.functions.tournament.timezone.now", return_value=self.rnd.started_at + timedelta(seconds=1)):
+        with patch(
+            "app.functions.tournament.timezone.now",
+            return_value=self.rnd.started_at + timedelta(seconds=1),
+        ):
             with self.captureOnCommitCallbacks(execute=True):
                 r = self.fx.pick(self.rnd, self.rnd.captain, client_picked_at=early)
         self.assertEqual(r.status_code, 201, r.data)
@@ -575,9 +630,15 @@ class PickTimingTests(TestCase):
         self.assertEqual(self.rnd.reserve_used_ms, 0)
 
     def test_client_picked_at_in_future_or_stale_falls_back_to_server_time(self):
-        for prefix, bad in (("ctf", timezone.now() + timedelta(seconds=5)), ("cts", timezone.now() - timedelta(seconds=10))):
+        for prefix, bad in (
+            ("ctf", timezone.now() + timedelta(seconds=5)),
+            ("cts", timezone.now() - timedelta(seconds=10)),
+        ):
             fx = TimedDraftFixture(grace_time_ms=1000, prefix=prefix)
-            with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True), self.captureOnCommitCallbacks(execute=True):
+            with (
+                patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True),
+                self.captureOnCommitCallbacks(execute=True),
+            ):
                 rnd = fx.start(now=timezone.now() - timedelta(seconds=2))
             with self.captureOnCommitCallbacks(execute=True):
                 r = fx.pick(rnd, rnd.captain, client_picked_at=bad.isoformat())
@@ -588,7 +649,10 @@ class PickTimingTests(TestCase):
     def test_staff_pick_during_pause_charges_only_time_before_pause(self):
         fx = TimedDraftFixture(prefix="sp")
         now = timezone.now()
-        with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True), self.captureOnCommitCallbacks(execute=True):
+        with (
+            patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             rnd = fx.start(now=now - timedelta(seconds=5))
         fx.draft.state = TeamDraftState.PAUSED
         fx.draft.paused_at = now - timedelta(seconds=4)
@@ -602,11 +666,16 @@ class PickTimingTests(TestCase):
 
     def test_last_pick_completes_draft(self):
         fx = TimedDraftFixture(num_teams=1, prefix="one")
-        with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True), self.captureOnCommitCallbacks(execute=True):
+        with (
+            patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             fx.start()
         for n in range(1, 5):
             with self.captureOnCommitCallbacks(execute=True):
-                self.assertEqual(fx.pick(fx.draft.active_round, fx.staff).status_code, 201)
+                self.assertEqual(
+                    fx.pick(fx.draft.active_round, fx.staff).status_code, 201
+                )
         fx.draft.refresh_from_db()
         self.assertEqual(fx.draft.state, TeamDraftState.COMPLETED)
         self.assertEqual(fx.events("draft_completed").count(), 1)
@@ -616,7 +685,10 @@ class PickTimingTests(TestCase):
 class UndoTests(TestCase):
     def armed_fixture(self, **kw: object) -> TimedDraftFixture:
         fx = TimedDraftFixture(**kw)
-        with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True), self.captureOnCommitCallbacks(execute=True):
+        with (
+            patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             fx.start()
         return fx
 
@@ -624,10 +696,16 @@ class UndoTests(TestCase):
         fx = self.armed_fixture(prefix="order")
         with self.captureOnCommitCallbacks(execute=True):
             fx.pick(fx.draft.active_round, fx.staff)
-        with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True), self.captureOnCommitCallbacks(execute=True):
+        with (
+            patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             fx.undo(fx.staff)
         types = list(
-            DraftEvent.objects.nocache().filter(draft=fx.draft).order_by("pk").values_list("event_type", flat=True)
+            DraftEvent.objects.nocache()
+            .filter(draft=fx.draft)
+            .order_by("pk")
+            .values_list("event_type", flat=True)
         )
         self.assertEqual(types[-2:], ["pick_undone", "round_started"])
 
@@ -642,7 +720,10 @@ class UndoTests(TestCase):
         with self.captureOnCommitCallbacks(execute=True):
             fx.pick(fx.draft.active_round, fx.staff)
         rnd2_captain = fx.round(2).captain_id
-        with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True), self.captureOnCommitCallbacks(execute=True):
+        with (
+            patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             r = fx.undo(fx.staff)
         self.assertEqual(r.status_code, 200, r.data)
         self.assertEqual(fx.round(2).captain_id, rnd2_captain)
@@ -650,8 +731,12 @@ class UndoTests(TestCase):
         rnd1 = fx.round(1)
         self.assertIsNone(rnd1.choice)
         self.assertIsNone(rnd1.completed_at)
-        self.assertIsNotNone(rnd1.started_at, "re-armed because the undone pick was timed")
-        self.assertEqual(fx.events("round_started").filter(payload__pick_number=1).count(), 2)
+        self.assertIsNotNone(
+            rnd1.started_at, "re-armed because the undone pick was timed"
+        )
+        self.assertEqual(
+            fx.events("round_started").filter(payload__pick_number=1).count(), 2
+        )
 
     def test_untimed_undo_leaves_round_unarmed(self) -> None:
         fx = TimedDraftFixture(timer_enabled=False, prefix="untimed")
@@ -669,14 +754,24 @@ class UndoTests(TestCase):
                 fx.pick(fx.draft.active_round, fx.staff)
         fx.draft.refresh_from_db()
         self.assertEqual(fx.draft.state, TeamDraftState.COMPLETED)
-        with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True) as mock_start, self.captureOnCommitCallbacks(execute=True):
+        with (
+            patch(
+                "app.tasks.draft_tick.start_tick_broadcaster", return_value=True
+            ) as mock_start,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             self.assertEqual(fx.undo(fx.staff).status_code, 200)
         fx.draft.refresh_from_db()
         self.assertEqual(fx.draft.state, TeamDraftState.DRAFTING)
         self.assertTrue(fx.draft.clock_armed)
         mock_start.assert_called_once()
         with self.captureOnCommitCallbacks(execute=True):
-            self.assertEqual(fx.pick(fx.draft.active_round, fx.draft.active_round.captain).status_code, 201)
+            self.assertEqual(
+                fx.pick(
+                    fx.draft.active_round, fx.draft.active_round.captain
+                ).status_code,
+                201,
+            )
 
     def test_undo_completed_untimed_draft_is_drafting_unarmed(self) -> None:
         fx = TimedDraftFixture(timer_enabled=False, num_teams=1, prefix="udone")
@@ -699,7 +794,10 @@ class UndoTests(TestCase):
         team = Team.objects.get(pk=fx.team_of(rnd.captain).pk)
         spent = team.draft_reserve_ms
         self.assertLess(spent, 30000)
-        with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True), self.captureOnCommitCallbacks(execute=True):
+        with (
+            patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             fx.undo(fx.staff)
         self.assertEqual(Team.objects.get(pk=team.pk).draft_reserve_ms, spent)
 
@@ -710,7 +808,12 @@ class UndoTests(TestCase):
         fx.draft.state = TeamDraftState.RESUMING
         fx.draft.resuming_until = timezone.now() + timedelta(seconds=3)
         fx.draft.save()
-        with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True) as mock_start, self.captureOnCommitCallbacks(execute=True):
+        with (
+            patch(
+                "app.tasks.draft_tick.start_tick_broadcaster", return_value=True
+            ) as mock_start,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             self.assertEqual(fx.undo(fx.staff).status_code, 200)
         fx.draft.refresh_from_db()
         self.assertEqual(fx.draft.state, TeamDraftState.RESUMING)
@@ -731,18 +834,32 @@ class UndoTests(TestCase):
             self.assertEqual(fx.undo(fx.staff).status_code, 200)
         rnd1 = fx.round(1)
         self.assertEqual((rnd1.started_at, rnd1.grace_time_ms), (None, 30000))
-        self.assertEqual(fx.events("round_started").filter(payload__pick_number=1).count(), 1, "no new round_started while paused")
+        self.assertEqual(
+            fx.events("round_started").filter(payload__pick_number=1).count(),
+            1,
+            "no new round_started while paused",
+        )
         client = APIClient()
         client.force_authenticate(fx.staff)
-        with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True), self.captureOnCommitCallbacks(execute=True):
-            self.assertEqual(client.post(f"/api/draft/{fx.draft.pk}/resume/", {}, format="json").status_code, 200)
+        with (
+            patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            self.assertEqual(
+                client.post(
+                    f"/api/draft/{fx.draft.pk}/resume/", {}, format="json"
+                ).status_code,
+                200,
+            )
         fx.draft.refresh_from_db()
         self.assertEqual(fx.round(1).started_at, fx.draft.resuming_until)
         self.assertTrue(fx.draft.clock_armed)
 
     def test_directly_built_untimed_pending_draft_undo_after_pick_is_200(self) -> None:
         fx = TimedDraftFixture(timer_enabled=False, prefix="direct")
-        fx.draft.state = TeamDraftState.PENDING   # models a Draft whose rounds were created without build_rounds
+        fx.draft.state = (
+            TeamDraftState.PENDING
+        )  # models a Draft whose rounds were created without build_rounds
         fx.draft.save()
         with self.captureOnCommitCallbacks(execute=True):
             self.assertEqual(fx.pick(fx.round(1), fx.staff).status_code, 201)
@@ -761,64 +878,143 @@ class TickPayloadTests(TestCase):
             self.r.delete(heartbeat_key("teamdraft", self.fx.draft.pk, cap.pk))
 
     def test_unarmed_draft_has_no_payload(self):
-        self.assertIsNone(teamdraft_tick.build_tick_payload(self.fx.draft, timezone.now(), self.r))
+        self.assertIsNone(
+            teamdraft_tick.build_tick_payload(self.fx.draft, timezone.now(), self.r)
+        )
 
     def test_drafting_payload_shape_and_heartbeat_derived_is_connected(self):
-        with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True), self.captureOnCommitCallbacks(execute=True):
+        with (
+            patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             rnd = self.fx.start()
         cap0 = self.fx.captains[0]
-        self.r.set(heartbeat_key("teamdraft", self.fx.draft.pk, cap0.pk), str(time.time()))
-        self.r.set(heartbeat_key("teamdraft", self.fx.draft.pk, self.fx.captains[1].pk), str(time.time() - 20))
-        self.fx.teams[2].draft_is_connected = True; self.fx.teams[2].save()
+        self.r.set(
+            heartbeat_key("teamdraft", self.fx.draft.pk, cap0.pk), str(time.time())
+        )
+        self.r.set(
+            heartbeat_key("teamdraft", self.fx.draft.pk, self.fx.captains[1].pk),
+            str(time.time() - 20),
+        )
+        self.fx.teams[2].draft_is_connected = True
+        self.fx.teams[2].save()
         now = timezone.now()
-        p = teamdraft_tick.build_tick_payload(Draft.objects.get(pk=self.fx.draft.pk), now, self.r)
+        p = teamdraft_tick.build_tick_payload(
+            Draft.objects.get(pk=self.fx.draft.pk), now, self.r
+        )
         self.assertEqual(p["type"], "draft.tick")
         self.assertEqual(
             set(p),
-            {"type", "draft_state", "server_time", "resuming_until", "active_round_pk", "active_pick_number", "active_captain_id",
-             "active_team_id", "round_started_at", "round_timed_out_at", "round_grace_time_ms", "teams"},
+            {
+                "type",
+                "draft_state",
+                "server_time",
+                "resuming_until",
+                "active_round_pk",
+                "active_pick_number",
+                "active_captain_id",
+                "active_team_id",
+                "round_started_at",
+                "round_timed_out_at",
+                "round_grace_time_ms",
+                "teams",
+            },
         )
-        self.assertEqual((p["draft_state"], p["server_time"], p["resuming_until"]), ("drafting", now.isoformat(), None))
-        self.assertEqual((p["active_round_pk"], p["active_pick_number"], p["active_captain_id"], p["active_team_id"]), (rnd.pk, 1, cap0.pk, self.fx.teams[0].pk))
+        self.assertEqual(
+            (p["draft_state"], p["server_time"], p["resuming_until"]),
+            ("drafting", now.isoformat(), None),
+        )
+        self.assertEqual(
+            (
+                p["active_round_pk"],
+                p["active_pick_number"],
+                p["active_captain_id"],
+                p["active_team_id"],
+            ),
+            (rnd.pk, 1, cap0.pk, self.fx.teams[0].pk),
+        )
         self.assertEqual(p["round_started_at"], rnd.started_at.isoformat())
-        self.assertEqual((p["round_timed_out_at"], p["round_grace_time_ms"]), (None, 30000))
+        self.assertEqual(
+            (p["round_timed_out_at"], p["round_grace_time_ms"]), (None, 30000)
+        )
         teams = {t["team_id"]: t for t in p["teams"]}
-        self.assertEqual(set(teams[self.fx.teams[0].pk]), {"team_id", "captain_id", "reserve_ms", "is_connected", "is_ready"})
+        self.assertEqual(
+            set(teams[self.fx.teams[0].pk]),
+            {"team_id", "captain_id", "reserve_ms", "is_connected", "is_ready"},
+        )
         self.assertEqual(teams[self.fx.teams[0].pk]["reserve_ms"], 12000)
         self.assertTrue(teams[self.fx.teams[0].pk]["is_connected"])
         self.assertFalse(teams[self.fx.teams[1].pk]["is_connected"], "stale key")
-        self.assertFalse(teams[self.fx.teams[2].pk]["is_connected"], "flag is not freshness")
+        self.assertFalse(
+            teams[self.fx.teams[2].pk]["is_connected"], "flag is not freshness"
+        )
 
     def test_resuming_payload_keeps_anchors(self):
-        with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True), self.captureOnCommitCallbacks(execute=True):
+        with (
+            patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             self.fx.start()
         self.fx.draft.state = TeamDraftState.RESUMING
         self.fx.draft.resuming_until = timezone.now() + timedelta(seconds=3)
         self.fx.draft.save()
-        p = teamdraft_tick.build_tick_payload(Draft.objects.get(pk=self.fx.draft.pk), timezone.now(), self.r)
+        p = teamdraft_tick.build_tick_payload(
+            Draft.objects.get(pk=self.fx.draft.pk), timezone.now(), self.r
+        )
         self.assertEqual(p["draft_state"], "resuming")
         self.assertEqual(p["resuming_until"], self.fx.draft.resuming_until.isoformat())
         self.assertIsNotNone(p["round_started_at"])
 
     def test_should_continue_rules(self):
-        self.assertEqual(teamdraft_tick.should_continue_ticking(self.fx.draft.pk), (False, "draft_state_pending"))
-        with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True), self.captureOnCommitCallbacks(execute=True):
+        self.assertEqual(
+            teamdraft_tick.should_continue_ticking(self.fx.draft.pk),
+            (False, "draft_state_pending"),
+        )
+        with (
+            patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             rnd = self.fx.start()
-        self.assertEqual(teamdraft_tick.should_continue_ticking(self.fx.draft.pk), (False, "no_connections"))
-        rnd.started_at = None; rnd.save()
-        self.assertEqual(teamdraft_tick.should_continue_ticking(self.fx.draft.pk), (False, "clock_unarmed"))
-        rnd.started_at = timezone.now(); rnd.save()
+        self.assertEqual(
+            teamdraft_tick.should_continue_ticking(self.fx.draft.pk),
+            (False, "no_connections"),
+        )
+        rnd.started_at = None
+        rnd.save()
+        self.assertEqual(
+            teamdraft_tick.should_continue_ticking(self.fx.draft.pk),
+            (False, "clock_unarmed"),
+        )
+        rnd.started_at = timezone.now()
+        rnd.save()
         with patch("app.tasks.teamdraft_tick.get_connection_count", return_value=1):
-            self.assertEqual(teamdraft_tick.should_continue_ticking(self.fx.draft.pk), (True, ""))
-        self.fx.draft.state = TeamDraftState.RESUMING; self.fx.draft.save()
-        self.assertEqual(teamdraft_tick.should_continue_ticking(self.fx.draft.pk), (True, ""))
-        self.fx.draft.state = TeamDraftState.PAUSED; self.fx.draft.save()
-        self.assertEqual(teamdraft_tick.should_continue_ticking(self.fx.draft.pk), (False, "draft_state_paused"))
-        self.assertEqual(teamdraft_tick.should_continue_ticking(999_999), (False, "draft_not_found"))
+            self.assertEqual(
+                teamdraft_tick.should_continue_ticking(self.fx.draft.pk), (True, "")
+            )
+        self.fx.draft.state = TeamDraftState.RESUMING
+        self.fx.draft.save()
+        self.assertEqual(
+            teamdraft_tick.should_continue_ticking(self.fx.draft.pk), (True, "")
+        )
+        self.fx.draft.state = TeamDraftState.PAUSED
+        self.fx.draft.save()
+        self.assertEqual(
+            teamdraft_tick.should_continue_ticking(self.fx.draft.pk),
+            (False, "draft_state_paused"),
+        )
+        self.assertEqual(
+            teamdraft_tick.should_continue_ticking(999_999), (False, "draft_not_found")
+        )
 
     def test_driver_satisfies_protocol(self):
         self.assertIsInstance(teamdraft_tick.TEAM_TICK_DRIVER, TickDriver)
-        self.assertEqual((teamdraft_tick.TEAM_TICK_DRIVER.prefix, teamdraft_tick.TEAM_TICK_DRIVER.system), ("teamdraft", "teamdraft"))
+        self.assertEqual(
+            (
+                teamdraft_tick.TEAM_TICK_DRIVER.prefix,
+                teamdraft_tick.TEAM_TICK_DRIVER.system,
+            ),
+            ("teamdraft", "teamdraft"),
+        )
 
 
 class AutoPauseTests(TransactionTestCase):
@@ -845,7 +1041,8 @@ class AutoPauseTests(TransactionTestCase):
         self.assertEqual(self.state(), TeamDraftState.DRAFTING)
 
     def test_connected_then_key_deleted_pauses_next_tick(self):
-        self.active_team.draft_has_connected = True; self.active_team.save()
+        self.active_team.draft_has_connected = True
+        self.active_team.save()
         self.r.set(self.hb, str(time.time()))
         self.assertIsNone(self.check())
         self.r.delete(self.hb)
@@ -854,28 +1051,41 @@ class AutoPauseTests(TransactionTestCase):
         self.assertEqual(draft.state, TeamDraftState.PAUSED)
         self.assertFalse(draft.is_manual_pause)
         ev = self.fx.events("draft_paused").get()
-        self.assertEqual((ev.payload["reason"], ev.payload["paused_by_id"], ev.payload["captain_id"]), ("captain_disconnected", None, self.rnd.captain_id))
+        self.assertEqual(
+            (
+                ev.payload["reason"],
+                ev.payload["paused_by_id"],
+                ev.payload["captain_id"],
+            ),
+            ("captain_disconnected", None, self.rnd.captain_id),
+        )
 
     def test_stale_key_past_nine_seconds_pauses(self):
-        self.active_team.draft_has_connected = True; self.active_team.save()
+        self.active_team.draft_has_connected = True
+        self.active_team.save()
         self.r.set(self.hb, str(time.time() - 9.5))
         self.assertIsNotNone(self.check())
         self.assertEqual(self.state(), TeamDraftState.PAUSED)
 
     def test_other_captain_stale_never_pauses(self):
         other = self.fx.teams[2]
-        other.draft_has_connected = True; other.save()
+        other.draft_has_connected = True
+        other.save()
         self.r.delete(heartbeat_key("teamdraft", self.fx.draft.pk, other.captain_id))
         self.assertIsNone(self.check())
         self.assertEqual(self.state(), TeamDraftState.DRAFTING)
 
     def test_unarmed_or_resuming_is_ignored(self):
-        self.active_team.draft_has_connected = True; self.active_team.save()
+        self.active_team.draft_has_connected = True
+        self.active_team.save()
         draft = Draft.objects.get(pk=self.fx.draft.pk)
-        draft.state = TeamDraftState.RESUMING; draft.save()
+        draft.state = TeamDraftState.RESUMING
+        draft.save()
         self.assertIsNone(self.check())
-        draft.state = TeamDraftState.DRAFTING; draft.save()
-        self.rnd.started_at = None; self.rnd.save()
+        draft.state = TeamDraftState.DRAFTING
+        draft.save()
+        self.rnd.started_at = None
+        self.rnd.save()
         self.assertIsNone(self.check())
         self.assertEqual(self.state(), TeamDraftState.DRAFTING)
 
@@ -885,10 +1095,13 @@ class AutoPauseTests(TransactionTestCase):
         draft.resuming_until = timezone.now() + timedelta(seconds=2)
         draft.save()
         self.assertFalse(async_to_sync(teamdraft_tick.check_resume_countdown)(draft.pk))
-        draft.resuming_until = timezone.now() - timedelta(milliseconds=10); draft.save()
+        draft.resuming_until = timezone.now() - timedelta(milliseconds=10)
+        draft.save()
         self.assertTrue(async_to_sync(teamdraft_tick.check_resume_countdown)(draft.pk))
         draft.refresh_from_db()
-        self.assertEqual((draft.state, draft.resuming_until), (TeamDraftState.DRAFTING, None))
+        self.assertEqual(
+            (draft.state, draft.resuming_until), (TeamDraftState.DRAFTING, None)
+        )
 
     def test_undo_during_resuming_keeps_loop_alive_through_countdown(self):
         self.assertEqual(self.fx.pick(self.rnd, self.fx.staff).status_code, 201)
@@ -899,11 +1112,18 @@ class AutoPauseTests(TransactionTestCase):
         with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True):
             self.assertEqual(self.fx.undo(self.fx.staff).status_code, 200)
         with patch("app.tasks.teamdraft_tick.get_connection_count", return_value=1):
-            self.assertEqual(teamdraft_tick.should_continue_ticking(draft.pk), (True, ""))
+            self.assertEqual(
+                teamdraft_tick.should_continue_ticking(draft.pk), (True, "")
+            )
             draft.refresh_from_db()
-            draft.resuming_until = timezone.now() - timedelta(milliseconds=10); draft.save()
-            self.assertTrue(async_to_sync(teamdraft_tick.check_resume_countdown)(draft.pk))
-            self.assertEqual(teamdraft_tick.should_continue_ticking(draft.pk), (True, ""))
+            draft.resuming_until = timezone.now() - timedelta(milliseconds=10)
+            draft.save()
+            self.assertTrue(
+                async_to_sync(teamdraft_tick.check_resume_countdown)(draft.pk)
+            )
+            self.assertEqual(
+                teamdraft_tick.should_continue_ticking(draft.pk), (True, "")
+            )
         draft.refresh_from_db()
         self.assertEqual(draft.state, TeamDraftState.DRAFTING)
         self.assertTrue(draft.clock_armed)
@@ -1145,13 +1365,18 @@ class DraftConsumerTimerTests(TransactionTestCase):
 class TestEndpointTests(TestCase):
     def setUp(self):
         self.fx = TimedDraftFixture(prefix="te")
-        with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True), self.captureOnCommitCallbacks(execute=True):
+        with (
+            patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             self.rnd = self.fx.start()
         self.factory = APIRequestFactory()
         self.r = get_redis_client()
 
     def call(self, view, body: dict):
-        return view(self.factory.post("/", body, format="json"), draft_pk=self.fx.draft.pk)
+        return view(
+            self.factory.post("/", body, format="json"), draft_pk=self.fx.draft.pk
+        )
 
     def test_expire_clock_backdates_started_at(self, _env):
         before = self.rnd.started_at
