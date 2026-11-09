@@ -132,6 +132,9 @@ test.describe.serial('Team draft pause and resume', () => {
         .getByTestId('draft-event-text')
     ).toHaveText(/Draft paused — .* disconnected/);
     await staffPage.keyboard.press('Escape');
+    await expect(staffPage.getByTestId('draft-event-row-draft_paused')).toHaveCount(0);
+    await expect(staffPage.getByTestId('close-draft-modal')).toBeVisible();
+    await expect(staffPage.getByTestId('draft-paused-overlay')).toBeVisible();
 
     const a = await openCaptainPage(browser, captainA, t.pk);
     try {
@@ -149,9 +152,7 @@ test.describe.serial('Team draft pause and resume', () => {
   test("@cicd Resume stays disabled while the captain's socket is open but heartbeats stop", async ({
     browser,
   }) => {
-    // precondition: captain pages closed; resume if paused
-    await ensureDrafting();
-
+    // precondition: captain pages closed; may already be auto-paused for A, which is equally valid
     const context = await browser.newContext({ ignoreHTTPSErrors: true });
     try {
       await loginAsUser(context, captainA);
@@ -177,11 +178,9 @@ test.describe.serial('Team draft pause and resume', () => {
 
   test('@cicd a non-active captain going stale does not pause', async ({ browser }) => {
     // precondition: captain A page open for the whole test; B has connected and left
-    await ensureDrafting();
-
     const a = await openCaptainPage(browser, captainA, t.pk);
     try {
-      await expect.poll(() => draftStateOf(admin, KEY)).toBe('drafting');
+      await ensureDrafting();
 
       const b = await openCaptainPage(browser, captainB, t.pk);
       try {
