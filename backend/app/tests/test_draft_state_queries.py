@@ -25,7 +25,11 @@ from rest_framework.test import APIClient
 
 from app.broadcast import atomic_sharing_draft_state, broadcast_event
 from app.consumers import DraftConsumer
-from app.draft_state import build_draft_state
+from app.draft_state import (
+    build_draft_state,
+    draft_state_queryset,
+    tournament_state_queryset,
+)
 from app.functions.tournament import _serialize_tournament
 from app.models import (
     Draft,
@@ -68,6 +72,10 @@ READY_ENDPOINT_QUERIES: int = 44
 # (+BEGIN/COMMIT), 17 for the one shared broadcast state behind both events,
 # 2 data_version stamps (build + reuse), 23 for the tournament response.
 PICK_QUERIES: int = 70
+# Upper bounds at the time of writing; the 4 == 8 team equality is the real pin.
+TOURNAMENT_RESPONSE_QUERIES: int = 24
+RESUME_ENDPOINT_QUERIES: int = 55
+UNDO_ENDPOINT_QUERIES: int = 65
 
 
 def legacy_users_dict(tournament: Tournament) -> dict:
@@ -171,6 +179,62 @@ class DraftStateOutputTests(TestCase):
         self.assertIsNone(build_draft_state(10_000_000, fresh=True))
 
 
+class DraftRoundTeamTests(TestCase):
+    """Prefetched DraftRound.team matches the filter(...).first() lookup."""
+
+    def setUp(self) -> None:
+        fx = make_fixture(4, "rt")
+        self.fx = fx
+        Team.objects.create(tournament=fx.tournament, name="NoCaptain", captain=None)
+        Team.objects.create(
+            tournament=fx.tournament, name="SharedCaptain", captain=fx.captains[1]
+        )
+        rounds = list(fx.draft.draft_rounds.order_by("pick_number"))
+        DraftRound.objects.filter(pk=rounds[-1].pk).update(captain=fx.players[-1])
+        DraftRound.objects.filter(pk=rounds[-2].pk).update(captain=None)
+
+    def legacy_team(self, rnd: DraftRound) -> Team | None:
+        return Team.objects.filter(
+            tournament=rnd.draft.tournament, captain=rnd.captain
+        ).first()
+
+    def test_prefetched_team_matches_filter_first(self) -> None:
+        draft = draft_state_queryset(fresh=True).get(pk=self.fx.draft.pk)
+        rounds = list(draft.draft_rounds.all())
+        cases = {
+            "no_team": rounds[-1],
+            "no_captain": rounds[-2],
+            "shared_captain": next(
+                r for r in rounds if r.captain_id == self.fx.captains[1].pk
+            ),
+        }
+        for label, rnd in cases.items():
+            with self.subTest(case=label):
+                expected = self.legacy_team(rnd)
+                self.assertEqual(
+                    rnd.team.pk if rnd.team else None,
+                    expected.pk if expected else None,
+                )
+        self.assertIsNone(cases["no_team"].team)
+        self.assertEqual(cases["no_captain"].team.name, "NoCaptain")
+        self.assertEqual(cases["shared_captain"].team, self.fx.teams[1])
+        for rnd in rounds:
+            expected = self.legacy_team(rnd)
+            self.assertEqual(
+                rnd.team.pk if rnd.team else None, expected.pk if expected else None
+            )
+
+    def test_edge_case_state_matches_lazy_serialization(self) -> None:
+        lazy = Draft.objects.nocache().get(pk=self.fx.draft.pk)
+        data = DraftSerializerSlim(lazy).data
+        data["_users"] = {
+            str(k): v for k, v in legacy_users_dict(lazy.tournament).items()
+        }
+        self.assertEqual(
+            dumps(build_draft_state(self.fx.draft.pk, fresh=True)), dumps(data)
+        )
+
+
 class DraftStateQueryCountTests(TestCase):
     """Query counts do not grow with teams, rounds or users."""
 
@@ -221,6 +285,7 @@ class DraftStateQueryCountTests(TestCase):
             for fx in (self.small, self.large)
         ]
         self.assertEqual(counts[0], counts[1])
+        self.assertLessEqual(counts[0], TOURNAMENT_RESPONSE_QUERIES)
 
     def test_resume_endpoint_is_constant(self) -> None:
         counts = []
@@ -238,6 +303,7 @@ class DraftStateQueryCountTests(TestCase):
                     )
                 )
         self.assertEqual(counts[0], counts[1])
+        self.assertLessEqual(counts[0], RESUME_ENDPOINT_QUERIES)
 
     def test_undo_endpoint_is_constant(self) -> None:
         counts = []
@@ -247,6 +313,7 @@ class DraftStateQueryCountTests(TestCase):
             ):
                 counts.append(self.count(lambda f=fx: self.undo_with_commit(f)))
         self.assertEqual(counts[0], counts[1])
+        self.assertLessEqual(counts[0], UNDO_ENDPOINT_QUERIES)
 
     def post_with_commit(self, client: APIClient, url: str) -> None:
         with self.captureOnCommitCallbacks(execute=True):
@@ -281,6 +348,44 @@ class DraftStateFreshnessTests(TransactionTestCase):
         if cacheops_settings.CACHEOPS_ENABLED:
             cached = build_draft_state(fx.draft.pk, fresh=False)
             self.assertEqual(self.team_name(cached, team.pk), team.name)
+
+
+class FreshCallerTests(TransactionTestCase):
+    """Broadcasts and endpoint responses ignore a warm, stale cache."""
+
+    def setUp(self) -> None:
+        if not cacheops_settings.CACHEOPS_ENABLED:
+            self.skipTest("cacheops disabled")
+        self.fx = TimedDraftFixture(prefix="caller")
+        self.team = self.fx.teams[0]
+        build_draft_state(self.fx.draft.pk, fresh=False)
+        _ = TournamentSerializer(
+            tournament_state_queryset(fresh=False).get(pk=self.fx.tournament.pk)
+        ).data
+        rename_team(self.team.pk)
+
+    def team_name(self, tournament: dict) -> str:
+        return next(t["name"] for t in tournament["teams"] if t["pk"] == self.team.pk)
+
+    def test_cache_is_stale(self) -> None:
+        state = build_draft_state(self.fx.draft.pk, fresh=False)
+        self.assertEqual(self.team_name(state["tournament"]), "T1")
+
+    def test_broadcast_event_reads_fresh_state(self) -> None:
+        layer = FakeChannelLayer()
+        event = DraftEvent.objects.create(
+            draft=self.fx.draft, event_type="captain_ready"
+        )
+        with patch("app.broadcast.get_channel_layer", return_value=layer):
+            broadcast_event(event)
+        self.assertEqual(
+            self.team_name(layer.messages[0]["draft_state"]["tournament"]), "Renamed"
+        )
+
+    def test_serialize_tournament_reads_fresh_state(self) -> None:
+        data = _serialize_tournament(self.fx.tournament)
+        self.assertEqual(self.team_name(data), "Renamed")
+        self.assertEqual(self.team_name(data["draft"]["tournament"]), "Renamed")
 
 
 class DraftStateFreshReadTests(TransactionTestCase):
@@ -380,10 +485,7 @@ class ReadyEndpointQueryTests(TestCase):
         self.assertEqual(small, READY_ENDPOINT_QUERIES)
 
 
-@override_settings(CACHEOPS_ENABLED=False)
-class PickEndpointQueryTests(TransactionTestCase):
-    """The pick view's outermost transaction builds the broadcast state once."""
-
+class PickHelpers(TransactionTestCase):
     def armed_fixture(self, num_teams: int) -> TimedDraftFixture:
         fx = make_fixture(num_teams, f"pick{num_teams}")
         Draft.objects.filter(pk=fx.draft.pk).update(
@@ -409,6 +511,17 @@ class PickEndpointQueryTests(TransactionTestCase):
         self.assertEqual(responses[0].status_code, 201, responses[0].data)
         return queries, layer
 
+    def assert_pick_builds_the_draft_state_once(self) -> None:
+        fx = self.armed_fixture(4)
+        with patch("app.broadcast.build_draft_state", wraps=build_draft_state) as spy:
+            self.pick(fx)
+        self.assertEqual(spy.call_count, 1)
+
+
+@override_settings(CACHEOPS_ENABLED=False)
+class PickEndpointQueryTests(PickHelpers):
+    """The pick view's outermost transaction builds the broadcast state once."""
+
     def test_pick_is_constant_and_bounded(self) -> None:
         small, small_layer = self.pick(self.armed_fixture(4))
         large, large_layer = self.pick(self.armed_fixture(8))
@@ -422,10 +535,15 @@ class PickEndpointQueryTests(TransactionTestCase):
             self.assertEqual(len(states), 1)
 
     def test_pick_builds_the_draft_state_once(self) -> None:
-        fx = self.armed_fixture(4)
-        with patch("app.broadcast.build_draft_state", wraps=build_draft_state) as spy:
-            self.pick(fx)
-        self.assertEqual(spy.call_count, 1)
+        self.assert_pick_builds_the_draft_state_once()
+
+
+@override_settings(CACHEOPS_ENABLED=True)
+class PickEndpointCacheopsTests(PickHelpers):
+    """The single shared build also holds with cacheops reads and invalidation."""
+
+    def test_pick_builds_the_draft_state_once(self) -> None:
+        self.assert_pick_builds_the_draft_state_once()
 
 
 def rename_team(team_pk: int) -> None:
