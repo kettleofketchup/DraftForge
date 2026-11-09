@@ -223,6 +223,7 @@ def _broadcast_committed_event(event: "DraftEvent") -> None:
             draft_id=event.draft_id,
             error=str(e),
             error_type=type(e).__name__,
+            exc_info=True,
         )
 
 

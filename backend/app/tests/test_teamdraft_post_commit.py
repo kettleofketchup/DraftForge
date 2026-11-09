@@ -87,6 +87,7 @@ class PostCommitFailureTests(TransactionTestCase):
         self.assertEqual(failures[0]["subsystem"], "broadcast")
         self.assertEqual(failures[0]["draft_id"], fx.draft.pk)
         self.assertEqual(failures[0]["error"], "layer down")
+        self.assertIs(failures[0]["exc_info"], True)
 
     def test_pick_is_201_and_saved_when_broadcast_raises(self) -> None:
         fx = TimedDraftFixture(prefix="pcpick")
@@ -163,3 +164,6 @@ class PostCommitFailureTests(TransactionTestCase):
         failures = [e for e in logs if e["event"] == "tick_start_after_commit_failed"]
         self.assertTrue(failures, [e["event"] for e in logs])
         self.assertEqual(failures[0]["error"], "redis down")
+        self.assertEqual(failures[0]["system"], "teamdraft")
+        self.assertEqual(failures[0]["subsystem"], "timer")
+        self.assertIs(failures[0]["exc_info"], True)

@@ -400,4 +400,5 @@ def _start_committed_tick(draft_id: int) -> None:
             draft_id=draft_id,
             error=str(e),
             error_type=type(e).__name__,
+            exc_info=True,
         )
