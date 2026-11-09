@@ -457,6 +457,9 @@ class TournamentView(viewsets.ModelViewSet):
             DraftRound,
             extra=cache_key,
             timeout=60 * 10,
+            # Every draft event refetches this; a read that straddles a commit
+            # must not cache the pre-commit payload for the full timeout.
+            keep_fresh=True,
         )
         def get_data():
             log.debug(

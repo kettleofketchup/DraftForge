@@ -62,6 +62,12 @@ test.describe.serial('Team draft ready screen', () => {
     const myTeam = teamsInOrder(t)[0];
     const check = page.getByTestId(`lobby-ready-check-${myTeam.pk}`);
     const toggle = page.getByTestId('lobby-ready-toggle');
+    const sent: boolean[] = [];
+    page.on('request', (req) => {
+      if (req.method() === 'POST' && /\/api\/draft\/\d+\/ready\/$/.test(req.url())) {
+        sent.push(req.postDataJSON().ready);
+      }
+    });
 
     await expect(check).toHaveAttribute('data-state', 'not-ready');
     await toggle.click();
@@ -69,6 +75,10 @@ test.describe.serial('Team draft ready screen', () => {
     await expect(toggle).toHaveText('Not ready');
     await toggle.click();
     await expect(check).toHaveAttribute('data-state', 'not-ready');
+    await expect(toggle).toHaveText('Ready up');
+    // A stale tournament refetch landing between the clicks flips the toggle back, so the
+    // second click re-sends ready=true.
+    expect(sent).toEqual([true, false]);
   });
 
   test('@cicd captain sees no start control', async ({ page, loginUser }) => {
