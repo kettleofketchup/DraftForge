@@ -126,13 +126,17 @@ test.describe.serial('Team draft timer countdown', () => {
     await expect(page.getByTestId('draft-clock-grace')).toBeVisible();
 
     const [teamA, teamB] = teamsInOrder(t);
+    // A's reserve may already be below 1:00: its round ran across the earlier tests.
+    const reserveA = page.getByTestId(`draft-clock-reserve-${teamA.pk}`);
+    await expect(reserveA).toHaveText(/^\d+:\d{2}$/);
+    const reserveABefore = (await reserveA.textContent()) ?? '';
     await expireDraftClock(context, t.draft.pk, 18_000);
 
     await expect(page.getByTestId('draft-clock-grace')).toHaveText('0:00', { timeout: 6_000 });
     await expect(page.getByTestId(`draft-clock-reserve-${teamB.pk}`)).not.toHaveText('1:00', {
       timeout: 6_000,
     });
-    await expect(page.getByTestId(`draft-clock-reserve-${teamA.pk}`)).toHaveText('1:00');
+    await expect(reserveA).toHaveText(reserveABefore);
 
     const cur = await fetchTimerTournament(context, KEY);
     await staffPick(context, activeRound(cur).pk, cur.draft.users_remaining[0]);
