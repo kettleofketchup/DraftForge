@@ -14,7 +14,8 @@ from app.cache_utils import invalidate_obj
 from app.consumers_base import BaseDraftConsumer
 from app.draft_state import build_draft_state
 from app.functions.teamdraft import emit_event, team_payload
-from app.models import Draft, DraftTeam, Team
+from app.models import Draft, DraftTeam, HeroDraft, Team
+from app.serializers import HeroDraftSerializer
 from app.tasks.draft_tick import CAPTAIN_CHANNEL_TTL, TickDriver
 from app.tasks.teamdraft_tick import (
     TEAM_TICK_DRIVER,
@@ -387,9 +388,6 @@ class HeroDraftConsumer(BaseDraftConsumer):
 
     @database_sync_to_async
     def get_initial_state_data(self, draft_id: int) -> dict:
-        from app.models import HeroDraft
-        from app.serializers import HeroDraftSerializer
-
         draft = HeroDraft.objects.prefetch_related(
             "draft_teams__tournament_team__captain",
             "draft_teams__tournament_team__members",
