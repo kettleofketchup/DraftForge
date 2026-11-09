@@ -20,3 +20,8 @@
 - While a team draft is paused, a captain whose heartbeats stop is now shown as disconnected
   and Resume stays disabled. Freshness was only re-checked by the clock loop, which stopped
   at the pause, so a captain who went quiet mid-pause kept showing as connected.
+- A burst of team-draft events (a timeout sends up to five) no longer freezes the draft
+  page for several seconds. The page now applies a burst in one update, skips users that
+  have not changed, refetches the tournament once per burst and not at all when the open
+  draft socket already carries the new state, and never lets an older draft state replace
+  a newer one.
