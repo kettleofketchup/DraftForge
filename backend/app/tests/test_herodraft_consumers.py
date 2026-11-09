@@ -3,14 +3,13 @@
 import asyncio
 import json
 from datetime import date, timedelta
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 
-from asgiref.sync import sync_to_async
 from channels.db import database_sync_to_async
 from channels.routing import URLRouter
 from channels.testing import WebsocketCommunicator
 from django.contrib.auth import get_user_model
-from django.test import TestCase, TransactionTestCase
+from django.test import TransactionTestCase
 from django.urls import re_path
 from django.utils import timezone
 

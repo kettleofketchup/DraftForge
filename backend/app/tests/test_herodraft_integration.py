@@ -5,7 +5,7 @@ from datetime import date
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, DraftTeam, Game, HeroDraft, Team, Tournament
+from app.models import CustomUser, Game, Team, Tournament
 
 
 class HeroDraftAPITest(TestCase):
@@ -147,7 +147,6 @@ class HeroDraftAPITest(TestCase):
         roll_winner_id = response.data["roll_winner"]["id"]
         draft_teams = response.data["draft_teams"]
         winner_team = next(t for t in draft_teams if t["id"] == roll_winner_id)
-        loser_team = next(t for t in draft_teams if t["id"] != roll_winner_id)
 
         winner_captain = (
             self.captain1
@@ -314,7 +313,6 @@ class HeroDraftPickTest(TestCase):
         roll_winner_id = response.data["roll_winner"]["id"]
         draft_teams = response.data["draft_teams"]
         winner_team = next(t for t in draft_teams if t["id"] == roll_winner_id)
-        loser_team = next(t for t in draft_teams if t["id"] != roll_winner_id)
 
         winner_captain = (
             self.captain1
@@ -514,7 +512,7 @@ class HeroDraftErrorCasesTest(TestCase):
 
     def test_create_draft_missing_captain(self):
         """Cannot create draft when a team has no captain."""
-        captain2 = CustomUser.objects.create_user(username="captain2", password="test")
+        CustomUser.objects.create_user(username="captain2", password="test")
         team2 = Team.objects.create(
             name="Team 2",
             tournament=self.tournament,
