@@ -160,6 +160,39 @@ class DraftConsumerBaseTestCase(TransactionTestCase):
             await comm.disconnect()
         self.assertEqual(get_connection_count("teamdraft", self.draft.pk), 0)
 
+    async def test_refresh_restarts_a_tick_loop_that_stopped_as_the_socket_connected(
+        self,
+    ):
+        # The loop read zero connections and was exiting with the lock still held,
+        # so the connect-time start lost the NX race; the refresh must retry.
+        attempts: list[int] = []
+
+        def start(driver: object, draft_id: int) -> bool:
+            attempts.append(draft_id)
+            return len(attempts) > 1
+
+        with (
+            patch.object(
+                DraftConsumer, "should_start_tick_broadcaster", return_value=True
+            ),
+            patch("app.tasks.draft_tick.start_tick_broadcaster", side_effect=start),
+            patch("app.tasks.draft_tick.CONN_REFRESH_SECONDS", 0.1),
+        ):
+            comm, _, _ = await self.connect(self.spectator)
+            await asyncio.sleep(0.5)
+            await comm.disconnect()
+        self.assertGreaterEqual(len(attempts), 2)
+
+    async def test_refresh_does_not_start_a_loop_for_an_idle_draft(self):
+        with (
+            patch("app.tasks.draft_tick.start_tick_broadcaster") as start,
+            patch("app.tasks.draft_tick.CONN_REFRESH_SECONDS", 0.1),
+        ):
+            comm, _, _ = await self.connect(self.spectator)
+            await asyncio.sleep(0.4)
+            await comm.disconnect()
+        start.assert_not_called()
+
     async def test_a_crashing_handler_still_runs_disconnect_cleanup(self):
         comm, _, _ = await self.connect(self.captain)
         self.assertEqual(get_connection_count("teamdraft", self.draft.pk), 1)

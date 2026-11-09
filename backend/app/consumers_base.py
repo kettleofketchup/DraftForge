@@ -365,6 +365,11 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
                         self.get_redis_prefix(), self.draft_id, self.channel_name
                     )
                     self._connection_tracked = True
+                    if self._tick_wanted:
+                        # A loop that read zero connections while this socket
+                        # connected can exit after our connect-time start lost
+                        # the lock race; a held lock makes this a no-op.
+                        await self._maybe_start_tick_broadcaster()
                 except redis.RedisError as e:
                     log.warning(
                         "connection_touch_failed",
@@ -454,6 +459,7 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
         self._is_captain = False
         self._ping_task = None
         self._refresh_task: asyncio.Future[None] | None = None
+        self._tick_wanted = False
 
         if (
             self.kick_duplicate_captain_connections
@@ -515,7 +521,8 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
                 initial_state = await self.get_initial_state_data(self.draft_id)
                 await self.send_initial_messages(initial_state)
 
-                if self.should_start_tick_broadcaster(initial_state):
+                self._tick_wanted = self.should_start_tick_broadcaster(initial_state)
+                if self._tick_wanted:
                     await self._maybe_start_tick_broadcaster()
 
             except Exception as e:

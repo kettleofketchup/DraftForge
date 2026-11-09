@@ -78,7 +78,10 @@ class DraftConsumer(BaseDraftConsumer):
     def should_start_tick_broadcaster(self, initial_state: dict | None) -> bool:
         return bool(
             initial_state
-            and (initial_state.get("clock_armed") or initial_state.get("state") == "paused")
+            and (
+                initial_state.get("clock_armed")
+                or initial_state.get("state") == "paused"
+            )
         )
 
     @database_sync_to_async
@@ -299,6 +302,7 @@ class DraftConsumer(BaseDraftConsumer):
         # Include draft state if available (allows clients to update without API calls)
         if "draft_state" in event:
             message["draft_state"] = event["draft_state"]
+            self._tick_wanted = self.should_start_tick_broadcaster(event["draft_state"])
         await self.send(text_data=json.dumps(message))
 
     async def force_disconnect(self, event: dict[str, Any]) -> None:
