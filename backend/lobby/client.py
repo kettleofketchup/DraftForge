@@ -18,7 +18,11 @@ as `http_<status>`, retryable for 502, 503 and 504.
 Calls that are safe to repeat are retried here a few times with a short
 backoff when the error is retryable. Create is safe to repeat: dota_lobby keys
 it on external_ref and returns the existing lobby for an identical request.
-Launch and flip are not retried; the caller decides.
+Launch, flip and invite are not retried; the caller decides.
+
+Redirects are not followed: requests would re-send X-API-Key to whatever host
+a redirect names, and turn a redirected POST into a GET. A 3xx is raised as a
+permanent `http_<status>` error.
 
 Request bodies, passwords and the API key are never logged.
 """
@@ -115,10 +119,7 @@ def error_from_response(resp: requests.Response) -> DotaLobbyError:
         except ValueError:
             body = None
     if isinstance(body, dict) and isinstance(body.get("code"), str):
-        raw_errors = body.get("errors") or []
-        errors = [
-            ProblemError.model_validate(e) for e in raw_errors if isinstance(e, dict)
-        ]
+        errors = _problem_errors(body.get("errors"))
         return DotaLobbyError(
             body["code"],
             status=status,
@@ -135,6 +136,21 @@ def error_from_response(resp: requests.Response) -> DotaLobbyError:
         title=resp.reason or "",
         retry_after=_retry_after(resp),
     )
+
+
+def _problem_errors(raw_errors: object) -> list[ProblemError]:
+    """The problem's `errors` entries, skipping any that are malformed."""
+    if not isinstance(raw_errors, list):
+        return []
+    errors = []
+    for raw in raw_errors:
+        if not isinstance(raw, dict):
+            continue
+        try:
+            errors.append(ProblemError.model_validate(raw))
+        except ValidationError:
+            continue
+    return errors
 
 
 class DotaLobbyClient:
@@ -219,11 +235,18 @@ class DotaLobbyClient:
         players: list[int] | None = None,
         missing: bool = False,
     ) -> InviteResult:
-        """POST /v1/lobbies/{id}/invite: the given players, or every missing one."""
+        """POST /v1/lobbies/{id}/invite: the given players, or every missing one.
+
+        Not retried: each attempt counts against dota_lobby's per-player invite
+        cap and resend cooldown, so a repeat after a lost response would come
+        back as 429 `invite_limited` for invites that did go out.
+        """
         if not players and not missing:
             raise ValueError("give players or missing=True")
         body: dict[str, Any] = {"missing": True} if missing else {"players": players}
-        resp = self._request("POST", _lobby_path(lobby_id, "invite"), json=body)
+        resp = self._request(
+            "POST", _lobby_path(lobby_id, "invite"), json=body, retry=False
+        )
         return self._parse(resp, InviteResult)
 
     def flip_teams(self, lobby_id: str) -> LobbyView:
@@ -304,6 +327,7 @@ class DotaLobbyClient:
                 json=json,
                 params=params,
                 timeout=self.timeout,
+                allow_redirects=False,
             )
         except (requests.Timeout, requests.ConnectionError) as exc:
             raise DotaLobbyUnavailable(type(exc).__name__) from exc

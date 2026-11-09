@@ -291,6 +291,42 @@ class CreateLobbyTests(ClientTestBase):
             (ctx.exception.code, ctx.exception.retryable), ("http_404", False)
         )
 
+    def test_malformed_problem_errors_are_dropped(self):
+        self.request.return_value = _problem(
+            422,
+            "invalid_request",
+            errors=[
+                {"message": {"x": 1}, "location": "body.name"},
+                "not an object",
+                {"message": "name is required", "location": "body.name"},
+            ],
+        )
+        with self.assertRaises(DotaLobbyError) as ctx:
+            self.client.create_lobby({"external_ref": "game:1"})
+        err = ctx.exception
+        self.assertEqual((err.status, err.code), (422, "invalid_request"))
+        self.assertEqual([e.message for e in err.errors], ["name is required"])
+
+    def test_non_list_problem_errors_ignored(self):
+        self.request.return_value = _problem(422, "invalid_request", errors={"a": 1})
+        with self.assertRaises(DotaLobbyError) as ctx:
+            self.client.create_lobby({"external_ref": "game:1"})
+        self.assertEqual(ctx.exception.errors, [])
+
+    def test_redirects_not_followed(self):
+        # Following one would re-send X-API-Key to the redirect's host.
+        self.request.return_value = _resp(
+            301, None, content_type="text/html", headers={"Location": "https://x/"}
+        )
+        with self.assertRaises(DotaLobbyError) as ctx:
+            self.client.create_lobby({"external_ref": "game:1"})
+        err = ctx.exception
+        self.assertEqual(
+            (err.status, err.code, err.retryable), (301, "http_301", False)
+        )
+        self.assertEqual(self.request.call_count, 1)
+        self.assertIs(self.call()[2]["allow_redirects"], False)
+
     def test_timeout_is_unreachable(self):
         self.request.side_effect = requests.Timeout("read timed out")
         with self.assertRaises(DotaLobbyUnavailable) as ctx:
@@ -390,6 +426,16 @@ class LobbyOperationTests(ClientTestBase):
         self.assertEqual(self.call()[2]["json"], {"missing": True})
         self.assertEqual(result.invited, [11111111])
         self.assertEqual(result.skipped[0].reason, "in_lobby")
+
+    def test_invite_is_not_retried(self):
+        # The bot may have sent the invites before the gateway timed out; a
+        # repeat would hit the resend cooldown and report 429 instead.
+        self.request.return_value = _problem(504, "gc_timeout", retryable=True)
+        with self.assertRaises(DotaLobbyError) as ctx:
+            self.client.invite("lob_1", missing=True)
+        self.assertEqual(ctx.exception.code, "gc_timeout")
+        self.assertEqual(self.request.call_count, 1)
+        self.assertEqual(self.sleeps, [])
 
     def test_invite_null_lists(self):
         self.request.return_value = _resp(200, {"invited": None, "skipped": None})
