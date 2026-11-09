@@ -15,7 +15,9 @@ Each endpoint:
     handler signals a logical "error" outcome — those are domain results,
     not HTTP failures).
 
-Do NOT inline business logic here. Edit ``handlers.py`` instead.
+Do NOT inline business logic here. Game-agnostic dispatch lives in
+``events/discord/handlers.py``; per-game logic lives in
+``events/discord/providers/<game>.py``.
 """
 
 from pydantic import ValidationError

@@ -16,7 +16,7 @@ from app.tests.teamdraft_fixtures import TimedDraftFixture
 
 BROADCAST_CALL_SITES: tuple[str, ...] = (
     "app.functions.teamdraft",
-    "app.functions.tournament",
+    "app.functions.draft_picks",
     "app.functions.shuffle_draft",
 )
 

@@ -60,7 +60,9 @@ def simulate_discord_signup(request, event_pk):
         "positions": data.get("positions", []),
         "rank_status": data.get("rank_status", "active"),
     }
-    result = handle_signup_modal_submit(event_pk, discord_user_id, 1, values)
+    result = handle_signup_modal_submit(
+        event_pk, discord_user_id, values=values, game_type=result["game_type"]
+    )
     if result["action"] == "error":
         return Response({"step": "modal_submit", "result": result}, status=400)
     if result["action"] == "signed_up":
@@ -231,6 +233,7 @@ def set_org_user_approved_mmr(request, org_pk: int, user_pk: int):
         return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
 
     from cacheops import invalidate_obj
+
     from org.models import OrgUser
 
     try:

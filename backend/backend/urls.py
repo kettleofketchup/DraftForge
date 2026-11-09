@@ -9,6 +9,7 @@ log = get_logger(__name__)
 from django.views.generic.base import RedirectView
 
 from app import views_main as app_views
+from app.functions.draft_picks import pick_player_for_round, undo_last_pick
 from app.functions.herodraft_views import (
     abandon_draft,
     create_herodraft,
@@ -33,9 +34,7 @@ from app.functions.tournament import (
     create_team_from_captain,
     generate_draft_rounds,
     get_draft_style_mmrs,
-    pick_player_for_round,
     rebuild_team,
-    undo_last_pick,
 )
 from app.functions.user import profile_update
 from app.views import (
