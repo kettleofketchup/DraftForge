@@ -212,7 +212,7 @@ class ShuffleDraftEventIntegrationTest(TestCase):
         # Verify broadcast was called
         mock_broadcast.assert_called_once()
 
-    @patch("app.functions.shuffle_draft.broadcast_event")
+    @patch("app.broadcast.broadcast_event")
     def test_assign_next_shuffle_captain_creates_captain_assigned_event(
         self, mock_broadcast
     ):
@@ -294,7 +294,7 @@ class TournamentEventIntegrationTest(TestCase):
             pick_number=1,
         )
 
-    @patch("app.functions.tournament.broadcast_event")
+    @patch("app.broadcast.broadcast_event")
     def test_pick_player_for_round_creates_player_picked_event(self, mock_broadcast):
         """Picking a player creates a player_picked event."""
         from rest_framework.test import APIRequestFactory
@@ -325,7 +325,7 @@ class TournamentEventIntegrationTest(TestCase):
         self.assertEqual(event.actor, self.captain)
         mock_broadcast.assert_called()
 
-    @patch("app.functions.tournament.broadcast_event")
+    @patch("app.broadcast.broadcast_event")
     def test_undo_last_pick_creates_pick_undone_event(self, mock_broadcast):
         """Undoing a pick creates a pick_undone event."""
         from rest_framework.test import APIRequestFactory

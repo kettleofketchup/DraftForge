@@ -7,7 +7,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
-from app.broadcast import atomic_sharing_draft_state, broadcast_event
+from app.broadcast import atomic_sharing_draft_state, broadcast_event_after_commit
 from app.cache_utils import invalidate_after_commit, invalidate_obj
 from app.draft_state import tournament_state_queryset
 from app.functions.shuffle_draft import assign_next_shuffle_captain
@@ -232,7 +232,7 @@ def pick_player_for_round(request: Request) -> Response:
                     "team_name": team.name if team else None,
                 },
             )
-            transaction.on_commit(lambda e=picked_event: broadcast_event(e))
+            broadcast_event_after_commit(picked_event)
 
             if draft.draft_style == "shuffle" and draft.users_remaining.exists():
                 tie_data = assign_next_shuffle_captain(draft)
@@ -690,7 +690,7 @@ def undo_last_pick(request: Request) -> Response:
                 "team_name": team.name if team else None,
             },
         )
-        transaction.on_commit(lambda e=undone_event: broadcast_event(e))
+        broadcast_event_after_commit(undone_event)
 
         timed_undo = options.timer_enabled and undone_round_had_completed_at
         if timed_undo and draft.state in (

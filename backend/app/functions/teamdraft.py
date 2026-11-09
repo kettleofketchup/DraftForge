@@ -4,7 +4,7 @@ from datetime import datetime
 
 from django.db import transaction
 
-from app.broadcast import broadcast_event
+from app.broadcast import broadcast_event_after_commit
 from app.cache_utils import invalidate_after_commit
 from app.models import (
     CustomUser,
@@ -69,7 +69,7 @@ def emit_event(
     event = DraftEvent.objects.create(
         draft=draft, event_type=event_type, payload=payload, actor=actor
     )
-    transaction.on_commit(lambda e=event: broadcast_event(e))
+    broadcast_event_after_commit(event)
     log.info(
         "draft_event_emitted",
         system="teamdraft",
@@ -231,9 +231,7 @@ def apply_draft_options(tournament: Tournament, data: dict) -> DraftOptions:
         if draft is None:
             return opts
         turning_off = (
-            was_enabled
-            and not opts.timer_enabled
-            and draft.state in _TIMER_OFF_STATES
+            was_enabled and not opts.timer_enabled and draft.state in _TIMER_OFF_STATES
         )
         rnd = draft.lock_active_round() if turning_off else None
         if draft.state == TeamDraftState.PENDING and (
@@ -250,7 +248,12 @@ def apply_draft_options(tournament: Tournament, data: dict) -> DraftOptions:
             draft.resuming_until = None
             draft.is_manual_pause = False
             draft.save(
-                update_fields=["state", "paused_at", "resuming_until", "is_manual_pause"]
+                update_fields=[
+                    "state",
+                    "paused_at",
+                    "resuming_until",
+                    "is_manual_pause",
+                ]
             )
             if rnd is not None:
                 rnd.started_at = None

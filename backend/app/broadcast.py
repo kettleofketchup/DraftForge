@@ -201,6 +201,31 @@ def broadcast_event(event: "DraftEvent", include_draft_state: bool = True) -> No
         )
 
 
+def broadcast_event_after_commit(event: "DraftEvent") -> None:
+    """Broadcast ``event`` once the transaction commits; failures are logged, not raised.
+
+    The write is already committed when the hook runs, so a raising broadcast
+    must neither fail the caller's response nor skip the hooks queued after it.
+    """
+    transaction.on_commit(lambda: _broadcast_committed_event(event))
+
+
+def _broadcast_committed_event(event: "DraftEvent") -> None:
+    try:
+        broadcast_event(event)
+    except Exception as e:
+        log.error(
+            "broadcast_after_commit_failed",
+            system="websocket",
+            subsystem="broadcast",
+            kind="draft",
+            event_type=event.event_type,
+            draft_id=event.draft_id,
+            error=str(e),
+            error_type=type(e).__name__,
+        )
+
+
 def broadcast_herodraft_event(
     draft: "HeroDraft",
     event_type: str,

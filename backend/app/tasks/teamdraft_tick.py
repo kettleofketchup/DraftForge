@@ -386,6 +386,18 @@ TEAM_TICK_DRIVER: TeamDraftTickDriver = TeamDraftTickDriver()
 
 
 def start_team_tick_broadcaster_after_commit(draft_id: int) -> None:
-    transaction.on_commit(
-        lambda: draft_tick.start_tick_broadcaster(TEAM_TICK_DRIVER, draft_id)
-    )
+    transaction.on_commit(lambda: _start_committed_tick(draft_id))
+
+
+def _start_committed_tick(draft_id: int) -> None:
+    try:
+        draft_tick.start_tick_broadcaster(TEAM_TICK_DRIVER, draft_id)
+    except Exception as e:
+        log.error(
+            "tick_start_after_commit_failed",
+            system="teamdraft",
+            subsystem="timer",
+            draft_id=draft_id,
+            error=str(e),
+            error_type=type(e).__name__,
+        )

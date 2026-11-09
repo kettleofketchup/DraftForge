@@ -38,7 +38,7 @@ class ReassignRoundCaptainTests(TestCase):
         rnd.tie_roll_data = {"x": 1}
         rnd.save()
         with (
-            patch("app.functions.shuffle_draft.broadcast_event") as mock_bc,
+            patch("app.broadcast.broadcast_event") as mock_bc,
             self.captureOnCommitCallbacks(execute=True),
         ):
             tie = shuffle_draft.reassign_round_captain(

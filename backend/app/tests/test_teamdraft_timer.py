@@ -54,7 +54,7 @@ class LifecycleHelperTests(TestCase):
         self.assertEqual(teamdraft.team_payload(None)["captain_id"], None)
 
     def test_emit_event_broadcasts_only_after_commit(self):
-        with patch("app.functions.teamdraft.broadcast_event") as mock_bc:
+        with patch("app.broadcast.broadcast_event") as mock_bc:
             with self.captureOnCommitCallbacks(execute=True) as callbacks:
                 ev = teamdraft.emit_event(
                     self.fx.draft,
@@ -575,18 +575,14 @@ class PickMatrixTests(EndpointTestBase):
 
     def test_broadcasts_are_deferred_to_commit(self):
         rnd = self.start()
-        with (
-            patch("app.functions.tournament.broadcast_event") as mock_bc,
-            patch("app.functions.teamdraft.broadcast_event") as mock_td,
-        ):
+        with patch("app.broadcast.broadcast_event") as mock_bc:
             with self.captureOnCommitCallbacks(execute=False) as callbacks:
                 self.assertEqual(self.fx.pick(rnd, rnd.captain).status_code, 201)
                 mock_bc.assert_not_called()
-                mock_td.assert_not_called()
             for cb in callbacks:
                 cb()
-            mock_bc.assert_called_once()
-            self.assertEqual(mock_td.call_count, 1)
+            types = [c.args[0].event_type for c in mock_bc.call_args_list]
+            self.assertEqual(types, ["player_picked", "round_started"])
 
 
 class PickTimingTests(TestCase):

@@ -2,9 +2,7 @@
 
 import random
 
-from django.db import transaction
-
-from app.broadcast import broadcast_event
+from app.broadcast import broadcast_event, broadcast_event_after_commit
 from app.models import CustomUser, Draft, DraftEvent, DraftRound, Organization, Team
 from org.models import OrgUser
 
@@ -199,7 +197,7 @@ def reassign_round_captain(
     captain_event = DraftEvent.objects.create(
         draft=draft, event_type="captain_assigned", payload=payload
     )
-    transaction.on_commit(lambda e=captain_event: broadcast_event(e))
+    broadcast_event_after_commit(captain_event)
 
     if tie_data:
         tie_event = DraftEvent.objects.create(
@@ -213,7 +211,7 @@ def reassign_round_captain(
                 "winner_name": captain.username,
             },
         )
-        transaction.on_commit(lambda e=tie_event: broadcast_event(e))
+        broadcast_event_after_commit(tie_event)
 
     return tie_data
 
