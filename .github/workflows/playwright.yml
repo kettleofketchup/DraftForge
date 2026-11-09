@@ -53,8 +53,16 @@ jobs:
           docker logs backend 2>&1 | tail -200 || true
           docker logs nginx 2>&1 | tail -100 || true
 
+      # Tests that fail and pass on retry still leave traces (retain-on-failure); keep them
+      # and the server logs so a green run does not discard the evidence.
+      - name: Save container logs
+        if: ${{ !cancelled() }}
+        run: |
+          mkdir -p frontend/test-results
+          for c in frontend backend nginx; do docker logs "$c" > "frontend/test-results/$c.log" 2>&1 || true; done
+
       - name: Upload test results
-        if: failure()
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
           name: playwright-chromium-shard-${{ matrix.shard }}
