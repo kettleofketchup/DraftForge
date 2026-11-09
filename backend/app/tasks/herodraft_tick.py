@@ -21,6 +21,7 @@ from django.conf import settings
 from django.utils import timezone
 from opentelemetry import trace
 
+from app.redis_keys import namespaced_key
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
@@ -53,13 +54,23 @@ TaskInfo = namedtuple("TaskInfo", ["stop_event", "thread"])
 # Connection tracking keys
 CONN_COUNT_KEY = "herodraft:connections:{draft_id}"
 LOCK_KEY = "herodraft:tick_lock:{draft_id}"
+
+
+def conn_count_key(draft_id: int) -> str:
+    return namespaced_key(CONN_COUNT_KEY.format(draft_id=draft_id))
+
+
+def tick_lock_key(draft_id: int) -> str:
+    return namespaced_key(LOCK_KEY.format(draft_id=draft_id))
+
+
 LOCK_TIMEOUT = 10  # Lock expires after 10 seconds (renewed each tick)
 
 
 def increment_connection_count(draft_id: int) -> int:
     """Increment WebSocket connection count for a draft. Returns new count."""
     r = get_redis_client()
-    key = CONN_COUNT_KEY.format(draft_id=draft_id)
+    key = conn_count_key(draft_id)
     count = r.incr(key)
     r.expire(key, 300)  # Expire after 5 min of no activity
     log.debug(
@@ -75,7 +86,7 @@ def increment_connection_count(draft_id: int) -> int:
 def decrement_connection_count(draft_id: int) -> int:
     """Decrement WebSocket connection count for a draft. Returns new count."""
     r = get_redis_client()
-    key = CONN_COUNT_KEY.format(draft_id=draft_id)
+    key = conn_count_key(draft_id)
     count = r.decr(key)
     if count <= 0:
         r.delete(key)
@@ -93,7 +104,7 @@ def decrement_connection_count(draft_id: int) -> int:
 def get_connection_count(draft_id: int) -> int:
     """Get current WebSocket connection count for a draft."""
     r = get_redis_client()
-    key = CONN_COUNT_KEY.format(draft_id=draft_id)
+    key = conn_count_key(draft_id)
     count = r.get(key)
     return int(count) if count else 0
 
@@ -407,6 +418,14 @@ async def check_resume_countdown(draft_id: int):
 
 # Heartbeat key pattern (must match consumers.py)
 CAPTAIN_HEARTBEAT_KEY = "herodraft:{draft_id}:captain:{user_id}:heartbeat"
+
+
+def captain_heartbeat_key(draft_id: int, user_id: int) -> str:
+    return namespaced_key(
+        CAPTAIN_HEARTBEAT_KEY.format(draft_id=draft_id, user_id=user_id)
+    )
+
+
 HEARTBEAT_STALE_SECONDS = (
     9  # Consider stale if no heartbeat for 9 seconds (3 missed beats)
 )
@@ -442,9 +461,7 @@ async def check_captain_heartbeats(draft_id: int):
             if not captain:
                 continue
 
-            heartbeat_key = CAPTAIN_HEARTBEAT_KEY.format(
-                draft_id=draft_id, user_id=captain.id
-            )
+            heartbeat_key = captain_heartbeat_key(draft_id, captain.id)
             last_heartbeat = r.get(heartbeat_key)
 
             if last_heartbeat is None:
@@ -578,7 +595,7 @@ def should_continue_ticking(draft_id: int, r: redis.Redis) -> tuple[bool, str]:
 async def run_tick_loop(draft_id: int, stop_event: threading.Event):
     """Run tick broadcasts every second while draft is active and has connections."""
     r = get_redis_client()
-    lock_key = LOCK_KEY.format(draft_id=draft_id)
+    lock_key = tick_lock_key(draft_id)
 
     @database_sync_to_async
     def check_continue():
@@ -717,7 +734,7 @@ def start_tick_broadcaster(draft_id: int) -> bool:
         bool: True if broadcaster was started, False if already running elsewhere
     """
     r = get_redis_client()
-    lock_key = LOCK_KEY.format(draft_id=draft_id)
+    lock_key = tick_lock_key(draft_id)
     stop_event = threading.Event()
 
     # Try to acquire distributed lock (non-blocking)
@@ -786,7 +803,7 @@ def start_tick_broadcaster(draft_id: int) -> bool:
 def stop_tick_broadcaster(draft_id: int):
     """Stop the tick broadcaster for a draft."""
     r = get_redis_client()
-    lock_key = LOCK_KEY.format(draft_id=draft_id)
+    lock_key = tick_lock_key(draft_id)
 
     # Get local task info
     with _lock:

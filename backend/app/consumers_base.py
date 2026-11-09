@@ -40,6 +40,7 @@ from channels.generic.websocket import AsyncWebsocketConsumer
 from opentelemetry import trace
 from opentelemetry.trace import Status, StatusCode
 
+from app.redis_keys import namespaced_key
 from telemetry.logging import get_logger
 from telemetry.websocket import TelemetryConsumerMixin
 
@@ -112,11 +113,11 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
 
     def _heartbeat_key(self, draft_id: int, user_id: int) -> str:
         prefix = self.get_room_group_prefix()
-        return f"{prefix}:{draft_id}:captain:{user_id}:heartbeat"
+        return namespaced_key(f"{prefix}:{draft_id}:captain:{user_id}:heartbeat")
 
     def _captain_channel_key(self, draft_id: int, user_id: int) -> str:
         prefix = self.get_room_group_prefix()
-        return f"{prefix}:{draft_id}:captain:{user_id}:channel"
+        return namespaced_key(f"{prefix}:{draft_id}:captain:{user_id}:channel")
 
     # --- Heartbeat ---
 

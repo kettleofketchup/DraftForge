@@ -242,6 +242,10 @@ jobs:
               app.tests.test_build_users_dict \
               tests.test_populate \
               tests.test_populate_offline \
+              discordbot.tests.test_signup_logging \
+              events.tests.test_modal_config_contract \
+              events.tests.test_discord \
+              events.tests.test_reaction_signup \
               app.tests.test_env_utils \
               app.tests.test_settings_env_overrides \
               -v 2

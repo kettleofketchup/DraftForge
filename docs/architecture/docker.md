@@ -326,8 +326,10 @@ pinned.
 ### Development Volumes
 - Source code mounted for hot reload
 - Database files persisted locally
-- Redis data is per stack: `backend/.redis_data` (test slot 0), `backend/.redis_data-sN`
-  (slot N), `backend/.redis_data-dev` (dev)
+- Redis data is per stack: named volume `<project>_redis_data` for test stacks
+  (`df_redis_data` for slot 0, `df-sN_redis_data` for slot N), `backend/.redis_data-dev` (dev).
+  The test stack uses a named volume so its redis definition does not depend on the
+  worktree path; a bind mount made a run from another worktree recreate the container.
 
 ### Production Volumes
 - Only database and SSL certificates mounted

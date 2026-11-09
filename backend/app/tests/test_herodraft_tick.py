@@ -15,6 +15,7 @@ from app.tasks.herodraft_tick import (
     _lock,
     broadcast_tick,
     check_timeout,
+    conn_count_key,
     get_redis_client,
     should_continue_ticking,
     start_tick_broadcaster,
@@ -453,7 +454,7 @@ class ShouldContinueTickingTestCase(TransactionTestCase):
         self.draft.save()
 
         # Ensure connection count is 0
-        conn_key = f"herodraft:connections:{self.draft.id}"
+        conn_key = conn_count_key(self.draft.id)
         self.r.delete(conn_key)
 
         should_continue, reason = should_continue_ticking(self.draft.id, self.r)
@@ -467,7 +468,7 @@ class ShouldContinueTickingTestCase(TransactionTestCase):
         self.draft.save()
 
         # Ensure connection count is 0
-        conn_key = f"herodraft:connections:{self.draft.id}"
+        conn_key = conn_count_key(self.draft.id)
         self.r.delete(conn_key)
 
         should_continue, reason = should_continue_ticking(self.draft.id, self.r)
