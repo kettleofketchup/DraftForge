@@ -32,6 +32,13 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 if TYPE_CHECKING:
     from app.schemas import TournamentUserSchema
 
+# Error ``message`` returned by ``handle_signup_modal_submit`` when the modal
+# was built for a different game than the event's current one. The bot's
+# modals prefix it with "❌ " like every other error message.
+STALE_MODAL_MESSAGE = (
+    "This event changed since you opened the form. Please press Sign Up again."
+)
+
 
 class OrgProxy:
     """Proxy for event.organization attribute access in embed builders.
@@ -41,13 +48,13 @@ class OrgProxy:
     Also truthful (bool(proxy) == True) so `if event.organization:` works.
     """
 
-    def __init__(self, pk: int, name: str, discord_server_id: str, logo: str):
+    def __init__(self, pk: int, name: str, discord_server_id: str, logo: str) -> None:
         self.pk = pk
         self.name = name
         self.discord_server_id = discord_server_id
         self.logo = logo
 
-    def __bool__(self):
+    def __bool__(self) -> bool:
         return True
 
 
@@ -245,7 +252,9 @@ class SignupInputPatch(BaseModel):
 
     @field_validator("positions")
     @classmethod
-    def _validate_positions_range(cls, v):
+    def _validate_positions_range(
+        cls, v: PositionPriorities | list[int] | None
+    ) -> PositionPriorities | list[int] | None:
         # PositionPriorities already validates 0..5 per field; only the legacy
         # list[int] form needs the role-number range check here.
         if v is None or isinstance(v, PositionPriorities):
@@ -296,9 +305,9 @@ ModalConfig = Annotated[
 def dota_require_screenshot(rank_status: str, cfg: "DotaModalConfig") -> bool:
     """Single home for the screenshot-required rule.
 
-    Was duplicated as a ternary in components.py (modal follow-up) and in
-    handle_get_rank_flow_state. Pure over the transported config so both
-    processes call it.
+    Called by the Dota modal follow-up (``discordbot/components/dota.py``) and
+    by ``DotaHandler`` (``events/discord/providers/dota.py``). Pure over the
+    transported config so both processes call it.
     """
     if rank_status == "active":
         return cfg.require_rank_screenshot
@@ -347,9 +356,10 @@ class SignupActionResponse(BaseModel):
 class RankFlowStateResponse(BaseModel):
     """Response of /api/internal/discord/rank-flow-state/.
 
-    Used by the legacy pos_confirm flow in bot.py to construct the next
-    RankDetailsView. ``error``/``message`` populated only on lookup failure;
-    otherwise the rank_status + require_screenshot + min_mmr fields drive UI.
+    Built by ``DotaHandler.get_rank_flow_state`` so a client can construct the
+    next ``RankDetailsView`` (``discordbot/components/dota.py``).
+    ``error``/``message`` are populated only on lookup failure; otherwise the
+    rank_status + require_screenshot + min_mmr fields drive the UI.
     """
 
     rank_status: str | None = None  # "active" | "previous" | "never"
