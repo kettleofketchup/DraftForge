@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/1.10/ref/settings/
 import contextlib
 import functools
 import os
+import secrets
 import sys
 from pathlib import Path
 
@@ -89,6 +90,13 @@ NODE_ENV = "dev"
 TEST = env_bool("TEST")
 RELEASE = env_bool("RELEASE")
 DEBUG = env_bool("DEBUG")
+
+# Concurrent test runs share one Redis and number their drafts from 1, so each
+# test process namespaces its channel groups, raw Redis keys and cache keys.
+RUNNING_TESTS: bool = sys.argv[1:2] == ["test"] or "pytest" in sys.modules
+REDIS_KEY_NAMESPACE: str = (
+    f"test-{os.getpid()}-{secrets.token_hex(4)}:" if RUNNING_TESTS else ""
+)
 
 # In test environments, only send Discord DMs to this user ID.
 # All other DMs return a fake success. Prevents spamming real users during testing.
@@ -318,6 +326,8 @@ if not env_bool("DISABLE_CACHE"):
             },
         }
     }
+    if RUNNING_TESTS:
+        CACHES["default"]["KEY_PREFIX"] = REDIS_KEY_NAMESPACE
 else:
     CACHES = {
         "default": {
@@ -420,7 +430,7 @@ def _deploy_version() -> str:
 # brute `invalidate_all()` that AppConfig.ready() used to fire on every
 # boot — that wiped warm cache on every Daphne reload / worker restart /
 # OOM, with the only legitimate goal being "fresh data after a deploy".
-_CACHE_KEY_PREFIX = f"dtx-v{_deploy_version()}:"
+_CACHE_KEY_PREFIX = f"dtx-v{_deploy_version()}:{REDIS_KEY_NAMESPACE}"
 CACHEOPS_PREFIX = lambda _query: _CACHE_KEY_PREFIX  # noqa: E731
 
 # Channel Layers for WebSocket support
@@ -440,6 +450,8 @@ else:
             },
         },
     }
+    if RUNNING_TESTS:
+        CHANNEL_LAYERS["default"]["CONFIG"]["prefix"] = f"asgi:{REDIS_KEY_NAMESPACE}"
 
 
 # Password validation
@@ -542,6 +554,7 @@ CSRF_TRUSTED_ORIGINS += env_list("EXTRA_CSRF_TRUSTED_ORIGINS")
 if env_bool("TRUST_X_FORWARDED_PROTO"):
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 AUTH_USER_MODEL = "app.CustomUser"
+TEST_RUNNER = "backend.test_runner.BackendDiscoverRunner"
 
 # Celery Configuration
 CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", f"redis://{REDIS_HOST}:6379/1")
@@ -554,6 +567,10 @@ CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = "UTC"
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_TIME_LIMIT = 300  # 5 minutes
+# Tests must never enqueue onto the broker the running test stack's worker consumes.
+if RUNNING_TESTS:
+    CELERY_TASK_ALWAYS_EAGER = True
+    CELERY_TASK_EAGER_PROPAGATES = True
 
 # League Stats Configuration
 LEAGUE_MMR_MIN_GAMES = int(os.environ.get("LEAGUE_MMR_MIN_GAMES", "5"))

@@ -25,7 +25,7 @@ The dev stack is separate. It is always compose project `df-dev`, one per machin
 | Base URL | `https://localhost` | `https://localhost:1N443` |
 | Discord bot + celery beat | on | off (`just test::background on` to enable) |
 | Discord/Steam tokens | real | blanked while background is off |
-| Redis data | `backend/.redis_data` | `backend/.redis_data-sN` |
+| Redis data | volume `df_redis_data` | volume `df-sN_redis_data` |
 
 There are 10 slots (0-9). Slot 0 is exactly the stack CI and older docs assume.
 Slots N ≥ 1 publish HTTPS only: nginx's HTTP→HTTPS redirect drops the port, so an HTTP
@@ -301,6 +301,6 @@ If in doubt, don't touch it.
 | `` `df` was taken over by <path> `` | An old-code worktree ran `test::upd`. Merge main into that worktree |
 | No free slot | `just test::slots`; release idle slots you own, or run the [pre-checks](#before-touching-another-worktrees-slot) and `just test::slot-release --slot N` |
 | Port already in use on `up` | `just test::slots` shows which project holds it; dev and test slot 0 cannot run together |
-| Redis fails to start, permission denied on `dump.rdb` | Rootless podman: `backend/.redis_data*/dump.rdb` is owned by the container's uid 999 (a subuid on the host). Remove that slot's directory without sudo: `podman unshare rm -rf backend/.redis_data-sN` (`.redis_data` for slot 0). If that fails, ask the user |
+| Redis fails to start, permission denied on `dump.rdb` (dev stack) | Rootless podman: `backend/.redis_data-dev/dump.rdb` is owned by the container's uid 999 (a subuid on the host). Remove the directory without sudo: `podman unshare rm -rf backend/.redis_data-dev`. Test stacks use the named volume `<project>_redis_data` and do not hit this. If that fails, ask the user |
 | Frontend `EACCES` writing the worktree | Rootless podman maps the frontend user to uid 100999. Run `setfacl -R -m u:100999:rwX -m d:u:100999:rwX <worktree>`, then `just test::compose restart frontend nginx` (restart **both**: nginx caches the frontend upstream IP) |
 | Orphan stacks (owner worktree deleted) | `just test::slots` flags them; run the [pre-checks](#before-touching-another-worktrees-slot), then `just test::slot-reap <project>` |

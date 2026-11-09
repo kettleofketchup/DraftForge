@@ -1,9 +1,17 @@
+from datetime import date, time, timedelta
 from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase, override_settings
+from django.utils import timezone
+from rest_framework.test import APIClient
 
+from app.models import Tournament
+from discordbot.embeds import event_announcement_embed, tournament_created_embed
 from discordbot.models import RSVP, EventTemplate, ScheduledEvent
+from discordbot.tasks import check_scheduled_events
+from discordbot.utils import sync_send_embed, sync_send_templated_embed
+from events.schemas import ScheduledEventDueSchema
 
 User = get_user_model()
 
@@ -37,10 +45,6 @@ class ScheduledEventModelTest(TestCase):
 
     def test_create_scheduled_event(self):
         """ScheduledEvent can be created linked to a template."""
-        from datetime import time
-
-        from django.utils import timezone
-
         event = ScheduledEvent.objects.create(
             template=self.template,
             is_recurring=True,
@@ -62,10 +66,6 @@ class RSVPModelTest(TestCase):
             color="#0000FF",
             channel_id="123456789012345678",
         )
-        from datetime import time
-
-        from django.utils import timezone
-
         self.scheduled_event = ScheduledEvent.objects.create(
             template=self.template,
             next_post_at=timezone.now(),
@@ -86,8 +86,6 @@ class RSVPModelTest(TestCase):
 class EmbedBuildersTest(TestCase):
     def test_event_announcement_embed(self):
         """event_announcement_embed returns dict with correct structure."""
-        from discordbot.embeds import event_announcement_embed
-
         template = EventTemplate.objects.create(
             name="Test",
             template_type="event",
@@ -105,11 +103,6 @@ class EmbedBuildersTest(TestCase):
 
     def test_tournament_created_embed(self):
         """tournament_created_embed returns dict with tournament info."""
-        from datetime import date
-
-        from app.models import Tournament
-        from discordbot.embeds import tournament_created_embed
-
         tournament = Tournament.objects.create(
             name="Test Tournament",
             date_played=date.today(),
@@ -124,11 +117,9 @@ class UtilsTest(TestCase):
     @patch("discordbot.utils.requests.post")
     def test_sync_send_embed(self, mock_post):
         """sync_send_embed sends POST to Discord webhook."""
-        from discordbot.utils import sync_send_embed
-
         mock_post.return_value = MagicMock(status_code=200)
 
-        result = sync_send_embed(
+        sync_send_embed(
             channel_id="123456789",
             title="Test Title",
             description="Test Description",
@@ -140,8 +131,6 @@ class UtilsTest(TestCase):
     @patch("discordbot.utils.requests.post")
     def test_sync_send_templated_embed(self, mock_post):
         """sync_send_templated_embed sends embed from EventTemplate."""
-        from discordbot.utils import sync_send_templated_embed
-
         mock_post.return_value = MagicMock(status_code=200)
 
         template = EventTemplate.objects.create(
@@ -157,7 +146,13 @@ class UtilsTest(TestCase):
         self.assertTrue(mock_post.called)
 
 
-class ScheduledEventTaskTest(TestCase):
+TOKEN = "test-internal-token"
+
+
+@override_settings(INTERNAL_SERVICE_TOKEN=TOKEN)
+class DueScheduledEventsEndpointTest(TestCase):
+    """The internal due-events endpoint returns only active, due, unposted events."""
+
     def setUp(self):
         self.template = EventTemplate.objects.create(
             name="Test Event",
@@ -168,77 +163,113 @@ class ScheduledEventTaskTest(TestCase):
             channel_id="123456789012345678",
         )
 
-    @patch("discordbot.tasks.sync_send_templated_embed")
-    @patch("discordbot.tasks.sync_add_reactions")
-    def test_check_scheduled_events_posts_due_events(self, mock_reactions, mock_send):
-        """check_scheduled_events posts events that are due."""
-        from datetime import timedelta
+    def _due_pks(self):
+        resp = APIClient().get(
+            "/api/internal/scheduled-events/due/", HTTP_X_INTERNAL_TOKEN=TOKEN
+        )
+        self.assertEqual(resp.status_code, 200)
+        return [row["pk"] for row in resp.json()]
 
-        from django.utils import timezone
-
-        from discordbot.tasks import check_scheduled_events
-
-        mock_send.return_value = {"id": "999888777"}
-
-        # Create a due event (next_post_at in the past)
-        event = ScheduledEvent.objects.create(
+    def test_returns_due_event(self):
+        due = ScheduledEvent.objects.create(
             template=self.template,
             next_post_at=timezone.now() - timedelta(minutes=5),
             is_active=True,
         )
+        self.assertEqual(self._due_pks(), [due.pk])
 
-        check_scheduled_events()
-
-        mock_send.assert_called_once()
-        event.refresh_from_db()
-        self.assertEqual(event.discord_message_id, "999888777")
-
-    @patch("discordbot.tasks.sync_send_templated_embed")
-    def test_check_scheduled_events_skips_future_events(self, mock_send):
-        """check_scheduled_events skips events not yet due."""
-        from datetime import timedelta
-
-        from django.utils import timezone
-
-        from discordbot.tasks import check_scheduled_events
-
-        # Create a future event
+    def test_skips_future_posted_and_inactive_events(self):
+        past = timezone.now() - timedelta(minutes=5)
         ScheduledEvent.objects.create(
             template=self.template,
             next_post_at=timezone.now() + timedelta(hours=1),
             is_active=True,
         )
+        ScheduledEvent.objects.create(
+            template=self.template,
+            next_post_at=past,
+            is_active=True,
+            discord_message_id="already-posted",
+        )
+        ScheduledEvent.objects.create(
+            template=self.template, next_post_at=past, is_active=False
+        )
+        self.assertEqual(self._due_pks(), [])
 
+
+def _due(pk, *, is_recurring=False, next_post_at=None, include_rsvp=True):
+    return ScheduledEventDueSchema.model_validate(
+        {
+            "pk": pk,
+            "is_recurring": is_recurring,
+            "next_post_at": next_post_at,
+            "template": {
+                "name": "Test Event",
+                "title": "Test",
+                "description": "Test description",
+                "color": "#FF0000",
+                "channel_id": "123456789012345678",
+                "include_rsvp": include_rsvp,
+            },
+        }
+    )
+
+
+@patch("app.internal_client.update_scheduled_event")
+@patch("discordbot.utils.sync_add_reactions")
+@patch("discordbot.utils.sync_send_embed")
+class CheckScheduledEventsTaskTest(SimpleTestCase):
+    """check_scheduled_events posts what the internal API reports as due."""
+
+    @patch("app.internal_client.get_due_scheduled_events")
+    def test_posts_due_event_and_stores_message_id(
+        self, mock_due, mock_send, mock_reactions, mock_update
+    ):
+        mock_due.return_value = [_due(7)]
+        mock_send.return_value = {"id": "999888777"}
+
+        check_scheduled_events()
+
+        mock_send.assert_called_once()
+        self.assertEqual(mock_send.call_args.kwargs["channel_id"], "123456789012345678")
+        mock_reactions.assert_called_once_with("123456789012345678", "999888777")
+        mock_update.assert_called_once_with(7, discord_message_id="999888777")
+
+    @patch("app.internal_client.get_due_scheduled_events", return_value=[])
+    def test_nothing_due_posts_nothing(
+        self, mock_due, mock_send, mock_reactions, mock_update
+    ):
         check_scheduled_events()
 
         mock_send.assert_not_called()
+        mock_update.assert_not_called()
 
-    @patch("discordbot.tasks.sync_send_templated_embed")
-    @patch("discordbot.tasks.sync_add_reactions")
-    def test_recurring_event_reschedules(self, mock_reactions, mock_send):
-        """Recurring events get rescheduled after posting."""
-        from datetime import time, timedelta
-
-        from django.utils import timezone
-
-        from discordbot.tasks import check_scheduled_events
-
+    @patch("app.internal_client.get_due_scheduled_events")
+    def test_recurring_event_reschedules_a_week_later(
+        self, mock_due, mock_send, mock_reactions, mock_update
+    ):
+        original = timezone.now() - timedelta(minutes=5)
+        mock_due.return_value = [
+            _due(8, is_recurring=True, next_post_at=original.isoformat())
+        ]
         mock_send.return_value = {"id": "111222333"}
-
-        original_time = timezone.now() - timedelta(minutes=5)
-        event = ScheduledEvent.objects.create(
-            template=self.template,
-            is_recurring=True,
-            day_of_week=0,
-            time_of_day=time(19, 0),
-            next_post_at=original_time,
-            is_active=True,
-        )
 
         check_scheduled_events()
 
-        event.refresh_from_db()
-        # Should be rescheduled 7 days later
-        self.assertGreater(event.next_post_at, original_time)
-        # discord_message_id should be cleared for next posting
-        self.assertIsNone(event.discord_message_id)
+        mock_update.assert_called_once_with(
+            8,
+            discord_message_id=None,
+            next_post_at=(original + timedelta(days=7)).isoformat(),
+        )
+
+    @patch("app.internal_client.get_due_scheduled_events")
+    def test_failed_post_is_not_marked_posted(
+        self, mock_due, mock_send, mock_reactions, mock_update
+    ):
+        mock_due.return_value = [_due(9)]
+        mock_send.return_value = None
+
+        check_scheduled_events()
+
+        mock_reactions.assert_not_called()
+        mock_update.assert_not_called()

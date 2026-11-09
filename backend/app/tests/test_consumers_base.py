@@ -4,7 +4,7 @@ import asyncio
 from types import SimpleNamespace
 from unittest import mock
 
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, override_settings
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
@@ -77,6 +77,7 @@ class TestAbstractInterface(SimpleTestCase):
             )
 
 
+@override_settings(REDIS_KEY_NAMESPACE="")
 class TestRedisKeyGeneration(SimpleTestCase):
     """Test Redis key helper methods on BaseDraftConsumer."""
 

@@ -5,8 +5,6 @@ services:
       DF_HTTPS_PORT: ${DF_HTTPS_PORT:?run via scripts.slots}
   redis:
     container_name: redis${DF_SUFFIX:?run via scripts.slots}
-    volumes: !override
-      - ./backend/.redis_data${DF_SUFFIX:?run via scripts.slots}:/data
   backend:
     container_name: backend${DF_SUFFIX:?run via scripts.slots}
     environment:
