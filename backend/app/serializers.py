@@ -11,8 +11,6 @@ from org.models import OrgUser
 from telemetry.logging import get_logger
 from user.querysets import with_user_profiles
 
-log = get_logger(__name__)
-
 from .models import (
     CustomUser,
     Draft,
@@ -31,6 +29,8 @@ from .models import (
     Team,
     Tournament,
 )
+
+log = get_logger(__name__)
 
 
 class UserPkField(serializers.RelatedField):

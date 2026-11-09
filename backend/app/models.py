@@ -1,9 +1,11 @@
 from collections.abc import Iterable
 from datetime import datetime
+from enum import IntEnum, StrEnum
 from typing import TYPE_CHECKING, Any, Self
 
 import requests
 from django.conf import settings
+from django.contrib.auth.models import AbstractUser
 from django.db import models
 from django.db.models import QuerySet
 from django.db.utils import IntegrityError
@@ -16,10 +18,6 @@ if TYPE_CHECKING:
     from user.models import DotaUserProfile
 
 User = settings.AUTH_USER_MODEL
-
-from enum import IntEnum, StrEnum
-
-from django.contrib.auth.models import AbstractUser
 
 log = get_logger(__name__)
 

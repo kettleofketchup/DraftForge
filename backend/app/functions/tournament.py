@@ -1,3 +1,4 @@
+from cacheops import cached_as
 from django.db import transaction
 from django.utils import timezone
 from rest_framework import serializers
@@ -33,6 +34,7 @@ from app.serializers import (
 from app.tasks.draft_tick import evaluate_client_pick_time
 from app.tasks.teamdraft_tick import start_team_tick_broadcaster_after_commit
 from telemetry.logging import get_logger
+from user.models import BaseUserProfile, DotaUserProfile
 
 log = get_logger(__name__)
 
@@ -292,12 +294,6 @@ def create_team_from_captain(request: Request) -> Response:
             status=403,
         )
 
-        # Create a new team and add the user as a member (or captain)
-    try:
-        draft = tournament.draft
-
-    except Draft.DoesNotExist:
-        pass  # No draft exists, continue
     if Team.objects.filter(tournament=tournament, captain=user).exists():
         if draft_order == 0:
             log.debug(
@@ -551,14 +547,6 @@ def rebuild_team(request: Request) -> Response:
 
 class DraftPredictMMRSerializer(serializers.Serializer):
     pk = serializers.IntegerField(required=True)
-
-
-from cacheops import cached_as
-
-# cached_as sites depending on CustomUser must also list BaseUserProfile
-# (nickname/avatar, T1) and DotaUserProfile (positions/dota-mmr, T2) —
-# enforced by user/tests/test_cacheops.py.
-from user.models import BaseUserProfile, DotaUserProfile
 
 
 @api_view(["POST"])
