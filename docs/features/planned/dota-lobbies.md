@@ -33,7 +33,16 @@ Still to come: lobby creation, the webhook receiver, the reconcile task, and the
   for example `game:42`. A staging and a production DraftForge can share one dota_lobby if
   they use different prefixes.
 - **Passwords are never stored.** `lobby.passwords.derive_password` computes them from the
-  Django secret key and the lobby row, so a retried create sends the same request.
+  Django secret key and the lobby reference, so a retried create, or a lobby recreated for the
+  same game, sends the same request and dota_lobby answers it as a repeat rather than a
+  conflict.
+  - Each lobby row records which secret key its password comes from. When rotating
+    `DJANGO_SECRET_KEY`, put the old key in `DJANGO_SECRET_KEY_FALLBACKS` until the lobbies
+    made under it have ended; without it their passwords can no longer be derived.
+  - What players are shown should be read from dota_lobby (`get_lobby` returns the password),
+    since that is the lobby they join.
+  - The password is refused when `DJANGO_SECRET_KEY` is unset and the public development key
+    is in use, outside `DEBUG` and tests.
 - **Errors:** dota_lobby answers errors as problem+json. The client raises `DotaLobbyError` and
   callers act on its `code` and `retryable` fields, never on the message text. Only `503`
   (`unavailable`), `504` (`gc_timeout`), timeouts and connection errors are retryable.

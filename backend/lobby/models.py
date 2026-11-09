@@ -10,7 +10,7 @@ from django.db import models
 from django.db.models import Q
 from django.utils import timezone
 
-from lobby import states
+from lobby import passwords, states
 
 
 class GameLobby(models.Model):
@@ -57,6 +57,9 @@ class GameLobby(models.Model):
         blank=True,
         on_delete=models.SET_NULL,
     )
+    # Fingerprint of the secret key the lobby password is derived with, so
+    # rotating DJANGO_SECRET_KEY keeps existing passwords (lobby.passwords).
+    password_key_id = models.CharField(max_length=16, blank=True, default="")
     # The create body exactly as sent, without the password, so a retry
     # rebuilds a byte-identical request and dota_lobby answers 200, not 409.
     request = models.JSONField(default=dict, blank=True)
@@ -143,8 +146,32 @@ class GameLobby(models.Model):
             self.ended_at = timezone.now()
         update_fields = kwargs.get("update_fields")
         if update_fields is not None and "state" in update_fields:
-            kwargs["update_fields"] = {*update_fields, "ended", "ended_at"}
+            update_fields = {*update_fields, "ended", "ended_at"}
+        if not self.password_key_id:
+            self.password_key_id = self._pick_password_key_id()
+            if update_fields is not None:
+                update_fields = {*update_fields, "password_key_id"}
+        if update_fields is not None:
+            kwargs["update_fields"] = update_fields
         super().save(*args, **kwargs)
+
+    def _pick_password_key_id(self) -> str:
+        """The key of this game's previous lobby while it is still configured.
+
+        A recreated lobby then sends the same password as the one it replaces,
+        so a create that dota_lobby did accept is replayed, not refused.
+        """
+        previous = (
+            GameLobby.objects.filter(external_ref=self.external_ref)
+            .exclude(pk=self.pk)
+            .exclude(password_key_id="")
+            .order_by("-created_at", "-pk")
+            .values_list("password_key_id", flat=True)
+            .first()
+        )
+        if previous and passwords.is_key_available(previous):
+            return previous
+        return passwords.current_key_id()
 
 
 class GameLobbyEvent(models.Model):

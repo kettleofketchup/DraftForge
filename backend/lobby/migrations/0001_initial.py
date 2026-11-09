@@ -26,6 +26,7 @@ class Migration(migrations.Migration):
                 ('state_reason', models.CharField(blank=True, default='', max_length=64)),
                 ('ended', models.BooleanField(db_index=True, default=False)),
                 ('trigger', models.CharField(choices=[('auto', 'Automatic'), ('manual', 'Manual')], default='manual', max_length=8)),
+                ('password_key_id', models.CharField(blank=True, default='', max_length=16)),
                 ('request', models.JSONField(blank=True, default=dict)),
                 ('bot', models.CharField(blank=True, default='', max_length=64)),
                 ('gc_lobby_id', models.CharField(blank=True, default='', max_length=24)),
