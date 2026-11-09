@@ -151,7 +151,7 @@ export interface RoundStartedPayload extends CaptainRef {
   pick_number: number;
   started_at: string;
   grace_time_ms: number;
-  reserve_ms: number;
+  reserve_ms: number | null;
 }
 
 export interface DraftPausedPayload extends CaptainRef {
