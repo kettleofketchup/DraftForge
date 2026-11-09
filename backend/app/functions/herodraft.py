@@ -372,7 +372,9 @@ def submit_pick(
                 team_id=next_round.draft_team_id,
                 started_at=next_round.started_at.isoformat(),
             )
-            active_span.set_attribute("draft.next_round_number", next_round.round_number)
+            active_span.set_attribute(
+                "draft.next_round_number", next_round.round_number
+            )
         else:
             draft.state = HeroDraftState.COMPLETED
             draft.save()
