@@ -4,6 +4,8 @@ import asyncio
 from datetime import date
 from unittest.mock import patch
 
+from channels.db import database_sync_to_async
+from channels.layers import get_channel_layer
 from channels.routing import URLRouter
 from channels.testing import WebsocketCommunicator
 from django.contrib.auth import get_user_model
@@ -129,6 +131,22 @@ class DraftConsumerBaseTestCase(TransactionTestCase):
             await asyncio.sleep(1.5)
             self.assertEqual(get_connection_count("teamdraft", self.draft.pk), 1)
             await comm.disconnect()
+
+    async def test_a_crashing_handler_still_runs_disconnect_cleanup(self):
+        comm, _, _ = await self.connect(self.captain)
+        self.assertEqual(get_connection_count("teamdraft", self.draft.pk), 1)
+        with patch.object(DraftConsumer, "draft_tick", side_effect=RuntimeError("boom")):
+            await get_channel_layer().group_send(
+                f"draft_{self.draft.pk}", {"type": "draft.tick"}
+            )
+            with self.assertRaises(RuntimeError):
+                await comm.wait(timeout=5)
+        self.assertEqual(get_connection_count("teamdraft", self.draft.pk), 0)
+        self.assertIsNone(
+            self.r.get(teamdraft_tick.captain_conn_key(self.draft.pk, self.captain.pk))
+        )
+        team = await database_sync_to_async(Team.objects.nocache().get)(pk=self.team.pk)
+        self.assertFalse(team.draft_is_connected)
 
     async def test_ping_frames_arrive_within_2s(self):
         comm, _, _ = await self.connect(self.spectator)

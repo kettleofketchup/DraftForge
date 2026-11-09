@@ -323,7 +323,8 @@ class DraftConsumer(BaseDraftConsumer):
 
     async def force_disconnect(self, event: dict[str, Any]) -> None:
         """Test-only: server-initiated connection close."""
-        await self.close(code=1012)  # Service Restart
+        # Daphne only lets a server send 1000 or 3000-4999; 1012 crashed the consumer.
+        await self.close(code=4012)
 
     @database_sync_to_async
     def get_recent_events(self, draft_id: int, limit: int = 20) -> list[dict]:
