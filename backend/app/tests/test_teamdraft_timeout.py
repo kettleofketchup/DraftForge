@@ -374,3 +374,33 @@ class PickTimeoutOrderingTests(TransactionTestCase):
         self.rnd.refresh_from_db()
         self.assertIsNone(self.rnd.timed_out_at)
         self.assertFalse(self.fx.events("pick_timed_out").exists())
+
+
+class ShufflePickTimeoutOrderingTests(TransactionTestCase):
+    """Shuffle skip keeps the round pk; the locked re-read must re-check the captain."""
+
+    def setUp(self):
+        self.fx = TimedDraftFixture(
+            style="shuffle", grace_time_ms=1000, reserve_time_ms=1000, prefix="sr", captain_mmrs=CAPTAIN_MMRS
+        )
+        with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True):
+            self.rnd = self.fx.start(now=timezone.now() - timedelta(seconds=5))
+
+    def test_skip_lands_between_auth_and_lock_then_skipped_captain_pick_is_refused(self):
+        captain_a, captain_b = self.fx.teams[0].captain, self.fx.teams[1].captain
+        self.assertEqual(self.rnd.captain_id, captain_a.pk)
+        b_members = set(self.fx.team_of(captain_b).members.values_list("pk", flat=True))
+
+        def skip_then_deny(*_args: object) -> bool:
+            self.assertIsNotNone(async_to_sync(teamdraft_tick.check_timeout)(self.fx.draft.pk))
+            return False
+
+        with patch("app.functions.tournament.can_edit_tournament", side_effect=skip_then_deny):
+            r = self.fx.pick(self.rnd, captain_a)
+        self.assertEqual((r.status_code, r.data["code"]), (409, "not_active_round"))
+        self.rnd.refresh_from_db()
+        self.assertEqual(self.rnd.captain_id, captain_b.pk)
+        self.assertIsNone(self.rnd.choice)
+        self.assertEqual(set(self.fx.team_of(captain_b).members.values_list("pk", flat=True)), b_members)
+        self.assertFalse(self.fx.events("player_picked").exists())
+        self.assertEqual(self.fx.events("pick_skipped").count(), 1)

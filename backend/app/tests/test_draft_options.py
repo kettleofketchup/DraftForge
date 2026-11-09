@@ -17,6 +17,8 @@ from app.tests.teamdraft_fixtures import TimedDraftFixture
 from tests.helpers.tournament_config import TestTournamentConfig
 from app.models import (
     Draft,
+    League,
+    Organization,
     DraftOptions,
     DraftRound,
     Team,
@@ -324,6 +326,37 @@ class SettingsWriteTests(TestCase):
         self.assertEqual(self.fx.events("draft_resumed").count(), 1)
         self.fx.draft.refresh_from_db()
         self.assertIsNone(self.fx.draft.resuming_until)
+
+
+class SettingsCreateTests(TestCase):
+    def setUp(self):
+        self.staff = User.objects.create_user(username="dc_staff", password="x", is_staff=True)
+        org = Organization.objects.create(name="dc org")
+        self.league = League.objects.create(organization=org, name="dc league", steam_league_id=None)
+        self.client = APIClient()
+        self.client.force_authenticate(self.staff)
+
+    def _create(self, **extra: object):
+        body = {"name": "dc tournament", "date_played": "2026-11-08T00:00:00Z", "tournament_type": "double_elimination", "league": self.league.pk, "league_id_write": self.league.pk, **extra}
+        return self.client.post("/api/tournaments/", body, format="json")
+
+    def test_create_with_draft_options_stores_them(self):
+        r = self._create(draft_options={"timer_enabled": True, "grace_time_ms": 10000, "reserve_time_ms": 20000})
+        self.assertEqual(r.status_code, 201, r.data)
+        opts = DraftOptions.objects.get(tournament_id=r.data["pk"])
+        self.assertEqual((opts.timer_enabled, opts.grace_time_ms, opts.reserve_time_ms), (True, 10000, 20000))
+        self.assertEqual(r.data["draft_options"]["grace_time_ms"], 10000)
+
+    def test_create_with_invalid_draft_options_is_400_without_write(self):
+        r = self._create(draft_options={"grace_time_ms": 0})
+        self.assertEqual(r.status_code, 400)
+        self.assertFalse(Tournament.objects.filter(name="dc tournament").exists())
+
+    def test_create_without_draft_options_is_unchanged(self):
+        r = self._create()
+        self.assertEqual(r.status_code, 201, r.data)
+        opts = DraftOptions.objects.get(tournament_id=r.data["pk"])
+        self.assertEqual((opts.timer_enabled, opts.grace_time_ms, opts.reserve_time_ms), (False, 30000, 30000))
 
 
 class FixtureConfigTests(TestCase):
