@@ -5,15 +5,13 @@ import type { UserType } from '~/index';
 import { draftWsSelectors, useDraftWebSocketStore } from '~/store/draftWebSocketStore';
 import { useUserStore } from '~/store/userStore';
 import { describeTimerActionError } from '../pickErrors';
-import type { ClockTeam, DraftClockBarProps } from './DraftClockBar';
-import type { DraftPauseOverlayProps } from './DraftPauseOverlay';
-import { useTeamDraftCountdown, type CountdownDraftSlice, type TeamDraftCountdown } from './useTeamDraftCountdown';
+import type { ClockTeam, LiveDraftClockBarProps } from './DraftClockBar';
+import type { LiveDraftPauseOverlayProps } from './DraftPauseOverlay';
 
 export interface TeamDraftTimerProps {
   showLobby: boolean;
-  clockBarProps: DraftClockBarProps;
-  pauseOverlayProps: DraftPauseOverlayProps;
-  countdown: TeamDraftCountdown;
+  clockBarProps: LiveDraftClockBarProps;
+  pauseOverlayProps: LiveDraftPauseOverlayProps;
 }
 
 interface StateTeam {
@@ -31,8 +29,6 @@ function runWithToast(action: () => Promise<unknown>, loading: string, success: 
 
 export function useTeamDraftTimerProps(currentUserPk: number | undefined, isStaff: boolean): TeamDraftTimerProps {
   const draftState = useDraftWebSocketStore((s) => s.draftState);
-  const tick = useDraftWebSocketStore((s) => s.tick);
-  const serverClockOffsetMs = useDraftWebSocketStore((s) => s.serverClockOffsetMs);
   const captainFresh = useDraftWebSocketStore((s) => s.captainFresh);
   const draftStatus = useDraftWebSocketStore(draftWsSelectors.draftStatus);
   const timerEnabled = useDraftWebSocketStore(draftWsSelectors.timerEnabled);
@@ -40,9 +36,6 @@ export function useTeamDraftTimerProps(currentUserPk: number | undefined, isStaf
   const activeRoundPk = useDraftWebSocketStore(draftWsSelectors.activeRoundPk);
   const isActiveCaptainDisconnected = useDraftWebSocketStore(draftWsSelectors.isActiveCaptainDisconnected);
   const userStoreDraftState = useUserStore((s) => s.tournament?.draft?.state);
-
-  const countdown = useTeamDraftCountdown(tick, draftState as CountdownDraftSlice | null, serverClockOffsetMs);
-  const resumingRemainingMs = countdown.kind === 'armed' ? countdown.resumingRemainingMs : 0;
 
   return useMemo(() => {
     const ds = draftState;
@@ -69,9 +62,7 @@ export function useTeamDraftTimerProps(currentUserPk: number | undefined, isStaf
 
     return {
       showLobby: (draftStatus ?? userStoreDraftState) === 'pending',
-      countdown,
       clockBarProps: {
-        countdown,
         timerEnabled,
         clockArmed,
         draftStatus,
@@ -87,7 +78,6 @@ export function useTeamDraftTimerProps(currentUserPk: number | undefined, isStaf
       pauseOverlayProps: {
         draftStatus,
         isManualPause,
-        resumingRemainingMs,
         activeCaptain,
         isActiveCaptainDisconnected,
         canResume: canControl,
@@ -108,7 +98,5 @@ export function useTeamDraftTimerProps(currentUserPk: number | undefined, isStaf
     timerEnabled,
     clockArmed,
     isActiveCaptainDisconnected,
-    countdown,
-    resumingRemainingMs,
   ]);
 }

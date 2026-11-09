@@ -58,8 +58,8 @@ import { LiveAutoButtons, DraftRoundIndicator } from './liveView';
 import { CompletedTeamDraftView } from './CompletedTeamDraftView';
 import { initDraftHook } from './hooks/initDraftHook';
 import { TieResolutionOverlay } from './TieResolutionOverlay';
-import { DraftClockBar } from './timer/DraftClockBar';
-import { DraftPauseOverlay } from './timer/DraftPauseOverlay';
+import { LiveDraftClockBar } from './timer/DraftClockBar';
+import { LiveDraftPauseOverlay } from './timer/DraftPauseOverlay';
 import { useTeamDraftTimerProps } from './timer/useTeamDraftTimerProps';
 import { deriveDraftIndex, resolveViewedRound } from './utils';
 import type { DraftRoundType, DraftType } from './types';
@@ -554,7 +554,7 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
 
     return (
       <>
-        <DraftClockBar {...timer.clockBarProps} />
+        <LiveDraftClockBar {...timer.clockBarProps} />
         <DraftBalanceDisplay />
         <DraftRoundView />
       </>
@@ -794,7 +794,7 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
           )}
         </div>
 
-        <DraftPauseOverlay {...timer.pauseOverlayProps} />
+        <LiveDraftPauseOverlay {...timer.pauseOverlayProps} />
 
         {/* Tie Resolution Overlay - shown to all users on WebSocket tie_roll event */}
         {showTieOverlay && tieResolution && (

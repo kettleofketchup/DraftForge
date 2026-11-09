@@ -5,6 +5,7 @@ import { DisplayName } from '~/components/user/avatar';
 import type { UserType } from '~/index';
 import type { TeamDraftState } from '../schemas';
 import { runTimerAction } from './runTimerAction';
+import { useLiveTeamDraftCountdown } from './useTeamDraftCountdown';
 
 export interface DraftPauseOverlayProps {
   draftStatus: TeamDraftState | null;
@@ -16,6 +17,14 @@ export interface DraftPauseOverlayProps {
   isStaff: boolean;
   onResume: () => Promise<unknown>;
   onPickForCaptain: () => void;
+}
+
+export type LiveDraftPauseOverlayProps = Omit<DraftPauseOverlayProps, 'resumingRemainingMs'>;
+
+export function LiveDraftPauseOverlay(props: LiveDraftPauseOverlayProps) {
+  const countdown = useLiveTeamDraftCountdown();
+  const resumingRemainingMs = countdown.kind === 'armed' ? countdown.resumingRemainingMs : 0;
+  return <DraftPauseOverlay {...props} resumingRemainingMs={resumingRemainingMs} />;
 }
 
 export function DraftPauseOverlay({

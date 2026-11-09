@@ -7,7 +7,7 @@ import { cn } from '~/lib/utils';
 import type { TeamDraftState } from '../schemas';
 import { formatClock } from './formatClock';
 import { runTimerAction } from './runTimerAction';
-import type { TeamDraftCountdown } from './useTeamDraftCountdown';
+import { useLiveTeamDraftCountdown, type TeamDraftCountdown } from './useTeamDraftCountdown';
 
 const GRACE_URGENT_MS = 10_000;
 
@@ -31,6 +31,13 @@ export interface DraftClockBarProps {
   reserveTotalMs: number;
   onPause: () => Promise<unknown>;
   onStartClock: () => Promise<unknown>;
+}
+
+export type LiveDraftClockBarProps = Omit<DraftClockBarProps, 'countdown'>;
+
+export function LiveDraftClockBar(props: LiveDraftClockBarProps) {
+  const countdown = useLiveTeamDraftCountdown();
+  return <DraftClockBar {...props} countdown={countdown} />;
 }
 
 export function DraftClockBar({

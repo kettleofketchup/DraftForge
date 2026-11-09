@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { renderHook } from '@testing-library/react';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { act, renderHook } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useDraftWebSocketStore } from '~/store/draftWebSocketStore';
 import { useTeamDraftTimerProps } from '../timer/useTeamDraftTimerProps';
 import { T0, user } from './fixtures';
@@ -53,13 +53,39 @@ describe('useTeamDraftTimerProps', () => {
     });
     const { result } = renderHook(() => useTeamDraftTimerProps(999, true));
     expect(result.current.pauseOverlayProps).toMatchObject({ draftStatus: 'paused', activeCaptain: user(7), isActiveCaptainDisconnected: true });
-    expect(result.current.countdown.kind).toBe('armed');
   });
 
   it('pending with tick null renders without a render loop and shows the lobby', () => {
     useDraftWebSocketStore.setState({ draftState: ds({ state: 'pending', clock_armed: false }) as never, tick: null });
     const { result } = renderHook(() => useTeamDraftTimerProps(7, false));
     expect(result.current.showLobby).toBe(true);
-    expect(result.current.countdown).toEqual({ kind: 'unarmed' });
+  });
+});
+
+describe('useTeamDraftTimerProps render cost', () => {
+  beforeEach(() => {
+    useDraftWebSocketStore.getState().reset();
+    vi.useFakeTimers();
+    vi.setSystemTime(T0);
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it('does not re-render the modal-level hook on animation frames while the clock is armed', () => {
+    useDraftWebSocketStore.setState({ draftState: ds() as never });
+    let renders = 0;
+    const { result } = renderHook(() => {
+      renders += 1;
+      return useTeamDraftTimerProps(999, true);
+    });
+    const before = renders;
+    for (let i = 0; i < 10; i += 1) {
+      act(() => {
+        vi.advanceTimersByTime(100);
+      });
+    }
+    expect(renders).toBe(before);
+    expect(result.current).not.toHaveProperty('countdown');
+    expect(result.current.clockBarProps).not.toHaveProperty('countdown');
+    expect(result.current.pauseOverlayProps).not.toHaveProperty('resumingRemainingMs');
   });
 });

@@ -1,4 +1,5 @@
 import { elapsedSince, remaining, serverNow, useAnimationFrameClock } from '~/lib/draftClock';
+import { useDraftWebSocketStore } from '~/store/draftWebSocketStore';
 import type { DraftTick, TeamDraftState } from '../schemas';
 
 export type TeamDraftCountdown =
@@ -128,4 +129,11 @@ export function useTeamDraftCountdown(
     isFrozen: draft?.state === 'paused',
     inputs: [tick, draft, serverClockOffsetMs],
   });
+}
+
+export function useLiveTeamDraftCountdown(): TeamDraftCountdown {
+  const tick = useDraftWebSocketStore((s) => s.tick);
+  const draftState = useDraftWebSocketStore((s) => s.draftState);
+  const serverClockOffsetMs = useDraftWebSocketStore((s) => s.serverClockOffsetMs);
+  return useTeamDraftCountdown(tick, draftState as CountdownDraftSlice | null, serverClockOffsetMs);
 }
