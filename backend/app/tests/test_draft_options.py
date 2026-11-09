@@ -7,14 +7,15 @@ from unittest.mock import PropertyMock, patch
 from django.apps import apps as global_apps
 from django.contrib.auth import get_user_model
 from django.db import transaction
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 
 from app.management.commands import sync_prod_tournaments
 from app.serializers import DraftSerializerSlim, TournamentSerializer
 from app.tests.teamdraft_fixtures import TimedDraftFixture
-from tests.helpers.tournament_config import TestTournamentConfig
+from tests.data.users import REGULAR_USER
+from tests.helpers.tournament_config import TEST_TOURNAMENTS, TestTournamentConfig
 from app.models import (
     Draft,
     League,
@@ -410,3 +411,24 @@ class FixtureConfigTests(TestCase):
     def test_completed_is_completed(self):
         t = TestTournamentConfig(key="k6", name="K6", description="d", draft_state="completed", picks_completed=16).create()
         self.assertEqual(t.draft.state, "completed")
+
+    def test_timer_configs_build_pending_lobbies_with_per_spec_clocks(self):
+        clocks = {
+            "draft_timer_ready": (20000, 10000),
+            "draft_timer_countdown": (20000, 60000),
+            "draft_timer_skip": (20000, 60000),
+            "draft_timer_pause": (120000, 30000),
+            "shuffle_timer_skip": (20000, 60000),
+        }
+        configs = [c for c in TEST_TOURNAMENTS if c.key in clocks]
+        self.assertEqual({c.key for c in configs}, set(clocks))
+        with override_settings(DEBUG=True):
+            for config in configs:
+                t = config.create()
+                opts = t.get_draft_options(fresh=True)
+                self.assertTrue(opts.timer_enabled, config.key)
+                self.assertEqual((opts.grace_time_ms, opts.reserve_time_ms), clocks[config.key], config.key)
+                self.assertEqual(t.draft.state, "pending", config.key)
+                self.assertEqual(t.teams.count(), 4, config.key)
+                first_team = t.teams.order_by("draft_order").first()
+                self.assertEqual(first_team.captain.pk, REGULAR_USER.pk, config.key)

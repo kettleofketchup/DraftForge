@@ -73,6 +73,8 @@ class TestTournamentConfig(BaseModel):
     timer_enabled: bool = Field(
         default=False, description="Write DraftOptions.timer_enabled explicitly"
     )
+    grace_time_ms: int = Field(default=30000)
+    reserve_time_ms: int = Field(default=30000)
     draft_style: Literal["snake", "normal", "shuffle"] = Field(default="snake")
     picks_completed: int = Field(
         default=0,
@@ -130,7 +132,11 @@ class TestTournamentConfig(BaseModel):
 
         DraftOptions.objects.update_or_create(
             tournament=self._tournament,
-            defaults={"timer_enabled": self.timer_enabled},
+            defaults={
+                "timer_enabled": self.timer_enabled,
+                "grace_time_ms": self.grace_time_ms,
+                "reserve_time_ms": self.reserve_time_ms,
+            },
         )
 
         if self.draft_state != "not_started":
@@ -458,6 +464,66 @@ TEST_TOURNAMENTS: List[TestTournamentConfig] = [
         draft_state="in_progress",
         draft_style="shuffle",
         picks_completed=0,
+        first_captain_is_test_user=True,
+    ),
+    TestTournamentConfig(
+        key="draft_timer_ready",
+        name="Timer Ready Screen",
+        description="Timer-enabled pending lobby; test user is captain A. Tests ready screen.",
+        draft_state="pending",
+        timer_enabled=True,
+        draft_style="snake",
+        grace_time_ms=20000,
+        reserve_time_ms=10000,
+        num_teams=4,
+        first_captain_is_test_user=True,
+    ),
+    TestTournamentConfig(
+        key="draft_timer_countdown",
+        name="Timer Countdown",
+        description="Timer-enabled pending lobby; test user is captain A. Tests grace countdown and expire-clock.",
+        draft_state="pending",
+        timer_enabled=True,
+        draft_style="snake",
+        grace_time_ms=20000,
+        reserve_time_ms=60000,
+        num_teams=4,
+        first_captain_is_test_user=True,
+    ),
+    TestTournamentConfig(
+        key="draft_timer_skip",
+        name="Timer Timeout Skip",
+        description="Timer-enabled pending lobby; test user is captain A. Tests timeout skip in a snake draft.",
+        draft_state="pending",
+        timer_enabled=True,
+        draft_style="snake",
+        grace_time_ms=20000,
+        reserve_time_ms=60000,
+        num_teams=4,
+        first_captain_is_test_user=True,
+    ),
+    TestTournamentConfig(
+        key="draft_timer_pause",
+        name="Timer Pause Resume",
+        description="Timer-enabled pending lobby; test user is captain A. Tests pause and resume.",
+        draft_state="pending",
+        timer_enabled=True,
+        draft_style="snake",
+        grace_time_ms=120000,
+        reserve_time_ms=30000,
+        num_teams=4,
+        first_captain_is_test_user=True,
+    ),
+    TestTournamentConfig(
+        key="shuffle_timer_skip",
+        name="Shuffle Timer Timeout Skip",
+        description="Timer-enabled pending lobby; test user is captain A. Tests timeout skip in a shuffle draft.",
+        draft_state="pending",
+        timer_enabled=True,
+        draft_style="shuffle",
+        grace_time_ms=20000,
+        reserve_time_ms=60000,
+        num_teams=4,
         first_captain_is_test_user=True,
     ),
 ]
