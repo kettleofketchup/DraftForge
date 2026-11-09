@@ -1,4 +1,4 @@
-import type { Browser, BrowserContext, Page } from '@playwright/test';
+import type { Browser, BrowserContext, Page, WebSocket } from '@playwright/test';
 import { API_URL } from './base-url';
 import { loginAsUser } from './auth';
 import { postWithCsrf } from './events';
@@ -190,7 +190,37 @@ export function activeRound(t: TimerTournament): TimerRound {
   return open[0];
 }
 
+/**
+ * Resolves once a draft socket on `page` receives `initial_state`. The server registers a
+ * captain's heartbeat and channel before sending it, so a test that changes heartbeats or
+ * expects this socket's broadcasts must wait for it, not just for the modal.
+ */
+function draftSocketReady(page: Page, timeoutMs = 15_000): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const onSocket = (ws: WebSocket): void => {
+      if (!/\/api\/draft\/\d+\/$/.test(new URL(ws.url()).pathname)) return;
+      ws.on('framereceived', ({ payload }) => {
+        try {
+          if (JSON.parse(String(payload)).type !== 'initial_state') return;
+        } catch {
+          return;
+        }
+        clearTimeout(timer);
+        page.off('websocket', onSocket);
+        resolve();
+      });
+    };
+    const timer = setTimeout(() => {
+      page.off('websocket', onSocket);
+      reject(new Error(`no initial_state on a draft socket within ${timeoutMs} ms`));
+    }, timeoutMs);
+    page.on('websocket', onSocket);
+  });
+}
+
 export async function openDraftModal(page: Page, tournamentPk: number): Promise<void> {
+  const socketReady = draftSocketReady(page);
+  socketReady.catch(() => undefined);
   const tournamentPage = new TournamentPage(page);
   await tournamentPage.goto(tournamentPk, 'teams');
   await page
@@ -200,6 +230,7 @@ export async function openDraftModal(page: Page, tournamentPk: number): Promise<
     .first()
     .click();
   await tournamentPage.waitForDraftModal();
+  await socketReady;
 }
 
 export async function openCaptainPage(
