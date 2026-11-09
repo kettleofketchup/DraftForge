@@ -5,7 +5,7 @@ import threading
 from collections.abc import Callable
 from unittest.mock import patch
 
-from django.test import SimpleTestCase, TransactionTestCase
+from django.test import SimpleTestCase, TransactionTestCase, override_settings
 from structlog.testing import capture_logs
 
 from app.tasks import draft_tick, herodraft_tick
@@ -22,6 +22,7 @@ from app.tasks.draft_tick import (
 )
 
 
+@override_settings(REDIS_KEY_NAMESPACE="")
 class KeyHelperTests(SimpleTestCase):
     def test_heartbeat_key_matches_hero_literal(self) -> None:
         self.assertEqual(
@@ -310,6 +311,7 @@ class HeroDriverAliasTests(SimpleTestCase):
         self.assertEqual(herodraft_tick.HeroDraftTickDriver.prefix, "herodraft")
         self.assertEqual(herodraft_tick.HeroDraftTickDriver.system, "herodraft")
 
+    @override_settings(REDIS_KEY_NAMESPACE="")
     def test_hero_constants_still_exported(self) -> None:
         self.assertEqual(
             herodraft_tick.CONN_COUNT_KEY.format(draft_id=3),
