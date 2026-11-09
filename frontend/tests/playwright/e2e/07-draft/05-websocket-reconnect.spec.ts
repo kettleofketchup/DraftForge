@@ -8,7 +8,9 @@
  * Uses serial execution because tests share WebSocket state and the
  * reconnect flow is order-dependent.
  *
- * Tournament: 'draft_captain_turn' (snake draft, in-progress, 0 picks)
+ * Tournament: 'draft_ws_reconnect' (snake draft, in-progress, 0 picks). Its own draft:
+ * killDraftWebSocket closes every socket on the draft, so sharing one would drop other
+ * specs' sockets.
  */
 
 import {
@@ -41,9 +43,9 @@ test.describe.serial('WebSocket Reconnection', () => {
     const context = await browser.newContext({ ignoreHTTPSErrors: true });
 
     // Get tournament data (draft already in-progress from populate)
-    const result = await getTournamentByKey(context, 'draft_captain_turn');
+    const result = await getTournamentByKey(context, 'draft_ws_reconnect');
     if (!result) {
-      throw new Error('Could not find draft_captain_turn tournament');
+      throw new Error('Could not find draft_ws_reconnect tournament');
     }
 
     const tournament = result as unknown as TournamentWithDraft;

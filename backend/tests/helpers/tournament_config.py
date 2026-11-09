@@ -530,6 +530,17 @@ TEST_TOURNAMENTS: List[TestTournamentConfig] = [
         num_teams=4,
         first_captain_is_test_user=True,
     ),
+    TestTournamentConfig(
+        key="draft_ws_reconnect",
+        name="WebSocket Reconnect Test",
+        description=(
+            "In-progress snake draft owned by the reconnect spec alone: it force-closes every "
+            "socket on its draft, which would drop other specs' sockets on a shared draft."
+        ),
+        draft_state="in_progress",
+        picks_completed=0,
+        first_captain_is_test_user=True,
+    ),
 ]
 
 # Mapping from key to tournament name for lookups
