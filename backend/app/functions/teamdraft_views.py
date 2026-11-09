@@ -51,16 +51,6 @@ def _is_armed(draft: Draft, options, active: DraftRound | None) -> bool:
     )
 
 
-def _log(event: str, draft: Draft, user_id: int) -> None:
-    log.info(
-        event,
-        system="teamdraft",
-        subsystem="view",
-        draft_id=draft.pk,
-        user_id=user_id,
-    )
-
-
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def teamdraft_set_ready(request: Request, draft_pk: int) -> Response:
@@ -87,7 +77,13 @@ def teamdraft_set_ready(request: Request, draft_pk: int) -> Response:
             team_payload(team),
             actor=request.user,
         )
-    _log("captain_ready_set", draft, request.user.pk)
+    log.info(
+        "captain_ready_set",
+        system="teamdraft",
+        subsystem="view",
+        draft_id=draft.pk,
+        user_id=request.user.pk,
+    )
     return _ok(draft)
 
 
@@ -143,7 +139,13 @@ def teamdraft_start(request: Request, draft_pk: int) -> Response:
             emit_event(draft, "draft_started_by_staff", actor, actor=request.user)
         else:
             return _wrong_state(draft)
-    _log("draft_started", draft, request.user.pk)
+    log.info(
+        "draft_started",
+        system="teamdraft",
+        subsystem="view",
+        draft_id=draft.pk,
+        user_id=request.user.pk,
+    )
     return _ok(draft)
 
 
@@ -184,7 +186,13 @@ def teamdraft_pause(request: Request, draft_pk: int) -> Response:
             },
             actor=request.user,
         )
-    _log("draft_paused", draft, request.user.pk)
+    log.info(
+        "draft_paused",
+        system="teamdraft",
+        subsystem="view",
+        draft_id=draft.pk,
+        user_id=request.user.pk,
+    )
     return _ok(draft)
 
 
@@ -231,5 +239,11 @@ def teamdraft_resume(request: Request, draft_pk: int) -> Response:
             actor=request.user,
         )
         start_team_tick_broadcaster_after_commit(draft.pk)
-    _log("draft_resumed", draft, request.user.pk)
+    log.info(
+        "draft_resumed",
+        system="teamdraft",
+        subsystem="view",
+        draft_id=draft.pk,
+        user_id=request.user.pk,
+    )
     return _ok(draft)

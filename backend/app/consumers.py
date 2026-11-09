@@ -88,20 +88,25 @@ class DraftConsumer(BaseDraftConsumer):
             team.save(update_fields=["draft_is_connected", "draft_has_connected"])
             invalidate_obj(team.tournament)
             emit_event(draft, "captain_connected", payload)
-            event_name = "teamdraft_captain_connected"
+            log.info(
+                "teamdraft_captain_connected",
+                system="teamdraft",
+                subsystem="connection",
+                draft_id=draft_id,
+                user_id=user.pk,
+            )
         else:
             team.draft_is_connected = False
             team.save(update_fields=["draft_is_connected"])
             invalidate_obj(team.tournament)
             emit_event(draft, "captain_disconnected", payload)
-            event_name = "teamdraft_captain_disconnected"
-        log.info(
-            event_name,
-            system="teamdraft",
-            subsystem="connection",
-            draft_id=draft_id,
-            user_id=user.pk,
-        )
+            log.info(
+                "teamdraft_captain_disconnected",
+                system="teamdraft",
+                subsystem="connection",
+                draft_id=draft_id,
+                user_id=user.pk,
+            )
 
     async def on_captain_state_change(
         self, draft_id: int, user: "AbstractBaseUser", is_connected: bool
