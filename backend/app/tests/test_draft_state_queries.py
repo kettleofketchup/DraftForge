@@ -6,6 +6,7 @@ same number of queries for a 4-team and an 8-team draft, and must serialize
 byte-identically to the unprefetched (lazy) serialization.
 """
 
+import contextvars
 import json
 import threading
 from collections.abc import Callable
@@ -426,6 +427,33 @@ class SharedDraftStateTests(TransactionTestCase):
 
     def test_a_write_on_another_connection_rebuilds_the_state(self) -> None:
         self.assert_rebuilt(*self.broadcast_twice(rename_team_on_another_connection))
+
+    def test_a_thread_that_inherits_the_context_builds_its_own_state(self) -> None:
+        fx = TimedDraftFixture(prefix="inherit")
+        event = DraftEvent.objects.create(draft=fx.draft, event_type="captain_ready")
+
+        def broadcast_from_inheriting_thread() -> None:
+            ctx = contextvars.copy_context()
+
+            def run() -> None:
+                try:
+                    ctx.run(broadcast_event, event)
+                finally:
+                    connection.close()
+
+            thread = threading.Thread(target=run)
+            thread.start()
+            thread.join()
+
+        with (
+            patch("app.broadcast.get_channel_layer", return_value=FakeChannelLayer()),
+            patch("app.broadcast.build_draft_state", wraps=build_draft_state) as spy,
+        ):
+            with atomic_sharing_draft_state():
+                transaction.on_commit(lambda: broadcast_event(event))
+                transaction.on_commit(broadcast_from_inheriting_thread)
+                transaction.on_commit(lambda: broadcast_event(event))
+        self.assertEqual(spy.call_count, 2)
 
     def test_nested_block_does_not_share(self) -> None:
         fx = TimedDraftFixture(prefix="nested")

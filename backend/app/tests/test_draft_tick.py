@@ -1,6 +1,8 @@
 """Tests for the shared tick runner (app.tasks.draft_tick)."""
 
+import contextvars
 import threading
+from collections.abc import Callable
 from unittest.mock import patch
 
 from django.test import SimpleTestCase, TransactionTestCase
@@ -221,6 +223,59 @@ class RegistryTests(TransactionTestCase):
         draft_tick.stop_all_broadcasters()
         self.assertEqual(draft_tick.registry_for("herodraft"), {})
         self.assertEqual(draft_tick.registry_for("teamdraft"), {})
+
+
+_STARTER_VAR: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "_STARTER_VAR", default=None
+)
+
+
+class ContextRecordingDriver(RecordingDriver):
+    def __init__(self, prefix: str) -> None:
+        super().__init__(prefix, iterations=1)
+        self.seen: list[str | None] = []
+
+    async def check_resume_countdown(self, draft_id: int) -> None:
+        self.seen.append(_STARTER_VAR.get())
+
+
+class InheritingThread(threading.Thread):
+    """Thread that runs its target in a copy of the starter's context.
+
+    Mirrors runtimes where new threads inherit context variables
+    (``sys.flags.thread_inherit_context``, the free-threaded 3.14 default).
+    """
+
+    def __init__(
+        self, *args: object, target: Callable[..., object], **kwargs: object
+    ) -> None:
+        ctx = contextvars.copy_context()
+        super().__init__(
+            *args, target=lambda *a, **k: ctx.run(target, *a, **k), **kwargs
+        )
+
+
+class TickThreadContextTests(TransactionTestCase):
+    DRAFT_ID = 987_003
+
+    def setUp(self) -> None:
+        draft_tick.stop_all_broadcasters()
+        get_redis_client().delete(lock_key("teamdraft", self.DRAFT_ID))
+
+    tearDown = setUp
+
+    def test_tick_thread_does_not_see_the_starters_context(self) -> None:
+        driver = ContextRecordingDriver("teamdraft")
+        token = _STARTER_VAR.set("starter")
+        try:
+            with patch.object(draft_tick.threading, "Thread", InheritingThread):
+                self.assertTrue(
+                    draft_tick.start_tick_broadcaster(driver, self.DRAFT_ID)
+                )
+        finally:
+            _STARTER_VAR.reset(token)
+        _wait_for_thread("teamdraft", self.DRAFT_ID)
+        self.assertEqual(driver.seen, [None])
 
 
 class HeroDriverAliasTests(SimpleTestCase):

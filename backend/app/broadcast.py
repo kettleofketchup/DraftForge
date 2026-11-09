@@ -2,15 +2,18 @@
 Broadcast helper for sending draft events to WebSocket channel groups.
 """
 
+import threading
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from asgiref.sync import async_to_sync
 from cacheops.transaction import is_sql_dirty
 from channels.layers import get_channel_layer
-from django.db import connection, transaction
+from django.db import DEFAULT_DB_ALIAS, connection, connections, transaction
+from django.db.backends.base.base import BaseDatabaseWrapper
 
 from app.draft_state import build_draft_state
 from app.models import Draft
@@ -27,9 +30,28 @@ if TYPE_CHECKING:
 log = get_logger(__name__)
 
 
-_shared_draft_states: ContextVar[dict[int, tuple[int, dict | None]] | None] = (
-    ContextVar("_shared_draft_states", default=None)
+@dataclass
+class _SharedStates:
+    thread_id: int
+    db: BaseDatabaseWrapper
+    states: dict[int, tuple[int, dict | None]] = field(default_factory=dict)
+
+
+_shared_draft_states: ContextVar[_SharedStates | None] = ContextVar(
+    "_shared_draft_states", default=None
 )
+
+
+def _owned_shared_states() -> dict[int, tuple[int, dict | None]] | None:
+    """The shared states, unless this context was inherited by another thread."""
+    shared = _shared_draft_states.get()
+    if shared is None:
+        return None
+    if shared.thread_id != threading.get_ident():
+        return None
+    if shared.db is not connections[DEFAULT_DB_ALIAS]:
+        return None
+    return shared.states
 
 
 def _forget_states_on_write(
@@ -39,7 +61,7 @@ def _forget_states_on_write(
     many: bool,
     context: dict[str, object],
 ) -> object:
-    shared = _shared_draft_states.get()
+    shared = _owned_shared_states()
     if shared and is_sql_dirty(sql):
         shared.clear()
     return execute(sql, params, many, context)
@@ -53,9 +75,13 @@ def atomic_sharing_draft_state() -> Iterator[None]:
     before it exits and reuse a single build per draft. Any SQL write on this
     connection drops the shared states, and a commit by any other connection
     (seen through SQLite's ``data_version``) forces a rebuild; nested blocks
-    defer their callbacks past the exit and build per event as usual.
+    defer their callbacks past the exit and build per event as usual. The
+    states belong to the opening thread and connection; a thread that inherits
+    this context sees none of them.
     """
-    token = _shared_draft_states.set({})
+    token = _shared_draft_states.set(
+        _SharedStates(threading.get_ident(), connections[DEFAULT_DB_ALIAS])
+    )
     try:
         with connection.execute_wrapper(_forget_states_on_write):
             with transaction.atomic():
@@ -74,7 +100,7 @@ def _data_version() -> int | None:
 
 
 def _draft_state(draft_id: int) -> dict | None:
-    shared = _shared_draft_states.get()
+    shared = _owned_shared_states()
     if shared is None or connection.in_atomic_block:
         return build_draft_state(draft_id, fresh=True)
     version = _data_version()

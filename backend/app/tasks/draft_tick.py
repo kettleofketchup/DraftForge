@@ -11,6 +11,7 @@ Diagnostic events when ticks misbehave:
 
 import asyncio
 import atexit
+import contextvars
 import threading
 import time
 from collections.abc import Coroutine
@@ -328,7 +329,10 @@ def start_tick_broadcaster(driver: TickDriver, draft_id: int) -> bool:
             r.delete(key)
             return False
 
-        thread = threading.Thread(target=run_in_thread, daemon=True)
+        # A fresh context: on_commit starters may hold request-scoped ContextVars.
+        thread = threading.Thread(
+            target=contextvars.Context().run, args=(run_in_thread,), daemon=True
+        )
         reg[draft_id] = TaskInfo(stop_event, thread)
 
     thread.start()
