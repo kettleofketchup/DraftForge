@@ -58,6 +58,7 @@ interface DraftWebSocketState {
   _currentDraftId: number | null;
   _stopHeartbeat: (() => void) | null;
   _lastTickReceivedAtMs: number | null;
+  _lastStateEventPk: number | null;
 
   // Actions
   connect: (draftId: number) => void;
@@ -70,6 +71,8 @@ interface DraftWebSocketState {
   jumpToPickNumber: (pickNumber: number) => boolean;
   getServerNowISO: () => string;
   clearForceJump: () => void;
+  /** Apply draft events buffered since the last flush (normally runs on a short timer). */
+  flushDraftEvents: () => void;
   reset: () => void;
 }
 
@@ -166,7 +169,29 @@ const initialState = {
   _currentDraftId: null,
   _stopHeartbeat: null,
   _lastTickReceivedAtMs: null,
+  _lastStateEventPk: null,
 };
+
+/** Events that arrive within this window render together (one store update per burst). */
+export const DRAFT_EVENT_FLUSH_MS = 50;
+
+interface PendingDraftEvents {
+  events: DraftEvent[];
+  state: WebSocketDraftState | null;
+  statePk: number | null;
+  jump: boolean;
+  tie: TieResolution | null;
+  staleCaptains: number[];
+}
+
+let pending: PendingDraftEvents | null = null;
+let flushTimer: ReturnType<typeof setTimeout> | null = null;
+
+function clearPending(): void {
+  if (flushTimer !== null) clearTimeout(flushTimer);
+  flushTimer = null;
+  pending = null;
+}
 
 export const useDraftWebSocketStore = create<DraftWebSocketState>((set, get) => ({
   ...initialState,
@@ -223,6 +248,8 @@ export const useDraftWebSocketStore = create<DraftWebSocketState>((set, get) => 
     const unsubscribe = manager.subscribe(connectionId, (rawMessage) => {
       const message = rawMessage as WebSocketMessage;
 
+      if (message.type !== 'draft_event' && message.type !== 'ping') get().flushDraftEvents();
+
       if (message.type === 'initial_state') {
         if (message.draft_state) {
           log.debug('Updating draft state from initial_state');
@@ -238,47 +265,41 @@ export const useDraftWebSocketStore = create<DraftWebSocketState>((set, get) => 
       } else if (message.type === 'draft_event' && message.event) {
         const newEvent = message.event;
         log.debug('Received draft event:', newEvent.event_type);
-
-        // Add to events list (newest first)
-        set((state) => ({
-          events: [newEvent, ...state.events],
-          lastEventTimestamp: Date.now(),
-          hasNewEvent: true,
-        }));
-
-        // Set pending tie resolution for live tie_roll events
-        if (newEvent.event_type === 'tie_roll') {
-          const trPayload = newEvent.payload as TieRollPayload;
-          set({
-            pendingTieResolution: {
-              tied_teams: trPayload.tied_teams,
-              roll_rounds: trPayload.roll_rounds,
-              winner_id: trPayload.winner_id,
-            },
-          });
-        }
-
         showEventToast(newEvent);
 
-        const pausedByDisconnect =
+        const buf: PendingDraftEvents = pending ?? {
+          events: [],
+          state: null,
+          statePk: null,
+          jump: false,
+          tie: null,
+          staleCaptains: [],
+        };
+        pending = buf;
+        buf.events.push(newEvent);
+        if (newEvent.event_type === 'tie_roll') {
+          const trPayload = newEvent.payload as TieRollPayload;
+          buf.tie = {
+            tied_teams: trPayload.tied_teams,
+            roll_rounds: trPayload.roll_rounds,
+            winner_id: trPayload.winner_id,
+          };
+        }
+        if (
           newEvent.event_type === 'draft_paused' &&
-          (newEvent.payload as DraftPausedPayload).reason === 'captain_disconnected';
-
-        if (message.draft_state) {
-          log.debug('Updating draft state from WebSocket');
-          ingestDraftStateUsers(message.draft_state);
-          const jump = newEvent.event_type === 'pick_skipped' || newEvent.event_type === 'round_started';
-          set((state) => ({
-            draftState: hydrateSlimDraftState(message.draft_state!),
-            ...(jump ? { forceJumpToRoundPk: message.draft_state!.latest_round } : {}),
-            ...(pausedByDisconnect
-              ? { captainFresh: { ...state.captainFresh, [(newEvent.payload as DraftPausedPayload).captain_id]: false } }
-              : {}),
-          }));
-        } else if (pausedByDisconnect) {
-          set((state) => ({
-            captainFresh: { ...state.captainFresh, [(newEvent.payload as DraftPausedPayload).captain_id]: false },
-          }));
+          (newEvent.payload as DraftPausedPayload).reason === 'captain_disconnected'
+        ) {
+          buf.staleCaptains.push((newEvent.payload as DraftPausedPayload).captain_id);
+        }
+        // A state built for an older event never replaces a newer one.
+        const lastPk = Math.max(buf.statePk ?? -Infinity, get()._lastStateEventPk ?? -Infinity);
+        if (message.draft_state && newEvent.pk > lastPk) {
+          buf.state = message.draft_state;
+          buf.statePk = newEvent.pk;
+          buf.jump = newEvent.event_type === 'pick_skipped' || newEvent.event_type === 'round_started';
+        }
+        if (flushTimer === null) {
+          flushTimer = setTimeout(() => get().flushDraftEvents(), DRAFT_EVENT_FLUSH_MS);
         }
       } else if (message.type === 'draft_tick') {
         const parsed = DraftTickSchema.safeParse(message);
@@ -375,7 +396,34 @@ export const useDraftWebSocketStore = create<DraftWebSocketState>((set, get) => 
 
   clearForceJump: () => set({ forceJumpToRoundPk: null }),
 
+  flushDraftEvents: () => {
+    const buf = pending;
+    clearPending();
+    if (!buf) return;
+    if (buf.state) ingestDraftStateUsers(buf.state);
+    set((state) => {
+      const captainFresh = buf.staleCaptains.length
+        ? { ...state.captainFresh, ...Object.fromEntries(buf.staleCaptains.map((id) => [id, false])) }
+        : state.captainFresh;
+      return {
+        events: [...buf.events.slice().reverse(), ...state.events],
+        lastEventTimestamp: Date.now(),
+        hasNewEvent: true,
+        captainFresh,
+        ...(buf.tie ? { pendingTieResolution: buf.tie } : {}),
+        ...(buf.state
+          ? {
+              draftState: hydrateSlimDraftState(buf.state),
+              _lastStateEventPk: buf.statePk,
+              ...(buf.jump ? { forceJumpToRoundPk: buf.state.latest_round } : {}),
+            }
+          : {}),
+      };
+    });
+  },
+
   disconnect: () => {
+    clearPending();
     get().stopHeartbeat();
     const { _unsubscribe } = get();
 

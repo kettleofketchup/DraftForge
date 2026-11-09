@@ -26,6 +26,8 @@ const { useUserStore } = await import('~/store/userStore');
 
 const T0 = Date.parse('2026-11-08T12:00:00.000Z');
 const emit = (msg: unknown) => captured.handler!(msg);
+// Draft events render together once the flush window passes.
+const settle = () => vi.advanceTimersByTime(50);
 
 const OPTIONS = { timer_enabled: true, grace_time_ms: 30000, reserve_time_ms: 60000, timeout_action: 'skip' };
 const state = (overrides: Partial<WebSocketDraftState> & Record<string, unknown> = {}): WebSocketDraftState =>
@@ -64,8 +66,9 @@ const tick = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
+let nextEventPk = 1;
 const evt = (event_type: DraftEventType, payload: object = {}): DraftEvent => ({
-  pk: 1,
+  pk: nextEventPk++,
   event_type,
   payload: payload as DraftEvent['payload'],
   actor: null,
@@ -103,6 +106,7 @@ describe('draftWebSocketStore timer', () => {
     emit({ type: 'initial_state', draft_state: state() });
     emit({ type: 'initial_events', events: [] });
     emit({ type: 'draft_event', event: evt('captain_connected', { ...cap, pick_number: 1, is_active_captain: true }), draft_state: state() });
+    settle();
     expect(useDraftWebSocketStore.getState().events).toHaveLength(1);
     expect(toast).not.toHaveBeenCalled();
   });
@@ -169,10 +173,12 @@ describe('draftWebSocketStore timer', () => {
       event: evt('round_started', { ...cap, pick_number: 3, started_at: new Date(T0).toISOString(), grace_time_ms: 30000, reserve_ms: null }),
       draft_state: state({ latest_round: 23 }),
     });
+    settle();
     expect(useDraftWebSocketStore.getState().forceJumpToRoundPk).toBe(23);
     useDraftWebSocketStore.getState().clearForceJump();
     expect(useDraftWebSocketStore.getState().forceJumpToRoundPk).toBeNull();
     emit({ type: 'draft_event', event: evt('pick_skipped', { ...skipped, deferred_to_pick_number: null }), draft_state: state({ latest_round: 22 }) });
+    settle();
     expect(useDraftWebSocketStore.getState().forceJumpToRoundPk).toBe(22);
   });
 
@@ -212,12 +218,14 @@ describe('draftWebSocketStore timer', () => {
       event: evt('draft_paused', { ...cap, reason: 'captain_disconnected', paused_by_id: null, paused_by_name: null, pick_number: 1 }),
       draft_state: state({ state: 'paused', clock_armed: false, latest_round: 21, draft_rounds: rounds, ...teamsA(true) }),
     });
+    settle();
     expect(draftWsSelectors.isActiveCaptainDisconnected(useDraftWebSocketStore.getState())).toBe(true);
     emit({
       type: 'draft_event',
       event: evt('captain_connected', { ...cap, pick_number: 1, is_active_captain: true }),
       draft_state: state({ state: 'paused', clock_armed: false, latest_round: 21, draft_rounds: rounds, ...teamsA(true) }),
     });
+    settle();
     expect(draftWsSelectors.isActiveCaptainDisconnected(useDraftWebSocketStore.getState())).toBe(true);
     emit({ type: 'captain_heartbeat', captain_id: 7, fresh: true });
     expect(draftWsSelectors.isActiveCaptainDisconnected(useDraftWebSocketStore.getState())).toBe(false);
@@ -226,7 +234,49 @@ describe('draftWebSocketStore timer', () => {
       event: evt('player_picked', { captain_name: 'Ana', picked_name: 'P', pick_number: 1 }),
       draft_state: state({ state: 'paused', clock_armed: false, latest_round: 22, draft_rounds: rounds, ...teamsA(true) }),
     });
+    settle();
     expect(draftWsSelectors.activeRoundPk(useDraftWebSocketStore.getState())).toBe(22);
+  });
+
+  it('a burst of draft events renders once with the newest state; toasts fire as events arrive', () => {
+    emit({ type: 'initial_state', draft_state: state({ latest_round: 21 }) });
+    const renders = vi.fn();
+    const unsubscribe = useDraftWebSocketStore.subscribe(renders);
+    const burst = [
+      evt('pick_timed_out', { ...cap, pick_number: 1, elapsed_ms: 1, reserve_used_ms: 0 }),
+      evt('captain_assigned', { ...cap, pick_number: 1 }),
+      evt('pick_skipped', { ...skipped, deferred_to_pick_number: null }),
+      evt('round_started', { ...cap, pick_number: 1, started_at: new Date(T0).toISOString(), grace_time_ms: 30000, reserve_ms: null }),
+    ];
+    burst.forEach((event, i) => emit({ type: 'draft_event', event, draft_state: state({ latest_round: 21 + i }) }));
+    expect(toast).toHaveBeenCalledWith('Ana ran out of time — Bo is up');
+    expect(renders).not.toHaveBeenCalled();
+    settle();
+    unsubscribe();
+    expect(renders).toHaveBeenCalledTimes(1);
+    const s = useDraftWebSocketStore.getState();
+    expect(s.events.map((e) => e.event_type)).toEqual(['round_started', 'pick_skipped', 'captain_assigned', 'pick_timed_out']);
+    expect(s.draftState?.latest_round).toBe(24);
+    expect(s.forceJumpToRoundPk).toBe(24);
+  });
+
+  it('never replaces a newer draft_state with one built for an older event', () => {
+    const newer = evt('player_picked', { captain_name: 'Ana', picked_name: 'P', pick_number: 1 });
+    const older = { ...evt('captain_connected', { ...cap, pick_number: 1, is_active_captain: true }), pk: newer.pk - 1 };
+    emit({ type: 'draft_event', event: newer, draft_state: state({ latest_round: 23 }) });
+    settle();
+    emit({ type: 'draft_event', event: older, draft_state: state({ latest_round: 21 }) });
+    settle();
+    expect(useDraftWebSocketStore.getState().draftState?.latest_round).toBe(23);
+    expect(useDraftWebSocketStore.getState().events).toHaveLength(2);
+  });
+
+  it('applies buffered events before a tick so the tick sees their state', () => {
+    const until = new Date(T0 + 3000).toISOString();
+    emit({ type: 'initial_state', draft_state: state({ state: 'paused' }) });
+    emit({ type: 'draft_event', event: evt('draft_resumed', {}), draft_state: state({ state: 'resuming', resuming_until: until }) });
+    emit(tick({ draft_state: 'drafting', server_time: new Date(T0 + 3500).toISOString() }));
+    expect(useDraftWebSocketStore.getState().draftState?.state).toBe('drafting');
   });
 
   it('a drafting tick past resuming_until ends the resuming countdown', () => {
