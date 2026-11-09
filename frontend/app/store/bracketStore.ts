@@ -72,6 +72,7 @@ export function mapApiMatchToMatch(apiMatch: ApiBracketMatch, allMatches: ApiBra
     status: apiMatch.status,
     steamMatchId: apiMatch.gameid ?? undefined,
     herodraft_id: apiMatch.herodraft_id ?? undefined,
+    lobbyState: apiMatch.lobby_state ?? undefined,
     nextMatchId,
     nextMatchSlot: apiMatch.next_game_slot ?? undefined,
     loserNextMatchId,

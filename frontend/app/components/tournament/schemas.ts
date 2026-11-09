@@ -12,6 +12,13 @@ export type TournamentTypeValue = typeof TOURNAMENT_TYPE_VALUES[number];
 
 // State values (keys from STATE_CHOICES enum)
 export const STATE_VALUES = ['future', 'in_progress', 'past'] as const;
+
+// dota_lobby in-game lobbies: off, created by staff, or created automatically.
+export const DOTA_LOBBY_MODE_VALUES = ['off', 'manual', 'auto'] as const;
+export const DotaLobbyModeSchema = z.enum(DOTA_LOBBY_MODE_VALUES);
+// Who starts the match: staff (or `!start` in lobby chat), or the bot once everyone is ready.
+export const DOTA_LOBBY_LAUNCH_VALUES = ['manual', 'auto'] as const;
+export const DotaLobbyLaunchSchema = z.enum(DOTA_LOBBY_LAUNCH_VALUES);
 export type StateValue = typeof STATE_VALUES[number];
 
 // Common timezone values for tournament scheduling
@@ -85,6 +92,14 @@ export const TournamentSchema = z.object({
   auto_create_hero_drafts: z.boolean().default(false),
   discord_send_draft_link: z.boolean().default(false),
   discord_send_herodraft_link: z.boolean().default(false),
+  // dota_lobby in-game lobbies (lobby app)
+  dota_lobby_mode: DotaLobbyModeSchema.default('off'),
+  dota_lobby_launch: DotaLobbyLaunchSchema.default('manual'),
+  dota_lobby_region: z.string().default(''),
+  discord_send_lobby_info: z.boolean().default(false),
+  // Read-only lobby context (edited through the event settings)
+  game_mode: z.string().nullable().optional(),
+  lobby_steam_league_id: z.number().nullable().optional(),
 });
 
 // Schema for creating a new tournament
@@ -99,6 +114,10 @@ export const CreateTournamentSchema = z.object({
   auto_create_hero_drafts: z.boolean().default(false),
   discord_send_draft_link: z.boolean().default(false),
   discord_send_herodraft_link: z.boolean().default(false),
+  dota_lobby_mode: DotaLobbyModeSchema.default('off'),
+  dota_lobby_launch: DotaLobbyLaunchSchema.default('manual'),
+  dota_lobby_region: z.string().max(32, 'Region is at most 32 characters').default(''),
+  discord_send_lobby_info: z.boolean().default(false),
 });
 
 export type CreateTournamentInput = z.infer<typeof CreateTournamentSchema>;

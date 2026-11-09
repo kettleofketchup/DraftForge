@@ -20,6 +20,9 @@ import { AdminOnlyButton } from '~/components/reusable/adminButton';
 import { useBracketStore } from '~/store/bracketStore';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCreateHeroDraft, useResetHeroDraft } from '~/hooks/useHeroDraft';
+import { useGameLobby } from '~/hooks/useGameLobby';
+import { LobbyPanel } from '~/components/lobby/LobbyPanel';
+import { provisionalWinnerSlot } from '~/components/lobby/provisional';
 import { DotaMatchStatsModal } from './DotaMatchStatsModal';
 import { LinkSteamMatchModal } from './LinkSteamMatchModal';
 import type { BracketMatch } from '../types';
@@ -64,7 +67,15 @@ export function MatchStatsModal({ match: matchProp, isOpen, onClose, initialDraf
   const createDraftMutation = useCreateHeroDraft();
   const resetDraftMutation = useResetHeroDraft();
 
+  // The lobby's provisional result pre-selects (never submits) a winner.
+  const { data: lobbyData } = useGameLobby(match?.gameId, isOpen && !!currentUser);
+
   if (!match) return null;
+
+  const lobbyWinnerSlot =
+    match.status !== 'completed'
+      ? provisionalWinnerSlot(lobbyData?.lobby, match.radiantTeam?.pk, match.direTeam?.pk)
+      : null;
 
   const isGameComplete = match.status === 'completed';
   const hasMatchId = !!match.steamMatchId;
@@ -201,18 +212,22 @@ export function MatchStatsModal({ match: matchProp, isOpen, onClose, initialDraf
               <p className="text-sm text-muted-foreground mb-2">Set Winner:</p>
               <div className="flex gap-2">
                 <SecondaryButton
-                  className="flex-1"
+                  className={cn('flex-1', lobbyWinnerSlot === 'radiant' && 'ring-2 ring-yellow-500')}
                   onClick={() => handleSetWinner('radiant')}
                   data-testid="radiantWinsButton"
+                  data-lobby-suggested={lobbyWinnerSlot === 'radiant' || undefined}
                 >
                   {match.radiantTeam.captain ? DisplayName(match.radiantTeam.captain) : match.radiantTeam.name} Wins
+                  {lobbyWinnerSlot === 'radiant' && ' (lobby result)'}
                 </SecondaryButton>
                 <SecondaryButton
-                  className="flex-1"
+                  className={cn('flex-1', lobbyWinnerSlot === 'dire' && 'ring-2 ring-yellow-500')}
                   onClick={() => handleSetWinner('dire')}
                   data-testid="direWinsButton"
+                  data-lobby-suggested={lobbyWinnerSlot === 'dire' || undefined}
                 >
                   {match.direTeam.captain ? DisplayName(match.direTeam.captain) : match.direTeam.name} Wins
+                  {lobbyWinnerSlot === 'dire' && ' (lobby result)'}
                 </SecondaryButton>
               </div>
             </div>
@@ -310,6 +325,9 @@ export function MatchStatsModal({ match: matchProp, isOpen, onClose, initialDraf
               </div>
             );
           })()}
+
+          {/* dota_lobby in-game lobby (signed-in users; the API needs a login) */}
+          {match.gameId && currentUser && <LobbyPanel gameId={match.gameId} />}
 
           {/* Steam match info and Stats button */}
           {hasMatchId && (
