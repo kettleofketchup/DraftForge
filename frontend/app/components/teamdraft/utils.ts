@@ -19,3 +19,11 @@ export function getDraftLabel(draft: ActiveDraftType): string {
   }
   return `Hero Draft (Game ${draft.game_pk})`;
 }
+
+export function deriveDraftIndex(
+  rounds: ReadonlyArray<{ pk: number | null }> | null | undefined,
+  curRoundPk: number | null | undefined,
+): number {
+  if (!rounds || curRoundPk == null) return -1;
+  return rounds.findIndex((r) => r.pk === curRoundPk);
+}
