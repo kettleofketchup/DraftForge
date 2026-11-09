@@ -1,6 +1,7 @@
 """Shared fixture for team-draft timer tests."""
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.db import transaction
@@ -10,6 +11,8 @@ from rest_framework.response import Response
 from rest_framework.test import APIRequestFactory, force_authenticate
 
 from app.functions import teamdraft
+from app.functions.teamdraft_timeout import skip_turn
+from app.functions.teamdraft_views import teamdraft_pause
 from app.functions.tournament import pick_player_for_round, undo_last_pick
 from app.models import (
     CustomUser,
@@ -125,6 +128,34 @@ class TimedDraftFixture:
         )
         force_authenticate(request, user=actor)
         return undo_last_pick(request)
+
+    def populate_mid_draft(self, base: datetime) -> None:
+        """Deterministic mid-draft state: roster extras, two picks, a skip, manual pause."""
+        team0, team1, team2 = self.teams[0], self.teams[1], self.teams[2]
+        team0.deputy_captain = self.players[-3]
+        team0.save(update_fields=["deputy_captain"])
+        team1.dropin_members.add(self.players[-1])
+        team2.left_members.add(self.players[-2])
+        step = iter(range(1, 100))
+
+        def at() -> datetime:
+            return base + timedelta(seconds=7 * next(step))
+
+        with patch("django.utils.timezone.now", side_effect=at):
+            self.start(now=base)
+            for pick_number, player in ((1, self.players[0]), (2, self.players[1])):
+                rnd = self.round(pick_number)
+                self.pick(rnd, rnd.captain, player)
+            active = self.draft.active_round
+            active.timed_out_at = at()
+            active.save(update_fields=["timed_out_at"])
+            draft = Draft.objects.nocache().get(pk=self.draft.pk)
+            with transaction.atomic():
+                skip_turn(draft, DraftRound.objects.nocache().get(pk=active.pk))
+            request = self.factory.post(f"/api/draft/{self.draft.pk}/pause/")
+            force_authenticate(request, user=self.captains[0])
+            teamdraft_pause(request, draft_pk=self.draft.pk)
+        self.draft = Draft.objects.nocache().get(pk=self.draft.pk)
 
     def events(self, event_type: str) -> QuerySet[DraftEvent]:
         return DraftEvent.objects.nocache().filter(

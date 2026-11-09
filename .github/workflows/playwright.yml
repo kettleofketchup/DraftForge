@@ -251,6 +251,7 @@ jobs:
               app.tests.test_teamdraft_timer \
               app.tests.test_teamdraft_timeout \
               app.tests.test_draft_events \
+              app.tests.test_draft_state_queries \
               tests.test_populate \
               app.tests.test_env_utils \
               app.tests.test_settings_env_overrides \
