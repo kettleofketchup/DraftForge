@@ -70,9 +70,7 @@ class DraftConsumer(BaseDraftConsumer):
     def _set_presence(
         self, draft_id: int, user: "AbstractBaseUser", is_connected: bool
     ) -> None:
-        team = Team.objects.filter(
-            tournament__draft__pk=draft_id, captain=user
-        ).first()
+        team = Team.objects.filter(tournament__draft__pk=draft_id, captain=user).first()
         if team is None:
             return
         draft = Draft.objects.get(pk=draft_id)
@@ -134,9 +132,7 @@ class DraftConsumer(BaseDraftConsumer):
 
     @database_sync_to_async
     def _restore_presence(self, draft_id: int, user: "AbstractBaseUser") -> None:
-        team = Team.objects.filter(
-            tournament__draft__pk=draft_id, captain=user
-        ).first()
+        team = Team.objects.filter(tournament__draft__pk=draft_id, captain=user).first()
         if team is None or team.draft_has_connected:
             return
         team.draft_is_connected = True
@@ -176,7 +172,10 @@ class DraftConsumer(BaseDraftConsumer):
     async def draft_tick(self, event: dict[str, Any]) -> None:
         await self.send(
             text_data=json.dumps(
-                {"type": "draft_tick", **{k: v for k, v in event.items() if k != "type"}}
+                {
+                    "type": "draft_tick",
+                    **{k: v for k, v in event.items() if k != "type"},
+                }
             )
         )
 
