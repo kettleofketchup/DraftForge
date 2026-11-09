@@ -7,6 +7,7 @@ byte-identically to the unprefetched (lazy) serialization.
 """
 
 import json
+import threading
 from collections.abc import Callable
 from datetime import datetime
 from datetime import timezone as dt_timezone
@@ -28,6 +29,7 @@ from app.models import (
     Draft,
     DraftEvent,
     DraftRound,
+    Team,
     TeamDraftState,
     Tournament,
 )
@@ -58,8 +60,8 @@ READY_ENDPOINT_QUERIES: int = 44
 # Pick, outermost transaction (TransactionTestCase, cacheops off): 26 for
 # auth, locks, the pick, timing, next-round activation and two event inserts
 # (+BEGIN/COMMIT), 17 for the one shared broadcast state behind both events,
-# 23 for the tournament response.
-PICK_QUERIES: int = 68
+# 2 data_version stamps (build + reuse), 23 for the tournament response.
+PICK_QUERIES: int = 70
 
 
 def legacy_users_dict(tournament: Tournament) -> dict:
@@ -357,6 +359,18 @@ def rename_team(team_pk: int) -> None:
         )
 
 
+def rename_team_on_another_connection(team_pk: int) -> None:
+    def run() -> None:
+        try:
+            Team.objects.filter(pk=team_pk).update(name="Renamed")
+        finally:
+            connection.close()
+
+    thread = threading.Thread(target=run)
+    thread.start()
+    thread.join()
+
+
 @override_settings(CACHEOPS_ENABLED=False)
 class SharedDraftStateTests(TransactionTestCase):
     def broadcast_twice(
@@ -409,6 +423,9 @@ class SharedDraftStateTests(TransactionTestCase):
                         cursor.execute(sql, {"name": "Renamed", "pk": pk})
 
                 self.assert_rebuilt(*self.broadcast_twice(between, prefix=label))
+
+    def test_a_write_on_another_connection_rebuilds_the_state(self) -> None:
+        self.assert_rebuilt(*self.broadcast_twice(rename_team_on_another_connection))
 
     def test_nested_block_does_not_share(self) -> None:
         fx = TimedDraftFixture(prefix="nested")

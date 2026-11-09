@@ -27,8 +27,8 @@ if TYPE_CHECKING:
 log = get_logger(__name__)
 
 
-_shared_draft_states: ContextVar[dict[int, dict | None] | None] = ContextVar(
-    "_shared_draft_states", default=None
+_shared_draft_states: ContextVar[dict[int, tuple[int, dict | None]] | None] = (
+    ContextVar("_shared_draft_states", default=None)
 )
 
 
@@ -51,8 +51,9 @@ def atomic_sharing_draft_state() -> Iterator[None]:
 
     When this is the outermost block, the on_commit broadcasts it triggers run
     before it exits and reuse a single build per draft. Any SQL write on this
-    connection drops the shared states; nested blocks defer their callbacks
-    past the exit and build per event as usual.
+    connection drops the shared states, and a commit by any other connection
+    (seen through SQLite's ``data_version``) forces a rebuild; nested blocks
+    defer their callbacks past the exit and build per event as usual.
     """
     token = _shared_draft_states.set({})
     try:
@@ -63,13 +64,27 @@ def atomic_sharing_draft_state() -> Iterator[None]:
         _shared_draft_states.reset(token)
 
 
+def _data_version() -> int | None:
+    """Changes whenever another connection commits; None off SQLite."""
+    if connection.vendor != "sqlite":
+        return None
+    with connection.cursor() as cursor:
+        cursor.execute("PRAGMA data_version")
+        return cursor.fetchone()[0]
+
+
 def _draft_state(draft_id: int) -> dict | None:
     shared = _shared_draft_states.get()
     if shared is None or connection.in_atomic_block:
         return build_draft_state(draft_id, fresh=True)
-    if draft_id not in shared:
-        shared[draft_id] = build_draft_state(draft_id, fresh=True)
-    return shared[draft_id]
+    version = _data_version()
+    if version is None:
+        return build_draft_state(draft_id, fresh=True)
+    cached = shared.get(draft_id)
+    if cached is None or cached[0] != version:
+        cached = (version, build_draft_state(draft_id, fresh=True))
+        shared[draft_id] = cached
+    return cached[1]
 
 
 def broadcast_event(event: "DraftEvent", include_draft_state: bool = True) -> None:
