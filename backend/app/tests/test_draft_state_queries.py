@@ -17,12 +17,14 @@ from unittest.mock import patch
 from cacheops.conf import settings as cacheops_settings
 from cacheops.signals import cache_read
 from django.core.serializers.json import DjangoJSONEncoder
-from django.db import connection, reset_queries, transaction
+from django.db import OperationalError, connection, reset_queries, transaction
 from django.test import TestCase, TransactionTestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 from rest_framework.test import APIClient
 
+from app import broadcast
+from app import draft_state as draft_state_module
 from app.broadcast import atomic_sharing_draft_state, broadcast_event
 from app.consumers import DraftConsumer
 from app.draft_state import (
@@ -32,6 +34,7 @@ from app.draft_state import (
 )
 from app.functions.tournament import _serialize_tournament
 from app.models import (
+    CustomUser,
     Draft,
     DraftEvent,
     DraftRound,
@@ -70,8 +73,9 @@ READY_ENDPOINT_QUERIES: int = 43
 # Pick, outermost transaction (TransactionTestCase, cacheops off): 26 for
 # auth, locks, the pick, timing, next-round activation and two event inserts
 # (+BEGIN/COMMIT), 17 for the one shared broadcast state behind both events,
-# 2 data_version stamps (build + reuse), 22 for the tournament response.
-PICK_QUERIES: int = 69
+# 2 data_version stamps (build + reuse), BEGIN/COMMIT around the autocommit
+# build, 22 for the tournament response.
+PICK_QUERIES: int = 71
 # Upper bounds at the time of writing; the 4 == 8 team equality is the real pin.
 TOURNAMENT_RESPONSE_QUERIES: int = 23
 RESUME_ENDPOINT_QUERIES: int = 54
@@ -411,6 +415,47 @@ class FreshCallerTests(TransactionTestCase):
         self.assertEqual(self.team_name(data["draft"]["tournament"]), "Renamed")
 
 
+@override_settings(CACHEOPS_ENABLED=False)
+class DraftStateSnapshotTests(TransactionTestCase):
+    """An autocommit build reads one snapshot: no commit lands mid-build."""
+
+    def test_commit_from_another_connection_does_not_land_mid_build(self) -> None:
+        fx = TimedDraftFixture(prefix="snap")
+        user = fx.players[0]
+        seen: dict[str, object] = {}
+        real = draft_state_module._build_users_dict
+
+        def rename() -> None:
+            try:
+                CustomUser.objects.filter(pk=user.pk).update(username="renamed")
+                seen["write"] = "committed"
+            except OperationalError as e:
+                seen["write"] = str(e)
+            finally:
+                connection.close()
+
+        def mid_build(tournament: Tournament, *, fresh: bool) -> dict:
+            seen["in_atomic"] = connection.in_atomic_block
+            writer = threading.Thread(target=rename)
+            writer.start()
+            writer.join(timeout=1)
+            seen["writer"] = writer
+            return real(tournament, fresh=fresh)
+
+        with patch.object(draft_state_module, "_build_users_dict", mid_build):
+            state = build_draft_state(fx.draft.pk, fresh=True)
+        seen["writer"].join(timeout=35)
+        self.assertEqual(state["_users"][str(user.pk)]["username"], user.username)
+        self.assertTrue(seen["in_atomic"])
+
+    def test_build_inside_a_transaction_adds_no_queries(self) -> None:
+        fx = make_fixture(4, "snapq")
+        with transaction.atomic():
+            reset_queries()
+            with self.assertNumQueries(DRAFT_STATE_QUERIES):
+                build_draft_state(fx.draft.pk, fresh=True)
+
+
 class DraftStateFreshReadTests(TransactionTestCase):
     """fresh=True payloads never read through cacheops, at any level."""
 
@@ -648,10 +693,24 @@ class SharedDraftStateTests(TransactionTestCase):
         fx = TimedDraftFixture(prefix="inherit")
         event = DraftEvent.objects.create(draft=fx.draft, event_type="captain_ready")
 
+        builders: list[int] = []
+        inheriting: list[int] = []
+
+        def recording_build(draft_id: int, *, fresh: bool) -> dict | None:
+            builders.append(threading.get_ident())
+            return build_draft_state(draft_id, fresh=fresh)
+
+        snapshots: list[dict[int, int]] = []
+
+        def snapshot_owner_states() -> None:
+            shared = broadcast._shared_draft_states.get()
+            snapshots.append({k: id(v) for k, v in shared.states.items()})
+
         def broadcast_from_inheriting_thread() -> None:
             ctx = contextvars.copy_context()
 
             def run() -> None:
+                inheriting.append(threading.get_ident())
                 try:
                     ctx.run(broadcast_event, event)
                 finally:
@@ -663,13 +722,18 @@ class SharedDraftStateTests(TransactionTestCase):
 
         with (
             patch("app.broadcast.get_channel_layer", return_value=FakeChannelLayer()),
-            patch("app.broadcast.build_draft_state", wraps=build_draft_state) as spy,
+            patch("app.broadcast.build_draft_state", recording_build),
         ):
             with atomic_sharing_draft_state():
                 transaction.on_commit(lambda: broadcast_event(event))
+                transaction.on_commit(snapshot_owner_states)
                 transaction.on_commit(broadcast_from_inheriting_thread)
+                transaction.on_commit(snapshot_owner_states)
                 transaction.on_commit(lambda: broadcast_event(event))
-        self.assertEqual(spy.call_count, 2)
+        # The inheriting thread builds its own state and leaves the owner's alone.
+        self.assertEqual(builders.count(inheriting[0]), 1)
+        self.assertEqual(builders[0], threading.get_ident())
+        self.assertEqual(snapshots[0], snapshots[1])
 
     def test_nested_block_does_not_share(self) -> None:
         fx = TimedDraftFixture(prefix="nested")

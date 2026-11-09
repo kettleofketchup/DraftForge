@@ -10,6 +10,7 @@ anything built right after a write (broadcasts, endpoint responses) so the
 payload never depends on the ordering of post-commit invalidations.
 """
 
+from django.db import connection, transaction
 from django.db.models import BooleanField, Model, Prefetch, QuerySet, Value
 
 from app.models import (
@@ -92,7 +93,22 @@ def tournament_state_queryset(*, fresh: bool) -> QuerySet[Tournament]:
 
 
 def build_draft_state(draft_id: int, *, fresh: bool) -> dict | None:
-    """DraftSerializerSlim payload plus the ``_users`` hydration dict (str keys)."""
+    """DraftSerializerSlim payload plus the ``_users`` hydration dict (str keys).
+
+    Outside a transaction the build runs in its own, so its reads share one
+    snapshot. Under the configured ``BEGIN IMMEDIATE`` that holds the write
+    lock for the build: other writers wait (busy timeout) rather than commit
+    mid-build. DEFERRED is not used: the OrgUser auto-create write in
+    _collect_context_mmr would then fail with SQLITE_BUSY_SNAPSHOT whenever
+    another connection committed after the build's first read.
+    """
+    if connection.in_atomic_block:
+        return _build_draft_state(draft_id, fresh=fresh)
+    with transaction.atomic():
+        return _build_draft_state(draft_id, fresh=fresh)
+
+
+def _build_draft_state(draft_id: int, *, fresh: bool) -> dict | None:
     try:
         draft = draft_state_queryset(fresh=fresh).get(pk=draft_id)
     except Draft.DoesNotExist:
