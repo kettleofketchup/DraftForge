@@ -5,13 +5,15 @@ from unittest import mock
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
+from app.models import Game
 from lobby import services, states
-from lobby.models import GameLobbyEvent
+from lobby.models import GameLobby, GameLobbyEvent
 from lobby.tests.helpers import (
     LOBBY_SETTINGS,
     envelope,
     lobby_settings,
     make_game,
+    make_team,
     post_webhook,
 )
 
@@ -185,12 +187,35 @@ class WebhookGameUpdateTests(WebhookTestBase):
             state="in_game",
         )
 
+    def ended(self, seq, scored, state="post_game"):
+        return self.event(
+            seq,
+            "match.ended",
+            {
+                "match_id": "8123456789",
+                "outcome": 2 if scored else 0,
+                "winner_side": "radiant" if scored else None,
+                "winner_team_ref": self.radiant_ref if scored else None,
+                "scored": scored,
+                "provisional": True,
+                "source": "lobby",
+            },
+            state=state,
+        )
+
     @mock.patch("lobby.broadcast.send")
-    def test_match_started_sets_gameid_and_live(self, send):
+    def test_match_started_marks_live_without_gameid(self, send):
         self.post(self.started())
         self.game.refresh_from_db()
         self.row.refresh_from_db()
-        self.assertEqual(self.game.gameid, 8123456789)
+        # The match ID stays on the lobby: Game.gameid is the Steam link's, so
+        # the Steam auto-link still scans this game and can set its winner.
+        self.assertIsNone(self.game.gameid)
+        self.assertTrue(
+            Game.objects.filter(
+                tournament=self.game.tournament, gameid__isnull=True, pk=self.game.pk
+            ).exists()
+        )
         self.assertEqual(self.game.status, "live")
         self.assertEqual(self.row.match_id, 8123456789)
         self.assertEqual(self.row.state, "in_game")
@@ -206,14 +231,70 @@ class WebhookGameUpdateTests(WebhookTestBase):
     def test_existing_gameid_is_kept(self):
         self.game.gameid = 555
         self.game.save()
-        with self.assertLogs("lobby.events", level="WARNING") as logs:
-            self.post(self.started())
-        self.assertIn("lobby_gameid_conflict", "".join(logs.output))
+        self.post(self.started())
         self.game.refresh_from_db()
         self.row.refresh_from_db()
         self.assertEqual(self.game.gameid, 555)
         self.assertEqual(self.game.status, "live")
         self.assertEqual(self.row.match_id, 8123456789)
+
+    def test_unscored_match_releases_game_for_a_new_lobby(self):
+        self.post(self.started())
+        self.post(self.ended(2, scored=False))
+        self.game.refresh_from_db()
+        self.assertEqual(self.game.status, "pending")
+        self.assertIsNone(self.game.gameid)
+        self.post(
+            self.event(3, "lobby.finished", {"reason": "match_ended"}, state="finished")
+        )
+        self.row.refresh_from_db()
+        self.assertTrue(self.row.ended)
+        self.assertTrue(
+            services.lobby_eligibility(self.game, trigger=GameLobby.Trigger.MANUAL).ok
+        )
+
+    def test_lobby_failing_after_start_releases_game(self):
+        self.post(self.started())
+        self.post(self.event(2, "lobby.failed", {"reason": "gc_lost"}, state="failed"))
+        self.game.refresh_from_db()
+        self.row.refresh_from_db()
+        self.assertEqual(self.game.status, "pending")
+        self.assertEqual((self.row.state, self.row.state_reason), ("failed", "gc_lost"))
+
+    def test_scored_match_keeps_game_live(self):
+        self.post(self.started())
+        self.post(self.ended(2, scored=True))
+        self.post(
+            self.event(3, "lobby.finished", {"reason": "match_ended"}, state="finished")
+        )
+        self.game.refresh_from_db()
+        self.assertEqual(self.game.status, "live")
+
+    def test_game_with_a_winner_is_not_released(self):
+        self.post(self.started())
+        Game.objects.filter(pk=self.game.pk).update(winning_team=self.game.radiant_team)
+        self.post(self.ended(2, scored=False))
+        self.game.refresh_from_db()
+        self.assertEqual(self.game.status, "live")
+
+    def test_locally_ended_lobby_does_not_touch_game(self):
+        # Closed because the teams changed, but dota_lobby had launched.
+        services.end_locally(self.row, services.TEAMS_CHANGED)
+        self.post(self.started())
+        self.game.refresh_from_db()
+        self.row.refresh_from_db()
+        self.assertEqual(self.game.status, "pending")
+        self.assertIsNone(self.game.gameid)
+        self.assertEqual(self.row.match_id, 8123456789)
+
+    def test_lobby_for_other_teams_does_not_touch_game(self):
+        # The lobby was made for an earlier dire team, and its events say so.
+        bats = make_team(self.game.tournament, "Bats")
+        GameLobby.objects.filter(pk=self.row.pk).update(dire_team=bats)
+        self.dire_ref = f"team-{bats.pk}"
+        self.post(self.started())
+        self.game.refresh_from_db()
+        self.assertEqual(self.game.status, "pending")
 
     def test_completed_game_keeps_status(self):
         self.game.status = "completed"
@@ -302,6 +383,43 @@ class WebhookGameUpdateTests(WebhookTestBase):
         self.row.refresh_from_db()
         self.assertEqual((self.row.state, self.row.ended), ("closed", True))
         self.assertEqual(self.row.state_reason, services.TEAMS_CHANGED)
+
+    def test_player_event_reason_is_not_the_state_reason(self):
+        self.post(
+            self.event(
+                1,
+                "lobby.state_changed",
+                {"from": "pending", "to": "waiting", "reason": "created"},
+                state="waiting",
+            )
+        )
+        self.post(
+            self.event(
+                2,
+                "lobby.player_kicked",
+                {"account_id": 9, "from": "team", "reason": "stranger"},
+                state="waiting",
+            )
+        )
+        self.post(
+            self.event(
+                3,
+                "lobby.player_unready",
+                {"account_id": 9, "reason": "left"},
+                state="waiting",
+            )
+        )
+        self.post(
+            self.event(
+                4,
+                "lobby.launch_failed",
+                {"reason": "host_not_seated", "attempt": 1},
+                state="ready",
+            )
+        )
+        self.row.refresh_from_db()
+        self.assertEqual((self.row.state, self.row.state_reason), ("ready", "created"))
+        self.assertEqual(self.row.last_error_detail, "host_not_seated")
 
     def test_create_failed_records_code(self):
         self.post(

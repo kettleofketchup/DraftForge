@@ -5,14 +5,18 @@ once by ID and applied strictly in `seq` order: an event that arrives ahead of
 a missing one is stored and applied once the gap is filled (the caller then
 fetches the missing events from dota_lobby).
 
-Game effects:
+Game effects, applied only by the game's active lobby while its teams still
+match the game's (a lobby DraftForge already ended never touches the game):
 
-- `match.started` sets Game.gameid when it is empty, and moves a `pending`
-  game to `live`. A game already linked to another match keeps its gameid;
-  the conflict is logged.
+- `match.started` moves a `pending` game to `live`. The match ID is kept on
+  the GameLobby only: Game.gameid stays empty, so the Steam link (automatic or
+  manual) still finds the game and sets its match ID and winner.
 - `match.ended` is recorded on the GameLobby only (`provisional_*`). It never
   sets the winner, completes the game or advances the bracket: staff confirm
   the result, and the Steam league sync stays authoritative.
+- A match that ends unscored (`scored: false`), or a lobby that ends after
+  its match started without a scored result, moves the game from `live` back
+  to `pending`, so organizers can request a new lobby.
 
 Callers hold a row lock on the GameLobby (select_for_update) inside a
 transaction.
@@ -32,12 +36,25 @@ from app.models import Game
 from lobby import broadcast, states
 from lobby.models import GameLobby, GameLobbyEvent
 from lobby.schemas import LobbyEvent, LobbyView
-from lobby.services import parse_team_ref
+from lobby.services import game_teams, lobby_teams, parse_team_ref
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
 
 _LOG = {"system": "lobby", "subsystem": "events"}
+
+# Events whose `reason` describes the lobby's state. On other events (a
+# player kicked or unready, a failed launch) it is about the player or the
+# launch, and must not become the lobby's state_reason.
+STATE_REASON_EVENTS = frozenset(
+    {
+        "lobby.state_changed",
+        "lobby.finished",
+        "lobby.closed",
+        "lobby.failed",
+        "lobby.timed_out",
+    }
+)
 
 PLAYER_STATUS_BY_EVENT = {
     "lobby.player_invited": "invited",
@@ -128,10 +145,20 @@ def _bind_summary(game_lobby: GameLobby, event: LobbyEvent) -> None:
         game_lobby.league_id = summary.league_id
 
 
+def _owns_game(game_lobby: GameLobby, game: Game) -> bool:
+    """Whether this lobby may change the game: it is the game's active lobby
+    and was created for the teams the game has now.
+
+    A row DraftForge ended (closed because the teams changed, or by staff)
+    keeps receiving its lobby's events, but they no longer reach the game.
+    """
+    return not game_lobby.ended and lobby_teams(game_lobby) == game_teams(game)
+
+
 def _apply_match_started(
     game_lobby: GameLobby, event: LobbyEvent, game: Game
 ) -> list[str]:
-    """Store the match ID; returns the Game fields changed."""
+    """Store the match ID on the lobby; returns the Game fields changed."""
     data = event.data
     raw = data.get("match_id")
     try:
@@ -148,23 +175,64 @@ def _apply_match_started(
     game_lobby.match_started_at = event.occurred_at
     _set_sides(game_lobby, data.get("radiant_team_ref"), data.get("dire_team_ref"))
 
-    changed: list[str] = []
-    if game.gameid is None:
-        game.gameid = match_id
-        changed.append("gameid")
-    elif game.gameid != match_id:
-        log.warning(
-            "lobby_gameid_conflict",
+    if not _owns_game(game_lobby, game):
+        log.info(
+            "lobby_match_started_ignored",
             game_id=game.pk,
+            game_lobby_id=game_lobby.pk,
             lobby_id=game_lobby.lobby_id,
-            gameid=game.gameid,
             match_id=match_id,
+            state_reason=game_lobby.state_reason,
             **_LOG,
         )
+        return []
     if game.status == "pending":
         game.status = "live"
-        changed.append("status")
-    return changed
+        return ["status"]
+    return []
+
+
+def _match_abandoned(game_lobby: GameLobby) -> bool:
+    """The lobby's match started but will not produce a result."""
+    if game_lobby.match_started_at is None and game_lobby.match_id is None:
+        return False
+    if game_lobby.provisional_scored is True:
+        return False
+    return (
+        game_lobby.provisional_scored is False
+        or game_lobby.state in states.SERVICE_TERMINAL_STATES
+    )
+
+
+def release_game(game_lobby: GameLobby, game: Game) -> list[str]:
+    """Move the game back to `pending` when its lobby's match was abandoned.
+
+    Only a `live` game without a winner, whose live status this lobby set, is
+    released, so a result staff or the Steam link recorded is never undone.
+    The caller saves the game. Returns the Game fields changed.
+    """
+    if not _match_abandoned(game_lobby) or not _owns_game(game_lobby, game):
+        return []
+    if game.status != "live" or game.winning_team_id is not None:
+        return []
+    if (
+        GameLobby.objects.filter(game_id=game.pk, ended=False)
+        .exclude(pk=game_lobby.pk)
+        .exists()
+    ):
+        return []
+    game.status = "pending"
+    log.info(
+        "lobby_match_abandoned",
+        game_id=game.pk,
+        game_lobby_id=game_lobby.pk,
+        lobby_id=game_lobby.lobby_id,
+        match_id=game_lobby.match_id,
+        state=game_lobby.state,
+        scored=game_lobby.provisional_scored,
+        **_LOG,
+    )
+    return ["status"]
 
 
 def _apply_match_ended(game_lobby: GameLobby, event: LobbyEvent) -> None:
@@ -240,7 +308,7 @@ def apply_event(game_lobby: GameLobby, event: LobbyEvent, game: Game) -> list[st
     elif kind == "match.ended":
         _apply_match_ended(game_lobby, event)
 
-    reason = data.get("reason") if kind.startswith("lobby.") else None
+    reason = data.get("reason") if kind in STATE_REASON_EVENTS else None
     if kind == "lobby.state_changed":
         _set_state(game_lobby, str(data.get("to") or event.lobby.state), reason)
     else:
@@ -327,6 +395,8 @@ def ingest_events(
             **_LOG,
         )
     result.gap = bool(pending)
+    if result.applied:
+        game_fields.update(release_game(game_lobby, game))
 
     if result.applied:
         game_lobby.save()
