@@ -2,10 +2,14 @@
 Broadcast helper for sending draft events to WebSocket channel groups.
 """
 
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import TYPE_CHECKING
 
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
+from django.db import connection, transaction
 
 from app.draft_state import build_draft_state
 from app.models import Draft
@@ -20,6 +24,52 @@ if TYPE_CHECKING:
     from app.models import DraftEvent, DraftTeam, HeroDraft
 
 log = get_logger(__name__)
+
+
+_shared_draft_states: ContextVar[dict[int, dict | None] | None] = ContextVar(
+    "_shared_draft_states", default=None
+)
+_WRITE_VERBS: frozenset[str] = frozenset({"INSERT", "UPDATE", "DELETE", "REPLACE"})
+
+
+def _forget_states_on_write(
+    execute: Callable[..., object],
+    sql: str,
+    params: object,
+    many: bool,
+    context: dict[str, object],
+) -> object:
+    shared = _shared_draft_states.get()
+    if shared and sql.lstrip().split(" ", 1)[0].upper() in _WRITE_VERBS:
+        shared.clear()
+    return execute(sql, params, many, context)
+
+
+@contextmanager
+def atomic_sharing_draft_state() -> Iterator[None]:
+    """``transaction.atomic()`` whose post-commit draft broadcasts share one state.
+
+    When this is the outermost block, the on_commit broadcasts it triggers run
+    before it exits and reuse a single build per draft. Any SQL write on this
+    connection drops the shared states; nested blocks defer their callbacks
+    past the exit and build per event as usual.
+    """
+    token = _shared_draft_states.set({})
+    try:
+        with connection.execute_wrapper(_forget_states_on_write):
+            with transaction.atomic():
+                yield
+    finally:
+        _shared_draft_states.reset(token)
+
+
+def _draft_state(draft_id: int) -> dict | None:
+    shared = _shared_draft_states.get()
+    if shared is None or connection.in_atomic_block:
+        return build_draft_state(draft_id, fresh=True)
+    if draft_id not in shared:
+        shared[draft_id] = build_draft_state(draft_id, fresh=True)
+    return shared[draft_id]
 
 
 def broadcast_event(event: "DraftEvent", include_draft_state: bool = True) -> None:
@@ -54,7 +104,7 @@ def broadcast_event(event: "DraftEvent", include_draft_state: bool = True) -> No
     draft_state = None
     if include_draft_state:
         try:
-            draft_state = build_draft_state(event.draft_id, fresh=True)
+            draft_state = _draft_state(event.draft_id)
             if draft_state is None:
                 raise Draft.DoesNotExist(f"Draft {event.draft_id} does not exist")
         except Exception as e:

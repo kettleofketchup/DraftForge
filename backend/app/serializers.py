@@ -664,6 +664,16 @@ def _users_remaining_pks(draft: Draft) -> list[int]:
     return [u.pk for u in remaining]
 
 
+def _shared_draft_options(
+    serializer: serializers.BaseSerializer, tournament: Tournament
+) -> DraftOptions:
+    """``get_draft_options()`` once per tournament for a whole serializer tree."""
+    memo = serializer.root.context.setdefault("_draft_options", {})
+    if tournament.pk not in memo:
+        memo[tournament.pk] = tournament.get_draft_options()
+    return memo[tournament.pk]
+
+
 class DraftRoundForDraftSerializer(serializers.ModelSerializer):
     captain = serializers.SerializerMethodField()
     pick_phase = serializers.IntegerField()
@@ -752,7 +762,7 @@ class DraftSerializerForTournament(serializers.ModelSerializer):
     # This allows clients to update team state without additional API calls
     tournament = TournamentSerializerForWebSocket(read_only=True)
     state = serializers.CharField(read_only=True)
-    clock_armed = serializers.BooleanField(read_only=True)
+    clock_armed = serializers.SerializerMethodField()
     paused_at = serializers.DateTimeField(read_only=True)
     resuming_until = serializers.DateTimeField(read_only=True)
     is_manual_pause = serializers.BooleanField(read_only=True)
@@ -762,8 +772,15 @@ class DraftSerializerForTournament(serializers.ModelSerializer):
         """Return user PKs only — full data provided via _users dict."""
         return _users_remaining_pks(draft)
 
+    def get_clock_armed(self, draft: Draft) -> bool:
+        return draft.is_clock_armed(
+            lambda: _shared_draft_options(self, draft.tournament)
+        )
+
     def get_draft_options(self, draft: Draft) -> dict:
-        return DraftOptionsSerializer(draft.tournament.get_draft_options()).data
+        return DraftOptionsSerializer(
+            _shared_draft_options(self, draft.tournament)
+        ).data
 
     class Meta:
         model = Draft
@@ -1167,7 +1184,7 @@ class TournamentSerializer(serializers.ModelSerializer):
                 return instance.draft_options
             except DraftOptions.DoesNotExist:
                 return DraftOptions(tournament=instance)
-        return instance.get_draft_options()
+        return _shared_draft_options(self, instance)
 
     def update(self, instance: Tournament, validated_data: dict) -> Tournament:
         """

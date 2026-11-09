@@ -1,4 +1,4 @@
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from datetime import datetime
 from enum import IntEnum, StrEnum
 from typing import TYPE_CHECKING, Any, Self
@@ -1119,11 +1119,21 @@ class Draft(models.Model):
 
     @property
     def active_round(self) -> "DraftRound | None":
+        rounds = self._prefetched_rounds()
+        if rounds is not None:
+            return next((r for r in rounds if r.choice_id is None), None)
         return (
             self.draft_rounds.filter(choice__isnull=True)
             .order_by("pick_number")
             .first()
         )
+
+    def _prefetched_rounds(self) -> "list[DraftRound] | None":
+        """Prefetched rounds sorted by pick_number, or None when not prefetched."""
+        rounds = getattr(self, "_prefetched_objects_cache", {}).get("draft_rounds")
+        if rounds is None:
+            return None
+        return sorted(rounds, key=lambda r: r.pick_number)
 
     def lock_active_round(self) -> "DraftRound | None":
         return (
@@ -1135,9 +1145,12 @@ class Draft(models.Model):
 
     @property
     def clock_armed(self) -> bool:
+        return self.is_clock_armed(self.tournament.get_draft_options)
+
+    def is_clock_armed(self, get_options: Callable[[], "DraftOptions"]) -> bool:
         if self.state not in (TeamDraftState.DRAFTING, TeamDraftState.RESUMING):
             return False
-        if not self.tournament.get_draft_options().timer_enabled:
+        if not get_options().timer_enabled:
             return False
         active = self.active_round
         return active is not None and active.started_at is not None
@@ -1432,15 +1445,7 @@ class Draft(models.Model):
             subsystem="draft",
             excluded_count=len(excluded_ids),
         )
-        users = self.tournament.users.exclude(id__in=excluded_ids).distinct()
-
-        log.debug(
-            "draft_users_remaining",
-            system="tournament",
-            subsystem="draft",
-            user_ids=[user.pk for user in users],
-        )
-        return users
+        return self.tournament.users.exclude(id__in=excluded_ids).distinct()
 
     @property
     def captains(self) -> QuerySet[CustomUser]:
@@ -1454,6 +1459,10 @@ class Draft(models.Model):
         """
         Returns the latest draft round.
         """
+        rounds = self._prefetched_rounds()
+        if rounds:
+            latest = next((r for r in rounds if r.choice_id is None), rounds[-1])
+            return latest.pk
         if not self.draft_rounds.exists():
             log.error(
                 "no_draft_rounds_exist",
@@ -1870,42 +1879,14 @@ class DraftRound(models.Model):
             username=user.username,
             captain_name=captain_name,
         )
-        log.debug(
-            "draft_users_remaining_snapshot",
-            system="tournament",
-            subsystem="draft",
-            draft_id=self.draft_id,
-        )
-
-        # Debug the current state
-        remaining_count_before = self.draft.users_remaining.count()
-        log.debug(
-            "draft_remaining_before_pick",
-            system="tournament",
-            subsystem="draft",
-            draft_round_id=self.pk,
-            remaining_count=remaining_count_before,
-            remaining_usernames=list(
-                self.draft.users_remaining.values_list("username", flat=True)
-            ),
-        )
-
-        if self.draft.users_remaining.filter(id=user.id).exists():
+        remaining = self.draft.users_remaining
+        if remaining.filter(id=user.id).exists():
             self.choice = user
             team = self.team
             if team:
                 team.members.add(user)
                 team.save()
             self.save()  # This triggers cache invalidation
-
-            remaining_count_after = self.draft.users_remaining.count()
-            log.debug(
-                "draft_remaining_after_pick",
-                system="tournament",
-                subsystem="draft",
-                draft_round_id=self.pk,
-                remaining_count=remaining_count_after,
-            )
             log.debug(
                 "draft_pick_success",
                 system="tournament",
@@ -1914,9 +1895,7 @@ class DraftRound(models.Model):
                 draft_round_id=self.pk,
             )
         else:
-            available_users = list(
-                self.draft.users_remaining.values_list("username", flat=True)
-            )
+            available_users = list(remaining.values_list("username", flat=True))
             log.error(
                 "draft_pick_user_unavailable",
                 system="tournament",

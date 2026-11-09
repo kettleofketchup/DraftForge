@@ -7,7 +7,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
-from app.broadcast import broadcast_event
+from app.broadcast import atomic_sharing_draft_state, broadcast_event
 from app.cache_utils import invalidate_after_commit, invalidate_obj
 from app.draft_state import tournament_state_queryset
 from app.functions.shuffle_draft import assign_next_shuffle_captain
@@ -102,7 +102,7 @@ def pick_player_for_round(request: Request) -> Response:
         is_tournament_staff = can_edit_tournament(
             request.user, draft_round.draft.tournament
         )
-    is_captain_for_round = draft_round.captain == request.user
+    is_captain_for_round = draft_round.captain_id == request.user.pk
 
     if not (is_tournament_staff or is_captain_for_round):
         log.warning(
@@ -128,7 +128,7 @@ def pick_player_for_round(request: Request) -> Response:
 
     tie_data = None
     try:
-        with transaction.atomic():
+        with atomic_sharing_draft_state():
             draft = Draft.objects.select_for_update().get(pk=draft_round.draft_id)
             active = draft.lock_active_round()
             draft_round = DraftRound.objects.select_for_update().get(pk=draft_round.pk)
@@ -157,6 +157,8 @@ def pick_player_for_round(request: Request) -> Response:
                 .first()
             )
             tournament = draft.tournament
+            if team is not None:
+                team.tournament = tournament
             options = tournament.get_draft_options(fresh=True)
             timed = options.timer_enabled
 
@@ -201,6 +203,7 @@ def pick_player_for_round(request: Request) -> Response:
             if draft.state == TeamDraftState.PAUSED and draft.paused_at is not None:
                 effective = min(effective, draft.paused_at)
 
+            draft_round.draft = draft
             draft_round.pick_player(user)
 
             if timed and draft_round.started_at and team is not None:
@@ -213,7 +216,7 @@ def pick_player_for_round(request: Request) -> Response:
                 )
 
             captain = draft_round.captain
-            round_team = draft_round.team
+            round_team = team
             picked_event = DraftEvent.objects.create(
                 draft=draft,
                 event_type="player_picked",

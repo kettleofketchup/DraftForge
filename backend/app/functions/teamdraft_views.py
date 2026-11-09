@@ -11,6 +11,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
+from app.broadcast import atomic_sharing_draft_state
 from app.cache_utils import invalidate_after_commit
 from app.functions.teamdraft import (
     RESUME_COUNTDOWN_SECONDS,
@@ -96,7 +97,7 @@ def teamdraft_start(request: Request, draft_pk: int) -> Response:
 
     now = timezone.now()
     actor = {"actor_id": request.user.pk, "actor_name": request.user.username}
-    with transaction.atomic():
+    with atomic_sharing_draft_state():
         draft = Draft.objects.select_for_update().get(pk=draft_pk)
         options = draft.tournament.get_draft_options(fresh=True)
         if not options.timer_enabled:
