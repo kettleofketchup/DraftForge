@@ -81,7 +81,7 @@ test.describe.serial('WebSocket Reconnection', () => {
   // Core Reconnection
   // =========================================================================
 
-  test('reconnects automatically after server kills WebSocket', async ({
+  test('@cicd reconnects automatically after server kills WebSocket', async ({
     page,
     context,
     loginAdmin,
@@ -108,7 +108,7 @@ test.describe.serial('WebSocket Reconnection', () => {
     expect(wsHelper.activeConnectionCount).toBe(1);
   });
 
-  test('receives initial_events with draft_state after reconnect', async ({
+  test('@cicd receives initial_events with draft_state after reconnect', async ({
     page,
     context,
     loginAdmin,
@@ -141,7 +141,7 @@ test.describe.serial('WebSocket Reconnection', () => {
     expect(reconnectMsg.draft_state).toBeDefined();
   });
 
-  test('draft state is consistent after reconnect', async ({
+  test('@cicd draft state is consistent after reconnect', async ({
     page,
     context,
     loginAdmin,
@@ -184,7 +184,7 @@ test.describe.serial('WebSocket Reconnection', () => {
     expect(reconnectRounds?.length).toBe(firstRounds?.length);
   });
 
-  test('no toasts appear from initial_events on reconnect', async ({
+  test('@cicd no toasts appear from initial_events on reconnect', async ({
     page,
     context,
     loginAdmin,
@@ -220,7 +220,7 @@ test.describe.serial('WebSocket Reconnection', () => {
   // Multiple disconnects
   // =========================================================================
 
-  test('survives multiple consecutive disconnects', async ({
+  test('@cicd survives multiple consecutive disconnects', async ({
     page,
     context,
     loginAdmin,
@@ -260,7 +260,7 @@ test.describe.serial('WebSocket Reconnection', () => {
   // Close event tracking
   // =========================================================================
 
-  test('close events recorded for each disconnect', async ({
+  test('@cicd close events recorded for each disconnect', async ({
     page,
     context,
     loginAdmin,

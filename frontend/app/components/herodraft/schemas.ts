@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { TickEnvelopeSchema } from '~/lib/draftClock';
 
 export const DraftTeamCaptainSchema = z.object({
   pk: z.number(),  // Backend uses 'pk' not 'id'
@@ -56,12 +57,8 @@ export const HeroDraftSchema = z.object({
 // Tick messages carry ANCHORS (timestamps + durations), not computed
 // remainders. The client uses `server_time` to derive a clock offset
 // and renders countdowns locally via requestAnimationFrame.
-export const HeroDraftTickSchema = z.object({
+export const HeroDraftTickSchema = TickEnvelopeSchema.extend({
   type: z.literal("herodraft_tick"),
-  draft_state: z.string(),
-  // Clock anchor — present on every tick regardless of state
-  server_time: z.string(),
-  // DRAFTING anchors
   current_round: z.number().nullable().optional(),
   active_team_id: z.number().nullable().optional(),
   round_started_at: z.string().nullable().optional(),
@@ -70,8 +67,6 @@ export const HeroDraftTickSchema = z.object({
   team_a_reserve_ms: z.number().nullable().optional(),
   team_b_id: z.number().nullable().optional(),
   team_b_reserve_ms: z.number().nullable().optional(),
-  // RESUMING anchor
-  resuming_until: z.string().nullable().optional(),
 });
 
 // Metadata schema for hero_selected events

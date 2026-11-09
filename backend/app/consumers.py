@@ -3,6 +3,7 @@ WebSocket consumers for draft event broadcasting.
 """
 
 import json
+from typing import TYPE_CHECKING, Any
 
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
@@ -12,87 +13,35 @@ from app.consumers_base import BaseDraftConsumer
 from telemetry.logging import get_logger
 from telemetry.websocket import TelemetryConsumerMixin
 
+if TYPE_CHECKING:
+    from django.contrib.auth.base_user import AbstractBaseUser
+
+    from app.models import Team
+
 log = get_logger(__name__)
 
 
-class DraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
+class DraftConsumer(BaseDraftConsumer):
     """WebSocket consumer for draft-specific events."""
 
-    async def connect(self):
-        await self.telemetry_connect()
-        self.draft_id = self.scope["url_route"]["kwargs"]["draft_id"]
-        self.room_group_name = f"draft_{self.draft_id}"
+    PING_ENABLED = False
+    kick_duplicate_captain_connections = False
+    clear_heartbeat_on_disconnect = False
 
-        # Validate draft exists
-        draft_exists = await self.draft_exists(self.draft_id)
-        if not draft_exists:
-            await self.close()
-            return
+    def get_room_group_prefix(self) -> str:
+        return "draft"
 
-        # Join draft group
-        await self.channel_layer.group_add(self.room_group_name, self.channel_name)
-        await self.accept()
-
-        # Send recent events and current draft state on connect
-        recent_events = await self.get_recent_events(self.draft_id)
-        draft_state = await self.get_draft_state(self.draft_id)
-        await self.send(
-            text_data=json.dumps(
-                {
-                    "type": "initial_events",
-                    "events": recent_events,
-                    "draft_state": draft_state,
-                }
-            )
-        )
-
-    async def disconnect(self, close_code):
-        await self.telemetry_disconnect(close_code)
-        # Leave draft group
-        await self.channel_layer.group_discard(self.room_group_name, self.channel_name)
-
-    async def receive(self, text_data):
-        # Read-only WebSocket - ignore incoming messages
-        pass
-
-    async def draft_event(self, event):
-        """Handle draft.event messages from channel layer."""
-        log.debug(
-            "draft_event_send",
-            system="herodraft",
-            subsystem="connection",
-            draft_id=self.draft_id,
-            channel_name=self.channel_name,
-        )
-        message = {
-            "type": "draft_event",
-            "event": event["payload"],
-        }
-        # Include draft state if available (allows clients to update without API calls)
-        if "draft_state" in event:
-            message["draft_state"] = event["draft_state"]
-        await self.send(text_data=json.dumps(message))
-
-    async def force_disconnect(self, event):
-        """Test-only: server-initiated connection close."""
-        await self.close(code=1012)  # Service Restart
+    def get_redis_prefix(self) -> str:
+        return "teamdraft"
 
     @database_sync_to_async
-    def draft_exists(self, draft_id):
+    def draft_exists(self, draft_id: int) -> bool:
         from app.models import Draft
 
         return Draft.objects.filter(pk=draft_id).exists()
 
     @database_sync_to_async
-    def get_recent_events(self, draft_id, limit=20):
-        from app.models import DraftEvent
-        from app.serializers import DraftEventSerializer
-
-        events = DraftEvent.objects.filter(draft_id=draft_id)[:limit]
-        return DraftEventSerializer(events, many=True).data
-
-    @database_sync_to_async
-    def get_draft_state(self, draft_id):
+    def get_initial_state_data(self, draft_id: int) -> dict | None:
         from app.models import Draft
         from app.serializers import DraftSerializerSlim, _build_users_dict
 
@@ -116,6 +65,107 @@ class DraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
             return data
         except Draft.DoesNotExist:
             return None
+
+    @database_sync_to_async
+    def get_captain_draft_team(
+        self, draft_id: int, user: "AbstractBaseUser"
+    ) -> "Team | None":
+        from app.models import Team
+
+        return Team.objects.filter(tournament__draft__pk=draft_id, captain=user).first()
+
+    def get_active_draft_state_values(self) -> list[str]:
+        return []
+
+    async def send_initial_messages(self, initial_state: dict | None) -> None:
+        await self.send(
+            text_data=json.dumps(
+                {
+                    "type": "initial_events",
+                    "events": await self.get_recent_events(self.draft_id),
+                    "draft_state": initial_state,
+                }
+            )
+        )
+
+    async def connect(self) -> None:
+        result = await self.base_connect()
+        if result:
+            log.info(
+                "teamdraft_connected",
+                system="teamdraft",
+                subsystem="connection",
+                draft_id=self.draft_id,
+                user_id=(
+                    self.user.id if self.user and self.user.is_authenticated else None
+                ),
+                is_captain=self._is_captain,
+            )
+
+    async def disconnect(self, close_code: int | None) -> None:
+        log.info(
+            "teamdraft_disconnected",
+            system="teamdraft",
+            subsystem="connection",
+            draft_id=getattr(self, "draft_id", None),
+            user_id=(
+                self.user.id
+                if getattr(self, "user", None) and self.user.is_authenticated
+                else None
+            ),
+            is_captain=getattr(self, "_is_captain", False),
+            close_code=close_code,
+        )
+        await self.base_disconnect(close_code)
+
+    async def receive(self, text_data: str | None) -> None:
+        if not self._is_captain:
+            return
+
+        try:
+            data = json.loads(text_data)
+            msg_type = data.get("type", "unknown")
+
+            async with self.traced_message(msg_type):
+                if msg_type == "heartbeat":
+                    await self.handle_heartbeat()
+        except json.JSONDecodeError:
+            log.warning(
+                "ws_malformed_message",
+                system="teamdraft",
+                subsystem="connection",
+                draft_id=getattr(self, "draft_id", None),
+            )
+
+    async def draft_event(self, event: dict[str, Any]) -> None:
+        """Handle draft.event messages from channel layer."""
+        log.debug(
+            "draft_event_send",
+            system="teamdraft",
+            subsystem="connection",
+            draft_id=self.draft_id,
+            channel_name=self.channel_name,
+        )
+        message = {
+            "type": "draft_event",
+            "event": event["payload"],
+        }
+        # Include draft state if available (allows clients to update without API calls)
+        if "draft_state" in event:
+            message["draft_state"] = event["draft_state"]
+        await self.send(text_data=json.dumps(message))
+
+    async def force_disconnect(self, event: dict[str, Any]) -> None:
+        """Test-only: server-initiated connection close."""
+        await self.close(code=1012)  # Service Restart
+
+    @database_sync_to_async
+    def get_recent_events(self, draft_id: int, limit: int = 20) -> list[dict]:
+        from app.models import DraftEvent
+        from app.serializers import DraftEventSerializer
+
+        events = DraftEvent.objects.filter(draft_id=draft_id)[:limit]
+        return DraftEventSerializer(events, many=True).data
 
 
 class TournamentConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
@@ -189,6 +239,10 @@ class TournamentConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
 class HeroDraftConsumer(BaseDraftConsumer):
     """WebSocket consumer for Captain's Mode hero draft."""
 
+    PING_ENABLED = True
+    kick_duplicate_captain_connections = True
+    clear_heartbeat_on_disconnect = True
+
     # --- Abstract method implementations ---
 
     def get_room_group_prefix(self) -> str:
@@ -230,16 +284,6 @@ class HeroDraftConsumer(BaseDraftConsumer):
     # --- Connect / Disconnect ---
 
     async def connect(self):
-        # Set early for kick detection (base_connect re-sets these to same values)
-        self.draft_id = self.scope["url_route"]["kwargs"]["draft_id"]
-        self.user = self.scope.get("user")
-
-        # Kick any existing captain connection BEFORE base_connect()
-        if self.user and self.user.is_authenticated:
-            existing_channel = await self._get_existing_captain_channel()
-            if existing_channel and existing_channel != self.channel_name:
-                await self._kick_channel(existing_channel)
-
         result = await self.base_connect()
         if result:
             log.info(
@@ -431,43 +475,6 @@ class HeroDraftConsumer(BaseDraftConsumer):
                     user_id=user.id,
                     error=str(e),
                 )
-
-    # --- HeroDraft-specific kick detection ---
-
-    async def _get_existing_captain_channel(self):
-        """Get the existing captain channel from Redis, if any."""
-        from app.tasks.herodraft_tick import get_redis_client
-
-        r = get_redis_client()
-        channel_key = self._captain_channel_key(self.draft_id, self.user.id)
-        return r.get(channel_key)
-
-    async def _kick_channel(self, old_channel):
-        """Send kick message to an existing captain connection."""
-        log.info(
-            "captain_kicked",
-            system="herodraft",
-            subsystem="connection",
-            draft_id=self.draft_id,
-            user_id=self.user.id,
-            old_channel=old_channel,
-            new_channel=self.channel_name,
-        )
-        try:
-            await self.channel_layer.send(
-                old_channel,
-                {"type": "herodraft.kicked", "reason": "new_connection"},
-            )
-        except Exception as e:
-            log.warning(
-                "captain_kick_failed",
-                system="herodraft",
-                subsystem="connection",
-                draft_id=self.draft_id,
-                user_id=self.user.id,
-                old_channel=old_channel,
-                error=str(e),
-            )
 
     # --- HeroDraft-specific channel layer handlers ---
 

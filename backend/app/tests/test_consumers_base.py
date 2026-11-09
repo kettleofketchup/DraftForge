@@ -12,7 +12,10 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
     InMemorySpanExporter,
 )
 
+from app.consumers import HeroDraftConsumer
 from app.consumers_base import BaseDraftConsumer
+from app.tasks.draft_tick import heartbeat_key
+from app.tasks.herodraft_tick import HeroDraftTickDriver
 
 
 class ConcreteDraftConsumer(BaseDraftConsumer):
@@ -174,9 +177,7 @@ class TestSpanInstrumentation(SimpleTestCase):
 
     def test_handle_heartbeat_emits_span_with_conn_id(self):
         """ws.heartbeat span carries ws.conn_id + ws.draft_id + user.id."""
-        with mock.patch(
-            "app.tasks.herodraft_tick.get_redis_client"
-        ) as mock_get_redis:
+        with mock.patch("app.tasks.herodraft_tick.get_redis_client") as mock_get_redis:
             mock_get_redis.return_value = mock.MagicMock()
             asyncio.run(self.consumer.handle_heartbeat())
 
@@ -274,4 +275,75 @@ class TestSpanInstrumentation(SimpleTestCase):
         self.assertEqual(
             heartbeat_spans[0].parent.span_id,
             message_spans[0].context.span_id,
+        )
+
+
+@override_settings(REDIS_KEY_NAMESPACE="")
+class TestBaseHooks(SimpleTestCase):
+    """Non-abstract hooks added for the team draft (spec §1)."""
+
+    def test_new_hooks_are_not_abstract(self):
+        for name in (
+            "get_redis_prefix",
+            "get_tick_driver",
+            "should_start_tick_broadcaster",
+            "send_initial_messages",
+        ):
+            self.assertFalse(
+                getattr(
+                    getattr(BaseDraftConsumer, name), "__isabstractmethod__", False
+                ),
+                name,
+            )
+
+    def test_redis_prefix_defaults_to_group_prefix(self):
+        consumer = ConcreteDraftConsumer()
+        self.assertEqual(consumer.get_redis_prefix(), consumer.get_room_group_prefix())
+        self.assertEqual(
+            consumer._heartbeat_key(1, 2), "testdraft:1:captain:2:heartbeat"
+        )
+
+    def test_redis_prefix_override_changes_keys_but_not_group(self):
+        class SplitPrefixConsumer(ConcreteDraftConsumer):
+            def get_redis_prefix(self):
+                return "teamdraft"
+
+        consumer = SplitPrefixConsumer()
+        self.assertEqual(consumer.get_room_group_prefix(), "testdraft")
+        self.assertEqual(
+            consumer._heartbeat_key(1, 2), "teamdraft:1:captain:2:heartbeat"
+        )
+        self.assertEqual(
+            consumer._captain_channel_key(1, 2), "teamdraft:1:captain:2:channel"
+        )
+
+    def test_tick_driver_defaults_to_none(self):
+        self.assertIsNone(ConcreteDraftConsumer().get_tick_driver())
+
+    def test_should_start_tick_broadcaster_uses_active_state_values(self):
+        consumer = ConcreteDraftConsumer()
+        self.assertTrue(consumer.should_start_tick_broadcaster({"state": "drafting"}))
+        self.assertFalse(consumer.should_start_tick_broadcaster({"state": "paused"}))
+        self.assertFalse(consumer.should_start_tick_broadcaster(None))
+
+    def test_class_gates_default_to_today(self):
+        self.assertTrue(BaseDraftConsumer.PING_ENABLED)
+        self.assertFalse(BaseDraftConsumer.kick_duplicate_captain_connections)
+        self.assertTrue(BaseDraftConsumer.clear_heartbeat_on_disconnect)
+
+    def test_hero_consumer_gates(self):
+        self.assertTrue(HeroDraftConsumer.PING_ENABLED)
+        self.assertTrue(HeroDraftConsumer.kick_duplicate_captain_connections)
+        self.assertTrue(HeroDraftConsumer.clear_heartbeat_on_disconnect)
+        self.assertEqual(
+            HeroDraftConsumer()._heartbeat_key(1, 2),
+            heartbeat_key(HeroDraftTickDriver.prefix, 1, 2),
+        )
+
+    def test_default_send_initial_messages_sends_initial_state_frame(self):
+        consumer = ConcreteDraftConsumer()
+        consumer.send = mock.AsyncMock()
+        asyncio.run(consumer.send_initial_messages({"state": "drafting"}))
+        consumer.send.assert_awaited_once_with(
+            text_data='{"type": "initial_state", "draft_state": {"state": "drafting"}}'
         )

@@ -1,115 +1,104 @@
-"""Tick broadcaster. One thread + asyncio loop per active draft, Redis-locked.
+"""HeroDraft tick driver bound to the shared runner in app.tasks.draft_tick.
 
-Diagnostic events when ticks misbehave:
-  tick_step_slow      — any sub-step >300ms
-  tick_loop_stalled   — gap between consecutive ticks >1.5s (event-loop blocked)
-  tick_slow           — whole iteration >1.5s
-Tempo: herodraft.tick.iteration with child herodraft.tick.<step> spans.
+Diagnostic events and Tempo spans (herodraft.tick.iteration with child
+herodraft.tick.<step>) are emitted by draft_tick.run_tick_loop.
 """
 
-import asyncio
-import atexit
+from __future__ import annotations
+
 import threading
 import time
-from collections import namedtuple
+from typing import TYPE_CHECKING, Any
 
 import redis
-from asgiref.sync import sync_to_async
 from channels.db import database_sync_to_async
 from channels.layers import get_channel_layer
-from django.conf import settings
 from django.utils import timezone
-from opentelemetry import trace
 
-from app.redis_keys import namespaced_key
+from app.tasks import draft_tick
+from app.tasks.draft_tick import (
+    HEARTBEAT_STALE_SECONDS,
+    LOCK_TIMEOUT,
+    TICK_GAP_STALL_THRESHOLD_S,
+    TICK_ITERATION_SLOW_THRESHOLD_S,
+    TICK_STEP_SLOW_THRESHOLD_S,
+    TaskInfo,
+    get_redis_client,
+)
 from telemetry.logging import get_logger
 
+if TYPE_CHECKING:
+    from app.models import HeroDraftRound
+
 log = get_logger(__name__)
-tracer = trace.get_tracer(__name__)
 
-TICK_STEP_SLOW_THRESHOLD_S = 0.3  # 30% of the 1s budget
-TICK_GAP_STALL_THRESHOLD_S = 1.5  # expected gap is 1.0s
-TICK_ITERATION_SLOW_THRESHOLD_S = 1.5  # backstop if no single step crossed
+__all__ = [
+    "CAPTAIN_HEARTBEAT_KEY",
+    "CONN_COUNT_KEY",
+    "HEARTBEAT_STALE_SECONDS",
+    "HERO_TICK_DRIVER",
+    "LOCK_KEY",
+    "LOCK_TIMEOUT",
+    "TICK_GAP_STALL_THRESHOLD_S",
+    "TICK_ITERATION_SLOW_THRESHOLD_S",
+    "TICK_STEP_SLOW_THRESHOLD_S",
+    "HeroDraftTickDriver",
+    "TaskInfo",
+    "broadcast_tick",
+    "captain_heartbeat_key",
+    "check_captain_heartbeats",
+    "check_resume_countdown",
+    "check_timeout",
+    "conn_count_key",
+    "decrement_connection_count",
+    "get_connection_count",
+    "get_redis_client",
+    "increment_connection_count",
+    "run_tick_loop",
+    "should_continue_ticking",
+    "start_tick_broadcaster",
+    "stop_all_broadcasters",
+    "stop_tick_broadcaster",
+    "tick_lock_key",
+]
 
-# Redis client for locking and connection tracking
-_redis_client = None
+_lock = draft_tick._lock
+_active_tick_tasks: dict[int, TaskInfo] = draft_tick.registry_for("herodraft")
 
-
-def get_redis_client():
-    """Get or create Redis client singleton."""
-    global _redis_client
-    if _redis_client is None:
-        redis_host = getattr(settings, "REDIS_HOST", "localhost")
-        _redis_client = redis.Redis(
-            host=redis_host, port=6379, db=2, decode_responses=True
-        )
-    return _redis_client
-
-
-# Thread-safe registry for local cleanup
-_lock = threading.Lock()
-_active_tick_tasks = {}  # draft_id -> TaskInfo(stop_event, thread)
-TaskInfo = namedtuple("TaskInfo", ["stop_event", "thread"])
-
-# Connection tracking keys
 CONN_COUNT_KEY = "herodraft:connections:{draft_id}"
 LOCK_KEY = "herodraft:tick_lock:{draft_id}"
+# Heartbeat key pattern (must match consumers.py)
+CAPTAIN_HEARTBEAT_KEY = "herodraft:{draft_id}:captain:{user_id}:heartbeat"
 
 
 def conn_count_key(draft_id: int) -> str:
-    return namespaced_key(CONN_COUNT_KEY.format(draft_id=draft_id))
+    return draft_tick.conn_count_key("herodraft", draft_id)
 
 
 def tick_lock_key(draft_id: int) -> str:
-    return namespaced_key(LOCK_KEY.format(draft_id=draft_id))
+    return draft_tick.lock_key("herodraft", draft_id)
 
 
-LOCK_TIMEOUT = 10  # Lock expires after 10 seconds (renewed each tick)
+def captain_heartbeat_key(draft_id: int, user_id: int) -> str:
+    return draft_tick.heartbeat_key("herodraft", draft_id, user_id)
 
 
 def increment_connection_count(draft_id: int) -> int:
     """Increment WebSocket connection count for a draft. Returns new count."""
-    r = get_redis_client()
-    key = conn_count_key(draft_id)
-    count = r.incr(key)
-    r.expire(key, 300)  # Expire after 5 min of no activity
-    log.debug(
-        "connection_count_incremented",
-        system="herodraft",
-        subsystem="timer",
-        draft_id=draft_id,
-        count=count,
-    )
-    return count
+    return draft_tick.increment_connection_count("herodraft", draft_id)
 
 
 def decrement_connection_count(draft_id: int) -> int:
     """Decrement WebSocket connection count for a draft. Returns new count."""
-    r = get_redis_client()
-    key = conn_count_key(draft_id)
-    count = r.decr(key)
-    if count <= 0:
-        r.delete(key)
-        count = 0
-    log.debug(
-        "connection_count_decremented",
-        system="herodraft",
-        subsystem="timer",
-        draft_id=draft_id,
-        count=count,
-    )
-    return count
+    return draft_tick.decrement_connection_count("herodraft", draft_id)
 
 
 def get_connection_count(draft_id: int) -> int:
     """Get current WebSocket connection count for a draft."""
-    r = get_redis_client()
-    key = conn_count_key(draft_id)
-    count = r.get(key)
-    return int(count) if count else 0
+    return draft_tick.get_connection_count("herodraft", draft_id)
 
 
-async def broadcast_tick(draft_id: int):
+async def broadcast_tick(draft_id: int) -> None:
     """Broadcast timing anchors to all connected clients.
 
     Sends ANCHORS (timestamps + durations) not computed remainders.
@@ -127,7 +116,7 @@ async def broadcast_tick(draft_id: int):
     room_group_name = f"herodraft_{draft_id}"
 
     @database_sync_to_async
-    def get_tick_data():
+    def get_tick_data() -> dict[str, Any] | None:
         try:
             draft = HeroDraft.objects.get(id=draft_id)
         except HeroDraft.DoesNotExist:
@@ -261,7 +250,7 @@ async def broadcast_tick(draft_id: int):
             )
 
 
-async def check_timeout(draft_id: int):
+async def check_timeout(draft_id: int) -> HeroDraftRound | None:
     """Check if current round has timed out and auto-pick if needed."""
     from django.db import transaction
 
@@ -270,7 +259,7 @@ async def check_timeout(draft_id: int):
     from app.models import DraftTeam, HeroDraft, HeroDraftState
 
     @database_sync_to_async
-    def check_and_auto_pick():
+    def check_and_auto_pick() -> HeroDraftRound | None:
         # Use transaction with select_for_update to prevent race conditions
         completed_round = None
 
@@ -346,7 +335,7 @@ async def check_timeout(draft_id: int):
     return await check_and_auto_pick()
 
 
-async def check_resume_countdown(draft_id: int):
+async def check_resume_countdown(draft_id: int) -> bool:
     """Check if RESUMING countdown is complete and transition to DRAFTING."""
     from django.db import transaction
 
@@ -354,7 +343,7 @@ async def check_resume_countdown(draft_id: int):
     from app.models import HeroDraft, HeroDraftEvent, HeroDraftState
 
     @database_sync_to_async
-    def check_and_resume():
+    def check_and_resume() -> bool:
         transitioned = False
 
         with transaction.atomic():
@@ -416,22 +405,7 @@ async def check_resume_countdown(draft_id: int):
     return await check_and_resume()
 
 
-# Heartbeat key pattern (must match consumers.py)
-CAPTAIN_HEARTBEAT_KEY = "herodraft:{draft_id}:captain:{user_id}:heartbeat"
-
-
-def captain_heartbeat_key(draft_id: int, user_id: int) -> str:
-    return namespaced_key(
-        CAPTAIN_HEARTBEAT_KEY.format(draft_id=draft_id, user_id=user_id)
-    )
-
-
-HEARTBEAT_STALE_SECONDS = (
-    9  # Consider stale if no heartbeat for 9 seconds (3 missed beats)
-)
-
-
-async def check_captain_heartbeats(draft_id: int):
+async def check_captain_heartbeats(draft_id: int) -> str | None:
     """Check if any captain's heartbeat is stale and trigger disconnect if so."""
     from django.db import transaction
 
@@ -439,7 +413,7 @@ async def check_captain_heartbeats(draft_id: int):
     from app.models import DraftTeam, HeroDraft, HeroDraftEvent, HeroDraftState
 
     @database_sync_to_async
-    def check_and_handle_stale():
+    def check_and_handle_stale() -> str | None:
         r = get_redis_client()
         now = time.time()
         stale_captain = None
@@ -592,264 +566,40 @@ def should_continue_ticking(draft_id: int, r: redis.Redis) -> tuple[bool, str]:
     return True, ""
 
 
-async def run_tick_loop(draft_id: int, stop_event: threading.Event):
-    """Run tick broadcasts every second while draft is active and has connections."""
-    r = get_redis_client()
-    lock_key = tick_lock_key(draft_id)
+class HeroDraftTickDriver:
+    prefix: str = "herodraft"
+    system: str = "herodraft"
 
-    @database_sync_to_async
-    def check_continue():
-        return should_continue_ticking(draft_id, r)
+    async def check_resume_countdown(self, draft_id: int) -> None:
+        await check_resume_countdown(draft_id)
 
-    @sync_to_async(thread_sensitive=False)
-    def extend_lock():
-        # Extend lock timeout to show we're still alive
-        r.expire(lock_key, LOCK_TIMEOUT)
+    async def check_captain_heartbeats(self, draft_id: int) -> None:
+        await check_captain_heartbeats(draft_id)
 
-    log.info(
-        "tick_loop_started", system="herodraft", subsystem="timer", draft_id=draft_id
-    )
-    tick_count = 0
-    last_tick_start: float | None = None
+    async def broadcast_tick(self, draft_id: int) -> None:
+        await broadcast_tick(draft_id)
 
-    async def _timed_step(step_name: str, coro):
-        """Span + duration log per sub-step. Warns past TICK_STEP_SLOW_THRESHOLD_S."""
-        with tracer.start_as_current_span(
-            f"herodraft.tick.{step_name}",
-            attributes={
-                "ws.draft_id": draft_id,
-                "tick.step": step_name,
-                "tick.iteration": tick_count + 1,
-            },
-        ) as span:
-            step_start = time.time()
-            await coro
-            step_duration = time.time() - step_start
-            span.set_attribute("tick.step_duration_s", round(step_duration, 4))
-            if step_duration > TICK_STEP_SLOW_THRESHOLD_S:
-                log.warning(
-                    "tick_step_slow",
-                    system="herodraft",
-                    subsystem="timer",
-                    draft_id=draft_id,
-                    tick_step=step_name,
-                    tick_count=tick_count + 1,
-                    duration_s=round(step_duration, 3),
-                )
+    async def check_timeout(self, draft_id: int) -> None:
+        await check_timeout(draft_id)
 
-    while not stop_event.is_set():
-        tick_start = time.time()
+    def should_continue(self, draft_id: int) -> tuple[bool, str]:
+        return should_continue_ticking(draft_id, get_redis_client())
 
-        # gap > expected = event loop was blocked outside per-step work
-        if last_tick_start is not None:
-            gap = tick_start - last_tick_start
-            if gap > TICK_GAP_STALL_THRESHOLD_S:
-                log.error(
-                    "tick_loop_stalled",
-                    system="herodraft",
-                    subsystem="timer",
-                    draft_id=draft_id,
-                    tick_count=tick_count,
-                    expected_gap_s=1.0,
-                    actual_gap_s=round(gap, 3),
-                    stall_s=round(gap - 1.0, 3),
-                )
 
-        with tracer.start_as_current_span(
-            "herodraft.tick.iteration",
-            attributes={
-                "ws.draft_id": draft_id,
-                "tick.iteration": tick_count + 1,
-            },
-        ) as iter_span:
-            should_continue, reason = await check_continue()
-            if not should_continue:
-                iter_span.set_attribute("tick.outcome", "stopping")
-                iter_span.set_attribute("tick.stop_reason", reason)
-                log.info(
-                    "tick_loop_stopping",
-                    system="herodraft",
-                    subsystem="timer",
-                    draft_id=draft_id,
-                    reason=reason,
-                    tick_count=tick_count,
-                )
-                break
+HERO_TICK_DRIVER: HeroDraftTickDriver = HeroDraftTickDriver()
 
-            await _timed_step("resume_countdown", check_resume_countdown(draft_id))
-            await _timed_step("captain_heartbeats", check_captain_heartbeats(draft_id))
-            await _timed_step("broadcast_tick", broadcast_tick(draft_id))
-            await _timed_step("check_timeout", check_timeout(draft_id))
-            await _timed_step("extend_lock", extend_lock())
 
-            tick_duration = time.time() - tick_start
-            tick_count += 1
-            iter_span.set_attribute("tick.duration_s", round(tick_duration, 4))
-            iter_span.set_attribute("tick.outcome", "completed")
-
-            if tick_duration > TICK_ITERATION_SLOW_THRESHOLD_S:
-                log.warning(
-                    "tick_slow",
-                    system="herodraft",
-                    subsystem="timer",
-                    draft_id=draft_id,
-                    tick_count=tick_count,
-                    duration_s=round(tick_duration, 2),
-                )
-            elif tick_count % 30 == 0:
-                log.info(
-                    "tick_loop_healthy",
-                    system="herodraft",
-                    subsystem="timer",
-                    draft_id=draft_id,
-                    tick_count=tick_count,
-                    duration_s=round(tick_duration, 3),
-                )
-
-        last_tick_start = tick_start
-        # Sleep just enough to maintain a 1Hz cadence. Sleeping a flat 1s
-        # would push the next tick out to `1s + work_duration`, which
-        # made `tick_loop_stalled` over-report (it compares start-to-start
-        # gaps against 1s expected). max(0, ...) absorbs a slow tick by
-        # firing immediately on the next iteration to catch up.
-        await asyncio.sleep(max(0.0, 1.0 - tick_duration))
-
-    log.info(
-        "tick_loop_ended",
-        system="herodraft",
-        subsystem="timer",
-        draft_id=draft_id,
-        tick_count=tick_count,
-    )
+async def run_tick_loop(draft_id: int, stop_event: threading.Event) -> None:
+    await draft_tick.run_tick_loop(HERO_TICK_DRIVER, draft_id, stop_event)
 
 
 def start_tick_broadcaster(draft_id: int) -> bool:
-    """
-    Start the tick broadcaster for a draft.
-
-    Uses Redis distributed lock to ensure only one broadcaster runs
-    across all Django instances.
-
-    Returns:
-        bool: True if broadcaster was started, False if already running elsewhere
-    """
-    r = get_redis_client()
-    lock_key = tick_lock_key(draft_id)
-    stop_event = threading.Event()
-
-    # Try to acquire distributed lock (non-blocking)
-    # SET NX = only set if not exists, EX = expire time
-    acquired = r.set(lock_key, "locked", nx=True, ex=LOCK_TIMEOUT)
-
-    if not acquired:
-        log.debug(
-            "tick_broadcaster_already_running",
-            system="herodraft",
-            subsystem="timer",
-            draft_id=draft_id,
-            reason="lock_held",
-        )
-        return False
-
-    def run_in_thread():
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            loop.run_until_complete(run_tick_loop(draft_id, stop_event))
-        except Exception as e:
-            log.error(
-                "tick_broadcaster_error",
-                system="herodraft",
-                subsystem="timer",
-                draft_id=draft_id,
-                error=str(e),
-            )
-        finally:
-            loop.close()
-            try:
-                r.delete(lock_key)
-            except Exception as e:
-                log.debug(
-                    "tick_lock_release_failed",
-                    system="herodraft",
-                    subsystem="timer",
-                    draft_id=draft_id,
-                    phase="run_in_thread",
-                    error=str(e),
-                )
-            with _lock:
-                _active_tick_tasks.pop(draft_id, None)
-
-    # Register locally for cleanup
-    with _lock:
-        if draft_id in _active_tick_tasks:
-            # Race condition - another local thread started
-            r.delete(lock_key)
-            return False
-
-        thread = threading.Thread(target=run_in_thread, daemon=True)
-        _active_tick_tasks[draft_id] = TaskInfo(stop_event, thread)
-
-    thread.start()
-    log.info(
-        "tick_broadcaster_started",
-        system="herodraft",
-        subsystem="timer",
-        draft_id=draft_id,
-    )
-    return True
+    return draft_tick.start_tick_broadcaster(HERO_TICK_DRIVER, draft_id)
 
 
-def stop_tick_broadcaster(draft_id: int):
-    """Stop the tick broadcaster for a draft."""
-    r = get_redis_client()
-    lock_key = tick_lock_key(draft_id)
-
-    # Get local task info
-    with _lock:
-        task_info = _active_tick_tasks.get(draft_id)
-
-    if task_info:
-        log.info(
-            "tick_broadcaster_stopping",
-            system="herodraft",
-            subsystem="timer",
-            draft_id=draft_id,
-        )
-        task_info.stop_event.set()
-        task_info.thread.join(timeout=2.0)
-
-    try:
-        r.delete(lock_key)
-    except Exception as e:
-        log.debug(
-            "tick_lock_release_failed",
-            system="herodraft",
-            subsystem="timer",
-            draft_id=draft_id,
-            phase="stop_tick_broadcaster",
-            error=str(e),
-        )
-
-    with _lock:
-        _active_tick_tasks.pop(draft_id, None)
+def stop_tick_broadcaster(draft_id: int) -> None:
+    draft_tick.stop_tick_broadcaster("herodraft", draft_id)
 
 
-def stop_all_broadcasters():
-    """Stop all active tick broadcasters. Called on shutdown."""
-    with _lock:
-        draft_ids = list(_active_tick_tasks.keys())
-
-    for draft_id in draft_ids:
-        stop_tick_broadcaster(draft_id)
-
-    log.info(
-        "tick_broadcasters_shutdown",
-        system="herodraft",
-        subsystem="timer",
-        count=len(draft_ids),
-    )
-
-
-# Register cleanup on process exit
-atexit.register(stop_all_broadcasters)
+def stop_all_broadcasters() -> None:
+    draft_tick.stop_all_broadcasters()

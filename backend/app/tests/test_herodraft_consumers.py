@@ -759,3 +759,55 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         )
 
         await second_comm.disconnect()
+
+    async def _next_json_of_type(self, comm, wanted: str, timeout: float = 5) -> dict:
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + timeout
+        while True:
+            frame = await comm.receive_json_from(
+                timeout=max(0.1, deadline - loop.time())
+            )
+            if frame.get("type") == wanted:
+                return frame
+
+    async def _next_non_ping_output(self, comm, timeout: float = 5) -> dict:
+        while True:
+            out = await comm.receive_output(timeout=timeout)
+            if (
+                out["type"] == "websocket.send"
+                and json.loads(out.get("text") or "{}").get("type") == "ping"
+            ):
+                continue
+            return out
+
+    @patch("app.tasks.herodraft_tick.start_tick_broadcaster")
+    @patch("app.consumers_base.PING_INTERVAL", 60)
+    async def test_kicked_connection_receives_kicked_frame_then_close_4000(
+        self, mock_start_tick
+    ):
+        """Spec §1: first socket gets {"type": "herodraft_kicked"} then close code 4000."""
+        mock_start_tick.return_value = True
+
+        first_comm = WebsocketCommunicator(
+            self.get_application(), f"/api/herodraft/{self.draft.id}/"
+        )
+        first_comm.scope["user"] = self.captain1
+        await first_comm.connect()
+        await self._next_json_of_type(first_comm, "initial_state")
+
+        second_comm = WebsocketCommunicator(
+            self.get_application(), f"/api/herodraft/{self.draft.id}/"
+        )
+        second_comm.scope["user"] = self.captain1
+        await second_comm.connect()
+        await self._next_json_of_type(second_comm, "initial_state")
+
+        kicked = await self._next_json_of_type(first_comm, "herodraft_kicked")
+        self.assertEqual(
+            kicked, {"type": "herodraft_kicked", "reason": "new_connection"}
+        )
+        closed = await self._next_non_ping_output(first_comm)
+        self.assertEqual(closed["type"], "websocket.close")
+        self.assertEqual(closed.get("code"), 4000)
+
+        await second_comm.disconnect()

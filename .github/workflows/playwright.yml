@@ -239,6 +239,14 @@ jobs:
               events.tests.test_sync_discord_scheduled_event_window \
               app.tests.test_task_schedule \
               app.tests.test_build_users_dict \
+              app.tests.test_herodraft_tick \
+              app.tests.test_herodraft_consumers \
+              app.tests.test_consumers_base \
+              app.tests.test_stale_connection \
+              app.tests.test_draft_consumers \
+              app.tests.test_shuffle_draft \
+              app.tests.test_draft_tick \
+              app.tests.test_draft_consumers_base \
               tests.test_populate \
               discordbot.tests.test_signup_logging \
               events.tests.test_modal_config_contract \
@@ -246,6 +254,8 @@ jobs:
               events.tests.test_reaction_signup \
               app.tests.test_env_utils \
               app.tests.test_settings_env_overrides \
+              app.tests.test_redis_namespace \
+              app.tests.test_test_runner \
               -v 2
 
       - name: Run frontend Vitest

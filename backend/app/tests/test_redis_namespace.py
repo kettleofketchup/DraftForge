@@ -20,7 +20,9 @@ from django.conf import settings
 from django.test import SimpleTestCase, override_settings
 
 import backend.settings
+from app.consumers import DraftConsumer, HeroDraftConsumer
 from app.redis_keys import namespaced_key
+from app.tasks import draft_tick
 from app.tasks.herodraft_tick import (
     captain_heartbeat_key,
     conn_count_key,
@@ -159,6 +161,65 @@ class NamespacedKeyTests(SimpleTestCase):
 
         consumer = HeroPrefix.__new__(HeroPrefix)
         self.assertEqual(consumer._heartbeat_key(3, 4), captain_heartbeat_key(3, 4))
+
+
+class DraftTickKeyNamespaceTests(SimpleTestCase):
+    PREFIXES: tuple[str, ...] = ("herodraft", "teamdraft")
+
+    def _keys(self, prefix: str) -> list[str]:
+        return [
+            draft_tick.heartbeat_key(prefix, 5, 9),
+            draft_tick.captain_channel_key(prefix, 5, 9),
+            draft_tick.conn_count_key(prefix, 5),
+            draft_tick.lock_key(prefix, 5),
+        ]
+
+    @override_settings(REDIS_KEY_NAMESPACE="")
+    def test_shared_helpers_keep_production_format(self) -> None:
+        for prefix in self.PREFIXES:
+            self.assertEqual(
+                self._keys(prefix),
+                [
+                    f"{prefix}:5:captain:9:heartbeat",
+                    f"{prefix}:5:captain:9:channel",
+                    f"{prefix}:connections:5",
+                    f"{prefix}:tick_lock:5",
+                ],
+            )
+
+    @override_settings(REDIS_KEY_NAMESPACE="ns:")
+    def test_shared_helpers_include_namespace(self) -> None:
+        for prefix in self.PREFIXES:
+            for key in self._keys(prefix):
+                self.assertTrue(key.startswith(f"ns:{prefix}:"), key)
+
+    def test_active_run_namespace_applies_to_shared_helpers(self) -> None:
+        self.assertNotEqual(settings.REDIS_KEY_NAMESPACE, "")
+        for prefix in self.PREFIXES:
+            for key in self._keys(prefix):
+                self.assertTrue(key.startswith(settings.REDIS_KEY_NAMESPACE), key)
+
+    @override_settings(REDIS_KEY_NAMESPACE="ns:")
+    def test_hero_compat_wrappers_match_shared_helpers(self) -> None:
+        self.assertEqual(conn_count_key(5), draft_tick.conn_count_key("herodraft", 5))
+        self.assertEqual(tick_lock_key(5), draft_tick.lock_key("herodraft", 5))
+        self.assertEqual(
+            captain_heartbeat_key(5, 9),
+            draft_tick.heartbeat_key("herodraft", 5, 9),
+        )
+
+    @override_settings(REDIS_KEY_NAMESPACE="ns:")
+    def test_real_consumer_keys_agree_with_tick_keys(self) -> None:
+        hero = HeroDraftConsumer.__new__(HeroDraftConsumer)
+        team = DraftConsumer.__new__(DraftConsumer)
+        self.assertEqual(hero._heartbeat_key(3, 4), captain_heartbeat_key(3, 4))
+        self.assertEqual(
+            team._heartbeat_key(3, 4), draft_tick.heartbeat_key("teamdraft", 3, 4)
+        )
+        self.assertEqual(
+            team._captain_channel_key(3, 4),
+            "ns:teamdraft:3:captain:4:channel",
+        )
 
 
 @mock.patch.dict(os.environ, {"TEST": "true", "DISABLE_CACHE": "false"})
