@@ -160,7 +160,10 @@ DMs, because it would store the embed.
 Errors are `{"error", "code"}`. Invite and launch call dota_lobby directly and pass its problem
 `code`, `retryable` and status through (`409 not_ready`, `422 league_not_held`,
 `429 invite_limited` with `Retry-After`, `503 unavailable`, `504 gc_timeout`); a `401` or `403`
-from dota_lobby (a wrong `DOTA_LOBBY_API_KEY`) becomes `502`. The password is derived on
+from dota_lobby (a wrong `DOTA_LOBBY_API_KEY`) becomes `502`. Because they wait for dota_lobby
+inside the web request, each user gets 12 invites and 12 launches a minute; after that the
+answer is `429 rate_limited` with `Retry-After`. Connecting to dota_lobby times out after 3
+seconds; `DOTA_LOBBY_TIMEOUT_SECONDS` is the read timeout. The password is derived on
 demand (see [Design notes](#design-notes)) and is never in bracket data, websocket messages or
 logs. It is shown only while the lobby is active.
 
@@ -238,7 +241,7 @@ the read-only `game_mode` and `lobby_steam_league_id`.
 | `DOTA_LOBBY_URL` | `backend/.env`, Helm `env.extra` | empty | dota_lobby base URL, without `/v1` |
 | `DOTA_LOBBY_API_KEY` | `backend/.env`, Helm `secrets.dotaLobbyApiKey` | empty | Sent as `X-API-Key` |
 | `DOTA_LOBBY_WEBHOOK_SECRET` | `backend/.env`, Helm `secrets.dotaLobbyWebhookSecret` | empty | The webhook signing secret dota_lobby uses for DraftForge's URL. A comma-separated list is accepted while rotating |
-| `DOTA_LOBBY_TIMEOUT_SECONDS` | env | `15` | Per-request timeout. It is above dota_lobby's 12-second game coordinator timeout |
+| `DOTA_LOBBY_TIMEOUT_SECONDS` | env | `15` | Read timeout per request (connecting is capped at 3 seconds). It is above dota_lobby's 12-second game coordinator timeout |
 | `DOTA_LOBBY_REF_PREFIX` | env | `game` | Lobby reference prefix |
 | `DOTA_LOBBY_WEBHOOK_TOLERANCE_SECONDS` | env | `300` | Clock skew allowed on webhook timestamps |
 | `DOTA_LOBBY_REGION` | env | empty | Default region name. A tournament's `dota_lobby_region` overrides it |

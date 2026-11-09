@@ -2,6 +2,7 @@
 
 from unittest import mock
 
+from django.core.cache.backends.locmem import LocMemCache
 from django.test import TestCase
 from rest_framework.test import APIClient
 
@@ -18,6 +19,7 @@ from lobby.tests.helpers import (
     make_tournament,
     make_user,
 )
+from lobby.views import LobbyActionThrottle
 
 PRIVATE_KEYS = {"password", "players", "last_error_detail", "name", "bot"}
 
@@ -391,6 +393,55 @@ class LobbyInviteTests(LobbyViewTestCase):
                 self.assertEqual(resp.status_code, expected)
                 self.assertEqual(resp.data["code"], exc.code)
                 self.assertEqual(resp.data["retryable"], exc.retryable)
+
+
+@lobby_settings
+@mock.patch("lobby.views.DotaLobbyClient")
+class LobbyActionThrottleTests(LobbyViewTestCase):
+    """Invite and launch block a web worker on dota_lobby: limit them per user."""
+
+    def setUp(self):
+        super().setUp()
+        # The test settings use a dummy cache, which never throttles.
+        cache = LocMemCache("lobby-throttle-test", {})
+        cache.clear()
+        patcher = mock.patch.object(LobbyActionThrottle, "cache", cache)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_player_invites_are_limited(self, client_cls):
+        self.make_lobby()
+        client_cls.return_value.invite.return_value = InviteResult(invited=[1])
+        client = self.as_user(self.player)
+        for _ in range(12):
+            resp = client.post(_url(self.game.pk, "invite/"), {}, format="json")
+            self.assertEqual(resp.status_code, 200)
+        resp = client.post(_url(self.game.pk, "invite/"), {}, format="json")
+        self.assertEqual(resp.status_code, 429)
+        self.assertEqual(resp.data["code"], "rate_limited")
+        self.assertTrue(resp.data["retryable"])
+        self.assertGreater(int(resp["Retry-After"]), 0)
+        self.assertEqual(client_cls.return_value.invite.call_count, 12)
+
+        # Another player has their own budget.
+        other = self.game.dire_team.captain
+        resp = self.as_user(other).post(
+            _url(self.game.pk, "invite/"), {}, format="json"
+        )
+        self.assertEqual(resp.status_code, 200)
+
+    def test_launch_has_its_own_budget(self, client_cls):
+        self.make_lobby(state=states.READY)
+        client_cls.return_value.invite.return_value = InviteResult(invited=[1])
+        client_cls.return_value.launch_lobby.side_effect = DotaLobbyError(
+            "not_ready", status=409
+        )
+        client = self.as_user(self.staff)
+        for _ in range(12):
+            client.post(_url(self.game.pk, "invite/"), {"missing": True}, format="json")
+        resp = client.post(_url(self.game.pk, "launch/"), {}, format="json")
+        self.assertEqual(resp.status_code, 409)
+        self.assertEqual(resp.data["code"], "not_ready")
 
 
 @lobby_settings

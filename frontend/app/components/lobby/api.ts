@@ -62,6 +62,7 @@ const ERROR_TEXT: Record<string, string> = {
   unreachable: 'The lobby service cannot be reached.',
   not_configured: 'The lobby service is not configured.',
   invite_limited: 'Invite limit reached for now. Try again later.',
+  rate_limited: 'Too many lobby requests. Wait a moment and try again.',
   not_ready: 'Not every player is seated and ready.',
   host_not_seated: 'The lobby host is not seated yet.',
   invalid_state: 'The lobby cannot do that in its current state.',

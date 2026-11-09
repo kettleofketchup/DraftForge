@@ -15,12 +15,15 @@ Routes under `api/games/<game_pk>/lobby/`, next to `create-herodraft`:
   short-handed or before every player is ready.
 
 Invite and launch call dota_lobby synchronously and answer its errors as
-`{error, code, retryable}` with dota_lobby's status. The create itself runs
-in Celery (lobby.tasks.create_dota_lobby), so `POST` answers 202.
+`{error, code, retryable}` with dota_lobby's status. Each user gets a few of
+them a minute (`429 rate_limited` after that), so repeated clicks while
+dota_lobby hangs cannot tie up every web worker. The create itself runs in
+Celery (lobby.tasks.create_dota_lobby), so `POST` answers 202.
 """
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 from django.core.exceptions import ImproperlyConfigured
@@ -30,6 +33,7 @@ from django.shortcuts import get_object_or_404
 from rest_framework import permissions, status
 from rest_framework.request import Request
 from rest_framework.response import Response
+from rest_framework.throttling import UserRateThrottle
 from rest_framework.views import APIView
 
 from app.models import CustomUser, DotaLobbyMode, Game, Team
@@ -53,6 +57,37 @@ LOCAL_ERROR_STATUSES = {"unreachable": 503, "not_configured": 503}
 
 REPLACED = "replaced"
 CLOSED_BY_STAFF = "closed_by_staff"
+
+
+class LobbyActionThrottle(UserRateThrottle):
+    """Per user and action: the synchronous dota_lobby calls (invite, launch).
+
+    Uses the default cache (Redis in production).
+    """
+
+    rate = "12/min"
+
+    def __init__(self, scope: str) -> None:
+        self.scope = scope
+        super().__init__()
+
+
+def _throttled(request: Request, view: APIView, scope: str) -> Response | None:
+    """The 429 to answer when the user has used up `scope`, else None."""
+    throttle = LobbyActionThrottle(scope)
+    if throttle.allow_request(request, view):
+        return None
+    log.info("lobby_action_throttled", action=scope, user_id=request.user.pk, **_LOG)
+    response = _error(
+        "Too many lobby requests. Try again shortly.",
+        "rate_limited",
+        429,
+        retryable=True,
+    )
+    wait = throttle.wait()
+    if wait:
+        response["Retry-After"] = str(math.ceil(wait))
+    return response
 
 
 def _error(message: str, code: str, http_status: int, **extra: Any) -> Response:
@@ -398,6 +433,9 @@ class GameLobbyInviteView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request: Request, game_pk: int) -> Response:
+        throttled = _throttled(request, self, "lobby_invite")
+        if throttled is not None:
+            return throttled
         game = _load_game(game_pk)
         game_lobby, problem = _active_for_action(game)
         if problem is not None:
@@ -458,6 +496,9 @@ class GameLobbyLaunchView(APIView):
     permission_classes = [IsTournamentStaff]
 
     def post(self, request: Request, game_pk: int) -> Response:
+        throttled = _throttled(request, self, "lobby_launch")
+        if throttled is not None:
+            return throttled
         game = _load_game(game_pk)
         game_lobby, problem = _active_for_action(game)
         if problem is not None:
