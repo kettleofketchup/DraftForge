@@ -282,12 +282,12 @@ class TournamentEventIntegrationTest(TestCase):
             pick_number=1,
         )
 
-    @patch("app.functions.tournament.broadcast_event")
+    @patch("app.functions.draft_picks.broadcast_event")
     def test_pick_player_for_round_creates_player_picked_event(self, mock_broadcast):
         """Picking a player creates a player_picked event."""
         from rest_framework.test import APIRequestFactory
 
-        from app.functions.tournament import pick_player_for_round
+        from app.functions.draft_picks import pick_player_for_round
 
         factory = APIRequestFactory()
         request = factory.post(
@@ -313,12 +313,12 @@ class TournamentEventIntegrationTest(TestCase):
         self.assertEqual(event.actor, self.captain)
         mock_broadcast.assert_called()
 
-    @patch("app.functions.tournament.broadcast_event")
+    @patch("app.functions.draft_picks.broadcast_event")
     def test_undo_last_pick_creates_pick_undone_event(self, mock_broadcast):
         """Undoing a pick creates a pick_undone event."""
         from rest_framework.test import APIRequestFactory
 
-        from app.functions.tournament import pick_player_for_round, undo_last_pick
+        from app.functions.draft_picks import pick_player_for_round, undo_last_pick
 
         factory = APIRequestFactory()
 

@@ -10,7 +10,7 @@ from rest_framework.response import Response
 from rest_framework.test import APIRequestFactory, force_authenticate
 
 from app.functions import teamdraft
-from app.functions.tournament import pick_player_for_round, undo_last_pick
+from app.functions.draft_picks import pick_player_for_round, undo_last_pick
 from app.models import (
     CustomUser,
     Draft,

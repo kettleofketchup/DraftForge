@@ -530,7 +530,7 @@ class PickMatrixTests(EndpointTestBase):
 
     def test_broadcasts_are_deferred_to_commit(self):
         rnd = self.start()
-        with patch("app.functions.tournament.broadcast_event") as mock_bc, patch("app.functions.teamdraft.broadcast_event") as mock_td:
+        with patch("app.functions.draft_picks.broadcast_event") as mock_bc, patch("app.functions.teamdraft.broadcast_event") as mock_td:
             with self.captureOnCommitCallbacks(execute=False) as callbacks:
                 self.assertEqual(self.fx.pick(rnd, rnd.captain).status_code, 201)
                 mock_bc.assert_not_called()
@@ -565,7 +565,7 @@ class PickTimingTests(TestCase):
 
     def test_client_picked_at_within_window_is_honoured(self):
         early = (self.rnd.started_at + timedelta(milliseconds=500)).isoformat()
-        with patch("app.functions.tournament.timezone.now", return_value=self.rnd.started_at + timedelta(seconds=1)):
+        with patch("app.functions.draft_picks.timezone.now", return_value=self.rnd.started_at + timedelta(seconds=1)):
             with self.captureOnCommitCallbacks(execute=True):
                 r = self.fx.pick(self.rnd, self.rnd.captain, client_picked_at=early)
         self.assertEqual(r.status_code, 201, r.data)
