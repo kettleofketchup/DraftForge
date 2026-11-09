@@ -1,26 +1,10 @@
-import json
-
-import requests
-from django.contrib.auth import login
-from django.contrib.auth import logout as auth_logout
-from django.contrib.auth.decorators import login_required
 from django.db import transaction
-from django.http import HttpResponse, HttpResponseBadRequest, JsonResponse
-from django.shortcuts import redirect, render
 from django.utils import timezone
-from rest_framework import generics, permissions, serializers, status, viewsets
+from rest_framework import serializers
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.generics import GenericAPIView
-from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
-from rest_framework.reverse import reverse
-from social_core.backends.oauth import BaseOAuth1, BaseOAuth2
-
-# Create your views here.
-from social_django.models import USER_MODEL  # fix: skip
-from social_django.models import AbstractUserSocialAuth, DjangoStorage
-from social_django.utils import load_strategy, psa
 
 from app.broadcast import broadcast_event
 from app.cache_utils import invalidate_after_commit, invalidate_obj
@@ -40,21 +24,14 @@ from app.models import (
     TeamDraftState,
     Tournament,
 )
-from app.permissions import IsStaff
-from app.permissions_org import CanEditDraft, can_edit_tournament
+from app.permissions_org import can_edit_tournament
 from app.serializers import (
-    DraftRoundSerializer,
-    DraftSerializer,
     DraftSerializerMMRs,
-    GameSerializer,
-    TeamSerializer,
     TournamentSerializer,
-    UserSerializer,
     _build_users_dict,
 )
 from app.tasks.draft_tick import evaluate_client_pick_time
 from app.tasks.teamdraft_tick import start_team_tick_broadcaster_after_commit
-from backend import settings
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
