@@ -8,7 +8,7 @@
 import { create } from 'zustand';
 import { toast } from 'sonner';
 import type { UserType } from '~/components/user/types';
-import { bestClockOffset, captureClockOffset, CLOCK_OFFSET_SAMPLES, serverNowISO, startHeartbeatLoop } from '~/lib/draftClock';
+import { addClockOffsetSample, seedClockOffset, serverNowISO, startHeartbeatLoop } from '~/lib/draftClock';
 import { getLogger } from '~/lib/logger';
 import { getWebSocketManager } from '~/lib/websocket';
 import type { ConnectionStatus, Unsubscribe } from '~/lib/websocket';
@@ -256,14 +256,12 @@ export const useDraftWebSocketStore = create<DraftWebSocketState>((set, get) => 
         if (message.draft_state) {
           log.debug('Updating draft state from initial_state');
           ingestDraftStateUsers(message.draft_state);
-          const offsetSamples = message.server_time
-            ? [captureClockOffset(message.server_time, Date.now())]
-            : get()._offsetSamples;
+          const clock = seedClockOffset(get()._offsetSamples, message.server_time, Date.now());
           set({
             draftState: hydrateSlimDraftState(message.draft_state),
             captainFresh: numericKeys(message.captain_fresh),
-            _offsetSamples: offsetSamples,
-            serverClockOffsetMs: bestClockOffset(offsetSamples),
+            _offsetSamples: clock.samples,
+            serverClockOffsetMs: clock.offsetMs,
             // A fresh snapshot: the old socket's last event pk no longer orders anything.
             _lastStateEventPk: null,
           });
@@ -332,13 +330,11 @@ export const useDraftWebSocketStore = create<DraftWebSocketState>((set, get) => 
         for (const team of tick.teams) {
           if (team.captain_id != null) fresh[team.captain_id] = team.is_connected;
         }
-        const offsetSamples = [...get()._offsetSamples, captureClockOffset(tick.server_time, receivedAtMs)].slice(
-          -CLOCK_OFFSET_SAMPLES,
-        );
+        const clock = addClockOffsetSample(get()._offsetSamples, tick.server_time, receivedAtMs);
         set((state) => ({
           tick,
-          _offsetSamples: offsetSamples,
-          serverClockOffsetMs: bestClockOffset(offsetSamples),
+          _offsetSamples: clock.samples,
+          serverClockOffsetMs: clock.offsetMs,
           _lastTickReceivedAtMs: receivedAtMs,
           captainFresh: { ...state.captainFresh, ...fresh },
           ...(resumeEndedBy(tick, state.draftState)

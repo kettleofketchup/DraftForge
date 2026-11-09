@@ -41,6 +41,7 @@ from asgiref.sync import sync_to_async
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
 from django.db.models import Model
+from django.utils import timezone
 from opentelemetry import trace
 from opentelemetry.trace import Span, Status, StatusCode
 
@@ -145,6 +146,8 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
                 {
                     "type": "initial_state",
                     "draft_state": initial_state,
+                    # Seeds the client's clock offset before its first tick.
+                    "server_time": timezone.now().isoformat(),
                 }
             )
         )

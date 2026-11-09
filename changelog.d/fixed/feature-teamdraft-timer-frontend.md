@@ -29,3 +29,5 @@
   viewer set its clock from the latest tick alone, so a tick that arrived late shifted that
   viewer's clock by the delay; the clock now uses the least-delayed recent tick, and a new
   viewer's clock is set from the server time sent with the initial state.
+- Hero draft clocks get the same fix: a late tick no longer shifts one viewer's clock, and
+  a new viewer's clock is set from the server time sent with the initial state.

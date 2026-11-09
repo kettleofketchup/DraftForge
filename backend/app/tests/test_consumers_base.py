@@ -1,6 +1,7 @@
 """Unit tests for BaseDraftConsumer abstract class."""
 
 import asyncio
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest import mock
 
@@ -361,7 +362,10 @@ class TestBaseHooks(SimpleTestCase):
     def test_default_send_initial_messages_sends_initial_state_frame(self):
         consumer = ConcreteDraftConsumer()
         consumer.send = mock.AsyncMock()
-        asyncio.run(consumer.send_initial_messages({"state": "drafting"}))
+        now = datetime(2026, 11, 9, 12, 0, tzinfo=UTC)
+        with mock.patch("app.consumers_base.timezone.now", return_value=now):
+            asyncio.run(consumer.send_initial_messages({"state": "drafting"}))
         consumer.send.assert_awaited_once_with(
-            text_data='{"type": "initial_state", "draft_state": {"state": "drafting"}}'
+            text_data='{"type": "initial_state", "draft_state": {"state": "drafting"}, '
+            '"server_time": "2026-11-09T12:00:00+00:00"}'
         )

@@ -22,6 +22,17 @@ const baseTick = { type: 'herodraft_tick', draft_state: 'drafting', current_roun
 beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(T0); handlers.length = 0; useHeroDraftStore.getState().connect(1); send.mockClear(); });
 afterEach(() => { useHeroDraftStore.getState().disconnect(); vi.useRealTimers(); });
 
+const captain = { pk: 1, username: 'c', nickname: null, avatar: null };
+const team = (id: number) => ({
+  id, tournament_team: 30 + id, captain, team_name: `Team ${id}`, members: [captain],
+  is_first_pick: null, is_radiant: null, reserve_time_remaining: 90000, is_ready: false, is_connected: false,
+});
+const heroDraft = {
+  id: 2, game: 99, tournament_id: 8, state: 'waiting_for_captains', roll_winner: null,
+  draft_teams: [team(1), team(2)], rounds: [], current_round: null,
+  created_at: '2026-05-19T00:00:00Z', updated_at: '2026-05-19T00:00:00Z',
+};
+
 const heartbeatSends = () => send.mock.calls.filter(([, msg]) => (msg as { type?: string })?.type === 'heartbeat').length;
 
 describe('heroDraftStore heartbeat (characterisation)', () => {
@@ -58,6 +69,19 @@ describe('heroDraftStore clock offset (characterisation)', () => {
   it('captures server_time - receivedAt on a tick', () => {
     handlers[0]({ ...baseTick, server_time: new Date(T0 + 5_000).toISOString() });
     expect(useHeroDraftStore.getState().serverClockOffsetMs).toBe(5_000);
+  });
+
+  it('a tick delivered late does not shift the offset', () => {
+    handlers[0]({ ...baseTick, server_time: new Date(T0).toISOString() });
+    vi.setSystemTime(T0 + 2_500);
+    handlers[0]({ ...baseTick, server_time: new Date(T0 + 1_000).toISOString() });
+    expect(useHeroDraftStore.getState().serverClockOffsetMs).toBe(0);
+  });
+
+  it('initial_state server_time seeds the offset before the first tick', () => {
+    handlers[0]({ type: 'initial_state', draft_state: heroDraft, server_time: new Date(T0 + 4_000).toISOString() });
+    expect(useHeroDraftStore.getState().serverClockOffsetMs).toBe(4_000);
+    expect(useHeroDraftStore.getState().draft?.id).toBe(2);
   });
 
   it('falls back to offset 0 on an unparseable server_time', () => {

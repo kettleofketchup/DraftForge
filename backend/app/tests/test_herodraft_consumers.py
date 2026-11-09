@@ -2,7 +2,7 @@
 
 import asyncio
 import json
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from unittest.mock import patch
 
 from channels.db import database_sync_to_async
@@ -112,6 +112,8 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         self.assertEqual(response["type"], "initial_state")
         self.assertIn("draft_state", response)
         self.assertEqual(response["draft_state"]["id"], self.draft.id)
+        self.assertEqual(set(response), {"type", "draft_state", "server_time"})
+        datetime.fromisoformat(response["server_time"])
 
         await communicator.disconnect()
 
