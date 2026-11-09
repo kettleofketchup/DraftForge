@@ -19,7 +19,7 @@ from datetime import datetime
 from typing import Any, NamedTuple, Protocol, runtime_checkable
 
 import redis
-from asgiref.sync import sync_to_async
+from asgiref.sync import ThreadSensitiveContext, sync_to_async
 from channels.db import database_sync_to_async
 from django.conf import settings
 from opentelemetry import trace
@@ -283,6 +283,17 @@ async def run_tick_loop(
     )
 
 
+async def with_own_db_thread[T](coro: Coroutine[Any, Any, T]) -> T:
+    """Run ``coro`` with its own thread for thread-sensitive DB calls.
+
+    Without a context, every tick loop and consumer shares asgiref's one
+    global sync thread, so a single write waiting on SQLite's lock stalled
+    every draft's ticks (4.6 s in CI run 42694572403).
+    """
+    async with ThreadSensitiveContext():
+        return await coro
+
+
 def start_tick_broadcaster(driver: TickDriver, draft_id: int) -> bool:
     """Start the tick broadcaster for a draft under a Redis lock.
 
@@ -309,7 +320,9 @@ def start_tick_broadcaster(driver: TickDriver, draft_id: int) -> bool:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
-            loop.run_until_complete(run_tick_loop(driver, draft_id, stop_event))
+            loop.run_until_complete(
+                with_own_db_thread(run_tick_loop(driver, draft_id, stop_event))
+            )
         except Exception as e:
             log.error(
                 "tick_broadcaster_error",
