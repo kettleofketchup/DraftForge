@@ -996,8 +996,12 @@ class TickPayloadTests(TestCase):
         self.fx.draft.save()
         self.assertEqual(
             teamdraft_tick.should_continue_ticking(self.fx.draft.pk),
-            (False, "draft_state_paused"),
+            (False, "no_connections"),
         )
+        with patch("app.tasks.teamdraft_tick.get_connection_count", return_value=1):
+            self.assertEqual(
+                teamdraft_tick.should_continue_ticking(self.fx.draft.pk), (True, "")
+            )
         self.assertEqual(
             teamdraft_tick.should_continue_ticking(999_999), (False, "draft_not_found")
         )
@@ -1070,6 +1074,38 @@ class AutoPauseTests(TransactionTestCase):
         self.r.delete(heartbeat_key("teamdraft", self.fx.draft.pk, other.captain_id))
         self.assertIsNone(self.check())
         self.assertEqual(self.state(), TeamDraftState.DRAFTING)
+
+    def test_paused_draft_announces_a_captain_going_stale(self):
+        sent: list[dict] = []
+
+        class Layer:
+            async def group_send(self, group: str, message: dict) -> None:
+                sent.append({"group": group, **message})
+
+        draft = Draft.objects.get(pk=self.fx.draft.pk)
+        draft.state = TeamDraftState.PAUSED
+        draft.save()
+        self.r.set(self.hb, str(time.time()))
+        self.addCleanup(teamdraft_tick._paused_freshness.pop, self.fx.draft.pk, None)
+        freshness = async_to_sync(teamdraft_tick.TEAM_TICK_DRIVER.broadcast_tick)
+        with patch("app.tasks.teamdraft_tick.get_channel_layer", return_value=Layer()):
+            freshness(self.fx.draft.pk)
+            sent.clear()
+            freshness(self.fx.draft.pk)
+            self.assertEqual(sent, [])
+            self.r.delete(self.hb)
+            freshness(self.fx.draft.pk)
+        self.assertEqual(
+            sent,
+            [
+                {
+                    "group": f"draft_{self.fx.draft.pk}",
+                    "type": "captain.heartbeat",
+                    "captain_id": self.rnd.captain_id,
+                    "fresh": False,
+                }
+            ],
+        )
 
     def test_unarmed_or_resuming_is_ignored(self):
         self.active_team.draft_has_connected = True

@@ -33,6 +33,7 @@ __all__ = [
     "PREFIX",
     "TEAM_TICK_DRIVER",
     "TeamDraftTickDriver",
+    "broadcast_paused_freshness",
     "broadcast_tick",
     "build_tick_payload",
     "captain_conn_key",
@@ -107,6 +108,11 @@ def should_continue_ticking(draft_id: int) -> tuple[bool, str]:
     draft = Draft.objects.filter(pk=draft_id).first()
     if draft is None:
         return False, "draft_not_found"
+    if draft.state == TeamDraftState.PAUSED:
+        # Keeps captain freshness live for the Resume gate (broadcast_paused_freshness).
+        if get_connection_count(PREFIX, draft_id) <= 0:
+            return False, "no_connections"
+        return True, ""
     if draft.state not in _ARMED_STATES:
         return False, f"draft_state_{draft.state}"
     if not draft.clock_armed:
@@ -150,6 +156,48 @@ async def broadcast_tick(draft_id: int) -> None:
             draft_id=draft_id,
             error=str(e),
         )
+
+
+_paused_freshness: dict[int, dict[int, bool]] = {}
+
+
+async def broadcast_paused_freshness(draft_id: int) -> None:
+    """While paused, send captain_heartbeat when a captain's freshness changes.
+
+    No clock ticks run during a pause, and a socket only announces fresh=True, so
+    without this a captain whose heartbeats stop mid-pause stays fresh for every
+    viewer and Resume stays enabled.
+    """
+
+    @database_sync_to_async
+    def read() -> dict[int, bool] | None:
+        draft = Draft.objects.filter(pk=draft_id).first()
+        if draft is None or draft.state != TeamDraftState.PAUSED:
+            return None
+        r = get_redis_client()
+        now_ts = time.time()
+        return {
+            captain_id: captain_is_fresh(r, draft_id, captain_id, now_ts)
+            for captain_id in Team.objects.nocache()
+            .filter(tournament_id=draft.tournament_id, captain__isnull=False)
+            .values_list("captain_id", flat=True)
+        }
+
+    fresh = await read()
+    if fresh is None:
+        _paused_freshness.pop(draft_id, None)
+        return
+    sent = _paused_freshness.get(draft_id, {})
+    channel_layer = get_channel_layer()
+    for captain_id, is_fresh in fresh.items():
+        if sent.get(captain_id) == is_fresh:
+            continue
+        if channel_layer is not None:
+            await channel_layer.group_send(
+                f"draft_{draft_id}",
+                {"type": "captain.heartbeat", "captain_id": captain_id, "fresh": is_fresh},
+            )
+    _paused_freshness[draft_id] = fresh
 
 
 async def check_resume_countdown(draft_id: int) -> bool:
@@ -375,6 +423,7 @@ class TeamDraftTickDriver:
 
     async def broadcast_tick(self, draft_id: int) -> None:
         await broadcast_tick(draft_id)
+        await broadcast_paused_freshness(draft_id)
 
     async def check_timeout(self, draft_id: int) -> None:
         await check_timeout(draft_id)
