@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import threading
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import redis
 from channels.db import database_sync_to_async
@@ -116,7 +116,7 @@ async def broadcast_tick(draft_id: int) -> None:
     room_group_name = f"herodraft_{draft_id}"
 
     @database_sync_to_async
-    def get_tick_data():
+    def get_tick_data() -> dict[str, Any] | None:
         try:
             draft = HeroDraft.objects.get(id=draft_id)
         except HeroDraft.DoesNotExist:
@@ -259,7 +259,7 @@ async def check_timeout(draft_id: int) -> HeroDraftRound | None:
     from app.models import DraftTeam, HeroDraft, HeroDraftState
 
     @database_sync_to_async
-    def check_and_auto_pick():
+    def check_and_auto_pick() -> HeroDraftRound | None:
         # Use transaction with select_for_update to prevent race conditions
         completed_round = None
 
@@ -343,7 +343,7 @@ async def check_resume_countdown(draft_id: int) -> bool:
     from app.models import HeroDraft, HeroDraftEvent, HeroDraftState
 
     @database_sync_to_async
-    def check_and_resume():
+    def check_and_resume() -> bool:
         transitioned = False
 
         with transaction.atomic():
@@ -413,7 +413,7 @@ async def check_captain_heartbeats(draft_id: int) -> str | None:
     from app.models import DraftTeam, HeroDraft, HeroDraftEvent, HeroDraftState
 
     @database_sync_to_async
-    def check_and_handle_stale():
+    def check_and_handle_stale() -> str | None:
         r = get_redis_client()
         now = time.time()
         stale_captain = None
