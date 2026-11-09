@@ -296,7 +296,8 @@ def reset_herodraft_on_team_change(
         draft_pk = draft.pk
         draft.delete()
         transaction.on_commit(
-            lambda: _broadcast_draft_event(draft_pk, "draft_invalidated", instance.pk)
+            lambda: _broadcast_draft_event(draft_pk, "draft_invalidated", instance.pk),
+            robust=True,
         )
         return
 
@@ -357,7 +358,8 @@ def reset_herodraft_on_team_change(
     # whole reset for any reader that's faster than the COMMIT.
     draft_pk = draft.pk
     transaction.on_commit(
-        lambda: _broadcast_draft_event(draft_pk, "draft_reset", instance.pk)
+        lambda: _broadcast_draft_event(draft_pk, "draft_reset", instance.pk),
+        robust=True,
     )
 
 

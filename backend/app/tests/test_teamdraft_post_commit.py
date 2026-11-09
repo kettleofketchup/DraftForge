@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 from django.db import transaction
 from django.test import TransactionTestCase
+from redis.exceptions import ResponseError
 from rest_framework.response import Response
 from rest_framework.test import APIClient
 from structlog.testing import capture_logs
@@ -166,4 +167,27 @@ class PostCommitFailureTests(TransactionTestCase):
         self.assertEqual(failures[0]["error"], "redis down")
         self.assertEqual(failures[0]["system"], "teamdraft")
         self.assertEqual(failures[0]["subsystem"], "timer")
+        self.assertIs(failures[0]["exc_info"], True)
+
+    def test_ready_is_200_and_broadcasts_when_invalidation_raises(self) -> None:
+        fx = TimedDraftFixture(prefix="pcinv")
+        with (
+            patch(
+                "app.cache_utils._cacheops_invalidate_obj",
+                side_effect=ResponseError("MISCONF"),
+            ),
+            patch("app.broadcast.broadcast_event") as broadcast_mock,
+            capture_logs() as logs,
+        ):
+            response = self.post(fx, fx.captains[0], "ready", {"ready": True})
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertTrue(Team.objects.nocache().get(pk=fx.teams[0].pk).draft_is_ready)
+        broadcast_mock.assert_called_once()
+        failures = [
+            e for e in logs if e["event"] == "cache_invalidate_after_commit_failed"
+        ]
+        self.assertTrue(failures, [e["event"] for e in logs])
+        self.assertEqual(failures[0]["system"], "cache")
+        self.assertEqual(failures[0]["subsystem"], "invalidate")
+        self.assertEqual(failures[0]["error"], "MISCONF")
         self.assertIs(failures[0]["exc_info"], True)
