@@ -1827,9 +1827,15 @@ class DraftRound(models.Model):
                 invalidate_obj(self.draft.tournament)
 
     @property
-    def team(self):
+    def team(self) -> "Team | None":
         if not self.draft:
             raise ValueError("Draft must be associated with a draft.")
+
+        tournament = self.draft.tournament
+        prefetched = getattr(tournament, "_prefetched_objects_cache", {}).get("teams")
+        if prefetched is not None:
+            matches = [t for t in prefetched if t.captain_id == self.captain_id]
+            return min(matches, key=lambda t: t.pk) if matches else None
 
         return Team.objects.filter(
             tournament=self.draft.tournament, captain=self.captain

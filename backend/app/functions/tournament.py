@@ -24,6 +24,7 @@ from social_django.utils import load_strategy, psa
 
 from app.broadcast import broadcast_event
 from app.cache_utils import invalidate_after_commit, invalidate_obj
+from app.draft_state import tournament_state_queryset
 from app.functions.shuffle_draft import assign_next_shuffle_captain
 from app.functions.teamdraft import (
     activate_round,
@@ -59,8 +60,13 @@ from telemetry.logging import get_logger
 log = get_logger(__name__)
 
 
-def _serialize_tournament(tournament):
-    """Serialize a tournament with the _users dict for frontend hydration."""
+def _serialize_tournament(tournament: Tournament) -> dict:
+    """Serialize a tournament with the _users dict for frontend hydration.
+
+    Re-fetches uncached with the full prefetch plan: callers respond right
+    after a write, and the plan keeps the query count independent of size.
+    """
+    tournament = tournament_state_queryset(fresh=True).get(pk=tournament.pk)
     data = TournamentSerializer(tournament).data
     data["_users"] = _build_users_dict(tournament)
     return data

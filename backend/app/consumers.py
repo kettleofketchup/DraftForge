@@ -12,6 +12,7 @@ from django.utils import timezone
 
 from app.cache_utils import invalidate_obj
 from app.consumers_base import BaseDraftConsumer
+from app.draft_state import build_draft_state
 from app.functions.teamdraft import emit_event, team_payload
 from app.models import Draft, Team
 from app.tasks.draft_tick import CAPTAIN_CHANNEL_TTL, TickDriver
@@ -48,28 +49,7 @@ class DraftConsumer(BaseDraftConsumer):
 
     @database_sync_to_async
     def get_initial_state_data(self, draft_id: int) -> dict | None:
-        from app.serializers import DraftSerializerSlim, _build_users_dict
-
-        try:
-            # Note: users_remaining is a property, not a relation, so it can't be prefetched
-            draft = Draft.objects.prefetch_related(
-                "draft_rounds__captain",
-                "draft_rounds__choice",
-                "tournament__teams__captain",
-                "tournament__teams__members",
-                "tournament__users",  # Prefetch users for users_remaining calculation
-            ).get(pk=draft_id)
-            data = DraftSerializerSlim(draft).data
-
-            # Add _users dict for frontend cache hydration
-            # Convert int keys to strings for consistency with broadcast path
-            # (msgpack strict mode forbids int map keys in channel layer)
-            data["_users"] = {
-                str(k): v for k, v in _build_users_dict(draft.tournament).items()
-            }
-            return data
-        except Draft.DoesNotExist:
-            return None
+        return build_draft_state(draft_id, fresh=False)
 
     @database_sync_to_async
     def get_captain_draft_team(

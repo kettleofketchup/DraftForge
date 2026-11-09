@@ -237,21 +237,24 @@ def _collect_context_mmr(tournament, seen_pks) -> dict:
 def _build_users_dict(tournament) -> dict:
     """Build a deduplicated ``{pk: serialized_user}`` dict for a tournament.
 
-    Shape-preserving: the CORE half is sourced from the per-user cache
-    (``serialize_user_core``) and the contextual MMR half is merged per-request.
+    Shape-preserving: the CORE half comes from one bulk uncached query
+    (``serialize_users_core``, same shape as the per-user ``serialize_user_core``)
+    and the contextual MMR half is merged per-request.
     Output JSON is byte-identical to the legacy _serialize_users_with_mmr path —
     org entries carry core + MMR (orgUserPk/mmr/league_mmr/guildNickname, no
     discordNickname); non-org entries carry core only.
     """
-    from app.user_cache import serialize_user_core
+    # local: app.user_cache imports app.serializers
+    from app.user_cache import serialize_users_core
 
     seen_pks = _collect_tournament_user_pks(tournament)
     mmr_map = _collect_context_mmr(tournament, seen_pks)
     is_org = _tournament_organization(tournament) is not None
+    cores = serialize_users_core(seen_pks)
 
     result: dict = {}
     for pk in seen_pks:
-        core = serialize_user_core(pk)
+        core = cores.get(pk)
         if not core:
             continue
         if is_org:
@@ -640,6 +643,22 @@ class LeaguesSerializer(serializers.ModelSerializer):
         return first_org.name if first_org else None
 
 
+def _users_remaining_pks(draft: Draft) -> list[int]:
+    """``Draft.users_remaining`` pks, taking the exclusions from prefetched rounds/teams."""
+    tournament = draft.tournament
+    draft_cache = getattr(draft, "_prefetched_objects_cache", {})
+    tournament_cache = getattr(tournament, "_prefetched_objects_cache", {})
+    if "draft_rounds" not in draft_cache or "teams" not in tournament_cache:
+        return [u.pk for u in draft.users_remaining]
+    if not tournament.users.exists():
+        return []
+    excluded = {r.choice_id for r in draft.draft_rounds.all() if r.choice_id} | {
+        t.captain_id for t in tournament.teams.all() if t.captain_id
+    }
+    remaining = tournament.users.nocache().exclude(id__in=excluded).distinct()
+    return [u.pk for u in remaining]
+
+
 class DraftRoundForDraftSerializer(serializers.ModelSerializer):
     captain = serializers.SerializerMethodField()
     pick_phase = serializers.IntegerField()
@@ -734,9 +753,9 @@ class DraftSerializerForTournament(serializers.ModelSerializer):
     is_manual_pause = serializers.BooleanField(read_only=True)
     draft_options = serializers.SerializerMethodField()
 
-    def get_users_remaining(self, draft):
+    def get_users_remaining(self, draft: Draft) -> list[int]:
         """Return user PKs only — full data provided via _users dict."""
-        return [u.pk for u in draft.users_remaining]
+        return _users_remaining_pks(draft)
 
     def get_draft_options(self, draft: Draft) -> dict:
         return DraftOptionsSerializer(draft.tournament.get_draft_options()).data
@@ -765,8 +784,8 @@ class DraftSerializerSlim(DraftSerializerForTournament):
     draft_rounds = DraftRoundSerializerSlim(many=True, read_only=True)
     users_remaining = serializers.SerializerMethodField()
 
-    def get_users_remaining(self, draft):
-        return [u.pk for u in draft.users_remaining]
+    def get_users_remaining(self, draft: Draft) -> list[int]:
+        return _users_remaining_pks(draft)
 
 
 class TournamentSerializerDraft(serializers.ModelSerializer):

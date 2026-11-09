@@ -7,12 +7,12 @@ from typing import TYPE_CHECKING
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 
+from app.draft_state import build_draft_state
+from app.models import Draft
 from app.serializers import (
     DraftEventSerializer,
-    DraftSerializerSlim,
     DraftTeamSerializerFull,
     HeroDraftSerializer,
-    _build_users_dict,
 )
 from telemetry.logging import get_logger
 
@@ -54,22 +54,9 @@ def broadcast_event(event: "DraftEvent", include_draft_state: bool = True) -> No
     draft_state = None
     if include_draft_state:
         try:
-            from app.models import Draft
-
-            # Re-fetch with prefetches to avoid N+1 queries and ensure
-            # captain/choice relations are fully loaded for serialization
-            draft = Draft.objects.prefetch_related(
-                "draft_rounds__captain",
-                "draft_rounds__choice",
-                "tournament__teams__captain",
-                "tournament__teams__members",
-                "tournament__users",
-            ).get(pk=event.draft_id)
-            draft_state = DraftSerializerSlim(draft).data
-            # Convert int keys to strings — msgpack strict mode forbids int map keys
-            draft_state["_users"] = {
-                str(k): v for k, v in _build_users_dict(draft.tournament).items()
-            }
+            draft_state = build_draft_state(event.draft_id, fresh=True)
+            if draft_state is None:
+                raise Draft.DoesNotExist(f"Draft {event.draft_id} does not exist")
         except Exception as e:
             log.warning(
                 "broadcast_serialize_failed",
