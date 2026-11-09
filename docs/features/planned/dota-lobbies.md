@@ -214,9 +214,10 @@ the read-only `game_mode` and `lobby_steam_league_id`.
   for example `game:42`. A staging and a production DraftForge can share one dota_lobby if
   they use different prefixes.
 - **Passwords are never stored.** `lobby.passwords.derive_password` computes them from the
-  Django secret key and the lobby reference, so a retried create, or a lobby recreated for the
-  same game, sends the same request and dota_lobby answers it as a repeat rather than a
-  conflict.
+  Django secret key, the lobby reference and the lobby row's ID. A retried create sends the
+  same request, so dota_lobby answers it as a repeat rather than a conflict, and every new
+  lobby for a game (Recreate, or new teams) gets a new password, so players who left the game
+  cannot use the one they saw.
   - Each lobby row records which secret key its password comes from. When rotating
     `DJANGO_SECRET_KEY`, put the old key in `DJANGO_SECRET_KEY_FALLBACKS` until the lobbies
     made under it have ended; without it their passwords can no longer be derived.

@@ -224,6 +224,21 @@ class LobbyCreateCloseTests(LobbyViewTestCase):
         close_delay.assert_called_once_with(row.pk, "lob_1")
         create_delay.assert_called_once()
 
+    def test_recreated_lobby_gets_a_new_password(self, create_delay, close_delay):
+        self.make_lobby(state=states.WAITING)
+        player = self.as_user(self.player)
+        old = player.get(_url(self.game.pk)).data["lobby"]["password"]
+        self.assertTrue(old)
+        with self.captureOnCommitCallbacks(execute=True):
+            resp = self.as_user(self.staff).post(
+                _url(self.game.pk), {"replace": True}, format="json"
+            )
+        self.assertEqual(resp.status_code, 202)
+        lobby = self.as_user(self.player).get(_url(self.game.pk)).data["lobby"]
+        self.assertEqual(lobby["state"], states.REQUESTED)
+        self.assertTrue(lobby["password"])
+        self.assertNotEqual(lobby["password"], old)
+
     def test_replace_refused_once_match_started(self, create_delay, close_delay):
         row = self.make_lobby(state=states.IN_GAME)
         resp = self.as_user(self.staff).post(
