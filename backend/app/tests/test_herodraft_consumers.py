@@ -217,7 +217,7 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
 
         state = await check_paused()
         self.assertEqual(state, "paused")
-        mock_start_tick.assert_called_once_with(str(self.draft.id))
+        mock_start_tick.assert_called_once_with(self.draft.id)
 
     async def test_spectator_does_not_affect_captain_status(self):
         """Test spectator connect/disconnect doesn't affect captain status."""

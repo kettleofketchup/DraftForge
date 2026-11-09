@@ -318,6 +318,24 @@ class TestBaseHooks(SimpleTestCase):
     def test_tick_driver_defaults_to_none(self):
         self.assertIsNone(ConcreteDraftConsumer().get_tick_driver())
 
+    def test_base_connect_stores_draft_id_as_int(self):
+        """A regex route hands draft_id over as a string; ticks key the registry on int."""
+
+        class MissingDraftConsumer(ConcreteDraftConsumer):
+            async def draft_exists(self, draft_id):
+                return False
+
+        consumer = MissingDraftConsumer()
+        consumer.scope = {"url_route": {"kwargs": {"draft_id": "22"}}, "path": ""}
+        with (
+            mock.patch.object(consumer, "telemetry_connect", mock.AsyncMock()),
+            mock.patch.object(consumer, "close", mock.AsyncMock()),
+        ):
+            asyncio.run(consumer.base_connect())
+
+        self.assertEqual(consumer.draft_id, 22)
+        self.assertEqual(consumer.room_group_name, "testdraft_22")
+
     def test_should_start_tick_broadcaster_uses_active_state_values(self):
         consumer = ConcreteDraftConsumer()
         self.assertTrue(consumer.should_start_tick_broadcaster({"state": "drafting"}))

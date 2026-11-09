@@ -8,14 +8,25 @@ from typing import TYPE_CHECKING, Any
 
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
+from django.db import transaction
 from django.utils import timezone
 
+from app.broadcast import broadcast_herodraft_state
 from app.cache_utils import invalidate_obj
 from app.consumers_base import BaseDraftConsumer
 from app.draft_state import build_draft_state
 from app.functions.teamdraft import emit_event, team_payload
-from app.models import Draft, DraftTeam, HeroDraft, Team
-from app.serializers import HeroDraftSerializer
+from app.models import (
+    Draft,
+    DraftEvent,
+    DraftTeam,
+    HeroDraft,
+    HeroDraftEvent,
+    HeroDraftState,
+    Team,
+    Tournament,
+)
+from app.serializers import DraftEventSerializer, HeroDraftSerializer
 from app.tasks.draft_tick import CAPTAIN_CHANNEL_TTL, TickDriver
 from app.tasks.teamdraft_tick import (
     TEAM_TICK_DRIVER,
@@ -293,9 +304,6 @@ class DraftConsumer(BaseDraftConsumer):
 
     @database_sync_to_async
     def get_recent_events(self, draft_id: int, limit: int = 20) -> list[dict]:
-        from app.models import DraftEvent
-        from app.serializers import DraftEventSerializer
-
         events = DraftEvent.objects.filter(draft_id=draft_id)[:limit]
         return DraftEventSerializer(events, many=True).data
 
@@ -350,15 +358,10 @@ class TournamentConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
 
     @database_sync_to_async
     def tournament_exists(self, tournament_id: int) -> bool:
-        from app.models import Tournament
-
         return Tournament.objects.filter(pk=tournament_id).exists()
 
     @database_sync_to_async
     def get_recent_events(self, tournament_id: int, limit: int = 20) -> list[dict]:
-        from app.models import Draft, DraftEvent
-        from app.serializers import DraftEventSerializer
-
         # Get events from the tournament's draft
         try:
             draft = Draft.objects.get(tournament_id=tournament_id)
@@ -382,8 +385,6 @@ class HeroDraftConsumer(BaseDraftConsumer):
 
     @database_sync_to_async
     def draft_exists(self, draft_id: int) -> bool:
-        from app.models import HeroDraft
-
         return HeroDraft.objects.filter(id=draft_id).exists()
 
     @database_sync_to_async
@@ -399,8 +400,6 @@ class HeroDraftConsumer(BaseDraftConsumer):
     def get_captain_draft_team(
         self, draft_id: int, user: "AbstractBaseUser"
     ) -> DraftTeam | None:
-        from app.models import HeroDraft
-
         try:
             draft = HeroDraft.objects.get(id=draft_id)
             return draft.draft_teams.filter(tournament_team__captain=user).first()
@@ -408,8 +407,6 @@ class HeroDraftConsumer(BaseDraftConsumer):
             return None
 
     def get_active_draft_state_values(self) -> list[str]:
-        from app.models import HeroDraftState
-
         return [HeroDraftState.DRAFTING.value]
 
     # --- Connect / Disconnect ---
@@ -490,10 +487,6 @@ class HeroDraftConsumer(BaseDraftConsumer):
         Only pauses during DRAFTING state (not RESUMING) to prevent infinite
         time exploit. Broadcasts state changes after transaction commits.
         """
-        from django.db import transaction
-
-        from app.broadcast import broadcast_herodraft_state
-        from app.models import HeroDraft, HeroDraftEvent, HeroDraftState
 
         broadcast_event_type = None
         should_broadcast = False
