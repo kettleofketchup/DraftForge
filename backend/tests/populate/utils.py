@@ -4,6 +4,7 @@ Utility functions for test database population.
 
 import os
 import random
+import re
 from typing import Any, Final
 
 import redis
@@ -160,6 +161,23 @@ def ensure_league_user(user, org_user, league):
     return league_user
 
 
+# One script, so no cache miss can interleave: a SCAN-then-DEL could delete a
+# fresh conj key while missing the result key it guards, leaving that result
+# with no invalidator until its timeout.
+_DELETE_MATCHING_LUA = """
+local keys = redis.call('KEYS', ARGV[1])
+for i = 1, #keys, 5000 do
+    redis.call('DEL', unpack(keys, i, math.min(i + 4999, #keys)))
+end
+return #keys
+"""
+_GLOB_SPECIAL = re.compile(r"([*?\[\]\\])")
+
+
+def _glob_escape(value: str) -> str:
+    return _GLOB_SPECIAL.sub(r"\\\1", value)
+
+
 def flush_redis_cache() -> None:
     """Drop cached query results after population.
 
@@ -172,15 +190,9 @@ def flush_redis_cache() -> None:
         return
     try:
         prefix: str = settings.CACHEOPS_PREFIX(None)
-        deleted = 0
-        batch: list[bytes] = []
-        for key in cacheops_redis.scan_iter(match=f"{prefix}*", count=500):
-            batch.append(key)
-            if len(batch) >= 500:
-                deleted += cacheops_redis.delete(*batch)
-                batch.clear()
-        if batch:
-            deleted += cacheops_redis.delete(*batch)
+        deleted = int(
+            cacheops_redis.eval(_DELETE_MATCHING_LUA, 0, _glob_escape(prefix) + "*")
+        )
         if hasattr(cache, "delete_pattern"):
             cache.delete_pattern("*")
         print(f"Redis query cache flushed ({deleted} cacheops keys)")
