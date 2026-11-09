@@ -532,12 +532,30 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
             span.set_attribute("ws.connect_outcome", "ok")
             return True
 
+    async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
+        # A handler that raises ends the consumer without websocket.disconnect;
+        # run the cleanup anyway so counts, presence and groups don't leak.
+        try:
+            await super().__call__(scope, receive, send)
+        finally:
+            if hasattr(self, "draft_id") and not getattr(self, "_disconnected", False):
+                log.warning(
+                    "ws_consumer_ended_without_disconnect",
+                    system="websocket",
+                    subsystem="connection",
+                    draft_id=self.draft_id,
+                )
+                await self.disconnect(None)
+
     async def base_disconnect(self, close_code: int | None) -> None:
         """Shared disconnection cleanup. Call from subclass disconnect().
 
         Handles: cancel ping, kicked connections, decrement count, unregister
         captain, mark disconnected, leave group, telemetry.
         """
+        if getattr(self, "_disconnected", False):
+            return
+        self._disconnected = True
         with tracer.start_as_current_span(
             "ws.disconnect",
             attributes={

@@ -318,7 +318,7 @@ class DraftConsumerTestCase(TransactionTestCase):
         # No exception = pass
 
     async def test_force_disconnect(self):
-        """force_disconnect handler closes connection with code 1012."""
+        """force_disconnect closes with 4012: daphne only sends 1000 or 3000-4999."""
         communicator, _, _ = await self.connect_to_draft(user=self.spectator)
 
         channel_layer = get_channel_layer()
@@ -330,7 +330,7 @@ class DraftConsumerTestCase(TransactionTestCase):
         # Connection should close
         response = await next_non_ping_output(communicator, timeout=5)
         self.assertEqual(response["type"], "websocket.close")
-        self.assertEqual(response.get("code", 1000), 1012)
+        self.assertEqual(response.get("code", 1000), 4012)
 
     async def test_read_only_ignores_incoming_messages(self):
         """Consumer ignores incoming messages (read-only WS)."""

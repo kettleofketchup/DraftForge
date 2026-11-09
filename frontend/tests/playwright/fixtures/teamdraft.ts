@@ -9,7 +9,7 @@ import { TournamentPage } from '../helpers/tournament';
  * Kill all WebSocket connections for a team draft.
  *
  * Sends a force.disconnect message to the draft's channel group,
- * causing all connected DraftConsumer instances to close with code 1012.
+ * causing all connected DraftConsumer instances to close with code 4012.
  *
  * @param context - Playwright BrowserContext for making API requests
  * @param draftId - The Draft primary key
