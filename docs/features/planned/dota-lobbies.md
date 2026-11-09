@@ -188,7 +188,9 @@ the read-only `game_mode` and `lobby_steam_league_id`.
   normally show none.
 - The tournament edit dialog has a "Dota Lobbies" section on the Config tab (off, manual or
   automatic; match start; region) and a "Send lobby info" toggle on the Discord tab.
-- The panel and the bracket refresh on the tournament websocket's `lobby_event` message.
+- The panel refreshes on the tournament websocket's `lobby_event` message. The bracket is
+  refetched only when the message's state differs from the one its lobby dot shows, so
+  invites, joins and ready checks do not make every viewer reload the bracket.
 
 ### Connecting dota_lobby
 
