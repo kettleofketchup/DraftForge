@@ -8,6 +8,7 @@ from contextvars import ContextVar
 from typing import TYPE_CHECKING
 
 from asgiref.sync import async_to_sync
+from cacheops.transaction import is_sql_dirty
 from channels.layers import get_channel_layer
 from django.db import connection, transaction
 
@@ -29,7 +30,6 @@ log = get_logger(__name__)
 _shared_draft_states: ContextVar[dict[int, dict | None] | None] = ContextVar(
     "_shared_draft_states", default=None
 )
-_WRITE_VERBS: frozenset[str] = frozenset({"INSERT", "UPDATE", "DELETE", "REPLACE"})
 
 
 def _forget_states_on_write(
@@ -40,7 +40,7 @@ def _forget_states_on_write(
     context: dict[str, object],
 ) -> object:
     shared = _shared_draft_states.get()
-    if shared and sql.lstrip().split(" ", 1)[0].upper() in _WRITE_VERBS:
+    if shared and is_sql_dirty(sql):
         shared.clear()
     return execute(sql, params, many, context)
 

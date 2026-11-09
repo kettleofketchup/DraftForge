@@ -350,20 +350,23 @@ class PickEndpointQueryTests(TransactionTestCase):
         self.assertEqual(spy.call_count, 1)
 
 
+def rename_team(team_pk: int) -> None:
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "UPDATE app_team SET name = %s WHERE id = %s", ["Renamed", team_pk]
+        )
+
+
 @override_settings(CACHEOPS_ENABLED=False)
 class SharedDraftStateTests(TransactionTestCase):
-    def broadcast_twice(self, write_between: bool) -> tuple[list[dict], int]:
-        fx = TimedDraftFixture(prefix="shared")
+    def broadcast_twice(
+        self, between: Callable[[int], None] | None = None, prefix: str = "shared"
+    ) -> tuple[list[dict], int]:
+        fx = TimedDraftFixture(prefix=prefix)
         team = fx.teams[0]
         first = DraftEvent.objects.create(draft=fx.draft, event_type="captain_ready")
         second = DraftEvent.objects.create(draft=fx.draft, event_type="captain_unready")
         layer = FakeChannelLayer()
-
-        def rename() -> None:
-            with connection.cursor() as cursor:
-                cursor.execute(
-                    "UPDATE app_team SET name = %s WHERE id = %s", ["Renamed", team.pk]
-                )
 
         with (
             patch("app.broadcast.get_channel_layer", return_value=layer),
@@ -371,21 +374,41 @@ class SharedDraftStateTests(TransactionTestCase):
         ):
             with atomic_sharing_draft_state():
                 transaction.on_commit(lambda: broadcast_event(first))
-                if write_between:
-                    transaction.on_commit(rename)
+                if between is not None:
+                    transaction.on_commit(lambda: between(team.pk))
                 transaction.on_commit(lambda: broadcast_event(second))
         return [m["draft_state"] for m in layer.messages[::2]], spy.call_count
 
+    def assert_rebuilt(self, states: list[dict], builds: int) -> None:
+        self.assertEqual(builds, 2)
+        names = [s["tournament"]["teams"][0]["name"] for s in states]
+        self.assertEqual(names, ["T1", "Renamed"])
+
     def test_state_is_reused_without_writes(self) -> None:
-        states, builds = self.broadcast_twice(write_between=False)
+        states, builds = self.broadcast_twice()
         self.assertEqual(builds, 1)
         self.assertEqual(dumps(states[0]), dumps(states[1]))
 
     def test_a_write_between_broadcasts_rebuilds_the_state(self) -> None:
-        states, builds = self.broadcast_twice(write_between=True)
-        self.assertEqual(builds, 2)
-        names = [s["tournament"]["teams"][0]["name"] for s in states]
-        self.assertEqual(names, ["T1", "Renamed"])
+        self.assert_rebuilt(*self.broadcast_twice(rename_team))
+
+    def test_writes_with_any_whitespace_or_cte_prefix_rebuild_the_state(self) -> None:
+        sqls = {
+            "newline": "UPDATE\napp_team SET name = %(name)s WHERE id = %(pk)s",
+            "tab": "\tUPDATE\tapp_team SET name = %(name)s WHERE id = %(pk)s",
+            "cte": (
+                "WITH target(id) AS (SELECT %(pk)s) UPDATE app_team "
+                "SET name = %(name)s WHERE id IN (SELECT id FROM target)"
+            ),
+        }
+        for label, sql in sqls.items():
+            with self.subTest(sql=label):
+
+                def between(pk: int, sql: str = sql) -> None:
+                    with connection.cursor() as cursor:
+                        cursor.execute(sql, {"name": "Renamed", "pk": pk})
+
+                self.assert_rebuilt(*self.broadcast_twice(between, prefix=label))
 
     def test_nested_block_does_not_share(self) -> None:
         fx = TimedDraftFixture(prefix="nested")
