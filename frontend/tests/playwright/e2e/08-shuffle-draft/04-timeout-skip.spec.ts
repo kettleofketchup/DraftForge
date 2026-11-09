@@ -26,6 +26,8 @@ import {
 
 const KEY = 'shuffle_timer_skip';
 
+test.use({ trace: 'on' }); // ci(tmp): measure burst handling on green runs
+
 async function resetReadyAndStart(
   browser: Browser
 ): Promise<{ t: TimerTournament; admin: BrowserContext }> {
