@@ -260,6 +260,8 @@ export type WebSocketMessage =
       draft_state: WebSocketDraftState | null;
       /** Keys are captain pks as strings. */
       captain_fresh?: Record<string, boolean>;
+      /** Server clock when the snapshot was sent; anchors the countdown before the first tick. */
+      server_time?: string;
     }
   | { type: "initial_events"; events: DraftEvent[] }
   | { type: "draft_event"; event: DraftEvent; draft_state?: WebSocketDraftState }

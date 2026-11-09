@@ -3,6 +3,18 @@ export function captureClockOffset(serverTimeIso: string, receivedAtMs: number):
   return Number.isNaN(serverMs) ? 0 : serverMs - receivedAtMs;
 }
 
+/** Samples kept for {@link bestClockOffset}: about the last ten seconds of ticks. */
+export const CLOCK_OFFSET_SAMPLES = 10;
+
+/**
+ * Each sample is server_time - receivedAt, i.e. the true offset minus that
+ * message's delivery delay. Delay is never negative, so the largest recent
+ * sample is the least-delayed one; a tick stuck in a queue can't drag the clock.
+ */
+export function bestClockOffset(samples: readonly number[]): number {
+  return samples.length === 0 ? 0 : Math.max(...samples);
+}
+
 export function serverNow(offsetMs: number): number {
   return Date.now() + offsetMs;
 }

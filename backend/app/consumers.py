@@ -225,6 +225,7 @@ class DraftConsumer(BaseDraftConsumer):
                     "type": "initial_state",
                     "draft_state": initial_state,
                     "captain_fresh": captain_fresh,
+                    "server_time": timezone.now().isoformat(),
                 }
             )
         )

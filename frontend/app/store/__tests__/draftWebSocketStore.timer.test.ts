@@ -120,6 +120,20 @@ describe('draftWebSocketStore timer', () => {
     expect(s.getServerNowISO()).toBe(new Date(T0 + 4000).toISOString());
   });
 
+  it('a tick delivered late does not shift the clock offset', () => {
+    emit(tick({ server_time: new Date(T0).toISOString() }));
+    expect(useDraftWebSocketStore.getState().serverClockOffsetMs).toBe(0);
+    // The next tick left the server 1 s later but sat 1.5 s in a queue.
+    vi.setSystemTime(T0 + 2500);
+    emit(tick({ server_time: new Date(T0 + 1000).toISOString() }));
+    expect(useDraftWebSocketStore.getState().serverClockOffsetMs).toBe(0);
+  });
+
+  it('initial_state anchors the clock offset before the first tick', () => {
+    emit({ type: 'initial_state', draft_state: state(), server_time: new Date(T0 + 5000).toISOString() });
+    expect(useDraftWebSocketStore.getState().serverClockOffsetMs).toBe(5000);
+  });
+
   it('keeps a tick that arrives before initial_state', () => {
     emit(tick());
     expect(useDraftWebSocketStore.getState().draftState).toBeNull();

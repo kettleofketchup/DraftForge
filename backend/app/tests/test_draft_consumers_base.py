@@ -84,6 +84,7 @@ class DraftConsumerBaseTestCase(TransactionTestCase):
         self.assertIn("events", events_frame)
         self.assertNotIn("draft_state", events_frame)
         self.assertEqual(state_frame["draft_state"]["pk"], self.draft.pk)
+        self.assertIn("server_time", state_frame)
         self.assertEqual(get_connection_count("teamdraft", self.draft.pk), 1)
         self.assertEqual(get_connection_count("herodraft", self.draft.pk), 0)
         await assert_no_frame_except_ping(comm, 0.5)

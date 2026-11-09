@@ -25,3 +25,7 @@
   have not changed, refetches the tournament once per burst and not at all when the open
   draft socket already carries the new state, and never lets an older draft state replace
   a newer one.
+- Two people watching the same team draft no longer see clocks a second or two apart. Each
+  viewer set its clock from the latest tick alone, so a tick that arrived late shifted that
+  viewer's clock by the delay; the clock now uses the least-delayed recent tick, and a new
+  viewer's clock is set from the server time sent with the initial state.
