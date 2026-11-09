@@ -2,9 +2,14 @@
 Utility functions for test database population.
 """
 
+import os
 import random
 from typing import Any, Final
 
+import redis
+from cacheops.redis import redis_client as cacheops_redis
+from django.conf import settings
+from django.core.cache import cache
 from django.db import transaction
 
 from app.models import CustomUser, Organization, PositionsModel
@@ -155,45 +160,33 @@ def ensure_league_user(user, org_user, league):
     return league_user
 
 
-def flush_redis_cache():
-    """Flush Redis cache to ensure fresh data after population."""
-    import os
+def flush_redis_cache() -> None:
+    """Drop cached query results after population.
 
+    Reset endpoints call this while other drafts run on the same Redis, so it
+    deletes only cacheops and Django cache keys. A FLUSHALL also wiped the
+    channel-layer groups, draft connection counts, heartbeats, tick locks and
+    the Celery broker, silently stopping other drafts' broadcasts and ticks.
+    """
     if os.environ.get("DISABLE_CACHE", "").lower() in ("true", "1", "yes"):
         return
-
     try:
-        import redis
-        from django.conf import settings
-
-        redis_url = getattr(settings, "CACHEOPS_REDIS", None)
-        if redis_url:
-            # Parse redis URL or use dict config with short timeout to avoid hanging
-            if isinstance(redis_url, str):
-                client = redis.from_url(
-                    redis_url, socket_timeout=2, socket_connect_timeout=2
-                )
-            else:
-                # Add timeout to dict config
-                config = {**redis_url, "socket_timeout": 2, "socket_connect_timeout": 2}
-                client = redis.Redis(**config)
-            client.flushall()
-            print("Redis cache flushed successfully")
-        else:
-            print("No CACHEOPS_REDIS configured, skipping cache flush")
+        prefix: str = settings.CACHEOPS_PREFIX(None)
+        deleted = 0
+        batch: list[bytes] = []
+        for key in cacheops_redis.scan_iter(match=f"{prefix}*", count=500):
+            batch.append(key)
+            if len(batch) >= 500:
+                deleted += cacheops_redis.delete(*batch)
+                batch.clear()
+        if batch:
+            deleted += cacheops_redis.delete(*batch)
+        if hasattr(cache, "delete_pattern"):
+            cache.delete_pattern("*")
+        print(f"Redis query cache flushed ({deleted} cacheops keys)")
+    except (redis.exceptions.ConnectionError, redis.exceptions.TimeoutError) as e:
+        print(f"Redis not available, skipping cache flush: {e}")
     except Exception as e:
-        # Import redis exceptions only if redis is available
-        try:
-            import redis as redis_module
-
-            if isinstance(e, redis_module.exceptions.ConnectionError):
-                print(f"Redis not available, skipping cache flush: {e}")
-                return
-            if isinstance(e, redis_module.exceptions.TimeoutError):
-                print(f"Redis timeout, skipping cache flush: {e}")
-                return
-        except ImportError:
-            pass
         print(f"Warning: Failed to flush Redis cache: {e}")
 
 
