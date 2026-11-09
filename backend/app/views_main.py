@@ -524,7 +524,7 @@ class TournamentView(viewsets.ModelViewSet):
         ]
         return Response(data)
 
-    def perform_create(self, serializer):
+    def perform_create(self, serializer: TournamentSerializer) -> None:
         """Check that user can create tournament in the specified league."""
         from rest_framework.exceptions import PermissionDenied, ValidationError
 
@@ -541,7 +541,11 @@ class TournamentView(viewsets.ModelViewSet):
                 )
         except League.DoesNotExist:
             raise ValidationError({"league": "League not found."})
-        serializer.save()
+        opts = serializer.validated_data.pop("draft_options", None)
+        with transaction.atomic():
+            serializer.save()
+            if opts is not None:
+                apply_draft_options(serializer.instance, opts)
 
 
 @permission_classes((IsStaff,))

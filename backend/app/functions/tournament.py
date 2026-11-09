@@ -149,6 +149,25 @@ def pick_player_for_round(request: Request) -> Response:
             draft_round = DraftRound.objects.select_for_update().get(
                 pk=draft_round.pk
             )
+            # Shuffle timeout skip keeps the round pk but swaps its captain.
+            if not (
+                is_tournament_staff or draft_round.captain_id == request.user.pk
+            ):
+                log.info(
+                    "pick_captain_changed",
+                    system="tournament",
+                    subsystem="draft",
+                    user_id=request.user.pk,
+                    draft_round_id=draft_round.pk,
+                    captain_id=draft_round.captain_id,
+                )
+                return Response(
+                    {
+                        "code": "not_active_round",
+                        "active_pick_number": active.pick_number if active else None,
+                    },
+                    status=409,
+                )
             team = Team.objects.select_for_update().filter(
                 tournament=draft.tournament_id, captain_id=draft_round.captain_id
             ).first()
