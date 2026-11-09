@@ -66,6 +66,8 @@ tracer = trace.get_tracer(__name__)
 # ~16 bytes per message; 100 connections = ~1.6 KB/s — negligible
 PING_INTERVAL = 1
 
+FALLBACK_CLEANUP_TIMEOUT_S: float = 5.0
+
 
 class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
     """Abstract base class for draft WebSocket consumers.
@@ -557,13 +559,28 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
             await super().__call__(scope, receive, send)
         finally:
             if hasattr(self, "draft_id") and not getattr(self, "_disconnected", False):
-                log.warning(
-                    "ws_consumer_ended_without_disconnect",
-                    system="websocket",
-                    subsystem="connection",
-                    draft_id=self.draft_id,
-                )
-                await self.disconnect(None)
+                await self._fallback_disconnect()
+
+    async def _fallback_disconnect(self) -> None:
+        # Also runs for every open socket when daphne shuts down mid-deploy, so
+        # it is time-bounded and never replaces the exception that ended us.
+        log.warning(
+            "ws_consumer_ended_without_disconnect",
+            system="websocket",
+            subsystem="connection",
+            draft_id=self.draft_id,
+        )
+        try:
+            await asyncio.wait_for(self.disconnect(None), FALLBACK_CLEANUP_TIMEOUT_S)
+        except Exception as e:
+            log.error(
+                "ws_fallback_cleanup_failed",
+                system="websocket",
+                subsystem="connection",
+                draft_id=self.draft_id,
+                error=str(e),
+                error_type=type(e).__name__,
+            )
 
     async def base_disconnect(self, close_code: int | None) -> None:
         """Shared disconnection cleanup. Call from subclass disconnect().

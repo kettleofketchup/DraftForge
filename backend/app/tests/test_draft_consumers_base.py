@@ -211,6 +211,36 @@ class DraftConsumerBaseTestCase(TransactionTestCase):
         team = await database_sync_to_async(Team.objects.nocache().get)(pk=self.team.pk)
         self.assertFalse(team.draft_is_connected)
 
+    async def test_a_failing_fallback_cleanup_keeps_the_handler_error(self):
+        comm, _, _ = await self.connect(self.spectator)
+        with (
+            patch.object(DraftConsumer, "draft_tick", side_effect=RuntimeError("boom")),
+            patch.object(
+                DraftConsumer, "disconnect", side_effect=ValueError("cleanup")
+            ),
+        ):
+            await get_channel_layer().group_send(
+                f"draft_{self.draft.pk}", {"type": "draft.tick"}
+            )
+            with self.assertRaisesRegex(RuntimeError, "boom"):
+                await comm.wait(timeout=5)
+
+    async def test_the_fallback_cleanup_is_time_bounded(self):
+        async def hang(consumer: DraftConsumer, code: int | None) -> None:
+            await asyncio.sleep(30)
+
+        comm, _, _ = await self.connect(self.spectator)
+        with (
+            patch.object(DraftConsumer, "draft_tick", side_effect=RuntimeError("boom")),
+            patch.object(DraftConsumer, "disconnect", hang),
+            patch("app.consumers_base.FALLBACK_CLEANUP_TIMEOUT_S", 0.2),
+        ):
+            await get_channel_layer().group_send(
+                f"draft_{self.draft.pk}", {"type": "draft.tick"}
+            )
+            with self.assertRaises(RuntimeError):
+                await comm.wait(timeout=3)
+
     async def test_ping_frames_arrive_within_2s(self):
         comm, _, _ = await self.connect(self.spectator)
         frame = await read_until_type(comm, "ping", timeout=2)
