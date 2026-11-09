@@ -486,6 +486,11 @@ class TeamDraftTickDriver:
             _paused_freshness.pop(draft_id, None)
         return keep_going, reason
 
+    def forget(self, draft_id: int) -> None:
+        self._state.pop(draft_id, None)
+        self._paused_ticks.pop(draft_id, None)
+        _paused_freshness.pop(draft_id, None)
+
 
 TEAM_TICK_DRIVER: TeamDraftTickDriver = TeamDraftTickDriver()
 

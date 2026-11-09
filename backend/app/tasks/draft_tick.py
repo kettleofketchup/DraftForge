@@ -156,6 +156,19 @@ async def run_tick_loop(
     driver: TickDriver, draft_id: int, stop_event: threading.Event
 ) -> None:
     """Run tick broadcasts every second while draft is active and has connections."""
+    forget = getattr(driver, "forget", None)
+    if forget is not None:
+        forget(draft_id)
+    try:
+        await _run_tick_loop(driver, draft_id, stop_event)
+    finally:
+        if forget is not None:
+            forget(draft_id)
+
+
+async def _run_tick_loop(
+    driver: TickDriver, draft_id: int, stop_event: threading.Event
+) -> None:
     r = get_redis_client()
     key = lock_key(driver.prefix, draft_id)
 

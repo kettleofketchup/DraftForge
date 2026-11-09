@@ -1,6 +1,7 @@
 """Team-draft timer lifecycle: helpers, endpoints, pick matrix, undo, auto-pause, tick payload (spec §2)."""
 
 import asyncio
+import threading
 import time
 from datetime import timedelta
 from unittest.mock import PropertyMock, patch
@@ -20,7 +21,7 @@ from rest_framework.test import APIClient, APIRequestFactory
 from app.consumers import DraftConsumer
 from app.functions import teamdraft
 from app.models import Draft, DraftEvent, DraftOptions, Team, TeamDraftState
-from app.tasks import teamdraft_tick
+from app.tasks import draft_tick, teamdraft_tick
 from app.tasks.draft_tick import (
     TickDriver,
     captain_channel_key,
@@ -1125,7 +1126,7 @@ class AutoPauseTests(TransactionTestCase):
         draft.state = TeamDraftState.PAUSED
         draft.save()
         driver = teamdraft_tick.TeamDraftTickDriver()
-        self.addCleanup(teamdraft_tick._paused_freshness.pop, self.fx.draft.pk, None)
+        self.addCleanup(driver.forget, self.fx.draft.pk)
         with (
             patch("app.tasks.teamdraft_tick.get_connection_count", return_value=1),
             patch("app.tasks.teamdraft_tick.get_channel_layer", return_value=None),
@@ -1171,13 +1172,23 @@ class AutoPauseTests(TransactionTestCase):
 
     def test_a_drafting_tick_skips_the_paused_freshness_check(self):
         driver = teamdraft_tick.TeamDraftTickDriver()
-        self.addCleanup(teamdraft_tick._paused_freshness.pop, self.fx.draft.pk, None)
+        self.addCleanup(driver.forget, self.fx.draft.pk)
         with (
             patch("app.tasks.teamdraft_tick.get_connection_count", return_value=1),
             patch("app.tasks.teamdraft_tick.broadcast_paused_freshness") as freshness,
         ):
             self.tick(driver)
         freshness.assert_not_called()
+
+    def test_the_loop_clears_paused_freshness_when_it_stops(self):
+        draft_pk = self.fx.draft.pk
+        teamdraft_tick._paused_freshness[draft_pk] = {self.rnd.captain_id: True}
+        stop = threading.Event()
+        with patch("app.tasks.teamdraft_tick.get_connection_count", return_value=0):
+            async_to_sync(draft_tick.run_tick_loop)(
+                teamdraft_tick.TEAM_TICK_DRIVER, draft_pk, stop
+            )
+        self.assertNotIn(draft_pk, teamdraft_tick._paused_freshness)
 
     def test_unarmed_or_resuming_is_ignored(self):
         self.active_team.draft_has_connected = True
