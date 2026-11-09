@@ -569,6 +569,7 @@ def get_draft_style_mmrs(request: Request) -> Response:
         return Response({"error": "Draft not found"}, status=404)
     cache_key = f"draft_sim_pk:{request.get_full_path()}"
 
+    # cached_as on CustomUser must also list BaseUserProfile/DotaUserProfile (user/tests/test_cacheops.py)
     @cached_as(
         Draft,
         CustomUser,
