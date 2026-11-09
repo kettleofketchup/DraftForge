@@ -147,10 +147,10 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
     }
   }, [searchParams, setSearchParams, setAutoAdvance]);
 
+  // Follow the URL both ways: a close can race the open's still-pending /draft navigation,
+  // and an open-only sync would then reopen the modal on /teams.
   useEffect(() => {
-    if (live) {
-      setOpen(true);
-    }
+    setOpen(live);
   }, [live]);
 
   // Enable live updates when modal is open and draft exists
