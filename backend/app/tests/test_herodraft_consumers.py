@@ -178,7 +178,10 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         is_connected = await check_disconnected()
         self.assertFalse(is_connected)
 
-    async def test_draft_paused_on_captain_disconnect_during_drafting(self):
+    @patch("app.tasks.herodraft_tick.start_tick_broadcaster", return_value=True)
+    async def test_draft_paused_on_captain_disconnect_during_drafting(
+        self, mock_start_tick
+    ):
         """Test draft is paused when captain disconnects during drafting."""
 
         # Set draft to drafting state
@@ -214,6 +217,7 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
 
         state = await check_paused()
         self.assertEqual(state, "paused")
+        mock_start_tick.assert_called_once_with(str(self.draft.id))
 
     async def test_spectator_does_not_affect_captain_status(self):
         """Test spectator connect/disconnect doesn't affect captain status."""

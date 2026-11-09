@@ -6,6 +6,7 @@ from collections.abc import Callable
 from unittest.mock import patch
 
 from django.test import SimpleTestCase, TransactionTestCase
+from structlog.testing import capture_logs
 
 from app.tasks import draft_tick, herodraft_tick
 from app.tasks.draft_tick import (
@@ -204,8 +205,11 @@ class RegistryTests(TransactionTestCase):
 
     def test_step_exception_releases_lock_and_registry(self):
         driver = RecordingDriver("teamdraft", iterations=5, fail_step="broadcast_tick")
-        draft_tick.start_tick_broadcaster(driver, self.DRAFT_ID)
-        _wait_for_thread("teamdraft", self.DRAFT_ID)
+        with capture_logs() as logs:
+            draft_tick.start_tick_broadcaster(driver, self.DRAFT_ID)
+            _wait_for_thread("teamdraft", self.DRAFT_ID)
+        errors = [e for e in logs if e["event"] == "tick_broadcaster_error"]
+        self.assertEqual([e["error"] for e in errors], ["boom in broadcast_tick"])
         self.assertNotIn(self.DRAFT_ID, draft_tick.registry_for("teamdraft"))
         self.assertIsNone(get_redis_client().get(lock_key("teamdraft", self.DRAFT_ID)))
 
