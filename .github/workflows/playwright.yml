@@ -21,6 +21,7 @@ env:
 
 jobs:
   chromium:
+    if: false  # ci(tmp)
     name: Playwright chromium (shard ${{ matrix.shard }}/4)
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -75,7 +76,57 @@ jobs:
         if: always()
         run: docker compose --project-directory . -f docker/docker-compose.test.yaml -f docker/docker-compose.ci.override.yaml down -v || true
 
+  teamdraft-repro:  # ci(tmp)
+    name: teamdraft repro (runner ${{ matrix.rep }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    permissions:
+      contents: read
+      packages: read
+    strategy:
+      fail-fast: false
+      matrix:
+        rep: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-playwright-stack
+        with:
+          registry-token: ${{ secrets.GITHUB_TOKEN }}
+          github-actor: ${{ github.actor }}
+          image-prefix: ${{ env.IMAGE_PREFIX }}
+
+      - name: Repeat 07-draft + 08-shuffle-draft @cicd (2 workers, no retries)
+        env:
+          CI: 'true'
+          PLAYWRIGHT_WORKERS: '2'
+        run: >-
+          just test::pw::run --project=chromium --no-deps --grep @cicd --workers=2
+          --repeat-each=4 --retries=0
+          tests/playwright/e2e/07-draft tests/playwright/e2e/08-shuffle-draft
+
+      - name: Save container logs
+        if: ${{ !cancelled() }}
+        run: |
+          mkdir -p frontend/test-results
+          for c in frontend backend nginx; do docker logs "$c" > "frontend/test-results/$c.log" 2>&1 || true; done
+
+      - name: Upload test results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: teamdraft-repro-${{ matrix.rep }}
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+          retention-days: 7
+
+      - name: Clean up
+        if: always()
+        run: docker compose --project-directory . -f docker/docker-compose.test.yaml -f docker/docker-compose.ci.override.yaml down -v || true
+
   mobile:
+    if: false  # ci(tmp)
     name: Playwright mobile (shard ${{ matrix.shard }}/2)
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -123,6 +174,7 @@ jobs:
         run: docker compose --project-directory . -f docker/docker-compose.test.yaml -f docker/docker-compose.ci.override.yaml down -v || true
 
   herodraft:
+    if: false  # ci(tmp)
     name: Playwright herodraft (sequential)
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -165,6 +217,7 @@ jobs:
         run: docker compose --project-directory . -f docker/docker-compose.test.yaml -f docker/docker-compose.ci.override.yaml down -v || true
 
   events:
+    if: false  # ci(tmp)
     name: Playwright events (sequential)
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -207,6 +260,7 @@ jobs:
         run: docker compose --project-directory . -f docker/docker-compose.test.yaml -f docker/docker-compose.ci.override.yaml down -v || true
 
   backend:
+    if: false  # ci(tmp)
     name: Backend tests (test_bracket)
     runs-on: ubuntu-latest
     timeout-minutes: 15
