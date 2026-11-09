@@ -114,7 +114,7 @@ export interface WebSocketDraftState {
 }
 
 export interface WebSocketMessage {
-  type: "initial_events" | "draft_event";
+  type: "initial_state" | "initial_events" | "draft_event";
   events?: DraftEvent[];
   event?: DraftEvent;
   /** Full draft state included to allow state updates without API calls */

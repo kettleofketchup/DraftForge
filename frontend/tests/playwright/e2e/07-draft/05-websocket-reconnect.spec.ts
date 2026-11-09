@@ -108,7 +108,7 @@ test.describe.serial('WebSocket Reconnection', () => {
     expect(wsHelper.activeConnectionCount).toBe(1);
   });
 
-  test('@cicd receives initial_events with draft_state after reconnect', async ({
+  test('@cicd receives initial_state with draft_state after reconnect', async ({
     page,
     context,
     loginAdmin,
@@ -118,25 +118,26 @@ test.describe.serial('WebSocket Reconnection', () => {
     const wsHelper = new DraftWebSocketHelper(page);
     await openDraftWithWS(page, wsHelper);
 
-    // First connection: should have initial_events
-    const firstInitial = wsHelper.messagesOfType('initial_events');
+    // First connection: draft_state arrives in initial_state, not initial_events
+    const firstInitial = wsHelper.messagesOfType('initial_state');
     expect(firstInitial.length).toBe(1);
     expect(firstInitial[0].draft_state).toBeDefined();
+    expect(wsHelper.messagesOfType('initial_events')[0].draft_state).toBeUndefined();
 
     // Kill and reconnect
     await killDraftWebSocket(context, draftPk);
     await wsHelper.waitForReconnect();
 
-    // Wait for the reconnected socket's initial_events
+    // Wait for the reconnected socket's initial_state
     await expect
-      .poll(() => wsHelper.messagesOfType('initial_events').length, {
-        message: 'Expected 2 initial_events messages (connect + reconnect)',
+      .poll(() => wsHelper.messagesOfType('initial_state').length, {
+        message: 'Expected 2 initial_state messages (connect + reconnect)',
         timeout: 10000,
       })
       .toBeGreaterThanOrEqual(2);
 
-    // Second initial_events should also have draft_state
-    const allInitial = wsHelper.messagesOfType('initial_events');
+    // Second initial_state should also have draft_state
+    const allInitial = wsHelper.messagesOfType('initial_state');
     const reconnectMsg = allInitial[allInitial.length - 1];
     expect(reconnectMsg.draft_state).toBeDefined();
   });
@@ -152,7 +153,7 @@ test.describe.serial('WebSocket Reconnection', () => {
     await openDraftWithWS(page, wsHelper);
 
     // Capture draft state from first connection
-    const firstInitial = wsHelper.messagesOfType('initial_events')[0];
+    const firstInitial = wsHelper.messagesOfType('initial_state')[0];
     const firstDraftState = firstInitial.draft_state as Record<string, unknown>;
     expect(firstDraftState).toBeDefined();
 
@@ -160,15 +161,15 @@ test.describe.serial('WebSocket Reconnection', () => {
     await killDraftWebSocket(context, draftPk);
     await wsHelper.waitForReconnect();
 
-    // Wait for reconnect initial_events
+    // Wait for reconnect initial_state
     await expect
-      .poll(() => wsHelper.messagesOfType('initial_events').length, {
+      .poll(() => wsHelper.messagesOfType('initial_state').length, {
         timeout: 10000,
       })
       .toBeGreaterThanOrEqual(2);
 
     // Compare key fields of draft state
-    const allInitial = wsHelper.messagesOfType('initial_events');
+    const allInitial = wsHelper.messagesOfType('initial_state');
     const reconnectDraftState = allInitial[allInitial.length - 1]
       .draft_state as Record<string, unknown>;
 

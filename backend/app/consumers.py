@@ -3,6 +3,7 @@ WebSocket consumers for draft event broadcasting.
 """
 
 import json
+import time
 from typing import TYPE_CHECKING, Any
 
 from channels.db import database_sync_to_async
@@ -14,7 +15,11 @@ from app.consumers_base import BaseDraftConsumer
 from app.functions.teamdraft import emit_event, team_payload
 from app.models import Draft, Team
 from app.tasks.draft_tick import CAPTAIN_CHANNEL_TTL, TickDriver
-from app.tasks.teamdraft_tick import TEAM_TICK_DRIVER, captain_conn_key
+from app.tasks.teamdraft_tick import (
+    TEAM_TICK_DRIVER,
+    captain_conn_key,
+    captain_is_fresh,
+)
 from telemetry.logging import get_logger
 from telemetry.websocket import TelemetryConsumerMixin
 
@@ -27,7 +32,7 @@ log = get_logger(__name__)
 class DraftConsumer(BaseDraftConsumer):
     """WebSocket consumer for draft-specific events."""
 
-    PING_ENABLED = False
+    PING_ENABLED = True
     kick_duplicate_captain_connections = False
     clear_heartbeat_on_disconnect = False
 
@@ -162,10 +167,21 @@ class DraftConsumer(BaseDraftConsumer):
         )
 
     async def handle_heartbeat(self) -> None:
-        await super().handle_heartbeat()
         if not self._is_captain:
+            await super().handle_heartbeat()
             return
         r = self._redis()
+        was_fresh = captain_is_fresh(r, self.draft_id, self.user.id, time.time())
+        await super().handle_heartbeat()
+        if not was_fresh:
+            await self.channel_layer.group_send(
+                self.room_group_name,
+                {
+                    "type": "captain.heartbeat",
+                    "captain_id": self.user.id,
+                    "fresh": True,
+                },
+            )
         key = captain_conn_key(self.draft_id, self.user.id)
         if not r.exists(key):
             return
@@ -179,13 +195,42 @@ class DraftConsumer(BaseDraftConsumer):
             )
         )
 
+    async def captain_heartbeat(self, event: dict[str, Any]) -> None:
+        await self.send(
+            text_data=json.dumps(
+                {
+                    "type": "captain_heartbeat",
+                    "captain_id": event["captain_id"],
+                    "fresh": event["fresh"],
+                }
+            )
+        )
+
     async def send_initial_messages(self, initial_state: dict | None) -> None:
+        r = self._redis()
+        now_ts = time.time()
+        teams = ((initial_state or {}).get("tournament") or {}).get("teams") or []
+        captain_fresh = {
+            str(team["captain"]): captain_is_fresh(
+                r, self.draft_id, team["captain"], now_ts
+            )
+            for team in teams
+            if team.get("captain") is not None
+        }
+        await self.send(
+            text_data=json.dumps(
+                {
+                    "type": "initial_state",
+                    "draft_state": initial_state,
+                    "captain_fresh": captain_fresh,
+                }
+            )
+        )
         await self.send(
             text_data=json.dumps(
                 {
                     "type": "initial_events",
                     "events": await self.get_recent_events(self.draft_id),
-                    "draft_state": initial_state,
                 }
             )
         )

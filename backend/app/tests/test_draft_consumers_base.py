@@ -1,4 +1,4 @@
-"""DraftConsumer on BaseDraftConsumer: heartbeat, counts, prefix isolation, no kick/ping/loop (spec §1)."""
+"""DraftConsumer on BaseDraftConsumer: heartbeat, counts, prefix isolation, no kick/loop (spec §1)."""
 
 import asyncio
 from datetime import date
@@ -19,6 +19,7 @@ from app.tasks.draft_tick import (
     get_redis_client,
     heartbeat_key,
 )
+from app.tests.ws_helpers import assert_no_frame_except_ping, read_until_type
 
 User = get_user_model()
 
@@ -64,26 +65,29 @@ class DraftConsumerBaseTestCase(TransactionTestCase):
             comm.scope["user"] = user
         connected, _ = await comm.connect()
         self.assertTrue(connected)
-        first = await comm.receive_json_from(timeout=5)
+        initial_state = await read_until_type(comm, "initial_state")
+        initial_events = await read_until_type(comm, "initial_events")
         if user is not None and user.pk == self.captain.pk:
-            await asyncio.wait_for(comm.receive_json_from(), timeout=5)
-        return comm, first
+            await read_until_type(comm, "draft_event")
+        return comm, initial_state, initial_events
 
-    async def test_spectator_gets_single_initial_events_frame_and_counts_under_teamdraft(
+    async def test_spectator_gets_initial_state_then_initial_events_and_counts_under_teamdraft(
         self,
     ):
-        comm, first = await self.connect(self.spectator)
-        self.assertEqual(first["type"], "initial_events")
-        self.assertIn("events", first)
-        self.assertEqual(first["draft_state"]["pk"], self.draft.pk)
+        comm, state_frame, events_frame = await self.connect(self.spectator)
+        self.assertEqual(state_frame["type"], "initial_state")
+        self.assertEqual(events_frame["type"], "initial_events")
+        self.assertIn("events", events_frame)
+        self.assertNotIn("draft_state", events_frame)
+        self.assertEqual(state_frame["draft_state"]["pk"], self.draft.pk)
         self.assertEqual(self.r.get(conn_count_key("teamdraft", self.draft.pk)), "1")
         self.assertIsNone(self.r.get(conn_count_key("herodraft", self.draft.pk)))
-        self.assertTrue(await comm.receive_nothing(timeout=0.5, interval=0.05))
+        await assert_no_frame_except_ping(comm, 0.5)
         await comm.disconnect()
         self.assertIsNone(self.r.get(conn_count_key("teamdraft", self.draft.pk)))
 
     async def test_captain_registers_heartbeat_and_channel_under_teamdraft(self):
-        comm, _ = await self.connect(self.captain)
+        comm, _, _ = await self.connect(self.captain)
         hb = heartbeat_key("teamdraft", self.draft.pk, self.captain.pk)
         self.assertIsNotNone(self.r.get(hb))
         self.assertIsNotNone(
@@ -97,7 +101,7 @@ class DraftConsumerBaseTestCase(TransactionTestCase):
         await comm.disconnect()
 
     async def test_clean_close_keeps_heartbeat_key(self):
-        comm, _ = await self.connect(self.captain)
+        comm, _, _ = await self.connect(self.captain)
         hb = heartbeat_key("teamdraft", self.draft.pk, self.captain.pk)
         await comm.disconnect()
         self.assertIsNotNone(
@@ -108,38 +112,37 @@ class DraftConsumerBaseTestCase(TransactionTestCase):
         )
 
     async def test_two_sockets_same_captain_both_stay_connected(self):
-        comm1, _ = await self.connect(self.captain)
-        comm2, _ = await self.connect(self.captain)
-        await asyncio.wait_for(comm1.receive_json_from(), timeout=5)
+        comm1, _, _ = await self.connect(self.captain)
+        comm2, _, _ = await self.connect(self.captain)
+        await read_until_type(comm1, "draft_event")
         for comm in (comm1, comm2):
-            self.assertTrue(await comm.receive_nothing(timeout=0.5, interval=0.05))
+            await assert_no_frame_except_ping(comm, 0.5)
         self.assertEqual(self.r.get(conn_count_key("teamdraft", self.draft.pk)), "2")
         await comm1.disconnect()
         await comm2.disconnect()
 
-    async def test_no_ping_frames(self):
-        comm, _ = await self.connect(self.spectator)
-        self.assertTrue(
-            await comm.receive_nothing(timeout=2.5, interval=0.05)
-        )  # > 2x PING_INTERVAL
+    async def test_ping_frames_arrive_within_2s(self):
+        comm, _, _ = await self.connect(self.spectator)
+        frame = await read_until_type(comm, "ping", timeout=2)
+        self.assertEqual(frame["type"], "ping")
         await comm.disconnect()
 
     @patch("app.tasks.draft_tick.start_tick_broadcaster")
     @patch("app.tasks.herodraft_tick.start_tick_broadcaster")
     async def test_no_tick_broadcaster_started(self, hero_start, shared_start):
-        comm, _ = await self.connect(self.captain)
+        comm, _, _ = await self.connect(self.captain)
         hero_start.assert_not_called()
         shared_start.assert_not_called()
         await comm.disconnect()
 
     async def test_anonymous_heartbeat_is_ignored(self):
-        comm, _ = await self.connect(user=None)
+        comm, _, _ = await self.connect(user=None)
         await comm.send_json_to({"type": "heartbeat"})
-        self.assertTrue(await comm.receive_nothing(timeout=0.5, interval=0.05))
+        await assert_no_frame_except_ping(comm, 0.5)
         await comm.disconnect()
 
     async def test_malformed_json_from_captain_keeps_socket_open(self):
-        comm, _ = await self.connect(self.captain)
+        comm, _, _ = await self.connect(self.captain)
         await comm.send_to(text_data="{not json")
-        self.assertTrue(await comm.receive_nothing(timeout=0.5, interval=0.05))
+        await assert_no_frame_except_ping(comm, 0.5)
         await comm.disconnect()

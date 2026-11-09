@@ -1992,7 +1992,7 @@ class DraftOptions(models.Model):
         related_name="draft_options",
         on_delete=models.CASCADE,
     )
-    timer_enabled = models.BooleanField(default=False)
+    timer_enabled = models.BooleanField(default=True)
     grace_time_ms = models.IntegerField(default=30000)
     reserve_time_ms = models.IntegerField(default=30000)
     timeout_action = models.CharField(

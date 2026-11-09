@@ -49,11 +49,23 @@ class DraftOptionsModelTests(TestCase):
     def test_defaults(self):
         t = make_tournament(1)
         opts = DraftOptions.objects.create(tournament=t)
-        self.assertFalse(opts.timer_enabled)
+        self.assertTrue(opts.timer_enabled)
         self.assertEqual(opts.grace_time_ms, 30000)
         self.assertEqual(opts.reserve_time_ms, 30000)
         self.assertEqual(opts.timeout_action, TimeoutAction.SKIP_TURN)
         self.assertEqual(TimeoutAction.values, ["skip_turn"])
+
+    def test_lazy_default_is_timer_enabled(self):
+        t = make_tournament(1, "lazy")
+        self.assertTrue(t.get_draft_options().timer_enabled)
+
+    def test_build_rounds_lands_in_pending_by_default(self):
+        t = make_tournament(4, "lazy2")
+        draft = Draft.objects.create(tournament=t, draft_style="snake")
+        draft.build_rounds()
+        draft.refresh_from_db()
+        self.assertEqual(draft.state, TeamDraftState.PENDING)
+        self.assertTrue(draft.tournament.get_draft_options().timer_enabled)
 
     def test_get_draft_options_creates_lazily_once(self):
         t = make_tournament(1)
@@ -75,6 +87,7 @@ class DraftOptionsModelTests(TestCase):
 class DraftStateTests(TestCase):
     def test_build_rounds_untimed_lands_in_drafting_unarmed(self):
         t = make_tournament()
+        DraftOptions.ensure_for(t, timer_enabled=False)
         draft = Draft.objects.create(tournament=t, draft_style="snake")
         draft.build_rounds()
         draft.refresh_from_db()
@@ -116,6 +129,7 @@ class DraftStateTests(TestCase):
 
     def test_clock_armed_requires_timer_state_and_started_at(self):
         t = make_tournament()
+        DraftOptions.ensure_for(t, timer_enabled=False)
         draft = Draft.objects.create(tournament=t, draft_style="snake")
         draft.build_rounds()
         rnd = draft.active_round
@@ -235,14 +249,14 @@ class SerializerFieldTests(TestCase):
         t = make_tournament(1, "ser")
         t.refresh_from_db()
         data = TournamentSerializer(t).data
-        self.assertEqual(data["draft_options"]["timer_enabled"], False)
+        self.assertEqual(data["draft_options"]["timer_enabled"], True)
         self.assertTrue(DraftOptions.objects.filter(tournament=t).exists())
 
     def test_list_serialization_does_not_create_options(self):
         t = make_tournament(1, "ser-list")
         t.refresh_from_db()
         data = TournamentSerializer([t], many=True).data
-        self.assertEqual(data[0]["draft_options"]["timer_enabled"], False)
+        self.assertEqual(data[0]["draft_options"]["timer_enabled"], True)
         self.assertFalse(DraftOptions.objects.filter(tournament=t).exists())
 
 
@@ -356,7 +370,7 @@ class SettingsCreateTests(TestCase):
         r = self._create()
         self.assertEqual(r.status_code, 201, r.data)
         opts = DraftOptions.objects.get(tournament_id=r.data["pk"])
-        self.assertEqual((opts.timer_enabled, opts.grace_time_ms, opts.reserve_time_ms), (False, 30000, 30000))
+        self.assertEqual((opts.timer_enabled, opts.grace_time_ms, opts.reserve_time_ms), (True, 30000, 30000))
 
 
 class FixtureConfigTests(TestCase):

@@ -4,7 +4,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from django.test import TestCase
 
-from app.models import CustomUser, Draft, DraftEvent, PositionsModel, Team, Tournament
+from app.models import (
+    CustomUser,
+    Draft,
+    DraftEvent,
+    DraftOptions,
+    PositionsModel,
+    Team,
+    Tournament,
+)
 from app.serializers import DraftEventSerializer
 
 
@@ -34,6 +42,7 @@ class DraftEventModelTest(TestCase):
         )
 
         # Create draft
+        DraftOptions.ensure_for(self.tournament, timer_enabled=False)
         self.draft = Draft.objects.create(
             tournament=self.tournament,
             draft_style="shuffle",
@@ -122,6 +131,7 @@ class DraftEventSerializerTest(TestCase):
             name="Test Tournament",
             date_played=date.today(),
         )
+        DraftOptions.ensure_for(self.tournament, timer_enabled=False)
         self.draft = Draft.objects.create(
             tournament=self.tournament,
             draft_style="shuffle",
@@ -181,6 +191,7 @@ class ShuffleDraftEventIntegrationTest(TestCase):
             self.teams.append(team)
 
         # Create draft
+        DraftOptions.ensure_for(self.tournament, timer_enabled=False)
         self.draft = Draft.objects.create(
             tournament=self.tournament,
             draft_style="shuffle",
@@ -268,6 +279,7 @@ class TournamentEventIntegrationTest(TestCase):
         self.team.members.add(self.captain)
 
         # Create draft
+        DraftOptions.ensure_for(self.tournament, timer_enabled=False)
         self.draft = Draft.objects.create(
             tournament=self.tournament,
             draft_style="snake",
@@ -372,6 +384,7 @@ class BroadcastEventTest(TestCase):
             name="Test Tournament",
             date_played=date.today(),
         )
+        DraftOptions.ensure_for(self.tournament, timer_enabled=False)
         self.draft = Draft.objects.create(
             tournament=self.tournament,
             draft_style="shuffle",

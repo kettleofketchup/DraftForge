@@ -29,6 +29,7 @@ from app.tasks.draft_tick import (
     registry_for,
 )
 from app.tests.teamdraft_fixtures import TimedDraftFixture
+from app.tests.ws_helpers import assert_no_frame_except_ping, read_until_type
 from tests.test_teamdraft import expire_draft_clock, stale_draft_heartbeat
 
 
@@ -921,9 +922,15 @@ class DraftConsumerTimerTests(TransactionTestCase):
     def _clear(self):
         self.r.delete(
             conn_count_key("teamdraft", self.fx.draft.pk),
-            heartbeat_key("teamdraft", self.fx.draft.pk, self.cap.pk),
-            captain_channel_key("teamdraft", self.fx.draft.pk, self.cap.pk),
-            teamdraft_tick.captain_conn_key(self.fx.draft.pk, self.cap.pk),
+            *(
+                key
+                for c in self.fx.captains
+                for key in (
+                    heartbeat_key("teamdraft", self.fx.draft.pk, c.pk),
+                    captain_channel_key("teamdraft", self.fx.draft.pk, c.pk),
+                    teamdraft_tick.captain_conn_key(self.fx.draft.pk, c.pk),
+                )
+            ),
         )
 
     def app(self):
@@ -936,14 +943,14 @@ class DraftConsumerTimerTests(TransactionTestCase):
         comm.scope["user"] = user
         connected, _ = await comm.connect()
         self.assertTrue(connected)
-        await asyncio.wait_for(comm.receive_json_from(), timeout=5)  # initial_events
-        return comm
+        initial_state = await read_until_type(comm, "initial_state")
+        initial_events = await read_until_type(comm, "initial_events")
+        return comm, initial_state, initial_events
 
     @patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True)
     async def test_captain_connect_emits_event_and_sets_flags(self, mock_start):
-        comm = await self.connect(self.cap)
-        frame = await asyncio.wait_for(comm.receive_json_from(), timeout=5)
-        self.assertEqual(frame["type"], "draft_event")
+        comm, _, _ = await self.connect(self.cap)
+        frame = await read_until_type(comm, "draft_event")
         self.assertEqual(frame["event"]["event_type"], "captain_connected")
         self.assertEqual(frame["event"]["payload"]["captain_id"], self.cap.pk)
         self.assertTrue(frame["event"]["payload"]["is_active_captain"])
@@ -956,7 +963,7 @@ class DraftConsumerTimerTests(TransactionTestCase):
     @patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True)
     async def test_armed_draft_starts_team_driver(self, mock_start):
         await database_sync_to_async(self.fx.start)()
-        comm = await self.connect(self.fx.players[0])
+        comm, _, _ = await self.connect(self.fx.players[0])
         for _ in range(50):
             if mock_start.called:
                 break
@@ -970,7 +977,7 @@ class DraftConsumerTimerTests(TransactionTestCase):
         draft = await database_sync_to_async(Draft.objects.get)(pk=self.fx.draft.pk)
         draft.state = TeamDraftState.DRAFTING
         await database_sync_to_async(draft.save)()
-        comm = await self.connect(self.fx.players[0])
+        comm, _, _ = await self.connect(self.fx.players[0])
         mock_start.assert_not_called()
         await comm.disconnect()
 
@@ -983,13 +990,13 @@ class DraftConsumerTimerTests(TransactionTestCase):
     async def test_second_tab_closing_is_silent_last_tab_emits_disconnected(
         self, mock_start
     ):
-        comm1 = await self.connect(self.cap)
-        await asyncio.wait_for(comm1.receive_json_from(), timeout=5)
-        comm2 = await self.connect(self.cap)
-        await asyncio.wait_for(comm2.receive_json_from(), timeout=5)
-        await asyncio.wait_for(comm1.receive_json_from(), timeout=5)
+        comm1, _, _ = await self.connect(self.cap)
+        await read_until_type(comm1, "draft_event")
+        comm2, _, _ = await self.connect(self.cap)
+        await read_until_type(comm2, "draft_event")
+        await read_until_type(comm1, "draft_event")
         await comm2.disconnect()
-        self.assertTrue(await comm1.receive_nothing(timeout=1.0, interval=0.05))
+        await assert_no_frame_except_ping(comm1, 1.0)
         count = await database_sync_to_async(self._disconnected_count)()
         self.assertEqual(count, 0)
         await comm1.disconnect()
@@ -1000,7 +1007,7 @@ class DraftConsumerTimerTests(TransactionTestCase):
         self.assertTrue(team.draft_has_connected)
 
     async def test_draft_tick_frame_is_forwarded(self):
-        comm = await self.connect(self.fx.players[0])
+        comm, _, _ = await self.connect(self.fx.players[0])
         layer = get_channel_layer()
         await layer.group_send(
             f"draft_{self.fx.draft.pk}",
@@ -1011,7 +1018,7 @@ class DraftConsumerTimerTests(TransactionTestCase):
                 "teams": [],
             },
         )
-        frame = await asyncio.wait_for(comm.receive_json_from(), timeout=5)
+        frame = await read_until_type(comm, "draft_tick")
         self.assertEqual(
             frame,
             {
@@ -1023,9 +1030,55 @@ class DraftConsumerTimerTests(TransactionTestCase):
         )
         await comm.disconnect()
 
+    async def test_initial_state_carries_captain_fresh(self):
+        self.r.set(
+            heartbeat_key("teamdraft", self.fx.draft.pk, self.cap.pk),
+            str(time.time()),
+        )
+        comm, initial_state, _ = await self.connect(self.fx.players[0])
+        fresh = initial_state["captain_fresh"]
+        self.assertIs(fresh[str(self.cap.pk)], True)
+        self.assertIs(fresh[str(self.fx.captains[1].pk)], False)
+        await comm.disconnect()
+
+    async def test_first_heartbeat_after_stale_broadcasts_captain_heartbeat(self):
+        spectator, _, _ = await self.connect(self.fx.players[0])
+        captain, _, _ = await self.connect(self.cap)
+        await read_until_type(spectator, "draft_event")
+        self.r.delete(heartbeat_key("teamdraft", self.fx.draft.pk, self.cap.pk))
+        await captain.send_json_to({"type": "heartbeat"})
+        frame = await read_until_type(spectator, "captain_heartbeat")
+        self.assertEqual(
+            frame,
+            {"type": "captain_heartbeat", "captain_id": self.cap.pk, "fresh": True},
+        )
+        await spectator.disconnect()
+        await captain.disconnect()
+
+    async def test_captain_connecting_with_stale_key_broadcasts_captain_heartbeat(
+        self,
+    ):
+        spectator, _, _ = await self.connect(self.fx.players[0])
+        captain, _, _ = await self.connect(self.cap)
+        frame = await read_until_type(spectator, "captain_heartbeat")
+        self.assertEqual(
+            frame,
+            {"type": "captain_heartbeat", "captain_id": self.cap.pk, "fresh": True},
+        )
+        await spectator.disconnect()
+        await captain.disconnect()
+
+    async def test_fresh_heartbeat_is_silent(self):
+        captain, _, _ = await self.connect(self.cap)
+        spectator, _, _ = await self.connect(self.fx.players[0])
+        await captain.send_json_to({"type": "heartbeat"})
+        await assert_no_frame_except_ping(spectator, 1.0)
+        await spectator.disconnect()
+        await captain.disconnect()
+
     async def test_conn_key_ttl_is_refreshed_by_heartbeat(self):
-        comm = await self.connect(self.cap)
-        await asyncio.wait_for(comm.receive_json_from(), timeout=5)
+        comm, _, _ = await self.connect(self.cap)
+        await read_until_type(comm, "draft_event")
         key = teamdraft_tick.captain_conn_key(self.fx.draft.pk, self.cap.pk)
         self.r.expire(key, 5)
         await comm.send_json_to({"type": "heartbeat"})
@@ -1040,8 +1093,8 @@ class DraftConsumerTimerTests(TransactionTestCase):
     async def test_heartbeat_after_rebuild_restores_presence_and_auto_pause(
         self, mock_start
     ):
-        comm = await self.connect(self.cap)
-        await asyncio.wait_for(comm.receive_json_from(), timeout=5)
+        comm, _, _ = await self.connect(self.cap)
+        await read_until_type(comm, "draft_event")
         await database_sync_to_async(self.fx.draft.build_rounds)()
         team = await database_sync_to_async(Team.objects.get)(pk=self.fx.teams[0].pk)
         self.assertFalse(team.draft_has_connected)
@@ -1081,8 +1134,7 @@ class DraftConsumerTimerTests(TransactionTestCase):
         comm = WebsocketCommunicator(self.app(), f"/api/draft/{fx.draft.pk}/")
         comm.scope["user"] = cap
         await comm.connect()
-        await asyncio.wait_for(comm.receive_json_from(), timeout=5)
-        await asyncio.wait_for(comm.receive_json_from(), timeout=5)
+        await read_until_type(comm, "draft_event")
         await comm.disconnect()
         draft = await database_sync_to_async(Draft.objects.get)(pk=fx.draft.pk)
         self.assertEqual(draft.state, TeamDraftState.DRAFTING)
