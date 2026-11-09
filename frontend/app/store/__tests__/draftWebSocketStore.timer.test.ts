@@ -275,6 +275,16 @@ describe('draftWebSocketStore timer', () => {
     expect(useDraftWebSocketStore.getState().forceJumpToRoundPk).toBe(23);
   });
 
+  it('initial_state resets the event ordering guard', () => {
+    emit({ type: 'draft_event', event: { ...evt('player_picked', { captain_name: 'Ana', picked_name: 'P', pick_number: 1 }), pk: 500 }, draft_state: state({ latest_round: 23 }) });
+    settle();
+    emit({ type: 'initial_state', draft_state: state({ latest_round: 21 }) });
+    expect(useDraftWebSocketStore.getState()._lastStateEventPk).toBeNull();
+    emit({ type: 'draft_event', event: { ...evt('round_started', {}), pk: 400 }, draft_state: state({ latest_round: 22 }) });
+    settle();
+    expect(useDraftWebSocketStore.getState().draftState?.latest_round).toBe(22);
+  });
+
   it('never replaces a newer draft_state with one built for an older event', () => {
     const newer = evt('player_picked', { captain_name: 'Ana', picked_name: 'P', pick_number: 1 });
     const older = { ...evt('captain_connected', { ...cap, pick_number: 1, is_active_captain: true }), pk: newer.pk - 1 };

@@ -257,6 +257,8 @@ export const useDraftWebSocketStore = create<DraftWebSocketState>((set, get) => 
           set({
             draftState: hydrateSlimDraftState(message.draft_state),
             captainFresh: numericKeys(message.captain_fresh),
+            // A fresh snapshot: the old socket's last event pk no longer orders anything.
+            _lastStateEventPk: null,
           });
         }
       } else if (message.type === 'initial_events' && message.events) {
