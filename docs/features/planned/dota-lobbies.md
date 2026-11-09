@@ -63,8 +63,11 @@ A lobby that times out or fails is not recreated automatically: organizers retry
 2. sends it to dota_lobby. A repeat sends the same request, so dota_lobby answers `200` with
    the existing lobby instead of `409`;
 3. reports the answer back. Only errors dota_lobby marks retryable (`503`, `504`), timeouts and
-   connection errors are retried; the reconcile task resends a create left `requested` for
-   two minutes. Any other error (`league_not_held`, `invalid_request`, ...) ends the row in
+   connection errors are retried. The reconcile task resends a create left `requested` only
+   once no attempt is in flight: each attempt holds the row for two minutes, and a retryable
+   failure holds it until the task's own retry is due plus those two minutes
+   (`next_attempt_at`). A create whose password cannot be derived (the secret key it was made
+   with is gone) ends in `error` with `password_unavailable`. Any other error (`league_not_held`, `invalid_request`, ...) ends the row in
    state `error` with `last_error_code` for organizers. A `409 conflict` is resolved by
    looking up the lobby holding the reference: DraftForge adopts it when it is the same row's,
    closes it and retries when it is an earlier lobby of the same game, and gives up otherwise.
@@ -73,7 +76,9 @@ A lobby that times out or fails is not recreated automatically: organizers retry
 to `ready`), the lobby is ended (`closed`, reason `teams_changed`), closed in dota_lobby, and a
 new one is requested for the new teams. Swapping the two teams between bracket slots is not a
 change. Once a match is under way the lobby is left alone and the change is logged. Deleting a
-game closes its lobby in dota_lobby.
+game closes its lobby in dota_lobby, and so does completing a game (or giving it a winner,
+as advance-winner does for a forfeit) while its lobby has not started (reason
+`game_completed`).
 
 The sides sent are stored on the lobby row (`radiant_team`, `dire_team`). When the hero draft
 completes with the other side choice, DraftForge asks dota_lobby to flip the teams once the
@@ -96,19 +101,24 @@ lobby is `waiting` or `ready`; the `lobby.teams_flipped` event updates the store
 
 | Event | Effect |
 |-------|--------|
-| `match.started` | `Game.gameid` is set to the match ID if it is empty, and a `pending` game becomes `live`. A game already linked to another match keeps its `gameid`; the conflict is logged (`lobby_gameid_conflict`) |
+| `match.started` | A `pending` game becomes `live`. The match ID is kept on the lobby (`match_id`) only: `Game.gameid` stays empty, so the Steam auto-link still scans the game and sets its match ID and winner |
+| `match.ended` with `scored: false`, or a lobby that ends (`failed`, `closed`, `timed_out`, `finished`, or unknown to dota_lobby) after its match started without a scored result | A `live` game without a winner goes back to `pending`, so organizers can request a new lobby |
 | `match.ended` | Recorded on the lobby only, as a provisional result (`provisional_winner_side`, `provisional_winner_team`, outcome, duration). The winner is not set, the game is not completed and the bracket does not advance: staff confirm with advance-winner, and the Steam league sync stays the authority |
-| lobby events | The lobby row's state, bot, players and sides |
+| lobby events | The lobby row's state, bot, players and sides. The state reason comes only from `lobby.state_changed` and the terminal events, not from the `reason` of a player or launch event |
+
+Only the game's active lobby, created for the teams the game has now, changes the game. A
+lobby DraftForge already ended (for example closed because the teams changed while dota_lobby
+was launching it) still records its own events, but never touches the game.
 
 **Reconcile.** `reconcile-dota-lobbies` runs every 60 seconds (in both beat schedules,
 `config/celery.py` and `config/celery_light.py`). For every lobby that has not ended it reads
 the lobby from dota_lobby, applies any events the webhooks missed, closes rows dota_lobby no
-longer knows, resends creates left `requested`, queues pending side flips, and creates lobbies
+longer knows, resends creates left `requested` with no attempt in flight, queues pending side flips, and creates lobbies
 for eligible games. It does nothing while `DOTA_LOBBY_ENABLED` is off.
 
 **Live updates.** The tournament websocket (`/api/tournament/<id>/`) gets a `lobby_event`
 message (`game_id`, `state`, `match_id`, `provisional_winner_side`; never the password) when a
-lobby changes, and a `bracket_update` message when a game's `gameid` or status changes. The
+lobby changes, and a `bracket_update` message when a lobby changes a game's status. The
 frontend already refetches the bracket on `bracket_update`.
 
 **Discord.** With the tournament's `discord_send_lobby_info` on, rostered players with a
@@ -126,9 +136,13 @@ DMs, because it would store the embed.
 2. Give dota_lobby DraftForge's `INTERNAL_SERVICE_TOKEN` for that URL
    (`just secrets webhook-token <url>`, read from stdin), and configure the webhook with
    `token_header: X-Internal-Token` and `events: ["*"]`.
-3. Add the dota_lobby host to `INTERNAL_SERVICE_ALLOWED_IPS` if it is not on a private
-   network. A `403` makes dota_lobby give the delivery up at once; the reconcile task still
-   catches up within a minute.
+3. If dota_lobby is not on a private network, allow its address in
+   `INTERNAL_SERVICE_ALLOWED_IPS`. Setting that variable replaces the built-in allowlist
+   (loopback and the RFC 1918 ranges) rather than adding to it, so list those too, or the
+   Celery workers and the Discord bot lose the internal API:
+   `127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,<dota_lobby address>`. A `403`
+   makes dota_lobby give the delivery up at once; the reconcile task still catches up within
+   a minute.
 4. Set `DOTA_LOBBY_URL` and `DOTA_LOBBY_API_KEY`, then `DOTA_LOBBY_ENABLED=true`, and set a
    tournament's `dota_lobby_mode`.
 
