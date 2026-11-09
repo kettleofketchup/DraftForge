@@ -131,9 +131,12 @@ export const useUserStore = create<UserState>()(
         try {
           await get().getCurrentTournament();
 
+          const rounds = get().tournament.draft?.draft_rounds ?? [];
           set({
             curDraftRound:
-              get().tournament.draft?.draft_rounds?.[get().draftIndex],
+              rounds.find((r) => r.pk === get().curDraftRound?.pk) ??
+              rounds.find((r) => r.pk === get().tournament.draft?.latest_round) ??
+              rounds[0],
           });
         } catch (err) {
           log.error('Failed to fetch draft:', err);
