@@ -2,6 +2,7 @@
 
 import contextvars
 import threading
+import time
 from collections.abc import Callable
 from unittest.mock import patch
 
@@ -18,6 +19,7 @@ from app.tasks.draft_tick import (
     get_redis_client,
     heartbeat_key,
     increment_connection_count,
+    touch_connection,
     lock_key,
 )
 
@@ -35,7 +37,7 @@ class KeyHelperTests(SimpleTestCase):
         )
 
     def test_conn_count_key_matches_hero_literal(self) -> None:
-        self.assertEqual(conn_count_key("herodraft", 7), "herodraft:connections:7")
+        self.assertEqual(conn_count_key("herodraft", 7), "herodraft:live_connections:7")
 
     def test_lock_key_matches_hero_literal(self) -> None:
         self.assertEqual(lock_key("herodraft", 7), "herodraft:tick_lock:7")
@@ -44,7 +46,7 @@ class KeyHelperTests(SimpleTestCase):
         self.assertNotEqual(
             heartbeat_key("teamdraft", 1, 2), heartbeat_key("herodraft", 1, 2)
         )
-        self.assertEqual(conn_count_key("teamdraft", 7), "teamdraft:connections:7")
+        self.assertEqual(conn_count_key("teamdraft", 7), "teamdraft:live_connections:7")
 
     def test_constants_match_hero_values(self) -> None:
         self.assertEqual(draft_tick.LOCK_TIMEOUT, 10)
@@ -65,23 +67,32 @@ class ConnectionCountTests(TransactionTestCase):
         )
 
     def test_counts_are_isolated_per_prefix(self) -> None:
-        self.assertEqual(increment_connection_count("teamdraft", self.DRAFT_ID), 1)
-        self.assertEqual(increment_connection_count("teamdraft", self.DRAFT_ID), 2)
+        self.assertEqual(increment_connection_count("teamdraft", self.DRAFT_ID, "c1"), 1)
+        self.assertEqual(increment_connection_count("teamdraft", self.DRAFT_ID, "c2"), 2)
         self.assertEqual(get_connection_count("herodraft", self.DRAFT_ID), 0)
         self.assertEqual(get_connection_count("teamdraft", self.DRAFT_ID), 2)
 
-    def test_decrement_below_zero_deletes_key_and_returns_zero(self) -> None:
-        increment_connection_count("teamdraft", self.DRAFT_ID)
-        self.assertEqual(decrement_connection_count("teamdraft", self.DRAFT_ID), 0)
-        self.assertEqual(decrement_connection_count("teamdraft", self.DRAFT_ID), 0)
-        self.assertIsNone(
-            get_redis_client().get(conn_count_key("teamdraft", self.DRAFT_ID))
-        )
+    def test_double_disconnect_never_goes_below_zero(self) -> None:
+        increment_connection_count("teamdraft", self.DRAFT_ID, "c1")
+        self.assertEqual(decrement_connection_count("teamdraft", self.DRAFT_ID, "c1"), 0)
+        self.assertEqual(decrement_connection_count("teamdraft", self.DRAFT_ID, "c1"), 0)
+        increment_connection_count("teamdraft", self.DRAFT_ID, "c2")
+        self.assertEqual(get_connection_count("teamdraft", self.DRAFT_ID), 1)
 
-    def test_increment_sets_300s_expiry(self) -> None:
-        increment_connection_count("teamdraft", self.DRAFT_ID)
-        ttl = get_redis_client().ttl(conn_count_key("teamdraft", self.DRAFT_ID))
-        self.assertTrue(0 < ttl <= 300)
+    def test_live_connection_outlives_the_key_ttl(self) -> None:
+        increment_connection_count("teamdraft", self.DRAFT_ID, "c1")
+        get_redis_client().delete(conn_count_key("teamdraft", self.DRAFT_ID))
+        self.assertEqual(get_connection_count("teamdraft", self.DRAFT_ID), 0)
+
+        touch_connection("teamdraft", self.DRAFT_ID, "c1")
+
+        self.assertEqual(get_connection_count("teamdraft", self.DRAFT_ID), 1)
+
+    def test_connection_not_refreshed_within_the_stale_window_is_not_counted(self) -> None:
+        increment_connection_count("teamdraft", self.DRAFT_ID, "c1")
+        stale_at = time.time() - draft_tick.CONN_STALE_SECONDS - 1
+        get_redis_client().zadd(conn_count_key("teamdraft", self.DRAFT_ID), {"c2": stale_at})
+        self.assertEqual(get_connection_count("teamdraft", self.DRAFT_ID), 1)
 
 
 class RecordingDriver:

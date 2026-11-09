@@ -36,6 +36,8 @@ TICK_ITERATION_SLOW_THRESHOLD_S: float = 1.5
 
 LOCK_TIMEOUT: int = 10
 CONN_COUNT_TTL_SECONDS: int = 300
+CONN_REFRESH_SECONDS: int = 10
+CONN_STALE_SECONDS: int = 30
 HEARTBEAT_INTERVAL_SECONDS: int = 3
 HEARTBEAT_STALE_SECONDS: int = 9
 HEARTBEAT_TTL: int = 30
@@ -65,19 +67,17 @@ def captain_channel_key(prefix: str, draft_id: int, user_id: int) -> str:
 
 
 def conn_count_key(prefix: str, draft_id: int) -> str:
-    return namespaced_key(f"{prefix}:connections:{draft_id}")
+    return namespaced_key(f"{prefix}:live_connections:{draft_id}")
 
 
 def lock_key(prefix: str, draft_id: int) -> str:
     return namespaced_key(f"{prefix}:tick_lock:{draft_id}")
 
 
-def increment_connection_count(prefix: str, draft_id: int) -> int:
-    """Increment WebSocket connection count for a draft. Returns new count."""
-    r = get_redis_client()
-    key = conn_count_key(prefix, draft_id)
-    count: int = r.incr(key)
-    r.expire(key, CONN_COUNT_TTL_SECONDS)
+def increment_connection_count(prefix: str, draft_id: int, channel: str) -> int:
+    """Register a live WebSocket connection for a draft. Returns the live count."""
+    touch_connection(prefix, draft_id, channel)
+    count = get_connection_count(prefix, draft_id)
     log.debug(
         "connection_count_incremented",
         system="websocket",
@@ -89,14 +89,10 @@ def increment_connection_count(prefix: str, draft_id: int) -> int:
     return count
 
 
-def decrement_connection_count(prefix: str, draft_id: int) -> int:
-    """Decrement WebSocket connection count for a draft. Returns new count."""
-    r = get_redis_client()
-    key = conn_count_key(prefix, draft_id)
-    count: int = r.decr(key)
-    if count <= 0:
-        r.delete(key)
-        count = 0
+def decrement_connection_count(prefix: str, draft_id: int, channel: str) -> int:
+    """Drop a WebSocket connection for a draft. Returns the live count."""
+    get_redis_client().zrem(conn_count_key(prefix, draft_id), channel)
+    count = get_connection_count(prefix, draft_id)
     log.debug(
         "connection_count_decremented",
         system="websocket",
@@ -108,10 +104,23 @@ def decrement_connection_count(prefix: str, draft_id: int) -> int:
     return count
 
 
+def touch_connection(prefix: str, draft_id: int, channel: str) -> None:
+    """Mark ``channel`` live now; re-adds it if the set was lost or expired."""
+    r = get_redis_client()
+    key = conn_count_key(prefix, draft_id)
+    pipe = r.pipeline()
+    pipe.zadd(key, {channel: time.time()})
+    pipe.expire(key, CONN_COUNT_TTL_SECONDS)
+    pipe.execute()
+
+
 def get_connection_count(prefix: str, draft_id: int) -> int:
-    """Get current WebSocket connection count for a draft."""
-    count = get_redis_client().get(conn_count_key(prefix, draft_id))
-    return int(count) if count else 0
+    """Connections seen within CONN_STALE_SECONDS (a crashed process's entries age out)."""
+    return int(
+        get_redis_client().zcount(
+            conn_count_key(prefix, draft_id), time.time() - CONN_STALE_SECONDS, "+inf"
+        )
+    )
 
 
 class TaskInfo(NamedTuple):

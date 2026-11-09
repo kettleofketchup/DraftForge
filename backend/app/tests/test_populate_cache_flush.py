@@ -34,7 +34,7 @@ class PopulateCacheFlushTests(TransactionTestCase):
         return list(cacheops_redis.scan_iter(match=f"{prefix}*", count=500))
 
     def test_flush_keeps_live_draft_state_and_drops_cached_queries(self) -> None:
-        increment_connection_count("teamdraft", 987654)
+        increment_connection_count("teamdraft", 987654, "c1")
         self.r.set(self.heartbeat, "1.0")
         tournament = Tournament.objects.create(name="flush probe", date_played=date.today())
         list(Tournament.objects.filter(pk=tournament.pk).cache())

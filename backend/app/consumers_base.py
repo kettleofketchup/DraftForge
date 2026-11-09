@@ -37,6 +37,7 @@ from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any
 
 import redis
+from asgiref.sync import sync_to_async
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
 from django.db.models import Model
@@ -275,7 +276,7 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
         """Increment WebSocket connection count in Redis."""
         try:
             draft_tick.increment_connection_count(
-                self.get_redis_prefix(), self.draft_id
+                self.get_redis_prefix(), self.draft_id, self.channel_name
             )
             self._connection_tracked = True
         except Exception as e:
@@ -292,7 +293,7 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
         """Decrement WebSocket connection count in Redis."""
         try:
             draft_tick.decrement_connection_count(
-                self.get_redis_prefix(), self.draft_id
+                self.get_redis_prefix(), self.draft_id, self.channel_name
             )
             self._connection_tracked = False
         except Exception as e:
@@ -332,10 +333,29 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
         This prevents proxies/load balancers from closing idle connections,
         especially during PAUSED state when no tick messages are being sent.
         """
+        touch = sync_to_async(draft_tick.touch_connection, thread_sensitive=False)
+        last_touch = time.monotonic()
         try:
             while True:
                 await asyncio.sleep(PING_INTERVAL)
                 await self.send(text_data=json.dumps({"type": "ping"}))
+                if (
+                    self._connection_tracked
+                    and time.monotonic() - last_touch >= draft_tick.CONN_REFRESH_SECONDS
+                ):
+                    last_touch = time.monotonic()
+                    try:
+                        await touch(
+                            self.get_redis_prefix(), self.draft_id, self.channel_name
+                        )
+                    except redis.RedisError as e:
+                        log.warning(
+                            "connection_touch_failed",
+                            system="websocket",
+                            subsystem="heartbeat",
+                            draft_id=self.draft_id,
+                            error=str(e),
+                        )
         except asyncio.CancelledError:
             pass
         except Exception as e:
