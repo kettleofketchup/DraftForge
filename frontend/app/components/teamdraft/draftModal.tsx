@@ -447,10 +447,12 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
     }
   }, [open]);
 
-  // Draft is complete when all rounds have a choice picked
-  const isDraftCompleted =
+  const wsDraftCompleted = useDraftWebSocketStore(draftWsSelectors.isDraftCompleted);
+  const hasWsDraftState = useDraftWebSocketStore((s) => s.draftState !== null);
+  const localDraftCompleted =
     (draft?.draft_rounds?.length ?? 0) > 0 &&
     draft?.draft_rounds?.every((r) => r.choice != null) === true;
+  const isDraftCompleted = hasWsDraftState ? wsDraftCompleted : localDraftCompleted;
 
   const mainView = () => {
     // Show start draft UI when no draft exists
