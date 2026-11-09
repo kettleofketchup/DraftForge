@@ -6,6 +6,7 @@ import type { UserType } from '~/index';
 import { cn } from '~/lib/utils';
 import type { TeamDraftState } from '../schemas';
 import { formatClock } from './formatClock';
+import { runTimerAction } from './runTimerAction';
 import type { TeamDraftCountdown } from './useTeamDraftCountdown';
 
 const GRACE_URGENT_MS = 10_000;
@@ -122,7 +123,7 @@ export function DraftClockBar({
               No pick clock
             </span>
             {isStaff && (
-              <PrimaryButton data-testid="draft-clock-start-button" onClick={() => void onStartClock()}>
+              <PrimaryButton data-testid="draft-clock-start-button" onClick={() => void runTimerAction(onStartClock, 'Failed to start the clock')}>
                 Start clock
               </PrimaryButton>
             )}
@@ -143,7 +144,7 @@ export function DraftClockBar({
           </span>
         )}
         {clockArmed && drafting && canControl && (
-          <SecondaryButton data-testid="draft-clock-pause-button" onClick={() => void onPause()}>
+          <SecondaryButton data-testid="draft-clock-pause-button" onClick={() => void runTimerAction(onPause, 'Failed to pause the draft')}>
             <Pause className="h-4 w-4 mr-2" />
             Pause
           </SecondaryButton>

@@ -4,6 +4,7 @@ import { PrimaryButton, SecondaryButton } from '~/components/ui/buttons';
 import { DisplayName } from '~/components/user/avatar';
 import type { UserType } from '~/index';
 import type { TeamDraftState } from '../schemas';
+import { runTimerAction } from './runTimerAction';
 
 export interface DraftPauseOverlayProps {
   draftStatus: TeamDraftState | null;
@@ -55,7 +56,7 @@ export function DraftPauseOverlay({
   const resumeButton = canResume && (
     <PrimaryButton
       color="green"
-      onClick={() => void onResume()}
+      onClick={() => void runTimerAction(onResume, 'Failed to resume the draft')}
       disabled={isActiveCaptainDisconnected}
       data-testid="draft-resume-button"
     >
