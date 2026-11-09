@@ -53,7 +53,12 @@ class GameLobbyAdmin(admin.ModelAdmin):
         # Lobbies are created through dota_lobby, never by hand.
         return False
 
-    @admin.action(description="Create a new lobby for these games (retry)")
+    # Both actions change lobbies in dota_lobby, so view-only staff get
+    # neither.
+    @admin.action(
+        description="Create a new lobby for these games (retry)",
+        permissions=("change",),
+    )
     def create_new_lobby(self, request: HttpRequest, queryset: QuerySet) -> None:
         games = {row.game_id: row.game for row in queryset.select_related("game")}
         for game in games.values():
@@ -67,7 +72,10 @@ class GameLobbyAdmin(admin.ModelAdmin):
                     level=messages.WARNING,
                 )
 
-    @admin.action(description="Close these lobbies (before the match starts)")
+    @admin.action(
+        description="Close these lobbies (before the match starts)",
+        permissions=("change",),
+    )
     def close_lobbies(self, request: HttpRequest, queryset: QuerySet) -> None:
         closed = skipped = 0
         for row in queryset.filter(ended=False):
