@@ -256,6 +256,8 @@ jobs:
               app.tests.test_settings_env_overrides \
               app.tests.test_redis_namespace \
               app.tests.test_test_runner \
+              lobby.tests \
+              app.tests.test_dota_lobby_migration \
               -v 2
 
       - name: Run frontend Vitest
