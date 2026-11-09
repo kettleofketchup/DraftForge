@@ -7,6 +7,7 @@ import redis as _redis
 import requests
 from django.conf import settings
 
+from app.redis_keys import namespaced_key
 from telemetry.logging import get_logger
 
 from .embeds import event_announcement_embed
@@ -64,7 +65,11 @@ end
 _RATE_LIMIT_KEY = "discord:rate_limit:global"
 
 
-def _acquire_rate_limit_token(max_wait=10.0):
+def rate_limit_key() -> str:
+    return namespaced_key(_RATE_LIMIT_KEY)
+
+
+def _acquire_rate_limit_token(max_wait: float = 10.0) -> bool:
     """Acquire a token from the Redis rate limit bucket.
 
     Blocks up to max_wait seconds waiting for a token. Falls back to allowing
@@ -78,7 +83,7 @@ def _acquire_rate_limit_token(max_wait=10.0):
     while True:
         try:
             result = redis_client.eval(
-                _TOKEN_BUCKET_LUA, 1, _RATE_LIMIT_KEY, rate, burst, _time.time()
+                _TOKEN_BUCKET_LUA, 1, rate_limit_key(), rate, burst, _time.time()
             )
             if result == 1:
                 return True

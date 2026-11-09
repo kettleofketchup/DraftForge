@@ -28,6 +28,7 @@ from app.tasks.herodraft_tick import (
 )
 from app.tests.test_consumers_base import ConcreteDraftConsumer
 from config.celery import app as celery_app
+from discordbot.utils import _acquire_rate_limit_token, rate_limit_key
 from tests.cache import flush_run_cache
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
@@ -250,3 +251,19 @@ class CeleryEagerUnderTestsTests(SimpleTestCase):
         self.assertIs(celery_app.conf.task_always_eager, True)
         self.assertIs(celery_app.conf.task_eager_propagates, True)
 
+
+class DiscordRateLimitKeyTests(SimpleTestCase):
+    @override_settings(REDIS_KEY_NAMESPACE="")
+    def test_production_key_unchanged(self) -> None:
+        self.assertEqual(rate_limit_key(), "discord:rate_limit:global")
+
+    @override_settings(REDIS_KEY_NAMESPACE="ns:")
+    def test_key_includes_namespace(self) -> None:
+        self.assertEqual(rate_limit_key(), "ns:discord:rate_limit:global")
+
+    @override_settings(REDIS_KEY_NAMESPACE="ns:")
+    def test_token_bucket_uses_namespaced_key(self) -> None:
+        with mock.patch("discordbot.utils.redis_client") as client:
+            client.eval.return_value = 1
+            _acquire_rate_limit_token()
+        self.assertEqual(client.eval.call_args.args[2], "ns:discord:rate_limit:global")
