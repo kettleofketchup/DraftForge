@@ -34,11 +34,17 @@ def claim(
     trigger: str,
     user_id: int | None = None,
     allow_missing: bool = False,
+    game_lobby_id: int | None = None,
 ) -> tuple[int | None, Any]:
     """(status, body) of the claim; status is None when the call failed."""
     resp = ic._post(
         f"{BASE}/games/{game_id}/claim/",
-        {"trigger": trigger, "user_id": user_id, "allow_missing": allow_missing},
+        {
+            "trigger": trigger,
+            "user_id": user_id,
+            "allow_missing": allow_missing,
+            "game_lobby_id": game_lobby_id,
+        },
     )
     if resp is None:
         return None, None

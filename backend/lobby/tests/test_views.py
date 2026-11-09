@@ -151,9 +151,29 @@ class LobbyCreateCloseTests(LobbyViewTestCase):
         with self.captureOnCommitCallbacks(execute=True):
             resp = self.as_user(self.staff).post(_url(self.game.pk), {}, format="json")
         self.assertEqual(resp.status_code, 202)
+        # The row exists before the task runs, so staff can close it at once.
+        row = GameLobby.objects.get(game=self.game)
+        self.assertEqual((row.state, row.trigger), (states.REQUESTED, "manual"))
+        self.assertEqual(row.requested_by, self.staff)
         create_delay.assert_called_once_with(
-            self.game.pk, trigger="manual", user_id=self.staff.pk, allow_missing=False
+            self.game.pk,
+            trigger="manual",
+            user_id=self.staff.pk,
+            allow_missing=False,
+            game_lobby_id=row.pk,
         )
+
+    def test_close_right_after_create_closes_the_queued_row(
+        self, create_delay, close_delay
+    ):
+        client = self.as_user(self.staff)
+        with self.captureOnCommitCallbacks(execute=True):
+            client.post(_url(self.game.pk), {}, format="json")
+        with self.captureOnCommitCallbacks(execute=True):
+            resp = client.delete(_url(self.game.pk))
+        self.assertEqual(resp.status_code, 200)
+        row = GameLobby.objects.get(game=self.game)
+        self.assertEqual((row.state, row.state_reason), ("closed", "closed_by_staff"))
 
     def test_non_staff_cannot_create(self, create_delay, close_delay):
         for user in (self.player, self.outsider):

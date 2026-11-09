@@ -110,6 +110,9 @@ class CreateTaskTests(TaskTestBase):
         self.assertEqual(self.retry.call_args.kwargs["countdown"], 30)
         row = self.row()
         self.assertEqual((row.state, row.last_error_code), ("requested", "unavailable"))
+        # The retry holds on to the row it claimed.
+        self.assertEqual(self.retry.call_args.kwargs["args"], [self.game.pk])
+        self.assertEqual(self.retry.call_args.kwargs["kwargs"]["game_lobby_id"], row.pk)
         # The reconcile task waits for this retry instead of starting another.
         self.assertEqual(
             (row.next_attempt_at - row.last_error_at).total_seconds(),
@@ -183,6 +186,46 @@ class CreateTaskTests(TaskTestBase):
         self.assertEqual(
             self.retry.call_args.kwargs["countdown"], tasks.CONFLICT_RETRY_SECONDS
         )
+
+    def test_retry_of_a_closed_row_does_not_create_a_new_lobby(self):
+        # Staff create, every bot is busy, staff close while the task waits
+        # to retry: the retry must not bring the lobby back.
+        self.client.create_lobby.side_effect = DotaLobbyError(
+            "unavailable", status=503, retryable=True
+        )
+        with self.assertRaises(Retry):
+            self.run_task(tasks.create_dota_lobby, self.game.pk, trigger="manual")
+        retry_kwargs = self.retry.call_args.kwargs["kwargs"]
+        row = self.row()
+        with self.captureOnCommitCallbacks(execute=False):
+            self.assertTrue(services.close_lobby(row, "closed_by_staff"))
+        self.client.create_lobby.reset_mock()
+        self.assertEqual(
+            self.run_task(
+                tasks.create_dota_lobby, self.game.pk, retries=1, **retry_kwargs
+            ),
+            "lobby_ended",
+        )
+        self.client.create_lobby.assert_not_called()
+        self.assertEqual(GameLobby.objects.filter(game=self.game).count(), 1)
+
+    def test_queued_manual_create_of_a_closed_row_is_not_sent(self):
+        with self.captureOnCommitCallbacks(execute=False):
+            self.assertTrue(services.queue_create(self.game).ok)
+        row = self.row()
+        with self.captureOnCommitCallbacks(execute=False):
+            services.close_lobby(row, "closed_by_staff")
+        self.assertEqual(
+            self.run_task(
+                tasks.create_dota_lobby,
+                self.game.pk,
+                trigger="manual",
+                game_lobby_id=row.pk,
+            ),
+            "lobby_ended",
+        )
+        self.client.create_lobby.assert_not_called()
+        self.assertFalse(GameLobby.objects.filter(game=self.game, ended=False).exists())
 
     def test_not_eligible_is_not_sent(self):
         self.game.radiant_team.members.add(make_user(steam=False))
@@ -284,7 +327,9 @@ class ReconcileTests(TaskTestBase):
         services.claim_lobby(fresh.pk)
         counts = self.run_task(tasks.reconcile_dota_lobbies)
         self.assertEqual(counts["recreated"], 1)
-        create_delay.assert_called_once_with(self.game.pk, trigger="auto")
+        create_delay.assert_called_once_with(
+            self.game.pk, trigger="auto", game_lobby_id=row.pk
+        )
         self.client.list_lobbies.assert_not_called()
 
     @mock.patch("lobby.tasks.create_dota_lobby.delay")

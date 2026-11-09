@@ -75,6 +75,11 @@ A lobby that times out or fails is not recreated automatically: organizers retry
    looking up the lobby holding the reference: DraftForge adopts it when it is the same row's,
    closes it and retries when it is an earlier lobby of the same game, and gives up otherwise.
 
+A manual create (staff, the admin action or `manage.py create_dota_lobby`) makes the
+`requested` row at once, so staff can close it before the task runs. The task, and every retry
+of it, carries the row's ID: once the row has ended (closed by staff or replaced), the next
+claim answers `409 lobby_ended` and the task stops instead of creating a new lobby.
+
 **Teams and sides.** When a game's teams change while its lobby has not started (`requested`
 to `ready`), the lobby is ended (`closed`, reason `teams_changed`), closed in dota_lobby, and a
 new one is requested for the new teams. Swapping the two teams between bracket slots is not a

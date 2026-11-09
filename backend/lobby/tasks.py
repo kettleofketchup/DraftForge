@@ -20,6 +20,7 @@ errors) are retried; any other is reported to the backend as permanent.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 from celery import Task, shared_task
@@ -58,12 +59,23 @@ def create_dota_lobby(
     trigger: str = "auto",
     user_id: int | None = None,
     allow_missing: bool = False,
+    game_lobby_id: int | None = None,
 ) -> str:
-    """Create (or resend the create of) the game's lobby in dota_lobby."""
+    """Create (or resend the create of) the game's lobby in dota_lobby.
+
+    Without `game_lobby_id` the task claims the game's active lobby or a new
+    row. Every retry carries the claimed row's ID, so a row that ended in
+    the meantime (an organizer closed or replaced it) stops the task instead
+    of being followed by a fresh lobby.
+    """
     if not _enabled():
         return "disabled"
     status, claim = internal_api.claim(
-        game_id, trigger=trigger, user_id=user_id, allow_missing=allow_missing
+        game_id,
+        trigger=trigger,
+        user_id=user_id,
+        allow_missing=allow_missing,
+        game_lobby_id=game_lobby_id,
     )
     if status is None or status >= 500 and status != 503:
         raise self.retry(countdown=_countdown(self.request.retries))
@@ -74,6 +86,7 @@ def create_dota_lobby(
         log.info(
             "lobby_create_skipped",
             game_id=game_id,
+            game_lobby_id=game_lobby_id,
             reason=claim.get("code"),
             trigger=trigger,
             **_LOG_TASKS,
@@ -84,11 +97,23 @@ def create_dota_lobby(
     if body is None:
         return "exists"
 
+    def retry(countdown: int) -> Exception:
+        return self.retry(
+            args=[game_id],
+            kwargs={
+                "trigger": trigger,
+                "user_id": user_id,
+                "allow_missing": allow_missing,
+                "game_lobby_id": pk,
+            },
+            countdown=countdown,
+        )
+
     try:
         client = DotaLobbyClient()
         result = client.create_lobby(body)
     except DotaLobbyError as exc:
-        return _create_failed(self, pk, body, exc)
+        return _create_failed(self, retry, pk, body, exc)
 
     answer = internal_api.accepted(
         pk, _view_json(result.lobby), replayed=result.replayed
@@ -107,8 +132,11 @@ def create_dota_lobby(
     return "replayed" if result.replayed else "created"
 
 
+RetryFn = Callable[[int], Exception]
+
+
 def _create_failed(
-    task: Any, pk: int, body: dict[str, Any], exc: DotaLobbyError
+    task: Any, retry: RetryFn, pk: int, body: dict[str, Any], exc: DotaLobbyError
 ) -> str:
     log_kwargs = {
         "game_lobby_id": pk,
@@ -135,12 +163,12 @@ def _create_failed(
             log.info(
                 "lobby_create_retry", attempt=task.request.retries + 1, **log_kwargs
             )
-            raise task.retry(countdown=countdown)
+            raise retry(countdown)
         # Left `requested`: the reconcile task sends it again later.
         log.warning("lobby_create_retries_exhausted", **log_kwargs)
         return exc.code
     if exc.code == "conflict":
-        return _resolve_conflict(task, pk, body)
+        return _resolve_conflict(task, retry, pk, body)
     log.warning(
         "lobby_create_refused",
         errors=[e.model_dump(mode="json") for e in exc.errors],
@@ -150,7 +178,7 @@ def _create_failed(
     return exc.code
 
 
-def _resolve_conflict(task: Task, pk: int, body: dict[str, Any]) -> str:
+def _resolve_conflict(task: Task, retry: RetryFn, pk: int, body: dict[str, Any]) -> str:
     """Another active lobby holds our external_ref: adopt, replace or give up."""
     client = DotaLobbyClient()
     try:
@@ -160,12 +188,12 @@ def _resolve_conflict(task: Task, pk: int, body: dict[str, Any]) -> str:
         )
     except DotaLobbyError as exc:
         if exc.retryable and task.request.retries < task.max_retries:
-            raise task.retry(countdown=_countdown(task.request.retries)) from exc
+            raise retry(_countdown(task.request.retries)) from exc
         internal_api.rejected(pk, code="conflict", detail=exc.detail, retryable=True)
         return "conflict"
     if holder is None:
         # It ended in between; the ref is free again.
-        raise task.retry(countdown=CONFLICT_RETRY_SECONDS)
+        raise retry(CONFLICT_RETRY_SECONDS)
     answer = internal_api.conflict(pk, _view_json(holder)) or {}
     action = answer.get("action")
     if action == "adopt":
@@ -183,7 +211,7 @@ def _resolve_conflict(task: Task, pk: int, body: dict[str, Any]) -> str:
                 **_LOG_TASKS,
             )
         if task.request.retries < task.max_retries:
-            raise task.retry(countdown=CONFLICT_RETRY_SECONDS)
+            raise retry(CONFLICT_RETRY_SECONDS)
         return "conflict"
     return "conflict"
 
@@ -353,7 +381,9 @@ def reconcile_dota_lobbies() -> dict[str, int] | str:
         if not row.get("lobby_id"):
             if row.get("resend_due"):
                 create_dota_lobby.delay(
-                    row["game_id"], trigger=row.get("trigger") or "auto"
+                    row["game_id"],
+                    trigger=row.get("trigger") or "auto",
+                    game_lobby_id=row["id"],
                 )
                 counts["recreated"] += 1
             continue

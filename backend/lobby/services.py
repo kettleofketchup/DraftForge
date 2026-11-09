@@ -28,7 +28,7 @@ from django.conf import settings
 from django.db import transaction
 
 from app.models import DotaLobbyMode, Game, GameMode, GameType, Team
-from lobby import refs, states
+from lobby import broadcast, refs, states
 from lobby.models import GameLobby
 from lobby.passwords import derive_password
 
@@ -277,8 +277,13 @@ def claim_lobby(
     trigger: str = GameLobby.Trigger.AUTO,
     user_id: int | None = None,
     allow_missing: bool = False,
+    game_lobby_id: int | None = None,
 ) -> Claim:
     """The game's active lobby, or a new `requested` row when it may have one.
+
+    With `game_lobby_id` (a create retrying for a row it already holds) it
+    is that row only, while it has not ended: a row an organizer closed is
+    never replaced by the retry of its own create (`lobby_ended`).
 
     Locks the game, so two claims for one game never both create a row.
     """
@@ -288,6 +293,15 @@ def claim_lobby(
             .select_related("tournament", "radiant_team", "dire_team")
             .get(pk=game_pk)
         )
+        if game_lobby_id is not None:
+            row = game.lobbies.filter(pk=game_lobby_id).first()
+            if row is None or row.ended:
+                return Claim(
+                    None,
+                    False,
+                    _fail("lobby_ended", state=row.state if row else None),
+                )
+            return Claim(row, False, Eligibility(True))
         existing = active_lobby(game)
         if existing is not None:
             return Claim(existing, False, Eligibility(True))
@@ -345,23 +359,36 @@ def wants_flip(game_lobby: GameLobby) -> bool:
 def queue_create(
     game: Game, *, user_id: int | None = None, allow_missing: bool = False
 ) -> Eligibility:
-    """Manual create (organizer action): check now, create in Celery on commit."""
-    eligibility = lobby_eligibility(
-        game, trigger=GameLobby.Trigger.MANUAL, allow_missing=allow_missing
-    )
-    if eligibility.ok:
-        from lobby.tasks import create_dota_lobby
+    """Manual create (organizer action): claim the row now, send it in Celery.
 
-        game_pk = game.pk
-        transaction.on_commit(
-            lambda: create_dota_lobby.delay(
-                game_pk,
-                trigger=GameLobby.Trigger.MANUAL,
-                user_id=user_id,
-                allow_missing=allow_missing,
-            )
+    The `requested` row exists before the task runs, and the task carries its
+    ID through every retry. Closing the row therefore stops the create: the
+    task's next claim answers `lobby_ended` instead of making a new row.
+    """
+    claim = claim_lobby(
+        game.pk,
+        trigger=GameLobby.Trigger.MANUAL,
+        user_id=user_id,
+        allow_missing=allow_missing,
+    )
+    if claim.game_lobby is None:
+        return claim.eligibility
+    if not claim.created:
+        return _fail("active_lobby_exists", state=claim.game_lobby.state)
+    from lobby.tasks import create_dota_lobby
+
+    game_pk, pk = game.pk, claim.game_lobby.pk
+    broadcast.lobby_changed_on_commit(claim.game_lobby, bracket_changed=False)
+    transaction.on_commit(
+        lambda: create_dota_lobby.delay(
+            game_pk,
+            trigger=GameLobby.Trigger.MANUAL,
+            user_id=user_id,
+            allow_missing=allow_missing,
+            game_lobby_id=pk,
         )
-    return eligibility
+    )
+    return claim.eligibility
 
 
 def close_lobby(game_lobby: GameLobby, reason: str) -> bool:
