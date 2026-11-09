@@ -26,6 +26,7 @@ import logging
 import warnings
 
 from backend.env_utils import env_bool, env_list
+from config.dota_lobby import DotaLobbyConfig
 from config.installed_apps import MODEL_APPS
 from config.leagues import app_config
 from telemetry.config import init_telemetry
@@ -52,6 +53,18 @@ _raw_ips = os.environ.get("INTERNAL_SERVICE_ALLOWED_IPS", "")
 INTERNAL_SERVICE_ALLOWED_IPS = [
     ip.strip() for ip in _raw_ips.split(",") if ip.strip()
 ] or None
+
+# dota_lobby integration (lobby app). Off unless DOTA_LOBBY_ENABLED is set.
+# Parsed in config/dota_lobby.py, shared with config/settings_celery.py.
+_dota_lobby = DotaLobbyConfig.from_env()
+DOTA_LOBBY_ENABLED = _dota_lobby.enabled
+DOTA_LOBBY_URL = _dota_lobby.url
+DOTA_LOBBY_API_KEY = _dota_lobby.api_key
+DOTA_LOBBY_WEBHOOK_SECRETS = _dota_lobby.webhook_secrets
+DOTA_LOBBY_TIMEOUT_SECONDS = _dota_lobby.timeout_seconds
+DOTA_LOBBY_REF_PREFIX = _dota_lobby.ref_prefix
+DOTA_LOBBY_WEBHOOK_TOLERANCE_SECONDS = _dota_lobby.webhook_tolerance_seconds
+DOTA_LOBBY_REGION = _dota_lobby.region
 
 # Test bot tokens for multi-user Discord integration tests.
 # Create additional bot applications at https://discord.com/developers/applications

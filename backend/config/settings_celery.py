@@ -7,6 +7,7 @@ import os
 
 from dotenv import load_dotenv
 
+from config.dota_lobby import DotaLobbyConfig
 from config.installed_apps import MODEL_APPS
 
 load_dotenv()
@@ -54,6 +55,19 @@ CELERY_TIMEZONE = "UTC"
 CELERY_TASK_TRACK_STARTED = True
 
 INTERNAL_SERVICE_TOKEN = os.environ.get("INTERNAL_SERVICE_TOKEN", "")
+
+# dota_lobby integration: the same values as backend.settings (see
+# config/dota_lobby.py). Workers call dota_lobby; the webhook secret is only
+# used by the backend but is kept here so both settings modules match.
+_dota_lobby = DotaLobbyConfig.from_env()
+DOTA_LOBBY_ENABLED = _dota_lobby.enabled
+DOTA_LOBBY_URL = _dota_lobby.url
+DOTA_LOBBY_API_KEY = _dota_lobby.api_key
+DOTA_LOBBY_WEBHOOK_SECRETS = _dota_lobby.webhook_secrets
+DOTA_LOBBY_TIMEOUT_SECONDS = _dota_lobby.timeout_seconds
+DOTA_LOBBY_REF_PREFIX = _dota_lobby.ref_prefix
+DOTA_LOBBY_WEBHOOK_TOLERANCE_SECONDS = _dota_lobby.webhook_tolerance_seconds
+DOTA_LOBBY_REGION = _dota_lobby.region
 
 # Discord bot token — required by discordbot.utils.sync_send_dm and friends.
 # In TEST mode we still need this for the matching TEST_DISCORD_USER_ID path,
