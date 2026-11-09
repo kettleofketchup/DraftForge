@@ -66,16 +66,16 @@ DRAFT_STATE_QUERIES: int = 17
 # Ready = the post-commit broadcast + the tournament response (with its
 # league/source_event/games/captains/draft lookups) + the view's own captain
 # check, row locks, update and event insert. Same for 4 and 8 teams.
-READY_ENDPOINT_QUERIES: int = 44
+READY_ENDPOINT_QUERIES: int = 43
 # Pick, outermost transaction (TransactionTestCase, cacheops off): 26 for
 # auth, locks, the pick, timing, next-round activation and two event inserts
 # (+BEGIN/COMMIT), 17 for the one shared broadcast state behind both events,
-# 2 data_version stamps (build + reuse), 23 for the tournament response.
-PICK_QUERIES: int = 70
+# 2 data_version stamps (build + reuse), 22 for the tournament response.
+PICK_QUERIES: int = 69
 # Upper bounds at the time of writing; the 4 == 8 team equality is the real pin.
-TOURNAMENT_RESPONSE_QUERIES: int = 24
-RESUME_ENDPOINT_QUERIES: int = 55
-UNDO_ENDPOINT_QUERIES: int = 65
+TOURNAMENT_RESPONSE_QUERIES: int = 23
+RESUME_ENDPOINT_QUERIES: int = 54
+UNDO_ENDPOINT_QUERIES: int = 64
 
 
 def legacy_users_dict(tournament: Tournament) -> dict:
@@ -174,6 +174,29 @@ class DraftStateOutputTests(TestCase):
         lazy["_users"] = legacy_users_dict(tournament)
         fresh = Tournament.objects.nocache().get(pk=self.fx.tournament.pk)
         self.assertEqual(dumps(_serialize_tournament(fresh)), dumps(lazy))
+
+    def test_tournament_response_reuses_prefetched_draft_options(self) -> None:
+        with patch.object(
+            Tournament, "get_draft_options", autospec=True
+        ) as get_draft_options:
+            data = _serialize_tournament(self.fx.tournament)
+        get_draft_options.assert_not_called()
+        self.assertEqual(
+            data["draft_options"]["grace_time_ms"], self.fx.options.grace_time_ms
+        )
+
+    def test_fresh_context_ignores_options_not_loaded_fresh(self) -> None:
+        tournament = tournament_state_queryset(fresh=False).get(
+            pk=self.fx.tournament.pk
+        )
+        with patch.object(
+            Tournament,
+            "get_draft_options",
+            autospec=True,
+            return_value=self.fx.options,
+        ) as get_draft_options:
+            TournamentSerializer(tournament, context={"fresh": True}).data
+        get_draft_options.assert_called_once_with(tournament, fresh=True)
 
     def test_missing_draft_returns_none(self) -> None:
         self.assertIsNone(build_draft_state(10_000_000, fresh=True))

@@ -678,14 +678,31 @@ def _users_remaining_pks(draft: Draft) -> list[int]:
 def _shared_draft_options(
     serializer: serializers.BaseSerializer, tournament: Tournament
 ) -> DraftOptions:
-    """``get_draft_options()`` once per tournament for a whole serializer tree."""
+    """``get_draft_options()`` once per tournament for a whole serializer tree.
+
+    Reuses the ``draft_options`` prefetched by tournament_state_queryset (marked
+    with ``loaded_uncached``); a fresh context only takes one loaded uncached.
+    Any other cached relation may predate a write and is re-read.
+    """
     context = serializer.root.context
     memo = context.setdefault("_draft_options", {})
     if tournament.pk not in memo:
-        memo[tournament.pk] = tournament.get_draft_options(
-            fresh=context.get("fresh", False)
-        )
+        fresh = context.get("fresh", False)
+        options = _prefetched_draft_options(tournament)
+        loaded_uncached = getattr(options, "loaded_uncached", None)
+        if loaded_uncached is None or (fresh and not loaded_uncached):
+            options = tournament.get_draft_options(fresh=fresh)
+        memo[tournament.pk] = options
     return memo[tournament.pk]
+
+
+def _prefetched_draft_options(tournament: Tournament) -> DraftOptions | None:
+    if not Tournament.draft_options.is_cached(tournament):
+        return None
+    try:
+        return tournament.draft_options
+    except DraftOptions.DoesNotExist:
+        return None
 
 
 class DraftRoundForDraftSerializer(serializers.ModelSerializer):

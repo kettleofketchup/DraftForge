@@ -10,7 +10,7 @@ anything built right after a write (broadcasts, endpoint responses) so the
 payload never depends on the ordering of post-commit invalidations.
 """
 
-from django.db.models import Model, Prefetch, QuerySet
+from django.db.models import BooleanField, Model, Prefetch, QuerySet, Value
 
 from app.models import (
     CustomUser,
@@ -79,7 +79,12 @@ def tournament_state_queryset(*, fresh: bool) -> QuerySet[Tournament]:
         *_tournament_prefetches("", fresh),
         Prefetch("league__admins", queryset=_qs(CustomUser, fresh)),
         Prefetch("league__staff", queryset=_qs(CustomUser, fresh)),
-        Prefetch("draft_options", queryset=_qs(DraftOptions, fresh)),
+        Prefetch(
+            "draft_options",
+            queryset=_qs(DraftOptions, fresh).annotate(
+                loaded_uncached=Value(fresh, output_field=BooleanField())
+            ),
+        ),
         Prefetch("draft", queryset=_qs(Draft, fresh)),
         _draft_round_prefetch("draft__", fresh),
         *game_prefetches,
