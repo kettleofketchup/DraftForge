@@ -67,6 +67,39 @@ class GameSignalTests(TestCase):
         close_delay.assert_called_once_with(row.pk, "lob_1")
         create_delay.assert_called_once_with(game.pk, trigger="auto")
 
+    def test_completed_game_closes_pregame_lobby(self, create_delay, close_delay):
+        game = make_game()
+        row = services.claim_lobby(game.pk).game_lobby
+        row.lobby_id = "lob_1"
+        row.state = states.WAITING
+        row.save()
+        create_delay.reset_mock()
+
+        # A forfeit decided with advance-winner: same teams, game completed.
+        game.winning_team = game.radiant_team
+        game.status = "completed"
+        self.save(game)
+
+        row.refresh_from_db()
+        self.assertEqual(
+            (row.state, row.state_reason), ("closed", services.GAME_COMPLETED)
+        )
+        close_delay.assert_called_once_with(row.pk, "lob_1")
+        create_delay.assert_not_called()
+
+    def test_completed_game_keeps_lobby_in_match(self, create_delay, close_delay):
+        game = make_game()
+        row = services.claim_lobby(game.pk).game_lobby
+        row.lobby_id = "lob_1"
+        row.state = states.IN_GAME
+        row.save()
+        game.winning_team = game.radiant_team
+        game.status = "completed"
+        self.save(game)
+        row.refresh_from_db()
+        self.assertEqual((row.state, row.ended), ("in_game", False))
+        close_delay.assert_not_called()
+
     def test_slot_swap_is_not_a_team_change(self, create_delay, close_delay):
         game = make_game()
         services.claim_lobby(game.pk)

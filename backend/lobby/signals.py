@@ -6,6 +6,9 @@
 - When a game's teams change while its lobby has not started, the lobby is
   ended here and closed in dota_lobby, and a new one is requested for the new
   teams, so a lobby's roster always matches the bracket.
+- When a game is completed (or gets a winner) while its lobby has not
+  started, for example a forfeit decided with advance-winner, the lobby is
+  ended and closed so it does not hold a bot.
 - A deleted game's lobby is closed in dota_lobby before the row goes with it.
 - When a hero draft completes with the other side choice than the lobby was
   created with, the lobby's teams are flipped.
@@ -41,6 +44,18 @@ def _close_for_team_change(game_lobby: GameLobby) -> None:
     broadcast.lobby_changed_on_commit(game_lobby, bracket_changed=False)
 
 
+def _close_for_game_completed(game_lobby: GameLobby) -> None:
+    services.close_lobby(game_lobby, services.GAME_COMPLETED)
+    log.info(
+        "lobby_closed_game_completed",
+        game_id=game_lobby.game_id,
+        game_lobby_id=game_lobby.pk,
+        lobby_id=game_lobby.lobby_id,
+        **_LOG,
+    )
+    broadcast.lobby_changed_on_commit(game_lobby, bracket_changed=False)
+
+
 @receiver(post_save, sender="app.Game", dispatch_uid="lobby_game_saved")
 def lobby_on_game_saved(
     sender: type, instance: Game, raw: bool = False, **kwargs: object
@@ -68,6 +83,14 @@ def lobby_on_game_saved(
                     state=current.state,
                     **_LOG,
                 )
+        if (
+            current is not None
+            and current.state in services.PREGAME_STATES
+            and (game.status == "completed" or game.winning_team_id is not None)
+        ):
+            # Decided without the lobby's match: nobody will play in it.
+            _close_for_game_completed(current)
+            return
         if current is not None:
             return
         if not (
