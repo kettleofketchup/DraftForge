@@ -27,6 +27,7 @@ from app.tasks.herodraft_tick import (
     tick_lock_key,
 )
 from app.tests.test_consumers_base import ConcreteDraftConsumer
+from config.celery import app as celery_app
 from tests.cache import flush_run_cache
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
@@ -229,3 +230,23 @@ class NoGlobalCacheFlushTests(SimpleTestCase):
                 elif isinstance(node, ast.Attribute) and node.attr == "invalidate_all":
                     offenders.append(f"{rel}:{node.lineno}")
         self.assertEqual(offenders, [], "use tests.cache.flush_run_cache() instead")
+
+
+class CeleryEagerUnderTestsTests(SimpleTestCase):
+    def test_test_run_executes_tasks_in_process(self) -> None:
+        mod = _reload(["manage.py", "test"])
+        self.assertIs(mod.CELERY_TASK_ALWAYS_EAGER, True)
+        self.assertIs(mod.CELERY_TASK_EAGER_PROPAGATES, True)
+
+    def test_non_test_process_keeps_the_broker(self) -> None:
+        # reload() re-executes into the old namespace; drop names a test run set.
+        for name in ("CELERY_TASK_ALWAYS_EAGER", "CELERY_TASK_EAGER_PROPAGATES"):
+            vars(backend.settings).pop(name, None)
+        mod = _reload(["manage.py", "runserver"])
+        self.assertFalse(hasattr(mod, "CELERY_TASK_ALWAYS_EAGER"))
+        self.assertFalse(hasattr(mod, "CELERY_TASK_EAGER_PROPAGATES"))
+
+    def test_active_celery_app_is_eager(self) -> None:
+        self.assertIs(celery_app.conf.task_always_eager, True)
+        self.assertIs(celery_app.conf.task_eager_propagates, True)
+
