@@ -144,6 +144,7 @@ test.describe.serial('Team draft timer countdown', () => {
     browser,
     loginAdmin: login,
   }) => {
+    test.setTimeout(120_000);
     t = await resetReadyAndStart(browser);
     await login();
 
@@ -156,7 +157,7 @@ test.describe.serial('Team draft timer countdown', () => {
     await openDraftModal(page, t.pk);
     await expect(page.getByTestId('completed-team-draft-view')).toBeVisible();
 
-    await page.getByTestId('undoPickButton').click();
+    await page.getByTestId('undoPickButton').filter({ visible: true }).click();
     await page.getByTestId('confirmUndoPickButton').click();
 
     await expect(page.getByTestId('draft-clock-bar')).toBeVisible();

@@ -151,7 +151,9 @@ test.describe.serial('Team draft ready screen', () => {
 
       await page.getByTestId('draft-history-button').click();
       await expect(page.getByTestId('draft-event-history-title')).toBeVisible();
-      await expect(page.getByText('Draft started by')).toBeVisible();
+      await expect(
+        page.getByTestId('draft-event-row-draft_started_by_staff').first().getByTestId('draft-event-text')
+      ).toContainText('Draft started by');
     } finally {
       await a.context.close();
     }
@@ -175,7 +177,8 @@ test.describe.serial('Team draft ready screen', () => {
 
     await expect(page.getByTestId('draft-lobby')).toBeHidden();
     await page.getByTestId('draft-history-button').click();
-    await expect(page.getByText('Draft force-started by')).toBeVisible();
-    await expect(page.getByText('2 not ready')).toBeVisible();
+    await expect(
+      page.getByTestId('draft-event-row-draft_force_started').first().getByTestId('draft-event-text')
+    ).toContainText(/force-started by .* \(2 not ready\)/);
   });
 });

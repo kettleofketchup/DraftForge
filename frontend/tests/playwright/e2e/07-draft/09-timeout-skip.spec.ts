@@ -96,13 +96,13 @@ test.describe.serial('Team draft timeout skip', () => {
 
   test('@cicd captain A navigating to their deferred round sees the deferred indicator, not YOUR turn', async () => {
     const { page } = a;
-    await page.getByTestId('nextRoundButton').click();
+    await page.getByTestId('nextRoundButton').filter({ visible: true }).click();
     await expect(page.getByTestId('turn-indicator-deferred')).toContainText(
       /Pick #2 — deferred, .* picks after #1/
     );
     await expect(page.getByTestId('turn-indicator')).toHaveCount(0);
 
-    await page.getByTestId('prevRoundButton').click();
+    await page.getByTestId('prevRoundButton').filter({ visible: true }).click();
     await expect(page.getByTestId('turn-indicator')).toContainText('Waiting for');
   });
 
