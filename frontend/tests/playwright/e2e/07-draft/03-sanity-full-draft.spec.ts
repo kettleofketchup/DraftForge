@@ -23,6 +23,10 @@ import {
 } from '../../fixtures';
 
 test.describe('Team Draft - Full Lifecycle Sanity', () => {
+  // The reset deletes and recreates the tournament under a new pk, so a second
+  // worker's beforeAll would pull it out from under the first worker's test.
+  test.describe.configure({ mode: 'default' });
+
   let tournamentData: TournamentData;
 
   test.beforeAll(async ({ browser }) => {
