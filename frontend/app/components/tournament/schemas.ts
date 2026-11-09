@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import { UserSchema } from '../user';
 
-import { DraftSchema } from '../teamdraft/schemas';
+import { DraftOptionsSchema, DraftSchema } from '../teamdraft/schemas';
 import { GameSchema } from '../game/schemas';
 import { TeamSchema } from '../team';
 
@@ -72,6 +72,7 @@ export const TournamentSchema = z.object({
   user_ids: z.array(z.number()).nullable().optional(),
   team_ids: z.array(z.number()).nullable().optional(),
   draft: DraftSchema.optional(),
+  draft_options: DraftOptionsSchema.optional(),
   // League can be number (ID) or object (minimal info from list endpoint)
   league: z.union([z.number(), LeagueMinimalSchema]).nullable().optional(),
   steam_league_id: z.number().nullable().optional(),
