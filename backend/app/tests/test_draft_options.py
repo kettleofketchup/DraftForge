@@ -11,6 +11,7 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 
+from app.functions.teamdraft_timeout import skip_turn
 from app.management.commands import sync_prod_tournaments
 from app.serializers import DraftSerializerSlim, TournamentSerializer
 from app.tests.teamdraft_fixtures import TimedDraftFixture
@@ -18,6 +19,7 @@ from tests.data.users import REGULAR_USER
 from tests.helpers.tournament_config import TEST_TOURNAMENTS, TestTournamentConfig
 from app.models import (
     Draft,
+    DraftEvent,
     League,
     Organization,
     DraftOptions,
@@ -432,3 +434,26 @@ class FixtureConfigTests(TestCase):
                 self.assertEqual(t.teams.count(), 4, config.key)
                 first_team = t.teams.order_by("draft_order").first()
                 self.assertEqual(first_team.captain.pk, REGULAR_USER.pk, config.key)
+                for team in t.teams.all():
+                    self.assertEqual(
+                        list(team.members.nocache().values_list("pk", flat=True)),
+                        [team.captain_id],
+                        f"{config.key}: {team.name} should start captain-only",
+                    )
+
+    def test_shuffle_timer_skip_reselects_when_the_test_users_team_is_first(self) -> None:
+        config = next(c for c in TEST_TOURNAMENTS if c.key == "shuffle_timer_skip")
+        with override_settings(DEBUG=True):
+            t = config.create()
+        first = t.draft.draft_rounds.order_by("pick_number").first()
+        test_captain_id = t.teams.get(draft_order=1).captain_id
+        first.captain_id = test_captain_id
+        first.save(update_fields=["captain"])
+        with transaction.atomic():
+            skip_turn(t.draft, first)
+        first.refresh_from_db()
+        self.assertNotEqual(first.captain_id, test_captain_id)
+        self.assertTrue(DraftEvent.objects.filter(draft=t.draft, event_type="pick_skipped").exists())
+        self.assertFalse(
+            DraftEvent.objects.filter(draft=t.draft, event_type="pick_skip_unavailable").exists()
+        )

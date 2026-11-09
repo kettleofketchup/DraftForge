@@ -187,6 +187,9 @@ class TestTournamentConfig(BaseModel):
             tournament=self._tournament,
             draft_style=self.draft_style,
         )
+        if self.draft_state == "pending":
+            # Match generate_draft_rounds: a draft about to start has captain-only teams.
+            draft.rebuild_teams(clear_only=True)
         draft.build_rounds()
 
         if self.draft_state == "pending":
@@ -383,9 +386,10 @@ class TestTournamentConfig(BaseModel):
         if first_team and first_team.captain:
             old_captain = first_team.captain
             first_team.captain = test_user
-            first_team.members.remove(old_captain)
-            first_team.members.add(test_user)
             first_team.save()
+            # Add before remove: a captain-only team emptied by remove() is deleted by signal.
+            first_team.members.add(test_user)
+            first_team.members.remove(old_captain)
             self._tournament.users.add(test_user)
 
             # Also update any DraftRounds that had the old captain
