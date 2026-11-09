@@ -11,6 +11,7 @@ import types
 from pathlib import Path
 from unittest import mock
 
+from django.contrib.auth.hashers import get_hasher
 from django.test import SimpleTestCase
 
 import backend.settings
@@ -151,3 +152,17 @@ class SettingsEnvOverrideTests(SimpleTestCase):
         self.assertEqual(
             mod.CHANNEL_LAYERS["default"]["CONFIG"]["hosts"], [("redis", 6379)]
         )
+
+
+class TestRunnerPasswordHasherTests(SimpleTestCase):
+    def test_test_runner_uses_fast_hasher(self) -> None:
+        self.assertEqual(get_hasher().algorithm, "md5")
+
+    def test_server_process_keeps_default_hashers(self) -> None:
+        with mock.patch.object(sys, "argv", ["daphne", "backend.asgi:application"]):
+            with mock.patch.dict(sys.modules):
+                sys.modules.pop("pytest", None)
+                # reload() re-executes into the old namespace; drop the stale value.
+                del backend.settings.PASSWORD_HASHERS
+                mod = _reload()
+        self.assertFalse(hasattr(mod, "PASSWORD_HASHERS"))

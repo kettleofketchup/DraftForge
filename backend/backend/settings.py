@@ -488,6 +488,10 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
+# PBKDF2 costs ~170 ms per create_user(password=...); test fixtures make hundreds.
+if RUNNING_TESTS:
+    PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
+
 
 # Internationalization
 # https://docs.djangoproject.com/en/1.10/topics/i18n/
