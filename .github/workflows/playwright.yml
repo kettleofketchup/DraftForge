@@ -110,7 +110,7 @@ jobs:
         if: ${{ !cancelled() }}
         run: |
           mkdir -p frontend/test-results
-          for c in frontend backend nginx; do docker logs "$c" > "frontend/test-results/$c.log" 2>&1 || true; done
+          for c in $(docker ps -a --format "{{.Names}}"); do docker logs "$c" > "frontend/test-results/$c.log" 2>&1 || true; done
 
       - name: Upload test results
         if: ${{ !cancelled() }}
