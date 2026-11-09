@@ -13,6 +13,7 @@ from app.cache_utils import invalidate_after_commit
 from app.functions.teamdraft import emit_event, team_for_round, team_payload
 from app.functions.teamdraft_timeout import TIMEOUT_ACTIONS
 from app.models import Draft, DraftRound, Team, TeamDraftState
+from app.redis_keys import namespaced_key
 from app.tasks import draft_tick
 from app.tasks.draft_tick import (
     CAPTAIN_CHANNEL_TTL,
@@ -51,7 +52,7 @@ _ARMED_STATES: frozenset[str] = frozenset(
 
 
 def captain_conn_key(draft_id: int, user_id: int) -> str:
-    return f"{PREFIX}:{draft_id}:captain:{user_id}:conns"
+    return namespaced_key(f"{PREFIX}:{draft_id}:captain:{user_id}:conns")
 
 
 def captain_is_fresh(
