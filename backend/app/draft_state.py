@@ -95,14 +95,16 @@ def tournament_state_queryset(*, fresh: bool) -> QuerySet[Tournament]:
 def build_draft_state(draft_id: int, *, fresh: bool) -> dict | None:
     """DraftSerializerSlim payload plus the ``_users`` hydration dict (str keys).
 
-    Outside a transaction the build runs in its own, so its reads share one
+    A fresh build outside a transaction runs in its own, so its reads share one
     snapshot. Under the configured ``BEGIN IMMEDIATE`` that holds the write
     lock for the build: other writers wait (busy timeout) rather than commit
     mid-build. DEFERRED is not used: the OrgUser auto-create write in
     _collect_context_mmr would then fail with SQLITE_BUSY_SNAPSHOT whenever
-    another connection committed after the build's first read.
+    another connection committed after the build's first read. Cached builds
+    (every websocket connect) promise no freshness and stay plain autocommit
+    reads, so spectators never queue on the write lock.
     """
-    if connection.in_atomic_block:
+    if not fresh or connection.in_atomic_block:
         return _build_draft_state(draft_id, fresh=fresh)
     with transaction.atomic():
         return _build_draft_state(draft_id, fresh=fresh)

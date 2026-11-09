@@ -455,6 +455,26 @@ class DraftStateSnapshotTests(TransactionTestCase):
             with self.assertNumQueries(DRAFT_STATE_QUERIES):
                 build_draft_state(fx.draft.pk, fresh=True)
 
+    def test_cached_build_opens_no_transaction(self) -> None:
+        fx = make_fixture(4, "snapc")
+        seen: list[bool] = []
+        real = draft_state_module._build_users_dict
+
+        def mid_build(tournament: Tournament, *, fresh: bool) -> dict:
+            seen.append(connection.in_atomic_block)
+            return real(tournament, fresh=fresh)
+
+        reset_queries()
+        with (
+            patch.object(draft_state_module, "_build_users_dict", mid_build),
+            CaptureQueriesContext(connection) as ctx,
+        ):
+            build_draft_state(fx.draft.pk, fresh=False)
+        self.assertEqual(seen, [False])
+        statements = [q["sql"].split()[0].upper() for q in ctx.captured_queries]
+        self.assertNotIn("BEGIN", statements)
+        self.assertEqual(len(ctx.captured_queries), DRAFT_STATE_QUERIES)
+
 
 class DraftStateFreshReadTests(TransactionTestCase):
     """fresh=True payloads never read through cacheops, at any level."""
