@@ -1,6 +1,8 @@
-from django.contrib import admin
+from django.contrib import admin, messages
+from django.db.models import QuerySet
 from django.http import HttpRequest
 
+from lobby import services
 from lobby.models import GameLobby, GameLobbyEvent
 
 
@@ -45,9 +47,37 @@ class GameLobbyAdmin(admin.ModelAdmin):
         "password_key_id",
     )
 
+    actions = ("create_new_lobby", "close_lobbies")
+
     def has_add_permission(self, request: HttpRequest) -> bool:
         # Lobbies are created through dota_lobby, never by hand.
         return False
+
+    @admin.action(description="Create a new lobby for these games (retry)")
+    def create_new_lobby(self, request: HttpRequest, queryset: QuerySet) -> None:
+        games = {row.game_id: row.game for row in queryset.select_related("game")}
+        for game in games.values():
+            eligibility = services.queue_create(game, user_id=request.user.pk)
+            if eligibility.ok:
+                self.message_user(request, f"Lobby requested for game {game.pk}.")
+            else:
+                self.message_user(
+                    request,
+                    f"Game {game.pk}: {eligibility.code} {eligibility.details or ''}",
+                    level=messages.WARNING,
+                )
+
+    @admin.action(description="Close these lobbies (before the match starts)")
+    def close_lobbies(self, request: HttpRequest, queryset: QuerySet) -> None:
+        closed = skipped = 0
+        for row in queryset.filter(ended=False):
+            if services.close_lobby(row, "closed_by_staff"):
+                closed += 1
+            else:
+                skipped += 1
+        self.message_user(
+            request, f"Closed {closed} lobbies; {skipped} already in a match."
+        )
 
 
 @admin.register(GameLobbyEvent)

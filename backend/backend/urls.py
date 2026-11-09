@@ -516,6 +516,11 @@ urlpatterns += [
     path("api/internal/discord/", include("discordbot.internal_urls")),
 ]
 
+# Internal API — dota_lobby lobbies: Celery task endpoints and the webhook receiver
+urlpatterns += [
+    path("api/internal/lobbies/", include("lobby.internal_urls")),
+]
+
 # Internal API — Steam sync endpoints
 from steam.views_internal import (
     recalculate_mmr,
