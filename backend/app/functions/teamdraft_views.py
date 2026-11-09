@@ -22,7 +22,7 @@ from app.functions.teamdraft import (
     team_payload,
 )
 from app.functions.tournament import _serialize_tournament
-from app.models import Draft, DraftRound, Team, TeamDraftState
+from app.models import Draft, DraftOptions, DraftRound, Team, TeamDraftState
 from app.permissions_org import can_edit_tournament
 from app.tasks.teamdraft_tick import start_team_tick_broadcaster_after_commit
 from telemetry.logging import get_logger
@@ -42,7 +42,7 @@ def _ok(draft: Draft) -> Response:
     return Response(_serialize_tournament(draft.tournament))
 
 
-def _is_armed(draft: Draft, options, active: DraftRound | None) -> bool:
+def _is_armed(draft: Draft, options: DraftOptions, active: DraftRound | None) -> bool:
     return bool(
         options.timer_enabled
         and draft.state in (TeamDraftState.DRAFTING, TeamDraftState.RESUMING)

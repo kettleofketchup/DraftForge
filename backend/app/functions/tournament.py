@@ -263,7 +263,7 @@ class CreateTournamentTeamRequestSerializer(serializers.Serializer):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
-def create_team_from_captain(request):
+def create_team_from_captain(request: Request) -> Response:
     """Create a team from a captain. Requires tournament staff access."""
     serializer = CreateTournamentTeamRequestSerializer(data=request.data)
 
@@ -349,7 +349,7 @@ class CreateDraftRounds(serializers.Serializer):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
-def generate_draft_rounds(request):
+def generate_draft_rounds(request: Request) -> Response:
     """Generate draft rounds for a tournament. Requires tournament staff access."""
     serializer = CreateDraftRounds(data=request.data)
 
@@ -446,7 +446,7 @@ def generate_draft_rounds(request):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
-def rebuild_team(request):
+def rebuild_team(request: Request) -> Response:
     """Rebuild teams in a tournament. Requires tournament staff access."""
     serializer = CreateDraftRounds(data=request.data)
 
@@ -563,7 +563,7 @@ from user.models import BaseUserProfile, DotaUserProfile
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
-def get_draft_style_mmrs(request):
+def get_draft_style_mmrs(request: Request) -> Response:
     serializer = DraftPredictMMRSerializer(data=request.data)
 
     if serializer.is_valid():
@@ -588,7 +588,7 @@ def get_draft_style_mmrs(request):
         extra=cache_key,
         timeout=60 * 15,
     )
-    def get_data(request):
+    def get_data(request: Request) -> dict:
         return DraftSerializerMMRs(draft).data
 
     data = get_data(request)
@@ -601,7 +601,7 @@ class UndoPickSerializer(serializers.Serializer):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
-def undo_last_pick(request):
+def undo_last_pick(request: Request) -> Response:
     """
     Undo the last pick in a draft.
 

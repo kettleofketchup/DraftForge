@@ -14,7 +14,7 @@ from app.cache_utils import invalidate_obj
 from app.consumers_base import BaseDraftConsumer
 from app.draft_state import build_draft_state
 from app.functions.teamdraft import emit_event, team_payload
-from app.models import Draft, Team
+from app.models import Draft, DraftTeam, Team
 from app.tasks.draft_tick import CAPTAIN_CHANNEL_TTL, TickDriver
 from app.tasks.teamdraft_tick import (
     TEAM_TICK_DRIVER,
@@ -302,7 +302,7 @@ class DraftConsumer(BaseDraftConsumer):
 class TournamentConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
     """WebSocket consumer for tournament-wide events."""
 
-    async def connect(self):
+    async def connect(self) -> None:
         await self.telemetry_connect()
         self.tournament_id = self.scope["url_route"]["kwargs"]["tournament_id"]
         self.room_group_name = f"tournament_{self.tournament_id}"
@@ -328,15 +328,15 @@ class TournamentConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
             )
         )
 
-    async def disconnect(self, close_code):
+    async def disconnect(self, close_code: int) -> None:
         await self.telemetry_disconnect(close_code)
         await self.channel_layer.group_discard(self.room_group_name, self.channel_name)
 
-    async def receive(self, text_data):
+    async def receive(self, text_data: str) -> None:
         # Read-only WebSocket - ignore incoming messages
         pass
 
-    async def draft_event(self, event):
+    async def draft_event(self, event: dict[str, Any]) -> None:
         """Handle draft.event messages from channel layer."""
         message = {
             "type": "draft_event",
@@ -348,13 +348,13 @@ class TournamentConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
         await self.send(text_data=json.dumps(message))
 
     @database_sync_to_async
-    def tournament_exists(self, tournament_id):
+    def tournament_exists(self, tournament_id: int) -> bool:
         from app.models import Tournament
 
         return Tournament.objects.filter(pk=tournament_id).exists()
 
     @database_sync_to_async
-    def get_recent_events(self, tournament_id, limit=20):
+    def get_recent_events(self, tournament_id: int, limit: int = 20) -> list[dict]:
         from app.models import Draft, DraftEvent
         from app.serializers import DraftEventSerializer
 
@@ -380,13 +380,13 @@ class HeroDraftConsumer(BaseDraftConsumer):
         return "herodraft"
 
     @database_sync_to_async
-    def draft_exists(self, draft_id):
+    def draft_exists(self, draft_id: int) -> bool:
         from app.models import HeroDraft
 
         return HeroDraft.objects.filter(id=draft_id).exists()
 
     @database_sync_to_async
-    def get_initial_state_data(self, draft_id):
+    def get_initial_state_data(self, draft_id: int) -> dict:
         from app.models import HeroDraft
         from app.serializers import HeroDraftSerializer
 
@@ -398,7 +398,9 @@ class HeroDraftConsumer(BaseDraftConsumer):
         return HeroDraftSerializer(draft).data
 
     @database_sync_to_async
-    def get_captain_draft_team(self, draft_id, user):
+    def get_captain_draft_team(
+        self, draft_id: int, user: "AbstractBaseUser"
+    ) -> DraftTeam | None:
         from app.models import HeroDraft
 
         try:
@@ -414,7 +416,7 @@ class HeroDraftConsumer(BaseDraftConsumer):
 
     # --- Connect / Disconnect ---
 
-    async def connect(self):
+    async def connect(self) -> None:
         result = await self.base_connect()
         if result:
             log.info(
@@ -428,7 +430,7 @@ class HeroDraftConsumer(BaseDraftConsumer):
                 is_captain=self._is_captain,
             )
 
-    async def disconnect(self, close_code):
+    async def disconnect(self, close_code: int) -> None:
         log.info(
             "herodraft_disconnected",
             system="herodraft",
@@ -447,7 +449,7 @@ class HeroDraftConsumer(BaseDraftConsumer):
 
     # --- Receive ---
 
-    async def receive(self, text_data):
+    async def receive(self, text_data: str) -> None:
         """Handle incoming WebSocket messages from clients.
 
         Wrapped in a `ws.message` span via `traced_message` so each
@@ -482,7 +484,9 @@ class HeroDraftConsumer(BaseDraftConsumer):
     # --- Captain state change (pause-on-disconnect) ---
 
     @database_sync_to_async
-    def on_captain_state_change(self, draft_id, user, is_connected):
+    def on_captain_state_change(
+        self, draft_id: int, user: "AbstractBaseUser", is_connected: bool
+    ) -> None:
         """Mark captain connected/disconnected and handle pause-on-disconnect.
 
         Only pauses during DRAFTING state (not RESUMING) to prevent infinite
@@ -609,7 +613,7 @@ class HeroDraftConsumer(BaseDraftConsumer):
 
     # --- HeroDraft-specific channel layer handlers ---
 
-    async def herodraft_kicked(self, event):
+    async def herodraft_kicked(self, event: dict[str, Any]) -> None:
         """Handle being kicked by a newer connection."""
         reason = event.get("reason", "unknown")
         log.info(
@@ -633,7 +637,7 @@ class HeroDraftConsumer(BaseDraftConsumer):
         )
         await self.close(code=4000)  # Custom close code for "kicked"
 
-    async def herodraft_event(self, event):
+    async def herodraft_event(self, event: dict[str, Any]) -> None:
         """Handle herodraft.event messages from channel layer."""
         # Build message with only fields that have actual values
         # Using .get() with missing keys returns None, which serializes to null
@@ -656,7 +660,7 @@ class HeroDraftConsumer(BaseDraftConsumer):
 
         await self.send(text_data=json.dumps(message))
 
-    async def herodraft_tick(self, event):
+    async def herodraft_tick(self, event: dict[str, Any]) -> None:
         """Forward tick anchors from the channel layer to this WS client.
 
         Anchor fields (server_time + round_started_at + round_grace_time_ms
