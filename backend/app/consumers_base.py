@@ -333,29 +333,10 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
         This prevents proxies/load balancers from closing idle connections,
         especially during PAUSED state when no tick messages are being sent.
         """
-        touch = sync_to_async(draft_tick.touch_connection, thread_sensitive=False)
-        last_touch = time.monotonic()
         try:
             while True:
                 await asyncio.sleep(PING_INTERVAL)
                 await self.send(text_data=json.dumps({"type": "ping"}))
-                if (
-                    self._connection_tracked
-                    and time.monotonic() - last_touch >= draft_tick.CONN_REFRESH_SECONDS
-                ):
-                    last_touch = time.monotonic()
-                    try:
-                        await touch(
-                            self.get_redis_prefix(), self.draft_id, self.channel_name
-                        )
-                    except redis.RedisError as e:
-                        log.warning(
-                            "connection_touch_failed",
-                            system="websocket",
-                            subsystem="heartbeat",
-                            draft_id=self.draft_id,
-                            error=str(e),
-                        )
         except asyncio.CancelledError:
             pass
         except Exception as e:
@@ -366,6 +347,34 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
                 draft_id=self.draft_id,
                 error=str(e),
             )
+
+    # --- Live-connection refresh ---
+
+    async def _connection_refresh_loop(self) -> None:
+        """Keep this socket in the draft's live-connection set while it is open.
+
+        Runs whether or not pings are enabled, and re-adds the entry if the
+        connect-time increment failed or the key was lost.
+        """
+        touch = sync_to_async(draft_tick.touch_connection, thread_sensitive=False)
+        try:
+            while True:
+                await asyncio.sleep(draft_tick.CONN_REFRESH_SECONDS)
+                try:
+                    await touch(
+                        self.get_redis_prefix(), self.draft_id, self.channel_name
+                    )
+                    self._connection_tracked = True
+                except redis.RedisError as e:
+                    log.warning(
+                        "connection_touch_failed",
+                        system="websocket",
+                        subsystem="heartbeat",
+                        draft_id=self.draft_id,
+                        error=str(e),
+                    )
+        except asyncio.CancelledError:
+            pass
 
     # --- Span helpers ---
 
@@ -444,6 +453,7 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
         self._connection_tracked = False
         self._is_captain = False
         self._ping_task = None
+        self._refresh_task: asyncio.Future[None] | None = None
 
         if (
             self.kick_duplicate_captain_connections
@@ -528,6 +538,7 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
             # Start server-side ping loop
             if self.PING_ENABLED:
                 self._ping_task = asyncio.ensure_future(self._ping_loop())
+            self._refresh_task = asyncio.ensure_future(self._connection_refresh_loop())
 
             span.set_attribute("ws.connect_outcome", "ok")
             return True
@@ -573,6 +584,15 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
                 except asyncio.CancelledError:
                     pass
                 self._ping_task = None
+
+            refresh = getattr(self, "_refresh_task", None)
+            if refresh is not None:
+                refresh.cancel()
+                try:
+                    await refresh
+                except asyncio.CancelledError:
+                    pass
+                self._refresh_task = None
 
             # Track disconnection
             if hasattr(self, "_connection_tracked") and self._connection_tracked:

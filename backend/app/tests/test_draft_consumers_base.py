@@ -4,6 +4,7 @@ import asyncio
 from datetime import date
 from unittest.mock import patch
 
+import redis
 from channels.db import database_sync_to_async
 from channels.layers import get_channel_layer
 from channels.routing import URLRouter
@@ -125,17 +126,46 @@ class DraftConsumerBaseTestCase(TransactionTestCase):
         await comm2.disconnect()
 
     async def test_open_socket_reregisters_after_its_count_key_is_lost(self):
-        with patch("app.tasks.draft_tick.CONN_REFRESH_SECONDS", 0):
+        with patch("app.tasks.draft_tick.CONN_REFRESH_SECONDS", 0.1):
             comm, _, _ = await self.connect(self.spectator)
             self.r.delete(conn_count_key("teamdraft", self.draft.pk))
             await asyncio.sleep(1.5)
             self.assertEqual(get_connection_count("teamdraft", self.draft.pk), 1)
             await comm.disconnect()
 
+    async def test_refresh_runs_without_the_ping_loop(self):
+        with (
+            patch.object(DraftConsumer, "PING_ENABLED", False),
+            patch("app.tasks.draft_tick.CONN_REFRESH_SECONDS", 0.1),
+        ):
+            comm, _, _ = await self.connect(self.spectator)
+            self.r.delete(conn_count_key("teamdraft", self.draft.pk))
+            await asyncio.sleep(0.5)
+            self.assertEqual(get_connection_count("teamdraft", self.draft.pk), 1)
+            await comm.disconnect()
+        self.assertEqual(get_connection_count("teamdraft", self.draft.pk), 0)
+
+    async def test_refresh_registers_a_socket_whose_connect_increment_failed(self):
+        with (
+            patch(
+                "app.tasks.draft_tick.increment_connection_count",
+                side_effect=redis.RedisError("down"),
+            ),
+            patch("app.tasks.draft_tick.CONN_REFRESH_SECONDS", 0.1),
+        ):
+            comm, _, _ = await self.connect(self.spectator)
+            self.assertEqual(get_connection_count("teamdraft", self.draft.pk), 0)
+            await asyncio.sleep(0.5)
+            self.assertEqual(get_connection_count("teamdraft", self.draft.pk), 1)
+            await comm.disconnect()
+        self.assertEqual(get_connection_count("teamdraft", self.draft.pk), 0)
+
     async def test_a_crashing_handler_still_runs_disconnect_cleanup(self):
         comm, _, _ = await self.connect(self.captain)
         self.assertEqual(get_connection_count("teamdraft", self.draft.pk), 1)
-        with patch.object(DraftConsumer, "draft_tick", side_effect=RuntimeError("boom")):
+        with patch.object(
+            DraftConsumer, "draft_tick", side_effect=RuntimeError("boom")
+        ):
             await get_channel_layer().group_send(
                 f"draft_{self.draft.pk}", {"type": "draft.tick"}
             )
