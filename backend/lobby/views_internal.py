@@ -12,6 +12,7 @@ trusts the first X-Forwarded-For value.
 from __future__ import annotations
 
 import json
+from datetime import timedelta
 from typing import Any
 
 from django.conf import settings
@@ -30,6 +31,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from app.auth import InternalServiceAuth, IsInternalService
+from app.cache_utils import invalidate_after_commit
 from app.models import Game
 from lobby import broadcast, events, refs, services, states
 from lobby.models import GameLobby, GameLobbyEvent
@@ -61,6 +63,21 @@ def _view_from(data: object) -> LobbyView | None:
         return None
 
 
+def _resend_due(row: GameLobby) -> bool:
+    """A `requested` row with no create in flight: the reconcile task resends.
+
+    Each claim that hands out the create body, and each retryable failure,
+    pushes `next_attempt_at` past the attempt (and its Celery retry
+    countdown), so a create chain that is still retrying is never doubled.
+    """
+    if row.state != states.REQUESTED or row.lobby_id:
+        return False
+    due = row.next_attempt_at or row.created_at + timedelta(
+        seconds=services.CREATE_ATTEMPT_LEASE_SECONDS
+    )
+    return timezone.now() >= due
+
+
 def _row_summary(row: GameLobby) -> dict[str, Any]:
     return {
         "id": row.pk,
@@ -72,6 +89,7 @@ def _row_summary(row: GameLobby) -> dict[str, Any]:
         "trigger": row.trigger,
         "last_seq": row.last_seq,
         "age_seconds": int((timezone.now() - row.created_at).total_seconds()),
+        "resend_due": _resend_due(row),
         "radiant_team_ref": (
             services.team_ref(row.radiant_team_id) if row.radiant_team_id else None
         ),
@@ -102,6 +120,35 @@ def _record_accepted(row: GameLobby, view: LobbyView) -> bool:
     events.apply_snapshot(row, view)
     broadcast.lobby_changed_on_commit(row, bracket_changed=False)
     return False
+
+
+def _fail_unsendable(pk: int, code: str, detail: str) -> None:
+    """End a `requested` row whose create body cannot be built.
+
+    Without this the row would stay `requested` forever: it blocks the game
+    (`active_lobby_exists`) and the reconcile task would resend it every
+    minute. As `error` it frees the game and shows organizers the cause.
+    """
+    with transaction.atomic():
+        row = GameLobby.objects.select_for_update().filter(pk=pk).first()
+        if row is None or row.ended or row.lobby_id:
+            return
+        row.state = states.ERROR
+        row.state_reason = code[:64]
+        row.last_error_code = code[:48]
+        row.last_error_detail = detail
+        row.last_error_at = timezone.now()
+        row.save(
+            update_fields=[
+                "state",
+                "state_reason",
+                "last_error_code",
+                "last_error_detail",
+                "last_error_at",
+                "updated_at",
+            ]
+        )
+        broadcast.lobby_changed_on_commit(row, bracket_changed=False)
 
 
 # ---------------------------------------------------------------------------
@@ -163,7 +210,14 @@ def claim(request: Request, game_id: int) -> Response:
                 error=type(exc).__name__,
                 **_LOG_API,
             )
+            _fail_unsendable(row.pk, "password_unavailable", str(exc))
             return _error("Lobby password unavailable", "password_unavailable", 503)
+        # This attempt holds the row: the reconcile task leaves it alone
+        # until the lease runs out (see _resend_due).
+        GameLobby.objects.filter(pk=row.pk).update(
+            next_attempt_at=timezone.now()
+            + timedelta(seconds=services.CREATE_ATTEMPT_LEASE_SECONDS)
+        )
     if result.created:
         log.info(
             "lobby_claimed",
@@ -210,21 +264,31 @@ def accepted(request: Request, pk: int) -> Response:
 @authentication_classes(_auth)
 @permission_classes(_perm)
 def rejected(request: Request, pk: int) -> Response:
-    """The create failed. Body: `{code, detail, retryable}`.
+    """The create failed. Body: `{code, detail, retryable, retry_in?}`.
 
-    A retryable failure keeps the row `requested` (the reconcile task tries
-    again); any other ends it with state `error`, for organizers to retry.
+    A retryable failure keeps the row `requested`: the task retries it after
+    `retry_in` seconds (0 when it gave up), and the reconcile task resends it
+    only once that and the attempt lease have passed. Any other failure ends
+    the row with state `error`, for organizers to retry.
     """
     code = str(request.data.get("code") or "unknown")[:48]
     detail = str(request.data.get("detail") or "")
     retryable = request.data.get("retryable") is True
+    retry_in = request.data.get("retry_in")
+    if not isinstance(retry_in, int) or isinstance(retry_in, bool) or retry_in < 0:
+        retry_in = 0
     with transaction.atomic():
         row = get_object_or_404(GameLobby.objects.select_for_update(), pk=pk)
         row.last_error_code = code
         row.last_error_detail = detail
         row.last_error_at = timezone.now()
         fields = ["last_error_code", "last_error_detail", "last_error_at"]
-        if not retryable and not row.ended and not row.lobby_id:
+        if retryable:
+            row.next_attempt_at = row.last_error_at + timedelta(
+                seconds=retry_in + services.CREATE_ATTEMPT_LEASE_SECONDS
+            )
+            fields.append("next_attempt_at")
+        elif not row.ended and not row.lobby_id:
             row.state = states.ERROR
             row.state_reason = code[:64]
             fields += ["state", "state_reason"]
@@ -349,8 +413,17 @@ def sync(request: Request, pk: int) -> Response:
         elif request.data.get("missing") is True and not row.ended:
             row.state = states.CLOSED
             row.state_reason = "not_found"
+            game = Game.objects.select_for_update().get(pk=row.game_id)
+            # Checked before the save, while the row still counts as active.
+            released = events.release_game(row, game)
             row.save(update_fields=["state", "state_reason", "updated_at"])
-            snapshot = True
+            if released:
+                game.save(update_fields=released)
+                invalidate_after_commit(
+                    *(o for o in (game, game.tournament) if o is not None)
+                )
+                broadcast.lobby_changed_on_commit(row, bracket_changed=True)
+            snapshot = not released
         else:
             row.last_synced_at = timezone.now()
             row.save(update_fields=["last_synced_at", "updated_at"])

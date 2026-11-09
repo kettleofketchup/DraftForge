@@ -51,11 +51,18 @@ def accepted(pk: int, lobby: dict[str, Any], *, replayed: bool) -> Any:
     )
 
 
-def rejected(pk: int, *, code: str, detail: str, retryable: bool) -> Any:
+def rejected(
+    pk: int, *, code: str, detail: str, retryable: bool, retry_in: int = 0
+) -> Any:
     return _json(
         ic._post(
             f"{BASE}/{pk}/rejected/",
-            {"code": code, "detail": detail, "retryable": retryable},
+            {
+                "code": code,
+                "detail": detail,
+                "retryable": retryable,
+                "retry_in": retry_in,
+            },
         )
     )
 

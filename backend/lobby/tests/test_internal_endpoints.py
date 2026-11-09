@@ -1,11 +1,15 @@
+from datetime import timedelta
+from unittest import mock
+
 from django.test import TestCase
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from app.models import DotaLobbyMode
 from discordbot.models import DiscordTournamentLog
 from lobby import services, states
 from lobby.models import GameLobby
-from lobby.passwords import derive_password
+from lobby.passwords import PasswordKeyUnavailable, derive_password
 from lobby.tests.helpers import (
     HEADERS,
     envelope,
@@ -59,6 +63,33 @@ class LobbyInternalApiTests(TestCase):
         self.assertFalse(again.json()["created"])
         self.assertEqual(again.json()["body"], data["body"])
         self.assertEqual(GameLobby.objects.count(), 1)
+
+    @mock.patch(
+        "lobby.services.create_body", side_effect=PasswordKeyUnavailable("gone")
+    )
+    def test_claim_without_password_key_ends_row(self, _create_body):
+        resp = self.claim()
+        self.assertEqual(resp.status_code, 503)
+        self.assertEqual(resp.json()["code"], "password_unavailable")
+        row = GameLobby.objects.get(game=self.game)
+        self.assertEqual(
+            (row.state, row.ended, row.last_error_code),
+            ("error", True, "password_unavailable"),
+        )
+        # The game is free again, and the reconcile task has nothing to resend.
+        self.assertEqual(self.get("/active/").json(), [])
+        self.assertTrue(
+            services.lobby_eligibility(self.game, trigger=GameLobby.Trigger.MANUAL).ok
+        )
+
+    def test_claim_with_body_leases_the_row(self):
+        row_id = self.claim().json()["game_lobby_id"]
+        row = GameLobby.objects.get(pk=row_id)
+        lease = row.next_attempt_at - timezone.now()
+        self.assertGreater(
+            lease, timedelta(seconds=services.CREATE_ATTEMPT_LEASE_SECONDS - 5)
+        )
+        self.assertFalse(self.get("/active/").json()[0]["resend_due"])
 
     def test_claim_of_accepted_lobby_has_no_body(self):
         row = services.claim_lobby(self.game.pk).game_lobby
@@ -122,6 +153,38 @@ class LobbyInternalApiTests(TestCase):
             (row.state, row.ended, row.last_error_code),
             ("error", True, "league_not_held"),
         )
+
+    def test_retryable_rejection_holds_resend_until_task_retry_is_due(self):
+        row_id = self.claim().json()["game_lobby_id"]
+        # Long past the create, but the task retries in 480 s.
+        GameLobby.objects.filter(pk=row_id).update(
+            created_at=timezone.now() - timedelta(minutes=20)
+        )
+        self.post(
+            f"/{row_id}/rejected/",
+            {"code": "unavailable", "retryable": True, "retry_in": 480},
+        )
+        row = GameLobby.objects.get(pk=row_id)
+        wait = row.next_attempt_at - row.last_error_at
+        self.assertEqual(
+            wait.total_seconds(), 480 + services.CREATE_ATTEMPT_LEASE_SECONDS
+        )
+        self.assertFalse(self.get("/active/").json()[0]["resend_due"])
+
+        GameLobby.objects.filter(pk=row_id).update(
+            next_attempt_at=timezone.now() - timedelta(seconds=1)
+        )
+        self.assertTrue(self.get("/active/").json()[0]["resend_due"])
+
+    def test_resend_due_without_attempt_counts_from_creation(self):
+        row = services.claim_lobby(self.game.pk).game_lobby
+        self.assertFalse(self.get("/active/").json()[0]["resend_due"])
+        GameLobby.objects.filter(pk=row.pk).update(
+            created_at=timezone.now() - timedelta(minutes=3)
+        )
+        self.assertTrue(self.get("/active/").json()[0]["resend_due"])
+        GameLobby.objects.filter(pk=row.pk).update(lobby_id="lob_1")
+        self.assertFalse(self.get("/active/").json()[0]["resend_due"])
 
     def test_conflict_actions(self):
         row_id = self.claim().json()["game_lobby_id"]
@@ -208,6 +271,29 @@ class LobbyInternalApiTests(TestCase):
         self.post(f"/{row.pk}/sync/", {"missing": True})
         row.refresh_from_db()
         self.assertEqual((row.state, row.state_reason), ("closed", "not_found"))
+
+    def test_sync_missing_after_match_start_releases_game(self):
+        row = services.claim_lobby(self.game.pk).game_lobby
+        row.lobby_id = "lob_1"
+        row.save()
+        events = [
+            envelope(
+                1,
+                "match.started",
+                {"match_id": "8123456789"},
+                external_ref=row.external_ref,
+                state="in_game",
+            )
+        ]
+        self.post(f"/{row.pk}/sync/", {"events": events})
+        self.game.refresh_from_db()
+        self.assertEqual(self.game.status, "live")
+
+        self.post(f"/{row.pk}/sync/", {"missing": True})
+        self.game.refresh_from_db()
+        row.refresh_from_db()
+        self.assertEqual(self.game.status, "pending")
+        self.assertEqual((row.state, row.ended), ("closed", True))
 
     def test_eligible_games(self):
         make_game(make_tournament(dota_lobby_mode=DotaLobbyMode.OFF))

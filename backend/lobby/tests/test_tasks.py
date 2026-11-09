@@ -110,6 +110,11 @@ class CreateTaskTests(TaskTestBase):
         self.assertEqual(self.retry.call_args.kwargs["countdown"], 30)
         row = self.row()
         self.assertEqual((row.state, row.last_error_code), ("requested", "unavailable"))
+        # The reconcile task waits for this retry instead of starting another.
+        self.assertEqual(
+            (row.next_attempt_at - row.last_error_at).total_seconds(),
+            30 + services.CREATE_ATTEMPT_LEASE_SECONDS,
+        )
 
     def test_unreachable_retries_until_exhausted(self):
         self.client.create_lobby.side_effect = DotaLobbyUnavailable("Timeout")
@@ -281,6 +286,29 @@ class ReconcileTests(TaskTestBase):
         self.assertEqual(counts["recreated"], 1)
         create_delay.assert_called_once_with(self.game.pk, trigger="auto")
         self.client.list_lobbies.assert_not_called()
+
+    @mock.patch("lobby.tasks.create_dota_lobby.delay")
+    def test_does_not_resend_while_a_create_is_retrying(self, create_delay):
+        self.client.create_lobby.side_effect = DotaLobbyError(
+            "unavailable", status=503, retryable=True
+        )
+        with mock.patch.object(tasks.create_dota_lobby, "retry", side_effect=Retry):
+            with self.assertRaises(Retry):
+                self.run_task(tasks.create_dota_lobby, self.game.pk, retries=4)
+        # Old enough for the old age-based rule, but the retry is in 480 s.
+        GameLobby.objects.filter(game=self.game).update(
+            created_at=timezone.now() - timedelta(minutes=20)
+        )
+        for _ in range(3):
+            counts = self.run_task(tasks.reconcile_dota_lobbies)
+            self.assertEqual(counts["recreated"], 0)
+        create_delay.assert_not_called()
+
+        GameLobby.objects.filter(game=self.game).update(
+            next_attempt_at=timezone.now() - timedelta(seconds=1)
+        )
+        counts = self.run_task(tasks.reconcile_dota_lobbies)
+        self.assertEqual(counts["recreated"], 1)
 
     @mock.patch("lobby.tasks.create_dota_lobby.delay")
     def test_sweeps_eligible_games(self, create_delay):

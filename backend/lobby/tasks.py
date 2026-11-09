@@ -7,7 +7,8 @@ with lobby.client. Every task does nothing while DOTA_LOBBY_ENABLED is off.
 - create_dota_lobby: claim a lobby for a game, send the create, report back.
   Create is idempotent on external_ref, so it is safe to repeat.
 - reconcile_dota_lobbies (beat, every 60 s): catch up on anything webhooks
-  missed, resend creates that never got an answer, flip sides the hero draft
+  missed, resend creates that never got an answer and are no longer being
+  retried (the backend's `resend_due`), flip sides the hero draft
   decided, and create lobbies for games that should have one.
 - backfill_lobby_events: read the events a webhook gap skipped.
 - close_dota_lobby, flip_lobby_sides: one dota_lobby action each.
@@ -34,8 +35,6 @@ log = get_logger(__name__)
 _LOG_TASKS = {"system": "lobby", "subsystem": "tasks"}
 _LOG_RECONCILE = {"system": "lobby", "subsystem": "reconcile"}
 
-# A `requested` lobby without an answer for this long is created again.
-REQUESTED_RETRY_AFTER_SECONDS = 120
 CONFLICT_RETRY_SECONDS = 15
 MAX_RETRY_COUNTDOWN = 600
 
@@ -119,12 +118,23 @@ def _create_failed(
         **_LOG_TASKS,
     }
     if exc.retryable:
-        internal_api.rejected(pk, code=exc.code, detail=exc.detail, retryable=True)
-        if task.request.retries < task.max_retries:
+        will_retry = task.request.retries < task.max_retries
+        countdown = (
+            max(exc.retry_after or 0, _countdown(task.request.retries))
+            if will_retry
+            else 0
+        )
+        internal_api.rejected(
+            pk,
+            code=exc.code,
+            detail=exc.detail,
+            retryable=True,
+            retry_in=countdown,
+        )
+        if will_retry:
             log.info(
                 "lobby_create_retry", attempt=task.request.retries + 1, **log_kwargs
             )
-            countdown = max(exc.retry_after or 0, _countdown(task.request.retries))
             raise task.retry(countdown=countdown)
         # Left `requested`: the reconcile task sends it again later.
         log.warning("lobby_create_retries_exhausted", **log_kwargs)
@@ -341,10 +351,7 @@ def reconcile_dota_lobbies() -> dict[str, int] | str:
 
     for row in rows:
         if not row.get("lobby_id"):
-            if (
-                row.get("state") == "requested"
-                and row.get("age_seconds", 0) >= REQUESTED_RETRY_AFTER_SECONDS
-            ):
+            if row.get("resend_due"):
                 create_dota_lobby.delay(
                     row["game_id"], trigger=row.get("trigger") or "auto"
                 )

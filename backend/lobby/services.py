@@ -66,6 +66,12 @@ FLIPPABLE_STATES = frozenset({states.WAITING, states.READY})
 # organizer to retry.
 AUTO_RECREATE_REASONS = frozenset({"teams_changed"})
 TEAMS_CHANGED = "teams_changed"
+GAME_COMPLETED = "game_completed"
+
+# How long one create attempt holds a `requested` row before the reconcile
+# task may send it again. One attempt (three HTTP tries with their timeouts)
+# fits well inside it.
+CREATE_ATTEMPT_LEASE_SECONDS = 120
 
 
 @dataclass(frozen=True)
