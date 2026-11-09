@@ -179,6 +179,8 @@ test.describe.serial('Team draft pause and resume', () => {
 
   test('@cicd a non-active captain going stale does not pause', async ({ browser }) => {
     // precondition: captain A page open for the whole test; B has connected and left
+    // Two captain page loads plus the fixed 12 s hold ran 27-30 s on CI, at the default 30 s budget.
+    test.setTimeout(60_000);
     const a = await openCaptainPage(browser, captainA, t.pk);
     try {
       await ensureDrafting();
