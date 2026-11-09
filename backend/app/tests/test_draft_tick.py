@@ -1,11 +1,14 @@
 """Tests for the shared tick runner (app.tasks.draft_tick)."""
 
+import asyncio
 import contextvars
 import threading
 import time
 from collections.abc import Callable
 from unittest.mock import patch
 
+from asgiref.sync import SyncToAsync
+from channels.db import database_sync_to_async
 from django.test import SimpleTestCase, TransactionTestCase, override_settings
 from structlog.testing import capture_logs
 
@@ -346,3 +349,23 @@ class HeroDriverAliasTests(SimpleTestCase):
             herodraft_tick.HERO_TICK_DRIVER.should_continue(5), (False, "patched")
         )
         mocked.assert_called_once()
+
+
+class TickLoopExecutorTests(SimpleTestCase):
+    """A writer stuck on SQLite's lock must not stall every draft's ticks and sockets."""
+
+    def test_tick_loop_db_work_does_not_share_the_global_single_thread(self) -> None:
+        shared = SyncToAsync.single_thread_executor.submit(threading.get_ident).result()
+        seen: list[int] = []
+
+        async def body() -> None:
+            seen.append(await database_sync_to_async(threading.get_ident)())
+
+        thread = threading.Thread(
+            target=lambda: asyncio.run(draft_tick.with_own_db_thread(body()))
+        )
+        thread.start()
+        thread.join(timeout=5)
+
+        self.assertEqual(len(seen), 1)
+        self.assertNotEqual(seen[0], shared)
