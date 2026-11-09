@@ -13,3 +13,7 @@
 - The tournament page no longer flips a captain's lobby toggle back to "Ready up" after they
   ready up. A tournament fetch that was already reading when the ready change committed
   cached its older copy for up to 10 minutes, and every later refetch served it.
+- A team or hero draft whose sockets stayed open for five minutes without anyone connecting
+  or leaving no longer stops its clock. The connection count expired after 300 seconds and
+  the tick loop then stopped with `no_connections`; open sockets now refresh their entry
+  every 10 seconds.
