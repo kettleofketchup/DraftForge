@@ -87,6 +87,7 @@ SECRET_KEY = (
 
 NODE_ENV = "dev"
 TEST = env_bool("TEST")
+RUNNING_TESTS: bool = sys.argv[1:2] == ["test"] or "pytest" in sys.modules
 RELEASE = env_bool("RELEASE")
 DEBUG = env_bool("DEBUG")
 
@@ -476,6 +477,10 @@ AUTH_PASSWORD_VALIDATORS = [
         "NAME": NumericPasswordValidator,
     },
 ]
+
+# PBKDF2 costs ~170 ms per create_user(password=...); test fixtures make hundreds.
+if RUNNING_TESTS:
+    PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 
 
 # Internationalization
