@@ -9,6 +9,7 @@
  * and uses getTournamentByKey for a known tournament.
  */
 
+import { API_URL } from '../../fixtures/base-url';
 import {
   test,
   expect,
@@ -17,7 +18,6 @@ import {
   getTournamentByKey,
 } from '../../fixtures';
 
-const API_URL = 'https://localhost/api';
 
 let orgPk: number;
 let leaguePk: number;

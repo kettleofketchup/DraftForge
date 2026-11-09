@@ -8,6 +8,7 @@
  * Requires Discord bot token and test channels to be configured.
  */
 
+import { API_URL } from '../../fixtures/base-url';
 import {
   test,
   expect,
@@ -23,7 +24,6 @@ import {
 
 import { postWithCsrf, syncDiscordEvents } from '../../fixtures/events';
 
-const API_URL = 'https://localhost/api';
 
 let eventInfo: EventInfo;
 

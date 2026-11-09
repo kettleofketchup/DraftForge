@@ -2,7 +2,7 @@
 name: cypress-tester
 description: Agent for running and debugging Cypress tests. Use when working with E2E tests, debugging test failures, or writing new tests.
 skills:
-  - inv-runner
+  - just
 ---
 
 # Cypress Tester Agent
@@ -23,36 +23,31 @@ frontend/tests/cypress/
 
 ## Capabilities
 
-1. Run specific test suites using invoke tasks
+1. Run specific test suites using just recipes
 2. Debug test failures
 3. Write new tests following project conventions
 4. Review test changes for intent preservation
 
 ## Commands
 
-```bash
-# Activate venv first
-source .venv/bin/activate
+The E2E suite now runs on Playwright; these are the just recipes (no venv activation needed).
 
-# Run all cypress tests
-inv test.cypress.all
+```bash
+# Run all tests (except demos) headless
+just test::pw::headless
 
 # Run specific category
-inv test.cypress.draft       # Draft tests (07-draft, 08-shuffle-draft)
-inv test.cypress.tournament  # Tournament tests (03, 04)
-inv test.cypress.bracket     # Bracket tests (09)
-inv test.cypress.league      # League tests (10)
-inv test.cypress.navigation  # Navigation tests (00, 01)
-inv test.cypress.mobile      # Mobile tests (06)
+just test::pw::draft       # Draft tests (07-draft, 08-shuffle-draft)
+just test::pw::tournament  # Tournament tests (03, 04)
+just test::pw::bracket     # Bracket tests (09)
+just test::pw::league      # League tests (10)
+just test::pw::navigation  # Navigation tests (00, 01)
 
 # Run single spec pattern
-inv test.spec --spec <pattern>
+just test::pw::spec <pattern>
 
-# Interactive mode (opens Cypress GUI)
-inv test.open
-
-# Headless mode
-inv test.headless
+# Interactive mode (Playwright UI)
+just test::pw::ui
 ```
 
 ## Test Environment Setup
@@ -61,11 +56,11 @@ Before running tests, ensure the test environment is ready:
 
 ```bash
 # Full setup (builds, migrates, populates, starts)
-inv test.setup
+just test::setup
 
 # Or start environment and populate data separately
-inv dev.test
-inv db.populate.all
+just test::upd
+just db::populate::all
 ```
 
 ## Test Writing Guidelines
@@ -117,7 +112,7 @@ Ask these questions:
 
 1. **Run failing test in interactive mode**:
    ```bash
-   inv test.open
+   just test::pw::ui
    ```
 
 2. **Check for common issues**:
@@ -164,17 +159,17 @@ Tests depend on pre-populated data. Key configurations:
 - Tournament IDs 1, 2, 3 - Various bracket states
 - League with `TEST_LEAGUE_ID` constant
 
-Populate with: `inv db.populate.all`
+Populate with: `just db::populate::all`
 
 ## CI/CD Commands
 
 ```bash
-# Full CI test run (setup + all tests)
-inv test.cicd.all
+# Full CI test run (backend tests, then setup + all Playwright tests)
+just test::cicd::all
 
-# Cypress only (with setup)
-inv test.cicd.cypress
+# Playwright only (with setup)
+just test::cicd::playwright
 
 # Backend only
-inv test.cicd.backend
+just test::cicd::backend
 ```

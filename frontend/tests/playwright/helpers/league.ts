@@ -1,7 +1,7 @@
+import { API_URL } from '../fixtures/base-url';
 import { expect } from '@playwright/test';
 import type { Page, Locator, BrowserContext } from '@playwright/test';
 
-const API_URL = 'https://localhost/api';
 
 /**
  * League data returned from the API.

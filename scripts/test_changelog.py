@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Tests for scripts/changelog.py. Stdlib only: `python3 scripts/test_changelog.py`.
 
-CI runs this on the bare runner python3, so it must never import invoke,
+CI runs this on the bare runner python3, so it must never import project dependencies,
 scripts/version.py or the root paths module.
 """
 

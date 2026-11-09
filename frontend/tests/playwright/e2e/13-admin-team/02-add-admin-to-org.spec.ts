@@ -15,6 +15,7 @@
  * - Database populated (just db::populate::all)
  */
 
+import { API_URL } from '../../fixtures/base-url';
 import { test, expect, visitAndWaitForHydration } from '../../fixtures';
 import {
   waitForAddUserModal,
@@ -24,7 +25,6 @@ import {
   closeAddUserModal,
 } from '../../helpers/add-user';
 
-const API_URL = 'https://localhost/api';
 
 /** Username of regular test user (pk=1003) who is NOT an org admin. */
 const ADDABLE_USERNAME = 'bucketoffish55';

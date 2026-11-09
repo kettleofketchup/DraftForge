@@ -527,6 +527,7 @@ CORS_ORIGIN_WHITELIST = [
     "http://localhost:5171",
     "https://localhost:443",
     "https://localhost",
+    *env_list("DF_EXTRA_CSRF_ORIGINS"),
 ]
 
 CSRF_TRUSTED_ORIGINS = [
@@ -540,6 +541,7 @@ CSRF_TRUSTED_ORIGINS = [
     "http://dtx.kettle.sh",
     "https://kettle.sh",
     "http://kettle.sh",
+    *env_list("DF_EXTRA_CSRF_ORIGINS"),
 ]
 CSRF_TRUSTED_ORIGINS += env_list("EXTRA_CSRF_TRUSTED_ORIGINS")
 # Behind a TLS-terminating proxy (Traefik) that sets X-Forwarded-Proto.

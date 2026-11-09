@@ -17,6 +17,7 @@
  *      undefined and the Profile Details row would not appear.
  */
 
+import { API_URL } from '../../fixtures/base-url';
 import {
   test,
   expect,
@@ -26,7 +27,6 @@ import {
   saveEditModal,
 } from '../../fixtures';
 
-const API_URL = 'https://localhost/api';
 const USER_EDIT_ORG_NAME = 'User Edit Org';
 // Dedicated user for this spec — see USER_EDIT_USERS in
 // backend/tests/data/users.py. Looked up by username so parallel specs

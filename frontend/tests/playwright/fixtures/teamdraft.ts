@@ -1,9 +1,9 @@
 import type { Browser, BrowserContext, Page } from '@playwright/test';
-import { API_URL as AUTH_API_URL, loginAsUser } from './auth';
+import { API_URL } from './base-url';
+import { loginAsUser } from './auth';
 import { postWithCsrf } from './events';
 import { TournamentPage } from '../helpers/tournament';
 
-const API_URL = 'https://localhost/api';
 
 /**
  * Kill all WebSocket connections for a team draft.
@@ -77,7 +77,7 @@ export async function resetTimerTournament(
 ): Promise<TimerTournament> {
   const response = await postWithCsrf(
     context,
-    `${AUTH_API_URL}/tests/reset-tournament/${key}/`
+    `${API_URL}/tests/reset-tournament/${key}/`
   );
   if (!response.ok()) {
     throw new Error(`resetTimerTournament(${key}) failed: ${response.status()}`);
@@ -90,7 +90,7 @@ export async function fetchTimerTournament(
   key: string
 ): Promise<TimerTournament> {
   const response = await context.request.get(
-    `${AUTH_API_URL}/tests/tournament-by-key/${key}/`,
+    `${API_URL}/tests/tournament-by-key/${key}/`,
     { failOnStatusCode: false }
   );
   if (!response.ok()) {
@@ -106,7 +106,7 @@ export async function expireDraftClock(
 ): Promise<void> {
   const response = await postWithCsrf(
     context,
-    `${AUTH_API_URL}/tests/draft/${draftPk}/expire-clock/`,
+    `${API_URL}/tests/draft/${draftPk}/expire-clock/`,
     { ms }
   );
   if (!response.ok()) {
@@ -122,7 +122,7 @@ export async function staleDraftHeartbeat(
 ): Promise<void> {
   const response = await postWithCsrf(
     context,
-    `${AUTH_API_URL}/tests/draft/${draftPk}/stale-heartbeat/`,
+    `${API_URL}/tests/draft/${draftPk}/stale-heartbeat/`,
     { user_pk: userPk, mode }
   );
   if (!response.ok()) {
@@ -135,7 +135,7 @@ async function postDraftAction(
   path: string,
   data?: Record<string, unknown>
 ): Promise<void> {
-  const response = await postWithCsrf(context, `${AUTH_API_URL}${path}`, data);
+  const response = await postWithCsrf(context, `${API_URL}${path}`, data);
   if (!response.ok()) {
     throw new Error(`POST ${path} failed: ${response.status()} ${await response.text()}`);
   }

@@ -1,9 +1,9 @@
+import { API_URL, BASE_URL } from './base-url';
 import { test as base, expect } from '@playwright/test';
 import type { Browser, BrowserContext, Page } from '@playwright/test';
 import { loginAsUser, waitForHydration } from './auth';
 import type { UserInfo } from './auth';
 
-const API_URL = 'https://localhost/api';
 
 /**
  * HeroDraft test fixtures that support two-captain scenarios.
@@ -198,8 +198,8 @@ export async function setupTwoCaptains(
   const draftUrl = `/herodraft/${draftInfo.pk}`;
 
   await Promise.all([
-    captainA.page.goto(`https://localhost${draftUrl}`),
-    captainB.page.goto(`https://localhost${draftUrl}`),
+    captainA.page.goto(`${BASE_URL}${draftUrl}`),
+    captainB.page.goto(`${BASE_URL}${draftUrl}`),
   ]);
 
   // Wait for both pages to hydrate

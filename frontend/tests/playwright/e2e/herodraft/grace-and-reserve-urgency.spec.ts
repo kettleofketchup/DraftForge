@@ -9,12 +9,11 @@
  * Driven by /api/tests/herodraft/<pk>/warp/ to skip the 25-90s of real-time
  * waiting needed to reach each threshold organically.
  */
+import { API_URL, BASE_URL } from '../../fixtures/base-url';
 import { test, expect, chromium, type Page } from '@playwright/test';
 import { loginAsDiscordId, waitForHydration } from '../../fixtures/auth';
 import { HeroDraftPage } from '../../helpers/HeroDraftPage';
 
-const API_URL = 'https://localhost/api';
-const BASE_URL = 'https://localhost';
 
 test.describe('HeroDraft Timer Urgency Animations', () => {
   test('grace<10s pulses grace-urgent; grace=0 + reserve<30s pulses reserve-critical', async () => {

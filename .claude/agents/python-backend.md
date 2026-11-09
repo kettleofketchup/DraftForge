@@ -1,6 +1,6 @@
 ---
 skills:
-  - inv-runner
+  - just
   - django-redis-caching
 ---
 
@@ -27,16 +27,9 @@ See [docs/development/backend-quickstart.md](../../../docs/development/backend-q
 
 ## Environment Setup
 
-Use the `inv-runner` skill for all invoke commands. Key patterns:
-
-```bash
-# Method 1: PATH prefix (recommended for Claude)
-PATH=".venv/bin:$PATH" inv <command>
-
-# Method 2: Activate venv
-source .venv/bin/activate
-inv <command>
-```
+Run repo commands through `just` recipes; they use the project venv
+(`.venv/bin/python`), so no activation is needed. `just --list --list-submodules`
+lists them all.
 
 ## Key Directories
 
@@ -67,7 +60,7 @@ Test endpoints available in `backend/tests/urls.py` for user/staff/admin login.
 
 **Docker (recommended)** - avoids Redis hanging issues:
 ```bash
-inv test.run --cmd 'python manage.py test app.tests -v 2'
+just test::run 'python manage.py test app.tests -v 2'
 ```
 
 **Local** - may hang on cleanup:
@@ -77,23 +70,25 @@ cd backend && DISABLE_CACHE=true python manage.py test app.tests -v 2
 
 ### Database Operations
 
-Use invoke tasks for database operations (see `inv-runner` skill):
-
 ```bash
 # Migrations (all environments)
-inv db.migrate.all
+just db::migrate::all
 
 # Specific environment migrations
-inv db.migrate.dev    # Development
-inv db.migrate.test   # Test
-inv db.migrate.prod   # Production
+just db::migrate::dev    # Development
+just db::migrate::test   # Test
+just db::migrate::prod   # Production
 
-# Create migrations (requires venv)
-cd backend && DISABLE_CACHE=true python manage.py makemigrations app
+# Create migrations (default: every app in the `apps` list in just/db/mod.just)
+just db::makemigrations app
 
 # Populate test data
-inv db.populate.all
+just db::populate::all
 ```
+
+`db::migrate::*` runs `makemigrations` with the explicit app list in
+`just/db/mod.just` (`apps := ...`); it does not read `INSTALLED_APPS`. Add a new
+Django app there as well as to `settings.INSTALLED_APPS`.
 
 ### Adding Dependencies
 ```bash
