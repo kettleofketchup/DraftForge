@@ -98,9 +98,19 @@ class DraftConsumer(BaseDraftConsumer):
         if is_connected:
             team.draft_is_connected = True
             team.draft_has_connected = True
+            _t0 = time.monotonic()  # TEMP-DIAG
             team.save(update_fields=["draft_is_connected", "draft_has_connected"])
+            _t1 = time.monotonic()
             invalidate_obj(team.tournament)
             emit_event(draft, "captain_connected", payload)
+            log.debug(
+                "diag_set_presence",
+                system="teamdraft",
+                subsystem="diag",
+                draft_id=draft_id,
+                save_ms=round((_t1 - _t0) * 1000, 1),
+                emit_ms=round((time.monotonic() - _t1) * 1000, 1),
+            )
             log.info(
                 "teamdraft_captain_connected",
                 system="teamdraft",
@@ -110,9 +120,19 @@ class DraftConsumer(BaseDraftConsumer):
             )
         else:
             team.draft_is_connected = False
+            _t0 = time.monotonic()  # TEMP-DIAG
             team.save(update_fields=["draft_is_connected"])
+            _t1 = time.monotonic()
             invalidate_obj(team.tournament)
             emit_event(draft, "captain_disconnected", payload)
+            log.debug(
+                "diag_set_presence",
+                system="teamdraft",
+                subsystem="diag",
+                draft_id=draft_id,
+                save_ms=round((_t1 - _t0) * 1000, 1),
+                emit_ms=round((time.monotonic() - _t1) * 1000, 1),
+            )
             log.info(
                 "teamdraft_captain_disconnected",
                 system="teamdraft",

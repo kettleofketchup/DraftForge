@@ -106,8 +106,24 @@ def build_draft_state(draft_id: int, *, fresh: bool) -> dict | None:
     """
     if not fresh or connection.in_atomic_block:
         return _build_draft_state(draft_id, fresh=fresh)
+    import time as _t  # TEMP-DIAG
+
+    from telemetry.logging import get_logger as _gl
+
+    _t0 = _t.monotonic()
     with transaction.atomic():
-        return _build_draft_state(draft_id, fresh=fresh)
+        _t1 = _t.monotonic()
+        try:
+            return _build_draft_state(draft_id, fresh=fresh)
+        finally:
+            _gl(__name__).debug(
+                "diag_build_state",
+                system="websocket",
+                subsystem="diag",
+                draft_id=draft_id,
+                lock_wait_ms=round((_t1 - _t0) * 1000, 1),
+                build_ms=round((_t.monotonic() - _t1) * 1000, 1),
+            )
 
 
 def _build_draft_state(draft_id: int, *, fresh: bool) -> dict | None:
