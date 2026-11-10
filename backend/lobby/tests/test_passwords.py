@@ -49,8 +49,8 @@ class DerivePasswordTests(TestCase):
 
     def test_same_for_a_recreated_lobby(self):
         # After an ambiguous failure dota_lobby may still hold the first
-        # lobby; the new row must send the same body so it is a replay (200),
-        # not a 409 conflict.
+        # lobby; the new row must send the same password so its create is a
+        # replay (200), not a 409 conflict.
         self._end(self.lobby)
         second = self._recreate()
         self.assertNotEqual(second.pk, self.lobby.pk)
