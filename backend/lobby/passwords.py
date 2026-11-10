@@ -1,6 +1,6 @@
 """Lobby passwords, derived on demand and never stored.
 
-The password is an HMAC of the lobby's external_ref (`game:<pk>`) under one
+The password is an HMAC of the lobby's external_ref (`<prefix>:<pk>`, `game:<pk>` by default) under one
 of Django's secret keys, so:
 
 - every create request for a game sends the same password, including a
