@@ -241,7 +241,7 @@ class Command(BaseCommand):
         self.stdout.write(f"    Created team: {team.name}")
         return team
 
-    def _create_draft(self, tournament, draft_data):
+    def _create_draft(self, tournament: Tournament, draft_data: dict) -> Draft:
         """Create draft and rounds."""
         draft = Draft.objects.create(
             tournament=tournament,
@@ -261,6 +261,9 @@ class Command(BaseCommand):
                     pick_number=round_data.get("pick_number", 1),
                     pick_phase=round_data.get("pick_phase", 1),
                 )
+
+        draft.state = draft.derive_legacy_state()
+        draft.save(update_fields=["state"])
 
         self.stdout.write(
             f"    Created draft with {len(draft_data.get('draft_rounds', []))} rounds"

@@ -847,6 +847,11 @@ class Tournament(models.Model):
             return None
         return self.league.steam_league_id
 
+    def get_draft_options(self, *, fresh: bool = False) -> "DraftOptions":
+        manager = DraftOptions.objects.nocache() if fresh else DraftOptions.objects
+        options, _ = manager.get_or_create(tournament=self)
+        return options
+
 
 class Team(models.Model):
     tournament = models.ForeignKey(
@@ -900,6 +905,11 @@ class Team(models.Model):
         blank=True,
         help_text="Final tournament placement (1=winner, 2=runner-up, etc.)",
     )
+
+    draft_reserve_ms = models.IntegerField(null=True, blank=True)
+    draft_is_ready = models.BooleanField(default=False)
+    draft_is_connected = models.BooleanField(default=False)
+    draft_has_connected = models.BooleanField(default=False)
 
     class Meta:
         indexes = [
@@ -1090,6 +1100,18 @@ class Game(models.Model):
             invalidate_obj(self.league)
 
 
+class TeamDraftState(models.TextChoices):
+    PENDING = "pending", "Pending"
+    DRAFTING = "drafting", "Drafting"
+    PAUSED = "paused", "Paused"
+    RESUMING = "resuming", "Resuming"
+    COMPLETED = "completed", "Completed"
+
+
+class TimeoutAction(models.TextChoices):
+    SKIP_TURN = "skip_turn", "Skip turn"
+
+
 class Draft(models.Model):
     tournament = models.OneToOneField(
         Tournament,
@@ -1110,9 +1132,86 @@ class Draft(models.Model):
         default="snake",
         help_text="Draft style: snake, normal, or shuffle",
     )
+    state = models.CharField(
+        max_length=16,
+        choices=TeamDraftState.choices,
+        default=TeamDraftState.PENDING,
+    )
+    paused_at = models.DateTimeField(null=True, blank=True)
+    resuming_until = models.DateTimeField(null=True, blank=True)
+    is_manual_pause = models.BooleanField(default=False)
 
     def __str__(self):
         return f"Draft {self.pk} in {self.tournament.name}"
+
+    @property
+    def active_round(self) -> "DraftRound | None":
+        return (
+            self.draft_rounds.filter(choice__isnull=True)
+            .order_by("pick_number")
+            .first()
+        )
+
+    def lock_active_round(self) -> "DraftRound | None":
+        return (
+            self.draft_rounds.select_for_update()
+            .filter(choice__isnull=True)
+            .order_by("pick_number")
+            .first()
+        )
+
+    @property
+    def clock_armed(self) -> bool:
+        if self.state not in (TeamDraftState.DRAFTING, TeamDraftState.RESUMING):
+            return False
+        if not self.tournament.get_draft_options().timer_enabled:
+            return False
+        active = self.active_round
+        return active is not None and active.started_at is not None
+
+    def reset_timer_state(self, options: "DraftOptions") -> None:
+        self.state = (
+            TeamDraftState.PENDING if options.timer_enabled else TeamDraftState.DRAFTING
+        )
+        self.paused_at = None
+        self.resuming_until = None
+        self.is_manual_pause = False
+        for team in self.tournament.teams.all():
+            team.draft_reserve_ms = options.reserve_time_ms
+            team.draft_is_ready = False
+            team.draft_is_connected = False
+            team.draft_has_connected = False
+            team.save(
+                update_fields=[
+                    "draft_reserve_ms",
+                    "draft_is_ready",
+                    "draft_is_connected",
+                    "draft_has_connected",
+                ]
+            )
+        self.save()
+
+    def derive_legacy_state(self) -> str:
+        rounds = self.draft_rounds.nocache()
+        if not rounds.exists():
+            return TeamDraftState.PENDING
+        if not rounds.filter(choice__isnull=True).exists():
+            return TeamDraftState.COMPLETED
+        return TeamDraftState.DRAFTING
+
+    def _emit_lobby_opened(self, options: "DraftOptions") -> None:
+        from app.broadcast import broadcast_event
+
+        event = DraftEvent.objects.create(
+            draft=self,
+            event_type="draft_lobby_opened",
+            payload={
+                "timer_enabled": True,
+                "grace_time_ms": options.grace_time_ms,
+                "reserve_time_ms": options.reserve_time_ms,
+            },
+        )
+        broadcast_event(event)
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
@@ -1489,11 +1588,16 @@ class Draft(models.Model):
             )
             round.delete()
 
+        options = self.tournament.get_draft_options(fresh=True)
+        self.reset_timer_state(options)
+
         # Delegate to shuffle module for shuffle style
         if self.draft_style == "shuffle":
             from app.functions.shuffle_draft import build_shuffle_rounds
 
             build_shuffle_rounds(self)
+            if self.state == TeamDraftState.PENDING:
+                self._emit_lobby_opened(options)
             return
 
         teams = list(self.tournament.teams.order_by("draft_order"))
@@ -1573,6 +1677,8 @@ class Draft(models.Model):
             tournament_name=self.tournament.name,
         )
         self.save()
+        if self.state == TeamDraftState.PENDING:
+            self._emit_lobby_opened(options)
 
     def go_back(self):
         """
@@ -1732,6 +1838,14 @@ class DraftRound(models.Model):
         help_text="Stores tie resolution: {tied_teams, roll_rounds, winner_id}",
     )
 
+    started_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    timed_out_at = models.DateTimeField(null=True, blank=True)
+    grace_time_ms = models.IntegerField(null=True, blank=True)
+    pick_duration_ms = models.IntegerField(null=True, blank=True)
+    reserve_used_ms = models.IntegerField(null=True, blank=True)
+    skip_count = models.IntegerField(default=0)
+
     class Meta:
         ordering = ["pick_number"]
 
@@ -1860,6 +1974,19 @@ class DraftEvent(models.Model):
         ("player_picked", "Player Picked"),
         ("tie_roll", "Tie Roll"),
         ("pick_undone", "Pick Undone"),
+        ("draft_lobby_opened", "Draft Lobby Opened"),
+        ("captain_ready", "Captain Ready"),
+        ("captain_unready", "Captain Unready"),
+        ("captain_connected", "Captain Connected"),
+        ("captain_disconnected", "Captain Disconnected"),
+        ("draft_started_by_staff", "Draft Started By Staff"),
+        ("draft_force_started", "Draft Force Started"),
+        ("round_started", "Round Started"),
+        ("draft_paused", "Draft Paused"),
+        ("draft_resumed", "Draft Resumed"),
+        ("pick_timed_out", "Pick Timed Out"),
+        ("pick_skipped", "Pick Skipped"),
+        ("pick_skip_unavailable", "Pick Skip Unavailable"),
     ]
 
     draft = models.ForeignKey(
@@ -1890,6 +2017,49 @@ class DraftEvent(models.Model):
 
     def __str__(self):
         return f"{self.event_type} - Draft {self.draft_id} at {self.created_at}"
+
+
+class DraftOptions(models.Model):
+    tournament = models.OneToOneField(
+        Tournament,
+        related_name="draft_options",
+        on_delete=models.CASCADE,
+    )
+    timer_enabled = models.BooleanField(default=False)
+    grace_time_ms = models.IntegerField(default=30000)
+    reserve_time_ms = models.IntegerField(default=30000)
+    timeout_action = models.CharField(
+        max_length=32,
+        choices=TimeoutAction.choices,
+        default=TimeoutAction.SKIP_TURN,
+    )
+
+    def __str__(self) -> str:
+        return f"DraftOptions for tournament {self.tournament_id}"
+
+    def save(self, *args, **kwargs) -> None:
+        super().save(*args, **kwargs)
+        invalidate_obj(self.tournament)
+
+    @classmethod
+    def ensure_for(
+        cls,
+        tournament: Tournament,
+        *,
+        timer_enabled: bool | None = None,
+        grace_time_ms: int | None = None,
+        reserve_time_ms: int | None = None,
+    ) -> "DraftOptions":
+        provided = {
+            "timer_enabled": timer_enabled,
+            "grace_time_ms": grace_time_ms,
+            "reserve_time_ms": reserve_time_ms,
+        }
+        defaults = {k: v for k, v in provided.items() if v is not None}
+        options, _ = cls.objects.update_or_create(
+            tournament=tournament, defaults=defaults
+        )
+        return options
 
 
 class HeroDraftState(models.TextChoices):
