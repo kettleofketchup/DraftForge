@@ -182,7 +182,7 @@ def flush_redis_cache() -> None:
     """Drop cached query results after population.
 
     Reset endpoints call this while other drafts run on the same Redis, so it
-    deletes only cacheops and Django cache keys. A FLUSHALL also wiped the
+    deletes only cacheops and Django cache keys. A FLUSHALL would also wipe the
     channel-layer groups, draft connection counts, heartbeats, tick locks and
     the Celery broker, silently stopping other drafts' broadcasts and ticks.
     """

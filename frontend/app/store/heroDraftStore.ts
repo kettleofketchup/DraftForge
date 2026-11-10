@@ -243,8 +243,8 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
             round_started_at: message.round_started_at,
           });
 
-          // Offset from the least-delayed recent tick: one tick stuck in a
-          // queue no longer shifts this viewer's clock by its delay.
+          // Offset from the least-delayed recent tick, so one tick stuck in a
+          // queue can't shift this viewer's clock by its delay.
           const tickReceivedAtMs = Date.now();
           const clock = addClockOffsetSample(get()._offsetSamples, message.server_time, tickReceivedAtMs);
 
