@@ -295,7 +295,7 @@ class ReconcileTests(TaskTestBase):
         with mock.patch.object(tasks.create_dota_lobby, "retry", side_effect=Retry):
             with self.assertRaises(Retry):
                 self.run_task(tasks.create_dota_lobby, self.game.pk, retries=4)
-        # Old enough for the old age-based rule, but the retry is in 480 s.
+        # Long past the create, but the retry is in 480 s.
         GameLobby.objects.filter(game=self.game).update(
             created_at=timezone.now() - timedelta(minutes=20)
         )
