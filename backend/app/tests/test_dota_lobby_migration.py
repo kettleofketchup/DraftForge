@@ -15,8 +15,8 @@ except ImportError as _import_error:  # pragma: no cover
 class TournamentDotaLobbyFieldsMigrationTest(MigratorTestCase):
     """0097 widens Game.gameid and adds the off-by-default lobby fields."""
 
-    migrate_from = ("app", "0096_drop_customuser_positions_dota_mmr")
-    migrate_to = ("app", "0097_tournament_dota_lobby_fields")
+    migrate_from = ("app", "0097_teamdraft_timer")
+    migrate_to = ("app", "0098_tournament_dota_lobby_fields")
 
     def prepare(self):
         Tournament = self.old_state.apps.get_model("app", "Tournament")
