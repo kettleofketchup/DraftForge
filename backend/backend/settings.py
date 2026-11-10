@@ -114,6 +114,7 @@ logging.basicConfig(
 if _log_level != "DEBUG":
     logging.getLogger("app.models").setLevel(logging.INFO)
     logging.getLogger("app.functions.tournament").setLevel(logging.INFO)
+    logging.getLogger("app.functions.draft_picks").setLevel(logging.INFO)
 
 
 # Application definition
@@ -362,6 +363,7 @@ CACHEOPS = {
     "user.dotauserprofile": {"ops": "all", "timeout": 60 * 60},
     "user.deadlockuserprofile": {"ops": "all", "timeout": 60 * 60},
     "app.draft": {"ops": "all", "timeout": 60 * 60},
+    "app.draftoptions": {"ops": "all", "timeout": 60 * 60},
     "app.game": {"ops": "all", "timeout": 60 * 60},
     "app.herodraft": {"ops": "all", "timeout": 60 * 60},
     "app.draftteam": {"ops": "all", "timeout": 60 * 60},

@@ -18,6 +18,7 @@ from social_core.backends.oauth import BaseOAuth1, BaseOAuth2
 from social_django.utils import load_strategy, psa
 
 # Create your views here.
+from app.functions.teamdraft import apply_draft_options
 from app.permissions_org import has_org_staff_access
 from league.models import LeagueUser
 from league.serializers import LeagueUserSerializer
@@ -403,6 +404,7 @@ class TournamentView(viewsets.ModelViewSet):
         return queryset.prefetch_related(
             "source_event",
             "source_event__event_repeater",
+            "draft_options",
             "users",
             "users__base_profile__dota_user_profile__positions",
             "teams__members",
@@ -478,6 +480,13 @@ class TournamentView(viewsets.ModelViewSet):
     def patch(self, request, *args, **kwargs):
         return self.partial_update(request, *args, **kwargs)
 
+    def perform_update(self, serializer: TournamentSerializer) -> None:
+        opts = serializer.validated_data.pop("draft_options", None)
+        with transaction.atomic():
+            serializer.save()
+            if opts is not None:
+                apply_draft_options(serializer.instance, opts)
+
     def get_permissions(self):
         if self.request.method == "GET":
             self.permission_classes = [AllowAny]
@@ -515,7 +524,7 @@ class TournamentView(viewsets.ModelViewSet):
         ]
         return Response(data)
 
-    def perform_create(self, serializer):
+    def perform_create(self, serializer: TournamentSerializer) -> None:
         """Check that user can create tournament in the specified league."""
         from rest_framework.exceptions import PermissionDenied, ValidationError
 
@@ -532,7 +541,11 @@ class TournamentView(viewsets.ModelViewSet):
                 )
         except League.DoesNotExist:
             raise ValidationError({"league": "League not found."})
-        serializer.save()
+        opts = serializer.validated_data.pop("draft_options", None)
+        with transaction.atomic():
+            serializer.save()
+            if opts is not None:
+                apply_draft_options(serializer.instance, opts)
 
 
 @permission_classes((IsStaff,))

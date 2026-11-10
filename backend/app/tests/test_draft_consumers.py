@@ -326,6 +326,8 @@ class DraftConsumerTestCase(TransactionTestCase):
         """Multiple connected clients all receive the same broadcast events."""
         comm1, _ = await self.connect_to_draft(user=self.spectator)
         comm2, _ = await self.connect_to_draft(user=self.captain1)
+        await asyncio.wait_for(comm1.receive_json_from(), timeout=5)
+        await asyncio.wait_for(comm2.receive_json_from(), timeout=5)
 
         channel_layer = get_channel_layer()
         await channel_layer.group_send(

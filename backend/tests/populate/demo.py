@@ -173,7 +173,7 @@ def populate_demo_captaindraft_tournament(force=False):
     """
     from django.utils import timezone
 
-    from app.models import Draft, League, Tournament
+    from app.models import Draft, DraftOptions, League, Tournament
 
     TOURNAMENT_NAME = "Demo Captain Draft Tournament"
 
@@ -217,6 +217,7 @@ def populate_demo_captaindraft_tournament(force=False):
             ensure_league_user(user, org_user, dtx_league)
 
     # Create draft for this tournament (shuffle mode for demo)
+    DraftOptions.ensure_for(tournament, timer_enabled=False)
     Draft.objects.create(
         tournament=tournament,
         draft_style="shuffle",
@@ -240,7 +241,7 @@ def populate_demo_snake_draft_tournament(force=False):
     """
     from django.utils import timezone
 
-    from app.models import Draft, League, Team, Tournament
+    from app.models import Draft, DraftOptions, League, Team, Tournament
 
     TOURNAMENT_NAME = "Demo Snake Draft Tournament"
 
@@ -296,6 +297,7 @@ def populate_demo_snake_draft_tournament(force=False):
         team.members.add(captain)
 
     # Create draft for this tournament (snake mode)
+    DraftOptions.ensure_for(tournament, timer_enabled=False)
     draft = Draft.objects.create(
         tournament=tournament,
         draft_style="snake",
@@ -324,7 +326,7 @@ def populate_demo_shuffle_draft_tournament(force=False):
     """
     from django.utils import timezone
 
-    from app.models import Draft, League, Team, Tournament
+    from app.models import Draft, DraftOptions, League, Team, Tournament
 
     TOURNAMENT_NAME = "Demo Shuffle Draft Tournament"
 
@@ -380,6 +382,7 @@ def populate_demo_shuffle_draft_tournament(force=False):
         team.members.add(captain)
 
     # Create draft for this tournament (shuffle mode)
+    DraftOptions.ensure_for(tournament, timer_enabled=False)
     draft = Draft.objects.create(
         tournament=tournament,
         draft_style="shuffle",

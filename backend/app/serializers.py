@@ -16,6 +16,7 @@ from .models import (
     CustomUser,
     Draft,
     DraftEvent,
+    DraftOptions,
     DraftRound,
     DraftTeam,
     Game,
@@ -320,6 +321,9 @@ class TeamSerializerForTournament(serializers.ModelSerializer):
             "deputy_captain",
             "draft_order",
             "placement",
+            "draft_reserve_ms",
+            "draft_is_ready",
+            "draft_is_connected",
         )
 
 
@@ -663,6 +667,13 @@ class DraftRoundForDraftSerializer(serializers.ModelSerializer):
             "pick_number",
             "choice",
             "team",
+            "started_at",
+            "completed_at",
+            "timed_out_at",
+            "grace_time_ms",
+            "pick_duration_ms",
+            "reserve_used_ms",
+            "skip_count",
         )
 
 
@@ -691,6 +702,16 @@ class TournamentSerializerForWebSocket(serializers.ModelSerializer):
         )
 
 
+class DraftOptionsSerializer(serializers.ModelSerializer):
+    grace_time_ms = serializers.IntegerField(min_value=1000, required=False)
+    reserve_time_ms = serializers.IntegerField(min_value=0, required=False)
+
+    class Meta:
+        model = DraftOptions
+        fields = ("timer_enabled", "grace_time_ms", "reserve_time_ms", "timeout_action")
+        read_only_fields = ("timeout_action",)
+
+
 class DraftSerializerForTournament(serializers.ModelSerializer):
     """
     Serializer for draft data used in WebSocket broadcasts.
@@ -706,10 +727,19 @@ class DraftSerializerForTournament(serializers.ModelSerializer):
     # Include tournament with teams for WebSocket broadcasts
     # This allows clients to update team state without additional API calls
     tournament = TournamentSerializerForWebSocket(read_only=True)
+    state = serializers.CharField(read_only=True)
+    clock_armed = serializers.BooleanField(read_only=True)
+    paused_at = serializers.DateTimeField(read_only=True)
+    resuming_until = serializers.DateTimeField(read_only=True)
+    is_manual_pause = serializers.BooleanField(read_only=True)
+    draft_options = serializers.SerializerMethodField()
 
     def get_users_remaining(self, draft):
         """Return user PKs only — full data provided via _users dict."""
         return [u.pk for u in draft.users_remaining]
+
+    def get_draft_options(self, draft: Draft) -> dict:
+        return DraftOptionsSerializer(draft.tournament.get_draft_options()).data
 
     class Meta:
         model = Draft
@@ -720,6 +750,12 @@ class DraftSerializerForTournament(serializers.ModelSerializer):
             "latest_round",
             "draft_style",
             "tournament",
+            "state",
+            "clock_armed",
+            "paused_at",
+            "resuming_until",
+            "is_manual_pause",
+            "draft_options",
         )
 
 
@@ -1019,6 +1055,7 @@ class TournamentSerializer(serializers.ModelSerializer):
     teams = TeamSerializerSlim(many=True, read_only=True)
     users = serializers.SerializerMethodField()
     draft = DraftSerializerSlim(many=False, read_only=True)
+    draft_options = DraftOptionsSerializer(required=False)
 
     user_ids = serializers.PrimaryKeyRelatedField(
         source="users",
@@ -1092,7 +1129,23 @@ class TournamentSerializer(serializers.ModelSerializer):
             "auto_create_hero_drafts",
             "discord_send_draft_link",
             "discord_send_herodraft_link",
+            "draft_options",
         )
+
+    def to_representation(self, instance: Tournament) -> dict:
+        data = super().to_representation(instance)
+        data["draft_options"] = DraftOptionsSerializer(
+            self._options_for(instance)
+        ).data
+        return data
+
+    def _options_for(self, instance: Tournament) -> DraftOptions:
+        if isinstance(self.parent, serializers.ListSerializer):
+            try:
+                return instance.draft_options
+            except DraftOptions.DoesNotExist:
+                return DraftOptions(tournament=instance)
+        return instance.get_draft_options()
 
     def update(self, instance, validated_data):
         """

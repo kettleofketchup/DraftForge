@@ -14,6 +14,7 @@ import atexit
 import threading
 import time
 from collections.abc import Coroutine
+from datetime import datetime
 from typing import Any, NamedTuple, Protocol, runtime_checkable
 
 import redis
@@ -38,6 +39,7 @@ HEARTBEAT_INTERVAL_SECONDS: int = 3
 HEARTBEAT_STALE_SECONDS: int = 9
 HEARTBEAT_TTL: int = 30
 CAPTAIN_CHANNEL_TTL: int = 300
+CLIENT_PICK_TIME_MAX_AGE_S: float = 2.0
 
 _redis_client: redis.Redis | None = None
 
@@ -396,3 +398,67 @@ def stop_all_broadcasters() -> None:
 
 
 atexit.register(stop_all_broadcasters)
+
+
+def evaluate_client_pick_time(
+    server_now: datetime,
+    client_picked_at: datetime | None,
+    draft_id: int,
+    *,
+    system: str,
+    subsystem: str,
+) -> tuple[datetime, str, int | None]:
+    """Decide whether to trust the client's pick time + log any weirdness.
+
+    Returns (effective_time, source, age_ms) where:
+        effective_time: datetime to compute elapsed from
+        source: "client" if we trusted it, "server_now" otherwise
+        age_ms: client→server delta in ms (or None when no client_picked_at)
+    """
+    if not client_picked_at:
+        return server_now, "server_now", None
+
+    # Subtracting a naive datetime from a tz-aware one raises TypeError.
+    # The view layer also filters these out; this is a defense-in-depth
+    # guard for tests or future direct callers.
+    if client_picked_at.tzinfo is None:
+        log.warning(
+            "pick_time_naive_datetime",
+            system=system,
+            subsystem=subsystem,
+            draft_id=draft_id,
+        )
+        return server_now, "server_now", None
+
+    age_s = (server_now - client_picked_at).total_seconds()
+    age_ms = int(age_s * 1000)
+
+    if age_s < 0:
+        # Client clock is in the future relative to server. Most often
+        # clock skew (laptop with bad NTP), occasionally a hostile client
+        # trying to win back time. Falls through to server time.
+        log.warning(
+            "pick_time_in_future",
+            system=system,
+            subsystem=subsystem,
+            draft_id=draft_id,
+            future_by_ms=-age_ms,
+        )
+        return server_now, "server_now", age_ms
+
+    if age_s > CLIENT_PICK_TIME_MAX_AGE_S:
+        # Pick payload arrived more than the sanity window after the
+        # client sent it. Network was slow or the client buffered the
+        # request. We discard the client timestamp to prevent abuse;
+        # this means the captain eats the network latency on this pick.
+        log.warning(
+            "pick_time_too_old",
+            system=system,
+            subsystem=subsystem,
+            draft_id=draft_id,
+            age_ms=age_ms,
+            max_age_ms=int(CLIENT_PICK_TIME_MAX_AGE_S * 1000),
+        )
+        return server_now, "server_now", age_ms
+
+    return client_picked_at, "client", age_ms

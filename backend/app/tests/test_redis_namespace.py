@@ -22,7 +22,7 @@ from django.test import SimpleTestCase, override_settings
 import backend.settings
 from app.consumers import DraftConsumer, HeroDraftConsumer
 from app.redis_keys import namespaced_key
-from app.tasks import draft_tick
+from app.tasks import draft_tick, teamdraft_tick
 from app.tasks.herodraft_tick import (
     captain_heartbeat_key,
     conn_count_key,
@@ -198,6 +198,18 @@ class DraftTickKeyNamespaceTests(SimpleTestCase):
         for prefix in self.PREFIXES:
             for key in self._keys(prefix):
                 self.assertTrue(key.startswith(settings.REDIS_KEY_NAMESPACE), key)
+
+    @override_settings(REDIS_KEY_NAMESPACE="")
+    def test_team_captain_conn_key_keeps_production_format(self) -> None:
+        self.assertEqual(
+            teamdraft_tick.captain_conn_key(5, 9), "teamdraft:5:captain:9:conns"
+        )
+
+    @override_settings(REDIS_KEY_NAMESPACE="ns:")
+    def test_team_captain_conn_key_includes_namespace(self) -> None:
+        self.assertEqual(
+            teamdraft_tick.captain_conn_key(5, 9), "ns:teamdraft:5:captain:9:conns"
+        )
 
     @override_settings(REDIS_KEY_NAMESPACE="ns:")
     def test_hero_compat_wrappers_match_shared_helpers(self) -> None:
