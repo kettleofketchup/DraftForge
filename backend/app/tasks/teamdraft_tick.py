@@ -356,11 +356,30 @@ async def check_captain_heartbeats(draft_id: int) -> str | None:
 
 
 def read_timeout_candidate(draft_id: int) -> tuple[int, datetime] | None:
+    """The active round, without a lock, once its grace + reserve has run out."""
     draft = Draft.objects.filter(pk=draft_id).first()
-    if draft is None or not draft.clock_armed:
+    if draft is None:
+        return None
+    options = draft.tournament.get_draft_options(fresh=True)
+    if not draft.is_clock_armed(lambda: options):
         return None
     active = draft.active_round
     if active is None or active.timed_out_at is not None or active.started_at is None:
+        return None
+    reserve = (
+        Team.objects.nocache()
+        .filter(tournament_id=draft.tournament_id, captain_id=active.captain_id)
+        .values_list("draft_reserve_ms", flat=True)
+        .first()
+    )
+    pool = reserve if reserve is not None else options.reserve_time_ms
+    grace = (
+        active.grace_time_ms
+        if active.grace_time_ms is not None
+        else options.grace_time_ms
+    )
+    elapsed_ms = int((timezone.now() - active.started_at).total_seconds() * 1000)
+    if elapsed_ms < grace + pool:
         return None
     return active.pk, active.started_at
 

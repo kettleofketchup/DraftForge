@@ -1155,6 +1155,16 @@ class AutoPauseTests(TransactionTestCase):
             async_to_sync(step)(self.fx.draft.pk)
         return keep_going
 
+    def test_a_timeout_check_far_from_due_takes_no_write_lock(self):
+        self.assertTrue(Draft.objects.get(pk=self.fx.draft.pk).clock_armed)
+        with patch.object(
+            teamdraft_tick.transaction, "atomic", wraps=transaction.atomic
+        ) as atomic:
+            self.assertIsNone(
+                async_to_sync(teamdraft_tick.check_timeout)(self.fx.draft.pk)
+            )
+        atomic.assert_not_called()
+
     def test_a_paused_tick_takes_no_write_lock_and_few_queries(self):
         draft = Draft.objects.get(pk=self.fx.draft.pk)
         draft.state = TeamDraftState.PAUSED
