@@ -17,7 +17,6 @@ export const UndoPickButton: React.FC = () => {
   const setTournament = useUserStore((state) => state.setTournament);
   const setDraft = useUserStore((state) => state.setDraft);
   const setCurDraftRound = useUserStore((state) => state.setCurDraftRound);
-  const setDraftIndex = useUserStore((state) => state.setDraftIndex);
   const isStaff = useUserStore((state) => state.isStaff);
   const [isLoading, setIsLoading] = useState(false);
   const [open, setOpen] = useState(false);
@@ -48,12 +47,6 @@ export const UndoPickButton: React.FC = () => {
 
       if (undoneRound) {
         setCurDraftRound(undoneRound);
-        const idx = updatedTournament.draft?.draft_rounds?.findIndex(
-          (r) => r.pk === undoneRound.pk
-        );
-        if (idx !== undefined && idx >= 0) {
-          setDraftIndex(idx);
-        }
       }
 
       toast.success('Pick undone successfully');

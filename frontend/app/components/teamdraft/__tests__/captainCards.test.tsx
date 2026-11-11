@@ -23,7 +23,6 @@ describe('CaptainCards', () => {
       },
     );
     useUserStore.setState({
-      draftIndex: 0,
       tournament: {
         teams: [7, 8, 9].map((c) => ({ pk: c, name: `Team ${c}`, captain: user(c) })),
         draft: { pk: 1, draft_rounds: rounds },

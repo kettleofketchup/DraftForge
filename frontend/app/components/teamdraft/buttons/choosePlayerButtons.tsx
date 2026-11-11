@@ -29,7 +29,6 @@ export const ChoosePlayerButton: React.FC<{
   const activeRoundPk = useDraftWebSocketStore(draftWsSelectors.activeRoundPk);
 
   const setDraft = useUserStore((state) => state.setDraft);
-  const setDraftIndex = useUserStore((state) => state.setDraftIndex);
   const autoRefreshDraft = useUserStore((state) => state.autoRefreshDraft);
   const location = useLocation();
 
@@ -68,7 +67,6 @@ export const ChoosePlayerButton: React.FC<{
       curDraftRound,
       setCurDraftRound,
       setDraft,
-      setDraftIndex,
       autoRefreshDraft: autoRefreshDraft || undefined,
     });
 

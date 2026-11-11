@@ -89,8 +89,6 @@ interface UserState {
   getCurrentTournament: () => Promise<void>;
   getDraft: () => Promise<void>;
   getCurrentDraftRound: () => Promise<void>;
-  draftIndex: number;
-  setDraftIndex: (index: number) => void;
   autoRefreshDraft: (() => Promise<void>) | null;
   setAutoRefreshDraft: (refresh: (() => Promise<void>) | null) => void;
 
@@ -142,8 +140,6 @@ export const useUserStore = create<UserState>()(
           log.error('Failed to fetch draft:', err);
         }
       },
-      draftIndex: 0,
-      setDraftIndex: (index: number) => set({ draftIndex: index }),
       setDraft: (draft: DraftType) => set({ draft }),
       tournaments: [] as TournamentType[],
       game: {} as GameType,

@@ -110,7 +110,6 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
         setDraft,
         curDraftRound,
         setCurDraftRound,
-        setDraftIndex: useUserStore.getState().setDraftIndex,
         draftStyle: selectedStyle,
       });
     } catch {

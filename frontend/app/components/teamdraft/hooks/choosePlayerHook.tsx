@@ -34,7 +34,6 @@ type hookParams = {
   curDraftRound: DraftRoundType;
   setDraft: (draft: DraftType) => void;
   setCurDraftRound: (draftRound: DraftRoundType) => void;
-  setDraftIndex: (index: number) => void;
   autoRefreshDraft?: () => Promise<void>;
 };
 
@@ -45,7 +44,6 @@ export const choosePlayerHook = async ({
   curDraftRound,
   setDraft,
   setCurDraftRound,
-  setDraftIndex,
   autoRefreshDraft,
 }: hookParams) => {
   if (!tournament || !tournament.pk) {
@@ -107,12 +105,6 @@ export const choosePlayerHook = async ({
 
       if (nextRound) {
         setCurDraftRound(nextRound);
-        const idx = data.draft.draft_rounds?.findIndex(
-          (r: DraftRoundType) => r.pk === nextRound.pk,
-        );
-        if (idx !== undefined && idx >= 0) {
-          setDraftIndex(idx);
-        }
         log.debug('Advanced to next round', nextRound);
       } else {
         // No more rounds with captains, stay on current (now completed) round

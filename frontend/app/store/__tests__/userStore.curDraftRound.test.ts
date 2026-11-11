@@ -4,7 +4,6 @@ import { useUserStore } from '../userStore';
 describe('getCurrentDraftRound', () => {
   beforeEach(() => {
     useUserStore.setState({
-      draftIndex: 0,
       tournament: { draft: { pk: 1, latest_round: 2, draft_rounds: [{ pk: 1 }, { pk: 2 }, { pk: 3 }] } } as never,
       getCurrentTournament: async () => {},
     });

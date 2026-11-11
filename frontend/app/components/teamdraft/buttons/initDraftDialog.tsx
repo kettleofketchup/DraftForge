@@ -27,7 +27,6 @@ export const InitDraftButton: React.FC = () => {
   const [open, setOpen] = useState(false);
   const tournament = useUserStore((state) => state.tournament);
   const setTournament = useUserStore((state) => state.setTournament);
-  const setDraftIndex = useUserStore((state) => state.setDraftIndex);
   const draft = useUserStore((state) => state.draft);
   const setDraft = useUserStore((state) => state.setDraft);
   const curDraftRound = useUserStore((state) => state.curDraftRound);
@@ -52,9 +51,7 @@ export const InitDraftButton: React.FC = () => {
       setDraft,
       curDraftRound,
       setCurDraftRound,
-      setDraftIndex,
     });
-    setDraftIndex(0);
     setOpen(false);
   };
 
