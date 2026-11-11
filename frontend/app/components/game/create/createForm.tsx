@@ -13,6 +13,7 @@ import type { GameType, TeamType, UserType } from '~/index';
 import { TeamComboBox } from '../helpers/teamCombobox';
 import { createGameHook } from '../hooks/createGameHook';
 import { PrimaryButton } from '~/components/ui/buttons';
+import { Input } from '~/components/ui/input';
 
 export const GameCreateForm: React.FC = () => {
   const currentUser: UserType = useUserStore((state) => state.currentUser); // Zustand setter
@@ -54,13 +55,14 @@ export const GameCreateForm: React.FC = () => {
     return (
       <div>
         <label className="font-semibold">{label}</label>
-        <input
+        <Input
           type={type}
           placeholder={form[key] ?? ''}
           value={form[key] ?? ''}
           onFocus={() => handleChange(key as keyof GameType, form[key])}
           onChange={(e) => handleChange(key as keyof GameType, e.target.value)}
-          className={`input input-bordered w-full mt-1 ${errorMessage[key] ? 'input-error' : ''}`}
+          aria-invalid={!!errorMessage[key]}
+          className="mt-1"
         />
         {errorMessage[key] && (
           <p className="text-error text-sm mt-1">{errorMessage[key]}</p>

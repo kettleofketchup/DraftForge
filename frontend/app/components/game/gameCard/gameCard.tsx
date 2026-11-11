@@ -14,6 +14,7 @@ import { EditButton, SubmitButton } from '../../ui/buttons';
 import { updateGameHook } from '../hooks/updateGameHook';
 import { GameRemoveButton } from './deleteButton';
 import { DotaMatchStatsModal } from '~/components/bracket/modals';
+import { Input } from '~/components/ui/input';
 interface Props {
   game: GameType;
   edit?: boolean;
@@ -87,11 +88,12 @@ export const GameCard: React.FC<Props> = ({
       <>
         <div>
           <label className="font-semibold">Round:</label>
-          <input
+          <Input
             type="text"
             value={form.round ?? ''}
             onChange={(e) => handleChange('round', e.target.value)}
-            className={`input input-bordered w-full mt-1 ${errorMessage.name ? 'input-error' : ''}`}
+            aria-invalid={!!errorMessage.name}
+            className="mt-1"
           />
           {errorMessage.name && (
             <p className="text-error text-sm mt-1">{errorMessage.round}</p>

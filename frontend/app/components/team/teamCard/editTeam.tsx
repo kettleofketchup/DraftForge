@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { DialogClose } from '~/components/ui/dialog';
 import { getLogger } from '~/lib/logger';
 import { PrimaryButton } from '~/components/ui/buttons';
+import { Input } from '~/components/ui/input';
 
 const log = getLogger('editForm');
 interface Props {
@@ -95,7 +96,7 @@ export const TeamEditForm: React.FC<Props> = ({ user, form, setForm }) => {
     return (
       <div>
         <label className="font-semibold">{label}</label>
-        <input
+        <Input
           type={type}
           placeholder={String(user[key] ?? '')}
           value={String(form[key as keyof UserType] ?? '')}
@@ -103,7 +104,8 @@ export const TeamEditForm: React.FC<Props> = ({ user, form, setForm }) => {
           onChange={(e) =>
             handleChange(key, e.target.value)
           }
-          className={`input input-bordered w-full mt-1 ${errorMessage[key as keyof UserType] ? 'input-error' : ''}`}
+          aria-invalid={!!errorMessage[key as keyof UserType]}
+          className="mt-1"
         />
         {errorMessage[key as keyof UserType] && (
           <p className="text-error text-sm mt-1">{errorMessage[key as keyof UserType]}</p>
