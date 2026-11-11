@@ -92,6 +92,42 @@ class EligibilityTests(TestCase):
         )
         self.assertEqual(self._code(), "")
 
+    def _ended_lobby(self, state, **fields):
+        return GameLobby.objects.create(
+            game=self.game,
+            external_ref=f"game:{self.game.pk}",
+            state=state,
+            radiant_team=self.game.radiant_team,
+            dire_team=self.game.dire_team,
+            **fields,
+        )
+
+    def test_no_retry_after_a_played_match(self):
+        self._ended_lobby(states.FINISHED, provisional_scored=True)
+        self.assertEqual(self._code(trigger="manual"), "lobby_match_played")
+        self.assertEqual(self._code(), "lobby_match_played")
+
+    def test_no_retry_after_a_finished_lobby_without_a_result_event(self):
+        self._ended_lobby(states.FINISHED)
+        self.assertEqual(self._code(trigger="manual"), "lobby_match_played")
+
+    def test_retry_after_a_match_that_ended_unscored(self):
+        self._ended_lobby(states.FINISHED, provisional_scored=False)
+        self.assertEqual(self._code(trigger="manual"), "")
+
+    def test_retry_after_lobbies_that_ended_without_a_match(self):
+        for state in (states.FAILED, states.TIMED_OUT, states.CLOSED, states.ERROR):
+            with self.subTest(state=state):
+                GameLobby.objects.filter(game=self.game).delete()
+                self._ended_lobby(state)
+                self.assertEqual(self._code(trigger="manual"), "")
+
+    def test_played_match_of_other_teams_does_not_block(self):
+        self._ended_lobby(states.FINISHED, provisional_scored=True)
+        self.game.dire_team = make_team(self.game.tournament, "Replacement")
+        self.game.save()
+        self.assertEqual(self._code(trigger="manual"), "")
+
     def test_missing_steam_ids_block_auto_but_manual_may_skip(self):
         no_steam = make_user(steam=False)
         self.game.dire_team.members.add(no_steam)

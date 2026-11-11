@@ -53,7 +53,10 @@ these games" on a game's lobby, or `python manage.py create_dota_lobby <game id>
 [--allow-missing]`. `--allow-missing` leaves players without a Steam account out of the roster;
 automatic creation never does.
 
-A lobby that times out or fails is not recreated automatically: organizers retry it.
+A lobby that times out or fails is not recreated automatically: organizers retry it. A lobby
+whose match finished with a result is never retried for the same two teams
+(`lobby_match_played`): the organizer confirms the winner instead. A match that ended without a
+scored result may be retried.
 
 **Creating.** Celery never touches the database. The `create_dota_lobby` task:
 

@@ -140,6 +140,18 @@ def active_lobby(game: Game) -> GameLobby | None:
     return game.lobbies.filter(ended=False).first()
 
 
+def match_played(game_lobby: GameLobby) -> bool:
+    """The lobby's match was played to a result, so a new lobby would replay it.
+
+    A match dota_lobby reported as ended without a scored result (abandoned
+    before it counted) was not played to a result, so it may be retried.
+    """
+    return (
+        game_lobby.state == states.FINISHED
+        and game_lobby.provisional_scored is not False
+    )
+
+
 def lobby_eligibility(
     game: Game, *, trigger: str = GameLobby.Trigger.AUTO, allow_missing: bool = False
 ) -> Eligibility:
@@ -168,8 +180,15 @@ def lobby_eligibility(
         return _fail("same_team")
     if game.lobbies.filter(ended=False).exists():
         return _fail("active_lobby_exists")
+    latest = game.lobbies.order_by("-created_at", "-pk").first()
+    if (
+        latest is not None
+        and match_played(latest)
+        and lobby_teams(latest) == game_teams(game)
+    ):
+        # The winner is confirmed on the game; a retry would replay the match.
+        return _fail("lobby_match_played", state=latest.state)
     if auto:
-        latest = game.lobbies.order_by("-created_at", "-pk").first()
         if (
             latest is not None
             and latest.state_reason not in AUTO_RECREATE_REASONS
