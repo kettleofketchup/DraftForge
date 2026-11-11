@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { TooltipProvider } from '~/components/ui/tooltip';
+import { useUserStore } from '~/store/userStore';
+import type { UserType } from '~/index';
 import { LobbyPanelBody } from '../LobbyPanel';
 import { GameLobbyResponseSchema, type GameLobbyResponse } from '../schemas';
 import { privateLobby, publicLobby, players } from './fixtures';
@@ -21,6 +23,13 @@ vi.mock('~/components/lobby/api', async (importOriginal) => {
     inviteToGameLobby: vi.fn(),
     launchGameLobby: vi.fn(),
   };
+});
+
+// The real store fetches the signed-in user when it loads; the panel only
+// reads `currentUser.pk`.
+vi.mock('~/store/userStore', async () => {
+  const { create } = await import('zustand');
+  return { useUserStore: create(() => ({ currentUser: {} })) };
 });
 
 function Wrapper({ children }: { children: ReactNode }) {
@@ -48,7 +57,23 @@ function renderPanel(data: GameLobbyResponse) {
   return render(<LobbyPanelBody gameId={1} data={data} />, { wrapper: Wrapper });
 }
 
+const seated = players.map((p, i) => ({
+  ...p,
+  account_id: p.account_id ?? 1003,
+  status: 'joined',
+  seat: `${p.side}_${i + 1}`,
+  ready: true,
+}));
+
+function endedLobby(state: string, extra: Record<string, unknown> = {}) {
+  return { ...privateLobby, state, ended: true, password: null, ...extra };
+}
+
 describe('LobbyPanel', () => {
+  afterEach(() => {
+    useUserStore.setState({ currentUser: {} as UserType });
+  });
+
   it('shows the state but no password or roster to other users', () => {
     renderPanel(response({}));
     expect(screen.getByTestId('lobby-state-badge')).toHaveTextContent('Waiting for players');
@@ -62,7 +87,7 @@ describe('LobbyPanel', () => {
     renderPanel(response({ is_player: true, lobby: privateLobby }));
     expect(screen.getByTestId('lobby-password')).toHaveTextContent('abcd2345efgh');
     expect(screen.getByTestId('lobby-name')).toHaveTextContent('Ravens vs Owls');
-    expect(screen.getByTestId('lobby-player-1')).toHaveTextContent('Seated (radiant_1), ready');
+    expect(screen.getByTestId('lobby-player-1')).toHaveTextContent('Seated · Radiant 1 · Ready');
     expect(screen.getByTestId('lobby-player-2')).toHaveTextContent('Invited (2×)');
     expect(screen.getByTestId('lobby-player-3')).toHaveTextContent('No Steam account');
     expect(screen.getByTestId('lobby-invite-me')).toBeInTheDocument();
@@ -103,6 +128,110 @@ describe('LobbyPanel', () => {
     expect(screen.getByTestId('lobby-create-btn')).toHaveTextContent('Retry lobby');
     expect(screen.queryByTestId('lobby-close-btn')).not.toBeInTheDocument();
     expect(screen.queryByTestId('lobby-password')).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['finished', { provisional_scored: true, match_id: '8000000001' }],
+    ['finished', {}],
+  ])('offers no retry after a played match (%s)', (state, extra) => {
+    renderPanel(
+      response({
+        can_manage: true,
+        lobby: endedLobby(state, extra),
+        // Even if the eligibility were stale, the panel does not offer it.
+        eligibility: { ok: true, code: null, details: {} },
+      }),
+    );
+    expect(screen.queryByTestId('lobby-create-btn')).not.toBeInTheDocument();
+  });
+
+  it('explains why a played match gets no retry', () => {
+    renderPanel(
+      response({
+        can_manage: true,
+        lobby: endedLobby('finished', { provisional_scored: true }),
+        eligibility: { ok: false, code: 'lobby_match_played', details: {} },
+      }),
+    );
+    expect(screen.getByTestId('lobby-eligibility')).toHaveTextContent('Confirm the winner');
+    expect(screen.queryByTestId('lobby-create-btn')).not.toBeInTheDocument();
+  });
+
+  it('offers no retry while the match is in post game', () => {
+    renderPanel(
+      response({
+        can_manage: true,
+        lobby: { ...privateLobby, state: 'post_game', password: null },
+        eligibility: { ok: false, code: 'active_lobby_exists', details: {} },
+      }),
+    );
+    expect(screen.queryByTestId('lobby-create-btn')).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['failed', {}],
+    ['timed_out', {}],
+    ['closed', {}],
+    ['finished', { provisional_scored: false }],
+  ])('offers a retry after a %s lobby without a played match', (state, extra) => {
+    renderPanel(
+      response({
+        can_manage: true,
+        lobby: endedLobby(state, extra),
+        eligibility: { ok: true, code: null, details: {} },
+      }),
+    );
+    expect(screen.getByTestId('lobby-create-btn')).toHaveTextContent('Retry lobby');
+  });
+
+  it('hides invite missing when every player is in the lobby', () => {
+    renderPanel(
+      response({ can_manage: true, lobby: { ...privateLobby, state: 'ready', players: seated } }),
+    );
+    expect(screen.queryByTestId('lobby-invite-missing-btn')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('lobby-reinvite-2')).not.toBeInTheDocument();
+    expect(screen.getByTestId('lobby-launch-btn')).toBeInTheDocument();
+  });
+
+  it('hides invite missing when the only absentee has no Steam account', () => {
+    const roster = seated.map((p) =>
+      p.user_id === 3 ? { ...p, account_id: null, status: '', seat: null, ready: false } : p,
+    );
+    renderPanel(
+      response({ can_manage: true, lobby: { ...privateLobby, players: roster } }),
+    );
+    expect(screen.queryByTestId('lobby-invite-missing-btn')).not.toBeInTheDocument();
+  });
+
+  it('does not offer a self-invite to a player already in the lobby', () => {
+    useUserStore.setState({ currentUser: { pk: 1 } as UserType });
+    renderPanel(response({ is_player: true, lobby: privateLobby }));
+    expect(screen.queryByTestId('lobby-invite-me')).not.toBeInTheDocument();
+  });
+
+  it('offers a self-invite to a player who is not in the lobby', () => {
+    useUserStore.setState({ currentUser: { pk: 2 } as UserType });
+    renderPanel(response({ is_player: true, lobby: privateLobby }));
+    expect(screen.getByTestId('lobby-invite-me')).toBeInTheDocument();
+  });
+
+  it('puts each name on its own line above the status', () => {
+    const long = 'A very long display name that would not fit next to its status';
+    const roster = players.map((p) => (p.user_id === 1 ? { ...p, name: long } : p));
+    renderPanel(response({ is_player: true, lobby: { ...privateLobby, players: roster } }));
+    const name = screen.getByTestId('lobby-player-name-1');
+    expect(name).toHaveTextContent(long);
+    expect(name.className).not.toMatch(/\btruncate\b/);
+    expect(screen.getByTestId('lobby-player-status-1')).toHaveTextContent(
+      'Seated · Radiant 1 · Ready',
+    );
+    expect(name.parentElement).toBe(screen.getByTestId('lobby-player-status-1').parentElement);
+  });
+
+  it('labels a pending player with a capitalised status', () => {
+    const roster = players.map((p) => (p.user_id === 2 ? { ...p, status: 'pending' } : p));
+    renderPanel(response({ is_player: true, lobby: { ...privateLobby, players: roster } }));
+    expect(screen.getByTestId('lobby-player-status-2')).toHaveTextContent('Invite pending');
   });
 
   it('names the players without Steam before the first lobby', () => {

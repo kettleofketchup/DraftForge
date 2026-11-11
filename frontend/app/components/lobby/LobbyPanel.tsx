@@ -12,7 +12,9 @@ import {
   useLaunchGameLobby,
 } from '~/hooks/useGameLobby';
 import { cn } from '~/lib/utils';
+import { useUserStore } from '~/store/userStore';
 import { lobbyErrorText, lobbyRequestErrorText } from './api';
+import { isInLobby, lobbyMatchPlayed, needsInvite, playerStatusText } from './players';
 import {
   JOINABLE_LOBBY_STATES,
   PREGAME_LOBBY_STATES,
@@ -51,6 +53,9 @@ export function LobbyPanelBody({ gameId, data }: { gameId: number; data: GameLob
   const lobby = data.lobby;
   const active = lobby && !lobby.ended ? lobby : null;
   const players = lobby?.players?.length ? lobby.players : (data.players ?? []);
+  const currentUserPk = useUserStore((state) => state.currentUser?.pk);
+  const self = players.find((p) => p.user_id === currentUserPk);
+  const joinable = !!active && JOINABLE_LOBBY_STATES.includes(active.state);
 
   return (
     <div className="border-t pt-4 space-y-3" data-testid="lobby-panel">
@@ -89,15 +94,17 @@ export function LobbyPanelBody({ gameId, data }: { gameId: number; data: GameLob
           gameId={gameId}
           players={players}
           canManage={data.can_manage}
-          canInvite={!!active && JOINABLE_LOBBY_STATES.includes(active.state)}
+          canInvite={joinable}
         />
       )}
 
-      {data.is_player && active && JOINABLE_LOBBY_STATES.includes(active.state) && (
+      {data.is_player && joinable && !(self && isInLobby(self)) && (
         <SelfInviteButton gameId={gameId} />
       )}
 
-      {data.can_manage && <StaffControls gameId={gameId} data={data} active={active} />}
+      {data.can_manage && (
+        <StaffControls gameId={gameId} data={data} active={active} players={players} />
+      )}
     </div>
   );
 }
@@ -203,23 +210,6 @@ function EligibilityHint({
   );
 }
 
-function playerStatusText(player: LobbyPlayer): string {
-  if (player.account_id === null) return 'No Steam account';
-  if (player.seat) return player.ready ? `Seated (${player.seat}), ready` : `Seated (${player.seat})`;
-  switch (player.status) {
-    case 'joined':
-      return 'In lobby';
-    case 'invited':
-      return player.invites_sent > 1 ? `Invited (${player.invites_sent}×)` : 'Invited';
-    case 'left':
-      return 'Left';
-    case 'kicked':
-      return 'Kicked';
-    default:
-      return player.status || 'Not invited';
-  }
-}
-
 function PlayerList({
   gameId,
   players,
@@ -247,43 +237,52 @@ function PlayerList({
   return (
     <div className="grid gap-3 sm:grid-cols-2" data-testid="lobby-players">
       {(['radiant', 'dire'] as const).map((side) => (
-        <div key={side} className="space-y-1">
+        <div key={side} className="min-w-0 space-y-1.5">
           <p className="text-xs font-medium capitalize text-muted-foreground">{side}</p>
           {players
             .filter((p) => p.side === side)
             .map((player) => (
+              // Name first, status beneath: the name gets the full width and
+              // wraps instead of being cut off by the status text.
               <div
                 key={player.user_id}
-                className="flex items-center justify-between gap-2 text-xs"
+                className="flex items-start justify-between gap-2 text-xs"
                 data-testid={`lobby-player-${player.user_id}`}
                 data-status={player.status}
               >
-                <span className="truncate" title={player.name}>
-                  {player.name}
-                  {player.captain && <span className="text-muted-foreground"> (C)</span>}
-                </span>
-                <span className="flex items-center gap-1 shrink-0">
-                  <span
+                <div className="min-w-0 flex-1">
+                  <p
+                    className="font-medium leading-snug [overflow-wrap:anywhere]"
+                    data-testid={`lobby-player-name-${player.user_id}`}
+                  >
+                    {player.name}
+                    {player.captain && (
+                      <span className="font-normal text-muted-foreground"> (C)</span>
+                    )}
+                  </p>
+                  <p
                     className={cn(
-                      'text-muted-foreground',
+                      'leading-snug text-muted-foreground',
                       player.account_id === null && 'text-destructive',
                     )}
+                    data-testid={`lobby-player-status-${player.user_id}`}
                   >
                     {playerStatusText(player)}
-                  </span>
-                  {canManage && canInvite && player.account_id !== null && !player.seat && (
-                    <button
-                      type="button"
-                      className="rounded p-0.5 hover:bg-muted"
-                      onClick={() => reinvite(player)}
-                      disabled={invite.isPending}
-                      aria-label={`Invite ${player.name} again`}
-                      data-testid={`lobby-reinvite-${player.user_id}`}
-                    >
-                      <Mail className="size-3" />
-                    </button>
-                  )}
-                </span>
+                  </p>
+                </div>
+                {canManage && canInvite && needsInvite(player) && (
+                  <button
+                    type="button"
+                    className="shrink-0 rounded p-1 hover:bg-muted"
+                    onClick={() => reinvite(player)}
+                    disabled={invite.isPending}
+                    aria-label={`Invite ${player.name} again`}
+                    title={`Invite ${player.name} again`}
+                    data-testid={`lobby-reinvite-${player.user_id}`}
+                  >
+                    <Mail className="size-3.5" />
+                  </button>
+                )}
               </div>
             ))}
         </div>
@@ -324,10 +323,12 @@ function StaffControls({
   gameId,
   data,
   active,
+  players,
 }: {
   gameId: number;
   data: GameLobbyResponse;
   active: GameLobby | null;
+  players: LobbyPlayer[];
 }) {
   const create = useCreateGameLobby(gameId);
   const close = useCloseGameLobby(gameId);
@@ -338,9 +339,12 @@ function StaffControls({
 
   const eligibility = data.eligibility;
   const missingSteam = eligibility?.code === 'missing_steam_ids';
-  const canCreate = !active && (eligibility?.ok || missingSteam);
+  // After a played match staff confirm the winner; a new lobby would replay it.
+  const canCreate =
+    !active && (eligibility?.ok || missingSteam) && !lobbyMatchPlayed(data.lobby);
   const isRetry = !!data.lobby && data.lobby.ended;
   const joinable = !!active && JOINABLE_LOBBY_STATES.includes(active.state);
+  const anyoneToInvite = players.some(needsInvite);
   const pregame = !!active && PREGAME_LOBBY_STATES.includes(active.state);
 
   const run = async (label: string, action: () => Promise<unknown>, success: string) => {
@@ -393,7 +397,7 @@ function StaffControls({
           Recreate
         </SecondaryButton>
       )}
-      {joinable && (
+      {joinable && anyoneToInvite && (
         <SecondaryButton
           size="sm"
           onClick={() =>
