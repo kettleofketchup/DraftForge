@@ -488,7 +488,7 @@ class TournamentView(viewsets.ModelViewSet):
         with transaction.atomic():
             serializer.save()
             if opts is not None:
-                apply_draft_options(serializer.instance, opts)
+                apply_draft_options(serializer.instance, opts, actor=self.request.user)
 
     def get_permissions(self):
         if self.request.method == "GET":
@@ -548,7 +548,7 @@ class TournamentView(viewsets.ModelViewSet):
         with transaction.atomic():
             serializer.save()
             if opts is not None:
-                apply_draft_options(serializer.instance, opts)
+                apply_draft_options(serializer.instance, opts, actor=self.request.user)
 
 
 @permission_classes((IsStaff,))

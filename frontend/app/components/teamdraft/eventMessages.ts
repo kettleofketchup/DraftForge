@@ -5,6 +5,7 @@ import type {
   DraftEventType,
   DraftForceStartedPayload,
   DraftLobbyOpenedPayload,
+  DraftOptionsChangedPayload,
   DraftPausedPayload,
   DraftStartedByStaffPayload,
   PickSkippedPayload,
@@ -85,6 +86,12 @@ export function getEventMessage(event: DraftEvent): string {
       const p = event.payload as PickSkipUnavailablePayload;
       return `${p.captain_name} ran out of time — waiting for ${p.captain_name} or staff to pick`;
     }
+    case 'draft_options_changed': {
+      const p = event.payload as DraftOptionsChangedPayload;
+      const who = p.changed_by_name ?? 'Staff';
+      if (!p.timer_enabled) return `${who} turned the pick clock off`;
+      return `${who} turned the pick clock on — ${p.grace_time_ms / 1000}s grace, ${p.reserve_time_ms / 1000}s reserve`;
+    }
     default:
       return 'Draft event occurred';
   }
@@ -130,6 +137,8 @@ export function getEventIcon(eventType: DraftEventType): string {
       return '⏭️';
     case 'pick_skip_unavailable':
       return '🚧';
+    case 'draft_options_changed':
+      return '⚙️';
     default:
       return '📋';
   }
@@ -146,6 +155,7 @@ export function getEventToast(event: DraftEvent): string | null {
     case 'draft_resumed':
     case 'draft_started_by_staff':
     case 'draft_force_started':
+    case 'draft_options_changed':
       return getEventMessage(event);
     case 'captain_disconnected':
       return (event.payload as CaptainPresencePayload).is_active_captain ? getEventMessage(event) : null;

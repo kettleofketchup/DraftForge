@@ -369,6 +369,35 @@ class SettingsWriteTests(TestCase):
             Team.objects.get(pk=self.fx.team_of(rnd.captain).pk).draft_reserve_ms, 30000
         )
 
+    def _patch_options(self, opts: dict) -> None:
+        with self.captureOnCommitCallbacks(execute=True):
+            r = self.client.patch(self.url, {"draft_options": opts}, format="json")
+        self.assertEqual(r.status_code, 200, r.data)
+
+    def test_timer_off_from_pending_emits_options_changed(self):
+        with patch("app.broadcast.broadcast_event") as sent:
+            self._patch_options({"timer_enabled": False})
+        event = self.fx.events("draft_options_changed").get()
+        self.assertEqual(event.actor, self.fx.staff)
+        self.assertFalse(event.payload["timer_enabled"])
+        self.assertEqual(event.payload["from_state"], TeamDraftState.PENDING)
+        self.assertEqual(event.payload["to_state"], TeamDraftState.DRAFTING)
+        self.assertIn(event, [c.args[0] for c in sent.call_args_list])
+
+    def test_timer_on_mid_draft_emits_options_changed(self):
+        self._patch_options({"timer_enabled": False})
+        self._patch_options({"timer_enabled": True})
+        events = self.fx.events("draft_options_changed").order_by("pk")
+        self.assertEqual(events.count(), 2)
+        last = events.last()
+        self.assertTrue(last.payload["timer_enabled"])
+        self.assertEqual(last.payload["from_state"], TeamDraftState.DRAFTING)
+        self.assertEqual(last.payload["to_state"], TeamDraftState.DRAFTING)
+
+    def test_unchanged_options_emit_nothing(self):
+        self._patch_options({"timer_enabled": True, "grace_time_ms": 30000})
+        self.assertFalse(self.fx.events("draft_options_changed").exists())
+
     def _disable_and_assert_drafting_unarmed(self):
         with self.captureOnCommitCallbacks(execute=True):
             r = self.client.patch(

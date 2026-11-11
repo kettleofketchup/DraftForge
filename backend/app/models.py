@@ -1955,6 +1955,7 @@ class DraftEvent(models.Model):
         ("pick_timed_out", "Pick Timed Out"),
         ("pick_skipped", "Pick Skipped"),
         ("pick_skip_unavailable", "Pick Skip Unavailable"),
+        ("draft_options_changed", "Draft Options Changed"),
     ]
 
     draft = models.ForeignKey(

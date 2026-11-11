@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { getEventIcon, getEventMessage, getEventToast } from '~/components/teamdraft/eventMessages';
 import type { DraftEvent, DraftEventType } from '~/types/draftEvent';
 
-const ALL_TYPES: DraftEventType[] = ['draft_started','draft_completed','captain_assigned','player_picked','tie_roll','pick_undone','draft_lobby_opened','captain_ready','captain_unready','captain_connected','captain_disconnected','draft_started_by_staff','draft_force_started','round_started','draft_paused','draft_resumed','pick_timed_out','pick_skipped','pick_skip_unavailable'];
+const ALL_TYPES: DraftEventType[] = ['draft_started','draft_completed','captain_assigned','player_picked','tie_roll','pick_undone','draft_lobby_opened','captain_ready','captain_unready','captain_connected','captain_disconnected','draft_started_by_staff','draft_force_started','round_started','draft_paused','draft_resumed','pick_timed_out','pick_skipped','pick_skip_unavailable','draft_options_changed'];
 const ev = (event_type: DraftEventType, payload: object): DraftEvent => ({ pk: 1, event_type, payload: payload as DraftEvent['payload'], actor: null, created_at: '2026-11-08T12:00:00Z' });
 const cap = { captain_id: 7, captain_name: 'Ana', captain_avatar_url: null, team_id: 1, team_name: 'T1' };
 const skipped = { skipped_captain_id: 7, skipped_captain_name: 'Ana', skipped_team_id: 1, skipped_team_name: 'T1', next_captain_id: 8, next_captain_name: 'Bo', next_team_id: 2, next_team_name: 'T2', from_pick_number: 4, to_pick_number: 5, pick_duration_ms: 60000, reserve_used_ms: 30000 };
@@ -23,6 +23,19 @@ describe('pick_skipped copy', () => {
     const msg = getEventMessage(ev('pick_skipped', { ...skipped, deferred_to_pick_number: null }));
     expect(msg).toBe('Ana ran out of time — Bo is up');
     expect(msg).not.toContain('null');
+  });
+});
+
+describe('draft_options_changed copy', () => {
+  const opts = { grace_time_ms: 20000, reserve_time_ms: 10000, changed_by_id: 1, changed_by_name: 'Staff', from_state: 'drafting', to_state: 'drafting', pick_number: 3 };
+  it('names the new clock when the timer turns on', () => {
+    expect(getEventToast(ev('draft_options_changed', { ...opts, timer_enabled: true }))).toBe('Staff turned the pick clock on — 20s grace, 10s reserve');
+  });
+  it('says the clock is off when the timer turns off', () => {
+    expect(getEventToast(ev('draft_options_changed', { ...opts, timer_enabled: false }))).toBe('Staff turned the pick clock off');
+  });
+  it('falls back to Staff when no actor is recorded', () => {
+    expect(getEventMessage(ev('draft_options_changed', { ...opts, changed_by_name: null, timer_enabled: false }))).toBe('Staff turned the pick clock off');
   });
 });
 

@@ -101,7 +101,7 @@ Each tournament has one `DraftOptions` row (`Tournament.draft_options`, created 
 
 | Field | Default | Description |
 |-------|---------|-------------|
-| `timer_enabled` | `True` (new tournaments open a ready lobby); set to `False` in Draft Settings for an untimed draft | Turns the server-authoritative clock on |
+| `timer_enabled` | `True` (new tournaments open a ready lobby; tournaments that existed before migration `0099` were backfilled with `False`); set to `False` in Draft Settings for an untimed draft | Turns the server-authoritative clock on |
 | `grace_time_ms` | `30000` | Free time per pick (>= 1000) |
 | `reserve_time_ms` | `30000` | Per-team reserve pool spent after grace (>= 0) |
 | `timeout_action` | `skip_turn` | What happens when a pick expires (read-only) |
@@ -190,6 +190,7 @@ All carry `pick_number` (the lowest unpicked round, or `null`) except `draft_lob
 | `pick_timed_out` | `captain_*`, `team_*`, `elapsed_ms`, `reserve_used_ms` |
 | `pick_skipped` | `skipped_captain_*`, `skipped_team_*`, `next_captain_*`, `next_team_*`, `from_pick_number`, `to_pick_number`, `deferred_to_pick_number` (null for shuffle), `pick_duration_ms`, `reserve_used_ms` |
 | `pick_skip_unavailable` | `captain_*`, `team_*` |
+| `draft_options_changed` | `timer_enabled`, `grace_time_ms`, `reserve_time_ms`, `changed_by_id`, `changed_by_name`, `from_state`, `to_state`; emitted when a Draft Settings save changes any option on a tournament that has a draft, so open draft windows get the new state |
 
 ### Backend tests
 

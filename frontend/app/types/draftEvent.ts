@@ -19,7 +19,8 @@ export type DraftEventType =
   | "draft_resumed"
   | "pick_timed_out"
   | "pick_skipped"
-  | "pick_skip_unavailable";
+  | "pick_skip_unavailable"
+  | "draft_options_changed";
 
 export interface DraftEvent {
   pk: number;
@@ -50,7 +51,8 @@ export type DraftEventPayload =
   | DraftResumedPayload
   | PickTimedOutPayload
   | PickSkippedPayload
-  | PickSkipUnavailablePayload;
+  | PickSkipUnavailablePayload
+  | DraftOptionsChangedPayload;
 
 export interface DraftStartedPayload {
   draft_id: number;
@@ -194,6 +196,17 @@ export interface PickSkippedPayload {
 
 export interface PickSkipUnavailablePayload extends CaptainRef {
   pick_number: number;
+}
+
+export interface DraftOptionsChangedPayload {
+  timer_enabled: boolean;
+  grace_time_ms: number;
+  reserve_time_ms: number;
+  changed_by_id: number | null;
+  changed_by_name: string | null;
+  from_state: TeamDraftState;
+  to_state: TeamDraftState;
+  pick_number: number | null;
 }
 
 /**
