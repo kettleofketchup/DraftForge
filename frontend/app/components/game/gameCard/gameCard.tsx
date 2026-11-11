@@ -19,7 +19,7 @@ interface Props {
   game: GameType;
   edit?: boolean;
   saveFunc?: string;
-  onEditModeChange?: (isEditing: boolean) => void; // Added new prop
+  onEditModeChange?: (isEditing: boolean) => void;
 }
 
 export const GameCard: React.FC<Props> = ({
@@ -69,7 +69,6 @@ export const GameCard: React.FC<Props> = ({
   }, [game]);
 
   useEffect(() => {
-    // Added useEffect to call onEditModeChange
     if (onEditModeChange) {
       onEditModeChange(editMode);
     }

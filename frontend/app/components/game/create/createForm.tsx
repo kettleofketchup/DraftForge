@@ -16,7 +16,7 @@ import { PrimaryButton } from '~/components/ui/buttons';
 import { Input } from '~/components/ui/input';
 
 export const GameCreateForm: React.FC = () => {
-  const currentUser: UserType = useUserStore((state) => state.currentUser); // Zustand setter
+  const currentUser: UserType = useUserStore((state) => state.currentUser);
   const [errorMessage, setErrorMessage] = useState<
     Partial<Record<keyof GameType, string>>
   >({});
@@ -27,7 +27,7 @@ export const GameCreateForm: React.FC = () => {
   const [radiantPK, setRadiantPK] = useState(0);
   const [direPK, setDirePK] = useState(0);
 
-  const setTournament = useUserStore((state) => state.setTournament); // Zustand setter
+  const setTournament = useUserStore((state) => state.setTournament);
   const [form, setForm] = useState<GameType>({} as GameType);
   const handleChange = (field: keyof GameType, value: any) => {
     setForm((prev: GameType) => ({ ...prev, [field]: value }) as GameType);

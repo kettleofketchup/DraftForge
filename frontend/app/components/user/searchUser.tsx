@@ -26,7 +26,7 @@ export const SearchUserDropdown: React.FC<Props> = ({
   setQuery,
   defaultValue = 'Search for users',
 }) => {
-  const user: UserType = useUserStore((state) => state.currentUser); // Zustand setter
+  const user: UserType = useUserStore((state) => state.currentUser);
 
   const filteredUsers =
     query === ''

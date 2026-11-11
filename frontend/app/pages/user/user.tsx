@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import axios from '~/components/api/axios'; // Assuming axios is configured for your API
+import axios from '~/components/api/axios';
 import type { UserClassType, UserType } from '~/components/user/types';
 import { UserCard } from '~/components/user/userCard';
 import { getLogger } from '~/lib/logger';
@@ -66,10 +66,7 @@ export const UserDetailPage: React.FC = () => {
 
   return (
     <div className="container mx-auto p-4">
-      {/* You can use TournamentCard or a custom layout */}
-
       <UserCard user={user as UserClassType} />
-      {/* Additional details or components can be added here */}
     </div>
   );
 };

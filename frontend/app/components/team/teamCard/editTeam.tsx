@@ -18,15 +18,15 @@ interface Props {
 }
 
 export const TeamEditForm: React.FC<Props> = ({ user, form, setForm }) => {
-  const currentUser: UserType = useUserStore((state) => state.currentUser); // Zustand setter
+  const currentUser: UserType = useUserStore((state) => state.currentUser);
   const [errorMessage, setErrorMessage] = useState<
     Partial<Record<keyof UserType, string>>
   >({});
 
   const [isSaving, setIsSaving] = useState(false);
   const [statusMsg, setStatusMsg] = useState<string | null>('null');
-  const updateUserStore = useUserStore((state) => state.setUser); // Zustand setter
-  const addUser = useUserStore((state) => state.addUser); // Zustand setter
+  const updateUserStore = useUserStore((state) => state.setUser);
+  const addUser = useUserStore((state) => state.addUser);
 
   const handleChange = (field: keyof UserClassType, value: any) => {
     setForm((prev) => ({ ...prev, [field]: value }) as UserClassType);

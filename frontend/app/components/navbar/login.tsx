@@ -56,10 +56,10 @@ const getCachedUser = (): UserType | null => {
 
 export const ProfileButton: React.FC = () => {
   const { t } = useTranslation('navbar');
-  const currentUser = useUserStore((state) => state.currentUser); // Zustand user state
+  const currentUser = useUserStore((state) => state.currentUser);
   const navigate = useNavigate();
   const [showPopover, setShowPopover] = useState(false);
-  const clearUser = useUserStore((state) => state.clearUser); // Zustand setter
+  const clearUser = useUserStore((state) => state.clearUser);
   useEffect(() => {}, [currentUser.username]);
   const handleClick = () => {
     setShowPopover((prev) => !prev);
