@@ -1,8 +1,10 @@
 """DraftConsumer on BaseDraftConsumer: heartbeat, counts, prefix isolation, no kick/loop (spec §1)."""
 
 import asyncio
+import threading
 from datetime import date
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
 
 import redis
 from channels.db import database_sync_to_async
@@ -22,6 +24,8 @@ from app.tasks.draft_tick import (
     get_connection_count,
     get_redis_client,
     heartbeat_key,
+    increment_connection_count,
+    touch_connection,
 )
 from app.tests.ws_helpers import assert_no_frame_except_ping, read_until_type
 
@@ -267,3 +271,61 @@ class DraftConsumerBaseTestCase(TransactionTestCase):
         await comm.send_to(text_data="{not json")
         await assert_no_frame_except_ping(comm, 0.5)
         await comm.disconnect()
+
+
+class RefreshInFlightAtDisconnectTests(TransactionTestCase):
+    def setUp(self) -> None:
+        self.tournament = Tournament.objects.create(
+            name="TDR", date_played=date.today()
+        )
+        self.draft = Draft.objects.create(
+            tournament=self.tournament, draft_style="snake"
+        )
+        self.key = conn_count_key("teamdraft", self.draft.pk)
+        get_redis_client().delete(self.key)
+
+    def tearDown(self) -> None:
+        get_redis_client().delete(self.key)
+
+    def _consumer(self) -> DraftConsumer:
+        consumer = DraftConsumer()
+        consumer.draft_id = self.draft.pk
+        consumer.channel_name = "test.refresh-inflight"
+        consumer.room_group_name = f"draft_{self.draft.pk}"
+        consumer.channel_layer = SimpleNamespace(group_discard=AsyncMock())
+        consumer._is_captain = False
+        consumer._tick_wanted = True
+        consumer._connection_tracked = True
+        return consumer
+
+    def test_a_touch_in_flight_at_disconnect_cannot_re_add_the_socket(self) -> None:
+        entered, release = threading.Event(), threading.Event()
+
+        def blocked_touch(prefix: str, draft_id: int, channel: str) -> None:
+            entered.set()
+            release.wait(5)
+            touch_connection(prefix, draft_id, channel)
+
+        consumer = self._consumer()
+        increment_connection_count("teamdraft", self.draft.pk, consumer.channel_name)
+
+        async def scenario() -> None:
+            consumer._refresh_task = asyncio.ensure_future(
+                consumer._connection_refresh_loop()
+            )
+            while not entered.is_set():
+                await asyncio.sleep(0.01)
+            closing = asyncio.ensure_future(consumer.base_disconnect(1000))
+            await asyncio.sleep(0.1)
+            release.set()
+            await closing
+            await asyncio.sleep(0.2)
+
+        with (
+            patch("app.tasks.draft_tick.touch_connection", new=blocked_touch),
+            patch("app.tasks.draft_tick.start_tick_broadcaster") as start,
+            patch("app.tasks.draft_tick.CONN_REFRESH_SECONDS", 0.05),
+        ):
+            asyncio.run(scenario())
+        self.assertEqual(get_connection_count("teamdraft", self.draft.pk), 0)
+        start.assert_not_called()

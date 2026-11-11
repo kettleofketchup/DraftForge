@@ -364,30 +364,34 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
         Runs whether or not pings are enabled, and re-adds the entry if the
         connect-time increment failed or the key was lost.
         """
-        touch = sync_to_async(draft_tick.touch_connection, thread_sensitive=False)
         try:
             while True:
                 await asyncio.sleep(draft_tick.CONN_REFRESH_SECONDS)
-                try:
-                    await touch(
-                        self.get_redis_prefix(), self.draft_id, self.channel_name
-                    )
-                    self._connection_tracked = True
-                    if self._tick_wanted:
-                        # A loop that read zero connections while this socket
-                        # connected can exit after our connect-time start lost
-                        # the lock race; a held lock makes this a no-op.
-                        await self._maybe_start_tick_broadcaster()
-                except redis.RedisError as e:
-                    log.warning(
-                        "connection_touch_failed",
-                        system="websocket",
-                        subsystem="heartbeat",
-                        draft_id=self.draft_id,
-                        error=str(e),
-                    )
+                # Cancelling us can't stop a step already in an executor thread;
+                # base_disconnect awaits the step before it removes the entry.
+                self._refresh_step = asyncio.ensure_future(self._refresh_connection())
+                await asyncio.shield(self._refresh_step)
         except asyncio.CancelledError:
             pass
+
+    async def _refresh_connection(self) -> None:
+        touch = sync_to_async(draft_tick.touch_connection, thread_sensitive=False)
+        try:
+            await touch(self.get_redis_prefix(), self.draft_id, self.channel_name)
+            self._connection_tracked = True
+            if self._tick_wanted and not getattr(self, "_disconnected", False):
+                # A loop that read zero connections while this socket
+                # connected can exit after our connect-time start lost
+                # the lock race; a held lock makes this a no-op.
+                await self._maybe_start_tick_broadcaster()
+        except redis.RedisError as e:
+            log.warning(
+                "connection_touch_failed",
+                system="websocket",
+                subsystem="heartbeat",
+                draft_id=self.draft_id,
+                error=str(e),
+            )
 
     # --- Span helpers ---
 
@@ -467,6 +471,7 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
         self._is_captain = False
         self._ping_task = None
         self._refresh_task: asyncio.Future[None] | None = None
+        self._refresh_step: asyncio.Future[None] | None = None
         self._tick_wanted = False
 
         if (
@@ -623,6 +628,11 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
                 except asyncio.CancelledError:
                     pass
                 self._refresh_task = None
+            step = getattr(self, "_refresh_step", None)
+            if step is not None:
+                with contextlib.suppress(Exception, asyncio.CancelledError):
+                    await step
+                self._refresh_step = None
 
             # Track disconnection
             if hasattr(self, "_connection_tracked") and self._connection_tracked:
