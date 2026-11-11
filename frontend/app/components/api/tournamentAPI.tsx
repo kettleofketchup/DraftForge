@@ -9,6 +9,7 @@ import type {
   TournamentType,
   UserType,
 } from '~/index';
+import type { DraftOptionsPatch } from '~/components/teamdraft/schemas';
 import type { DiscordTournamentLogEntry } from '~/components/tournament/schemas';
 import type { AddMemberPayload, AddUserResponse } from './types';
 import { getLogger } from '~/lib/logger';
@@ -58,6 +59,17 @@ export async function updateTournament(
   const response = await axios.patch<TournamentType>(
     `/tournaments/${pk}/`,
     data,
+  );
+  return response.data;
+}
+
+export async function updateDraftOptions(
+  tournamentPk: number,
+  patch: DraftOptionsPatch,
+): Promise<TournamentType> {
+  const response = await axios.patch<TournamentType>(
+    `/tournaments/${tournamentPk}/`,
+    { draft_options: patch },
   );
   return response.data;
 }

@@ -142,7 +142,7 @@ export class DraftWebSocketHelper {
 
   /**
    * Wait for a reconnection: a close event followed by a new open.
-   * Returns when the new connection's initial_events message is received.
+   * Returns once a new `/api/draft/` socket is open (it then receives `initial_state` and `initial_events`).
    */
   async waitForReconnect(timeout = 15000): Promise<void> {
     const countBefore = this.connectionCount;

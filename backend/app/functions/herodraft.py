@@ -61,7 +61,9 @@ CAPTAINS_MODE_SEQUENCE = {
 }
 
 
-def build_draft_rounds(draft: HeroDraft, first_team: DraftTeam, second_team: DraftTeam):
+def build_draft_rounds(
+    draft: HeroDraft, first_team: DraftTeam, second_team: DraftTeam
+) -> None:
     """
     Create all 24 HeroDraftRound objects for the draft.
 
@@ -116,7 +118,9 @@ def trigger_roll(draft: HeroDraft, actor_team: DraftTeam) -> DraftTeam:
         return winner
 
 
-def submit_choice(draft: HeroDraft, team: DraftTeam, choice_type: str, value: str):
+def submit_choice(
+    draft: HeroDraft, team: DraftTeam, choice_type: str, value: str
+) -> None:
     """
     Submit a choice for pick order or side.
 
@@ -187,7 +191,7 @@ def submit_pick(
     draft: HeroDraft,
     team: DraftTeam,
     hero_id: int,
-    client_picked_at=None,
+    client_picked_at: datetime | None = None,
 ) -> HeroDraftRound:
     """
     Submit a hero pick or ban for the current round.
@@ -372,7 +376,9 @@ def submit_pick(
                 team_id=next_round.draft_team_id,
                 started_at=next_round.started_at.isoformat(),
             )
-            active_span.set_attribute("draft.next_round_number", next_round.round_number)
+            active_span.set_attribute(
+                "draft.next_round_number", next_round.round_number
+            )
         else:
             draft.state = HeroDraftState.COMPLETED
             draft.save()

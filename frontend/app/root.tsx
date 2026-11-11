@@ -62,9 +62,9 @@ export function DevScripts() {
       process.env.NODE_ENV,
     );
 
-    // Skip react-scan during Playwright tests or when explicitly disabled
-    // Playwright tests inject window.playwright = true via addInitScript
-    const isPlaywright = typeof window !== 'undefined' && 'playwright' in window;
+    // Skip react-scan under automation; navigator.webdriver also covers raw browser.newContext()
+    const isPlaywright =
+      typeof window !== 'undefined' && ('playwright' in window || navigator.webdriver === true);
     const disableReactScan = import.meta.env.VITE_DISABLE_REACT_SCAN === 'true';
 
     if (import.meta.env.DEV && !isPlaywright && !disableReactScan) {

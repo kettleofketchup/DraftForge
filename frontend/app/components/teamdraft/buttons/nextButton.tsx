@@ -13,6 +13,7 @@ export const NextRoundButton: React.FC<NextRoundButtonProps> = ({
       direction="right"
       onClick={goToNextRound}
       disabled={disabled}
+      data-testid="nextRoundButton"
       aria-label="Go to the next draft round"
     />
   );

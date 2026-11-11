@@ -12,6 +12,7 @@ export const LatestRoundButton: React.FC<LatestRoundButtonProps> = ({
     <NavButton
       onClick={goToLatestRound}
       disabled={disabled}
+      data-testid="latestRoundButton"
       aria-label="Go to the latest draft round"
     >
       Latest

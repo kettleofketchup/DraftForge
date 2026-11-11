@@ -3,18 +3,37 @@ WebSocket consumers for draft event broadcasting.
 """
 
 import json
+import time
 from typing import TYPE_CHECKING, Any
 
+from asgiref.sync import sync_to_async
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
+from django.db import transaction
 from django.utils import timezone
 
+from app.broadcast import broadcast_herodraft_state
 from app.cache_utils import invalidate_obj
 from app.consumers_base import BaseDraftConsumer
+from app.draft_state import build_draft_state
 from app.functions.teamdraft import emit_event, team_payload
-from app.models import Draft, Team
+from app.models import (
+    Draft,
+    DraftEvent,
+    DraftTeam,
+    HeroDraft,
+    HeroDraftEvent,
+    HeroDraftState,
+    Team,
+    Tournament,
+)
+from app.serializers import DraftEventSerializer, HeroDraftSerializer
 from app.tasks.draft_tick import CAPTAIN_CHANNEL_TTL, TickDriver
-from app.tasks.teamdraft_tick import TEAM_TICK_DRIVER, captain_conn_key
+from app.tasks.teamdraft_tick import (
+    TEAM_TICK_DRIVER,
+    captain_conn_key,
+    captain_is_fresh,
+)
 from telemetry.logging import get_logger
 from telemetry.websocket import TelemetryConsumerMixin
 
@@ -27,7 +46,7 @@ log = get_logger(__name__)
 class DraftConsumer(BaseDraftConsumer):
     """WebSocket consumer for draft-specific events."""
 
-    PING_ENABLED = False
+    PING_ENABLED = True
     kick_duplicate_captain_connections = False
     clear_heartbeat_on_disconnect = False
 
@@ -43,28 +62,7 @@ class DraftConsumer(BaseDraftConsumer):
 
     @database_sync_to_async
     def get_initial_state_data(self, draft_id: int) -> dict | None:
-        from app.serializers import DraftSerializerSlim, _build_users_dict
-
-        try:
-            # Note: users_remaining is a property, not a relation, so it can't be prefetched
-            draft = Draft.objects.prefetch_related(
-                "draft_rounds__captain",
-                "draft_rounds__choice",
-                "tournament__teams__captain",
-                "tournament__teams__members",
-                "tournament__users",  # Prefetch users for users_remaining calculation
-            ).get(pk=draft_id)
-            data = DraftSerializerSlim(draft).data
-
-            # Add _users dict for frontend cache hydration
-            # Convert int keys to strings for consistency with broadcast path
-            # (msgpack strict mode forbids int map keys in channel layer)
-            data["_users"] = {
-                str(k): v for k, v in _build_users_dict(draft.tournament).items()
-            }
-            return data
-        except Draft.DoesNotExist:
-            return None
+        return build_draft_state(draft_id, fresh=False)
 
     @database_sync_to_async
     def get_captain_draft_team(
@@ -79,15 +77,19 @@ class DraftConsumer(BaseDraftConsumer):
         return TEAM_TICK_DRIVER
 
     def should_start_tick_broadcaster(self, initial_state: dict | None) -> bool:
-        return bool(initial_state and initial_state.get("clock_armed"))
+        return bool(
+            initial_state
+            and (
+                initial_state.get("clock_armed")
+                or initial_state.get("state") == "paused"
+            )
+        )
 
     @database_sync_to_async
     def _set_presence(
         self, draft_id: int, user: "AbstractBaseUser", is_connected: bool
     ) -> None:
-        team = Team.objects.filter(
-            tournament__draft__pk=draft_id, captain=user
-        ).first()
+        team = Team.objects.filter(tournament__draft__pk=draft_id, captain=user).first()
         if team is None:
             return
         draft = Draft.objects.get(pk=draft_id)
@@ -103,20 +105,25 @@ class DraftConsumer(BaseDraftConsumer):
             team.save(update_fields=["draft_is_connected", "draft_has_connected"])
             invalidate_obj(team.tournament)
             emit_event(draft, "captain_connected", payload)
-            event_name = "teamdraft_captain_connected"
+            log.info(
+                "teamdraft_captain_connected",
+                system="teamdraft",
+                subsystem="connection",
+                draft_id=draft_id,
+                user_id=user.pk,
+            )
         else:
             team.draft_is_connected = False
             team.save(update_fields=["draft_is_connected"])
             invalidate_obj(team.tournament)
             emit_event(draft, "captain_disconnected", payload)
-            event_name = "teamdraft_captain_disconnected"
-        log.info(
-            event_name,
-            system="teamdraft",
-            subsystem="connection",
-            draft_id=draft_id,
-            user_id=user.pk,
-        )
+            log.info(
+                "teamdraft_captain_disconnected",
+                system="teamdraft",
+                subsystem="connection",
+                draft_id=draft_id,
+                user_id=user.pk,
+            )
 
     async def on_captain_state_change(
         self, draft_id: int, user: "AbstractBaseUser", is_connected: bool
@@ -144,9 +151,7 @@ class DraftConsumer(BaseDraftConsumer):
 
     @database_sync_to_async
     def _restore_presence(self, draft_id: int, user: "AbstractBaseUser") -> None:
-        team = Team.objects.filter(
-            tournament__draft__pk=draft_id, captain=user
-        ).first()
+        team = Team.objects.filter(tournament__draft__pk=draft_id, captain=user).first()
         if team is None or team.draft_has_connected:
             return
         team.draft_is_connected = True
@@ -162,30 +167,89 @@ class DraftConsumer(BaseDraftConsumer):
         )
 
     async def handle_heartbeat(self) -> None:
-        await super().handle_heartbeat()
         if not self._is_captain:
+            await super().handle_heartbeat()
             return
+        was_fresh = await sync_to_async(
+            self._captain_is_fresh, thread_sensitive=False
+        )()
+        await super().handle_heartbeat()
+        if not was_fresh:
+            await self.channel_layer.group_send(
+                self.room_group_name,
+                {
+                    "type": "captain.heartbeat",
+                    "captain_id": self.user.id,
+                    "fresh": True,
+                },
+            )
+        if not await sync_to_async(self._extend_captain_conn, thread_sensitive=False)():
+            return
+        await self._restore_presence(self.draft_id, self.user)
+
+    def _captain_is_fresh(self) -> bool:
+        return captain_is_fresh(self._redis(), self.draft_id, self.user.id, time.time())
+
+    def _extend_captain_conn(self) -> bool:
         r = self._redis()
         key = captain_conn_key(self.draft_id, self.user.id)
         if not r.exists(key):
-            return
+            return False
         r.expire(key, CAPTAIN_CHANNEL_TTL)
-        await self._restore_presence(self.draft_id, self.user)
+        return True
 
     async def draft_tick(self, event: dict[str, Any]) -> None:
         await self.send(
             text_data=json.dumps(
-                {"type": "draft_tick", **{k: v for k, v in event.items() if k != "type"}}
+                {
+                    "type": "draft_tick",
+                    **{k: v for k, v in event.items() if k != "type"},
+                }
             )
         )
 
+    async def captain_heartbeat(self, event: dict[str, Any]) -> None:
+        await self.send(
+            text_data=json.dumps(
+                {
+                    "type": "captain_heartbeat",
+                    "captain_id": event["captain_id"],
+                    "fresh": event["fresh"],
+                }
+            )
+        )
+
+    def _captain_fresh_map(self, initial_state: dict | None) -> dict[str, bool]:
+        r = self._redis()
+        now_ts = time.time()
+        teams = ((initial_state or {}).get("tournament") or {}).get("teams") or []
+        return {
+            str(team["captain"]): captain_is_fresh(
+                r, self.draft_id, team["captain"], now_ts
+            )
+            for team in teams
+            if team.get("captain") is not None
+        }
+
     async def send_initial_messages(self, initial_state: dict | None) -> None:
+        captain_fresh = await sync_to_async(
+            self._captain_fresh_map, thread_sensitive=False
+        )(initial_state)
+        await self.send(
+            text_data=json.dumps(
+                {
+                    "type": "initial_state",
+                    "draft_state": initial_state,
+                    "captain_fresh": captain_fresh,
+                    "server_time": timezone.now().isoformat(),
+                }
+            )
+        )
         await self.send(
             text_data=json.dumps(
                 {
                     "type": "initial_events",
                     "events": await self.get_recent_events(self.draft_id),
-                    "draft_state": initial_state,
                 }
             )
         )
@@ -255,17 +319,16 @@ class DraftConsumer(BaseDraftConsumer):
         # Include draft state if available (allows clients to update without API calls)
         if "draft_state" in event:
             message["draft_state"] = event["draft_state"]
+            self._tick_wanted = self.should_start_tick_broadcaster(event["draft_state"])
         await self.send(text_data=json.dumps(message))
 
     async def force_disconnect(self, event: dict[str, Any]) -> None:
         """Test-only: server-initiated connection close."""
-        await self.close(code=1012)  # Service Restart
+        # Daphne only lets a server send 1000 or 3000-4999; 1012 crashed the consumer.
+        await self.close(code=4012)
 
     @database_sync_to_async
     def get_recent_events(self, draft_id: int, limit: int = 20) -> list[dict]:
-        from app.models import DraftEvent
-        from app.serializers import DraftEventSerializer
-
         events = DraftEvent.objects.filter(draft_id=draft_id)[:limit]
         return DraftEventSerializer(events, many=True).data
 
@@ -273,7 +336,7 @@ class DraftConsumer(BaseDraftConsumer):
 class TournamentConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
     """WebSocket consumer for tournament-wide events."""
 
-    async def connect(self):
+    async def connect(self) -> None:
         await self.telemetry_connect()
         self.tournament_id = self.scope["url_route"]["kwargs"]["tournament_id"]
         self.room_group_name = f"tournament_{self.tournament_id}"
@@ -299,15 +362,15 @@ class TournamentConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
             )
         )
 
-    async def disconnect(self, close_code):
+    async def disconnect(self, close_code: int) -> None:
         await self.telemetry_disconnect(close_code)
         await self.channel_layer.group_discard(self.room_group_name, self.channel_name)
 
-    async def receive(self, text_data):
+    async def receive(self, text_data: str) -> None:
         # Read-only WebSocket - ignore incoming messages
         pass
 
-    async def draft_event(self, event):
+    async def draft_event(self, event: dict[str, Any]) -> None:
         """Handle draft.event messages from channel layer."""
         message = {
             "type": "draft_event",
@@ -319,16 +382,11 @@ class TournamentConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
         await self.send(text_data=json.dumps(message))
 
     @database_sync_to_async
-    def tournament_exists(self, tournament_id):
-        from app.models import Tournament
-
+    def tournament_exists(self, tournament_id: int) -> bool:
         return Tournament.objects.filter(pk=tournament_id).exists()
 
     @database_sync_to_async
-    def get_recent_events(self, tournament_id, limit=20):
-        from app.models import Draft, DraftEvent
-        from app.serializers import DraftEventSerializer
-
+    def get_recent_events(self, tournament_id: int, limit: int = 20) -> list[dict]:
         # Get events from the tournament's draft
         try:
             draft = Draft.objects.get(tournament_id=tournament_id)
@@ -351,16 +409,11 @@ class HeroDraftConsumer(BaseDraftConsumer):
         return "herodraft"
 
     @database_sync_to_async
-    def draft_exists(self, draft_id):
-        from app.models import HeroDraft
-
+    def draft_exists(self, draft_id: int) -> bool:
         return HeroDraft.objects.filter(id=draft_id).exists()
 
     @database_sync_to_async
-    def get_initial_state_data(self, draft_id):
-        from app.models import HeroDraft
-        from app.serializers import HeroDraftSerializer
-
+    def get_initial_state_data(self, draft_id: int) -> dict:
         draft = HeroDraft.objects.prefetch_related(
             "draft_teams__tournament_team__captain",
             "draft_teams__tournament_team__members",
@@ -369,9 +422,9 @@ class HeroDraftConsumer(BaseDraftConsumer):
         return HeroDraftSerializer(draft).data
 
     @database_sync_to_async
-    def get_captain_draft_team(self, draft_id, user):
-        from app.models import HeroDraft
-
+    def get_captain_draft_team(
+        self, draft_id: int, user: "AbstractBaseUser"
+    ) -> DraftTeam | None:
         try:
             draft = HeroDraft.objects.get(id=draft_id)
             return draft.draft_teams.filter(tournament_team__captain=user).first()
@@ -379,13 +432,18 @@ class HeroDraftConsumer(BaseDraftConsumer):
             return None
 
     def get_active_draft_state_values(self) -> list[str]:
-        from app.models import HeroDraftState
-
         return [HeroDraftState.DRAFTING.value]
+
+    def _follow_tick_state(self, state: str | None) -> None:
+        # The tick loop runs through RESUMING; any other state ends it.
+        self._tick_wanted = state in (
+            HeroDraftState.DRAFTING.value,
+            HeroDraftState.RESUMING.value,
+        )
 
     # --- Connect / Disconnect ---
 
-    async def connect(self):
+    async def connect(self) -> None:
         result = await self.base_connect()
         if result:
             log.info(
@@ -399,7 +457,7 @@ class HeroDraftConsumer(BaseDraftConsumer):
                 is_captain=self._is_captain,
             )
 
-    async def disconnect(self, close_code):
+    async def disconnect(self, close_code: int) -> None:
         log.info(
             "herodraft_disconnected",
             system="herodraft",
@@ -418,7 +476,7 @@ class HeroDraftConsumer(BaseDraftConsumer):
 
     # --- Receive ---
 
-    async def receive(self, text_data):
+    async def receive(self, text_data: str) -> None:
         """Handle incoming WebSocket messages from clients.
 
         Wrapped in a `ws.message` span via `traced_message` so each
@@ -453,16 +511,14 @@ class HeroDraftConsumer(BaseDraftConsumer):
     # --- Captain state change (pause-on-disconnect) ---
 
     @database_sync_to_async
-    def on_captain_state_change(self, draft_id, user, is_connected):
+    def on_captain_state_change(
+        self, draft_id: int, user: "AbstractBaseUser", is_connected: bool
+    ) -> None:
         """Mark captain connected/disconnected and handle pause-on-disconnect.
 
         Only pauses during DRAFTING state (not RESUMING) to prevent infinite
         time exploit. Broadcasts state changes after transaction commits.
         """
-        from django.db import transaction
-
-        from app.broadcast import broadcast_herodraft_state
-        from app.models import HeroDraft, HeroDraftEvent, HeroDraftState
 
         broadcast_event_type = None
         should_broadcast = False
@@ -580,7 +636,7 @@ class HeroDraftConsumer(BaseDraftConsumer):
 
     # --- HeroDraft-specific channel layer handlers ---
 
-    async def herodraft_kicked(self, event):
+    async def herodraft_kicked(self, event: dict[str, Any]) -> None:
         """Handle being kicked by a newer connection."""
         reason = event.get("reason", "unknown")
         log.info(
@@ -604,7 +660,7 @@ class HeroDraftConsumer(BaseDraftConsumer):
         )
         await self.close(code=4000)  # Custom close code for "kicked"
 
-    async def herodraft_event(self, event):
+    async def herodraft_event(self, event: dict[str, Any]) -> None:
         """Handle herodraft.event messages from channel layer."""
         # Build message with only fields that have actual values
         # Using .get() with missing keys returns None, which serializes to null
@@ -620,6 +676,7 @@ class HeroDraftConsumer(BaseDraftConsumer):
             message["draft_team"] = event["draft_team"]
         if "draft_state" in event and event["draft_state"] is not None:
             message["draft_state"] = event["draft_state"]
+            self._follow_tick_state(event["draft_state"].get("state"))
         if "timestamp" in event and event["timestamp"] is not None:
             message["timestamp"] = event["timestamp"]
         if "metadata" in event and event["metadata"] is not None:
@@ -627,7 +684,7 @@ class HeroDraftConsumer(BaseDraftConsumer):
 
         await self.send(text_data=json.dumps(message))
 
-    async def herodraft_tick(self, event):
+    async def herodraft_tick(self, event: dict[str, Any]) -> None:
         """Forward tick anchors from the channel layer to this WS client.
 
         Anchor fields (server_time + round_started_at + round_grace_time_ms
@@ -635,6 +692,7 @@ class HeroDraftConsumer(BaseDraftConsumer):
         countdown. See `backend/app/tasks/herodraft_tick.py::broadcast_tick`
         for the producer side.
         """
+        self._follow_tick_state(event.get("draft_state"))
         await self.send(
             text_data=json.dumps(
                 {

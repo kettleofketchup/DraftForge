@@ -170,6 +170,8 @@ export const PickOrderSection = memo(() => {
                     : 'bg-muted/30 border border-muted hover:bg-muted/50'
                 )}
                 data-testid={`upcoming-pick-${idx}`}
+                data-pick-number={pick.pickNumber}
+                data-team-pk={pick.team.pk}
               >
                 <Badge
                   variant={pick.isCurrent ? 'default' : 'secondary'}

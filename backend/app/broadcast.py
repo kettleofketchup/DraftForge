@@ -2,17 +2,25 @@
 Broadcast helper for sending draft events to WebSocket channel groups.
 """
 
+import threading
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from asgiref.sync import async_to_sync
+from cacheops.transaction import is_sql_dirty
 from channels.layers import get_channel_layer
+from django.db import DEFAULT_DB_ALIAS, connection, connections, transaction
+from django.db.backends.base.base import BaseDatabaseWrapper
 
+from app.draft_state import build_draft_state
+from app.models import Draft
 from app.serializers import (
     DraftEventSerializer,
-    DraftSerializerSlim,
     DraftTeamSerializerFull,
     HeroDraftSerializer,
-    _build_users_dict,
 )
 from telemetry.logging import get_logger
 
@@ -20,6 +28,89 @@ if TYPE_CHECKING:
     from app.models import DraftEvent, DraftTeam, HeroDraft
 
 log = get_logger(__name__)
+
+
+@dataclass
+class _SharedStates:
+    thread_id: int
+    db: BaseDatabaseWrapper
+    states: dict[int, tuple[int, dict | None]] = field(default_factory=dict)
+
+
+_shared_draft_states: ContextVar[_SharedStates | None] = ContextVar(
+    "_shared_draft_states", default=None
+)
+
+
+def _owned_shared_states() -> dict[int, tuple[int, dict | None]] | None:
+    """The shared states, unless this context was inherited by another thread."""
+    shared = _shared_draft_states.get()
+    if shared is None:
+        return None
+    if shared.thread_id != threading.get_ident():
+        return None
+    if shared.db is not connections[DEFAULT_DB_ALIAS]:
+        return None
+    return shared.states
+
+
+def _forget_states_on_write(
+    execute: Callable[..., object],
+    sql: str,
+    params: object,
+    many: bool,
+    context: dict[str, object],
+) -> object:
+    shared = _owned_shared_states()
+    if shared and is_sql_dirty(sql):
+        shared.clear()
+    return execute(sql, params, many, context)
+
+
+@contextmanager
+def atomic_sharing_draft_state() -> Iterator[None]:
+    """``transaction.atomic()`` whose post-commit draft broadcasts share one state.
+
+    When this is the outermost block, the on_commit broadcasts it triggers run
+    before it exits and reuse a single build per draft. Any SQL write on this
+    connection drops the shared states, and a commit by any other connection
+    (seen through SQLite's ``data_version``) forces a rebuild; nested blocks
+    defer their callbacks past the exit and build per event as usual. The
+    states belong to the opening thread and connection; a thread that inherits
+    this context sees none of them.
+    """
+    token = _shared_draft_states.set(
+        _SharedStates(threading.get_ident(), connections[DEFAULT_DB_ALIAS])
+    )
+    try:
+        with connection.execute_wrapper(_forget_states_on_write):
+            with transaction.atomic():
+                yield
+    finally:
+        _shared_draft_states.reset(token)
+
+
+def _data_version() -> int | None:
+    """Changes whenever another connection commits; None off SQLite."""
+    if connection.vendor != "sqlite":
+        return None
+    with connection.cursor() as cursor:
+        cursor.execute("PRAGMA data_version")
+        return cursor.fetchone()[0]
+
+
+def _draft_state(draft_id: int) -> dict | None:
+    shared = _owned_shared_states()
+    if shared is None or connection.in_atomic_block:
+        return build_draft_state(draft_id, fresh=True)
+    version = _data_version()
+    if version is None:
+        return build_draft_state(draft_id, fresh=True)
+    cached = shared.get(draft_id)
+    if cached is None or cached[0] != version:
+        cached = (version, build_draft_state(draft_id, fresh=True))
+        shared[draft_id] = cached
+    return cached[1]
 
 
 def broadcast_event(event: "DraftEvent", include_draft_state: bool = True) -> None:
@@ -54,22 +145,9 @@ def broadcast_event(event: "DraftEvent", include_draft_state: bool = True) -> No
     draft_state = None
     if include_draft_state:
         try:
-            from app.models import Draft
-
-            # Re-fetch with prefetches to avoid N+1 queries and ensure
-            # captain/choice relations are fully loaded for serialization
-            draft = Draft.objects.prefetch_related(
-                "draft_rounds__captain",
-                "draft_rounds__choice",
-                "tournament__teams__captain",
-                "tournament__teams__members",
-                "tournament__users",
-            ).get(pk=event.draft_id)
-            draft_state = DraftSerializerSlim(draft).data
-            # Convert int keys to strings — msgpack strict mode forbids int map keys
-            draft_state["_users"] = {
-                str(k): v for k, v in _build_users_dict(draft.tournament).items()
-            }
+            draft_state = _draft_state(event.draft_id)
+            if draft_state is None:
+                raise Draft.DoesNotExist(f"Draft {event.draft_id} does not exist")
         except Exception as e:
             log.warning(
                 "broadcast_serialize_failed",
@@ -120,6 +198,32 @@ def broadcast_event(event: "DraftEvent", include_draft_state: bool = True) -> No
             event_type=event.event_type,
             draft_id=event.draft_id,
             error=str(e),
+        )
+
+
+def broadcast_event_after_commit(event: "DraftEvent") -> None:
+    """Broadcast ``event`` once the transaction commits; failures are logged, not raised.
+
+    The write is already committed when the hook runs, so a raising broadcast
+    must neither fail the caller's response nor skip the hooks queued after it.
+    """
+    transaction.on_commit(lambda: _broadcast_committed_event(event))
+
+
+def _broadcast_committed_event(event: "DraftEvent") -> None:
+    try:
+        broadcast_event(event)
+    except Exception as e:
+        log.error(
+            "broadcast_after_commit_failed",
+            system="websocket",
+            subsystem="broadcast",
+            kind="draft",
+            event_type=event.event_type,
+            draft_id=event.draft_id,
+            error=str(e),
+            error_type=type(e).__name__,
+            exc_info=True,
         )
 
 

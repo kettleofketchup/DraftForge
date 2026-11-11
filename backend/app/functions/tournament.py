@@ -1,48 +1,34 @@
-import json
-
-import requests
-from django.contrib.auth import login
-from django.contrib.auth import logout as auth_logout
-from django.contrib.auth.decorators import login_required
-from django.http import HttpResponse, HttpResponseBadRequest, JsonResponse
-from django.shortcuts import redirect, render
-from rest_framework import generics, permissions, serializers, status, viewsets
+from cacheops import cached_as
+from rest_framework import serializers
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.generics import GenericAPIView
-from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.request import Request
 from rest_framework.response import Response
-from rest_framework.reverse import reverse
-from social_core.backends.oauth import BaseOAuth1, BaseOAuth2
 
-# Create your views here.
-from social_django.models import USER_MODEL  # fix: skip
-from social_django.models import AbstractUserSocialAuth, DjangoStorage
-from social_django.utils import load_strategy, psa
-
-from app.cache_utils import invalidate_after_commit, invalidate_obj
+from app.cache_utils import invalidate_obj
+from app.draft_state import tournament_state_queryset
 from app.models import CustomUser, Draft, Team, Tournament
-from app.permissions import IsStaff
-from app.permissions_org import CanEditDraft, can_edit_tournament
+from app.permissions_org import can_edit_tournament
 from app.serializers import (
-    DraftRoundSerializer,
-    DraftSerializer,
     DraftSerializerMMRs,
-    GameSerializer,
-    TeamSerializer,
     TournamentSerializer,
-    UserSerializer,
     _build_users_dict,
 )
-from backend import settings
 from telemetry.logging import get_logger
+from user.models import BaseUserProfile, DotaUserProfile
 
 log = get_logger(__name__)
 
 
-def _serialize_tournament(tournament):
-    """Serialize a tournament with the _users dict for frontend hydration."""
-    data = TournamentSerializer(tournament).data
-    data["_users"] = _build_users_dict(tournament)
+def _serialize_tournament(tournament: Tournament) -> dict:
+    """Serialize a tournament with the _users dict for frontend hydration.
+
+    Re-fetches uncached with the full prefetch plan: callers respond right
+    after a write, and the plan keeps the query count independent of size.
+    """
+    tournament = tournament_state_queryset(fresh=True).get(pk=tournament.pk)
+    data = TournamentSerializer(tournament, context={"fresh": True}).data
+    data["_users"] = _build_users_dict(tournament, fresh=True)
     return data
 
 
@@ -58,7 +44,7 @@ class CreateTournamentTeamRequestSerializer(serializers.Serializer):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
-def create_team_from_captain(request):
+def create_team_from_captain(request: Request) -> Response:
     """Create a team from a captain. Requires tournament staff access."""
     serializer = CreateTournamentTeamRequestSerializer(data=request.data)
 
@@ -87,12 +73,6 @@ def create_team_from_captain(request):
             status=403,
         )
 
-        # Create a new team and add the user as a member (or captain)
-    try:
-        draft = tournament.draft
-
-    except Draft.DoesNotExist:
-        pass  # No draft exists, continue
     if Team.objects.filter(tournament=tournament, captain=user).exists():
         if draft_order == 0:
             log.debug(
@@ -144,7 +124,7 @@ class CreateDraftRounds(serializers.Serializer):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
-def generate_draft_rounds(request):
+def generate_draft_rounds(request: Request) -> Response:
     """Generate draft rounds for a tournament. Requires tournament staff access."""
     serializer = CreateDraftRounds(data=request.data)
 
@@ -241,7 +221,7 @@ def generate_draft_rounds(request):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
-def rebuild_team(request):
+def rebuild_team(request: Request) -> Response:
     """Rebuild teams in a tournament. Requires tournament staff access."""
     serializer = CreateDraftRounds(data=request.data)
 
@@ -348,17 +328,9 @@ class DraftPredictMMRSerializer(serializers.Serializer):
     pk = serializers.IntegerField(required=True)
 
 
-from cacheops import cached_as
-
-# cached_as sites depending on CustomUser must also list BaseUserProfile
-# (nickname/avatar, T1) and DotaUserProfile (positions/dota-mmr, T2) —
-# enforced by user/tests/test_cacheops.py.
-from user.models import BaseUserProfile, DotaUserProfile
-
-
 @api_view(["POST"])
 @permission_classes([AllowAny])
-def get_draft_style_mmrs(request):
+def get_draft_style_mmrs(request: Request) -> Response:
     serializer = DraftPredictMMRSerializer(data=request.data)
 
     if serializer.is_valid():
@@ -373,6 +345,7 @@ def get_draft_style_mmrs(request):
         return Response({"error": "Draft not found"}, status=404)
     cache_key = f"draft_sim_pk:{request.get_full_path()}"
 
+    # cached_as on CustomUser must also list BaseUserProfile/DotaUserProfile (user/tests/test_cacheops.py)
     @cached_as(
         Draft,
         CustomUser,
@@ -383,7 +356,7 @@ def get_draft_style_mmrs(request):
         extra=cache_key,
         timeout=60 * 15,
     )
-    def get_data(request):
+    def get_data(request: Request) -> dict:
         return DraftSerializerMMRs(draft).data
 
     data = get_data(request)

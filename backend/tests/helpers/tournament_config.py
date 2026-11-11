@@ -73,6 +73,8 @@ class TestTournamentConfig(BaseModel):
     timer_enabled: bool = Field(
         default=False, description="Write DraftOptions.timer_enabled explicitly"
     )
+    grace_time_ms: int = Field(default=30000)
+    reserve_time_ms: int = Field(default=30000)
     draft_style: Literal["snake", "normal", "shuffle"] = Field(default="snake")
     picks_completed: int = Field(
         default=0,
@@ -130,7 +132,11 @@ class TestTournamentConfig(BaseModel):
 
         DraftOptions.objects.update_or_create(
             tournament=self._tournament,
-            defaults={"timer_enabled": self.timer_enabled},
+            defaults={
+                "timer_enabled": self.timer_enabled,
+                "grace_time_ms": self.grace_time_ms,
+                "reserve_time_ms": self.reserve_time_ms,
+            },
         )
 
         if self.draft_state != "not_started":
@@ -181,6 +187,9 @@ class TestTournamentConfig(BaseModel):
             tournament=self._tournament,
             draft_style=self.draft_style,
         )
+        if self.draft_state == "pending":
+            # Match generate_draft_rounds: a draft about to start has captain-only teams.
+            draft.rebuild_teams(clear_only=True)
         draft.build_rounds()
 
         if self.draft_state == "pending":
@@ -377,9 +386,10 @@ class TestTournamentConfig(BaseModel):
         if first_team and first_team.captain:
             old_captain = first_team.captain
             first_team.captain = test_user
-            first_team.members.remove(old_captain)
-            first_team.members.add(test_user)
             first_team.save()
+            # Add before remove: a captain-only team emptied by remove() is deleted by signal.
+            first_team.members.add(test_user)
+            first_team.members.remove(old_captain)
             self._tournament.users.add(test_user)
 
             # Also update any DraftRounds that had the old captain
@@ -457,6 +467,77 @@ TEST_TOURNAMENTS: List[TestTournamentConfig] = [
         description="Shuffle draft where test user is captain with pending pick. Tests captain auth with shuffle.",
         draft_state="in_progress",
         draft_style="shuffle",
+        picks_completed=0,
+        first_captain_is_test_user=True,
+    ),
+    TestTournamentConfig(
+        key="draft_timer_ready",
+        name="Timer Ready Screen",
+        description="Timer-enabled pending lobby; test user is captain A. Tests ready screen.",
+        draft_state="pending",
+        timer_enabled=True,
+        draft_style="snake",
+        grace_time_ms=20000,
+        reserve_time_ms=10000,
+        num_teams=4,
+        first_captain_is_test_user=True,
+    ),
+    TestTournamentConfig(
+        key="draft_timer_countdown",
+        name="Timer Countdown",
+        description="Timer-enabled pending lobby; test user is captain A. Tests grace countdown and expire-clock.",
+        draft_state="pending",
+        timer_enabled=True,
+        draft_style="snake",
+        grace_time_ms=90000,
+        reserve_time_ms=60000,
+        num_teams=4,
+        first_captain_is_test_user=True,
+    ),
+    TestTournamentConfig(
+        key="draft_timer_skip",
+        name="Timer Timeout Skip",
+        description="Timer-enabled pending lobby; test user is captain A. Tests timeout skip in a snake draft.",
+        draft_state="pending",
+        timer_enabled=True,
+        draft_style="snake",
+        grace_time_ms=20000,
+        reserve_time_ms=60000,
+        num_teams=4,
+        first_captain_is_test_user=True,
+    ),
+    TestTournamentConfig(
+        key="draft_timer_pause",
+        name="Timer Pause Resume",
+        description="Timer-enabled pending lobby; test user is captain A. Tests pause and resume.",
+        draft_state="pending",
+        timer_enabled=True,
+        draft_style="snake",
+        grace_time_ms=120000,
+        reserve_time_ms=30000,
+        num_teams=4,
+        first_captain_is_test_user=True,
+    ),
+    TestTournamentConfig(
+        key="shuffle_timer_skip",
+        name="Shuffle Timer Timeout Skip",
+        description="Timer-enabled pending lobby; test user is captain A. Tests timeout skip in a shuffle draft.",
+        draft_state="pending",
+        timer_enabled=True,
+        draft_style="shuffle",
+        grace_time_ms=20000,
+        reserve_time_ms=60000,
+        num_teams=4,
+        first_captain_is_test_user=True,
+    ),
+    TestTournamentConfig(
+        key="draft_ws_reconnect",
+        name="WebSocket Reconnect Test",
+        description=(
+            "In-progress snake draft owned by the reconnect spec alone: it force-closes every "
+            "socket on its draft, which would drop other specs' sockets on a shared draft."
+        ),
+        draft_state="in_progress",
         picks_completed=0,
         first_captain_is_test_user=True,
     ),

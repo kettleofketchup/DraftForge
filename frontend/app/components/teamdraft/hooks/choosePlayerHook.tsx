@@ -9,6 +9,8 @@ import { hydrateTournament } from '~/lib/hydrateTournament';
 import { getLogger } from '~/lib/logger';
 import { useDraftWebSocketStore } from '~/store/draftWebSocketStore';
 import type { TieResolution } from '../types';
+import { handlePickError } from '../pickErrors';
+import { refreshTournamentHook } from './refreshTournamentHook';
 const log = getLogger('PickPlayerHook');
 
 // Toast message component with avatar
@@ -32,7 +34,6 @@ type hookParams = {
   curDraftRound: DraftRoundType;
   setDraft: (draft: DraftType) => void;
   setCurDraftRound: (draftRound: DraftRoundType) => void;
-  setDraftIndex: (index: number) => void;
   autoRefreshDraft?: () => Promise<void>;
 };
 
@@ -43,7 +44,6 @@ export const choosePlayerHook = async ({
   curDraftRound,
   setDraft,
   setCurDraftRound,
-  setDraftIndex,
   autoRefreshDraft,
 }: hookParams) => {
   if (!tournament || !tournament.pk) {
@@ -66,6 +66,7 @@ export const choosePlayerHook = async ({
   const dataRoundUpdate: PickPlayerForRoundAPI = {
     draft_round_pk: curDraftRound.pk,
     user_pk: player.pk,
+    client_picked_at: useDraftWebSocketStore.getState().getServerNowISO(),
   };
 
   const getDraft = (tournament: TournamentType) => {
@@ -104,12 +105,6 @@ export const choosePlayerHook = async ({
 
       if (nextRound) {
         setCurDraftRound(nextRound);
-        const idx = data.draft.draft_rounds?.findIndex(
-          (r: DraftRoundType) => r.pk === nextRound.pk,
-        );
-        if (idx !== undefined && idx >= 0) {
-          setDraftIndex(idx);
-        }
         log.debug('Advanced to next round', nextRound);
       } else {
         // No more rounds with captains, stay on current (now completed) round
@@ -147,9 +142,13 @@ export const choosePlayerHook = async ({
       );
     },
     error: (err) => {
-      const val = err.response.data;
       log.error('Failed to update captains tournament', err);
-      return `Failed to update captains: ${val}`;
+      return handlePickError(err, {
+        jumpToPickNumber: (n) => useDraftWebSocketStore.getState().jumpToPickNumber(n),
+        refresh: () => {
+          void refreshTournamentHook({ tournament, setTournament, setDraft, curDraftRound, setCurDraftRound });
+        },
+      });
     },
   });
 };

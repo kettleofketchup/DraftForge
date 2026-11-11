@@ -65,6 +65,7 @@ def invalidate_after_commit(*objs: Model) -> None:
     deferred until the current database transaction commits.
 
     If called outside a transaction, the callback fires immediately.
+    Failures are logged per object, never raised.
 
     Usage::
 
@@ -74,8 +75,22 @@ def invalidate_after_commit(*objs: Model) -> None:
             invalidate_after_commit(tournament, org_user, org_user.organization)
     """
 
-    def _do():
+    def _do() -> None:
+        # Runs after commit: a failure must not fail the committed action or
+        # skip the hooks queued behind it.
         for obj in objs:
-            invalidate_obj(obj)
+            try:
+                invalidate_obj(obj)
+            except Exception as e:
+                log.error(
+                    "cache_invalidate_after_commit_failed",
+                    system="cache",
+                    subsystem="invalidate",
+                    obj_class=obj.__class__.__name__,
+                    obj_pk=obj.pk,
+                    error=str(e),
+                    error_type=type(e).__name__,
+                    exc_info=True,
+                )
 
     transaction.on_commit(_do)
