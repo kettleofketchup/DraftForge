@@ -60,6 +60,9 @@ interface DraftWebSocketState {
   _lastTickReceivedAtMs: number | null;
   _lastStateEventPk: number | null;
   _offsetSamples: number[];
+  /** Receive order of the applied tick and draft_state; the newer one drives the countdown. */
+  _tickSeq: number | null;
+  _draftStateSeq: number | null;
 
   // Actions
   connect: (draftId: number) => void;
@@ -172,6 +175,8 @@ const initialState = {
   _lastTickReceivedAtMs: null,
   _lastStateEventPk: null,
   _offsetSamples: [] as number[],
+  _tickSeq: null,
+  _draftStateSeq: null,
 };
 
 /** Events that arrive within this window render together (one store update per burst). */
@@ -187,6 +192,7 @@ interface PendingDraftEvents {
 }
 
 let pending: PendingDraftEvents | null = null;
+let receiveSeq = 0;
 let flushTimer: ReturnType<typeof setTimeout> | null = null;
 
 function clearPending(): void {
@@ -264,6 +270,7 @@ export const useDraftWebSocketStore = create<DraftWebSocketState>((set, get) => 
             serverClockOffsetMs: clock.offsetMs,
             // A fresh snapshot: the old socket's last event pk no longer orders anything.
             _lastStateEventPk: null,
+            _draftStateSeq: ++receiveSeq,
           });
         }
       } else if (message.type === 'initial_events' && message.events) {
@@ -333,6 +340,7 @@ export const useDraftWebSocketStore = create<DraftWebSocketState>((set, get) => 
         const clock = addClockOffsetSample(get()._offsetSamples, tick.server_time, receivedAtMs);
         set((state) => ({
           tick,
+          _tickSeq: ++receiveSeq,
           _offsetSamples: clock.samples,
           serverClockOffsetMs: clock.offsetMs,
           _lastTickReceivedAtMs: receivedAtMs,
@@ -424,6 +432,7 @@ export const useDraftWebSocketStore = create<DraftWebSocketState>((set, get) => 
           ? {
               draftState: hydrateSlimDraftState(buf.state),
               _lastStateEventPk: buf.statePk,
+              _draftStateSeq: ++receiveSeq,
               ...(buf.jump ? { forceJumpToRoundPk: buf.state.latest_round } : {}),
             }
           : {}),
@@ -509,4 +518,7 @@ export const draftWsSelectors = {
   },
 
   teamTiming: (s: DraftWebSocketState) => s.tick?.teams ?? EMPTY_TEAMS,
+
+  tickIsNewerThanDraftState: (s: DraftWebSocketState): boolean =>
+    s._tickSeq !== null && (s._draftStateSeq === null || s._tickSeq > s._draftStateSeq),
 };

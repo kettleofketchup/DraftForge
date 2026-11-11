@@ -1,5 +1,5 @@
 import { elapsedSince, remaining, serverNow, useAnimationFrameClock } from '~/lib/draftClock';
-import { useDraftWebSocketStore } from '~/store/draftWebSocketStore';
+import { draftWsSelectors, useDraftWebSocketStore } from '~/store/draftWebSocketStore';
 import type { DraftTick, TeamDraftState } from '../schemas';
 
 export type TeamDraftCountdown =
@@ -100,22 +100,17 @@ function compute(src: Source, nowMs: number): TeamDraftCountdown {
   };
 }
 
-function tickMatchesRound(tick: DraftTick, draft: CountdownDraftSlice): boolean {
-  if (tick.active_round_pk !== draft.latest_round) return false;
-  const startedAt = draft.draft_rounds?.find((r) => r.pk === draft.latest_round)?.started_at;
-  if (startedAt == null || tick.round_started_at == null) return true;
-  // Resume and a shuffle skip re-anchor the same round; an older tick must not win.
-  return Date.parse(startedAt) === Date.parse(tick.round_started_at);
-}
-
 export function _deriveTeamCountdown(
   tick: DraftTick | null,
   draft: CountdownDraftSlice | null,
   serverClockOffsetMs: number,
   nowMs: number,
+  tickIsNewer = true,
 ): TeamDraftCountdown {
   void serverClockOffsetMs;
-  const matching = tick && (!draft || tickMatchesRound(tick, draft)) ? tick : null;
+  // Resume and a shuffle skip re-anchor the same round pk, so a tick received before that draft_state must not win.
+  const matching =
+    tick && (!draft || (tickIsNewer && tick.active_round_pk === draft.latest_round)) ? tick : null;
 
   if (draft?.state === 'paused') {
     const pausedAt = draft.paused_at ? Date.parse(draft.paused_at) : NaN;
@@ -131,11 +126,13 @@ export function useTeamDraftCountdown(
   tick: DraftTick | null,
   draft: CountdownDraftSlice | null,
   serverClockOffsetMs: number,
+  tickIsNewer = true,
 ): TeamDraftCountdown {
   return useAnimationFrameClock({
-    derive: () => _deriveTeamCountdown(tick, draft, serverClockOffsetMs, serverNow(serverClockOffsetMs)),
+    derive: () =>
+      _deriveTeamCountdown(tick, draft, serverClockOffsetMs, serverNow(serverClockOffsetMs), tickIsNewer),
     isFrozen: draft?.state === 'paused',
-    inputs: [tick, draft, serverClockOffsetMs],
+    inputs: [tick, draft, serverClockOffsetMs, tickIsNewer],
   });
 }
 
@@ -143,5 +140,6 @@ export function useLiveTeamDraftCountdown(): TeamDraftCountdown {
   const tick = useDraftWebSocketStore((s) => s.tick);
   const draftState = useDraftWebSocketStore((s) => s.draftState);
   const serverClockOffsetMs = useDraftWebSocketStore((s) => s.serverClockOffsetMs);
-  return useTeamDraftCountdown(tick, draftState as CountdownDraftSlice | null, serverClockOffsetMs);
+  const tickIsNewer = useDraftWebSocketStore(draftWsSelectors.tickIsNewerThanDraftState);
+  return useTeamDraftCountdown(tick, draftState as CountdownDraftSlice | null, serverClockOffsetMs, tickIsNewer);
 }

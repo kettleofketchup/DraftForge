@@ -114,42 +114,41 @@ describe('_deriveTeamCountdown', () => {
     expect(c).toMatchObject({ kind: 'armed', graceRemainingMs: 0, expired: false });
     if (c.kind === 'armed') expect(c.reserveByTeamId).toEqual({ 1: 5_000, 2: 10_000 });
   });
-  it('ignores a tick that still names the previous round', () => {
+  it('ignores a newer tick that still names the previous round', () => {
     const draft = armedDraft({
       latest_round: 23,
       draft_rounds: [{ pk: 23, started_at: new Date(T0 - 1_000).toISOString(), grace_time_ms: 20_000, captain: { pk: 8 } }],
     });
-    const c = _deriveTeamCountdown(tick({ active_round_pk: 22 }), draft, 0, T0);
+    const c = _deriveTeamCountdown(tick({ active_round_pk: 22 }), draft, 0, T0, true);
     if (c.kind === 'armed') {
       expect(c.graceRemainingMs).toBe(19_000);
       expect(c.reserveByTeamId).toEqual({ 1: 10_000, 2: 10_000 });
     } else throw new Error('expected armed');
   });
-  it('ignores a pre-pause tick once resume moved the round anchor', () => {
+  it('ignores a pre-pause tick received before the resume state', () => {
     const draft = armedDraft({
       state: 'resuming',
       resuming_until: new Date(T0 + 2_000).toISOString(),
       draft_rounds: [{ pk: 22, started_at: new Date(T0 - 5_000).toISOString(), grace_time_ms: 20_000, captain: { pk: 7 } }],
     });
     const stale = tick({ round_started_at: new Date(T0 - 65_000).toISOString() });
-    const c = _deriveTeamCountdown(stale, draft, 0, T0);
+    const c = _deriveTeamCountdown(stale, draft, 0, T0, false);
     expect(c).toMatchObject({ kind: 'armed', resumingRemainingMs: 2_000, graceRemainingMs: 13_000 });
     if (c.kind === 'armed') expect(c.reserveByTeamId).toEqual({ 1: 10_000, 2: 10_000 });
   });
-  it('ignores an expired tick after a shuffle skip re-armed the same round', () => {
+  it('ignores an expired tick received before a shuffle skip re-armed the same round', () => {
     const draft = armedDraft({
       draft_rounds: [{ pk: 22, started_at: new Date(T0 - 1_000).toISOString(), timed_out_at: null, grace_time_ms: 20_000, captain: { pk: 8 } }],
     });
     const stale = tick({ round_timed_out_at: new Date(T0 - 1_500).toISOString() });
-    const c = _deriveTeamCountdown(stale, draft, 0, T0);
+    const c = _deriveTeamCountdown(stale, draft, 0, T0, false);
     expect(c).toMatchObject({ kind: 'armed', expired: false, graceRemainingMs: 19_000 });
   });
-  it('uses a tick whose anchor matches the round in another ISO spelling', () => {
-    const draft = armedDraft({
-      draft_rounds: [{ pk: 22, started_at: '2026-11-08T11:59:35+00:00', grace_time_ms: 20_000, captain: { pk: 7 } }],
-    });
-    const c = _deriveTeamCountdown(tick({ round_timed_out_at: new Date(T0).toISOString() }), draft, 0, T0);
-    expect(c.kind === 'armed' && c.expired).toBe(true);
+  it('honours a tick received after the draft state even when it moved the round anchor', () => {
+    const backdated = tick({ round_started_at: new Date(T0 - 108_000).toISOString() });
+    const c = _deriveTeamCountdown(backdated, armedDraft(), 0, T0, true);
+    expect(c).toMatchObject({ kind: 'armed', graceRemainingMs: 0 });
+    if (c.kind === 'armed') expect(c.reserveByTeamId).toEqual({ 1: 0, 2: 10_000 });
   });
   it('is unarmed when the draft is not clock_armed, even with a tick', () => {
     expect(_deriveTeamCountdown(tick(), armedDraft({ clock_armed: false }), 0, T0).kind).toBe('unarmed');

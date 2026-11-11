@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DraftEvent, DraftEventType, WebSocketDraftState } from '~/types/draftEvent';
 
@@ -23,6 +24,7 @@ vi.mock('sonner', () => ({ toast }));
 
 const { useDraftWebSocketStore, draftWsSelectors } = await import('~/store/draftWebSocketStore');
 const { useUserStore } = await import('~/store/userStore');
+const { useLiveTeamDraftCountdown } = await import('~/components/teamdraft/timer/useTeamDraftCountdown');
 
 const T0 = Date.parse('2026-11-08T12:00:00.000Z');
 const emit = (msg: unknown) => captured.handler!(msg);
@@ -341,6 +343,70 @@ describe('draftWebSocketStore timer', () => {
     emit({ type: 'initial_state', draft_state: state({ state: 'paused' }) });
     emit(tick({ draft_state: 'drafting', server_time: new Date(T0 + 9000).toISOString() }));
     expect(draftWsSelectors.draftStatus(useDraftWebSocketStore.getState())).toBe('paused');
+  });
+
+  describe('tick vs draft_state receive order', () => {
+    const newer = () => draftWsSelectors.tickIsNewerThanDraftState(useDraftWebSocketStore.getState());
+
+    it('is false with no tick', () => {
+      emit({ type: 'initial_state', draft_state: state() });
+      expect(newer()).toBe(false);
+    });
+    it('a tick after initial_state is newer; initial_state after a tick is not', () => {
+      emit({ type: 'initial_state', draft_state: state() });
+      emit(tick());
+      expect(newer()).toBe(true);
+      emit({ type: 'initial_state', draft_state: state() });
+      expect(newer()).toBe(false);
+    });
+    it('a tick with no draft state yet is newer', () => {
+      emit(tick());
+      expect(newer()).toBe(true);
+    });
+    it('a coalesced burst received before a tick orders before it', () => {
+      emit({ type: 'initial_state', draft_state: state() });
+      emit({ type: 'draft_event', event: evt('draft_resumed', {}), draft_state: state({ state: 'resuming' }) });
+      emit({ type: 'draft_event', event: evt('round_started', {}), draft_state: state({ latest_round: 23 }) });
+      emit(tick());
+      expect(newer()).toBe(true);
+    });
+    it('a flushed draft_event state after a tick is newer than it', () => {
+      emit({ type: 'initial_state', draft_state: state() });
+      emit(tick());
+      emit({ type: 'draft_event', event: evt('draft_resumed', {}), draft_state: state({ state: 'resuming' }) });
+      settle();
+      expect(newer()).toBe(false);
+    });
+    it('a draft_event without a state, or one the event-pk guard drops, leaves the tick newer', () => {
+      const first = evt('player_picked', { captain_name: 'Ana', picked_name: 'P', pick_number: 1 });
+      emit({ type: 'draft_event', event: first, draft_state: state({ latest_round: 23 }) });
+      settle();
+      emit(tick());
+      emit({ type: 'draft_event', event: evt('pick_timed_out', { ...cap, pick_number: 4, elapsed_ms: 1, reserve_used_ms: 1 }) });
+      settle();
+      emit({ type: 'draft_event', event: { ...first, pk: first.pk - 1 }, draft_state: state({ latest_round: 21 }) });
+      settle();
+      expect(newer()).toBe(true);
+    });
+    it('a tick that ends resuming stays newer than the state it rewrote', () => {
+      const until = new Date(T0 + 3000).toISOString();
+      emit({ type: 'initial_state', draft_state: state({ state: 'resuming', resuming_until: until }) });
+      emit(tick({ draft_state: 'drafting', server_time: new Date(T0 + 3200).toISOString() }));
+      expect(newer()).toBe(true);
+    });
+    it('disconnect clears the order', () => {
+      emit(tick());
+      useDraftWebSocketStore.getState().disconnect();
+      expect(newer()).toBe(false);
+    });
+  });
+
+  it('the live countdown follows a tick whose anchor was moved without a draft event', () => {
+    const rounds = [{ pk: 22, pick_number: 2, started_at: new Date(T0 - 5_000).toISOString(), grace_time_ms: 30000, captain: { pk: 8 } }];
+    emit({ type: 'initial_state', draft_state: state({ draft_rounds: rounds }) });
+    emit(tick({ round_started_at: new Date(T0 - 93_000).toISOString() }));
+    const { result } = renderHook(() => useLiveTeamDraftCountdown());
+    expect(result.current).toMatchObject({ kind: 'armed', graceRemainingMs: 0 });
   });
 
   it('teamTiming returns the same empty array reference with no tick', () => {
