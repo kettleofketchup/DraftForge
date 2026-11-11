@@ -197,21 +197,34 @@ async def broadcast_paused_freshness(draft_id: int) -> None:
     if fresh is None:
         _paused_freshness.pop(draft_id, None)
         return
-    sent = _paused_freshness.get(draft_id, {})
+    sent = dict(_paused_freshness.get(draft_id, {}))
     channel_layer = get_channel_layer()
     for captain_id, is_fresh in fresh.items():
         if sent.get(captain_id) == is_fresh:
             continue
         if channel_layer is not None:
-            await channel_layer.group_send(
-                f"draft_{draft_id}",
-                {
-                    "type": "captain.heartbeat",
-                    "captain_id": captain_id,
-                    "fresh": is_fresh,
-                },
-            )
-    _paused_freshness[draft_id] = fresh
+            try:
+                await channel_layer.group_send(
+                    f"draft_{draft_id}",
+                    {
+                        "type": "captain.heartbeat",
+                        "captain_id": captain_id,
+                        "fresh": is_fresh,
+                    },
+                )
+            except Exception as e:
+                # Left unrecorded, so the next paused tick sends it again.
+                log.error(
+                    "paused_freshness_send_failed",
+                    system="teamdraft",
+                    subsystem="heartbeat",
+                    draft_id=draft_id,
+                    user_id=captain_id,
+                    error=str(e),
+                )
+                continue
+        sent[captain_id] = is_fresh
+    _paused_freshness[draft_id] = sent
 
 
 async def check_resume_countdown(draft_id: int) -> bool:

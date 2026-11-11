@@ -6,6 +6,7 @@ import time
 from datetime import timedelta
 from unittest.mock import PropertyMock, patch
 
+import redis
 from asgiref.sync import async_to_sync
 from channels.db import database_sync_to_async
 from channels.layers import get_channel_layer
@@ -1108,6 +1109,39 @@ class AutoPauseTests(TransactionTestCase):
                     "fresh": False,
                 }
             ],
+        )
+
+    def test_a_failed_freshness_send_is_logged_and_retried(self):
+        sent: list[dict] = []
+        failing = True
+
+        class Layer:
+            async def group_send(self, group: str, message: dict) -> None:
+                if failing:
+                    raise redis.ConnectionError("blip")
+                sent.append(message)
+
+        draft = Draft.objects.get(pk=self.fx.draft.pk)
+        draft.state = TeamDraftState.PAUSED
+        draft.save()
+        self.r.set(self.hb, str(time.time()))
+        self.addCleanup(teamdraft_tick._paused_freshness.pop, self.fx.draft.pk, None)
+        freshness = async_to_sync(teamdraft_tick.broadcast_paused_freshness)
+        with (
+            patch("app.tasks.teamdraft_tick.get_channel_layer", return_value=Layer()),
+            patch.object(teamdraft_tick.log, "error") as logged,
+        ):
+            freshness(self.fx.draft.pk)
+            self.assertEqual(logged.call_args.args[0], "paused_freshness_send_failed")
+            failing = False
+            freshness(self.fx.draft.pk)
+        self.assertIn(
+            {
+                "type": "captain.heartbeat",
+                "captain_id": self.rnd.captain_id,
+                "fresh": True,
+            },
+            sent,
         )
 
     def tick(self, driver: teamdraft_tick.TeamDraftTickDriver) -> tuple[bool, str]:
