@@ -247,8 +247,8 @@ export const UserCard: React.FC<Props> = memo(
           // a deliberate ease, not an instant snap. Replaces the previous
           // motion.div which paid the full Framer animation-pipeline tax
           // for every visible card on every scroll-triggered remount.
-          className="flex flex-col gap-2 card card-compact bg-base-300 rounded-2xl
-            w-full min-w-0 p-2 overflow-hidden transform-gpu
+          className="flex flex-col gap-2 bg-base-300 card-3d px-4 py-2 rounded-[1.25rem]
+            w-full min-w-0 overflow-hidden transform-gpu
             transition-transform duration-300 hover:scale-[1.02]
             hover:bg-base-200 focus:outline-2
             focus:outline-offset-2 focus:outline-primary

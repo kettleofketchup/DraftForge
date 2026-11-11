@@ -259,7 +259,7 @@ export const TournamentCard: React.FC<Props> = React.memo(({
         whileHover={{ scale: 1.02 }}
       >
         <div
-          className="card card-compact bg-base-300 rounded-2xl w-full max-w-sm h-full flex flex-col
+          className="bg-base-300 w-full max-w-sm h-full flex flex-col card-3d px-4 py-2 rounded-[1.25rem]
               hover:bg-base-200 focus:outline-2
               focus:outline-offset-2 focus:outline-primary
               active:bg-base-200"

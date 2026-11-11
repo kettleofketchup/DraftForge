@@ -79,7 +79,7 @@ export const GameCard: React.FC<Props> = ({
     if (editMode) return null;
     return (
       <div className="flex flex-col w-40em items-top ">
-        <h2 className="w-full card-title text-lg">Game</h2>
+        <h2 className="w-full text-xl font-semibold leading-snug">Game</h2>
       </div>
     );
   };
@@ -192,10 +192,10 @@ export const GameCard: React.FC<Props> = ({
       whileHover={{ scale: 1.02 }}
     >
       <div
-        className="w-full h-full card bg-base-300 shadow-elevated w-full
+        className="w-full h-full bg-base-300 shadow-elevated p-8
             max-w-sm hover:bg-base-200 shadow-hover focus:outline-2
             focus:outline-offset-2 focus:outline-primary
-            focus:outline-offset-2 active:bg-base-200
+            active:bg-base-200
             transition-all duration-300 ease-in-out"
       >
         <div className="flex flex-row items-center align-start gap-2">

@@ -56,32 +56,18 @@
   text-align: left;
 }
 
-.card {
-  padding: 2em;
-}
-
-/* Compact card variant with reduced vertical padding for dense layouts */
-.card-compact {
-  padding-top: 0.5em;
-  padding-bottom: 0.5em;
-  padding-left: 1em;
-  padding-right: 1em;
-  /* Rounded corners */
-  border-radius: 1.25rem;
-
-  /* 3D depth effects */
+/* Raised card surface: bottom lip, stacked shadow, lift on hover, press on click. */
+.card-3d {
   border-bottom: 4px solid rgba(0, 0, 0, 0.3);
   box-shadow:
     0 4px 6px -1px rgba(0, 0, 0, 0.2),
     0 10px 15px -3px rgba(0, 0, 0, 0.15),
     0 20px 25px -5px rgba(0, 0, 0, 0.1),
     inset 0 1px 0 rgba(255, 255, 255, 0.05);
-
-  /* Smooth transitions for hover effects */
   transition: transform 0.15s ease-out, box-shadow 0.15s ease-out;
 }
 
-.card-compact:hover {
+.card-3d:hover {
   transform: translateY(-2px);
   box-shadow:
     0 6px 8px -1px rgba(0, 0, 0, 0.25),
@@ -90,7 +76,7 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
-.card-compact:active {
+.card-3d:active {
   transform: translateY(1px);
   border-bottom-width: 2px;
   box-shadow:
@@ -757,20 +743,6 @@ body {
 
 .input::placeholder {
   color: var(--muted-foreground);
-}
-
-/* Card utilities */
-.card-title {
-  font-size: 1.25rem;
-  font-weight: 600;
-  line-height: 1.4;
-}
-
-.card-body {
-  padding: 1.5rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
 }
 
 /* Divider */
