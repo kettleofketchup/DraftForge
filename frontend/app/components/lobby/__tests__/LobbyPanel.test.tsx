@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { TooltipProvider } from '~/components/ui/tooltip';
 import { useUserStore } from '~/store/userStore';
 import type { UserType } from '~/index';
+import { createGameLobby } from '../api';
 import { LobbyPanelBody } from '../LobbyPanel';
 import { GameLobbyResponseSchema, type GameLobbyResponse } from '../schemas';
 import { privateLobby, publicLobby, players } from './fixtures';
@@ -130,22 +131,20 @@ describe('LobbyPanel', () => {
     expect(screen.queryByTestId('lobby-password')).not.toBeInTheDocument();
   });
 
-  it.each([
-    ['finished', { provisional_scored: true, match_id: '8000000001' }],
-    ['finished', {}],
-  ])('offers no retry after a played match (%s)', (state, extra) => {
+  it('offers a retry after a played match when the backend allows it', () => {
+    // The game's teams changed since that match, so the backend answers ok.
     renderPanel(
       response({
         can_manage: true,
-        lobby: endedLobby(state, extra),
-        // Even if the eligibility were stale, the panel does not offer it.
+        lobby: endedLobby('finished', { provisional_scored: true, match_id: '8000000001' }),
         eligibility: { ok: true, code: null, details: {} },
       }),
     );
-    expect(screen.queryByTestId('lobby-create-btn')).not.toBeInTheDocument();
+    expect(screen.getByTestId('lobby-create-btn')).toHaveTextContent('Retry lobby');
+    expect(screen.queryByTestId('lobby-replay-btn')).not.toBeInTheDocument();
   });
 
-  it('explains why a played match gets no retry', () => {
+  it('explains why a played match gets no retry and offers a replay', () => {
     renderPanel(
       response({
         can_manage: true,
@@ -155,17 +154,22 @@ describe('LobbyPanel', () => {
     );
     expect(screen.getByTestId('lobby-eligibility')).toHaveTextContent('Confirm the winner');
     expect(screen.queryByTestId('lobby-create-btn')).not.toBeInTheDocument();
+    expect(screen.getByTestId('lobby-replay-btn')).toBeInTheDocument();
   });
 
-  it('offers no retry while the match is in post game', () => {
+  it('replays a played match only after confirming', async () => {
+    vi.mocked(createGameLobby).mockResolvedValue(undefined);
     renderPanel(
       response({
         can_manage: true,
-        lobby: { ...privateLobby, state: 'post_game', password: null },
-        eligibility: { ok: false, code: 'active_lobby_exists', details: {} },
+        lobby: endedLobby('finished', { provisional_scored: true }),
+        eligibility: { ok: false, code: 'lobby_match_played', details: {} },
       }),
     );
-    expect(screen.queryByTestId('lobby-create-btn')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('lobby-replay-btn'));
+    expect(createGameLobby).not.toHaveBeenCalled();
+    fireEvent.click(await screen.findByTestId('lobby-replay-confirm'));
+    await waitFor(() => expect(createGameLobby).toHaveBeenCalledWith(1, { replay: true }));
   });
 
   it.each([

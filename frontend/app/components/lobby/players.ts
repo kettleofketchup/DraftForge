@@ -1,5 +1,5 @@
 // Display text and invite rules for the players of a lobby's roster.
-import type { GameLobby, LobbyPlayer } from './schemas';
+import type { LobbyPlayer } from './schemas';
 
 // dota_lobby's player statuses, plus '' for a player the lobby has not
 // reported on yet (no lobby, or the roster changed since).
@@ -63,14 +63,4 @@ export function playerStatusText(player: LobbyPlayer): string {
     return `${playerStatusLabel('invited')} (${player.invites_sent}×)`;
   }
   return playerStatusLabel(player.status);
-}
-
-/**
- * The lobby's match was played to a result, so staff confirm the winner
- * instead of retrying. Mirrors `lobby.services.match_played`.
- */
-export function lobbyMatchPlayed(lobby: GameLobby | null | undefined): boolean {
-  if (!lobby) return false;
-  if (lobby.state === 'post_game') return true;
-  return lobby.state === 'finished' && lobby.provisional_scored !== false;
 }

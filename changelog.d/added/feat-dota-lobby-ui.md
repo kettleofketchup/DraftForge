@@ -3,7 +3,8 @@
   player's invite and seat status, with the name above its status so long names stay readable.
   Staff can create, retry, recreate, close and launch the lobby and re-invite players, and
   players can invite themselves. Invite actions show only while someone is missing from the
-  lobby, and a lobby whose match was played is not retried: staff confirm the winner instead.
+  lobby, and a lobby whose match was played is not retried: staff confirm the winner instead,
+  or replay the match on purpose. A match abandoned after it started can always get a new lobby.
   The API is under `/api/games/<id>/lobby/`.
 - A lobby's provisional result is shown in the match dialog and highlights the matching winner
   button without submitting it. Bracket nodes show a ringed dot for the lobby state: amber while

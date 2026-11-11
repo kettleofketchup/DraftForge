@@ -14,7 +14,7 @@ import {
 import { cn } from '~/lib/utils';
 import { useUserStore } from '~/store/userStore';
 import { lobbyErrorText, lobbyRequestErrorText } from './api';
-import { isInLobby, lobbyMatchPlayed, needsInvite, playerStatusText } from './players';
+import { isInLobby, needsInvite, playerStatusText } from './players';
 import {
   JOINABLE_LOBBY_STATES,
   PREGAME_LOBBY_STATES,
@@ -336,12 +336,15 @@ function StaffControls({
   const launch = useLaunchGameLobby(gameId);
   const [confirmClose, setConfirmClose] = useState(false);
   const [confirmForce, setConfirmForce] = useState(false);
+  const [confirmReplay, setConfirmReplay] = useState(false);
 
+  // The backend decides whether a lobby may be created; it also knows whether
+  // a played match was for the game's current teams.
   const eligibility = data.eligibility;
   const missingSteam = eligibility?.code === 'missing_steam_ids';
-  // After a played match staff confirm the winner; a new lobby would replay it.
-  const canCreate =
-    !active && (eligibility?.ok || missingSteam) && !lobbyMatchPlayed(data.lobby);
+  const canCreate = !active && (eligibility?.ok || missingSteam);
+  // After a played match staff confirm the winner, or replay it on purpose.
+  const canReplay = !active && eligibility?.code === 'lobby_match_played';
   const isRetry = !!data.lobby && data.lobby.ended;
   const joinable = !!active && JOINABLE_LOBBY_STATES.includes(active.state);
   const anyoneToInvite = players.some(needsInvite);
@@ -383,6 +386,17 @@ function StaffControls({
           {isRetry ? 'Retry lobby' : 'Create lobby'}
           {missingSteam && ' without missing players'}
         </PrimaryButton>
+      )}
+      {canReplay && (
+        <SecondaryButton
+          size="sm"
+          onClick={() => setConfirmReplay(true)}
+          disabled={create.isPending}
+          data-testid="lobby-replay-btn"
+        >
+          <RotateCcw className="size-4 mr-1" />
+          Replay match
+        </SecondaryButton>
       )}
       {pregame && active?.state !== 'requested' && (
         <SecondaryButton
@@ -453,6 +467,24 @@ function StaffControls({
         onConfirm={async () => {
           await run('Launch', () => launch.mutateAsync(true), 'Launching the match');
           setConfirmForce(false);
+        }}
+      />
+      <ConfirmDialog
+        open={confirmReplay}
+        onOpenChange={setConfirmReplay}
+        title="Replay the match?"
+        description="These teams already played this game in a lobby. A new lobby hosts the match again; confirm the winner instead if its result stands."
+        confirmLabel="Replay match"
+        variant="warning"
+        isLoading={create.isPending}
+        confirmTestId="lobby-replay-confirm"
+        onConfirm={async () => {
+          await run(
+            'Lobby request',
+            () => create.mutateAsync({ replay: true }),
+            'New lobby requested',
+          );
+          setConfirmReplay(false);
         }}
       />
       <ConfirmDialog

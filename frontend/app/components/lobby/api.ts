@@ -10,6 +10,8 @@ import {
 export interface CreateLobbyOptions {
   allowMissing?: boolean;
   replace?: boolean;
+  /** Host the match again although a lobby already played it. */
+  replay?: boolean;
 }
 
 export type InviteRequest = { missing: true } | { players: number[] } | Record<string, never>;
@@ -26,6 +28,7 @@ export async function createGameLobby(
   await api.post(`/games/${gameId}/lobby/`, {
     allow_missing: options.allowMissing ?? false,
     replace: options.replace ?? false,
+    replay: options.replay ?? false,
   });
 }
 
@@ -76,7 +79,8 @@ const ERROR_TEXT: Record<string, string> = {
   lobby_disabled: 'Hosted lobbies are turned off.',
   lobby_mode_off: 'Hosted lobbies are off for this tournament.',
   active_lobby_exists: 'This game already has a lobby.',
-  lobby_match_played: "The lobby's match was played. Confirm the winner instead of retrying.",
+  lobby_match_played:
+    "The lobby's match was played. Confirm the winner, or replay the match if it must be played again.",
   lobby_in_progress: 'The match has started.',
   lobby_not_created: 'The lobby is still being created.',
   no_active_lobby: 'This game has no open lobby.',

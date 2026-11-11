@@ -2,13 +2,12 @@ import { describe, expect, it } from 'vitest';
 import {
   PLAYER_STATUS_LABELS,
   isInLobby,
-  lobbyMatchPlayed,
   needsInvite,
   playerStatusLabel,
   playerStatusText,
 } from '../players';
-import { GameLobbySchema, LobbyPlayerSchema, type LobbyPlayer } from '../schemas';
-import { players, publicLobby } from './fixtures';
+import { LobbyPlayerSchema, type LobbyPlayer } from '../schemas';
+import { players } from './fixtures';
 
 const base = LobbyPlayerSchema.parse(players[1]);
 
@@ -69,24 +68,5 @@ describe('needsInvite', () => {
     expect(needsInvite(player({ status: 'joined' }))).toBe(false);
     expect(needsInvite(player({ account_id: null, status: '' }))).toBe(false);
     expect(isInLobby(player({ status: 'seated' }))).toBe(true);
-  });
-});
-
-describe('lobbyMatchPlayed', () => {
-  const lobby = (overrides: Record<string, unknown>) =>
-    GameLobbySchema.parse({ ...publicLobby, ended: true, ...overrides });
-
-  it('is true once the match was played', () => {
-    expect(lobbyMatchPlayed(lobby({ state: 'finished', provisional_scored: true }))).toBe(true);
-    expect(lobbyMatchPlayed(lobby({ state: 'finished' }))).toBe(true);
-    expect(lobbyMatchPlayed(lobby({ state: 'post_game', ended: false }))).toBe(true);
-  });
-
-  it('is false for lobbies that ended without a played match', () => {
-    for (const state of ['failed', 'timed_out', 'closed', 'error']) {
-      expect(lobbyMatchPlayed(lobby({ state }))).toBe(false);
-    }
-    expect(lobbyMatchPlayed(lobby({ state: 'finished', provisional_scored: false }))).toBe(false);
-    expect(lobbyMatchPlayed(null)).toBe(false);
   });
 });
