@@ -57,6 +57,7 @@ import { useDraftWebSocketStore, draftWsSelectors } from '~/store/draftWebSocket
 import { LiveAutoButtons, DraftRoundIndicator } from './liveView';
 import { CompletedTeamDraftView } from './CompletedTeamDraftView';
 import { initDraftHook } from './hooks/initDraftHook';
+import { isCaptainOf } from './isCaptainOf';
 import { TieResolutionOverlay } from './TieResolutionOverlay';
 import { LiveDraftClockBar } from './timer/DraftClockBar';
 import { LiveDraftPauseOverlay } from './timer/DraftPauseOverlay';
@@ -278,7 +279,7 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
   const startHeartbeat = useDraftWebSocketStore((s) => s.startHeartbeat);
   const stopHeartbeat = useDraftWebSocketStore((s) => s.stopHeartbeat);
 
-  const isMyselfCaptain = tournament?.teams?.some((t) => t.captain?.pk === currentUser?.pk) === true;
+  const isMyselfCaptain = isCaptainOf(tournament?.teams, currentUser?.pk);
   useEffect(() => {
     if (wsConnected && isMyselfCaptain) {
       startHeartbeat();
@@ -563,9 +564,7 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
 
   const draftDialogButton = () => {
     // Check if user is a captain of any team in this tournament
-    const isCaptain = tournament?.teams?.some(
-      (team) => team?.captain?.pk === currentUser?.pk
-    );
+    const isCaptain = isCaptainOf(tournament?.teams, currentUser?.pk);
 
     // Determine button styling and label based on draft state and user role
     let buttonLabel: string;

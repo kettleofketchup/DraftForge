@@ -4,6 +4,7 @@ import { pauseTeamDraft, resumeTeamDraft, startTeamDraft } from '~/components/ap
 import type { UserType } from '~/index';
 import { draftWsSelectors, useDraftWebSocketStore } from '~/store/draftWebSocketStore';
 import { useUserStore } from '~/store/userStore';
+import { isCaptainOf } from '../isCaptainOf';
 import { describeTimerActionError } from '../pickErrors';
 import type { ClockTeam, LiveDraftClockBarProps } from './DraftClockBar';
 import type { LiveDraftPauseOverlayProps } from './DraftPauseOverlay';
@@ -44,7 +45,7 @@ export function useTeamDraftTimerProps(currentUserPk: number | undefined, isStaf
     const activeCaptain = (activeRound?.captain ?? null) as UserType | null;
     const dsTeams = (ds?.tournament?.teams ?? []) as StateTeam[];
     const activeTeamPk = dsTeams.find((t) => t.captain?.pk === activeCaptain?.pk)?.pk ?? null;
-    const isCaptain = dsTeams.some((t) => t.captain?.pk === currentUserPk);
+    const isCaptain = isCaptainOf(dsTeams, currentUserPk);
     const canControl = isStaff || isCaptain;
     const isMyTurn = currentUserPk != null && activeCaptain?.pk === currentUserPk;
     const teams: ClockTeam[] = [...dsTeams]

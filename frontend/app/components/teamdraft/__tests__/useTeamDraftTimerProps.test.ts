@@ -2,6 +2,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useDraftWebSocketStore } from '~/store/draftWebSocketStore';
+import { isCaptainOf } from '../isCaptainOf';
 import { useTeamDraftTimerProps } from '../timer/useTeamDraftTimerProps';
 import { T0, user } from './fixtures';
 
@@ -38,6 +39,25 @@ describe('useTeamDraftTimerProps', () => {
     const { result } = renderHook(() => useTeamDraftTimerProps(555, false));
     expect(result.current.clockBarProps.canControl).toBe(false);
     expect(result.current.pauseOverlayProps.canResume).toBe(false);
+  });
+
+  it('logged-out viewer is not a captain when a team has no captain', () => {
+    const teams = [
+      { pk: 1, draft_order: 1, captain: null, draft_reserve_ms: 30000 },
+      { pk: 2, draft_order: 2, captain: user(7), draft_reserve_ms: 30000 },
+    ];
+    useDraftWebSocketStore.setState({ draftState: ds({ tournament: { teams } }) as never });
+    const { result } = renderHook(() => useTeamDraftTimerProps(undefined, false));
+    expect(result.current.clockBarProps.canControl).toBe(false);
+    expect(result.current.pauseOverlayProps.canResume).toBe(false);
+  });
+
+  it('isCaptainOf needs a signed-in user', () => {
+    const teams = [{ captain: null }, { captain: { pk: undefined } }, { captain: user(7) }];
+    expect(isCaptainOf(teams, undefined)).toBe(false);
+    expect(isCaptainOf(teams, null)).toBe(false);
+    expect(isCaptainOf(teams, 7)).toBe(true);
+    expect(isCaptainOf(undefined, 7)).toBe(false);
   });
 
   it('captain of the active round: isMyTurn', () => {

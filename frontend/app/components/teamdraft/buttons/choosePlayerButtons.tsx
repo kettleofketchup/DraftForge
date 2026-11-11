@@ -11,6 +11,7 @@ import { getLogger } from '~/lib/logger';
 import { draftWsSelectors, useDraftWebSocketStore } from '~/store/draftWebSocketStore';
 import { useUserStore } from '~/store/userStore';
 import { choosePlayerHook } from '../hooks/choosePlayerHook';
+import { isCaptainOf } from '../isCaptainOf';
 const log = getLogger('pickPlayerButton');
 
 export const ChoosePlayerButton: React.FC<{
@@ -38,9 +39,7 @@ export const ChoosePlayerButton: React.FC<{
   const isLoggedIn = currentUser?.pk != null;
 
   // Check if current user is a captain of any team in this tournament
-  const isAnyCaptain = tournament?.teams?.some(
-    (team) => team.captain?.pk === currentUser?.pk
-  );
+  const isAnyCaptain = isCaptainOf(tournament?.teams, currentUser?.pk);
 
   // Check if current user is the captain for this round
   // Must check that both currentUser and captain exist with valid pks to avoid undefined === undefined
