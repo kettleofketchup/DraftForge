@@ -61,6 +61,18 @@ def _not_active_round(active: DraftRound | None) -> Response:
     )
 
 
+def _was_skipped_from(user: CustomUser, draft_round: DraftRound) -> bool:
+    """A shuffle timeout skip reassigned this round away from ``user``."""
+    if draft_round.skip_count == 0:
+        return False
+    return DraftEvent.objects.filter(
+        draft_id=draft_round.draft_id,
+        event_type="pick_skipped",
+        payload__skipped_captain_id=user.pk,
+        payload__from_pick_number=draft_round.pick_number,
+    ).exists()
+
+
 def _authorize_pick(
     user: CustomUser, draft_round: DraftRound
 ) -> tuple[bool, Response | None]:
@@ -69,6 +81,9 @@ def _authorize_pick(
     if draft_round.draft and draft_round.draft.tournament:
         is_tournament_staff = can_edit_tournament(user, draft_round.draft.tournament)
     if is_tournament_staff or draft_round.captain_id == user.pk:
+        return is_tournament_staff, None
+    if _was_skipped_from(user, draft_round):
+        # The locked re-check answers 409 not_active_round with the live pick.
         return is_tournament_staff, None
 
     log.warning(

@@ -526,3 +526,23 @@ class ShufflePickTimeoutOrderingTests(TransactionTestCase):
         )
         self.assertFalse(self.fx.events("player_picked").exists())
         self.assertEqual(self.fx.events("pick_skipped").count(), 1)
+
+    def test_late_pick_from_skipped_captain_is_409_with_active_pick(self):
+        captain_a = self.fx.teams[0].captain
+        self.assertIsNotNone(
+            async_to_sync(teamdraft_tick.check_timeout)(self.fx.draft.pk)
+        )
+        r = self.fx.pick(self.rnd, captain_a)
+        self.assertEqual(
+            (r.status_code, r.data["code"], r.data["active_pick_number"]),
+            (409, "not_active_round", self.rnd.pick_number),
+        )
+        self.assertFalse(self.fx.events("player_picked").exists())
+
+    def test_pick_from_unrelated_user_after_skip_is_still_403(self):
+        self.assertIsNotNone(
+            async_to_sync(teamdraft_tick.check_timeout)(self.fx.draft.pk)
+        )
+        r = self.fx.pick(self.rnd, self.fx.players[0])
+        self.assertEqual(r.status_code, 403)
+        self.assertIn("error", r.data)
