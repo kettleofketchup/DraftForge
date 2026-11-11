@@ -1,10 +1,12 @@
 """Unit tests for BaseDraftConsumer abstract class."""
 
 import asyncio
+import threading
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest import mock
 
+from asgiref.sync import async_to_sync, sync_to_async
 from django.test import SimpleTestCase, override_settings
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
@@ -401,3 +403,26 @@ class TestHeroTickWantedFollowsState(SimpleTestCase):
         self.assertTrue(consumer._tick_wanted)
         asyncio.run(consumer.herodraft_tick({"draft_state": "drafting"}))
         self.assertTrue(consumer._tick_wanted)
+
+
+class TestTickStartRunsOffTheSyncThread(SimpleTestCase):
+    def test_start_does_not_queue_on_the_thread_sensitive_executor(self):
+        consumer = HeroDraftConsumer()
+        consumer.draft_id = 5
+        ran_on: list[threading.Thread] = []
+
+        def record(_draft_id: int) -> bool:
+            ran_on.append(threading.current_thread())
+            return False
+
+        async def go() -> threading.Thread:
+            sensitive = await sync_to_async(threading.current_thread)()
+            with mock.patch(
+                "app.tasks.herodraft_tick.start_tick_broadcaster", side_effect=record
+            ):
+                await consumer._maybe_start_tick_broadcaster()
+            return sensitive
+
+        sensitive = async_to_sync(go)()
+        self.assertEqual(len(ran_on), 1)
+        self.assertIsNot(ran_on[0], sensitive)

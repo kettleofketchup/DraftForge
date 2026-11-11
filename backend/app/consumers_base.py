@@ -312,9 +312,12 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
 
     # --- Tick broadcaster ---
 
-    @database_sync_to_async
-    def _maybe_start_tick_broadcaster(self) -> None:
+    async def _maybe_start_tick_broadcaster(self) -> None:
         """Start tick broadcaster if not already running."""
+        # Redis and a thread spawn only: keep it off asgiref's single sync thread.
+        await sync_to_async(self._start_tick_broadcaster, thread_sensitive=False)()
+
+    def _start_tick_broadcaster(self) -> None:
         try:
             driver = self.get_tick_driver()
             if driver is None:
