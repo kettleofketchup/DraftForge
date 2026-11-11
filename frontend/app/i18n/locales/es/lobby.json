@@ -1,0 +1,26 @@
+{
+  "player": {
+    "no_steam": "Sin cuenta de Steam",
+    "ready": "Listo",
+    "seat": {
+      "broadcaster": "Transmisor",
+      "dire": "Dire",
+      "dire_slot": "Dire {{slot}}",
+      "player_pool": "Reserva de jugadores",
+      "radiant": "Radiant",
+      "radiant_slot": "Radiant {{slot}}",
+      "spectator": "Espectador"
+    },
+    "separator": " · ",
+    "status": {
+      "invited": "Invitado",
+      "invited_times": "Invitado ({{times}}×)",
+      "joined": "En el lobby",
+      "kicked": "Expulsado",
+      "left": "Salió del lobby",
+      "not_invited": "Sin invitar",
+      "pending": "Invitación pendiente",
+      "seated": "Sentado"
+    }
+  }
+}

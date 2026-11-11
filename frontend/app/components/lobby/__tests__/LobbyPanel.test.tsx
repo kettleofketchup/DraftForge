@@ -3,7 +3,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
+import { I18nextProvider } from 'react-i18next';
 import { TooltipProvider } from '~/components/ui/tooltip';
+import { createI18nInstance } from '~/i18n/config';
 import { useUserStore } from '~/store/userStore';
 import type { UserType } from '~/index';
 import { createGameLobby } from '../api';
@@ -36,9 +38,11 @@ vi.mock('~/store/userStore', async () => {
 function Wrapper({ children }: { children: ReactNode }) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return (
-    <QueryClientProvider client={qc}>
-      <TooltipProvider>{children}</TooltipProvider>
-    </QueryClientProvider>
+    <I18nextProvider i18n={createI18nInstance('en')}>
+      <QueryClientProvider client={qc}>
+        <TooltipProvider>{children}</TooltipProvider>
+      </QueryClientProvider>
+    </I18nextProvider>
   );
 }
 

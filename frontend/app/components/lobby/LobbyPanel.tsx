@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { Copy, Loader2, Mail, Play, Plus, RotateCcw, X } from 'lucide-react';
 import { Badge } from '~/components/ui/badge';
@@ -221,6 +222,7 @@ function PlayerList({
   canManage: boolean;
   canInvite: boolean;
 }) {
+  const { t } = useTranslation('lobby');
   const invite = useInviteToGameLobby(gameId);
 
   const reinvite = async (player: LobbyPlayer) => {
@@ -267,7 +269,7 @@ function PlayerList({
                     )}
                     data-testid={`lobby-player-status-${player.user_id}`}
                   >
-                    {playerStatusText(player)}
+                    {playerStatusText(player, t)}
                   </p>
                 </div>
                 {canManage && canInvite && needsInvite(player) && (
