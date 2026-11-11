@@ -157,8 +157,18 @@ export function MatchStatsModal({ match: matchProp, isOpen, onClose, initialDraf
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-2xl" data-testid="matchStatsModal">
-        <DialogHeader>
+      {/* Never taller than the viewport (the lobby panel makes it long): the
+          header and close button stay put and the body scrolls. dvh follows
+          the mobile browser bars; vh is the fallback. */}
+      <DialogContent
+        className={cn(
+          'max-w-2xl flex flex-col gap-4 overflow-hidden',
+          'max-h-[calc(100vh-2rem)]',
+          'supports-[height:100dvh]:max-h-[calc(100dvh-2rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))]',
+        )}
+        data-testid="matchStatsModal"
+      >
+        <DialogHeader className="shrink-0 pr-8">
           <DialogTitle data-testid="match-details-header">Match Details</DialogTitle>
           <DialogDescription>
             {match.bracketType === 'grand_finals'
@@ -167,7 +177,10 @@ export function MatchStatsModal({ match: matchProp, isOpen, onClose, initialDraf
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div
+          className="-mx-6 min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-6 pb-1"
+          data-testid="matchStatsModal-body"
+        >
           {/* Teams display — auto-sized middle column so the VS / Final badge
               doesn't eat 1/3 of the iPhone-SE-width modal and squeeze the
               team names into overlap. */}
