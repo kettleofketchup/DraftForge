@@ -10,7 +10,7 @@ import { DisplayName } from '~/components/user/avatar';
 import { UserAvatar } from '~/components/user/UserAvatar';
 import { UserStrip } from '~/components/user';
 import { TeamPositionCoverageRow } from './TeamPositionCoverage';
-import { formatClock } from './timer/formatClock';
+import { formatDuration } from '~/lib/dota/utils';
 import type { DraftRoundType } from './types';
 import type { TeamType } from '~/components/tournament/types';
 import type { UserType } from '~/components/user/types';
@@ -60,7 +60,7 @@ function TeamMembersList({ members, captain, organizationId, rounds }: { members
                   )}
                   {hasDuration && (
                     <Badge variant="outline" className="text-[10px] px-1.5 py-0" data-testid={`pick-duration-${member.pk}`}>
-                      {formatClock(round!.pick_duration_ms as number)}
+                      {formatDuration((round!.pick_duration_ms as number) / 1000)}
                     </Badge>
                   )}
                   {hasSkips && (

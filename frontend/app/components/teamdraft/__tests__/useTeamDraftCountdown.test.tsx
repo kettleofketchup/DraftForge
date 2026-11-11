@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { formatClock } from '../timer/formatClock';
 import {
   _deriveTeamCountdown,
   useTeamDraftCountdown,
@@ -178,13 +177,5 @@ describe('useTeamDraftCountdown', () => {
       vi.advanceTimersByTime(1_000);
     });
     expect(result.current).toEqual(frozen);
-  });
-});
-
-describe('formatClock', () => {
-  it('rounds to the nearest second as m:ss', () => {
-    expect(formatClock(29_600)).toBe('0:30');
-    expect(formatClock(90_000)).toBe('1:30');
-    expect(formatClock(-5)).toBe('0:00');
   });
 });

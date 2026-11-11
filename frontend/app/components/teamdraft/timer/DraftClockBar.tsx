@@ -5,7 +5,7 @@ import { UserAvatar } from '~/components/user/UserAvatar';
 import type { UserType } from '~/index';
 import { cn } from '~/lib/utils';
 import type { TeamDraftState } from '../schemas';
-import { formatClock } from './formatClock';
+import { formatDuration } from '~/lib/dota/utils';
 import { useLiveTeamDraftCountdown, type TeamDraftCountdown } from './useTeamDraftCountdown';
 
 const GRACE_URGENT_MS = 10_000;
@@ -88,7 +88,7 @@ export function DraftClockBar({
               style={{ width: `${pct}%` }}
             />
           </div>
-          <span className="text-xs font-mono tabular-nums">{formatClock(ms)}</span>
+          <span className="text-xs font-mono tabular-nums">{formatDuration(ms / 1000)}</span>
         </div>
       );
     }
@@ -99,7 +99,7 @@ export function DraftClockBar({
         data-pct={pct}
         className="rounded bg-black/30 px-2 py-0.5 text-xs font-mono tabular-nums"
       >
-        {formatClock(ms)}
+        {formatDuration(ms / 1000)}
       </span>
     );
   };
@@ -147,7 +147,7 @@ export function DraftClockBar({
               armed && armed.graceRemainingMs < GRACE_URGENT_MS && 'animate-grace-urgent text-red-400',
             )}
           >
-            {armed ? formatClock(armed.graceRemainingMs) : '—'}
+            {armed ? formatDuration(armed.graceRemainingMs / 1000) : '—'}
           </span>
         )}
         {clockArmed && drafting && canControl && (
