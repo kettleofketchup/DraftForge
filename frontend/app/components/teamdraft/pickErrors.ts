@@ -5,8 +5,10 @@ export interface PickErrorInfo {
 
 interface ErrorBody {
   code?: string;
-  active_pick_number?: number;
+  active_pick_number?: number | null;
   state?: string;
+  error?: unknown;
+  detail?: unknown;
 }
 
 const responseOf = (err: unknown): { status?: number; data?: unknown } | undefined =>
@@ -28,7 +30,7 @@ export function describePickError(err: unknown): PickErrorInfo {
           jumpToPickNumber: n,
         };
       }
-      break;
+      return { message: 'That pick is no longer active', jumpToPickNumber: null };
     }
     case 'draft_not_accepting_picks':
       return {
@@ -41,9 +43,21 @@ export function describePickError(err: unknown): PickErrorInfo {
       return { message: 'That pick was already made', jumpToPickNumber: null };
   }
   return {
-    message: `Failed to update captains: ${responseOf(err)?.data}`,
+    message: `Failed to update captains: ${serverMessage(err)}`,
     jumpToPickNumber: null,
   };
+}
+
+function serverMessage(err: unknown): string {
+  const response = responseOf(err);
+  if (typeof response?.data === 'string' && response.data) return response.data;
+  const body = bodyOf(err);
+  for (const text of [body.error, body.detail]) {
+    if (typeof text === 'string' && text) return text;
+  }
+  if (response?.status) return `request failed (${response.status})`;
+  const message = (err as { message?: unknown } | null)?.message;
+  return typeof message === 'string' && message ? message : 'unknown error';
 }
 
 export function handlePickError(

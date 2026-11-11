@@ -1,4 +1,4 @@
-import { expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   describePickError,
   describeTimerActionError,
@@ -36,4 +36,27 @@ it('handlePickError neither jumps nor refreshes for unknown errors', () => {
   expect(handlePickError(axiosErr(500, 'boom'), { jumpToPickNumber: jump, refresh })).toBe('Failed to update captains: boom');
   expect(jump).not.toHaveBeenCalled();
   expect(refresh).not.toHaveBeenCalled();
+});
+
+describe('server error messages are shown, never [object Object]', () => {
+  it('shows the error string of a 403 body', () => {
+    const msg = describePickError(axiosErr(403, { error: 'Only tournament staff or the captain for this round can make picks' })).message;
+    expect(msg).toBe('Failed to update captains: Only tournament staff or the captain for this round can make picks');
+  });
+  it('shows a DRF detail string', () => {
+    expect(describePickError(axiosErr(401, { detail: 'Not signed in' })).message).toBe('Failed to update captains: Not signed in');
+  });
+  it('names the stale pick when not_active_round has no active pick', () => {
+    const info = describePickError(axiosErr(409, { code: 'not_active_round', active_pick_number: null }));
+    expect(info).toEqual({ message: 'That pick is no longer active', jumpToPickNumber: null });
+  });
+  it.each([
+    [400, { user_pk: ['This field is required.'] }],
+    [500, {}],
+  ])('never renders [object Object] for a %s body without a message', (status, body) => {
+    expect(describePickError(axiosErr(status, body)).message).not.toContain('[object Object]');
+  });
+  it('uses the request error message when there is no response', () => {
+    expect(describePickError(new Error('Network Error')).message).toBe('Failed to update captains: Network Error');
+  });
 });
