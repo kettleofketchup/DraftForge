@@ -50,13 +50,16 @@ sweeps for eligible games every minute, so a missed signal or a tournament that 
 picked up. In `manual` mode, and for retries, staff use the match dialog (see
 [Organizer API and UI](#organizer-api-and-ui)), the Django admin action "Create a new lobby for
 these games" on a game's lobby, or `python manage.py create_dota_lobby <game id>
-[--allow-missing]`. `--allow-missing` leaves players without a Steam account out of the roster;
-automatic creation never does.
+[--allow-missing] [--replay]`. `--allow-missing` leaves players without a Steam account out of
+the roster; automatic creation never does.
 
 A lobby that times out or fails is not recreated automatically: organizers retry it. A lobby
-whose match finished with a result is never retried for the same two teams
-(`lobby_match_played`): the organizer confirms the winner instead. A match that ended without a
-scored result may be retried.
+whose match finished with a result is not retried for the same two teams
+(`lobby_match_played`): the organizer confirms the winner instead. To host that match again,
+for example after resetting a disputed game to pending, organizers ask for a replay (`replay`
+on the create request, "Replay match" in the dialog, or `--replay`); automatic creation never
+replays a match. A match that ended unscored, or that started and whose lobby then ended
+without a scored result, was abandoned: the game goes back to pending and may get a new lobby.
 
 **Creating.** Celery never touches the database. The `create_dota_lobby` task:
 

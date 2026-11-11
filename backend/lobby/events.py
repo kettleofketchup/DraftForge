@@ -36,7 +36,7 @@ from app.models import Game
 from lobby import broadcast, states
 from lobby.models import GameLobby, GameLobbyEvent
 from lobby.schemas import LobbyEvent, LobbyView
-from lobby.services import game_teams, lobby_teams, parse_team_ref
+from lobby.services import game_teams, lobby_teams, match_abandoned, parse_team_ref
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
@@ -192,18 +192,6 @@ def _apply_match_started(
     return []
 
 
-def _match_abandoned(game_lobby: GameLobby) -> bool:
-    """The lobby's match started but will not produce a result."""
-    if game_lobby.match_started_at is None and game_lobby.match_id is None:
-        return False
-    if game_lobby.provisional_scored is True:
-        return False
-    return (
-        game_lobby.provisional_scored is False
-        or game_lobby.state in states.SERVICE_TERMINAL_STATES
-    )
-
-
 def release_game(game_lobby: GameLobby, game: Game) -> list[str]:
     """Move the game back to `pending` when its lobby's match was abandoned.
 
@@ -211,7 +199,7 @@ def release_game(game_lobby: GameLobby, game: Game) -> list[str]:
     released, so a result staff or the Steam link recorded is never undone.
     The caller saves the game. Returns the Game fields changed.
     """
-    if not _match_abandoned(game_lobby) or not _owns_game(game_lobby, game):
+    if not match_abandoned(game_lobby) or not _owns_game(game_lobby, game):
         return []
     if game.status != "live" or game.winning_team_id is not None:
         return []

@@ -289,6 +289,18 @@ class LobbyCreateCloseTests(LobbyViewTestCase):
         self.assertEqual(GameLobby.objects.filter(game=self.game).count(), 1)
         create_delay.assert_not_called()
 
+    def test_replay_after_a_played_match(self, create_delay, close_delay):
+        row = self.make_lobby(state=states.FINISHED)
+        row.provisional_scored = True
+        row.save()
+        with self.captureOnCommitCallbacks(execute=True):
+            resp = self.as_user(self.staff).post(
+                _url(self.game.pk), {"replay": True}, format="json"
+            )
+        self.assertEqual(resp.status_code, 202)
+        self.assertEqual(GameLobby.objects.filter(game=self.game).count(), 2)
+        create_delay.assert_called_once()
+
     def test_staff_close(self, create_delay, close_delay):
         row = self.make_lobby()
         with self.captureOnCommitCallbacks(execute=True):

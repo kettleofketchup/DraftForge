@@ -140,22 +140,48 @@ def active_lobby(game: Game) -> GameLobby | None:
     return game.lobbies.filter(ended=False).first()
 
 
+def match_abandoned(game_lobby: GameLobby) -> bool:
+    """The lobby's match started but will not produce a result.
+
+    dota_lobby reported it unscored, or the lobby reached a terminal state
+    after the match started without any scored result. The game goes back to
+    `pending` (lobby.events.release_game) so organizers can request a new lobby.
+    """
+    if game_lobby.match_started_at is None and game_lobby.match_id is None:
+        return False
+    if game_lobby.provisional_scored is True:
+        return False
+    return (
+        game_lobby.provisional_scored is False
+        or game_lobby.state in states.SERVICE_TERMINAL_STATES
+    )
+
+
 def match_played(game_lobby: GameLobby) -> bool:
     """The lobby's match was played to a result, so a new lobby would replay it.
 
-    A match dota_lobby reported as ended without a scored result (abandoned
-    before it counted) was not played to a result, so it may be retried.
+    A match that ended unscored, or was abandoned after it started, was not
+    played to a result (see `match_abandoned`), so it may be retried.
     """
     return (
         game_lobby.state == states.FINISHED
         and game_lobby.provisional_scored is not False
+        and not match_abandoned(game_lobby)
     )
 
 
 def lobby_eligibility(
-    game: Game, *, trigger: str = GameLobby.Trigger.AUTO, allow_missing: bool = False
+    game: Game,
+    *,
+    trigger: str = GameLobby.Trigger.AUTO,
+    allow_missing: bool = False,
+    replay: bool = False,
 ) -> Eligibility:
-    """Whether `game` may get a new lobby now, and why not."""
+    """Whether `game` may get a new lobby now, and why not.
+
+    `replay` (manual only) lets organizers host a match again after its lobby
+    played it to a result, for example after resetting a disputed game.
+    """
     if not is_enabled():
         return _fail("lobby_disabled")
     tournament = game.tournament
@@ -183,10 +209,12 @@ def lobby_eligibility(
     latest = game.lobbies.order_by("-created_at", "-pk").first()
     if (
         latest is not None
+        and not (replay and not auto)
         and match_played(latest)
         and lobby_teams(latest) == game_teams(game)
     ):
-        # The winner is confirmed on the game; a retry would replay the match.
+        # These teams already played this game in a lobby: organizers confirm
+        # its result, or ask for a replay explicitly.
         return _fail("lobby_match_played", state=latest.state)
     if auto:
         if (
@@ -296,6 +324,7 @@ def claim_lobby(
     trigger: str = GameLobby.Trigger.AUTO,
     user_id: int | None = None,
     allow_missing: bool = False,
+    replay: bool = False,
     game_lobby_id: int | None = None,
 ) -> Claim:
     """The game's active lobby, or a new `requested` row when it may have one.
@@ -325,7 +354,7 @@ def claim_lobby(
         if existing is not None:
             return Claim(existing, False, Eligibility(True))
         eligibility = lobby_eligibility(
-            game, trigger=trigger, allow_missing=allow_missing
+            game, trigger=trigger, allow_missing=allow_missing, replay=replay
         )
         if not eligibility.ok:
             return Claim(None, False, eligibility)
@@ -382,7 +411,11 @@ def wants_flip(game_lobby: GameLobby) -> bool:
 
 
 def queue_create(
-    game: Game, *, user_id: int | None = None, allow_missing: bool = False
+    game: Game,
+    *,
+    user_id: int | None = None,
+    allow_missing: bool = False,
+    replay: bool = False,
 ) -> Eligibility:
     """Manual create (organizer action): claim the row now, send it in Celery.
 
@@ -395,6 +428,7 @@ def queue_create(
         trigger=GameLobby.Trigger.MANUAL,
         user_id=user_id,
         allow_missing=allow_missing,
+        replay=replay,
     )
     if claim.game_lobby is None:
         return claim.eligibility

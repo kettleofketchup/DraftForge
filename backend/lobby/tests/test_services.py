@@ -1,4 +1,5 @@
 from django.test import TestCase, override_settings
+from django.utils import timezone
 
 from app.models import DotaLobbyLaunch, DotaLobbyMode, GameMode, GameType
 from lobby import services, states
@@ -108,8 +109,25 @@ class EligibilityTests(TestCase):
         self.assertEqual(self._code(), "lobby_match_played")
 
     def test_no_retry_after_a_finished_lobby_without_a_result_event(self):
+        # No match was seen starting, so nothing says it was abandoned.
         self._ended_lobby(states.FINISHED)
         self.assertEqual(self._code(trigger="manual"), "lobby_match_played")
+
+    def test_retry_after_a_started_match_finished_without_a_result(self):
+        # release_game puts this game back to pending as abandoned, so
+        # organizers (and auto mode) must be able to request a new lobby.
+        lobby = self._ended_lobby(
+            states.FINISHED, match_id=7001, match_started_at=timezone.now()
+        )
+        self.assertTrue(services.match_abandoned(lobby))
+        self.assertFalse(services.match_played(lobby))
+        self.assertEqual(self._code(trigger="manual"), "")
+
+    def test_replay_lets_organizers_host_a_played_match_again(self):
+        self._ended_lobby(states.FINISHED, provisional_scored=True)
+        self.assertEqual(self._code(trigger="manual", replay=True), "")
+        # Auto mode never replays a played match on its own.
+        self.assertEqual(self._code(replay=True), "lobby_match_played")
 
     def test_retry_after_a_match_that_ended_unscored(self):
         self._ended_lobby(states.FINISHED, provisional_scored=False)

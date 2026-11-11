@@ -7,7 +7,8 @@ Routes under `api/games/<game_pk>/lobby/`, next to `create-herodraft`:
   the game's rostered players and tournament staff. Everyone else gets the
   state, the match ID and the provisional result.
 - `POST` (tournament staff): request a lobby, or retry one that ended.
-  `replace` first closes an active lobby that has not started.
+  `replace` first closes an active lobby that has not started; `replay`
+  hosts a match again after its lobby played it to a result.
 - `DELETE` (tournament staff): close the active lobby before its match.
 - `POST invite/`: staff invite the missing players or the given ones; a
   rostered player can only invite themselves.
@@ -347,9 +348,10 @@ class GameLobbyView(APIView):
         return Response(lobby_response(request, game))
 
     def post(self, request: Request, game_pk: int) -> Response:
-        """Request a lobby, or retry. `{allow_missing?, replace?}`."""
+        """Request a lobby, or retry. `{allow_missing?, replace?, replay?}`."""
         allow_missing = _bool(request.data.get("allow_missing"))
         replace = _bool(request.data.get("replace"))
+        replay = _bool(request.data.get("replay"))
         with transaction.atomic():
             game = get_object_or_404(
                 Game.objects.select_for_update().select_related(
@@ -374,7 +376,10 @@ class GameLobbyView(APIView):
                         state=active.state,
                     )
             eligibility = services.queue_create(
-                game, user_id=request.user.pk, allow_missing=allow_missing
+                game,
+                user_id=request.user.pk,
+                allow_missing=allow_missing,
+                replay=replay,
             )
             if not eligibility.ok:
                 problem = _error(
@@ -391,6 +396,7 @@ class GameLobbyView(APIView):
             game_id=game.pk,
             user_id=request.user.pk,
             replace=replace,
+            replay=replay,
             allow_missing=allow_missing,
             **_LOG,
         )
