@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router';
-import { Pencil, Trash2, ShieldAlert } from 'lucide-react';
+import { CircleX, Pencil, Trash2, ShieldAlert } from 'lucide-react';
 import type { UserType } from '~/components/user/types';
 import { useLeagueStore } from '~/store/leagueStore';
 import { useOrgStore } from '~/store/orgStore';
@@ -24,6 +24,7 @@ import { toast } from 'sonner';
 import { getLogger } from '~/lib/logger';
 import { tournamentEditContext } from './tournamentEditContext';
 import { Spinner } from '~/components/ui/spinner';
+import { Alert, AlertDescription } from '~/components/ui/alert';
 const log = getLogger('TournamentDetailPage');
 
 export const TournamentDetailPage: React.FC = () => {
@@ -230,22 +231,10 @@ export const TournamentDetailPage: React.FC = () => {
   if (error) {
     return (
       <div className="flex justify-center items-center h-screen">
-        <div role="alert" className="alert alert-error">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            className="stroke-current shrink-0 h-6 w-6"
-            fill="none"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="2"
-              d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"
-            />
-          </svg>
-          <span>Failed to load tournament details. Please try again later.</span>
-        </div>
+        <Alert variant="destructive" className="w-auto">
+          <CircleX />
+          <AlertDescription>Failed to load tournament details. Please try again later.</AlertDescription>
+        </Alert>
       </div>
     );
   }

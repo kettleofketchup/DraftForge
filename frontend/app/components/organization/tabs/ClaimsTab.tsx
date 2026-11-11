@@ -15,6 +15,7 @@ import { MobileNavDropdown } from '~/components/ui/mobile-nav-dropdown';
 import { getLogger } from '~/lib/logger';
 import { ClaimCard } from './ClaimCard';
 import { Spinner } from '~/components/ui/spinner';
+import { Alert, AlertDescription } from '~/components/ui/alert';
 
 const log = getLogger('ClaimsTab');
 
@@ -145,14 +146,14 @@ export const ClaimsTab: React.FC<Props> = ({ organizationId }) => {
               <Spinner className="size-8" />
             </div>
           ) : error ? (
-            <div role="alert" className="alert alert-error" data-testid="claims-error">
-              <AlertCircle className="w-5 h-5" />
-              <span>{error}</span>
-            </div>
+            <Alert variant="destructive" data-testid="claims-error">
+              <AlertCircle />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
           ) : claims.length === 0 ? (
-            <div className="alert alert-info" data-testid="claims-empty">
-              <span>No {statusFilter} claim requests</span>
-            </div>
+            <Alert data-testid="claims-empty">
+              <AlertDescription>No {statusFilter} claim requests</AlertDescription>
+            </Alert>
           ) : (
             <div className="space-y-3" data-testid="claims-list">
               {claims.map((claim, index) => (
