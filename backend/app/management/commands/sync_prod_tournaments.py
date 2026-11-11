@@ -1,11 +1,20 @@
 import logging
 from datetime import datetime
+from typing import Any
 
 import requests
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandParser
 from django.db import transaction
 
-from app.models import CustomUser, Draft, DraftRound, Game, Team, Tournament
+from app.models import (
+    CustomUser,
+    Draft,
+    DraftOptions,
+    DraftRound,
+    Game,
+    Team,
+    Tournament,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -15,11 +24,11 @@ PROD_API_URL = "https://dota.kettle.sh/api/tournaments/"
 class Command(BaseCommand):
     help = "Sync tournaments from production (dota.kettle.sh) to local database"
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        self.user_map = {}  # Map prod user pk -> local user
+        self.user_map: dict[str, CustomUser] = {}  # Map prod user pk -> local user
 
-    def add_arguments(self, parser):
+    def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument(
             "--dry-run",
             action="store_true",
@@ -32,7 +41,7 @@ class Command(BaseCommand):
             help=f"Production API URL (default: {PROD_API_URL})",
         )
 
-    def handle(self, *args, **options):
+    def handle(self, *args: Any, **options: Any) -> None:
         dry_run = options.get("dry_run", False)
         api_url = options.get("url", PROD_API_URL)
 
@@ -93,7 +102,7 @@ class Command(BaseCommand):
                 )
             )
 
-    def _build_user_map(self):
+    def _build_user_map(self) -> None:
         """Build a map of production user identifiers to local users."""
         for user in CustomUser.objects.all():
             if user.discordId:
@@ -149,6 +158,7 @@ class Command(BaseCommand):
                 "tournament_type", "double_elimination"
             ),
         )
+        DraftOptions.ensure_for(tournament, timer_enabled=False)
 
         # Add users to tournament
         users_data = tournament_data.get("users", [])

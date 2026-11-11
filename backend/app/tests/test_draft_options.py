@@ -12,23 +12,23 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from app.functions.teamdraft_timeout import skip_turn
-from app.management.commands import sync_prod_tournaments
-from app.serializers import DraftSerializerSlim, TournamentSerializer
-from app.tests.teamdraft_fixtures import TimedDraftFixture
-from tests.data.users import REGULAR_USER
-from tests.helpers.tournament_config import TEST_TOURNAMENTS, TestTournamentConfig
+from app.management.commands import import_prod_tournament, sync_prod_tournaments
 from app.models import (
     Draft,
     DraftEvent,
-    League,
-    Organization,
     DraftOptions,
     DraftRound,
+    League,
+    Organization,
     Team,
     TeamDraftState,
     TimeoutAction,
     Tournament,
 )
+from app.serializers import DraftSerializerSlim, TournamentSerializer
+from app.tests.teamdraft_fixtures import TimedDraftFixture
+from tests.data.users import REGULAR_USER
+from tests.helpers.tournament_config import TEST_TOURNAMENTS, TestTournamentConfig
 
 User = get_user_model()
 
@@ -193,6 +193,24 @@ class MigrationStateRuleTests(TestCase):
         self.assertEqual(Draft.objects.get(pk=half.pk).state, "drafting")
         self.assertEqual(Draft.objects.get(pk=done.pk).state, "completed")
 
+    def test_backfill_turns_the_timer_off_for_existing_tournaments(self):
+        mod = importlib.import_module(
+            "app.migrations.0099_backfill_draftoptions_timer_off"
+        )
+        bare = make_tournament(1, "bf0")
+        opted_in = make_tournament(1, "bf1")
+        DraftOptions.objects.create(
+            tournament=opted_in, timer_enabled=True, grace_time_ms=5000
+        )
+
+        mod.backfill_timer_off(global_apps, None)
+
+        self.assertFalse(DraftOptions.objects.get(tournament=bare).timer_enabled)
+        kept = DraftOptions.objects.get(tournament=opted_in)
+        self.assertEqual((kept.timer_enabled, kept.grace_time_ms), (True, 5000))
+        fresh = make_tournament(1, "bf2")
+        self.assertTrue(fresh.get_draft_options().timer_enabled)
+
 
 class LegacyStateDerivationTests(TestCase):
     def test_derive_legacy_state(self):
@@ -218,12 +236,17 @@ class LegacyStateDerivationTests(TestCase):
         ]
 
     def test_sync_create_draft_derives_state(self):
-        for prefix, picked, expected in (("sc", True, "completed"), ("sd", False, "drafting")):
+        for prefix, picked, expected in (
+            ("sc", True, "completed"),
+            ("sd", False, "drafting"),
+        ):
             t = make_tournament(2, prefix)
             cmd = sync_prod_tournaments.Command()
             cmd.user_map = {f"username:{u.username}": u for u in t.users.all()}
             draft = cmd._create_draft(
-                t, {"draft_style": "snake", "draft_rounds": self._sync_rounds(t, picked)}, {}
+                t,
+                {"draft_style": "snake", "draft_rounds": self._sync_rounds(t, picked)},
+                {},
             )
             self.assertEqual(Draft.objects.get(pk=draft.pk).state, expected, prefix)
         t = make_tournament(1, "se")
@@ -231,18 +254,41 @@ class LegacyStateDerivationTests(TestCase):
         draft = cmd._create_draft(t, {"draft_style": "snake", "draft_rounds": []}, {})
         self.assertEqual(Draft.objects.get(pk=draft.pk).state, "pending")
 
+    def test_sync_prod_tournament_is_untimed(self):
+        cmd = sync_prod_tournaments.Command()
+        t = cmd._create_tournament({"name": "synced", "date_played": "2025-01-01"})
+        self.assertFalse(t.get_draft_options(fresh=True).timer_enabled)
+
+    def test_import_prod_tournament_is_untimed(self):
+        cmd = import_prod_tournament.Command()
+        t = cmd.create_tournament({"name": "imported", "date_played": "2025-01-01"})
+        self.assertFalse(t.get_draft_options(fresh=True).timer_enabled)
+
 
 class SerializerFieldTests(TestCase):
     def test_slim_draft_carries_timer_fields(self):
         fx = TimedDraftFixture()
         data = DraftSerializerSlim(fx.draft).data
-        for key in ("state", "clock_armed", "paused_at", "resuming_until", "is_manual_pause", "draft_options"):
+        for key in (
+            "state",
+            "clock_armed",
+            "paused_at",
+            "resuming_until",
+            "is_manual_pause",
+            "draft_options",
+        ):
             self.assertIn(key, data)
         self.assertEqual(data["state"], "pending")
         self.assertFalse(data["clock_armed"])
         self.assertEqual(data["draft_options"]["reserve_time_ms"], 30000)
         rnd = data["draft_rounds"][0]
-        for key in ("started_at", "timed_out_at", "pick_duration_ms", "reserve_used_ms", "skip_count"):
+        for key in (
+            "started_at",
+            "timed_out_at",
+            "pick_duration_ms",
+            "reserve_used_ms",
+            "skip_count",
+        ):
             self.assertIn(key, rnd)
         team = data["tournament"]["teams"][0]
         for key in ("draft_reserve_ms", "draft_is_ready", "draft_is_connected"):
@@ -271,46 +317,75 @@ class SettingsWriteTests(TestCase):
         self.url = f"/api/tournaments/{self.fx.tournament.pk}/"
 
     def test_staff_patch_writes_options_and_reseeds_pending_pools(self):
-        r = self.client.patch(self.url, {"draft_options": {"reserve_time_ms": 15000, "grace_time_ms": 10000}}, format="json")
+        r = self.client.patch(
+            self.url,
+            {"draft_options": {"reserve_time_ms": 15000, "grace_time_ms": 10000}},
+            format="json",
+        )
         self.assertEqual(r.status_code, 200, r.data)
         self.assertEqual(r.data["draft_options"]["reserve_time_ms"], 15000)
-        self.assertEqual(Team.objects.get(pk=self.fx.teams[0].pk).draft_reserve_ms, 15000)
+        self.assertEqual(
+            Team.objects.get(pk=self.fx.teams[0].pk).draft_reserve_ms, 15000
+        )
 
     def test_non_staff_patch_is_forbidden(self):
         self.client.force_authenticate(self.fx.captains[0])
-        r = self.client.patch(self.url, {"draft_options": {"timer_enabled": False}}, format="json")
+        r = self.client.patch(
+            self.url, {"draft_options": {"timer_enabled": False}}, format="json"
+        )
         self.assertEqual(r.status_code, 403)
 
     def test_invalid_values_are_rejected_without_write(self):
-        r = self.client.patch(self.url, {"draft_options": {"grace_time_ms": 0}}, format="json")
+        r = self.client.patch(
+            self.url, {"draft_options": {"grace_time_ms": 0}}, format="json"
+        )
         self.assertEqual(r.status_code, 400)
-        r = self.client.patch(self.url, {"draft_options": {"reserve_time_ms": -1}}, format="json")
+        r = self.client.patch(
+            self.url, {"draft_options": {"reserve_time_ms": -1}}, format="json"
+        )
         self.assertEqual(r.status_code, 400)
-        self.assertEqual(DraftOptions.objects.get(pk=self.fx.options.pk).grace_time_ms, 30000)
+        self.assertEqual(
+            DraftOptions.objects.get(pk=self.fx.options.pk).grace_time_ms, 30000
+        )
 
     def test_timeout_action_is_read_only(self):
-        r = self.client.patch(self.url, {"draft_options": {"timeout_action": "other"}}, format="json")
+        r = self.client.patch(
+            self.url, {"draft_options": {"timeout_action": "other"}}, format="json"
+        )
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.data["draft_options"]["timeout_action"], "skip_turn")
 
     def test_mid_draft_change_does_not_touch_active_round_or_reserve(self):
         with self.captureOnCommitCallbacks(execute=True):
             rnd = self.fx.start()
-        self.client.patch(self.url, {"draft_options": {"grace_time_ms": 5000, "reserve_time_ms": 1000}}, format="json")
+        self.client.patch(
+            self.url,
+            {"draft_options": {"grace_time_ms": 5000, "reserve_time_ms": 1000}},
+            format="json",
+        )
         rnd.refresh_from_db()
         self.assertEqual(rnd.grace_time_ms, 30000)
-        self.assertEqual(Team.objects.get(pk=self.fx.team_of(rnd.captain).pk).draft_reserve_ms, 30000)
+        self.assertEqual(
+            Team.objects.get(pk=self.fx.team_of(rnd.captain).pk).draft_reserve_ms, 30000
+        )
 
     def _disable_and_assert_drafting_unarmed(self):
         with self.captureOnCommitCallbacks(execute=True):
-            r = self.client.patch(self.url, {"draft_options": {"timer_enabled": False}}, format="json")
+            r = self.client.patch(
+                self.url, {"draft_options": {"timer_enabled": False}}, format="json"
+            )
         self.assertEqual(r.status_code, 200, r.data)
         self.fx.draft.refresh_from_db()
         self.assertEqual(self.fx.draft.state, TeamDraftState.DRAFTING)
         self.assertFalse(self.fx.draft.clock_armed)
         self.assertIsNone(self.fx.draft.paused_at)
         self.assertIsNone(self.fx.draft.active_round.started_at)
-        self.assertEqual(self.fx.pick(self.fx.draft.active_round, self.fx.draft.active_round.captain).status_code, 201)
+        self.assertEqual(
+            self.fx.pick(
+                self.fx.draft.active_round, self.fx.draft.active_round.captain
+            ).status_code,
+            201,
+        )
 
     def test_timer_off_from_pending(self):
         self._disable_and_assert_drafting_unarmed()
@@ -347,21 +422,41 @@ class SettingsWriteTests(TestCase):
 
 class SettingsCreateTests(TestCase):
     def setUp(self):
-        self.staff = User.objects.create_user(username="dc_staff", password="x", is_staff=True)
+        self.staff = User.objects.create_user(
+            username="dc_staff", password="x", is_staff=True
+        )
         org = Organization.objects.create(name="dc org")
-        self.league = League.objects.create(organization=org, name="dc league", steam_league_id=None)
+        self.league = League.objects.create(
+            organization=org, name="dc league", steam_league_id=None
+        )
         self.client = APIClient()
         self.client.force_authenticate(self.staff)
 
     def _create(self, **extra: object):
-        body = {"name": "dc tournament", "date_played": "2026-11-08T00:00:00Z", "tournament_type": "double_elimination", "league": self.league.pk, "league_id_write": self.league.pk, **extra}
+        body = {
+            "name": "dc tournament",
+            "date_played": "2026-11-08T00:00:00Z",
+            "tournament_type": "double_elimination",
+            "league": self.league.pk,
+            "league_id_write": self.league.pk,
+            **extra,
+        }
         return self.client.post("/api/tournaments/", body, format="json")
 
     def test_create_with_draft_options_stores_them(self):
-        r = self._create(draft_options={"timer_enabled": True, "grace_time_ms": 10000, "reserve_time_ms": 20000})
+        r = self._create(
+            draft_options={
+                "timer_enabled": True,
+                "grace_time_ms": 10000,
+                "reserve_time_ms": 20000,
+            }
+        )
         self.assertEqual(r.status_code, 201, r.data)
         opts = DraftOptions.objects.get(tournament_id=r.data["pk"])
-        self.assertEqual((opts.timer_enabled, opts.grace_time_ms, opts.reserve_time_ms), (True, 10000, 20000))
+        self.assertEqual(
+            (opts.timer_enabled, opts.grace_time_ms, opts.reserve_time_ms),
+            (True, 10000, 20000),
+        )
         self.assertEqual(r.data["draft_options"]["grace_time_ms"], 10000)
 
     def test_create_with_invalid_draft_options_is_400_without_write(self):
@@ -373,7 +468,10 @@ class SettingsCreateTests(TestCase):
         r = self._create()
         self.assertEqual(r.status_code, 201, r.data)
         opts = DraftOptions.objects.get(tournament_id=r.data["pk"])
-        self.assertEqual((opts.timer_enabled, opts.grace_time_ms, opts.reserve_time_ms), (True, 30000, 30000))
+        self.assertEqual(
+            (opts.timer_enabled, opts.grace_time_ms, opts.reserve_time_ms),
+            (True, 30000, 30000),
+        )
 
 
 class FixtureConfigTests(TestCase):
@@ -383,35 +481,71 @@ class FixtureConfigTests(TestCase):
             User.objects.create_user(username=f"fixture_u{i}", password="x")
 
     def test_default_config_writes_untimed_options_even_without_draft(self):
-        t = TestTournamentConfig(key="k1", name="K1", description="d", draft_state="not_started").create()
+        t = TestTournamentConfig(
+            key="k1", name="K1", description="d", draft_state="not_started"
+        ).create()
         # checked before any get_draft_options() call, which would lazily create the row itself
-        self.assertTrue(DraftOptions.objects.filter(tournament=t, timer_enabled=False).exists())
+        self.assertTrue(
+            DraftOptions.objects.filter(tournament=t, timer_enabled=False).exists()
+        )
         self.assertEqual(DraftOptions.objects.filter(tournament=t).count(), 1)
 
     def test_config_writes_timer_enabled_explicitly_not_via_field_default(self):
         field = DraftOptions._meta.get_field("timer_enabled")
-        with patch.object(field, "get_default", return_value=True):  # PR 3 flips the default; fixtures must not follow it
-            t = TestTournamentConfig(key="k1b", name="K1b", description="d", draft_state="not_started").create()
-        self.assertTrue(DraftOptions.objects.filter(tournament=t, timer_enabled=False).exists())
+        with patch.object(
+            field, "get_default", return_value=True
+        ):  # PR 3 flips the default; fixtures must not follow it
+            t = TestTournamentConfig(
+                key="k1b", name="K1b", description="d", draft_state="not_started"
+            ).create()
+        self.assertTrue(
+            DraftOptions.objects.filter(tournament=t, timer_enabled=False).exists()
+        )
 
     def test_in_progress_untimed_is_drafting_unarmed(self):
-        t = TestTournamentConfig(key="k2", name="K2", description="d", draft_state="in_progress", picks_completed=2).create()
+        t = TestTournamentConfig(
+            key="k2",
+            name="K2",
+            description="d",
+            draft_state="in_progress",
+            picks_completed=2,
+        ).create()
         self.assertEqual(t.draft.state, "drafting")
         self.assertIsNone(t.draft.active_round.started_at)
 
     def test_in_progress_timed_arms_active_round(self):
-        t = TestTournamentConfig(key="k3", name="K3", description="d", draft_state="in_progress", timer_enabled=True).create()
+        t = TestTournamentConfig(
+            key="k3",
+            name="K3",
+            description="d",
+            draft_state="in_progress",
+            timer_enabled=True,
+        ).create()
         self.assertEqual(t.draft.state, "drafting")
         self.assertTrue(t.draft.clock_armed)
 
     def test_pending_requires_timer(self):
-        t = TestTournamentConfig(key="k4", name="K4", description="d", draft_state="pending", timer_enabled=True).create()
+        t = TestTournamentConfig(
+            key="k4",
+            name="K4",
+            description="d",
+            draft_state="pending",
+            timer_enabled=True,
+        ).create()
         self.assertEqual(t.draft.state, "pending")
         with self.assertRaises(ValueError):
-            TestTournamentConfig(key="k5", name="K5", description="d", draft_state="pending")
+            TestTournamentConfig(
+                key="k5", name="K5", description="d", draft_state="pending"
+            )
 
     def test_completed_is_completed(self):
-        t = TestTournamentConfig(key="k6", name="K6", description="d", draft_state="completed", picks_completed=16).create()
+        t = TestTournamentConfig(
+            key="k6",
+            name="K6",
+            description="d",
+            draft_state="completed",
+            picks_completed=16,
+        ).create()
         self.assertEqual(t.draft.state, "completed")
 
     def test_timer_configs_build_pending_lobbies_with_per_spec_clocks(self):
@@ -429,7 +563,11 @@ class FixtureConfigTests(TestCase):
                 t = config.create()
                 opts = t.get_draft_options(fresh=True)
                 self.assertTrue(opts.timer_enabled, config.key)
-                self.assertEqual((opts.grace_time_ms, opts.reserve_time_ms), clocks[config.key], config.key)
+                self.assertEqual(
+                    (opts.grace_time_ms, opts.reserve_time_ms),
+                    clocks[config.key],
+                    config.key,
+                )
                 self.assertEqual(t.draft.state, "pending", config.key)
                 self.assertEqual(t.teams.count(), 4, config.key)
                 first_team = t.teams.order_by("draft_order").first()
@@ -441,7 +579,9 @@ class FixtureConfigTests(TestCase):
                         f"{config.key}: {team.name} should start captain-only",
                     )
 
-    def test_shuffle_timer_skip_reselects_when_the_test_users_team_is_first(self) -> None:
+    def test_shuffle_timer_skip_reselects_when_the_test_users_team_is_first(
+        self,
+    ) -> None:
         config = next(c for c in TEST_TOURNAMENTS if c.key == "shuffle_timer_skip")
         with override_settings(DEBUG=True):
             t = config.create()
@@ -453,7 +593,11 @@ class FixtureConfigTests(TestCase):
             skip_turn(t.draft, first)
         first.refresh_from_db()
         self.assertNotEqual(first.captain_id, test_captain_id)
-        self.assertTrue(DraftEvent.objects.filter(draft=t.draft, event_type="pick_skipped").exists())
+        self.assertTrue(
+            DraftEvent.objects.filter(draft=t.draft, event_type="pick_skipped").exists()
+        )
         self.assertFalse(
-            DraftEvent.objects.filter(draft=t.draft, event_type="pick_skip_unavailable").exists()
+            DraftEvent.objects.filter(
+                draft=t.draft, event_type="pick_skip_unavailable"
+            ).exists()
         )
