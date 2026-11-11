@@ -22,6 +22,12 @@ export interface DraftPauseOverlayProps {
 export type LiveDraftPauseOverlayProps = Omit<DraftPauseOverlayProps, 'resumingRemainingMs'>;
 
 export function LiveDraftPauseOverlay(props: LiveDraftPauseOverlayProps) {
+  // Only the resuming countdown needs the per-frame clock.
+  if (props.draftStatus === 'resuming') return <LiveResumingOverlay {...props} />;
+  return <DraftPauseOverlay {...props} resumingRemainingMs={0} />;
+}
+
+function LiveResumingOverlay(props: LiveDraftPauseOverlayProps) {
   const countdown = useLiveTeamDraftCountdown();
   const resumingRemainingMs = countdown.kind === 'armed' ? countdown.resumingRemainingMs : 0;
   return <DraftPauseOverlay {...props} resumingRemainingMs={resumingRemainingMs} />;

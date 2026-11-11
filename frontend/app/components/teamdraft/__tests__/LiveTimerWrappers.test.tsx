@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { act, render, screen } from '@testing-library/react';
+import { Profiler } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useDraftWebSocketStore } from '~/store/draftWebSocketStore';
 import { LiveDraftClockBar } from '../timer/DraftClockBar';
@@ -65,5 +66,34 @@ describe('live timer wrappers', () => {
     });
     render(<LiveDraftPauseOverlay {...overlayProps} draftStatus="resuming" />);
     expect(screen.getByTestId('draft-resuming-countdown')).toHaveTextContent('Resuming in 3');
+  });
+
+  it('LiveDraftPauseOverlay does not re-render on animation frames while drafting', () => {
+    useDraftWebSocketStore.setState({ draftState: draft() as never, tick: null });
+    const onRender = vi.fn();
+    render(
+      <Profiler id="overlay" onRender={onRender}>
+        <LiveDraftPauseOverlay {...overlayProps} draftStatus="drafting" />
+      </Profiler>,
+    );
+    const mounted = onRender.mock.calls.length;
+    act(() => {
+      vi.advanceTimersByTime(1_000);
+    });
+    expect(onRender.mock.calls.length).toBe(mounted);
+  });
+
+  it('LiveDraftPauseOverlay counts down once the draft turns to resuming', () => {
+    useDraftWebSocketStore.setState({ draftState: draft() as never, tick: null });
+    const { rerender } = render(<LiveDraftPauseOverlay {...overlayProps} draftStatus="drafting" />);
+    useDraftWebSocketStore.setState({
+      draftState: draft({ state: 'resuming', resuming_until: new Date(T0 + 2_400).toISOString() }) as never,
+    });
+    rerender(<LiveDraftPauseOverlay {...overlayProps} draftStatus="resuming" />);
+    expect(screen.getByTestId('draft-resuming-countdown')).toHaveTextContent('Resuming in 3');
+    act(() => {
+      vi.advanceTimersByTime(1_500);
+    });
+    expect(screen.getByTestId('draft-resuming-countdown')).toHaveTextContent('Resuming in 1');
   });
 });
