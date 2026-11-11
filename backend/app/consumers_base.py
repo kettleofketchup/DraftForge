@@ -202,18 +202,20 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
 
     # --- Heartbeat ---
 
+    def _write_heartbeat(self) -> None:
+        self._redis().set(
+            self._heartbeat_key(self.draft_id, self.user.id),
+            str(time.time()),
+            ex=HEARTBEAT_TTL,
+        )
+
     async def handle_heartbeat(self) -> None:
         """Process a heartbeat message from a captain. Updates Redis TTL."""
         with tracer.start_as_current_span(
             "ws.heartbeat",
             attributes=self._base_span_attrs(),
         ) as span:
-            r = self._redis()
-            r.set(
-                self._heartbeat_key(self.draft_id, self.user.id),
-                str(time.time()),
-                ex=HEARTBEAT_TTL,
-            )
+            await sync_to_async(self._write_heartbeat, thread_sensitive=False)()
             span.set_attribute("ws.heartbeat_ttl_s", HEARTBEAT_TTL)
             log.debug(
                 "heartbeat_received",

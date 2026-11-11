@@ -6,6 +6,7 @@ import json
 import time
 from typing import TYPE_CHECKING, Any
 
+from asgiref.sync import sync_to_async
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
 from django.db import transaction
@@ -169,8 +170,9 @@ class DraftConsumer(BaseDraftConsumer):
         if not self._is_captain:
             await super().handle_heartbeat()
             return
-        r = self._redis()
-        was_fresh = captain_is_fresh(r, self.draft_id, self.user.id, time.time())
+        was_fresh = await sync_to_async(
+            self._captain_is_fresh, thread_sensitive=False
+        )()
         await super().handle_heartbeat()
         if not was_fresh:
             await self.channel_layer.group_send(
@@ -181,11 +183,20 @@ class DraftConsumer(BaseDraftConsumer):
                     "fresh": True,
                 },
             )
+        if not await sync_to_async(self._extend_captain_conn, thread_sensitive=False)():
+            return
+        await self._restore_presence(self.draft_id, self.user)
+
+    def _captain_is_fresh(self) -> bool:
+        return captain_is_fresh(self._redis(), self.draft_id, self.user.id, time.time())
+
+    def _extend_captain_conn(self) -> bool:
+        r = self._redis()
         key = captain_conn_key(self.draft_id, self.user.id)
         if not r.exists(key):
-            return
+            return False
         r.expire(key, CAPTAIN_CHANNEL_TTL)
-        await self._restore_presence(self.draft_id, self.user)
+        return True
 
     async def draft_tick(self, event: dict[str, Any]) -> None:
         await self.send(
@@ -208,17 +219,22 @@ class DraftConsumer(BaseDraftConsumer):
             )
         )
 
-    async def send_initial_messages(self, initial_state: dict | None) -> None:
+    def _captain_fresh_map(self, initial_state: dict | None) -> dict[str, bool]:
         r = self._redis()
         now_ts = time.time()
         teams = ((initial_state or {}).get("tournament") or {}).get("teams") or []
-        captain_fresh = {
+        return {
             str(team["captain"]): captain_is_fresh(
                 r, self.draft_id, team["captain"], now_ts
             )
             for team in teams
             if team.get("captain") is not None
         }
+
+    async def send_initial_messages(self, initial_state: dict | None) -> None:
+        captain_fresh = await sync_to_async(
+            self._captain_fresh_map, thread_sensitive=False
+        )(initial_state)
         await self.send(
             text_data=json.dumps(
                 {

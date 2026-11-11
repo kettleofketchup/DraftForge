@@ -329,3 +329,84 @@ class RefreshInFlightAtDisconnectTests(TransactionTestCase):
             asyncio.run(scenario())
         self.assertEqual(get_connection_count("teamdraft", self.draft.pk), 0)
         start.assert_not_called()
+
+
+class RedisOffEventLoopTests(TransactionTestCase):
+    """Initial frames and heartbeats must not run blocking Redis on the loop."""
+
+    def setUp(self) -> None:
+        self.captain = User.objects.create_user(username="rol_captain", password="x")
+        self.tournament = Tournament.objects.create(
+            name="ROL", date_played=date.today()
+        )
+        Team.objects.create(
+            tournament=self.tournament,
+            name="T1",
+            captain=self.captain,
+            draft_order=1,
+        )
+        self.draft = Draft.objects.create(
+            tournament=self.tournament, draft_style="snake"
+        )
+        self.threads: list[tuple[str, int]] = []
+
+    def _recording_redis(self) -> SimpleNamespace:
+        real = get_redis_client()
+
+        def record(name: str):
+            def call(*args, **kwargs):
+                self.threads.append((name, threading.get_ident()))
+                return getattr(real, name)(*args, **kwargs)
+
+            return call
+
+        return SimpleNamespace(
+            **{n: record(n) for n in ("get", "set", "exists", "expire")}
+        )
+
+    def _consumer(self, is_captain: bool) -> DraftConsumer:
+        consumer = DraftConsumer()
+        consumer.draft_id = self.draft.pk
+        consumer.user = self.captain
+        consumer.channel_name = "test.redis-off-loop"
+        consumer.room_group_name = f"draft_{self.draft.pk}"
+        consumer.channel_layer = SimpleNamespace(group_send=AsyncMock())
+        consumer._is_captain = is_captain
+        consumer.send = AsyncMock()
+        consumer._redis = self._recording_redis
+        return consumer
+
+    def _assert_all_off_loop(self, loop_thread: int, expected: set[str]) -> None:
+        self.assertTrue(expected <= {n for n, _ in self.threads}, self.threads)
+        self.assertNotIn(loop_thread, {t for _, t in self.threads})
+
+    def test_send_initial_messages_reads_redis_off_the_loop_before_sending(
+        self,
+    ) -> None:
+        consumer = self._consumer(is_captain=False)
+        state = {"tournament": {"teams": [{"captain": self.captain.pk}]}}
+        order: list[str] = []
+
+        async def scenario() -> int:
+            async def send(**kwargs) -> None:
+                order.append(kwargs["text_data"][:30])
+
+            consumer.send = send
+            await consumer.send_initial_messages(state)
+            return threading.get_ident()
+
+        loop_thread = asyncio.run(scenario())
+        self._assert_all_off_loop(loop_thread, {"get"})
+        self.assertIn("initial_state", order[0])
+        self.assertIn("initial_events", order[1])
+
+    def test_captain_heartbeat_touches_redis_off_the_loop(self) -> None:
+        consumer = self._consumer(is_captain=True)
+
+        async def scenario() -> int:
+            with patch.object(DraftConsumer, "_restore_presence", new=AsyncMock()):
+                await consumer.handle_heartbeat()
+            return threading.get_ident()
+
+        loop_thread = asyncio.run(scenario())
+        self._assert_all_off_loop(loop_thread, {"get", "set", "exists"})
