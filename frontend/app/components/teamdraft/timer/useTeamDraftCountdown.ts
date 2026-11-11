@@ -100,6 +100,14 @@ function compute(src: Source, nowMs: number): TeamDraftCountdown {
   };
 }
 
+function tickMatchesRound(tick: DraftTick, draft: CountdownDraftSlice): boolean {
+  if (tick.active_round_pk !== draft.latest_round) return false;
+  const startedAt = draft.draft_rounds?.find((r) => r.pk === draft.latest_round)?.started_at;
+  if (startedAt == null || tick.round_started_at == null) return true;
+  // Resume and a shuffle skip re-anchor the same round; an older tick must not win.
+  return Date.parse(startedAt) === Date.parse(tick.round_started_at);
+}
+
 export function _deriveTeamCountdown(
   tick: DraftTick | null,
   draft: CountdownDraftSlice | null,
@@ -107,7 +115,7 @@ export function _deriveTeamCountdown(
   nowMs: number,
 ): TeamDraftCountdown {
   void serverClockOffsetMs;
-  const matching = tick && (!draft || tick.active_round_pk === draft.latest_round) ? tick : null;
+  const matching = tick && (!draft || tickMatchesRound(tick, draft)) ? tick : null;
 
   if (draft?.state === 'paused') {
     const pausedAt = draft.paused_at ? Date.parse(draft.paused_at) : NaN;
