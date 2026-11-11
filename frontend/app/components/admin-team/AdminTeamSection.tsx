@@ -39,7 +39,7 @@ import { organizationQueryKey } from '~/components/organization/hooks/useOrganiz
 import { useOrgStore } from '~/store/orgStore';
 import { AddUserModal } from '~/components/user/AddUserModal';
 import { Button } from '~/components/ui/button';
-import { CancelButton, ConfirmButton } from '~/components/ui/buttons';
+import { ConfirmDialog } from '~/components/ui/dialogs';
 
 interface AdminTeamSectionProps {
   organization?: OrganizationType | null;
@@ -313,9 +313,10 @@ export function AdminTeamSection({
     setShowTransferConfirm(true);
   };
 
-  const confirmTransfer = () => {
+  const confirmTransfer = async () => {
     if (transferTarget?.pk) {
-      transferOwnershipMutation.mutate(transferTarget.pk);
+      // onError already toasts; swallow so ConfirmDialog can close cleanly.
+      await transferOwnershipMutation.mutateAsync(transferTarget.pk).catch(() => undefined);
     }
   };
 
@@ -460,45 +461,29 @@ export function AdminTeamSection({
         </div>
       )}
 
-      {/* Transfer Confirmation Modal */}
-      {showTransferConfirm && transferTarget && (
-        <div className="modal modal-open">
-          <div className="modal-box">
-            <h3 className="font-bold text-lg">Transfer Ownership</h3>
-            <p className="py-4">
-              Are you sure you want to transfer ownership to{' '}
-              <strong>
-                {transferTarget.guildNickname ||
-                  transferTarget.discordNickname ||
-                  transferTarget.username}
-              </strong>
-              ?
-            </p>
-            <p className="text-sm text-gray-500">
-              You will become an admin after the transfer.
-            </p>
-            <div className="modal-action">
-              <CancelButton
-                type="button"
-                onClick={() => {
-                  setShowTransferConfirm(false);
-                  setTransferTarget(null);
-                }}
-              >
-                Cancel
-              </CancelButton>
-              <ConfirmButton
-                type="button"
-                variant="warning"
-                onClick={confirmTransfer}
-                loading={transferOwnershipMutation.isPending}
-              >
-                Transfer
-              </ConfirmButton>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDialog
+        open={showTransferConfirm && !!transferTarget}
+        onOpenChange={(open) => {
+          setShowTransferConfirm(open);
+          if (!open) setTransferTarget(null);
+        }}
+        title="Transfer Ownership"
+        description={
+          <>
+            Are you sure you want to transfer ownership to{' '}
+            <strong>
+              {transferTarget?.guildNickname ||
+                transferTarget?.discordNickname ||
+                transferTarget?.username}
+            </strong>
+            ? You will become an admin after the transfer.
+          </>
+        }
+        confirmLabel="Transfer"
+        variant="warning"
+        isLoading={transferOwnershipMutation.isPending}
+        onConfirm={confirmTransfer}
+      />
 
       {/* Add Admin Modal */}
       {canManageAdmins && (
