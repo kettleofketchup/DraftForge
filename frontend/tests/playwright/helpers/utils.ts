@@ -104,7 +104,6 @@ export async function navigateToRoute(page: Page, route: string): Promise<void> 
   const visibleLinkSelectors = [
     `nav a[href="${route}"]`,
     `header a[href="${route}"]`,
-    `.navbar a[href="${route}"]`,
     `a[href="${route}"]`,
   ];
 
