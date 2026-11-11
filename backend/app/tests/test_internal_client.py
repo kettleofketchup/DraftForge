@@ -141,3 +141,43 @@ class InternalClientConvenienceTest(TestCase):
             "/events/1/transition/",
             {"state": "signups_open"},
         )
+
+
+class InternalClientAuthRoundTripTest(TestCase):
+    """The client's request, served by the real internal view and auth class."""
+
+    def _serve(
+        self,
+        url: str,
+        params: dict | None = None,
+        headers: dict | None = None,
+        timeout: int | None = None,
+    ) -> MagicMock:
+        from app.internal_client import INTERNAL_API_URL
+
+        path = "/api/internal" + url.removeprefix(INTERNAL_API_URL)
+        resp = self.client.get(path, data=params or {}, headers=headers)
+        return MagicMock(
+            ok=resp.status_code < 400,
+            status_code=resp.status_code,
+            text=resp.content.decode(),
+        )
+
+    def _status_with(self, client_token: str, server_token: str) -> int:
+        from app.internal_client import _get
+
+        with (
+            patch.dict(os.environ, {"INTERNAL_SERVICE_TOKEN": client_token}),
+            override_settings(INTERNAL_SERVICE_TOKEN=server_token),
+            patch("app.internal_client.requests.get", side_effect=self._serve),
+        ):
+            return _get("/steam/tracked-leagues/").status_code
+
+    def test_matching_token_is_accepted(self) -> None:
+        self.assertEqual(self._status_with("shared-token", "shared-token"), 200)
+
+    def test_unset_token_on_both_sides_is_rejected(self) -> None:
+        self.assertEqual(self._status_with("", ""), 403)
+
+    def test_mismatched_token_is_rejected(self) -> None:
+        self.assertEqual(self._status_with("worker-token", "backend-token"), 403)
