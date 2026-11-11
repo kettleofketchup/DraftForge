@@ -121,9 +121,6 @@ if _log_level != "DEBUG":
 if "NODE_ENV" in os.environ:
     NODE_ENV = os.environ.get("NODE_ENV")
 
-# MODEL_APPS = ["app", "events", "discordbot", "steam", "org", "league"] —
-# shared with config.settings_celery so a new model-bearing app can't
-# be added to one process and silently forgotten in the other.
 INSTALLED_APPS = [
     "daphne",
     "channels",
