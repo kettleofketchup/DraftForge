@@ -230,6 +230,7 @@ jobs:
               org.tests \
               tests.test_populate_utils \
               discordbot.tests.test_components \
+              discordbot.tests.test_discord_http_timeouts \
               discordbot.tests.test_custom_ids \
               discordbot.tests.test_interaction_router \
               discordbot.tests.test_log_context \
@@ -252,6 +253,7 @@ jobs:
               app.tests.test_teamdraft_timeout \
               app.tests.test_draft_events \
               tests.test_populate \
+              tests.test_populate_offline \
               discordbot.tests.test_signup_logging \
               events.tests.test_modal_config_contract \
               events.tests.test_discord \
