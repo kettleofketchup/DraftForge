@@ -45,21 +45,29 @@ export function lobbyStateToneName(state: string): Tone {
   return TONES[state] ?? 'pending';
 }
 
+// One colour per tone, from the theme's status colours: amber while the
+// lobby waits for players, green while the match is on, red when staff need
+// to act.
 const BADGE_CLASSES: Record<Tone, string> = {
   pending: 'bg-muted text-muted-foreground',
-  open: 'bg-blue-500/20 text-blue-400',
-  live: 'bg-red-500/20 text-red-400',
+  open: 'bg-warning/20 text-warning',
+  live: 'bg-success/20 text-success',
   problem: 'bg-destructive/20 text-destructive',
   done: 'bg-muted text-muted-foreground',
 };
 
+// The bracket node dot. The foreground ring keeps it readable on every node
+// header, including the red-tinted losers bracket; the live dot also pulses.
 const DOT_CLASSES: Record<Tone, string> = {
   pending: 'bg-muted-foreground',
-  open: 'bg-blue-500',
-  live: 'bg-red-500',
+  open: 'bg-warning',
+  live: 'bg-success motion-safe:animate-pulse',
   problem: 'bg-destructive',
   done: 'bg-muted-foreground/50',
 };
+
+export const LOBBY_DOT_BASE =
+  'inline-block size-2.5 shrink-0 rounded-full ring-1 ring-foreground/80';
 
 export function lobbyStateTone(state: string): string {
   return BADGE_CLASSES[lobbyStateToneName(state)];
