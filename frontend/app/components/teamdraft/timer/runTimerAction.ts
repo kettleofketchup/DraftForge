@@ -4,11 +4,26 @@ import { describeTimerActionError } from '../pickErrors';
 
 const log = getLogger('runTimerAction');
 
-export async function runTimerAction(action: () => Promise<unknown>, fallback: string): Promise<void> {
+export interface TimerActionProgress {
+  loading: string;
+  success: string;
+}
+
+/** Runs a timer action, toasts its failure once, and never rejects. */
+export async function runTimerAction<T>(
+  action: () => Promise<T>,
+  fallback: string,
+  progress?: TimerActionProgress,
+): Promise<T | undefined> {
+  const promise = (async () => action())();
+  if (progress) {
+    toast.promise(promise, { ...progress, error: (err: unknown) => describeTimerActionError(err, fallback) });
+  }
   try {
-    await action();
+    return await promise;
   } catch (err) {
     log.error(fallback, err);
-    toast.error(describeTimerActionError(err, fallback));
+    if (!progress) toast.error(describeTimerActionError(err, fallback));
+    return undefined;
   }
 }

@@ -36,26 +36,3 @@ describe('DraftPauseOverlay', () => {
   it('spectators get no Resume button', () => { render(<DraftPauseOverlay {...base} canResume={false} />); expect(screen.queryByTestId('draft-resume-button')).toBeNull(); });
   it('resuming shows the countdown', () => { render(<DraftPauseOverlay {...base} draftStatus="resuming" resumingRemainingMs={2_400} />); expect(screen.getByTestId('draft-resuming-countdown')).toHaveTextContent('Resuming in 3'); });
 });
-
-describe('DraftPauseOverlay rejected resume', () => {
-  it('swallows a rejected onResume instead of leaving it unhandled', async () => {
-    const onResume = vi.fn().mockRejectedValue(new Error('boom'));
-    render(
-      <DraftPauseOverlay
-        draftStatus="paused"
-        isManualPause
-        resumingRemainingMs={0}
-        activeCaptain={null}
-        isActiveCaptainDisconnected={false}
-        canResume
-        isStaff={false}
-        onResume={onResume}
-        onPickForCaptain={vi.fn()}
-      />,
-    );
-    fireEvent.click(screen.getByTestId('draft-resume-button'));
-    await Promise.resolve();
-    await Promise.resolve();
-    expect(onResume).toHaveBeenCalledTimes(1);
-  });
-});

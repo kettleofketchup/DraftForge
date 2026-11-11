@@ -1,13 +1,12 @@
 import { useMemo } from 'react';
-import { toast } from 'sonner';
 import { pauseTeamDraft, resumeTeamDraft, startTeamDraft } from '~/components/api/draftAPI';
 import type { UserType } from '~/index';
 import { draftWsSelectors, useDraftWebSocketStore } from '~/store/draftWebSocketStore';
 import { useUserStore } from '~/store/userStore';
 import { isCaptainOf } from '../isCaptainOf';
-import { describeTimerActionError } from '../pickErrors';
 import type { ClockTeam, LiveDraftClockBarProps } from './DraftClockBar';
 import type { LiveDraftPauseOverlayProps } from './DraftPauseOverlay';
+import { runTimerAction } from './runTimerAction';
 
 export interface TeamDraftTimerProps {
   showLobby: boolean;
@@ -20,12 +19,6 @@ interface StateTeam {
   name?: string | null;
   draft_order?: number | null;
   captain?: UserType | null;
-}
-
-function runWithToast(action: () => Promise<unknown>, loading: string, success: string, fallback: string): Promise<unknown> {
-  const promise = action();
-  toast.promise(promise, { loading, success, error: (err: unknown) => describeTimerActionError(err, fallback) });
-  return promise.catch(() => undefined);
 }
 
 export function useTeamDraftTimerProps(currentUserPk: number | undefined, isStaff: boolean): TeamDraftTimerProps {
@@ -58,8 +51,9 @@ export function useTeamDraftTimerProps(currentUserPk: number | undefined, isStaf
       }));
     const isManualPause = ds?.is_manual_pause === true;
 
-    const act = (fn: (pk: number) => Promise<unknown>, loading: string, success: string, fallback: string) => () =>
-      draftPk == null ? Promise.resolve() : runWithToast(() => fn(draftPk), loading, success, fallback);
+    const act = (fn: (pk: number) => Promise<unknown>, loading: string, success: string, fallback: string) => async () => {
+      if (draftPk != null) await runTimerAction(() => fn(draftPk), fallback, { loading, success });
+    };
 
     return {
       showLobby: (draftStatus ?? userStoreDraftState) === 'pending',

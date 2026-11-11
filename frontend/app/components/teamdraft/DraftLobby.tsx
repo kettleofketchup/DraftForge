@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { toast } from 'sonner';
 import { setDraftReady, startTeamDraft } from '~/components/api/draftAPI';
 import type { TeamType } from '~/components/team/types';
 import { PrimaryButton } from '~/components/ui/buttons';
@@ -8,12 +7,9 @@ import { DisplayName } from '~/components/user/avatar';
 import { UserAvatar } from '~/components/user/UserAvatar';
 import type { TournamentType } from '~/index';
 import { hydrateTournament } from '~/lib/hydrateTournament';
-import { getLogger } from '~/lib/logger';
 import { cn } from '~/lib/utils';
 import { useUserStore } from '~/store/userStore';
-import { describeTimerActionError } from './pickErrors';
-
-const log = getLogger('DraftLobby');
+import { runTimerAction } from './timer/runTimerAction';
 
 export interface DraftLobbyProps {
   draftPk: number;
@@ -55,11 +51,10 @@ export function DraftLobby({
   const run = async (action: () => Promise<unknown>, fallback: string) => {
     setBusy(true);
     try {
-      const res = await action();
-      if (res && typeof res === 'object' && Object.keys(res).length > 0) applyResponse(res);
-    } catch (err) {
-      log.error(fallback, err);
-      toast.error(describeTimerActionError(err, fallback));
+      await runTimerAction(async () => {
+        const res = await action();
+        if (res && typeof res === 'object' && Object.keys(res).length > 0) applyResponse(res);
+      }, fallback);
     } finally {
       setBusy(false);
     }

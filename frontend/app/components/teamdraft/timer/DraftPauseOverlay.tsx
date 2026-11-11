@@ -4,7 +4,6 @@ import { PrimaryButton, SecondaryButton } from '~/components/ui/buttons';
 import { DisplayName } from '~/components/user/avatar';
 import type { UserType } from '~/index';
 import type { TeamDraftState } from '../schemas';
-import { runTimerAction } from './runTimerAction';
 import { useLiveTeamDraftCountdown } from './useTeamDraftCountdown';
 
 export interface DraftPauseOverlayProps {
@@ -15,7 +14,8 @@ export interface DraftPauseOverlayProps {
   isActiveCaptainDisconnected: boolean;
   canResume: boolean;
   isStaff: boolean;
-  onResume: () => Promise<unknown>;
+  /** Never rejects: failures are toasted by runTimerAction. */
+  onResume: () => Promise<void>;
   onPickForCaptain: () => void;
 }
 
@@ -71,7 +71,7 @@ export function DraftPauseOverlay({
   const resumeButton = canResume && (
     <PrimaryButton
       color="green"
-      onClick={() => void runTimerAction(onResume, 'Failed to resume the draft')}
+      onClick={() => void onResume()}
       disabled={isActiveCaptainDisconnected}
       data-testid="draft-resume-button"
     >
