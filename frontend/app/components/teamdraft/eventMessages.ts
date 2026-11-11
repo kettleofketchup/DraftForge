@@ -28,9 +28,9 @@ export function getEventMessage(event: DraftEvent): string {
     }
     case 'tie_roll': {
       const p = event.payload as TieRollPayload;
-      const lastRound = p.roll_rounds[p.roll_rounds.length - 1];
+      const lastRound = p.roll_rounds?.[p.roll_rounds.length - 1] ?? [];
       const rolls = lastRound.map((r) => r.roll).join(' vs ');
-      return `Tie resolved! ${p.winner_name} wins (${rolls})`;
+      return rolls ? `Tie resolved! ${p.winner_name} wins (${rolls})` : `Tie resolved! ${p.winner_name} wins`;
     }
     case 'captain_assigned': {
       const p = event.payload as { captain_name: string };

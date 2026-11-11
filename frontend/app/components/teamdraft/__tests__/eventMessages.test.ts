@@ -26,6 +26,16 @@ describe('pick_skipped copy', () => {
   });
 });
 
+describe('tie_roll copy', () => {
+  it.each([[undefined], [[]], [[[]]]])('does not throw when roll_rounds is %j', (roll_rounds) => {
+    const msg = getEventMessage(ev('tie_roll', { winner_name: 'T1', roll_rounds }));
+    expect(msg).toBe('Tie resolved! T1 wins');
+  });
+  it('names the final rolls', () => {
+    expect(getEventMessage(ev('tie_roll', { winner_name: 'T1', roll_rounds: [[{ team_id: 1, roll: 2 }, { team_id: 2, roll: 2 }], [{ team_id: 1, roll: 6 }, { team_id: 2, roll: 3 }]] }))).toBe('Tie resolved! T1 wins (6 vs 3)');
+  });
+});
+
 describe('draft_options_changed copy', () => {
   const opts = { grace_time_ms: 20000, reserve_time_ms: 10000, changed_by_id: 1, changed_by_name: 'Staff', from_state: 'drafting', to_state: 'drafting', pick_number: 3 };
   it('names the new clock when the timer turns on', () => {
