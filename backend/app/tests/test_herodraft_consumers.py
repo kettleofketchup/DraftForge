@@ -142,6 +142,7 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
 
         # Receive initial state
         await communicator.receive_json_from()
+        await self._await_captain_connected(communicator)
 
         # Check captain is marked connected
         @database_sync_to_async
@@ -231,6 +232,7 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         captain_communicator.scope["user"] = self.captain1
         await captain_communicator.connect()
         await captain_communicator.receive_json_from()
+        await self._await_captain_connected(captain_communicator)
 
         # Connect spectator
         spectator_communicator = WebsocketCommunicator(
@@ -374,6 +376,7 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         connected, _ = await captain1_communicator.connect()
         self.assertTrue(connected)
         await captain1_communicator.receive_json_from()  # initial state
+        await self._await_captain_connected(captain1_communicator)
 
         # Connect captain2
         captain2_communicator = WebsocketCommunicator(
@@ -384,6 +387,7 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         connected, _ = await captain2_communicator.connect()
         self.assertTrue(connected)
         await captain2_communicator.receive_json_from()  # initial state
+        await self._await_captain_connected(captain2_communicator)
 
         # Disconnect captain1 - this should trigger pause
         await captain1_communicator.disconnect()
@@ -436,9 +440,8 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         captain1_reconnect.scope["user"] = self.captain1
         connected, _ = await captain1_reconnect.connect()
         self.assertTrue(connected)
-        # Receive initial state message - this ensures the consumer's
-        # websocket_connect handler has completed (including DB writes)
         await captain1_reconnect.receive_json_from()
+        await self._await_captain_connected(captain1_reconnect)
 
         # Verify captain1 is connected but state is still PAUSED
         @database_sync_to_async
@@ -730,6 +733,7 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         first_comm.scope["user"] = self.captain1
         await first_comm.connect()
         await first_comm.receive_json_from()
+        await self._await_captain_connected(first_comm)
 
         # Second connection for captain1 (should kick first)
         second_comm = WebsocketCommunicator(
@@ -739,6 +743,7 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         second_comm.scope["user"] = self.captain1
         await second_comm.connect()
         await second_comm.receive_json_from()
+        await self._await_captain_connected(second_comm)
 
         # Draft should still be DRAFTING (kicked connection should not trigger pause)
         @database_sync_to_async
@@ -764,6 +769,13 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         )
 
         await second_comm.disconnect()
+
+    async def _await_captain_connected(self, comm: WebsocketCommunicator) -> None:
+        """The captain's presence write has committed once this broadcast arrives."""
+        while True:
+            frame = await self._next_json_of_type(comm, "herodraft_event")
+            if frame.get("event_type") == "captain_connected":
+                return
 
     async def _next_json_of_type(self, comm, wanted: str, timeout: float = 5) -> dict:
         loop = asyncio.get_running_loop()
