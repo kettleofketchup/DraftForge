@@ -187,7 +187,7 @@ const DiscordUserDropdown: React.FC<Props> = ({
           {/* {!isUserAlreadyAdded(user) && (
             <Button
               size="sm"
-              className="justify-end btn bg-green-500 text-white hover:bg-green-600 disabled:bg-gray-300 disabled:text-gray-500"
+              className="justify-end bg-green-500 text-white hover:bg-green-600 disabled:bg-gray-300 disabled:text-gray-500"
             >
               <PlusCircleIcon color="green" />
               <p className="text-sm"> Quick Add</p>

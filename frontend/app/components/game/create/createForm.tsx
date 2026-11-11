@@ -12,6 +12,7 @@ import { Label } from '~/components/ui/label';
 import type { GameType, TeamType, UserType } from '~/index';
 import { TeamComboBox } from '../helpers/teamCombobox';
 import { createGameHook } from '../hooks/createGameHook';
+import { PrimaryButton } from '~/components/ui/buttons';
 
 export const GameCreateForm: React.FC = () => {
   const currentUser: UserType = useUserStore((state) => state.currentUser); // Zustand setter
@@ -98,13 +99,14 @@ export const GameCreateForm: React.FC = () => {
       {teamPicker()}
       <div className="flex flex-row items-start gap-4">
         <DialogClose asChild>
-          <button
+          <PrimaryButton
+            size="sm"
             onClick={handleSave}
-            className="btn btn-primary btn-sm mt-3"
+            className="mt-3"
             disabled={isSaving}
           >
-            <div>Create Game</div>
-          </button>
+            Create Game
+          </PrimaryButton>
         </DialogClose>
       </div>
     </>

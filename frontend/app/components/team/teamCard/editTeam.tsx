@@ -7,6 +7,7 @@ import { useUserStore } from '~/store/userStore';
 import { toast } from 'sonner';
 import { DialogClose } from '~/components/ui/dialog';
 import { getLogger } from '~/lib/logger';
+import { PrimaryButton } from '~/components/ui/buttons';
 
 const log = getLogger('editForm');
 interface Props {
@@ -121,14 +122,15 @@ export const TeamEditForm: React.FC<Props> = ({ user, form, setForm }) => {
       {inputView('guildNickname', 'Discord Guild Nickname: ')}
       <div className="flex flex-row items-start gap-4">
         <DialogClose asChild>
-          <button
+          <PrimaryButton
+            size="sm"
             onClick={handleSave}
-            className="btn btn-primary btn-sm mt-3"
+            className="mt-3"
             disabled={isSaving}
           >
             {user && user.pk && (isSaving ? 'Saving...' : 'Save Changes')}
             {user && !user.pk && (isSaving ? 'Saving...' : 'Create User')}
-          </button>
+          </PrimaryButton>
         </DialogClose>
       </div>
     </>

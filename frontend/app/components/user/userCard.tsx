@@ -1,6 +1,6 @@
 import React, { memo, useEffect } from 'react';
 import { Badge } from '~/components/ui/badge';
-import { DotabuffButton, ViewIconButton } from '~/components/ui/buttons';
+import { DotabuffButton, PrimaryButton, ViewIconButton } from '~/components/ui/buttons';
 import {
   CardAction,
   CardDescription,
@@ -31,6 +31,7 @@ import {
   type EditUserScope,
 } from './userCard/editUserSchema';
 import { LoginAsUserButton } from './userCard/LoginAsUserButton';
+import { UserPlus } from 'lucide-react';
 
 /** Returns true if the user has rated any role > 0. */
 function hasAnyPosition(p: PositionsType | undefined): boolean {
@@ -180,20 +181,15 @@ export const UserCard: React.FC<Props> = memo(
     const claimProfileButton = () => {
       if (!canClaimProfile) return null;
       return (
-        <button
-          className="btn btn-sm btn-primary gap-1"
+        <PrimaryButton
+          size="sm"
           onClick={handleViewProfile}
           title="Link your Steam account to this profile"
           data-testid={`claim-profile-btn-${user.pk}`}
         >
-          <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-            <circle cx="9" cy="7" r="4" />
-            <line x1="19" x2="19" y1="8" y2="14" />
-            <line x1="22" x2="16" y1="11" y2="11" />
-          </svg>
+          <UserPlus />
           <span>Claim</span>
-        </button>
+        </PrimaryButton>
       );
     };
     const getKeyName = () => {

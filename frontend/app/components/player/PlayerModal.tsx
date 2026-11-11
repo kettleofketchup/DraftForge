@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { claimUserProfile, fetchUser } from '~/components/api/api';
 import { Badge } from '~/components/ui/badge';
-import { DotabuffButton, ViewIconButton } from '~/components/ui/buttons';
+import { DotabuffButton, PrimaryButton, ViewIconButton } from '~/components/ui/buttons';
 import { InfoDialog } from '~/components/ui/dialogs';
 import { useSharedPopover } from '~/components/ui/shared-popover-context';
 import { LeagueStatsCard } from '~/components/user/LeagueStatsCard';
@@ -21,6 +21,7 @@ import { useOrgStore } from '~/store/orgStore';
 import { isUserEntry } from '~/store/userCacheTypes';
 import { useUserCacheStore } from '~/store/userCacheStore';
 import { useUserStore } from '~/store/userStore';
+import { UserPlus } from 'lucide-react';
 
 const log = getLogger('PlayerModal');
 
@@ -301,20 +302,16 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
 
           {/* Claim Profile button */}
           {canClaimProfile && (
-            <button
-              className="flex items-center justify-center btn btn-sm btn-primary flex-1 gap-1"
+            <PrimaryButton
+              size="sm"
+              className="flex-1"
               onClick={handleClaimProfile}
               disabled={isClaiming}
               data-testid={`claim-profile-modal-btn-${displayPlayer.pk}`}
             >
-              <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-                <circle cx="9" cy="7" r="4" />
-                <line x1="19" x2="19" y1="8" y2="14" />
-                <line x1="22" x2="16" y1="11" y2="11" />
-              </svg>
+              <UserPlus />
               {isClaiming ? 'Claiming...' : 'Claim Profile'}
-            </button>
+            </PrimaryButton>
           )}
         </div>
       </div>
