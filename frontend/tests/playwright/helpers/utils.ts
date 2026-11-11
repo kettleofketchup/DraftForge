@@ -77,7 +77,7 @@ export async function waitForLoadingToComplete(
   timeout = 10000
 ): Promise<void> {
   const loadingSelector =
-    '[data-testid="loading"], .loading, .spinner, [aria-busy="true"]';
+    '[data-testid="loading"], [data-slot="spinner"], .spinner, [aria-busy="true"]';
 
   // Check if any loading indicators exist
   const loadingCount = await page.locator(loadingSelector).count();

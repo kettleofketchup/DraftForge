@@ -14,6 +14,7 @@ import { Badge } from '~/components/ui/badge';
 import { MobileNavDropdown } from '~/components/ui/mobile-nav-dropdown';
 import { getLogger } from '~/lib/logger';
 import { ClaimCard } from './ClaimCard';
+import { Spinner } from '~/components/ui/spinner';
 
 const log = getLogger('ClaimsTab');
 
@@ -141,7 +142,7 @@ export const ClaimsTab: React.FC<Props> = ({ organizationId }) => {
         <TabsContent value={statusFilter} className="mt-4">
           {isLoading ? (
             <div className="flex items-center justify-center py-8" data-testid="claims-loading">
-              <span className="loading loading-spinner loading-lg"></span>
+              <Spinner className="size-8" />
             </div>
           ) : error ? (
             <div role="alert" className="alert alert-error" data-testid="claims-error">

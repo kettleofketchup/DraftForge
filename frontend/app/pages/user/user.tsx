@@ -4,6 +4,7 @@ import axios from '~/components/api/axios'; // Assuming axios is configured for 
 import type { UserClassType, UserType } from '~/components/user/types';
 import { UserCard } from '~/components/user/userCard';
 import { getLogger } from '~/lib/logger';
+import { Spinner } from '~/components/ui/spinner';
 
 const log = getLogger('userDetailPage');
 
@@ -37,7 +38,7 @@ export const UserDetailPage: React.FC = () => {
   if (loading) {
     return (
       <div className="flex justify-center items-center h-screen">
-        <span className="loading loading-spinner loading-lg"></span>
+        <Spinner className="size-8" />
       </div>
     );
   }

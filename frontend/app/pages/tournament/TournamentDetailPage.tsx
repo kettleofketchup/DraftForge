@@ -23,6 +23,7 @@ import { toast } from 'sonner';
 
 import { getLogger } from '~/lib/logger';
 import { tournamentEditContext } from './tournamentEditContext';
+import { Spinner } from '~/components/ui/spinner';
 const log = getLogger('TournamentDetailPage');
 
 export const TournamentDetailPage: React.FC = () => {
@@ -221,7 +222,7 @@ export const TournamentDetailPage: React.FC = () => {
   if (isLoading) {
     return (
       <div className="flex justify-center items-center h-screen">
-        <span className="loading loading-spinner loading-lg"></span>
+        <Spinner className="size-8" />
       </div>
     );
   }
