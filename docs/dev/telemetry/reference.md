@@ -75,9 +75,11 @@ container environment variables.
 | `VITE_SENTRY_ENABLED` | unset; `true` in `frontend/Dockerfile` | Only `true` initialises Sentry. Dev servers (`react-router dev`), test stacks and vitest leave it unset and send nothing. |
 | `VITE_SENTRY_DSN` | the project DSN | Optional override for the DSN in `app/lib/sentry.ts`. |
 
-Production and preview images build the `runtime` target, whose builder stage sets
-`VITE_SENTRY_ENABLED=true`, so they keep reporting. To build an image that does not
-report, pass `--build-arg VITE_SENTRY_ENABLED=false`. To try Sentry from a local dev
+Production images build the `runtime` target, whose builder stage sets
+`VITE_SENTRY_ENABLED=true`, so they keep reporting. PR preview images build the same target
+with `VITE_SENTRY_ENABLED=false` (`.github/workflows/preview-images.yml`), so preview
+deploys send nothing. To build any other image that does not report, pass
+`--build-arg VITE_SENTRY_ENABLED=false`. To try Sentry from a local dev
 server, start it with `VITE_SENTRY_ENABLED=true` in its environment.
 
 ## Context Fields
