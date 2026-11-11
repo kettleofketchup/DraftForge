@@ -103,11 +103,9 @@ function compute(src: Source, nowMs: number): TeamDraftCountdown {
 export function _deriveTeamCountdown(
   tick: DraftTick | null,
   draft: CountdownDraftSlice | null,
-  serverClockOffsetMs: number,
   nowMs: number,
   tickIsNewer = true,
 ): TeamDraftCountdown {
-  void serverClockOffsetMs;
   // Resume and a shuffle skip re-anchor the same round pk, so a tick received before that draft_state must not win.
   const matching =
     tick && (!draft || (tickIsNewer && tick.active_round_pk === draft.latest_round)) ? tick : null;
@@ -130,7 +128,7 @@ export function useTeamDraftCountdown(
 ): TeamDraftCountdown {
   return useAnimationFrameClock({
     derive: () =>
-      _deriveTeamCountdown(tick, draft, serverClockOffsetMs, serverNow(serverClockOffsetMs), tickIsNewer),
+      _deriveTeamCountdown(tick, draft, serverNow(serverClockOffsetMs), tickIsNewer),
     isFrozen: draft?.state === 'paused',
     inputs: [tick, draft, serverClockOffsetMs, tickIsNewer],
   });

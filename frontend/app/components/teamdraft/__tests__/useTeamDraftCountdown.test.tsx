@@ -24,16 +24,16 @@ const armedDraft = (o: Partial<CountdownDraftSlice> = {}): CountdownDraftSlice =
 
 describe('_deriveTeamCountdown', () => {
   it('is unarmed with no tick and no paused draft', () =>
-    expect(_deriveTeamCountdown(null, null, 0, T0)).toEqual({ kind: 'unarmed' }));
+    expect(_deriveTeamCountdown(null, null, T0)).toEqual({ kind: 'unarmed' }));
   it('is unarmed when the tick has no round anchor', () =>
-    expect(_deriveTeamCountdown(tick({ round_started_at: null }), null, 0, T0).kind).toBe('unarmed'));
+    expect(_deriveTeamCountdown(tick({ round_started_at: null }), null, T0).kind).toBe('unarmed'));
   it('burns only the active team past grace', () => {
-    const c = _deriveTeamCountdown(tick(), null, 0, T0);
+    const c = _deriveTeamCountdown(tick(), null, T0);
     expect(c).toMatchObject({ kind: 'armed', graceRemainingMs: 0, resumingRemainingMs: 0, expired: false });
     if (c.kind === 'armed') expect(c.reserveByTeamId).toEqual({ 1: 5_000, 2: 10_000 });
   });
   it('shows grace remaining before grace ends and leaves reserve intact', () => {
-    const c = _deriveTeamCountdown(tick({ round_started_at: new Date(T0 - 5_000).toISOString() }), null, 0, T0);
+    const c = _deriveTeamCountdown(tick({ round_started_at: new Date(T0 - 5_000).toISOString() }), null, T0);
     if (c.kind === 'armed') {
       expect(c.graceRemainingMs).toBe(15_000);
       expect(c.reserveByTeamId[1]).toBe(10_000);
@@ -44,7 +44,6 @@ describe('_deriveTeamCountdown', () => {
     const c = _deriveTeamCountdown(
       tick({ draft_state: 'resuming', resuming_until: until, round_started_at: new Date(T0 - 7_000).toISOString() }),
       null,
-      0,
       T0,
     );
     if (c.kind === 'armed') {
@@ -53,7 +52,7 @@ describe('_deriveTeamCountdown', () => {
     } else throw new Error('expected armed');
   });
   it('flags a last-slot expiry', () => {
-    const c = _deriveTeamCountdown(tick({ round_timed_out_at: new Date(T0).toISOString() }), null, 0, T0);
+    const c = _deriveTeamCountdown(tick({ round_timed_out_at: new Date(T0).toISOString() }), null, T0);
     expect(c.kind === 'armed' && c.expired).toBe(true);
   });
   it('derives frozen values from the serialized draft when paused with no tick', () => {
@@ -69,7 +68,7 @@ describe('_deriveTeamCountdown', () => {
         ],
       },
     };
-    const c = _deriveTeamCountdown(null, draft, 0, T0);
+    const c = _deriveTeamCountdown(null, draft, T0);
     expect(c).toMatchObject({ kind: 'armed', graceRemainingMs: 0 });
     if (c.kind === 'armed') expect(c.reserveByTeamId).toEqual({ 1: 5_000, 2: 10_000 });
   });
@@ -82,7 +81,6 @@ describe('_deriveTeamCountdown', () => {
         ],
       }),
       null,
-      0,
       T0,
     );
     if (c.kind === 'armed') expect(c.reserveByTeamId[3]).toBe(10_000);
@@ -97,19 +95,18 @@ describe('_deriveTeamCountdown', () => {
         ],
       }),
       null,
-      0,
       T0,
     );
     if (c.kind === 'armed') expect(c.reserveByTeamId).toEqual({ 1: 0, 2: 0 });
     else throw new Error('expected armed');
   });
-  it('applies the server clock offset', () => {
-    const c = _deriveTeamCountdown(tick({ round_started_at: new Date(T0).toISOString() }), null, 0, T0 + 4_000);
+  it('derives the grace remainder from the supplied now', () => {
+    const c = _deriveTeamCountdown(tick({ round_started_at: new Date(T0).toISOString() }), null, T0 + 4_000);
     if (c.kind === 'armed') expect(c.graceRemainingMs).toBe(16_000);
     else throw new Error('expected armed');
   });
   it('armed draft with no tick yet derives from the serialized active round (not unarmed)', () => {
-    const c = _deriveTeamCountdown(null, armedDraft(), 0, T0);
+    const c = _deriveTeamCountdown(null, armedDraft(), T0);
     expect(c).toMatchObject({ kind: 'armed', graceRemainingMs: 0, expired: false });
     if (c.kind === 'armed') expect(c.reserveByTeamId).toEqual({ 1: 5_000, 2: 10_000 });
   });
@@ -118,7 +115,7 @@ describe('_deriveTeamCountdown', () => {
       latest_round: 23,
       draft_rounds: [{ pk: 23, started_at: new Date(T0 - 1_000).toISOString(), grace_time_ms: 20_000, captain: { pk: 8 } }],
     });
-    const c = _deriveTeamCountdown(tick({ active_round_pk: 22 }), draft, 0, T0, true);
+    const c = _deriveTeamCountdown(tick({ active_round_pk: 22 }), draft, T0, true);
     if (c.kind === 'armed') {
       expect(c.graceRemainingMs).toBe(19_000);
       expect(c.reserveByTeamId).toEqual({ 1: 10_000, 2: 10_000 });
@@ -131,7 +128,7 @@ describe('_deriveTeamCountdown', () => {
       draft_rounds: [{ pk: 22, started_at: new Date(T0 - 5_000).toISOString(), grace_time_ms: 20_000, captain: { pk: 7 } }],
     });
     const stale = tick({ round_started_at: new Date(T0 - 65_000).toISOString() });
-    const c = _deriveTeamCountdown(stale, draft, 0, T0, false);
+    const c = _deriveTeamCountdown(stale, draft, T0, false);
     expect(c).toMatchObject({ kind: 'armed', resumingRemainingMs: 2_000, graceRemainingMs: 13_000 });
     if (c.kind === 'armed') expect(c.reserveByTeamId).toEqual({ 1: 10_000, 2: 10_000 });
   });
@@ -140,17 +137,17 @@ describe('_deriveTeamCountdown', () => {
       draft_rounds: [{ pk: 22, started_at: new Date(T0 - 1_000).toISOString(), timed_out_at: null, grace_time_ms: 20_000, captain: { pk: 8 } }],
     });
     const stale = tick({ round_timed_out_at: new Date(T0 - 1_500).toISOString() });
-    const c = _deriveTeamCountdown(stale, draft, 0, T0, false);
+    const c = _deriveTeamCountdown(stale, draft, T0, false);
     expect(c).toMatchObject({ kind: 'armed', expired: false, graceRemainingMs: 19_000 });
   });
   it('honours a tick received after the draft state even when it moved the round anchor', () => {
     const backdated = tick({ round_started_at: new Date(T0 - 108_000).toISOString() });
-    const c = _deriveTeamCountdown(backdated, armedDraft(), 0, T0, true);
+    const c = _deriveTeamCountdown(backdated, armedDraft(), T0, true);
     expect(c).toMatchObject({ kind: 'armed', graceRemainingMs: 0 });
     if (c.kind === 'armed') expect(c.reserveByTeamId).toEqual({ 1: 0, 2: 10_000 });
   });
   it('is unarmed when the draft is not clock_armed, even with a tick', () => {
-    expect(_deriveTeamCountdown(tick(), armedDraft({ clock_armed: false }), 0, T0).kind).toBe('unarmed');
+    expect(_deriveTeamCountdown(tick(), armedDraft({ clock_armed: false }), T0).kind).toBe('unarmed');
   });
 });
 
