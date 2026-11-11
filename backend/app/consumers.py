@@ -418,6 +418,13 @@ class HeroDraftConsumer(BaseDraftConsumer):
     def get_active_draft_state_values(self) -> list[str]:
         return [HeroDraftState.DRAFTING.value]
 
+    def _follow_tick_state(self, state: str | None) -> None:
+        # The tick loop runs through RESUMING; any other state ends it.
+        self._tick_wanted = state in (
+            HeroDraftState.DRAFTING.value,
+            HeroDraftState.RESUMING.value,
+        )
+
     # --- Connect / Disconnect ---
 
     async def connect(self) -> None:
@@ -653,6 +660,7 @@ class HeroDraftConsumer(BaseDraftConsumer):
             message["draft_team"] = event["draft_team"]
         if "draft_state" in event and event["draft_state"] is not None:
             message["draft_state"] = event["draft_state"]
+            self._follow_tick_state(event["draft_state"].get("state"))
         if "timestamp" in event and event["timestamp"] is not None:
             message["timestamp"] = event["timestamp"]
         if "metadata" in event and event["metadata"] is not None:
@@ -668,6 +676,7 @@ class HeroDraftConsumer(BaseDraftConsumer):
         countdown. See `backend/app/tasks/herodraft_tick.py::broadcast_tick`
         for the producer side.
         """
+        self._follow_tick_state(event.get("draft_state"))
         await self.send(
             text_data=json.dumps(
                 {

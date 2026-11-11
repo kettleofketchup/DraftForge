@@ -369,3 +369,35 @@ class TestBaseHooks(SimpleTestCase):
             text_data='{"type": "initial_state", "draft_state": {"state": "drafting"}, '
             '"server_time": "2026-11-09T12:00:00+00:00"}'
         )
+
+
+class TestHeroTickWantedFollowsState(SimpleTestCase):
+    def _consumer(self) -> HeroDraftConsumer:
+        consumer = HeroDraftConsumer()
+        consumer.draft_id = 5
+        consumer.send = mock.AsyncMock()
+        consumer._tick_wanted = True
+        return consumer
+
+    def test_event_with_a_finished_draft_state_stops_wanting_ticks(self):
+        consumer = self._consumer()
+        asyncio.run(
+            consumer.herodraft_event(
+                {"event_type": "draft_completed", "draft_state": {"state": "completed"}}
+            )
+        )
+        self.assertFalse(consumer._tick_wanted)
+
+    def test_event_without_draft_state_leaves_it_alone(self):
+        consumer = self._consumer()
+        asyncio.run(consumer.herodraft_event({"event_type": "roll_result"}))
+        self.assertTrue(consumer._tick_wanted)
+
+    def test_tick_state_drives_it(self):
+        consumer = self._consumer()
+        asyncio.run(consumer.herodraft_tick({"draft_state": "paused"}))
+        self.assertFalse(consumer._tick_wanted)
+        asyncio.run(consumer.herodraft_tick({"draft_state": "resuming"}))
+        self.assertTrue(consumer._tick_wanted)
+        asyncio.run(consumer.herodraft_tick({"draft_state": "drafting"}))
+        self.assertTrue(consumer._tick_wanted)
