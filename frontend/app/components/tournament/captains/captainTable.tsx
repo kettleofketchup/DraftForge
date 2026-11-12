@@ -123,6 +123,7 @@ const CaptainStripRow: React.FC<CaptainStripRowProps> = ({ user, isCaptain }) =>
       compact
       showPositions={false}
       nameMaxLength={12}
+      statsLeagueId={tournament?.league_pk ?? null}
       data-testid={`captain-row-${user.pk}`}
       actionSlot={
         <div

@@ -234,6 +234,7 @@ export default function RollCallPage() {
                   userMap={userMap}
                   isAdmin={isAdmin}
                   gameType={event.game_type}
+                  leaguePk={event.tournament_league ?? null}
                   signupActions={signupActions}
                   onRequestApproval={setApprovalSignup}
                   onRequestConfirm={setConfirmSignup}
@@ -260,6 +261,7 @@ export default function RollCallPage() {
                   userMap={userMap}
                   isAdmin={isAdmin}
                   gameType={event.game_type}
+                  leaguePk={event.tournament_league ?? null}
                   signupActions={signupActions}
                   onRequestApproval={setApprovalSignup}
                   onRequestConfirm={setConfirmSignup}
@@ -287,6 +289,7 @@ export default function RollCallPage() {
                   userMap={userMap}
                   isAdmin={isAdmin}
                   gameType={event.game_type}
+                  leaguePk={event.tournament_league ?? null}
                   signupActions={signupActions}
                   onRequestApproval={setApprovalSignup}
                   onRequestConfirm={setConfirmSignup}
@@ -482,6 +485,7 @@ function SignupStrip({
   userMap,
   isAdmin,
   gameType,
+  leaguePk,
   signupActions,
   onRequestApproval,
   onRequestConfirm,
@@ -494,6 +498,7 @@ function SignupStrip({
   userMap: Map<number, import('~/store/userCacheTypes').UserEntry>;
   isAdmin: boolean;
   gameType: number;
+  leaguePk: number | null;
   signupActions: ReturnType<typeof useSignupActionMutations>;
   onRequestApproval: (signup: EventSignupType) => void;
   onRequestConfirm: (signup: EventSignupType) => void;
@@ -601,6 +606,8 @@ function SignupStrip({
         compact
         showPositions
         organizationId={signup.organization ?? undefined}
+        statsLeagueId={leaguePk}
+        statsBreakpoint="wide"
         contextSlot={<EventStateBadge state={signup.status} />}
         actionSlot={actionSlot}
       />

@@ -35,7 +35,7 @@ Players RSVP from the event page. Each signup shows:
 
 - **Position number** (#1, #2, ...) — first-come-first-served
 - **Status badge** — RSVP, Pending Approval, Approved, Confirmed, Waitlisted
-- **UserStrip** — avatar, name, positions, MMR badges
+- **UserStrip** — avatar, name, positions, MMR badges, and league ticket-match stats (rank, games, win rate, last 5 results) when the event's tournament has a league
 
 Admin actions per signup: Approve, Reject, Confirm.
 

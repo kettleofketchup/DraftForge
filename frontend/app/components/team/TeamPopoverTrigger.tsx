@@ -11,7 +11,7 @@ export const TeamPopoverTrigger: React.FC<TeamPopoverTriggerProps> = ({
   team,
   children,
 }) => {
-  const { showTeamPopover, hidePopover, openTeamModal } = useSharedPopoverActions();
+  const { showTeamPopover, hidePopover, scheduleHidePopover, openTeamModal } = useSharedPopoverActions();
   const triggerRef = useRef<HTMLSpanElement>(null);
   const captain = team.captain;
   const teamName = team.name || `${captain?.nickname || captain?.username || 'Unknown'}'s Team`;
@@ -23,8 +23,8 @@ export const TeamPopoverTrigger: React.FC<TeamPopoverTriggerProps> = ({
   }, [team, showTeamPopover]);
 
   const handleMouseLeave = useCallback(() => {
-    hidePopover();
-  }, [hidePopover]);
+    scheduleHidePopover();
+  }, [scheduleHidePopover]);
 
   const handleClick = useCallback((e: React.MouseEvent) => {
     e.preventDefault();

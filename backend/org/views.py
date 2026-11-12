@@ -281,7 +281,7 @@ class ClaimRequestViewSet(viewsets.ModelViewSet):
         LeagueMatchParticipant.objects.filter(player=target_user).update(player=claimer)
 
         # Steam match stats
-        PlayerMatchStats.objects.filter(user=target_user).update(user=claimer)
+        PlayerMatchStats.objects.filter(user=target_user).invalidated_update(user=claimer)
 
         # League player stats
         for stats in LeaguePlayerStats.objects.filter(user=target_user):

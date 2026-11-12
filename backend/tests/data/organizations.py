@@ -85,6 +85,16 @@ AUTH_MATRIX_ORG: TestOrganization = TestOrganization(
     timezone="America/New_York",
 )
 
+# Strip league stats E2E tests. Created by the last populate step with a pinned
+# pk above every autoincrement org; deliberately not in ALL_ORGANIZATIONS.
+STRIP_STATS_ORG: TestOrganization = TestOrganization(
+    pk=20,
+    name="Strip Stats Org",
+    description="Isolated organization for strip league stats E2E tests.",
+    rules_template="Strip stats test rules.",
+    timezone="America/New_York",
+)
+
 # =============================================================================
 # Constants for easy access
 # =============================================================================
@@ -97,6 +107,7 @@ USER_EDIT_ORG_NAME = USER_EDIT_ORG.name
 SHUFFLE_TIE_ORG_NAME = SHUFFLE_TIE_ORG.name
 EVENTS_ORG_NAME = EVENTS_ORG.name
 AUTH_MATRIX_ORG_NAME = AUTH_MATRIX_ORG.name
+STRIP_STATS_ORG_NAME = STRIP_STATS_ORG.name
 
 # =============================================================================
 # All Organizations (for iteration)
@@ -112,3 +123,12 @@ ALL_ORGANIZATIONS: list[TestOrganization] = [
     EVENTS_ORG,
     AUTH_MATRIX_ORG,
 ]
+
+# Owns SHOWCASE_LEAGUE; deliberately not in ALL_ORGANIZATIONS.
+SHOWCASE_ORG: TestOrganization = TestOrganization(
+    pk=21,
+    name="League Stats Showcase Org",
+    description="Organization for the seeded league stats showcase.",
+    rules_template="Showcase league rules.",
+    timezone="America/New_York",
+)

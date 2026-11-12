@@ -68,7 +68,7 @@ import type { TieResolution } from './types';
 import type { TournamentType } from '~/components/tournament/types';
 const log = getLogger('DraftModal');
 type DraftModalParams = {};
-export const DraftModal: React.FC<DraftModalParams> = ({}) => {
+export const DraftModal: React.FC<DraftModalParams> = () => {
   const tournament = useUserStore((state) => state.tournament);
   const setTournament = useUserStore((state) => state.setTournament);
   const draft = useUserStore((state) => state.draft);
@@ -548,7 +548,12 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
     // Show completed team draft view when draft is complete and not viewing full draft
     if (isDraftCompleted && !showFullDraft) {
       return (
-        <CompletedTeamDraftView teams={tournament?.teams || []} organizationId={tournament?.organization_pk ?? undefined} rounds={draft?.draft_rounds ?? []} />
+        <CompletedTeamDraftView
+          teams={tournament?.teams || []}
+          organizationId={tournament?.organization_pk ?? undefined}
+          leaguePk={tournament?.league_pk ?? null}
+          rounds={draft?.draft_rounds ?? []}
+        />
       );
     }
 

@@ -62,8 +62,6 @@ TeamMemberRow.displayName = 'TeamMemberRow';
 
 export interface TeamPopoverContentProps {
   team: TeamType;
-  onMouseEnter: () => void;
-  onMouseLeave: () => void;
   onPlayerHover: (player: UserType, el: HTMLElement) => void;
   onPlayerLeave: () => void;
   onPlayerClick: (player: UserType) => void;
@@ -71,8 +69,6 @@ export interface TeamPopoverContentProps {
 
 export const TeamPopoverContent: React.FC<TeamPopoverContentProps> = ({
   team,
-  onMouseEnter,
-  onMouseLeave,
   onPlayerHover,
   onPlayerLeave,
   onPlayerClick,
@@ -100,7 +96,7 @@ export const TeamPopoverContent: React.FC<TeamPopoverContentProps> = ({
   }, [team.members, hasMembers]);
 
   return (
-    <div onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
+    <div>
       {/* Header */}
       <div className="flex items-center justify-between p-3 border-b">
         <div className="flex items-center gap-3">
