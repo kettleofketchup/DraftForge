@@ -447,6 +447,10 @@ class PasswordVisibilityTests(EventPasswordApiTestCase):
             with self.subTest(user=user.username):
                 self.assertEqual(self.as_user(user).get(self.url()).status_code, 404)
         self.assertEqual(APIClient().get(self.url()).status_code, 404)
+        self.assertEqual(
+            self.as_user(self.admin).get("/api/events/abc/lobby-password/").status_code,
+            404,
+        )
 
     def test_rostered_members_and_captains_see_it(self):
         captain = self.make_user("rostered_captain")

@@ -111,6 +111,14 @@ def _attach_user_can_manage(payload, user):
     return payload
 
 
+def _pk_or_none(pk: str | None) -> int | None:
+    """The URL pk as an int; the router accepts any non-slash text."""
+    try:
+        return int(pk) if pk is not None else None
+    except ValueError:
+        return None
+
+
 def _no_lobby_password() -> Response:
     # 404 rather than 403: do not reveal to outsiders that a password exists.
     return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -350,7 +358,7 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
 
         Never cached. Writes go through the series PATCH (write-only field).
         """
-        repeater = EventRepeater.objects.nocache().filter(pk=pk).first()
+        repeater = EventRepeater.objects.nocache().filter(pk=_pk_or_none(pk)).first()
         if repeater is None or not has_org_staff_access(
             request.user, repeater.organization
         ):
@@ -631,7 +639,7 @@ class EventViewSet(viewsets.ModelViewSet):
         event = (
             Event.objects.nocache()
             .select_related("organization", "event_repeater")
-            .filter(pk=pk)
+            .filter(pk=_pk_or_none(pk))
             .first()
         )
         if event is None:
@@ -674,7 +682,7 @@ class EventViewSet(viewsets.ModelViewSet):
         event = (
             Event.objects.nocache()
             .select_related("organization", "tournament")
-            .filter(pk=pk)
+            .filter(pk=_pk_or_none(pk))
             .first()
         )
         if event is None or not has_org_staff_access(request.user, event.organization):
