@@ -121,6 +121,10 @@ class GameLobby(models.Model):
     # task: pushed forward by every attempt and every retryable failure, so
     # a create still retrying in Celery is not started a second time.
     next_attempt_at = models.DateTimeField(null=True, blank=True)
+    # DraftForge ended the row but dota_lobby has not confirmed the close
+    # yet. The close task and then the reconcile task keep closing until it
+    # does, so a lobby DraftForge stopped tracking never keeps a bot.
+    close_pending = models.BooleanField(default=False, db_index=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -152,30 +156,12 @@ class GameLobby(models.Model):
         if update_fields is not None and "state" in update_fields:
             update_fields = {*update_fields, "ended", "ended_at"}
         if not self.password_key_id:
-            self.password_key_id = self._pick_password_key_id()
+            self.password_key_id = passwords.current_key_id()
             if update_fields is not None:
                 update_fields = {*update_fields, "password_key_id"}
         if update_fields is not None:
             kwargs["update_fields"] = update_fields
         super().save(*args, **kwargs)
-
-    def _pick_password_key_id(self) -> str:
-        """The key of this game's previous lobby while it is still configured.
-
-        A recreated lobby then sends the same password as the one it replaces,
-        so a create that dota_lobby did accept is replayed, not refused.
-        """
-        previous = (
-            GameLobby.objects.filter(external_ref=self.external_ref)
-            .exclude(pk=self.pk)
-            .exclude(password_key_id="")
-            .order_by("-created_at", "-pk")
-            .values_list("password_key_id", flat=True)
-            .first()
-        )
-        if previous and passwords.is_key_available(previous):
-            return previous
-        return passwords.current_key_id()
 
 
 class GameLobbyEvent(models.Model):

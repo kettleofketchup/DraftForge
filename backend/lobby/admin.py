@@ -21,7 +21,7 @@ class GameLobbyAdmin(admin.ModelAdmin):
         "last_error_code",
         "created_at",
     )
-    list_filter = ("state", "ended", "trigger")
+    list_filter = ("state", "ended", "close_pending", "trigger")
     search_fields = ("external_ref", "lobby_id", "gc_lobby_id", "bot")
     raw_id_fields = (
         "game",
@@ -39,6 +39,7 @@ class GameLobbyAdmin(admin.ModelAdmin):
         "state",
         "state_reason",
         "ended",
+        "close_pending",
         "last_seq",
         "created_at",
         "updated_at",

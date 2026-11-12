@@ -97,6 +97,7 @@ def _row_summary(row: GameLobby) -> dict[str, Any]:
             services.team_ref(row.dire_team_id) if row.dire_team_id else None
         ),
         "wants_flip": services.wants_flip(row),
+        "close_pending": row.close_pending,
     }
 
 
@@ -170,54 +171,74 @@ def eligible_games(request: Request) -> Response:
 def claim(request: Request, game_id: int) -> Response:
     """The game's active lobby, or a new one, with the create body to send.
 
-    Body: `{trigger, user_id?, allow_missing?}`. The create body includes the
-    lobby password and is returned only while the lobby is `requested`.
+    Body: `{trigger, user_id?, allow_missing?, game_lobby_id?}`. A create
+    that already holds a row passes `game_lobby_id` and gets that row only:
+    once it has ended (closed by staff, replaced) the answer is 409
+    `lobby_ended` and the task stops. The create body includes the lobby
+    password and is returned only while the lobby is `requested`.
     """
     get_object_or_404(Game, pk=game_id)
     trigger = request.data.get("trigger") or GameLobby.Trigger.AUTO
     if trigger not in GameLobby.Trigger.values:
         return _error("Unknown trigger", "invalid_trigger", 400)
     user_id = request.data.get("user_id")
-    result = services.claim_lobby(
-        game_id,
-        trigger=trigger,
-        user_id=user_id if isinstance(user_id, int) else None,
-        allow_missing=request.data.get("allow_missing") is True,
-    )
-    row = result.game_lobby
-    if row is None:
-        eligibility = result.eligibility
-        return _error(
-            "Game is not eligible for a lobby",
-            eligibility.code,
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
-            details=eligibility.details,
+    game_lobby_id = request.data.get("game_lobby_id")
+    if game_lobby_id is not None and (
+        not isinstance(game_lobby_id, int) or isinstance(game_lobby_id, bool)
+    ):
+        return _error("game_lobby_id must be an integer", "invalid_request", 400)
+    # One transaction: the game stays locked until the attempt lease is
+    # recorded, so a close cannot slip in between the claim and the lease.
+    with transaction.atomic():
+        result = services.claim_lobby(
+            game_id,
+            trigger=trigger,
+            user_id=user_id if isinstance(user_id, int) else None,
+            allow_missing=request.data.get("allow_missing") is True,
+            game_lobby_id=game_lobby_id,
         )
-    payload: dict[str, Any] = {
-        "game_lobby_id": row.pk,
-        "external_ref": row.external_ref,
-        "created": result.created,
-        "lobby_id": row.lobby_id,
-        "state": row.state,
-    }
-    if row.state == states.REQUESTED and not row.lobby_id:
-        try:
-            payload["body"] = services.create_body(row)
-        except (PasswordKeyUnavailable, ImproperlyConfigured) as exc:
-            log.error(
-                "lobby_password_unavailable",
-                game_lobby_id=row.pk,
-                error=type(exc).__name__,
-                **_LOG_API,
+        row = result.game_lobby
+        if row is None:
+            eligibility = result.eligibility
+            if eligibility.code == "lobby_ended":
+                return _error(
+                    "The lobby has ended",
+                    "lobby_ended",
+                    status.HTTP_409_CONFLICT,
+                    details=eligibility.details,
+                )
+            return _error(
+                "Game is not eligible for a lobby",
+                eligibility.code,
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                details=eligibility.details,
             )
-            _fail_unsendable(row.pk, "password_unavailable", str(exc))
-            return _error("Lobby password unavailable", "password_unavailable", 503)
-        # This attempt holds the row: the reconcile task leaves it alone
-        # until the lease runs out (see _resend_due).
-        GameLobby.objects.filter(pk=row.pk).update(
-            next_attempt_at=timezone.now()
-            + timedelta(seconds=services.CREATE_ATTEMPT_LEASE_SECONDS)
-        )
+        payload: dict[str, Any] = {
+            "game_lobby_id": row.pk,
+            "external_ref": row.external_ref,
+            "created": result.created,
+            "lobby_id": row.lobby_id,
+            "state": row.state,
+        }
+        if row.state == states.REQUESTED and not row.lobby_id:
+            try:
+                payload["body"] = services.create_body(row)
+            except (PasswordKeyUnavailable, ImproperlyConfigured) as exc:
+                log.error(
+                    "lobby_password_unavailable",
+                    game_lobby_id=row.pk,
+                    error=type(exc).__name__,
+                    **_LOG_API,
+                )
+                _fail_unsendable(row.pk, "password_unavailable", str(exc))
+                return _error("Lobby password unavailable", "password_unavailable", 503)
+            # This attempt holds the row: the reconcile task leaves it alone
+            # until the lease runs out (see _resend_due). A set lease also
+            # tells a later close that a create may have reached dota_lobby.
+            GameLobby.objects.filter(pk=row.pk).update(
+                next_attempt_at=timezone.now()
+                + timedelta(seconds=services.CREATE_ATTEMPT_LEASE_SECONDS)
+            )
     if result.created:
         log.info(
             "lobby_claimed",
@@ -362,6 +383,53 @@ def active(request: Request) -> Response:
     """Every lobby that has not ended, for the reconcile task."""
     rows = GameLobby.objects.filter(ended=False).select_related("game").order_by("pk")
     return Response([_row_summary(row) for row in rows])
+
+
+@api_view(["GET"])
+@authentication_classes(_auth)
+@permission_classes(_perm)
+def close_pending(request: Request) -> Response:
+    """Ended lobbies dota_lobby has not confirmed closed, for the reconcile task."""
+    rows = (
+        GameLobby.objects.filter(close_pending=True)
+        .select_related("game")
+        .order_by("pk")
+    )
+    return Response([_row_summary(row) for row in rows])
+
+
+@api_view(["POST"])
+@authentication_classes(_auth)
+@permission_classes(_perm)
+def close_done(request: Request, pk: int) -> Response:
+    """The close task closed what dota_lobby held for the row. Body: `{found}`.
+
+    Clears `close_pending`, except while a row without a lobby ID still has
+    a create attempt in flight (its lease has not run out) and nothing was
+    found: that create may still reach dota_lobby, so the reconcile task
+    looks again.
+    """
+    found = request.data.get("found")
+    if not isinstance(found, int) or isinstance(found, bool) or found < 0:
+        return _error("found must be a count", "invalid_request", 400)
+    with transaction.atomic():
+        row = get_object_or_404(GameLobby.objects.select_for_update(), pk=pk)
+        attempt_in_flight = (
+            not row.lobby_id
+            and row.next_attempt_at is not None
+            and timezone.now() < row.next_attempt_at
+        )
+        if row.close_pending and not (found == 0 and attempt_in_flight):
+            row.close_pending = False
+            row.save(update_fields=["close_pending", "updated_at"])
+            log.info(
+                "lobby_close_confirmed",
+                game_lobby_id=pk,
+                lobby_id=row.lobby_id,
+                found=found,
+                **_LOG_API,
+            )
+    return Response({"close_pending": row.close_pending})
 
 
 @api_view(["GET"])

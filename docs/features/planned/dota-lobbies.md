@@ -28,8 +28,10 @@ The second stage creates and follows lobbies (see [Lobby lifecycle](#lobby-lifec
 and manual creation, the webhook receiver, the reconcile task, game updates, live updates on the
 tournament websocket and the opt-in Discord message.
 
-Still to come: the organizer API and UI (create, retry, invite, launch and close from the
-bracket, and the provisional result shown next to advance-winner).
+The third stage adds the organizer and player API and the UI (see
+[Organizer API and UI](#organizer-api-and-ui)): lobby state, password and invites in the match
+dialog, staff controls to create, retry, invite, launch and close, the provisional result next
+to the winner buttons, a lobby dot on bracket nodes, and the tournament settings.
 
 ### Lobby lifecycle
 
@@ -45,12 +47,19 @@ must allow it. In `auto` mode a game gets a lobby once all of these hold:
 
 The trigger is the game's save (a `post_save` signal, sent on commit). The reconcile task also
 sweeps for eligible games every minute, so a missed signal or a tournament that just started is
-picked up. In `manual` mode, and for retries, staff use the Django admin action "Create a new
-lobby for these games" on a game's lobby, or `python manage.py create_dota_lobby <game id>
-[--allow-missing]`. `--allow-missing` leaves players without a Steam account out of the roster;
-automatic creation never does.
+picked up. In `manual` mode, and for retries, staff use the match dialog (see
+[Organizer API and UI](#organizer-api-and-ui)), the Django admin action "Create a new lobby for
+these games" on a game's lobby, or `python manage.py create_dota_lobby <game id>
+[--allow-missing] [--replay]`. `--allow-missing` leaves players without a Steam account out of
+the roster; automatic creation never does.
 
-A lobby that times out or fails is not recreated automatically: organizers retry it.
+A lobby that times out or fails is not recreated automatically: organizers retry it. A lobby
+whose match finished with a result is not retried for the same two teams
+(`lobby_match_played`): the organizer confirms the winner instead. To host that match again,
+for example after resetting a disputed game to pending, organizers ask for a replay (`replay`
+on the create request, "Replay match" in the dialog, or `--replay`); automatic creation never
+replays a match. A match that ended unscored, or that started and whose lobby then ended
+without a scored result, was abandoned: the game goes back to pending and may get a new lobby.
 
 **Creating.** Celery never touches the database. The `create_dota_lobby` task:
 
@@ -71,6 +80,11 @@ A lobby that times out or fails is not recreated automatically: organizers retry
    state `error` with `last_error_code` for organizers. A `409 conflict` is resolved by
    looking up the lobby holding the reference: DraftForge adopts it when it is the same row's,
    closes it and retries when it is an earlier lobby of the same game, and gives up otherwise.
+
+A manual create (staff, the admin action or `manage.py create_dota_lobby`) makes the
+`requested` row at once, so staff can close it before the task runs. The task, and every retry
+of it, carries the row's ID: once the row has ended (closed by staff or replaced), the next
+claim answers `409 lobby_ended` and the task stops instead of creating a new lobby.
 
 **Teams and sides.** When a game's teams change while its lobby has not started (`requested`
 to `ready`), the lobby is ended (`closed`, reason `teams_changed`), closed in dota_lobby, and a
@@ -113,8 +127,18 @@ was launching it) still records its own events, but never touches the game.
 **Reconcile.** `reconcile-dota-lobbies` runs every 60 seconds (in both beat schedules,
 `config/celery.py` and `config/celery_light.py`). For every lobby that has not ended it reads
 the lobby from dota_lobby, applies any events the webhooks missed, closes rows dota_lobby no
-longer knows, resends creates left `requested` with no attempt in flight, queues pending side flips, and creates lobbies
-for eligible games. It does nothing while `DOTA_LOBBY_ENABLED` is off.
+longer knows, resends creates left `requested` with no attempt in flight, queues pending side flips, finishes
+closes dota_lobby has not confirmed, and creates lobbies for eligible games. It does nothing
+while `DOTA_LOBBY_ENABLED` is off.
+
+**Closing.** Closing a lobby (staff, a replace, changed teams, a completed game) ends the row in
+DraftForge at once, so a new lobby can be requested, and closes it in dota_lobby from Celery.
+The row stays `close_pending` until dota_lobby confirms the close (or answers that the lobby is
+gone or already in its match). If the close task gives up, for example while dota_lobby is
+restarting or `DOTA_LOBBY_ENABLED` is off, the reconcile task tries again every minute. A row
+that ended before dota_lobby's answer to its create was recorded has no lobby ID: it is closed
+by its reference, only the lobby whose metadata names that row, and the reconcile task keeps
+looking until the create attempt's lease has run out.
 
 **Live updates.** The tournament websocket (`/api/tournament/<id>/`) gets a `lobby_event`
 message (`game_id`, `state`, `match_id`, `provisional_winner_side`; never the password) when a
@@ -126,6 +150,53 @@ linked Discord account get a DM when the lobby is created in the game: the lobby
 password (read from dota_lobby), their side and the region. The tournament's Discord log
 records the send (`lobby_info`) without the password; no per-message log is kept for these
 DMs, because it would store the embed.
+
+### Organizer API and UI
+
+**API.** Under `api/games/<game id>/lobby/`, next to `create-herodraft`:
+
+| Method and path | Who | What it does |
+|-----------------|-----|--------------|
+| `GET .../lobby/` | Signed-in users | The game's active lobby, or its latest one. Everyone gets the state, the lobby's match ID, the sides and the provisional result. The game's rostered players (members and captains of either team) and tournament staff also get the lobby name, the password, per-player invite and seat status and the last error. Staff also get `eligibility` (whether and why not the game can get a lobby now, with the names of players missing a Steam account) |
+| `POST .../lobby/` | Tournament staff | Request a lobby, or retry after one ended. `{"allow_missing": true}` leaves players without a Steam account out; `{"replace": true}` first closes an active lobby whose match has not started. Answers `202`: the create runs in Celery |
+| `DELETE .../lobby/` | Tournament staff | Close the active lobby before its match starts (reason `closed_by_staff`) |
+| `POST .../lobby/invite/` | Staff, or a rostered player | Staff send `{"missing": true}` or `{"players": [account_id, ...]}`. A player always invites only themselves |
+| `POST .../lobby/launch/` | Tournament staff | Start the match; `{"force": true}` starts it before every player is seated and ready |
+
+Errors are `{"error", "code"}`. Invite and launch call dota_lobby directly and pass its problem
+`code`, `retryable` and status through (`409 not_ready`, `422 league_not_held`,
+`429 invite_limited` with `Retry-After`, `503 unavailable`, `504 gc_timeout`); a `401` or `403`
+from dota_lobby (a wrong `DOTA_LOBBY_API_KEY`) becomes `502`. Because they wait for dota_lobby
+inside the web request, each user gets 12 invites and 12 launches a minute; after that the
+answer is `429 rate_limited` with `Retry-After`. Connecting to dota_lobby times out after 3
+seconds; `DOTA_LOBBY_TIMEOUT_SECONDS` is the read timeout. The password is derived on
+demand (see [Design notes](#design-notes)) and is never in bracket data, websocket messages or
+logs. It is shown only while the lobby is active.
+
+The bracket (`GET /api/bracket/tournaments/<id>/`) gives each game a `lobby_state`: the state
+of its latest lobby, or `null`. The tournament API exposes `dota_lobby_mode`,
+`dota_lobby_launch`, `dota_lobby_region` and `discord_send_lobby_info` (editable by staff), and
+the read-only `game_mode` and `lobby_steam_league_id`.
+
+**UI.**
+
+- The match dialog has a "Dota lobby" panel for signed-in users: the state, and for the game's
+  players and staff the lobby name, the password with a copy button, and each player's invite
+  and seat status. Players can send themselves an invite while the lobby is waiting for
+  players.
+- Staff get Create (or Retry, after a lobby ended), Recreate, Invite missing, Launch (a force
+  confirmation unless the lobby is `ready`), Close, and a re-invite button per player. The
+  last error is explained (no bot holds the league, no bot is free, players without Steam
+  accounts by name, ...).
+- When the lobby reports a result, the panel shows it as provisional, and the matching
+  winner button is highlighted as "(lobby result)". Nothing is submitted: staff still click it.
+- Bracket nodes show a coloured dot for the lobby state; lobbies that closed or finished
+  normally show none.
+- The tournament edit dialog has a "Dota Lobbies" section on the Config tab (off, manual or
+  automatic; match start; region) and a "Send lobby info" toggle on the Discord tab.
+- The panel refreshes on the tournament websocket's `lobby_event` message. The bracket is
+  refetched only when the message's state differs from the one its lobby dot shows, so
+  invites, joins and ready checks do not make every viewer reload the bracket.
 
 ### Connecting dota_lobby
 
@@ -154,14 +225,16 @@ DMs, because it would store the embed.
   for example `game:42`. A staging and a production DraftForge can share one dota_lobby if
   they use different prefixes.
 - **Passwords are never stored.** `lobby.passwords.derive_password` computes them from the
-  Django secret key and the lobby reference, so a retried create, or a lobby recreated for the
-  same game, sends the same request and dota_lobby answers it as a repeat rather than a
-  conflict.
+  Django secret key, the lobby reference and the lobby row's ID. A retried create sends the
+  same request, so dota_lobby answers it as a repeat rather than a conflict, and every new
+  lobby for a game (Recreate, or new teams) gets a new password, so players who left the game
+  cannot use the one they saw.
   - Each lobby row records which secret key its password comes from. When rotating
     `DJANGO_SECRET_KEY`, put the old key in `DJANGO_SECRET_KEY_FALLBACKS` until the lobbies
     made under it have ended; without it their passwords can no longer be derived.
-  - What players are shown should be read from dota_lobby (`get_lobby` returns the password),
-    since that is the lobby they join.
+  - The match dialog shows the derived password, which is the one the create request sent.
+    When it can no longer be derived (the key was dropped), the dialog shows none and staff
+    recreate the lobby. The Discord message reads it from dota_lobby (`get_lobby`).
   - The password is refused when `DJANGO_SECRET_KEY` is unset and the public development key
     is in use, outside `DEBUG` and tests.
 - **Errors:** dota_lobby answers errors as problem+json. The client raises `DotaLobbyError` and
@@ -176,7 +249,7 @@ DMs, because it would store the embed.
 | `DOTA_LOBBY_URL` | `backend/.env`, Helm `env.extra` | empty | dota_lobby base URL, without `/v1` |
 | `DOTA_LOBBY_API_KEY` | `backend/.env`, Helm `secrets.dotaLobbyApiKey` | empty | Sent as `X-API-Key` |
 | `DOTA_LOBBY_WEBHOOK_SECRET` | `backend/.env`, Helm `secrets.dotaLobbyWebhookSecret` | empty | The webhook signing secret dota_lobby uses for DraftForge's URL. A comma-separated list is accepted while rotating |
-| `DOTA_LOBBY_TIMEOUT_SECONDS` | env | `15` | Per-request timeout. It is above dota_lobby's 12-second game coordinator timeout |
+| `DOTA_LOBBY_TIMEOUT_SECONDS` | env | `15` | Read timeout per request (connecting is capped at 3 seconds). It is above dota_lobby's 12-second game coordinator timeout |
 | `DOTA_LOBBY_REF_PREFIX` | env | `game` | Lobby reference prefix |
 | `DOTA_LOBBY_WEBHOOK_TOLERANCE_SECONDS` | env | `300` | Clock skew allowed on webhook timestamps |
 | `DOTA_LOBBY_REGION` | env | empty | Default region name. A tournament's `dota_lobby_region` overrides it |

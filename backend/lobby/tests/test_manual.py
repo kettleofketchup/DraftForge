@@ -27,8 +27,14 @@ class ManualTriggerTests(TestCase):
         out = StringIO()
         with self.captureOnCommitCallbacks(execute=True):
             call_command("create_dota_lobby", str(self.game.pk), stdout=out)
+        row = GameLobby.objects.get(game=self.game)
+        self.assertEqual((row.state, row.trigger), (states.REQUESTED, "manual"))
         create_delay.assert_called_once_with(
-            self.game.pk, trigger="manual", user_id=None, allow_missing=False
+            self.game.pk,
+            trigger="manual",
+            user_id=None,
+            allow_missing=False,
+            game_lobby_id=row.pk,
         )
         self.assertIn("Lobby requested", out.getvalue())
 
@@ -51,8 +57,14 @@ class ManualTriggerTests(TestCase):
             self.admin.create_new_lobby(
                 self.request, GameLobby.objects.filter(pk=row.pk)
             )
+        new = GameLobby.objects.get(game=self.game, ended=False)
+        self.assertNotEqual(new.pk, row.pk)
         create_delay.assert_called_once_with(
-            self.game.pk, trigger="manual", user_id=self.staff.pk, allow_missing=False
+            self.game.pk,
+            trigger="manual",
+            user_id=self.staff.pk,
+            allow_missing=False,
+            game_lobby_id=new.pk,
         )
 
     def test_admin_close(self, create_delay, close_delay):

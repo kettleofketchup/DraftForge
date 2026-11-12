@@ -47,14 +47,13 @@ class DerivePasswordTests(TestCase):
         self.assertEqual(self.lobby.password_key_id, current_key_id())
         self.assertNotIn(settings.SECRET_KEY, self.lobby.password_key_id)
 
-    def test_same_for_a_recreated_lobby(self):
-        # After an ambiguous failure dota_lobby may still hold the first
-        # lobby; the new row must send the same password so its create is a
-        # replay (200), not a 409 conflict.
+    def test_new_for_a_recreated_lobby(self):
+        # Players dropped from the game saw the old lobby's password; the
+        # lobby made for the new roster must not accept it.
         self._end(self.lobby)
         second = self._recreate()
         self.assertNotEqual(second.pk, self.lobby.pk)
-        self.assertEqual(derive_password(second), derive_password(self.lobby))
+        self.assertNotEqual(derive_password(second), derive_password(self.lobby))
 
     def test_differs_per_game(self):
         other_game = Game.objects.create()
@@ -75,33 +74,28 @@ class DerivePasswordTests(TestCase):
         with override_settings(SECRET_KEY=NEW_KEY, SECRET_KEY_FALLBACKS=[OLD_KEY]):
             lobby = GameLobby.objects.get(pk=self.old_lobby.pk)
             self.assertEqual(derive_password(lobby), before)
-            # A lobby recreated for that game keeps the old key's password.
-            self._end(lobby)
-            again = GameLobby.objects.create(
-                game=self.old_game, external_ref=lobby.external_ref
-            )
-            self.assertEqual(again.password_key_id, key_id(OLD_KEY))
-            self.assertEqual(derive_password(again), before)
-            # A new game uses the new key.
-            fresh = GameLobby.objects.create(
-                game=Game.objects.create(), external_ref="game:fresh"
-            )
-            self.assertEqual(fresh.password_key_id, key_id(NEW_KEY))
-
-    def test_dropped_key_refused(self):
-        with override_settings(SECRET_KEY=OLD_KEY):
-            before = derive_password(self.lobby_under_old_key())
-        with override_settings(SECRET_KEY=NEW_KEY, SECRET_KEY_FALLBACKS=[]):
-            lobby = GameLobby.objects.get(pk=self.old_lobby.pk)
-            with self.assertRaises(PasswordKeyUnavailable):
-                derive_password(lobby)
-            # A recreated lobby falls back to the current key.
+            # A lobby recreated for that game uses the new key.
             self._end(lobby)
             again = GameLobby.objects.create(
                 game=self.old_game, external_ref=lobby.external_ref
             )
             self.assertEqual(again.password_key_id, key_id(NEW_KEY))
             self.assertNotEqual(derive_password(again), before)
+
+    def test_dropped_key_refused(self):
+        with override_settings(SECRET_KEY=OLD_KEY):
+            self.lobby_under_old_key()
+        with override_settings(SECRET_KEY=NEW_KEY, SECRET_KEY_FALLBACKS=[]):
+            lobby = GameLobby.objects.get(pk=self.old_lobby.pk)
+            with self.assertRaises(PasswordKeyUnavailable):
+                derive_password(lobby)
+            # A recreated lobby uses the current key.
+            self._end(lobby)
+            again = GameLobby.objects.create(
+                game=self.old_game, external_ref=lobby.external_ref
+            )
+            self.assertEqual(again.password_key_id, key_id(NEW_KEY))
+            derive_password(again)
 
     def lobby_under_old_key(self):
         self.old_game = Game.objects.create()

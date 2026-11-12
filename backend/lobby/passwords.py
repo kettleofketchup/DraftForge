@@ -1,24 +1,26 @@
 """Lobby passwords, derived on demand and never stored.
 
-The password is an HMAC of the lobby's external_ref (`<prefix>:<pk>`, `game:<pk>` by default) under one
-of Django's secret keys, so:
+The password is an HMAC of the lobby row (its external_ref `<prefix>:<pk>`, `game:<pk>` by
+default, and the GameLobby pk) under one of Django's secret keys, so:
 
-- every create request for a game sends the same password, including a
-  retried create and a new GameLobby row made after an ambiguous failure.
-  dota_lobby then treats a repeat as a replay (200) of the lobby that may
-  already exist, not as a conflict (409);
+- every create request for a row sends the same password, so a retried
+  create is identical and dota_lobby answers it as a replay (200), not a
+  conflict (409);
+- every new lobby for a game, recreated after a roster change for example,
+  gets a new password: players removed from the game cannot reuse the one
+  they saw. (A new row never replays an older row's create anyway: the row
+  ID is in the request's metadata.)
 - nothing at rest needs encrypting.
 
 Rotating DJANGO_SECRET_KEY must not change the password of a lobby that
 already exists. Each GameLobby row records which key it was made under
 (`password_key_id`, a fingerprint that reveals nothing about the key), and
 the password is derived with whichever of SECRET_KEY and
-SECRET_KEY_FALLBACKS matches. A new row for a game reuses the key of the
-game's previous row while that key is still configured. Once the old key is
-dropped from SECRET_KEY_FALLBACKS, derive_password raises
-PasswordKeyUnavailable; read the live password from dota_lobby
-(`get_lobby`) instead. Anything shown to players should come from dota_lobby
-anyway, since that is the lobby they join.
+SECRET_KEY_FALLBACKS matches. Once the old key is dropped from
+SECRET_KEY_FALLBACKS, derive_password raises PasswordKeyUnavailable; read
+the live password from dota_lobby (`get_lobby`) instead. Anything shown to
+players should come from dota_lobby anyway, since that is the lobby they
+join.
 
 The password is refused under the public development SECRET_KEY outside
 DEBUG and tests: anyone could compute it.
@@ -65,10 +67,6 @@ def current_key_id() -> str:
     return key_id(settings.SECRET_KEY)
 
 
-def is_key_available(wanted: str) -> bool:
-    return any(key_id(secret) == wanted for secret in _configured_keys())
-
-
 def _key_for(game_lobby: GameLobby) -> str:
     for secret in _configured_keys():
         if key_id(secret) == game_lobby.password_key_id:
@@ -88,7 +86,7 @@ def _insecure_key_allowed() -> bool:
 
 
 def derive_password(game_lobby: GameLobby) -> str:
-    """A 12-character lowercase [a-z2-7] password for this lobby's game."""
+    """A 12-character lowercase [a-z2-7] password for this lobby row."""
     if game_lobby.pk is None or not game_lobby.password_key_id:
         raise ValueError("save the GameLobby before deriving its password")
     secret = _key_for(game_lobby)
@@ -99,6 +97,9 @@ def derive_password(game_lobby: GameLobby) -> str:
             "from the public development key"
         )
     digest = salted_hmac(
-        _SALT, game_lobby.external_ref, secret=secret, algorithm="sha256"
+        _SALT,
+        f"{game_lobby.external_ref}#{game_lobby.pk}",
+        secret=secret,
+        algorithm="sha256",
     ).digest()
     return base64.b32encode(digest).decode("ascii")[:PASSWORD_LENGTH].lower()

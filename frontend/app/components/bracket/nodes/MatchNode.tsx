@@ -16,6 +16,13 @@ import { DisplayName } from '~/components/user/avatar';
 import { getRoundLabel } from '../utils/doubleElimination';
 import { BracketBadge } from '../BracketBadge';
 import { getBadgeLetter } from '../utils/badgeUtils';
+import {
+  LOBBY_DOT_BASE,
+  lobbyStateDot,
+  lobbyStateLabel,
+  lobbyStateToneName,
+  showLobbyDot,
+} from '~/components/lobby/states';
 
 const statusConfig = {
   pending: { label: 'Upcoming', className: 'bg-muted text-muted-foreground' },
@@ -92,9 +99,22 @@ export const MatchNode = memo(({ data, selected }: NodeProps & { data: MatchNode
         <BaseNodeHeaderTitle className="text-xs text-muted-foreground">
           {roundLabel}
         </BaseNodeHeaderTitle>
-        <Badge variant="outline" className={cn('text-xs', status.className)}>
-          {status.label}
-        </Badge>
+        <span className="flex items-center gap-1.5">
+          {showLobbyDot(data.lobbyState) && (
+            <span
+              role="img"
+              className={cn(LOBBY_DOT_BASE, lobbyStateDot(data.lobbyState))}
+              title={`Lobby: ${lobbyStateLabel(data.lobbyState)}`}
+              aria-label={`Lobby: ${lobbyStateLabel(data.lobbyState)}`}
+              data-testid="match-lobby-dot"
+              data-lobby-state={data.lobbyState}
+              data-lobby-tone={lobbyStateToneName(data.lobbyState)}
+            />
+          )}
+          <Badge variant="outline" className={cn('text-xs', status.className)}>
+            {status.label}
+          </Badge>
+        </span>
       </BaseNodeHeader>
 
       {/* Team slots */}

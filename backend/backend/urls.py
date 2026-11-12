@@ -190,6 +190,8 @@ urlpatterns = [
         create_herodraft,
         name="create_herodraft",
     ),
+    # dota_lobby in-game lobby for a game (lobby app)
+    path("api/games/<int:game_pk>/lobby/", include("lobby.urls")),
     path("api/herodraft/<int:draft_pk>/", get_herodraft, name="get_herodraft"),
     path(
         "api/herodraft/<int:draft_pk>/set-ready/", set_ready, name="herodraft_set_ready"

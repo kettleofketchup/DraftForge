@@ -28,7 +28,7 @@ from django.conf import settings
 from django.db import transaction
 
 from app.models import DotaLobbyMode, Game, GameMode, GameType, Team
-from lobby import refs, states
+from lobby import broadcast, refs, states
 from lobby.models import GameLobby
 from lobby.passwords import derive_password
 
@@ -140,10 +140,48 @@ def active_lobby(game: Game) -> GameLobby | None:
     return game.lobbies.filter(ended=False).first()
 
 
+def match_abandoned(game_lobby: GameLobby) -> bool:
+    """The lobby's match started but will not produce a result.
+
+    dota_lobby reported it unscored, or the lobby reached a terminal state
+    after the match started without any scored result. The game goes back to
+    `pending` (lobby.events.release_game) so organizers can request a new lobby.
+    """
+    if game_lobby.match_started_at is None and game_lobby.match_id is None:
+        return False
+    if game_lobby.provisional_scored is True:
+        return False
+    return (
+        game_lobby.provisional_scored is False
+        or game_lobby.state in states.SERVICE_TERMINAL_STATES
+    )
+
+
+def match_played(game_lobby: GameLobby) -> bool:
+    """The lobby's match was played to a result, so a new lobby would replay it.
+
+    A match that ended unscored, or was abandoned after it started, was not
+    played to a result (see `match_abandoned`), so it may be retried.
+    """
+    return (
+        game_lobby.state == states.FINISHED
+        and game_lobby.provisional_scored is not False
+        and not match_abandoned(game_lobby)
+    )
+
+
 def lobby_eligibility(
-    game: Game, *, trigger: str = GameLobby.Trigger.AUTO, allow_missing: bool = False
+    game: Game,
+    *,
+    trigger: str = GameLobby.Trigger.AUTO,
+    allow_missing: bool = False,
+    replay: bool = False,
 ) -> Eligibility:
-    """Whether `game` may get a new lobby now, and why not."""
+    """Whether `game` may get a new lobby now, and why not.
+
+    `replay` (manual only) lets organizers host a match again after its lobby
+    played it to a result, for example after resetting a disputed game.
+    """
     if not is_enabled():
         return _fail("lobby_disabled")
     tournament = game.tournament
@@ -168,8 +206,17 @@ def lobby_eligibility(
         return _fail("same_team")
     if game.lobbies.filter(ended=False).exists():
         return _fail("active_lobby_exists")
+    latest = game.lobbies.order_by("-created_at", "-pk").first()
+    if (
+        latest is not None
+        and not (replay and not auto)
+        and match_played(latest)
+        and lobby_teams(latest) == game_teams(game)
+    ):
+        # These teams already played this game in a lobby: organizers confirm
+        # its result, or ask for a replay explicitly.
+        return _fail("lobby_match_played", state=latest.state)
     if auto:
-        latest = game.lobbies.order_by("-created_at", "-pk").first()
         if (
             latest is not None
             and latest.state_reason not in AUTO_RECREATE_REASONS
@@ -277,8 +324,14 @@ def claim_lobby(
     trigger: str = GameLobby.Trigger.AUTO,
     user_id: int | None = None,
     allow_missing: bool = False,
+    replay: bool = False,
+    game_lobby_id: int | None = None,
 ) -> Claim:
     """The game's active lobby, or a new `requested` row when it may have one.
+
+    With `game_lobby_id` (a create retrying for a row it already holds) it
+    is that row only, while it has not ended: a row an organizer closed is
+    never replaced by the retry of its own create (`lobby_ended`).
 
     Locks the game, so two claims for one game never both create a row.
     """
@@ -288,11 +341,20 @@ def claim_lobby(
             .select_related("tournament", "radiant_team", "dire_team")
             .get(pk=game_pk)
         )
+        if game_lobby_id is not None:
+            row = game.lobbies.filter(pk=game_lobby_id).first()
+            if row is None or row.ended:
+                return Claim(
+                    None,
+                    False,
+                    _fail("lobby_ended", state=row.state if row else None),
+                )
+            return Claim(row, False, Eligibility(True))
         existing = active_lobby(game)
         if existing is not None:
             return Claim(existing, False, Eligibility(True))
         eligibility = lobby_eligibility(
-            game, trigger=trigger, allow_missing=allow_missing
+            game, trigger=trigger, allow_missing=allow_missing, replay=replay
         )
         if not eligibility.ok:
             return Claim(None, False, eligibility)
@@ -314,11 +376,17 @@ def end_locally(game_lobby: GameLobby, reason: str) -> None:
     """Mark a lobby ended in DraftForge before dota_lobby has closed it.
 
     The caller closes it in dota_lobby. The row stops counting as the game's
-    active lobby at once, so a replacement can be requested.
+    active lobby at once, so a replacement can be requested. It stays
+    `close_pending` until dota_lobby confirms the close whenever dota_lobby
+    may hold a lobby for it: one it accepted, or a create that was sent
+    (`next_attempt_at` is set) and whose answer may have been lost.
     """
     game_lobby.state = states.CLOSED
     game_lobby.state_reason = reason
-    game_lobby.save(update_fields=["state", "state_reason", "updated_at"])
+    game_lobby.close_pending = bool(game_lobby.lobby_id or game_lobby.next_attempt_at)
+    game_lobby.save(
+        update_fields=["state", "state_reason", "close_pending", "updated_at"]
+    )
 
 
 def desired_radiant_team_id(game: Game) -> int | None:
@@ -343,39 +411,58 @@ def wants_flip(game_lobby: GameLobby) -> bool:
 
 
 def queue_create(
-    game: Game, *, user_id: int | None = None, allow_missing: bool = False
+    game: Game,
+    *,
+    user_id: int | None = None,
+    allow_missing: bool = False,
+    replay: bool = False,
 ) -> Eligibility:
-    """Manual create (organizer action): check now, create in Celery on commit."""
-    eligibility = lobby_eligibility(
-        game, trigger=GameLobby.Trigger.MANUAL, allow_missing=allow_missing
-    )
-    if eligibility.ok:
-        from lobby.tasks import create_dota_lobby
+    """Manual create (organizer action): claim the row now, send it in Celery.
 
-        game_pk = game.pk
-        transaction.on_commit(
-            lambda: create_dota_lobby.delay(
-                game_pk,
-                trigger=GameLobby.Trigger.MANUAL,
-                user_id=user_id,
-                allow_missing=allow_missing,
-            )
+    The `requested` row exists before the task runs, and the task carries its
+    ID through every retry. Closing the row therefore stops the create: the
+    task's next claim answers `lobby_ended` instead of making a new row.
+    """
+    claim = claim_lobby(
+        game.pk,
+        trigger=GameLobby.Trigger.MANUAL,
+        user_id=user_id,
+        allow_missing=allow_missing,
+        replay=replay,
+    )
+    if claim.game_lobby is None:
+        return claim.eligibility
+    if not claim.created:
+        return _fail("active_lobby_exists", state=claim.game_lobby.state)
+    from lobby.tasks import create_dota_lobby
+
+    game_pk, pk = game.pk, claim.game_lobby.pk
+    broadcast.lobby_changed_on_commit(claim.game_lobby, bracket_changed=False)
+    transaction.on_commit(
+        lambda: create_dota_lobby.delay(
+            game_pk,
+            trigger=GameLobby.Trigger.MANUAL,
+            user_id=user_id,
+            allow_missing=allow_missing,
+            game_lobby_id=pk,
         )
-    return eligibility
+    )
+    return claim.eligibility
 
 
 def close_lobby(game_lobby: GameLobby, reason: str) -> bool:
     """End a lobby that has not started and close it in dota_lobby.
 
     False when the match is already under way: dota_lobby ends such a lobby
-    with the match.
+    with the match. The close runs in Celery; until dota_lobby confirms it
+    the row stays `close_pending` and the reconcile task tries again.
     """
     if game_lobby.ended or game_lobby.state not in PREGAME_STATES:
         return False
     end_locally(game_lobby, reason)
-    if game_lobby.lobby_id:
+    if game_lobby.close_pending:
         from lobby.tasks import close_dota_lobby
 
-        pk, lobby_id = game_lobby.pk, game_lobby.lobby_id
+        pk, lobby_id = game_lobby.pk, game_lobby.lobby_id or ""
         transaction.on_commit(lambda: close_dota_lobby.delay(pk, lobby_id))
     return True

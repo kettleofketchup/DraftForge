@@ -1,4 +1,5 @@
 from django.test import TestCase, override_settings
+from django.utils import timezone
 
 from app.models import DotaLobbyLaunch, DotaLobbyMode, GameMode, GameType
 from lobby import services, states
@@ -91,6 +92,59 @@ class EligibilityTests(TestCase):
             state_reason=services.TEAMS_CHANGED,
         )
         self.assertEqual(self._code(), "")
+
+    def _ended_lobby(self, state, **fields):
+        return GameLobby.objects.create(
+            game=self.game,
+            external_ref=f"game:{self.game.pk}",
+            state=state,
+            radiant_team=self.game.radiant_team,
+            dire_team=self.game.dire_team,
+            **fields,
+        )
+
+    def test_no_retry_after_a_played_match(self):
+        self._ended_lobby(states.FINISHED, provisional_scored=True)
+        self.assertEqual(self._code(trigger="manual"), "lobby_match_played")
+        self.assertEqual(self._code(), "lobby_match_played")
+
+    def test_no_retry_after_a_finished_lobby_without_a_result_event(self):
+        # No match was seen starting, so nothing says it was abandoned.
+        self._ended_lobby(states.FINISHED)
+        self.assertEqual(self._code(trigger="manual"), "lobby_match_played")
+
+    def test_retry_after_a_started_match_finished_without_a_result(self):
+        # release_game puts this game back to pending as abandoned, so
+        # organizers (and auto mode) must be able to request a new lobby.
+        lobby = self._ended_lobby(
+            states.FINISHED, match_id=7001, match_started_at=timezone.now()
+        )
+        self.assertTrue(services.match_abandoned(lobby))
+        self.assertFalse(services.match_played(lobby))
+        self.assertEqual(self._code(trigger="manual"), "")
+
+    def test_replay_lets_organizers_host_a_played_match_again(self):
+        self._ended_lobby(states.FINISHED, provisional_scored=True)
+        self.assertEqual(self._code(trigger="manual", replay=True), "")
+        # Auto mode never replays a played match on its own.
+        self.assertEqual(self._code(replay=True), "lobby_match_played")
+
+    def test_retry_after_a_match_that_ended_unscored(self):
+        self._ended_lobby(states.FINISHED, provisional_scored=False)
+        self.assertEqual(self._code(trigger="manual"), "")
+
+    def test_retry_after_lobbies_that_ended_without_a_match(self):
+        for state in (states.FAILED, states.TIMED_OUT, states.CLOSED, states.ERROR):
+            with self.subTest(state=state):
+                GameLobby.objects.filter(game=self.game).delete()
+                self._ended_lobby(state)
+                self.assertEqual(self._code(trigger="manual"), "")
+
+    def test_played_match_of_other_teams_does_not_block(self):
+        self._ended_lobby(states.FINISHED, provisional_scored=True)
+        self.game.dire_team = make_team(self.game.tournament, "Replacement")
+        self.game.save()
+        self.assertEqual(self._code(trigger="manual"), "")
 
     def test_missing_steam_ids_block_auto_but_manual_may_skip(self):
         no_steam = make_user(steam=False)

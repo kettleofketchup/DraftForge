@@ -20,6 +20,11 @@ class Command(BaseCommand):
             action="store_true",
             help="Leave out players without a Steam account ID",
         )
+        parser.add_argument(
+            "--replay",
+            action="store_true",
+            help="Host the match again although a lobby already played it",
+        )
 
     def handle(self, *args: object, **options: object) -> None:
         try:
@@ -30,7 +35,9 @@ class Command(BaseCommand):
             raise CommandError(f"No game {options['game_id']}") from None
         with transaction.atomic():
             eligibility = services.queue_create(
-                game, allow_missing=bool(options["allow_missing"])
+                game,
+                allow_missing=bool(options["allow_missing"]),
+                replay=bool(options["replay"]),
             )
         if not eligibility.ok:
             raise CommandError(f"{eligibility.code} {eligibility.details or ''}")

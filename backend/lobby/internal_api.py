@@ -34,11 +34,17 @@ def claim(
     trigger: str,
     user_id: int | None = None,
     allow_missing: bool = False,
+    game_lobby_id: int | None = None,
 ) -> tuple[int | None, Any]:
     """(status, body) of the claim; status is None when the call failed."""
     resp = ic._post(
         f"{BASE}/games/{game_id}/claim/",
-        {"trigger": trigger, "user_id": user_id, "allow_missing": allow_missing},
+        {
+            "trigger": trigger,
+            "user_id": user_id,
+            "allow_missing": allow_missing,
+            "game_lobby_id": game_lobby_id,
+        },
     )
     if resp is None:
         return None, None
@@ -73,6 +79,14 @@ def conflict(pk: int, lobby: dict[str, Any]) -> Any:
 
 def active() -> list[dict[str, Any]] | None:
     return _json(ic._get(f"{BASE}/active/"))
+
+
+def close_pending() -> list[dict[str, Any]] | None:
+    return _json(ic._get(f"{BASE}/close-pending/"))
+
+
+def close_done(pk: int, *, found: int) -> Any:
+    return _json(ic._post(f"{BASE}/{pk}/close-done/", {"found": found}))
 
 
 def detail(pk: int) -> dict[str, Any] | None:

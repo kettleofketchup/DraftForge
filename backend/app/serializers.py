@@ -1207,7 +1207,15 @@ class TournamentSerializer(serializers.ModelSerializer):
             "discord_send_draft_link",
             "discord_send_herodraft_link",
             "draft_options",
+            "dota_lobby_mode",
+            "dota_lobby_launch",
+            "dota_lobby_region",
+            "discord_send_lobby_info",
+            "game_mode",
+            "lobby_steam_league_id",
         )
+        # Lobby context the UI shows; edited through the event settings.
+        read_only_fields = ("game_mode", "lobby_steam_league_id")
 
     def to_representation(self, instance: Tournament) -> dict:
         data = super().to_representation(instance)
@@ -1543,11 +1551,23 @@ class BracketGameSerializer(serializers.ModelSerializer):
     dire_team = TeamSerializerForTournament(read_only=True)
     winning_team = TeamSerializerForTournament(read_only=True)
     herodraft_id = serializers.SerializerMethodField()
+    lobby_state = serializers.SerializerMethodField()
 
     def get_herodraft_id(self, obj: Game) -> int | None:
         if hasattr(obj, "herodraft"):
             return obj.herodraft.id
         return None
+
+    def get_lobby_state(self, obj):
+        """State of the game's latest dota_lobby lobby, or None. No password.
+
+        get_bracket prefetches the lobbies into `latest_lobbies`; other
+        callers serialize one game and query it.
+        """
+        lobbies = getattr(obj, "latest_lobbies", None)
+        if lobbies is not None:
+            return lobbies[0].state if lobbies else None
+        return obj.lobbies.values_list("state", flat=True).first()
 
     class Meta:
         model = Game
@@ -1569,6 +1589,7 @@ class BracketGameSerializer(serializers.ModelSerializer):
             "swiss_record_losses",
             "gameid",
             "herodraft_id",
+            "lobby_state",
         )
 
 
