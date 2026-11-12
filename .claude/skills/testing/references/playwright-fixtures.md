@@ -140,6 +140,21 @@ const resp = await context.request.get(`${API_URL}/events/?organization=7`);
 const events = await resp.json();
 ```
 
+## dota_lobby Fixture (`fixtures/dota-lobby.ts`)
+
+For the 18-dota-lobby specs against the simulated dota_lobby (`just test::dota-lobby up`).
+
+| Function | Endpoint | Purpose |
+|----------|----------|---------|
+| `getDotaLobbyTestData(context)` / `resetDotaLobbyData(context)` | GET `/api/tests/dota-lobby/data/` / POST `.../reset/` | Seeded PKs, names, teams, fixed password; reset returns the same |
+| `loginDotaLobby(context, role)` | POST `/api/tests/login-dota-lobby/<role>/` | `staff`, `rostered`, `registered`, `unregistered`, `league-staff` |
+| `hasSimulator(context)` / `simulatorStatus(context)` | GET `/api/tests/dota-lobby/simulator/` | Gate: `test.skip(!(await hasSimulator(context)), SIMULATOR_SKIP_REASON)` |
+| `sim.get/post/patch/delete(context, path)` | `/api/tests/dota-lobby-sim/<path>` | The simulator's `/v1/sim/<path>` (players, seats, chat, start, end, fail, settings) |
+| `getSimLobby(context, lobbyId)` | GET `.../dota-lobby-sim/lobbies/<id>` | Simulated lobby: password, members and seats, chat |
+| `getLobbyRow` / `waitForLobbyRow(context, gamePk, ready?, {previousId})` | GET `/api/tests/dota-lobby/games/<pk>/lobby/` | The game's latest lobby row; waits until accepted and created (or `ready`) |
+| `requestLobby(context, gamePk, body?)` | POST `/api/games/<pk>/lobby/` | Staff create (expects `202`) |
+| `openBracket`, `bracketNode`, `openMatchModal`, `closeMatchModal`, `expectLobbyState` | UI | Bracket page, node by `data-game-pk`, Match Details dialog, `lobby-state-badge[data-lobby-state]` |
+
 ## Fixture Index (`fixtures/index.ts`)
 
 Re-exports all fixtures and helpers:

@@ -31,6 +31,17 @@ testIgnore: **/fixtures/**, **/helpers/**, **/constants.ts, **/*.d.ts
 - `headless: true` in CI/Docker, `false` locally
 - `slowMo: 100ms` locally, `0ms` in CI
 
+### `events-sequential` / `dota-lobby-sequential` - Shared-State Suites
+
+- `events-sequential` matches `e2e/16-events/`, `dota-lobby-sequential` matches
+  `e2e/18-dota-lobby/`; `chromium` ignores both directories
+- `fullyParallel: false`, `dependencies: ['chromium']`
+- `dota-lobby-sequential` also sets `workers: 1`: its files share one simulated
+  dota_lobby and reset the same seeded games
+- `just test::pw::dota-lobby` (all) / `just test::pw::cicd-dota-lobby` (@cicd).
+  Specs that need the simulator skip without it; `DOTA_LOBBY_SIMULATOR_REQUIRED=1`
+  makes that an error instead
+
 ### 3. `demo` - Video Recording
 
 - `testDir: ./tests/playwright/demo`
