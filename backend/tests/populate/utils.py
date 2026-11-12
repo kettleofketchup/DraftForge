@@ -2,9 +2,15 @@
 Utility functions for test database population.
 """
 
+import os
 import random
+import re
 from typing import Any, Final
 
+import redis
+from cacheops.redis import redis_client as cacheops_redis
+from django.conf import settings
+from django.core.cache import cache
 from django.db import transaction
 
 from app.models import CustomUser, Organization, PositionsModel
@@ -155,45 +161,44 @@ def ensure_league_user(user, org_user, league):
     return league_user
 
 
-def flush_redis_cache():
-    """Flush Redis cache to ensure fresh data after population."""
-    import os
+# One script, so no cache miss can interleave: a SCAN-then-DEL could delete a
+# fresh conj key while missing the result key it guards, leaving that result
+# with no invalidator until its timeout.
+_DELETE_MATCHING_LUA = """
+local keys = redis.call('KEYS', ARGV[1])
+for i = 1, #keys, 5000 do
+    redis.call('DEL', unpack(keys, i, math.min(i + 4999, #keys)))
+end
+return #keys
+"""
+_GLOB_SPECIAL = re.compile(r"([*?\[\]\\])")
 
+
+def _glob_escape(value: str) -> str:
+    return _GLOB_SPECIAL.sub(r"\\\1", value)
+
+
+def flush_redis_cache() -> None:
+    """Drop cached query results after population.
+
+    Reset endpoints call this while other drafts run on the same Redis, so it
+    deletes only cacheops and Django cache keys. A FLUSHALL would also wipe the
+    channel-layer groups, draft connection counts, heartbeats, tick locks and
+    the Celery broker, silently stopping other drafts' broadcasts and ticks.
+    """
     if os.environ.get("DISABLE_CACHE", "").lower() in ("true", "1", "yes"):
         return
-
     try:
-        import redis
-        from django.conf import settings
-
-        redis_url = getattr(settings, "CACHEOPS_REDIS", None)
-        if redis_url:
-            # Parse redis URL or use dict config with short timeout to avoid hanging
-            if isinstance(redis_url, str):
-                client = redis.from_url(
-                    redis_url, socket_timeout=2, socket_connect_timeout=2
-                )
-            else:
-                # Add timeout to dict config
-                config = {**redis_url, "socket_timeout": 2, "socket_connect_timeout": 2}
-                client = redis.Redis(**config)
-            client.flushall()
-            print("Redis cache flushed successfully")
-        else:
-            print("No CACHEOPS_REDIS configured, skipping cache flush")
+        prefix: str = settings.CACHEOPS_PREFIX(None)
+        deleted = int(
+            cacheops_redis.eval(_DELETE_MATCHING_LUA, 0, _glob_escape(prefix) + "*")
+        )
+        if hasattr(cache, "delete_pattern"):
+            cache.delete_pattern("*")
+        print(f"Redis query cache flushed ({deleted} cacheops keys)")
+    except (redis.exceptions.ConnectionError, redis.exceptions.TimeoutError) as e:
+        print(f"Redis not available, skipping cache flush: {e}")
     except Exception as e:
-        # Import redis exceptions only if redis is available
-        try:
-            import redis as redis_module
-
-            if isinstance(e, redis_module.exceptions.ConnectionError):
-                print(f"Redis not available, skipping cache flush: {e}")
-                return
-            if isinstance(e, redis_module.exceptions.TimeoutError):
-                print(f"Redis timeout, skipping cache flush: {e}")
-                return
-        except ImportError:
-            pass
         print(f"Warning: Failed to flush Redis cache: {e}")
 
 

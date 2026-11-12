@@ -1,9 +1,12 @@
 """Unit tests for BaseDraftConsumer abstract class."""
 
 import asyncio
+import threading
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest import mock
 
+from asgiref.sync import async_to_sync, sync_to_async
 from django.test import SimpleTestCase, override_settings
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
@@ -320,6 +323,24 @@ class TestBaseHooks(SimpleTestCase):
     def test_tick_driver_defaults_to_none(self):
         self.assertIsNone(ConcreteDraftConsumer().get_tick_driver())
 
+    def test_base_connect_stores_draft_id_as_int(self):
+        """A regex route hands draft_id over as a string; ticks key the registry on int."""
+
+        class MissingDraftConsumer(ConcreteDraftConsumer):
+            async def draft_exists(self, draft_id):
+                return False
+
+        consumer = MissingDraftConsumer()
+        consumer.scope = {"url_route": {"kwargs": {"draft_id": "22"}}, "path": ""}
+        with (
+            mock.patch.object(consumer, "telemetry_connect", mock.AsyncMock()),
+            mock.patch.object(consumer, "close", mock.AsyncMock()),
+        ):
+            asyncio.run(consumer.base_connect())
+
+        self.assertEqual(consumer.draft_id, 22)
+        self.assertEqual(consumer.room_group_name, "testdraft_22")
+
     def test_should_start_tick_broadcaster_uses_active_state_values(self):
         consumer = ConcreteDraftConsumer()
         self.assertTrue(consumer.should_start_tick_broadcaster({"state": "drafting"}))
@@ -343,7 +364,65 @@ class TestBaseHooks(SimpleTestCase):
     def test_default_send_initial_messages_sends_initial_state_frame(self):
         consumer = ConcreteDraftConsumer()
         consumer.send = mock.AsyncMock()
-        asyncio.run(consumer.send_initial_messages({"state": "drafting"}))
+        now = datetime(2026, 11, 9, 12, 0, tzinfo=UTC)
+        with mock.patch("app.consumers_base.timezone.now", return_value=now):
+            asyncio.run(consumer.send_initial_messages({"state": "drafting"}))
         consumer.send.assert_awaited_once_with(
-            text_data='{"type": "initial_state", "draft_state": {"state": "drafting"}}'
+            text_data='{"type": "initial_state", "draft_state": {"state": "drafting"}, '
+            '"server_time": "2026-11-09T12:00:00+00:00"}'
         )
+
+
+class TestHeroTickWantedFollowsState(SimpleTestCase):
+    def _consumer(self) -> HeroDraftConsumer:
+        consumer = HeroDraftConsumer()
+        consumer.draft_id = 5
+        consumer.send = mock.AsyncMock()
+        consumer._tick_wanted = True
+        return consumer
+
+    def test_event_with_a_finished_draft_state_stops_wanting_ticks(self):
+        consumer = self._consumer()
+        asyncio.run(
+            consumer.herodraft_event(
+                {"event_type": "draft_completed", "draft_state": {"state": "completed"}}
+            )
+        )
+        self.assertFalse(consumer._tick_wanted)
+
+    def test_event_without_draft_state_leaves_it_alone(self):
+        consumer = self._consumer()
+        asyncio.run(consumer.herodraft_event({"event_type": "roll_result"}))
+        self.assertTrue(consumer._tick_wanted)
+
+    def test_tick_state_drives_it(self):
+        consumer = self._consumer()
+        asyncio.run(consumer.herodraft_tick({"draft_state": "paused"}))
+        self.assertFalse(consumer._tick_wanted)
+        asyncio.run(consumer.herodraft_tick({"draft_state": "resuming"}))
+        self.assertTrue(consumer._tick_wanted)
+        asyncio.run(consumer.herodraft_tick({"draft_state": "drafting"}))
+        self.assertTrue(consumer._tick_wanted)
+
+
+class TestTickStartRunsOffTheSyncThread(SimpleTestCase):
+    def test_start_does_not_queue_on_the_thread_sensitive_executor(self):
+        consumer = HeroDraftConsumer()
+        consumer.draft_id = 5
+        ran_on: list[threading.Thread] = []
+
+        def record(_draft_id: int) -> bool:
+            ran_on.append(threading.current_thread())
+            return False
+
+        async def go() -> threading.Thread:
+            sensitive = await sync_to_async(threading.current_thread)()
+            with mock.patch(
+                "app.tasks.herodraft_tick.start_tick_broadcaster", side_effect=record
+            ):
+                await consumer._maybe_start_tick_broadcaster()
+            return sensitive
+
+        sensitive = async_to_sync(go)()
+        self.assertEqual(len(ran_on), 1)
+        self.assertIsNot(ran_on[0], sensitive)

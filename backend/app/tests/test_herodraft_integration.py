@@ -1,17 +1,29 @@
 """Integration tests for HeroDraft API flow."""
 
 from datetime import date
+from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, DraftTeam, Game, HeroDraft, Team, Tournament
+from app.models import CustomUser, Game, Team, Tournament
+
+
+def patch_tick_start(test: TestCase) -> MagicMock:
+    """Entering DRAFTING starts a real tick thread; under TestCase its reads hit
+    SQLite shared-cache table locks held by the test's open transaction."""
+    patcher = patch(
+        "app.tasks.herodraft_tick.start_tick_broadcaster", return_value=True
+    )
+    test.addCleanup(patcher.stop)
+    return patcher.start()
 
 
 class HeroDraftAPITest(TestCase):
     """Tests for the HeroDraft API endpoints."""
 
     def setUp(self):
+        self.tick_start = patch_tick_start(self)
         self.client = APIClient()
         self.captain1 = CustomUser.objects.create_user(
             username="captain1", password="test123"
@@ -147,7 +159,6 @@ class HeroDraftAPITest(TestCase):
         roll_winner_id = response.data["roll_winner"]["id"]
         draft_teams = response.data["draft_teams"]
         winner_team = next(t for t in draft_teams if t["id"] == roll_winner_id)
-        loser_team = next(t for t in draft_teams if t["id"] != roll_winner_id)
 
         winner_captain = (
             self.captain1
@@ -175,6 +186,7 @@ class HeroDraftAPITest(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["state"], "drafting")
+        self.tick_start.assert_called_once_with(draft_id)
         self.assertEqual(len(response.data["rounds"]), 24)
 
     def test_loser_cannot_choose_first(self):
@@ -270,6 +282,7 @@ class HeroDraftPickTest(TestCase):
     """Tests for hero pick/ban functionality."""
 
     def setUp(self):
+        self.tick_start = patch_tick_start(self)
         self.client = APIClient()
         self.captain1 = CustomUser.objects.create_user(
             username="captain1", password="test123"
@@ -314,7 +327,6 @@ class HeroDraftPickTest(TestCase):
         roll_winner_id = response.data["roll_winner"]["id"]
         draft_teams = response.data["draft_teams"]
         winner_team = next(t for t in draft_teams if t["id"] == roll_winner_id)
-        loser_team = next(t for t in draft_teams if t["id"] != roll_winner_id)
 
         winner_captain = (
             self.captain1
@@ -514,7 +526,7 @@ class HeroDraftErrorCasesTest(TestCase):
 
     def test_create_draft_missing_captain(self):
         """Cannot create draft when a team has no captain."""
-        captain2 = CustomUser.objects.create_user(username="captain2", password="test")
+        CustomUser.objects.create_user(username="captain2", password="test")
         team2 = Team.objects.create(
             name="Team 2",
             tournament=self.tournament,

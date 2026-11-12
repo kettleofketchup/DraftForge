@@ -8,8 +8,10 @@ import { buildDiscordLoginUrl } from '~/components/navbar/login';
 import type { UserType } from '~/index';
 import { DisplayName } from '~/components/user/avatar';
 import { getLogger } from '~/lib/logger';
+import { draftWsSelectors, useDraftWebSocketStore } from '~/store/draftWebSocketStore';
 import { useUserStore } from '~/store/userStore';
 import { choosePlayerHook } from '../hooks/choosePlayerHook';
+import { isCaptainOf } from '../isCaptainOf';
 const log = getLogger('pickPlayerButton');
 
 export const ChoosePlayerButton: React.FC<{
@@ -23,9 +25,10 @@ export const ChoosePlayerButton: React.FC<{
   const curDraftRound = useUserStore((state) => state.curDraftRound);
   const draft = useUserStore((state) => state.draft);
   const isStaff = useUserStore((state) => state.isStaff);
+  const timerEnabled = useDraftWebSocketStore(draftWsSelectors.timerEnabled);
+  const activeRoundPk = useDraftWebSocketStore(draftWsSelectors.activeRoundPk);
 
   const setDraft = useUserStore((state) => state.setDraft);
-  const setDraftIndex = useUserStore((state) => state.setDraftIndex);
   const autoRefreshDraft = useUserStore((state) => state.autoRefreshDraft);
   const location = useLocation();
 
@@ -35,9 +38,7 @@ export const ChoosePlayerButton: React.FC<{
   const isLoggedIn = currentUser?.pk != null;
 
   // Check if current user is a captain of any team in this tournament
-  const isAnyCaptain = tournament?.teams?.some(
-    (team) => team.captain?.pk === currentUser?.pk
-  );
+  const isAnyCaptain = isCaptainOf(tournament?.teams, currentUser?.pk);
 
   // Check if current user is the captain for this round
   // Must check that both currentUser and captain exist with valid pks to avoid undefined === undefined
@@ -45,7 +46,9 @@ export const ChoosePlayerButton: React.FC<{
     currentUser?.pk != null &&
     curDraftRound?.captain?.pk != null &&
     currentUser.pk === curDraftRound.captain.pk;
-  const canPick = isStaff() || isCaptainForRound;
+  const canPick =
+    isStaff() ||
+    (isCaptainForRound && (!timerEnabled || curDraftRound.pk === activeRoundPk));
   const pickAlreadyMade = !!curDraftRound?.choice;
 
   useEffect(() => {}, [tournament.draft, tournament.teams]);
@@ -64,7 +67,6 @@ export const ChoosePlayerButton: React.FC<{
       curDraftRound,
       setCurDraftRound,
       setDraft,
-      setDraftIndex,
       autoRefreshDraft: autoRefreshDraft || undefined,
     });
 

@@ -1,6 +1,13 @@
 import { InfoDialog } from "~/components/ui/dialogs";
 import { UserAvatar } from "~/components/user/UserAvatar";
-import type { DraftEvent, PlayerPickedPayload, CaptainAssignedPayload, TieRollPayload } from "~/types/draftEvent";
+import type {
+  CaptainPresencePayload,
+  CaptainRef,
+  DraftEvent,
+  PickSkippedPayload,
+  PlayerPickedPayload,
+} from "~/types/draftEvent";
+import { getEventIcon, getEventMessage } from "./eventMessages";
 import { formatDistanceToNow } from "date-fns";
 
 interface DraftEventModalProps {
@@ -9,29 +16,22 @@ interface DraftEventModalProps {
   events: DraftEvent[];
 }
 
-function getEventIcon(eventType: DraftEvent["event_type"]): string {
-  switch (eventType) {
-    case "draft_started":
-      return "▶️";
-    case "draft_completed":
-      return "🏁";
-    case "player_picked":
-      return "🎯";
-    case "tie_roll":
-      return "🎲";
-    case "captain_assigned":
-      return "👑";
-    case "pick_undone":
-      return "↩️";
-    default:
-      return "📋";
-  }
-}
-
 interface EventAvatars {
   captain?: string | null;
   picked?: string | null;
 }
+
+const CAPTAIN_AVATAR_EVENTS = new Set<DraftEvent["event_type"]>([
+  "captain_assigned",
+  "round_started",
+  "captain_ready",
+  "captain_unready",
+  "captain_connected",
+  "captain_disconnected",
+  "draft_paused",
+  "pick_timed_out",
+  "pick_skip_unavailable",
+]);
 
 function getEventAvatars(event: DraftEvent): EventAvatars {
   const avatars: EventAvatars = {};
@@ -40,42 +40,15 @@ function getEventAvatars(event: DraftEvent): EventAvatars {
     const payload = event.payload as PlayerPickedPayload;
     avatars.captain = payload.captain_avatar_url;
     avatars.picked = payload.picked_avatar_url;
-  } else if (event.event_type === "captain_assigned") {
-    const payload = event.payload as CaptainAssignedPayload;
-    avatars.captain = payload.captain_avatar_url;
+  } else if (event.event_type === "pick_skipped") {
+    const payload = event.payload as PickSkippedPayload;
+    avatars.captain = payload.skipped_captain_avatar_url;
+    avatars.picked = payload.next_captain_avatar_url;
+  } else if (CAPTAIN_AVATAR_EVENTS.has(event.event_type)) {
+    avatars.captain = (event.payload as CaptainRef | CaptainPresencePayload).captain_avatar_url;
   }
 
   return avatars;
-}
-
-function getEventDescription(event: DraftEvent): string {
-  switch (event.event_type) {
-    case "draft_started":
-      return "Draft started";
-    case "draft_completed":
-      return "Draft completed";
-    case "player_picked": {
-      const payload = event.payload as PlayerPickedPayload;
-      return `${payload.captain_name} picked ${payload.picked_name} (Pick ${payload.pick_number})`;
-    }
-    case "tie_roll": {
-      const payload = event.payload as TieRollPayload;
-      const names = payload.tied_teams?.map((t) => t.name).join(" vs ") ?? "teams";
-      const lastRound = payload.roll_rounds?.[payload.roll_rounds.length - 1];
-      const rolls = lastRound?.map((r) => `${r.roll}`).join(" vs ") ?? "";
-      return `Tie! ${names} rolled ${rolls} → ${payload.winner_name} wins`;
-    }
-    case "captain_assigned": {
-      const payload = event.payload as CaptainAssignedPayload;
-      return `${payload.captain_name} is picking next`;
-    }
-    case "pick_undone": {
-      const payload = event.payload as { undone_player_name: string; pick_number: number };
-      return `Pick ${payload.pick_number} undone (${payload.undone_player_name})`;
-    }
-    default:
-      return "Unknown event";
-  }
 }
 
 function EventAvatarDisplay({ avatars }: { avatars: EventAvatars }) {
@@ -116,14 +89,15 @@ export function DraftEventModal({ open, onOpenChange, events }: DraftEventModalP
             return (
               <div
                 key={event.pk}
+                data-testid={`draft-event-row-${event.event_type}`}
                 className="flex items-start gap-3 p-2 rounded-lg bg-muted/50"
               >
                 <span className="text-lg">{getEventIcon(event.event_type)}</span>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <EventAvatarDisplay avatars={avatars} />
-                    <p className="text-sm font-medium">
-                      {getEventDescription(event)}
+                    <p className="text-sm font-medium" data-testid="draft-event-text">
+                      {getEventMessage(event)}
                     </p>
                   </div>
                   <p className="text-xs text-muted-foreground">

@@ -1,16 +1,20 @@
 """Team-draft timer lifecycle: helpers, endpoints, pick matrix, undo, auto-pause, tick payload (spec §2)."""
 
 import asyncio
+import threading
 import time
 from datetime import timedelta
 from unittest.mock import PropertyMock, patch
 
+import redis
 from asgiref.sync import async_to_sync
 from channels.db import database_sync_to_async
 from channels.layers import get_channel_layer
 from channels.routing import URLRouter
 from channels.testing import WebsocketCommunicator
+from django.db import connection, transaction
 from django.test import TestCase, TransactionTestCase
+from django.test.utils import CaptureQueriesContext
 from django.urls import re_path, resolve
 from django.utils import timezone
 from rest_framework.test import APIClient, APIRequestFactory
@@ -18,7 +22,7 @@ from rest_framework.test import APIClient, APIRequestFactory
 from app.consumers import DraftConsumer
 from app.functions import teamdraft
 from app.models import Draft, DraftEvent, DraftOptions, Team, TeamDraftState
-from app.tasks import teamdraft_tick
+from app.tasks import draft_tick, teamdraft_tick
 from app.tasks.draft_tick import (
     TickDriver,
     captain_channel_key,
@@ -29,6 +33,7 @@ from app.tasks.draft_tick import (
     registry_for,
 )
 from app.tests.teamdraft_fixtures import TimedDraftFixture
+from app.tests.ws_helpers import assert_no_frame_except_ping, read_until_type
 from tests.test_teamdraft import expire_draft_clock, stale_draft_heartbeat
 
 
@@ -53,7 +58,7 @@ class LifecycleHelperTests(TestCase):
         self.assertEqual(teamdraft.team_payload(None)["captain_id"], None)
 
     def test_emit_event_broadcasts_only_after_commit(self):
-        with patch("app.functions.teamdraft.broadcast_event") as mock_bc:
+        with patch("app.broadcast.broadcast_event") as mock_bc:
             with self.captureOnCommitCallbacks(execute=True) as callbacks:
                 ev = teamdraft.emit_event(
                     self.fx.draft,
@@ -284,12 +289,16 @@ class ReadyEndpointTests(EndpointTestBase):
         r = self.post(cap, "ready", {"ready": True})
         self.assertEqual(r.status_code, 200, r.data)
         self.assertTrue(Team.objects.get(pk=self.fx.team_of(cap).pk).draft_is_ready)
-        self.assertEqual(self.fx.events("captain_ready").get().payload["captain_id"], cap.pk)
+        self.assertEqual(
+            self.fx.events("captain_ready").get().payload["captain_id"], cap.pk
+        )
         r = self.post(cap, "ready", {"ready": False})
         self.assertEqual(r.status_code, 200)
         self.assertEqual(self.fx.events("captain_unready").count(), 1)
         self.fx.draft.refresh_from_db()
-        self.assertEqual(self.fx.draft.state, TeamDraftState.PENDING, "ready never starts the draft")
+        self.assertEqual(
+            self.fx.draft.state, TeamDraftState.PENDING, "ready never starts the draft"
+        )
 
     def test_all_ready_does_not_start_draft(self):
         for cap in self.fx.captains:
@@ -298,8 +307,12 @@ class ReadyEndpointTests(EndpointTestBase):
         self.assertEqual(self.fx.draft.state, TeamDraftState.PENDING)
 
     def test_spectator_and_staff_cannot_ready(self):
-        self.assertEqual(self.post(self.fx.players[0], "ready", {"ready": True}).status_code, 403)
-        self.assertEqual(self.post(self.fx.staff, "ready", {"ready": True}).status_code, 403)
+        self.assertEqual(
+            self.post(self.fx.players[0], "ready", {"ready": True}).status_code, 403
+        )
+        self.assertEqual(
+            self.post(self.fx.staff, "ready", {"ready": True}).status_code, 403
+        )
         self.assertFalse(self.fx.events("captain_ready").exists())
 
     def test_ready_outside_pending_is_400(self):
@@ -332,8 +345,14 @@ class StartEndpointTests(EndpointTestBase):
         r = self.post(self.fx.staff, "start")
         self.assertEqual(r.status_code, 200, r.data)
         ev = self.fx.events("draft_force_started").get()
-        self.assertEqual({x["captain_id"] for x in ev.payload["not_ready"]}, {c.pk for c in self.fx.captains[1:]})
-        self.assertEqual(set(ev.payload["not_ready"][0]), {"team_id", "team_name", "captain_id", "captain_name"})
+        self.assertEqual(
+            {x["captain_id"] for x in ev.payload["not_ready"]},
+            {c.pk for c in self.fx.captains[1:]},
+        )
+        self.assertEqual(
+            set(ev.payload["not_ready"][0]),
+            {"team_id", "team_name", "captain_id", "captain_name"},
+        )
         self.fx.draft.refresh_from_db()
         self.assertIsNotNone(self.fx.draft.active_round.started_at)
 
@@ -374,8 +393,17 @@ class StartEndpointTests(EndpointTestBase):
         Team.objects.filter(tournament=self.fx.tournament).update(draft_reserve_ms=None)
         r = self.post(self.fx.staff, "start")
         self.assertEqual(r.status_code, 200, r.data)
-        self.assertEqual(set(Team.objects.filter(tournament=self.fx.tournament).values_list("draft_reserve_ms", flat=True)), {30000})
-        self.assertEqual(self.fx.events("round_started").get().payload["reserve_ms"], 30000)
+        self.assertEqual(
+            set(
+                Team.objects.filter(tournament=self.fx.tournament).values_list(
+                    "draft_reserve_ms", flat=True
+                )
+            ),
+            {30000},
+        )
+        self.assertEqual(
+            self.fx.events("round_started").get().payload["reserve_ms"], 30000
+        )
 
 
 class PauseResumeEndpointTests(EndpointTestBase):
@@ -397,15 +425,21 @@ class PauseResumeEndpointTests(EndpointTestBase):
         self.assertEqual(ev.payload["captain_id"], rnd.captain_id)
         self.assertEqual(ev.payload["pick_number"], 1)
 
-        with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True) as mock_start:
+        with patch(
+            "app.tasks.draft_tick.start_tick_broadcaster", return_value=True
+        ) as mock_start:
             r = self.post(self.fx.staff, "resume")
         self.assertEqual(r.status_code, 200, r.data)
-        self.fx.draft.refresh_from_db(); rnd.refresh_from_db()
+        self.fx.draft.refresh_from_db()
+        rnd.refresh_from_db()
         self.assertEqual(self.fx.draft.state, TeamDraftState.RESUMING)
         self.assertIsNone(self.fx.draft.paused_at)
         self.assertFalse(self.fx.draft.is_manual_pause)
         self.assertGreaterEqual(rnd.started_at - started, timedelta(seconds=3))
-        self.assertEqual(self.fx.events("draft_resumed").get().payload["resumed_by_id"], self.fx.staff.pk)
+        self.assertEqual(
+            self.fx.events("draft_resumed").get().payload["resumed_by_id"],
+            self.fx.staff.pk,
+        )
         mock_start.assert_called_once()
 
     def test_resume_with_null_started_at_sets_resuming_until(self):
@@ -416,7 +450,8 @@ class PauseResumeEndpointTests(EndpointTestBase):
         with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True):
             r = self.post(self.fx.staff, "resume")
         self.assertEqual(r.status_code, 200, r.data)
-        self.fx.draft.refresh_from_db(); rnd.refresh_from_db()
+        self.fx.draft.refresh_from_db()
+        rnd.refresh_from_db()
         self.assertEqual(rnd.started_at, self.fx.draft.resuming_until)
 
     def test_resume_fills_missing_grace(self):
@@ -455,7 +490,10 @@ class PauseResumeEndpointTests(EndpointTestBase):
 
 class PickMatrixTests(EndpointTestBase):
     def start(self):
-        with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True), self.captureOnCommitCallbacks(execute=True):
+        with (
+            patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             return self.fx.start()
 
     def test_pending_rejects_captain_and_staff(self):
@@ -487,9 +525,13 @@ class PickMatrixTests(EndpointTestBase):
         nxt = self.fx.draft.active_round
         self.assertEqual(nxt.pick_number, 2)
         self.assertIsNone(nxt.started_at)
-        self.assertEqual(nxt.grace_time_ms, 30000, "next round really activated (unarmed)")
+        self.assertEqual(
+            nxt.grace_time_ms, 30000, "next round really activated (unarmed)"
+        )
         self.assertIsNone(nxt.timed_out_at)
-        self.assertEqual(self.fx.events("round_started").filter(payload__pick_number=2).count(), 0)
+        self.assertEqual(
+            self.fx.events("round_started").filter(payload__pick_number=2).count(), 0
+        )
 
     def test_resume_after_paused_staff_pick_arms_round_with_grace(self):
         active = self.start()
@@ -499,15 +541,22 @@ class PickMatrixTests(EndpointTestBase):
         self.assertEqual(self.armed("resume").status_code, 200)
         self.fx.draft.refresh_from_db()
         rnd = self.fx.draft.active_round
-        self.assertEqual((rnd.pick_number, rnd.started_at, rnd.grace_time_ms), (2, self.fx.draft.resuming_until, 30000))
+        self.assertEqual(
+            (rnd.pick_number, rnd.started_at, rnd.grace_time_ms),
+            (2, self.fx.draft.resuming_until, 30000),
+        )
 
     def test_locked_pick_path_ignores_stale_cached_active_round(self):
         self.start()
         rnd3 = self.fx.round(3)
-        with patch.object(Draft, "active_round", new_callable=PropertyMock, return_value=rnd3):
+        with patch.object(
+            Draft, "active_round", new_callable=PropertyMock, return_value=rnd3
+        ):
             r = self.fx.pick(rnd3, rnd3.captain)
         self.assertEqual(r.status_code, 409)
-        self.assertEqual((r.data["code"], r.data["active_pick_number"]), ("not_active_round", 1))
+        self.assertEqual(
+            (r.data["code"], r.data["active_pick_number"]), ("not_active_round", 1)
+        )
 
     def test_resuming_and_completed_reject_everyone(self):
         rnd = self.start()
@@ -530,21 +579,23 @@ class PickMatrixTests(EndpointTestBase):
 
     def test_broadcasts_are_deferred_to_commit(self):
         rnd = self.start()
-        with patch("app.functions.draft_picks.broadcast_event") as mock_bc, patch("app.functions.teamdraft.broadcast_event") as mock_td:
+        with patch("app.broadcast.broadcast_event") as mock_bc:
             with self.captureOnCommitCallbacks(execute=False) as callbacks:
                 self.assertEqual(self.fx.pick(rnd, rnd.captain).status_code, 201)
                 mock_bc.assert_not_called()
-                mock_td.assert_not_called()
             for cb in callbacks:
                 cb()
-            mock_bc.assert_called_once()
-            self.assertEqual(mock_td.call_count, 1)
+            types = [c.args[0].event_type for c in mock_bc.call_args_list]
+            self.assertEqual(types, ["player_picked", "round_started"])
 
 
 class PickTimingTests(TestCase):
     def setUp(self):
         self.fx = TimedDraftFixture(grace_time_ms=1000, reserve_time_ms=5000)
-        with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True), self.captureOnCommitCallbacks(execute=True):
+        with (
+            patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             self.rnd = self.fx.start(now=timezone.now() - timedelta(seconds=3))
 
     def test_pick_records_duration_and_debits_reserve_then_activates_next(self):
@@ -561,11 +612,16 @@ class PickTimingTests(TestCase):
         self.assertEqual(nxt.pick_number, 2)
         self.assertIsNotNone(nxt.started_at)
         self.assertEqual(nxt.grace_time_ms, 1000)
-        self.assertTrue(self.fx.events("round_started").filter(payload__pick_number=2).exists())
+        self.assertTrue(
+            self.fx.events("round_started").filter(payload__pick_number=2).exists()
+        )
 
     def test_client_picked_at_within_window_is_honoured(self):
         early = (self.rnd.started_at + timedelta(milliseconds=500)).isoformat()
-        with patch("app.functions.draft_picks.timezone.now", return_value=self.rnd.started_at + timedelta(seconds=1)):
+        with patch(
+            "app.functions.draft_picks.timezone.now",
+            return_value=self.rnd.started_at + timedelta(seconds=1),
+        ):
             with self.captureOnCommitCallbacks(execute=True):
                 r = self.fx.pick(self.rnd, self.rnd.captain, client_picked_at=early)
         self.assertEqual(r.status_code, 201, r.data)
@@ -574,9 +630,15 @@ class PickTimingTests(TestCase):
         self.assertEqual(self.rnd.reserve_used_ms, 0)
 
     def test_client_picked_at_in_future_or_stale_falls_back_to_server_time(self):
-        for prefix, bad in (("ctf", timezone.now() + timedelta(seconds=5)), ("cts", timezone.now() - timedelta(seconds=10))):
+        for prefix, bad in (
+            ("ctf", timezone.now() + timedelta(seconds=5)),
+            ("cts", timezone.now() - timedelta(seconds=10)),
+        ):
             fx = TimedDraftFixture(grace_time_ms=1000, prefix=prefix)
-            with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True), self.captureOnCommitCallbacks(execute=True):
+            with (
+                patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True),
+                self.captureOnCommitCallbacks(execute=True),
+            ):
                 rnd = fx.start(now=timezone.now() - timedelta(seconds=2))
             with self.captureOnCommitCallbacks(execute=True):
                 r = fx.pick(rnd, rnd.captain, client_picked_at=bad.isoformat())
@@ -587,7 +649,10 @@ class PickTimingTests(TestCase):
     def test_staff_pick_during_pause_charges_only_time_before_pause(self):
         fx = TimedDraftFixture(prefix="sp")
         now = timezone.now()
-        with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True), self.captureOnCommitCallbacks(execute=True):
+        with (
+            patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             rnd = fx.start(now=now - timedelta(seconds=5))
         fx.draft.state = TeamDraftState.PAUSED
         fx.draft.paused_at = now - timedelta(seconds=4)
@@ -601,11 +666,16 @@ class PickTimingTests(TestCase):
 
     def test_last_pick_completes_draft(self):
         fx = TimedDraftFixture(num_teams=1, prefix="one")
-        with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True), self.captureOnCommitCallbacks(execute=True):
+        with (
+            patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             fx.start()
         for n in range(1, 5):
             with self.captureOnCommitCallbacks(execute=True):
-                self.assertEqual(fx.pick(fx.draft.active_round, fx.staff).status_code, 201)
+                self.assertEqual(
+                    fx.pick(fx.draft.active_round, fx.staff).status_code, 201
+                )
         fx.draft.refresh_from_db()
         self.assertEqual(fx.draft.state, TeamDraftState.COMPLETED)
         self.assertEqual(fx.events("draft_completed").count(), 1)
@@ -615,7 +685,10 @@ class PickTimingTests(TestCase):
 class UndoTests(TestCase):
     def armed_fixture(self, **kw: object) -> TimedDraftFixture:
         fx = TimedDraftFixture(**kw)
-        with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True), self.captureOnCommitCallbacks(execute=True):
+        with (
+            patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             fx.start()
         return fx
 
@@ -623,10 +696,16 @@ class UndoTests(TestCase):
         fx = self.armed_fixture(prefix="order")
         with self.captureOnCommitCallbacks(execute=True):
             fx.pick(fx.draft.active_round, fx.staff)
-        with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True), self.captureOnCommitCallbacks(execute=True):
+        with (
+            patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             fx.undo(fx.staff)
         types = list(
-            DraftEvent.objects.nocache().filter(draft=fx.draft).order_by("pk").values_list("event_type", flat=True)
+            DraftEvent.objects.nocache()
+            .filter(draft=fx.draft)
+            .order_by("pk")
+            .values_list("event_type", flat=True)
         )
         self.assertEqual(types[-2:], ["pick_undone", "round_started"])
 
@@ -641,7 +720,10 @@ class UndoTests(TestCase):
         with self.captureOnCommitCallbacks(execute=True):
             fx.pick(fx.draft.active_round, fx.staff)
         rnd2_captain = fx.round(2).captain_id
-        with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True), self.captureOnCommitCallbacks(execute=True):
+        with (
+            patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             r = fx.undo(fx.staff)
         self.assertEqual(r.status_code, 200, r.data)
         self.assertEqual(fx.round(2).captain_id, rnd2_captain)
@@ -649,8 +731,12 @@ class UndoTests(TestCase):
         rnd1 = fx.round(1)
         self.assertIsNone(rnd1.choice)
         self.assertIsNone(rnd1.completed_at)
-        self.assertIsNotNone(rnd1.started_at, "re-armed because the undone pick was timed")
-        self.assertEqual(fx.events("round_started").filter(payload__pick_number=1).count(), 2)
+        self.assertIsNotNone(
+            rnd1.started_at, "re-armed because the undone pick was timed"
+        )
+        self.assertEqual(
+            fx.events("round_started").filter(payload__pick_number=1).count(), 2
+        )
 
     def test_untimed_undo_leaves_round_unarmed(self) -> None:
         fx = TimedDraftFixture(timer_enabled=False, prefix="untimed")
@@ -668,14 +754,24 @@ class UndoTests(TestCase):
                 fx.pick(fx.draft.active_round, fx.staff)
         fx.draft.refresh_from_db()
         self.assertEqual(fx.draft.state, TeamDraftState.COMPLETED)
-        with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True) as mock_start, self.captureOnCommitCallbacks(execute=True):
+        with (
+            patch(
+                "app.tasks.draft_tick.start_tick_broadcaster", return_value=True
+            ) as mock_start,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             self.assertEqual(fx.undo(fx.staff).status_code, 200)
         fx.draft.refresh_from_db()
         self.assertEqual(fx.draft.state, TeamDraftState.DRAFTING)
         self.assertTrue(fx.draft.clock_armed)
         mock_start.assert_called_once()
         with self.captureOnCommitCallbacks(execute=True):
-            self.assertEqual(fx.pick(fx.draft.active_round, fx.draft.active_round.captain).status_code, 201)
+            self.assertEqual(
+                fx.pick(
+                    fx.draft.active_round, fx.draft.active_round.captain
+                ).status_code,
+                201,
+            )
 
     def test_undo_completed_untimed_draft_is_drafting_unarmed(self) -> None:
         fx = TimedDraftFixture(timer_enabled=False, num_teams=1, prefix="udone")
@@ -698,7 +794,10 @@ class UndoTests(TestCase):
         team = Team.objects.get(pk=fx.team_of(rnd.captain).pk)
         spent = team.draft_reserve_ms
         self.assertLess(spent, 30000)
-        with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True), self.captureOnCommitCallbacks(execute=True):
+        with (
+            patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             fx.undo(fx.staff)
         self.assertEqual(Team.objects.get(pk=team.pk).draft_reserve_ms, spent)
 
@@ -709,7 +808,12 @@ class UndoTests(TestCase):
         fx.draft.state = TeamDraftState.RESUMING
         fx.draft.resuming_until = timezone.now() + timedelta(seconds=3)
         fx.draft.save()
-        with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True) as mock_start, self.captureOnCommitCallbacks(execute=True):
+        with (
+            patch(
+                "app.tasks.draft_tick.start_tick_broadcaster", return_value=True
+            ) as mock_start,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             self.assertEqual(fx.undo(fx.staff).status_code, 200)
         fx.draft.refresh_from_db()
         self.assertEqual(fx.draft.state, TeamDraftState.RESUMING)
@@ -730,18 +834,32 @@ class UndoTests(TestCase):
             self.assertEqual(fx.undo(fx.staff).status_code, 200)
         rnd1 = fx.round(1)
         self.assertEqual((rnd1.started_at, rnd1.grace_time_ms), (None, 30000))
-        self.assertEqual(fx.events("round_started").filter(payload__pick_number=1).count(), 1, "no new round_started while paused")
+        self.assertEqual(
+            fx.events("round_started").filter(payload__pick_number=1).count(),
+            1,
+            "no new round_started while paused",
+        )
         client = APIClient()
         client.force_authenticate(fx.staff)
-        with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True), self.captureOnCommitCallbacks(execute=True):
-            self.assertEqual(client.post(f"/api/draft/{fx.draft.pk}/resume/", {}, format="json").status_code, 200)
+        with (
+            patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            self.assertEqual(
+                client.post(
+                    f"/api/draft/{fx.draft.pk}/resume/", {}, format="json"
+                ).status_code,
+                200,
+            )
         fx.draft.refresh_from_db()
         self.assertEqual(fx.round(1).started_at, fx.draft.resuming_until)
         self.assertTrue(fx.draft.clock_armed)
 
     def test_directly_built_untimed_pending_draft_undo_after_pick_is_200(self) -> None:
         fx = TimedDraftFixture(timer_enabled=False, prefix="direct")
-        fx.draft.state = TeamDraftState.PENDING   # models a Draft whose rounds were created without build_rounds
+        fx.draft.state = (
+            TeamDraftState.PENDING
+        )  # models a Draft whose rounds were created without build_rounds
         fx.draft.save()
         with self.captureOnCommitCallbacks(execute=True):
             self.assertEqual(fx.pick(fx.round(1), fx.staff).status_code, 201)
@@ -760,64 +878,147 @@ class TickPayloadTests(TestCase):
             self.r.delete(heartbeat_key("teamdraft", self.fx.draft.pk, cap.pk))
 
     def test_unarmed_draft_has_no_payload(self):
-        self.assertIsNone(teamdraft_tick.build_tick_payload(self.fx.draft, timezone.now(), self.r))
+        self.assertIsNone(
+            teamdraft_tick.build_tick_payload(self.fx.draft, timezone.now(), self.r)
+        )
 
     def test_drafting_payload_shape_and_heartbeat_derived_is_connected(self):
-        with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True), self.captureOnCommitCallbacks(execute=True):
+        with (
+            patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             rnd = self.fx.start()
         cap0 = self.fx.captains[0]
-        self.r.set(heartbeat_key("teamdraft", self.fx.draft.pk, cap0.pk), str(time.time()))
-        self.r.set(heartbeat_key("teamdraft", self.fx.draft.pk, self.fx.captains[1].pk), str(time.time() - 20))
-        self.fx.teams[2].draft_is_connected = True; self.fx.teams[2].save()
+        self.r.set(
+            heartbeat_key("teamdraft", self.fx.draft.pk, cap0.pk), str(time.time())
+        )
+        self.r.set(
+            heartbeat_key("teamdraft", self.fx.draft.pk, self.fx.captains[1].pk),
+            str(time.time() - 20),
+        )
+        self.fx.teams[2].draft_is_connected = True
+        self.fx.teams[2].save()
         now = timezone.now()
-        p = teamdraft_tick.build_tick_payload(Draft.objects.get(pk=self.fx.draft.pk), now, self.r)
+        p = teamdraft_tick.build_tick_payload(
+            Draft.objects.get(pk=self.fx.draft.pk), now, self.r
+        )
         self.assertEqual(p["type"], "draft.tick")
         self.assertEqual(
             set(p),
-            {"type", "draft_state", "server_time", "resuming_until", "active_round_pk", "active_pick_number", "active_captain_id",
-             "active_team_id", "round_started_at", "round_timed_out_at", "round_grace_time_ms", "teams"},
+            {
+                "type",
+                "draft_state",
+                "server_time",
+                "resuming_until",
+                "active_round_pk",
+                "active_pick_number",
+                "active_captain_id",
+                "active_team_id",
+                "round_started_at",
+                "round_timed_out_at",
+                "round_grace_time_ms",
+                "teams",
+            },
         )
-        self.assertEqual((p["draft_state"], p["server_time"], p["resuming_until"]), ("drafting", now.isoformat(), None))
-        self.assertEqual((p["active_round_pk"], p["active_pick_number"], p["active_captain_id"], p["active_team_id"]), (rnd.pk, 1, cap0.pk, self.fx.teams[0].pk))
+        self.assertEqual(
+            (p["draft_state"], p["server_time"], p["resuming_until"]),
+            ("drafting", now.isoformat(), None),
+        )
+        self.assertEqual(
+            (
+                p["active_round_pk"],
+                p["active_pick_number"],
+                p["active_captain_id"],
+                p["active_team_id"],
+            ),
+            (rnd.pk, 1, cap0.pk, self.fx.teams[0].pk),
+        )
         self.assertEqual(p["round_started_at"], rnd.started_at.isoformat())
-        self.assertEqual((p["round_timed_out_at"], p["round_grace_time_ms"]), (None, 30000))
+        self.assertEqual(
+            (p["round_timed_out_at"], p["round_grace_time_ms"]), (None, 30000)
+        )
         teams = {t["team_id"]: t for t in p["teams"]}
-        self.assertEqual(set(teams[self.fx.teams[0].pk]), {"team_id", "captain_id", "reserve_ms", "is_connected", "is_ready"})
+        self.assertEqual(
+            set(teams[self.fx.teams[0].pk]),
+            {"team_id", "captain_id", "reserve_ms", "is_connected", "is_ready"},
+        )
         self.assertEqual(teams[self.fx.teams[0].pk]["reserve_ms"], 12000)
         self.assertTrue(teams[self.fx.teams[0].pk]["is_connected"])
         self.assertFalse(teams[self.fx.teams[1].pk]["is_connected"], "stale key")
-        self.assertFalse(teams[self.fx.teams[2].pk]["is_connected"], "flag is not freshness")
+        self.assertFalse(
+            teams[self.fx.teams[2].pk]["is_connected"], "flag is not freshness"
+        )
 
     def test_resuming_payload_keeps_anchors(self):
-        with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True), self.captureOnCommitCallbacks(execute=True):
+        with (
+            patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             self.fx.start()
         self.fx.draft.state = TeamDraftState.RESUMING
         self.fx.draft.resuming_until = timezone.now() + timedelta(seconds=3)
         self.fx.draft.save()
-        p = teamdraft_tick.build_tick_payload(Draft.objects.get(pk=self.fx.draft.pk), timezone.now(), self.r)
+        p = teamdraft_tick.build_tick_payload(
+            Draft.objects.get(pk=self.fx.draft.pk), timezone.now(), self.r
+        )
         self.assertEqual(p["draft_state"], "resuming")
         self.assertEqual(p["resuming_until"], self.fx.draft.resuming_until.isoformat())
         self.assertIsNotNone(p["round_started_at"])
 
     def test_should_continue_rules(self):
-        self.assertEqual(teamdraft_tick.should_continue_ticking(self.fx.draft.pk), (False, "draft_state_pending"))
-        with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True), self.captureOnCommitCallbacks(execute=True):
+        self.assertEqual(
+            teamdraft_tick.should_continue_ticking(self.fx.draft.pk),
+            (False, "draft_state_pending"),
+        )
+        with (
+            patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             rnd = self.fx.start()
-        self.assertEqual(teamdraft_tick.should_continue_ticking(self.fx.draft.pk), (False, "no_connections"))
-        rnd.started_at = None; rnd.save()
-        self.assertEqual(teamdraft_tick.should_continue_ticking(self.fx.draft.pk), (False, "clock_unarmed"))
-        rnd.started_at = timezone.now(); rnd.save()
+        self.assertEqual(
+            teamdraft_tick.should_continue_ticking(self.fx.draft.pk),
+            (False, "no_connections"),
+        )
+        rnd.started_at = None
+        rnd.save()
+        self.assertEqual(
+            teamdraft_tick.should_continue_ticking(self.fx.draft.pk),
+            (False, "clock_unarmed"),
+        )
+        rnd.started_at = timezone.now()
+        rnd.save()
         with patch("app.tasks.teamdraft_tick.get_connection_count", return_value=1):
-            self.assertEqual(teamdraft_tick.should_continue_ticking(self.fx.draft.pk), (True, ""))
-        self.fx.draft.state = TeamDraftState.RESUMING; self.fx.draft.save()
-        self.assertEqual(teamdraft_tick.should_continue_ticking(self.fx.draft.pk), (True, ""))
-        self.fx.draft.state = TeamDraftState.PAUSED; self.fx.draft.save()
-        self.assertEqual(teamdraft_tick.should_continue_ticking(self.fx.draft.pk), (False, "draft_state_paused"))
-        self.assertEqual(teamdraft_tick.should_continue_ticking(999_999), (False, "draft_not_found"))
+            self.assertEqual(
+                teamdraft_tick.should_continue_ticking(self.fx.draft.pk), (True, "")
+            )
+        self.fx.draft.state = TeamDraftState.RESUMING
+        self.fx.draft.save()
+        self.assertEqual(
+            teamdraft_tick.should_continue_ticking(self.fx.draft.pk), (True, "")
+        )
+        self.fx.draft.state = TeamDraftState.PAUSED
+        self.fx.draft.save()
+        self.assertEqual(
+            teamdraft_tick.should_continue_ticking(self.fx.draft.pk),
+            (False, "no_connections"),
+        )
+        with patch("app.tasks.teamdraft_tick.get_connection_count", return_value=1):
+            self.assertEqual(
+                teamdraft_tick.should_continue_ticking(self.fx.draft.pk), (True, "")
+            )
+        self.assertEqual(
+            teamdraft_tick.should_continue_ticking(999_999), (False, "draft_not_found")
+        )
 
     def test_driver_satisfies_protocol(self):
         self.assertIsInstance(teamdraft_tick.TEAM_TICK_DRIVER, TickDriver)
-        self.assertEqual((teamdraft_tick.TEAM_TICK_DRIVER.prefix, teamdraft_tick.TEAM_TICK_DRIVER.system), ("teamdraft", "teamdraft"))
+        self.assertEqual(
+            (
+                teamdraft_tick.TEAM_TICK_DRIVER.prefix,
+                teamdraft_tick.TEAM_TICK_DRIVER.system,
+            ),
+            ("teamdraft", "teamdraft"),
+        )
 
 
 class AutoPauseTests(TransactionTestCase):
@@ -844,7 +1045,8 @@ class AutoPauseTests(TransactionTestCase):
         self.assertEqual(self.state(), TeamDraftState.DRAFTING)
 
     def test_connected_then_key_deleted_pauses_next_tick(self):
-        self.active_team.draft_has_connected = True; self.active_team.save()
+        self.active_team.draft_has_connected = True
+        self.active_team.save()
         self.r.set(self.hb, str(time.time()))
         self.assertIsNone(self.check())
         self.r.delete(self.hb)
@@ -853,28 +1055,196 @@ class AutoPauseTests(TransactionTestCase):
         self.assertEqual(draft.state, TeamDraftState.PAUSED)
         self.assertFalse(draft.is_manual_pause)
         ev = self.fx.events("draft_paused").get()
-        self.assertEqual((ev.payload["reason"], ev.payload["paused_by_id"], ev.payload["captain_id"]), ("captain_disconnected", None, self.rnd.captain_id))
+        self.assertEqual(
+            (
+                ev.payload["reason"],
+                ev.payload["paused_by_id"],
+                ev.payload["captain_id"],
+            ),
+            ("captain_disconnected", None, self.rnd.captain_id),
+        )
 
     def test_stale_key_past_nine_seconds_pauses(self):
-        self.active_team.draft_has_connected = True; self.active_team.save()
+        self.active_team.draft_has_connected = True
+        self.active_team.save()
         self.r.set(self.hb, str(time.time() - 9.5))
         self.assertIsNotNone(self.check())
         self.assertEqual(self.state(), TeamDraftState.PAUSED)
 
     def test_other_captain_stale_never_pauses(self):
         other = self.fx.teams[2]
-        other.draft_has_connected = True; other.save()
+        other.draft_has_connected = True
+        other.save()
         self.r.delete(heartbeat_key("teamdraft", self.fx.draft.pk, other.captain_id))
         self.assertIsNone(self.check())
         self.assertEqual(self.state(), TeamDraftState.DRAFTING)
 
-    def test_unarmed_or_resuming_is_ignored(self):
-        self.active_team.draft_has_connected = True; self.active_team.save()
+    def test_paused_draft_announces_a_captain_going_stale(self):
+        sent: list[dict] = []
+
+        class Layer:
+            async def group_send(self, group: str, message: dict) -> None:
+                sent.append({"group": group, **message})
+
         draft = Draft.objects.get(pk=self.fx.draft.pk)
-        draft.state = TeamDraftState.RESUMING; draft.save()
+        draft.state = TeamDraftState.PAUSED
+        draft.save()
+        self.r.set(self.hb, str(time.time()))
+        self.addCleanup(teamdraft_tick._paused_freshness.pop, self.fx.draft.pk, None)
+        freshness = async_to_sync(teamdraft_tick.broadcast_paused_freshness)
+        with patch("app.tasks.teamdraft_tick.get_channel_layer", return_value=Layer()):
+            freshness(self.fx.draft.pk)
+            sent.clear()
+            freshness(self.fx.draft.pk)
+            self.assertEqual(sent, [])
+            self.r.delete(self.hb)
+            freshness(self.fx.draft.pk)
+        self.assertEqual(
+            sent,
+            [
+                {
+                    "group": f"draft_{self.fx.draft.pk}",
+                    "type": "captain.heartbeat",
+                    "captain_id": self.rnd.captain_id,
+                    "fresh": False,
+                }
+            ],
+        )
+
+    def test_a_failed_freshness_send_is_logged_and_retried(self):
+        sent: list[dict] = []
+        failing = True
+
+        class Layer:
+            async def group_send(self, group: str, message: dict) -> None:
+                if failing:
+                    raise redis.ConnectionError("blip")
+                sent.append(message)
+
+        draft = Draft.objects.get(pk=self.fx.draft.pk)
+        draft.state = TeamDraftState.PAUSED
+        draft.save()
+        self.r.set(self.hb, str(time.time()))
+        self.addCleanup(teamdraft_tick._paused_freshness.pop, self.fx.draft.pk, None)
+        freshness = async_to_sync(teamdraft_tick.broadcast_paused_freshness)
+        with (
+            patch("app.tasks.teamdraft_tick.get_channel_layer", return_value=Layer()),
+            patch.object(teamdraft_tick.log, "error") as logged,
+        ):
+            freshness(self.fx.draft.pk)
+            self.assertEqual(logged.call_args.args[0], "paused_freshness_send_failed")
+            failing = False
+            freshness(self.fx.draft.pk)
+        self.assertIn(
+            {
+                "type": "captain.heartbeat",
+                "captain_id": self.rnd.captain_id,
+                "fresh": True,
+            },
+            sent,
+        )
+
+    def tick(self, driver: teamdraft_tick.TeamDraftTickDriver) -> tuple[bool, str]:
+        keep_going = driver.should_continue(self.fx.draft.pk)
+        for step in (
+            driver.check_resume_countdown,
+            driver.check_captain_heartbeats,
+            driver.broadcast_tick,
+            driver.check_timeout,
+        ):
+            async_to_sync(step)(self.fx.draft.pk)
+        return keep_going
+
+    def test_a_timeout_check_far_from_due_takes_no_write_lock(self):
+        self.assertTrue(Draft.objects.get(pk=self.fx.draft.pk).clock_armed)
+        with patch.object(
+            teamdraft_tick.transaction, "atomic", wraps=transaction.atomic
+        ) as atomic:
+            self.assertIsNone(
+                async_to_sync(teamdraft_tick.check_timeout)(self.fx.draft.pk)
+            )
+        atomic.assert_not_called()
+
+    def test_a_paused_tick_takes_no_write_lock_and_few_queries(self):
+        draft = Draft.objects.get(pk=self.fx.draft.pk)
+        draft.state = TeamDraftState.PAUSED
+        draft.save()
+        driver = teamdraft_tick.TeamDraftTickDriver()
+        self.addCleanup(driver.forget, self.fx.draft.pk)
+        with (
+            patch("app.tasks.teamdraft_tick.get_connection_count", return_value=1),
+            patch("app.tasks.teamdraft_tick.get_channel_layer", return_value=None),
+            patch.object(
+                teamdraft_tick.transaction, "atomic", wraps=transaction.atomic
+            ) as atomic,
+            CaptureQueriesContext(connection) as queries,
+        ):
+            for _ in range(6):
+                self.assertEqual(self.tick(driver), (True, ""))
+        atomic.assert_not_called()
+        # One Draft read per tick, plus the freshness check (2 reads) every 3rd tick.
+        self.assertLessEqual(len(queries), 6 + 2 * 2)
+
+    def test_a_paused_loop_stops_once_nobody_is_connected(self):
+        draft = Draft.objects.get(pk=self.fx.draft.pk)
+        draft.state = TeamDraftState.PAUSED
+        draft.save()
+        driver = teamdraft_tick.TeamDraftTickDriver()
+        with patch("app.tasks.teamdraft_tick.get_connection_count", return_value=0):
+            self.assertEqual(
+                driver.should_continue(self.fx.draft.pk), (False, "no_connections")
+            )
+
+    def test_resume_countdown_locks_only_when_due(self):
+        draft = Draft.objects.get(pk=self.fx.draft.pk)
+        draft.state = TeamDraftState.RESUMING
+        draft.resuming_until = timezone.now() + timedelta(seconds=30)
+        draft.save()
+        with patch.object(
+            teamdraft_tick.transaction, "atomic", wraps=transaction.atomic
+        ) as atomic:
+            self.assertFalse(
+                async_to_sync(teamdraft_tick.check_resume_countdown)(draft.pk)
+            )
+            atomic.assert_not_called()
+            draft.resuming_until = timezone.now() - timedelta(seconds=1)
+            draft.save()
+            self.assertTrue(
+                async_to_sync(teamdraft_tick.check_resume_countdown)(draft.pk)
+            )
+            atomic.assert_called_once()
+
+    def test_a_drafting_tick_skips_the_paused_freshness_check(self):
+        driver = teamdraft_tick.TeamDraftTickDriver()
+        self.addCleanup(driver.forget, self.fx.draft.pk)
+        with (
+            patch("app.tasks.teamdraft_tick.get_connection_count", return_value=1),
+            patch("app.tasks.teamdraft_tick.broadcast_paused_freshness") as freshness,
+        ):
+            self.tick(driver)
+        freshness.assert_not_called()
+
+    def test_the_loop_clears_paused_freshness_when_it_stops(self):
+        draft_pk = self.fx.draft.pk
+        teamdraft_tick._paused_freshness[draft_pk] = {self.rnd.captain_id: True}
+        stop = threading.Event()
+        with patch("app.tasks.teamdraft_tick.get_connection_count", return_value=0):
+            async_to_sync(draft_tick.run_tick_loop)(
+                teamdraft_tick.TEAM_TICK_DRIVER, draft_pk, stop
+            )
+        self.assertNotIn(draft_pk, teamdraft_tick._paused_freshness)
+
+    def test_unarmed_or_resuming_is_ignored(self):
+        self.active_team.draft_has_connected = True
+        self.active_team.save()
+        draft = Draft.objects.get(pk=self.fx.draft.pk)
+        draft.state = TeamDraftState.RESUMING
+        draft.save()
         self.assertIsNone(self.check())
-        draft.state = TeamDraftState.DRAFTING; draft.save()
-        self.rnd.started_at = None; self.rnd.save()
+        draft.state = TeamDraftState.DRAFTING
+        draft.save()
+        self.rnd.started_at = None
+        self.rnd.save()
         self.assertIsNone(self.check())
         self.assertEqual(self.state(), TeamDraftState.DRAFTING)
 
@@ -884,10 +1254,13 @@ class AutoPauseTests(TransactionTestCase):
         draft.resuming_until = timezone.now() + timedelta(seconds=2)
         draft.save()
         self.assertFalse(async_to_sync(teamdraft_tick.check_resume_countdown)(draft.pk))
-        draft.resuming_until = timezone.now() - timedelta(milliseconds=10); draft.save()
+        draft.resuming_until = timezone.now() - timedelta(milliseconds=10)
+        draft.save()
         self.assertTrue(async_to_sync(teamdraft_tick.check_resume_countdown)(draft.pk))
         draft.refresh_from_db()
-        self.assertEqual((draft.state, draft.resuming_until), (TeamDraftState.DRAFTING, None))
+        self.assertEqual(
+            (draft.state, draft.resuming_until), (TeamDraftState.DRAFTING, None)
+        )
 
     def test_undo_during_resuming_keeps_loop_alive_through_countdown(self):
         self.assertEqual(self.fx.pick(self.rnd, self.fx.staff).status_code, 201)
@@ -898,11 +1271,18 @@ class AutoPauseTests(TransactionTestCase):
         with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True):
             self.assertEqual(self.fx.undo(self.fx.staff).status_code, 200)
         with patch("app.tasks.teamdraft_tick.get_connection_count", return_value=1):
-            self.assertEqual(teamdraft_tick.should_continue_ticking(draft.pk), (True, ""))
+            self.assertEqual(
+                teamdraft_tick.should_continue_ticking(draft.pk), (True, "")
+            )
             draft.refresh_from_db()
-            draft.resuming_until = timezone.now() - timedelta(milliseconds=10); draft.save()
-            self.assertTrue(async_to_sync(teamdraft_tick.check_resume_countdown)(draft.pk))
-            self.assertEqual(teamdraft_tick.should_continue_ticking(draft.pk), (True, ""))
+            draft.resuming_until = timezone.now() - timedelta(milliseconds=10)
+            draft.save()
+            self.assertTrue(
+                async_to_sync(teamdraft_tick.check_resume_countdown)(draft.pk)
+            )
+            self.assertEqual(
+                teamdraft_tick.should_continue_ticking(draft.pk), (True, "")
+            )
         draft.refresh_from_db()
         self.assertEqual(draft.state, TeamDraftState.DRAFTING)
         self.assertTrue(draft.clock_armed)
@@ -921,9 +1301,15 @@ class DraftConsumerTimerTests(TransactionTestCase):
     def _clear(self):
         self.r.delete(
             conn_count_key("teamdraft", self.fx.draft.pk),
-            heartbeat_key("teamdraft", self.fx.draft.pk, self.cap.pk),
-            captain_channel_key("teamdraft", self.fx.draft.pk, self.cap.pk),
-            teamdraft_tick.captain_conn_key(self.fx.draft.pk, self.cap.pk),
+            *(
+                key
+                for c in self.fx.captains
+                for key in (
+                    heartbeat_key("teamdraft", self.fx.draft.pk, c.pk),
+                    captain_channel_key("teamdraft", self.fx.draft.pk, c.pk),
+                    teamdraft_tick.captain_conn_key(self.fx.draft.pk, c.pk),
+                )
+            ),
         )
 
     def app(self):
@@ -936,14 +1322,14 @@ class DraftConsumerTimerTests(TransactionTestCase):
         comm.scope["user"] = user
         connected, _ = await comm.connect()
         self.assertTrue(connected)
-        await asyncio.wait_for(comm.receive_json_from(), timeout=5)  # initial_events
-        return comm
+        initial_state = await read_until_type(comm, "initial_state")
+        initial_events = await read_until_type(comm, "initial_events")
+        return comm, initial_state, initial_events
 
     @patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True)
     async def test_captain_connect_emits_event_and_sets_flags(self, mock_start):
-        comm = await self.connect(self.cap)
-        frame = await asyncio.wait_for(comm.receive_json_from(), timeout=5)
-        self.assertEqual(frame["type"], "draft_event")
+        comm, _, _ = await self.connect(self.cap)
+        frame = await read_until_type(comm, "draft_event")
         self.assertEqual(frame["event"]["event_type"], "captain_connected")
         self.assertEqual(frame["event"]["payload"]["captain_id"], self.cap.pk)
         self.assertTrue(frame["event"]["payload"]["is_active_captain"])
@@ -956,7 +1342,7 @@ class DraftConsumerTimerTests(TransactionTestCase):
     @patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True)
     async def test_armed_draft_starts_team_driver(self, mock_start):
         await database_sync_to_async(self.fx.start)()
-        comm = await self.connect(self.fx.players[0])
+        comm, _, _ = await self.connect(self.fx.players[0])
         for _ in range(50):
             if mock_start.called:
                 break
@@ -970,7 +1356,7 @@ class DraftConsumerTimerTests(TransactionTestCase):
         draft = await database_sync_to_async(Draft.objects.get)(pk=self.fx.draft.pk)
         draft.state = TeamDraftState.DRAFTING
         await database_sync_to_async(draft.save)()
-        comm = await self.connect(self.fx.players[0])
+        comm, _, _ = await self.connect(self.fx.players[0])
         mock_start.assert_not_called()
         await comm.disconnect()
 
@@ -983,13 +1369,13 @@ class DraftConsumerTimerTests(TransactionTestCase):
     async def test_second_tab_closing_is_silent_last_tab_emits_disconnected(
         self, mock_start
     ):
-        comm1 = await self.connect(self.cap)
-        await asyncio.wait_for(comm1.receive_json_from(), timeout=5)
-        comm2 = await self.connect(self.cap)
-        await asyncio.wait_for(comm2.receive_json_from(), timeout=5)
-        await asyncio.wait_for(comm1.receive_json_from(), timeout=5)
+        comm1, _, _ = await self.connect(self.cap)
+        await read_until_type(comm1, "draft_event")
+        comm2, _, _ = await self.connect(self.cap)
+        await read_until_type(comm2, "draft_event")
+        await read_until_type(comm1, "draft_event")
         await comm2.disconnect()
-        self.assertTrue(await comm1.receive_nothing(timeout=1.0, interval=0.05))
+        await assert_no_frame_except_ping(comm1, 1.0)
         count = await database_sync_to_async(self._disconnected_count)()
         self.assertEqual(count, 0)
         await comm1.disconnect()
@@ -1000,7 +1386,7 @@ class DraftConsumerTimerTests(TransactionTestCase):
         self.assertTrue(team.draft_has_connected)
 
     async def test_draft_tick_frame_is_forwarded(self):
-        comm = await self.connect(self.fx.players[0])
+        comm, _, _ = await self.connect(self.fx.players[0])
         layer = get_channel_layer()
         await layer.group_send(
             f"draft_{self.fx.draft.pk}",
@@ -1011,7 +1397,7 @@ class DraftConsumerTimerTests(TransactionTestCase):
                 "teams": [],
             },
         )
-        frame = await asyncio.wait_for(comm.receive_json_from(), timeout=5)
+        frame = await read_until_type(comm, "draft_tick")
         self.assertEqual(
             frame,
             {
@@ -1023,9 +1409,55 @@ class DraftConsumerTimerTests(TransactionTestCase):
         )
         await comm.disconnect()
 
+    async def test_initial_state_carries_captain_fresh(self):
+        self.r.set(
+            heartbeat_key("teamdraft", self.fx.draft.pk, self.cap.pk),
+            str(time.time()),
+        )
+        comm, initial_state, _ = await self.connect(self.fx.players[0])
+        fresh = initial_state["captain_fresh"]
+        self.assertIs(fresh[str(self.cap.pk)], True)
+        self.assertIs(fresh[str(self.fx.captains[1].pk)], False)
+        await comm.disconnect()
+
+    async def test_first_heartbeat_after_stale_broadcasts_captain_heartbeat(self):
+        spectator, _, _ = await self.connect(self.fx.players[0])
+        captain, _, _ = await self.connect(self.cap)
+        await read_until_type(spectator, "draft_event")
+        self.r.delete(heartbeat_key("teamdraft", self.fx.draft.pk, self.cap.pk))
+        await captain.send_json_to({"type": "heartbeat"})
+        frame = await read_until_type(spectator, "captain_heartbeat")
+        self.assertEqual(
+            frame,
+            {"type": "captain_heartbeat", "captain_id": self.cap.pk, "fresh": True},
+        )
+        await spectator.disconnect()
+        await captain.disconnect()
+
+    async def test_captain_connecting_with_stale_key_broadcasts_captain_heartbeat(
+        self,
+    ):
+        spectator, _, _ = await self.connect(self.fx.players[0])
+        captain, _, _ = await self.connect(self.cap)
+        frame = await read_until_type(spectator, "captain_heartbeat")
+        self.assertEqual(
+            frame,
+            {"type": "captain_heartbeat", "captain_id": self.cap.pk, "fresh": True},
+        )
+        await spectator.disconnect()
+        await captain.disconnect()
+
+    async def test_fresh_heartbeat_is_silent(self):
+        captain, _, _ = await self.connect(self.cap)
+        spectator, _, _ = await self.connect(self.fx.players[0])
+        await captain.send_json_to({"type": "heartbeat"})
+        await assert_no_frame_except_ping(spectator, 1.0)
+        await spectator.disconnect()
+        await captain.disconnect()
+
     async def test_conn_key_ttl_is_refreshed_by_heartbeat(self):
-        comm = await self.connect(self.cap)
-        await asyncio.wait_for(comm.receive_json_from(), timeout=5)
+        comm, _, _ = await self.connect(self.cap)
+        await read_until_type(comm, "draft_event")
         key = teamdraft_tick.captain_conn_key(self.fx.draft.pk, self.cap.pk)
         self.r.expire(key, 5)
         await comm.send_json_to({"type": "heartbeat"})
@@ -1040,8 +1472,8 @@ class DraftConsumerTimerTests(TransactionTestCase):
     async def test_heartbeat_after_rebuild_restores_presence_and_auto_pause(
         self, mock_start
     ):
-        comm = await self.connect(self.cap)
-        await asyncio.wait_for(comm.receive_json_from(), timeout=5)
+        comm, _, _ = await self.connect(self.cap)
+        await read_until_type(comm, "draft_event")
         await database_sync_to_async(self.fx.draft.build_rounds)()
         team = await database_sync_to_async(Team.objects.get)(pk=self.fx.teams[0].pk)
         self.assertFalse(team.draft_has_connected)
@@ -1081,8 +1513,7 @@ class DraftConsumerTimerTests(TransactionTestCase):
         comm = WebsocketCommunicator(self.app(), f"/api/draft/{fx.draft.pk}/")
         comm.scope["user"] = cap
         await comm.connect()
-        await asyncio.wait_for(comm.receive_json_from(), timeout=5)
-        await asyncio.wait_for(comm.receive_json_from(), timeout=5)
+        await read_until_type(comm, "draft_event")
         await comm.disconnect()
         draft = await database_sync_to_async(Draft.objects.get)(pk=fx.draft.pk)
         self.assertEqual(draft.state, TeamDraftState.DRAFTING)
@@ -1093,13 +1524,18 @@ class DraftConsumerTimerTests(TransactionTestCase):
 class TestEndpointTests(TestCase):
     def setUp(self):
         self.fx = TimedDraftFixture(prefix="te")
-        with patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True), self.captureOnCommitCallbacks(execute=True):
+        with (
+            patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             self.rnd = self.fx.start()
         self.factory = APIRequestFactory()
         self.r = get_redis_client()
 
     def call(self, view, body: dict):
-        return view(self.factory.post("/", body, format="json"), draft_pk=self.fx.draft.pk)
+        return view(
+            self.factory.post("/", body, format="json"), draft_pk=self.fx.draft.pk
+        )
 
     def test_expire_clock_backdates_started_at(self, _env):
         before = self.rnd.started_at

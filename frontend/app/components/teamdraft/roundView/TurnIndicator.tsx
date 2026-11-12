@@ -1,27 +1,20 @@
-import { useEffect } from 'react';
 import { DisplayName } from '~/components/user/avatar';
+import { draftWsSelectors, useDraftWebSocketStore } from '~/store/draftWebSocketStore';
 import { useUserStore } from '~/store/userStore';
 
-/**
- * Indicator showing whose turn it is in the draft.
- *
- * Displays a prominent message when it's the current user's turn,
- * or shows which captain is currently picking.
- */
 export const TurnIndicator: React.FC = () => {
   const currentUser = useUserStore((state) => state.currentUser);
   const curDraftRound = useUserStore((state) => state.curDraftRound);
+  const activeRoundPk = useDraftWebSocketStore(draftWsSelectors.activeRoundPk);
+  const timerEnabled = useDraftWebSocketStore(draftWsSelectors.timerEnabled);
 
-  const isMyTurn = currentUser?.pk === curDraftRound?.captain?.pk;
   const captainName = curDraftRound?.captain ? DisplayName(curDraftRound.captain) : 'Unknown';
   const pickNumber = curDraftRound?.pick_number || 0;
-  const pickAlreadyMade = !!curDraftRound?.choice;
+  const isActiveRound = !timerEnabled || curDraftRound?.pk === activeRoundPk;
+  const isMyTurn =
+    currentUser?.pk != null && currentUser.pk === curDraftRound?.captain?.pk && isActiveRound;
 
-  useEffect(() => {
-    // TODO: Add any side effects here if needed
-  }, [curDraftRound?.pk, curDraftRound?.choice, curDraftRound?.captain?.pk]);
-
-  if (pickAlreadyMade) {
+  if (curDraftRound?.choice) {
     return (
       <div className="p-4 rounded-lg text-center bg-base-200">
         <span className="text-sm text-base-content/70">
@@ -31,13 +24,21 @@ export const TurnIndicator: React.FC = () => {
     );
   }
 
+  const deferred = timerEnabled && !isActiveRound && (curDraftRound?.skip_count ?? 0) > 0;
+  if (deferred) {
+    return (
+      <div data-testid="turn-indicator-deferred" className="p-4 rounded-lg text-center bg-base-200">
+        <span className="text-base-content">
+          Pick #{pickNumber} — deferred, {captainName} picks after #{pickNumber - 1}
+        </span>
+      </div>
+    );
+  }
 
   return (
     <div
       data-testid="turn-indicator"
-      className={`p-4 rounded-lg text-center ${
-        isMyTurn ? 'bg-green-800 animate-pulse' : 'bg-base-200'
-      }`}
+      className={`p-4 rounded-lg text-center ${isMyTurn ? 'bg-green-800 animate-pulse' : 'bg-base-200'}`}
     >
       {isMyTurn ? (
         <span className="text-lg font-bold text-white">
@@ -45,8 +46,7 @@ export const TurnIndicator: React.FC = () => {
         </span>
       ) : (
         <span className="text-base-content">
-          Waiting for <strong>{captainName}</strong> to pick (Pick #{pickNumber}
-          )
+          Waiting for <strong>{captainName}</strong> to pick (Pick #{pickNumber})
         </span>
       )}
     </div>

@@ -10,7 +10,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
-from app.broadcast import broadcast_event
+from app.broadcast import atomic_sharing_draft_state, broadcast_event_after_commit
 from app.cache_utils import invalidate_after_commit
 from app.functions.shuffle_draft import assign_next_shuffle_captain
 from app.functions.teamdraft import (
@@ -61,6 +61,18 @@ def _not_active_round(active: DraftRound | None) -> Response:
     )
 
 
+def _was_skipped_from(user: CustomUser, draft_round: DraftRound) -> bool:
+    """A shuffle timeout skip reassigned this round away from ``user``."""
+    if draft_round.skip_count == 0:
+        return False
+    return DraftEvent.objects.filter(
+        draft_id=draft_round.draft_id,
+        event_type="pick_skipped",
+        payload__skipped_captain_id=user.pk,
+        payload__from_pick_number=draft_round.pick_number,
+    ).exists()
+
+
 def _authorize_pick(
     user: CustomUser, draft_round: DraftRound
 ) -> tuple[bool, Response | None]:
@@ -68,7 +80,10 @@ def _authorize_pick(
     is_tournament_staff = False
     if draft_round.draft and draft_round.draft.tournament:
         is_tournament_staff = can_edit_tournament(user, draft_round.draft.tournament)
-    if is_tournament_staff or draft_round.captain == user:
+    if is_tournament_staff or draft_round.captain_id == user.pk:
+        return is_tournament_staff, None
+    if _was_skipped_from(user, draft_round):
+        # The locked re-check answers 409 not_active_round with the live pick.
         return is_tournament_staff, None
 
     log.warning(
@@ -132,10 +147,13 @@ def _effective_pick_time(
 
 
 def _record_picked_event(
-    draft: Draft, draft_round: DraftRound, picked: CustomUser, actor: CustomUser
+    draft: Draft,
+    draft_round: DraftRound,
+    team: Team | None,
+    picked: CustomUser,
+    actor: CustomUser,
 ) -> None:
     captain = draft_round.captain
-    round_team = draft_round.team
     picked_event = DraftEvent.objects.create(
         draft=draft,
         event_type="player_picked",
@@ -148,11 +166,11 @@ def _record_picked_event(
             "picked_id": picked.pk,
             "picked_name": picked.username,
             "picked_avatar_url": picked.avatarUrl,
-            "team_id": round_team.pk if round_team else None,
-            "team_name": round_team.name if round_team else None,
+            "team_id": team.pk if team else None,
+            "team_name": team.name if team else None,
         },
     )
-    transaction.on_commit(lambda e=picked_event: broadcast_event(e))
+    broadcast_event_after_commit(picked_event)
 
 
 def _pick_under_lock(
@@ -185,6 +203,8 @@ def _pick_under_lock(
         .first()
     )
     tournament = draft.tournament
+    if team is not None:
+        team.tournament = tournament
     options = tournament.get_draft_options(fresh=True)
     timed = options.timer_enabled
 
@@ -196,6 +216,7 @@ def _pick_under_lock(
     now = timezone.now()
     effective = _effective_pick_time(draft, now, client_picked_at)
 
+    draft_round.draft = draft
     draft_round.pick_player(picked)
     if timed and draft_round.started_at and team is not None:
         record_pick_timing(
@@ -205,7 +226,7 @@ def _pick_under_lock(
             effective_pick_time=effective,
             default_reserve_ms=options.reserve_time_ms,
         )
-    _record_picked_event(draft, draft_round, picked, actor)
+    _record_picked_event(draft, draft_round, team, picked, actor)
 
     tie_data = None
     if draft.draft_style == "shuffle" and draft.users_remaining.exists():
@@ -262,7 +283,7 @@ def pick_player_for_round(request: Request) -> Response:
         return Response({"error": "User not found"}, status=404)
 
     try:
-        with transaction.atomic():
+        with atomic_sharing_draft_state():
             result = _pick_under_lock(
                 request.user,
                 draft_round.draft_id,
@@ -431,7 +452,7 @@ def undo_last_pick(request: Request) -> Response:
                 "team_name": team.name if team else None,
             },
         )
-        transaction.on_commit(lambda e=undone_event: broadcast_event(e))
+        broadcast_event_after_commit(undone_event)
 
         _restore_undone_round_clock(draft, last_round, options, had_completed_at)
         if draft.draft_style == "shuffle":

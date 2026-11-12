@@ -13,6 +13,7 @@ export const PrevRoundButton: React.FC<PrevRoundButtonProps> = ({
       direction="left"
       onClick={goToPrevRound}
       disabled={disabled}
+      data-testid="prevRoundButton"
       aria-label="Go to the previous draft round"
     />
   );

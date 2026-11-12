@@ -2,15 +2,14 @@
 
 import asyncio
 import json
-from datetime import date, timedelta
-from unittest.mock import AsyncMock, MagicMock, patch
+from datetime import date, datetime, timedelta
+from unittest.mock import patch
 
-from asgiref.sync import sync_to_async
 from channels.db import database_sync_to_async
 from channels.routing import URLRouter
 from channels.testing import WebsocketCommunicator
 from django.contrib.auth import get_user_model
-from django.test import TestCase, TransactionTestCase
+from django.test import TransactionTestCase
 from django.urls import re_path
 from django.utils import timezone
 
@@ -113,6 +112,8 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         self.assertEqual(response["type"], "initial_state")
         self.assertIn("draft_state", response)
         self.assertEqual(response["draft_state"]["id"], self.draft.id)
+        self.assertEqual(set(response), {"type", "draft_state", "server_time"})
+        datetime.fromisoformat(response["server_time"])
 
         await communicator.disconnect()
 
@@ -179,7 +180,10 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         is_connected = await check_disconnected()
         self.assertFalse(is_connected)
 
-    async def test_draft_paused_on_captain_disconnect_during_drafting(self):
+    @patch("app.tasks.herodraft_tick.start_tick_broadcaster", return_value=True)
+    async def test_draft_paused_on_captain_disconnect_during_drafting(
+        self, mock_start_tick
+    ):
         """Test draft is paused when captain disconnects during drafting."""
 
         # Set draft to drafting state
@@ -215,6 +219,7 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
 
         state = await check_paused()
         self.assertEqual(state, "paused")
+        mock_start_tick.assert_called_once_with(self.draft.id)
 
     async def test_spectator_does_not_affect_captain_status(self):
         """Test spectator connect/disconnect doesn't affect captain status."""
