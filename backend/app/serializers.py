@@ -1217,6 +1217,35 @@ class TournamentSerializer(serializers.ModelSerializer):
         # Lobby context the UI shows; edited through the event settings.
         read_only_fields = ("game_mode", "lobby_steam_league_id")
 
+    # A tournament created from an event takes these from the event
+    # (events.services.LOBBY_CONFIG_FIELDS); only standalone tournaments
+    # edit them here.
+    EVENT_LOBBY_FIELDS = (
+        "dota_lobby_mode",
+        "dota_lobby_launch",
+        "dota_lobby_region",
+        "discord_send_lobby_info",
+    )
+
+    def validate(self, data: dict) -> dict:
+        instance = self.instance
+        if instance is None or not instance.source_event.nocache().exists():
+            return data
+        changed = [
+            name
+            for name in self.EVENT_LOBBY_FIELDS
+            if name in data and data[name] != getattr(instance, name)
+        ]
+        if changed:
+            raise serializers.ValidationError(
+                {
+                    name: "This tournament's lobby settings come from its event: "
+                    "edit them in the event settings."
+                    for name in changed
+                }
+            )
+        return data
+
     def to_representation(self, instance: Tournament) -> dict:
         data = super().to_representation(instance)
         data["draft_options"] = DraftOptionsSerializer(self._options_for(instance)).data

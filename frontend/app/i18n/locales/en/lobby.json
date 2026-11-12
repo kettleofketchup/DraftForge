@@ -1,4 +1,46 @@
 {
+  "password": {
+    "copy": {
+      "done": "Password copied",
+      "failed": "Could not copy the password",
+      "label": "Copy lobby password"
+    },
+    "errors": {
+      "invalid_characters": "Use only letters, digits, spaces and standard punctuation.",
+      "required": "Enter a lobby password.",
+      "surrounding_spaces": "The password cannot start or end with a space.",
+      "too_long": "The password can have at most {{max}} characters."
+    },
+    "event": {
+      "description": "Use it to join every lobby of this event. Keep it to yourself.",
+      "title": "Lobby password"
+    },
+    "settings": {
+      "current": "Current password:",
+      "from_series": "This event follows its series. While the event is upcoming, saving the series again replaces a password set here.",
+      "help_changes": "A change applies to lobbies created afterwards. Lobbies that already exist keep their password.",
+      "help_shared": "Every lobby of the event uses this password, so anyone who has it can join any of them.",
+      "hide": "Hide password",
+      "keep_placeholder": "Leave empty to keep the current password",
+      "leak": {
+        "fixed": "If it leaks, set a new one here and recreate the event's lobbies that are still waiting: existing lobbies keep the old password.",
+        "regenerate": "If it leaks, regenerate it and recreate the event's lobbies that are still waiting: existing lobbies keep the old password.",
+        "series_random": "If an event's password leaks, regenerate it in that event's settings and recreate its lobbies that are still waiting."
+      },
+      "mode": {
+        "fixed": "Fixed: set it now",
+        "random": "Random: generated for each event"
+      },
+      "mode_label": "Password",
+      "overrides_series": "This event overrides its series' password. While the event is upcoming, saving the series again replaces it with the series' setting.",
+      "password_label": "Lobby password",
+      "random_new": "A password is generated when you save.",
+      "random_series": "Each event of the series gets its own generated password.",
+      "regenerate": "Regenerate",
+      "show": "Show password",
+      "title": "Lobby password"
+    }
+  },
   "player": {
     "no_steam": "No Steam account",
     "ready": "Ready",

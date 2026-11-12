@@ -27,10 +27,11 @@ from typing import TYPE_CHECKING, Any
 from django.conf import settings
 from django.db import transaction
 
-from app.models import DotaLobbyMode, Game, GameMode, GameType, Team
+from app.cache_utils import invalidate_after_commit
+from app.models import DotaLobbyMode, Game, GameMode, GameType, Team, Tournament
 from lobby import broadcast, refs, states
 from lobby.models import GameLobby
-from lobby.passwords import derive_password
+from lobby.passwords import generate_password
 
 if TYPE_CHECKING:
     from app.models import CustomUser
@@ -307,8 +308,23 @@ def build_request(game: Game, game_lobby: GameLobby) -> dict[str, Any]:
 
 
 def create_body(game_lobby: GameLobby) -> dict[str, Any]:
-    """The stored request plus the derived password: what Celery sends."""
-    return {**game_lobby.request, "password": derive_password(game_lobby)}
+    """The stored request plus the lobby's password: what Celery sends."""
+    return {**game_lobby.request, "password": game_lobby.password}
+
+
+def _tournament_password(tournament: Tournament) -> str:
+    """The tournament's lobby password, generated and stored if it has none.
+
+    Tournaments get one from their event or when lobbies are enabled; this
+    only heals a row that predates that (or was written with .update()).
+    """
+    if tournament.dota_lobby_password:
+        return tournament.dota_lobby_password
+    password = generate_password()
+    Tournament.objects.filter(pk=tournament.pk).update(dota_lobby_password=password)
+    tournament.dota_lobby_password = password
+    invalidate_after_commit(tournament)
+    return password
 
 
 @dataclass(frozen=True)
@@ -366,6 +382,9 @@ def claim_lobby(
             radiant_team=game.radiant_team,
             dire_team=game.dire_team,
             league_id=_league_id(game),
+            # Read under the game's lock (select_for_update bypasses the
+            # cache), so a just-changed event password is the one used.
+            password=_tournament_password(game.tournament),
         )
         game_lobby.request = build_request(game, game_lobby)
         game_lobby.save(update_fields=["request"])

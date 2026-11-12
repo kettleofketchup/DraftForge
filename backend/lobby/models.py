@@ -1,8 +1,8 @@
 """In-game lobbies DraftForge asked dota_lobby for, and the events it sent back.
 
 One GameLobby row per dota_lobby lobby, so a game keeps its lobby history; at
-most one row per game has not ended. The lobby password is never stored: see
-lobby.passwords.
+most one row per game has not ended. Each row keeps the password it was
+created with: see lobby.passwords.
 """
 
 from django.conf import settings
@@ -57,9 +57,10 @@ class GameLobby(models.Model):
         blank=True,
         on_delete=models.SET_NULL,
     )
-    # Fingerprint of the secret key the lobby password is derived with, so
-    # rotating DJANGO_SECRET_KEY keeps existing passwords (lobby.passwords).
-    password_key_id = models.CharField(max_length=16, blank=True, default="")
+    # The tournament's (event's) password when the row was claimed. Retries
+    # send it unchanged, and changing the event password later leaves this
+    # lobby alone. Never logged, never in the admin or public data.
+    password = models.CharField(max_length=passwords.MAX_LENGTH, blank=True, default="")
     # The create body exactly as sent, without the password, so a retry
     # rebuilds a byte-identical request and dota_lobby answers 200, not 409.
     request = models.JSONField(default=dict, blank=True)
@@ -155,10 +156,6 @@ class GameLobby(models.Model):
         update_fields = kwargs.get("update_fields")
         if update_fields is not None and "state" in update_fields:
             update_fields = {*update_fields, "ended", "ended_at"}
-        if not self.password_key_id:
-            self.password_key_id = passwords.current_key_id()
-            if update_fields is not None:
-                update_fields = {*update_fields, "password_key_id"}
         if update_fields is not None:
             kwargs["update_fields"] = update_fields
         super().save(*args, **kwargs)

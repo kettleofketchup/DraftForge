@@ -3,8 +3,10 @@ import api from '~/components/api/axios';
 import {
   GameLobbyResponseSchema,
   InviteResultSchema,
+  LobbyPasswordInfoSchema,
   type GameLobbyResponse,
   type InviteResult,
+  type LobbyPasswordInfo,
 } from './schemas';
 
 export interface CreateLobbyOptions {
@@ -53,6 +55,33 @@ export async function launchGameLobby(
   return GameLobbyResponseSchema.parse(response.data);
 }
 
+/** A 404 means "not yours to see" (or no such event): null, not an error. */
+async function getPasswordInfo(url: string): Promise<LobbyPasswordInfo | null> {
+  try {
+    const response = await api.get(url);
+    return LobbyPasswordInfoSchema.parse(response.data);
+  } catch (error) {
+    if (isAxiosError(error) && error.response?.status === 404) return null;
+    throw error;
+  }
+}
+
+/** The event's lobby password, for its staff and registered players. */
+export function getEventLobbyPassword(eventId: number): Promise<LobbyPasswordInfo | null> {
+  return getPasswordInfo(`/events/${eventId}/lobby-password/`);
+}
+
+/** The series' password mode and fixed password (staff only). */
+export function getRepeaterLobbyPassword(repeaterId: number): Promise<LobbyPasswordInfo | null> {
+  return getPasswordInfo(`/events/repeaters/${repeaterId}/lobby-password/`);
+}
+
+/** A new random password for the event (staff, random mode only). */
+export async function regenerateEventLobbyPassword(eventId: number): Promise<LobbyPasswordInfo> {
+  const response = await api.post(`/events/${eventId}/lobby-password/regenerate/`);
+  return LobbyPasswordInfoSchema.parse(response.data);
+}
+
 // Organizer-facing text for lobby error codes (dota_lobby problem codes,
 // DraftForge eligibility codes and client codes). Unknown codes fall back to
 // the server's message.
@@ -75,7 +104,7 @@ const ERROR_TEXT: Record<string, string> = {
   unknown_game_mode: "The lobby service does not know this tournament's game mode.",
   unknown_region: "The lobby service does not know this tournament's region.",
   invalid_request: 'The lobby service rejected the request.',
-  password_unavailable: 'The lobby password can no longer be derived. Create a new lobby.',
+  password_unavailable: 'The lobby password was unavailable. Create a new lobby.',
   lobby_disabled: 'Hosted lobbies are turned off.',
   lobby_mode_off: 'Hosted lobbies are off for this tournament.',
   active_lobby_exists: 'This game already has a lobby.',

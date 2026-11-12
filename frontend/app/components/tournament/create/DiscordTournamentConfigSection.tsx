@@ -11,9 +11,11 @@ import type { CreateTournamentInput } from '../schemas';
 
 interface Props {
   control: Control<CreateTournamentInput>;
+  /** The tournament's event sets "send lobby info": shown read-only. */
+  lobbyInfoFromEvent?: boolean;
 }
 
-export function DiscordTournamentConfigSection({ control }: Props) {
+export function DiscordTournamentConfigSection({ control, lobbyInfoFromEvent = false }: Props) {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2 mb-2">
@@ -89,6 +91,7 @@ export function DiscordTournamentConfigSection({ control }: Props) {
                   data-testid="discord-discord_send_lobby_info"
                   checked={field.value}
                   onChange={field.onChange}
+                  disabled={lobbyInfoFromEvent}
                   className="h-4 w-4 rounded border-border accent-primary"
                 />
               </FormControl>
@@ -98,6 +101,7 @@ export function DiscordTournamentConfigSection({ control }: Props) {
                 </FormLabel>
                 <FormDescription>
                   DM players the in-game lobby name, password and side when their lobby is created
+                  {lobbyInfoFromEvent && ' (set in the event settings)'}
                 </FormDescription>
               </div>
             </FormItem>

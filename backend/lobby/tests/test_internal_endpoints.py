@@ -1,5 +1,4 @@
 from datetime import timedelta
-from unittest import mock
 
 from django.test import TestCase
 from django.utils import timezone
@@ -9,7 +8,6 @@ from app.models import DotaLobbyMode
 from discordbot.models import DiscordTournamentLog
 from lobby import services, states
 from lobby.models import GameLobby
-from lobby.passwords import PasswordKeyUnavailable, derive_password
 from lobby.tests.helpers import (
     HEADERS,
     envelope,
@@ -54,7 +52,8 @@ class LobbyInternalApiTests(TestCase):
         self.assertEqual(resp.status_code, 201)
         data = resp.json()
         row = GameLobby.objects.get(pk=data["game_lobby_id"])
-        self.assertEqual(data["body"]["password"], derive_password(row))
+        self.assertEqual(data["body"]["password"], row.password)
+        self.assertEqual(row.password, self.game.tournament.dota_lobby_password)
         self.assertNotIn("password", row.request)
         self.assertEqual(data["external_ref"], f"game:{self.game.pk}")
 
@@ -64,23 +63,26 @@ class LobbyInternalApiTests(TestCase):
         self.assertEqual(again.json()["body"], data["body"])
         self.assertEqual(GameLobby.objects.count(), 1)
 
-    @mock.patch(
-        "lobby.services.create_body", side_effect=PasswordKeyUnavailable("gone")
-    )
-    def test_claim_without_password_key_ends_row(self, _create_body):
-        resp = self.claim()
-        self.assertEqual(resp.status_code, 503)
-        self.assertEqual(resp.json()["code"], "password_unavailable")
-        row = GameLobby.objects.get(game=self.game)
-        self.assertEqual(
-            (row.state, row.ended, row.last_error_code),
-            ("error", True, "password_unavailable"),
+    def test_claim_keeps_the_password_after_the_event_password_changes(self):
+        # A retried create must stay byte-identical (dota_lobby replays it).
+        data = self.claim().json()
+        tournament = self.game.tournament
+        tournament.dota_lobby_password = "changed-later"
+        tournament.save()
+        again = self.claim().json()
+        self.assertEqual(again["body"], data["body"])
+        self.assertNotEqual(again["body"]["password"], "changed-later")
+
+    def test_claim_heals_a_tournament_without_password(self):
+        from app.models import Tournament
+
+        Tournament.objects.filter(pk=self.game.tournament_id).update(
+            dota_lobby_password=""
         )
-        # The game is free again, and the reconcile task has nothing to resend.
-        self.assertEqual(self.get("/active/").json(), [])
-        self.assertTrue(
-            services.lobby_eligibility(self.game, trigger=GameLobby.Trigger.MANUAL).ok
-        )
+        data = self.claim().json()
+        stored = Tournament.objects.get(pk=self.game.tournament_id)
+        self.assertTrue(stored.dota_lobby_password)
+        self.assertEqual(data["body"]["password"], stored.dota_lobby_password)
 
     def test_claim_with_body_leases_the_row(self):
         row_id = self.claim().json()["game_lobby_id"]
@@ -307,7 +309,8 @@ class LobbyInternalApiTests(TestCase):
         self.assertEqual(len(data["recipients"]), 10)
         self.assertEqual({r["side"] for r in data["recipients"]}, {"radiant", "dire"})
         self.assertFalse(data["enabled"])
-        self.assertNotIn(derive_password(row), str(data))
+        self.assertTrue(row.password)
+        self.assertNotIn(row.password, str(data))
 
     def test_lobby_info_notification_type(self):
         self.assertIn("lobby_info", DiscordTournamentLog.NotificationType.values)

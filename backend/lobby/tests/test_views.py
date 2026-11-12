@@ -4,13 +4,14 @@ from unittest import mock
 
 from django.core.cache.backends.locmem import LocMemCache
 from django.test import TestCase
+from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.models import DotaLobbyMode, GameMode
+from app.models import DotaLobbyMode, GameMode, League, Organization
+from events.models import Event
 from lobby import services, states
 from lobby.client import DotaLobbyError, DotaLobbyUnavailable
 from lobby.models import GameLobby
-from lobby.passwords import derive_password
 from lobby.schemas import InviteResult, LobbyView
 from lobby.tests.helpers import (
     lobby_settings,
@@ -89,7 +90,8 @@ class LobbyReadTests(LobbyViewTestCase):
         self.assertEqual(lobby["match_id"], "8000000001")
         self.assertEqual(lobby["provisional_winner_side"], "radiant")
         self.assertFalse(PRIVATE_KEYS & set(lobby))
-        self.assertNotIn(derive_password(row), str(resp.content))
+        self.assertTrue(row.password)
+        self.assertNotIn(row.password, str(resp.content))
 
     def test_rostered_player_sees_password_and_invites(self):
         row = self.make_lobby()
@@ -100,7 +102,7 @@ class LobbyReadTests(LobbyViewTestCase):
         lobby = resp.data["lobby"]
         self.assertTrue(resp.data["is_player"])
         self.assertFalse(resp.data["can_manage"])
-        self.assertEqual(lobby["password"], derive_password(row))
+        self.assertEqual(lobby["password"], row.password)
         self.assertEqual(lobby["name"], row.request["name"])
         mine = next(p for p in lobby["players"] if p["user_id"] == self.player.pk)
         self.assertEqual(mine["status"], "invited")
@@ -121,10 +123,71 @@ class LobbyReadTests(LobbyViewTestCase):
         row.save()
         resp = self.as_user(self.staff).get(_url(self.game.pk))
         lobby = resp.data["lobby"]
-        self.assertEqual(lobby["password"], derive_password(row))
+        self.assertEqual(lobby["password"], row.password)
         self.assertEqual(lobby["last_error_code"], "league_not_held")
         self.assertEqual(lobby["last_error_detail"], "no bot holds league 1")
         self.assertEqual(resp.data["eligibility"]["code"], "active_lobby_exists")
+
+    def _league_tournament(self):
+        owner = make_user()
+        org = Organization.objects.create(name="Lobby Org", owner=owner)
+        league = League.objects.create(name="Lobby League", organization=org)
+        self.tournament.league = league
+        self.tournament.save()
+        return org, league
+
+    def test_league_staff_outside_the_org_manage_without_the_password(self):
+        # The password is event-wide: a tournament editor who is only league
+        # staff must not read it from the lobby panel.
+        _, league = self._league_tournament()
+        league_staff = make_user()
+        league.staff.add(league_staff)
+        self.make_lobby()
+        resp = self.as_user(league_staff).get(_url(self.game.pk))
+        self.assertTrue(resp.data["can_manage"])
+        self.assertIsNone(resp.data["lobby"]["password"])
+        self.assertNotIn(self.tournament.dota_lobby_password, str(resp.content))
+
+    def test_org_staff_of_the_league_org_see_the_password(self):
+        org, _ = self._league_tournament()
+        org_staff = make_user()
+        org.staff.add(org_staff)
+        row = self.make_lobby()
+        resp = self.as_user(org_staff).get(_url(self.game.pk))
+        self.assertTrue(resp.data["can_manage"])
+        self.assertEqual(resp.data["lobby"]["password"], row.password)
+
+    def test_org_staff_of_the_source_event_see_the_password(self):
+        _, league = self._league_tournament()
+        event_owner = make_user()
+        event_org = Organization.objects.create(name="Event Org", owner=event_owner)
+        Event.objects.create(
+            organization=event_org,
+            name="Night 4",
+            scheduled_at=timezone.now(),
+            tournament=self.tournament,
+            created_by=event_owner,
+        )
+        # Org staff of the event's organization who also edit the league.
+        both = make_user()
+        event_org.staff.add(both)
+        league.staff.add(both)
+        row = self.make_lobby()
+        resp = self.as_user(both).get(_url(self.game.pk))
+        self.assertEqual(resp.data["lobby"]["password"], row.password)
+        # League org staff who are not staff of the event's organization.
+        league_org_staff = make_user()
+        league.organization.staff.add(league_org_staff)
+        resp = self.as_user(league_org_staff).get(_url(self.game.pk))
+        self.assertTrue(resp.data["can_manage"])
+        self.assertIsNone(resp.data["lobby"]["password"])
+
+    def test_rostered_league_staff_still_see_the_password(self):
+        _, league = self._league_tournament()
+        league.staff.add(self.player)
+        row = self.make_lobby()
+        resp = self.as_user(self.player).get(_url(self.game.pk))
+        self.assertEqual(resp.data["lobby"]["password"], row.password)
 
     def test_ended_lobby_is_shown_without_password(self):
         row = self.make_lobby(state=states.TIMED_OUT)
@@ -226,11 +289,15 @@ class LobbyCreateCloseTests(LobbyViewTestCase):
         close_delay.assert_called_once_with(row.pk, "lob_1")
         create_delay.assert_called_once()
 
-    def test_recreated_lobby_gets_a_new_password(self, create_delay, close_delay):
+    def test_recreated_lobby_uses_the_tournament_password(
+        self, create_delay, close_delay
+    ):
+        # One password per event/tournament: a recreated lobby keeps it until
+        # staff change or regenerate the event password.
         self.make_lobby(state=states.WAITING)
         player = self.as_user(self.player)
         old = player.get(_url(self.game.pk)).data["lobby"]["password"]
-        self.assertTrue(old)
+        self.assertEqual(old, self.tournament.dota_lobby_password)
         with self.captureOnCommitCallbacks(execute=True):
             resp = self.as_user(self.staff).post(
                 _url(self.game.pk), {"replace": True}, format="json"
@@ -238,8 +305,24 @@ class LobbyCreateCloseTests(LobbyViewTestCase):
         self.assertEqual(resp.status_code, 202)
         lobby = self.as_user(self.player).get(_url(self.game.pk)).data["lobby"]
         self.assertEqual(lobby["state"], states.REQUESTED)
-        self.assertTrue(lobby["password"])
-        self.assertNotEqual(lobby["password"], old)
+        self.assertEqual(lobby["password"], old)
+
+    def test_changed_password_applies_to_the_next_lobby_only(
+        self, create_delay, close_delay
+    ):
+        first = self.make_lobby(state=states.WAITING)
+        old = first.password
+        self.tournament.dota_lobby_password = "new-event-pw"
+        self.tournament.save()
+        with self.captureOnCommitCallbacks(execute=True):
+            resp = self.as_user(self.staff).post(
+                _url(self.game.pk), {"replace": True}, format="json"
+            )
+        self.assertEqual(resp.status_code, 202)
+        first.refresh_from_db()
+        self.assertEqual(first.password, old)
+        lobby = self.as_user(self.player).get(_url(self.game.pk)).data["lobby"]
+        self.assertEqual(lobby["password"], "new-event-pw")
 
     def test_replace_refused_once_match_started(self, create_delay, close_delay):
         row = self.make_lobby(state=states.IN_GAME)

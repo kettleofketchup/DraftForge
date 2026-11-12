@@ -16,7 +16,6 @@ from datetime import timedelta
 from typing import Any
 
 from django.conf import settings
-from django.core.exceptions import ImproperlyConfigured
 from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -35,7 +34,6 @@ from app.cache_utils import invalidate_after_commit
 from app.models import Game
 from lobby import broadcast, events, refs, services, states
 from lobby.models import GameLobby, GameLobbyEvent
-from lobby.passwords import PasswordKeyUnavailable
 from lobby.schemas import LobbyEvent, LobbyView
 from lobby.webhook import verify_signature
 from telemetry.logging import get_logger
@@ -123,35 +121,6 @@ def _record_accepted(row: GameLobby, view: LobbyView) -> bool:
     return False
 
 
-def _fail_unsendable(pk: int, code: str, detail: str) -> None:
-    """End a `requested` row whose create body cannot be built.
-
-    Without this the row would stay `requested` forever: it blocks the game
-    (`active_lobby_exists`) and the reconcile task would resend it every
-    minute. As `error` it frees the game and shows organizers the cause.
-    """
-    with transaction.atomic():
-        row = GameLobby.objects.select_for_update().filter(pk=pk).first()
-        if row is None or row.ended or row.lobby_id:
-            return
-        row.state = states.ERROR
-        row.state_reason = code[:64]
-        row.last_error_code = code[:48]
-        row.last_error_detail = detail
-        row.last_error_at = timezone.now()
-        row.save(
-            update_fields=[
-                "state",
-                "state_reason",
-                "last_error_code",
-                "last_error_detail",
-                "last_error_at",
-                "updated_at",
-            ]
-        )
-        broadcast.lobby_changed_on_commit(row, bracket_changed=False)
-
-
 # ---------------------------------------------------------------------------
 # Celery-facing endpoints
 # ---------------------------------------------------------------------------
@@ -221,17 +190,7 @@ def claim(request: Request, game_id: int) -> Response:
             "state": row.state,
         }
         if row.state == states.REQUESTED and not row.lobby_id:
-            try:
-                payload["body"] = services.create_body(row)
-            except (PasswordKeyUnavailable, ImproperlyConfigured) as exc:
-                log.error(
-                    "lobby_password_unavailable",
-                    game_lobby_id=row.pk,
-                    error=type(exc).__name__,
-                    **_LOG_API,
-                )
-                _fail_unsendable(row.pk, "password_unavailable", str(exc))
-                return _error("Lobby password unavailable", "password_unavailable", 503)
+            payload["body"] = services.create_body(row)
             # This attempt holds the row: the reconcile task leaves it alone
             # until the lease runs out (see _resend_due). A set lease also
             # tells a later close that a create may have reached dota_lobby.

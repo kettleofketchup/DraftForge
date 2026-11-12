@@ -1,4 +1,5 @@
-import type { Control } from 'react-hook-form';
+import type { Control, FieldValues } from 'react-hook-form';
+import { Link } from 'react-router';
 import {
   FormControl,
   FormDescription,
@@ -15,10 +16,22 @@ import {
   SelectTrigger,
   SelectValue,
 } from '~/components/ui/select';
-import type { CreateTournamentInput } from '../schemas';
+/** The fields this section edits, on tournament, event and series forms. */
+interface DotaLobbyFields {
+  dota_lobby_mode?: 'off' | 'manual' | 'auto';
+  dota_lobby_launch?: 'manual' | 'auto';
+  dota_lobby_region?: string;
+  discord_send_lobby_info?: boolean;
+}
 
-interface Props {
-  control: Control<CreateTournamentInput>;
+interface Props<T extends FieldValues & DotaLobbyFields> {
+  control: Control<T>;
+  /** Also render the "send lobby info" DM toggle (event and series forms,
+   *  which have no tournament Discord tab). */
+  includeLobbyInfo?: boolean;
+  /** The tournament's event, when it has one: the settings come from it and
+   *  are shown read-only. */
+  sourceEvent?: { id: number; name: string } | null;
 }
 
 const MODE_OPTIONS = [
@@ -32,19 +45,34 @@ const LAUNCH_OPTIONS = [
   { value: 'auto', label: 'Start when every player is ready' },
 ] as const;
 
-/** Tournament settings for dota_lobby-hosted in-game lobbies. */
-export function DotaLobbyConfigSection({ control }: Props) {
+/** Settings for dota_lobby-hosted in-game lobbies (tournament, event, series). */
+export function DotaLobbyConfigSection<T extends FieldValues & DotaLobbyFields>({
+  control: parentControl,
+  includeLobbyInfo = false,
+  sourceEvent = null,
+}: Props<T>) {
+  const control = parentControl as unknown as Control<DotaLobbyFields>;
+  const disabled = sourceEvent != null;
   return (
     <div className="space-y-3 mt-4" data-testid="config-dota-lobby-section">
       <h3 className="text-sm font-semibold">Dota Lobbies</h3>
       <div className="rounded-md border border-border p-3 space-y-3">
+        {sourceEvent && (
+          <p className="text-sm text-muted-foreground" data-testid="config-dota-lobby-from-event">
+            These settings and the lobby password come from the event{' '}
+            <Link to={`/events/${sourceEvent.id}`} className="underline">
+              {sourceEvent.name}
+            </Link>
+            . Edit them in the event settings.
+          </p>
+        )}
         <FormField
           control={control}
           name="dota_lobby_mode"
           render={({ field }) => (
             <FormItem>
               <FormLabel>Hosted lobbies</FormLabel>
-              <Select onValueChange={field.onChange} value={field.value}>
+              <Select onValueChange={field.onChange} value={field.value} disabled={disabled}>
                 <FormControl>
                   <SelectTrigger data-testid="config-dota-lobby-mode">
                     <SelectValue />
@@ -75,7 +103,7 @@ export function DotaLobbyConfigSection({ control }: Props) {
           render={({ field }) => (
             <FormItem>
               <FormLabel>Match start</FormLabel>
-              <Select onValueChange={field.onChange} value={field.value}>
+              <Select onValueChange={field.onChange} value={field.value} disabled={disabled}>
                 <FormControl>
                   <SelectTrigger data-testid="config-dota-lobby-launch">
                     <SelectValue />
@@ -106,6 +134,7 @@ export function DotaLobbyConfigSection({ control }: Props) {
                 <Input
                   placeholder="Service default"
                   data-testid="config-dota-lobby-region"
+                  disabled={disabled}
                   {...field}
                 />
               </FormControl>
@@ -117,6 +146,35 @@ export function DotaLobbyConfigSection({ control }: Props) {
             </FormItem>
           )}
         />
+        {includeLobbyInfo && (
+          <FormField
+            control={control}
+            name="discord_send_lobby_info"
+            render={({ field }) => (
+              <FormItem className="flex items-center gap-3">
+                <FormControl>
+                  <input
+                    type="checkbox"
+                    data-testid="config-dota-lobby-send-info"
+                    checked={field.value}
+                    onChange={field.onChange}
+                    disabled={disabled}
+                    className="h-4 w-4 rounded border-border accent-primary"
+                  />
+                </FormControl>
+                <div>
+                  <FormLabel className="text-sm font-medium cursor-pointer">
+                    Send lobby info
+                  </FormLabel>
+                  <FormDescription>
+                    DM players the in-game lobby name, password and side when their lobby is
+                    created
+                  </FormDescription>
+                </div>
+              </FormItem>
+            )}
+          />
+        )}
       </div>
     </div>
   );

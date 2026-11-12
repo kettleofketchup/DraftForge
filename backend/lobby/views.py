@@ -27,7 +27,6 @@ from __future__ import annotations
 import math
 from typing import Any
 
-from django.core.exceptions import ImproperlyConfigured
 from django.db import transaction
 from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404
@@ -37,12 +36,15 @@ from rest_framework.response import Response
 from rest_framework.throttling import UserRateThrottle
 from rest_framework.views import APIView
 
-from app.models import CustomUser, DotaLobbyMode, Game, Team
-from app.permissions_org import IsTournamentStaff, can_edit_tournament
+from app.models import CustomUser, DotaLobbyMode, Game, Team, Tournament
+from app.permissions_org import (
+    IsTournamentStaff,
+    can_edit_tournament,
+    has_org_staff_access,
+)
 from lobby import broadcast, events, services, states
 from lobby.client import DotaLobbyClient, DotaLobbyError
 from lobby.models import GameLobby
-from lobby.passwords import PasswordKeyUnavailable, derive_password
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
@@ -202,9 +204,16 @@ def _team(team: Team | None) -> dict[str, Any] | None:
 
 
 def serialize_lobby(
-    game: Game, game_lobby: GameLobby, *, private: bool
+    game: Game,
+    game_lobby: GameLobby,
+    *,
+    private: bool,
+    show_password: bool | None = None,
 ) -> dict[str, Any]:
-    """The lobby for the UI. `private` adds what only players and staff see."""
+    """The lobby for the UI. `private` adds what only players and staff see.
+
+    `show_password` (default: `private`) gates the password within it.
+    """
     data: dict[str, Any] = {
         "id": game_lobby.pk,
         "state": game_lobby.state,
@@ -224,12 +233,11 @@ def serialize_lobby(
     if not private:
         return data
     request = game_lobby.request or {}
+    if show_password is None:
+        show_password = private
     password: str | None = None
-    if game_lobby.state not in states.ENDED_STATES:
-        try:
-            password = derive_password(game_lobby)
-        except (PasswordKeyUnavailable, ImproperlyConfigured, ValueError):
-            password = None
+    if show_password and game_lobby.state not in states.ENDED_STATES:
+        password = game_lobby.password or None
     data.update(
         {
             "state_reason": game_lobby.state_reason or None,
@@ -267,11 +275,33 @@ def _eligibility_body(eligibility: services.Eligibility) -> dict[str, Any]:
     return {"ok": eligibility.ok, "code": eligibility.code or None, "details": details}
 
 
+def can_see_lobby_password(user: CustomUser, tournament: Tournament) -> bool:
+    """Site staff, or org staff of the organization that runs the tournament.
+
+    Every lobby of an event shares the event's password, so tournament
+    editors who are only league staff (has_league_staff_access) manage the
+    lobby without seeing it, as on the events lobby-password endpoint.
+    """
+    if not user.is_authenticated:
+        return False
+    if user.is_staff or user.is_superuser:
+        return True
+    event = tournament.source_event.nocache().select_related("organization").first()
+    organization = event.organization if event is not None else None
+    if organization is None and tournament.league_id:
+        organization = tournament.league.organization
+    return organization is not None and has_org_staff_access(user, organization)
+
+
 def lobby_response(request: Request, game: Game) -> dict[str, Any]:
     game_lobby = latest_lobby(game)
     tournament = game.tournament
     staff = tournament is not None and can_edit_tournament(request.user, tournament)
-    private = staff or is_rostered(request.user, game, game_lobby)
+    rostered = is_rostered(request.user, game, game_lobby)
+    private = staff or rostered
+    show_password = rostered or (
+        staff and can_see_lobby_password(request.user, tournament)
+    )
     mode = tournament.dota_lobby_mode if tournament else DotaLobbyMode.OFF
     body: dict[str, Any] = {
         "game_id": game.pk,
@@ -280,7 +310,9 @@ def lobby_response(request: Request, game: Game) -> dict[str, Any]:
         "can_manage": staff,
         "is_player": private and not staff,
         "lobby": (
-            serialize_lobby(game, game_lobby, private=private)
+            serialize_lobby(
+                game, game_lobby, private=private, show_password=show_password
+            )
             if game_lobby is not None
             else None
         ),

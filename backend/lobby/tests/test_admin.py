@@ -25,11 +25,16 @@ class GameLobbyAdminTests(TestCase):
             "last_seq",
             "lobby_id",
             "external_ref",
-            "password_key_id",
         ):
             with self.subTest(field=field):
                 self.assertNotIn(field, form_fields)
                 self.assertIn(field, self.admin.get_readonly_fields(self.request))
+
+    def test_password_not_shown(self):
+        form_fields = self.admin.get_form(self.request, self.lobby).base_fields
+        self.assertNotIn("password", form_fields)
+        self.assertNotIn("password", self.admin.get_readonly_fields(self.request))
+        self.assertNotIn("password", self.admin.get_list_display(self.request))
 
     def test_no_adding_by_hand(self):
         self.assertFalse(self.admin.has_add_permission(self.request))
