@@ -16,4 +16,7 @@ export const TeamSchema = z.object({
   dropin_member_ids: z.array(z.number()).nullable(),
   left_member_ids: z.array(z.number()).nullable(),
   captain_id: z.number().nullable(),
+  draft_reserve_ms: z.number().nullable().optional(),
+  draft_is_ready: z.boolean().optional(),
+  draft_is_connected: z.boolean().optional(),
 });

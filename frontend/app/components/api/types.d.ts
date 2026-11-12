@@ -28,6 +28,7 @@ export interface RebuildDraftRoundsAPI {
 export interface PickPlayerForRoundAPI {
   draft_round_pk: number;
   user_pk: number;
+  client_picked_at?: string;
 }
 
 export interface GetDraftStyleMMRsAPI {

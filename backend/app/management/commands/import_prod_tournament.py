@@ -1,13 +1,15 @@
 import logging
 from datetime import datetime
+from typing import Any
 
 import requests
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandParser
 from django.db import transaction
 
 from app.models import (
     CustomUser,
     Draft,
+    DraftOptions,
     DraftRound,
     Game,
     PositionsModel,
@@ -23,11 +25,11 @@ PROD_BASE_URL = "https://dota.kettle.sh/api"
 class Command(BaseCommand):
     help = "Import tournament data from production API"
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        self.user_map = {}  # Map discordId -> local user
+        self.user_map: dict[str, CustomUser] = {}  # Map discordId -> local user
 
-    def add_arguments(self, parser):
+    def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument("tournament_id", type=int, help="Production tournament ID")
         parser.add_argument(
             "--include-draft", action="store_true", help="Include draft data"
@@ -44,7 +46,7 @@ class Command(BaseCommand):
             help=f"Production API base URL (default: {PROD_BASE_URL})",
         )
 
-    def handle(self, *args, **options):
+    def handle(self, *args: Any, **options: Any) -> None:
         tournament_id = options["tournament_id"]
         include_draft = options["include_draft"]
         dry_run = options.get("dry_run", False)
@@ -73,7 +75,9 @@ class Command(BaseCommand):
                 )
             )
 
-    def fetch_tournament(self, base_url, tournament_id):
+    def fetch_tournament(
+        self, base_url: str, tournament_id: int
+    ) -> dict[str, Any] | None:
         """Fetch tournament data from production API."""
         try:
             response = requests.get(
@@ -85,7 +89,7 @@ class Command(BaseCommand):
             self.stderr.write(self.style.ERROR(f"API error: {e}"))
             return None
 
-    def _show_dry_run_info(self, tournament_data):
+    def _show_dry_run_info(self, tournament_data: dict[str, Any]) -> None:
         """Show information about what would be imported."""
         self.stdout.write(f"  Tournament: {tournament_data.get('name')}")
         self.stdout.write(f"  State: {tournament_data.get('state')}")
@@ -109,7 +113,9 @@ class Command(BaseCommand):
                 f"  Draft: {draft.get('draft_style')} ({len(rounds)} rounds)"
             )
 
-    def get_or_create_user_by_discord(self, user_data):
+    def get_or_create_user_by_discord(
+        self, user_data: dict[str, Any] | None
+    ) -> CustomUser | None:
         """Get or create user by Discord ID."""
         if not user_data:
             return None
@@ -156,7 +162,9 @@ class Command(BaseCommand):
         self.stdout.write(f"  Created user: {user.username}")
         return user
 
-    def create_tournament(self, data, include_draft=False):
+    def create_tournament(
+        self, data: dict[str, Any], include_draft: bool = False
+    ) -> Tournament:
         """Create tournament and related objects."""
         # Add users to map and collect for tournament
         users = []
@@ -181,6 +189,7 @@ class Command(BaseCommand):
             tournament_type=data.get("tournament_type", "double_elimination"),
         )
         tournament.users.set(users)
+        DraftOptions.ensure_for(tournament, timer_enabled=False)
 
         self.stdout.write(f"  Created tournament: {tournament.name}")
 
@@ -209,7 +218,9 @@ class Command(BaseCommand):
 
         return tournament
 
-    def _create_team(self, tournament, team_data):
+    def _create_team(
+        self, tournament: Tournament, team_data: dict[str, Any]
+    ) -> Team | None:
         """Create a team from production API data."""
         captain = self.get_or_create_user_by_discord(team_data.get("captain"))
 
@@ -270,7 +281,12 @@ class Command(BaseCommand):
         )
         return draft
 
-    def _create_game(self, tournament, game_data, team_map):
+    def _create_game(
+        self,
+        tournament: Tournament,
+        game_data: dict[str, Any],
+        team_map: dict[str, Team],
+    ) -> Game | None:
         """Create a game from production API data."""
         radiant_data = game_data.get("radiant_team")
         dire_data = game_data.get("dire_team")

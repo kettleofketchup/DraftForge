@@ -9,17 +9,34 @@ Handles:
 - Purge stale HeroDraft when a Game's teams change (issue #235)
 """
 
+from asgiref.sync import async_to_sync
+from channels import layers
 from django.db import transaction
 from django.db.models.signals import m2m_changed, pre_save
 from django.dispatch import receiver
 
+from app.cache_utils import invalidate_after_commit
+from app.models import (
+    CustomUser,
+    DraftTeam,
+    Game,
+    HeroDraft,
+    HeroDraftRound,
+    HeroDraftState,
+    Team,
+    Tournament,
+)
+from league.models import LeagueUser
+from org.models import OrgUser
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
 
 
 @receiver(m2m_changed, sender="app.Team_members")
-def handle_team_member_removal(sender, instance, action, pk_set, **kwargs):
+def handle_team_member_removal(
+    sender: type, instance: Team, action: str, pk_set: set[int] | None, **kwargs: object
+) -> None:
     """Handle captain/deputy succession when members are removed."""
     team = instance
 
@@ -86,7 +103,13 @@ def handle_team_member_removal(sender, instance, action, pk_set, **kwargs):
 
 
 @receiver(m2m_changed, sender="app.Tournament_users")
-def handle_tournament_user_removal(sender, instance, action, pk_set, **kwargs):
+def handle_tournament_user_removal(
+    sender: type,
+    instance: Tournament,
+    action: str,
+    pk_set: set[int] | None,
+    **kwargs: object,
+) -> None:
     """Cascade removal from tournament.users to team.members."""
     # Handle clear all users
     if action == "post_clear":
@@ -111,7 +134,13 @@ def handle_tournament_user_removal(sender, instance, action, pk_set, **kwargs):
 
 
 @receiver(m2m_changed, sender="app.Tournament_users")
-def handle_tournament_user_addition(sender, instance, action, pk_set, **kwargs):
+def handle_tournament_user_addition(
+    sender: type,
+    instance: Tournament,
+    action: str,
+    pk_set: set[int] | None,
+    **kwargs: object,
+) -> None:
     """
     Auto-add users to organization and league when added to a tournament.
 
@@ -135,12 +164,6 @@ def handle_tournament_user_addition(sender, instance, action, pk_set, **kwargs):
     # Skip if league has no organization
     if not org:
         return
-
-    # Import models here to avoid circular imports
-    from league.models import LeagueUser
-    from org.models import OrgUser
-
-    from .models import CustomUser
 
     # Get the users that were added
     added_users = CustomUser.objects.filter(pk__in=added_pks)
@@ -183,7 +206,9 @@ def handle_tournament_user_addition(sender, instance, action, pk_set, **kwargs):
 
 
 @receiver(pre_save, sender="app.Game")
-def reset_herodraft_on_team_change(sender, instance, **kwargs):
+def reset_herodraft_on_team_change(
+    sender: type[Game], instance: Game, **kwargs: object
+) -> None:
     """Issue #235: bracket reset leaves stale HeroDraft with old captains.
 
     A HeroDraft holds its captains via DraftTeam.tournament_team, captured
@@ -236,8 +261,6 @@ def reset_herodraft_on_team_change(sender, instance, **kwargs):
     ):
         return
 
-    from app.models import DraftTeam, HeroDraft, HeroDraftRound, HeroDraftState
-
     draft = HeroDraft.objects.filter(game_id=instance.pk).first()
     if not draft:
         return
@@ -273,7 +296,8 @@ def reset_herodraft_on_team_change(sender, instance, **kwargs):
         draft_pk = draft.pk
         draft.delete()
         transaction.on_commit(
-            lambda: _broadcast_draft_event(draft_pk, "draft_invalidated", instance.pk)
+            lambda: _broadcast_draft_event(draft_pk, "draft_invalidated", instance.pk),
+            robust=True,
         )
         return
 
@@ -326,8 +350,6 @@ def reset_herodraft_on_team_change(sender, instance, **kwargs):
     # the pre-update rows from the DB and re-cache them with the old
     # captains, defeating the whole reset. `invalidate_after_commit` schedules
     # a second invalidation on transaction.on_commit to close that race.
-    from app.cache_utils import invalidate_after_commit
-
     invalidate_after_commit(draft, *updated_draft_teams)
 
     # Defer the broadcast to commit too. If we fired now, clients would
@@ -336,11 +358,12 @@ def reset_herodraft_on_team_change(sender, instance, **kwargs):
     # whole reset for any reader that's faster than the COMMIT.
     draft_pk = draft.pk
     transaction.on_commit(
-        lambda: _broadcast_draft_event(draft_pk, "draft_reset", instance.pk)
+        lambda: _broadcast_draft_event(draft_pk, "draft_reset", instance.pk),
+        robust=True,
     )
 
 
-def _broadcast_draft_event(draft_pk, event_type, game_id):
+def _broadcast_draft_event(draft_pk: int, event_type: str, game_id: int) -> None:
     """Send a HeroDraftConsumer event to the draft's channel group.
 
     Best-effort: a missing channel layer (tests, fallback to in-memory)
@@ -348,10 +371,7 @@ def _broadcast_draft_event(draft_pk, event_type, game_id):
     the row updates that already committed, not the broadcast.
     """
     try:
-        from asgiref.sync import async_to_sync
-        from channels.layers import get_channel_layer
-
-        channel_layer = get_channel_layer()
+        channel_layer = layers.get_channel_layer()
         if channel_layer is None:
             return
         async_to_sync(channel_layer.group_send)(

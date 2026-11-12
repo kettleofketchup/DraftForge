@@ -1,3 +1,5 @@
+from collections.abc import Iterable
+
 from cacheops import cached_as
 
 from user.models import BaseUserProfile, DotaUserProfile
@@ -33,3 +35,9 @@ def serialize_user_core(pk: int) -> dict:
         return TournamentUserSerializer(user).data if user else {}
 
     return _build()
+
+
+def serialize_users_core(pks: Iterable[int]) -> dict[int, dict]:
+    """Bulk CORE serialization in one uncached query; same shape as serialize_user_core."""
+    users = with_user_profiles(CustomUser.objects.filter(pk__in=list(pks)), dota=True)
+    return {user.pk: TournamentUserSerializer(user).data for user in users}

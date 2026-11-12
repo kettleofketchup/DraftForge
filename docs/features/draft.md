@@ -101,7 +101,7 @@ Each tournament has one `DraftOptions` row (`Tournament.draft_options`, created 
 
 | Field | Default | Description |
 |-------|---------|-------------|
-| `timer_enabled` | `False` (this release) | Turns the server-authoritative clock on |
+| `timer_enabled` | `True` (new tournaments open a ready lobby; tournaments that existed before migration `0099` were backfilled with `False`); set to `False` in Draft Settings for an untimed draft | Turns the server-authoritative clock on |
 | `grace_time_ms` | `30000` | Free time per pick (>= 1000) |
 | `reserve_time_ms` | `30000` | Per-team reserve pool spent after grace (>= 0) |
 | `timeout_action` | `skip_turn` | What happens when a pick expires (read-only) |
@@ -190,6 +190,7 @@ All carry `pick_number` (the lowest unpicked round, or `null`) except `draft_lob
 | `pick_timed_out` | `captain_*`, `team_*`, `elapsed_ms`, `reserve_used_ms` |
 | `pick_skipped` | `skipped_captain_*`, `skipped_team_*`, `next_captain_*`, `next_team_*`, `from_pick_number`, `to_pick_number`, `deferred_to_pick_number` (null for shuffle), `pick_duration_ms`, `reserve_used_ms` |
 | `pick_skip_unavailable` | `captain_*`, `team_*` |
+| `draft_options_changed` | `timer_enabled`, `grace_time_ms`, `reserve_time_ms`, `changed_by_id`, `changed_by_name`, `from_state`, `to_state`; emitted when a Draft Settings save changes any option on a tournament that has a draft, so open draft windows get the new state |
 
 ### Backend tests
 
@@ -243,7 +244,7 @@ just test::run 'python manage.py test app.tests.test_draft_options app.tests.tes
 | Field | Type | Description |
 |-------|------|-------------|
 | `tournament` | OneToOne | `related_name="draft_options"` |
-| `timer_enabled` | Boolean | Default `False` |
+| `timer_enabled` | Boolean | Default `True` |
 | `grace_time_ms` | Integer | Default 30000 |
 | `reserve_time_ms` | Integer | Default 30000 |
 | `timeout_action` | CharField | `skip_turn` |
@@ -349,6 +350,85 @@ Allows selecting draft style:
 - Normal Draft option with predicted MMR balance
 - Shuffle Draft option (dynamic balance, no prediction)
 - Apply button to change style
+
+### DraftLobby
+
+Shown while the draft is `pending` and the timer is on. Lists each team with a connected dot and a ready check. Captains get a ready toggle; staff get Start (or Force start, which opens a confirm dialog naming the teams that are not ready). Non-staff see "waiting for staff". The staff button that opens the draft modal is labelled "Open draft".
+
+### DraftClockBar
+
+Shows the active captain, the grace countdown, and a reserve bar and chip per team. Untimed or unarmed drafts show "No pick clock" with a "Start clock" button for staff. When time runs out it shows the expired copy until the server skips the turn.
+
+### DraftPauseOverlay
+
+Shown while the draft is `paused` or `resuming`, with a 3 s resume countdown. Resume is disabled while the active captain's heartbeat is stale. Freshness comes from `initial_state.captain_fresh`, tick frames and the `captain_heartbeat` frame, not from socket presence. A captain who goes stale during a manual pause is not reported until the tick loop runs again, so Resume stays enabled and the draft re-pauses on the first tick. A captain's own socket may receive `captain_heartbeat` before `initial_state`, and the frame fires when a stale or absent captain connects as well as on a later heartbeat. Staff also get Pick-for-captain.
+
+### Settings
+
+`DraftStyleModal` has Grace seconds, Reserve seconds and Timer enabled, saved via `PATCH /api/tournaments/<pk>/`. `timeout_action` is not exposed.
+
+### Test IDs
+
+| Test ID | Element |
+|---------|---------|
+| `draft-lobby` | Lobby container |
+| `lobby-team-row-<pk>` | Team row |
+| `lobby-connected-dot-<pk>` | Captain connected dot |
+| `lobby-ready-check-<pk>` | Captain ready check |
+| `lobby-ready-toggle` | Captain ready toggle |
+| `lobby-waiting-for-staff` | Waiting message for non-staff |
+| `lobby-start-button` | Staff Start / Force start |
+| `lobby-force-start-dialog` | Force start dialog |
+| `lobby-force-start-not-ready` | Not-ready team list |
+| `lobby-force-start-confirm` | Force start confirm |
+| `draft-clock-bar` | Clock strip |
+| `draft-clock-active-captain` | Active captain name |
+| `draft-clock-your-turn` | Your-turn marker |
+| `draft-clock-grace` | Grace countdown |
+| `draft-clock-reserve-<teamPk>` | Team reserve (carries `data-pct`) |
+| `draft-clock-unarmed` | "No pick clock" |
+| `draft-clock-start-button` | Staff Start clock |
+| `draft-clock-pause-button` | Staff Pause |
+| `draft-clock-expired` | Expired copy |
+| `draft-paused-overlay` | Pause overlay |
+| `draft-paused-banner` | Collapsed pause banner |
+| `draft-paused-expand` | Expand banner |
+| `draft-paused-title` | Pause title |
+| `draft-paused-message` | Pause message |
+| `draft-resume-button` | Resume |
+| `draft-pick-for-captain-button` | Staff Pick-for-captain |
+| `draft-resuming-countdown` | Resume countdown |
+| `turn-indicator` | Turn indicator (mounted by `DraftRoundView`) |
+| `turn-indicator-deferred` | Deferred-turn indicator |
+| `available-players-section` | Available players |
+| `prevRoundButton` / `nextRoundButton` / `latestRoundButton` | Round navigation |
+| `pick-duration-<userPk>` | Pick duration in completed view and history |
+| `pick-skips-<userPk>` | Skip count in completed view and history |
+| `draft-options-form` | Draft settings form |
+| `draft-options-timer-enabled` | Timer enabled switch |
+| `draft-options-grace-s` | Grace seconds input |
+| `draft-options-reserve-s` | Reserve seconds input |
+| `draft-options-save` | Save settings |
+| `draft-event-row-<event_type>` | Event feed row |
+| `draft-event-text` | Event feed text |
+| `startTeamDraftButton` | Staff "Open draft" button |
+
+### Frontend E2E Tests (Playwright)
+
+Every title carries `@cicd`.
+
+| Spec | Populate key |
+|------|--------------|
+| `07-draft/07-ready-screen.spec.ts` | `draft_timer_ready` |
+| `07-draft/08-timer-countdown.spec.ts` | `draft_timer_countdown` |
+| `07-draft/09-timeout-skip.spec.ts` | `draft_timer_skip` |
+| `07-draft/10-pause-resume.spec.ts` | `draft_timer_pause` |
+| `08-shuffle-draft/04-timeout-skip.spec.ts` | `shuffle_timer_skip` |
+
+```bash
+just test::pw::spec 07-draft
+just test::pw::spec 08-shuffle-draft
+```
 
 ## Implementation Notes
 

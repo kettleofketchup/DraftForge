@@ -1,9 +1,16 @@
 """Tests for the shared tick runner (app.tasks.draft_tick)."""
 
+import asyncio
+import contextvars
 import threading
+import time
+from collections.abc import Callable
 from unittest.mock import patch
 
+from asgiref.sync import SyncToAsync
+from channels.db import database_sync_to_async
 from django.test import SimpleTestCase, TransactionTestCase, override_settings
+from structlog.testing import capture_logs
 
 from app.tasks import draft_tick, herodraft_tick
 from app.tasks.draft_tick import (
@@ -16,6 +23,7 @@ from app.tasks.draft_tick import (
     heartbeat_key,
     increment_connection_count,
     lock_key,
+    touch_connection,
 )
 
 
@@ -32,7 +40,7 @@ class KeyHelperTests(SimpleTestCase):
         )
 
     def test_conn_count_key_matches_hero_literal(self) -> None:
-        self.assertEqual(conn_count_key("herodraft", 7), "herodraft:connections:7")
+        self.assertEqual(conn_count_key("herodraft", 7), "herodraft:live_connections:7")
 
     def test_lock_key_matches_hero_literal(self) -> None:
         self.assertEqual(lock_key("herodraft", 7), "herodraft:tick_lock:7")
@@ -41,7 +49,7 @@ class KeyHelperTests(SimpleTestCase):
         self.assertNotEqual(
             heartbeat_key("teamdraft", 1, 2), heartbeat_key("herodraft", 1, 2)
         )
-        self.assertEqual(conn_count_key("teamdraft", 7), "teamdraft:connections:7")
+        self.assertEqual(conn_count_key("teamdraft", 7), "teamdraft:live_connections:7")
 
     def test_constants_match_hero_values(self) -> None:
         self.assertEqual(draft_tick.LOCK_TIMEOUT, 10)
@@ -62,23 +70,51 @@ class ConnectionCountTests(TransactionTestCase):
         )
 
     def test_counts_are_isolated_per_prefix(self) -> None:
-        self.assertEqual(increment_connection_count("teamdraft", self.DRAFT_ID), 1)
-        self.assertEqual(increment_connection_count("teamdraft", self.DRAFT_ID), 2)
+        self.assertEqual(
+            increment_connection_count("teamdraft", self.DRAFT_ID, "c1"), 1
+        )
+        self.assertEqual(
+            increment_connection_count("teamdraft", self.DRAFT_ID, "c2"), 2
+        )
         self.assertEqual(get_connection_count("herodraft", self.DRAFT_ID), 0)
         self.assertEqual(get_connection_count("teamdraft", self.DRAFT_ID), 2)
 
-    def test_decrement_below_zero_deletes_key_and_returns_zero(self) -> None:
-        increment_connection_count("teamdraft", self.DRAFT_ID)
-        self.assertEqual(decrement_connection_count("teamdraft", self.DRAFT_ID), 0)
-        self.assertEqual(decrement_connection_count("teamdraft", self.DRAFT_ID), 0)
-        self.assertIsNone(
-            get_redis_client().get(conn_count_key("teamdraft", self.DRAFT_ID))
+    def test_double_disconnect_never_goes_below_zero(self) -> None:
+        increment_connection_count("teamdraft", self.DRAFT_ID, "c1")
+        self.assertEqual(
+            decrement_connection_count("teamdraft", self.DRAFT_ID, "c1"), 0
         )
+        self.assertEqual(
+            decrement_connection_count("teamdraft", self.DRAFT_ID, "c1"), 0
+        )
+        increment_connection_count("teamdraft", self.DRAFT_ID, "c2")
+        self.assertEqual(get_connection_count("teamdraft", self.DRAFT_ID), 1)
 
-    def test_increment_sets_300s_expiry(self) -> None:
-        increment_connection_count("teamdraft", self.DRAFT_ID)
-        ttl = get_redis_client().ttl(conn_count_key("teamdraft", self.DRAFT_ID))
-        self.assertTrue(0 < ttl <= 300)
+    def test_live_connection_outlives_the_key_ttl(self) -> None:
+        increment_connection_count("teamdraft", self.DRAFT_ID, "c1")
+        get_redis_client().delete(conn_count_key("teamdraft", self.DRAFT_ID))
+        self.assertEqual(get_connection_count("teamdraft", self.DRAFT_ID), 0)
+
+        touch_connection("teamdraft", self.DRAFT_ID, "c1")
+
+        self.assertEqual(get_connection_count("teamdraft", self.DRAFT_ID), 1)
+
+    def test_connection_not_refreshed_within_the_stale_window_is_not_counted(
+        self,
+    ) -> None:
+        increment_connection_count("teamdraft", self.DRAFT_ID, "c1")
+        stale_at = time.time() - draft_tick.CONN_STALE_SECONDS - 1
+        get_redis_client().zadd(
+            conn_count_key("teamdraft", self.DRAFT_ID), {"c2": stale_at}
+        )
+        self.assertEqual(get_connection_count("teamdraft", self.DRAFT_ID), 1)
+
+    def test_touch_prunes_members_past_the_stale_window(self) -> None:
+        key = conn_count_key("teamdraft", self.DRAFT_ID)
+        stale_at = time.time() - draft_tick.CONN_STALE_SECONDS - 1
+        get_redis_client().zadd(key, {"crashed": stale_at})
+        touch_connection("teamdraft", self.DRAFT_ID, "c1")
+        self.assertEqual(get_redis_client().zrange(key, 0, -1), ["c1"])
 
 
 class RecordingDriver:
@@ -203,10 +239,29 @@ class RegistryTests(TransactionTestCase):
 
     def test_step_exception_releases_lock_and_registry(self):
         driver = RecordingDriver("teamdraft", iterations=5, fail_step="broadcast_tick")
-        draft_tick.start_tick_broadcaster(driver, self.DRAFT_ID)
-        _wait_for_thread("teamdraft", self.DRAFT_ID)
+        with capture_logs() as logs:
+            draft_tick.start_tick_broadcaster(driver, self.DRAFT_ID)
+            _wait_for_thread("teamdraft", self.DRAFT_ID)
+        errors = [e for e in logs if e["event"] == "tick_broadcaster_error"]
+        self.assertEqual([e["error"] for e in errors], ["boom in broadcast_tick"])
         self.assertNotIn(self.DRAFT_ID, draft_tick.registry_for("teamdraft"))
         self.assertIsNone(get_redis_client().get(lock_key("teamdraft", self.DRAFT_ID)))
+
+    def test_failed_thread_start_releases_lock_and_registry(self) -> None:
+        driver = RecordingDriver("teamdraft", iterations=10_000)
+        with (
+            patch.object(
+                draft_tick.threading.Thread,
+                "start",
+                side_effect=RuntimeError("can't start new thread"),
+            ),
+            self.assertRaises(RuntimeError),
+        ):
+            draft_tick.start_tick_broadcaster(driver, self.DRAFT_ID)
+        self.assertNotIn(self.DRAFT_ID, draft_tick.registry_for("teamdraft"))
+        self.assertIsNone(get_redis_client().get(lock_key("teamdraft", self.DRAFT_ID)))
+        self.assertTrue(draft_tick.start_tick_broadcaster(driver, self.DRAFT_ID))
+        draft_tick.stop_tick_broadcaster("teamdraft", self.DRAFT_ID)
 
     def test_stop_unknown_prefix_and_id_is_safe(self):
         draft_tick.stop_tick_broadcaster("never-registered", 1)
@@ -222,6 +277,59 @@ class RegistryTests(TransactionTestCase):
         draft_tick.stop_all_broadcasters()
         self.assertEqual(draft_tick.registry_for("herodraft"), {})
         self.assertEqual(draft_tick.registry_for("teamdraft"), {})
+
+
+_STARTER_VAR: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "_STARTER_VAR", default=None
+)
+
+
+class ContextRecordingDriver(RecordingDriver):
+    def __init__(self, prefix: str) -> None:
+        super().__init__(prefix, iterations=1)
+        self.seen: list[str | None] = []
+
+    async def check_resume_countdown(self, draft_id: int) -> None:
+        self.seen.append(_STARTER_VAR.get())
+
+
+class InheritingThread(threading.Thread):
+    """Thread that runs its target in a copy of the starter's context.
+
+    Mirrors runtimes where new threads inherit context variables
+    (``sys.flags.thread_inherit_context``, the free-threaded 3.14 default).
+    """
+
+    def __init__(
+        self, *args: object, target: Callable[..., object], **kwargs: object
+    ) -> None:
+        ctx = contextvars.copy_context()
+        super().__init__(
+            *args, target=lambda *a, **k: ctx.run(target, *a, **k), **kwargs
+        )
+
+
+class TickThreadContextTests(TransactionTestCase):
+    DRAFT_ID = 987_003
+
+    def setUp(self) -> None:
+        draft_tick.stop_all_broadcasters()
+        get_redis_client().delete(lock_key("teamdraft", self.DRAFT_ID))
+
+    tearDown = setUp
+
+    def test_tick_thread_does_not_see_the_starters_context(self) -> None:
+        driver = ContextRecordingDriver("teamdraft")
+        token = _STARTER_VAR.set("starter")
+        try:
+            with patch.object(draft_tick.threading, "Thread", InheritingThread):
+                self.assertTrue(
+                    draft_tick.start_tick_broadcaster(driver, self.DRAFT_ID)
+                )
+        finally:
+            _STARTER_VAR.reset(token)
+        _wait_for_thread("teamdraft", self.DRAFT_ID)
+        self.assertEqual(driver.seen, [None])
 
 
 class HeroDriverAliasTests(SimpleTestCase):
@@ -260,3 +368,23 @@ class HeroDriverAliasTests(SimpleTestCase):
             herodraft_tick.HERO_TICK_DRIVER.should_continue(5), (False, "patched")
         )
         mocked.assert_called_once()
+
+
+class TickLoopExecutorTests(SimpleTestCase):
+    """A writer stuck on SQLite's lock must not stall every draft's ticks and sockets."""
+
+    def test_tick_loop_db_work_does_not_share_the_global_single_thread(self) -> None:
+        shared = SyncToAsync.single_thread_executor.submit(threading.get_ident).result()
+        seen: list[int] = []
+
+        async def body() -> None:
+            seen.append(await database_sync_to_async(threading.get_ident)())
+
+        thread = threading.Thread(
+            target=lambda: asyncio.run(draft_tick.with_own_db_thread(body()))
+        )
+        thread.start()
+        thread.join(timeout=5)
+
+        self.assertEqual(len(seen), 1)
+        self.assertNotEqual(seen[0], shared)

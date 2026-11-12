@@ -32,14 +32,18 @@ import asyncio
 import contextlib
 import json
 import time
+import weakref
 from abc import abstractmethod
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
+from concurrent.futures import ThreadPoolExecutor
 from typing import TYPE_CHECKING, Any
 
 import redis
+from asgiref.sync import sync_to_async
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
 from django.db.models import Model
+from django.utils import timezone
 from opentelemetry import trace
 from opentelemetry.trace import Span, Status, StatusCode
 
@@ -64,6 +68,29 @@ tracer = trace.get_tracer(__name__)
 # Server-side ping interval in seconds (must be < frontend staleTimeoutMs)
 # ~16 bytes per message; 100 connections = ~1.6 KB/s — negligible
 PING_INTERVAL = 1
+
+FALLBACK_CLEANUP_TIMEOUT_S: float = 5.0
+
+CONSUMER_DB_THREADS: int = 16
+_consumer_db_executor = ThreadPoolExecutor(
+    max_workers=CONSUMER_DB_THREADS, thread_name_prefix="ws-db"
+)
+
+
+def consumer_db[**P, R](func: Callable[P, R]) -> Callable[P, Awaitable[R]]:
+    """``database_sync_to_async`` on a pool instead of asgiref's one shared thread.
+
+    Each call gets its own connection, closed after it (CONN_MAX_AGE=0), so a
+    write waiting on SQLite's lock holds up only its own caller (#352).
+    """
+    return database_sync_to_async(
+        func, thread_sensitive=False, executor=_consumer_db_executor
+    )
+
+
+_draft_write_locks: "weakref.WeakValueDictionary[tuple[str, int], asyncio.Lock]" = (
+    weakref.WeakValueDictionary()
+)
 
 
 class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
@@ -142,6 +169,8 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
                 {
                     "type": "initial_state",
                     "draft_state": initial_state,
+                    # Seeds the client's clock offset before its first tick.
+                    "server_time": timezone.now().isoformat(),
                 }
             )
         )
@@ -156,6 +185,22 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
 
     def _captain_channel_key(self, draft_id: int, user_id: int) -> str:
         return captain_channel_key(self.get_redis_prefix(), draft_id, user_id)
+
+    async def in_draft_order[T](self, call: Callable[[], Awaitable[T]]) -> T:
+        """Run a ``consumer_db`` write after this process's earlier ones for the draft.
+
+        The pool runs calls concurrently, but a socket's disconnect write must
+        still land before its reconnect's. The lock is held until the thread
+        finishes, even if the caller is cancelled.
+        """
+        key = (self.get_redis_prefix(), self.draft_id)
+        lock = _draft_write_locks.get(key)
+        if lock is None:
+            lock = _draft_write_locks[key] = asyncio.Lock()
+        await lock.acquire()
+        work = asyncio.ensure_future(call())
+        work.add_done_callback(lambda _: lock.release())
+        return await asyncio.shield(work)
 
     # --- Kick detection ---
 
@@ -196,18 +241,20 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
 
     # --- Heartbeat ---
 
+    def _write_heartbeat(self) -> None:
+        self._redis().set(
+            self._heartbeat_key(self.draft_id, self.user.id),
+            str(time.time()),
+            ex=HEARTBEAT_TTL,
+        )
+
     async def handle_heartbeat(self) -> None:
         """Process a heartbeat message from a captain. Updates Redis TTL."""
         with tracer.start_as_current_span(
             "ws.heartbeat",
             attributes=self._base_span_attrs(),
         ) as span:
-            r = self._redis()
-            r.set(
-                self._heartbeat_key(self.draft_id, self.user.id),
-                str(time.time()),
-                ex=HEARTBEAT_TTL,
-            )
+            await sync_to_async(self._write_heartbeat, thread_sensitive=False)()
             span.set_attribute("ws.heartbeat_ttl_s", HEARTBEAT_TTL)
             log.debug(
                 "heartbeat_received",
@@ -270,12 +317,12 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
 
     # --- Connection count tracking ---
 
-    @database_sync_to_async
+    @sync_to_async(thread_sensitive=False)
     def _increment_connection_count(self) -> None:
         """Increment WebSocket connection count in Redis."""
         try:
             draft_tick.increment_connection_count(
-                self.get_redis_prefix(), self.draft_id
+                self.get_redis_prefix(), self.draft_id, self.channel_name
             )
             self._connection_tracked = True
         except Exception as e:
@@ -287,12 +334,12 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
                 error=str(e),
             )
 
-    @database_sync_to_async
+    @sync_to_async(thread_sensitive=False)
     def _decrement_connection_count(self) -> None:
         """Decrement WebSocket connection count in Redis."""
         try:
             draft_tick.decrement_connection_count(
-                self.get_redis_prefix(), self.draft_id
+                self.get_redis_prefix(), self.draft_id, self.channel_name
             )
             self._connection_tracked = False
         except Exception as e:
@@ -306,9 +353,12 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
 
     # --- Tick broadcaster ---
 
-    @database_sync_to_async
-    def _maybe_start_tick_broadcaster(self) -> None:
+    async def _maybe_start_tick_broadcaster(self) -> None:
         """Start tick broadcaster if not already running."""
+        # Redis and a thread spawn only: keep it off asgiref's single sync thread.
+        await sync_to_async(self._start_tick_broadcaster, thread_sensitive=False)()
+
+    def _start_tick_broadcaster(self) -> None:
         try:
             driver = self.get_tick_driver()
             if driver is None:
@@ -341,6 +391,43 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
         except Exception as e:
             log.debug(
                 "ping_loop_ended",
+                system="websocket",
+                subsystem="heartbeat",
+                draft_id=self.draft_id,
+                error=str(e),
+            )
+
+    # --- Live-connection refresh ---
+
+    async def _connection_refresh_loop(self) -> None:
+        """Keep this socket in the draft's live-connection set while it is open.
+
+        Runs whether or not pings are enabled, and re-adds the entry if the
+        connect-time increment failed or the key was lost.
+        """
+        try:
+            while True:
+                await asyncio.sleep(draft_tick.CONN_REFRESH_SECONDS)
+                # Cancelling us can't stop a step already in an executor thread;
+                # base_disconnect awaits the step before it removes the entry.
+                self._refresh_step = asyncio.ensure_future(self._refresh_connection())
+                await asyncio.shield(self._refresh_step)
+        except asyncio.CancelledError:
+            pass
+
+    async def _refresh_connection(self) -> None:
+        touch = sync_to_async(draft_tick.touch_connection, thread_sensitive=False)
+        try:
+            await touch(self.get_redis_prefix(), self.draft_id, self.channel_name)
+            self._connection_tracked = True
+            if self._tick_wanted and not getattr(self, "_disconnected", False):
+                # A loop that read zero connections while this socket
+                # connected can exit after our connect-time start lost
+                # the lock race; a held lock makes this a no-op.
+                await self._maybe_start_tick_broadcaster()
+        except redis.RedisError as e:
+            log.warning(
+                "connection_touch_failed",
                 system="websocket",
                 subsystem="heartbeat",
                 draft_id=self.draft_id,
@@ -417,13 +504,16 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
         """
         await self.telemetry_connect()
 
-        self.draft_id = self.scope["url_route"]["kwargs"]["draft_id"]
+        self.draft_id = int(self.scope["url_route"]["kwargs"]["draft_id"])
         prefix = self.get_room_group_prefix()
         self.room_group_name = f"{prefix}_{self.draft_id}"
         self.user = self.scope.get("user")
         self._connection_tracked = False
         self._is_captain = False
         self._ping_task = None
+        self._refresh_task: asyncio.Future[None] | None = None
+        self._refresh_step: asyncio.Future[None] | None = None
+        self._tick_wanted = False
 
         if (
             self.kick_duplicate_captain_connections
@@ -485,7 +575,8 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
                 initial_state = await self.get_initial_state_data(self.draft_id)
                 await self.send_initial_messages(initial_state)
 
-                if self.should_start_tick_broadcaster(initial_state):
+                self._tick_wanted = self.should_start_tick_broadcaster(initial_state)
+                if self._tick_wanted:
                     await self._maybe_start_tick_broadcaster()
 
             except Exception as e:
@@ -508,9 +599,40 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
             # Start server-side ping loop
             if self.PING_ENABLED:
                 self._ping_task = asyncio.ensure_future(self._ping_loop())
+            self._refresh_task = asyncio.ensure_future(self._connection_refresh_loop())
 
             span.set_attribute("ws.connect_outcome", "ok")
             return True
+
+    async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
+        # A handler that raises ends the consumer without websocket.disconnect;
+        # run the cleanup anyway so counts, presence and groups don't leak.
+        try:
+            await super().__call__(scope, receive, send)
+        finally:
+            if hasattr(self, "draft_id") and not getattr(self, "_disconnected", False):
+                await self._fallback_disconnect()
+
+    async def _fallback_disconnect(self) -> None:
+        # Also runs for every open socket when daphne shuts down mid-deploy, so
+        # it is time-bounded and never replaces the exception that ended us.
+        log.warning(
+            "ws_consumer_ended_without_disconnect",
+            system="websocket",
+            subsystem="connection",
+            draft_id=self.draft_id,
+        )
+        try:
+            await asyncio.wait_for(self.disconnect(None), FALLBACK_CLEANUP_TIMEOUT_S)
+        except Exception as e:
+            log.error(
+                "ws_fallback_cleanup_failed",
+                system="websocket",
+                subsystem="connection",
+                draft_id=self.draft_id,
+                error=str(e),
+                error_type=type(e).__name__,
+            )
 
     async def base_disconnect(self, close_code: int | None) -> None:
         """Shared disconnection cleanup. Call from subclass disconnect().
@@ -518,6 +640,9 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
         Handles: cancel ping, kicked connections, decrement count, unregister
         captain, mark disconnected, leave group, telemetry.
         """
+        if getattr(self, "_disconnected", False):
+            return
+        self._disconnected = True
         with tracer.start_as_current_span(
             "ws.disconnect",
             attributes={
@@ -535,6 +660,20 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
                 except asyncio.CancelledError:
                     pass
                 self._ping_task = None
+
+            refresh = getattr(self, "_refresh_task", None)
+            if refresh is not None:
+                refresh.cancel()
+                try:
+                    await refresh
+                except asyncio.CancelledError:
+                    pass
+                self._refresh_task = None
+            step = getattr(self, "_refresh_step", None)
+            if step is not None:
+                with contextlib.suppress(Exception, asyncio.CancelledError):
+                    await step
+                self._refresh_step = None
 
             # Track disconnection
             if hasattr(self, "_connection_tracked") and self._connection_tracked:

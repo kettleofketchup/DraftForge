@@ -456,6 +456,9 @@ class TournamentView(viewsets.ModelViewSet):
             DraftRound,
             extra=cache_key,
             timeout=60 * 10,
+            # Every draft event refetches this; a read that straddles a commit
+            # must not cache the pre-commit payload for the full timeout.
+            keep_fresh=True,
         )
         def get_data():
             log.debug(
@@ -484,7 +487,7 @@ class TournamentView(viewsets.ModelViewSet):
         with transaction.atomic():
             serializer.save()
             if opts is not None:
-                apply_draft_options(serializer.instance, opts)
+                apply_draft_options(serializer.instance, opts, actor=self.request.user)
 
     def get_permissions(self):
         if self.request.method == "GET":
@@ -542,7 +545,7 @@ class TournamentView(viewsets.ModelViewSet):
         with transaction.atomic():
             serializer.save()
             if opts is not None:
-                apply_draft_options(serializer.instance, opts)
+                apply_draft_options(serializer.instance, opts, actor=self.request.user)
 
 
 @permission_classes((IsStaff,))

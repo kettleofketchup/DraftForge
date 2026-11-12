@@ -65,7 +65,7 @@ __all__ = [
 _lock = draft_tick._lock
 _active_tick_tasks: dict[int, TaskInfo] = draft_tick.registry_for("herodraft")
 
-CONN_COUNT_KEY = "herodraft:connections:{draft_id}"
+CONN_COUNT_KEY = "herodraft:live_connections:{draft_id}"
 LOCK_KEY = "herodraft:tick_lock:{draft_id}"
 # Heartbeat key pattern (must match consumers.py)
 CAPTAIN_HEARTBEAT_KEY = "herodraft:{draft_id}:captain:{user_id}:heartbeat"
@@ -83,14 +83,14 @@ def captain_heartbeat_key(draft_id: int, user_id: int) -> str:
     return draft_tick.heartbeat_key("herodraft", draft_id, user_id)
 
 
-def increment_connection_count(draft_id: int) -> int:
-    """Increment WebSocket connection count for a draft. Returns new count."""
-    return draft_tick.increment_connection_count("herodraft", draft_id)
+def increment_connection_count(draft_id: int, channel: str) -> int:
+    """Register a live WebSocket connection for a draft. Returns the live count."""
+    return draft_tick.increment_connection_count("herodraft", draft_id, channel)
 
 
-def decrement_connection_count(draft_id: int) -> int:
-    """Decrement WebSocket connection count for a draft. Returns new count."""
-    return draft_tick.decrement_connection_count("herodraft", draft_id)
+def decrement_connection_count(draft_id: int, channel: str) -> int:
+    """Drop a WebSocket connection for a draft. Returns the live count."""
+    return draft_tick.decrement_connection_count("herodraft", draft_id, channel)
 
 
 def get_connection_count(draft_id: int) -> int:
