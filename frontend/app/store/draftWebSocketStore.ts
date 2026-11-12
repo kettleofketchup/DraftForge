@@ -8,63 +8,32 @@
 import { create } from 'zustand';
 import { toast } from 'sonner';
 import type { UserType } from '~/components/user/types';
+import { addClockOffsetSample, seedClockOffset, serverNowISO, startHeartbeatLoop } from '~/lib/draftClock';
 import { getLogger } from '~/lib/logger';
 import { getWebSocketManager } from '~/lib/websocket';
 import type { ConnectionStatus, Unsubscribe } from '~/lib/websocket';
+import { useUserStore } from '~/store/userStore';
 import { useOrgStore } from '~/store/orgStore';
 import { useUserCacheStore } from '~/store/userCacheStore';
-import type { DraftEvent, PlayerPickedPayload, TieRollPayload, WebSocketDraftState, WebSocketMessage } from '~/types/draftEvent';
+import type { DraftEvent, DraftPausedPayload, PlayerPickedPayload, TieRollPayload, WebSocketDraftState, WebSocketMessage } from '~/types/draftEvent';
 import type { TieResolution } from '~/components/teamdraft/types';
+import { DraftTickSchema } from '~/components/teamdraft/schemas';
+import type { DraftTick, TeamDraftState } from '~/components/teamdraft/schemas';
+import { getEventToast } from '~/components/teamdraft/eventMessages';
 import { PlayerPickedToast } from '~/components/teamdraft/DraftToasts';
 
 const log = getLogger('draftWebSocketStore');
 
-// Events that trigger toast notifications
-const SIGNIFICANT_EVENTS: DraftEvent['event_type'][] = [
-  'draft_started',
-  'draft_completed',
-  'player_picked',
-];
-
-function getEventMessage(event: DraftEvent): string {
-  switch (event.event_type) {
-    case 'draft_started':
-      return 'Draft has started!';
-    case 'draft_completed':
-      return 'Draft completed!';
-    case 'player_picked': {
-      const payload = event.payload as PlayerPickedPayload;
-      return `${payload.captain_name} picked ${payload.picked_name} (Pick ${payload.pick_number})`;
-    }
-    case 'tie_roll': {
-      const payload = event.payload as TieRollPayload;
-      const lastRound = payload.roll_rounds[payload.roll_rounds.length - 1];
-      const rolls = lastRound.map((r) => r.roll).join(' vs ');
-      return `Tie resolved! ${payload.winner_name} wins (${rolls})`;
-    }
-    case 'captain_assigned': {
-      const payload = event.payload as { captain_name: string };
-      return `${payload.captain_name} is picking next`;
-    }
-    case 'pick_undone': {
-      const payload = event.payload as { undone_player_name: string; pick_number: number };
-      return `Pick ${payload.pick_number} undone (${payload.undone_player_name})`;
-    }
-    default:
-      return 'Draft event occurred';
-  }
-}
-
 function showEventToast(event: DraftEvent): void {
-  // Use rich component toast for player_picked events
   if (event.event_type === 'player_picked') {
-    const payload = event.payload as PlayerPickedPayload;
-    toast(PlayerPickedToast({ payload }));
+    toast(PlayerPickedToast({ payload: event.payload as PlayerPickedPayload }));
     return;
   }
-  // Use simple string toast for other events
-  toast(getEventMessage(event));
+  const message = getEventToast(event);
+  if (message !== null) toast(message);
 }
+
+const EMPTY_TEAMS: DraftTick['teams'] = [];
 
 interface DraftWebSocketState {
   // Connection state (synced from manager)
@@ -78,11 +47,22 @@ interface DraftWebSocketState {
   lastEventTimestamp: number | null;
   hasNewEvent: boolean;
   pendingTieResolution: TieResolution | null;
+  tick: DraftTick | null;
+  serverClockOffsetMs: number;
+  captainFresh: Record<number, boolean>;
+  forceJumpToRoundPk: number | null;
 
   // Internal tracking
   _connectionId: string | null;
   _unsubscribe: Unsubscribe | null;
   _currentDraftId: number | null;
+  _stopHeartbeat: (() => void) | null;
+  _lastTickReceivedAtMs: number | null;
+  _lastStateEventPk: number | null;
+  _offsetSamples: number[];
+  /** Receive order of the applied tick and draft_state; the newer one drives the countdown. */
+  _tickSeq: number | null;
+  _draftStateSeq: number | null;
 
   // Actions
   connect: (draftId: number) => void;
@@ -90,7 +70,27 @@ interface DraftWebSocketState {
   clearNewEventFlag: () => void;
   setPendingTieResolution: (tr: TieResolution) => void;
   clearPendingTieResolution: () => void;
+  startHeartbeat: () => void;
+  stopHeartbeat: () => void;
+  jumpToPickNumber: (pickNumber: number) => boolean;
+  getServerNowISO: () => string;
+  clearForceJump: () => void;
+  /** Apply draft events buffered since the last flush (normally runs on a short timer). */
+  flushDraftEvents: () => void;
   reset: () => void;
+}
+
+function numericKeys(fresh: Record<string, boolean> | undefined): Record<number, boolean> {
+  const out: Record<number, boolean> = {};
+  for (const [k, v] of Object.entries(fresh ?? {})) out[Number(k)] = v;
+  return out;
+}
+
+// The tick loop flips resuming -> drafting without an event; only its ticks report it.
+function resumeEndedBy(tick: DraftTick, draftState: WebSocketDraftState | null): boolean {
+  if (draftState?.state !== 'resuming' || tick.draft_state !== 'drafting') return false;
+  const until = draftState.resuming_until ? Date.parse(draftState.resuming_until) : NaN;
+  return !Number.isNaN(until) && Date.parse(tick.server_time) >= until;
 }
 
 /** Ingest _users dict from WS draft state into entity cache. */
@@ -164,10 +164,42 @@ const initialState = {
   lastEventTimestamp: null,
   hasNewEvent: false,
   pendingTieResolution: null,
+  tick: null,
+  serverClockOffsetMs: 0,
+  captainFresh: {},
+  forceJumpToRoundPk: null,
   _connectionId: null,
   _unsubscribe: null,
   _currentDraftId: null,
+  _stopHeartbeat: null,
+  _lastTickReceivedAtMs: null,
+  _lastStateEventPk: null,
+  _offsetSamples: [] as number[],
+  _tickSeq: null,
+  _draftStateSeq: null,
 };
+
+/** Events that arrive within this window render together (one store update per burst). */
+export const DRAFT_EVENT_FLUSH_MS = 50;
+
+interface PendingDraftEvents {
+  events: DraftEvent[];
+  state: WebSocketDraftState | null;
+  statePk: number | null;
+  jump: boolean;
+  tie: TieResolution | null;
+  staleCaptains: number[];
+}
+
+let pending: PendingDraftEvents | null = null;
+let receiveSeq = 0;
+let flushTimer: ReturnType<typeof setTimeout> | null = null;
+
+function clearPending(): void {
+  if (flushTimer !== null) clearTimeout(flushTimer);
+  flushTimer = null;
+  pending = null;
+}
 
 export const useDraftWebSocketStore = create<DraftWebSocketState>((set, get) => ({
   ...initialState,
@@ -207,6 +239,7 @@ export const useDraftWebSocketStore = create<DraftWebSocketState>((set, get) => 
           reconnectAttempts: state.reconnectAttempts,
         });
       },
+      staleTimeoutMs: 3000,
       telemetry: {
         onConnected: (connUrl, durationMs) => {
           log.debug(`Connected to ${connUrl} in ${durationMs}ms`);
@@ -223,49 +256,101 @@ export const useDraftWebSocketStore = create<DraftWebSocketState>((set, get) => 
     const unsubscribe = manager.subscribe(connectionId, (rawMessage) => {
       const message = rawMessage as WebSocketMessage;
 
-      if (message.type === 'initial_events' && message.events) {
+      if (message.type !== 'draft_event' && message.type !== 'ping') get().flushDraftEvents();
+
+      if (message.type === 'initial_state') {
+        if (message.draft_state) {
+          log.debug('Updating draft state from initial_state');
+          ingestDraftStateUsers(message.draft_state);
+          const clock = seedClockOffset(get()._offsetSamples, message.server_time, Date.now());
+          set({
+            draftState: hydrateSlimDraftState(message.draft_state),
+            captainFresh: numericKeys(message.captain_fresh),
+            _offsetSamples: clock.samples,
+            serverClockOffsetMs: clock.offsetMs,
+            // A fresh snapshot: the old socket's last event pk no longer orders anything.
+            _lastStateEventPk: null,
+            _draftStateSeq: ++receiveSeq,
+          });
+        }
+      } else if (message.type === 'initial_events' && message.events) {
         log.debug(`Received ${message.events.length} initial events`);
         set({ events: message.events });
-        // Also update draft state if included in initial_events
-        if (message.draft_state) {
-          log.debug('Updating draft state from initial_events');
-          ingestDraftStateUsers(message.draft_state);
-          set({ draftState: hydrateSlimDraftState(message.draft_state) });
-        }
       } else if (message.type === 'draft_event' && message.event) {
         const newEvent = message.event;
         log.debug('Received draft event:', newEvent.event_type);
+        showEventToast(newEvent);
 
-        // Add to events list (newest first)
-        set((state) => ({
-          events: [newEvent, ...state.events],
-          lastEventTimestamp: Date.now(),
-          hasNewEvent: true,
-        }));
-
-        // Set pending tie resolution for live tie_roll events
+        const buf: PendingDraftEvents = pending ?? {
+          events: [],
+          state: null,
+          statePk: null,
+          jump: false,
+          tie: null,
+          staleCaptains: [],
+        };
+        pending = buf;
+        buf.events.push(newEvent);
         if (newEvent.event_type === 'tie_roll') {
           const trPayload = newEvent.payload as TieRollPayload;
-          set({
-            pendingTieResolution: {
-              tied_teams: trPayload.tied_teams,
-              roll_rounds: trPayload.roll_rounds,
-              winner_id: trPayload.winner_id,
-            },
+          buf.tie = {
+            tied_teams: trPayload.tied_teams,
+            roll_rounds: trPayload.roll_rounds,
+            winner_id: trPayload.winner_id,
+          };
+        }
+        if (
+          newEvent.event_type === 'draft_paused' &&
+          (newEvent.payload as DraftPausedPayload).reason === 'captain_disconnected'
+        ) {
+          buf.staleCaptains.push((newEvent.payload as DraftPausedPayload).captain_id);
+        }
+        // A state built for an older event never replaces a newer one.
+        const lastPk = Math.max(buf.statePk ?? -Infinity, get()._lastStateEventPk ?? -Infinity);
+        if (message.draft_state && newEvent.pk > lastPk) {
+          buf.state = message.draft_state;
+          buf.statePk = newEvent.pk;
+          buf.jump ||= newEvent.event_type === 'pick_skipped' || newEvent.event_type === 'round_started';
+        }
+        if (flushTimer === null) {
+          flushTimer = setTimeout(() => get().flushDraftEvents(), DRAFT_EVENT_FLUSH_MS);
+        }
+      } else if (message.type === 'draft_tick') {
+        const parsed = DraftTickSchema.safeParse(message);
+        if (!parsed.success) {
+          log.warn('draft_tick_invalid', { issues: parsed.error.issues.length });
+          return;
+        }
+        const tick = parsed.data;
+        const receivedAtMs = Date.now();
+        const lastAt = get()._lastTickReceivedAtMs;
+        if (lastAt !== null && receivedAtMs - lastAt > 2000) {
+          const gapMs = receivedAtMs - lastAt;
+          log.warn('client_tick_gap', {
+            draft_id: get()._currentDraftId,
+            expected_gap_ms: 1000,
+            actual_gap_ms: gapMs,
+            stall_ms: gapMs - 1000,
           });
         }
-
-        // Show toast for significant events
-        if (SIGNIFICANT_EVENTS.includes(newEvent.event_type)) {
-          showEventToast(newEvent);
+        const fresh: Record<number, boolean> = {};
+        for (const team of tick.teams) {
+          if (team.captain_id != null) fresh[team.captain_id] = team.is_connected;
         }
-
-        // Update draft state if included
-        if (message.draft_state) {
-          log.debug('Updating draft state from WebSocket');
-          ingestDraftStateUsers(message.draft_state);
-          set({ draftState: hydrateSlimDraftState(message.draft_state) });
-        }
+        const clock = addClockOffsetSample(get()._offsetSamples, tick.server_time, receivedAtMs);
+        set((state) => ({
+          tick,
+          _tickSeq: ++receiveSeq,
+          _offsetSamples: clock.samples,
+          serverClockOffsetMs: clock.offsetMs,
+          _lastTickReceivedAtMs: receivedAtMs,
+          captainFresh: { ...state.captainFresh, ...fresh },
+          ...(resumeEndedBy(tick, state.draftState)
+            ? { draftState: { ...state.draftState!, state: 'drafting', resuming_until: null } }
+            : {}),
+        }));
+      } else if (message.type === 'captain_heartbeat') {
+        set((state) => ({ captainFresh: { ...state.captainFresh, [message.captain_id]: message.fresh } }));
       }
     });
 
@@ -293,7 +378,71 @@ export const useDraftWebSocketStore = create<DraftWebSocketState>((set, get) => 
     set({ pendingTieResolution: null });
   },
 
+  startHeartbeat: () => {
+    if (get()._stopHeartbeat) return;
+    const connectionId = get()._connectionId;
+    if (!connectionId) {
+      log.warn('Cannot start heartbeat: not connected');
+      return;
+    }
+    const manager = getWebSocketManager();
+    set({
+      _stopHeartbeat: startHeartbeatLoop(() => {
+        const cur = get()._connectionId;
+        if (cur) manager.send(cur, { type: 'heartbeat' });
+      }),
+    });
+  },
+
+  stopHeartbeat: () => {
+    const stop = get()._stopHeartbeat;
+    if (stop) {
+      stop();
+      set({ _stopHeartbeat: null });
+    }
+  },
+
+  jumpToPickNumber: (pickNumber: number) => {
+    const round = get().draftState?.draft_rounds?.find((r) => r.pick_number === pickNumber);
+    if (!round) return false;
+    useUserStore.getState().setCurDraftRound(round as never);
+    return true;
+  },
+
+  getServerNowISO: () => serverNowISO(get().serverClockOffsetMs),
+
+  clearForceJump: () => set({ forceJumpToRoundPk: null }),
+
+  flushDraftEvents: () => {
+    const buf = pending;
+    clearPending();
+    if (!buf) return;
+    if (buf.state) ingestDraftStateUsers(buf.state);
+    set((state) => {
+      const captainFresh = buf.staleCaptains.length
+        ? { ...state.captainFresh, ...Object.fromEntries(buf.staleCaptains.map((id) => [id, false])) }
+        : state.captainFresh;
+      return {
+        events: [...buf.events.slice().reverse(), ...state.events],
+        lastEventTimestamp: Date.now(),
+        hasNewEvent: true,
+        captainFresh,
+        ...(buf.tie ? { pendingTieResolution: buf.tie } : {}),
+        ...(buf.state
+          ? {
+              draftState: hydrateSlimDraftState(buf.state),
+              _lastStateEventPk: buf.statePk,
+              _draftStateSeq: ++receiveSeq,
+              ...(buf.jump ? { forceJumpToRoundPk: buf.state.latest_round } : {}),
+            }
+          : {}),
+      };
+    });
+  },
+
   disconnect: () => {
+    clearPending();
+    get().stopHeartbeat();
     const { _unsubscribe } = get();
 
     // Unsubscribe only - manager auto-disconnects when no subscribers remain
@@ -332,8 +481,9 @@ export const draftWsSelectors = {
   usersRemainingCount: (s: DraftWebSocketState) =>
     s.draftState?.users_remaining?.length ?? 0,
 
-  /** True when draft is completed (all rounds have a choice) */
+  /** True when draft is completed */
   isDraftCompleted: (s: DraftWebSocketState) => {
+    if (s.draftState?.state) return s.draftState.state === 'completed';
     const rounds = s.draftState?.draft_rounds;
     return (
       s.draftState !== null &&
@@ -341,4 +491,34 @@ export const draftWsSelectors = {
       rounds?.every((r) => r.choice != null) === true
     );
   },
+
+  draftStatus: (s: DraftWebSocketState): TeamDraftState | null => s.draftState?.state ?? null,
+
+  timerEnabled: (s: DraftWebSocketState) => s.draftState?.draft_options?.timer_enabled === true,
+
+  clockArmed: (s: DraftWebSocketState) => s.draftState?.clock_armed === true,
+
+  // draftState.latest_round is authoritative; the tick lags each pick by up to 1 s.
+  activeRoundPk: (s: DraftWebSocketState): number | null =>
+    s.draftState ? (s.draftState.latest_round ?? null) : (s.tick?.active_round_pk ?? null),
+
+  activeCaptainId: (s: DraftWebSocketState): number | null => {
+    if (!s.draftState) return s.tick?.active_captain_id ?? null;
+    const r = s.draftState.draft_rounds?.find((x) => x.pk === s.draftState!.latest_round);
+    return (r?.captain as { pk?: number } | undefined)?.pk ?? null;
+  },
+
+  isMyTurn: (s: DraftWebSocketState, userPk: number | undefined) =>
+    userPk != null && draftWsSelectors.activeCaptainId(s) === userPk,
+
+  /** Heartbeat freshness, never Team.draft_is_connected. */
+  isActiveCaptainDisconnected: (s: DraftWebSocketState) => {
+    const id = draftWsSelectors.activeCaptainId(s);
+    return id != null && s.captainFresh[id] === false;
+  },
+
+  teamTiming: (s: DraftWebSocketState) => s.tick?.teams ?? EMPTY_TEAMS,
+
+  tickIsNewerThanDraftState: (s: DraftWebSocketState): boolean =>
+    s._tickSeq !== null && (s._draftStateSeq === null || s._tickSeq > s._draftStateSeq),
 };

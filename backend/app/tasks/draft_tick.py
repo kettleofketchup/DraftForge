@@ -11,6 +11,7 @@ Diagnostic events when ticks misbehave:
 
 import asyncio
 import atexit
+import contextvars
 import threading
 import time
 from collections.abc import Coroutine
@@ -18,7 +19,7 @@ from datetime import datetime
 from typing import Any, NamedTuple, Protocol, runtime_checkable
 
 import redis
-from asgiref.sync import sync_to_async
+from asgiref.sync import ThreadSensitiveContext, sync_to_async
 from channels.db import database_sync_to_async
 from django.conf import settings
 from opentelemetry import trace
@@ -35,6 +36,8 @@ TICK_ITERATION_SLOW_THRESHOLD_S: float = 1.5
 
 LOCK_TIMEOUT: int = 10
 CONN_COUNT_TTL_SECONDS: int = 300
+CONN_REFRESH_SECONDS: int = 10
+CONN_STALE_SECONDS: int = 30
 HEARTBEAT_INTERVAL_SECONDS: int = 3
 HEARTBEAT_STALE_SECONDS: int = 9
 HEARTBEAT_TTL: int = 30
@@ -64,19 +67,17 @@ def captain_channel_key(prefix: str, draft_id: int, user_id: int) -> str:
 
 
 def conn_count_key(prefix: str, draft_id: int) -> str:
-    return namespaced_key(f"{prefix}:connections:{draft_id}")
+    return namespaced_key(f"{prefix}:live_connections:{draft_id}")
 
 
 def lock_key(prefix: str, draft_id: int) -> str:
     return namespaced_key(f"{prefix}:tick_lock:{draft_id}")
 
 
-def increment_connection_count(prefix: str, draft_id: int) -> int:
-    """Increment WebSocket connection count for a draft. Returns new count."""
-    r = get_redis_client()
-    key = conn_count_key(prefix, draft_id)
-    count: int = r.incr(key)
-    r.expire(key, CONN_COUNT_TTL_SECONDS)
+def increment_connection_count(prefix: str, draft_id: int, channel: str) -> int:
+    """Register a live WebSocket connection for a draft. Returns the live count."""
+    touch_connection(prefix, draft_id, channel)
+    count = get_connection_count(prefix, draft_id)
     log.debug(
         "connection_count_incremented",
         system="websocket",
@@ -88,14 +89,10 @@ def increment_connection_count(prefix: str, draft_id: int) -> int:
     return count
 
 
-def decrement_connection_count(prefix: str, draft_id: int) -> int:
-    """Decrement WebSocket connection count for a draft. Returns new count."""
-    r = get_redis_client()
-    key = conn_count_key(prefix, draft_id)
-    count: int = r.decr(key)
-    if count <= 0:
-        r.delete(key)
-        count = 0
+def decrement_connection_count(prefix: str, draft_id: int, channel: str) -> int:
+    """Drop a WebSocket connection for a draft. Returns the live count."""
+    get_redis_client().zrem(conn_count_key(prefix, draft_id), channel)
+    count = get_connection_count(prefix, draft_id)
     log.debug(
         "connection_count_decremented",
         system="websocket",
@@ -107,10 +104,29 @@ def decrement_connection_count(prefix: str, draft_id: int) -> int:
     return count
 
 
+def touch_connection(prefix: str, draft_id: int, channel: str) -> None:
+    """Mark ``channel`` live now; re-adds it if the set was lost or expired.
+
+    Also drops members past the stale window (sockets of a crashed process),
+    so the set can't grow without bound while live sockets keep its TTL fresh.
+    """
+    r = get_redis_client()
+    key = conn_count_key(prefix, draft_id)
+    now = time.time()
+    pipe = r.pipeline()
+    pipe.zremrangebyscore(key, "-inf", now - CONN_STALE_SECONDS)
+    pipe.zadd(key, {channel: now})
+    pipe.expire(key, CONN_COUNT_TTL_SECONDS)
+    pipe.execute()
+
+
 def get_connection_count(prefix: str, draft_id: int) -> int:
-    """Get current WebSocket connection count for a draft."""
-    count = get_redis_client().get(conn_count_key(prefix, draft_id))
-    return int(count) if count else 0
+    """Connections seen within CONN_STALE_SECONDS (a crashed process's entries age out)."""
+    return int(
+        get_redis_client().zcount(
+            conn_count_key(prefix, draft_id), time.time() - CONN_STALE_SECONDS, "+inf"
+        )
+    )
 
 
 class TaskInfo(NamedTuple):
@@ -146,6 +162,19 @@ async def run_tick_loop(
     driver: TickDriver, draft_id: int, stop_event: threading.Event
 ) -> None:
     """Run tick broadcasts every second while draft is active and has connections."""
+    forget = getattr(driver, "forget", None)
+    if forget is not None:
+        forget(draft_id)
+    try:
+        await _run_tick_loop(driver, draft_id, stop_event)
+    finally:
+        if forget is not None:
+            forget(draft_id)
+
+
+async def _run_tick_loop(
+    driver: TickDriver, draft_id: int, stop_event: threading.Event
+) -> None:
     r = get_redis_client()
     key = lock_key(driver.prefix, draft_id)
 
@@ -273,6 +302,17 @@ async def run_tick_loop(
     )
 
 
+async def with_own_db_thread[T](coro: Coroutine[Any, Any, T]) -> T:
+    """Run ``coro`` with its own thread for thread-sensitive DB calls.
+
+    Without a context, every tick loop and consumer shares asgiref's one
+    global sync thread, so a single write waiting on SQLite's lock stalled
+    every draft's ticks (4.6 s in CI run 42694572403).
+    """
+    async with ThreadSensitiveContext():
+        return await coro
+
+
 def start_tick_broadcaster(driver: TickDriver, draft_id: int) -> bool:
     """Start the tick broadcaster for a draft under a Redis lock.
 
@@ -299,7 +339,9 @@ def start_tick_broadcaster(driver: TickDriver, draft_id: int) -> bool:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
-            loop.run_until_complete(run_tick_loop(driver, draft_id, stop_event))
+            loop.run_until_complete(
+                with_own_db_thread(run_tick_loop(driver, draft_id, stop_event))
+            )
         except Exception as e:
             log.error(
                 "tick_broadcaster_error",
@@ -329,10 +371,19 @@ def start_tick_broadcaster(driver: TickDriver, draft_id: int) -> bool:
             r.delete(key)
             return False
 
-        thread = threading.Thread(target=run_in_thread, daemon=True)
+        # A fresh context: on_commit starters may hold request-scoped ContextVars.
+        thread = threading.Thread(
+            target=contextvars.Context().run, args=(run_in_thread,), daemon=True
+        )
         reg[draft_id] = TaskInfo(stop_event, thread)
 
-    thread.start()
+    try:
+        thread.start()
+    except Exception:
+        with _lock:
+            reg.pop(draft_id, None)
+        r.delete(key)
+        raise
     log.info(
         "tick_broadcaster_started",
         system=driver.system,

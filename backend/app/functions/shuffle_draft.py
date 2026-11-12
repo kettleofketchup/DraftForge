@@ -2,16 +2,15 @@
 
 import random
 
-from django.db import transaction
-
-from app.broadcast import broadcast_event
-from app.models import Draft, DraftEvent, DraftRound
+from app.broadcast import broadcast_event, broadcast_event_after_commit
+from app.models import CustomUser, Draft, DraftEvent, DraftRound, Organization, Team
+from org.models import OrgUser
 
 # Maximum team size (captain + 4 drafted players)
 MAX_TEAM_SIZE = 5
 
 
-def get_user_org_mmr(user, organization) -> int:
+def get_user_org_mmr(user: CustomUser, organization: Organization) -> int:
     """
     Get a user's MMR from their OrgUser membership.
 
@@ -22,8 +21,6 @@ def get_user_org_mmr(user, organization) -> int:
     Returns:
         MMR as integer, or 0 if no OrgUser exists
     """
-    from org.models import OrgUser
-
     try:
         org_user = OrgUser.objects.get(user=user, organization=organization)
         return org_user.mmr or 0
@@ -31,7 +28,7 @@ def get_user_org_mmr(user, organization) -> int:
         return 0
 
 
-def get_team_total_mmr(team, organization=None) -> int:
+def get_team_total_mmr(team: Team, organization: Organization | None = None) -> int:
     """
     Calculate total MMR for a team (captain + members).
 
@@ -115,7 +112,7 @@ def get_lowest_mmr_team(teams: list) -> tuple:
     return tied[0], None
 
 
-def build_shuffle_rounds(draft) -> None:
+def build_shuffle_rounds(draft: Draft) -> None:
     """
     Create all rounds for shuffle draft, assign first captain.
 
@@ -200,7 +197,7 @@ def reassign_round_captain(
     captain_event = DraftEvent.objects.create(
         draft=draft, event_type="captain_assigned", payload=payload
     )
-    transaction.on_commit(lambda e=captain_event: broadcast_event(e))
+    broadcast_event_after_commit(captain_event)
 
     if tie_data:
         tie_event = DraftEvent.objects.create(
@@ -214,7 +211,7 @@ def reassign_round_captain(
                 "winner_name": captain.username,
             },
         )
-        transaction.on_commit(lambda e=tie_event: broadcast_event(e))
+        broadcast_event_after_commit(tie_event)
 
     return tie_data
 

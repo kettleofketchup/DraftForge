@@ -4,7 +4,7 @@ from datetime import datetime
 
 from django.db import transaction
 
-from app.broadcast import broadcast_event
+from app.broadcast import broadcast_event_after_commit
 from app.cache_utils import invalidate_after_commit
 from app.models import (
     CustomUser,
@@ -69,7 +69,7 @@ def emit_event(
     event = DraftEvent.objects.create(
         draft=draft, event_type=event_type, payload=payload, actor=actor
     )
-    transaction.on_commit(lambda e=event: broadcast_event(e))
+    broadcast_event_after_commit(event)
     log.info(
         "draft_event_emitted",
         system="teamdraft",
@@ -220,20 +220,22 @@ def advance_after_pick(
     return nxt
 
 
-def apply_draft_options(tournament: Tournament, data: dict) -> DraftOptions:
+def apply_draft_options(
+    tournament: Tournament, data: dict, actor: CustomUser | None = None
+) -> DraftOptions:
     with transaction.atomic():
         draft = Draft.objects.select_for_update().filter(tournament=tournament).first()
         opts = tournament.get_draft_options(fresh=True)
         was_enabled = opts.timer_enabled
+        changed = any(getattr(opts, key) != value for key, value in data.items())
         for key, value in data.items():
             setattr(opts, key, value)
         opts.save()
         if draft is None:
             return opts
+        from_state = draft.state
         turning_off = (
-            was_enabled
-            and not opts.timer_enabled
-            and draft.state in _TIMER_OFF_STATES
+            was_enabled and not opts.timer_enabled and draft.state in _TIMER_OFF_STATES
         )
         rnd = draft.lock_active_round() if turning_off else None
         if draft.state == TeamDraftState.PENDING and (
@@ -243,14 +245,18 @@ def apply_draft_options(tournament: Tournament, data: dict) -> DraftOptions:
                 team.draft_reserve_ms = opts.reserve_time_ms
                 team.save(update_fields=["draft_reserve_ms"])
         if turning_off:
-            from_state = draft.state
             was_paused = from_state in (TeamDraftState.PAUSED, TeamDraftState.RESUMING)
             draft.state = TeamDraftState.DRAFTING
             draft.paused_at = None
             draft.resuming_until = None
             draft.is_manual_pause = False
             draft.save(
-                update_fields=["state", "paused_at", "resuming_until", "is_manual_pause"]
+                update_fields=[
+                    "state",
+                    "paused_at",
+                    "resuming_until",
+                    "is_manual_pause",
+                ]
             )
             if rnd is not None:
                 rnd.started_at = None
@@ -272,6 +278,21 @@ def apply_draft_options(tournament: Tournament, data: dict) -> DraftOptions:
                 subsystem="timer",
                 draft_id=draft.pk,
                 from_state=from_state,
+            )
+        if changed:
+            emit_event(
+                draft,
+                "draft_options_changed",
+                {
+                    "timer_enabled": opts.timer_enabled,
+                    "grace_time_ms": opts.grace_time_ms,
+                    "reserve_time_ms": opts.reserve_time_ms,
+                    "changed_by_id": actor.pk if actor else None,
+                    "changed_by_name": actor.username if actor else None,
+                    "from_state": from_state,
+                    "to_state": draft.state,
+                },
+                actor=actor,
             )
         invalidate_after_commit(tournament, draft)
         return opts

@@ -35,8 +35,9 @@ LABEL = "preview-env"
 OPT_OUT = "no-preview"
 NO_BUILD_GRACE = timedelta(hours=2)
 # Raising the ceiling is a reviewed code change, not a repo-variable edit: the
-# deploying cluster budgets capacity for this many previews.
-MAX_CAP = 3
+# deploying cluster budgets capacity for this many previews, each under a
+# ResourceQuota of 1 CPU / 2Gi requests (4Gi memory limit).
+MAX_CAP = 5
 
 # PREVIEW_AUTHORS entries are compared exactly and case-sensitively with
 # `user.login`, so they must use the canonical case GitHub returns. The

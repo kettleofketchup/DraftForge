@@ -1302,7 +1302,7 @@ def kill_draft_websocket(request, draft_id):
     TEST ONLY: Force-disconnect all WebSocket clients for a draft.
 
     Sends a force.disconnect message to the draft's channel group,
-    causing all connected DraftConsumer instances to close with code 1012.
+    causing all connected DraftConsumer instances to close with code 4012.
     Used by Playwright E2E tests to simulate server-initiated WS drops.
 
     Args:

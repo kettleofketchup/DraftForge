@@ -107,7 +107,7 @@ test.describe('Undo Pick', () => {
 
       // Now check for undo button
       await expect(dialog).toBeVisible();
-      await expect(dialog.locator('[data-testid="undoPickButton"]')).toBeVisible();
+      await expect(dialog.locator('[data-testid="undoPickButton"]').filter({ visible: true })).toBeVisible();
     });
 
     test('should NOT show undo button for non-staff users', async ({
@@ -141,7 +141,7 @@ test.describe('Undo Pick', () => {
       await page.waitForLoadState('networkidle');
 
       // Undo button should not be visible for non-staff
-      const undoButton = dialog.locator('[data-testid="undoPickButton"]');
+      const undoButton = dialog.locator('[data-testid="undoPickButton"]').filter({ visible: true });
       const isVisible = await undoButton.isVisible().catch(() => false);
       expect(isVisible).toBe(false);
     });
@@ -192,7 +192,7 @@ test.describe('Undo Pick', () => {
       }
 
       // After restart, no picks should exist, so undo should not be visible
-      await expect(dialog.locator('[data-testid="undoPickButton"]')).not.toBeVisible();
+      await expect(dialog.locator('[data-testid="undoPickButton"]').filter({ visible: true })).not.toBeVisible();
     });
   });
 
@@ -274,7 +274,7 @@ test.describe('Undo Pick', () => {
       await page.waitForLoadState('networkidle');
 
       // Now undo the pick - wait for button to appear first (confirms pick was recorded)
-      const undoButton = dialog.locator('[data-testid="undoPickButton"]');
+      const undoButton = dialog.locator('[data-testid="undoPickButton"]').filter({ visible: true });
       await expect(undoButton).toBeVisible({ timeout: 10000 });
       await undoButton.click({ force: true });
 
@@ -348,7 +348,7 @@ test.describe('Undo Pick', () => {
       }
 
       // Click undo button
-      const undoButton = dialog.locator('[data-testid="undoPickButton"]');
+      const undoButton = dialog.locator('[data-testid="undoPickButton"]').filter({ visible: true });
       await undoButton.click({ force: true });
 
       // Click cancel in the alert dialog
@@ -360,7 +360,7 @@ test.describe('Undo Pick', () => {
       await expect(page.locator('[role="alertdialog"]')).not.toBeVisible();
 
       // Pick should NOT be undone - undo button should still be visible
-      await expect(dialog.locator('[data-testid="undoPickButton"]')).toBeVisible();
+      await expect(dialog.locator('[data-testid="undoPickButton"]').filter({ visible: true })).toBeVisible();
     });
   });
 });

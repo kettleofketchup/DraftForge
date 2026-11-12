@@ -11,6 +11,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
+from app.broadcast import atomic_sharing_draft_state
 from app.cache_utils import invalidate_after_commit
 from app.functions.teamdraft import (
     RESUME_COUNTDOWN_SECONDS,
@@ -22,7 +23,7 @@ from app.functions.teamdraft import (
     team_payload,
 )
 from app.functions.tournament import _serialize_tournament
-from app.models import Draft, DraftRound, Team, TeamDraftState, Tournament
+from app.models import Draft, DraftOptions, DraftRound, Team, TeamDraftState
 from app.permissions_org import can_edit_tournament
 from app.tasks.teamdraft_tick import start_team_tick_broadcaster_after_commit
 from telemetry.logging import get_logger
@@ -39,26 +40,15 @@ def _wrong_state(draft: Draft) -> Response:
 
 
 def _ok(draft: Draft) -> Response:
-    tournament = Tournament.objects.nocache().get(pk=draft.tournament_id)
-    return Response(_serialize_tournament(tournament))
+    return Response(_serialize_tournament(draft.tournament))
 
 
-def _is_armed(draft: Draft, options, active: DraftRound | None) -> bool:
+def _is_armed(draft: Draft, options: DraftOptions, active: DraftRound | None) -> bool:
     return bool(
         options.timer_enabled
         and draft.state in (TeamDraftState.DRAFTING, TeamDraftState.RESUMING)
         and active is not None
         and active.started_at is not None
-    )
-
-
-def _log(event: str, draft: Draft, user_id: int) -> None:
-    log.info(
-        event,
-        system="teamdraft",
-        subsystem="view",
-        draft_id=draft.pk,
-        user_id=user_id,
     )
 
 
@@ -88,7 +78,13 @@ def teamdraft_set_ready(request: Request, draft_pk: int) -> Response:
             team_payload(team),
             actor=request.user,
         )
-    _log("captain_ready_set", draft, request.user.pk)
+    log.info(
+        "captain_ready_set",
+        system="teamdraft",
+        subsystem="view",
+        draft_id=draft.pk,
+        user_id=request.user.pk,
+    )
     return _ok(draft)
 
 
@@ -101,7 +97,7 @@ def teamdraft_start(request: Request, draft_pk: int) -> Response:
 
     now = timezone.now()
     actor = {"actor_id": request.user.pk, "actor_name": request.user.username}
-    with transaction.atomic():
+    with atomic_sharing_draft_state():
         draft = Draft.objects.select_for_update().get(pk=draft_pk)
         options = draft.tournament.get_draft_options(fresh=True)
         if not options.timer_enabled:
@@ -144,7 +140,13 @@ def teamdraft_start(request: Request, draft_pk: int) -> Response:
             emit_event(draft, "draft_started_by_staff", actor, actor=request.user)
         else:
             return _wrong_state(draft)
-    _log("draft_started", draft, request.user.pk)
+    log.info(
+        "draft_started",
+        system="teamdraft",
+        subsystem="view",
+        draft_id=draft.pk,
+        user_id=request.user.pk,
+    )
     return _ok(draft)
 
 
@@ -185,7 +187,13 @@ def teamdraft_pause(request: Request, draft_pk: int) -> Response:
             },
             actor=request.user,
         )
-    _log("draft_paused", draft, request.user.pk)
+    log.info(
+        "draft_paused",
+        system="teamdraft",
+        subsystem="view",
+        draft_id=draft.pk,
+        user_id=request.user.pk,
+    )
     return _ok(draft)
 
 
@@ -232,5 +240,11 @@ def teamdraft_resume(request: Request, draft_pk: int) -> Response:
             actor=request.user,
         )
         start_team_tick_broadcaster_after_commit(draft.pk)
-    _log("draft_resumed", draft, request.user.pk)
+    log.info(
+        "draft_resumed",
+        system="teamdraft",
+        subsystem="view",
+        draft_id=draft.pk,
+        user_id=request.user.pk,
+    )
     return _ok(draft)

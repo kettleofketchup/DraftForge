@@ -28,7 +28,6 @@ export const DraftModerationDropdown: React.FC<DraftModerationDropdownProps> = (
   const [confirmOpen, setConfirmOpen] = useState(false);
   const tournament = useUserStore((state) => state.tournament);
   const setTournament = useUserStore((state) => state.setTournament);
-  const setDraftIndex = useUserStore((state) => state.setDraftIndex);
   const draft = useUserStore((state) => state.draft);
   const setDraft = useUserStore((state) => state.setDraft);
   const curDraftRound = useUserStore((state) => state.curDraftRound);
@@ -53,7 +52,6 @@ export const DraftModerationDropdown: React.FC<DraftModerationDropdownProps> = (
       setDraft,
       curDraftRound,
       setCurDraftRound,
-      setDraftIndex,
     });
     setConfirmOpen(false);
   };
