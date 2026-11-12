@@ -11,19 +11,10 @@ const base = { timerEnabled: true, clockArmed: true, draftStatus: 'drafting' as 
 
 describe('DraftClockBar', () => {
   it('renders nothing when the timer is disabled', () => { const { container } = render(<DraftClockBar {...base} timerEnabled={false} countdown={armed()} />); expect(container).toBeEmptyDOMElement(); });
-  it('shows grace, per-team reserve and a dash for a captain-less team', () => {
+  it('shows grace and no per-team reserve row', () => {
     render(<DraftClockBar {...base} countdown={armed()} />);
     expect(screen.getByTestId('draft-clock-grace')).toHaveTextContent('0:12');
-    expect(screen.getByTestId('draft-clock-reserve-2')).toHaveTextContent('0:04');
-    expect(screen.getByTestId('draft-clock-reserve-3')).toHaveAttribute('data-empty', 'true');
-    expect(screen.getByTestId('draft-clock-reserve-3')).not.toHaveTextContent('NaN');
-  });
-  it('sizes reserve as a percentage of reserveTotalMs', () => {
-    const { rerender } = render(<DraftClockBar {...base} reserveTotalMs={10_000} countdown={armed()} />);
-    expect(screen.getByTestId('draft-clock-reserve-2')).toHaveAttribute('data-pct', '40');
-    expect(screen.getByTestId('draft-clock-reserve-1')).toHaveAttribute('data-pct', '100');
-    rerender(<DraftClockBar {...base} reserveTotalMs={0} countdown={armed()} />);
-    expect(screen.getByTestId('draft-clock-reserve-1')).toHaveAttribute('data-pct', '0');
+    expect(screen.queryByTestId('draft-clock-reserve-2')).toBeNull();
   });
   it('pulses grace under 10 s', () => { render(<DraftClockBar {...base} countdown={armed({ graceRemainingMs: 9_000 })} />); expect(screen.getByTestId('draft-clock-grace').className).toContain('animate-grace-urgent'); });
   it('shows Pause only for controllers while armed and drafting', () => {

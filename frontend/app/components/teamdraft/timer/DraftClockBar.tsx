@@ -74,56 +74,11 @@ export function DraftClockBar({
   const inReserve = !!armed && !armed.expired && activeTeamPk != null && armed.graceRemainingMs <= 0;
   const reserveDraining = inReserve && drafting && activeReserveMs > 0;
 
-  const reservePct = (teamPk: number): number =>
-    reserveTotalMs > 0 && armed
-      ? Math.min(100, Math.round((100 * (armed.reserveByTeamId[teamPk] ?? 0)) / reserveTotalMs))
-      : 0;
-
-  const renderReserve = (team: ClockTeam, isActive: boolean) => {
-    const testId = `draft-clock-reserve-${team.teamPk}`;
-    const label = team.captain ? DisplayName(team.captain) : (team.teamName ?? 'No captain');
-    if (!team.captain) {
-      return (
-        <div key={team.teamPk} className="flex items-center gap-2 rounded-md bg-black/20 px-3 py-1.5 opacity-60">
-          <span className="truncate text-xs">{label}</span>
-          <span data-testid={testId} data-empty="true" className="text-xs text-muted-foreground">
-            —
-          </span>
-        </div>
-      );
-    }
-    if (!armed) return null;
-    const ms = armed.reserveByTeamId[team.teamPk] ?? 0;
-    const pct = reservePct(team.teamPk);
-    const draining = isActive && reserveDraining;
-    return (
-      <div
-        key={team.teamPk}
-        data-active={isActive}
-        className={cn(
-          'flex min-w-[9rem] flex-col gap-1 rounded-md px-3 py-1.5',
-          isActive ? 'bg-black/40 ring-1 ring-white/40' : 'bg-black/20 opacity-70',
-          draining && 'ring-red-400',
-        )}
-      >
-        <div className="flex items-center justify-between gap-3">
-          <span className={cn('truncate text-xs', isActive && 'font-semibold')}>{label}</span>
-          <span
-            data-testid={testId}
-            data-pct={pct}
-            className={cn('font-mono text-sm tabular-nums', ms <= 0 && 'text-muted-foreground', draining && 'text-red-300')}
-          >
-            {formatDuration(ms / 1000)}
-          </span>
-        </div>
-        <ReserveBar pct={pct} draining={draining} />
-      </div>
-    );
-  };
+  const activePct =
+    reserveTotalMs > 0 ? Math.min(100, Math.round((100 * activeReserveMs) / reserveTotalMs)) : 0;
 
   const clockLabel = 'text-[10px] font-semibold uppercase tracking-widest';
   const clockDigits = 'text-3xl md:text-4xl font-mono font-bold tabular-nums leading-none';
-  const activePct = activeTeamPk != null ? reservePct(activeTeamPk) : 0;
 
   return (
     <>
@@ -138,7 +93,7 @@ export function DraftClockBar({
         data-testid="draft-clock-bar"
         data-phase={armed?.expired ? 'expired' : inReserve ? 'reserve' : armed ? 'grace' : 'none'}
         className={cn(
-          'flex flex-col gap-2 rounded-lg px-4 py-3 text-white',
+          'rounded-lg px-4 py-3 text-white',
           brandBg,
           reserveDraining && 'ring-2 ring-red-500',
         )}
@@ -222,12 +177,6 @@ export function DraftClockBar({
             )}
           </div>
         </div>
-
-        {armed && (
-          <div className="flex flex-wrap items-center justify-center gap-2">
-            {teams.map((t) => renderReserve(t, t.teamPk === activeTeamPk))}
-          </div>
-        )}
       </div>
     </>
   );
