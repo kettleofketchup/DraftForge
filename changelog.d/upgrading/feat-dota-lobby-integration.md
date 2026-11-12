@@ -1,5 +1,0 @@
-Run the migrations `app.0101_tournament_dota_lobby_fields` and `lobby.0001_initial`. 0101 changes `Game.gameid` to a 64-bit integer (no data change on SQLite) and adds tournament lobby fields that default to off. `lobby.0001_initial` creates the new `lobby` app's tables.
-
-The dota_lobby integration is off unless `DOTA_LOBBY_ENABLED=true`. The tracked `docker/.env.*` files set it to `false`, so turn it on there to enable it. New optional environment variables: `DOTA_LOBBY_URL`, `DOTA_LOBBY_API_KEY` and `DOTA_LOBBY_WEBHOOK_SECRET` (secrets: put them in `backend/.env`), and `DOTA_LOBBY_TIMEOUT_SECONDS` (15), `DOTA_LOBBY_REF_PREFIX` (`game`), `DOTA_LOBBY_WEBHOOK_TOLERANCE_SECONDS` (300) and `DOTA_LOBBY_REGION`. On Helm, set the secrets with `secrets.dotaLobbyApiKey` and `secrets.dotaLobbyWebhookSecret` (or an `extraEnvSecrets` Secret) and the rest with `env.extra`. See `docs/features/planned/dota-lobbies.md`.
-
-Lobby passwords are derived from `DJANGO_SECRET_KEY`, which must be set wherever lobbies are enabled. When rotating it, keep the previous key in the new optional `DJANGO_SECRET_KEY_FALLBACKS` (comma-separated) until the lobbies created under it have ended.
