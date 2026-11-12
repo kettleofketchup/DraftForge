@@ -2,7 +2,7 @@
  * dota_lobby E2E fixtures: the seeded lobby data and the simulated dota_lobby.
  *
  * Infrastructure (backend/tests/populate/dota_lobby.py, tests.data.dota_lobby):
- * - Lobby Test Org / Lobby Test League (steam league 17938, which the
+ * - Lobby Test Org / Lobby Test League (steam league 17940, which the
  *   simulator's bots administer)
  * - Lobby Test Series: fixed password mode, one upcoming event and its
  *   tournament (Alpha vs Beta, Gamma vs Delta, then a final)

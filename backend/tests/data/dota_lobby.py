@@ -5,7 +5,7 @@ dota_lobby in the test stack (docker/dota-lobby/simulator.yaml, whose bots
 administer LOBBY_STEAM_LEAGUE_ID). populate_dota_lobby_data creates it and
 reset_dota_lobby_data puts it back between spec files.
 
-- "Lobby Test Org" and "Lobby Test League" (steam league 17938).
+- "Lobby Test Org" and "Lobby Test League" (steam league 17940).
 - "Lobby Test Series": a paused series in fixed password mode
   (LOBBY_FIXED_PASSWORD) with one upcoming, on-schedule event and its
   tournament (four teams, single elimination).
@@ -35,7 +35,7 @@ LOBBY_ORG: TestOrganization = TestOrganization(
     timezone="America/New_York",
 )
 
-LOBBY_STEAM_LEAGUE_ID = 17938
+LOBBY_STEAM_LEAGUE_ID = 17940
 
 LOBBY_LEAGUE: TestLeague = TestLeague(
     name="Lobby Test League",

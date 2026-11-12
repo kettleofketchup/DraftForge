@@ -12,11 +12,11 @@ bots:
   # The simulated game coordinator reports that these bots administer the
   # Lobby Test League (backend/tests/data/dota_lobby.py, LOBBY_STEAM_LEAGUE_ID).
   - name: sim_bot_1
-    leagues: [17938]
+    leagues: [17940]
   - name: sim_bot_2
-    leagues: [17938]
+    leagues: [17940]
   - name: sim_bot_3
-    leagues: [17938]
+    leagues: [17940]
 lobby:
   auto_launch_delay: 1s
   postgame_linger: 5s

@@ -105,7 +105,7 @@ See [references/backend-test-endpoints.md](references/backend-test-endpoints.md)
 | League | Test League | 2 | 17930 |
 | League | CSV Import League | 3 | 17931 |
 | League | Events Test League | 7 | 17935 |
-| Org / League | Lobby Test Org / Lobby Test League | auto (look up by name) | 17938 |
+| Org / League | Lobby Test Org / Lobby Test League | auto (look up by name) | 17940 |
 
 | User | PK | Role | Login fixture |
 |------|----|------|--------------|
