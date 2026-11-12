@@ -1,7 +1,7 @@
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
 
 from app.models import CustomUser
-from steam.functions.stats_update import update_player_league_stats
+from steam.functions.stats_update import player_won, update_player_league_stats
 from steam.models import LeaguePlayerStats, Match, PlayerMatchStats
 
 
@@ -95,3 +95,19 @@ class TestStatsUpdate(TestCase):
         self.assertEqual(stats.win_rate, 0.5)
         self.assertEqual(stats.total_kills, 20)
         self.assertEqual(stats.avg_kills, 10.0)
+
+
+class PlayerWonTests(SimpleTestCase):
+    def test_radiant_slot_wins_when_radiant_wins(self) -> None:
+        self.assertIs(player_won(0, True), True)
+        self.assertIs(player_won(127, True), True)
+
+    def test_radiant_slot_loses_when_dire_wins(self) -> None:
+        self.assertIs(player_won(4, False), False)
+
+    def test_dire_slot_wins_when_dire_wins(self) -> None:
+        self.assertIs(player_won(128, False), True)
+        self.assertIs(player_won(132, False), True)
+
+    def test_dire_slot_loses_when_radiant_wins(self) -> None:
+        self.assertIs(player_won(128, True), False)

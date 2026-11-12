@@ -17,14 +17,14 @@ reset_dota_lobby_data puts it back between spec files.
 Every tournament hosts lobbies in manual mode, so nothing creates a lobby
 until a spec asks for one. Every rostered player has a Steam account ID.
 
-Users (pk 7000-7099):
+Users (pk 7200-7299):
 
-- 7000 lobby_staff: admin of the Lobby Test Org
-- 7001 lobby_rostered: captain of "Lobby Gamma" in the series tournament
-- 7002 lobby_registered: approved signup for the series event, on no team
-- 7003 lobby_unregistered: no signup, no team
-- 7004 lobby_league_staff: staff of the Lobby Test League only
-- 7010-7016, 7020-7023, 7030-7033: the other rostered players
+- 7200 lobby_staff: admin of the Lobby Test Org
+- 7201 lobby_rostered: captain of "Lobby Gamma" in the series tournament
+- 7202 lobby_registered: approved signup for the series event, on no team
+- 7203 lobby_unregistered: no signup, no team
+- 7204 lobby_league_staff: staff of the Lobby Test League only
+- 7210-7216, 7220-7223, 7230-7233: the other rostered players
 """
 
 from tests.data.models import TestLeague, TestOrganization, TestUser
@@ -59,7 +59,7 @@ LOBBY_TOURNAMENT_NAMES = (
     LOBBY_LIFECYCLE_TOURNAMENT_NAME,
 )
 
-# account_id = LOBBY_STEAM_ACCOUNT_BASE + (pk - 7000): unique 32-bit IDs.
+# account_id = LOBBY_STEAM_ACCOUNT_BASE + (pk - 7200): unique 32-bit IDs.
 LOBBY_STEAM_ACCOUNT_BASE = 307_000_000
 
 
@@ -69,15 +69,15 @@ def _user(pk: int, username: str, nickname: str) -> TestUser:
         username=username,
         nickname=nickname,
         discord_id=str(710_000_000_000_000_000 + pk),
-        steam_id=LOBBY_STEAM_ACCOUNT_BASE + (pk - 7000),
+        steam_id=LOBBY_STEAM_ACCOUNT_BASE + (pk - 7200),
     )
 
 
-LOBBY_STAFF_USER = _user(7000, "lobby_staff", "Lobby Staff")
-LOBBY_ROSTERED_USER = _user(7001, "lobby_rostered", "Lobby Rostered")
-LOBBY_REGISTERED_USER = _user(7002, "lobby_registered", "Lobby Registered")
-LOBBY_UNREGISTERED_USER = _user(7003, "lobby_unregistered", "Lobby Unregistered")
-LOBBY_LEAGUE_STAFF_USER = _user(7004, "lobby_league_staff", "Lobby League Staff")
+LOBBY_STAFF_USER = _user(7200, "lobby_staff", "Lobby Staff")
+LOBBY_ROSTERED_USER = _user(7201, "lobby_rostered", "Lobby Rostered")
+LOBBY_REGISTERED_USER = _user(7202, "lobby_registered", "Lobby Registered")
+LOBBY_UNREGISTERED_USER = _user(7203, "lobby_unregistered", "Lobby Unregistered")
+LOBBY_LEAGUE_STAFF_USER = _user(7204, "lobby_league_staff", "Lobby League Staff")
 
 # Login roles for /api/tests/login-dota-lobby/<role>/.
 LOBBY_ROLE_USERS: dict[str, TestUser] = {
@@ -94,23 +94,23 @@ LOBBY_SERIES_TEAMS: list[tuple[str, list[TestUser]]] = [
     (
         "Lobby Alpha",
         [
-            _user(7010, "lobby_alpha_1", "Alpha One"),
-            _user(7011, "lobby_alpha_2", "Alpha Two"),
+            _user(7210, "lobby_alpha_1", "Alpha One"),
+            _user(7211, "lobby_alpha_2", "Alpha Two"),
         ],
     ),
     (
         "Lobby Beta",
         [
-            _user(7012, "lobby_beta_1", "Beta One"),
-            _user(7013, "lobby_beta_2", "Beta Two"),
+            _user(7212, "lobby_beta_1", "Beta One"),
+            _user(7213, "lobby_beta_2", "Beta Two"),
         ],
     ),
-    ("Lobby Gamma", [LOBBY_ROSTERED_USER, _user(7014, "lobby_gamma_2", "Gamma Two")]),
+    ("Lobby Gamma", [LOBBY_ROSTERED_USER, _user(7214, "lobby_gamma_2", "Gamma Two")]),
     (
         "Lobby Delta",
         [
-            _user(7015, "lobby_delta_1", "Delta One"),
-            _user(7016, "lobby_delta_2", "Delta Two"),
+            _user(7215, "lobby_delta_1", "Delta One"),
+            _user(7216, "lobby_delta_2", "Delta Two"),
         ],
     ),
 ]
@@ -118,15 +118,15 @@ LOBBY_LIFECYCLE_TEAMS: list[tuple[str, list[TestUser]]] = [
     (
         "Lifecycle Ravens",
         [
-            _user(7020, "lobby_ravens_1", "Ravens One"),
-            _user(7021, "lobby_ravens_2", "Ravens Two"),
+            _user(7220, "lobby_ravens_1", "Ravens One"),
+            _user(7221, "lobby_ravens_2", "Ravens Two"),
         ],
     ),
     (
         "Lifecycle Wolves",
         [
-            _user(7022, "lobby_wolves_1", "Wolves One"),
-            _user(7023, "lobby_wolves_2", "Wolves Two"),
+            _user(7222, "lobby_wolves_1", "Wolves One"),
+            _user(7223, "lobby_wolves_2", "Wolves Two"),
         ],
     ),
 ]
@@ -134,15 +134,15 @@ LOBBY_RANDOM_TEAMS: list[tuple[str, list[TestUser]]] = [
     (
         "Random Herons",
         [
-            _user(7030, "lobby_herons_1", "Herons One"),
-            _user(7031, "lobby_herons_2", "Herons Two"),
+            _user(7230, "lobby_herons_1", "Herons One"),
+            _user(7231, "lobby_herons_2", "Herons Two"),
         ],
     ),
     (
         "Random Foxes",
         [
-            _user(7032, "lobby_foxes_1", "Foxes One"),
-            _user(7033, "lobby_foxes_2", "Foxes Two"),
+            _user(7232, "lobby_foxes_1", "Foxes One"),
+            _user(7233, "lobby_foxes_2", "Foxes Two"),
         ],
     ),
 ]

@@ -85,7 +85,7 @@ test.describe.serial('Team draft timer countdown', () => {
       .toBeLessThan(first);
 
     const teamA = teamsInOrder(t)[0];
-    await expect(a.page.getByTestId(`draft-clock-reserve-${teamA.pk}`)).toHaveText('1:00');
+    await expect(a.page.getByTestId(`draft-clock-reserve-${teamA.pk}`).first()).toHaveText('1:00');
     // Grace is still running after the reserve check, so the reserve was full before grace ended.
     expect(parseClock(await grace.textContent())).toBeGreaterThan(0);
     await expect(a.page.getByTestId('draft-clock-your-turn')).toBeVisible();
@@ -128,18 +128,18 @@ test.describe.serial('Team draft timer countdown', () => {
     await openDraftModal(page, t.pk);
     await expect(page.getByTestId('draft-clock-grace')).toBeVisible();
 
-    const [teamA, teamB] = teamsInOrder(t);
-    // A's reserve may already be below 1:00: its round ran across the earlier tests.
-    const reserveA = page.getByTestId(`draft-clock-reserve-${teamA.pk}`);
-    await expect(reserveA).toHaveText(/^\d+:\d{2}$/);
-    const reserveABefore = (await reserveA.textContent()) ?? '';
+    const [, teamB, teamC] = teamsInOrder(t);
+    // Pick order lists upcoming picks only, so check a waiting team (C) rather than A, who has already picked.
+    const reserveC = page.getByTestId(`draft-clock-reserve-${teamC.pk}`).first();
+    await expect(reserveC).toHaveText(/^\d+:\d{2}$/);
+    const reserveCBefore = (await reserveC.textContent()) ?? '';
     await expireDraftClock(context, t.draft.pk, 88_000);
 
     await expect(page.getByTestId('draft-clock-grace')).toHaveText('0:00', { timeout: 6_000 });
-    await expect(page.getByTestId(`draft-clock-reserve-${teamB.pk}`)).not.toHaveText('1:00', {
+    await expect(page.getByTestId(`draft-clock-reserve-${teamB.pk}`).first()).not.toHaveText('1:00', {
       timeout: 6_000,
     });
-    await expect(reserveA).toHaveText(reserveABefore);
+    await expect(reserveC).toHaveText(reserveCBefore);
 
     const cur = await fetchTimerTournament(context, KEY);
     await staffPick(context, activeRound(cur).pk, cur.draft.users_remaining[0]);

@@ -1449,6 +1449,7 @@ class DraftConsumerTimerTests(TransactionTestCase):
 
     async def test_fresh_heartbeat_is_silent(self):
         captain, _, _ = await self.connect(self.cap)
+        await read_until_type(captain, "draft_event")
         spectator, _, _ = await self.connect(self.fx.players[0])
         await captain.send_json_to({"type": "heartbeat"})
         await assert_no_frame_except_ping(spectator, 1.0)

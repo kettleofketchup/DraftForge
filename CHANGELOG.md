@@ -14,6 +14,114 @@ Releases made before this file was added are not listed here; see the git tags a
 
 <!-- Do not edit. Unreleased changes live in changelog.d/; `just version::set` assembles them here. -->
 
+## [0.10.0] - 2026-11-12
+
+### Upgrading
+
+Run the migrations `app.0101_tournament_dota_lobby_fields` and `lobby.0001_initial`. 0101 changes `Game.gameid` to a 64-bit integer (no data change on SQLite) and adds tournament lobby fields that default to off. `lobby.0001_initial` creates the new `lobby` app's tables.
+
+The dota_lobby integration is off unless `DOTA_LOBBY_ENABLED=true`. The tracked `docker/.env.*` files set it to `false`, so turn it on there to enable it. New optional environment variables: `DOTA_LOBBY_URL`, `DOTA_LOBBY_API_KEY` and `DOTA_LOBBY_WEBHOOK_SECRET` (secrets: put them in `backend/.env`), and `DOTA_LOBBY_TIMEOUT_SECONDS` (15), `DOTA_LOBBY_REF_PREFIX` (`game`), `DOTA_LOBBY_WEBHOOK_TOLERANCE_SECONDS` (300) and `DOTA_LOBBY_REGION`. On Helm, set the secrets with `secrets.dotaLobbyApiKey` and `secrets.dotaLobbyWebhookSecret` (or an `extraEnvSecrets` Secret) and the rest with `env.extra`. See `docs/features/planned/dota-lobbies.md`.
+
+Lobby passwords are derived from `DJANGO_SECRET_KEY`, which must be set wherever lobbies are enabled. When rotating it, keep the previous key in the new optional `DJANGO_SECRET_KEY_FALLBACKS` (comma-separated) until the lobbies created under it have ended.
+
+- Migration `0099_backfill_draftoptions_timer_off` gives every existing tournament
+  without draft options a `DraftOptions` row with the pick timer off, so drafts already
+  running or rebuilt on old tournaments stay untimed. Tournaments created after the
+  upgrade still get the timer on by default; `sync_prod_tournaments` and
+  `import_prod_tournament` create theirs with the timer off.
+
+### Added
+
+- Groundwork for in-game Dota 2 lobbies through the dota_lobby service (#56): a new
+  `lobby` app that records each lobby a game gets and the events dota_lobby reports,
+  and a client for the dota_lobby API that reads its problem+json errors and retries
+  only the ones dota_lobby marks retryable. Nothing calls dota_lobby yet.
+- Tournaments have dota_lobby settings (`dota_lobby_mode`, `dota_lobby_launch`,
+  `dota_lobby_region`, `discord_send_lobby_info`), all off by default.
+- **Team-draft pick timer (UI).** New tournaments open a ready lobby: captains ready up and
+  staff press Start (or Force start). During the draft every browser shows the same grace and
+  reserve clock, pause/resume overlays, skip and timeout toasts, and the event feed names each
+  change. Draft Settings gains Grace time, Reserve time and Timer enabled; the completed view
+  and history show pick durations and skips. The "Start Team Draft" button is now "Open draft".
+- **Team-draft pick timer (backend).** Tournaments gain `draft_options` (grace and reserve
+  time, default 30 s each; the timer is on for new tournaments). When enabled, rounds are built
+  into a ready lobby that staff start (or force-start), each pick runs a server-authoritative
+  grace + reserve clock broadcast as `draft_tick`, captains and staff can pause/resume, the
+  draft auto-pauses when the active captain's connection goes stale, and an expired pick is
+  skipped (`skip_turn`: swapped with the next pick; shuffle re-selects the captain). Pick
+  durations, reserve use and skips are recorded on each round. Existing drafts and all demo
+  fixtures stay untimed.
+
+### Changed
+
+- **DaisyUI removed from the frontend** (#74). The `daisyui` dependency and the ~460 lines of hand-written DaisyUI rules in `app.css` are gone. The remaining buttons, cards, inputs, alerts, spinners, skeletons and the transfer-ownership modal now use the brand buttons, shadcn primitives (new `Alert` and `Spinner`) or plain Tailwind. Error and empty-state messages that rendered as bare text now show as styled alerts. The raised card look is now `.card-3d`.
+- **Preview ceiling raised to 5.** `MAX_CAP` in the preview queue goes from 3 to 5, so `PREVIEW_CAP` accepts up to 5 concurrent previews (each under a 1 CPU / 2Gi requests quota). Set the `PREVIEW_CAP` repo variable to 5 after merge.
+- **Shared draft tick runner.** The hero draft's Redis-locked tick loop, heartbeat/connection
+  keys and consumer plumbing moved into `app/tasks/draft_tick.py` and `BaseDraftConsumer`
+  hooks; the team-draft WebSocket (`DraftConsumer`) now runs on the same base with its own
+  `teamdraft` Redis prefix. Hero draft behaviour and payloads are unchanged. Frontend countdown
+  math and clock-offset handling moved to `~/lib/draftClock`. Kick, connection-count and
+  broadcaster-shutdown log events now carry `system=websocket` instead of `system=herodraft`.
+
+### Fixed
+
+- Team-draft broadcasts, the initial WebSocket state and draft endpoint responses now build
+  the draft state in a fixed number of queries (about 17) regardless of team, round or user
+  count; previously each broadcast of a 4-team draft took about 140 queries and grew with
+  every team. A pick now costs 70 queries instead of about 540.
+- Team-draft pick, undo, ready, start, pause and resume no longer answer 500 when a
+  WebSocket broadcast fails after the change has been saved; the failure is logged as
+  `broadcast_after_commit_failed` and the remaining post-commit work (cache invalidation,
+  tick start) still runs.
+- Undoing a pick in a snake or normal draft no longer leaves the next round without a
+  captain.
+- Backend tests use a fast password hasher under the test runner, cutting the team-draft
+  test modules from about 6 minutes to about 35 seconds.
+- The tournament page no longer flips a captain's lobby toggle back to "Ready up" after they
+  ready up. A tournament fetch that was already reading when the ready change committed
+  cached its older copy for up to 10 minutes, and every later refetch served it.
+- A team or hero draft whose sockets stayed open for five minutes without anyone connecting
+  or leaving no longer stops its clock. The connection count expired after 300 seconds and
+  the tick loop then stopped with `no_connections`; open sockets now refresh their entry
+  every 10 seconds.
+- While a team draft is paused, a captain whose heartbeats stop is now shown as disconnected
+  and Resume stays disabled. Freshness was only re-checked by the clock loop, which stopped
+  at the pause, so a captain who went quiet mid-pause kept showing as connected.
+- A burst of team-draft events (a timeout sends up to five) no longer freezes the draft
+  page for several seconds. The page now applies a burst in one update, skips users that
+  have not changed, refetches the tournament once per burst and not at all when the open
+  draft socket already carries the new state, and never lets an older draft state replace
+  a newer one.
+- Two people watching the same team draft no longer see clocks a second or two apart. Each
+  viewer set its clock from the latest tick alone, so a tick that arrived late shifted that
+  viewer's clock by the delay; the clock now uses the least-delayed recent tick, and a new
+  viewer's clock is set from the server time sent with the initial state.
+- Hero draft clocks get the same fix: a late tick no longer shifts one viewer's clock, and
+  a new viewer's clock is set from the server time sent with the initial state.
+- A captain's connect or disconnect write that waits on the database lock no longer
+  freezes WebSocket connects and messages for every other team and hero draft on the
+  server. Draft sockets shared one database thread, so a spectator joining an unrelated
+  draft waited the full lock wait (about 2.8 seconds behind a 3-second lock in testing);
+  it now gets its initial state in under 20 ms. Writes for the same draft still apply in
+  the order they were made.
+- `populate_all` no longer hangs when Discord is unreachable and no bot token is
+  configured. The guild member fetch behind the demo avatars now skips the request
+  without a token, and Discord REST calls from the member, guild and voice-activity
+  helpers and the rate-limited sender now have a 10-second timeout. The
+  voice-activity endpoint returns 503 when no bot token is configured.
+- Test stacks keep Redis data on a named volume (`<project>_redis_data`) instead of a
+  bind mount under the worktree, so a compose run from another worktree no longer
+  recreates the test stack's `redis` container and drops its connections.
+- Backend test runs (`manage.py test`, pytest) give each process its own Redis
+  namespace for channel-layer groups, draft heartbeat/tick keys, the Discord
+  rate-limit bucket and cache keys, so concurrent runs no longer receive each other's
+  websocket events. Production key names are unchanged.
+- Backend test runs no longer flush the Redis DB the running test stack uses for its
+  cache and Celery broker, and run Celery tasks eagerly instead of enqueueing them
+  onto that broker.
+- A bare `python manage.py test` (no labels) discovers the backend tests again instead
+  of failing with `No module named 'app.backend'`.
+
 ## [0.9.71] - 2026-11-08
 
 ### Upgrading

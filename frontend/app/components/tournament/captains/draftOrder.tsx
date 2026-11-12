@@ -13,6 +13,7 @@ import { Label } from '~/components/ui/label';
 import type { UserType } from '~/index';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
+import { Spinner } from '~/components/ui/spinner';
 const log = getLogger('updateCaptainButton');
 
 export const DraftOrderButton: React.FC<{
@@ -138,7 +139,7 @@ export const DraftOrderButton: React.FC<{
             ))}
           </BrandSelectContent>
         </BrandSelect>
-        {isLoading && <span className="loading loading-spinner loading-xs" />}
+        {isLoading && <Spinner />}
       </div>
     </div>
   );

@@ -9,7 +9,7 @@ import { toast } from 'sonner';
 import { createTournament, updateTournament } from '~/components/api/api';
 import type { LeagueType } from '~/components/league/schemas';
 import { Button } from '~/components/ui/button';
-import { SecondaryButton, SubmitButton } from '~/components/ui/buttons';
+import { CancelButton, SubmitButton } from '~/components/ui/buttons';
 import { Calendar } from '~/components/ui/calendar';
 import { DialogClose } from '~/components/ui/dialog';
 import {
@@ -464,13 +464,13 @@ export const TournamentEditForm: React.FC<Props> = ({
           {/* Submit Button — sticky bottom */}
           <div className="flex flex-row justify-end gap-2 pt-4 mt-auto sticky bottom-0 bg-background/95 backdrop-blur-sm pb-2 -mb-2">
             <DialogClose asChild>
-              <SecondaryButton
+              <CancelButton
                 type="button"
                 disabled={isSubmitting}
                 data-testid="tournament-cancel-button"
               >
                 Cancel
-              </SecondaryButton>
+              </CancelButton>
             </DialogClose>
             <SubmitButton
               loading={isSubmitting}

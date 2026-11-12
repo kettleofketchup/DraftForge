@@ -84,7 +84,7 @@ export default defineConfig({
       // share a single seeded event PK from getEventsTestData and race on
       // start_roll_call / resetEventsData when workers > 1 in the same shard),
       // and 18-dota-lobby specs (dota-lobby-sequential).
-      testIgnore: [/herodraft/i, /e2e\/mobile\//, /e2e\/16-events\//, /e2e\/18-dota-lobby\//],
+      testIgnore: [/herodraft/i, /e2e\/mobile\//, /e2e\/16-events\//, /e2e\/layout\//, /e2e\/18-dota-lobby\//],
       use: {
         ...devices['Desktop Chrome'],
         launchOptions: {
@@ -198,6 +198,25 @@ export default defineConfig({
       fullyParallel: false,
       // Longer timeout for demo recordings
       timeout: 300_000,
+    },
+    {
+      // Layout overlap/clip-escape sweep. Starts at 375x667; the sweep widens the same page to
+      // 1440x900 itself, so the device must not be isMobile.
+      name: 'layout',
+      testMatch: /e2e\/layout\/.*\.spec\.ts$/,
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 375, height: 667 },
+        launchOptions: {
+          executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
+          args: [
+            '--no-sandbox',
+            '--disable-gpu',
+            '--disable-dev-shm-usage',
+            '--disable-setuid-sandbox',
+          ],
+        },
+      },
     },
     {
       name: 'mobile-pixel5',

@@ -102,7 +102,7 @@ export const CarryBadge: React.FC<BadgeProps> = memo(({ user, compact, disableTo
       }
     >
       <Badge className={cn(
-        "badge-primary !bg-rose-900 !text-white hover:!bg-rose-800 transition-colors",
+        "!bg-rose-900 !text-white hover:!bg-rose-800 transition-colors",
         forceCompact && "!px-1 !py-0.5",
         isResponsive && "!px-1 !py-0.5 sm:!px-2.5 sm:!py-0.5"
       )}>
@@ -160,7 +160,7 @@ export const MidBadge: React.FC<BadgeProps> = memo(({ user, compact, disableTool
       }
     >
       <Badge className={cn(
-        "badge-primary !bg-cyan-900 !text-white hover:!bg-cyan-800 transition-colors",
+        "!bg-cyan-900 !text-white hover:!bg-cyan-800 transition-colors",
         forceCompact && "!px-1 !py-0.5",
         isResponsive && "!px-1 !py-0.5 sm:!px-2.5 sm:!py-0.5"
       )}>
@@ -218,7 +218,7 @@ export const OfflaneBadge: React.FC<BadgeProps> = memo(({ user, compact, disable
       }
     >
       <Badge className={cn(
-        "badge-primary !bg-emerald-900 !text-white hover:!bg-emerald-800 transition-colors",
+        "!bg-emerald-900 !text-white hover:!bg-emerald-800 transition-colors",
         forceCompact && "!px-1 !py-0.5",
         isResponsive && "!px-1 !py-0.5 sm:!px-2.5 sm:!py-0.5"
       )}>
@@ -276,7 +276,7 @@ export const SoftSupportBadge: React.FC<BadgeProps> = memo(({ user, compact, dis
       }
     >
       <Badge className={cn(
-        "badge-primary !bg-violet-900 !text-white hover:!bg-violet-800 transition-colors",
+        "!bg-violet-900 !text-white hover:!bg-violet-800 transition-colors",
         forceCompact && "!px-1 !py-0.5",
         isResponsive && "!px-1 !py-0.5 sm:!px-2.5 sm:!py-0.5"
       )}>
@@ -337,7 +337,7 @@ export const HardSupportBadge: React.FC<BadgeProps> = memo(({ user, compact, dis
       }
     >
       <Badge className={cn(
-        "badge-primary !bg-indigo-900 !text-white hover:!bg-indigo-800 transition-colors",
+        "!bg-indigo-900 !text-white hover:!bg-indigo-800 transition-colors",
         forceCompact && "!px-1 !py-0.5",
         isResponsive && "!px-1 !py-0.5 sm:!px-2.5 sm:!py-0.5"
       )}>
@@ -423,7 +423,7 @@ const PlaceholderBadge: React.FC<{ compact?: boolean; positionKey: string }> = (
   return (
     <div className="relative inline-block opacity-30 pointer-events-none">
       <Badge className={cn(
-        "badge-primary !bg-gray-700/50 !text-gray-500",
+        "!bg-gray-700/50 !text-gray-500",
         forceCompact && "!px-1 !py-0.5",
         isResponsive && "!px-1 !py-0.5 sm:!px-2.5 sm:!py-0.5"
       )}>

@@ -1,9 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import axios from '~/components/api/axios'; // Assuming axios is configured for your API
+import axios from '~/components/api/axios';
 import type { UserClassType, UserType } from '~/components/user/types';
 import { UserCard } from '~/components/user/userCard';
 import { getLogger } from '~/lib/logger';
+import { Spinner } from '~/components/ui/spinner';
+import { Alert, AlertDescription } from '~/components/ui/alert';
+import { CircleX } from 'lucide-react';
 
 const log = getLogger('userDetailPage');
 
@@ -37,7 +40,7 @@ export const UserDetailPage: React.FC = () => {
   if (loading) {
     return (
       <div className="flex justify-center items-center h-screen">
-        <span className="loading loading-spinner loading-lg"></span>
+        <Spinner className="size-8" />
       </div>
     );
   }
@@ -45,22 +48,10 @@ export const UserDetailPage: React.FC = () => {
   if (error) {
     return (
       <div className="flex justify-center items-center h-screen">
-        <div role="alert" className="alert alert-error">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            className="stroke-current shrink-0 h-6 w-6"
-            fill="none"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="2"
-              d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"
-            />
-          </svg>
-          <span>{error}</span>
-        </div>
+        <Alert variant="destructive" className="w-auto">
+          <CircleX />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       </div>
     );
   }
@@ -75,10 +66,7 @@ export const UserDetailPage: React.FC = () => {
 
   return (
     <div className="container mx-auto p-4">
-      {/* You can use TournamentCard or a custom layout */}
-
       <UserCard user={user as UserClassType} />
-      {/* Additional details or components can be added here */}
     </div>
   );
 };

@@ -91,6 +91,7 @@ See [references/backend-test-endpoints.md](references/backend-test-endpoints.md)
 | [feature-isolation.md](references/feature-isolation.md) | Creating dedicated test data for a new feature's E2E tests |
 | [playwright-config.md](references/playwright-config.md) | Test runner config, projects, workers, sharding, timeouts |
 | [mobile-iteration-workflow.md](references/mobile-iteration-workflow.md) | Iterating on mobile overflow / hydration regressions across the `brand`, `ui-styling`, `i18n-react`, `playwright` skills |
+| [layout-overlap.md](references/layout-overlap.md) | A red `layout` project: overlapping or clip-escaping content, the quarantine file, the detector self-test |
 
 ## Quick Reference: Current Test Data
 

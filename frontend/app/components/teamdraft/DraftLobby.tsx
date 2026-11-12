@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { setDraftReady, startTeamDraft } from '~/components/api/draftAPI';
 import type { TeamType } from '~/components/team/types';
-import { PrimaryButton } from '~/components/ui/buttons';
+import { PrimaryButton, SecondaryButton } from '~/components/ui/buttons';
 import { ConfirmDialog } from '~/components/ui/dialogs';
 import { DisplayName } from '~/components/user/avatar';
 import { UserAvatar } from '~/components/user/UserAvatar';
@@ -74,7 +74,7 @@ export function DraftLobby({
   };
 
   return (
-    <div data-testid="draft-lobby" className="flex flex-col gap-4">
+    <div data-testid="draft-lobby" className="mx-auto flex w-full max-w-2xl flex-col gap-4">
       <ul className="flex flex-col gap-2">
         {ordered.map((team) => (
           <li
@@ -101,22 +101,33 @@ export function DraftLobby({
         ))}
       </ul>
 
-      {myTeam && (
-        <PrimaryButton data-testid="lobby-ready-toggle" disabled={busy} onClick={() => void toggleReady()}>
-          {myReady ? 'Not ready' : 'Ready up'}
-        </PrimaryButton>
+      {(myTeam || isStaff) && (
+        <div className="flex flex-wrap items-center justify-center gap-3">
+          {myTeam &&
+            (myReady ? (
+              <SecondaryButton data-testid="lobby-ready-toggle" disabled={busy} onClick={() => void toggleReady()}>
+                Not ready
+              </SecondaryButton>
+            ) : (
+              <PrimaryButton data-testid="lobby-ready-toggle" disabled={busy} onClick={() => void toggleReady()}>
+                Ready up
+              </PrimaryButton>
+            ))}
+          {isStaff && (
+            <PrimaryButton data-testid="lobby-start-button" disabled={busy} onClick={onStartClick}>
+              {allReady ? 'Start draft' : 'Force start'}
+            </PrimaryButton>
+          )}
+        </div>
       )}
       {myTeam && !isStaff && allReady && (
-        <p data-testid="lobby-waiting-for-staff" className="text-sm text-muted-foreground">
+        <p data-testid="lobby-waiting-for-staff" className="text-center text-sm text-muted-foreground">
           Waiting for staff to start
         </p>
       )}
 
       {isStaff && (
         <>
-          <PrimaryButton data-testid="lobby-start-button" disabled={busy} onClick={onStartClick}>
-            {allReady ? 'Start draft' : 'Force start'}
-          </PrimaryButton>
           <ConfirmDialog
             open={confirmOpen}
             onOpenChange={setConfirmOpen}

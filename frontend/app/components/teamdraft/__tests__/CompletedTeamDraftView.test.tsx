@@ -21,14 +21,14 @@ describe('CompletedTeamDraftView', () => {
     const rounds = [
       { pk: 22, pick_number: 5, captain, choice: member, pick_duration_ms: 42_000, skip_count: 1 },
     ] as unknown as DraftRoundType[];
-    render(<CompletedTeamDraftView teams={[team]} rounds={rounds} />);
+    render(<CompletedTeamDraftView teams={[team]} leaguePk={null} rounds={rounds} />);
     expect(screen.getByTestId('pick-duration-50')).toHaveTextContent('0:42');
     expect(screen.getByTestId('pick-skips-50')).toHaveTextContent('skipped ×1');
     expect(screen.queryByTestId('pick-duration-7')).toBeNull();
   });
 
   it('renders without rounds (untimed drafts)', () => {
-    render(<CompletedTeamDraftView teams={[team]} />);
+    render(<CompletedTeamDraftView teams={[team]} leaguePk={null} />);
     expect(screen.queryByTestId(/pick-duration-/)).toBeNull();
   });
 });

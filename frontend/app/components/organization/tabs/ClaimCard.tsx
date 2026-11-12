@@ -62,12 +62,12 @@ export const ClaimCard: React.FC<ClaimCardProps> = ({
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.15, delay: Math.min(index * 0.02, 0.2) }}
-      className="card card-compact bg-base-300 rounded-2xl hover:bg-base-200
+      className="bg-base-300 hover:bg-base-200 card-3d px-4 py-2 rounded-[1.25rem]
         focus:outline-2 focus:outline-offset-2 focus:outline-primary
         transition-colors"
       data-testid={`claim-card-${claim.id}`}
     >
-      <div className="card-body">
+      <div className="flex flex-col gap-2 p-6">
         <div className="flex items-start gap-4">
           {/* Claimer info */}
           <div className="flex items-center gap-3 flex-1">

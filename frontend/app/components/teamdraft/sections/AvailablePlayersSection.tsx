@@ -6,6 +6,8 @@ import { Card } from '~/components/ui/card';
 import { Input } from '~/components/ui/input';
 import { ScrollArea } from '~/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
+import { type LeagueStatsFilter, matchesLeagueFilter } from '~/features/league-stats/filters';
+import { useLeaguePlayerSummaries } from '~/features/league-stats/queries';
 import { cn } from '~/lib/utils';
 import { brandGradient, brandGlowLift } from '~/components/ui/buttons/styles';
 import { GAME_TYPE } from '~/components/game/constants';
@@ -24,7 +26,6 @@ const MAX_TEAM_SIZE = 5;
 // Filter types
 type PositionFilter = 'all' | 'carry' | 'mid' | 'offlane' | 'soft_support' | 'hard_support';
 type PickOrderFilter = 'all' | 'double_pick' | 'maintains_first';
-type LeagueStatsFilter = 'all' | 'high_winrate' | 'experienced' | 'new_players';
 
 const POSITION_LABELS: Record<PositionFilter, string> = {
   all: 'All',
@@ -55,6 +56,7 @@ const selectTeams = (state: ReturnType<typeof useUserStore.getState>) => state.t
 const selectCurDraftRoundCaptainPk = (state: ReturnType<typeof useUserStore.getState>) => state.curDraftRound?.captain?.pk;
 const selectCurDraftRoundChoice = (state: ReturnType<typeof useUserStore.getState>) => state.curDraftRound?.choice;
 const selectOrganizationPk = (state: ReturnType<typeof useUserStore.getState>) => state.tournament?.organization_pk;
+const selectLeaguePk = (state: ReturnType<typeof useUserStore.getState>) => state.tournament?.league_pk ?? null;
 
 // Helper to get ordinal suffix
 const getOrdinal = (n: number): string => {
@@ -105,15 +107,18 @@ const AvailablePlayerStrip = memo(({
   isShuffle,
   projected,
   organizationId,
+  statsLeagueId,
 }: {
   user: UserType;
   isShuffle: boolean;
   projected: { newTeamMmr: number; newPickOrder: number; isDoublePick: boolean } | null;
   organizationId?: number;
+  statsLeagueId: number | null;
 }) => (
   <UserStrip
     user={user}
     organizationId={organizationId}
+    statsLeagueId={statsLeagueId}
     className={projected?.isDoublePick ? 'bg-green-950/30 border-green-500/50' : undefined}
     contextSlot={isShuffle && projected ? <ShuffleProjectionSlot projected={projected} /> : undefined}
     actionSlot={<ChoosePlayerButton user={user} />}
@@ -129,6 +134,8 @@ export const AvailablePlayersSection = memo(() => {
   const curDraftRoundCaptainPk = useUserStore(selectCurDraftRoundCaptainPk);
   const curDraftRoundChoice = useUserStore(selectCurDraftRoundChoice);
   const organizationPk = useUserStore(selectOrganizationPk);
+  const leaguePk = useUserStore(selectLeaguePk);
+  const { data: leagueSummaries } = useLeaguePlayerSummaries(leaguePk);
 
   // Subscribe ONCE to a pk→positions record off the list-populated entity
   // adapter (usersRemaining lives in the DRAFT store, not the cache, so the
@@ -236,18 +243,18 @@ export const AvailablePlayersSection = memo(() => {
     }
 
     // League stats filter
-    if (leagueStatsFilter !== 'all') {
-      players = players.filter((user) => {
-        const extended = user as UserType & { games_played?: number; win_rate?: number };
-        if (leagueStatsFilter === 'high_winrate') return (extended.win_rate || 0) >= 55;
-        if (leagueStatsFilter === 'experienced') return (extended.games_played || 0) >= 10;
-        if (leagueStatsFilter === 'new_players') return (extended.games_played || 0) < 5;
-        return true;
-      });
+    if (leagueStatsFilter !== 'all' && leagueSummaries) {
+      players = players.filter((user) =>
+        matchesLeagueFilter(
+          leagueStatsFilter,
+          user.pk != null ? leagueSummaries.players[String(user.pk)] : undefined,
+          leagueSummaries.min_games,
+        ),
+      );
     }
 
     return players;
-  }, [availablePlayers, searchQuery, positionFilter, pickOrderFilter, leagueStatsFilter, isShuffle, currentTeam, teams, positionsByPk]);
+  }, [availablePlayers, searchQuery, positionFilter, pickOrderFilter, leagueStatsFilter, leagueSummaries, isShuffle, currentTeam, teams, positionsByPk]);
 
   // Split players into columns (newspaper style)
   const { col1, col2, col3, leftCol, rightCol } = useMemo(() => {
@@ -327,7 +334,7 @@ export const AvailablePlayersSection = memo(() => {
             <TabsTrigger value="positions" className="text-xs">Positions</TabsTrigger>
             {isShuffle && <TabsTrigger value="pickorder" className="text-xs">Pick Order</TabsTrigger>}
             {!isShuffle && <TabsTrigger value="pickorder" disabled className="text-xs opacity-50">Pick Order</TabsTrigger>}
-            <TabsTrigger value="league" className="text-xs">League</TabsTrigger>
+            <TabsTrigger value="league" disabled={leaguePk == null} className="text-xs">League</TabsTrigger>
           </TabsList>
 
           <TabsContent value="positions" className="mt-2">
@@ -381,7 +388,7 @@ export const AvailablePlayersSection = memo(() => {
                     "text-xs px-2 py-0.5 h-6",
                     leagueStatsFilter === filter && `${brandGradient} ${brandGlowLift} [text-shadow:_0_1px_2px_rgba(0,0,0,0.5)]`
                   )}
-                  disabled
+                  aria-pressed={leagueStatsFilter === filter}
                 >
                   {LEAGUE_STATS_LABELS[filter]}
                 </Button>
@@ -390,7 +397,7 @@ export const AvailablePlayersSection = memo(() => {
           </TabsContent>
         </Tabs>
 
-        <div className="text-[13px] text-muted-foreground">
+        <div data-testid="available-players-count" className="text-[13px] text-muted-foreground">
           {filteredPlayers.length}/{availablePlayers.length} players
           {filteredPlayers.length < availablePlayers.length && (
             <span className="text-yellow-500/80 ml-1">
@@ -411,6 +418,7 @@ export const AvailablePlayersSection = memo(() => {
                 isShuffle={isShuffle}
                 projected={getProjectedData(user.mmr || 0)}
                 organizationId={organizationPk ?? undefined}
+                statsLeagueId={leaguePk}
               />
             ))}
           </div>
@@ -424,6 +432,7 @@ export const AvailablePlayersSection = memo(() => {
                 isShuffle={isShuffle}
                 projected={getProjectedData(user.mmr || 0)}
                 organizationId={organizationPk ?? undefined}
+                statsLeagueId={leaguePk}
               />
             ))}
           </div>
@@ -437,6 +446,7 @@ export const AvailablePlayersSection = memo(() => {
                 isShuffle={isShuffle}
                 projected={getProjectedData(user.mmr || 0)}
                 organizationId={organizationPk ?? undefined}
+                statsLeagueId={leaguePk}
               />
             ))}
           </div>
@@ -454,6 +464,7 @@ export const AvailablePlayersSection = memo(() => {
                 isShuffle={isShuffle}
                 projected={getProjectedData(user.mmr || 0)}
                 organizationId={organizationPk ?? undefined}
+                statsLeagueId={leaguePk}
               />
             ))}
           </div>
@@ -467,6 +478,7 @@ export const AvailablePlayersSection = memo(() => {
                 isShuffle={isShuffle}
                 projected={getProjectedData(user.mmr || 0)}
                 organizationId={organizationPk ?? undefined}
+                statsLeagueId={leaguePk}
               />
             ))}
           </div>
@@ -483,6 +495,7 @@ export const AvailablePlayersSection = memo(() => {
               isShuffle={isShuffle}
               projected={getProjectedData(user.mmr || 0)}
               organizationId={organizationPk ?? undefined}
+              statsLeagueId={leaguePk}
             />
           ))}
         </div>

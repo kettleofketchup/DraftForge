@@ -232,7 +232,13 @@ def _pick_under_lock(
     if draft.draft_style == "shuffle" and draft.users_remaining.exists():
         tie_data = assign_next_shuffle_captain(draft)
 
-    advance_after_pick(draft, options, now=now, activate=activate_next)
+    advance_after_pick(
+        draft,
+        options,
+        now=now,
+        activate=activate_next,
+        hold_ms=tie_data["hold_ms"] if tie_data else 0,
+    )
     invalidate_after_commit(tournament, draft)
     return tournament, tie_data
 

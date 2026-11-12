@@ -7,6 +7,7 @@ import { DisplayName } from '~/components/user/avatar';
 import { UserAvatar } from '~/components/user/UserAvatar';
 import type { TeamType } from '~/components/tournament/types';
 import type { UserType } from '~/index';
+import { LivePickOrderReserve } from '../timer/PickOrderReserve';
 import type { DraftRoundType } from '../types';
 
 const MAX_TEAM_SIZE = 5;
@@ -203,6 +204,9 @@ export const PickOrderSection = memo(() => {
                   <span className="text-xs md:text-sm font-medium text-muted-foreground">
                     {getTeamMmr(pick.team).toLocaleString()} · {(pick.team.members?.length || 1) - 1}/4
                   </span>
+                  {pick.team.captain && pick.team.pk != null && (
+                    <LivePickOrderReserve teamPk={pick.team.pk} isCurrent={pick.isCurrent} />
+                  )}
                 </div>
               </div>
             </TeamPopover>
@@ -265,6 +269,9 @@ export const PickOrderSection = memo(() => {
                 <span className="text-xs md:text-sm font-medium text-muted-foreground">
                   {captain.totalMmr.toLocaleString()} · {(captain.team.members?.length || 1) - 1}/4
                 </span>
+                {captain.team.captain && captain.team.pk != null && !captain.isMaxed && (
+                  <LivePickOrderReserve teamPk={captain.team.pk} isCurrent={captain.isCurrent} />
+                )}
               </div>
             </div>
           </TeamPopover>

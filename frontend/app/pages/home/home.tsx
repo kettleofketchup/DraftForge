@@ -377,8 +377,8 @@ export default function HomePage() {
           transition={{ duration: 0.5 }}
           className="max-w-4xl mx-auto"
         >
-          <div className="card bg-gradient-to-r from-primary/10 via-accent/5 to-primary/10 border border-primary/20">
-            <div className="card-body text-center py-12">
+          <div className="bg-gradient-to-r from-primary/10 via-accent/5 to-primary/10 border border-primary/20 p-8">
+            <div className="text-center flex flex-col gap-2 p-6">
               <h2 className="text-3xl font-bold mb-4">
                 Ready to Forge Your Tournament?
               </h2>

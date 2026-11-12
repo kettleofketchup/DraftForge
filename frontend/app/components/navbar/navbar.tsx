@@ -599,11 +599,12 @@ export const ResponsiveAppBar: React.FC = memo(() => {
   return (
     <header>
       <nav
-        className="sticky z-50 top-0 navbar bg-base-600 shadow-elevated border-b border-border px-3 sm:px-4 lg:px-6 py-0"
+        className="sticky z-50 top-0 flex items-center w-full h-16 xl:h-18 px-4 py-2 bg-base-600 shadow-elevated border-b border-border"
         role="navigation"
         aria-label={t('aria.main_nav')}
+        data-testid="nav-root"
       >
-        <div className="navbar-start flex-1">
+        <div className="flex grow shrink-0 basis-0 items-center justify-start w-1/2 gap-2">
           <MobileNav />
           <SiteLogo />
           <NavLinks className="hidden md:flex" />
@@ -612,7 +613,7 @@ export const ResponsiveAppBar: React.FC = memo(() => {
         <div className="absolute left-1/2 -translate-x-1/2 md:hidden z-10">
           <PageNavBar />
         </div>
-        <div className="navbar-end">
+        <div className="flex shrink-0 items-center justify-end w-1/2 gap-2">
           <ExternalLinks className="hidden md:flex" />
           <PreviewLoginMenu />
           <LoginWithDiscordButton />

@@ -14,11 +14,12 @@ import { EditButton, SubmitButton } from '../../ui/buttons';
 import { updateGameHook } from '../hooks/updateGameHook';
 import { GameRemoveButton } from './deleteButton';
 import { DotaMatchStatsModal } from '~/components/bracket/modals';
+import { Input } from '~/components/ui/input';
 interface Props {
   game: GameType;
   edit?: boolean;
   saveFunc?: string;
-  onEditModeChange?: (isEditing: boolean) => void; // Added new prop
+  onEditModeChange?: (isEditing: boolean) => void;
 }
 
 export const GameCard: React.FC<Props> = ({
@@ -68,7 +69,6 @@ export const GameCard: React.FC<Props> = ({
   }, [game]);
 
   useEffect(() => {
-    // Added useEffect to call onEditModeChange
     if (onEditModeChange) {
       onEditModeChange(editMode);
     }
@@ -78,7 +78,7 @@ export const GameCard: React.FC<Props> = ({
     if (editMode) return null;
     return (
       <div className="flex flex-col w-40em items-top ">
-        <h2 className="w-full card-title text-lg">Game</h2>
+        <h2 className="w-full text-xl font-semibold leading-snug">Game</h2>
       </div>
     );
   };
@@ -87,11 +87,12 @@ export const GameCard: React.FC<Props> = ({
       <>
         <div>
           <label className="font-semibold">Round:</label>
-          <input
+          <Input
             type="text"
             value={form.round ?? ''}
             onChange={(e) => handleChange('round', e.target.value)}
-            className={`input input-bordered w-full mt-1 ${errorMessage.name ? 'input-error' : ''}`}
+            aria-invalid={!!errorMessage.name}
+            className="mt-1"
           />
           {errorMessage.name && (
             <p className="text-error text-sm mt-1">{errorMessage.round}</p>
@@ -190,10 +191,10 @@ export const GameCard: React.FC<Props> = ({
       whileHover={{ scale: 1.02 }}
     >
       <div
-        className="w-full h-full card bg-base-300 shadow-elevated w-full
+        className="w-full h-full bg-base-300 shadow-elevated p-8
             max-w-sm hover:bg-base-200 shadow-hover focus:outline-2
             focus:outline-offset-2 focus:outline-primary
-            focus:outline-offset-2 active:bg-base-200
+            active:bg-base-200
             transition-all duration-300 ease-in-out"
       >
         <div className="flex flex-row items-center align-start gap-2">

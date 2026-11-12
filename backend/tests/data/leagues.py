@@ -101,6 +101,18 @@ AUTH_MATRIX_LEAGUE: TestLeague = TestLeague(
     organization_names=["Auth Matrix Test Org"],
 )
 
+# Strip league stats E2E tests. Created by the last populate step with a pinned
+# pk above every autoincrement league; deliberately not in ALL_LEAGUES.
+STRIP_STATS_LEAGUE: TestLeague = TestLeague(
+    pk=20,
+    name="Strip Stats League",
+    steam_league_id=17938,
+    description="Isolated league for strip league stats E2E tests.",
+    rules="Strip stats test rules.",
+    timezone="America/New_York",
+    organization_names=["Strip Stats Org"],
+)
+
 # =============================================================================
 # Constants for easy access
 # =============================================================================
@@ -132,6 +144,9 @@ EVENTS_LEAGUE_ALT_STEAM_ID = EVENTS_LEAGUE_ALT.steam_league_id
 AUTH_MATRIX_LEAGUE_NAME = AUTH_MATRIX_LEAGUE.name
 AUTH_MATRIX_LEAGUE_STEAM_ID = AUTH_MATRIX_LEAGUE.steam_league_id
 
+STRIP_STATS_LEAGUE_NAME = STRIP_STATS_LEAGUE.name
+STRIP_STATS_STEAM_LEAGUE_ID = STRIP_STATS_LEAGUE.steam_league_id
+
 # =============================================================================
 # All Leagues (for iteration)
 # =============================================================================
@@ -147,3 +162,14 @@ ALL_LEAGUES: list[TestLeague] = [
     EVENTS_LEAGUE_ALT,
     AUTH_MATRIX_LEAGUE,
 ]
+
+# Seeded showcase league for demos and manual checks; see tests/data/league_stats.py.
+SHOWCASE_LEAGUE: TestLeague = TestLeague(
+    pk=21,
+    name="League Stats Showcase",
+    steam_league_id=17939,
+    description="Seeded league with a realistic spread of ticket games.",
+    rules="Showcase league rules.",
+    timezone="America/New_York",
+    organization_names=["League Stats Showcase Org"],
+)

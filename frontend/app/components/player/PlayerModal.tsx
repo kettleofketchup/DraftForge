@@ -3,10 +3,10 @@ import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { claimUserProfile, fetchUser } from '~/components/api/api';
 import { Badge } from '~/components/ui/badge';
-import { DotabuffButton, ViewIconButton } from '~/components/ui/buttons';
+import { DotabuffButton, PrimaryButton, ViewIconButton } from '~/components/ui/buttons';
 import { InfoDialog } from '~/components/ui/dialogs';
 import { useSharedPopover } from '~/components/ui/shared-popover-context';
-import { LeagueStatsCard } from '~/components/user/LeagueStatsCard';
+import { PlayerLeagueSummary } from '~/components/player/PlayerLeagueSummary';
 import { RolePositions } from '~/components/user/positions';
 import type { UserType } from '~/components/user/types';
 import { User } from '~/components/user/user';
@@ -14,13 +14,13 @@ import UserEditModal from '~/components/user/userCard/editModal';
 import type { EditUserScope } from '~/components/user/userCard/editUserSchema';
 import { UserAvatar } from '~/components/user/UserAvatar';
 import { DisplayName } from '~/components/user/avatar';
-import { useUserLeagueStats } from '~/features/leaderboard/queries';
 import { getLogger } from '~/lib/logger';
 import { useLeagueStore } from '~/store/leagueStore';
 import { useOrgStore } from '~/store/orgStore';
 import { isUserEntry } from '~/store/userCacheTypes';
 import { useUserCacheStore } from '~/store/userCacheStore';
 import { useUserStore } from '~/store/userStore';
+import { UserPlus } from 'lucide-react';
 
 const log = getLogger('PlayerModal');
 
@@ -111,7 +111,6 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
         ? { ...base, mmr: orgEntry.mmr, orgUserPk: orgEntry.id }
         : base;
     return new User(merged);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fullUserData, player, orgEntry?.id, orgEntry?.mmr]);
 
   // Can claim if: target HAS steam_account_id (manually added profile with steam identifier),
@@ -123,10 +122,7 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
     currentUser?.discordId &&
     currentUser?.pk !== player.pk;
 
-  const { data: leagueStats, isLoading: isLoadingStats } = useUserLeagueStats(
-    leagueId && player.pk ? player.pk : null,
-    leagueId
-  );
+  const statsLeaguePk = ctx?.statsLeagueId !== undefined ? ctx.statsLeagueId : leagueId;
 
   // Fetch full user data when modal opens
   useEffect(() => {
@@ -264,26 +260,15 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
         </div>
 
         {/* League Stats (if context provided) */}
-        {leagueId && (
+        {statsLeaguePk && player.pk ? (
           <div className="space-y-2">
             <h3 className="text-sm font-semibold text-muted-foreground">League Stats</h3>
-            {isLoadingStats ? (
-              <div className="text-sm text-muted-foreground">Loading stats...</div>
-            ) : leagueStats ? (
-              <LeagueStatsCard
-                stats={leagueStats}
-                baseMmr={leagueStats.base_mmr}
-                leagueMmr={leagueStats.league_mmr}
-                compact
-              />
-            ) : (
-              <div className="text-sm text-muted-foreground">No league stats available</div>
-            )}
+            <PlayerLeagueSummary leaguePk={statsLeaguePk} userId={player.pk} />
           </div>
-        )}
+        ) : null}
 
         {/* Organization Stats placeholder (if context provided) */}
-        {organizationId && !leagueId && (
+        {organizationId && !statsLeaguePk && (
           <div className="space-y-2">
             <h3 className="text-sm font-semibold text-muted-foreground">Organization Stats</h3>
             <div className="text-sm text-muted-foreground">Organization stats coming soon</div>
@@ -301,20 +286,16 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
 
           {/* Claim Profile button */}
           {canClaimProfile && (
-            <button
-              className="flex items-center justify-center btn btn-sm btn-primary flex-1 gap-1"
+            <PrimaryButton
+              size="sm"
+              className="flex-1"
               onClick={handleClaimProfile}
               disabled={isClaiming}
               data-testid={`claim-profile-modal-btn-${displayPlayer.pk}`}
             >
-              <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-                <circle cx="9" cy="7" r="4" />
-                <line x1="19" x2="19" y1="8" y2="14" />
-                <line x1="22" x2="16" y1="11" y2="11" />
-              </svg>
+              <UserPlus />
               {isClaiming ? 'Claiming...' : 'Claim Profile'}
-            </button>
+            </PrimaryButton>
           )}
         </div>
       </div>

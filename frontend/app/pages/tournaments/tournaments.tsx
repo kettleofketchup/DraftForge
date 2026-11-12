@@ -15,7 +15,7 @@ import { useUserStore } from '~/store/userStore';
 /** Skeleton loader for tournament cards */
 const TournamentCardSkeleton = () => (
   <div className="flex items-center justify-center p-4 gap-6 content-center w-full h-full">
-    <div className="w-full h-full card bg-base-200 shadow-md max-w-sm animate-pulse">
+    <div className="w-full h-full bg-base-200 shadow-md max-w-sm animate-pulse p-8">
       <div className="p-4">
         {/* Header skeleton */}
         <div className="flex flex-row items-center justify-between gap-2 mb-4">

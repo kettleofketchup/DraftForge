@@ -93,7 +93,7 @@ all *args:
 # Run only @cicd tagged tests (fast smoke tests for CI/CD)
 [group('test::pw')]
 cicd *args:
-    {{cicd}} --project=chromium --project=mobile-pixel5 --project=mobile-iphone13 --project=mobile-iphone-se --project=herodraft --project=events-sequential --project=dota-lobby-sequential --no-deps "$@"
+    {{cicd}} --project=chromium --project=mobile-pixel5 --project=mobile-iphone13 --project=mobile-iphone-se --project=herodraft --project=events-sequential --project=layout --project=dota-lobby-sequential --no-deps "$@"
 
 # CI/CD per-project runners — used by the matrix shards in
 # .github/workflows/playwright.yml. Local devs typically just use `cicd`.
@@ -104,6 +104,10 @@ cicd-chromium *args:
 [group('test::pw')]
 cicd-mobile *args:
     {{cicd}} --project=mobile-pixel5 --project=mobile-iphone13 --project=mobile-iphone-se --no-deps "$@"
+
+[group('test::pw')]
+cicd-layout *args:
+    {{cicd}} --project=layout --no-deps "$@"
 
 [group('test::pw')]
 cicd-herodraft *args:

@@ -64,14 +64,14 @@ export function MaintainerSection() {
       whileHover={{ scale: 1.01 }}
       whileFocus={{ scale: 1.01 }}
     >
-      <div className="card bg-base-200/50 backdrop-blur border border-primary/10 hover:border-primary/30 transition-all duration-300">
-        <div className="card-body">
+      <div className="bg-base-200/50 backdrop-blur border border-primary/10 hover:border-primary/30 transition-all duration-300 p-8">
+        <div className="flex flex-col gap-2 p-6">
           <div className="flex items-center gap-4 mb-6">
             <div className="hover:animate-spin">
               <UserAvatar user={getKettle()} size="xl" />
             </div>
             <div>
-              <h2 className="card-title text-2xl text-red-500">
+              <h2 className="text-red-500 text-xl font-semibold leading-snug">
                 KettleOfKetchup
               </h2>
               <p className="text-base-content/70">Site Owner & Developer</p>
