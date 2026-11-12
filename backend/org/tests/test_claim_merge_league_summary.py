@@ -1,6 +1,5 @@
 from unittest.mock import patch
 
-from cacheops import invalidate_all
 from django.test import TransactionTestCase
 from rest_framework.test import APIClient
 
@@ -8,13 +7,14 @@ from app.models import CustomUser, League, Organization, ProfileClaimRequest
 from org.views import ClaimRequestViewSet
 from steam.functions.league_summary import get_league_summary
 from steam.tests.league_summary_fixtures import make_player, record_series
+from tests.cache import flush_run_cache
 
 STEAM_LEAGUE = 90001
 
 
 class ClaimMergeLeagueSummaryTests(TransactionTestCase):
     def setUp(self) -> None:
-        invalidate_all()
+        flush_run_cache()
         self.admin = CustomUser.objects.create_superuser(
             username="claim_admin", password="testpass"
         )

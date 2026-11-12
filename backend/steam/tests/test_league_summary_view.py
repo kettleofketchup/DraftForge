@@ -1,4 +1,3 @@
-from cacheops import invalidate_all
 from django.db import connection, reset_queries
 from django.test import TestCase, TransactionTestCase
 from django.test.utils import CaptureQueriesContext
@@ -6,6 +5,7 @@ from rest_framework.test import APIClient
 
 from app.models import League
 from steam.tests.league_summary_fixtures import make_player, record_series
+from tests.cache import flush_run_cache
 
 STEAM_LEAGUE = 90011
 PLAYER_KEYS = {
@@ -27,7 +27,7 @@ def summaries_url(league_pk: int) -> str:
 
 class LeaguePlayerSummariesViewTests(TestCase):
     def setUp(self) -> None:
-        invalidate_all()
+        flush_run_cache()
         self.client = APIClient()
         self.league = League.objects.create(
             name="Summary League", steam_league_id=STEAM_LEAGUE
@@ -86,7 +86,7 @@ class LeaguePlayerSummariesViewTests(TestCase):
 
     def test_query_count_constant(self) -> None:
         self._add_players(0, 5)
-        invalidate_all()
+        flush_run_cache()
         reset_queries()
         with CaptureQueriesContext(connection) as small:
             self.assertEqual(
@@ -95,7 +95,7 @@ class LeaguePlayerSummariesViewTests(TestCase):
         small_count = len(small.captured_queries)
         self.assertEqual(small_count, 2)
         self._add_players(5, 45)
-        invalidate_all()
+        flush_run_cache()
         reset_queries()
         with self.assertNumQueries(small_count):
             response = self.client.get(summaries_url(self.league.pk))
@@ -108,14 +108,14 @@ class LeaguePlayerSummariesViewTests(TestCase):
 
 class LeaguePlayerSummariesViewCacheTests(TransactionTestCase):
     def setUp(self) -> None:
-        invalidate_all()
+        flush_run_cache()
         self.client = APIClient()
         self.league = League.objects.create(
             name="Cached Summary League", steam_league_id=STEAM_LEAGUE
         )
         user = make_player("cached_view_user", 76561198000101000)
         record_series(user, "WWLWW", league_id=STEAM_LEAGUE, first_match_id=30_000)
-        invalidate_all()
+        flush_run_cache()
 
     def test_cold_then_warm_query_counts(self) -> None:
         reset_queries()

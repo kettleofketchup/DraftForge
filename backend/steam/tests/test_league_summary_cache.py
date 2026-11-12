@@ -1,16 +1,16 @@
-from cacheops import invalidate_all
 from django.test import TransactionTestCase
 
 from steam.functions.league_summary import get_league_summary
 from steam.models import Match
 from steam.tests.league_summary_fixtures import make_player, record_game, record_series
+from tests.cache import flush_run_cache
 
 LEAGUE = 90001
 
 
 class GetLeagueSummaryCacheTests(TransactionTestCase):
     def setUp(self) -> None:
-        invalidate_all()
+        flush_run_cache()
         self.user = make_player("cache_user", 76561198000000101)
         record_series(self.user, "WWLWW", league_id=LEAGUE, first_match_id=500)
 
