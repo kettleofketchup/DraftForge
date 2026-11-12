@@ -258,7 +258,7 @@ test.describe('Roll Call Demo', () => {
     console.log(`Step 0: Bulk RSVP response: ${bulkRsvpResponse.status()}`);
 
     // =========================================================================
-    // Step 1 — Navigate to the E2E Signup Event
+    // Step 1 — Navigate to the demo event
     // =========================================================================
     console.log('Step 1: Navigate to event page');
     await page.goto(`${BASE_URL}/events/${eventPk}`);
