@@ -1,0 +1,38 @@
+# dota_lobby in simulation mode for the test stack (service `dota-lobby` in
+# docker-compose.test.yaml, profile `dota-lobby`). No Steam account logs on:
+# the bots, players and matches are simulated, and Playwright drives them
+# through /api/tests/dota-lobby-sim/ (backend/tests/test_dota_lobby.py).
+#
+# The simulator refuses to start if a bot has Steam credentials, so the bots
+# below have a name and leagues only. Test-only values: never reuse this file
+# for a real deployment.
+state_dir: /app/state
+readiness: { min_ready_bots: 1 }
+bots:
+  # The simulated game coordinator reports that these bots administer the
+  # Lobby Test League (backend/tests/data/dota_lobby.py, LOBBY_STEAM_LEAGUE_ID).
+  - name: sim_bot_1
+    leagues: [17940]
+  - name: sim_bot_2
+    leagues: [17940]
+  - name: sim_bot_3
+    leagues: [17940]
+lobby:
+  auto_launch_delay: 1s
+  postgame_linger: 5s
+  chat: { enabled: true, start_countdown: 1s, send_interval: 100ms }
+simulation:
+  enabled: true
+  # Invited players join and sit on their rostered side by themselves.
+  auto_join: true
+  auto_join_delay: 200ms
+  auto_ready: true
+  # A launched lobby starts its match by itself; tests end it through the
+  # control API (POST /v1/sim/lobbies/{id}/end).
+  auto_start: true
+  auto_start_delay: 500ms
+webhooks:
+  # The backend's internal receiver, on the stack's own network.
+  - url: http://backend:8000/api/internal/lobbies/events/
+    events: ["*"]
+    token_header: X-Internal-Token

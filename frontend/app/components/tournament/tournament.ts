@@ -40,6 +40,10 @@ export class Tournament implements TournamentClassType {
   auto_create_hero_drafts: boolean = false;
   discord_send_draft_link: boolean = false;
   discord_send_herodraft_link: boolean = false;
+  dota_lobby_mode: 'off' | 'manual' | 'auto' = 'off';
+  dota_lobby_launch: 'manual' | 'auto' = 'manual';
+  dota_lobby_region: string = '';
+  discord_send_lobby_info: boolean = false;
 
   constructor(data: TournamentType) {
     Object.assign(this, data);

@@ -30,6 +30,7 @@ not be your worktree. Never hardcode `https://localhost`: Playwright code import
 | `just test::down` / `stop` / `logs` / `ps` / `exec` / `restart` | This slot only; error if no slot or it was taken |
 | `just test::run '<cmd>'` | Never allocates; without a slot runs in a throwaway `df-run-<hex>` project |
 | `just test::compose <args>` | Compose against this slot; `--stack dev` for `df-dev`. Use instead of raw `docker compose` / `docker exec <name>` |
+| `just test::dota-lobby [up\|down\|restart\|logs\|ps]` | The simulated dota_lobby (service `dota-lobby`, profile `dota-lobby`) for the 18-dota-lobby specs. `up` runs the slot's `up -d` with the profile on |
 | `just test::background on\|off` | Discord bot + celery beat + real tokens for this N ≥ 1 slot (one project at a time) |
 | `just test::slot-release` | Release own slot (stack must be down) |
 | `just test::slot-release --slot N` | Release someone else's idle slot. Pre-checks first (Rules) |
@@ -49,6 +50,28 @@ Slots N ≥ 1 with background off have no bot, no beat, and blank `DISCORD_BOT_T
 warn and skip their Discord assertions otherwise, so a pass there proves nothing about
 Discord. Backend `events.tests.test_discord_integration` skips without the token;
 `just test::run` prints a notice when it blanks it.
+
+### dota_lobby simulator
+
+`docker-compose.test.yaml` has a `dota-lobby` service behind the `dota-lobby` profile:
+dota_lobby in simulation mode (`docker/dota-lobby/simulator.yaml` and
+`simulator-secrets.yaml`), no Steam logon. It is off unless asked for, so `test::up`
+and CI never pull it. Each slot runs its own (project-scoped name, no host port);
+the backend reaches it at `http://dota-lobby:8080` and it posts webhooks to
+`http://backend:8000/api/internal/lobbies/events/`. `docker/.env.test` turns lobbies
+on with matching test-only values (API key, webhook secret, `INTERNAL_SERVICE_TOKEN`).
+
+- Image: `DOTA_LOBBY_IMAGE` (default `ghcr.io/kettleofketchup/dota_lobby:${DOTA_LOBBY_IMAGE_TAG}`).
+  `DOTA_LOBBY_IMAGE_TAG` defaults to `0.2.0`, the first dota_lobby release with simulation
+  mode; bump it with the default in `docker-compose.test.yaml` and
+  `scripts/slot_tests/test_compose_files.py`. To test unreleased dota_lobby changes, build
+  it there (`just docker::build`, tag `ghcr.io/kettleofketchup/dota_lobby:local`) and run
+  `DOTA_LOBBY_IMAGE=ghcr.io/kettleofketchup/dota_lobby:local just test::dota-lobby up`.
+- `test::down`, `stop`, `kill` and `rm` add `--profile '*'` (`scripts/slots.py`
+  `TEARDOWN_VERBS`), so the simulator never outlives its stack or holds its network.
+- Lobbies live in memory: `just test::dota-lobby restart` forgets them all.
+- Never point it at a real deployment: it sends `X-Dota-Lobby-Simulation: true` and
+  made-up match IDs.
 
 ## Rules
 

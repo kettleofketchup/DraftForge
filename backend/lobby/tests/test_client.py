@@ -8,6 +8,7 @@ from django.test import SimpleTestCase
 from structlog.testing import capture_logs
 
 from lobby.client import (
+    CONNECT_TIMEOUT_SECONDS,
     DotaLobbyClient,
     DotaLobbyError,
     DotaLobbyNotConfigured,
@@ -186,11 +187,18 @@ class CreateLobbyTests(ClientTestBase):
         method, url, kwargs = self.call()
         self.assertEqual((method, url), ("POST", f"{BASE}/v1/lobbies"))
         self.assertEqual(kwargs["json"], self.BODY)
-        self.assertEqual(kwargs["timeout"], 5)
+        # (connect, read): connecting is capped, reading uses the setting.
+        self.assertEqual(kwargs["timeout"], (CONNECT_TIMEOUT_SECONDS, 5))
         self.assertFalse(result.replayed)
         self.assertEqual(result.lobby.id, "lob_01JC9Z7Q8W5X2M3N4P5R6S7T8V")
         self.assertEqual(result.lobby.password.get_secret_value(), PASSWORD)
         self.assertNotIn(PASSWORD, repr(result))
+
+    def test_short_timeout_also_caps_connect(self):
+        client = DotaLobbyClient(BASE, API_KEY, timeout=1)
+        self.request.return_value = _resp(202, _lobby(password=PASSWORD))
+        client.create_lobby(self.BODY)
+        self.assertEqual(self.call()[2]["timeout"], (1, 1))
 
     def test_replayed(self):
         self.request.return_value = _resp(200, _lobby(password=PASSWORD))

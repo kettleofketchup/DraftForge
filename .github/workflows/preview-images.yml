@@ -46,7 +46,10 @@ jobs:
             context: frontend
             file: frontend/Dockerfile
             target: runtime
-            args: VITE_PREVIEW_TEST_FEATURES=true
+            # Previews show the test login menu and never report to Sentry.
+            args: |
+              VITE_PREVIEW_TEST_FEATURES=true
+              VITE_SENTRY_ENABLED=false
     steps:
       # First, so the tag output exists even if a later step fails.
       - name: Compute image tag
