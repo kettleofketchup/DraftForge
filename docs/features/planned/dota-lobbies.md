@@ -290,6 +290,24 @@ announcements. The opt-in Discord lobby info DM still sends it to the game's ros
 4. Set `DOTA_LOBBY_URL` and `DOTA_LOBBY_API_KEY`, then `DOTA_LOBBY_ENABLED=true`, and set a
    tournament's `dota_lobby_mode`.
 
+### End-to-end tests
+
+`frontend/tests/playwright/e2e/18-dota-lobby/` runs the integration against the real
+dota_lobby service in simulation mode, the test stack's `dota-lobby` service (see
+[Test Stack Slots](../../development/test-stack-slots.md#simulated-dota_lobby)). The
+specs use their own data (Lobby Test Org and League, the Lobby Test Series with a fixed
+password, the Lobby Random Event, the Lobby Lifecycle Tournament) and drive the
+simulator through `/api/tests/dota-lobby-sim/`, which forwards to its `/v1/sim` control
+API:
+
+| Spec | What it proves |
+|------|----------------|
+| `01-fixed-password` | A new fixed series password reaches the event and its tournament, and the created lobby has exactly that password in the simulated game coordinator |
+| `02-random-password` | A regenerated random password leaves the existing lobby alone; the recreated lobby gets the new one and the old lobby is closed |
+| `03-password-visibility` | A registered player sees the password on the event page and a rostered player in the match dialog; a user who is neither and league-only staff get `404` from the event endpoint, no password from the lobby API, and see it nowhere |
+| `04-lifecycle` | Invited players join and sit on their sides, a chat line reaches the bot, staff launch, the match starts (game live, in-game dot on the bracket), the simulated match ends (provisional winner suggested, not submitted), no new lobby is offered for the played match, and a replay is offered once staff reset the game |
+| `05-modal-fit` | At 390x844 and 1366x768 the Match Details title and close button stay in the viewport and Link Steam Match is reached by scrolling the dialog body |
+
 ### Design notes
 
 - **One `GameLobby` row per dota_lobby lobby.** A game keeps its lobby history, and at most one

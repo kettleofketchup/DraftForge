@@ -251,6 +251,7 @@ function PlayerList({
                 className="flex items-start justify-between gap-2 text-xs"
                 data-testid={`lobby-player-${player.user_id}`}
                 data-status={player.status}
+                data-seat={player.seat ?? undefined}
               >
                 <div className="min-w-0 flex-1">
                   <p
