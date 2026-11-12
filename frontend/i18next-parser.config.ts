@@ -2,7 +2,7 @@ import type { UserConfig } from 'i18next-parser';
 
 const config: UserConfig = {
   locales: ['en', 'es'],
-  input: ['app/components/navbar/**/*.{ts,tsx}'],
+  input: ['app/components/navbar/**/*.{ts,tsx}', 'app/components/lobby/**/*.{ts,tsx}'],
   output: 'app/i18n/locales/$LOCALE/$NAMESPACE.json',
   defaultNamespace: 'navbar',
   keySeparator: '.',

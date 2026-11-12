@@ -43,6 +43,9 @@ from events.services import (
     ensure_discord_event,
     ensure_tournament_with_signups,
     finalize_event_tournament,
+    is_registered_for_event,
+    log_lobby_password_changed,
+    regenerate_event_lobby_password,
     reinstate_signup,
     reject_signup,
     restart_event_tournament,
@@ -53,6 +56,7 @@ from events.services import (
     unconfirm_signup,
 )
 from events.utils import starts_in_future
+from lobby.passwords import PasswordMode
 
 
 class IsOrgStaff(permissions.BasePermission):
@@ -105,6 +109,44 @@ def _attach_user_can_manage(payload, user):
         if ev is not None:
             p["user_can_manage"] = has_event_staff_access(user, ev)
     return payload
+
+
+def _pk_or_none(pk: str | None) -> int | None:
+    """The URL pk as an int; the router accepts any non-slash text."""
+    try:
+        return int(pk) if pk is not None else None
+    except ValueError:
+        return None
+
+
+def _no_lobby_password() -> Response:
+    # 404 rather than 403: do not reveal to outsiders that a password exists.
+    return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+
+
+def _staff_lobby_password(event: Event) -> dict:
+    """The event's password settings for org staff.
+
+    `source` is `series` while the event matches its series (an on-schedule
+    event with the same mode and, when fixed, the same password): the next
+    series save keeps it as it is. Otherwise `event`.
+    """
+    repeater = event.event_repeater
+    from_series = (
+        repeater is not None
+        and not event.is_off_schedule
+        and event.dota_lobby_password_mode == repeater.dota_lobby_password_mode
+        and (
+            event.dota_lobby_password_mode == PasswordMode.RANDOM
+            or event.dota_lobby_password == repeater.dota_lobby_password
+        )
+    )
+    return {
+        "mode": event.dota_lobby_password_mode,
+        "password": event.dota_lobby_password,
+        "source": "series" if from_series else "event",
+        "can_manage": True,
+    }
 
 
 class EventRepeaterViewSet(viewsets.ModelViewSet):
@@ -331,6 +373,31 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
         )
 
     @action(
+        detail=True,
+        methods=["get"],
+        url_path="lobby-password",
+        permission_classes=[permissions.IsAuthenticated],
+    )
+    def lobby_password(self, request, pk=None):
+        """The series' lobby password mode and fixed password (org staff only).
+
+        Never cached. Writes go through the series PATCH (write-only field).
+        """
+        repeater = EventRepeater.objects.nocache().filter(pk=_pk_or_none(pk)).first()
+        if repeater is None or not has_org_staff_access(
+            request.user, repeater.organization
+        ):
+            return _no_lobby_password()
+        fixed = repeater.dota_lobby_password_mode == PasswordMode.FIXED
+        return Response(
+            {
+                "mode": repeater.dota_lobby_password_mode,
+                "password": repeater.dota_lobby_password if fixed else None,
+                "can_manage": True,
+            }
+        )
+
+    @action(
         detail=True, methods=["post"], permission_classes=[permissions.IsAuthenticated]
     )
     def reactivate(self, request, pk=None):
@@ -526,8 +593,11 @@ class EventViewSet(viewsets.ModelViewSet):
     def perform_update(self, serializer):
         from app.cache_utils import invalidate_after_commit
 
+        previous_password = serializer.instance.dota_lobby_password
         event = serializer.save()
         invalidate_after_commit(event)
+        if event.dota_lobby_password != previous_password:
+            log_lobby_password_changed(event, "event_update")
         result = sync_tournament_from_event(event)
         self._cascade_warning = result.get("warning")
 
@@ -576,6 +646,59 @@ class EventViewSet(viewsets.ModelViewSet):
         if self.action in ("update", "partial_update", "destroy"):
             if not has_org_staff_access(request.user, obj.organization):
                 self.permission_denied(request)
+
+    @action(
+        detail=True,
+        methods=["get"],
+        url_path="lobby-password",
+        permission_classes=[permissions.AllowAny],
+    )
+    def lobby_password(self, request, pk=None):
+        """The event's lobby password, for org staff and registered players.
+
+        Staff (who may edit the event) also get the mode and where the
+        password comes from; registered players (events.services.
+        is_registered_for_event) get the password only; anyone else a 404.
+        Never cached: the answer depends on the user.
+        """
+        event = (
+            Event.objects.nocache()
+            .select_related("organization", "event_repeater")
+            .filter(pk=_pk_or_none(pk))
+            .first()
+        )
+        if event is None:
+            return _no_lobby_password()
+        if has_org_staff_access(request.user, event.organization):
+            return Response(_staff_lobby_password(event))
+        if is_registered_for_event(request.user, event):
+            return Response({"password": event.dota_lobby_password})
+        return _no_lobby_password()
+
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path="lobby-password/regenerate",
+        permission_classes=[permissions.IsAuthenticated],
+    )
+    def regenerate_lobby_password(self, request, pk=None):
+        """Generate a new random lobby password (org staff, random mode only).
+
+        Lobbies that already exist keep their password.
+        """
+        event = (
+            Event.objects.nocache()
+            .select_related("organization", "tournament", "event_repeater")
+            .filter(pk=_pk_or_none(pk))
+            .first()
+        )
+        if event is None or not has_org_staff_access(request.user, event.organization):
+            return _no_lobby_password()
+        try:
+            regenerate_event_lobby_password(event)
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+        return Response(_staff_lobby_password(event))
 
     @action(
         detail=True,

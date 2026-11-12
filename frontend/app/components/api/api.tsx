@@ -149,5 +149,5 @@ export {
   updateOrgEventDefaults,
 } from './eventsAPI';
 
-export type { EventRepeaterType, RepeaterSubscriber, DiscordChannel, DiscordRole, OrgEventDefaultsType, SignupBody } from './eventsAPI';
+export type { EventRepeaterType, EventWritePayload, RepeaterSubscriber, DiscordChannel, DiscordRole, OrgEventDefaultsType, SignupBody } from './eventsAPI';
 export type { EventType, EventSignupType, EventTeamType } from '~/components/events/schemas';

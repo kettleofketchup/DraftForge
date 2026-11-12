@@ -25,6 +25,7 @@ export const BracketMatchSchema = z.object({
   status: MatchStatusSchema,
   gameid: z.number().nullable(),        // Steam match ID (null for pending games)
   herodraft_id: z.number().nullable().optional(),  // HeroDraft ID for this game
+  lobby_state: z.string().nullable().optional(),   // Latest dota_lobby lobby state (no password)
   next_game: z.number().nullable().optional(),    // FK to next game for winner
   next_game_slot: z.enum(['radiant', 'dire']).nullable().optional(),
   loser_next_game: z.number().nullable().optional(),    // FK to next game for loser
