@@ -3,8 +3,9 @@
  *
  * Lobby Lifecycle Tournament, one game. Staff create the lobby; the
  * simulator's auto mode has the invited players join and sit on their
- * rostered sides, so the lobby becomes ready. A player's chat line reaches
- * the bot, staff launch, and the simulator starts the match: the game goes
+ * rostered sides, so the lobby becomes ready (DraftForge asks for no ready
+ * check) and the panel shows each seat. A player's chat line reaches the
+ * bot, staff launch, and the simulator starts the match: the game goes
  * live and its bracket node shows the in-game dot. When the simulated match
  * ends, the lobby's result is offered (never submitted) on the winner
  * buttons, and a new lobby is no longer offered: staff confirm the winner,
@@ -77,12 +78,25 @@ test.describe('Dota lobby: lifecycle with the simulator (e2e)', () => {
       seated.members.find((m) => m.account_id === accountId)?.team;
     for (const player of radiantTeam) expect(seatOf(player.account_id)).toBe('radiant');
     for (const player of direTeam) expect(seatOf(player.account_id)).toBe('dire');
+    // The panel applied the join and seat webhooks: each roster row shows its
+    // player on their side, not only some status text.
+    for (const [side, team] of [
+      ['radiant', radiantTeam],
+      ['dire', direTeam],
+    ] as const) {
+      for (const player of team) {
+        await expect(
+          dialog.locator(`[data-testid="lobby-player-${player.pk}"]`),
+          `${player.username} seated on ${side}`,
+        ).toHaveAttribute('data-seat', new RegExp(`^${side}(_|$)`), { timeout: 15_000 });
+      }
+    }
     const captain = radiantTeam[0];
-    await expect(
-      dialog.locator(`[data-testid="lobby-player-status-${captain.pk}"]`),
-    ).not.toHaveText('', { timeout: 15_000 });
 
-    // A player's chat command reaches the bot through the simulated chat.
+    // A player's line reaches the bot through the simulated chat. DraftForge
+    // creates lobbies without a ready check, so readiness is the seating
+    // checked above and no `!ready` is needed; this only shows the lobby
+    // chat is live for the players DraftForge invited.
     const chat = await sim.post(context, `lobbies/${row.lobby_id}/chat`, {
       account_id: captain.account_id,
       text: '!help',
