@@ -292,6 +292,7 @@ jobs:
               app.tests.test_build_users_dict \
               app.tests.test_herodraft_tick \
               app.tests.test_herodraft_consumers \
+              app.tests.test_consumer_db_isolation \
               app.tests.test_consumers_base \
               app.tests.test_stale_connection \
               app.tests.test_draft_consumers \
