@@ -7,6 +7,8 @@ sequences. Runs last in populate_all with pinned pks (org 20, league 20,
 tournament 250) so no existing autoincrement pk shifts.
 """
 
+import math
+import random
 from datetime import date
 
 from django.db import transaction
@@ -26,16 +28,27 @@ from league.models import LeagueUser
 from steam.functions.stats_update import update_all_league_stats_for_league
 from steam.models import LeaguePlayerStats, Match, PlayerMatchStats
 from tests.data.league_stats import (
+    SHOWCASE_CAPTAIN_COUNT,
+    SHOWCASE_MATCH_COUNT,
+    SHOWCASE_MATCH_ID_BASE,
+    SHOWCASE_MATCH_ID_MAX,
+    SHOWCASE_PLAYERS,
+    SHOWCASE_SEED,
+    SHOWCASE_START_TIME_BASE,
+    SHOWCASE_TOURNAMENT_NAME,
+    SHOWCASE_TOURNAMENT_PK,
     STRIP_STATS_MATCH_ID_BASE,
     STRIP_STATS_MATCH_ID_MAX,
     STRIP_STATS_PLAYERS,
     STRIP_STATS_START_TIME_BASE,
     STRIP_STATS_TOURNAMENT_NAME,
     STRIP_STATS_TOURNAMENT_PK,
+    ShowcasePlayer,
     StripStatsPlayer,
 )
-from tests.data.leagues import STRIP_STATS_LEAGUE
-from tests.data.organizations import STRIP_STATS_ORG
+from tests.data.leagues import SHOWCASE_LEAGUE, STRIP_STATS_LEAGUE
+from tests.data.models import TestLeague, TestOrganization, TestUser
+from tests.data.organizations import SHOWCASE_ORG, STRIP_STATS_ORG
 from tests.data.users import ADMIN_USER
 
 from .utils import ensure_org_user, flush_redis_cache
@@ -44,32 +57,34 @@ RADIANT_SLOT = 0
 DIRE_SLOT = 128
 
 
-def _ensure_org_and_league() -> tuple[Organization, League]:
+def _ensure_org_and_league(
+    org_data: TestOrganization, league_data: TestLeague
+) -> tuple[Organization, League]:
     org, _ = Organization.objects.update_or_create(
-        name=STRIP_STATS_ORG.name,
+        name=org_data.name,
         defaults={
-            "pk": STRIP_STATS_ORG.pk,
-            "description": STRIP_STATS_ORG.description,
+            "pk": org_data.pk,
+            "description": org_data.description,
             "logo": "",
-            "rules_template": STRIP_STATS_ORG.rules_template,
-            "timezone": STRIP_STATS_ORG.timezone,
+            "rules_template": org_data.rules_template,
+            "timezone": org_data.timezone,
         },
     )
-    assert org.pk == STRIP_STATS_ORG.pk, f"Strip Stats Org pk {org.pk}"
+    assert org.pk == org_data.pk, f"{org_data.name} pk {org.pk}"
 
     league, _ = League.objects.update_or_create(
-        steam_league_id=STRIP_STATS_LEAGUE.steam_league_id,
+        steam_league_id=league_data.steam_league_id,
         defaults={
-            "pk": STRIP_STATS_LEAGUE.pk,
+            "pk": league_data.pk,
             "organization": org,
-            "name": STRIP_STATS_LEAGUE.name,
-            "description": STRIP_STATS_LEAGUE.description,
-            "rules": STRIP_STATS_LEAGUE.rules,
+            "name": league_data.name,
+            "description": league_data.description,
+            "rules": league_data.rules,
             "prize_pool": "",
-            "timezone": STRIP_STATS_LEAGUE.timezone,
+            "timezone": league_data.timezone,
         },
     )
-    assert league.pk == STRIP_STATS_LEAGUE.pk, f"Strip Stats League pk {league.pk}"
+    assert league.pk == league_data.pk, f"{league_data.name} pk {league.pk}"
 
     if org.default_league_id != league.pk:
         org.default_league = league
@@ -81,8 +96,7 @@ def _ensure_org_and_league() -> tuple[Organization, League]:
     return org, league
 
 
-def _ensure_user(player: StripStatsPlayer, force: bool) -> CustomUser:
-    data = player.user
+def _ensure_user(data: TestUser, force: bool) -> CustomUser:
     existing = CustomUser.objects.filter(pk=data.pk).first()
     if existing and existing.username != data.username:
         raise RuntimeError(
@@ -151,9 +165,11 @@ def _build_matches(
 
 def populate_league_stats_data(force: bool = False) -> None:
     print("Populating strip league stats test data...")
-    org, league = _ensure_org_and_league()
+    org, league = _ensure_org_and_league(STRIP_STATS_ORG, STRIP_STATS_LEAGUE)
 
-    users = [(player, _ensure_user(player, force)) for player in STRIP_STATS_PLAYERS]
+    users = [
+        (player, _ensure_user(player.user, force)) for player in STRIP_STATS_PLAYERS
+    ]
 
     for player, user in users:
         org_user = ensure_org_user(user, org, mmr=player.org_mmr)
@@ -208,5 +224,149 @@ def populate_league_stats_data(force: bool = False) -> None:
     print(
         f"  Created '{tournament.name}' (pk={tournament.pk}), league pk={league.pk}, "
         f"{len(matches)} ticket matches"
+    )
+    flush_redis_cache()
+
+
+TEAM_SIZE = 5
+SKILL_WEIGHT = 0.6
+
+
+def _showcase_lineups() -> (
+    list[tuple[list[ShowcasePlayer], list[ShowcasePlayer], bool]]
+):
+    """Seeded 5v5 lineups; the stronger side is more likely, not certain, to win."""
+    rng = random.Random(SHOWCASE_SEED)
+    regulars = [p for p in SHOWCASE_PLAYERS if p.fixed_games is None]
+    newcomers = [p for p in SHOWCASE_PLAYERS if p.fixed_games]
+    lineups: list[tuple[list[ShowcasePlayer], list[ShowcasePlayer], bool]] = []
+    for index in range(SHOWCASE_MATCH_COUNT):
+        joining = [p for p in newcomers if index < (p.fixed_games or 0)]
+        ranked = sorted(
+            regulars, key=lambda p: rng.random() ** (1.0 / p.activity), reverse=True
+        )
+        lineup = joining + ranked[: TEAM_SIZE * 2 - len(joining)]
+        rng.shuffle(lineup)
+        radiant, dire = lineup[:TEAM_SIZE], lineup[TEAM_SIZE:]
+        gap = sum(p.skill for p in radiant) - sum(p.skill for p in dire)
+        radiant_win = rng.random() < 1 / (1 + math.exp(-SKILL_WEIGHT * gap))
+        lineups.append((radiant, dire, radiant_win))
+    return lineups
+
+
+def _build_showcase_matches(
+    users: dict[int, CustomUser],
+) -> tuple[list[Match], list[PlayerMatchStats]]:
+    rng = random.Random(SHOWCASE_SEED + 1)
+    matches: list[Match] = []
+    stats: list[PlayerMatchStats] = []
+    for index, (radiant, dire, radiant_win) in enumerate(_showcase_lineups(), start=1):
+        match = Match(
+            match_id=SHOWCASE_MATCH_ID_BASE + index,
+            radiant_win=radiant_win,
+            duration=rng.randint(1500, 3300),
+            start_time=SHOWCASE_START_TIME_BASE + index * 3600,
+            game_mode=2,
+            lobby_type=1,
+            league_id=SHOWCASE_LEAGUE.steam_league_id,
+        )
+        matches.append(match)
+        for side, base_slot, won in (
+            (radiant, RADIANT_SLOT, radiant_win),
+            (dire, DIRE_SLOT, not radiant_win),
+        ):
+            for offset, player in enumerate(side):
+                user = users[player.user.pk]
+                stats.append(
+                    PlayerMatchStats(
+                        match=match,
+                        steam_id=user.steamid,
+                        user=user,
+                        player_slot=base_slot + offset,
+                        hero_id=rng.randint(1, 120),
+                        kills=rng.randint(4, 14) if won else rng.randint(1, 8),
+                        deaths=rng.randint(1, 6) if won else rng.randint(4, 12),
+                        assists=rng.randint(5, 20),
+                        gold_per_min=rng.randint(420, 680)
+                        if won
+                        else rng.randint(300, 520),
+                        xp_per_min=rng.randint(480, 760)
+                        if won
+                        else rng.randint(360, 600),
+                        last_hits=rng.randint(40, 320),
+                        denies=rng.randint(0, 20),
+                        hero_damage=rng.randint(8000, 40000),
+                        tower_damage=rng.randint(500, 8000)
+                        if won
+                        else rng.randint(0, 2500),
+                        hero_healing=rng.randint(0, 4000),
+                    )
+                )
+    return matches, stats
+
+
+def populate_league_stats_showcase(force: bool = False) -> None:
+    print("Populating league stats showcase data...")
+    org, league = _ensure_org_and_league(SHOWCASE_ORG, SHOWCASE_LEAGUE)
+
+    users = {p.user.pk: _ensure_user(p.user, force) for p in SHOWCASE_PLAYERS}
+    for player in SHOWCASE_PLAYERS:
+        user = users[player.user.pk]
+        org_user = ensure_org_user(user, org, mmr=player.org_mmr)
+        LeagueUser.objects.update_or_create(
+            user=user,
+            league=league,
+            defaults={"org_user": org_user, "mmr": player.org_mmr},
+        )
+
+    Tournament.objects.filter(pk=SHOWCASE_TOURNAMENT_PK).delete()
+    Tournament.objects.filter(name=SHOWCASE_TOURNAMENT_NAME).delete()
+    tournament = Tournament.objects.create(
+        pk=SHOWCASE_TOURNAMENT_PK,
+        name=SHOWCASE_TOURNAMENT_NAME,
+        date_played=date.today(),
+        state="in_progress",
+        tournament_type="double_elimination",
+        league=league,
+        steam_league_id=SHOWCASE_LEAGUE.steam_league_id,
+    )
+    tournament.users.set(users.values())
+
+    captains = sorted(
+        (p for p in SHOWCASE_PLAYERS if p.fixed_games is None),
+        key=lambda p: p.org_mmr,
+        reverse=True,
+    )[:SHOWCASE_CAPTAIN_COUNT]
+    for order, player in enumerate(captains, start=1):
+        captain = users[player.user.pk]
+        team = Team.objects.create(
+            tournament=tournament,
+            name=f"Showcase Team {order}",
+            captain=captain,
+            draft_order=order,
+        )
+        team.members.set([captain])
+
+    DraftOptions.ensure_for(tournament, timer_enabled=False)
+    draft = Draft.objects.create(tournament=tournament, draft_style="snake")
+    draft.build_rounds()
+    draft.state = TeamDraftState.DRAFTING
+    draft.save(update_fields=["state"])
+
+    matches, stats = _build_showcase_matches(users)
+    with transaction.atomic():
+        Match.objects.filter(
+            match_id__gt=SHOWCASE_MATCH_ID_BASE, match_id__lte=SHOWCASE_MATCH_ID_MAX
+        ).delete()
+        LeaguePlayerStats.objects.filter(
+            league_id=SHOWCASE_LEAGUE.steam_league_id
+        ).delete()
+        Match.objects.bulk_create(matches)
+        PlayerMatchStats.objects.bulk_create(stats)
+    update_all_league_stats_for_league(SHOWCASE_LEAGUE.steam_league_id)
+
+    print(
+        f"  Created '{tournament.name}' (pk={tournament.pk}), league pk={league.pk}, "
+        f"{len(matches)} ticket matches, {len(users)} players"
     )
     flush_redis_cache()

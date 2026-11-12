@@ -1,3 +1,5 @@
+import random
+
 from pydantic import BaseModel
 
 from tests.data.models import TestUser
@@ -91,3 +93,53 @@ STRIP_STATS_PLAYERS: list[StripStatsPlayer] = [
         captain=True,
     ),
 ]
+
+
+# Showcase league: a seeded, realistic league for demos and manual checks of the
+# strip column and the win-rate histogram. Tests assert its shape, not its values.
+SHOWCASE_TOURNAMENT_PK = 251
+SHOWCASE_TOURNAMENT_NAME = "League Stats Showcase"
+SHOWCASE_MATCH_ID_BASE = 9200010000
+SHOWCASE_MATCH_ID_MAX = 9200099999
+SHOWCASE_START_TIME_BASE = 1750000000
+SHOWCASE_SEED = 20261112
+SHOWCASE_MATCH_COUNT = 160
+SHOWCASE_CAPTAIN_COUNT = 8
+SHOWCASE_NEWCOMER_GAMES: tuple[int, ...] = (1, 2, 4)
+SHOWCASE_IDLE_COUNT = 3
+
+
+class ShowcasePlayer(BaseModel):
+    user: TestUser
+    skill: float
+    activity: float
+    fixed_games: int | None = None
+    org_mmr: int
+
+
+def _showcase_players() -> list[ShowcasePlayer]:
+    rng = random.Random(SHOWCASE_SEED)
+    regulars = 60 - len(SHOWCASE_NEWCOMER_GAMES) - SHOWCASE_IDLE_COUNT
+    players: list[ShowcasePlayer] = []
+    for index in range(60):
+        pk = 7100 + index
+        skill = rng.gauss(0.0, 1.0)
+        if index < regulars:
+            activity, fixed = rng.uniform(0.3, 1.5), None
+        elif index < regulars + len(SHOWCASE_NEWCOMER_GAMES):
+            activity, fixed = 0.0, SHOWCASE_NEWCOMER_GAMES[index - regulars]
+        else:
+            activity, fixed = 0.0, 0
+        players.append(
+            ShowcasePlayer(
+                user=_user(pk, f"showcase_{index:02d}", f"Showcase {index:02d}"),
+                skill=skill,
+                activity=activity,
+                fixed_games=fixed,
+                org_mmr=max(1000, int(round(3500 + skill * 900, -1))),
+            )
+        )
+    return players
+
+
+SHOWCASE_PLAYERS: list[ShowcasePlayer] = _showcase_players()

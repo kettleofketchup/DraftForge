@@ -162,3 +162,14 @@ ALL_LEAGUES: list[TestLeague] = [
     EVENTS_LEAGUE_ALT,
     AUTH_MATRIX_LEAGUE,
 ]
+
+# Seeded showcase league for demos and manual checks; see tests/data/league_stats.py.
+SHOWCASE_LEAGUE: TestLeague = TestLeague(
+    pk=21,
+    name="League Stats Showcase",
+    steam_league_id=17939,
+    description="Seeded league with a realistic spread of ticket games.",
+    rules="Showcase league rules.",
+    timezone="America/New_York",
+    organization_names=["League Stats Showcase Org"],
+)

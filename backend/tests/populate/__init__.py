@@ -47,7 +47,10 @@ from tests.populate.constants import (
 from tests.populate.csv_import import populate_csv_import_data
 from tests.populate.demo import populate_demo_tournaments
 from tests.populate.events import populate_events_data
-from tests.populate.league_stats import populate_league_stats_data
+from tests.populate.league_stats import (
+    populate_league_stats_data,
+    populate_league_stats_showcase,
+)
 from tests.populate.org_delete import populate_org_delete
 from tests.populate.organizations import populate_organizations_and_leagues
 from tests.populate.shuffle_tie import populate_shuffle_tie_data
@@ -96,6 +99,7 @@ def populate_all(force: bool = False) -> None:
         ("Auth Matrix Data", populate_auth_matrix_data),
         ("Demo Tournaments", populate_demo_tournaments),
         ("League Stats Data", populate_league_stats_data),
+        ("League Stats Showcase", populate_league_stats_showcase),
     ]
 
     console = Console()
@@ -145,6 +149,7 @@ __all__ = [
     "populate_auth_matrix_data",
     "populate_demo_tournaments",
     "populate_league_stats_data",
+    "populate_league_stats_showcase",
     "populate_test_tournaments",
     # Utilities
     "create_user",

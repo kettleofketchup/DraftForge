@@ -123,3 +123,12 @@ ALL_ORGANIZATIONS: list[TestOrganization] = [
     EVENTS_ORG,
     AUTH_MATRIX_ORG,
 ]
+
+# Owns SHOWCASE_LEAGUE; deliberately not in ALL_ORGANIZATIONS.
+SHOWCASE_ORG: TestOrganization = TestOrganization(
+    pk=21,
+    name="League Stats Showcase Org",
+    description="Organization for the seeded league stats showcase.",
+    rules_template="Showcase league rules.",
+    timezone="America/New_York",
+)
