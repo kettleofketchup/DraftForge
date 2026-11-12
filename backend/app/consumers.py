@@ -381,6 +381,29 @@ class TournamentConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
             message["draft_state"] = event["draft_state"]
         await self.send(text_data=json.dumps(message))
 
+    async def lobby_event(self, event: dict[str, object]) -> None:
+        """A game's dota_lobby lobby changed (lobby.broadcast). No password."""
+        await self.send(
+            text_data=json.dumps(
+                {
+                    "type": "lobby_event",
+                    "game_id": event.get("game_id"),
+                    "game_lobby_id": event.get("game_lobby_id"),
+                    "state": event.get("state"),
+                    "match_id": event.get("match_id"),
+                    "provisional_winner_side": event.get("provisional_winner_side"),
+                }
+            )
+        )
+
+    async def bracket_update(self, event: dict[str, object]) -> None:
+        """A game's bracket data changed; clients refetch the bracket."""
+        await self.send(
+            text_data=json.dumps(
+                {"type": "bracket_update", "game_id": event.get("game_id")}
+            )
+        )
+
     @database_sync_to_async
     def tournament_exists(self, tournament_id: int) -> bool:
         return Tournament.objects.filter(pk=tournament_id).exists()

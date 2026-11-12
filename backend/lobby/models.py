@@ -117,6 +117,10 @@ class GameLobby(models.Model):
     last_error_code = models.CharField(max_length=48, blank=True, default="")
     last_error_detail = models.TextField(blank=True, default="")
     last_error_at = models.DateTimeField(null=True, blank=True)
+    # When a `requested` row's create may be sent again by the reconcile
+    # task: pushed forward by every attempt and every retryable failure, so
+    # a create still retrying in Celery is not started a second time.
+    next_attempt_at = models.DateTimeField(null=True, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
