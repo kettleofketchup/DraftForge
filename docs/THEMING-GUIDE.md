@@ -541,10 +541,22 @@ brandGlow              // Brand glow shadow
 
 ### From DaisyUI
 
-Button classes map directly:
-- `btn btn-primary` works as-is
-- `btn btn-ghost`, `btn btn-outline` work as-is
-- `bg-base-*` classes work with new values
+DaisyUI and its hand-written class layer are gone (#74). Map any old markup like this:
+
+| DaisyUI class | Use instead |
+|---------------|-------------|
+| `btn btn-*` | `<PrimaryButton>` / `<SecondaryButton>` / `<ConfirmButton>` |
+| `card`, `card-body`, `card-title` | `<Card>` family, or Tailwind padding and type utilities |
+| `card-compact` (raised card) | `card-3d` plus padding and radius utilities |
+| `badge badge-*` | `<Badge>` |
+| `modal*` | `<Dialog>` or `<ConfirmDialog>` |
+| `alert alert-*` | `<Alert>` from `~/components/ui/alert` |
+| `input input-bordered` | `<Input>` (`aria-invalid` for errors) |
+| `loading loading-spinner` | `<Spinner>` from `~/components/ui/spinner` |
+| `skeleton` | `<Skeleton>` |
+| `navbar*`, `avatar`, `collapse*` | Flex utilities, `<UserAvatar>`, `<Collapsible>` |
+
+The `bg-base-*` and `text-base-content` names come from DaisyUI but are now the brand surface tokens; keep using them.
 
 ### shadcn/ui Components
 

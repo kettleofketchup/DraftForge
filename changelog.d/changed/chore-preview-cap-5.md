@@ -1,1 +1,0 @@
-- **Preview ceiling raised to 5.** `MAX_CAP` in the preview queue goes from 3 to 5, so `PREVIEW_CAP` accepts up to 5 concurrent previews (each under a 1 CPU / 2Gi requests quota). Set the `PREVIEW_CAP` repo variable to 5 after merge.

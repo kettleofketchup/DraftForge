@@ -10,6 +10,7 @@ import { UserAvatar } from '~/components/user/UserAvatar';
 import { useUserStore } from '~/store/userStore';
 
 import { getLogger } from '~/lib/logger';
+import { Input } from '~/components/ui/input';
 const log = getLogger('searchUser');
 
 interface Props {
@@ -25,7 +26,7 @@ export const SearchUserDropdown: React.FC<Props> = ({
   setQuery,
   defaultValue = 'Search for users',
 }) => {
-  const user: UserType = useUserStore((state) => state.currentUser); // Zustand setter
+  const user: UserType = useUserStore((state) => state.currentUser);
 
   const filteredUsers =
     query === ''
@@ -68,7 +69,7 @@ export const SearchUserDropdown: React.FC<Props> = ({
         <Combobox value={query} onChange={handleSearchUserSelect}>
           <ComboboxInput
             id="search-user-combobox"
-            className="input input-bordered w-full"
+            as={Input}
             data-testid="userSearchInput"
             placeholder={defaultValue}
             onChange={(event) => setQuery(event.target.value)}

@@ -22,9 +22,9 @@ const LOADING_SELECTORS = [
   // Generic loading indicators
   '[data-loading="true"]',
   '[aria-busy="true"]',
-  '.loading',
+  '[data-slot="spinner"]',
   '.spinner',
-  '.skeleton',
+  '[data-slot="skeleton"]',
   // Lucide/icon spinners
   '.animate-spin',
   '[class*="animate-spin"]',

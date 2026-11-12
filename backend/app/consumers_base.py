@@ -32,8 +32,10 @@ import asyncio
 import contextlib
 import json
 import time
+import weakref
 from abc import abstractmethod
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
+from concurrent.futures import ThreadPoolExecutor
 from typing import TYPE_CHECKING, Any
 
 import redis
@@ -68,6 +70,27 @@ tracer = trace.get_tracer(__name__)
 PING_INTERVAL = 1
 
 FALLBACK_CLEANUP_TIMEOUT_S: float = 5.0
+
+CONSUMER_DB_THREADS: int = 16
+_consumer_db_executor = ThreadPoolExecutor(
+    max_workers=CONSUMER_DB_THREADS, thread_name_prefix="ws-db"
+)
+
+
+def consumer_db[**P, R](func: Callable[P, R]) -> Callable[P, Awaitable[R]]:
+    """``database_sync_to_async`` on a pool instead of asgiref's one shared thread.
+
+    Each call gets its own connection, closed after it (CONN_MAX_AGE=0), so a
+    write waiting on SQLite's lock holds up only its own caller (#352).
+    """
+    return database_sync_to_async(
+        func, thread_sensitive=False, executor=_consumer_db_executor
+    )
+
+
+_draft_write_locks: "weakref.WeakValueDictionary[tuple[str, int], asyncio.Lock]" = (
+    weakref.WeakValueDictionary()
+)
 
 
 class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
@@ -162,6 +185,22 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
 
     def _captain_channel_key(self, draft_id: int, user_id: int) -> str:
         return captain_channel_key(self.get_redis_prefix(), draft_id, user_id)
+
+    async def in_draft_order[T](self, call: Callable[[], Awaitable[T]]) -> T:
+        """Run a ``consumer_db`` write after this process's earlier ones for the draft.
+
+        The pool runs calls concurrently, but a socket's disconnect write must
+        still land before its reconnect's. The lock is held until the thread
+        finishes, even if the caller is cancelled.
+        """
+        key = (self.get_redis_prefix(), self.draft_id)
+        lock = _draft_write_locks.get(key)
+        if lock is None:
+            lock = _draft_write_locks[key] = asyncio.Lock()
+        await lock.acquire()
+        work = asyncio.ensure_future(call())
+        work.add_done_callback(lambda _: lock.release())
+        return await asyncio.shield(work)
 
     # --- Kick detection ---
 
@@ -278,7 +317,7 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
 
     # --- Connection count tracking ---
 
-    @database_sync_to_async
+    @sync_to_async(thread_sensitive=False)
     def _increment_connection_count(self) -> None:
         """Increment WebSocket connection count in Redis."""
         try:
@@ -295,7 +334,7 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
                 error=str(e),
             )
 
-    @database_sync_to_async
+    @sync_to_async(thread_sensitive=False)
     def _decrement_connection_count(self) -> None:
         """Decrement WebSocket connection count in Redis."""
         try:
