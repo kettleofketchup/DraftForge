@@ -1,7 +1,9 @@
+import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useQueryClient } from '@tanstack/react-query';
 import { KeyRound } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '~/components/ui/card';
-import { useEventLobbyPassword } from '~/hooks/useLobbyPassword';
+import { eventLobbyPasswordKey, useEventLobbyPassword } from '~/hooks/useLobbyPassword';
 import { CopyPasswordButton } from './CopyPasswordButton';
 
 interface EventLobbyPasswordProps {
@@ -18,8 +20,14 @@ interface EventLobbyPasswordProps {
  */
 export function EventLobbyPassword({ eventId, lobbiesEnabled, signedIn }: EventLobbyPasswordProps) {
   const { t } = useTranslation('lobby');
+  const queryClient = useQueryClient();
   const { data } = useEventLobbyPassword(eventId, lobbiesEnabled && signedIn);
-  if (!lobbiesEnabled || !data?.password) return null;
+  // A disabled query still returns its cached data: drop it on logout so the
+  // next person at the screen (or the next account) never sees it.
+  useEffect(() => {
+    if (!signedIn) queryClient.removeQueries({ queryKey: eventLobbyPasswordKey(eventId) });
+  }, [signedIn, eventId, queryClient]);
+  if (!lobbiesEnabled || !signedIn || !data?.password) return null;
 
   return (
     <Card data-testid="event-lobby-password">

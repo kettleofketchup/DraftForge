@@ -45,6 +45,26 @@ describe('EventLobbyPassword', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
+  it('hides the password and drops it from the cache on logout', async () => {
+    vi.mocked(getEventLobbyPassword).mockResolvedValue({ password: 'night-4' });
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const i18n = createI18nInstance('en');
+    const ui = (signedIn: boolean) => (
+      <I18nextProvider i18n={i18n}>
+        <QueryClientProvider client={qc}>
+          <EventLobbyPassword eventId={7} lobbiesEnabled signedIn={signedIn} />
+        </QueryClientProvider>
+      </I18nextProvider>
+    );
+    const { rerender } = render(ui(true));
+    expect(await screen.findByTestId('event-lobby-password-value')).toHaveTextContent('night-4');
+    rerender(ui(false));
+    expect(screen.queryByTestId('event-lobby-password')).not.toBeInTheDocument();
+    await vi.waitFor(() =>
+      expect(qc.getQueryData(['event-lobby-password', 7])).toBeUndefined(),
+    );
+  });
+
   it('does not ask when lobbies are off or nobody is signed in', () => {
     render(<EventLobbyPassword eventId={7} lobbiesEnabled={false} signedIn />, {
       wrapper: Wrapper,
