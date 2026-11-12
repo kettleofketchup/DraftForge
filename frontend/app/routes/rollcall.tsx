@@ -474,6 +474,7 @@ export default function RollCallPage() {
             toast.error('Failed to start tournament');
           }
         }}
+        confirmTestId="rollcall-start-dialog-confirm"
       />
     </div>
   );

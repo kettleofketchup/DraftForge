@@ -6,15 +6,15 @@
  *   1. View event with signups
  *   2. Browse through signed-up players
  *   3. Start roll call
- *   4. Confirm 10 players
+ *   4. Confirm 10 players (each via the "Confirm attendance" dialog)
  *   5. Start tournament from confirmed players
  *
  * Output: roll_call.webm (1000x800)
- * Pipeline: just demo::rollcall → just demo::trim → just demo::gifs
+ * Pipeline: just demo::roll-call → just demo::trim → just demo::gifs
  */
 
 import { BASE_URL } from '../fixtures/base-url';
-import { test, chromium, type Page, type Locator } from '@playwright/test';
+import { test, expect, chromium, type Page, type Locator } from '@playwright/test';
 import { loginAdmin, waitForHydration, API_URL } from '../fixtures/auth';
 import { waitForDemoReady } from '../fixtures/demo-utils';
 import * as path from 'path';
@@ -187,10 +187,13 @@ test.describe('Roll Call Demo', () => {
     // =========================================================================
     console.log('Step 0: Reset events data, create event, and bulk RSVP');
 
+    const cookies = await context.cookies();
+    const csrfToken = cookies.find((c) => c.name === 'csrftoken')?.value || '';
+
     // Wipe all events for a clean slate
     const resetResponse = await context.request.post(
       `${API_URL}/tests/events/demo-reset/`,
-      { failOnStatusCode: false },
+      { headers: { 'X-CSRFToken': csrfToken } },
     );
     console.log(`Step 0: Reset response: ${resetResponse.status()}`);
 
@@ -204,10 +207,6 @@ test.describe('Roll Call Demo', () => {
     const leaguesResp = await context.request.get(`${API_URL}/leagues/?organization=${orgPk}`);
     const leagues = await leaguesResp.json();
     const leaguePk = leagues[0]?.pk ?? orgPk;
-
-    // Get CSRF token for API calls
-    const cookies = await context.cookies();
-    const csrfToken = cookies.find((c) => c.name === 'csrftoken')?.value || '';
 
     // Create a fresh event for the demo (signups_open, auto_approve)
     const tomorrow = new Date();
@@ -320,16 +319,14 @@ test.describe('Roll Call Demo', () => {
     // Step 7 — Wait for confirmation dialog
     // =========================================================================
     console.log('Step 7: Confirmation dialog');
-    const dialog = page.locator('[role="alertdialog"]');
-    await dialog.waitFor({ state: 'visible', timeout: 10000 });
+    const confirmBtn = page.getByTestId('event-rollcall-dialog-confirm');
+    await confirmBtn.waitFor({ state: 'visible', timeout: 10000 });
     await page.waitForTimeout(500);
 
     // =========================================================================
     // Step 8 — Click confirm button in dialog
     // =========================================================================
     console.log('Step 8: Confirm start roll call');
-    const confirmBtn = dialog.locator('button', { hasText: /confirm|continue|yes|start/i });
-    await confirmBtn.waitFor({ state: 'visible', timeout: 5000 });
     await demoClick(page, confirmBtn, 200);
 
     // =========================================================================
@@ -356,23 +353,24 @@ test.describe('Roll Call Demo', () => {
     await page.waitForTimeout(500);
 
     // =========================================================================
-    // Step 12 — Confirm 10 players (click "Confirm" buttons with pause)
+    // Step 12 — Confirm 10 players via each row's "Confirm attendance" dialog
     // =========================================================================
     console.log('Step 12: Confirm 10 players');
-    for (let i = 0; i < 10; i++) {
-      // Each iteration picks the first visible "Confirm" button in the awaiting section
-      const confirmPlayerBtn = page
-        .locator('[data-testid="rollcall-confirm-btn"]')
-        .first();
+    const confirmedSection = page.getByTestId('rollcall-confirmed-section');
+    const attendanceSummary = page.getByTestId('rollcall-confirm-summary');
+    for (let i = 1; i <= 10; i++) {
+      const confirmPlayerBtn = page.getByTestId('rollcall-confirm-btn').first();
+      await confirmPlayerBtn.waitFor({ state: 'visible', timeout: 5000 });
+      await demoClick(page, confirmPlayerBtn, 200);
 
-      try {
-        await confirmPlayerBtn.waitFor({ state: 'visible', timeout: 5000 });
-        await demoClick(page, confirmPlayerBtn, 200);
-        await page.waitForTimeout(300);
-      } catch {
-        console.log(`Could not find confirm button for player ${i + 1}, skipping`);
-        break;
-      }
+      const attendanceConfirmBtn = page.getByTestId('rollcall-confirm-dialog-confirm');
+      await attendanceConfirmBtn.waitFor({ state: 'visible', timeout: 5000 });
+      await page.waitForTimeout(250);
+      await demoClick(page, attendanceConfirmBtn, 200);
+
+      await expect(attendanceSummary).toHaveCount(0, { timeout: 5000 });
+      await expect(confirmedSection).toHaveText(new RegExp(`\\(${i}\\)`), { timeout: 5000 });
+      await page.waitForTimeout(200);
     }
 
     // =========================================================================
@@ -404,19 +402,14 @@ test.describe('Roll Call Demo', () => {
     // Step 16 — Wait for confirmation dialog
     // =========================================================================
     console.log('Step 16: Start Tournament confirmation dialog');
-    const tournamentDialog = page.locator('[role="alertdialog"]');
-    await tournamentDialog.waitFor({ state: 'visible', timeout: 10000 });
+    const tournamentConfirmBtn = page.getByTestId('rollcall-start-dialog-confirm');
+    await tournamentConfirmBtn.waitFor({ state: 'visible', timeout: 10000 });
     await page.waitForTimeout(500);
 
     // =========================================================================
     // Step 17 — Click confirm
     // =========================================================================
     console.log('Step 17: Confirm start tournament');
-    const tournamentConfirmBtn = tournamentDialog.locator(
-      'button',
-      { hasText: /confirm|continue|yes|start/i },
-    );
-    await tournamentConfirmBtn.waitFor({ state: 'visible', timeout: 5000 });
     await demoClick(page, tournamentConfirmBtn, 200);
 
     // =========================================================================

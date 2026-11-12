@@ -607,6 +607,7 @@ export default function EventPage() {
             toast.error('Failed to start roll call');
           }
         }}
+        confirmTestId="event-rollcall-dialog-confirm"
       />
 
       <ConfirmDialog
