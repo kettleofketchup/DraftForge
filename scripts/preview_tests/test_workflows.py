@@ -165,7 +165,10 @@ class PreviewImagesStructureTest(unittest.TestCase):
         self.assertEqual((legs["frontend"]["context"], legs["frontend"]["file"],
                           legs["frontend"]["target"]),
                          ("frontend", "frontend/Dockerfile", "runtime"))
-        self.assertEqual(legs["frontend"]["args"], "VITE_PREVIEW_TEST_FEATURES=true")
+        self.assertEqual(
+            legs["frontend"]["args"].split(),
+            ["VITE_PREVIEW_TEST_FEATURES=true", "VITE_SENTRY_ENABLED=false"],
+        )
         self.assertEqual(legs["backend"]["args"], "")
         self.assertIs(self.build["strategy"]["fail-fast"], False)
         self.assertEqual(self.build_push["with"]["build-args"], "${{ matrix.args }}")

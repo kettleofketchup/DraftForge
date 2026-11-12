@@ -40,6 +40,7 @@ just test::pw::spec bracket       # Bracket tests
 just test::pw::spec league        # League tests
 just test::pw::spec herodraft     # HeroDraft tests
 just test::pw::spec mobile        # Mobile responsive tests
+just test::pw::dota-lobby         # dota_lobby integration (needs `just test::dota-lobby up`)
 ```
 
 ### Performance Options

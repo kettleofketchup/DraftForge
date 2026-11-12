@@ -41,6 +41,13 @@ _beat_schedule = {
         "task": "discordbot.tasks.check_scheduled_events",
         "schedule": 60.0,
     },
+    # dota_lobby lobbies: catch up on missed webhooks, resend unanswered
+    # creates, create lobbies for eligible games. No-op unless
+    # DOTA_LOBBY_ENABLED. Keep in step with the other beat schedule file.
+    "reconcile-dota-lobbies": {
+        "task": "lobby.tasks.reconcile_dota_lobbies",
+        "schedule": 60.0,
+    },
     "sweep-stale-discord-leases": {
         "task": "discordbot.tasks.sweep_stale_discord_leases",
         "schedule": 60.0,  # 60s cadence: keeps worker-crash recovery <1.5 min

@@ -2,7 +2,15 @@ import nh3
 from django.core.validators import RegexValidator
 from django.db import models
 
-from app.models import TOURNAMNET_TYPE_CHOICES, DraftStyles, GameMode, GameType
+from app.models import (
+    TOURNAMNET_TYPE_CHOICES,
+    DotaLobbyLaunch,
+    DotaLobbyMode,
+    DraftStyles,
+    GameMode,
+    GameType,
+)
+from lobby import passwords as lobby_passwords
 
 discord_id_validator = RegexValidator(
     r"^(\d{17,20})?$",
@@ -230,11 +238,48 @@ class DiscordTournamentConfigMixin(models.Model):
         abstract = True
 
 
+class DotaLobbyConfigMixin(models.Model):
+    """dota_lobby settings a series hands to its events and their tournaments.
+
+    Same choices and defaults as the Tournament fields they are copied to.
+    The password itself is a concrete field on EventRepeater and Event, not
+    part of this mixin, so the auto-built copy lists never copy it blindly
+    (events.services.series_lobby_password decides).
+    """
+
+    dota_lobby_mode = models.CharField(
+        max_length=8, choices=DotaLobbyMode.choices, default=DotaLobbyMode.OFF
+    )
+    dota_lobby_launch = models.CharField(
+        max_length=8, choices=DotaLobbyLaunch.choices, default=DotaLobbyLaunch.MANUAL
+    )
+    dota_lobby_region = models.CharField(
+        max_length=32,
+        blank=True,
+        default="",
+        help_text="dota_lobby region name; empty uses DOTA_LOBBY_REGION",
+    )
+    discord_send_lobby_info = models.BooleanField(
+        default=False,
+        help_text="DM rostered players the lobby name and password",
+    )
+    dota_lobby_password_mode = models.CharField(
+        max_length=8,
+        choices=lobby_passwords.PasswordMode.choices,
+        default=lobby_passwords.PasswordMode.RANDOM,
+        help_text="fixed: staff set the lobby password; random: generated per event",
+    )
+
+    class Meta:
+        abstract = True
+
+
 class EventRepeater(
     TournamentTemplateMixin,
     EventConfigMixin,
     DiscordEventConfigMixin,
     DiscordTournamentConfigMixin,
+    DotaLobbyConfigMixin,
 ):
     organization = models.ForeignKey(
         "app.Organization",
@@ -260,6 +305,11 @@ class EventRepeater(
         default=True,
         help_text="Notify users when new events are generated and ready for signup",
     )
+    # The fixed lobby password (fixed mode only; empty in random mode, where
+    # each event generates its own). Never in public serializers.
+    dota_lobby_password = models.CharField(
+        max_length=lobby_passwords.MAX_LENGTH, blank=True, default=""
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -280,6 +330,7 @@ class Event(
     EventConfigMixin,
     DiscordEventConfigMixin,
     DiscordTournamentConfigMixin,
+    DotaLobbyConfigMixin,
 ):
     organization = models.ForeignKey(
         "app.Organization",
@@ -314,6 +365,13 @@ class Event(
         blank=True,
         related_name="source_event",
     )
+    # The event's effective lobby password: the series' fixed one, one typed
+    # for this event, or a generated one. Copied onto the event's tournament;
+    # every lobby of the event uses it. Shown only to staff and registered
+    # players (events.lobby_password), never in public serializers.
+    dota_lobby_password = models.CharField(
+        max_length=lobby_passwords.MAX_LENGTH, blank=True, default=""
+    )
     created_by = models.ForeignKey(
         "app.CustomUser",
         on_delete=models.SET_NULL,
@@ -340,6 +398,14 @@ class Event(
     def save(self, *args, **kwargs):
         if self.description:
             self.description = nh3.clean(self.description)
+        if (
+            self.dota_lobby_password_mode == lobby_passwords.PasswordMode.RANDOM
+            and not self.dota_lobby_password
+        ):
+            self.dota_lobby_password = lobby_passwords.generate_password()
+            update_fields = kwargs.get("update_fields")
+            if update_fields is not None:
+                kwargs["update_fields"] = {*update_fields, "dota_lobby_password"}
         super().save(*args, **kwargs)
 
     def transition_state(self, new_state):

@@ -319,6 +319,7 @@ class DiscordTournamentLog(models.Model):
     class NotificationType(models.TextChoices):
         DRAFT_LINK = "draft_link", "Draft Link"
         HERODRAFT_LINK = "herodraft_link", "Hero Draft Link"
+        LOBBY_INFO = "lobby_info", "Lobby Info"
 
     class Category(models.TextChoices):
         NOTIFICATION = "notification", "Notification"

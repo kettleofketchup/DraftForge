@@ -386,6 +386,26 @@ def test_scale_only_on_up_and_create() -> None:
         assert "--scale" not in compose_argv("test", verb, slot=e, root=ROOTX), verb
 
 
+@pytest.mark.parametrize("verb", ["down", "stop", "kill", "rm"])
+def test_teardown_verbs_reach_profiled_services(verb: str) -> None:
+    # The dota-lobby simulator sits behind a profile: without it, `down`
+    # leaves its container holding the project's network.
+    for n in (0, 3):
+        e = slot_env_for(n, ROOTX, "t", REG)
+        argv = compose_argv("test", verb, "-v", slot=e, root=ROOTX)
+        assert argv[argv.index(verb) - 2 :] == ["--profile", "*", verb, "-v"], (n, verb)
+
+
+def test_profiles_stay_off_for_other_verbs_and_stacks() -> None:
+    e = slot_env_for(3, ROOTX, "t", REG)
+    for verb in ("up", "create", "logs", "ps", "restart", "config"):
+        assert "--profile" not in compose_argv("test", verb, slot=e, root=ROOTX), verb
+    assert "--profile" not in compose_argv("dev", "down", root=ROOTX)
+    # An explicit --profile is left as it is.
+    argv = compose_argv("test", "--profile", "x", "down", slot=e, root=ROOTX)
+    assert argv.count("--profile") == 1 and argv[argv.index("--profile") + 1] == "x"
+
+
 @pytest.mark.parametrize("stack", ["test", "dev", "dev-m1", "prod", "release"])
 def test_all_f_paths_absolute(stack: slots.Stack) -> None:
     e = slot_env_for(3, ROOTX, "t", REG) if stack == "test" else None
