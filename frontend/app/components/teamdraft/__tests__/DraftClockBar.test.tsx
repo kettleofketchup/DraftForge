@@ -68,5 +68,14 @@ describe('DraftClockBar', () => {
     rerender(<DraftClockBar {...base} draftStatus="paused" countdown={armed({ graceRemainingMs: 0 })} />);
     expect(screen.queryByTestId('draft-reserve-tint')).toBeNull();
   });
+  it('no critical pulse when reserveTotalMs is unknown', () => {
+    render(<DraftClockBar {...base} reserveTotalMs={0} countdown={armed({ graceRemainingMs: 0 })} />);
+    expect(screen.getByTestId('draft-clock-active-reserve').className).not.toContain('animate-reserve-critical');
+  });
+  it('no active team: grace phase, no tint', () => {
+    render(<DraftClockBar {...base} activeTeamPk={null} countdown={armed({ graceRemainingMs: 0 })} />);
+    expect(screen.getByTestId('draft-clock-bar')).toHaveAttribute('data-phase', 'grace');
+    expect(screen.queryByTestId('draft-reserve-tint')).toBeNull();
+  });
   it('expired: waiting copy names the captain', () => { render(<DraftClockBar {...base} countdown={armed({ graceRemainingMs: 0, expired: true })} />); expect(screen.getByTestId('draft-clock-expired')).toHaveTextContent(`Clock expired — waiting for ${DisplayName(user(7))} or staff to pick`); });
 });

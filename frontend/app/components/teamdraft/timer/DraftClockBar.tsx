@@ -33,6 +33,14 @@ export interface DraftClockBarProps {
   onStartClock: () => Promise<void>;
 }
 
+function ReserveBar({ pct, draining, className }: { pct: number; draining: boolean; className?: string }) {
+  return (
+    <div className={cn('h-1 rounded bg-black/40 overflow-hidden', className)}>
+      <div className={cn('h-full rounded', draining ? 'bg-red-400' : 'bg-green-400')} style={{ width: `${pct}%` }} />
+    </div>
+  );
+}
+
 export type LiveDraftClockBarProps = Omit<DraftClockBarProps, 'countdown'>;
 
 export function LiveDraftClockBar(props: LiveDraftClockBarProps) {
@@ -63,7 +71,7 @@ export function DraftClockBar({
   const showUnarmed = !clockArmed && drafting;
 
   const activeReserveMs = armed && activeTeamPk != null ? (armed.reserveByTeamId[activeTeamPk] ?? 0) : 0;
-  const inReserve = !!armed && !armed.expired && armed.graceRemainingMs <= 0;
+  const inReserve = !!armed && !armed.expired && activeTeamPk != null && armed.graceRemainingMs <= 0;
   const reserveDraining = inReserve && drafting && activeReserveMs > 0;
 
   const reservePct = (teamPk: number): number =>
@@ -108,12 +116,7 @@ export function DraftClockBar({
             {formatDuration(ms / 1000)}
           </span>
         </div>
-        <div className="h-1 rounded bg-black/40 overflow-hidden">
-          <div
-            className={cn('h-full rounded', draining ? 'bg-red-400' : 'bg-green-400')}
-            style={{ width: `${pct}%` }}
-          />
-        </div>
+        <ReserveBar pct={pct} draining={draining} />
       </div>
     );
   };
@@ -199,17 +202,12 @@ export function DraftClockBar({
                     className={cn(
                       clockDigits,
                       reserveDraining && 'text-red-300',
-                      reserveDraining && activePct < 20 && 'animate-reserve-critical',
+                      reserveDraining && reserveTotalMs > 0 && activePct < 20 && 'animate-reserve-critical',
                     )}
                   >
                     {armed ? formatDuration(activeReserveMs / 1000) : '—'}
                   </span>
-                  <div className="h-1 w-full rounded bg-black/40 overflow-hidden">
-                    <div
-                      className={cn('h-full rounded', reserveDraining ? 'bg-red-400' : 'bg-green-400')}
-                      style={{ width: `${activePct}%` }}
-                    />
-                  </div>
+                  <ReserveBar pct={activePct} draining={reserveDraining} className="w-full" />
                 </div>
               </div>
             )}
