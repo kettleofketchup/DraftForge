@@ -11,9 +11,11 @@ import type { CreateTournamentInput } from '../schemas';
 
 interface Props {
   control: Control<CreateTournamentInput>;
+  /** The tournament's event sets "send lobby info": shown read-only. */
+  lobbyInfoFromEvent?: boolean;
 }
 
-export function DiscordTournamentConfigSection({ control }: Props) {
+export function DiscordTournamentConfigSection({ control, lobbyInfoFromEvent = false }: Props) {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2 mb-2">
@@ -71,6 +73,35 @@ export function DiscordTournamentConfigSection({ control }: Props) {
                 </FormLabel>
                 <FormDescription>
                   DM team members their hero draft link when a hero draft is created for their match
+                </FormDescription>
+              </div>
+            </FormItem>
+          )}
+        />
+      </div>
+      <div className="rounded-md border border-border p-3 space-y-3">
+        <FormField
+          control={control}
+          name="discord_send_lobby_info"
+          render={({ field }) => (
+            <FormItem className="flex items-center gap-3">
+              <FormControl>
+                <input
+                  type="checkbox"
+                  data-testid="discord-discord_send_lobby_info"
+                  checked={field.value}
+                  onChange={field.onChange}
+                  disabled={lobbyInfoFromEvent}
+                  className="h-4 w-4 rounded border-border accent-primary"
+                />
+              </FormControl>
+              <div>
+                <FormLabel className="text-sm font-medium cursor-pointer">
+                  Send lobby info
+                </FormLabel>
+                <FormDescription>
+                  DM players the in-game lobby name, password and side when their lobby is created
+                  {lobbyInfoFromEvent && ' (set in the event settings)'}
                 </FormDescription>
               </div>
             </FormItem>
