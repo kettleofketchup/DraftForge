@@ -25,17 +25,23 @@ TIED_AFTER_SKIP = [1000, 2000, 2000, 4000]
 NO_TIES = [1000, 2000, 3000, 4000]
 
 
+class NoTickThreadTestCase(TestCase):
+    """Picks, skips and resume schedule the real tick broadcaster on commit; keep its thread out of tests."""
+
+    def setUp(self) -> None:
+        patcher = patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True)
+        self.start_tick = patcher.start()
+        self.addCleanup(patcher.stop)
+
+
 def _started(fx: TimedDraftFixture) -> TimedDraftFixture:
-    with (
-        patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True),
-        patch("app.functions.shuffle_draft.roll_until_winner") as roll,
-    ):
+    with patch("app.functions.shuffle_draft.roll_until_winner") as roll:
         roll.side_effect = lambda teams: (teams[0], [[{"team_id": t.id, "roll": 6 - i} for i, t in enumerate(teams)]])
         fx.start()
     return fx
 
 
-class TieRollHoldAfterPickTests(TestCase):
+class TieRollHoldAfterPickTests(NoTickThreadTestCase):
     def _pick_first_round(self, mmrs: list[int]) -> tuple[TimedDraftFixture, DraftRound, datetime]:
         fx = TimedDraftFixture(style="shuffle", captain_mmrs=mmrs, prefix="hold")
         _started(fx)
@@ -85,7 +91,7 @@ class TieRollHoldAfterPickTests(TestCase):
         self.assertEqual(team.draft_reserve_ms, fx.options.reserve_time_ms)
 
 
-class TieRollHoldAfterTimeoutTests(TestCase):
+class TieRollHoldAfterTimeoutTests(NoTickThreadTestCase):
     def _skip_first_round(self, mmrs: list[int]) -> tuple[TimedDraftFixture, DraftRound, datetime]:
         fx = TimedDraftFixture(style="shuffle", captain_mmrs=mmrs, prefix="skip")
         _started(fx)
@@ -130,8 +136,9 @@ class TieRollHoldAfterTimeoutTests(TestCase):
         self.assertIsNone(teamdraft_tick.read_timeout_candidate(fx.draft.pk))
 
 
-class TieRollHoldPauseTests(TestCase):
-    def setUp(self):
+class TieRollHoldPauseTests(NoTickThreadTestCase):
+    def setUp(self) -> None:
+        super().setUp()
         self.fx = TimedDraftFixture(style="shuffle", captain_mmrs=TIED_AFTER_PICK, prefix="pause")
         _started(self.fx)
         with self.captureOnCommitCallbacks(execute=True):
@@ -156,3 +163,4 @@ class TieRollHoldPauseTests(TestCase):
         # Shifted by the pause plus the resume countdown: the unspent hold is still ahead.
         self.assertGreaterEqual(shift, paused_for)
         self.assertGreater(resumed_start, t0 + paused_for)
+        self.start_tick.assert_called()
