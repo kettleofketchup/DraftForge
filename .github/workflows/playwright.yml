@@ -273,6 +273,7 @@ jobs:
               app.tests.test_test_runner \
               lobby.tests \
               app.tests.test_dota_lobby_migration \
+              tests.test_dota_lobby_support \
               -v 2
 
       - name: Run frontend Vitest
