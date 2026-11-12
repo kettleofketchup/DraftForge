@@ -45,6 +45,8 @@ async function pickFirstPlayer(page: Page): Promise<void> {
 }
 
 test.describe.serial('Shuffle draft - tie roll popup', () => {
+  // Two logged-in browsers plus the 5 s dice hold do not fit the default 30 s on a CI runner.
+  test.describe.configure({ timeout: 60_000 });
   let t: TournamentData;
 
   test.beforeEach(async ({ browser, context, loginAdmin: login }) => {
