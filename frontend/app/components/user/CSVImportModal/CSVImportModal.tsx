@@ -9,7 +9,7 @@ import {
   DialogTitle,
 } from '~/components/ui/dialog';
 import { Button } from '~/components/ui/button';
-import { ConfirmButton, PrimaryButton, SecondaryButton } from '~/components/ui/buttons';
+import { CancelButton, ConfirmButton, PrimaryButton, SecondaryButton } from '~/components/ui/buttons';
 import { Label } from '~/components/ui/label';
 import {
   Select,
@@ -453,9 +453,9 @@ export function CSVImportModal({
             )}
 
             <div className="flex justify-end gap-2">
-              <SecondaryButton onClick={() => handleOpenChange(false)}>
+              <CancelButton onClick={() => handleOpenChange(false)}>
                 Cancel
-              </SecondaryButton>
+              </CancelButton>
               <ConfirmButton
                 onClick={handleImport}
                 disabled={validCount === 0}

@@ -98,7 +98,7 @@ export const ProfileButton: React.FC = () => {
         <DropdownMenuContent>
           <DropdownMenuLabel>
             <Link to="/profile">
-              <Button data-testid="navbarProfileButton">
+              <Button className="min-h-11" data-testid="navbarProfileButton">
                 <UserPenIcon />
                 {t('profile')}
               </Button>
