@@ -4,9 +4,11 @@ from unittest import mock
 
 from django.core.cache.backends.locmem import LocMemCache
 from django.test import TestCase
+from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.models import DotaLobbyMode, GameMode
+from app.models import DotaLobbyMode, GameMode, League, Organization
+from events.models import Event
 from lobby import services, states
 from lobby.client import DotaLobbyError, DotaLobbyUnavailable
 from lobby.models import GameLobby
@@ -125,6 +127,67 @@ class LobbyReadTests(LobbyViewTestCase):
         self.assertEqual(lobby["last_error_code"], "league_not_held")
         self.assertEqual(lobby["last_error_detail"], "no bot holds league 1")
         self.assertEqual(resp.data["eligibility"]["code"], "active_lobby_exists")
+
+    def _league_tournament(self):
+        owner = make_user()
+        org = Organization.objects.create(name="Lobby Org", owner=owner)
+        league = League.objects.create(name="Lobby League", organization=org)
+        self.tournament.league = league
+        self.tournament.save()
+        return org, league
+
+    def test_league_staff_outside_the_org_manage_without_the_password(self):
+        # The password is event-wide: a tournament editor who is only league
+        # staff must not read it from the lobby panel.
+        _, league = self._league_tournament()
+        league_staff = make_user()
+        league.staff.add(league_staff)
+        self.make_lobby()
+        resp = self.as_user(league_staff).get(_url(self.game.pk))
+        self.assertTrue(resp.data["can_manage"])
+        self.assertIsNone(resp.data["lobby"]["password"])
+        self.assertNotIn(self.tournament.dota_lobby_password, str(resp.content))
+
+    def test_org_staff_of_the_league_org_see_the_password(self):
+        org, _ = self._league_tournament()
+        org_staff = make_user()
+        org.staff.add(org_staff)
+        row = self.make_lobby()
+        resp = self.as_user(org_staff).get(_url(self.game.pk))
+        self.assertTrue(resp.data["can_manage"])
+        self.assertEqual(resp.data["lobby"]["password"], row.password)
+
+    def test_org_staff_of_the_source_event_see_the_password(self):
+        _, league = self._league_tournament()
+        event_owner = make_user()
+        event_org = Organization.objects.create(name="Event Org", owner=event_owner)
+        Event.objects.create(
+            organization=event_org,
+            name="Night 4",
+            scheduled_at=timezone.now(),
+            tournament=self.tournament,
+            created_by=event_owner,
+        )
+        # Org staff of the event's organization who also edit the league.
+        both = make_user()
+        event_org.staff.add(both)
+        league.staff.add(both)
+        row = self.make_lobby()
+        resp = self.as_user(both).get(_url(self.game.pk))
+        self.assertEqual(resp.data["lobby"]["password"], row.password)
+        # League org staff who are not staff of the event's organization.
+        league_org_staff = make_user()
+        league.organization.staff.add(league_org_staff)
+        resp = self.as_user(league_org_staff).get(_url(self.game.pk))
+        self.assertTrue(resp.data["can_manage"])
+        self.assertIsNone(resp.data["lobby"]["password"])
+
+    def test_rostered_league_staff_still_see_the_password(self):
+        _, league = self._league_tournament()
+        league.staff.add(self.player)
+        row = self.make_lobby()
+        resp = self.as_user(self.player).get(_url(self.game.pk))
+        self.assertEqual(resp.data["lobby"]["password"], row.password)
 
     def test_ended_lobby_is_shown_without_password(self):
         row = self.make_lobby(state=states.TIMED_OUT)

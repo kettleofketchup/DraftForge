@@ -252,6 +252,11 @@ that are still waiting.
 | Registered players: an `approved` or `confirmed` signup, or a member or captain of a team in the event's tournament | The event page, ahead of time (`GET /api/events/<id>/lobby-password/`), and the match dialog for their own games |
 | Everyone else (including `rsvp`, `pending_approval`, `waitlisted`, `tentative`, `rejected` and `cancelled` signups, and league staff who are not org staff) | Never: the endpoint answers `404` |
 
+League staff who are not org staff can still edit the tournament and manage its lobbies from
+the match dialog, but the dialog leaves the password out for them (`password: null`) unless
+they play in that game. For a tournament created from an event, "org staff" means staff of
+the event's organization; for a standalone tournament, staff of its league's organization.
+
 The password is write-only on the events API: it is never in event, series or tournament
 payloads (which are cached and public), in the data Celery tasks read, in websocket messages,
 in logs (`lobby_password_changed` logs the event, mode and reason only) or in Discord
