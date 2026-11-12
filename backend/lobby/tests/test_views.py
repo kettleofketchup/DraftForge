@@ -10,7 +10,6 @@ from app.models import DotaLobbyMode, GameMode
 from lobby import services, states
 from lobby.client import DotaLobbyError, DotaLobbyUnavailable
 from lobby.models import GameLobby
-from lobby.passwords import derive_password
 from lobby.schemas import InviteResult, LobbyView
 from lobby.tests.helpers import (
     lobby_settings,
@@ -89,7 +88,8 @@ class LobbyReadTests(LobbyViewTestCase):
         self.assertEqual(lobby["match_id"], "8000000001")
         self.assertEqual(lobby["provisional_winner_side"], "radiant")
         self.assertFalse(PRIVATE_KEYS & set(lobby))
-        self.assertNotIn(derive_password(row), str(resp.content))
+        self.assertTrue(row.password)
+        self.assertNotIn(row.password, str(resp.content))
 
     def test_rostered_player_sees_password_and_invites(self):
         row = self.make_lobby()
@@ -100,7 +100,7 @@ class LobbyReadTests(LobbyViewTestCase):
         lobby = resp.data["lobby"]
         self.assertTrue(resp.data["is_player"])
         self.assertFalse(resp.data["can_manage"])
-        self.assertEqual(lobby["password"], derive_password(row))
+        self.assertEqual(lobby["password"], row.password)
         self.assertEqual(lobby["name"], row.request["name"])
         mine = next(p for p in lobby["players"] if p["user_id"] == self.player.pk)
         self.assertEqual(mine["status"], "invited")
@@ -121,7 +121,7 @@ class LobbyReadTests(LobbyViewTestCase):
         row.save()
         resp = self.as_user(self.staff).get(_url(self.game.pk))
         lobby = resp.data["lobby"]
-        self.assertEqual(lobby["password"], derive_password(row))
+        self.assertEqual(lobby["password"], row.password)
         self.assertEqual(lobby["last_error_code"], "league_not_held")
         self.assertEqual(lobby["last_error_detail"], "no bot holds league 1")
         self.assertEqual(resp.data["eligibility"]["code"], "active_lobby_exists")
@@ -226,11 +226,15 @@ class LobbyCreateCloseTests(LobbyViewTestCase):
         close_delay.assert_called_once_with(row.pk, "lob_1")
         create_delay.assert_called_once()
 
-    def test_recreated_lobby_gets_a_new_password(self, create_delay, close_delay):
+    def test_recreated_lobby_uses_the_tournament_password(
+        self, create_delay, close_delay
+    ):
+        # One password per event/tournament: a recreated lobby keeps it until
+        # staff change or regenerate the event password.
         self.make_lobby(state=states.WAITING)
         player = self.as_user(self.player)
         old = player.get(_url(self.game.pk)).data["lobby"]["password"]
-        self.assertTrue(old)
+        self.assertEqual(old, self.tournament.dota_lobby_password)
         with self.captureOnCommitCallbacks(execute=True):
             resp = self.as_user(self.staff).post(
                 _url(self.game.pk), {"replace": True}, format="json"
@@ -238,8 +242,24 @@ class LobbyCreateCloseTests(LobbyViewTestCase):
         self.assertEqual(resp.status_code, 202)
         lobby = self.as_user(self.player).get(_url(self.game.pk)).data["lobby"]
         self.assertEqual(lobby["state"], states.REQUESTED)
-        self.assertTrue(lobby["password"])
-        self.assertNotEqual(lobby["password"], old)
+        self.assertEqual(lobby["password"], old)
+
+    def test_changed_password_applies_to_the_next_lobby_only(
+        self, create_delay, close_delay
+    ):
+        first = self.make_lobby(state=states.WAITING)
+        old = first.password
+        self.tournament.dota_lobby_password = "new-event-pw"
+        self.tournament.save()
+        with self.captureOnCommitCallbacks(execute=True):
+            resp = self.as_user(self.staff).post(
+                _url(self.game.pk), {"replace": True}, format="json"
+            )
+        self.assertEqual(resp.status_code, 202)
+        first.refresh_from_db()
+        self.assertEqual(first.password, old)
+        lobby = self.as_user(self.player).get(_url(self.game.pk)).data["lobby"]
+        self.assertEqual(lobby["password"], "new-event-pw")
 
     def test_replace_refused_once_match_started(self, create_delay, close_delay):
         row = self.make_lobby(state=states.IN_GAME)

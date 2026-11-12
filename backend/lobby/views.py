@@ -27,7 +27,6 @@ from __future__ import annotations
 import math
 from typing import Any
 
-from django.core.exceptions import ImproperlyConfigured
 from django.db import transaction
 from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404
@@ -42,7 +41,6 @@ from app.permissions_org import IsTournamentStaff, can_edit_tournament
 from lobby import broadcast, events, services, states
 from lobby.client import DotaLobbyClient, DotaLobbyError
 from lobby.models import GameLobby
-from lobby.passwords import PasswordKeyUnavailable, derive_password
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
@@ -226,10 +224,7 @@ def serialize_lobby(
     request = game_lobby.request or {}
     password: str | None = None
     if game_lobby.state not in states.ENDED_STATES:
-        try:
-            password = derive_password(game_lobby)
-        except (PasswordKeyUnavailable, ImproperlyConfigured, ValueError):
-            password = None
+        password = game_lobby.password or None
     data.update(
         {
             "state_reason": game_lobby.state_reason or None,

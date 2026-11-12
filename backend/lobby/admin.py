@@ -45,8 +45,9 @@ class GameLobbyAdmin(admin.ModelAdmin):
         "updated_at",
         "accepted_at",
         "ended_at",
-        "password_key_id",
     )
+    # Players' lobby password: not for the admin.
+    exclude = ("password",)
 
     actions = ("create_new_lobby", "close_lobbies")
 

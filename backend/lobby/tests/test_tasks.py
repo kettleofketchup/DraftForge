@@ -9,7 +9,6 @@ from discordbot.models import DiscordMessageLog, DiscordTournamentLog
 from lobby import services, states, tasks
 from lobby.client import DotaLobbyError, DotaLobbyUnavailable
 from lobby.models import GameLobby
-from lobby.passwords import derive_password
 from lobby.schemas import CreateResult, LobbyEvent, LobbyView
 from lobby.tests.helpers import (
     LOBBY_SETTINGS,
@@ -75,7 +74,8 @@ class CreateTaskTests(TaskTestBase):
         )
         body = self.client.create_lobby.call_args.args[0]
         row = self.row()
-        self.assertEqual(body["password"], derive_password(row))
+        self.assertEqual(body["password"], row.password)
+        self.assertTrue(row.password)
         self.assertEqual(
             {k: v for k, v in body.items() if k != "password"}, row.request
         )

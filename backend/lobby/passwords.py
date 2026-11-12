@@ -1,105 +1,68 @@
-"""Lobby passwords, derived on demand and never stored.
+"""Lobby passwords: one per event, stored, and snapshotted on each lobby.
 
-The password is an HMAC of the lobby row (its external_ref `<prefix>:<pk>`, `game:<pk>` by
-default, and the GameLobby pk) under one of Django's secret keys, so:
+Staff choose a password mode on a series or an event:
 
-- every create request for a row sends the same password, so a retried
-  create is identical and dota_lobby answers it as a replay (200), not a
-  conflict (409);
-- every new lobby for a game, recreated after a roster change for example,
-  gets a new password: players removed from the game cannot reuse the one
-  they saw. (A new row never replays an older row's create anyway: the row
-  ID is in the request's metadata.)
-- nothing at rest needs encrypting.
+- `fixed`: staff type the password ahead of time;
+- `random`: DraftForge generates one when the event is created (or when the
+  mode switches to random), and staff can regenerate it.
 
-Rotating DJANGO_SECRET_KEY must not change the password of a lobby that
-already exists. Each GameLobby row records which key it was made under
-(`password_key_id`, a fingerprint that reveals nothing about the key), and
-the password is derived with whichever of SECRET_KEY and
-SECRET_KEY_FALLBACKS matches. Once the old key is dropped from
-SECRET_KEY_FALLBACKS, derive_password raises PasswordKeyUnavailable; read
-the live password from dota_lobby (`get_lobby`) instead. Anything shown to
-players should come from dota_lobby anyway, since that is the lobby they
-join.
+Every lobby in every tournament of the event uses that password. The event's
+password is copied onto its tournament; a standalone tournament gets a random
+one when lobbies are enabled. Each GameLobby keeps the password it was created
+with (`GameLobby.password`), so a retried create is byte-identical and a later
+change only affects lobbies created afterwards.
 
-The password is refused under the public development SECRET_KEY outside
-DEBUG and tests: anyone could compute it.
-
-Only the Django process can derive it: Celery workers run with a placeholder
-SECRET_KEY and receive the password from the internal API instead. Callers
-must keep it out of logs, events and bracket data.
+This module only imports the standard library and Django, so models and
+serializers in `app` and `events` can use it without an import cycle.
+Callers must keep passwords out of logs, events, bracket data and public
+serializers.
 """
 
 from __future__ import annotations
 
-import base64
-from typing import TYPE_CHECKING
+import secrets
 
-from django.conf import settings
-from django.core.exceptions import ImproperlyConfigured
-from django.utils.crypto import salted_hmac
+from django.core.exceptions import ValidationError
+from django.db import models
 
-if TYPE_CHECKING:
-    from lobby.models import GameLobby
-
-PASSWORD_LENGTH = 12
-_SALT = "draftforge.lobby.password"
-_KEY_ID_SALT = "draftforge.lobby.password.key-id"
-KEY_ID_LENGTH = 16
+# dota_lobby accepts up to 32 characters; empty means no password.
+MAX_LENGTH = 32
+GENERATED_LENGTH = 12
+# Lowercase letters and digits without the easily confused i, l, o, 0 and 1.
+ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"
 
 
-class PasswordKeyUnavailable(ValueError):
-    """The secret key this lobby's password was made under is gone."""
+class PasswordMode(models.TextChoices):
+    FIXED = "fixed", "Fixed"
+    RANDOM = "random", "Random"
 
 
-def key_id(secret: str) -> str:
-    """A fingerprint naming a secret key without revealing it."""
-    return salted_hmac(_KEY_ID_SALT, "", secret=secret, algorithm="sha256").hexdigest()[
-        :KEY_ID_LENGTH
-    ]
+def generate_password() -> str:
+    """A random password that is easy to read out and type."""
+    return "".join(secrets.choice(ALPHABET) for _ in range(GENERATED_LENGTH))
 
 
-def _configured_keys() -> list[str]:
-    return [settings.SECRET_KEY, *getattr(settings, "SECRET_KEY_FALLBACKS", [])]
+def validate_password(value: str) -> str:
+    """Return `value` if dota_lobby and players can use it, else raise.
 
-
-def current_key_id() -> str:
-    return key_id(settings.SECRET_KEY)
-
-
-def _key_for(game_lobby: GameLobby) -> str:
-    for secret in _configured_keys():
-        if key_id(secret) == game_lobby.password_key_id:
-            return secret
-    raise PasswordKeyUnavailable(
-        "the secret key this lobby's password was derived with is no longer in "
-        "SECRET_KEY or SECRET_KEY_FALLBACKS"
-    )
-
-
-def _insecure_key_allowed() -> bool:
-    return bool(
-        settings.DEBUG
-        or getattr(settings, "TEST", False)
-        or getattr(settings, "RUNNING_TESTS", False)
-    )
-
-
-def derive_password(game_lobby: GameLobby) -> str:
-    """A 12-character lowercase [a-z2-7] password for this lobby row."""
-    if game_lobby.pk is None or not game_lobby.password_key_id:
-        raise ValueError("save the GameLobby before deriving its password")
-    secret = _key_for(game_lobby)
-    insecure = getattr(settings, "INSECURE_DEV_SECRET_KEY", None)
-    if secret == insecure and not _insecure_key_allowed():
-        raise ImproperlyConfigured(
-            "DJANGO_SECRET_KEY is not set: lobby passwords would be derived "
-            "from the public development key"
+    Rejects empty values, more than 32 characters, anything outside printable
+    ASCII and leading or trailing spaces (easy to miss when typing it in Dota).
+    """
+    if not isinstance(value, str) or value == "":
+        raise ValidationError("Enter a lobby password.", code="required")
+    if len(value) > MAX_LENGTH:
+        raise ValidationError(
+            f"The lobby password can have at most {MAX_LENGTH} characters.",
+            code="max_length",
         )
-    digest = salted_hmac(
-        _SALT,
-        f"{game_lobby.external_ref}#{game_lobby.pk}",
-        secret=secret,
-        algorithm="sha256",
-    ).digest()
-    return base64.b32encode(digest).decode("ascii")[:PASSWORD_LENGTH].lower()
+    if any(not (0x20 <= ord(ch) <= 0x7E) for ch in value):
+        raise ValidationError(
+            "Use only letters, digits, spaces and standard punctuation.",
+            code="invalid_characters",
+        )
+    if value != value.strip():
+        raise ValidationError(
+            "The lobby password cannot start or end with a space.",
+            code="surrounding_spaces",
+        )
+    return value

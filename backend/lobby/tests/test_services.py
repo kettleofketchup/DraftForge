@@ -4,7 +4,6 @@ from django.utils import timezone
 from app.models import DotaLobbyLaunch, DotaLobbyMode, GameMode, GameType
 from lobby import services, states
 from lobby.models import GameLobby
-from lobby.passwords import derive_password
 from lobby.tests.helpers import (
     LOBBY_SETTINGS,
     lobby_settings,
@@ -212,9 +211,12 @@ class BuildRequestTests(TestCase):
             (self.row.radiant_team_id, self.row.dire_team_id), (radiant.pk, dire.pk)
         )
 
-    def test_create_body_adds_derived_password(self):
+    def test_create_body_adds_the_lobby_password(self):
         body = services.create_body(self.row)
-        self.assertEqual(body["password"], derive_password(self.row))
+        self.assertEqual(body["password"], self.row.password)
+        self.assertEqual(
+            self.row.password, self.row.game.tournament.dota_lobby_password
+        )
         self.assertEqual(
             {k: v for k, v in body.items() if k != "password"}, self.row.request
         )
