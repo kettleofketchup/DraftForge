@@ -48,8 +48,10 @@ Render either profile locally with `just helm::template default` or
 | `seed.enabled` / `.commands` | `false` / `["populate_all --force"]` | Previews: `true`. |
 | `env.*` | `nodeEnv: production`, `debug/test/release/ci: false`, `siteUrl: ""`, `otelEnabled: false`, `logFormat: json`, `logLevel: INFO`, `extra: {}` | Populates ConfigMap `draftforge-env`. `siteUrl` defaults to `https://<ingress.host>`. `extra` may only add keys: a key the chart manages (`TEST`, `DEBUG`, `CI`, `NODE_ENV`, `SITE_URL`, `REDIS_HOST`, ...) fails the render, so `env.extra` cannot turn on the test-login endpoints around the `env.test` check. |
 | `secrets.create` / `.djangoSecretKey` / `.internalServiceToken` | `false` / `""` / `""` | Previews create the Secret with dummy values. Prod uses `extraEnvSecrets`. Outside preview mode one of `secrets.create` or `extraEnvSecrets` is required, or the render fails: without `DJANGO_SECRET_KEY` the backend falls back to the development key, which is public in this repo. |
+| `secrets.dotaLobbyApiKey` / `.dotaLobbyWebhookSecret` | `""` / `""` | `DOTA_LOBBY_API_KEY` and `DOTA_LOBBY_WEBHOOK_SECRET` for the dota_lobby integration, added to the chart's Secret only when set (and only with `secrets.create`; otherwise put them in an `extraEnvSecrets` Secret). The webhook secret may be a comma-separated list while rotating. The feature stays off until `env.extra` sets `DOTA_LOBBY_ENABLED: "true"` and `DOTA_LOBBY_URL`. `ingress.blockInternalApi` blocks the webhook receiver path (`/api/internal/`) from outside the cluster, so dota_lobby must deliver to the backend Service in-cluster. |
 | `extraEnvSecrets` | `[]` | Extra Secrets loaded with `envFrom` after the ConfigMap, so their keys win (prod). Previews leave this empty. The chart cannot see Secret contents: keep `TEST`, `DEBUG` and `CI` out of them. |
-| `ingress.enabled` / `.host` / `.entryPoint` | `true` / `dota.kettle.sh` / `websecure` | Previews: the host must be `<namespace>.<preview.hostSuffix>`. |
+| `ingress.enabled` / `.host` | `true` / `dota.kettle.sh` | Previews: the host must be `<namespace>.<preview.hostSuffix>`. |
+| `ingress.entryPoints` / `.entryPoint` | `[]` / `websecure` | The Traefik entry points the IngressRoute binds to. A non-empty `entryPoints` list (unique, non-empty names) wins; otherwise the single `entryPoint` is used, so existing values keep working. The render fails when both are empty. Every route keeps the same middlewares on every entry point. |
 | `ingress.tls.secretName` | `""` | The `tls` key is emitted only when this is set. |
 | `ingress.authentik.enabled` / `.middlewareName` / `.middlewareNamespace` | `false` / `""` / `""` | The forward-auth middleware, listed on every route after the rate limit. All three are required in preview mode. |
 | `ingress.blockInternalApi` | `true` | Denies `/api/internal` from outside (see below). Required in preview mode. |
@@ -148,7 +150,7 @@ The DraftForge side of the preview queue is controlled from this repo:
 
 Repo variables and their defaults when unset:
 
-- `PREVIEW_CAP` (0 to 3, default `0`) is the number of preview slots. `0`, or leaving it
+- `PREVIEW_CAP` (0 to 5, default `0`) is the number of preview slots. `0`, or leaving it
   unset, pauses previews. The next queue run trims holders to the cap and keeps the
   longest-standing ones.
 - `PREVIEW_AUTHORS` (default `kettleofketchup`) is the comma-separated list of logins whose

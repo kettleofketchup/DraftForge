@@ -52,6 +52,7 @@ from .test_herodraft import (
     warp_herodraft_round,
 )
 from .test_steam import create_test_match
+from .test_teamdraft import expire_draft_clock, stale_draft_heartbeat
 
 urlpatterns = [
     path(
@@ -212,6 +213,16 @@ urlpatterns = [
         "herodraft-by-key/<str:key>/",
         get_herodraft_by_key,
         name="test-herodraft-by-key",
+    ),
+    path(
+        "draft/<int:draft_pk>/expire-clock/",
+        expire_draft_clock,
+        name="test-draft-expire-clock",
+    ),
+    path(
+        "draft/<int:draft_pk>/stale-heartbeat/",
+        stale_draft_heartbeat,
+        name="test-draft-stale-heartbeat",
     ),
     # Team draft WebSocket testing
     path(

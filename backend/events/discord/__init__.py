@@ -8,6 +8,7 @@ Re-exports all public symbols for backward compatibility — existing code can
 continue to ``from events.discord import build_announcement_embed`` etc.
 """
 
+from events.discord._shared import _get_org_user
 from events.discord.components import build_announcement_components
 from events.discord.dispatch import (
     notify_create_discord_event,
@@ -37,7 +38,6 @@ from events.discord.embeds import (
     build_signup_update_embed,
     build_subscriber_dm_embed,
 )
-from events.discord._shared import _get_org_user
 from events.discord.handlers import (
     handle_battle_cup_submit,
     handle_decline_button,
@@ -50,8 +50,6 @@ from events.discord.handlers import (
     handle_signup_modal_submit,
     handle_tentative_button,
 )
-from events.discord.providers.deadlock import _check_deadlock_profile_complete
-from events.discord.providers.dota import _check_dota_profile_complete
 from events.discord.reactions import handle_reaction_cancel, handle_reaction_signup
 
 __all__ = [
@@ -84,8 +82,6 @@ __all__ = [
     "notify_sync_signups",
     "notify_mark_interested",
     # handlers
-    "_check_dota_profile_complete",
-    "_check_deadlock_profile_complete",
     "_get_org_user",
     "handle_signup_button",
     "handle_signup_modal_submit",

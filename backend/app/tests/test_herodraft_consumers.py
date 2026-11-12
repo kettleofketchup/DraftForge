@@ -2,15 +2,14 @@
 
 import asyncio
 import json
-from datetime import date, timedelta
-from unittest.mock import AsyncMock, MagicMock, patch
+from datetime import date, datetime, timedelta
+from unittest.mock import patch
 
-from asgiref.sync import sync_to_async
 from channels.db import database_sync_to_async
 from channels.routing import URLRouter
 from channels.testing import WebsocketCommunicator
 from django.contrib.auth import get_user_model
-from django.test import TestCase, TransactionTestCase
+from django.test import TransactionTestCase
 from django.urls import re_path
 from django.utils import timezone
 
@@ -113,6 +112,8 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         self.assertEqual(response["type"], "initial_state")
         self.assertIn("draft_state", response)
         self.assertEqual(response["draft_state"]["id"], self.draft.id)
+        self.assertEqual(set(response), {"type", "draft_state", "server_time"})
+        datetime.fromisoformat(response["server_time"])
 
         await communicator.disconnect()
 
@@ -141,6 +142,7 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
 
         # Receive initial state
         await communicator.receive_json_from()
+        await self._await_captain_connected(communicator)
 
         # Check captain is marked connected
         @database_sync_to_async
@@ -179,7 +181,10 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         is_connected = await check_disconnected()
         self.assertFalse(is_connected)
 
-    async def test_draft_paused_on_captain_disconnect_during_drafting(self):
+    @patch("app.tasks.herodraft_tick.start_tick_broadcaster", return_value=True)
+    async def test_draft_paused_on_captain_disconnect_during_drafting(
+        self, mock_start_tick
+    ):
         """Test draft is paused when captain disconnects during drafting."""
 
         # Set draft to drafting state
@@ -215,6 +220,7 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
 
         state = await check_paused()
         self.assertEqual(state, "paused")
+        mock_start_tick.assert_called_once_with(self.draft.id)
 
     async def test_spectator_does_not_affect_captain_status(self):
         """Test spectator connect/disconnect doesn't affect captain status."""
@@ -226,6 +232,7 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         captain_communicator.scope["user"] = self.captain1
         await captain_communicator.connect()
         await captain_communicator.receive_json_from()
+        await self._await_captain_connected(captain_communicator)
 
         # Connect spectator
         spectator_communicator = WebsocketCommunicator(
@@ -369,6 +376,7 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         connected, _ = await captain1_communicator.connect()
         self.assertTrue(connected)
         await captain1_communicator.receive_json_from()  # initial state
+        await self._await_captain_connected(captain1_communicator)
 
         # Connect captain2
         captain2_communicator = WebsocketCommunicator(
@@ -379,6 +387,7 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         connected, _ = await captain2_communicator.connect()
         self.assertTrue(connected)
         await captain2_communicator.receive_json_from()  # initial state
+        await self._await_captain_connected(captain2_communicator)
 
         # Disconnect captain1 - this should trigger pause
         await captain1_communicator.disconnect()
@@ -431,9 +440,8 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         captain1_reconnect.scope["user"] = self.captain1
         connected, _ = await captain1_reconnect.connect()
         self.assertTrue(connected)
-        # Receive initial state message - this ensures the consumer's
-        # websocket_connect handler has completed (including DB writes)
         await captain1_reconnect.receive_json_from()
+        await self._await_captain_connected(captain1_reconnect)
 
         # Verify captain1 is connected but state is still PAUSED
         @database_sync_to_async
@@ -725,6 +733,7 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         first_comm.scope["user"] = self.captain1
         await first_comm.connect()
         await first_comm.receive_json_from()
+        await self._await_captain_connected(first_comm)
 
         # Second connection for captain1 (should kick first)
         second_comm = WebsocketCommunicator(
@@ -734,6 +743,7 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         second_comm.scope["user"] = self.captain1
         await second_comm.connect()
         await second_comm.receive_json_from()
+        await self._await_captain_connected(second_comm)
 
         # Draft should still be DRAFTING (kicked connection should not trigger pause)
         @database_sync_to_async
@@ -757,5 +767,64 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
             is_connected,
             "Captain should remain connected after kick (new connection took over)",
         )
+
+        await second_comm.disconnect()
+
+    async def _await_captain_connected(self, comm: WebsocketCommunicator) -> None:
+        """The captain's presence write has committed once this broadcast arrives."""
+        while True:
+            frame = await self._next_json_of_type(comm, "herodraft_event")
+            if frame.get("event_type") == "captain_connected":
+                return
+
+    async def _next_json_of_type(self, comm, wanted: str, timeout: float = 5) -> dict:
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + timeout
+        while True:
+            frame = await comm.receive_json_from(
+                timeout=max(0.1, deadline - loop.time())
+            )
+            if frame.get("type") == wanted:
+                return frame
+
+    async def _next_non_ping_output(self, comm, timeout: float = 5) -> dict:
+        while True:
+            out = await comm.receive_output(timeout=timeout)
+            if (
+                out["type"] == "websocket.send"
+                and json.loads(out.get("text") or "{}").get("type") == "ping"
+            ):
+                continue
+            return out
+
+    @patch("app.tasks.herodraft_tick.start_tick_broadcaster")
+    @patch("app.consumers_base.PING_INTERVAL", 60)
+    async def test_kicked_connection_receives_kicked_frame_then_close_4000(
+        self, mock_start_tick
+    ):
+        """Spec §1: first socket gets {"type": "herodraft_kicked"} then close code 4000."""
+        mock_start_tick.return_value = True
+
+        first_comm = WebsocketCommunicator(
+            self.get_application(), f"/api/herodraft/{self.draft.id}/"
+        )
+        first_comm.scope["user"] = self.captain1
+        await first_comm.connect()
+        await self._next_json_of_type(first_comm, "initial_state")
+
+        second_comm = WebsocketCommunicator(
+            self.get_application(), f"/api/herodraft/{self.draft.id}/"
+        )
+        second_comm.scope["user"] = self.captain1
+        await second_comm.connect()
+        await self._next_json_of_type(second_comm, "initial_state")
+
+        kicked = await self._next_json_of_type(first_comm, "herodraft_kicked")
+        self.assertEqual(
+            kicked, {"type": "herodraft_kicked", "reason": "new_connection"}
+        )
+        closed = await self._next_non_ping_output(first_comm)
+        self.assertEqual(closed["type"], "websocket.close")
+        self.assertEqual(closed.get("code"), 4000)
 
         await second_comm.disconnect()

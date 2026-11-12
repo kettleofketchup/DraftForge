@@ -9,6 +9,7 @@
  * and uses getTournamentByKey for a known tournament.
  */
 
+import { API_URL } from '../../fixtures/base-url';
 import {
   test,
   expect,
@@ -17,7 +18,6 @@ import {
   getTournamentByKey,
 } from '../../fixtures';
 
-const API_URL = 'https://localhost/api';
 
 let orgPk: number;
 let leaguePk: number;
@@ -39,9 +39,10 @@ test.describe('AddUserModal Smoke Tests', () => {
       ? leagueData.organization.pk
       : leagueData.organization;
 
-    // Get a tournament
-    const tournament = await getTournamentByKey(context, 'bracket_unset_winner');
-    if (!tournament) throw new Error('No bracket_unset_winner tournament found');
+    // Any tournament no spec resets: a reset deletes and recreates it under a
+    // new pk, and 09-bracket/04 resets bracket_unset_winner in parallel.
+    const tournament = await getTournamentByKey(context, 'completed_bracket');
+    if (!tournament) throw new Error('No completed_bracket tournament found');
     tournamentPk = tournament.pk;
 
     await context.close();

@@ -11,6 +11,7 @@ import { getLogger } from '~/lib/logger';
 import { useUserStore } from '../../store/userStore';
 import { get_dtx_members } from '../api/api';
 import type { GuildMember, GuildMembers, UsersType } from '../user/types';
+import { Input } from '~/components/ui/input';
 
 const log = getLogger('DiscordUserDropdown');
 interface Props {
@@ -28,9 +29,9 @@ const DiscordUserDropdown: React.FC<Props> = ({
 }) => {
   const [error, setError] = useState<Error | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
-  const setDiscordUsers = useUserStore((state) => state.setDiscordUsers); // Zustand setter
-  const discordUsers = useUserStore((state) => state.discordUsers); // Zustand setter
-  const discordUser = useUserStore((state) => state.selectedDiscordUser); // Zustand setter
+  const setDiscordUsers = useUserStore((state) => state.setDiscordUsers);
+  const discordUsers = useUserStore((state) => state.discordUsers);
+  const discordUser = useUserStore((state) => state.selectedDiscordUser);
 
   const getDiscordUsers = useCallback(async () => {
     try {
@@ -187,7 +188,7 @@ const DiscordUserDropdown: React.FC<Props> = ({
           {/* {!isUserAlreadyAdded(user) && (
             <Button
               size="sm"
-              className="justify-end btn bg-green-500 text-white hover:bg-green-600 disabled:bg-gray-300 disabled:text-gray-500"
+              className="justify-end bg-green-500 text-white hover:bg-green-600 disabled:bg-gray-300 disabled:text-gray-500"
             >
               <PlusCircleIcon color="green" />
               <p className="text-sm"> Quick Add</p>
@@ -201,7 +202,7 @@ const DiscordUserDropdown: React.FC<Props> = ({
     <div className="w-full max-w-md">
       <Combobox value={discordUser} onChange={(u) => { if (u) onSelect(u); }}>
         <ComboboxInput
-          className="input input-bordered w-full"
+          as={Input}
           placeholder="Search DTX members..."
           onChange={(event) => setQuery?.(event.target.value)}
           autoComplete="off"

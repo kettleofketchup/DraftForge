@@ -1,12 +1,11 @@
 """Functions for Captain's Mode hero draft."""
 
 import random
+from datetime import datetime
 
 from django.db import transaction
 from django.utils import timezone
 from opentelemetry import trace
-
-from telemetry.logging import get_logger
 
 from app.models import (
     DraftTeam,
@@ -15,6 +14,11 @@ from app.models import (
     HeroDraftRound,
     HeroDraftState,
 )
+from app.tasks.draft_tick import (  # noqa: F401
+    CLIENT_PICK_TIME_MAX_AGE_S,
+    evaluate_client_pick_time,
+)
+from telemetry.logging import get_logger
 
 log = get_logger(__name__)
 tracer = trace.get_tracer(__name__)
@@ -57,7 +61,9 @@ CAPTAINS_MODE_SEQUENCE = {
 }
 
 
-def build_draft_rounds(draft: HeroDraft, first_team: DraftTeam, second_team: DraftTeam):
+def build_draft_rounds(
+    draft: HeroDraft, first_team: DraftTeam, second_team: DraftTeam
+) -> None:
     """
     Create all 24 HeroDraftRound objects for the draft.
 
@@ -112,7 +118,9 @@ def trigger_roll(draft: HeroDraft, actor_team: DraftTeam) -> DraftTeam:
         return winner
 
 
-def submit_choice(draft: HeroDraft, team: DraftTeam, choice_type: str, value: str):
+def submit_choice(
+    draft: HeroDraft, team: DraftTeam, choice_type: str, value: str
+) -> None:
     """
     Submit a choice for pick order or side.
 
@@ -167,71 +175,23 @@ def submit_choice(draft: HeroDraft, team: DraftTeam, choice_type: str, value: st
             first_round.save()
 
 
-CLIENT_PICK_TIME_MAX_AGE_S = 2.0
-
-
-def _evaluate_client_pick_time(server_now, client_picked_at, draft_id):
-    """Decide whether to trust the client's pick time + log any weirdness.
-
-    Returns (effective_time, source, age_ms) where:
-        effective_time: datetime to compute elapsed from
-        source: "client" if we trusted it, "server_now" otherwise
-        age_ms: client→server delta in ms (or None when no client_picked_at)
-    """
-    if not client_picked_at:
-        return server_now, "server_now", None
-
-    # Subtracting a naive datetime from a tz-aware one raises TypeError.
-    # The view layer also filters these out; this is a defense-in-depth
-    # guard for tests or future direct callers.
-    if client_picked_at.tzinfo is None:
-        log.warning(
-            "pick_time_naive_datetime",
-            system="herodraft",
-            subsystem="timing",
-            draft_id=draft_id,
-        )
-        return server_now, "server_now", None
-
-    age_s = (server_now - client_picked_at).total_seconds()
-    age_ms = int(age_s * 1000)
-
-    if age_s < 0:
-        # Client clock is in the future relative to server. Most often
-        # clock skew (laptop with bad NTP), occasionally a hostile client
-        # trying to win back time. Falls through to server time.
-        log.warning(
-            "pick_time_in_future",
-            system="herodraft",
-            subsystem="timing",
-            draft_id=draft_id,
-            future_by_ms=-age_ms,
-        )
-        return server_now, "server_now", age_ms
-
-    if age_s > CLIENT_PICK_TIME_MAX_AGE_S:
-        # Pick payload arrived more than the sanity window after the
-        # client sent it. Network was slow or the client buffered the
-        # request. We discard the client timestamp to prevent abuse;
-        # this means the captain eats the network latency on this pick.
-        log.warning(
-            "pick_time_too_old",
-            system="herodraft",
-            subsystem="timing",
-            draft_id=draft_id,
-            age_ms=age_ms,
-            max_age_ms=int(CLIENT_PICK_TIME_MAX_AGE_S * 1000),
-        )
-        return server_now, "server_now", age_ms
-
-    return client_picked_at, "client", age_ms
+def _evaluate_client_pick_time(
+    server_now: datetime, client_picked_at: datetime | None, draft_id: int
+) -> tuple[datetime, str, int | None]:
+    return evaluate_client_pick_time(
+        server_now,
+        client_picked_at,
+        draft_id,
+        system="herodraft",
+        subsystem="timing",
+    )
 
 
 def submit_pick(
     draft: HeroDraft,
     team: DraftTeam,
     hero_id: int,
-    client_picked_at=None,
+    client_picked_at: datetime | None = None,
 ) -> HeroDraftRound:
     """
     Submit a hero pick or ban for the current round.
@@ -416,7 +376,9 @@ def submit_pick(
                 team_id=next_round.draft_team_id,
                 started_at=next_round.started_at.isoformat(),
             )
-            active_span.set_attribute("draft.next_round_number", next_round.round_number)
+            active_span.set_attribute(
+                "draft.next_round_number", next_round.round_number
+            )
         else:
             draft.state = HeroDraftState.COMPLETED
             draft.save()

@@ -1,10 +1,13 @@
+import os
+
 from django.apps import AppConfig
+from django.conf import settings
 
 
 class AppConfig(AppConfig):
     name = "app"
 
-    def ready(self):
+    def ready(self) -> None:
         """Register signal handlers; cache freshness handled elsewhere.
 
         Production relies on two cheaper mechanisms than the previous
@@ -22,14 +25,15 @@ class AppConfig(AppConfig):
         test-suite state from previous runs can leave the cache out
         of sync with the DB. So when `NODE_ENV` is `test` or `dev`
         (or `TEST=true` env), `invalidate_all()` still fires. In
-        prod the cache survives restarts.
+        prod the cache survives restarts. A `manage.py test` process
+        skips it: its cache keys carry a fresh per-run prefix, and
+        `invalidate_all()` is FLUSHDB on the Redis DB the running test
+        stack shares.
 
         Schema-change migrations that need to wipe a specific model's
         cache should call `invalidate_model(Model)` from inside the
         migration (see e.g. `discordbot/migrations/0009_*`).
         """
-        import os
-
         import app.signals  # noqa: F401
 
         if os.environ.get("DISABLE_CACHE", "false").lower() == "true":
@@ -40,7 +44,7 @@ class AppConfig(AppConfig):
             node_env in ("test", "dev")
             or os.environ.get("TEST", "").lower() == "true"
         )
-        if not is_test_env:
+        if not is_test_env or getattr(settings, "RUNNING_TESTS", False):
             return
 
         try:

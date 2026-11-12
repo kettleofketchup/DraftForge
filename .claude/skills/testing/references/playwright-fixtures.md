@@ -7,9 +7,15 @@ Source: `frontend/tests/playwright/fixtures/`
 ### Environment
 
 ```typescript
-const DOCKER_HOST = process.env.DOCKER_HOST || 'localhost';
-const API_URL = `https://${DOCKER_HOST}/api`;
+import { API_URL, BASE_URL } from './base-url';
 ```
+
+`fixtures/base-url.ts` exports `BASE_URL` (this worktree's slot URL, e.g.
+`https://localhost` or `https://localhost:12443`) and `API_URL` (`${BASE_URL}/api`).
+`fixtures/auth.ts` and `fixtures/constants.ts` re-export both. Never write
+`https://localhost` or read `DOCKER_HOST` in specs, fixtures or configs; a vitest guard
+(`tests/unit/playwright-literal-guard.test.ts`) fails on either. Cookies use
+`url: BASE_URL`.
 
 ### Login Functions
 

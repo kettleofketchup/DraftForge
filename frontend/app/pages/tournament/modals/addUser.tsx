@@ -1,9 +1,10 @@
 import { Suspense, useState } from 'react';
 import { useNavigate } from 'react-router';
-import type { TournamentType } from '~/components/tournament/types'; // Adjust the import path as necessary
+import type { TournamentType } from '~/components/tournament/types';
 import { SearchUserDropdown } from '~/components/user/searchUser';
 import type { User } from '~/components/user/user';
 import { UserCard } from '~/components/user/userCard';
+import { Alert, AlertDescription } from '~/components/ui/alert';
 export default function PlayersTab({
   tournament,
 }: {
@@ -24,9 +25,9 @@ export default function PlayersTab({
   if (!tournament || !tournament.users || tournament.users.length === 0) {
     return (
       <div className="flex justify-center items-center h-screen">
-        <div className="alert alert-info">
-          <span>No teams available for this tournament.</span>
-        </div>
+        <Alert className="w-auto">
+          <AlertDescription>No teams available for this tournament.</AlertDescription>
+        </Alert>
       </div>
     );
   }

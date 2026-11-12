@@ -1,1 +1,0 @@
-- Backend container detection now recognises podman (`/run/.containerenv`), so rootless podman stacks connect to the `redis` service instead of `localhost` (#323).

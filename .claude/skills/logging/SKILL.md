@@ -27,11 +27,16 @@ Every log MUST include `system` and `subsystem` kwargs. These are the primary Gr
 
 | system | subsystem | tags | Where | What |
 |--------|-----------|------|-------|------|
-| `herodraft` | `connection` | — | `consumers.py` | WS connect/disconnect, captain state, kicks |
+| `herodraft` | `connection` | — | `consumers.py` | WS connect/disconnect, captain state (kicks now under websocket/connection) |
 | `herodraft` | `heartbeat` | — | `herodraft_tick.py` | Heartbeat staleness checks, heartbeat-triggered pauses |
-| `herodraft` | `timer` | — | `herodraft_tick.py` | Tick loop lifecycle, tick broadcast, timeout auto-pick, resume |
+| `herodraft` | `timer` | — | `herodraft_tick.py` (driver) + `draft_tick.py` (loop) | Tick loop lifecycle, tick broadcast, timeout auto-pick, resume |
 | `websocket` | `heartbeat` | — | `consumers_base.py` | Heartbeat receive, captain register/unregister (generic WS infra) |
-| `websocket` | `connection` | — | `telemetry/websocket.py` | Generic WS connect/disconnect/receive instrumentation |
+| `websocket` | `connection` | — | `telemetry/websocket.py`, `consumers_base.py` | Generic WS connect/disconnect/receive instrumentation; captain kick send/failure (captain_kicked, captain_kick_failed) |
+| `websocket` | `timer` | — | `app/tasks/draft_tick.py` | Shared tick runner: connection counts (connection_count_incremented, connection_count_decremented), registry shutdown (tick_broadcasters_shutdown) |
+| `teamdraft` | `connection` | — | `consumers.py` (DraftConsumer) | Team-draft WS connect/disconnect, heartbeat frames, malformed messages; captain presence (teamdraft_captain_connected, teamdraft_captain_disconnected, teamdraft_captain_presence_restored, captain_conn_count_negative) |
+| `teamdraft` | `timer` | — | `app/tasks/teamdraft_tick.py`, `app/functions/teamdraft.py`, `app/functions/teamdraft_timeout.py`, `app/tasks/draft_tick.py` (evaluate_client_pick_time) | Team-draft tick loop, round activation, pick timing, timeout skip; client pick-time rejects (pick_time_naive_datetime, pick_time_in_future, pick_time_too_old) |
+| `teamdraft` | `heartbeat` | — | `app/tasks/teamdraft_tick.py` | Active-captain heartbeat staleness → auto-pause |
+| `teamdraft` | `view` | — | `app/functions/teamdraft_views.py` | ready/start/pause/resume HTTP actions |
 | `herodraft` | `view` | — | `app/functions/herodraft_views.py` | HeroDraft HTTP actions: create, roll, choice/pick submit, abandon, reset |
 | `celery` | `task` | — | `telemetry/celery.py` | Generic Celery task lifecycle bookends (started/completed/failed) |
 | `events` | `discord` | — | `events/tasks.py` (cron sync, non-interaction tasks like `sync_discord_events`) | Cron-driven event sync to Discord that isn't triggered by an interaction |
@@ -57,9 +62,10 @@ Every log MUST include `system` and `subsystem` kwargs. These are the primary Gr
 | `internal_client` | `http` | — | `app/internal_client/__init__.py` | Internal HTTP client JSON-parse failures |
 | `discord` | `bot`, `utils`, `views`, `channels`, `roles`, `users` | — | `discordbot/**` | Bot lifecycle, message utils, slash views, channel/role/user services |
 | `events` | `tasks`, `services`, `views`, `dispatch` | — | `events/**` | Event task lifecycle, signup services, manual fire, tournament-link dispatch |
-| `steam` | `api`, `game_linking`, `match`, `mmr`, `stats`, `model`, `league_sync`, `retry` | — | `steam/**` | Steam API, account/game linking, match fetch/store, MMR/stats, league sync, retry |
+| `steam` | `api`, `game_linking`, `match`, `mmr`, `stats`, `model`, `league_sync`, `retry`, `ingest` | — | `steam/**` | Steam API, account/game linking, match fetch/store, MMR/stats, league sync, retry, internal store_match ingest |
 | `bracket` | `generate`, `model` | — | `bracket/**` | Bracket generation + model-level cache logging |
 | `org` | `views` | — | `org/views.py` | Org admin actions (user delete/merge) |
+| `lobby` | `client` | — | `lobby/client.py` | dota_lobby API calls: failed requests with the problem `code`, `retryable` and retry attempt (never bodies, passwords or the API key) |
 | `common` | `utils` | — | `common/utils.py` | Shared utility warnings (CI/IP detection) |
 
 Add new systems/subsystems as features grow. Keep systems coarse (feature area), subsystems functional (what role the code plays).

@@ -1,0 +1,4 @@
+redis	running	df	redis	/home/kettle/git_repos/draftforge/.worktrees/user-strip-league-stats	/home/kettle/git_repos/draftforge/.worktrees/user-strip-league-stats/docker/docker-compose.test.yaml	False
+df-backend-run-3f2a9c1d07e4	exited	df	backend	/home/kettle/git_repos/draftforge/.worktrees/user-strip-league-stats	/home/kettle/git_repos/draftforge/.worktrees/user-strip-league-stats/docker/docker-compose.test.yaml,/home/kettle/git_repos/draftforge/.worktrees/user-strip-league-stats/docker/docker-compose.run.yaml	True
+cliproxyapi	running					
+df-s2-nginx-1	running	df-s2	nginx	/tmp/my wt	/tmp/my wt/docker/docker-compose.test.yaml	False

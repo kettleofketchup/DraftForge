@@ -8,6 +8,7 @@
  * Uses isolated "User Edit Org" data — does not touch other test entities.
  */
 
+import { API_URL } from '../../fixtures/base-url';
 import {
   test,
   expect,
@@ -19,7 +20,6 @@ import {
   restoreUserField,
 } from '../../fixtures';
 
-const API_URL = 'https://localhost/api';
 const USER_EDIT_ORG_NAME = 'User Edit Org';
 
 let orgPk: number;

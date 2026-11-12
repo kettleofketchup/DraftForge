@@ -378,6 +378,9 @@ tightening — not strictly "no behavior change" — and makes
 `SignupModalSubmitRequest.game_type` vestigial (keep it accepted-but-ignored;
 see Open Items).
 
+> **Superseded by #318:** `game_type` is no longer ignored. It is the
+> stale-modal guard, see the addendum at the end of this spec.
+
 - **`DefaultHandler` (base.py):** the four common methods with safe defaults.
 - **`DotaHandler` (dota.py):** `_check_dota_profile_complete`, `DotaModalConfig`
   assembly, `apply_modal_submit`, and the eight rank-flow operations as concrete
@@ -390,7 +393,8 @@ see Open Items).
 `handlers.py` and every provider (no provider→dispatcher inversion).
 `events/discord/__init__.py` `__all__` is updated so the re-exported helpers
 (`_check_dota_profile_complete`, `_check_deadlock_profile_complete`,
-`_get_org_user`) source from their new modules. **Load-bearing invariant:** the
+`_get_org_user`) source from their new modules. (#318 removed the two
+`_check_*_profile_complete` re-exports; nothing imported them.) **Load-bearing invariant:** the
 existing `events.services → events.discord(__init__) → handlers` cycle
 (`handlers.py:21`) is broken today by keeping all `from events.services import …`
 calls **function-local**. `_shared.py` (`_get_org_user` needs
@@ -833,7 +837,7 @@ defining modules.
   `dict`) may warrant a typed per-game model. Default: leave untyped (no
   behavior change). Also: `SignupModalSubmitRequest.game_type` becomes vestigial
   (dispatch now uses `event.game_type`) — keep it accepted-but-ignored, or drop
-  it in a follow-up.
+  it in a follow-up. **Resolved in #318:** kept and checked, see the addendum.
 - **Stale working docs:** `docs/superpowers/plans/2026-05-03-...`,
   `2026-05-25-...` reference moved line numbers. Gitignored working docs —
   update only if convenient.
@@ -852,6 +856,23 @@ Both lanes depend on PR2's `events/schemas.py` contract (the shared types), so
 PR2 lands first; then A and B proceed in parallel and integrate at the
 `signup_actions` HTTP boundary. Conflict risk is low (disjoint app directories);
 the only shared file is `events/schemas.py`, already frozen by PR2.
+
+## Addendum: `game_type` is the stale-modal guard (#318)
+
+Dispatch still resolves from `event.game_type`. `SignupModalSubmitRequest.game_type`
+now records which game the modal was built for, and `handle_signup_modal_submit`
+compares it with the event before dispatching:
+
+- A registered game's modal sends its own `GameType` member. A mismatch with
+  the event returns `{"action": "error", "message": STALE_MODAL_MESSAGE}`
+  ("press Sign Up again") and writes nothing.
+- `None` (or omitted) marks the fallback `DefaultSignupModal`. It is accepted
+  only while the event still resolves to `DefaultHandler`; once the event
+  belongs to a game in `SIGNUP_HANDLERS` it is rejected the same way.
+
+Do not remove the parameter as vestigial. Step 8 of the "Adding a game type"
+checklist (`events/discord/providers/registry.py`) requires every new modal to
+send its `GameType`.
 
 ## GSTACK REVIEW REPORT
 

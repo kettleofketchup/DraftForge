@@ -12,7 +12,7 @@
       "enabled": true,
       "pattern": "^docker compose.*down",
       "just_command": "just test::down",
-      "reason": "project-standard compose config"
+      "reason": "test::down is scoped to this worktree's slot only from a checkout that has the slots feature; until main has it, run it as just -f <worktree>/justfile -d <worktree> test::down, never bare from the main checkout; for another project use just test::slot-reap <project>"
     },
     {
       "category": "docker",

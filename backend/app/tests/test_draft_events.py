@@ -4,7 +4,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from django.test import TestCase
 
-from app.models import CustomUser, Draft, DraftEvent, PositionsModel, Team, Tournament
+from app.models import (
+    CustomUser,
+    Draft,
+    DraftEvent,
+    DraftOptions,
+    PositionsModel,
+    Team,
+    Tournament,
+)
 from app.serializers import DraftEventSerializer
 
 
@@ -34,6 +42,7 @@ class DraftEventModelTest(TestCase):
         )
 
         # Create draft
+        DraftOptions.ensure_for(self.tournament, timer_enabled=False)
         self.draft = Draft.objects.create(
             tournament=self.tournament,
             draft_style="shuffle",
@@ -122,6 +131,7 @@ class DraftEventSerializerTest(TestCase):
             name="Test Tournament",
             date_played=date.today(),
         )
+        DraftOptions.ensure_for(self.tournament, timer_enabled=False)
         self.draft = Draft.objects.create(
             tournament=self.tournament,
             draft_style="shuffle",
@@ -181,6 +191,7 @@ class ShuffleDraftEventIntegrationTest(TestCase):
             self.teams.append(team)
 
         # Create draft
+        DraftOptions.ensure_for(self.tournament, timer_enabled=False)
         self.draft = Draft.objects.create(
             tournament=self.tournament,
             draft_style="shuffle",
@@ -201,7 +212,7 @@ class ShuffleDraftEventIntegrationTest(TestCase):
         # Verify broadcast was called
         mock_broadcast.assert_called_once()
 
-    @patch("app.functions.shuffle_draft.broadcast_event")
+    @patch("app.broadcast.broadcast_event")
     def test_assign_next_shuffle_captain_creates_captain_assigned_event(
         self, mock_broadcast
     ):
@@ -222,7 +233,8 @@ class ShuffleDraftEventIntegrationTest(TestCase):
         first_round.choice = self.captains[1]  # Pick someone
         first_round.save()
 
-        assign_next_shuffle_captain(self.draft)
+        with self.captureOnCommitCallbacks(execute=True):
+            assign_next_shuffle_captain(self.draft)
 
         events = DraftEvent.objects.filter(
             draft=self.draft, event_type="captain_assigned"
@@ -267,6 +279,7 @@ class TournamentEventIntegrationTest(TestCase):
         self.team.members.add(self.captain)
 
         # Create draft
+        DraftOptions.ensure_for(self.tournament, timer_enabled=False)
         self.draft = Draft.objects.create(
             tournament=self.tournament,
             draft_style="snake",
@@ -281,12 +294,12 @@ class TournamentEventIntegrationTest(TestCase):
             pick_number=1,
         )
 
-    @patch("app.functions.tournament.broadcast_event")
+    @patch("app.broadcast.broadcast_event")
     def test_pick_player_for_round_creates_player_picked_event(self, mock_broadcast):
         """Picking a player creates a player_picked event."""
         from rest_framework.test import APIRequestFactory
 
-        from app.functions.tournament import pick_player_for_round
+        from app.functions.draft_picks import pick_player_for_round
 
         factory = APIRequestFactory()
         request = factory.post(
@@ -299,7 +312,8 @@ class TournamentEventIntegrationTest(TestCase):
         )
         request.user = self.captain
 
-        response = pick_player_for_round(request)
+        with self.captureOnCommitCallbacks(execute=True):
+            response = pick_player_for_round(request)
 
         self.assertEqual(response.status_code, 201)
 
@@ -311,12 +325,12 @@ class TournamentEventIntegrationTest(TestCase):
         self.assertEqual(event.actor, self.captain)
         mock_broadcast.assert_called()
 
-    @patch("app.functions.tournament.broadcast_event")
+    @patch("app.broadcast.broadcast_event")
     def test_undo_last_pick_creates_pick_undone_event(self, mock_broadcast):
         """Undoing a pick creates a pick_undone event."""
         from rest_framework.test import APIRequestFactory
 
-        from app.functions.tournament import pick_player_for_round, undo_last_pick
+        from app.functions.draft_picks import pick_player_for_round, undo_last_pick
 
         factory = APIRequestFactory()
 
@@ -330,7 +344,8 @@ class TournamentEventIntegrationTest(TestCase):
             format="json",
         )
         pick_request.user = self.captain
-        pick_player_for_round(pick_request)
+        with self.captureOnCommitCallbacks(execute=True):
+            pick_player_for_round(pick_request)
 
         # Clear events to isolate undo test
         DraftEvent.objects.filter(draft=self.draft).delete()
@@ -344,7 +359,8 @@ class TournamentEventIntegrationTest(TestCase):
         )
         undo_request.user = self.captain
 
-        response = undo_last_pick(undo_request)
+        with self.captureOnCommitCallbacks(execute=True):
+            response = undo_last_pick(undo_request)
 
         self.assertEqual(response.status_code, 200)
 
@@ -368,6 +384,7 @@ class BroadcastEventTest(TestCase):
             name="Test Tournament",
             date_played=date.today(),
         )
+        DraftOptions.ensure_for(self.tournament, timer_enabled=False)
         self.draft = Draft.objects.create(
             tournament=self.tournament,
             draft_style="shuffle",

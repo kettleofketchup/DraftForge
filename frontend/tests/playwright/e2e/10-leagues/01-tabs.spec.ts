@@ -25,7 +25,7 @@ test.describe('League Page - Tab Navigation (e2e)', () => {
     const context = await browser.newContext({ ignoreHTTPSErrors: true });
     const league = await getFirstLeague(context);
     if (!league) {
-      throw new Error('No leagues found in database. Run inv db.populate.all first.');
+      throw new Error('No leagues found in database. Run just db::populate::all first.');
     }
     testLeagueId = league.pk;
     await context.close();

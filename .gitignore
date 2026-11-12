@@ -330,3 +330,6 @@ docs/assets/site_snapshots/
 # Git worktrees
 .worktrees/
 frontend/screenshots/
+
+# Per-worktree test stack slot file
+docker/.env.slot

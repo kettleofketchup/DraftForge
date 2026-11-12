@@ -1,0 +1,4 @@
+services:
+  redis:
+    volumes: !reset []
+    tmpfs: ["/data"]

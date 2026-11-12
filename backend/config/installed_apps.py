@@ -24,4 +24,6 @@ MODEL_APPS: list[str] = [
     "discordbot",
     "steam",
     "org",
+    "league.apps.LeagueConfig",
+    "lobby",
 ]

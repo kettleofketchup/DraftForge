@@ -11,6 +11,8 @@
  * Tournament: 'draft_captain_turn' (snake draft, in-progress)
  */
 
+import type { Page } from '@playwright/test';
+import { BASE_URL } from '../../fixtures/base-url';
 import {
   test,
   expect,
@@ -18,6 +20,16 @@ import {
   TournamentPage,
   DraftWebSocketHelper,
 } from '../../fixtures';
+
+// Client-side route change to "/": the app must close the socket on unmount. A page.goto()
+// unloads the document instead, which closes sockets without Playwright emitting 'close'.
+async function navigateAwayInApp(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    window.history.pushState(null, '', '/');
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  });
+  await expect(page).toHaveURL(`${BASE_URL}/`);
+}
 
 interface TournamentWithDraft {
   pk: number;
@@ -48,7 +60,7 @@ test.describe('WebSocket Connection Lifecycle', () => {
     }
   });
 
-  test('connects on modal open', async ({ page, loginAdmin }) => {
+  test('@cicd connects on modal open', async ({ page, loginAdmin }) => {
     await loginAdmin();
 
     const wsHelper = new DraftWebSocketHelper(page);
@@ -63,7 +75,7 @@ test.describe('WebSocket Connection Lifecycle', () => {
     wsHelper.assertSingleConnection();
   });
 
-  test('disconnects on modal close', async ({ page, loginAdmin }) => {
+  test('@cicd disconnects on modal close', async ({ page, loginAdmin }) => {
     await loginAdmin();
 
     const wsHelper = new DraftWebSocketHelper(page);
@@ -83,7 +95,7 @@ test.describe('WebSocket Connection Lifecycle', () => {
     wsHelper.assertNoConnections();
   });
 
-  test('no duplicate connections from StrictMode', async ({
+  test('@cicd no duplicate connections from StrictMode', async ({
     page,
     loginAdmin,
   }) => {
@@ -105,7 +117,7 @@ test.describe('WebSocket Connection Lifecycle', () => {
     expect(wsHelper.activeConnectionCount).toBe(1);
   });
 
-  test('clean disconnect on page navigation', async ({
+  test('@cicd clean disconnect on page navigation', async ({
     page,
     loginAdmin,
   }) => {
@@ -120,15 +132,14 @@ test.describe('WebSocket Connection Lifecycle', () => {
     await tournamentPage.waitForDraftModal();
     await wsHelper.waitForConnection();
 
-    // Navigate away
-    await page.goto('https://localhost/', { waitUntil: 'domcontentloaded' });
+    await navigateAwayInApp(page);
 
     // All WS connections should be closed
     await wsHelper.waitForDisconnect();
     wsHelper.assertNoConnections();
   });
 
-  test('fresh connection on revisit', async ({ page, loginAdmin }) => {
+  test('@cicd fresh connection on revisit', async ({ page, loginAdmin }) => {
     await loginAdmin();
 
     const wsHelper = new DraftWebSocketHelper(page);
@@ -142,8 +153,7 @@ test.describe('WebSocket Connection Lifecycle', () => {
     await wsHelper.waitForConnection();
     expect(wsHelper.connectionCount).toBe(1);
 
-    // Navigate away (closes everything cleanly)
-    await page.goto('https://localhost/', { waitUntil: 'domcontentloaded' });
+    await navigateAwayInApp(page);
     await wsHelper.waitForDisconnect();
 
     // Navigate back and reopen

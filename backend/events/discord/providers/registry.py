@@ -1,6 +1,6 @@
 """Game-type -> signup-handler registry (the ORM-logic side of the split).
 
-Adding a game type (mirror of the spec's extension checklist):
+Adding a game type (canonical checklist; other modules link here):
 
 1. ``discordbot/components/<game>.py`` — ``<Game>Components`` (build_signup_modal,
    ``bare_select_ids``, operation methods + any follow-up View classes).
@@ -17,6 +17,10 @@ Adding a game type (mirror of the spec's extension checklist):
    (Steps 5+6 are guarded by the keyset-equality test — miss one and it goes red.)
 7. ``discordbot/custom_ids.py`` — only if the game has unique interaction flows
    needing new codecs (a text-field game like Deadlock needs none).
+8. The game's signup modal must send its own ``GameType`` member as
+   ``game_type`` to ``signup_modal_submit``. ``handle_signup_modal_submit``
+   rejects a modal built for another game; ``None`` is reserved for the
+   fallback modal and is rejected for any game registered above.
 """
 
 from __future__ import annotations
@@ -37,7 +41,7 @@ SIGNUP_HANDLERS: dict[GameType, GameSignupHandler] = {
 _DEFAULT = DefaultHandler()
 
 
-def get_signup_handler(game_type: int) -> GameSignupHandler:
+def get_signup_handler(game_type: GameType | int) -> GameSignupHandler:
     """Resolve the handler for a game type, falling back to DefaultHandler."""
     handler = SIGNUP_HANDLERS.get(game_type)
     if handler is None:

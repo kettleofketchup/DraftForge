@@ -91,6 +91,21 @@ tests:
       - equal: {path: "metadata.annotations[\"argocd.argoproj.io/sync-wave\"]", value: "0"}
       - equal: {path: stringData.DJANGO_SECRET_KEY, value: test-key}
       - equal: {path: stringData.INTERNAL_SERVICE_TOKEN, value: test-token}
+      - notExists: {path: stringData.DOTA_LOBBY_API_KEY}
+      - notExists: {path: stringData.DOTA_LOBBY_WEBHOOK_SECRET}
+
+  - it: adds the dota_lobby keys to the env Secret when they are set
+    template: templates/secret.yaml
+    set:
+      secrets.create: true
+      secrets.djangoSecretKey: test-key
+      secrets.internalServiceToken: test-token
+      secrets.dotaLobbyApiKey: test-lobby-key
+      secrets.dotaLobbyWebhookSecret: "test-new,test-old"
+    asserts:
+      - equal: {path: stringData.DOTA_LOBBY_API_KEY, value: test-lobby-key}
+      - equal: {path: stringData.DOTA_LOBBY_WEBHOOK_SECRET, value: "test-new,test-old"}
+      - equal: {path: stringData.DJANGO_SECRET_KEY, value: test-key}
 
   - it: renders the ServiceAccount without an API token
     template: templates/serviceaccount.yaml

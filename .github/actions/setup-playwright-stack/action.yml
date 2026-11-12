@@ -72,7 +72,7 @@ runs:
           echo "Images pulled successfully"
         else
           echo "Pull failed, building with buildx + registry cache..."
-          poetry run inv docker.test-build
+          just docker::frontend::build-dev
         fi
 
     - name: Rebuild frontend-dev image if pulled :latest is stale
@@ -86,7 +86,7 @@ runs:
           echo "frontend-dev:${FRONTEND_HASH:0:12} present (deps in sync)"
         else
           echo "frontend-dev image lacks current package-lock hash; rebuilding"
-          poetry run inv docker.frontend.build-dev
+          just docker::frontend::build-dev
         fi
 
     - name: Get test database
@@ -131,3 +131,24 @@ runs:
         docker compose --project-directory . -f docker/docker-compose.test.yaml -f docker/docker-compose.ci.override.yaml ps
         docker compose --project-directory . -f docker/docker-compose.test.yaml -f docker/docker-compose.ci.override.yaml logs --tail=40
         exit 1
+
+    # Celery tasks reach the database only through the internal API. If the worker's
+    # token is not accepted, every task fails with 403 while the specs still pass.
+    - name: Check celery worker can authenticate to the internal API
+      shell: bash
+      run: |
+        docker compose --project-directory . -f docker/docker-compose.test.yaml -f docker/docker-compose.ci.override.yaml \
+          exec -T celery-worker python - <<'EOF'
+        import sys
+        import time
+        from app.internal_client import _get
+        # The readiness probe above goes through nginx, so daphne may still be starting.
+        for _ in range(30):
+            resp = _get("/steam/tracked-leagues/")
+            if resp is not None:
+                break
+            time.sleep(2)
+        status = "unreachable" if resp is None else resp.status_code
+        print(f"celery-worker GET /api/internal/steam/tracked-leagues/ -> {status}")
+        sys.exit(0 if resp is not None and resp.ok else 1)
+        EOF

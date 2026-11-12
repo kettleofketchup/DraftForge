@@ -14,7 +14,7 @@ from scripts.preview_tests import _util
 RELEASE_TOOLING = [
     _util.REPO_ROOT / "scripts" / "sync_version.py",
     _util.REPO_ROOT / "scripts" / "version.py",
-    _util.REPO_ROOT / "tasks.py",
+    _util.REPO_ROOT / "just" / "version.just",
 ]
 LABELER = _util.REPO_ROOT / ".github" / "labeler.yml"
 QUEUE_LABELS = ("preview-env", "no-preview")

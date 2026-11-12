@@ -17,6 +17,7 @@
  * - csv_team_user (pk=2004, steam=76561198800000005)
  */
 
+import { API_URL } from '../../fixtures/base-url';
 import { test, expect, visitAndWaitForHydration } from '../../fixtures';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -24,7 +25,6 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const API_URL = 'https://localhost/api';
 const CSV_DIR = path.resolve(__dirname, '../../fixtures/csv');
 
 // CSV Import Org name (must match populate_csv_import_data)

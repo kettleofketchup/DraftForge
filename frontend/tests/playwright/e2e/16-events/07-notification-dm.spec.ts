@@ -7,6 +7,7 @@
  * Sends a real DM to Discord user 243497113906970625.
  */
 
+import { API_URL } from '../../fixtures/base-url';
 import {
   test,
   expect,
@@ -23,7 +24,6 @@ import {
   sendTestNotification,
 } from '../../fixtures/events';
 
-const API_URL = 'https://localhost/api';
 
 let eventInfo: EventInfo;
 

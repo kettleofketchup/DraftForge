@@ -533,7 +533,7 @@ class Writes(unittest.TestCase):
 class Config(unittest.TestCase):
     def test_parse_config_rejects(self):
         bad = [
-            ("-1", OWNER, "7"), ("4", OWNER, "7"), ("11", OWNER, "7"), ("x", OWNER, "7"), ("", OWNER, "7"),
+            ("-1", OWNER, "7"), ("6", OWNER, "7"), ("11", OWNER, "7"), ("x", OWNER, "7"), ("", OWNER, "7"),
             ("3", "a, b", "7"), ("3", "a,,b", "7"), ("3", "", "7"), ("3", "bad_login", "7"),
             ("3", OWNER, "0"), ("3", OWNER, "x"), ("3", OWNER, ""), ("3", OWNER, "366"),
             ("3", "a,b\n", "7"), ("3", "kettleofketchup\n", "7"),
@@ -549,6 +549,12 @@ class Config(unittest.TestCase):
             parse_config("3", "kettleofketchup,other-user", "365"),
             (3, frozenset({"kettleofketchup", "other-user"}), 365),
         )
+
+    def test_parse_config_ceiling_is_five(self):
+        self.assertEqual(preview_queue.MAX_CAP, 5)
+        self.assertEqual(parse_config("5", OWNER, "7"), (5, frozenset({OWNER}), 7))
+        with self.assertRaises(ValueError):
+            parse_config("6", OWNER, "7")
 
 
 # --- I/O: the real GitHub client and GHCR check over a canned transport ---
@@ -915,7 +921,7 @@ def as_listed(p: PR) -> PR:
 
 class Main(unittest.TestCase):
     def test_main_bad_cap_no_writes(self):
-        bad = [dict(ENV, CAP="x"), dict(ENV, CAP="4"), dict(ENV, CAP=""),
+        bad = [dict(ENV, CAP="x"), dict(ENV, CAP="6"), dict(ENV, CAP=""),
                dict(ENV, PREVIEW_AUTHORS="a, b"), dict(ENV, PREVIEW_IDLE_DAYS="0"),
                dict(ENV, CLOSED_PR="abc"), {k: v for k, v in ENV.items() if k != "CAP"}]
         for env in bad:

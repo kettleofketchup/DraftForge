@@ -5,23 +5,29 @@ operations as methods. Each ephemeral-view callback decodes its typed
 ``CustomId`` and delegates to a bound method, forwarding the View's transient
 state as explicit kwargs. discord.py dispatches the overridden callbacks
 directly from its in-memory view store, so they self-dispatch (no central
-routing) — except the bare ``pos_select_`` select, which ``bot.py`` routes via
-``bare_select_ids`` / ``dispatch_bare_select``.
+routing) — except the bare ``pos_select_`` select, which
+``discordbot.interaction_router`` routes via ``bare_select_ids`` /
+``dispatch_bare_select``.
 
 Counterpart logic layer: ``events.discord.providers.dota.DotaHandler``.
 """
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from typing import Any
+
 import discord
 from asgiref.sync import sync_to_async
 from discord import ui
 
+from app.models import GameType
 from discordbot.components.base import (
     GameComponentProvider,
     ScreenshotUploadPromptView,
     build_friend_id_input,
     respond_to_signup_user,
+    send_unexpected_modal_result,
 )
 from discordbot.custom_ids import (
     BattleCupTierId,
@@ -67,6 +73,92 @@ DOTA_MEDALS = [
 DOTA_STARS = ["1", "2", "3", "4", "5"]
 
 
+_GENERIC_ERROR = "❌ Something went wrong. Please try again."
+
+
+class SubmitOnceView(ui.View):
+    """View whose submitting components may reach the backend only once.
+
+    ``_submitted`` is the server-side re-entrancy guard read and set by
+    ``_lock_view_and_ack``; ``rank_medal_select`` also checks it so a medal
+    pick cannot swap a fresh, unlocked view in after a submit.
+    """
+
+    def __init__(self, *, timeout: float | None = 300) -> None:
+        super().__init__(timeout=timeout)
+        self._submitted = False
+
+
+def _set_items_disabled(view: ui.View, disabled: bool) -> None:
+    for item in view.children:
+        item.disabled = disabled  # type: ignore[attr-defined]
+
+
+async def _lock_view_and_ack(
+    interaction: discord.Interaction, view: SubmitOnceView
+) -> bool:
+    """ACK a submitting component and lock its view against a second activation.
+
+    discord.py dispatches every click to ``item.callback`` regardless of
+    ``item.disabled`` (``View._scheduled_task`` never checks it), and a bare
+    ``defer()`` sends no component payload, so the user's client keeps the
+    controls live. ``edit_message(view=view)`` is still a type-7 ACK inside the
+    3s window but also pushes the disabled components to the client. The
+    ``_submitted`` flag is the server-side guard: the check-and-set happens
+    before any ``await``, so two concurrent callbacks on one event loop cannot
+    both pass it.
+
+    If the ACK itself fails (for example 10062 Unknown interaction after the
+    3s window), nothing reached the client and its controls still look live,
+    so the lock is undone before re-raising and the user's retry runs the
+    full callback instead of being silently ignored.
+
+    Returns False when an earlier activation already submitted; the caller
+    must stop without calling the backend.
+    """
+    if view._submitted:
+        if not interaction.response.is_done():
+            await interaction.response.defer()
+        return False
+    view._submitted = True
+    _set_items_disabled(view, True)
+    try:
+        await interaction.response.edit_message(view=view)
+    except discord.HTTPException:
+        view._submitted = False
+        _set_items_disabled(view, False)
+        raise
+    return True
+
+
+async def _call_backend_or_report(
+    interaction: discord.Interaction,
+    fn: Callable[..., dict[str, Any]],
+    /,
+    **kwargs: Any,
+) -> dict[str, Any]:
+    """Run a blocking internal-API call after the interaction was ACKed.
+
+    Once ACKed, Discord no longer shows "This interaction failed", so a
+    raised exception would leave the user staring at a locked menu with no
+    feedback. Replace the message with a generic error, then re-raise so the
+    log context and ``View.on_error`` still record the failure.
+    """
+    try:
+        return await sync_to_async(fn, thread_sensitive=False)(**kwargs)
+    except Exception:
+        try:
+            await interaction.edit_original_response(content=_GENERIC_ERROR, view=None)
+        except discord.HTTPException:
+            log.warning(
+                "error_reply_failed",
+                system="discord",
+                subsystem="interaction",
+                exc_info=True,
+            )
+        raise
+
+
 def _medal_options() -> list[discord.SelectOption]:
     """Build SelectOption list for Dota 2 medals."""
     return [discord.SelectOption(label=m, value=m) for m in DOTA_MEDALS]
@@ -94,7 +186,7 @@ class DotaComponents(GameComponentProvider):
     async def position_select(
         self, interaction: discord.Interaction, cid: PosSelectId
     ) -> None:
-        """Bare select (routed by bot.py): persist a single position pick."""
+        """Bare select (routed by interaction_router): persist a single position pick."""
         if interaction.response.is_done():
             return
         selected = interaction.data.get("values", []) if interaction.data else []
@@ -147,7 +239,7 @@ class DotaComponents(GameComponentProvider):
         interaction: discord.Interaction,
         cid: PosConfirmId,
         *,
-        view: ui.View,
+        view: SubmitOnceView,
         rank_status: str,
         require_screenshot: bool,
         min_mmr: int | None,
@@ -160,11 +252,10 @@ class DotaComponents(GameComponentProvider):
                 if isinstance(item, ui.Select) and item.values:
                     positions.extend(item.values)
 
-            # Disable selects + confirm on first activation (double-click guard).
-            for item in view.children:
-                item.disabled = True
-
-            await interaction.response.defer()  # bug-2: ACK before slow ORM
+            # ACK before the slow backend call and lock the view.
+            if not await _lock_view_and_ack(interaction, view):
+                ctx.set_outcome("duplicate_submit_ignored")
+                return
 
             try:
                 positions_int = [int(v) for v in positions]
@@ -176,7 +267,9 @@ class DotaComponents(GameComponentProvider):
                 )
                 return
 
-            result = await sync_to_async(save_positions, thread_sensitive=False)(
+            result = await _call_backend_or_report(
+                interaction,
+                save_positions,
                 event_id=cid.event_id,
                 discord_user_id=str(interaction.user.id),
                 positions=positions_int,
@@ -214,17 +307,25 @@ class DotaComponents(GameComponentProvider):
         cid: RankMedalId,
         *,
         values: list[str],
+        view: SubmitOnceView,
         rank_status: str,
         require_screenshot: bool,
     ) -> None:
         """Rebuild RankDetailsView so StarSelect.custom_id encodes the picked medal.
 
         Doing the rebuild here (rather than in a central handler) removes the
-        40060 race against discord.py's view dispatch.
+        40060 race against discord.py's view dispatch. A medal pick that
+        arrives after the star or tier select submitted is ignored, so it
+        cannot replace the locked message with a fresh, unlocked view.
         """
         async with discord_log_context(
             interaction, custom_id=cid.encode(), event_id=cid.event_id
         ) as ctx:
+            if view._submitted:
+                ctx.set_outcome("duplicate_submit_ignored")
+                if not interaction.response.is_done():
+                    await interaction.response.defer()
+                return
             medal = values[0] if values else "Herald"
             ctx.set_outcome("medal_selected")
             ctx.add(medal=medal)
@@ -248,7 +349,7 @@ class DotaComponents(GameComponentProvider):
         cid: RankStarId,
         *,
         values: list[str],
-        view: ui.View,
+        view: SubmitOnceView,
         rank_status: str,
     ) -> None:
         async with discord_log_context(
@@ -266,13 +367,14 @@ class DotaComponents(GameComponentProvider):
             star = values[0] if values else "1"
             medal_with_star = f"{medal} {star}" if medal != "Immortal" else "Immortal"
 
-            # Disable selects (double-click guard) before the slow ORM call.
-            for item in view.children:
-                item.disabled = True
+            # ACK before the slow backend call and lock the view.
+            if not await _lock_view_and_ack(interaction, view):
+                ctx.set_outcome("duplicate_submit_ignored")
+                return
 
-            await interaction.response.defer()  # bug-2: ACK before slow ORM
-
-            result = await sync_to_async(rank_medal_select, thread_sensitive=False)(
+            result = await _call_backend_or_report(
+                interaction,
+                rank_medal_select,
                 event_id=cid.event_id,
                 discord_user_id=str(interaction.user.id),
                 medal=medal_with_star,
@@ -311,20 +413,21 @@ class DotaComponents(GameComponentProvider):
         cid: BattleCupTierId,
         *,
         values: list[str],
-        view: ui.View,
+        view: SubmitOnceView,
     ) -> None:
         async with discord_log_context(
             interaction, custom_id=cid.encode(), event_id=cid.event_id
         ) as ctx:
             tier = values[0] if values else "1"
 
-            # Disable selects (double-click guard) before the slow ORM call.
-            for item in view.children:
-                item.disabled = True
+            # ACK before the slow backend call and lock the view.
+            if not await _lock_view_and_ack(interaction, view):
+                ctx.set_outcome("duplicate_submit_ignored")
+                return
 
-            await interaction.response.defer()  # bug-2: ACK before slow ORM
-
-            result = await sync_to_async(battle_cup_submit, thread_sensitive=False)(
+            result = await _call_backend_or_report(
+                interaction,
+                battle_cup_submit,
                 event_id=cid.event_id,
                 discord_user_id=str(interaction.user.id),
                 tier=tier,
@@ -473,7 +576,7 @@ class DotaSignupModal(ui.Modal):
             result = await sync_to_async(signup_modal_submit, thread_sensitive=False)(
                 event_id=self.event_id,
                 discord_user_id=str(interaction.user.id),
-                game_type=1,
+                game_type=GameType.DOTA2,
                 values=values,
             )
             ctx.set_outcome(result["action"])
@@ -522,6 +625,8 @@ class DotaSignupModal(ui.Modal):
                     f"❌ {result['message']}",
                     ephemeral=True,
                 )
+            else:
+                await send_unexpected_modal_result(interaction)
 
     async def on_error(
         self, interaction: discord.Interaction, error: Exception
@@ -596,7 +701,7 @@ class RankStatusSelect(ui.Select):
         )
 
 
-class PositionSelectView(ui.View):
+class PositionSelectView(SubmitOnceView):
     """Ephemeral view with 3 position selects. Confirm saves positions and shows rank details."""
 
     def __init__(
@@ -695,7 +800,7 @@ class PositionConfirmButton(ui.Button):
         )
 
 
-class RankDetailsView(ui.View):
+class RankDetailsView(SubmitOnceView):
     """Ephemeral follow-up for collecting rank details. All selects, no modals.
 
     - active: Medal + Star selects → signs up
@@ -774,6 +879,7 @@ class MedalSelect(ui.Select):
             interaction,
             RankMedalId.decode(self.custom_id),
             values=list(self.values),
+            view=self.view,
             rank_status=self.rank_status,
             require_screenshot=self.require_screenshot,
         )

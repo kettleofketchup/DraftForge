@@ -1,3 +1,4 @@
+import { API_URL } from '../fixtures/base-url';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as https from 'node:https';
@@ -33,7 +34,7 @@ interface ProbeResult {
 // Test-only endpoint, gated by `isTestEnvironment()` in backend/urls.py —
 // lives under `api/tests/` alongside the other test-only login + reset
 // helpers. NOT reachable in prod/release.
-const HEALTH_URL = process.env.PLAYWRIGHT_HEALTH_URL ?? 'https://localhost/api/tests/healthz/';
+const HEALTH_URL = process.env.PLAYWRIGHT_HEALTH_URL ?? `${API_URL}/tests/healthz/`;
 const HEALTH_TIMEOUT_MS = 5000;
 
 function probeOnce(): Promise<ProbeResult> {

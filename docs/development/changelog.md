@@ -127,7 +127,7 @@ retry. If the tag push fails after `main` was pushed, push the tag by hand:
 git push origin refs/tags/X.Y.Z
 ```
 
-`inv version.set X.Y.Z --no-commit` is unchanged: it only rewrites the version files (and
+`just version::set X.Y.Z --no-commit` only rewrites the version files (and
 makes a local tag unless `--no-tag-version`).
 
 ## One-time admin setup

@@ -32,29 +32,65 @@ import asyncio
 import contextlib
 import json
 import time
+import weakref
 from abc import abstractmethod
-from typing import Any
+from collections.abc import AsyncIterator, Awaitable, Callable
+from concurrent.futures import ThreadPoolExecutor
+from typing import TYPE_CHECKING, Any
 
+import redis
+from asgiref.sync import sync_to_async
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
+from django.db.models import Model
+from django.utils import timezone
 from opentelemetry import trace
-from opentelemetry.trace import Status, StatusCode
+from opentelemetry.trace import Span, Status, StatusCode
 
+from app.tasks import draft_tick
+from app.tasks import herodraft_tick as legacy_tick  # late lookup keeps patches working
+from app.tasks.draft_tick import (
+    CAPTAIN_CHANNEL_TTL,
+    HEARTBEAT_TTL,
+    TickDriver,
+    captain_channel_key,
+    heartbeat_key,
+)
 from telemetry.logging import get_logger
 from telemetry.websocket import TelemetryConsumerMixin
+
+if TYPE_CHECKING:
+    from django.contrib.auth.base_user import AbstractBaseUser
 
 log = get_logger(__name__)
 tracer = trace.get_tracer(__name__)
 
-# Heartbeat expires after 30 seconds without renewal
-HEARTBEAT_TTL = 30
-
-# Captain channel registration expires after 5 minutes (cleanup on crash)
-CAPTAIN_CHANNEL_TTL = 300
-
 # Server-side ping interval in seconds (must be < frontend staleTimeoutMs)
 # ~16 bytes per message; 100 connections = ~1.6 KB/s — negligible
 PING_INTERVAL = 1
+
+FALLBACK_CLEANUP_TIMEOUT_S: float = 5.0
+
+CONSUMER_DB_THREADS: int = 16
+_consumer_db_executor = ThreadPoolExecutor(
+    max_workers=CONSUMER_DB_THREADS, thread_name_prefix="ws-db"
+)
+
+
+def consumer_db[**P, R](func: Callable[P, R]) -> Callable[P, Awaitable[R]]:
+    """``database_sync_to_async`` on a pool instead of asgiref's one shared thread.
+
+    Each call gets its own connection, closed after it (CONN_MAX_AGE=0), so a
+    write waiting on SQLite's lock holds up only its own caller (#352).
+    """
+    return database_sync_to_async(
+        func, thread_sensitive=False, executor=_consumer_db_executor
+    )
+
+
+_draft_write_locks: "weakref.WeakValueDictionary[tuple[str, int], asyncio.Lock]" = (
+    weakref.WeakValueDictionary()
+)
 
 
 class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
@@ -69,6 +105,10 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
 
     Subclasses must implement abstract methods to provide draft-specific behavior.
     """
+
+    PING_ENABLED: bool = True
+    kick_duplicate_captain_connections: bool = False
+    clear_heartbeat_on_disconnect: bool = True
 
     # --- Abstract methods subclasses must implement ---
 
@@ -88,7 +128,9 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
         ...
 
     @abstractmethod
-    async def get_captain_draft_team(self, draft_id: int, user):
+    async def get_captain_draft_team(
+        self, draft_id: int, user: "AbstractBaseUser"
+    ) -> Model | None:
         """Return the DraftTeam for this captain, or None if not a captain."""
         ...
 
@@ -100,7 +142,9 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
         """
         ...
 
-    async def on_captain_state_change(self, draft_id, user, is_connected):
+    async def on_captain_state_change(
+        self, draft_id: int, user: "AbstractBaseUser", is_connected: bool
+    ) -> None:
         """Hook called when a captain connects/disconnects.
 
         Override in subclasses to handle pause-on-disconnect, event logging,
@@ -108,29 +152,109 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
         """
         pass
 
-    # --- Redis key helpers ---
+    def get_redis_prefix(self) -> str:
+        return self.get_room_group_prefix()
+
+    def get_tick_driver(self) -> TickDriver | None:
+        return None
+
+    def should_start_tick_broadcaster(self, initial_state: dict | None) -> bool:
+        return bool(initial_state) and (
+            initial_state.get("state") in self.get_active_draft_state_values()
+        )
+
+    async def send_initial_messages(self, initial_state: dict | None) -> None:
+        await self.send(
+            text_data=json.dumps(
+                {
+                    "type": "initial_state",
+                    "draft_state": initial_state,
+                    # Seeds the client's clock offset before its first tick.
+                    "server_time": timezone.now().isoformat(),
+                }
+            )
+        )
+
+    # --- Redis helpers ---
+
+    def _redis(self) -> redis.Redis:
+        return legacy_tick.get_redis_client()
 
     def _heartbeat_key(self, draft_id: int, user_id: int) -> str:
-        prefix = self.get_room_group_prefix()
-        return f"{prefix}:{draft_id}:captain:{user_id}:heartbeat"
+        return heartbeat_key(self.get_redis_prefix(), draft_id, user_id)
 
     def _captain_channel_key(self, draft_id: int, user_id: int) -> str:
-        prefix = self.get_room_group_prefix()
-        return f"{prefix}:{draft_id}:captain:{user_id}:channel"
+        return captain_channel_key(self.get_redis_prefix(), draft_id, user_id)
+
+    async def in_draft_order[T](self, call: Callable[[], Awaitable[T]]) -> T:
+        """Run a ``consumer_db`` write after this process's earlier ones for the draft.
+
+        The pool runs calls concurrently, but a socket's disconnect write must
+        still land before its reconnect's. The lock is held until the thread
+        finishes, even if the caller is cancelled.
+        """
+        key = (self.get_redis_prefix(), self.draft_id)
+        lock = _draft_write_locks.get(key)
+        if lock is None:
+            lock = _draft_write_locks[key] = asyncio.Lock()
+        await lock.acquire()
+        work = asyncio.ensure_future(call())
+        work.add_done_callback(lambda _: lock.release())
+        return await asyncio.shield(work)
+
+    # --- Kick detection ---
+
+    async def _get_existing_captain_channel(self) -> str | None:
+        """Get the existing captain channel from Redis, if any."""
+        channel_key = self._captain_channel_key(self.draft_id, self.user.id)
+        return self._redis().get(channel_key)
+
+    async def _kick_channel(self, old_channel: str) -> None:
+        """Send kick message to an existing captain connection."""
+        log.info(
+            "captain_kicked",
+            system="websocket",
+            subsystem="connection",
+            draft_id=self.draft_id,
+            user_id=self.user.id,
+            old_channel=old_channel,
+            new_channel=self.channel_name,
+        )
+        try:
+            await self.channel_layer.send(
+                old_channel,
+                {
+                    "type": f"{self.get_room_group_prefix()}.kicked",
+                    "reason": "new_connection",
+                },
+            )
+        except Exception as e:
+            log.warning(
+                "captain_kick_failed",
+                system="websocket",
+                subsystem="connection",
+                draft_id=self.draft_id,
+                user_id=self.user.id,
+                old_channel=old_channel,
+                error=str(e),
+            )
 
     # --- Heartbeat ---
 
-    async def handle_heartbeat(self):
+    def _write_heartbeat(self) -> None:
+        self._redis().set(
+            self._heartbeat_key(self.draft_id, self.user.id),
+            str(time.time()),
+            ex=HEARTBEAT_TTL,
+        )
+
+    async def handle_heartbeat(self) -> None:
         """Process a heartbeat message from a captain. Updates Redis TTL."""
         with tracer.start_as_current_span(
             "ws.heartbeat",
             attributes=self._base_span_attrs(),
         ) as span:
-            from app.tasks.herodraft_tick import get_redis_client
-
-            r = get_redis_client()
-            heartbeat_key = self._heartbeat_key(self.draft_id, self.user.id)
-            r.set(heartbeat_key, str(time.time()), ex=HEARTBEAT_TTL)
+            await sync_to_async(self._write_heartbeat, thread_sensitive=False)()
             span.set_attribute("ws.heartbeat_ttl_s", HEARTBEAT_TTL)
             log.debug(
                 "heartbeat_received",
@@ -143,15 +267,13 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
 
     # --- Captain channel registration ---
 
-    async def _register_captain(self):
+    async def _register_captain(self) -> None:
         """Register this connection as the captain's active channel in Redis."""
         with tracer.start_as_current_span(
             "ws.captain_register",
             attributes=self._base_span_attrs(),
         ):
-            from app.tasks.herodraft_tick import get_redis_client
-
-            r = get_redis_client()
+            r = self._redis()
             channel_key = self._captain_channel_key(self.draft_id, self.user.id)
             r.set(channel_key, self.channel_name, ex=CAPTAIN_CHANNEL_TTL)
             # Initialize heartbeat (nested span)
@@ -165,22 +287,20 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
                 channel=self.channel_name,
             )
 
-    async def _unregister_captain_if_current(self):
+    async def _unregister_captain_if_current(self) -> None:
         """Unregister captain channel only if it's still this connection."""
         with tracer.start_as_current_span(
             "ws.captain_unregister",
             attributes=self._base_span_attrs(),
         ) as span:
-            from app.tasks.herodraft_tick import get_redis_client
-
-            r = get_redis_client()
+            r = self._redis()
             channel_key = self._captain_channel_key(self.draft_id, self.user.id)
-            heartbeat_key = self._heartbeat_key(self.draft_id, self.user.id)
 
             current_channel = r.get(channel_key)
             if current_channel == self.channel_name:
                 r.delete(channel_key)
-                r.delete(heartbeat_key)
+                if self.clear_heartbeat_on_disconnect:
+                    r.delete(self._heartbeat_key(self.draft_id, self.user.id))
                 span.set_attribute("ws.captain_unregistered", True)
                 log.info(
                     "captain_unregistered",
@@ -197,13 +317,13 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
 
     # --- Connection count tracking ---
 
-    @database_sync_to_async
-    def _increment_connection_count(self):
+    @sync_to_async(thread_sensitive=False)
+    def _increment_connection_count(self) -> None:
         """Increment WebSocket connection count in Redis."""
-        from app.tasks.herodraft_tick import increment_connection_count
-
         try:
-            increment_connection_count(self.draft_id)
+            draft_tick.increment_connection_count(
+                self.get_redis_prefix(), self.draft_id, self.channel_name
+            )
             self._connection_tracked = True
         except Exception as e:
             log.warning(
@@ -214,13 +334,13 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
                 error=str(e),
             )
 
-    @database_sync_to_async
-    def _decrement_connection_count(self):
+    @sync_to_async(thread_sensitive=False)
+    def _decrement_connection_count(self) -> None:
         """Decrement WebSocket connection count in Redis."""
-        from app.tasks.herodraft_tick import decrement_connection_count
-
         try:
-            decrement_connection_count(self.draft_id)
+            draft_tick.decrement_connection_count(
+                self.get_redis_prefix(), self.draft_id, self.channel_name
+            )
             self._connection_tracked = False
         except Exception as e:
             log.warning(
@@ -233,13 +353,18 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
 
     # --- Tick broadcaster ---
 
-    @database_sync_to_async
-    def _maybe_start_tick_broadcaster(self):
+    async def _maybe_start_tick_broadcaster(self) -> None:
         """Start tick broadcaster if not already running."""
-        from app.tasks.herodraft_tick import start_tick_broadcaster
+        # Redis and a thread spawn only: keep it off asgiref's single sync thread.
+        await sync_to_async(self._start_tick_broadcaster, thread_sensitive=False)()
 
+    def _start_tick_broadcaster(self) -> None:
         try:
-            start_tick_broadcaster(self.draft_id)
+            driver = self.get_tick_driver()
+            if driver is None:
+                legacy_tick.start_tick_broadcaster(self.draft_id)
+            else:
+                draft_tick.start_tick_broadcaster(driver, self.draft_id)
         except Exception as e:
             log.warning(
                 "tick_broadcaster_start_failed",
@@ -251,7 +376,7 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
 
     # --- Server-side ping loop ---
 
-    async def _ping_loop(self):
+    async def _ping_loop(self) -> None:
         """Send periodic ping messages to keep WebSocket connections alive.
 
         This prevents proxies/load balancers from closing idle connections,
@@ -266,6 +391,43 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
         except Exception as e:
             log.debug(
                 "ping_loop_ended",
+                system="websocket",
+                subsystem="heartbeat",
+                draft_id=self.draft_id,
+                error=str(e),
+            )
+
+    # --- Live-connection refresh ---
+
+    async def _connection_refresh_loop(self) -> None:
+        """Keep this socket in the draft's live-connection set while it is open.
+
+        Runs whether or not pings are enabled, and re-adds the entry if the
+        connect-time increment failed or the key was lost.
+        """
+        try:
+            while True:
+                await asyncio.sleep(draft_tick.CONN_REFRESH_SECONDS)
+                # Cancelling us can't stop a step already in an executor thread;
+                # base_disconnect awaits the step before it removes the entry.
+                self._refresh_step = asyncio.ensure_future(self._refresh_connection())
+                await asyncio.shield(self._refresh_step)
+        except asyncio.CancelledError:
+            pass
+
+    async def _refresh_connection(self) -> None:
+        touch = sync_to_async(draft_tick.touch_connection, thread_sensitive=False)
+        try:
+            await touch(self.get_redis_prefix(), self.draft_id, self.channel_name)
+            self._connection_tracked = True
+            if self._tick_wanted and not getattr(self, "_disconnected", False):
+                # A loop that read zero connections while this socket
+                # connected can exit after our connect-time start lost
+                # the lock race; a held lock makes this a no-op.
+                await self._maybe_start_tick_broadcaster()
+        except redis.RedisError as e:
+            log.warning(
+                "connection_touch_failed",
                 system="websocket",
                 subsystem="heartbeat",
                 draft_id=self.draft_id,
@@ -301,7 +463,9 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
         return attrs
 
     @contextlib.asynccontextmanager
-    async def traced_message(self, message_type: str, **extra_attrs: Any):
+    async def traced_message(
+        self, message_type: str, **extra_attrs: Any
+    ) -> AsyncIterator[Span]:
         """Async context manager for tracing a received WS message.
 
         Subclasses that handle messages should wrap their per-message
@@ -330,7 +494,7 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
 
     # --- Base connect/disconnect ---
 
-    async def base_connect(self):
+    async def base_connect(self) -> bool:
         """Shared connection setup. Call from subclass connect() after any
         subclass-specific pre-connection logic (e.g. kick detection).
 
@@ -340,13 +504,25 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
         """
         await self.telemetry_connect()
 
-        self.draft_id = self.scope["url_route"]["kwargs"]["draft_id"]
+        self.draft_id = int(self.scope["url_route"]["kwargs"]["draft_id"])
         prefix = self.get_room_group_prefix()
         self.room_group_name = f"{prefix}_{self.draft_id}"
         self.user = self.scope.get("user")
         self._connection_tracked = False
         self._is_captain = False
         self._ping_task = None
+        self._refresh_task: asyncio.Future[None] | None = None
+        self._refresh_step: asyncio.Future[None] | None = None
+        self._tick_wanted = False
+
+        if (
+            self.kick_duplicate_captain_connections
+            and self.user
+            and self.user.is_authenticated
+        ):
+            existing_channel = await self._get_existing_captain_channel()
+            if existing_channel and existing_channel != self.channel_name:
+                await self._kick_channel(existing_channel)
 
         with tracer.start_as_current_span(
             "ws.connect",
@@ -397,21 +573,10 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
             # Send initial state
             try:
                 initial_state = await self.get_initial_state_data(self.draft_id)
-                await self.send(
-                    text_data=json.dumps(
-                        {
-                            "type": "initial_state",
-                            "draft_state": initial_state,
-                        }
-                    )
-                )
+                await self.send_initial_messages(initial_state)
 
-                # Start tick broadcaster if draft is in an active state
-                if (
-                    initial_state
-                    and initial_state.get("state")
-                    in self.get_active_draft_state_values()
-                ):
+                self._tick_wanted = self.should_start_tick_broadcaster(initial_state)
+                if self._tick_wanted:
                     await self._maybe_start_tick_broadcaster()
 
             except Exception as e:
@@ -432,17 +597,52 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
                 await self.on_captain_state_change(self.draft_id, self.user, True)
 
             # Start server-side ping loop
-            self._ping_task = asyncio.ensure_future(self._ping_loop())
+            if self.PING_ENABLED:
+                self._ping_task = asyncio.ensure_future(self._ping_loop())
+            self._refresh_task = asyncio.ensure_future(self._connection_refresh_loop())
 
             span.set_attribute("ws.connect_outcome", "ok")
             return True
 
-    async def base_disconnect(self, close_code):
+    async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
+        # A handler that raises ends the consumer without websocket.disconnect;
+        # run the cleanup anyway so counts, presence and groups don't leak.
+        try:
+            await super().__call__(scope, receive, send)
+        finally:
+            if hasattr(self, "draft_id") and not getattr(self, "_disconnected", False):
+                await self._fallback_disconnect()
+
+    async def _fallback_disconnect(self) -> None:
+        # Also runs for every open socket when daphne shuts down mid-deploy, so
+        # it is time-bounded and never replaces the exception that ended us.
+        log.warning(
+            "ws_consumer_ended_without_disconnect",
+            system="websocket",
+            subsystem="connection",
+            draft_id=self.draft_id,
+        )
+        try:
+            await asyncio.wait_for(self.disconnect(None), FALLBACK_CLEANUP_TIMEOUT_S)
+        except Exception as e:
+            log.error(
+                "ws_fallback_cleanup_failed",
+                system="websocket",
+                subsystem="connection",
+                draft_id=self.draft_id,
+                error=str(e),
+                error_type=type(e).__name__,
+            )
+
+    async def base_disconnect(self, close_code: int | None) -> None:
         """Shared disconnection cleanup. Call from subclass disconnect().
 
         Handles: cancel ping, kicked connections, decrement count, unregister
         captain, mark disconnected, leave group, telemetry.
         """
+        if getattr(self, "_disconnected", False):
+            return
+        self._disconnected = True
         with tracer.start_as_current_span(
             "ws.disconnect",
             attributes={
@@ -460,6 +660,20 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
                 except asyncio.CancelledError:
                     pass
                 self._ping_task = None
+
+            refresh = getattr(self, "_refresh_task", None)
+            if refresh is not None:
+                refresh.cancel()
+                try:
+                    await refresh
+                except asyncio.CancelledError:
+                    pass
+                self._refresh_task = None
+            step = getattr(self, "_refresh_step", None)
+            if step is not None:
+                with contextlib.suppress(Exception, asyncio.CancelledError):
+                    await step
+                self._refresh_step = None
 
             # Track disconnection
             if hasattr(self, "_connection_tracked") and self._connection_tracked:

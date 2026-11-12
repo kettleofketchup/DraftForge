@@ -1,7 +1,21 @@
 # CI entry points (module: ci::). Recipes here run on the bare runner: host bash,
 # git and python3 only, no .venv.
 
-root := source_directory() / ".."
+set shell := ["bash", "-euo", "pipefail", "-c"]
+
+root := clean(source_directory() / "..")
+
+# Shellcheck every just recipe, rendered with --dry-run, plus the checker's tests (the `shellcheck` CI job); pass namepaths to check only those
+[group('ci')]
+[positional-arguments]
+shellcheck *recipes:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd {{quote(root)}}
+    fail=0
+    python3 -I scripts/test_shellcheck_just.py 2>&1 | tail -n 3 || fail=1
+    python3 -I scripts/shellcheck_just.py "$@" || fail=1
+    exit "$fail"
 
 # Every event: fragment rules (including [Unreleased] holding only the pointer and no
 # fragment a release already consumed) and the checker's tests. push to main: HEAD

@@ -1,4 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import {
+  elapsedSince,
+  remaining,
+  serverNow,
+  useAnimationFrameClock,
+} from "~/lib/draftClock";
 import { useHeroDraftStore } from "~/store/heroDraftStore";
 import type { HeroDraftTick } from "./types";
 
@@ -32,11 +37,9 @@ function deriveCountdown(
 ): DraftCountdown {
   if (!tick) return ZERO;
 
-  // Offset was captured ONCE at tick-receive time by the store.
-  // Computing it again per frame (Date.now() + (server_time - Date.now()))
-  // collapses to `server_time` exactly — the clock would only advance
-  // when a new tick arrived (1Hz), not the 60fps we want.
-  const serverNowMs = Date.now() + serverClockOffsetMs;
+  // Offset is captured once per tick by the store; recomputing it per
+  // frame would collapse to server_time.
+  const serverNowMs = serverNow(serverClockOffsetMs);
 
   // RESUMING — single countdown to draft.resuming_until. The grace and
   // reserve values are FROZEN at what they'll be when RESUMING completes:
@@ -44,8 +47,10 @@ function deriveCountdown(
   // + 3s, so evaluating elapsed at resuming_until reproduces the values
   // from the moment of pause.
   if (tick.draft_state === "resuming" && tick.resuming_until) {
-    const target = new Date(tick.resuming_until).getTime();
-    const resumingRemainingMs = Math.max(0, target - serverNowMs);
+    const target = Date.parse(tick.resuming_until);
+    const resumingRemainingMs = Number.isNaN(target)
+      ? 0
+      : Math.max(0, target - serverNowMs);
     const frozen = computeDraftingValues(tick, target);
     return {
       ...frozen,
@@ -74,9 +79,12 @@ function computeDraftingValues(
   ) {
     return { graceRemainingMs: 0, teamAReserveMs: 0, teamBReserveMs: 0 };
   }
-  const startedAtMs = new Date(tick.round_started_at).getTime();
-  const elapsedMs = Math.max(0, serverNowMs - startedAtMs);
-  const graceRemainingMs = Math.max(0, tick.round_grace_time_ms - elapsedMs);
+  const elapsedMs = elapsedSince(tick.round_started_at, serverNowMs);
+  const graceRemainingMs = remaining(
+    tick.round_started_at,
+    tick.round_grace_time_ms,
+    serverNowMs,
+  );
 
   // Active team's reserve burns down once elapsed exceeds grace.
   // Non-active team's reserve stays at its round-start value.
@@ -113,37 +121,11 @@ export function useDraftCountdown(): DraftCountdown {
   const serverClockOffsetMs = useHeroDraftStore((s) => s.serverClockOffsetMs);
   const isPaused = useHeroDraftStore((s) => s.draft?.state === "paused");
 
-  const [countdown, setCountdown] = useState<DraftCountdown>(() =>
-    deriveCountdown(tick, serverClockOffsetMs),
-  );
-
-  const tickRef = useRef(tick);
-  const offsetRef = useRef(serverClockOffsetMs);
-  const isPausedRef = useRef(isPaused);
-  tickRef.current = tick;
-  offsetRef.current = serverClockOffsetMs;
-  isPausedRef.current = isPaused;
-
-  // Re-derive once on every new tick even while paused, so a tick that
-  // lands DURING pause (e.g. a final RESUMING anchor) still propagates
-  // its values into the display before the frame loop freezes.
-  useEffect(() => {
-    setCountdown(deriveCountdown(tick, serverClockOffsetMs));
-  }, [tick, serverClockOffsetMs]);
-
-  useEffect(() => {
-    let rafId = 0;
-    const frame = () => {
-      if (!isPausedRef.current) {
-        setCountdown(deriveCountdown(tickRef.current, offsetRef.current));
-      }
-      rafId = requestAnimationFrame(frame);
-    };
-    rafId = requestAnimationFrame(frame);
-    return () => cancelAnimationFrame(rafId);
-  }, []);
-
-  return countdown;
+  return useAnimationFrameClock({
+    derive: () => deriveCountdown(tick, serverClockOffsetMs),
+    isFrozen: isPaused,
+    inputs: [tick, serverClockOffsetMs],
+  });
 }
 
 // Exported for unit-test access to the pure derivation logic.

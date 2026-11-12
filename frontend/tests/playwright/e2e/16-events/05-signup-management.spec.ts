@@ -12,6 +12,7 @@
  * Uses the dedicated Events Test Org (pk=7) with 12 event players (pk=5001-5012).
  */
 
+import { API_URL } from '../../fixtures/base-url';
 import {
   test,
   expect,
@@ -25,7 +26,6 @@ import {
 import { postWithCsrf } from '../../fixtures/events';
 import { waitForAddUserModal, searchAndAddUser, closeAddUserModal } from '../../helpers/add-user';
 
-const API_URL = 'https://localhost/api';
 
 let eventInfo: EventInfo;
 

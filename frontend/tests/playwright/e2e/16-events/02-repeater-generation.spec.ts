@@ -18,6 +18,7 @@
  * - event_player_1 (pk=5001) — regular player
  */
 
+import { API_URL } from '../../fixtures/base-url';
 import {
   test,
   expect,
@@ -31,7 +32,6 @@ import {
   type EventInfo,
 } from '../../fixtures';
 
-const API_URL = 'https://localhost/api';
 
 /** Helper: today's date as YYYY-MM-DD */
 function todayISO(): string {

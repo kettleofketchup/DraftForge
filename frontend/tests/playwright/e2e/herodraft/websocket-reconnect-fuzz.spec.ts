@@ -1,10 +1,9 @@
+import { API_URL, BASE_URL } from '../../fixtures/base-url';
 import { test, expect, chromium } from '@playwright/test';
 import type { BrowserContext, Page } from '@playwright/test';
 import { loginAsDiscordId, waitForHydration } from '../../fixtures/auth';
 import { HeroDraftPage } from '../../helpers/HeroDraftPage';
 
-const API_URL = 'https://localhost/api';
-const BASE_URL = 'https://localhost';
 
 /**
  * WebSocket Reconnection Fuzzing Tests

@@ -1,184 +1,35 @@
-import json
-
-import requests
-from django.contrib.auth import login
-from django.contrib.auth import logout as auth_logout
-from django.contrib.auth.decorators import login_required
-from django.http import HttpResponse, HttpResponseBadRequest, JsonResponse
-from django.shortcuts import redirect, render
-from rest_framework import generics, permissions, serializers, status, viewsets
+from cacheops import cached_as
+from rest_framework import serializers
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.generics import GenericAPIView
-from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.request import Request
 from rest_framework.response import Response
-from rest_framework.reverse import reverse
-from social_core.backends.oauth import BaseOAuth1, BaseOAuth2
 
-# Create your views here.
-from social_django.models import USER_MODEL  # fix: skip
-from social_django.models import AbstractUserSocialAuth, DjangoStorage
-from social_django.utils import load_strategy, psa
-
-from app.broadcast import broadcast_event
-from app.models import CustomUser, Draft, DraftEvent, DraftRound, Team, Tournament
-from app.permissions import IsStaff
-from app.permissions_org import CanEditDraft, can_edit_tournament
+from app.cache_utils import invalidate_obj
+from app.draft_state import tournament_state_queryset
+from app.models import CustomUser, Draft, Team, Tournament
+from app.permissions_org import can_edit_tournament
 from app.serializers import (
-    DraftRoundSerializer,
-    DraftSerializer,
     DraftSerializerMMRs,
-    GameSerializer,
-    TeamSerializer,
     TournamentSerializer,
-    UserSerializer,
     _build_users_dict,
 )
-from backend import settings
 from telemetry.logging import get_logger
+from user.models import BaseUserProfile, DotaUserProfile
 
 log = get_logger(__name__)
 
 
-def _serialize_tournament(tournament):
-    """Serialize a tournament with the _users dict for frontend hydration."""
-    data = TournamentSerializer(tournament).data
-    data["_users"] = _build_users_dict(tournament)
+def _serialize_tournament(tournament: Tournament) -> dict:
+    """Serialize a tournament with the _users dict for frontend hydration.
+
+    Re-fetches uncached with the full prefetch plan: callers respond right
+    after a write, and the plan keeps the query count independent of size.
+    """
+    tournament = tournament_state_queryset(fresh=True).get(pk=tournament.pk)
+    data = TournamentSerializer(tournament, context={"fresh": True}).data
+    data["_users"] = _build_users_dict(tournament, fresh=True)
     return data
-
-
-class PickPlayerForRound(serializers.Serializer):
-    draft_round_pk = serializers.IntegerField(required=True)
-    user_pk = serializers.IntegerField(required=True)
-
-
-from app.cache_utils import invalidate_obj
-
-
-@api_view(["POST"])
-@permission_classes([IsAuthenticated])
-def pick_player_for_round(request):
-    """
-    Pick a player for a draft round.
-
-    Authorization: Staff can pick for any round. Captains can only pick
-    for their own round (when they are the captain for that round).
-
-    Request body:
-        draft_round_pk: int - Primary key of the draft round
-        user_pk: int - Primary key of the user to pick
-
-    Returns:
-        201: Success with updated tournament data
-        400: Validation error
-        403: Not authorized (not staff and not captain for this round)
-        404: Draft round or user not found
-        500: Error during pick
-    """
-
-    serializer = PickPlayerForRound(data=request.data)
-
-    if serializer.is_valid():
-        draft_round_pk = serializer.validated_data["draft_round_pk"]
-        user_pk = serializer.validated_data["user_pk"]
-    else:
-        return Response(serializer.errors, status=400)
-
-    try:
-        draft_round = DraftRound.objects.select_related("draft__tournament").get(
-            pk=draft_round_pk
-        )
-    except DraftRound.DoesNotExist:
-        return Response({"error": "Draft round not found"}, status=404)
-
-    # Check authorization: tournament staff OR captain for this round
-    is_tournament_staff = False
-    if draft_round.draft and draft_round.draft.tournament:
-        is_tournament_staff = can_edit_tournament(
-            request.user, draft_round.draft.tournament
-        )
-    is_captain_for_round = draft_round.captain == request.user
-
-    if not (is_tournament_staff or is_captain_for_round):
-        log.warning(
-            "pick_unauthorized",
-            system="tournament",
-            subsystem="draft",
-            user_id=request.user.pk,
-            username=request.user.username,
-            draft_round_id=draft_round_pk,
-            captain_username=draft_round.captain.username,
-        )
-        return Response(
-            {
-                "error": "Only tournament staff or the captain for this round can make picks"
-            },
-            status=403,
-        )
-
-    # Authorization check: staff OR captain for this round
-    try:
-        user = CustomUser.objects.get(pk=user_pk)
-    except CustomUser.DoesNotExist:
-        return Response({"error": "User not found"}, status=404)
-
-    try:
-        draft_round.pick_player(user)
-    except Exception as e:
-        log.error(
-            "pick_failed",
-            system="tournament",
-            subsystem="draft",
-            draft_round_id=draft_round_pk,
-            error=str(e),
-        )
-        return Response({"error": f"Failed to pick player. {str(e)}"}, status=500)
-
-    draft = draft_round.draft
-    draft.save()
-    draft_round.save()
-
-    # Create player_picked event
-    team = draft_round.team
-    captain = draft_round.captain
-    picked_event = DraftEvent.objects.create(
-        draft=draft,
-        event_type="player_picked",
-        actor=request.user,
-        payload={
-            "pick_number": draft_round.pick_number,
-            "captain_id": captain.pk,
-            "captain_name": captain.username,
-            "captain_avatar_url": captain.avatarUrl,
-            "picked_id": user.pk,
-            "picked_name": user.username,
-            "picked_avatar_url": user.avatarUrl,
-            "team_id": team.pk if team else None,
-            "team_name": team.name if team else None,
-        },
-    )
-    broadcast_event(picked_event)
-
-    # For shuffle draft, assign next captain
-    tie_data = None
-    if draft.draft_style == "shuffle" and draft.users_remaining.exists():
-        from app.functions.shuffle_draft import assign_next_shuffle_captain
-
-        tie_data = assign_next_shuffle_captain(draft)
-
-    try:
-        tournament = draft_round.draft.tournament
-    except Tournament.DoesNotExist:
-        return Response({"error": "Tournament not found"}, status=404)
-    # Build response data
-    response_data = _serialize_tournament(tournament)
-    if tie_data:
-        response_data["tie_resolution"] = tie_data
-
-    # Invalidate specific objects, not entire model caches
-    invalidate_obj(tournament)
-    if draft:
-        invalidate_obj(draft)
-    return Response(response_data, status=201)
 
 
 class CreateTournamentTeamRequestSerializer(serializers.Serializer):
@@ -193,7 +44,7 @@ class CreateTournamentTeamRequestSerializer(serializers.Serializer):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
-def create_team_from_captain(request):
+def create_team_from_captain(request: Request) -> Response:
     """Create a team from a captain. Requires tournament staff access."""
     serializer = CreateTournamentTeamRequestSerializer(data=request.data)
 
@@ -222,12 +73,6 @@ def create_team_from_captain(request):
             status=403,
         )
 
-        # Create a new team and add the user as a member (or captain)
-    try:
-        draft = tournament.draft
-
-    except Draft.DoesNotExist:
-        pass  # No draft exists, continue
     if Team.objects.filter(tournament=tournament, captain=user).exists():
         if draft_order == 0:
             log.debug(
@@ -279,7 +124,7 @@ class CreateDraftRounds(serializers.Serializer):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
-def generate_draft_rounds(request):
+def generate_draft_rounds(request: Request) -> Response:
     """Generate draft rounds for a tournament. Requires tournament staff access."""
     serializer = CreateDraftRounds(data=request.data)
 
@@ -376,7 +221,7 @@ def generate_draft_rounds(request):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
-def rebuild_team(request):
+def rebuild_team(request: Request) -> Response:
     """Rebuild teams in a tournament. Requires tournament staff access."""
     serializer = CreateDraftRounds(data=request.data)
 
@@ -483,17 +328,9 @@ class DraftPredictMMRSerializer(serializers.Serializer):
     pk = serializers.IntegerField(required=True)
 
 
-from cacheops import cached_as
-
-# cached_as sites depending on CustomUser must also list BaseUserProfile
-# (nickname/avatar, T1) and DotaUserProfile (positions/dota-mmr, T2) —
-# enforced by user/tests/test_cacheops.py.
-from user.models import BaseUserProfile, DotaUserProfile
-
-
 @api_view(["POST"])
 @permission_classes([AllowAny])
-def get_draft_style_mmrs(request):
+def get_draft_style_mmrs(request: Request) -> Response:
     serializer = DraftPredictMMRSerializer(data=request.data)
 
     if serializer.is_valid():
@@ -508,6 +345,7 @@ def get_draft_style_mmrs(request):
         return Response({"error": "Draft not found"}, status=404)
     cache_key = f"draft_sim_pk:{request.get_full_path()}"
 
+    # cached_as on CustomUser must also list BaseUserProfile/DotaUserProfile (user/tests/test_cacheops.py)
     @cached_as(
         Draft,
         CustomUser,
@@ -518,125 +356,8 @@ def get_draft_style_mmrs(request):
         extra=cache_key,
         timeout=60 * 15,
     )
-    def get_data(request):
+    def get_data(request: Request) -> dict:
         return DraftSerializerMMRs(draft).data
 
     data = get_data(request)
     return Response(data, 201)
-
-
-class UndoPickSerializer(serializers.Serializer):
-    draft_pk = serializers.IntegerField(required=True)
-
-
-@api_view(["POST"])
-@permission_classes([IsAuthenticated])
-def undo_last_pick(request):
-    """
-    Undo the last pick in a draft.
-
-    Requires tournament staff access.
-    This removes the last draft round (if it has a choice) and restores
-    the player to the available pool.
-
-    Request body:
-        draft_pk: int - Primary key of the draft
-
-    Returns:
-        200: Success with updated tournament data
-        400: No picks to undo
-        403: Not authorized
-        404: Draft not found
-    """
-    serializer = UndoPickSerializer(data=request.data)
-
-    if serializer.is_valid():
-        draft_pk = serializer.validated_data["draft_pk"]
-    else:
-        return Response(serializer.errors, status=400)
-
-    try:
-        draft = Draft.objects.select_related("tournament").get(pk=draft_pk)
-    except Draft.DoesNotExist:
-        return Response({"error": "Draft not found"}, status=404)
-
-    # Check tournament staff permission
-    if not draft.tournament or not can_edit_tournament(request.user, draft.tournament):
-        return Response(
-            {"error": "You do not have permission to undo picks in this draft"},
-            status=403,
-        )
-
-    # Find the last round with a choice
-    last_round_with_choice = (
-        draft.draft_rounds.filter(choice__isnull=False).order_by("-pick_number").first()
-    )
-
-    if not last_round_with_choice:
-        return Response({"error": "No picks to undo"}, status=400)
-
-    # Get the player that was picked
-    player = last_round_with_choice.choice
-    team = last_round_with_choice.team
-
-    log.info(
-        "pick_undone",
-        system="tournament",
-        subsystem="draft",
-        draft_id=draft.pk,
-        player_id=player.pk,
-        player_username=player.username,
-        team_id=team.pk if team else None,
-        team_name=team.name if team else None,
-    )
-
-    # Remove player from team
-    if team and player:
-        team.members.remove(player)
-        team.save()
-
-    # Note: users_remaining is a computed property, not a field.
-    # Clearing the choice below will automatically make the player
-    # appear in users_remaining again.
-
-    # Clear the choice and reset the round
-    last_round_with_choice.choice = None
-    last_round_with_choice.save()
-
-    # Clear the next round's captain so it gets recalculated on next pick
-    next_round = (
-        draft.draft_rounds.filter(pick_number__gt=last_round_with_choice.pick_number)
-        .order_by("pick_number")
-        .first()
-    )
-    if next_round and next_round.choice is None:
-        next_round.captain = None
-        next_round.was_tie = False
-        next_round.tie_roll_data = None
-        next_round.save()
-
-    # Note: latest_round is a computed property that automatically returns
-    # the first round without a choice. No need to set it manually.
-
-    # Create pick_undone event
-    undone_event = DraftEvent.objects.create(
-        draft=draft,
-        event_type="pick_undone",
-        actor=request.user,
-        payload={
-            "pick_number": last_round_with_choice.pick_number,
-            "undone_player_id": player.pk,
-            "undone_player_name": player.username,
-            "team_id": team.pk if team else None,
-            "team_name": team.name if team else None,
-        },
-    )
-    broadcast_event(undone_event)
-
-    tournament = draft.tournament
-
-    # Invalidate specific objects
-    invalidate_obj(tournament)
-    invalidate_obj(draft)
-
-    return Response(_serialize_tournament(tournament), status=200)

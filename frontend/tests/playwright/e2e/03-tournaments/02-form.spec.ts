@@ -188,9 +188,7 @@ test.describe('Tournaments - create (e2e)', () => {
     await createdTournament.scrollIntoViewIfNeeded();
     await expect(createdTournament).toBeVisible({ timeout: 15000 });
 
-    // Find the tournament card - use the card structure: div.card contains the title
-    // Cards use class "card card-compact" - find the one containing our tournament name
-    const tournamentCard = page.locator('div.card').filter({ hasText: deletableName }).first();
+    const tournamentCard = page.locator('div[data-testid^="tournament-card-"]').filter({ hasText: deletableName }).first();
     await tournamentCard.waitFor({ state: 'visible', timeout: 10000 });
 
     // Find the delete button - TrashIconButton uses variant="destructive" which applies bg-destructive

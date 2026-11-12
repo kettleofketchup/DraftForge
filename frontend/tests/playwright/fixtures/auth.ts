@@ -10,10 +10,9 @@
 import { test as base, expect } from '@playwright/test';
 import type { BrowserContext, Page } from '@playwright/test';
 
-// Use localhost by default (matches playwright.config.ts baseURL)
-// Can be overridden with DOCKER_HOST for running inside Docker containers
-export const DOCKER_HOST = process.env.DOCKER_HOST || 'localhost';
-export const API_URL = `https://${DOCKER_HOST}/api`;
+import { API_URL, BASE_URL } from './base-url';
+
+export { API_URL, BASE_URL };
 
 export interface UserInfo {
   pk: number;
@@ -136,7 +135,7 @@ export async function loginAsDiscordId(
 export async function loginAdmin(context: BrowserContext): Promise<void> {
   const url = `${API_URL}/tests/login-admin/`;
   console.log(`[auth] loginAdmin: POST ${url}`);
-  console.log(`[auth] Environment: API_URL=${API_URL}, DOCKER_HOST=${DOCKER_HOST}, CI=${process.env.CI}`);
+  console.log(`[auth] Environment: API_URL=${API_URL}, CI=${process.env.CI}`);
 
   let response;
   try {
@@ -181,9 +180,8 @@ export async function loginAdmin(context: BrowserContext): Promise<void> {
  */
 export async function loginAdminFromPage(page: Page): Promise<void> {
   // Navigate to a page on the target domain first to establish origin
-  const currentUrl = page.url();
-  if (!currentUrl.includes(DOCKER_HOST)) {
-    await page.goto(`https://${DOCKER_HOST}/`);
+  if (!page.url().startsWith(BASE_URL)) {
+    await page.goto(`${BASE_URL}/`);
     await page.waitForLoadState('domcontentloaded');
   }
 
@@ -540,7 +538,7 @@ async function setSessionCookies(
   const cookieStrings = cookieHeader.split(/,(?=\s*\w+=)/);
 
   // Use URL instead of domain/path for more reliable cookie setting
-  const cookieUrl = `https://${DOCKER_HOST}/`;
+  const cookieUrl = `${BASE_URL}/`;
 
   for (const cookieStr of cookieStrings) {
     const [nameValue] = cookieStr.split(';');

@@ -221,7 +221,7 @@ export const FeatureCard = ({
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, delay }}
-        className={`card bg-base-200/50 backdrop-blur border border-primary/10 hover:border-primary/30 transition-all duration-300 hover:shadow-lg hover:shadow-primary/5 relative ${comingSoon ? 'opacity-75' : ''}`}
+        className={`bg-base-200/50 backdrop-blur border border-primary/10 hover:border-primary/30 transition-all duration-300 hover:shadow-lg hover:shadow-primary/5 relative ${comingSoon ? 'opacity-75' : ''} p-8`}
         onMouseEnter={handlePrefetchVideos}
       >
         {/* Status Badge - Top Right of Card */}
@@ -235,8 +235,8 @@ export const FeatureCard = ({
         )}
 
         {/* Card Header: Icon + Title */}
-        <div className="card-header relative z-10">
-          <div className="card-header relative z-10">
+        <div className="relative z-10">
+          <div className="relative z-10">
             <Item
               variant="default"
               size="sm"
@@ -259,7 +259,7 @@ export const FeatureCard = ({
         </div>
 
         {/* Card Body: Description + Preview */}
-        <div className="card-body pt-2 relative z-10 flex flex-col">
+        <div className="relative z-10 flex flex-col gap-2 p-6">
           <p className="text-base-content/70 text-sm">{description}</p>
 
           {/* Spacer to push preview and buttons to bottom */}

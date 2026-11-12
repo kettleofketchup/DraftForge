@@ -89,8 +89,6 @@ interface UserState {
   getCurrentTournament: () => Promise<void>;
   getDraft: () => Promise<void>;
   getCurrentDraftRound: () => Promise<void>;
-  draftIndex: number;
-  setDraftIndex: (index: number) => void;
   autoRefreshDraft: (() => Promise<void>) | null;
   setAutoRefreshDraft: (refresh: (() => Promise<void>) | null) => void;
 
@@ -131,16 +129,17 @@ export const useUserStore = create<UserState>()(
         try {
           await get().getCurrentTournament();
 
+          const rounds = get().tournament.draft?.draft_rounds ?? [];
           set({
             curDraftRound:
-              get().tournament.draft?.draft_rounds?.[get().draftIndex],
+              rounds.find((r) => r.pk === get().curDraftRound?.pk) ??
+              rounds.find((r) => r.pk === get().tournament.draft?.latest_round) ??
+              rounds[0],
           });
         } catch (err) {
           log.error('Failed to fetch draft:', err);
         }
       },
-      draftIndex: 0,
-      setDraftIndex: (index: number) => set({ draftIndex: index }),
       setDraft: (draft: DraftType) => set({ draft }),
       tournaments: [] as TournamentType[],
       game: {} as GameType,

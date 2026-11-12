@@ -111,7 +111,9 @@
       "properties": {
         "create": { "type": "boolean" },
         "djangoSecretKey": { "type": "string" },
-        "internalServiceToken": { "type": "string" }
+        "internalServiceToken": { "type": "string" },
+        "dotaLobbyApiKey": { "type": "string" },
+        "dotaLobbyWebhookSecret": { "type": "string" }
       }
     },
     "extraEnvSecrets": { "type": "array", "items": { "type": "string", "minLength": 1 } },
@@ -121,6 +123,7 @@
         "enabled": { "type": "boolean" },
         "host": { "type": "string" },
         "entryPoint": { "type": "string" },
+        "entryPoints": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
         "tls": {
           "type": "object",
           "properties": { "secretName": { "type": "string" } }

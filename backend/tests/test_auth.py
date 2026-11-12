@@ -18,7 +18,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from social_django.models import UserSocialAuth
 
-from app.models import CustomUser
+from app.models import CustomUser, Draft
 from common.utils import isTestEnvironment
 
 # Import test user configuration
@@ -46,6 +46,11 @@ from tests.data.users import (
 # with no circular-import risk.
 from tests.populate.bracket import populate_bracket_unset_winner_tournament
 from tests.populate.shuffle_tie import populate_shuffle_tie_data
+from tests.data.tournaments import (
+    BRACKET_UNSET_WINNER_TOURNAMENT,
+    SHUFFLE_TIE_TOURNAMENT,
+)
+from tests.test_teamdraft import clear_teamdraft_redis
 
 log = logging.getLogger(__name__)
 
@@ -991,8 +996,25 @@ def reset_tournament_by_key(request, key: str):
         "bracket_unset_winner": populate_bracket_unset_winner_tournament,
     }
 
+    def clear_existing_draft_redis(name: str) -> None:
+        draft = Draft.objects.filter(tournament__name=name).first()
+        if draft is None:
+            return
+        captain_ids = list(
+            draft.tournament.teams.exclude(captain__isnull=True).values_list(
+                "captain_id", flat=True
+            )
+        )
+        clear_teamdraft_redis(draft.pk, captain_ids)
+
+    RESET_TOURNAMENT_NAMES = {
+        "shuffle_tie_resolution": SHUFFLE_TIE_TOURNAMENT.name,
+        "bracket_unset_winner": BRACKET_UNSET_WINNER_TOURNAMENT.name,
+    }
+
     reset_fn = RESET_FUNCTIONS.get(key)
     if reset_fn:
+        clear_existing_draft_redis(RESET_TOURNAMENT_NAMES[key])
         tournament = reset_fn(force=True)
         tournament = Tournament.objects.get(pk=tournament.pk)
         return Response(TournamentSerializer(tournament).data)
@@ -1006,6 +1028,7 @@ def reset_tournament_by_key(request, key: str):
         )
 
     # Delete existing tournament with this name, then recreate
+    clear_existing_draft_redis(config.name)
     Tournament.objects.filter(name=config.name).delete()
     tournament = config.create()
     tournament = Tournament.objects.get(pk=tournament.pk)
@@ -1279,7 +1302,7 @@ def kill_draft_websocket(request, draft_id):
     TEST ONLY: Force-disconnect all WebSocket clients for a draft.
 
     Sends a force.disconnect message to the draft's channel group,
-    causing all connected DraftConsumer instances to close with code 1012.
+    causing all connected DraftConsumer instances to close with code 4012.
     Used by Playwright E2E tests to simulate server-initiated WS drops.
 
     Args:

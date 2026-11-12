@@ -1,10 +1,13 @@
 """Unit tests for BaseDraftConsumer abstract class."""
 
 import asyncio
+import threading
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest import mock
 
-from django.test import SimpleTestCase
+from asgiref.sync import async_to_sync, sync_to_async
+from django.test import SimpleTestCase, override_settings
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
@@ -12,7 +15,10 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
     InMemorySpanExporter,
 )
 
+from app.consumers import HeroDraftConsumer
 from app.consumers_base import BaseDraftConsumer
+from app.tasks.draft_tick import heartbeat_key
+from app.tasks.herodraft_tick import HeroDraftTickDriver
 
 
 class ConcreteDraftConsumer(BaseDraftConsumer):
@@ -77,6 +83,7 @@ class TestAbstractInterface(SimpleTestCase):
             )
 
 
+@override_settings(REDIS_KEY_NAMESPACE="")
 class TestRedisKeyGeneration(SimpleTestCase):
     """Test Redis key helper methods on BaseDraftConsumer."""
 
@@ -173,9 +180,7 @@ class TestSpanInstrumentation(SimpleTestCase):
 
     def test_handle_heartbeat_emits_span_with_conn_id(self):
         """ws.heartbeat span carries ws.conn_id + ws.draft_id + user.id."""
-        with mock.patch(
-            "app.tasks.herodraft_tick.get_redis_client"
-        ) as mock_get_redis:
+        with mock.patch("app.tasks.herodraft_tick.get_redis_client") as mock_get_redis:
             mock_get_redis.return_value = mock.MagicMock()
             asyncio.run(self.consumer.handle_heartbeat())
 
@@ -274,3 +279,150 @@ class TestSpanInstrumentation(SimpleTestCase):
             heartbeat_spans[0].parent.span_id,
             message_spans[0].context.span_id,
         )
+
+
+@override_settings(REDIS_KEY_NAMESPACE="")
+class TestBaseHooks(SimpleTestCase):
+    """Non-abstract hooks added for the team draft (spec §1)."""
+
+    def test_new_hooks_are_not_abstract(self):
+        for name in (
+            "get_redis_prefix",
+            "get_tick_driver",
+            "should_start_tick_broadcaster",
+            "send_initial_messages",
+        ):
+            self.assertFalse(
+                getattr(
+                    getattr(BaseDraftConsumer, name), "__isabstractmethod__", False
+                ),
+                name,
+            )
+
+    def test_redis_prefix_defaults_to_group_prefix(self):
+        consumer = ConcreteDraftConsumer()
+        self.assertEqual(consumer.get_redis_prefix(), consumer.get_room_group_prefix())
+        self.assertEqual(
+            consumer._heartbeat_key(1, 2), "testdraft:1:captain:2:heartbeat"
+        )
+
+    def test_redis_prefix_override_changes_keys_but_not_group(self):
+        class SplitPrefixConsumer(ConcreteDraftConsumer):
+            def get_redis_prefix(self):
+                return "teamdraft"
+
+        consumer = SplitPrefixConsumer()
+        self.assertEqual(consumer.get_room_group_prefix(), "testdraft")
+        self.assertEqual(
+            consumer._heartbeat_key(1, 2), "teamdraft:1:captain:2:heartbeat"
+        )
+        self.assertEqual(
+            consumer._captain_channel_key(1, 2), "teamdraft:1:captain:2:channel"
+        )
+
+    def test_tick_driver_defaults_to_none(self):
+        self.assertIsNone(ConcreteDraftConsumer().get_tick_driver())
+
+    def test_base_connect_stores_draft_id_as_int(self):
+        """A regex route hands draft_id over as a string; ticks key the registry on int."""
+
+        class MissingDraftConsumer(ConcreteDraftConsumer):
+            async def draft_exists(self, draft_id):
+                return False
+
+        consumer = MissingDraftConsumer()
+        consumer.scope = {"url_route": {"kwargs": {"draft_id": "22"}}, "path": ""}
+        with (
+            mock.patch.object(consumer, "telemetry_connect", mock.AsyncMock()),
+            mock.patch.object(consumer, "close", mock.AsyncMock()),
+        ):
+            asyncio.run(consumer.base_connect())
+
+        self.assertEqual(consumer.draft_id, 22)
+        self.assertEqual(consumer.room_group_name, "testdraft_22")
+
+    def test_should_start_tick_broadcaster_uses_active_state_values(self):
+        consumer = ConcreteDraftConsumer()
+        self.assertTrue(consumer.should_start_tick_broadcaster({"state": "drafting"}))
+        self.assertFalse(consumer.should_start_tick_broadcaster({"state": "paused"}))
+        self.assertFalse(consumer.should_start_tick_broadcaster(None))
+
+    def test_class_gates_default_to_today(self):
+        self.assertTrue(BaseDraftConsumer.PING_ENABLED)
+        self.assertFalse(BaseDraftConsumer.kick_duplicate_captain_connections)
+        self.assertTrue(BaseDraftConsumer.clear_heartbeat_on_disconnect)
+
+    def test_hero_consumer_gates(self):
+        self.assertTrue(HeroDraftConsumer.PING_ENABLED)
+        self.assertTrue(HeroDraftConsumer.kick_duplicate_captain_connections)
+        self.assertTrue(HeroDraftConsumer.clear_heartbeat_on_disconnect)
+        self.assertEqual(
+            HeroDraftConsumer()._heartbeat_key(1, 2),
+            heartbeat_key(HeroDraftTickDriver.prefix, 1, 2),
+        )
+
+    def test_default_send_initial_messages_sends_initial_state_frame(self):
+        consumer = ConcreteDraftConsumer()
+        consumer.send = mock.AsyncMock()
+        now = datetime(2026, 11, 9, 12, 0, tzinfo=UTC)
+        with mock.patch("app.consumers_base.timezone.now", return_value=now):
+            asyncio.run(consumer.send_initial_messages({"state": "drafting"}))
+        consumer.send.assert_awaited_once_with(
+            text_data='{"type": "initial_state", "draft_state": {"state": "drafting"}, '
+            '"server_time": "2026-11-09T12:00:00+00:00"}'
+        )
+
+
+class TestHeroTickWantedFollowsState(SimpleTestCase):
+    def _consumer(self) -> HeroDraftConsumer:
+        consumer = HeroDraftConsumer()
+        consumer.draft_id = 5
+        consumer.send = mock.AsyncMock()
+        consumer._tick_wanted = True
+        return consumer
+
+    def test_event_with_a_finished_draft_state_stops_wanting_ticks(self):
+        consumer = self._consumer()
+        asyncio.run(
+            consumer.herodraft_event(
+                {"event_type": "draft_completed", "draft_state": {"state": "completed"}}
+            )
+        )
+        self.assertFalse(consumer._tick_wanted)
+
+    def test_event_without_draft_state_leaves_it_alone(self):
+        consumer = self._consumer()
+        asyncio.run(consumer.herodraft_event({"event_type": "roll_result"}))
+        self.assertTrue(consumer._tick_wanted)
+
+    def test_tick_state_drives_it(self):
+        consumer = self._consumer()
+        asyncio.run(consumer.herodraft_tick({"draft_state": "paused"}))
+        self.assertFalse(consumer._tick_wanted)
+        asyncio.run(consumer.herodraft_tick({"draft_state": "resuming"}))
+        self.assertTrue(consumer._tick_wanted)
+        asyncio.run(consumer.herodraft_tick({"draft_state": "drafting"}))
+        self.assertTrue(consumer._tick_wanted)
+
+
+class TestTickStartRunsOffTheSyncThread(SimpleTestCase):
+    def test_start_does_not_queue_on_the_thread_sensitive_executor(self):
+        consumer = HeroDraftConsumer()
+        consumer.draft_id = 5
+        ran_on: list[threading.Thread] = []
+
+        def record(_draft_id: int) -> bool:
+            ran_on.append(threading.current_thread())
+            return False
+
+        async def go() -> threading.Thread:
+            sensitive = await sync_to_async(threading.current_thread)()
+            with mock.patch(
+                "app.tasks.herodraft_tick.start_tick_broadcaster", side_effect=record
+            ):
+                await consumer._maybe_start_tick_broadcaster()
+            return sensitive
+
+        sensitive = async_to_sync(go)()
+        self.assertEqual(len(ran_on), 1)
+        self.assertIsNot(ran_on[0], sensitive)

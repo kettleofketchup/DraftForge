@@ -14,6 +14,7 @@
  * kettleofketchup (pk=1001) is included as a participant and team captain.
  */
 
+import { API_URL, BASE_URL } from '../../fixtures/base-url';
 import {
   test,
   expect,
@@ -26,7 +27,6 @@ import {
 
 import { postWithCsrf, patchWithCsrf } from '../../fixtures/events';
 
-const API_URL = 'https://localhost/api';
 
 let eventInfo: EventInfo;
 
@@ -344,7 +344,7 @@ test.describe('Tournament Discord Lifecycle (@cicd)', () => {
     // =========================================================================
     // 14. Navigate to tournament settings and verify Discord Activity tab
     // =========================================================================
-    await page.goto(`https://localhost/tournament/${tournamentPk}`, {
+    await page.goto(`${BASE_URL}/tournament/${tournamentPk}`, {
       waitUntil: 'networkidle',
     });
 

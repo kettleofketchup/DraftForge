@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { useUserStore } from '~/store/userStore';
 import type { Route } from './+types/home';
+import { Spinner } from '~/components/ui/spinner';
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -29,7 +30,7 @@ function EditProfileRedirect() {
 
   return (
     <div className="flex justify-center items-center h-screen">
-      <span className="loading loading-spinner loading-lg"></span>
+      <Spinner className="size-8" />
     </div>
   );
 }

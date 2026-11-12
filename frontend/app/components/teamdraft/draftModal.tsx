@@ -33,6 +33,8 @@ import {
 import { cn } from '~/lib/utils';
 import { getLogger } from '~/lib/logger';
 import { useTournamentStore } from '~/store/tournamentStore';
+import { toast } from 'sonner';
+import { DisplayName } from '~/components/user/avatar';
 import { useUserStore } from '~/store/userStore';
 import { TEAMS_BUTTONS_WIDTH } from '../constants';
 import { DIALOG_CSS_FULLSCREEN } from '../reusable/modal';
@@ -45,6 +47,7 @@ import { PrevRoundButton } from './buttons/prevButton';
 import { ShareDraftButton } from './buttons/shareDraftButton';
 import { UndoPickButton } from './buttons/undoPickButton';
 import { DraftBalanceDisplay } from './draftBalanceDisplay';
+import { DraftLobby } from './DraftLobby';
 import { DraftRoundView } from './draftRoundView';
 import { refreshDraftHook } from './hooks/refreshDraftHook';
 import { refreshTournamentHook } from './hooks/refreshTournamentHook';
@@ -54,7 +57,12 @@ import { useDraftWebSocketStore, draftWsSelectors } from '~/store/draftWebSocket
 import { LiveAutoButtons, DraftRoundIndicator } from './liveView';
 import { CompletedTeamDraftView } from './CompletedTeamDraftView';
 import { initDraftHook } from './hooks/initDraftHook';
+import { isCaptainOf } from './isCaptainOf';
 import { TieResolutionOverlay } from './TieResolutionOverlay';
+import { LiveDraftClockBar } from './timer/DraftClockBar';
+import { LiveDraftPauseOverlay } from './timer/DraftPauseOverlay';
+import { useTeamDraftTimerProps } from './timer/useTeamDraftTimerProps';
+import { deriveDraftIndex, resolveViewedRound } from './utils';
 import type { DraftRoundType, DraftType } from './types';
 import type { TieResolution } from './types';
 import type { TournamentType } from '~/components/tournament/types';
@@ -67,8 +75,7 @@ export const DraftModal: React.FC<DraftModalParams> = () => {
   const setDraft = useUserStore((state) => state.setDraft);
   const curDraftRound = useUserStore((state) => state.curDraftRound);
   const setCurDraftRound = useUserStore((state) => state.setCurDraftRound);
-  const draftIndex = useUserStore((state) => state.draftIndex);
-  const setDraftIndex = useUserStore((state) => state.setDraftIndex);
+  const draftIndex = deriveDraftIndex(draft?.draft_rounds, curDraftRound?.pk);
   const setAutoRefreshDraft = useUserStore(
     (state) => state.setAutoRefreshDraft,
   );
@@ -88,6 +95,7 @@ export const DraftModal: React.FC<DraftModalParams> = () => {
   const [showTieOverlay, setShowTieOverlay] = useState(false);
   const isStaff = useUserStore((state) => state.isStaff);
   const currentUser = useUserStore((state) => state.currentUser);
+  const timer = useTeamDraftTimerProps(currentUser?.pk, isStaff());
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const { pk } = useParams<{ pk: string }>();
@@ -102,7 +110,6 @@ export const DraftModal: React.FC<DraftModalParams> = () => {
         setDraft,
         curDraftRound,
         setCurDraftRound,
-        setDraftIndex,
         draftStyle: selectedStyle,
       });
     } catch {
@@ -140,10 +147,10 @@ export const DraftModal: React.FC<DraftModalParams> = () => {
     }
   }, [searchParams, setSearchParams, setAutoAdvance]);
 
+  // Follow the URL both ways: a close can race the open's still-pending /draft navigation,
+  // and an open-only sync would then reopen the modal on /teams.
   useEffect(() => {
-    if (live) {
-      setOpen(true);
-    }
+    setOpen(live);
   }, [live]);
 
   // Enable live updates when modal is open and draft exists
@@ -155,13 +162,7 @@ export const DraftModal: React.FC<DraftModalParams> = () => {
       ) || ({} as DraftRoundType);
 
     setCurDraftRound(newDraft);
-
-    const i = draft?.draft_rounds?.findIndex(
-      (round: DraftRoundType) => round.pk === newDraft.pk,
-    );
-    if (i !== undefined && i >= 0) setDraftIndex(i);
-    log.debug('Set draft round to latest:', { newDraft, i });
-    log.debug('Current round after update:', curDraftRound);
+    log.debug('Set draft round to latest:', { newDraft });
   };
 
   const onUpdate = useCallback(() => {
@@ -219,33 +220,19 @@ export const DraftModal: React.FC<DraftModalParams> = () => {
         setTournament(mergedTournament as TournamentType);
       }
 
-      // Find and update the current draft round with new data
-      const currentDraftRound = curDraftRoundRef.current;
-      if (currentDraftRound?.pk && draftState.draft_rounds) {
-        const updatedRound = draftState.draft_rounds.find(
-          (round: DraftRoundType) => round.pk === currentDraftRound.pk,
+      const force = useDraftWebSocketStore.getState().forceJumpToRoundPk;
+      const result = resolveViewedRound(draftState.draft_rounds ?? [], curDraftRoundRef.current, {
+        autoAdvance: autoAdvanceRef.current,
+        latestRoundPk: draftState.latest_round,
+        forceJumpToRoundPk: force,
+      });
+      if (result.round) setCurDraftRound(result.round);
+      if (result.moved) {
+        toast.info(
+          `${result.moved.captain ? DisplayName(result.moved.captain) : 'Captain'}'s pick moved to #${result.moved.pickNumber}`,
         );
-        if (updatedRound) {
-          setCurDraftRound(updatedRound);
-        }
       }
-
-      // Auto-advance to latest round if enabled
-      if (autoAdvanceRef.current && draftState.latest_round) {
-        const latestRound = draftState.draft_rounds?.find(
-          (round: DraftRoundType) => round.pk === draftState.latest_round,
-        );
-        if (latestRound) {
-          log.debug('Auto-advancing to latest round:', latestRound.pk);
-          setCurDraftRound(latestRound);
-          const i = draftState.draft_rounds?.findIndex(
-            (round: DraftRoundType) => round.pk === latestRound.pk,
-          );
-          if (i !== undefined && i >= 0) {
-            setDraftIndex(i);
-          }
-        }
-      }
+      if (force != null) useDraftWebSocketStore.getState().clearForceJump();
 
       // Fallback: refresh tournament if not included in WebSocket payload
       if (!draftState.tournament) {
@@ -259,7 +246,7 @@ export const DraftModal: React.FC<DraftModalParams> = () => {
         }
       }
     },
-    [setDraft, setCurDraftRound, setDraftIndex, setTournament],
+    [setDraft, setCurDraftRound, setTournament],
   );
 
   // Fallback refresh for when draft state is not included in WebSocket message
@@ -288,6 +275,16 @@ export const DraftModal: React.FC<DraftModalParams> = () => {
   const pendingTieResolution = useDraftWebSocketStore((s) => s.pendingTieResolution);
   const wsConnect = useDraftWebSocketStore((s) => s.connect);
   const wsDisconnect = useDraftWebSocketStore((s) => s.disconnect);
+  const startHeartbeat = useDraftWebSocketStore((s) => s.startHeartbeat);
+  const stopHeartbeat = useDraftWebSocketStore((s) => s.stopHeartbeat);
+
+  const isMyselfCaptain = isCaptainOf(tournament?.teams, currentUser?.pk);
+  useEffect(() => {
+    if (wsConnected && isMyselfCaptain) {
+      startHeartbeat();
+      return () => stopHeartbeat();
+    }
+  }, [wsConnected, isMyselfCaptain, startHeartbeat, stopHeartbeat]);
 
   // Connect/disconnect WebSocket based on modal open state and draft availability
   useEffect(() => {
@@ -364,21 +361,7 @@ export const DraftModal: React.FC<DraftModalParams> = () => {
       ) || ({} as DraftRoundType);
 
     setCurDraftRound(newDraft);
-
-    const i = draft?.draft_rounds?.findIndex(
-      (round: DraftRoundType) => round.pk === newDraft.pk,
-    );
-
-    if (i == -1) {
-      setCurDraftRound(draft?.draft_rounds[-1]);
-    }
-    if (i !== undefined && i !== draftIndex) {
-      log.debug('Setting draft index to latest round index:', i);
-      setDraftIndex(i);
-    }
-
-    log.debug('Set draft round to latest:', { newDraft, i });
-    log.debug('Current round after update:', curDraftRound);
+    log.debug('Set draft round to latest:', { newDraft });
   };
 
   const prevRound = async () => {
@@ -390,7 +373,6 @@ export const DraftModal: React.FC<DraftModalParams> = () => {
 
     if (i > 0) {
       log.debug('Setting new round', draftIndex, draft.draft_rounds.length);
-      setDraftIndex(i - 1);
       setCurDraftRound(draft.draft_rounds[i - 1]);
     }
   };
@@ -404,7 +386,6 @@ export const DraftModal: React.FC<DraftModalParams> = () => {
     // Fix: Check if next index is within bounds
     if (i < draft.draft_rounds.length - 1) {
       log.debug('Setting new round', i + 1, draft.draft_rounds.length);
-      setDraftIndex(i + 1);
       setCurDraftRound(draft?.draft_rounds?.[i + 1] || ({} as DraftRoundType));
     } else {
       log.debug('Already at the last round');
@@ -442,18 +423,13 @@ export const DraftModal: React.FC<DraftModalParams> = () => {
         const latestRound = draftData.draft_rounds.find(
           (r: DraftRoundType) => r.pk === draftData.latest_round
         );
-        const latestIdx = draftData.draft_rounds.findIndex(
-          (r: DraftRoundType) => r.pk === draftData.latest_round
-        );
         if (latestRound) {
           setCurDraftRound(latestRound);
-          setDraftIndex(latestIdx >= 0 ? latestIdx : 0);
           log.debug('Initialized directly to latest round:', latestRound.pk);
           return;
         }
       }
       // Default: start at first round
-      setDraftIndex(0);
       setCurDraftRound(draftData.draft_rounds[0]);
       log.debug('Set initial draft round:', draftData.draft_rounds[0]);
     } else {
@@ -471,10 +447,12 @@ export const DraftModal: React.FC<DraftModalParams> = () => {
     }
   }, [open]);
 
-  // Draft is complete when all rounds have a choice picked
-  const isDraftCompleted =
+  const wsDraftCompleted = useDraftWebSocketStore(draftWsSelectors.isDraftCompleted);
+  const hasWsDraftState = useDraftWebSocketStore((s) => s.draftState !== null);
+  const localDraftCompleted =
     (draft?.draft_rounds?.length ?? 0) > 0 &&
     draft?.draft_rounds?.every((r) => r.choice != null) === true;
+  const isDraftCompleted = hasWsDraftState ? wsDraftCompleted : localDraftCompleted;
 
   const mainView = () => {
     // Show start draft UI when no draft exists
@@ -556,6 +534,17 @@ export const DraftModal: React.FC<DraftModalParams> = () => {
       );
     }
 
+    if (timer.showLobby) {
+      return (
+        <DraftLobby
+          draftPk={draft.pk}
+          teams={tournament?.teams ?? []}
+          currentUserPk={currentUser?.pk}
+          isStaff={isStaff()}
+        />
+      );
+    }
+
     // Show completed team draft view when draft is complete and not viewing full draft
     if (isDraftCompleted && !showFullDraft) {
       return (
@@ -563,12 +552,14 @@ export const DraftModal: React.FC<DraftModalParams> = () => {
           teams={tournament?.teams || []}
           organizationId={tournament?.organization_pk ?? undefined}
           leaguePk={tournament?.league_pk ?? null}
+          rounds={draft?.draft_rounds ?? []}
         />
       );
     }
 
     return (
       <>
+        <LiveDraftClockBar {...timer.clockBarProps} />
         <DraftBalanceDisplay />
         <DraftRoundView />
       </>
@@ -577,9 +568,7 @@ export const DraftModal: React.FC<DraftModalParams> = () => {
 
   const draftDialogButton = () => {
     // Check if user is a captain of any team in this tournament
-    const isCaptain = tournament?.teams?.some(
-      (team) => team?.captain?.pk === currentUser?.pk
-    );
+    const isCaptain = isCaptainOf(tournament?.teams, currentUser?.pk);
 
     // Determine button styling and label based on draft state and user role
     let buttonLabel: string;
@@ -595,10 +584,10 @@ export const DraftModal: React.FC<DraftModalParams> = () => {
       tooltipText = 'View the completed team draft results';
       testId = 'viewCompletedTeamDraftButton';
     } else if (isStaff()) {
-      buttonLabel = 'Start Team Draft';
+      buttonLabel = 'Open draft';
       buttonLabelMobile = 'Draft';
       buttonIcon = <ClipboardPen />;
-      tooltipText = 'Administer the Team Draft';
+      tooltipText = 'Open the team draft';
       testId = 'startTeamDraftButton';
     } else if (isCaptain) {
       buttonLabel = 'Live Team Draft';
@@ -669,9 +658,12 @@ export const DraftModal: React.FC<DraftModalParams> = () => {
             <div className="w-[120px]" />
           </div>
 
-          {/* Main content area */}
-          <div className="flex-1 overflow-auto p-2 md:p-4">
-            {mainView()}
+          {/* Main content area; the pause overlay covers only this, leaving the footer usable */}
+          <div className="relative flex-1 min-h-0 flex flex-col">
+            <LiveDraftPauseOverlay {...timer.pauseOverlayProps} />
+            <div className="flex-1 overflow-auto p-2 md:p-4">
+              {mainView()}
+            </div>
           </div>
 
           {/* Footer - fixed at bottom, hidden when no draft */}

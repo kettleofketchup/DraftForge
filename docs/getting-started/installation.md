@@ -73,4 +73,6 @@ just db::migrate::all     # Run migrations for all environments
 just dev::debug
 ```
 
-Visit https://localhost to verify the application is running.
+Visit https://localhost to verify the application is running (the dev stack always
+uses ports 80/443). The test stack's URL depends on the worktree's slot: run
+`just test::slot` to see it, and see [Test Stack Slots](../development/test-stack-slots.md).
