@@ -372,9 +372,25 @@ class RegeneratePasswordTests(EventPasswordApiTestCase):
         self.tournament.refresh_from_db()
         self.assertNotEqual(self.event.dota_lobby_password, before)
         self.assertEqual(resp.data["password"], self.event.dota_lobby_password)
+        self.assertEqual(resp.data["source"], "event")
         self.assertEqual(
             self.tournament.dota_lobby_password, self.event.dota_lobby_password
         )
+
+    def test_regenerate_reports_the_series_source(self):
+        repeater = EventRepeater.objects.create(
+            organization=self.org,
+            name="Weekly",
+            frequency=RepeatFrequency.WEEKLY,
+            day_of_week=3,
+            time_of_day=time(19, 0),
+            starts_at=tz.now().date(),
+            created_by=self.admin,
+        )
+        Event.objects.filter(pk=self.event.pk).update(event_repeater=repeater)
+        resp = self.as_user(self.admin).post(self.url("regenerate/"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["source"], "series")
 
     def test_fixed_password_cannot_be_regenerated(self):
         self.event.dota_lobby_password_mode = FIXED
@@ -420,6 +436,59 @@ class PasswordVisibilityTests(EventPasswordApiTestCase):
         self.assertEqual(resp.data["mode"], RANDOM)
         self.assertEqual(resp.data["source"], "event")
         self.assertTrue(resp.data["can_manage"])
+
+    def attach_to_series(self, *, series_mode, series_password="", **event_fields):
+        repeater = EventRepeater.objects.create(
+            organization=self.org,
+            name="Weekly",
+            frequency=RepeatFrequency.WEEKLY,
+            day_of_week=3,
+            time_of_day=time(19, 0),
+            starts_at=tz.now().date(),
+            created_by=self.admin,
+            dota_lobby_password_mode=series_mode,
+            dota_lobby_password=series_password,
+        )
+        # update(): no save side effects; only the fields under test change.
+        Event.objects.filter(pk=self.event.pk).update(
+            event_repeater=repeater, **event_fields
+        )
+        return repeater
+
+    def source(self):
+        resp = self.as_user(self.admin).get(self.url())
+        self.assertEqual(resp.status_code, 200)
+        return resp.data["source"]
+
+    def test_source_on_schedule_random_event_of_a_random_series(self):
+        self.attach_to_series(series_mode=RANDOM)
+        self.assertEqual(self.source(), "series")
+
+    def test_source_fixed_event_with_the_series_password(self):
+        self.attach_to_series(
+            series_mode=FIXED,
+            series_password="night-4",
+            dota_lobby_password_mode=FIXED,
+            dota_lobby_password="night-4",
+        )
+        self.assertEqual(self.source(), "series")
+
+    def test_source_fixed_event_overriding_the_series_password(self):
+        self.attach_to_series(
+            series_mode=FIXED,
+            series_password="night-4",
+            dota_lobby_password_mode=FIXED,
+            dota_lobby_password="override",
+        )
+        self.assertEqual(self.source(), "event")
+
+    def test_source_mode_differs_from_the_series(self):
+        self.attach_to_series(series_mode=FIXED, series_password="night-4")
+        self.assertEqual(self.source(), "event")
+
+    def test_source_off_schedule_event(self):
+        self.attach_to_series(series_mode=RANDOM, is_off_schedule=True)
+        self.assertEqual(self.source(), "event")
 
     def test_registered_players_see_only_the_password(self):
         for status in (SignupStatus.APPROVED, SignupStatus.CONFIRMED):

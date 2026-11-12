@@ -124,6 +124,31 @@ def _no_lobby_password() -> Response:
     return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
 
 
+def _staff_lobby_password(event: Event) -> dict:
+    """The event's password settings for org staff.
+
+    `source` is `series` while the event matches its series (an on-schedule
+    event with the same mode and, when fixed, the same password): the next
+    series save keeps it as it is. Otherwise `event`.
+    """
+    repeater = event.event_repeater
+    from_series = (
+        repeater is not None
+        and not event.is_off_schedule
+        and event.dota_lobby_password_mode == repeater.dota_lobby_password_mode
+        and (
+            event.dota_lobby_password_mode == PasswordMode.RANDOM
+            or event.dota_lobby_password == repeater.dota_lobby_password
+        )
+    )
+    return {
+        "mode": event.dota_lobby_password_mode,
+        "password": event.dota_lobby_password,
+        "source": "series" if from_series else "event",
+        "can_manage": True,
+    }
+
+
 class EventRepeaterViewSet(viewsets.ModelViewSet):
     serializer_class = EventRepeaterSerializer
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
@@ -645,25 +670,7 @@ class EventViewSet(viewsets.ModelViewSet):
         if event is None:
             return _no_lobby_password()
         if has_org_staff_access(request.user, event.organization):
-            repeater = event.event_repeater
-            # Matches the series: the next series save keeps it as it is.
-            from_series = (
-                repeater is not None
-                and not event.is_off_schedule
-                and event.dota_lobby_password_mode == repeater.dota_lobby_password_mode
-                and (
-                    event.dota_lobby_password_mode == PasswordMode.RANDOM
-                    or event.dota_lobby_password == repeater.dota_lobby_password
-                )
-            )
-            return Response(
-                {
-                    "mode": event.dota_lobby_password_mode,
-                    "password": event.dota_lobby_password,
-                    "source": "series" if from_series else "event",
-                    "can_manage": True,
-                }
-            )
+            return Response(_staff_lobby_password(event))
         if is_registered_for_event(request.user, event):
             return Response({"password": event.dota_lobby_password})
         return _no_lobby_password()
@@ -681,7 +688,7 @@ class EventViewSet(viewsets.ModelViewSet):
         """
         event = (
             Event.objects.nocache()
-            .select_related("organization", "tournament")
+            .select_related("organization", "tournament", "event_repeater")
             .filter(pk=_pk_or_none(pk))
             .first()
         )
@@ -691,13 +698,7 @@ class EventViewSet(viewsets.ModelViewSet):
             regenerate_event_lobby_password(event)
         except ValueError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
-        return Response(
-            {
-                "mode": event.dota_lobby_password_mode,
-                "password": event.dota_lobby_password,
-                "can_manage": True,
-            }
-        )
+        return Response(_staff_lobby_password(event))
 
     @action(
         detail=True,

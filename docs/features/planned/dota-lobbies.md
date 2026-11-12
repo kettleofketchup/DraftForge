@@ -267,7 +267,7 @@ announcements. The opt-in Discord lobby info DM still sends it to the game's ros
 | Method and path | Who | What it does |
 |-----------------|-----|--------------|
 | `GET /api/events/<id>/lobby-password/` | Org staff, registered players | Staff get `{mode, password, source, can_manage}` (`source` is `series` while the event matches its series); registered players get `{password}`; anyone else `404` |
-| `POST /api/events/<id>/lobby-password/regenerate/` | Org staff | A new random password; `409` when the event's password is fixed |
+| `POST /api/events/<id>/lobby-password/regenerate/` | Org staff | A new random password, answered like the staff `GET`; `409` when the event's password is fixed |
 | `GET /api/events/repeaters/<id>/lobby-password/` | Org staff | `{mode, password, can_manage}`; `password` is `null` in random mode |
 | `PATCH /api/events/<id>/`, `PATCH /api/events/repeaters/<id>/`, the create endpoints | Org staff | Write `dota_lobby_password_mode` and the write-only `dota_lobby_password`. Fixed mode needs a valid password (the current one is kept when none is sent); in random mode a sent password is ignored |
 
