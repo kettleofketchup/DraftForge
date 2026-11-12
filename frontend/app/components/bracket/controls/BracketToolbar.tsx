@@ -171,7 +171,7 @@ export function BracketToolbar({
       {hasMatches && (
         <SecondaryButton
           onClick={() => setShowAutoAssign(true)}
-          className="hidden sm:inline-flex"
+          className="hidden sm:inline-flex min-h-11"
           data-testid="auto-assign-btn"
         >
           <Wand2 className="h-4 w-4 mr-1" />
