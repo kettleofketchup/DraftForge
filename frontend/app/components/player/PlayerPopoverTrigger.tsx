@@ -3,17 +3,23 @@ import type { UserType } from '~/components/user/types';
 import { useSharedPopoverActions } from '~/components/ui/shared-popover-context';
 import { useLeagueStore } from '~/store/leagueStore';
 import { useOrgStore } from '~/store/orgStore';
+import { cn } from '~/lib/utils';
 
 interface PlayerPopoverTriggerProps {
   player: UserType;
   children: React.ReactNode;
   statsLeagueId?: number | null;
+  /** Accessible name; defaults to "View profile for <name>". */
+  label?: string;
+  className?: string;
 }
 
 export const PlayerPopoverTrigger: React.FC<PlayerPopoverTriggerProps> = ({
   player,
   children,
   statsLeagueId,
+  label,
+  className,
 }) => {
   const { showPlayerPopover, hidePopover, scheduleHidePopover, openPlayerModal } = useSharedPopoverActions();
   const currentOrg = useOrgStore((s) => s.currentOrg);
@@ -57,10 +63,10 @@ export const PlayerPopoverTrigger: React.FC<PlayerPopoverTriggerProps> = ({
   return (
     <span
       ref={triggerRef}
-      className="cursor-pointer"
+      className={cn('cursor-pointer', className)}
       role="button"
       tabIndex={0}
-      aria-label={`View profile for ${playerName}`}
+      aria-label={label ?? `View profile for ${playerName}`}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
       onClick={handleClick}

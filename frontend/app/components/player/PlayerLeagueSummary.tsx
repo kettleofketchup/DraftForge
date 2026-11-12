@@ -38,13 +38,15 @@ function averagesLine(stats: LeagueStatsResponse): string {
   return `KDA ${fmt1(stats.avg_kills)} / ${fmt1(stats.avg_deaths)} / ${fmt1(stats.avg_assists)} · GPM ${Math.round(stats.avg_gpm)} · XPM ${Math.round(stats.avg_xpm)}`;
 }
 
-export const PlayerLeagueSummary: React.FC<{ leaguePk: number; userId: number }> = ({
-  leaguePk,
-  userId,
-}) => {
+export const PlayerLeagueSummary: React.FC<{
+  leaguePk: number;
+  userId: number;
+  /** Hover-card variant: no KDA/GPM/XPM averages line and no request for it. */
+  compact?: boolean;
+}> = ({ leaguePk, userId, compact = false }) => {
   const summaryQuery = usePlayerLeagueSummary(leaguePk, userId);
   const distributionQuery = useLeagueDistribution(leaguePk);
-  const statsQuery = useUserLeagueStatsByLeague(userId, leaguePk);
+  const statsQuery = useUserLeagueStatsByLeague(compact ? undefined : userId, leaguePk);
 
   const summaryError = summaryQuery.error;
   const statsError = statsQuery.error;
@@ -64,7 +66,7 @@ export const PlayerLeagueSummary: React.FC<{ leaguePk: number; userId: number }>
     });
   }, [statsError, leaguePk, userId]);
 
-  const averages = statsQuery.isPending ? (
+  const averages = compact ? null : statsQuery.isPending ? (
     <div className="text-xs text-muted-foreground">Loading averages...</div>
   ) : statsQuery.isError ? (
     <div className="text-xs text-muted-foreground">Averages unavailable</div>
@@ -96,7 +98,7 @@ export const PlayerLeagueSummary: React.FC<{ leaguePk: number; userId: number }>
   const tone = winRateTone(summary.win_rate);
 
   return (
-    <div data-testid="player-league-summary" className="space-y-3">
+    <div data-testid={compact ? 'hover-league-summary' : 'player-league-summary'} className="space-y-3">
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <Tile
           label="Rank"

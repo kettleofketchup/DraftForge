@@ -1,6 +1,7 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useSharedPopover } from './shared-popover-context';
+import { PlayerLeagueSummary } from '~/components/player/PlayerLeagueSummary';
 import { RolePositions } from '~/components/user/positions';
 import type { UserType } from '~/components/user/types';
 import { UserAvatar } from '~/components/user/UserAvatar';
@@ -11,7 +12,10 @@ import { useLeagueStore } from '~/store/leagueStore';
 import { useOrgStore } from '~/store/orgStore';
 
 // Player popover content
-const PlayerPopoverContent: React.FC<{ player: UserType }> = ({ player }) => {
+const PlayerPopoverContent: React.FC<{
+  player: UserType;
+  statsLeagueId?: number | null;
+}> = ({ player, statsLeagueId }) => {
   const playerName = player.nickname || player.username || 'Unknown';
 
   return (
@@ -34,6 +38,9 @@ const PlayerPopoverContent: React.FC<{ player: UserType }> = ({ player }) => {
           <RolePositions user={player} disableTooltips />
         </div>
       </div>
+      {statsLeagueId != null && player.pk != null && (
+        <PlayerLeagueSummary leaguePk={statsLeagueId} userId={player.pk} compact />
+      )}
       <p className="text-xs text-foreground/60 text-center">
         Click for full profile
       </p>
@@ -62,12 +69,13 @@ export const SharedPopoverRenderer: React.FC = () => {
   const [position, setPosition] = useState({ top: 0, left: 0 });
   const isHoveringPopoverRef = useRef(false);
 
-  // Calculate position when anchor changes
-  useEffect(() => {
+  // Place the card from its measured size; re-place when it resizes (e.g. league stats load).
+  const placePopover = useCallback(() => {
     if (state.anchorEl && state.isOpen) {
       const rect = state.anchorEl.getBoundingClientRect();
       const popoverWidth = state.type === 'team' ? 640 : 400;
-      const popoverHeight = state.type === 'team' ? 400 : 280;
+      const popoverHeight =
+        popoverRef.current?.offsetHeight || (state.type === 'team' ? 400 : 280);
 
       let top = rect.bottom + 4;
       let left = rect.left + rect.width / 2 - popoverWidth / 2;
@@ -80,10 +88,21 @@ export const SharedPopoverRenderer: React.FC = () => {
       if (top + popoverHeight > window.innerHeight - 8) {
         top = rect.top - popoverHeight - 4;
       }
+      if (top < 8) top = 8;
 
-      setPosition({ top, left });
+      setPosition((prev) => (prev.top === top && prev.left === left ? prev : { top, left }));
     }
   }, [state.anchorEl, state.isOpen, state.type]);
+
+  useLayoutEffect(placePopover, [placePopover]);
+
+  useEffect(() => {
+    const el = popoverRef.current;
+    if (!state.isOpen || !el || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(placePopover);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [state.isOpen, placePopover]);
 
   const handlePopoverMouseEnter = useCallback(() => {
     isHoveringPopoverRef.current = true;
@@ -147,7 +166,10 @@ export const SharedPopoverRenderer: React.FC = () => {
         role="tooltip"
       >
         {state.type === 'player' && state.player && (
-          <PlayerPopoverContent player={state.player} />
+          <PlayerPopoverContent
+            player={state.player}
+            statsLeagueId={state.context?.statsLeagueId}
+          />
         )}
         {state.type === 'team' && state.team && (
           <TeamPopoverContent

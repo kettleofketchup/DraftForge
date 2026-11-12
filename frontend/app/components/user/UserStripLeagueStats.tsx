@@ -1,16 +1,14 @@
-import { memo, useState } from 'react';
+import { memo } from 'react';
 import { RecentForm } from '~/components/league-stats/RecentForm';
+import { PlayerPopoverTrigger as PlayerPopover } from '~/components/player/PlayerPopoverTrigger';
 import { MIN_STREAK, StreakBadge } from '~/components/league-stats/StreakBadge';
 import { Badge } from '~/components/ui/badge';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '~/components/ui/tooltip';
 import { formatWinRate, toneChipClass, winRateTone } from '~/features/league-stats/format';
 import { usePlayerLeagueSummary } from '~/features/league-stats/queries';
 import type { PlayerLeagueSummary } from '~/features/league-stats/schemas';
 import { cn } from '~/lib/utils';
+import type { UserEntry } from '~/store/userCacheTypes';
+import type { UserType } from './types';
 
 const FORM_COUNT = 5;
 
@@ -44,74 +42,55 @@ const breakpointClass: Record<StatsBreakpoint, string> = {
 
 interface UserStripLeagueStatsProps {
   leaguePk: number;
-  userId: number;
+  player: UserType | UserEntry;
   breakpoint?: StatsBreakpoint;
 }
 
 export const UserStripLeagueStats = memo(
-  ({ leaguePk, userId, breakpoint = 'default' }: UserStripLeagueStatsProps) => {
-    const { data } = usePlayerLeagueSummary(leaguePk, userId);
-    const [tooltipArmed, setTooltipArmed] = useState(false);
+  ({ leaguePk, player, breakpoint = 'default' }: UserStripLeagueStatsProps) => {
+    const { data } = usePlayerLeagueSummary(leaguePk, player.pk ?? -1);
 
     const summary = data?.summary;
     if (!data || !summary || summary.games === 0) return null;
 
     const { population, minGames } = data;
     const tone = winRateTone(summary.win_rate);
-    const tooltipCopy =
-      summary.rank != null
-        ? `Rank ${summary.rank} of ${population} players with ≥${minGames} ticket games in this league`
-        : `Needs ${minGames} games to be ranked (${summary.games} so far)`;
-
-    const badge = (
-      <Badge
-        variant="outline"
-        className="px-1.5 py-0 text-xs font-mono tabular-nums justify-start gap-0"
-        onPointerEnter={tooltipArmed ? undefined : () => setTooltipArmed(true)}
-      >
-        <span
-          data-testid="strip-league-stats-rank"
-          className="inline-block min-w-[4ch] text-right"
-        >
-          {summary.rank != null ? `#${summary.rank}` : ''}
-        </span>
-        <span aria-hidden className="whitespace-pre">{' · '}</span>
-        <span className="inline-block min-w-[4ch] text-right">{`${summary.games}g`}</span>
-        <span aria-hidden className="whitespace-pre">{' · '}</span>
-        <span className={cn('inline-block min-w-[4ch] text-right', toneChipClass[tone])}>
-          {formatWinRate(summary.win_rate)}
-        </span>
-      </Badge>
-    );
+    const playerName = player.nickname || player.username || 'Unknown';
+    const label = `League stats for ${playerName}: ${accessibleLabel(summary, population, minGames)}. Opens the player panel`;
 
     return (
       <div
         data-testid="strip-league-stats"
-        role="img"
-        aria-label={accessibleLabel(summary, population, minGames)}
-        className={cn(
-          'hidden flex-col justify-center gap-0.5 shrink-0',
-          breakpointClass[breakpoint],
-        )}
+        className={cn('hidden shrink-0', breakpointClass[breakpoint])}
       >
-        {tooltipArmed ? (
-          <Tooltip>
-            <TooltipTrigger asChild>{badge}</TooltipTrigger>
-            <TooltipContent
-              side="top"
-              className="text-xs bg-popover text-popover-foreground"
+        <PlayerPopover
+          player={player as UserType}
+          statsLeagueId={leaguePk}
+          label={label}
+          className="flex flex-col justify-center gap-0.5"
+        >
+          <Badge
+            variant="outline"
+            className="px-1.5 py-0 text-xs font-mono tabular-nums justify-start gap-0 hover:bg-muted/50"
+          >
+            <span
+              data-testid="strip-league-stats-rank"
+              className="inline-block min-w-[4ch] text-right"
             >
-              <p className="font-semibold text-foreground">League ticket games</p>
-              <p className="text-muted-foreground">{tooltipCopy}</p>
-            </TooltipContent>
-          </Tooltip>
-        ) : (
-          badge
-        )}
-        <div className="flex h-[14px] items-center gap-1">
-          <RecentForm results={summary.recent} count={FORM_COUNT} />
-          <StreakBadge streak={summary.streak} />
-        </div>
+              {summary.rank != null ? `#${summary.rank}` : ''}
+            </span>
+            <span aria-hidden className="whitespace-pre">{' · '}</span>
+            <span className="inline-block min-w-[4ch] text-right">{`${summary.games}g`}</span>
+            <span aria-hidden className="whitespace-pre">{' · '}</span>
+            <span className={cn('inline-block min-w-[4ch] text-right', toneChipClass[tone])}>
+              {formatWinRate(summary.win_rate)}
+            </span>
+          </Badge>
+          <span className="flex h-[14px] items-center gap-1">
+            <RecentForm results={summary.recent} count={FORM_COUNT} />
+            <StreakBadge streak={summary.streak} />
+          </span>
+        </PlayerPopover>
       </div>
     );
   },

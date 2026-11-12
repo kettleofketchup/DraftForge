@@ -282,6 +282,59 @@ test.describe('Strip league stats (@cicd)', () => {
       await expect(page.getByTestId('player-league-summary')).toContainText('— / 7');
     });
 
+    test('League filter narrows the available players', async ({ page }) => {
+      const dialog = await openDraftModal(page, tournament);
+      await expectAceVisible(dialog);
+      // The section stays rendered when a filter leaves no players; the dialog locator does not.
+      const section = page.getByTestId('available-players-section');
+      const count = section.getByTestId('available-players-count');
+      await expect(count).toContainText('8/8 players');
+
+      await section.getByRole('tab', { name: 'League' }).click();
+      const expected: Record<string, string[]> = {
+        'High WR': [NAMES.ace, NAMES.hot, NAMES.tieA, NAMES.tieB],
+        '10+ Games': [],
+        New: [NAMES.rookie, NAMES.zero],
+      };
+      for (const [filter, names] of Object.entries(expected)) {
+        await section.getByRole('button', { name: filter, exact: true }).click();
+        await expect(count).toContainText(`${names.length}/8 players`);
+        for (const name of names) {
+          await expect(availableStrip(section, name)).toHaveCount(1);
+        }
+      }
+
+      await section.getByRole('button', { name: 'All', exact: true }).click();
+      await expect(count).toContainText('8/8 players');
+    });
+
+    test('hover card shows the compact league summary', async ({ page }) => {
+      const dialog = await openDraftModal(page, tournament);
+      await expectAceVisible(dialog);
+      await nameTrigger(availableStrip(dialog, NAMES.ace), NAMES.ace).hover();
+      const card = page.getByRole('tooltip').filter({ hasText: NAMES.ace });
+      const summary = card.getByTestId('hover-league-summary');
+      await expect(summary).toContainText('#1 / 7');
+      await expect(summary.getByTestId('win-rate-histogram')).toBeVisible();
+      await expect(summary).not.toContainText('KDA');
+    });
+
+    test('stats badge opens the hover card and the player panel', async ({ page }) => {
+      const dialog = await openDraftModal(page, tournament);
+      await expectAceVisible(dialog);
+      const badge = availableStrip(dialog, NAMES.hot).getByRole('button', {
+        name: /^League stats for Strip Hot/,
+      });
+
+      await badge.hover();
+      const card = page.getByRole('tooltip').filter({ hasText: NAMES.hot });
+      await expect(card.getByTestId('hover-league-summary')).toContainText('#2 / 7');
+
+      await badge.click();
+      const panel = page.getByTestId('player-league-summary');
+      await expect(panel).toContainText('#2 / 7');
+    });
+
     test('modal from hover card', async ({ page }) => {
       await openTeamsTab(page, tournament);
       const card = teamCard(page, NAMES.captA);

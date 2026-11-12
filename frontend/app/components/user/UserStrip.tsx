@@ -270,7 +270,7 @@ export const UserStrip = memo(
         {statsLeagueId != null && user.pk != null ? (
           <UserStripLeagueStats
             leaguePk={statsLeagueId}
-            userId={user.pk}
+            player={user}
             breakpoint={statsBreakpoint}
           />
         ) : null}

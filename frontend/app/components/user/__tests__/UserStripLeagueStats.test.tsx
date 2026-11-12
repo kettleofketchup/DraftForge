@@ -3,7 +3,23 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { TooltipProvider } from '~/components/ui/tooltip';
+import type { UserType } from '~/components/user/types';
 import { UserStripLeagueStats } from '../UserStripLeagueStats';
+
+const actions = vi.hoisted(() => ({
+  showPlayerPopover: vi.fn(),
+  hidePopover: vi.fn(),
+  scheduleHidePopover: vi.fn(),
+  openPlayerModal: vi.fn(),
+}));
+
+vi.mock('~/components/ui/shared-popover-context', () => ({
+  useSharedPopoverActions: () => actions,
+}));
+
+function player(pk: number): UserType {
+  return { pk, username: `user${pk}`, nickname: `User ${pk}` } as UserType;
+}
 
 class ResizeObserverStub {
   observe() {}
@@ -90,11 +106,11 @@ function renderStats(userId: number, leaguePk = 3, controlUserId?: number) {
     <QueryClientProvider client={client}>
       <TooltipProvider>
         <div data-testid="subject">
-          <UserStripLeagueStats leaguePk={leaguePk} userId={userId} />
+          <UserStripLeagueStats leaguePk={leaguePk} player={player(userId)} />
         </div>
         {controlUserId != null && (
           <div data-testid="control">
-            <UserStripLeagueStats leaguePk={3} userId={controlUserId} />
+            <UserStripLeagueStats leaguePk={3} player={player(controlUserId)} />
           </div>
         )}
       </TooltipProvider>
@@ -113,6 +129,7 @@ async function expectSubjectEmptyAfterControlRenders() {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.clearAllMocks();
 });
 
 describe('UserStripLeagueStats', () => {
@@ -124,8 +141,8 @@ describe('UserStripLeagueStats', () => {
     expect(column.textContent).toContain('14g');
     const pct = screen.getByText('57%');
     expect(pct.className).toContain('text-success');
-    expect(column.getAttribute('aria-label')).toBe(
-      'Rank 12 of 84 (≥3 ticket games), 14 games, 57% win rate, last 5: L W W W W, oldest to newest, win streak 4',
+    expect(screen.getByRole('button').getAttribute('aria-label')).toBe(
+      'League stats for User 42: Rank 12 of 84 (≥3 ticket games), 14 games, 57% win rate, last 5: L W W W W, oldest to newest, win streak 4. Opens the player panel',
     );
     expect(screen.getByTestId('recent-form')).toBeTruthy();
     expect(screen.getByTestId('streak-badge').textContent).toBe('W4');
@@ -146,9 +163,9 @@ describe('UserStripLeagueStats', () => {
     stubFetch(summaries);
     renderStats(43);
     const column = await screen.findByTestId('strip-league-stats');
-    const label = column.getAttribute('aria-label') ?? '';
-    expect(label).toBe(
-      'Unranked: needs 3 ticket games (2 so far), 0% win rate, last 2: L L, oldest to newest',
+    const trigger = screen.getByRole('button');
+    expect(trigger.getAttribute('aria-label')).toBe(
+      'League stats for User 43: Unranked: needs 3 ticket games (2 so far), 0% win rate, last 2: L L, oldest to newest. Opens the player panel',
     );
     expect(column.textContent).not.toContain('#');
     expect(column.textContent).toContain('2g');
@@ -192,7 +209,7 @@ describe('UserStripLeagueStats', () => {
     render(
       <QueryClientProvider client={client}>
         <TooltipProvider>
-          <UserStripLeagueStats leaguePk={3} userId={42} />
+          <UserStripLeagueStats leaguePk={3} player={player(42)} />
         </TooltipProvider>
       </QueryClientProvider>,
     );
@@ -213,22 +230,33 @@ describe('UserStripLeagueStats', () => {
     for (const sep of seps) expect(sep.className).toContain('whitespace-pre');
   });
 
-  it('mounts the Radix tooltip only after pointerenter', async () => {
+  it('the badge opens the hover card and the panel for this league', async () => {
+    stubFetch(summaries);
+    renderStats(42);
+    await screen.findByTestId('strip-league-stats');
+    const trigger = screen.getByRole('button', { name: /^League stats for User 42: Rank 12 of 84/ });
+
+    fireEvent.mouseEnter(trigger);
+    expect(actions.showPlayerPopover).toHaveBeenCalledWith(
+      expect.objectContaining({ pk: 42 }),
+      trigger,
+      { statsLeagueId: 3 },
+    );
+
+    fireEvent.click(trigger);
+    expect(actions.openPlayerModal).toHaveBeenCalledWith(
+      expect.objectContaining({ pk: 42 }),
+      expect.objectContaining({ statsLeagueId: 3 }),
+    );
+  });
+
+  it('mounts no tooltip of its own', async () => {
     stubFetch(summaries);
     renderStats(42);
     const column = await screen.findByTestId('strip-league-stats');
-    const badge = () => column.firstElementChild as HTMLElement;
-    expect(badge().hasAttribute('data-state')).toBe(false);
+    fireEvent.pointerOver(column);
+    fireEvent.mouseEnter(screen.getByRole('button'));
     expect(screen.queryByText('League ticket games')).toBeNull();
-
-    fireEvent.pointerOver(badge());
-    await waitFor(() => expect(badge().getAttribute('data-state')).toBe('closed'));
-
-    fireEvent.focus(badge());
-    expect((await screen.findAllByText('League ticket games')).length).toBeGreaterThan(0);
-    expect(
-      screen.getAllByText('Rank 12 of 84 players with ≥3 ticket games in this league')
-        .length,
-    ).toBeGreaterThan(0);
+    expect(column.querySelector('[data-state]')).toBeNull();
   });
 });

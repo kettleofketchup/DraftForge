@@ -96,14 +96,14 @@ function stubFetch(summaryReply: Reply, statsReply: Reply) {
   });
 }
 
-function renderPanel() {
+function renderPanel(compact = false) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, retryDelay: 0 } },
   });
   return render(
     <QueryClientProvider client={client}>
       <TooltipProvider>
-        <PlayerLeagueSummary leaguePk={LEAGUE_PK} userId={USER_ID} />
+        <PlayerLeagueSummary leaguePk={LEAGUE_PK} userId={USER_ID} compact={compact} />
       </TooltipProvider>
     </QueryClientProvider>,
   );
@@ -310,5 +310,19 @@ describe('PlayerLeagueSummary', () => {
     renderPanel();
     expect(await screen.findByText('2/3 games to rank')).toBeTruthy();
     expect(screen.getByTestId('player-league-summary').textContent).toContain('— / 84');
+  });
+
+  it('compact renders the tiles without fetching or showing averages', async () => {
+    const fetchSpy = stubFetch({ status: 200, body: summaries({ [USER_ID]: rankedRow }) }, {
+      status: 200,
+      body: leagueStats,
+    });
+    renderPanel(true);
+    expect(await screen.findByText('#12 / 84')).toBeTruthy();
+    expect(screen.getByTestId('win-rate-histogram')).toBeTruthy();
+    expect(screen.queryByText(/KDA /)).toBeNull();
+    expect(screen.queryByText('Loading averages...')).toBeNull();
+    const urls = fetchSpy.mock.calls.map(([input]) => String(input));
+    expect(urls.every((url) => url.includes('/player-summaries/'))).toBe(true);
   });
 });
