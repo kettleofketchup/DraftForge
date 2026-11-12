@@ -259,6 +259,7 @@ jobs:
               app.tests.test_draft_options \
               app.tests.test_teamdraft_timer \
               app.tests.test_teamdraft_timeout \
+              app.tests.test_tie_roll_hold \
               app.tests.test_draft_events \
               app.tests.test_draft_state_queries \
               tests.test_populate \

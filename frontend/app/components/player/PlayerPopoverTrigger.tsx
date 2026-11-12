@@ -3,17 +3,25 @@ import type { UserType } from '~/components/user/types';
 import { useSharedPopoverActions } from '~/components/ui/shared-popover-context';
 import { useLeagueStore } from '~/store/leagueStore';
 import { useOrgStore } from '~/store/orgStore';
+import { cn } from '~/lib/utils';
 
 interface PlayerPopoverTriggerProps {
   player: UserType;
   children: React.ReactNode;
+  statsLeagueId?: number | null;
+  /** Accessible name; defaults to "View profile for <name>". */
+  label?: string;
+  className?: string;
 }
 
 export const PlayerPopoverTrigger: React.FC<PlayerPopoverTriggerProps> = ({
   player,
   children,
+  statsLeagueId,
+  label,
+  className,
 }) => {
-  const { showPlayerPopover, hidePopover, openPlayerModal } = useSharedPopoverActions();
+  const { showPlayerPopover, hidePopover, scheduleHidePopover, openPlayerModal } = useSharedPopoverActions();
   const currentOrg = useOrgStore((s) => s.currentOrg);
   const currentLeague = useLeagueStore((s) => s.currentLeague);
   const triggerRef = useRef<HTMLSpanElement>(null);
@@ -21,13 +29,13 @@ export const PlayerPopoverTrigger: React.FC<PlayerPopoverTriggerProps> = ({
 
   const handleMouseEnter = useCallback(() => {
     if (triggerRef.current) {
-      showPlayerPopover(player, triggerRef.current);
+      showPlayerPopover(player, triggerRef.current, { statsLeagueId });
     }
-  }, [player, showPlayerPopover]);
+  }, [player, showPlayerPopover, statsLeagueId]);
 
   const handleMouseLeave = useCallback(() => {
-    hidePopover();
-  }, [hidePopover]);
+    scheduleHidePopover();
+  }, [scheduleHidePopover]);
 
   const handleClick = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -35,8 +43,9 @@ export const PlayerPopoverTrigger: React.FC<PlayerPopoverTriggerProps> = ({
     openPlayerModal(player, {
       organizationId: currentOrg?.pk,
       leagueId: currentLeague?.pk,
+      statsLeagueId,
     });
-  }, [player, openPlayerModal, currentOrg?.pk, currentLeague?.pk]);
+  }, [player, openPlayerModal, currentOrg?.pk, currentLeague?.pk, statsLeagueId]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter' || e.key === ' ') {
@@ -44,19 +53,20 @@ export const PlayerPopoverTrigger: React.FC<PlayerPopoverTriggerProps> = ({
       openPlayerModal(player, {
         organizationId: currentOrg?.pk,
         leagueId: currentLeague?.pk,
+        statsLeagueId,
       });
     } else if (e.key === 'Escape') {
       hidePopover();
     }
-  }, [player, openPlayerModal, hidePopover, currentOrg?.pk, currentLeague?.pk]);
+  }, [player, openPlayerModal, hidePopover, currentOrg?.pk, currentLeague?.pk, statsLeagueId]);
 
   return (
     <span
       ref={triggerRef}
-      className="cursor-pointer"
+      className={cn('cursor-pointer', className)}
       role="button"
       tabIndex={0}
-      aria-label={`View profile for ${playerName}`}
+      aria-label={label ?? `View profile for ${playerName}`}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
       onClick={handleClick}

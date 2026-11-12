@@ -11,24 +11,39 @@ import type { UserType } from '~/components/user/types';
 
 type PopoverType = 'player' | 'team' | null;
 
+/** Grace period so the pointer can cross from a trigger onto its hover card. */
+export const HIDE_DELAY_MS = 150;
+
 interface SharedPopoverState {
   type: PopoverType;
   player: UserType | null;
   team: TeamType | null;
   anchorEl: HTMLElement | null;
   isOpen: boolean;
+  context?: PlayerPopoverContext;
+}
+
+export interface PlayerPopoverContext {
+  statsLeagueId?: number | null;
 }
 
 export interface PlayerModalContext {
   leagueId?: number;
   organizationId?: number;
+  statsLeagueId?: number | null;
 }
 
 /** Stable callbacks. The value is constructed once and never changes. */
 interface SharedPopoverActionsValue {
-  showPlayerPopover: (player: UserType, anchorEl: HTMLElement) => void;
+  showPlayerPopover: (
+    player: UserType,
+    anchorEl: HTMLElement,
+    context?: PlayerPopoverContext,
+  ) => void;
   showTeamPopover: (team: TeamType, anchorEl: HTMLElement) => void;
   hidePopover: () => void;
+  scheduleHidePopover: () => void;
+  cancelHidePopover: () => void;
   openPlayerModal: (player: UserType, context?: PlayerModalContext) => void;
   openTeamModal: (team: TeamType) => void;
   setPlayerModalOpen: (open: boolean) => void;
@@ -108,27 +123,41 @@ export const SharedPopoverProvider: React.FC<SharedPopoverProviderProps> = ({
   }>({ team: null, open: false });
 
   const hoverIntentRef = useRef<NodeJS.Timeout | null>(null);
+  const hideTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const cancelHidePopover = useCallback(() => {
+    if (hideTimerRef.current) {
+      clearTimeout(hideTimerRef.current);
+      hideTimerRef.current = null;
+    }
+  }, []);
   const isHoveringRef = useRef(false);
 
-  const showPlayerPopover = useCallback((player: UserType, anchorEl: HTMLElement) => {
-    isHoveringRef.current = true;
-    if (hoverIntentRef.current) {
-      clearTimeout(hoverIntentRef.current);
-    }
-    hoverIntentRef.current = setTimeout(() => {
-      if (isHoveringRef.current) {
-        setState({
-          type: 'player',
-          player,
-          team: null,
-          anchorEl,
-          isOpen: true,
-        });
+  const showPlayerPopover = useCallback(
+    (player: UserType, anchorEl: HTMLElement, context?: PlayerPopoverContext) => {
+      cancelHidePopover();
+      isHoveringRef.current = true;
+      if (hoverIntentRef.current) {
+        clearTimeout(hoverIntentRef.current);
       }
-    }, 50);
-  }, []);
+      hoverIntentRef.current = setTimeout(() => {
+        if (isHoveringRef.current) {
+          setState({
+            type: 'player',
+            player,
+            team: null,
+            anchorEl,
+            isOpen: true,
+            context,
+          });
+        }
+      }, 50);
+    },
+    [cancelHidePopover],
+  );
 
   const showTeamPopover = useCallback((team: TeamType, anchorEl: HTMLElement) => {
+    cancelHidePopover();
     isHoveringRef.current = true;
     if (hoverIntentRef.current) {
       clearTimeout(hoverIntentRef.current);
@@ -144,15 +173,25 @@ export const SharedPopoverProvider: React.FC<SharedPopoverProviderProps> = ({
         });
       }
     }, 50);
-  }, []);
+  }, [cancelHidePopover]);
 
   const hidePopover = useCallback(() => {
+    cancelHidePopover();
     isHoveringRef.current = false;
     if (hoverIntentRef.current) {
       clearTimeout(hoverIntentRef.current);
     }
     setState((prev) => ({ ...prev, isOpen: false }));
-  }, []);
+  }, [cancelHidePopover]);
+
+  const scheduleHidePopover = useCallback(() => {
+    isHoveringRef.current = false;
+    if (hoverIntentRef.current) {
+      clearTimeout(hoverIntentRef.current);
+    }
+    cancelHidePopover();
+    hideTimerRef.current = setTimeout(hidePopover, HIDE_DELAY_MS);
+  }, [cancelHidePopover, hidePopover]);
 
   const openPlayerModal = useCallback((player: UserType, context?: PlayerModalContext) => {
     hidePopover();
@@ -181,6 +220,8 @@ export const SharedPopoverProvider: React.FC<SharedPopoverProviderProps> = ({
       showPlayerPopover,
       showTeamPopover,
       hidePopover,
+      scheduleHidePopover,
+      cancelHidePopover,
       openPlayerModal,
       openTeamModal,
       setPlayerModalOpen,
@@ -190,6 +231,8 @@ export const SharedPopoverProvider: React.FC<SharedPopoverProviderProps> = ({
       showPlayerPopover,
       showTeamPopover,
       hidePopover,
+      scheduleHidePopover,
+      cancelHidePopover,
       openPlayerModal,
       openTeamModal,
       setPlayerModalOpen,

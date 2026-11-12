@@ -1,4 +1,8 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, type UseQueryResult } from "@tanstack/react-query";
+import {
+  LeagueStatsResponseSchema,
+  type LeagueStatsResponse,
+} from "~/features/league-stats/schemas";
 import type {
   LeaderboardResponse,
   LeagueStats,
@@ -40,6 +44,28 @@ async function fetchUserLeagueStats(userId: number, leagueId?: number): Promise<
   return response.json();
 }
 
+export class LeagueStatsHttpError extends Error {
+  status: number;
+
+  constructor(status: number) {
+    super(`Failed to fetch league stats: ${status}`);
+    this.name = "LeagueStatsHttpError";
+    this.status = status;
+  }
+}
+
+async function fetchUserLeagueStatsByLeague(
+  userId: number,
+  leaguePk: number
+): Promise<LeagueStatsResponse | null> {
+  const response = await fetch(
+    `${API_BASE}/league-stats/${userId}/?league=${leaguePk}`
+  );
+  if (response.status === 404) return null;
+  if (!response.ok) throw new LeagueStatsHttpError(response.status);
+  return LeagueStatsResponseSchema.parse(await response.json());
+}
+
 async function fetchMyLeagueStats(): Promise<LeagueStats> {
   const response = await fetch(`${API_BASE}/league-stats/me/`, {
     credentials: "include",
@@ -62,6 +88,21 @@ export function useUserLeagueStats(userId: number | null, leagueId?: number) {
     queryKey: ["league-stats", userId, leagueId],
     queryFn: () => fetchUserLeagueStats(userId!, leagueId),
     enabled: userId !== null,
+  });
+}
+
+export function useUserLeagueStatsByLeague(
+  userId: number | undefined,
+  leaguePk: number | null | undefined
+): UseQueryResult<LeagueStatsResponse | null, Error> {
+  return useQuery({
+    queryKey: ["league-stats", "by-league", userId, leaguePk],
+    queryFn: () => fetchUserLeagueStatsByLeague(userId!, leaguePk!),
+    enabled: !!userId && !!leaguePk,
+    retry: (failureCount, error) =>
+      error instanceof LeagueStatsHttpError &&
+      error.status !== 404 &&
+      failureCount < 1,
   });
 }
 

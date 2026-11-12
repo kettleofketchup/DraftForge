@@ -84,6 +84,9 @@ def roll_until_winner(teams: list) -> tuple:
     return remaining[0], roll_rounds
 
 
+TIE_ROLL_HOLD_MS = 5000
+
+
 def get_lowest_mmr_team(teams: list) -> tuple:
     """
     Find team with lowest total MMR.
@@ -106,6 +109,7 @@ def get_lowest_mmr_team(teams: list) -> tuple:
             ],
             "roll_rounds": roll_rounds,
             "winner_id": winner.id,
+            "hold_ms": TIE_ROLL_HOLD_MS,
         }
         return winner, tie_data
 
@@ -178,6 +182,7 @@ def reassign_round_captain(
     next_team, tie_data = get_lowest_mmr_team(eligible_teams)
     round.captain = next_team.captain
     if tie_data:
+        tie_data["pick_number"] = round.pick_number
         round.was_tie = True
         round.tie_roll_data = tie_data
     round.save()
@@ -209,6 +214,7 @@ def reassign_round_captain(
                 "roll_rounds": tie_data["roll_rounds"],
                 "winner_id": tie_data["winner_id"],
                 "winner_name": captain.username,
+                "hold_ms": tie_data["hold_ms"],
             },
         )
         broadcast_event_after_commit(tie_event)

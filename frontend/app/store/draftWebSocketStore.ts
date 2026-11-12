@@ -297,6 +297,8 @@ export const useDraftWebSocketStore = create<DraftWebSocketState>((set, get) => 
             tied_teams: trPayload.tied_teams,
             roll_rounds: trPayload.roll_rounds,
             winner_id: trPayload.winner_id,
+            pick_number: trPayload.pick_number,
+            hold_ms: trPayload.hold_ms,
           };
         }
         if (

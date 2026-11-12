@@ -82,7 +82,7 @@ Endpoints for Steam integration and league statistics.
 |-----------|------|---------|-------------|
 | `page` | int | 1 | Page number |
 | `page_size` | int | 20 | Results per page |
-| `sort_by` | string | `league_mmr` | Sort field: `league_mmr`, `games_played`, `win_rate`, `avg_kda` |
+| `sort_by` | string | `win_rate` | Sort field: `win_rate`, `games_played`, `avg_kda`; unknown values fall back to `win_rate` |
 | `order` | string | `desc` | Sort order: `asc`, `desc` |
 
 **Response:**
@@ -117,6 +117,13 @@ Endpoints for Steam integration and league statistics.
 | GET | `/api/steam/league-stats/{user_id}/` | Get user's league stats | No |
 | GET | `/api/steam/league-stats/me/` | Get current user's stats | Yes |
 
+**Query Parameters (`{user_id}` only):**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `league` | int | | DraftForge league pk, mapped to its `steam_league_id`; takes precedence over `league_id`. 404 if the league does not exist or has no `steam_league_id` |
+| `league_id` | int | `LEAGUE_ID` setting | Steam league id |
+
 **Response:**
 
 ```json
@@ -137,6 +144,54 @@ Endpoints for Steam integration and league statistics.
   "league_mmr": 3250
 }
 ```
+
+
+### League Player Summaries
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| GET | `/api/steam/leagues/{league_pk}/player-summaries/` | Per-player ticket-match summaries and win-rate distribution for a DraftForge league | No |
+
+Built from Steam league-ticket matches (`Match.league_id == League.steam_league_id`). A league
+without a `steam_league_id` returns an empty summary; an unknown `league_pk` returns 404.
+
+- **Rank** is by win rate among players with at least `min_games` (`LEAGUE_MMR_MIN_GAMES`)
+  games; ties break on more games, then more wins. Players below the threshold get `rank`,
+  `top_percent` and `bucket` as `null`.
+- **`recent`** holds the last 10 results, oldest first. **`streak`** is the current run.
+- **`distribution`** has 10 buckets of 10% win rate, counting ranked players only.
+
+**Response:**
+
+```json
+{
+  "league_pk": 20,
+  "steam_league_id": 17938,
+  "min_games": 5,
+  "population": 84,
+  "players": {
+    "42": {
+      "rank": 12,
+      "top_percent": 15,
+      "games": 20,
+      "wins": 13,
+      "losses": 7,
+      "win_rate": 0.65,
+      "bucket": 6,
+      "recent": ["W", "L", "W", "W", "W"],
+      "streak": { "result": "W", "count": 3 }
+    }
+  },
+  "distribution": {
+    "bucket_size": 10,
+    "buckets": [{ "min": 0, "max": 10, "count": 1 }]
+  }
+}
+```
+
+!!! note
+    Results are cached for 30 minutes and invalidated when the league's matches or any
+    `PlayerMatchStats` row change.
 
 ## Organizations
 

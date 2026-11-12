@@ -19,6 +19,7 @@ export interface TournamentData {
   captains: number[];
   users: number[];
   league: number | null;
+  league_pk?: number | null;
   _users?: Record<string, { pk: number; username: string; mmr?: number }>;
 }
 
