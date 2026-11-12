@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 from django.db import models, transaction
 
 from app.cache_utils import invalidate_after_commit, invalidate_obj
-from app.models import CustomUser, Tournament
+from app.models import CustomUser, Team, Tournament
 from events.constants import EventState, RepeatFrequency, SignupStatus, SignupType
 from events.discord import (
     notify_create_discord_event,
@@ -19,12 +19,14 @@ from events.discord import (
 from events.models import (
     DiscordEventConfigMixin,
     DiscordTournamentConfigMixin,
+    DotaLobbyConfigMixin,
     Event,
     EventConfigMixin,
     EventRepeater,
     EventSignup,
     TournamentTemplateMixin,
 )
+from lobby.passwords import PasswordMode, generate_password
 from telemetry.logging import get_logger
 
 logger = get_logger(__name__)
@@ -827,6 +829,12 @@ LOBBY_CONFIG_FIELDS = [
     "custom_game_name",
     "captains_draft_time",
     "lobby_steam_league_id",
+    # dota_lobby settings (DotaLobbyConfigMixin) and the event's password.
+    "dota_lobby_mode",
+    "dota_lobby_launch",
+    "dota_lobby_region",
+    "discord_send_lobby_info",
+    "dota_lobby_password",
 ]
 
 DISCORD_TOURNAMENT_CONFIG_FIELDS = [
@@ -856,6 +864,11 @@ def create_tournament_for_event(event):
         auto_create_hero_drafts=event.auto_create_hero_drafts,
         discord_send_draft_link=event.discord_send_draft_link,
         discord_send_herodraft_link=event.discord_send_herodraft_link,
+        dota_lobby_mode=event.dota_lobby_mode,
+        dota_lobby_launch=event.dota_lobby_launch,
+        dota_lobby_region=event.dota_lobby_region,
+        discord_send_lobby_info=event.discord_send_lobby_info,
+        dota_lobby_password=event.dota_lobby_password,
         state="future",
     )
     event.tournament = tournament
@@ -937,10 +950,10 @@ def sync_tournament_from_event(event):
         invalidate_obj(event.tournament)
         return {"synced": True, "warning": None}
     elif state == "in_progress":
-        return {
-            "synced": False,
-            "warning": "Tournament is in progress. Changes were saved to the event but not applied to the active tournament.",
-        }
+        warning = "Tournament is in progress. Changes were saved to the event but not applied to the active tournament."
+        if push_lobby_password_to_tournament(event):
+            warning += " The new lobby password applies to lobbies created from now on."
+        return {"synced": False, "warning": warning}
     else:
         return {
             "synced": False,
@@ -1048,6 +1061,112 @@ def teardown_event(event: Event) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Lobby passwords
+# ---------------------------------------------------------------------------
+#
+# One password per event, used by every lobby of every tournament of the
+# event (lobby.passwords). A series holds the mode and, in fixed mode, the
+# password; each event stores its effective password and copies it onto its
+# tournament. A lobby keeps the password it was created with, so a change
+# only affects lobbies created afterwards.
+
+# Signup statuses that put a player in the event's tournament
+# (approve_signup / confirm_signup call add_user_to_tournament).
+REGISTERED_SIGNUP_STATUSES = (SignupStatus.APPROVED, SignupStatus.CONFIRMED)
+
+
+def is_registered_for_event(user, event: Event) -> bool:
+    """The user plays in the event: an accepted signup, or on a team roster.
+
+    Accepted means APPROVED or CONFIRMED. rsvp, pending_approval,
+    waitlisted, tentative, rejected and cancelled signups do not count.
+    Rostered means a member or the captain of a team in the event's
+    tournament.
+    """
+    if not user or not getattr(user, "is_authenticated", False):
+        return False
+    # nocache: a player just rejected or removed must lose access at once.
+    if (
+        EventSignup.objects.nocache()
+        .filter(event=event, user=user, status__in=REGISTERED_SIGNUP_STATUSES)
+        .exists()
+    ):
+        return True
+    if event.tournament_id is None:
+        return False
+    return (
+        Team.objects.nocache()
+        .filter(tournament_id=event.tournament_id)
+        .filter(models.Q(members=user) | models.Q(captain=user))
+        .exists()
+    )
+
+
+def series_lobby_password(
+    repeater: EventRepeater, previous_mode: str, previous_password: str
+) -> str:
+    """The password an on-schedule event gets from its series.
+
+    Fixed: the series' password. Random: the event keeps its own generated
+    password, and gets a new one when it had a fixed one (or none).
+    """
+    if repeater.dota_lobby_password_mode == PasswordMode.FIXED:
+        return repeater.dota_lobby_password
+    if previous_mode == PasswordMode.RANDOM and previous_password:
+        return previous_password
+    return generate_password()
+
+
+def push_lobby_password_to_tournament(event: Event) -> bool:
+    """Copy only the event's password to its tournament unless it is past.
+
+    sync_tournament_from_event copies everything to a future tournament; this
+    also reaches an in-progress one, whose next lobbies must use the new
+    password. Returns whether the tournament changed.
+    """
+    tournament = event.tournament
+    if tournament is None:
+        return False
+    # Decided by the database, not a possibly cached tournament.
+    changed = (
+        Tournament.objects.filter(pk=tournament.pk)
+        .exclude(state="past")
+        .exclude(dota_lobby_password=event.dota_lobby_password)
+        .update(dota_lobby_password=event.dota_lobby_password)
+    )
+    if not changed:
+        return False
+    tournament.dota_lobby_password = event.dota_lobby_password
+    invalidate_after_commit(tournament)
+    return True
+
+
+def log_lobby_password_changed(event: Event, reason: str) -> None:
+    """Log that an event's lobby password changed. Never logs the value."""
+    logger.info(
+        "lobby_password_changed",
+        system="events",
+        subsystem="services",
+        event_id=event.pk,
+        mode=event.dota_lobby_password_mode,
+        reason=reason,
+    )
+
+
+@transaction.atomic
+def regenerate_event_lobby_password(event: Event) -> Event:
+    """Give a random-mode event a new password (and its tournament)."""
+    if event.dota_lobby_password_mode != PasswordMode.RANDOM:
+        raise ValueError("Only a random lobby password can be regenerated.")
+    event.dota_lobby_password = generate_password()
+    event.save(update_fields=["dota_lobby_password", "updated_at"])
+    push_lobby_password_to_tournament(event)
+    invalidate_after_commit(event)
+    log_lobby_password_changed(event, "regenerated")
+    return event
+
+
+# ---------------------------------------------------------------------------
 # Event generation
 # ---------------------------------------------------------------------------
 
@@ -1065,11 +1184,17 @@ DISCORD_TOURNAMENT_TEMPLATE_FIELDS = [
     for f in DiscordTournamentConfigMixin._meta.get_fields()
     if hasattr(f, "column")
 ]
+# Includes dota_lobby_password_mode but not the password itself, which
+# series_lobby_password resolves.
+DOTA_LOBBY_CONFIG_FIELDS = [
+    f.name for f in DotaLobbyConfigMixin._meta.get_fields() if hasattr(f, "column")
+]
 REPEATER_CREATE_COPY_FIELDS = (
     TOURNAMENT_TEMPLATE_FIELDS
     + EVENT_CONFIG_FIELDS
     + DISCORD_CONFIG_FIELDS
     + DISCORD_TOURNAMENT_TEMPLATE_FIELDS
+    + DOTA_LOBBY_CONFIG_FIELDS
 )
 
 
@@ -1174,6 +1299,8 @@ def generate_events_for_repeater(repeater):
             created_by=repeater.created_by,
         )
         _copy_mixin_fields(repeater, event, REPEATER_CREATE_COPY_FIELDS)
+        # Empty in random mode: Event.save generates one.
+        event.dota_lobby_password = series_lobby_password(repeater, "", "")
         event.tournament_date = dt
         event.save()
         create_tournament_for_event(event)
@@ -1233,8 +1360,15 @@ def create_off_schedule_event(
         is_off_schedule=True,
     )
     _copy_mixin_fields(repeater, event, REPEATER_CREATE_COPY_FIELDS)
+    event.dota_lobby_password = series_lobby_password(repeater, "", "")
+    # Overrides win, the password included (OneOffEventCreateSerializer
+    # validates it against the effective mode).
     for field_name, value in (overrides or {}).items():
         setattr(event, field_name, value)
+    if event.dota_lobby_password_mode == PasswordMode.RANDOM and (
+        "dota_lobby_password" not in (overrides or {})
+    ):
+        event.dota_lobby_password = ""  # generated by Event.save
     event.tournament_date = scheduled_at
     event.save()
 
@@ -1334,15 +1468,25 @@ def sync_future_events(repeater, *, realign_schedule=False):
         + TOURNAMENT_TEMPLATE_FIELDS
         + EVENT_CONFIG_FIELDS
         + DISCORD_CONFIG_FIELDS
+        + DOTA_LOBBY_CONFIG_FIELDS
+        + ["dota_lobby_password"]
     )
     for event in future_events:
+        previous_password = event.dota_lobby_password
+        previous_mode = event.dota_lobby_password_mode
         for field_name in shared_fields:
             setattr(event, field_name, getattr(repeater, field_name))
         _copy_mixin_fields(repeater, event, TOURNAMENT_TEMPLATE_FIELDS)
         _copy_mixin_fields(repeater, event, EVENT_CONFIG_FIELDS)
         _copy_mixin_fields(repeater, event, DISCORD_CONFIG_FIELDS)
+        _copy_mixin_fields(repeater, event, DOTA_LOBBY_CONFIG_FIELDS)
+        event.dota_lobby_password = series_lobby_password(
+            repeater, previous_mode, previous_password
+        )
         event.tournament_date = event.scheduled_at
         event.save(update_fields=update_fields + ["tournament_date", "updated_at"])
+        if event.dota_lobby_password != previous_password:
+            log_lobby_password_changed(event, "series_cascade")
         sync_tournament_from_event(event)
 
     # Single batched invalidation post-commit

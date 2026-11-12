@@ -1,4 +1,5 @@
 import nh3
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.utils import timezone
 from rest_framework import serializers
 
@@ -14,9 +15,30 @@ from events.models import (
 from events.services import (
     DISCORD_CONFIG_FIELDS,
     DISCORD_TOURNAMENT_TEMPLATE_FIELDS,
+    DOTA_LOBBY_CONFIG_FIELDS,
     EVENT_CONFIG_FIELDS,
     TOURNAMENT_TEMPLATE_FIELDS,
 )
+from lobby.passwords import MAX_LENGTH as LOBBY_PASSWORD_MAX_LENGTH
+from lobby.passwords import PasswordMode, validate_password
+
+# The lobby password is write-only on every events serializer: event and
+# series payloads are cached, public and handed to Celery. Staff and
+# registered players read it from the lobby-password endpoints.
+LOBBY_PASSWORD_FIELD_KWARGS = {
+    "write_only": True,
+    "required": False,
+    "allow_blank": True,
+    "max_length": LOBBY_PASSWORD_MAX_LENGTH,
+    "trim_whitespace": False,
+}
+
+
+def _valid_fixed_password(value: str) -> str:
+    try:
+        return validate_password(value)
+    except DjangoValidationError as exc:
+        raise serializers.ValidationError({"dota_lobby_password": exc.messages})
 
 
 class TournamentLeagueOrgMixin:
@@ -151,6 +173,13 @@ class EventRepeaterSerializer(TournamentLeagueOrgMixin, serializers.ModelSeriali
             "auto_create_hero_drafts",
             "discord_send_draft_link",
             "discord_send_herodraft_link",
+            # DotaLobbyConfig
+            "dota_lobby_mode",
+            "dota_lobby_launch",
+            "dota_lobby_region",
+            "discord_send_lobby_info",
+            "dota_lobby_password_mode",
+            "dota_lobby_password",
             "subscriber_count",
             "is_subscribed",
             "next_event_date",
@@ -164,6 +193,7 @@ class EventRepeaterSerializer(TournamentLeagueOrgMixin, serializers.ModelSeriali
             "is_subscribed",
             "next_event_date",
         ]
+        extra_kwargs = {"dota_lobby_password": LOBBY_PASSWORD_FIELD_KWARGS}
 
     def validate_description(self, value):
         return nh3.clean(value) if value else value
@@ -179,6 +209,23 @@ class EventRepeaterSerializer(TournamentLeagueOrgMixin, serializers.ModelSeriali
             raise serializers.ValidationError(
                 {"game_mode": f"{game_mode} is only available for Dota 2."}
             )
+        # Fixed: the series stores the password. Random: it stores none,
+        # each event generates its own.
+        mode = data.get(
+            "dota_lobby_password_mode",
+            (
+                self.instance.dota_lobby_password_mode
+                if self.instance
+                else PasswordMode.RANDOM
+            ),
+        )
+        if mode == PasswordMode.FIXED:
+            current = self.instance.dota_lobby_password if self.instance else ""
+            data["dota_lobby_password"] = _valid_fixed_password(
+                data.get("dota_lobby_password", current)
+            )
+        else:
+            data["dota_lobby_password"] = ""
         return data
 
 
@@ -317,6 +364,13 @@ class EventSerializer(TournamentLeagueOrgMixin, serializers.ModelSerializer):
             "auto_create_hero_drafts",
             "discord_send_draft_link",
             "discord_send_herodraft_link",
+            # DotaLobbyConfig
+            "dota_lobby_mode",
+            "dota_lobby_launch",
+            "dota_lobby_region",
+            "discord_send_lobby_info",
+            "dota_lobby_password_mode",
+            "dota_lobby_password",
             "user_can_manage",
             "is_off_schedule",
         ]
@@ -329,6 +383,7 @@ class EventSerializer(TournamentLeagueOrgMixin, serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
+        extra_kwargs = {"dota_lobby_password": LOBBY_PASSWORD_FIELD_KWARGS}
 
     def validate_description(self, value):
         return nh3.clean(value) if value else value
@@ -387,7 +442,38 @@ class EventSerializer(TournamentLeagueOrgMixin, serializers.ModelSerializer):
                         )
                     }
                 )
+        self._validate_lobby_password(data)
         return data
+
+    def _validate_lobby_password(self, data):
+        """Fixed needs a valid password; random keeps or generates one.
+
+        Switching to random (or a random event without a password) leaves the
+        password empty, so Event.save generates one. A random event keeps its
+        password otherwise; regenerating is a separate staff action.
+        """
+        instance = self.instance
+        previous_mode = instance.dota_lobby_password_mode if instance else None
+        mode = data.get(
+            "dota_lobby_password_mode", previous_mode or PasswordMode.RANDOM
+        )
+        if mode == PasswordMode.FIXED:
+            current = (
+                instance.dota_lobby_password
+                if instance and previous_mode == PasswordMode.FIXED
+                else ""
+            )
+            data["dota_lobby_password"] = _valid_fixed_password(
+                data.get("dota_lobby_password", current)
+            )
+        elif (
+            instance is not None
+            and previous_mode == PasswordMode.RANDOM
+            and instance.dota_lobby_password
+        ):
+            data.pop("dota_lobby_password", None)
+        else:
+            data["dota_lobby_password"] = ""
 
 
 class EventTeamSerializer(serializers.ModelSerializer):
@@ -645,6 +731,8 @@ ONE_OFF_OVERRIDE_FIELDS = (
     + EVENT_CONFIG_FIELDS
     + DISCORD_CONFIG_FIELDS
     + DISCORD_TOURNAMENT_TEMPLATE_FIELDS
+    + DOTA_LOBBY_CONFIG_FIELDS
+    + ["dota_lobby_password"]
 )
 
 
@@ -664,7 +752,10 @@ class OneOffEventCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Event
         fields = ONE_OFF_OVERRIDE_FIELDS + ["scheduled_at", "open_signups"]
-        extra_kwargs = {name: {"required": False} for name in ONE_OFF_OVERRIDE_FIELDS}
+        extra_kwargs = {
+            **{name: {"required": False} for name in ONE_OFF_OVERRIDE_FIELDS},
+            "dota_lobby_password": LOBBY_PASSWORD_FIELD_KWARGS,
+        }
 
     def validate_scheduled_at(self, value):
         if value <= timezone.now():
@@ -694,6 +785,23 @@ class OneOffEventCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"game_mode": f"'{game_mode}' is only valid for Dota 2 events."}
             )
+        # The effective mode decides: fixed needs a password (typed here or
+        # the series' fixed one); random generates one, so any typed
+        # password is dropped.
+        overrides = data.get("overrides", {})
+        mode = data.get("dota_lobby_password_mode", repeater.dota_lobby_password_mode)
+        if mode == PasswordMode.FIXED:
+            inherited = (
+                repeater.dota_lobby_password
+                if repeater.dota_lobby_password_mode == PasswordMode.FIXED
+                else ""
+            )
+            password = _valid_fixed_password(data.get("dota_lobby_password", inherited))
+            data["dota_lobby_password"] = password
+            overrides["dota_lobby_password"] = password
+        else:
+            data.pop("dota_lobby_password", None)
+            overrides.pop("dota_lobby_password", None)
         return data
 
     def to_internal_value(self, data):
