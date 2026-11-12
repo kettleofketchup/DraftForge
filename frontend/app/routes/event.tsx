@@ -261,7 +261,6 @@ export default function EventPage() {
     [signups, currentUser?.pk],
   );
 
-  // Split signups into active and waitlisted
   const activeSignups = useMemo(
     () => (signups ?? []).filter((s) => !['waitlisted', 'tentative', 'cancelled', 'rejected'].includes(s.status)),
     [signups],
@@ -607,6 +606,7 @@ export default function EventPage() {
             toast.error('Failed to start roll call');
           }
         }}
+        confirmTestId="event-rollcall-dialog-confirm"
       />
 
       <ConfirmDialog
@@ -764,7 +764,7 @@ function SignupsTab({
     }
     const resp = await adminAddSignup(eventId!, payload.user_id);
     queryClient.invalidateQueries({ queryKey: ['event-signups', eventId] });
-    // Backend now adds the user as an OrgUser when admin signs them up; reset
+    // Backend adds the user as an OrgUser when an admin signs them up; reset
     // the org-users cache so the org page reflects the new membership.
     if (orgId) useOrgStore.getState().clearOrgUsers();
     // AddUserModal reads `.pk` off this to track optimistic adds — the signup
@@ -819,10 +819,8 @@ function SignupsTab({
       {signups.map((signup, index) => {
         const user = userMap.get(signup.user);
         const position = signup.waitlist_position ?? index + 1;
-        // "Waitlist" in the UI fires the `demote` mutation on the server —
-        // moving an approved/rsvp signup down to waitlisted is conceptually
-        // a demotion. Named handler so the JSX stays readable and the
-        // semantic gap between button label and mutation name is documented.
+        // "Waitlist" fires the server's `demote` mutation
+        // (approved/rsvp → waitlisted); named so the label/mutation gap is explicit.
         const handleWaitlist = () => signupActions.demote.mutate(signup.id);
 
         const adminActions = isAdmin ? (
