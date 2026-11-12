@@ -90,6 +90,7 @@ Source: `backend/tests/test_dota_lobby.py` (views), `backend/tests/dota_lobby_si
 | `/api/tests/dota-lobby/data/` | GET | Seeded PKs, names, teams with account IDs, the fixed series password |
 | `/api/tests/dota-lobby/reset/` | POST | Close open lobbies in dota_lobby, delete rows that had ended, end the open ones (`test_reset`), games back to `pending`, series back to its fixed password, a new random event password, simulator auto mode back to `simulator.yaml`. Returns the same body as `data/` |
 | `/api/tests/dota-lobby/games/<game_pk>/lobby/` | GET | The game's latest `GameLobby` row: `lobby_id`, `gc_lobby_id`, `state`, `password`, `match_id`, `provisional_winner_side` |
+| `/api/tests/dota-lobby/games/<game_pk>/lobby/seed/` | POST | A `waiting` lobby row for a lobby test game, claimed like a staff create (event password, rostered teams) under a `lob_seeded_<pk>` ID no dota_lobby holds; nothing is sent to dota_lobby. Keeps an active row. `409 {code}` when the game cannot have a lobby. Only without the simulator: its reconcile would end the row |
 | `/api/tests/dota-lobby/simulator/` | GET | `{available, ready, simulation, verified_leagues}`; `available` needs a ready simulator that holds the test league. `503` when nothing answers |
 | `/api/tests/dota-lobby-sim/<path>` | GET/POST/PATCH/DELETE | Forwarded to the simulator's control API `/v1/sim/<path>` with the backend's `DOTA_LOBBY_API_KEY`; the answer (problem+json included) is passed through. `400` for a path outside it, `503` when nothing answers |
 

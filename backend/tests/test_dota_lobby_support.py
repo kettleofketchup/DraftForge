@@ -31,6 +31,7 @@ from tests.data.dota_lobby import (
 )
 from tests.dota_lobby_sim import SimResponse
 from tests.populate.dota_lobby import (
+    SEEDED_LOBBY_PREFIX,
     dota_lobby_test_data,
     populate_dota_lobby_data,
     reset_dota_lobby_data,
@@ -335,3 +336,77 @@ class DotaLobbySimulatorProxyTests(TestCase):
             resp = views.dota_lobby_simulator(factory.get("/x/"))
         self.assertEqual(resp.status_code, 503)
         self.assertEqual(resp.data["code"], "not_configured")
+
+
+@override_settings(DOTA_LOBBY_ENABLED=True)
+class DotaLobbySeedTests(TestCase):
+    """seed_dota_lobby: a lobby row for the specs that run without the simulator."""
+
+    @classmethod
+    def setUpTestData(cls):
+        populate_dota_lobby_data(force=True)
+
+    def setUp(self):
+        self.data = dota_lobby_test_data()
+        self.game = Game.objects.get(
+            pk=self.data["series_event"]["tournament"]["games"][1]["pk"]
+        )
+
+    def _seed(self, game_pk):
+        with _test_env():
+            return views.seed_dota_lobby_row(
+                factory.post(f"/api/tests/dota-lobby/games/{game_pk}/lobby/seed/"),
+                game_pk=game_pk,
+            )
+
+    @mock.patch("lobby.client.requests.Session.request")
+    def test_seed_gives_a_waiting_row_with_the_event_password(self, http):
+        resp = self._seed(self.game.pk)
+        self.assertEqual(resp.status_code, 200, resp.data)
+        row = GameLobby.objects.get(pk=resp.data["lobby"]["id"])
+        self.assertEqual(row.state, states.WAITING)
+        self.assertFalse(row.ended)
+        self.assertTrue(row.lobby_id.startswith(SEEDED_LOBBY_PREFIX))
+        self.assertEqual(row.password, LOBBY_FIXED_PASSWORD)
+        self.assertEqual(resp.data["lobby"]["password"], LOBBY_FIXED_PASSWORD)
+        self.assertEqual(row.radiant_team_id, self.game.radiant_team_id)
+        self.assertEqual(row.dire_team_id, self.game.dire_team_id)
+        self.assertEqual(row.request["external_ref"], row.external_ref)
+        http.assert_not_called()
+
+    def test_seed_again_keeps_the_active_row(self):
+        first = self._seed(self.game.pk).data["lobby"]["id"]
+        again = self._seed(self.game.pk)
+        self.assertEqual(again.status_code, 200)
+        self.assertEqual(again.data["lobby"]["id"], first)
+        self.assertEqual(GameLobby.objects.filter(game=self.game).count(), 1)
+
+    def test_seed_refuses_other_games_and_disabled_lobbies(self):
+        missing_pk = Game.objects.order_by("-pk").first().pk + 1
+        resp = self._seed(missing_pk)
+        self.assertEqual(resp.status_code, 409)
+        self.assertEqual(resp.data["code"], "not_a_lobby_test_game")
+        with override_settings(DOTA_LOBBY_ENABLED=False):
+            resp = self._seed(self.game.pk)
+        self.assertEqual(resp.status_code, 409)
+        self.assertEqual(resp.data["code"], "lobby_disabled")
+        self.assertFalse(GameLobby.objects.filter(game=self.game).exists())
+
+    def test_seed_is_hidden_outside_tests(self):
+        with mock.patch.object(views, "isTestEnvironment", return_value=False):
+            resp = views.seed_dota_lobby_row(factory.post("/x/"), game_pk=self.game.pk)
+        self.assertEqual(resp.status_code, 404)
+
+    @mock.patch("tests.populate.dota_lobby.simulator_request")
+    @mock.patch("tests.populate.dota_lobby.DotaLobbyClient")
+    def test_reset_ends_a_seeded_row_without_asking_dota_lobby(self, client_cls, _sim):
+        row_id = self._seed(self.game.pk).data["lobby"]["id"]
+        reset_dota_lobby_data()
+        client_cls.return_value.close_lobby.assert_not_called()
+        row = GameLobby.objects.get(pk=row_id)
+        self.assertEqual(row.state, states.CLOSED)
+        self.assertTrue(row.ended)
+        # The game can have a lobby again: a second seed makes a new row.
+        again = self._seed(self.game.pk)
+        self.assertEqual(again.status_code, 200)
+        self.assertNotEqual(again.data["lobby"]["id"], row_id)

@@ -44,6 +44,7 @@ from .test_dota_lobby import (
     dota_lobby_simulator,
     login_dota_lobby,
     reset_dota_lobby,
+    seed_dota_lobby_row,
 )
 from .test_health import healthz
 from .test_discord import seed_discord_members
@@ -326,6 +327,11 @@ urlpatterns = [
         "dota-lobby/games/<int:game_pk>/lobby/",
         dota_lobby_game_lobby,
         name="test-dota-lobby-game-lobby",
+    ),
+    path(
+        "dota-lobby/games/<int:game_pk>/lobby/seed/",
+        seed_dota_lobby_row,
+        name="test-dota-lobby-seed-lobby",
     ),
     path(
         "dota-lobby/simulator/",

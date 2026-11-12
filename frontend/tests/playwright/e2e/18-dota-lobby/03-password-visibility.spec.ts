@@ -1,8 +1,10 @@
 /**
  * Who sees the lobby password.
  *
- * The series event's second game (Lobby Gamma vs Lobby Delta) gets a lobby.
- * Then, with the fixed series password:
+ * The series event's second game (Lobby Gamma vs Lobby Delta) gets a lobby:
+ * created in the simulated dota_lobby when it runs, otherwise a seeded row
+ * (the CI stack), since who sees the password is DraftForge's alone. Then,
+ * with the fixed series password:
  * - a registered player (approved signup, on no team) sees it on the event page;
  * - a rostered player (Lobby Gamma's captain) sees it in the match dialog;
  * - a signed-in user who is neither, and league staff who are not org staff,
@@ -18,7 +20,7 @@ import {
   requestLobby,
   resetDotaLobbyData,
   hasSimulator,
-  SIMULATOR_SKIP_REASON,
+  seedLobbyRow,
   test,
   visitAndWaitForHydration,
   waitForLobbyRow,
@@ -34,21 +36,27 @@ test.describe('Dota lobby: password visibility (e2e)', () => {
   let gamePk: number;
 
   test.beforeAll(async ({ browser }) => {
+    test.setTimeout(90_000);
     const context = await browser.newContext({ ignoreHTTPSErrors: true });
     try {
-      if (!(await hasSimulator(context))) return;
+      const simulated = await hasSimulator(context);
       data = await resetDotaLobbyData(context);
       gamePk = data.series_event.tournament.games[1].pk;
-      await loginDotaLobby(context, 'staff');
-      await requestLobby(context, gamePk);
-      await waitForLobbyRow(context, gamePk);
+      if (simulated) {
+        await loginDotaLobby(context, 'staff');
+        await requestLobby(context, gamePk);
+        await waitForLobbyRow(context, gamePk);
+      } else {
+        const row = await seedLobbyRow(context, gamePk);
+        expect(row.state).toBe('waiting');
+        expect(row.password).toBe(data.fixed_password);
+      }
     } finally {
       await context.close();
     }
   });
 
   test.beforeEach(async ({ context }) => {
-    test.skip(!data, SIMULATOR_SKIP_REASON);
     await context.clearCookies();
   });
 
@@ -122,10 +130,19 @@ test.describe('Dota lobby: password visibility (e2e)', () => {
       expect(body.can_manage).toBe(manages);
       expect(body.lobby.password ?? null).toBeNull();
 
+      // The card only renders from its own query: wait for the page's request
+      // to settle (404) before checking that nothing shows, so the absence
+      // check cannot pass on a page that has not asked yet.
+      const passwordPath = `/api/events/${data.series_event.pk}/lobby-password/`;
+      const passwordResponse = page.waitForResponse(
+        (r) => new URL(r.url()).pathname === passwordPath && r.request().method() === 'GET',
+        { timeout: 20_000 },
+      );
       await visitAndWaitForHydration(page, `/events/${data.series_event.pk}`);
       await expect(page.locator('[data-testid="event-tab-details"]')).toBeVisible({
         timeout: 15_000,
       });
+      expect((await passwordResponse).status()).toBe(404);
       await expect(page.locator('[data-testid="event-lobby-password"]')).toHaveCount(0);
 
       await openBracket(page, data.series_event.tournament.pk);

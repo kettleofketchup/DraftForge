@@ -148,7 +148,8 @@ For the 18-dota-lobby specs against the simulated dota_lobby (`just test::dota-l
 |----------|----------|---------|
 | `getDotaLobbyTestData(context)` / `resetDotaLobbyData(context)` | GET `/api/tests/dota-lobby/data/` / POST `.../reset/` | Seeded PKs, names, teams, fixed password; reset returns the same |
 | `loginDotaLobby(context, role)` | POST `/api/tests/login-dota-lobby/<role>/` | `staff`, `rostered`, `registered`, `unregistered`, `league-staff` |
-| `hasSimulator(context)` / `simulatorStatus(context)` | GET `/api/tests/dota-lobby/simulator/` | Gate: `test.skip(!(await hasSimulator(context)), SIMULATOR_SKIP_REASON)` |
+| `hasSimulator(context)` / `simulatorStatus(context)` | GET `/api/tests/dota-lobby/simulator/` | Gate: `test.skip(!(await hasSimulator(context)), SIMULATOR_SKIP_REASON)`. Waits up to 60 s for a simulator that answers but is still starting; false at once when nothing answers; throws with `DOTA_LOBBY_SIMULATOR_REQUIRED=1` |
+| `seedLobbyRow(context, gamePk)` | POST `/api/tests/dota-lobby/games/<pk>/lobby/seed/` | A `waiting` lobby row without dota_lobby, for specs that check DraftForge's side of a lobby where no simulator runs (never with one running) |
 | `sim.get/post/patch/delete(context, path)` | `/api/tests/dota-lobby-sim/<path>` | The simulator's `/v1/sim/<path>` (players, seats, chat, start, end, fail, settings) |
 | `getSimLobby(context, lobbyId)` | GET `.../dota-lobby-sim/lobbies/<id>` | Simulated lobby: password, members and seats, chat |
 | `getLobbyRow` / `waitForLobbyRow(context, gamePk, ready?, {previousId})` | GET `/api/tests/dota-lobby/games/<pk>/lobby/` | The game's latest lobby row; waits until accepted and created (or `ready`) |

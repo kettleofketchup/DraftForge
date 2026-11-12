@@ -10,6 +10,9 @@ Routes under /api/tests/ (tests/urls.py):
   rows, set the games back to pending and restore the password settings.
 - GET dota-lobby/games/<game_pk>/lobby/: the game's latest lobby row with its
   dota_lobby lobby ID, so a spec can address the simulator.
+- POST dota-lobby/games/<game_pk>/lobby/seed/: give a lobby test game a
+  `waiting` lobby row without dota_lobby (seed_dota_lobby), for specs that
+  run without the simulator. 409 with the code when the game cannot have one.
 - GET dota-lobby/simulator/: whether the simulated dota_lobby answers, is
   ready and holds the test league. Specs skip when it is not available.
 - GET/POST/PATCH/DELETE dota-lobby-sim/<path>: forwarded to the simulator's
@@ -19,6 +22,7 @@ Routes under /api/tests/ (tests/urls.py):
 from __future__ import annotations
 
 import re
+from typing import Any
 
 from django.contrib.auth import login
 from django.views.decorators.csrf import csrf_exempt
@@ -37,7 +41,12 @@ from common.utils import isTestEnvironment
 from lobby.models import GameLobby
 from tests.data.dota_lobby import LOBBY_ROLE_USERS, LOBBY_STEAM_LEAGUE_ID
 from tests.dota_lobby_sim import SimulatorUnavailable, simulator_request
-from tests.populate.dota_lobby import dota_lobby_test_data, reset_dota_lobby_data
+from tests.populate.dota_lobby import (
+    SeedRefused,
+    dota_lobby_test_data,
+    reset_dota_lobby_data,
+    seed_dota_lobby,
+)
 
 # A /v1/sim sub-path: segments of letters, digits, '_' and '-'.
 _SIM_PATH_RE = re.compile(r"^[A-Za-z0-9_-]+(/[A-Za-z0-9_-]+)*/?$")
@@ -99,6 +108,21 @@ def reset_dota_lobby(request: Request) -> Response:
     return Response(reset_dota_lobby_data())
 
 
+def _row_payload(row: GameLobby) -> dict[str, Any]:
+    return {
+        "id": row.pk,
+        "lobby_id": row.lobby_id,
+        "gc_lobby_id": row.gc_lobby_id or None,
+        "state": row.state,
+        "state_reason": row.state_reason or None,
+        "ended": row.ended,
+        "password": row.password,
+        "match_id": str(row.match_id) if row.match_id else None,
+        "provisional_winner_side": row.provisional_winner_side or None,
+        "last_error_code": row.last_error_code or None,
+    }
+
+
 @api_view(["GET"])
 @authentication_classes([])
 @permission_classes([AllowAny])
@@ -109,24 +133,25 @@ def dota_lobby_game_lobby(request: Request, game_pk: int) -> Response:
     row = (
         GameLobby.objects.filter(game_id=game_pk).order_by("-created_at", "-pk").first()
     )
-    if row is None:
-        return Response({"lobby": None})
-    return Response(
-        {
-            "lobby": {
-                "id": row.pk,
-                "lobby_id": row.lobby_id,
-                "gc_lobby_id": row.gc_lobby_id or None,
-                "state": row.state,
-                "state_reason": row.state_reason or None,
-                "ended": row.ended,
-                "password": row.password,
-                "match_id": str(row.match_id) if row.match_id else None,
-                "provisional_winner_side": row.provisional_winner_side or None,
-                "last_error_code": row.last_error_code or None,
-            }
-        }
-    )
+    return Response({"lobby": _row_payload(row) if row is not None else None})
+
+
+@csrf_exempt
+@api_view(["POST"])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def seed_dota_lobby_row(request: Request, game_pk: int) -> Response:
+    """Give a lobby test game a `waiting` lobby row, without dota_lobby."""
+    if not isTestEnvironment(request):
+        return _not_found()
+    try:
+        row = seed_dota_lobby(game_pk)
+    except SeedRefused as exc:
+        return Response(
+            {"detail": "The game cannot have a lobby now", "code": exc.code},
+            status=status.HTTP_409_CONFLICT,
+        )
+    return Response({"lobby": _row_payload(row)})
 
 
 @api_view(["GET"])

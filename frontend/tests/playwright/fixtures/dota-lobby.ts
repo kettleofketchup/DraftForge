@@ -197,6 +197,20 @@ export async function getLobbyRow(context: BrowserContext, gamePk: number): Prom
 }
 
 /**
+ * Give the game a `waiting` lobby row without dota_lobby
+ * (POST /api/tests/dota-lobby/games/<pk>/lobby/seed/), for specs that check
+ * what DraftForge shows of a lobby where the simulator does not run. Never
+ * with the simulator running: its reconcile would end the row.
+ */
+export async function seedLobbyRow(context: BrowserContext, gamePk: number): Promise<LobbyRow> {
+  const body = await json<{ lobby: LobbyRow }>(
+    await context.request.post(`${API_URL}/tests/dota-lobby/games/${gamePk}/lobby/seed/`),
+    `seed lobby for game ${gamePk}`,
+  );
+  return body.lobby;
+}
+
+/**
  * Wait until the game's latest lobby row matches `ready` (by default: a new
  * row, other than `previousId`, that dota_lobby accepted and created in the
  * simulated game coordinator).

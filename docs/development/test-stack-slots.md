@@ -164,8 +164,12 @@ just test::dota-lobby logs         # follow it; also down, restart, ps
   simulator goes with its stack.
 - **State:** lobbies live in memory and the database on a tmpfs: `just test::dota-lobby
   restart` starts from nothing.
-- **Without it,** the specs that need it skip (`DOTA_LOBBY_SIMULATOR_REQUIRED=1` makes
-  that a failure); `05-modal-fit` needs only lobbies on and always runs, CI included.
+- **Without it,** the specs that need it skip. `just test::pw::dota-lobby` and
+  `cicd-dota-lobby` set `DOTA_LOBBY_SIMULATOR_REQUIRED=1` when this slot's simulator is
+  running, so a simulator that is up but never becomes available within 60 s (bots not
+  ready, test league not verified) fails the run rather than skipping it.
+  `03-password-visibility` falls back to a seeded lobby row and `05-modal-fit` needs
+  only lobbies on: both always run, CI included.
 
 ### Backend suites that skip without tokens
 

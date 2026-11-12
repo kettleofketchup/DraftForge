@@ -179,6 +179,7 @@ export {
   sim,
   getSimLobby,
   getLobbyRow,
+  seedLobbyRow,
   waitForLobbyRow,
   requestLobby,
   openBracket,

@@ -5,7 +5,9 @@ tournaments, teams and bracket games. reset_dota_lobby_data, behind
 POST /api/tests/dota-lobby/reset/, puts the lobby state back between spec
 files without recreating anything: it closes the lobbies the specs left in
 dota_lobby, ends their rows, sets the games back to pending and restores the
-password settings. dota_lobby_test_data is the lookup the specs read.
+password settings. seed_dota_lobby gives a game a lobby row without
+dota_lobby, for specs that run where the simulator does not.
+dota_lobby_test_data is the lookup the specs read.
 """
 
 from __future__ import annotations
@@ -38,7 +40,7 @@ from events.services import (
     sync_future_events,
     sync_tournament_from_event,
 )
-from lobby import states
+from lobby import services, states
 from lobby.client import DotaLobbyClient, DotaLobbyError
 from lobby.models import GameLobby
 from lobby.passwords import PasswordMode, generate_password
@@ -67,6 +69,8 @@ from tests.populate.utils import ensure_league_user, ensure_org_user
 
 # The reason the reset writes on the lobby rows it ends.
 RESET_REASON = "test_reset"
+# The lobby ID prefix of seed_dota_lobby's rows: no dota_lobby holds them.
+SEEDED_LOBBY_PREFIX = "lob_seeded_"
 # What the reset puts the simulator's auto mode back to (simulator.yaml).
 SIMULATOR_DEFAULTS = {
     "auto_join": True,
@@ -279,7 +283,11 @@ def _lobby_games() -> list[Game]:
 def _close_in_dota_lobby(rows: list[GameLobby]) -> None:
     """Best effort: close the lobbies the specs left open in dota_lobby."""
     open_rows = [
-        r for r in rows if r.lobby_id and r.state not in states.SERVICE_TERMINAL_STATES
+        r
+        for r in rows
+        if r.lobby_id
+        and not r.lobby_id.startswith(SEEDED_LOBBY_PREFIX)
+        and r.state not in states.SERVICE_TERMINAL_STATES
     ]
     if not open_rows:
         return
@@ -372,6 +380,40 @@ def reset_dota_lobby_data() -> dict[str, Any]:
     _reset_simulator()
     _reset_rows_and_settings()
     return dota_lobby_test_data()
+
+
+class SeedRefused(Exception):
+    """The game cannot have a lobby now (an eligibility code), or is not a lobby test game."""
+
+    def __init__(self, code: str) -> None:
+        super().__init__(code)
+        self.code = code
+
+
+def seed_dota_lobby(game_pk: int) -> GameLobby:
+    """A `waiting` lobby row for a lobby test game, as if dota_lobby created it.
+
+    Nothing is sent to dota_lobby: the row is claimed as a staff create would
+    claim it (the event's password, the rostered teams) and marked accepted
+    under a lobby ID no dota_lobby holds. For specs that check what
+    DraftForge shows of a lobby where no simulator runs. Only for stacks
+    without one: the reconcile task would find the lobby missing there and
+    end the row. A game that already has an active lobby keeps it.
+    """
+    if game_pk not in {g.pk for g in _lobby_games()}:
+        raise SeedRefused("not_a_lobby_test_game")
+    claim = services.claim_lobby(game_pk, trigger=GameLobby.Trigger.MANUAL)
+    row = claim.game_lobby
+    if row is None:
+        raise SeedRefused(claim.eligibility.code or "not_eligible")
+    if claim.created:
+        row.lobby_id = f"{SEEDED_LOBBY_PREFIX}{row.pk}"
+        row.state = states.WAITING
+        row.bot = "seeded"
+        row.league_verified = True
+        row.accepted_at = tz.now()
+        row.save()
+    return row
 
 
 def _games_payload(tournament: Tournament) -> list[dict[str, Any]]:
