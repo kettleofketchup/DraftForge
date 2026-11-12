@@ -68,32 +68,29 @@ therefore have to deliver webhooks to the backend Service from inside the cluste
 
 ### Where dota_lobby runs
 
-Production DraftForge (`dota.kettle.sh`) uses the dota_lobby instance on KettleCluster, at
-`https://dota-lobby.home.kettle.sh`. It is the `dota-lobby` app in `kettleofketchup/home`
-(`apps/dota-lobby`), deployed by ArgoCD. The dota_lobby docs cover the setup in detail:
-[Kubernetes](https://kettleofketchup.github.io/dota_lobby/deployment/kubernetes/).
+Production DraftForge uses its own dota_lobby instance, run on Kubernetes as described in the
+dota_lobby docs: [Kubernetes](https://kettleofketchup.github.io/dota_lobby/deployment/kubernetes/).
 
-- **Access:** the host is reached through the Cloudflare tunnel without Authentik
-  forward-auth. Traefik allows only the DraftForge production server's address. That check
-  relies on a forwarded header someone on the home LAN could forge, so the API key is the
-  real gate.
+- **Access:** the instance is published without SSO in front of it. An IP allowlist admits
+  only the DraftForge production server, but that check relies on a forwarded header, so
+  the API key is the real gate.
 - **Production settings:** `DOTA_LOBBY_URL` and `DOTA_LOBBY_API_KEY` are in
-  `backend/.env` on the production host. The key's source of truth is
-  `apps/dota-lobby/dota-lobby-api.enc.yaml` (sops); when rotating it, update both and
-  restart the backend services. `DOTA_LOBBY_ENABLED` stays `false` in
-  `docker/.env.release` until DraftForge creates lobbies.
+  `backend/.env` on the production host. The key is also stored, encrypted, with the
+  instance's deployment; when rotating it, update both and restart the backend services.
+  `DOTA_LOBBY_ENABLED` stays `false` in `docker/.env.release` until DraftForge creates
+  lobbies.
 - **Bots:** one Steam bot, `draftforge1`. Its credentials live in the dota_lobby repository
-  (`secrets/bots/draftforge1.sops.yaml`) and are copied into the cluster Secret with
+  (`secrets/bots/draftforge1.sops.yaml`) and are copied into the instance's Secret with
   `just secrets k8s-secret`. A second bot (`draftforge2`) has credentials but is not
   deployed. Each account may run in only one dota_lobby instance at a time, so do not run
-  these bots locally while the cluster instance is up.
-- **Checking it from production:**
+  these bots locally while the production instance is up.
+- **Checking it from production**, in the backend container:
     ```bash
-    ssh dota.kettle.sh 'docker exec df-backend-1 python /app/backend/manage.py shell -c \
-      "from lobby.client import DotaLobbyClient; print(DotaLobbyClient().list_lobbies())"'
+    python /app/backend/manage.py shell -c \
+      "from lobby.client import DotaLobbyClient; print(DotaLobbyClient().list_lobbies())"
     ```
-- **Webhooks:** none are configured yet. When the receiver lands, dota_lobby will post to
-  production's `/api/internal/` from the home cluster. That address must then be in
+- **Webhooks:** none are configured yet. When the receiver lands, the dota_lobby instance
+  will post to production's `/api/internal/`, so its outbound address must be in
   `INTERNAL_SERVICE_ALLOWED_IPS`, and the signing secret set on both sides.
 
 ---
