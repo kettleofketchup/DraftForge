@@ -15,7 +15,7 @@ export const PlayerPopoverTrigger: React.FC<PlayerPopoverTriggerProps> = ({
   children,
   statsLeagueId,
 }) => {
-  const { showPlayerPopover, hidePopover, openPlayerModal } = useSharedPopoverActions();
+  const { showPlayerPopover, hidePopover, scheduleHidePopover, openPlayerModal } = useSharedPopoverActions();
   const currentOrg = useOrgStore((s) => s.currentOrg);
   const currentLeague = useLeagueStore((s) => s.currentLeague);
   const triggerRef = useRef<HTMLSpanElement>(null);
@@ -28,8 +28,8 @@ export const PlayerPopoverTrigger: React.FC<PlayerPopoverTriggerProps> = ({
   }, [player, showPlayerPopover, statsLeagueId]);
 
   const handleMouseLeave = useCallback(() => {
-    hidePopover();
-  }, [hidePopover]);
+    scheduleHidePopover();
+  }, [scheduleHidePopover]);
 
   const handleClick = useCallback((e: React.MouseEvent) => {
     e.preventDefault();

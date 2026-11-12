@@ -10,6 +10,7 @@ import { PlayerPopoverTrigger } from '../PlayerPopoverTrigger';
 const actions = vi.hoisted(() => ({
   showPlayerPopover: vi.fn(),
   hidePopover: vi.fn(),
+  scheduleHidePopover: vi.fn(),
   openPlayerModal: vi.fn(),
   openTeamModal: vi.fn(),
 }));

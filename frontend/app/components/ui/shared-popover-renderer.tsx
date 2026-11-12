@@ -11,19 +11,11 @@ import { useLeagueStore } from '~/store/leagueStore';
 import { useOrgStore } from '~/store/orgStore';
 
 // Player popover content
-const PlayerPopoverContent: React.FC<{
-  player: UserType;
-  onMouseEnter: () => void;
-  onMouseLeave: () => void;
-}> = ({ player, onMouseEnter, onMouseLeave }) => {
+const PlayerPopoverContent: React.FC<{ player: UserType }> = ({ player }) => {
   const playerName = player.nickname || player.username || 'Unknown';
 
   return (
-    <div
-      className="flex flex-col gap-3 w-full overflow-hidden"
-      onMouseEnter={onMouseEnter}
-      onMouseLeave={onMouseLeave}
-    >
+    <div className="flex flex-col gap-3 w-full overflow-hidden">
       {/* Header: Avatar + Name/MMR */}
       <div className="flex items-center gap-4 min-w-0">
         <UserAvatar user={player} size="xl" className="shrink-0" />
@@ -52,7 +44,8 @@ const PlayerPopoverContent: React.FC<{
 export const SharedPopoverRenderer: React.FC = () => {
   const {
     state,
-    hidePopover,
+    scheduleHidePopover,
+    cancelHidePopover,
     showPlayerPopover,
     openPlayerModal,
     openTeamModal,
@@ -94,12 +87,13 @@ export const SharedPopoverRenderer: React.FC = () => {
 
   const handlePopoverMouseEnter = useCallback(() => {
     isHoveringPopoverRef.current = true;
-  }, []);
+    cancelHidePopover();
+  }, [cancelHidePopover]);
 
   const handlePopoverMouseLeave = useCallback(() => {
     isHoveringPopoverRef.current = false;
-    hidePopover();
-  }, [hidePopover]);
+    scheduleHidePopover();
+  }, [scheduleHidePopover]);
 
   const handleClick = useCallback(() => {
     if (state.type === 'player' && state.player) {
@@ -148,22 +142,18 @@ export const SharedPopoverRenderer: React.FC = () => {
         }`}
         style={{ top: position.top, left: position.left }}
         onClick={handleClick}
+        onMouseEnter={handlePopoverMouseEnter}
+        onMouseLeave={handlePopoverMouseLeave}
         role="tooltip"
       >
         {state.type === 'player' && state.player && (
-          <PlayerPopoverContent
-            player={state.player}
-            onMouseEnter={handlePopoverMouseEnter}
-            onMouseLeave={handlePopoverMouseLeave}
-          />
+          <PlayerPopoverContent player={state.player} />
         )}
         {state.type === 'team' && state.team && (
           <TeamPopoverContent
             team={state.team}
-            onMouseEnter={handlePopoverMouseEnter}
-            onMouseLeave={handlePopoverMouseLeave}
             onPlayerHover={showPlayerPopover}
-            onPlayerLeave={hidePopover}
+            onPlayerLeave={scheduleHidePopover}
             onPlayerClick={openPlayerModal}
           />
         )}
