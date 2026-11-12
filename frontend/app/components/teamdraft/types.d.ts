@@ -25,6 +25,10 @@ export interface TieResolution {
     }>
   >;
   winner_id: number;
+  /** Pick the tie decided; absent on older HTTP pick responses. */
+  pick_number?: number;
+  /** How long the server holds the next clock for the roll; absent on older payloads. */
+  hold_ms?: number;
 }
 
 export interface PickResponse {

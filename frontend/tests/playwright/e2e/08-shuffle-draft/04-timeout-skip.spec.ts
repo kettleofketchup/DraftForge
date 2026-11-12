@@ -81,9 +81,17 @@ test.describe.serial('Shuffle draft timeout skip', () => {
     await wsHelper.waitForToast(/ran out of time — .* is up$/, 5_000);
     await expect(active).not.toHaveText(name, { timeout: 5_000 });
     // Every captain is 0 MMR, so the re-selection is a tie roll among the remaining teams.
-    await expect(page.getByTestId('tie-resolution-overlay')).toBeVisible();
-    await page.getByTestId('tie-resolution-continue').click();
-    await expect(page.getByTestId('tie-resolution-overlay')).toHaveCount(0);
+    const popup = page.getByTestId('tie-roll-popup');
+    await expect(popup).toBeVisible();
+    await expect(popup).toHaveAttribute('data-pick-number', '1');
+    await expect(page.getByTestId('tie-roll-countdown')).toContainText('Clock starts in');
+    // The server holds the next clock while the dice roll: grace stays full, then runs.
+    const grace = page.getByTestId('draft-clock-grace');
+    await expect(grace).toHaveText('0:20');
+    await page.waitForTimeout(2_000);
+    await expect(grace).toHaveText('0:20');
+    await expect(popup).toHaveCount(0, { timeout: 8_000 });
+    await expect(grace).not.toHaveText('0:20', { timeout: 4_000 });
 
     const after = activeRound(await fetchTimerTournament(admin, KEY));
     expect(after.pk).toBe(before.pk);

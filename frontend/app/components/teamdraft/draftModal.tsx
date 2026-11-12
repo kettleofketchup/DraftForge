@@ -58,7 +58,7 @@ import { LiveAutoButtons, DraftRoundIndicator } from './liveView';
 import { CompletedTeamDraftView } from './CompletedTeamDraftView';
 import { initDraftHook } from './hooks/initDraftHook';
 import { isCaptainOf } from './isCaptainOf';
-import { TieResolutionOverlay } from './TieResolutionOverlay';
+import { TieRollPopup, tieRollKey } from './TieRollPopup';
 import { LiveDraftClockBar } from './timer/DraftClockBar';
 import { LiveDraftPauseOverlay } from './timer/DraftPauseOverlay';
 import { useTeamDraftTimerProps } from './timer/useTeamDraftTimerProps';
@@ -92,7 +92,7 @@ export const DraftModal: React.FC<DraftModalParams> = () => {
   const [selectedStyle, setSelectedStyle] = useState<'snake' | 'normal' | 'shuffle'>('snake');
   const [isStarting, setIsStarting] = useState(false);
   const [tieResolution, setTieResolution] = useState<TieResolution | null>(null);
-  const [showTieOverlay, setShowTieOverlay] = useState(false);
+  const lastTieKeyRef = useRef<string | null>(null);
   const isStaff = useUserStore((state) => state.isStaff);
   const currentUser = useUserStore((state) => state.currentUser);
   const timer = useTeamDraftTimerProps(currentUser?.pk, isStaff());
@@ -308,12 +308,15 @@ export const DraftModal: React.FC<DraftModalParams> = () => {
   // Set from two paths: HTTP response (choosePlayerHook) and live WS draft_event.
   // NOT set from initial_events, so historical tie_rolls don't re-trigger on remount.
   useEffect(() => {
-    if (pendingTieResolution) {
-      setTieResolution(pendingTieResolution);
-      setShowTieOverlay(true);
-      useDraftWebSocketStore.getState().clearPendingTieResolution();
-    }
+    if (!pendingTieResolution) return;
+    useDraftWebSocketStore.getState().clearPendingTieResolution();
+    // The picker gets the same roll from the HTTP response and the WS event.
+    const key = tieRollKey(pendingTieResolution);
+    if (key === lastTieKeyRef.current) return;
+    lastTieKeyRef.current = key;
+    setTieResolution(pendingTieResolution);
   }, [pendingTieResolution]);
+  const dismissTie = useCallback(() => setTieResolution(null), []);
 
   // Auto-advance to latest round when latest_round changes and autoAdvance is enabled
   // Uses primitive value (draft?.latest_round) to avoid infinite loops from object reference changes
@@ -800,14 +803,13 @@ export const DraftModal: React.FC<DraftModalParams> = () => {
           )}
         </div>
 
-        {/* Tie Resolution Overlay - shown to all users on WebSocket tie_roll event */}
-        {showTieOverlay && tieResolution && (
-          <TieResolutionOverlay
-            tieResolution={tieResolution}
-            onDismiss={() => {
-              setShowTieOverlay(false);
-              setTieResolution(null);
-            }}
+        {tieResolution && (
+          <TieRollPopup
+            key={tieRollKey(tieResolution)}
+            tie={tieResolution}
+            teams={(tournament?.teams ?? []).map((t) => ({ id: t.pk ?? -1, captain: t.captain ?? null }))}
+            clockHeld={timer.clockBarProps.timerEnabled}
+            onDone={dismissTie}
           />
         )}
 
