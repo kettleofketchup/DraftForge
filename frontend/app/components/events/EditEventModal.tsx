@@ -159,17 +159,20 @@ export function EditEventModal({ event, open, onOpenChange }: EditEventModalProp
         discord_send_lobby_info: event.discord_send_lobby_info,
         dota_lobby_password_mode: event.dota_lobby_password_mode,
         dota_lobby_password: '',
+        dota_lobby_password_saved: event.dota_lobby_password_mode === 'fixed',
       });
     }
   }, [event, open]);
 
   // The fixed password is write-only on the event: prefill it from the
-  // staff-only endpoint unless staff already typed one.
+  // staff-only endpoint unless staff already typed one. Runs after the reset
+  // above, so a reset never leaves it empty. Left empty (the endpoint failed
+  // or is still loading), the saved password is kept.
   useEffect(() => {
     if (open && savedPassword?.mode === 'fixed' && !form.getFieldState('dota_lobby_password').isDirty) {
       form.setValue('dota_lobby_password', savedPassword.password ?? '');
     }
-  }, [savedPassword, open]);
+  }, [savedPassword, event, open]);
 
   async function onRegenerate() {
     try {
@@ -185,10 +188,20 @@ export function EditEventModal({ event, open, onOpenChange }: EditEventModalProp
     setIsSubmitting(true);
     try {
       // Convert naive datetime-local to UTC using selected timezone
-      const { dota_lobby_password_mode, dota_lobby_password, ...rest } = data;
+      const {
+        dota_lobby_password_mode,
+        dota_lobby_password,
+        dota_lobby_password_saved,
+        ...rest
+      } = data;
       const payload = {
         ...rest,
-        ...lobbyPasswordPayload({ dota_lobby_password_mode, dota_lobby_password }),
+        ...lobbyPasswordPayload({
+          game_type: data.game_type,
+          dota_lobby_password_mode,
+          dota_lobby_password,
+          dota_lobby_password_saved,
+        }),
         scheduled_at: data.scheduled_at ? localToUTC(data.scheduled_at, data.timezone) : data.scheduled_at,
       };
       const result = await mutation.mutateAsync(payload);
@@ -485,6 +498,7 @@ export function EditEventModal({ event, open, onOpenChange }: EditEventModalProp
           watch={form.watch}
           scope="event"
           saved={savedPassword}
+          followsSeries={event?.event_repeater != null && !event?.is_off_schedule}
           onRegenerate={onRegenerate}
           regenerating={regenerate.isPending}
         />

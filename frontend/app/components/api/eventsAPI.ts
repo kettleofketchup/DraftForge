@@ -342,7 +342,7 @@ export async function adminAddSignup(
 /** A one-off event body. A random lobby password mode sends no password. */
 export type SeriesOneOffPayload = Omit<
   CreateSeriesEventInput,
-  'dota_lobby_password_mode' | 'dota_lobby_password'
+  'dota_lobby_password_mode' | 'dota_lobby_password' | 'dota_lobby_password_saved'
 > & {
   dota_lobby_password_mode?: 'random' | 'fixed';
   dota_lobby_password?: string;

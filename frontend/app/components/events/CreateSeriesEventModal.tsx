@@ -146,10 +146,19 @@ export function CreateSeriesEventModal({
     if (isSubmitting) return;
     setIsSubmitting(true);
     try {
-      const { dota_lobby_password_mode, dota_lobby_password, ...rest } = data;
+      const {
+        dota_lobby_password_mode,
+        dota_lobby_password,
+        dota_lobby_password_saved: _saved,
+        ...rest
+      } = data;
       await createSeriesOneOffEvent(repeater.id, {
         ...rest,
-        ...lobbyPasswordPayload({ dota_lobby_password_mode, dota_lobby_password }),
+        ...lobbyPasswordPayload({
+          game_type: data.game_type,
+          dota_lobby_password_mode,
+          dota_lobby_password,
+        }),
         tournament_league: data.tournament_league ?? null,
         scheduled_at: data.scheduled_at
           ? localToUTC(data.scheduled_at, data.timezone)

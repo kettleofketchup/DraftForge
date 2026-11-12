@@ -155,26 +155,39 @@ export function EditRepeaterModal({ repeater, open, onOpenChange }: EditRepeater
         discord_send_lobby_info: repeater.discord_send_lobby_info ?? false,
         dota_lobby_password_mode: repeater.dota_lobby_password_mode ?? 'random',
         dota_lobby_password: '',
+        dota_lobby_password_saved: repeater.dota_lobby_password_mode === 'fixed',
       });
     }
   }, [repeater, open]);
 
   // The fixed password is write-only on the series: prefill it from the
-  // staff-only endpoint unless staff already typed one.
+  // staff-only endpoint unless staff already typed one. Runs after the reset
+  // above, so a reset never leaves it empty. Left empty (the endpoint failed
+  // or is still loading), the saved password is kept.
   useEffect(() => {
     if (open && savedPassword?.mode === 'fixed' && !form.getFieldState('dota_lobby_password').isDirty) {
       form.setValue('dota_lobby_password', savedPassword.password ?? '');
     }
-  }, [savedPassword, open]);
+  }, [savedPassword, repeater, open]);
 
   async function onSubmit(data: EditRepeaterInput) {
     if (isSubmitting || !repeater) return;
     setIsSubmitting(true);
     try {
-      const { dota_lobby_password_mode, dota_lobby_password, ...rest } = data;
+      const {
+        dota_lobby_password_mode,
+        dota_lobby_password,
+        dota_lobby_password_saved,
+        ...rest
+      } = data;
       await mutation.mutateAsync({
         ...rest,
-        ...lobbyPasswordPayload({ dota_lobby_password_mode, dota_lobby_password }),
+        ...lobbyPasswordPayload({
+          game_type: data.game_type,
+          dota_lobby_password_mode,
+          dota_lobby_password,
+          dota_lobby_password_saved,
+        }),
         day_of_week: data.day_of_week ?? null,
         ends_at: data.ends_at || null,
       });

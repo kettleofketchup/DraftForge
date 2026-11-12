@@ -42,6 +42,51 @@ describe('refineLobbyPassword', () => {
     ).toBe(true);
   });
 
+  it('lets an empty field keep a saved fixed password', () => {
+    const saved = z
+      .object({
+        dota_lobby_password_mode: z.enum(['random', 'fixed']),
+        dota_lobby_password: z.string(),
+        dota_lobby_password_saved: z.boolean(),
+      })
+      .superRefine(refineLobbyPassword);
+    expect(
+      saved.safeParse({
+        dota_lobby_password_mode: 'fixed',
+        dota_lobby_password: '',
+        dota_lobby_password_saved: true,
+      }).success,
+    ).toBe(true);
+    expect(
+      saved.safeParse({
+        dota_lobby_password_mode: 'fixed',
+        dota_lobby_password: '',
+        dota_lobby_password_saved: false,
+      }).success,
+    ).toBe(false);
+    // A typed password is still checked.
+    expect(
+      saved.safeParse({
+        dota_lobby_password_mode: 'fixed',
+        dota_lobby_password: ' x',
+        dota_lobby_password_saved: true,
+      }).success,
+    ).toBe(false);
+  });
+
+  it('skips forms for another game, where the section is hidden', () => {
+    const withGame = z
+      .object({
+        game_type: z.number(),
+        dota_lobby_password_mode: z.enum(['random', 'fixed']),
+        dota_lobby_password: z.string(),
+      })
+      .superRefine(refineLobbyPassword);
+    const fixedEmpty = { dota_lobby_password_mode: 'fixed', dota_lobby_password: '' } as const;
+    expect(withGame.safeParse({ game_type: 2, ...fixedEmpty }).success).toBe(true);
+    expect(withGame.safeParse({ game_type: 1, ...fixedEmpty }).success).toBe(false);
+  });
+
   it('reports the issue code on the password field', () => {
     const result = schema.safeParse({ dota_lobby_password_mode: 'fixed', dota_lobby_password: ' x' });
     expect(result.success).toBe(false);
@@ -56,6 +101,33 @@ describe('lobbyPasswordPayload', () => {
       lobbyPasswordPayload({ dota_lobby_password_mode: 'random', dota_lobby_password: 'stale' }),
     ).toEqual({ dota_lobby_password_mode: 'random' });
     expect(lobbyPasswordPayload({})).toEqual({ dota_lobby_password_mode: 'random' });
+  });
+
+  it('sends no password to keep the saved fixed one', () => {
+    expect(
+      lobbyPasswordPayload({
+        dota_lobby_password_mode: 'fixed',
+        dota_lobby_password: '',
+        dota_lobby_password_saved: true,
+      }),
+    ).toEqual({ dota_lobby_password_mode: 'fixed' });
+    expect(
+      lobbyPasswordPayload({
+        dota_lobby_password_mode: 'fixed',
+        dota_lobby_password: 'new-pw',
+        dota_lobby_password_saved: true,
+      }),
+    ).toEqual({ dota_lobby_password_mode: 'fixed', dota_lobby_password: 'new-pw' });
+  });
+
+  it('sends no password fields for another game', () => {
+    expect(
+      lobbyPasswordPayload({
+        game_type: 2,
+        dota_lobby_password_mode: 'fixed',
+        dota_lobby_password: ' x',
+      }),
+    ).toEqual({});
   });
 
   it('sends the fixed password', () => {

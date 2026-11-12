@@ -14,6 +14,7 @@ interface DotaLobbyEventFields {
   discord_send_lobby_info?: boolean;
   dota_lobby_password_mode?: LobbyPasswordMode;
   dota_lobby_password?: string;
+  dota_lobby_password_saved?: boolean;
 }
 
 interface Props<T extends FieldValues & DotaLobbyEventFields> {
@@ -21,6 +22,7 @@ interface Props<T extends FieldValues & DotaLobbyEventFields> {
   watch: UseFormWatch<T>;
   scope: 'series' | 'event';
   saved?: LobbyPasswordInfo | null;
+  followsSeries?: boolean;
   onRegenerate?: () => void;
   regenerating?: boolean;
 }

@@ -175,8 +175,11 @@ export function CreateEventModal({
     if (isSubmitting) return;
     setIsSubmitting(true);
     try {
-      const { is_recurring, frequency, day_of_week, time_of_day, starts_at, ends_at, generate_days_ahead, scheduled_at: rawScheduledAt, discord_notify_new_events, signup_mode, signup_days_before, dota_lobby_password_mode, dota_lobby_password, ...rest } = data;
-      const shared = { ...rest, ...lobbyPasswordPayload({ dota_lobby_password_mode, dota_lobby_password }) };
+      const { is_recurring, frequency, day_of_week, time_of_day, starts_at, ends_at, generate_days_ahead, scheduled_at: rawScheduledAt, discord_notify_new_events, signup_mode, signup_days_before, dota_lobby_password_mode, dota_lobby_password, dota_lobby_password_saved: _saved, ...rest } = data;
+      const shared = {
+        ...rest,
+        ...lobbyPasswordPayload({ game_type: data.game_type, dota_lobby_password_mode, dota_lobby_password }),
+      };
       // Convert naive datetime-local to UTC using the selected timezone
       const scheduled_at = rawScheduledAt ? localToUTC(rawScheduledAt, data.timezone) : rawScheduledAt;
 

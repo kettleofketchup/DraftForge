@@ -147,6 +147,26 @@ describe('EditRepeaterModal Discord ping roles', () => {
     expect(body).not.toHaveProperty('dota_lobby_password');
   });
 
+  it("keeps a fixed series' password it could not load", async () => {
+    // The staff endpoint failed or is still loading: the field stays empty,
+    // and saving another change must not require retyping the password.
+    render(
+      <EditRepeaterModal
+        repeater={{ ...repeater, dota_lobby_password_mode: 'fixed' }}
+        open
+        onOpenChange={() => {}}
+      />,
+      { wrapper: Wrapper },
+    );
+    expect(screen.getByTestId('lobby-password-input')).toHaveValue('');
+    fireEvent.click(screen.getByTestId('form-dialog-submit'));
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalled());
+    const body = mutateAsync.mock.calls[0][0];
+    expect(body.dota_lobby_password_mode).toBe('fixed');
+    expect(body).not.toHaveProperty('dota_lobby_password');
+    expect(body).not.toHaveProperty('dota_lobby_password_saved');
+  });
+
   it("keeps a fixed series' password it loaded", async () => {
     savedPassword.current = { mode: 'fixed', password: 'series-pw', can_manage: true };
     render(

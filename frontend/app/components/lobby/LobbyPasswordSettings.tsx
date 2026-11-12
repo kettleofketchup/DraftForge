@@ -30,6 +30,7 @@ import type { LobbyPasswordInfo } from './schemas';
 interface LobbyPasswordFields {
   dota_lobby_password_mode?: LobbyPasswordMode;
   dota_lobby_password?: string;
+  dota_lobby_password_saved?: boolean;
 }
 
 interface LobbyPasswordSettingsProps<T extends FieldValues & LobbyPasswordFields> {
@@ -39,6 +40,11 @@ interface LobbyPasswordSettingsProps<T extends FieldValues & LobbyPasswordFields
   scope: 'series' | 'event';
   /** The saved settings (edit forms), from the lobby-password endpoint. */
   saved?: LobbyPasswordInfo | null;
+  /**
+   * An on-schedule event of a series: the next series save, while the event
+   * is upcoming, replaces its password settings.
+   */
+  followsSeries?: boolean;
   /** Generate a new random password now (events in random mode). */
   onRegenerate?: () => void;
   regenerating?: boolean;
@@ -53,6 +59,7 @@ export function LobbyPasswordSettings<T extends FieldValues & LobbyPasswordField
   watch: parentWatch,
   scope,
   saved,
+  followsSeries = false,
   onRegenerate,
   regenerating = false,
 }: LobbyPasswordSettingsProps<T>) {
@@ -61,7 +68,15 @@ export function LobbyPasswordSettings<T extends FieldValues & LobbyPasswordField
   const control = parentControl as unknown as Control<LobbyPasswordFields>;
   const watch = parentWatch as unknown as UseFormWatch<LobbyPasswordFields>;
   const mode = watch('dota_lobby_password_mode');
+  const keepsSaved = !!watch('dota_lobby_password_saved');
   const savedRandom = saved?.mode === 'random' && saved.password ? saved.password : null;
+  const canRegenerate = scope === 'event' && mode !== 'fixed' && !!savedRandom && !!onRegenerate;
+
+  // What to do when the password leaks: only offer actions the form has.
+  let leakHelp: string | null = null;
+  if (mode === 'fixed') leakHelp = t('password.settings.leak.fixed');
+  else if (scope === 'series') leakHelp = t('password.settings.leak.series_random');
+  else if (canRegenerate) leakHelp = t('password.settings.leak.regenerate');
 
   const issueText = (issue: string | undefined): string | null => {
     switch (issue as LobbyPasswordIssue | undefined) {
@@ -122,6 +137,7 @@ export function LobbyPasswordSettings<T extends FieldValues & LobbyPasswordField
                       type={shown ? 'text' : 'password'}
                       autoComplete="off"
                       maxLength={LOBBY_PASSWORD_MAX_LENGTH}
+                      placeholder={keepsSaved ? t('password.settings.keep_placeholder') : undefined}
                       data-testid="lobby-password-input"
                       {...field}
                       value={field.value ?? ''}
@@ -157,7 +173,7 @@ export function LobbyPasswordSettings<T extends FieldValues & LobbyPasswordField
               {savedRandom}
             </code>
             <CopyPasswordButton password={savedRandom} data-testid="lobby-password-copy" />
-            {onRegenerate && (
+            {canRegenerate && (
               <SecondaryButton
                 type="button"
                 size="sm"
@@ -179,10 +195,15 @@ export function LobbyPasswordSettings<T extends FieldValues & LobbyPasswordField
         )}
 
         <FormDescription>{t('password.settings.help_shared')}</FormDescription>
+        {leakHelp && (
+          <FormDescription data-testid="lobby-password-leak-help">{leakHelp}</FormDescription>
+        )}
         <FormDescription>{t('password.settings.help_changes')}</FormDescription>
-        {scope === 'event' && saved?.source === 'series' && (
+        {scope === 'event' && followsSeries && (
           <FormDescription data-testid="lobby-password-from-series">
-            {t('password.settings.from_series')}
+            {saved?.source === 'event'
+              ? t('password.settings.overrides_series')
+              : t('password.settings.from_series')}
           </FormDescription>
         )}
       </div>

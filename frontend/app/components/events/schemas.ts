@@ -351,6 +351,8 @@ export const dotaLobbyConfigSchema = z.object({
   discord_send_lobby_info: z.boolean().default(false),
   dota_lobby_password_mode: z.enum(['random', 'fixed']).default('random'),
   dota_lobby_password: z.string().default(''),
+  // Form-only: the saved password is already fixed, so an empty field keeps it.
+  dota_lobby_password_saved: z.boolean().default(false),
 });
 
 export const DOTA_LOBBY_CONFIG_DEFAULTS = {
@@ -360,6 +362,7 @@ export const DOTA_LOBBY_CONFIG_DEFAULTS = {
   discord_send_lobby_info: false,
   dota_lobby_password_mode: 'random',
   dota_lobby_password: '',
+  dota_lobby_password_saved: false,
 } as const;
 
 export const createEventInputSchema = z.object({

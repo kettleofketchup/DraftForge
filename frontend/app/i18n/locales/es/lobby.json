@@ -19,13 +19,20 @@
       "current": "Contraseña actual:",
       "from_series": "Este evento sigue a su serie. Mientras el evento esté próximo, guardar la serie de nuevo reemplaza la contraseña puesta aquí.",
       "help_changes": "Un cambio se aplica a los lobbies creados después. Los lobbies que ya existen conservan su contraseña.",
-      "help_shared": "Todos los lobbies del evento usan esta contraseña, así que quien la tenga puede entrar en cualquiera. Regénerala si se filtra.",
+      "help_shared": "Todos los lobbies del evento usan esta contraseña, así que quien la tenga puede entrar en cualquiera.",
       "hide": "Ocultar contraseña",
+      "keep_placeholder": "Déjala vacía para conservar la contraseña actual",
+      "leak": {
+        "fixed": "Si se filtra, define una nueva aquí y vuelve a crear los lobbies del evento que siguen esperando: los lobbies existentes conservan la contraseña anterior.",
+        "regenerate": "Si se filtra, regénerala y vuelve a crear los lobbies del evento que siguen esperando: los lobbies existentes conservan la contraseña anterior.",
+        "series_random": "Si se filtra la contraseña de un evento, regénerala en los ajustes de ese evento y vuelve a crear sus lobbies que siguen esperando."
+      },
       "mode": {
         "fixed": "Fija: definirla ahora",
         "random": "Aleatoria: generada para cada evento"
       },
       "mode_label": "Contraseña",
+      "overrides_series": "Este evento reemplaza la contraseña de su serie. Mientras el evento esté próximo, guardar la serie de nuevo la sustituye por el ajuste de la serie.",
       "password_label": "Contraseña del lobby",
       "random_new": "Se genera una contraseña al guardar.",
       "random_series": "Cada evento de la serie recibe su propia contraseña generada.",
