@@ -54,6 +54,29 @@ def backfill_passwords(apps, schema_editor):
         GameLobby.objects.filter(pk=row.pk).update(password=password)
 
 
+def restore_key_ids(apps, schema_editor):
+    """Name, for each lobby, the configured key its stored password derives under.
+
+    Rolling back restores the derived passwords, so a lobby keeps its
+    password only when one of SECRET_KEY and SECRET_KEY_FALLBACKS derives
+    it. Every other lobby (one created after the upgrade, which took its
+    tournament's password, or one whose key is gone) gets the current key
+    and a different password: a retried create of it then answers 409, and
+    staff recreate the lobby.
+    """
+    GameLobby = apps.get_model("lobby", "GameLobby")
+    secrets_ = [settings.SECRET_KEY, *getattr(settings, "SECRET_KEY_FALLBACKS", [])]
+    current = _key_id(settings.SECRET_KEY)
+    for row in GameLobby.objects.iterator():
+        key_id = current
+        if row.password:
+            for secret in secrets_:
+                if _derived(row, secret) == row.password:
+                    key_id = _key_id(secret)
+                    break
+        GameLobby.objects.filter(pk=row.pk).update(password_key_id=key_id)
+
+
 class Migration(migrations.Migration):
     dependencies = [
         ("lobby", "0003_gamelobby_close_pending"),
@@ -66,7 +89,7 @@ class Migration(migrations.Migration):
             name="password",
             field=models.CharField(blank=True, default="", max_length=32),
         ),
-        migrations.RunPython(backfill_passwords, migrations.RunPython.noop),
+        migrations.RunPython(backfill_passwords, restore_key_ids),
         migrations.RemoveField(
             model_name="gamelobby",
             name="password_key_id",
