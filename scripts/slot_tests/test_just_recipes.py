@@ -182,6 +182,30 @@ def test_stack_verbs_go_through_the_slot_helper(run: Runner, recipe: str, tail: 
     assert call.argv == [*SLOTS, *tail]
 
 
+@pytest.mark.parametrize(
+    "action,tail",
+    [
+        # The whole stack with the profile on: slots N >= 1 scale services
+        # that `up dota-lobby` would leave out of the selection.
+        ("up", ["up", "-d"]),
+        ("down", ["rm", "--stop", "--force", "dota-lobby"]),
+        ("restart", ["restart", "dota-lobby"]),
+        ("logs", ["logs", "-f", "dota-lobby"]),
+        ("ps", ["ps", "dota-lobby"]),
+    ],
+)
+def test_dota_lobby_simulator_recipe(run: Runner, action: str, tail: list[str]) -> None:
+    assert run("test::dota-lobby", action).returncode == 0
+    [call] = run.calls()
+    assert call.argv == [*SLOTS, *tail]
+
+
+def test_dota_lobby_simulator_recipe_rejects_unknown_actions(run: Runner) -> None:
+    result = run("test::dota-lobby", "bogus")
+    assert result.returncode == 2 and "usage" in result.stderr
+    assert run.calls() == []
+
+
 def test_test_compose_passes_args_verbatim(run: Runner) -> None:
     assert run("test::compose", "--stack", "dev", "config", "--services").returncode == 0
     [call] = run.calls()
