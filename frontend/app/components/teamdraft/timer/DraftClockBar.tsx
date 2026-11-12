@@ -33,6 +33,14 @@ export interface DraftClockBarProps {
   onStartClock: () => Promise<void>;
 }
 
+function ReserveBar({ pct, draining, className }: { pct: number; draining: boolean; className?: string }) {
+  return (
+    <div className={cn('h-1 rounded bg-black/40 overflow-hidden', className)}>
+      <div className={cn('h-full rounded', draining ? 'bg-red-400' : 'bg-green-400')} style={{ width: `${pct}%` }} />
+    </div>
+  );
+}
+
 export type LiveDraftClockBarProps = Omit<DraftClockBarProps, 'countdown'>;
 
 export function LiveDraftClockBar(props: LiveDraftClockBarProps) {
@@ -62,105 +70,114 @@ export function DraftClockBar({
   const activeCaptain = activeTeam?.captain ?? null;
   const showUnarmed = !clockArmed && drafting;
 
-  const reservePct = (teamPk: number): number =>
-    reserveTotalMs > 0 && armed
-      ? Math.min(100, Math.round((100 * (armed.reserveByTeamId[teamPk] ?? 0)) / reserveTotalMs))
-      : 0;
+  const activeReserveMs = armed && activeTeamPk != null ? (armed.reserveByTeamId[activeTeamPk] ?? 0) : 0;
+  const inReserve = !!armed && !armed.expired && activeTeamPk != null && armed.graceRemainingMs <= 0;
+  const reserveDraining = inReserve && drafting && activeReserveMs > 0;
 
-  const renderReserve = (team: ClockTeam, isActive: boolean) => {
-    const testId = `draft-clock-reserve-${team.teamPk}`;
-    if (!team.captain) {
-      return (
-        <span key={team.teamPk} data-testid={testId} data-empty="true" className="text-xs text-muted-foreground">
-          —
-        </span>
-      );
-    }
-    if (!armed) return null;
-    const ms = armed.reserveByTeamId[team.teamPk] ?? 0;
-    const pct = reservePct(team.teamPk);
-    if (isActive) {
-      return (
-        <div key={team.teamPk} data-testid={testId} data-pct={pct} className="flex items-center gap-2 min-w-[7rem]">
-          <div className="h-2 flex-1 rounded bg-black/30 overflow-hidden">
-            <div
-              className={cn('h-full rounded bg-green-400', ms > 0 && pct < 20 && 'animate-reserve-critical')}
-              style={{ width: `${pct}%` }}
-            />
-          </div>
-          <span className="text-xs font-mono tabular-nums">{formatDuration(ms / 1000)}</span>
-        </div>
-      );
-    }
-    return (
-      <span
-        key={team.teamPk}
-        data-testid={testId}
-        data-pct={pct}
-        className="rounded bg-black/30 px-2 py-0.5 text-xs font-mono tabular-nums"
-      >
-        {formatDuration(ms / 1000)}
-      </span>
-    );
-  };
+  const activePct =
+    reserveTotalMs > 0 ? Math.min(100, Math.round((100 * activeReserveMs) / reserveTotalMs)) : 0;
+
+  const clockLabel = 'text-[10px] font-semibold uppercase tracking-widest';
+  const clockDigits = 'text-3xl md:text-4xl font-mono font-bold tabular-nums leading-none';
 
   return (
-    <div
-      data-testid="draft-clock-bar"
-      className={cn('flex flex-wrap items-center justify-between gap-3 rounded-lg px-4 py-2 text-white', brandBg)}
-    >
-      <div className="flex items-center gap-2">
-        {activeCaptain && (
-          <div data-testid="draft-clock-active-captain" className="flex items-center gap-2">
-            <UserAvatar user={activeCaptain} size="sm" border="captain" />
-            <span className="font-semibold">{DisplayName(activeCaptain)}</span>
+    <>
+      {reserveDraining && (
+        <div
+          data-testid="draft-reserve-tint"
+          aria-hidden
+          className="pointer-events-none fixed inset-0 z-40 bg-red-600/15 shadow-[inset_0_0_120px_rgba(239,68,68,0.45)]"
+        />
+      )}
+      <div
+        data-testid="draft-clock-bar"
+        data-phase={armed?.expired ? 'expired' : inReserve ? 'reserve' : armed ? 'grace' : 'none'}
+        className={cn(
+          'rounded-lg px-4 py-3 text-white',
+          brandBg,
+          reserveDraining && 'ring-2 ring-red-500',
+        )}
+      >
+        <div className="grid grid-cols-1 items-center gap-3 md:grid-cols-[1fr_auto_1fr]">
+          <div className="flex items-center gap-2 min-w-0">
+            {activeCaptain && (
+              <div data-testid="draft-clock-active-captain" className="flex items-center gap-2 min-w-0">
+                <UserAvatar user={activeCaptain} size="sm" border="captain" />
+                <span className="truncate font-semibold">{DisplayName(activeCaptain)}</span>
+              </div>
+            )}
+            {isMyTurn && (
+              <span data-testid="draft-clock-your-turn" className="rounded bg-green-500 px-2 py-0.5 text-xs font-bold">
+                YOUR TURN
+              </span>
+            )}
           </div>
-        )}
-        {isMyTurn && (
-          <span data-testid="draft-clock-your-turn" className="rounded bg-green-500 px-2 py-0.5 text-xs font-bold">
-            YOUR TURN
-          </span>
-        )}
-      </div>
 
-      <div className="flex items-center gap-3">
-        {showUnarmed ? (
-          <>
-            <span data-testid="draft-clock-unarmed" className="rounded bg-black/30 px-2 py-0.5 text-sm">
-              No pick clock
-            </span>
-            {isStaff && (
-              <PrimaryButton data-testid="draft-clock-start-button" onClick={() => void onStartClock()}>
-                Start clock
-              </PrimaryButton>
+          <div className="flex items-center justify-center gap-3">
+            {showUnarmed ? (
+              <>
+                <span data-testid="draft-clock-unarmed" className="rounded bg-black/30 px-2 py-0.5 text-sm">
+                  No pick clock
+                </span>
+                {isStaff && (
+                  <PrimaryButton data-testid="draft-clock-start-button" onClick={() => void onStartClock()}>
+                    Start clock
+                  </PrimaryButton>
+                )}
+              </>
+            ) : armed?.expired ? (
+              <span data-testid="draft-clock-expired" className="text-sm font-semibold text-red-300">
+                Clock expired — waiting for {activeCaptain ? DisplayName(activeCaptain) : 'captain'} or staff to pick
+              </span>
+            ) : (
+              <div className="flex items-stretch rounded-lg bg-black/30">
+                <div className={cn('flex flex-col items-center gap-1 px-4 py-2', inReserve && 'opacity-40')}>
+                  <span className={clockLabel}>Grace</span>
+                  <span
+                    data-testid="draft-clock-grace"
+                    className={cn(
+                      clockDigits,
+                      armed && !inReserve && armed.graceRemainingMs < GRACE_URGENT_MS && 'animate-grace-urgent text-red-400',
+                    )}
+                  >
+                    {armed ? formatDuration(armed.graceRemainingMs / 1000) : '—'}
+                  </span>
+                </div>
+                <div className="w-px bg-white/20" />
+                <div
+                  className={cn(
+                    'flex min-w-[7rem] flex-col items-center gap-1 rounded-r-lg px-4 py-2',
+                    !inReserve && 'opacity-40',
+                    reserveDraining && 'bg-red-600/30',
+                  )}
+                >
+                  <span className={cn(clockLabel, reserveDraining && 'text-red-200')}>Reserve</span>
+                  <span
+                    data-testid="draft-clock-active-reserve"
+                    className={cn(
+                      clockDigits,
+                      reserveDraining && 'text-red-300',
+                      reserveDraining && reserveTotalMs > 0 && activePct < 20 && 'animate-reserve-critical',
+                    )}
+                  >
+                    {armed ? formatDuration(activeReserveMs / 1000) : '—'}
+                  </span>
+                  <ReserveBar pct={activePct} draining={reserveDraining} className="w-full" />
+                </div>
+              </div>
             )}
-          </>
-        ) : armed?.expired ? (
-          <span data-testid="draft-clock-expired" className="text-sm font-semibold text-red-300">
-            Clock expired — waiting for {activeCaptain ? DisplayName(activeCaptain) : 'captain'} or staff to pick
-          </span>
-        ) : (
-          <span
-            data-testid="draft-clock-grace"
-            className={cn(
-              'text-2xl font-mono font-bold tabular-nums',
-              armed && armed.graceRemainingMs < GRACE_URGENT_MS && 'animate-grace-urgent text-red-400',
-            )}
-          >
-            {armed ? formatDuration(armed.graceRemainingMs / 1000) : '—'}
-          </span>
-        )}
-        {clockArmed && drafting && canControl && (
-          <SecondaryButton data-testid="draft-clock-pause-button" onClick={() => void onPause()}>
-            <Pause className="h-4 w-4 mr-2" />
-            Pause
-          </SecondaryButton>
-        )}
-      </div>
+          </div>
 
-      <div className="flex items-center gap-2">
-        {teams.map((t) => renderReserve(t, t.teamPk === activeTeamPk))}
+          <div className="flex items-center justify-end">
+            {clockArmed && drafting && canControl && (
+              <SecondaryButton data-testid="draft-clock-pause-button" onClick={() => void onPause()}>
+                <Pause className="h-4 w-4 mr-2" />
+                Pause
+              </SecondaryButton>
+            )}
+          </div>
+        </div>
       </div>
-    </div>
+    </>
   );
 }
