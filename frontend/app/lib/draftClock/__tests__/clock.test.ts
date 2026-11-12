@@ -1,5 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { captureClockOffset, elapsedSince, remaining, serverNow, serverNowISO } from '~/lib/draftClock';
+import {
+  CLOCK_OFFSET_SAMPLES,
+  addClockOffsetSample,
+  captureClockOffset,
+  elapsedSince,
+  remaining,
+  seedClockOffset,
+  serverNow,
+  serverNowISO,
+} from '~/lib/draftClock';
 
 const T0 = Date.parse('2026-11-08T12:00:00.000Z');
 beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(T0); });
@@ -42,5 +51,30 @@ describe('elapsedSince / remaining', () => {
     expect(remaining(anchor, null, T0)).toBe(0);
     expect(remaining(anchor, undefined, T0)).toBe(0);
     expect(remaining('nope', 30_000, T0)).toBe(0);
+  });
+});
+
+describe('clock offset estimator', () => {
+  const at = (ms: number) => new Date(T0 + ms).toISOString();
+
+  it('a late tick does not move the offset', () => {
+    let est = addClockOffsetSample([], at(0), T0);
+    expect(est.offsetMs).toBe(0);
+    // Sent 1 s later, delivered after 1.5 s in a queue.
+    est = addClockOffsetSample(est.samples, at(1000), T0 + 2500);
+    expect(est.offsetMs).toBe(0);
+  });
+
+  it('follows a real clock change once the old samples age out', () => {
+    let est = addClockOffsetSample([], at(0), T0);
+    for (let i = 1; i <= CLOCK_OFFSET_SAMPLES; i++) {
+      est = addClockOffsetSample(est.samples, at(i * 1000 - 3000), T0 + i * 1000);
+    }
+    expect(est.offsetMs).toBe(-3000);
+  });
+
+  it('initial_state seeds the offset; a missing server_time keeps the current samples', () => {
+    expect(seedClockOffset([5], at(4000), T0)).toEqual({ samples: [4000], offsetMs: 4000 });
+    expect(seedClockOffset([5], undefined, T0)).toEqual({ samples: [5], offsetMs: 5 });
   });
 });

@@ -55,8 +55,8 @@ describe('handleTournamentMessage', () => {
 
   it('refetches the bracket on bracket_update', () => {
     expect(keys({ type: 'bracket_update', game_id: 42 })).toEqual([
-      ['tournament', 7],
       ['bracket', 7],
+      ['tournament', 7],
     ]);
   });
 

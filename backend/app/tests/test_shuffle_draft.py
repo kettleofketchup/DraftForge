@@ -8,6 +8,7 @@ from django.test import TestCase
 from app.models import (
     CustomUser,
     Draft,
+    DraftOptions,
     DraftRound,
     League,
     Organization,
@@ -234,6 +235,7 @@ class BuildShuffleRoundsTest(TestCase):
             self.teams.append(team)
 
         # Create draft
+        DraftOptions.ensure_for(self.tournament, timer_enabled=False)
         self.draft = Draft.objects.create(
             tournament=self.tournament, draft_style="shuffle"
         )
@@ -323,6 +325,7 @@ class AssignNextShuffleCaptainTest(TestCase):
         self.tournament.users.add(self.player)
 
         # Create draft and build rounds
+        DraftOptions.ensure_for(self.tournament, timer_enabled=False)
         self.draft = Draft.objects.create(
             tournament=self.tournament, draft_style="shuffle"
         )
@@ -391,6 +394,7 @@ class DraftBuildRoundsIntegrationTest(TestCase):
             )
             team.members.add(captain)
 
+        DraftOptions.ensure_for(self.tournament, timer_enabled=False)
         self.draft = Draft.objects.create(
             tournament=self.tournament, draft_style="shuffle"
         )
@@ -463,6 +467,7 @@ class PickPlayerForRoundShuffleTest(TestCase):
         self.tournament.users.add(self.player1, self.player2)
 
         # Create draft
+        DraftOptions.ensure_for(self.tournament, timer_enabled=False)
         self.draft = Draft.objects.create(
             tournament=self.tournament, draft_style="shuffle"
         )
@@ -535,6 +540,7 @@ class PickAuthorizationTest(TestCase):
         self.tournament.users.add(self.player1)
 
         # Create draft
+        DraftOptions.ensure_for(self.tournament, timer_enabled=False)
         self.draft = Draft.objects.create(
             tournament=self.tournament, draft_style="shuffle"
         )
@@ -644,6 +650,7 @@ class FullTeamNotAssignedTest(TestCase):
             self.team2.members.add(member)
 
         # Create draft
+        DraftOptions.ensure_for(self.tournament, timer_enabled=False)
         self.draft = Draft.objects.create(
             tournament=self.tournament, draft_style="shuffle"
         )
@@ -736,6 +743,7 @@ class UndoClearsNextCaptainTest(TestCase):
         self.tournament.users.add(self.player1, self.player2)
 
         # Create draft with shuffle style
+        DraftOptions.ensure_for(self.tournament, timer_enabled=False)
         self.draft = Draft.objects.create(
             tournament=self.tournament, draft_style="shuffle"
         )
@@ -856,6 +864,7 @@ class DraftRestartTest(TestCase):
         self.team2.members.add(self.captain2)
 
         # Create draft with shuffle style
+        DraftOptions.ensure_for(self.tournament, timer_enabled=False)
         self.draft = Draft.objects.create(
             tournament=self.tournament, draft_style="shuffle"
         )
@@ -959,6 +968,7 @@ class DraftRestartFuzzTest(TestCase):
             players.append(p)
             tournament.users.add(p)
 
+        DraftOptions.ensure_for(tournament, timer_enabled=False)
         draft = Draft.objects.create(tournament=tournament, draft_style="shuffle")
         draft.build_rounds()
 
@@ -1257,6 +1267,7 @@ class DraftRestartFuzzTest(TestCase):
             OrgUser.objects.create(user=p, organization=org, mmr=3000)
             tournament.users.add(p)
 
+        DraftOptions.ensure_for(tournament, timer_enabled=False)
         draft = Draft.objects.create(tournament=tournament, draft_style="shuffle")
         draft.build_rounds()
 

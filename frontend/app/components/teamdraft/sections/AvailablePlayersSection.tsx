@@ -307,7 +307,7 @@ export const AvailablePlayersSection = memo(() => {
   }
 
   return (
-    <div className="flex-1 min-h-[180px] md:min-h-[250px] flex flex-col">
+    <div data-testid="available-players-section" className="flex-1 min-h-[180px] md:min-h-[250px] flex flex-col">
       {/* Search + Filter Tabs */}
       <div className="shrink-0 space-y-2 mb-3">
         {/* Search Bar */}

@@ -123,3 +123,27 @@ export async function getDraftStyleMMRs(
   const response = await axios.post(`/draft/get-style-mmrs`, data);
   return response.data as DraftStyleMMRsAPIReturn;
 }
+
+// Team draft timer controls
+export async function setDraftReady(
+  draftPk: number,
+  ready: boolean,
+): Promise<TournamentType> {
+  const response = await axios.post<TournamentType>(`/draft/${draftPk}/ready/`, { ready });
+  return response.data;
+}
+
+export async function startTeamDraft(draftPk: number): Promise<TournamentType> {
+  const response = await axios.post<TournamentType>(`/draft/${draftPk}/start/`);
+  return response.data;
+}
+
+export async function pauseTeamDraft(draftPk: number): Promise<TournamentType> {
+  const response = await axios.post<TournamentType>(`/draft/${draftPk}/pause/`);
+  return response.data;
+}
+
+export async function resumeTeamDraft(draftPk: number): Promise<TournamentType> {
+  const response = await axios.post<TournamentType>(`/draft/${draftPk}/resume/`);
+  return response.data;
+}

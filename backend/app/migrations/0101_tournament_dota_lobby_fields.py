@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('app', '0097_teamdraft_timer'),
+        ('app', '0100_draftevent_options_changed'),
     ]
 
     operations = [

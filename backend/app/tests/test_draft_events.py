@@ -4,7 +4,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from django.test import TestCase
 
-from app.models import CustomUser, Draft, DraftEvent, PositionsModel, Team, Tournament
+from app.models import (
+    CustomUser,
+    Draft,
+    DraftEvent,
+    DraftOptions,
+    PositionsModel,
+    Team,
+    Tournament,
+)
 from app.serializers import DraftEventSerializer
 
 
@@ -34,6 +42,7 @@ class DraftEventModelTest(TestCase):
         )
 
         # Create draft
+        DraftOptions.ensure_for(self.tournament, timer_enabled=False)
         self.draft = Draft.objects.create(
             tournament=self.tournament,
             draft_style="shuffle",
@@ -122,6 +131,7 @@ class DraftEventSerializerTest(TestCase):
             name="Test Tournament",
             date_played=date.today(),
         )
+        DraftOptions.ensure_for(self.tournament, timer_enabled=False)
         self.draft = Draft.objects.create(
             tournament=self.tournament,
             draft_style="shuffle",
@@ -181,6 +191,7 @@ class ShuffleDraftEventIntegrationTest(TestCase):
             self.teams.append(team)
 
         # Create draft
+        DraftOptions.ensure_for(self.tournament, timer_enabled=False)
         self.draft = Draft.objects.create(
             tournament=self.tournament,
             draft_style="shuffle",
@@ -201,7 +212,7 @@ class ShuffleDraftEventIntegrationTest(TestCase):
         # Verify broadcast was called
         mock_broadcast.assert_called_once()
 
-    @patch("app.functions.shuffle_draft.broadcast_event")
+    @patch("app.broadcast.broadcast_event")
     def test_assign_next_shuffle_captain_creates_captain_assigned_event(
         self, mock_broadcast
     ):
@@ -268,6 +279,7 @@ class TournamentEventIntegrationTest(TestCase):
         self.team.members.add(self.captain)
 
         # Create draft
+        DraftOptions.ensure_for(self.tournament, timer_enabled=False)
         self.draft = Draft.objects.create(
             tournament=self.tournament,
             draft_style="snake",
@@ -282,7 +294,7 @@ class TournamentEventIntegrationTest(TestCase):
             pick_number=1,
         )
 
-    @patch("app.functions.draft_picks.broadcast_event")
+    @patch("app.broadcast.broadcast_event")
     def test_pick_player_for_round_creates_player_picked_event(self, mock_broadcast):
         """Picking a player creates a player_picked event."""
         from rest_framework.test import APIRequestFactory
@@ -313,7 +325,7 @@ class TournamentEventIntegrationTest(TestCase):
         self.assertEqual(event.actor, self.captain)
         mock_broadcast.assert_called()
 
-    @patch("app.functions.draft_picks.broadcast_event")
+    @patch("app.broadcast.broadcast_event")
     def test_undo_last_pick_creates_pick_undone_event(self, mock_broadcast):
         """Undoing a pick creates a pick_undone event."""
         from rest_framework.test import APIRequestFactory
@@ -372,6 +384,7 @@ class BroadcastEventTest(TestCase):
             name="Test Tournament",
             date_played=date.today(),
         )
+        DraftOptions.ensure_for(self.tournament, timer_enabled=False)
         self.draft = Draft.objects.create(
             tournament=self.tournament,
             draft_style="shuffle",

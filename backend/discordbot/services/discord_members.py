@@ -32,11 +32,13 @@ from django.core.cache import cache
 #      Discord-linked user. Daily cadence is enough; admin-triggered
 #      refreshes (item 1) cover the "user joined since yesterday" gap.
 #
-# The 15-second TTL this used to have (sub-request burst dedup only) was
-# replaced when we made the cache load-bearing for the daily avatar
-# task — that task needs the cache to actually hold data between
-# admin-triggered fills, not for 15 seconds.
+# The TTL is long because the daily avatar task needs the cache to still
+# hold data between admin-triggered fills.
 DISCORD_MEMBER_CACHE_TTL_S = 60 * 60  # 1 hour
+
+# Per-request bound for Discord REST calls. Without one, a request whose TCP
+# handshake is dropped (filtered egress) blocks its caller indefinitely.
+DISCORD_HTTP_TIMEOUT_S = 10
 
 
 def get_discord_members_data(guild_id=None):
@@ -48,6 +50,10 @@ def get_discord_members_data(guild_id=None):
     if guild_id is None:
         guild_id = settings.DISCORD_GUILD_ID
     bot_token = settings.DISCORD_BOT_TOKEN
+    # Skip if Discord bot token is not configured (e.g., in CI): the request
+    # can only fail, and an empty result is not cached.
+    if not bot_token:
+        return []
 
     cache_key = f"discord_members_{guild_id}"
     cached_members = cache.get(cache_key)
@@ -66,7 +72,9 @@ def get_discord_members_data(guild_id=None):
             params["after"] = after
 
         try:
-            response = requests.get(url, headers=headers, params=params)
+            response = requests.get(
+                url, headers=headers, params=params, timeout=DISCORD_HTTP_TIMEOUT_S
+            )
             response.raise_for_status()
             page = response.json()
             if not page:

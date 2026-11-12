@@ -20,6 +20,7 @@ from .embeds import (
     results_posted_embed,
     tournament_created_embed,
 )
+from .services.discord_members import DISCORD_HTTP_TIMEOUT_S
 
 if TYPE_CHECKING:
     from app.models import Draft, Tournament
@@ -119,7 +120,9 @@ def _rate_limited_request(
     """Make a rate-limited HTTP request to the Discord API.
 
     Acquires a token before each attempt and retries on 429 responses.
+    Applies DISCORD_HTTP_TIMEOUT_S unless the caller passes its own timeout.
     """
+    kwargs.setdefault("timeout", DISCORD_HTTP_TIMEOUT_S)
     for attempt in range(max_retries):
         _acquire_rate_limit_token()
         response = requests.request(method, url, **kwargs)

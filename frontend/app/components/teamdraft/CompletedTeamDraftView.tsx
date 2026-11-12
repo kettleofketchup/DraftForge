@@ -10,22 +10,26 @@ import { DisplayName } from '~/components/user/avatar';
 import { UserAvatar } from '~/components/user/UserAvatar';
 import { UserStrip } from '~/components/user';
 import { TeamPositionCoverageRow } from './TeamPositionCoverage';
+import { formatDuration } from '~/lib/dota/utils';
+import type { DraftRoundType } from './types';
 import type { TeamType } from '~/components/tournament/types';
 import type { UserType } from '~/components/user/types';
 
 interface CompletedTeamDraftViewProps {
   teams: TeamType[];
   organizationId?: number;
+  rounds?: DraftRoundType[];
 }
 
 interface TeamCardProps {
   team: TeamType;
   rank: number;
   organizationId?: number;
+  rounds?: DraftRoundType[];
 }
 
 // Team Members List component
-function TeamMembersList({ members, captain, organizationId }: { members: UserType[]; captain: UserType | undefined; organizationId?: number }) {
+function TeamMembersList({ members, captain, organizationId, rounds }: { members: UserType[]; captain: UserType | undefined; organizationId?: number; rounds?: DraftRoundType[] }) {
   // Sort by MMR (highest first)
   const sortedMembers = useMemo(() => {
     return [...members].sort((a, b) => (b.mmr || 0) - (a.mmr || 0));
@@ -33,28 +37,48 @@ function TeamMembersList({ members, captain, organizationId }: { members: UserTy
 
   return (
     <div className="space-y-1">
-      {sortedMembers.map((member) => (
-        <UserStrip
-          key={member.pk}
-          user={member}
-          compact
-          showBorder={false}
-          organizationId={organizationId}
-          className="bg-slate-700/30 hover:bg-slate-700/50"
-          contextSlot={
-            captain?.pk === member.pk ? (
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-primary border-primary">
-                Captain
-              </Badge>
-            ) : undefined
-          }
-        />
-      ))}
+      {sortedMembers.map((member) => {
+        const round = rounds?.find((r) => r.choice?.pk === member.pk);
+        const isCaptain = captain?.pk === member.pk;
+        const hasDuration = typeof round?.pick_duration_ms === 'number';
+        const hasSkips = (round?.skip_count ?? 0) > 0;
+        return (
+          <UserStrip
+            key={member.pk}
+            user={member}
+            compact
+            showBorder={false}
+            organizationId={organizationId}
+            className="bg-slate-700/30 hover:bg-slate-700/50"
+            contextSlot={
+              isCaptain || hasDuration || hasSkips ? (
+                <div className="flex items-center gap-1">
+                  {isCaptain && (
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-primary border-primary">
+                      Captain
+                    </Badge>
+                  )}
+                  {hasDuration && (
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0" data-testid={`pick-duration-${member.pk}`}>
+                      {formatDuration((round!.pick_duration_ms as number) / 1000)}
+                    </Badge>
+                  )}
+                  {hasSkips && (
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-amber-400 border-amber-400" data-testid={`pick-skips-${member.pk}`}>
+                      skipped ×{round!.skip_count}
+                    </Badge>
+                  )}
+                </div>
+              ) : undefined
+            }
+          />
+        );
+      })}
     </div>
   );
 }
 
-function TeamCard({ team, rank, organizationId }: TeamCardProps) {
+function TeamCard({ team, rank, organizationId, rounds }: TeamCardProps) {
   const { openTeamModal } = useSharedPopoverActions();
   const captain = team.captain;
   const displayName = captain ? DisplayName(captain) : team.name;
@@ -145,11 +169,11 @@ function TeamCard({ team, rank, organizationId }: TeamCardProps) {
                 <TeamPositionCoverageRow team={team} teamName={team.name || displayName} showFullTable />
               </TabsContent>
               <TabsContent value="members" className="mt-0 flex-1 overflow-y-auto">
-                <TeamMembersList members={team.members || []} captain={captain} organizationId={organizationId} />
+                <TeamMembersList members={team.members || []} captain={captain} organizationId={organizationId} rounds={rounds} />
               </TabsContent>
             </Tabs>
           ) : (
-            <TeamMembersList members={team.members || []} captain={captain} organizationId={organizationId} />
+            <TeamMembersList members={team.members || []} captain={captain} organizationId={organizationId} rounds={rounds} />
           )}
         </div>
       </CardContent>
@@ -160,7 +184,7 @@ function TeamCard({ team, rank, organizationId }: TeamCardProps) {
 // Export TeamCard and TeamMembersList for reuse in TeamsTab
 export { TeamCard, TeamMembersList };
 
-export function CompletedTeamDraftView({ teams, organizationId }: CompletedTeamDraftViewProps) {
+export function CompletedTeamDraftView({ teams, organizationId, rounds }: CompletedTeamDraftViewProps) {
   // Sort teams by average MMR (highest first)
   const sortedTeams = useMemo(() => {
     return [...teams].sort((a, b) => {
@@ -194,7 +218,7 @@ export function CompletedTeamDraftView({ teams, organizationId }: CompletedTeamD
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 w-full max-w-6xl">
         {sortedTeams.map((team, index) => (
-          <TeamCard key={team.pk} team={team} rank={index + 1} organizationId={organizationId} />
+          <TeamCard key={team.pk} team={team} rank={index + 1} organizationId={organizationId} rounds={rounds} />
         ))}
       </div>
     </div>

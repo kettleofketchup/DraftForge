@@ -150,7 +150,7 @@ The DraftForge side of the preview queue is controlled from this repo:
 
 Repo variables and their defaults when unset:
 
-- `PREVIEW_CAP` (0 to 3, default `0`) is the number of preview slots. `0`, or leaving it
+- `PREVIEW_CAP` (0 to 5, default `0`) is the number of preview slots. `0`, or leaving it
   unset, pauses previews. The next queue run trims holders to the cap and keeps the
   longest-standing ones.
 - `PREVIEW_AUTHORS` (default `kettleofketchup`) is the comma-separated list of logins whose
