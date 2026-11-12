@@ -14,6 +14,7 @@
  */
 
 import { BASE_URL } from '../fixtures/base-url';
+import { isCsrfCookie } from '../fixtures/cookies';
 import { test, chromium, type Page, type Locator } from '@playwright/test';
 import { loginAdmin, waitForHydration, API_URL } from '../fixtures/auth';
 import { waitForDemoReady } from '../fixtures/demo-utils';
@@ -207,7 +208,7 @@ test.describe('Roll Call Demo', () => {
 
     // Get CSRF token for API calls
     const cookies = await context.cookies();
-    const csrfToken = cookies.find((c) => c.name === 'csrftoken')?.value || '';
+    const csrfToken = cookies.find((c) => isCsrfCookie(c.name))?.value || '';
 
     // Create a fresh event for the demo (signups_open, auto_approve)
     const tomorrow = new Date();

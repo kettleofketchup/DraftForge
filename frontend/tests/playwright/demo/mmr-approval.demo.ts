@@ -13,6 +13,7 @@
  */
 
 import { BASE_URL } from '../fixtures/base-url';
+import { isCsrfCookie } from '../fixtures/cookies';
 import { test, chromium, type Page, type Locator } from '@playwright/test';
 import { loginAdmin, waitForHydration, API_URL } from '../fixtures/auth';
 import { waitForDemoReady } from '../fixtures/demo-utils';
@@ -173,7 +174,7 @@ test.describe('MMR Approval Demo', () => {
       data: { user_pk: 5001 },
       headers: { 'Content-Type': 'application/json' },
     });
-    const csrf2 = (await context.cookies()).find(c => c.name === 'csrftoken')?.value || '';
+    const csrf2 = (await context.cookies()).find(c => isCsrfCookie(c.name))?.value || '';
     await context.request.post(`${API_URL}/events/${eventId}/rsvp/`, {
       headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf2 },
     });
@@ -183,7 +184,7 @@ test.describe('MMR Approval Demo', () => {
       data: { user_pk: 5002 },
       headers: { 'Content-Type': 'application/json' },
     });
-    const csrf3 = (await context.cookies()).find(c => c.name === 'csrftoken')?.value || '';
+    const csrf3 = (await context.cookies()).find(c => isCsrfCookie(c.name))?.value || '';
     await context.request.post(`${API_URL}/events/${eventId}/rsvp/`, {
       headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf3 },
     });

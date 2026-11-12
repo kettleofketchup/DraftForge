@@ -11,6 +11,7 @@ import { test as base, expect } from '@playwright/test';
 import type { BrowserContext, Page } from '@playwright/test';
 
 import { API_URL, BASE_URL } from './base-url';
+import { isSessionCookie } from './cookies';
 
 export { API_URL, BASE_URL };
 
@@ -550,7 +551,7 @@ async function setSessionCookies(
           name: name.trim(),
           value: value.trim(),
           url: cookieUrl,  // Use URL instead of domain/path
-          httpOnly: name.trim() === 'sessionid',
+          httpOnly: isSessionCookie(name.trim()),
           // Note: sameSite defaults to 'Lax' when not specified
           // For same-origin requests, Lax should work
         },

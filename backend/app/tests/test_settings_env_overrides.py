@@ -26,6 +26,8 @@ OVERRIDE_KEYS = (
     "TRUST_X_FORWARDED_PROTO",
     "CELERY_BROKER_URL",
     "CELERY_RESULT_BACKEND",
+    "DF_SESSION_COOKIE_NAME",
+    "DF_CSRF_COOKIE_NAME",
 )
 
 DEFAULT_SECRET_KEY = "v*kswpdyi3+*-=q4a)7&_!xwb%@udm1vi56r690!!j6e*p3^mn"
@@ -87,6 +89,23 @@ def tearDownModule():
 
 
 class SettingsEnvOverrideTests(SimpleTestCase):
+    def test_cookie_names_default_to_django_names(self):
+        mod = _reload()
+        self.assertEqual(mod.SESSION_COOKIE_NAME, "sessionid")
+        self.assertEqual(mod.CSRF_COOKIE_NAME, "csrftoken")
+
+    def test_slot_cookie_names_come_from_env(self):
+        mod = _reload(
+            {"DF_SESSION_COOKIE_NAME": "sessionid-s4", "DF_CSRF_COOKIE_NAME": "csrftoken-s4"}
+        )
+        self.assertEqual(mod.SESSION_COOKIE_NAME, "sessionid-s4")
+        self.assertEqual(mod.CSRF_COOKIE_NAME, "csrftoken-s4")
+
+    def test_blank_cookie_names_fall_back_to_defaults(self):
+        mod = _reload({"DF_SESSION_COOKIE_NAME": "", "DF_CSRF_COOKIE_NAME": ""})
+        self.assertEqual(mod.SESSION_COOKIE_NAME, "sessionid")
+        self.assertEqual(mod.CSRF_COOKIE_NAME, "csrftoken")
+
     def test_defaults_unchanged(self):
         mod = _reload()
         self.assertEqual(mod.SECRET_KEY, DEFAULT_SECRET_KEY)
