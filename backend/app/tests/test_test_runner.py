@@ -35,3 +35,39 @@ class TestRunnerDiscoveryTests(SimpleTestCase):
         )
         failed = [i for i in ids if i.startswith("unittest.loader._FailedTest")]
         self.assertEqual(failed, [])
+
+
+class DotaLobbyDefaultsTests(SimpleTestCase):
+    """The test stack turns dota_lobby on; unit tests start with it off."""
+
+    def test_lobbies_are_off_whatever_the_environment_says(self) -> None:
+        import os
+
+        from config.dota_lobby import DotaLobbyConfig
+
+        self.assertFalse(settings.DOTA_LOBBY_ENABLED)
+        self.assertEqual(settings.DOTA_LOBBY_URL, "")
+        self.assertEqual(settings.DOTA_LOBBY_API_KEY, "")
+        self.assertEqual(settings.DOTA_LOBBY_WEBHOOK_SECRETS, ())
+        self.assertEqual([k for k in os.environ if k.startswith("DOTA_LOBBY_")], [])
+        self.assertFalse(DotaLobbyConfig.from_env().is_configured)
+
+    def test_runner_restores_the_environment(self) -> None:
+        import os
+        from unittest import mock
+
+        from backend.test_runner import BackendDiscoverRunner
+
+        runner = BackendDiscoverRunner(verbosity=0, interactive=False)
+        with (
+            mock.patch.dict(
+                os.environ, {"DOTA_LOBBY_ENABLED": "true", "DOTA_LOBBY_URL": "http://x"}
+            ),
+            mock.patch("django.test.runner.setup_test_environment"),
+            mock.patch("django.test.runner.teardown_test_environment"),
+        ):
+            runner.setup_test_environment()
+            self.assertNotIn("DOTA_LOBBY_URL", os.environ)
+            self.assertFalse(settings.DOTA_LOBBY_ENABLED)
+            runner.teardown_test_environment()
+            self.assertEqual(os.environ["DOTA_LOBBY_URL"], "http://x")

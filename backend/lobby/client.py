@@ -54,6 +54,10 @@ log = get_logger(__name__)
 _LOG = {"system": "lobby", "subsystem": "client"}
 
 RETRY_BACKOFF_SECONDS: tuple[float, ...] = (1.0, 3.0)
+# Connecting gets at most this long, whatever DOTA_LOBBY_TIMEOUT_SECONDS
+# says (that is the read timeout): a dota_lobby that drops packets then
+# fails fast instead of holding a web worker for both timeouts.
+CONNECT_TIMEOUT_SECONDS = 3.0
 GATEWAY_STATUSES = frozenset({502, 503, 504})
 LIST_PAGE_SIZE = 200
 EVENTS_PAGE_SIZE = 500
@@ -326,7 +330,7 @@ class DotaLobbyClient:
                 f"{self.base_url}{path}",
                 json=json,
                 params=params,
-                timeout=self.timeout,
+                timeout=(min(CONNECT_TIMEOUT_SECONDS, self.timeout), self.timeout),
                 allow_redirects=False,
             )
         except (requests.Timeout, requests.ConnectionError) as exc:
