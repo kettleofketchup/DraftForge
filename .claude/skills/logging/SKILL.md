@@ -65,6 +65,7 @@ Every log MUST include `system` and `subsystem` kwargs. These are the primary Gr
 | `steam` | `api`, `game_linking`, `match`, `mmr`, `stats`, `model`, `league_sync`, `retry`, `ingest` | — | `steam/**` | Steam API, account/game linking, match fetch/store, MMR/stats, league sync, retry, internal store_match ingest |
 | `bracket` | `generate`, `model` | — | `bracket/**` | Bracket generation + model-level cache logging |
 | `org` | `views` | — | `org/views.py` | Org admin actions (user delete/merge) |
+| `lobby` | `client` | — | `lobby/client.py` | dota_lobby API calls: failed requests with the problem `code`, `retryable` and retry attempt (never bodies, passwords or the API key) |
 | `common` | `utils` | — | `common/utils.py` | Shared utility warnings (CI/IP detection) |
 
 Add new systems/subsystems as features grow. Keep systems coarse (feature area), subsystems functional (what role the code plays).

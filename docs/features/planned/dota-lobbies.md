@@ -9,6 +9,63 @@ Automated Dota 2 custom lobby creation during tournament drafts, allowing captai
 
 This feature integrates the `dota_lobby` service to generate and manage Dota 2 custom lobbies using league-defined rules, passwords, and settings. Lobbies are created **in parallel with drafting**, not after it.
 
+
+## Implementation status
+
+The work lands in stages. The first stage is in place and changes no behaviour:
+
+- **`lobby` app** (`backend/lobby/`): the `GameLobby` and `GameLobbyEvent` models, and
+  `DotaLobbyClient`, a client for the dota_lobby `/v1` API.
+- **Tournament fields**, all off by default:
+    - `dota_lobby_mode`: `off`, `manual` or `auto`
+    - `dota_lobby_launch`: `manual` or `auto`
+    - `dota_lobby_region`
+    - `discord_send_lobby_info`
+- **`Game.gameid`** is now a 64-bit field, the size of a Steam match ID.
+
+Still to come: lobby creation, the webhook receiver, the reconcile task, and the organizer UI.
+
+### Design notes
+
+- **One `GameLobby` row per dota_lobby lobby.** A game keeps its lobby history, and at most one
+  of its lobbies is active at a time.
+- **Lobby reference:** each lobby is named `<DOTA_LOBBY_REF_PREFIX>:<game id>` in dota_lobby,
+  for example `game:42`. A staging and a production DraftForge can share one dota_lobby if
+  they use different prefixes.
+- **Passwords are never stored.** `lobby.passwords.derive_password` computes them from the
+  Django secret key and the lobby reference, so a retried create, or a lobby recreated for the
+  same game, sends the same request and dota_lobby answers it as a repeat rather than a
+  conflict.
+  - Each lobby row records which secret key its password comes from. When rotating
+    `DJANGO_SECRET_KEY`, put the old key in `DJANGO_SECRET_KEY_FALLBACKS` until the lobbies
+    made under it have ended; without it their passwords can no longer be derived.
+  - What players are shown should be read from dota_lobby (`get_lobby` returns the password),
+    since that is the lobby they join.
+  - The password is refused when `DJANGO_SECRET_KEY` is unset and the public development key
+    is in use, outside `DEBUG` and tests.
+- **Errors:** dota_lobby answers errors as problem+json. The client raises `DotaLobbyError` and
+  callers act on its `code` and `retryable` fields, never on the message text. Only `503`
+  (`unavailable`), `504` (`gc_timeout`), timeouts and connection errors are retryable.
+
+### Configuration
+
+| Variable | Where | Default | Purpose |
+|----------|-------|---------|---------|
+| `DOTA_LOBBY_ENABLED` | `docker/.env.<stack>`, Helm `env.extra` | `false` | Global switch |
+| `DOTA_LOBBY_URL` | `backend/.env`, Helm `env.extra` | empty | dota_lobby base URL, without `/v1` |
+| `DOTA_LOBBY_API_KEY` | `backend/.env`, Helm `secrets.dotaLobbyApiKey` | empty | Sent as `X-API-Key` |
+| `DOTA_LOBBY_WEBHOOK_SECRET` | `backend/.env`, Helm `secrets.dotaLobbyWebhookSecret` | empty | The webhook signing secret dota_lobby uses for DraftForge's URL. A comma-separated list is accepted while rotating |
+| `DOTA_LOBBY_TIMEOUT_SECONDS` | env | `15` | Per-request timeout. It is above dota_lobby's 12-second game coordinator timeout |
+| `DOTA_LOBBY_REF_PREFIX` | env | `game` | Lobby reference prefix |
+| `DOTA_LOBBY_WEBHOOK_TOLERANCE_SECONDS` | env | `300` | Clock skew allowed on webhook timestamps |
+| `DOTA_LOBBY_REGION` | env | empty | Default region name. A tournament's `dota_lobby_region` overrides it |
+
+The backend and the Celery settings both read these variables through
+`backend/config/dota_lobby.py`.
+
+On Helm, `ingress.blockInternalApi` blocks `/api/internal/` at the ingress. dota_lobby will
+therefore have to deliver webhooks to the backend Service from inside the cluster.
+
 ---
 
 ## Goals

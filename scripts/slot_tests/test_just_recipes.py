@@ -16,7 +16,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 JUST = shutil.which("just")
 SLOTS = ["-m", "scripts.slots", "--root", str(ROOT), "compose"]
-APPS = ["steam", "app", "bracket", "discordbot", "events", "org", "user"]
+APPS = ["steam", "app", "bracket", "discordbot", "events", "org", "user", "lobby"]
 
 pytestmark = pytest.mark.skipif(JUST is None, reason="just is not on PATH")
 

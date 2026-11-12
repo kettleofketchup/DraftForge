@@ -25,4 +25,5 @@ MODEL_APPS: list[str] = [
     "steam",
     "org",
     "league.apps.LeagueConfig",
+    "lobby",
 ]
