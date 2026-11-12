@@ -48,5 +48,25 @@ describe('DraftClockBar', () => {
     expect(screen.queryByTestId('draft-clock-start-button')).toBeNull();
     expect(screen.getByTestId('draft-clock-grace')).toHaveTextContent('—');
   });
+  it('grace phase: big reserve clock shows the active team reserve, no tint', () => {
+    render(<DraftClockBar {...base} countdown={armed()} />);
+    expect(screen.getByTestId('draft-clock-bar')).toHaveAttribute('data-phase', 'grace');
+    expect(screen.getByTestId('draft-clock-active-reserve')).toHaveTextContent('0:10');
+    expect(screen.queryByTestId('draft-reserve-tint')).toBeNull();
+  });
+  it('reserve phase: big clock drains the active reserve and tints the screen', () => {
+    render(<DraftClockBar {...base} countdown={armed({ graceRemainingMs: 0, reserveByTeamId: { 1: 6_000, 2: 4_000, 3: 10_000 } })} />);
+    expect(screen.getByTestId('draft-clock-bar')).toHaveAttribute('data-phase', 'reserve');
+    expect(screen.getByTestId('draft-clock-active-reserve')).toHaveTextContent('0:06');
+    expect(screen.getByTestId('draft-clock-grace')).toHaveTextContent('0:00');
+    expect(screen.getByTestId('draft-reserve-tint')).toBeInTheDocument();
+  });
+  it('no tint once the reserve is empty or the draft is not drafting', () => {
+    const zero = armed({ graceRemainingMs: 0, reserveByTeamId: { 1: 0, 2: 4_000, 3: 10_000 } });
+    const { rerender } = render(<DraftClockBar {...base} countdown={zero} />);
+    expect(screen.queryByTestId('draft-reserve-tint')).toBeNull();
+    rerender(<DraftClockBar {...base} draftStatus="paused" countdown={armed({ graceRemainingMs: 0 })} />);
+    expect(screen.queryByTestId('draft-reserve-tint')).toBeNull();
+  });
   it('expired: waiting copy names the captain', () => { render(<DraftClockBar {...base} countdown={armed({ graceRemainingMs: 0, expired: true })} />); expect(screen.getByTestId('draft-clock-expired')).toHaveTextContent(`Clock expired — waiting for ${DisplayName(user(7))} or staff to pick`); });
 });
