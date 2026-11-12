@@ -118,6 +118,6 @@ See [references/backend-test-endpoints.md](references/backend-test-endpoints.md)
 | league_staff_tester | 1031 | league staff | `loginLeagueStaff()` |
 | event_org_admin | 1080 | org admin (org 7) | `loginEventAdmin()` |
 | event_player_1 | 1081 | regular | `loginEventPlayer()` |
-| lobby_staff, lobby_rostered, lobby_registered, lobby_unregistered, lobby_league_staff | 7000-7004 | dota_lobby roles | `loginDotaLobby(context, role)` |
+| lobby_staff, lobby_rostered, lobby_registered, lobby_unregistered, lobby_league_staff | 7200-7204 | dota_lobby roles | `loginDotaLobby(context, role)` |
 
 > **NOTE**: When this table drifts from source, read `backend/tests/data/users.py` and `backend/tests/data/organizations.py` for truth.

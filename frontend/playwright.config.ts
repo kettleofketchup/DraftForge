@@ -83,7 +83,8 @@ export default defineConfig({
       // 16-events specs (run in events-sequential project — those tests
       // share a single seeded event PK from getEventsTestData and race on
       // start_roll_call / resetEventsData when workers > 1 in the same shard),
-      // and 18-dota-lobby specs (dota-lobby-sequential).
+      // layout specs (layout project) and 18-dota-lobby specs
+      // (dota-lobby-sequential).
       testIgnore: [/herodraft/i, /e2e\/mobile\//, /e2e\/16-events\//, /e2e\/layout\//, /e2e\/18-dota-lobby\//],
       use: {
         ...devices['Desktop Chrome'],
