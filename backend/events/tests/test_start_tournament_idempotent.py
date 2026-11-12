@@ -1,11 +1,19 @@
 """Tests for events.services.ensure_tournament_with_signups (#200)."""
 
+from unittest.mock import patch
+
 from django.test import TestCase
 from django.utils import timezone as tz
+from rest_framework.test import APIClient
 
 from app.models import CustomUser, Organization, PositionsModel
+from events.constants import EventState
 from events.models import Event, EventSignup
-from events.services import ensure_tournament_with_signups
+from events.services import (
+    create_tournament_for_event,
+    ensure_tournament_with_signups,
+    restart_event_tournament,
+)
 
 
 class EnsureTournamentWithSignupsTest(TestCase):
@@ -107,3 +115,147 @@ class EnsureTournamentWithSignupsTest(TestCase):
         self.assertEqual(args[1], self.event)
         # Both added users must be in the invalidation set
         self.assertEqual(set(args[2:]), {self.users[0], self.users[1]})
+
+
+class EnsureTournamentRollCallRosterTest(TestCase):
+    """#378: starting from roll call keeps only CONFIRMED players."""
+
+    def setUp(self) -> None:
+        self.org = Organization.objects.create(name="Roll Call Roster Org")
+        self.users: list[CustomUser] = [
+            CustomUser.objects.create(
+                username=f"rc_user_{i}",
+                positions=PositionsModel.objects.create(),
+            )
+            for i in range(5)
+        ]
+
+    def _event(self, state: str, roll_call_enabled: bool = True) -> Event:
+        return Event.objects.create(
+            name=f"Roll Call Roster {state}",
+            organization=self.org,
+            scheduled_at=tz.now(),
+            timezone="UTC",
+            roll_call_enabled=roll_call_enabled,
+            state=state,
+        )
+
+    def _signups(self, event: Event) -> None:
+        for user in self.users[:3]:
+            EventSignup.objects.create(event=event, user=user, status="confirmed")
+        for user in self.users[3:]:
+            EventSignup.objects.create(event=event, user=user, status="approved")
+
+    def _roster(self, event: Event) -> set[int]:
+        event.refresh_from_db()
+        return set(event.tournament.users.values_list("pk", flat=True))
+
+    def test_roll_call_adds_only_confirmed(self) -> None:
+        event = self._event(EventState.ROLL_CALL)
+        self._signups(event)
+        ensure_tournament_with_signups(event)
+        self.assertEqual(self._roster(event), {u.pk for u in self.users[:3]})
+
+    def test_roll_call_removes_unconfirmed_already_in_tournament(self) -> None:
+        event = self._event(EventState.ROLL_CALL, roll_call_enabled=False)
+        create_tournament_for_event(event)
+        event.refresh_from_db()
+        self._signups(event)
+        event.tournament.users.add(*self.users)
+        ensure_tournament_with_signups(event)
+        self.assertEqual(self._roster(event), {u.pk for u in self.users[:3]})
+
+    def test_roll_call_keeps_non_signup_tournament_members(self) -> None:
+        event = self._event(EventState.ROLL_CALL)
+        create_tournament_for_event(event)
+        event.refresh_from_db()
+        self._signups(event)
+        extra = CustomUser.objects.create(
+            username="rc_manual", positions=PositionsModel.objects.create()
+        )
+        event.tournament.users.add(extra)
+        ensure_tournament_with_signups(event)
+        self.assertEqual(
+            self._roster(event), {u.pk for u in self.users[:3]} | {extra.pk}
+        )
+
+    def test_roll_call_idempotent(self) -> None:
+        event = self._event(EventState.ROLL_CALL)
+        self._signups(event)
+        ensure_tournament_with_signups(event)
+        ensure_tournament_with_signups(event)
+        self.assertEqual(self._roster(event), {u.pk for u in self.users[:3]})
+
+    def test_roll_call_invalidates_added_and_removed_users(self) -> None:
+        event = self._event(EventState.ROLL_CALL)
+        create_tournament_for_event(event)
+        event.refresh_from_db()
+        self._signups(event)
+        event.tournament.users.add(self.users[3])
+        with patch("events.services.invalidate_after_commit") as mock_inv:
+            ensure_tournament_with_signups(event)
+        args = mock_inv.call_args_list[-1].args
+        self.assertEqual(args[0], event.tournament)
+        self.assertEqual(args[1], event)
+        self.assertEqual(set(args[2:]), set(self.users[:3]) | {self.users[3]})
+
+    def test_signups_open_keeps_approved_and_confirmed(self) -> None:
+        event = self._event(EventState.SIGNUPS_OPEN)
+        self._signups(event)
+        ensure_tournament_with_signups(event)
+        self.assertEqual(self._roster(event), {u.pk for u in self.users})
+
+    def test_start_tournament_endpoint_from_roll_call(self) -> None:
+        event = self._event(EventState.ROLL_CALL)
+        self._signups(event)
+        staff = CustomUser.objects.create(
+            username="rc_staff",
+            is_staff=True,
+            is_superuser=True,
+            positions=PositionsModel.objects.create(),
+        )
+        client = APIClient()
+        client.force_authenticate(staff)
+        resp = client.post(f"/api/events/{event.pk}/start_tournament/")
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertEqual(self._roster(event), {u.pk for u in self.users[:3]})
+
+
+class RestartEventTournamentRosterTest(TestCase):
+    """restart_event_tournament rebuilds the SIGNUPS_OPEN roster."""
+
+    def setUp(self) -> None:
+        self.org = Organization.objects.create(name="Restart Roster Org")
+        self.users: list[CustomUser] = [
+            CustomUser.objects.create(
+                username=f"rs_user_{i}",
+                positions=PositionsModel.objects.create(),
+            )
+            for i in range(4)
+        ]
+
+    def _restart(self, roll_call_enabled: bool) -> set[int]:
+        event = Event.objects.create(
+            name="Restart Roster",
+            organization=self.org,
+            scheduled_at=tz.now(),
+            timezone="UTC",
+            roll_call_enabled=roll_call_enabled,
+            state=EventState.IN_PROGRESS,
+        )
+        create_tournament_for_event(event)
+        event.refresh_from_db()
+        for user in self.users[:2]:
+            EventSignup.objects.create(event=event, user=user, status="confirmed")
+        for user in self.users[2:]:
+            EventSignup.objects.create(event=event, user=user, status="approved")
+        restart_event_tournament(event)
+        event.refresh_from_db()
+        self.assertEqual(event.state, EventState.SIGNUPS_OPEN)
+        return set(event.tournament.users.values_list("pk", flat=True))
+
+    def test_roll_call_event_re_adds_only_confirmed(self) -> None:
+        self.assertEqual(self._restart(True), {u.pk for u in self.users[:2]})
+
+    def test_no_roll_call_event_re_adds_approved_and_confirmed(self) -> None:
+        self.assertEqual(self._restart(False), {u.pk for u in self.users})

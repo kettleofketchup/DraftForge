@@ -234,6 +234,19 @@ test.describe('Event Signup Management (@cicd)', () => {
     // Tournament should have been created
     expect(startedEvent.tournament).not.toBeNull();
 
+    // Only the 8 confirmed players join; the 2 unconfirmed are left out (#378)
+    const tournResp = await context.request.get(
+      `${API_URL}/tournaments/${startedEvent.tournament}/`,
+    );
+    expect(tournResp.ok()).toBeTruthy();
+    const tournamentUsers = ((await tournResp.json()).users as Array<number | { pk: number }>)
+      .map((u) => (typeof u === 'number' ? u : u.pk))
+      .sort((a, b) => a - b);
+    const confirmedUserPks = confirmed
+      .map((s: { user: number }) => s.user)
+      .sort((a: number, b: number) => a - b);
+    expect(tournamentUsers).toEqual(confirmedUserPks);
+
     // =========================================================================
     // 12. Navigate to event page and verify UI
     // =========================================================================

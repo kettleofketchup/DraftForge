@@ -949,8 +949,12 @@ def sync_tournament_from_event(event):
 
 
 @transaction.atomic
-def restart_event_tournament(event):
-    """Delete existing tournament, create fresh one, re-add confirmed users."""
+def restart_event_tournament(event: Event) -> Tournament:
+    """Delete existing tournament, create fresh one, reopen signups.
+
+    Re-adds the SIGNUPS_OPEN roster: CONFIRMED, plus APPROVED when roll call
+    is disabled (same rule as approve_signup).
+    """
     if not event.tournament:
         raise ValueError("No tournament to restart.")
 
@@ -961,11 +965,13 @@ def restart_event_tournament(event):
 
     tournament = create_tournament_for_event(event)
 
-    confirmed = EventSignup.objects.filter(
-        event=event,
-        status__in=[SignupStatus.CONFIRMED, SignupStatus.APPROVED],
+    statuses = [SignupStatus.CONFIRMED]
+    if not event.roll_call_enabled:
+        statuses.append(SignupStatus.APPROVED)
+    roster = EventSignup.objects.filter(
+        event=event, status__in=statuses
     ).select_related("user")
-    for signup in confirmed:
+    for signup in roster:
         tournament.users.add(signup.user)
 
     event.state = EventState.SIGNUPS_OPEN
@@ -975,14 +981,19 @@ def restart_event_tournament(event):
 
 
 @transaction.atomic
-def ensure_tournament_with_signups(event):
-    """Self-heal: create event.tournament if missing, bulk-add APPROVED + CONFIRMED users.
+def ensure_tournament_with_signups(event: Event) -> Tournament:
+    """Self-heal: create event.tournament if missing, then sync its roster.
+
+    From ROLL_CALL only CONFIRMED players belong in the tournament (#378), so
+    APPROVED signups (did not confirm) are left out, and removed if present.
+    Otherwise APPROVED + CONFIRMED are added.
 
     Issue #200 — start_tournament previously silently no-op'd when event.tournament
     was None (legacy events created before perform_create wired create_tournament_for_event).
-    Idempotent: safe to call multiple times; M2M add() is a no-op for existing users.
+    Idempotent: safe to call multiple times; M2M add()/remove() are no-ops when
+    already applied.
 
-    Cache invalidation deferred to commit so the tournament UI reflects the bulk-add
+    Cache invalidation deferred to commit so the tournament UI reflects the change
     immediately rather than after the cacheops 1-hour TTL — Django M2M does NOT
     auto-invalidate cacheops.
     """
@@ -991,19 +1002,41 @@ def ensure_tournament_with_signups(event):
         event.refresh_from_db()
 
     tournament = event.tournament
-    confirmed_or_approved = EventSignup.objects.filter(
-        event=event,
-        status__in=[SignupStatus.APPROVED, SignupStatus.CONFIRMED],
-    ).select_related("user")
+    from_roll_call = event.state == EventState.ROLL_CALL
+    statuses = [SignupStatus.CONFIRMED]
+    if not from_roll_call:
+        statuses.append(SignupStatus.APPROVED)
 
-    added_users = []
-    for signup in confirmed_or_approved:
-        tournament.users.add(signup.user)
-        added_users.append(signup.user)
+    roster = EventSignup.objects.filter(
+        event=event, status__in=statuses
+    ).select_related("user")
+    added_users = [signup.user for signup in roster]
+    tournament.users.add(*added_users)
+
+    removed_users: list[CustomUser] = []
+    if from_roll_call:
+        removed_users = list(
+            tournament.users.filter(
+                event_signups__event=event,
+                event_signups__status=SignupStatus.APPROVED,
+            )
+        )
+        tournament.users.remove(*removed_users)
+
+    log.info(
+        "event_tournament_roster_synced",
+        system="events",
+        subsystem="services",
+        event_id=event.pk,
+        tournament_id=tournament.pk,
+        from_roll_call=from_roll_call,
+        added_count=len(added_users),
+        removed_count=len(removed_users),
+    )
 
     # M2M change invalidates both sides: tournament.users.all() AND user.tournament_set.all().
     # cacheops doesn't auto-track M2M, so we invalidate every user we touched.
-    invalidate_after_commit(tournament, event, *added_users)
+    invalidate_after_commit(tournament, event, *added_users, *removed_users)
     return tournament
 
 
