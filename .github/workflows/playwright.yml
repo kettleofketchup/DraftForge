@@ -185,6 +185,14 @@ jobs:
           CI: 'true'
         run: just test::pw::cicd-events --workers=1
 
+      # The 18-dota-lobby specs. The CI stack does not start the simulated
+      # dota_lobby (profile dota-lobby, no released image yet), so only the
+      # specs that need lobbies on but no simulator run; the rest skip.
+      - name: Run Playwright (dota-lobby-sequential)
+        env:
+          CI: 'true'
+        run: just test::pw::cicd-dota-lobby
+
       - name: Dump container logs on failure
         if: failure()
         run: |

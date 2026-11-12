@@ -489,7 +489,10 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
 
       {/* Dirty indicator */}
       {isDirty && (
-        <div className="bg-yellow-500/10 text-yellow-500 text-sm px-3 py-1 rounded">
+        <div
+          className="bg-yellow-500/10 text-yellow-500 text-sm px-3 py-1 rounded"
+          data-testid="bracket-unsaved-changes"
+        >
           Unsaved changes
         </div>
       )}
