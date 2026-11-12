@@ -290,7 +290,12 @@ test.describe('Strip league stats (@cicd)', () => {
       await avatarTrigger(card, NAMES.captA).hover();
       const hoverCard = page.getByRole('tooltip').filter({ hasText: NAMES.captA });
       await expect(hoverCard).toBeVisible();
-      await hoverCard.click();
+      // Cross from the trigger onto the card the way a pointer does, in steps.
+      const box = await hoverCard.boundingBox();
+      if (!box) throw new Error('hover card has no bounding box');
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 12 });
+      await page.mouse.down();
+      await page.mouse.up();
       const summary = page.getByTestId('player-league-summary');
       await expect(summary).toBeVisible();
       await expect(summary).toContainText('#7 / 7');
