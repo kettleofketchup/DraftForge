@@ -64,7 +64,6 @@
     "cmdk": "^1.1.1",
     "consola": "^3.4.2",
     "csv-parse": "^6.1.0",
-    "daisyui": "^5.0.50",
     "date-fns": "^4.1.0",
     "discord-api-types": "^0.38.18",
     "dotaconstants": "^10.7.0",

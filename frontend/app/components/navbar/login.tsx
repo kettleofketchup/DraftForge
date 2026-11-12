@@ -20,6 +20,8 @@ import { Button } from '~/components/ui/button';
 import { DestructiveButton, PrimaryButton } from '~/components/ui/buttons';
 import { DiscordIcon } from '~/components/ui/icons';
 import { getLogger } from '~/lib/logger';
+import { logout } from '~/components/api/api';
+import { Skeleton } from '~/components/ui/skeleton';
 const log = getLogger('login');
 
 type AvatarProps = {
@@ -37,7 +39,6 @@ const AvatarContainer: React.FC<AvatarProps> = (props) => {
   );
 };
 
-import { logout } from '~/components/api/api';
 
 // Try to get cached user from sessionStorage (client-side only)
 const getCachedUser = (): UserType | null => {
@@ -55,10 +56,10 @@ const getCachedUser = (): UserType | null => {
 
 export const ProfileButton: React.FC = () => {
   const { t } = useTranslation('navbar');
-  const currentUser = useUserStore((state) => state.currentUser); // Zustand user state
+  const currentUser = useUserStore((state) => state.currentUser);
   const navigate = useNavigate();
   const [showPopover, setShowPopover] = useState(false);
-  const clearUser = useUserStore((state) => state.clearUser); // Zustand setter
+  const clearUser = useUserStore((state) => state.clearUser);
   useEffect(() => {}, [currentUser.username]);
   const handleClick = () => {
     setShowPopover((prev) => !prev);
@@ -82,7 +83,7 @@ export const ProfileButton: React.FC = () => {
       <DropdownMenu>
         <DropdownMenuTrigger>
           <div
-            className="m-0 btn-circle avatar flex p-0 relative"
+            className="m-0 p-0 rounded-full inline-flex relative"
             popoverTarget="popover-3"
             style={{ anchorName: '--anchor-3' } as React.CSSProperties}
             onClick={handleClick}
@@ -182,9 +183,9 @@ export const LoginWithDiscordButton: React.FC<props> = () => {
   if (!mounted) {
     return (
       <button type="button" className="bg-transparent border-0 p-0">
-        <div className="m-0 btn-circle avatar flex p-0 relative">
+        <div className="m-0 p-0 rounded-full inline-flex relative">
           <AvatarContainer>
-            <div className="w-full h-full skeleton rounded-full" />
+            <Skeleton className="size-full rounded-full bg-base-300" />
           </AvatarContainer>
           <DraftNotificationBadge />
         </div>
@@ -205,11 +206,11 @@ export const LoginWithDiscordButton: React.FC<props> = () => {
       <DropdownMenu>
         <DropdownMenuTrigger>
           <div
-            className="m-0 btn-circle avatar flex p-0 relative"
+            className="m-0 p-0 rounded-full inline-flex relative"
             style={{ anchorName: '--anchor-3' } as React.CSSProperties}
           >
             <AvatarContainer>
-              <div className="w-full h-full skeleton rounded-full" />
+              <Skeleton className="size-full rounded-full bg-base-300" />
             </AvatarContainer>
             <DraftNotificationBadge />
           </div>
