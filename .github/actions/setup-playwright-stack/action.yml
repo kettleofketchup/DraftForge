@@ -140,8 +140,14 @@ runs:
         docker compose --project-directory . -f docker/docker-compose.test.yaml -f docker/docker-compose.ci.override.yaml \
           exec -T celery-worker python - <<'EOF'
         import sys
+        import time
         from app.internal_client import _get
-        resp = _get("/steam/tracked-leagues/")
+        # The readiness probe above goes through nginx, so daphne may still be starting.
+        for _ in range(30):
+            resp = _get("/steam/tracked-leagues/")
+            if resp is not None:
+                break
+            time.sleep(2)
         status = "unreachable" if resp is None else resp.status_code
         print(f"celery-worker GET /api/internal/steam/tracked-leagues/ -> {status}")
         sys.exit(0 if resp is not None and resp.ok else 1)
