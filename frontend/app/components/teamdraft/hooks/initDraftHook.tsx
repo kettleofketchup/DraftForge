@@ -12,7 +12,6 @@ type hookParams = {
   setDraft: (draft: DraftType) => void;
   curDraftRound: DraftRoundType;
   setCurDraftRound: (draftRound: DraftRoundType) => void;
-  setDraftIndex: (index: number) => void;
   draftStyle?: 'snake' | 'normal' | 'shuffle';
 };
 
@@ -22,7 +21,6 @@ export const initDraftHook = async ({
   setDraft,
   curDraftRound,
   setCurDraftRound,
-  setDraftIndex,
   draftStyle,
 }: hookParams) => {
   log.debug('Initialization draft', { tournament });
@@ -57,7 +55,6 @@ export const initDraftHook = async ({
       if (data.draft.draft_rounds?.[0]) {
         setCurDraftRound(data.draft.draft_rounds[0]);
       }
-      setDraftIndex(0);
       return `Tournament Draft has been initialized!`;
     },
     error: (err) => {

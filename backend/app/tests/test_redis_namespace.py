@@ -131,13 +131,13 @@ class NamespacedKeyTests(SimpleTestCase):
 
     @override_settings(REDIS_KEY_NAMESPACE="")
     def test_tick_keys_keep_production_format(self) -> None:
-        self.assertEqual(conn_count_key(5), "herodraft:connections:5")
+        self.assertEqual(conn_count_key(5), "herodraft:live_connections:5")
         self.assertEqual(tick_lock_key(5), "herodraft:tick_lock:5")
         self.assertEqual(captain_heartbeat_key(5, 9), "herodraft:5:captain:9:heartbeat")
 
     @override_settings(REDIS_KEY_NAMESPACE="ns:")
     def test_tick_keys_include_namespace(self) -> None:
-        self.assertEqual(conn_count_key(5), "ns:herodraft:connections:5")
+        self.assertEqual(conn_count_key(5), "ns:herodraft:live_connections:5")
         self.assertEqual(tick_lock_key(5), "ns:herodraft:tick_lock:5")
         self.assertEqual(
             captain_heartbeat_key(5, 9), "ns:herodraft:5:captain:9:heartbeat"
@@ -182,7 +182,7 @@ class DraftTickKeyNamespaceTests(SimpleTestCase):
                 [
                     f"{prefix}:5:captain:9:heartbeat",
                     f"{prefix}:5:captain:9:channel",
-                    f"{prefix}:connections:5",
+                    f"{prefix}:live_connections:5",
                     f"{prefix}:tick_lock:5",
                 ],
             )

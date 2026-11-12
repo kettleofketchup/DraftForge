@@ -3,7 +3,6 @@ from django.http import JsonResponse
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 
-# Create your views here.
 from app.models import (
     CustomUser,
     Organization,
@@ -32,7 +31,7 @@ def get_user_guilds(request):
         return JsonResponse({"guilds": cached_guilds}, safe=True)
 
     try:
-        response = requests.get(url, headers=headers)
+        response = requests.get(url, headers=headers, timeout=DISCORD_HTTP_TIMEOUT_S)
         response.raise_for_status()
         guilds = response.json()
         cache.set(cache_key, guilds, timeout=5)
@@ -48,6 +47,7 @@ def get_user_guilds(request):
 # (which has ORM-heavy top-level imports that crash with
 # settings_celery.DATABASES = {}).
 from discordbot.services.discord_members import (  # noqa: F401
+    DISCORD_HTTP_TIMEOUT_S,
     DISCORD_MEMBER_CACHE_TTL_S,
     get_discord_members_data,
 )
@@ -90,6 +90,10 @@ def get_discord_voice_channel_activity(request):
             {"error": f"Discord API setting missing in Django settings: {e.name}"},
             status=500,
         )
+    if not bot_token:
+        return JsonResponse(
+            {"error": "Discord bot token is not configured"}, status=503
+        )
     cache_key = f"voice_activity_{guild_id}"
 
     cached_voice_activity = cache.get(cache_key)
@@ -104,7 +108,9 @@ def get_discord_voice_channel_activity(request):
     try:
         # 1. Fetch all guild channels to identify voice channels and their names
         channels_url = f"{api_base_url}/guilds/{guild_id}/channels"
-        response_channels = requests.get(channels_url, headers=headers)
+        response_channels = requests.get(
+            channels_url, headers=headers, timeout=DISCORD_HTTP_TIMEOUT_S
+        )
         response_channels.raise_for_status()
         all_channels = response_channels.json()
         print(all_channels)
@@ -118,7 +124,9 @@ def get_discord_voice_channel_activity(request):
         # The 'voice_states' array contains information about users in voice channels,
         # including their 'member' object.
         guild_url = f"{api_base_url}/guilds/{guild_id}"
-        response_guild = requests.get(guild_url, headers=headers)
+        response_guild = requests.get(
+            guild_url, headers=headers, timeout=DISCORD_HTTP_TIMEOUT_S
+        )
         response_guild.raise_for_status()
         guild_data = response_guild.json()
         print("Voice Channels Map:")
@@ -158,7 +166,6 @@ def get_discord_voice_channel_activity(request):
             {"error": f"Error communicating with Discord API: {str(e)}"}, status=500
         )
     except Exception as e:
-        # Catch any other unexpected errors during processing
         return JsonResponse(
             {"error": f"An unexpected error occurred: {str(e)}"}, status=500
         )
@@ -243,7 +250,7 @@ def search_discord_members(request):
             {"error": "Organization has no Discord server configured"}, status=400
         )
 
-    # Use SEPARATE cache key from get_discord_members_data's internal 15s cache
+    # Separate key from get_discord_members_data's own per-guild member cache
     cache_key = f"discord_members_search_{org.discord_server_id}"
     members = cache.get(cache_key)
 

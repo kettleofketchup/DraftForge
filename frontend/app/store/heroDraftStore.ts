@@ -6,7 +6,7 @@
  */
 
 import { create } from 'zustand';
-import { captureClockOffset, serverNowISO, startHeartbeatLoop } from '~/lib/draftClock';
+import { addClockOffsetSample, seedClockOffset, serverNowISO, startHeartbeatLoop } from '~/lib/draftClock';
 import { getLogger } from '~/lib/logger';
 import { getWebSocketManager } from '~/lib/websocket';
 import type { ConnectionStatus, Unsubscribe } from '~/lib/websocket';
@@ -51,6 +51,7 @@ interface HeroDraftState {
   // case where the broadcast happened but didn't reach this client
   // (WS hiccup, browser tab throttled, channel-layer queue saturated).
   _lastTickReceivedAtMs: number | null;
+  _offsetSamples: number[];
 
   // Actions
   connect: (draftId: number) => void;
@@ -85,6 +86,7 @@ const initialState = {
   _currentDraftId: null,
   _stopHeartbeat: null,
   _lastTickReceivedAtMs: null,
+  _offsetSamples: [] as number[],
 };
 
 export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
@@ -161,7 +163,10 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
             current_round: message.draft_state.current_round,
             rounds_count: message.draft_state.rounds.length,
           });
-          set({ draft: message.draft_state });
+          {
+            const clock = seedClockOffset(get()._offsetSamples, message.server_time, Date.now());
+            set({ draft: message.draft_state, _offsetSamples: clock.samples, serverClockOffsetMs: clock.offsetMs });
+          }
           break;
 
         case 'herodraft_event':
@@ -238,13 +243,10 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
             round_started_at: message.round_started_at,
           });
 
-          // Re-anchor clock offset on every tick. Includes one-way
-          // network latency in the offset, which means submitPick's
-          // outbound timestamp will be ~RTT/2 in the past relative to
-          // server-receive — that's the desired behaviour (the server's
-          // 2s sanity window absorbs it cleanly).
+          // Offset from the least-delayed recent tick, so one tick stuck in a
+          // queue can't shift this viewer's clock by its delay.
           const tickReceivedAtMs = Date.now();
-          const serverClockOffsetMs = captureClockOffset(message.server_time, tickReceivedAtMs);
+          const clock = addClockOffsetSample(get()._offsetSamples, message.server_time, tickReceivedAtMs);
 
           // Gap detection — expected cadence is 1Hz. If we go >2s without
           // a tick, log it. This catches client-side delivery problems
@@ -265,7 +267,8 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
 
           set({
             _lastTickReceivedAtMs: tickReceivedAtMs,
-            serverClockOffsetMs,
+            _offsetSamples: clock.samples,
+            serverClockOffsetMs: clock.offsetMs,
             tick: {
               type: 'herodraft_tick',
               draft_state: message.draft_state,

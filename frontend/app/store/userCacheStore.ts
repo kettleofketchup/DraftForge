@@ -32,9 +32,22 @@ function pick<T extends Record<string, unknown>>(
   return result as Partial<T>;
 }
 
+// Payloads rebuild nested values (positions, id lists) on every fetch, so compare by value.
+function sameValue(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  const ka = Object.keys(a);
+  const kb = Object.keys(b);
+  if (ka.length !== kb.length) return false;
+  return ka.every((k) =>
+    sameValue((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k]),
+  );
+}
+
 function hasCoreChanged(existing: UserEntry, incoming: UserEntry): boolean {
   return coreKeys.some(
-    (k) => existing[k as keyof UserEntry] !== incoming[k as keyof UserEntry],
+    (k) => !sameValue(existing[k as keyof UserEntry], incoming[k as keyof UserEntry]),
   );
 }
 

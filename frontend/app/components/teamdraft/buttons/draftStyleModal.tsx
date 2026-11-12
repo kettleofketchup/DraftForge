@@ -1,5 +1,9 @@
+import { zodResolver } from '@hookform/resolvers/zod';
 import { Settings } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { toast } from 'sonner';
+import { updateDraftOptions } from '~/components/api/tournamentAPI';
 import { TEAMS_BUTTONS_WIDTH } from '~/components/constants';
 import { DIALOG_CSS } from '~/components/reusable/modal';
 import { Button } from '~/components/ui/button';
@@ -15,12 +19,22 @@ import {
   DialogTrigger,
 } from '~/components/ui/dialog';
 import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '~/components/ui/form';
+import { Input } from '~/components/ui/input';
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from '~/components/ui/select';
+import { Switch } from '~/components/ui/switch';
 import {
   Tooltip,
   TooltipContent,
@@ -30,10 +44,142 @@ import { useTournamentStore } from '~/store/tournamentStore';
 import { useUserStore } from '~/store/userStore';
 
 import { Label } from '~/components/ui/label';
+import { hydrateTournament } from '~/lib/hydrateTournament';
 import { getLogger } from '~/lib/logger';
 import { updateDraftStyleHook } from '../hooks/updateDraftStyleHook';
+import {
+  DraftOptionsFormSchema,
+  draftOptionsFormToPatch,
+  draftOptionsToFormInput,
+  type DraftOptionsFormInput,
+  type DraftOptionsFormValues,
+} from '../schemas';
 import type { DraftType } from '../types';
 const log = getLogger('DraftStyleModal');
+
+const DraftOptionsSection: React.FC = () => {
+  const tournament = useUserStore((state) => state.tournament);
+  const draft = useUserStore((state) => state.draft);
+  const setTournament = useUserStore((state) => state.setTournament);
+  const setDraft = useUserStore((state) => state.setDraft);
+  const options = tournament?.draft_options ?? draft?.draft_options;
+
+  const form = useForm<DraftOptionsFormInput, unknown, DraftOptionsFormValues>({
+    resolver: zodResolver(DraftOptionsFormSchema),
+    defaultValues: draftOptionsToFormInput(options),
+  });
+  const { isDirty } = form.formState;
+
+  useEffect(() => {
+    if (!form.formState.isDirty) form.reset(draftOptionsToFormInput(options));
+  }, [options]);
+
+  const onSubmit = async (values: DraftOptionsFormValues) => {
+    if (tournament.pk === null) return;
+    const request = updateDraftOptions(
+      tournament.pk,
+      draftOptionsFormToPatch(values),
+    );
+    toast.promise(request, {
+      loading: 'Saving draft timer settings...',
+      success: 'Draft timer settings saved',
+      error: 'Failed to save draft timer settings',
+    });
+    try {
+      const data = await request;
+      setTournament(
+        hydrateTournament(
+          data as typeof data & { _users?: Record<number, unknown> },
+        ) as typeof data,
+      );
+      setDraft(data.draft as DraftType);
+      form.reset(values);
+    } catch (error) {
+      log.error('Failed to save draft options', { error });
+    }
+  };
+
+  return (
+    <Form {...form}>
+      <form
+        onSubmit={form.handleSubmit(onSubmit)}
+        className="space-y-4 rounded-lg border p-4"
+        data-testid="draft-options-form"
+      >
+        <h3 className="text-lg font-semibold">Pick Timer</h3>
+        <FormField
+          control={form.control}
+          name="timer_enabled"
+          render={({ field }) => (
+            <FormItem className="flex items-center justify-between">
+              <FormLabel>Timer enabled</FormLabel>
+              <FormControl>
+                <Switch
+                  checked={field.value}
+                  onCheckedChange={field.onChange}
+                  data-testid="draft-options-timer-enabled"
+                />
+              </FormControl>
+            </FormItem>
+          )}
+        />
+        <div className="grid grid-cols-2 gap-4">
+          <FormField
+            control={form.control}
+            name="grace_time_s"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Grace time (s)</FormLabel>
+                <FormControl>
+                  <Input
+                    type="number"
+                    step="1"
+                    data-testid="draft-options-grace-s"
+                    name={field.name}
+                    ref={field.ref}
+                    onBlur={field.onBlur}
+                    value={field.value as string | number}
+                    onChange={(e) => field.onChange(e.target.value)}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="reserve_time_s"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Reserve time (s)</FormLabel>
+                <FormControl>
+                  <Input
+                    type="number"
+                    step="1"
+                    data-testid="draft-options-reserve-s"
+                    name={field.name}
+                    ref={field.ref}
+                    onBlur={field.onBlur}
+                    value={field.value as string | number}
+                    onChange={(e) => field.onChange(e.target.value)}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+        <PrimaryButton
+          type="submit"
+          disabled={!isDirty}
+          data-testid="draft-options-save"
+        >
+          Save timer settings
+        </PrimaryButton>
+      </form>
+    </Form>
+  );
+};
 
 interface DraftStyleModalProps {
   /** External open state control (optional) */
@@ -344,6 +490,12 @@ export const DraftStyleModal: React.FC<DraftStyleModalProps> = ({
             </div>
           </div>
         </div>
+        )}
+
+        {isStaff() && (
+          <div className="mt-6">
+            <DraftOptionsSection />
+          </div>
         )}
 
         <DialogFooter className="gap-2">

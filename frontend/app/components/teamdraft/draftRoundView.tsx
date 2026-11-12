@@ -1,14 +1,13 @@
 // Redesigned draft view with pick order + current team at top
 // Full screen with alternating columns on md+ (2 cols) and xl+ (3 cols)
-import { memo, useEffect } from 'react';
+import { memo } from 'react';
 import { Card } from '~/components/ui/card';
-import { getLogger } from '~/lib/logger';
+import { draftWsSelectors, useDraftWebSocketStore } from '~/store/draftWebSocketStore';
 import { useUserStore } from '~/store/userStore';
+import { TurnIndicator } from './roundView/TurnIndicator';
 import { DoublePickThreshold } from './shuffle/DoublePickThreshold';
 import { PickOrderSection, CurrentTeamSection, AvailablePlayersSection } from './sections';
 import type { DraftRoundType } from './types';
-
-const log = getLogger('DraftRoundView');
 
 // Granular selectors for minimal re-renders
 const selectDraftRounds = (state: ReturnType<typeof useUserStore.getState>) => state.draft?.draft_rounds;
@@ -17,7 +16,6 @@ const selectLatestRoundPk = (state: ReturnType<typeof useUserStore.getState>) =>
 const selectCurDraftRoundPk = (state: ReturnType<typeof useUserStore.getState>) => state.curDraftRound?.pk;
 const selectCurDraftRoundChoice = (state: ReturnType<typeof useUserStore.getState>) => state.curDraftRound?.choice;
 const selectCurDraftRoundPickNumber = (state: ReturnType<typeof useUserStore.getState>) => state.curDraftRound?.pick_number;
-const selectDraftIndex = (state: ReturnType<typeof useUserStore.getState>) => state.draftIndex;
 
 export const DraftRoundView: React.FC = memo(() => {
   // Use granular selectors - component only re-renders when these specific values change
@@ -27,11 +25,7 @@ export const DraftRoundView: React.FC = memo(() => {
   const curDraftRoundPk = useUserStore(selectCurDraftRoundPk);
   const curDraftRoundChoice = useUserStore(selectCurDraftRoundChoice);
   const curDraftRoundPickNumber = useUserStore(selectCurDraftRoundPickNumber);
-  const draftIndex = useUserStore(selectDraftIndex);
-
-  useEffect(() => {
-    log.debug('Draft view updated - index:', draftIndex);
-  }, [draftIndex]);
+  const timerEnabled = useDraftWebSocketStore(draftWsSelectors.timerEnabled);
 
   const latestRound = draftRounds?.find(
     (round: DraftRoundType) => round.pk === latestRoundPk
@@ -61,7 +55,11 @@ export const DraftRoundView: React.FC = memo(() => {
     return (
       <div className="flex-1 flex items-center justify-center">
         <div className="text-center">
-          <h3 className="text-xl font-bold">Not Current Round</h3>
+          {timerEnabled ? (
+            <TurnIndicator />
+          ) : (
+            <h3 className="text-xl font-bold">Not Current Round</h3>
+          )}
           <p className="text-muted-foreground">
             Pick {curDraftRoundPickNumber} of {latestRound?.pick_number}
           </p>
@@ -72,6 +70,8 @@ export const DraftRoundView: React.FC = memo(() => {
 
   return (
     <div className="flex flex-col h-full gap-2 p-2 md:gap-4 md:p-4">
+      <TurnIndicator />
+
       {/* Top Section: Pick Order + Current Team - unified card */}
       <Card className="p-2 md:p-4 shrink-0">
         <div className="flex flex-col lg:flex-row gap-3 md:gap-4">

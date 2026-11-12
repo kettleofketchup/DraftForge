@@ -94,6 +94,8 @@ export const HeroDraftEventSchema = z.object({
 export const InitialStateMessageSchema = z.object({
   type: z.literal("initial_state"),
   draft_state: HeroDraftSchema,
+  /** Server clock at send; seeds the clock offset before the first tick. */
+  server_time: z.string().optional(),
 });
 
 export const HeroDraftKickedSchema = z.object({
