@@ -18,10 +18,19 @@ const Tile: React.FC<{
   value: React.ReactNode;
   caption: React.ReactNode;
   valueClassName?: string;
-}> = ({ label, value, caption, valueClassName }) => (
-  <div className="rounded-md bg-muted/40 px-3 py-2">
+  compact?: boolean;
+}> = ({ label, value, caption, valueClassName, compact = false }) => (
+  <div className={cn('rounded-md bg-muted/40', compact ? 'px-2 py-1.5' : 'px-3 py-2')}>
     <div className="text-xs text-muted-foreground">{label}</div>
-    <div className={cn('text-xl font-bold tabular-nums', valueClassName)}>{value}</div>
+    <div
+      className={cn(
+        'font-bold tabular-nums',
+        compact ? 'text-base whitespace-nowrap' : 'text-xl',
+        valueClassName,
+      )}
+    >
+      {value}
+    </div>
     <div className="text-xs text-muted-foreground">{caption}</div>
   </div>
 );
@@ -100,21 +109,21 @@ export const PlayerLeagueSummary: React.FC<{
   return (
     <div data-testid={compact ? 'hover-league-summary' : 'player-league-summary'} className="space-y-3">
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <Tile
+        <Tile compact={compact}
           label="Rank"
           value={`${ranked ? `#${summary.rank}` : '—'} / ${population}`}
           caption={
             ranked ? `top ${summary.top_percent}%` : `${summary.games}/${minGames} games to rank`
           }
         />
-        <Tile label="Games" value={summary.games} caption="ticket games" />
-        <Tile
+        <Tile compact={compact} label="Games" value={summary.games} caption="ticket games" />
+        <Tile compact={compact}
           label="Win rate"
           value={formatWinRate(summary.win_rate)}
           valueClassName={toneClass[tone]}
           caption={`${summary.wins}–${summary.losses}`}
         />
-        <Tile
+        <Tile compact={compact}
           label="Streak"
           value={summary.streak ? `${summary.streak.result}${summary.streak.count}` : '—'}
           caption={streakCaption(summary.streak)}
