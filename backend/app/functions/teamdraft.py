@@ -1,6 +1,6 @@
 """Team-draft timer lifecycle helpers (spec §2)."""
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from django.db import transaction
 
@@ -93,8 +93,10 @@ def activate_round(
     *,
     now: datetime,
     armed: bool = True,
+    hold_ms: int = 0,
 ) -> None:
-    round.started_at = now if armed else None
+    start = now + timedelta(milliseconds=hold_ms)
+    round.started_at = start if armed else None
     round.timed_out_at = None
     round.grace_time_ms = options.grace_time_ms
     round.save(update_fields=["started_at", "timed_out_at", "grace_time_ms"])
@@ -106,8 +108,9 @@ def activate_round(
             {
                 "pick_number": round.pick_number,
                 **team_payload(team),
-                "started_at": now.isoformat(),
+                "started_at": start.isoformat(),
                 "grace_time_ms": options.grace_time_ms,
+                "hold_ms": hold_ms,
                 "reserve_ms": team.draft_reserve_ms if team else None,
             },
         )
@@ -203,7 +206,12 @@ def complete_draft(draft: Draft) -> None:
 
 
 def advance_after_pick(
-    draft: Draft, options: DraftOptions, *, now: datetime, activate: bool
+    draft: Draft,
+    options: DraftOptions,
+    *,
+    now: datetime,
+    activate: bool,
+    hold_ms: int = 0,
 ) -> DraftRound | None:
     nxt = draft.lock_active_round()
     if nxt is None:
@@ -216,6 +224,7 @@ def advance_after_pick(
             options,
             now=now,
             armed=draft.state == TeamDraftState.DRAFTING,
+            hold_ms=hold_ms,
         )
     return nxt
 
