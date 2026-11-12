@@ -141,7 +141,7 @@ def test_dota_lobby_simulator_is_behind_a_profile() -> None:
 @pytest.mark.parametrize(
     ("env", "image"),
     [
-        ({}, "ghcr.io/kettleofketchup/dota_lobby:simulation-release-placeholder"),
+        ({}, "ghcr.io/kettleofketchup/dota_lobby:0.2.0"),
         ({"DOTA_LOBBY_IMAGE_TAG": "1.4.0"}, "ghcr.io/kettleofketchup/dota_lobby:1.4.0"),
         (
             {"DOTA_LOBBY_IMAGE": "ghcr.io/kettleofketchup/dota_lobby:local"},

@@ -59,7 +59,7 @@ Every worktree runs its own test stack in a slot: slot 0 is project `df` on
 - Slots N ≥ 1 run without the Discord bot, celery beat and real Discord/Steam tokens unless `just test::background on`.
 - `just test::slot-reap`, `just test::slot-claim` and `just test::slot-release --slot N` need no user approval. Before using one on another worktree's slot, verify no agent is working in or testing against it (owner worktree activity, the project's containers and logs, test processes with that cwd, peer Claude sessions). If in doubt, don't touch it.
 - Slots idle more than 12h are reaped automatically on the next allocation; `just test::slot-reap --stale` does it now.
-- The 18-dota-lobby specs drive a simulated dota_lobby, the profile-gated `dota-lobby` service: `just test::dota-lobby up` (image and placeholder tag in [test-stack-slots.md](references/test-stack-slots.md)). Without it, the specs that need it skip (03 uses a seeded lobby row instead); with it running, `just test::pw::dota-lobby` fails rather than skips if it never becomes available.
+- The 18-dota-lobby specs drive a simulated dota_lobby, the profile-gated `dota-lobby` service: `just test::dota-lobby up` (image and pinned release tag in [test-stack-slots.md](references/test-stack-slots.md)). Without it, the specs that need it skip (03 uses a seeded lobby row instead); with it running, `just test::pw::dota-lobby` fails rather than skips if it never becomes available.
 
 Commands, externals policy and troubleshooting: [test-stack-slots.md](references/test-stack-slots.md).
 

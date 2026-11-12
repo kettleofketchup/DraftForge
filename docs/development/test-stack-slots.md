@@ -147,8 +147,9 @@ just test::dota-lobby logs         # follow it; also down, restart, ps
 ```
 
 - **Image:** `DOTA_LOBBY_IMAGE`, default `ghcr.io/kettleofketchup/dota_lobby:${DOTA_LOBBY_IMAGE_TAG}`.
-  The tag's default is a placeholder: set `DOTA_LOBBY_IMAGE_TAG` (and the default in
-  `docker-compose.test.yaml`) to the first dota_lobby release with simulation mode.
+  The tag defaults to `0.2.0`, the first dota_lobby release with simulation mode; bump the
+  default in `docker-compose.test.yaml` (and `scripts/slot_tests/test_compose_files.py`)
+  to take a newer release.
 - **Config:** `docker/dota-lobby/simulator.yaml` (three bots that administer the
   Lobby Test League, auto join, auto start, a 5 s post-game linger) and
   `simulator-secrets.yaml`. Every secret in them is a test-only value that

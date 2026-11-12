@@ -109,13 +109,13 @@ services:
   # dota_lobby in simulation mode: no Steam logon, simulated bots, players and
   # matches (docker/dota-lobby/simulator.yaml). Only for the 18-dota-lobby
   # Playwright specs, so it is behind a profile: start it with
-  # `just test::dota-lobby up` or COMPOSE_PROFILES=dota-lobby. The image
-  # defaults to the GHCR release pinned by DOTA_LOBBY_IMAGE_TAG, whose default
-  # is a placeholder: set it to the first dota_lobby release with simulation
-  # mode. Until then, point DOTA_LOBBY_IMAGE at a local build, for example
+  # `just test::dota-lobby up` or COMPOSE_PROFILES=dota-lobby. The image is
+  # the GHCR release pinned by DOTA_LOBBY_IMAGE_TAG (0.2.0, the first with
+  # simulation mode). To test unreleased dota_lobby changes, point
+  # DOTA_LOBBY_IMAGE at a local build, for example
   # ghcr.io/kettleofketchup/dota_lobby:local (`just docker::build` in dota_lobby).
   dota-lobby:
-    image: ${DOTA_LOBBY_IMAGE:-ghcr.io/kettleofketchup/dota_lobby:${DOTA_LOBBY_IMAGE_TAG:-simulation-release-placeholder}}
+    image: ${DOTA_LOBBY_IMAGE:-ghcr.io/kettleofketchup/dota_lobby:${DOTA_LOBBY_IMAGE_TAG:-0.2.0}}
     profiles: ["dota-lobby"]
     command: ["serve", "--simulate"]
     environment:

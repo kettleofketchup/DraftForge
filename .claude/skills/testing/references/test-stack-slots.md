@@ -62,9 +62,10 @@ the backend reaches it at `http://dota-lobby:8080` and it posts webhooks to
 on with matching test-only values (API key, webhook secret, `INTERNAL_SERVICE_TOKEN`).
 
 - Image: `DOTA_LOBBY_IMAGE` (default `ghcr.io/kettleofketchup/dota_lobby:${DOTA_LOBBY_IMAGE_TAG}`).
-  `DOTA_LOBBY_IMAGE_TAG` defaults to a placeholder: set it to the first dota_lobby
-  release with simulation mode. Until then, build it in dota_lobby (`just docker::build`,
-  tag `ghcr.io/kettleofketchup/dota_lobby:local`) and run
+  `DOTA_LOBBY_IMAGE_TAG` defaults to `0.2.0`, the first dota_lobby release with simulation
+  mode; bump it with the default in `docker-compose.test.yaml` and
+  `scripts/slot_tests/test_compose_files.py`. To test unreleased dota_lobby changes, build
+  it there (`just docker::build`, tag `ghcr.io/kettleofketchup/dota_lobby:local`) and run
   `DOTA_LOBBY_IMAGE=ghcr.io/kettleofketchup/dota_lobby:local just test::dota-lobby up`.
 - `test::down`, `stop`, `kill` and `rm` add `--profile '*'` (`scripts/slots.py`
   `TEARDOWN_VERBS`), so the simulator never outlives its stack or holds its network.
