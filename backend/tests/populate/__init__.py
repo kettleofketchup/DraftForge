@@ -41,6 +41,7 @@ from tests.populate.auth_matrix import populate_auth_matrix_data
 from tests.populate.csv_import import populate_csv_import_data
 from tests.populate.org_delete import populate_org_delete
 from tests.populate.demo import populate_demo_tournaments
+from tests.populate.dota_lobby import populate_dota_lobby_data
 from tests.populate.events import populate_events_data
 from tests.populate.organizations import populate_organizations_and_leagues
 from tests.populate.shuffle_tie import populate_shuffle_tie_data
@@ -95,6 +96,9 @@ def populate_all(force=False):
         # auto-incremented org pk lands on 8 (matching AUTH_MATRIX_ORG.pk).
         ("Auth Matrix Data", populate_auth_matrix_data),
         ("Demo Tournaments", populate_demo_tournaments),
+        # Last: its org and league take auto-incremented pks, so it must not
+        # shift the pks the steps above expect.
+        ("Dota Lobby Data", populate_dota_lobby_data),
     ]
 
     console = Console()
@@ -143,6 +147,7 @@ __all__ = [
     "populate_events_data",
     "populate_auth_matrix_data",
     "populate_demo_tournaments",
+    "populate_dota_lobby_data",
     "populate_test_tournaments",
     # Utilities
     "create_user",

@@ -185,12 +185,25 @@ jobs:
           CI: 'true'
         run: just test::pw::cicd-events --workers=1
 
+      # The 18-dota-lobby specs run against the simulated dota_lobby (profile
+      # dota-lobby, image pinned by DOTA_LOBBY_IMAGE_TAG). With it running,
+      # cicd-dota-lobby sets DOTA_LOBBY_SIMULATOR_REQUIRED=1, so a spec that
+      # would skip for lack of the simulator fails instead.
+      - name: Start the simulated dota_lobby
+        run: just test::dota-lobby up
+
+      - name: Run Playwright (dota-lobby-sequential)
+        env:
+          CI: 'true'
+        run: just test::pw::cicd-dota-lobby
+
       - name: Dump container logs on failure
         if: failure()
         run: |
           docker logs frontend 2>&1 | tail -200 || true
           docker logs backend 2>&1 | tail -200 || true
           docker logs nginx 2>&1 | tail -100 || true
+          just test::compose logs --tail=200 dota-lobby || true
 
       - name: Upload test results
         if: failure()
@@ -273,6 +286,7 @@ jobs:
               app.tests.test_test_runner \
               lobby.tests \
               app.tests.test_dota_lobby_migration \
+              tests.test_dota_lobby_support \
               -v 2
 
       - name: Run frontend Vitest

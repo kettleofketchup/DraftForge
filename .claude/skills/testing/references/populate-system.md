@@ -27,6 +27,7 @@ Pydantic models defining test entity schemas:
 | `leagues.py` | DTX_LEAGUE(pk=1, steam=17929), TEST_LEAGUE(pk=2, steam=17930), CSV_LEAGUE(pk=3, steam=17931), EVENTS_LEAGUE(pk=7, steam=17935) + name/id constants |
 | `teams.py` | 4 real tournament teams, 2 herodraft demo teams, 4 bracket-unset-winner teams |
 | `tournaments.py` | 6 DynamicTournamentConfig objects + REAL_TOURNAMENT_38, DEMO_HERODRAFT_TOURNAMENT, BRACKET_UNSET_WINNER_TOURNAMENT, CSV_IMPORT_TOURNAMENT |
+| `dota_lobby.py` | LOBBY_ORG, LOBBY_LEAGUE (steam=17938), LOBBY_FIXED_PASSWORD, LOBBY_ROLE_USERS (pk 7000-7004), team rosters (pk 7010-7033) |
 | `__init__.py` | Re-exports all models + all constants from above files |
 
 ## Populate Functions (`backend/tests/populate/`)
@@ -47,7 +48,11 @@ Execution order in `populate_all(force=False)`:
 11. populate_user_edit_data              → user_edit.py
 12. populate_events_data                 → events.py (Events Test Org/League, repeater, signup event)
 13. populate_shuffle_tie_data            → shuffle_tie.py
+...
+last. populate_dota_lobby_data           → dota_lobby.py (runs last: its org/league take auto pks)
 ```
+
+Read `steps` in `populate_all()` for the exact current order.
 
 ### Key Functions
 
@@ -58,6 +63,7 @@ Execution order in `populate_all(force=False)`:
 | `populate_test_auth_users` | users.py | Creates 9 users with specific PKs, assigns org/league roles |
 | `populate_tournaments` | tournaments.py | Auto-discovers DynamicTournamentConfig objects, creates them |
 | `populate_csv_import_data` | csv_import.py | Creates CSV org/league/tournament, 5 users, generates fixture CSVs |
+| `populate_dota_lobby_data` | dota_lobby.py | Lobby Test Org/League (steam 17938), "Lobby Test Series" (fixed password, paused) with one upcoming event + 4-team tournament, "Lobby Random Event" (random password) + 2-team tournament, "Lobby Lifecycle Tournament" (in progress). Manual lobby mode everywhere; users 7000-7033 with Steam account IDs. `reset_dota_lobby_data` and `dota_lobby_test_data` serve the test endpoints |
 | `populate_events_data` | events.py | Creates Events Test Org (pk=7), league (pk=7), 21 users (pk=5000-5020), "Weekly Inhouse" repeater, "E2E Signup Event" |
 
 ### Shared Utilities (`backend/tests/populate/utils.py`)

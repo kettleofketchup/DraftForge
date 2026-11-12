@@ -236,6 +236,20 @@ describe('LobbyPanel', () => {
     expect(name.parentElement).toBe(screen.getByTestId('lobby-player-status-1').parentElement);
   });
 
+  it('puts the status and seat of each player on its roster row', () => {
+    renderPanel(response({ is_player: true, lobby: { ...privateLobby, players: seated } }));
+    const row = screen.getByTestId(`lobby-player-${seated[0].user_id}`);
+    expect(row).toHaveAttribute('data-status', 'joined');
+    expect(row).toHaveAttribute('data-seat', seated[0].seat);
+  });
+
+  it('leaves the seat off a player who is not seated', () => {
+    renderPanel(response({ is_player: true, lobby: privateLobby }));
+    // Bob (user 2) is invited, not in the lobby.
+    expect(screen.getByTestId('lobby-player-2')).toHaveAttribute('data-status', 'invited');
+    expect(screen.getByTestId('lobby-player-2')).not.toHaveAttribute('data-seat');
+  });
+
   it('labels a pending player with a capitalised status', () => {
     const roster = players.map((p) => (p.user_id === 2 ? { ...p, status: 'pending' } : p));
     renderPanel(response({ is_player: true, lobby: { ...privateLobby, players: roster } }));

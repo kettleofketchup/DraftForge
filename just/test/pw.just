@@ -21,10 +21,10 @@ run *args:
     cd frontend
     exec npx playwright test "$@"
 
-# All suites except demos (chromium, herodraft, events-sequential)
+# All suites except demos (chromium, herodraft, events-sequential, dota-lobby-sequential)
 [group('test::pw')]
 headless *args:
-    {{pw}} --project=chromium --project=herodraft --project=events-sequential "$@"
+    {{pw}} --project=chromium --project=herodraft --project=events-sequential --project=dota-lobby-sequential "$@"
 
 [group('test::pw')]
 ui:
@@ -80,6 +80,12 @@ league *args:
 herodraft *args:
     {{pw}} tests/playwright/e2e/herodraft/ "$@"
 
+# The 18-dota-lobby specs. With this slot's simulator running
+# (just test::dota-lobby up) they must use it: a skip is an error.
+[group('test::pw')]
+dota-lobby *args:
+    {{just}} test::pw::with-simulator --project=dota-lobby-sequential --no-deps "$@"
+
 [group('test::pw')]
 all *args:
     {{pw}} "$@"
@@ -87,7 +93,7 @@ all *args:
 # Run only @cicd tagged tests (fast smoke tests for CI/CD)
 [group('test::pw')]
 cicd *args:
-    {{cicd}} --project=chromium --project=mobile-pixel5 --project=mobile-iphone13 --project=mobile-iphone-se --project=herodraft --project=events-sequential --no-deps "$@"
+    {{cicd}} --project=chromium --project=mobile-pixel5 --project=mobile-iphone13 --project=mobile-iphone-se --project=herodraft --project=events-sequential --project=dota-lobby-sequential --no-deps "$@"
 
 # CI/CD per-project runners — used by the matrix shards in
 # .github/workflows/playwright.yml. Local devs typically just use `cicd`.
@@ -107,6 +113,25 @@ cicd-herodraft *args:
 [group('test::pw')]
 cicd-events *args:
     {{cicd}} --project=events-sequential --no-deps "$@"
+
+# The 18-dota-lobby specs in order (dota-lobby-sequential): they share one
+# simulated dota_lobby. Specs that need it skip unless `just test::dota-lobby up`
+# ran, and then fail rather than skip when it never becomes available.
+[group('test::pw')]
+cicd-dota-lobby *args:
+    {{just}} test::pw::with-simulator --grep @cicd --project=dota-lobby-sequential --no-deps "$@"
+
+# Playwright with DOTA_LOBBY_SIMULATOR_REQUIRED=1 when this slot's simulated
+# dota_lobby is running, unless the caller set it already.
+[private]
+with-simulator *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [[ -z "${DOTA_LOBBY_SIMULATOR_REQUIRED-}" ]] \
+        && [[ -n "$({{just}} test::compose ps --status running --quiet dota-lobby 2>/dev/null || true)" ]]; then
+        export DOTA_LOBBY_SIMULATOR_REQUIRED=1
+    fi
+    exec {{pw}} "$@"
 
 # Run the headless suite while streaming backend logs + health probes to
 # frontend/test-results/run-logs/ for diagnosing transient first-attempt

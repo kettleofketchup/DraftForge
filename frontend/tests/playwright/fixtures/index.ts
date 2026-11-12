@@ -167,3 +167,32 @@ export {
   EVENTS_EVENT_NAME,
   type EventInfo,
 } from './events';
+
+// dota_lobby utilities (18-dota-lobby specs, simulated dota_lobby)
+export {
+  getDotaLobbyTestData,
+  resetDotaLobbyData,
+  loginDotaLobby,
+  simulatorStatus,
+  hasSimulator,
+  SIMULATOR_SKIP_REASON,
+  sim,
+  getSimLobby,
+  getLobbyRow,
+  seedLobbyRow,
+  waitForLobbyRow,
+  requestLobby,
+  openBracket,
+  bracketNode,
+  openMatchModal,
+  closeMatchModal,
+  expectLobbyState,
+  type DotaLobbyRole,
+  type DotaLobbyTestData,
+  type LobbyGame,
+  type LobbyPlayer,
+  type LobbyRow,
+  type LobbyTournament,
+  type SimLobby,
+  type SimulatorStatus,
+} from './dota-lobby';
