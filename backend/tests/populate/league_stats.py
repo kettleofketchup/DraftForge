@@ -14,10 +14,12 @@ from django.db import transaction
 from app.models import (
     CustomUser,
     Draft,
+    DraftOptions,
     League,
     Organization,
     PositionsModel,
     Team,
+    TeamDraftState,
     Tournament,
 )
 from league.models import LeagueUser
@@ -184,8 +186,11 @@ def populate_league_stats_data(force: bool = False) -> None:
         )
         team.members.set([captain])
 
+    DraftOptions.ensure_for(tournament, timer_enabled=False)
     draft = Draft.objects.create(tournament=tournament, draft_style="snake")
     draft.build_rounds()
+    draft.state = TeamDraftState.DRAFTING
+    draft.save(update_fields=["state"])
 
     matches, stats = _build_matches(users)
     with transaction.atomic():

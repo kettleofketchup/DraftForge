@@ -18,7 +18,7 @@ import type { UserType } from '~/components/user/types';
 interface CompletedTeamDraftViewProps {
   teams: TeamType[];
   organizationId?: number;
-  leaguePk?: number | null;
+  leaguePk: number | null;
   rounds?: DraftRoundType[];
 }
 
@@ -199,7 +199,7 @@ function TeamCard({ team, rank, organizationId, leaguePk, rounds }: TeamCardProp
 // Export TeamCard and TeamMembersList for reuse in TeamsTab
 export { TeamCard, TeamMembersList };
 
-export function CompletedTeamDraftView({ teams, organizationId, leaguePk = null, rounds }: CompletedTeamDraftViewProps) {
+export function CompletedTeamDraftView({ teams, organizationId, leaguePk, rounds }: CompletedTeamDraftViewProps) {
   // Sort teams by average MMR (highest first)
   const sortedTeams = useMemo(() => {
     return [...teams].sort((a, b) => {

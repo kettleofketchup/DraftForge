@@ -2,7 +2,7 @@ from unittest import mock
 
 from django.test import TestCase
 
-from app.models import Draft, League, Organization, Team, Tournament
+from app.models import Draft, League, Organization, Team, TeamDraftState, Tournament
 from league.models import LeagueUser
 from steam.functions.league_summary import compute_league_summary
 from steam.models import LeaguePlayerStats, Match, PlayerMatchStats
@@ -87,6 +87,8 @@ class LeagueStatsPopulateTest(TestCase):
         self.assertEqual(draft.draft_style, "snake")
         self.assertGreater(draft.draft_rounds.count(), 0)
         self.assertFalse(draft.draft_rounds.filter(choice__isnull=False).exists())
+        self.assertEqual(draft.state, TeamDraftState.DRAFTING)
+        self.assertFalse(tournament.get_draft_options(fresh=True).timer_enabled)
 
         teams = Team.objects.filter(tournament=tournament)
         self.assertEqual(
