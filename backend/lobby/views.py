@@ -276,7 +276,7 @@ def _eligibility_body(eligibility: services.Eligibility) -> dict[str, Any]:
 
 
 def can_see_lobby_password(user: CustomUser, tournament: Tournament) -> bool:
-    """Org staff of the organization that runs the tournament.
+    """Site staff, or org staff of the organization that runs the tournament.
 
     Every lobby of an event shares the event's password, so tournament
     editors who are only league staff (has_league_staff_access) manage the

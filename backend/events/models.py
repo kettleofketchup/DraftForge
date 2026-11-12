@@ -244,7 +244,7 @@ class DotaLobbyConfigMixin(models.Model):
     Same choices and defaults as the Tournament fields they are copied to.
     The password itself is a concrete field on EventRepeater and Event, not
     part of this mixin, so the auto-built copy lists never copy it blindly
-    (events.services.apply_series_lobby_password decides).
+    (events.services.series_lobby_password decides).
     """
 
     dota_lobby_mode = models.CharField(

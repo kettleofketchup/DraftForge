@@ -51,8 +51,8 @@ class TournamentPasswordMigrationTest(MigratorTestCase):
 class EventLobbySettingsMigrationTest(MigratorTestCase):
     """events 0020: events take their tournament's lobby settings."""
 
-    # app 0102 first: the plan is truncated at the latest target, and events
-    # 0020 depends on it.
+    # app 0102 first: the migration plan is truncated at the latest target,
+    # and events 0020 depends on it.
     migrate_from = [
         ("app", "0102_tournament_dota_lobby_password"),
         ("events", "0019_event_is_off_schedule"),

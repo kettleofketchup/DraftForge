@@ -1299,7 +1299,7 @@ def generate_events_for_repeater(repeater):
             created_by=repeater.created_by,
         )
         _copy_mixin_fields(repeater, event, REPEATER_CREATE_COPY_FIELDS)
-        # Empty in random mode: Event.save generates one.
+        # The series' fixed password, or a new random one.
         event.dota_lobby_password = series_lobby_password(repeater, "", "")
         event.tournament_date = dt
         event.save()
