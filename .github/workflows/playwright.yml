@@ -264,7 +264,7 @@ jobs:
           github-actor: ${{ github.actor }}
           image-prefix: ${{ env.IMAGE_PREFIX }}
 
-      # No labels: BackendDiscoverRunner discovers every test*.py package under backend/.
+      # No labels: BackendDiscoverRunner discovers every test*.py module under backend/.
       - name: Run backend tests
         env:
           CI: 'true'
