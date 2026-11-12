@@ -113,6 +113,9 @@ export const TournamentEditForm: React.FC<Props> = ({
   const [calendarOpen, setCalendarOpen] = useState(false);
 
   const isEditing = !!tourn?.pk;
+  const sourceEvent = tourn?.source_event
+    ? { id: tourn.source_event.id, name: tourn.source_event.name }
+    : null;
 
   // Extract initial date and time from existing tournament
   const initialDateTime = extractDateAndTime(tourn?.date_played);
@@ -183,10 +186,15 @@ export const TournamentEditForm: React.FC<Props> = ({
         auto_create_hero_drafts: data.auto_create_hero_drafts,
         discord_send_draft_link: data.discord_send_draft_link,
         discord_send_herodraft_link: data.discord_send_herodraft_link,
-        dota_lobby_mode: data.dota_lobby_mode,
-        dota_lobby_launch: data.dota_lobby_launch,
-        dota_lobby_region: data.dota_lobby_region.trim(),
-        discord_send_lobby_info: data.discord_send_lobby_info,
+        // A tournament created from an event takes these from the event.
+        ...(sourceEvent
+          ? {}
+          : {
+              dota_lobby_mode: data.dota_lobby_mode,
+              dota_lobby_launch: data.dota_lobby_launch,
+              dota_lobby_region: data.dota_lobby_region.trim(),
+              discord_send_lobby_info: data.discord_send_lobby_info,
+            }),
       };
 
       if (isEditing) {
@@ -442,11 +450,14 @@ export const TournamentEditForm: React.FC<Props> = ({
 
             <TabsContent value="config" className="mt-4">
               <TournamentConfigSection control={form.control} />
-              <DotaLobbyConfigSection control={form.control} />
+              <DotaLobbyConfigSection control={form.control} sourceEvent={sourceEvent} />
             </TabsContent>
 
             <TabsContent value="discord" className="mt-4">
-              <DiscordTournamentConfigSection control={form.control} />
+              <DiscordTournamentConfigSection
+                control={form.control}
+                lobbyInfoFromEvent={sourceEvent != null}
+              />
             </TabsContent>
           </Tabs>
 

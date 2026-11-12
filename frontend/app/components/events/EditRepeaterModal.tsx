@@ -25,9 +25,12 @@ import {
 import { Textarea } from '~/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { useUpdateEventRepeaterMutation } from '~/hooks/useEvent';
+import { useRepeaterLobbyPassword } from '~/hooks/useLobbyPassword';
+import { lobbyPasswordPayload, refineLobbyPassword } from '~/components/lobby/password';
+import { DotaLobbyEventSettings } from './DotaLobbyEventSettings';
 import { DiscordConfigSection, DiscordIcon } from './DiscordConfigSection';
 import { LobbyConfigSection } from './LobbyConfigSection';
-import { discordConfigSchema, GameMode, DISCORD_CONFIG_DEFAULTS, COMMON_TIMEZONES, Frequency, FREQUENCY_LABELS, DAY_LABELS } from './schemas';
+import { discordConfigSchema, dotaLobbyConfigSchema, GameMode, DISCORD_CONFIG_DEFAULTS, DOTA_LOBBY_CONFIG_DEFAULTS, COMMON_TIMEZONES, Frequency, FREQUENCY_LABELS, DAY_LABELS } from './schemas';
 import { GAME_TYPE } from '~/components/game/constants';
 
 const editRepeaterSchema = z.object({
@@ -50,7 +53,7 @@ const editRepeaterSchema = z.object({
   generate_days_ahead: z.number().int().min(1),
   timezone: z.string().min(1, 'Timezone is required'),
   discord_notify_new_events: z.boolean(),
-}).merge(discordConfigSchema);
+}).merge(discordConfigSchema).merge(dotaLobbyConfigSchema).superRefine(refineLobbyPassword);
 
 type EditRepeaterInput = z.infer<typeof editRepeaterSchema>;
 
@@ -63,6 +66,7 @@ interface EditRepeaterModalProps {
 export function EditRepeaterModal({ repeater, open, onOpenChange }: EditRepeaterModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const mutation = useUpdateEventRepeaterMutation(repeater?.id ?? 0);
+  const { data: savedPassword } = useRepeaterLobbyPassword(repeater?.id, open);
 
   // 3-generic useForm to align TFieldValues=z.input and TTransformedValues=z.output
   // — zodResolver returns Resolver<z.input<S>, _, z.output<S>> under zod 4.
@@ -90,6 +94,7 @@ export function EditRepeaterModal({ repeater, open, onOpenChange }: EditRepeater
       timezone: '',
       discord_notify_new_events: true,
       ...DISCORD_CONFIG_DEFAULTS,
+      ...DOTA_LOBBY_CONFIG_DEFAULTS,
     },
   });
 
@@ -144,16 +149,32 @@ export function EditRepeaterModal({ repeater, open, onOpenChange }: EditRepeater
         require_steam_id: repeater.require_steam_id ?? false,
         require_mmr_verified: repeater.require_mmr_verified ?? false,
         require_profile_complete: repeater.require_profile_complete ?? false,
+        dota_lobby_mode: repeater.dota_lobby_mode ?? 'off',
+        dota_lobby_launch: repeater.dota_lobby_launch ?? 'manual',
+        dota_lobby_region: repeater.dota_lobby_region ?? '',
+        discord_send_lobby_info: repeater.discord_send_lobby_info ?? false,
+        dota_lobby_password_mode: repeater.dota_lobby_password_mode ?? 'random',
+        dota_lobby_password: '',
       });
     }
   }, [repeater, open]);
+
+  // The fixed password is write-only on the series: prefill it from the
+  // staff-only endpoint unless staff already typed one.
+  useEffect(() => {
+    if (open && savedPassword?.mode === 'fixed' && !form.getFieldState('dota_lobby_password').isDirty) {
+      form.setValue('dota_lobby_password', savedPassword.password ?? '');
+    }
+  }, [savedPassword, open]);
 
   async function onSubmit(data: EditRepeaterInput) {
     if (isSubmitting || !repeater) return;
     setIsSubmitting(true);
     try {
+      const { dota_lobby_password_mode, dota_lobby_password, ...rest } = data;
       await mutation.mutateAsync({
-        ...data,
+        ...rest,
+        ...lobbyPasswordPayload({ dota_lobby_password_mode, dota_lobby_password }),
         day_of_week: data.day_of_week ?? null,
         ends_at: data.ends_at || null,
       });
@@ -502,6 +523,12 @@ export function EditRepeaterModal({ repeater, open, onOpenChange }: EditRepeater
         </div>
 
         <LobbyConfigSection control={form.control} watch={form.watch} />
+        <DotaLobbyEventSettings
+          control={form.control}
+          watch={form.watch}
+          scope="series"
+          saved={savedPassword}
+        />
 
           </TabsContent>
 

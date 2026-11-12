@@ -104,6 +104,7 @@ import { ConfirmDialog } from '~/components/ui/dialogs';
 import { EntityBreadcrumb, type BreadcrumbSegment } from '~/components/ui/entity-breadcrumb';
 import api from '~/components/api/axios';
 import { extractApiError } from '~/lib/apiError';
+import { EventLobbyPassword } from '~/components/lobby/EventLobbyPassword';
 
 export default function EventPage() {
   const { eventId, tab } = useParams<{ eventId: string; tab?: string }>();
@@ -529,7 +530,7 @@ export default function EventPage() {
           </TabsList>
 
           <TabsContent value="details">
-            <DetailsTab event={event} />
+            <DetailsTab event={event} signedIn={!!currentUser?.pk} />
             {isAdmin && event.event_repeater && (
               <div className="mt-4">
                 <SubscriberList repeaterId={event.event_repeater} />
@@ -672,9 +673,20 @@ function Stat({ label, value }: { label: string; value: ReactNode }) {
 }
 
 /** Details tab — Tournament Info + Signup Rules + optional Description cards. */
-function DetailsTab({ event }: { event: NonNullable<ReturnType<typeof useEvent>['data']> }) {
+function DetailsTab({
+  event,
+  signedIn,
+}: {
+  event: NonNullable<ReturnType<typeof useEvent>['data']>;
+  signedIn: boolean;
+}) {
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <EventLobbyPassword
+        eventId={event.id}
+        lobbiesEnabled={event.game_type === 1 && event.dota_lobby_mode !== 'off'}
+        signedIn={signedIn}
+      />
       <Card>
         <CardHeader>
           <h3 className="font-semibold">Tournament Info</h3>

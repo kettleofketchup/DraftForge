@@ -26,10 +26,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { ShieldCheck } from 'lucide-react';
 import { LeagueCombobox } from '~/components/league/LeagueCombobox';
 import { useUpdateEventMutation } from '~/hooks/useEvent';
+import { useEventLobbyPassword, useRegenerateEventLobbyPassword } from '~/hooks/useLobbyPassword';
+import { lobbyPasswordPayload, refineLobbyPassword } from '~/components/lobby/password';
+import { DotaLobbyEventSettings } from './DotaLobbyEventSettings';
 import { ApprovalConfigSection } from './ApprovalConfigSection';
 import { DiscordConfigSection, DiscordIcon } from './DiscordConfigSection';
 import { LobbyConfigSection } from './LobbyConfigSection';
-import { discordConfigSchema, GameMode, DISCORD_CONFIG_DEFAULTS, COMMON_TIMEZONES, localToUTC } from './schemas';
+import { discordConfigSchema, dotaLobbyConfigSchema, GameMode, DISCORD_CONFIG_DEFAULTS, DOTA_LOBBY_CONFIG_DEFAULTS, COMMON_TIMEZONES, localToUTC } from './schemas';
 import type { EventType } from './schemas';
 import { GAME_TYPE } from '~/components/game/constants';
 
@@ -49,7 +52,7 @@ const editEventSchema = z.object({
   number_of_teams: z.number().int().min(2).nullable(),
   timezone: z.string().min(1, 'Timezone is required'),
   tournament_league: z.number().nullable(),
-}).merge(discordConfigSchema);
+}).merge(discordConfigSchema).merge(dotaLobbyConfigSchema).superRefine(refineLobbyPassword);
 
 type EditEventInput = z.infer<typeof editEventSchema>;
 
@@ -68,6 +71,8 @@ function toDatetimeLocal(iso: string): string {
 export function EditEventModal({ event, open, onOpenChange }: EditEventModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const mutation = useUpdateEventMutation(event?.id ?? 0);
+  const { data: savedPassword } = useEventLobbyPassword(event?.id, open);
+  const regenerate = useRegenerateEventLobbyPassword(event?.id);
 
   // 3-generic useForm to align TFieldValues=z.input and TTransformedValues=z.output
   // — zodResolver returns Resolver<z.input<S>, _, z.output<S>> under zod 4.
@@ -91,6 +96,7 @@ export function EditEventModal({ event, open, onOpenChange }: EditEventModalProp
       timezone: '',
       tournament_league: null,  // overridden by useEffect when event loads
       ...DISCORD_CONFIG_DEFAULTS,
+      ...DOTA_LOBBY_CONFIG_DEFAULTS,
     },
   });
 
@@ -147,17 +153,42 @@ export function EditEventModal({ event, open, onOpenChange }: EditEventModalProp
         require_steam_id: event.require_steam_id ?? false,
         require_mmr_verified: event.require_mmr_verified ?? false,
         require_profile_complete: event.require_profile_complete ?? false,
+        dota_lobby_mode: event.dota_lobby_mode,
+        dota_lobby_launch: event.dota_lobby_launch,
+        dota_lobby_region: event.dota_lobby_region,
+        discord_send_lobby_info: event.discord_send_lobby_info,
+        dota_lobby_password_mode: event.dota_lobby_password_mode,
+        dota_lobby_password: '',
       });
     }
   }, [event, open]);
+
+  // The fixed password is write-only on the event: prefill it from the
+  // staff-only endpoint unless staff already typed one.
+  useEffect(() => {
+    if (open && savedPassword?.mode === 'fixed' && !form.getFieldState('dota_lobby_password').isDirty) {
+      form.setValue('dota_lobby_password', savedPassword.password ?? '');
+    }
+  }, [savedPassword, open]);
+
+  async function onRegenerate() {
+    try {
+      await regenerate.mutateAsync();
+      toast.success('New lobby password generated');
+    } catch {
+      toast.error('Could not regenerate the lobby password');
+    }
+  }
 
   async function onSubmit(data: EditEventInput) {
     if (isSubmitting || !event) return;
     setIsSubmitting(true);
     try {
       // Convert naive datetime-local to UTC using selected timezone
+      const { dota_lobby_password_mode, dota_lobby_password, ...rest } = data;
       const payload = {
-        ...data,
+        ...rest,
+        ...lobbyPasswordPayload({ dota_lobby_password_mode, dota_lobby_password }),
         scheduled_at: data.scheduled_at ? localToUTC(data.scheduled_at, data.timezone) : data.scheduled_at,
       };
       const result = await mutation.mutateAsync(payload);
@@ -449,6 +480,14 @@ export function EditEventModal({ event, open, onOpenChange }: EditEventModalProp
         </div>
 
         <LobbyConfigSection control={form.control} watch={form.watch} />
+        <DotaLobbyEventSettings
+          control={form.control}
+          watch={form.watch}
+          scope="event"
+          saved={savedPassword}
+          onRegenerate={onRegenerate}
+          regenerating={regenerate.isPending}
+        />
 
           </TabsContent>
 

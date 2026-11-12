@@ -85,6 +85,12 @@ export const eventSchema = z.object({
   discord_require_battlecup_screenshot: z.boolean(),
   min_mmr: z.number().nullable(),
   is_off_schedule: z.boolean().optional(),
+  // dota_lobby settings (the password itself is never in event payloads).
+  dota_lobby_mode: z.enum(['off', 'manual', 'auto']).default('off'),
+  dota_lobby_launch: z.enum(['manual', 'auto']).default('manual'),
+  dota_lobby_region: z.string().default(''),
+  discord_send_lobby_info: z.boolean().default(false),
+  dota_lobby_password_mode: z.enum(['random', 'fixed']).default('random'),
   user_can_manage: z.boolean().default(false),
   _warning: z.string().optional(),
 }).superRefine((val, ctx) => {
@@ -333,6 +339,29 @@ export const DISCORD_CONFIG_DEFAULTS = {
   require_profile_complete: false,
 } as const;
 
+/**
+ * dota_lobby settings a series hands to its events and their tournaments.
+ * Defaults keep form resets that predate these fields valid. The fixed
+ * password is write-only on the API; refineLobbyPassword validates it.
+ */
+export const dotaLobbyConfigSchema = z.object({
+  dota_lobby_mode: z.enum(['off', 'manual', 'auto']).default('off'),
+  dota_lobby_launch: z.enum(['manual', 'auto']).default('manual'),
+  dota_lobby_region: z.string().max(32, 'Region is at most 32 characters').default(''),
+  discord_send_lobby_info: z.boolean().default(false),
+  dota_lobby_password_mode: z.enum(['random', 'fixed']).default('random'),
+  dota_lobby_password: z.string().default(''),
+});
+
+export const DOTA_LOBBY_CONFIG_DEFAULTS = {
+  dota_lobby_mode: 'off',
+  dota_lobby_launch: 'manual',
+  dota_lobby_region: '',
+  discord_send_lobby_info: false,
+  dota_lobby_password_mode: 'random',
+  dota_lobby_password: '',
+} as const;
+
 export const createEventInputSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   description: z.string(),
@@ -361,7 +390,7 @@ export const createEventInputSchema = z.object({
   starts_at: z.string().optional(),
   ends_at: z.string().optional(),
   generate_days_ahead: z.number().int().min(1),
-}).merge(discordConfigSchema);
+}).merge(discordConfigSchema).merge(dotaLobbyConfigSchema);
 
 export type CreateEventInput = z.infer<typeof createEventInputSchema>;
 
@@ -383,7 +412,8 @@ export const createSeriesEventInputSchema = createEventInputSchema
     discord_notify_new_events: true,
   })
   .extend({ open_signups: z.boolean().default(false) })
-  .merge(discordConfigSchema);
+  .merge(discordConfigSchema)
+  .merge(dotaLobbyConfigSchema);
 
 export type CreateSeriesEventInput = z.output<typeof createSeriesEventInputSchema>;
 

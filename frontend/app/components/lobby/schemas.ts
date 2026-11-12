@@ -128,3 +128,15 @@ export type GameLobbyResponse = z.infer<typeof GameLobbyResponseSchema>;
 export type LobbyPlayer = z.infer<typeof LobbyPlayerSchema>;
 export type LobbyEligibility = z.infer<typeof LobbyEligibilitySchema>;
 export type InviteResult = z.infer<typeof InviteResultSchema>;
+
+// GET /events/<id>/lobby-password/ (and the series equivalent). Staff get the
+// mode (and, for events, where the password comes from); registered players
+// get the password only.
+export const LobbyPasswordInfoSchema = z.object({
+  password: z.string().nullable(),
+  mode: z.enum(['fixed', 'random']).optional(),
+  source: z.enum(['series', 'event']).optional(),
+  can_manage: z.boolean().optional(),
+});
+
+export type LobbyPasswordInfo = z.infer<typeof LobbyPasswordInfoSchema>;

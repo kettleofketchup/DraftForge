@@ -2,12 +2,20 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EventRepeaterType } from '~/components/api/api';
+import { I18nextProvider } from 'react-i18next';
 import { TooltipProvider } from '~/components/ui/tooltip';
+import { createI18nInstance } from '~/i18n/config';
 
 // Mutation seam: the PATCH body is the assertion target.
 const mutateAsync = vi.fn().mockResolvedValue({});
 vi.mock('~/hooks/useEvent', () => ({
   useUpdateEventRepeaterMutation: () => ({ mutateAsync, isPending: false }),
+}));
+
+// The series' fixed password is read from its staff-only endpoint.
+const savedPassword = vi.hoisted(() => ({ current: undefined as unknown }));
+vi.mock('~/hooks/useLobbyPassword', () => ({
+  useRepeaterLobbyPassword: () => ({ data: savedPassword.current }),
 }));
 
 vi.mock('sonner', () => ({
@@ -25,7 +33,11 @@ class ResizeObserverStub {
 globalThis.ResizeObserver ??= ResizeObserverStub as unknown as typeof ResizeObserver;
 
 function Wrapper({ children }: { children: React.ReactNode }) {
-  return <TooltipProvider>{children}</TooltipProvider>;
+  return (
+    <I18nextProvider i18n={createI18nInstance('en')}>
+      <TooltipProvider>{children}</TooltipProvider>
+    </I18nextProvider>
+  );
 }
 
 const repeater = {
@@ -106,6 +118,7 @@ const repeater = {
 describe('EditRepeaterModal Discord ping roles', () => {
   beforeEach(() => {
     mutateAsync.mockClear();
+    savedPassword.current = undefined;
   });
 
   it('submits the existing role arrays unchanged instead of clearing them', async () => {
@@ -120,6 +133,38 @@ describe('EditRepeaterModal Discord ping roles', () => {
     expect(mutateAsync.mock.calls[0][0]).toMatchObject({
       discord_announcement_role_ids: ['111'],
       discord_signup_role_ids: ['222'],
+    });
+  });
+
+  it('sends no lobby password for a random series', async () => {
+    render(<EditRepeaterModal repeater={repeater} open onOpenChange={() => {}} />, {
+      wrapper: Wrapper,
+    });
+    fireEvent.click(screen.getByTestId('form-dialog-submit'));
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalled());
+    const body = mutateAsync.mock.calls[0][0];
+    expect(body.dota_lobby_password_mode).toBe('random');
+    expect(body).not.toHaveProperty('dota_lobby_password');
+  });
+
+  it("keeps a fixed series' password it loaded", async () => {
+    savedPassword.current = { mode: 'fixed', password: 'series-pw', can_manage: true };
+    render(
+      <EditRepeaterModal
+        repeater={{ ...repeater, dota_lobby_password_mode: 'fixed' }}
+        open
+        onOpenChange={() => {}}
+      />,
+      { wrapper: Wrapper },
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId('lobby-password-input')).toHaveValue('series-pw'),
+    );
+    fireEvent.click(screen.getByTestId('form-dialog-submit'));
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalled());
+    expect(mutateAsync.mock.calls[0][0]).toMatchObject({
+      dota_lobby_password_mode: 'fixed',
+      dota_lobby_password: 'series-pw',
     });
   });
 });
