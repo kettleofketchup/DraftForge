@@ -180,8 +180,20 @@ cy.loginAdmin().then(() => {
 ## Backend Tests
 
 ```bash
-just test::run 'python manage.py test app.tests -v 2'
+just test::run 'python manage.py test -v 2'                   # whole suite, same as CI
+just test::run 'python manage.py test app.tests -v 2'         # one package
+just test::run 'python manage.py test app.tests.test_bracket -v 2'  # one module
 ```
+
+The `Backend tests` job in `.github/workflows/playwright.yml` runs
+`python manage.py test` with no labels. `BackendDiscoverRunner` (`backend/backend/test_runner.py`)
+anchors discovery at `backend/`, so every `test*.py` module in a package
+(a directory with `__init__.py`) under `backend/` runs, including the top-level
+`backend/tests/` package. New test modules are picked up without editing the workflow.
+
+Write backend tests as Django/unittest `TestCase` or `SimpleTestCase` classes.
+The Django runner doesn't collect bare pytest `def test_*` functions, so CI
+would never run them.
 
 ## Worktree Testing Verification
 
