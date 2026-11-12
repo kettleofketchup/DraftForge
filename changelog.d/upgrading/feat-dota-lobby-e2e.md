@@ -10,3 +10,6 @@ The simulator image is `DOTA_LOBBY_IMAGE`, by default
 placeholder until the first dota_lobby release with simulation mode. Until then, build
 it in dota_lobby (`just docker::build`) and run
 `DOTA_LOBBY_IMAGE=ghcr.io/kettleofketchup/dota_lobby:local just test::dota-lobby up`.
+With it running, `just test::pw::dota-lobby` and `cicd-dota-lobby` set
+`DOTA_LOBBY_SIMULATOR_REQUIRED=1`: a simulator that never becomes available fails the
+run instead of skipping its specs.

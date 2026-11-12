@@ -80,9 +80,11 @@ league *args:
 herodraft *args:
     {{pw}} tests/playwright/e2e/herodraft/ "$@"
 
+# The 18-dota-lobby specs. With this slot's simulator running
+# (just test::dota-lobby up) they must use it: a skip is an error.
 [group('test::pw')]
 dota-lobby *args:
-    {{pw}} --project=dota-lobby-sequential --no-deps "$@"
+    {{just}} test::pw::with-simulator --project=dota-lobby-sequential --no-deps "$@"
 
 [group('test::pw')]
 all *args:
@@ -113,10 +115,23 @@ cicd-events *args:
     {{cicd}} --project=events-sequential --no-deps "$@"
 
 # The 18-dota-lobby specs in order (dota-lobby-sequential): they share one
-# simulated dota_lobby. Specs that need it skip unless `just test::dota-lobby up` ran.
+# simulated dota_lobby. Specs that need it skip unless `just test::dota-lobby up`
+# ran, and then fail rather than skip when it never becomes available.
 [group('test::pw')]
 cicd-dota-lobby *args:
-    {{cicd}} --project=dota-lobby-sequential --no-deps "$@"
+    {{just}} test::pw::with-simulator --grep @cicd --project=dota-lobby-sequential --no-deps "$@"
+
+# Playwright with DOTA_LOBBY_SIMULATOR_REQUIRED=1 when this slot's simulated
+# dota_lobby is running, unless the caller set it already.
+[private]
+with-simulator *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [[ -z "${DOTA_LOBBY_SIMULATOR_REQUIRED-}" ]] \
+        && [[ -n "$({{just}} test::compose ps --status running --quiet dota-lobby 2>/dev/null || true)" ]]; then
+        export DOTA_LOBBY_SIMULATOR_REQUIRED=1
+    fi
+    exec {{pw}} "$@"
 
 # Run the headless suite while streaming backend logs + health probes to
 # frontend/test-results/run-logs/ for diagnosing transient first-attempt

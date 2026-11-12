@@ -39,8 +39,10 @@ testIgnore: **/fixtures/**, **/helpers/**, **/constants.ts, **/*.d.ts
 - `dota-lobby-sequential` also sets `workers: 1`: its files share one simulated
   dota_lobby and reset the same seeded games
 - `just test::pw::dota-lobby` (all) / `just test::pw::cicd-dota-lobby` (@cicd).
-  Specs that need the simulator skip without it; `DOTA_LOBBY_SIMULATOR_REQUIRED=1`
-  makes that an error instead
+  Specs that need the simulator skip when nothing answers; both recipes set
+  `DOTA_LOBBY_SIMULATOR_REQUIRED=1` when this slot's simulator is running, so one
+  that never becomes available (bots not ready, test league not verified within
+  60 s) fails the run instead of skipping it
 
 ### 3. `demo` - Video Recording
 

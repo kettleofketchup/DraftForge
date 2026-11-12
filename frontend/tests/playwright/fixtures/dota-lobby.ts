@@ -12,7 +12,7 @@
  * The simulator is the test stack's `dota-lobby` service
  * (`just test::dota-lobby up`). Specs reach its control API through the
  * backend (/api/tests/dota-lobby-sim/...), never directly, and skip when it
- * is not running (requireSimulator).
+ * is not running (hasSimulator).
  *
  * Never hardcode PKs: read them from getDotaLobbyTestData / resetDotaLobbyData.
  */
@@ -118,6 +118,8 @@ export async function loginDotaLobby(context: BrowserContext, role: DotaLobbyRol
 
 export interface SimulatorStatus {
   available: boolean;
+  /** The simulator answered (it may still be starting); false when nothing did. */
+  reachable: boolean;
   ready?: boolean;
   simulation?: boolean;
   code?: string;
@@ -125,23 +127,50 @@ export interface SimulatorStatus {
 
 export async function simulatorStatus(context: BrowserContext): Promise<SimulatorStatus> {
   const resp = await context.request.get(`${API_URL}/tests/dota-lobby/simulator/`);
-  if (!resp.ok()) return { available: false, code: String(resp.status()) };
-  return (await resp.json()) as SimulatorStatus;
+  if (resp.ok()) {
+    return { ...((await resp.json()) as Omit<SimulatorStatus, 'reachable'>), reachable: true };
+  }
+  // 503: DOTA_LOBBY_URL is not set, or nothing answers there.
+  const body = (await resp.json().catch(() => ({}))) as { code?: string };
+  return { available: false, reachable: false, code: body.code ?? String(resp.status()) };
 }
 
 export const SIMULATOR_SKIP_REASON =
   'The simulated dota_lobby is not running: start it with `just test::dota-lobby up`';
 
 /**
- * Whether the simulator can take lobbies now. Specs skip without it, unless
- * DOTA_LOBBY_SIMULATOR_REQUIRED=1 (a run that starts it on purpose), where
- * a missing simulator is an error instead.
+ * How long hasSimulator waits for a simulator that is still starting: the
+ * container answers before its bots are ready and have verified the test
+ * league. With DOTA_LOBBY_SIMULATOR_REQUIRED=1 it also waits for one that
+ * does not answer yet (`up -d` returns before the service listens).
+ */
+const SIMULATOR_WAIT_MS = 60_000;
+
+let simulatorSeen = false;
+
+/**
+ * Whether the simulator can take lobbies. Waits, up to SIMULATOR_WAIT_MS,
+ * for one that answers but is not available yet, and skips at once when
+ * nothing answers (the CI stack, which does not start it).
+ *
+ * DOTA_LOBBY_SIMULATOR_REQUIRED=1 (just test::pw::dota-lobby sets it when
+ * this slot's simulator is running) makes a simulator that never becomes
+ * available an error, never a skip, so a misconfigured one (a league ID
+ * mismatch, a bad secret) cannot pass as a green run.
  */
 export async function hasSimulator(context: BrowserContext): Promise<boolean> {
-  const status = await simulatorStatus(context);
-  if (!status.available && process.env.DOTA_LOBBY_SIMULATOR_REQUIRED === '1') {
+  if (simulatorSeen) return true;
+  const required = process.env.DOTA_LOBBY_SIMULATOR_REQUIRED === '1';
+  const deadline = Date.now() + SIMULATOR_WAIT_MS;
+  let status = await simulatorStatus(context);
+  while (!status.available && (status.reachable || required) && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+    status = await simulatorStatus(context);
+  }
+  if (!status.available && required) {
     throw new Error(`${SIMULATOR_SKIP_REASON} (status: ${JSON.stringify(status)})`);
   }
+  simulatorSeen = status.available;
   return status.available;
 }
 
