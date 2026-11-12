@@ -9,6 +9,7 @@
  * in sync with the expectations below. Quick reference:
  *
  *                                       siteAdmin siteStaff orgOwner orgAdmin orgStaff orgMember leagueAdmin leagueStaff anonymous
+ *   orgUsersTab  (members_private off)    ✓         ✓         ✓        ✓        ✓        ✓         ✓           ✓          ✗
  *   editUser     (org members tab)        ✓         ✓         ✓        ✓        ✓        ✗         ✗           ✗          ✗
  *   editUser     (tournament players)     ✓         ✓         ✗        ✗        ✗        ✗         ✓           ✗          ✗
  *   generateBracket                       ✓         ✓         ✓        ✓        ✓        ✗         ✓           ✓          ✗
@@ -51,6 +52,23 @@ const TOURNAMENT_PENDING_BRACKET_PK = 201;
 const TOURNAMENT_COMPLETED_BRACKET_PK = 202;
 
 type Expectations = Record<RoleName, boolean>;
+
+// Org Users tab → ``organization.can_view_members`` from the backend:
+// org members plus org staff tier. League roles are OrgUsers of the matrix
+// org (populate pins it; tournament reads would enroll them anyway). The
+// members_private=true case is covered by
+// app.tests.test_org_members_privacy (flipping it here would race other roles).
+const ORG_USERS_TAB_EXPECTATIONS: Expectations = {
+  siteAdmin: true,
+  siteStaff: true,
+  orgOwner: true,
+  orgAdmin: true,
+  orgStaff: true,
+  orgMember: true,
+  leagueAdmin: true,
+  leagueStaff: true,
+  anonymous: false,
+};
 
 // Edit User on the org members tab → ``useIsOrganizationStaff(currentOrg)``.
 // Site admins bypass via the hook's ``is_staff || is_superuser`` short-circuit.
@@ -219,6 +237,15 @@ async function assertModalGateAcrossRoles(
 }
 
 test.describe('Edit + Bracket permission matrix (8 roles in parallel)', () => {
+  test('Org Users tab visibility', async ({ roleContexts }) => {
+    await assertGateAcrossRoles(
+      roleContexts,
+      `/organizations/${AUTH_MATRIX_ORG_PK}`,
+      'org-tab-users',
+      ORG_USERS_TAB_EXPECTATIONS,
+    );
+  });
+
   test('Edit User button visibility (org members tab)', async ({ roleContexts }) => {
     await assertGateAcrossRoles(
       roleContexts,

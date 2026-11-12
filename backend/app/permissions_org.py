@@ -1,6 +1,9 @@
 """Organization and League permission helpers."""
 
+from django.contrib.auth.models import AnonymousUser
 from rest_framework import permissions
+
+from app.models import CustomUser, Organization
 
 
 def is_org_owner(user, obj):
@@ -62,6 +65,17 @@ def has_org_staff_access(user, obj):
     )
 
 
+def can_view_org_members(
+    user: CustomUser | AnonymousUser, organization: Organization
+) -> bool:
+    """Org staff always; plain members only while the member list isn't private."""
+    if has_org_staff_access(user, organization):
+        return True
+    if not user.is_authenticated or organization.members_private:
+        return False
+    return organization.members.filter(user_id=user.pk).exists()
+
+
 def has_league_admin_access(user, league):
     """Check if user is league admin, admin of any linked org, or site admin."""
     if not user.is_authenticated:
@@ -110,7 +124,9 @@ def has_event_staff_access(user, event):
         return False
     if has_org_staff_access(user, event.organization):
         return True
-    if event.tournament_league_id and has_league_staff_access(user, event.tournament_league):
+    if event.tournament_league_id and has_league_staff_access(
+        user, event.tournament_league
+    ):
         return True
     return False
 

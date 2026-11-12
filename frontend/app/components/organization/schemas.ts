@@ -10,6 +10,8 @@ export const OrganizationSchema = z.object({
   discord_server_id: z.string().max(20).nullable().optional(),
   rules_template: z.string().optional().default(''),
   timezone: z.string().optional().default('America/New_York'), // Default to US East
+  members_private: z.boolean().optional().default(false),
+  can_view_members: z.boolean().optional().default(false),
   owner_id: z.number().nullable().optional(),
   admin_ids: z.array(z.number()).optional(),
   staff_ids: z.array(z.number()).optional(),
@@ -37,6 +39,7 @@ export const EditOrganizationSchema = z.object({
   discord_server_id: z.string().max(20).nullable().optional(),
   rules_template: z.string(),
   timezone: z.string().optional().default('America/New_York'),
+  members_private: z.boolean().optional().default(false),
 });
 
 // Inferred types from Zod schemas

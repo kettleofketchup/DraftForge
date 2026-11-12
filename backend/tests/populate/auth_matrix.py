@@ -72,7 +72,9 @@ def populate_auth_matrix_data(force=False):
     if league.organization != org:
         league.organization = org
         league.save()
-    print(f"  {'Created' if created else 'Updated'} league: {league.name} (pk={league.pk})")
+    print(
+        f"  {'Created' if created else 'Updated'} league: {league.name} (pk={league.pk})"
+    )
 
     if org.default_league != league:
         org.default_league = league
@@ -85,8 +87,12 @@ def populate_auth_matrix_data(force=False):
     org_admin = CustomUser.objects.filter(pk=AUTH_MATRIX_ORG_ADMIN_USER.pk).first()
     org_staff = CustomUser.objects.filter(pk=AUTH_MATRIX_ORG_STAFF_USER.pk).first()
     org_member = CustomUser.objects.filter(pk=AUTH_MATRIX_ORG_MEMBER_USER.pk).first()
-    league_admin = CustomUser.objects.filter(pk=AUTH_MATRIX_LEAGUE_ADMIN_USER.pk).first()
-    league_staff = CustomUser.objects.filter(pk=AUTH_MATRIX_LEAGUE_STAFF_USER.pk).first()
+    league_admin = CustomUser.objects.filter(
+        pk=AUTH_MATRIX_LEAGUE_ADMIN_USER.pk
+    ).first()
+    league_staff = CustomUser.objects.filter(
+        pk=AUTH_MATRIX_LEAGUE_STAFF_USER.pk
+    ).first()
 
     # Owner is the Organization.owner FK — NOT added to admins, so the
     # matrix can verify the owner-implies-admin cascade independently.
@@ -111,6 +117,12 @@ def populate_auth_matrix_data(force=False):
     if league_staff and league_staff not in league.staff.all():
         league.staff.add(league_staff)
         print(f"  Added {league_staff.username} as staff of {league.name}")
+    # Reading a league tournament auto-creates OrgUsers for everyone in the
+    # payload, league staff included; pin it so member-gated rows don't
+    # depend on spec order.
+    for league_user in (league_admin, league_staff):
+        if league_user:
+            ensure_org_user(league_user, org)
 
     # 4. Bracket tournaments — delegate to the dynamic-tournament helper
     # so we get teams, captains, and (for the pending/completed variants)

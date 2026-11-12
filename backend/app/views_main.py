@@ -12,6 +12,7 @@ from django.shortcuts import redirect
 from django.utils import timezone
 from rest_framework import generics, status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 from social_core.backends.oauth import BaseOAuth1, BaseOAuth2
@@ -19,7 +20,6 @@ from social_django.utils import load_strategy, psa
 
 # Create your views here.
 from app.functions.teamdraft import apply_draft_options
-from app.permissions_org import has_org_staff_access
 from league.models import LeagueUser
 from league.serializers import LeagueUserSerializer
 from org.models import OrgUser
@@ -39,6 +39,7 @@ from .models import (
     CustomUser,
     Draft,
     DraftRound,
+    DraftTeam,
     Game,
     League,
     Organization,
@@ -57,7 +58,10 @@ from .permissions_org import (
     IsOrgAdmin,
     IsOrgOwner,
     can_manage_game,
+    can_view_org_members,
     has_league_admin_access,
+    has_league_staff_access,
+    has_org_staff_access,
 )
 from .serializers import (
     DraftRoundSerializer,
@@ -259,9 +263,6 @@ class UserView(viewsets.ModelViewSet):
         """Allow org admins/staff to edit users in their organizations."""
         super().check_object_permissions(request, obj)
         if request.method in ("PATCH", "PUT") and not request.user.is_staff:
-            from app.permissions_org import has_org_staff_access
-            from org.models import OrgUser
-
             # Check if the target user shares an org where requester is staff
             target_orgs = OrgUser.objects.filter(user=obj).select_related(
                 "organization"
@@ -299,8 +300,6 @@ class UserView(viewsets.ModelViewSet):
 
         Creates a ProfileClaimRequest that must be approved by an org admin.
         """
-        from org.models import OrgUser
-
         current_user = request.user
         if not current_user.is_authenticated:
             return Response(
@@ -526,8 +525,6 @@ class TournamentView(viewsets.ModelViewSet):
 
     def perform_create(self, serializer: TournamentSerializer) -> None:
         """Check that user can create tournament in the specified league."""
-        from rest_framework.exceptions import PermissionDenied, ValidationError
-
         league_id = self.request.data.get("league")
         if not league_id:
             raise ValidationError(
@@ -792,8 +789,6 @@ def current_user(request):
         active_drafts = []
 
         # Team drafts: user is captain with pending pick in in_progress tournament
-        from app.models import DraftTeam
-
         pending_team_round = (
             DraftRound.objects.filter(
                 captain=user,
@@ -864,13 +859,9 @@ class GameCreateView(generics.CreateAPIView):
             try:
                 tournament = Tournament.objects.get(pk=tournament_id)
                 if tournament.league:
-                    from .permissions_org import has_league_staff_access
-
                     if not has_league_staff_access(
                         self.request.user, tournament.league
                     ):
-                        from rest_framework.exceptions import PermissionDenied
-
                         raise PermissionDenied(
                             "You do not have permission to create games in this tournament."
                         )
@@ -880,11 +871,7 @@ class GameCreateView(generics.CreateAPIView):
         elif league_id:
             try:
                 league = League.objects.get(pk=league_id)
-                from .permissions_org import has_league_staff_access
-
                 if not has_league_staff_access(self.request.user, league):
-                    from rest_framework.exceptions import PermissionDenied
-
                     raise PermissionDenied(
                         "You do not have permission to create games in this league."
                     )
@@ -982,8 +969,6 @@ class GameView(viewsets.ModelViewSet):
                         {"league": tournament.league, "tournament": tournament},
                     )(),
                 ):
-                    from rest_framework.exceptions import PermissionDenied
-
                     raise PermissionDenied(
                         "You do not have permission to create games in this tournament."
                     )
@@ -992,14 +977,8 @@ class GameView(viewsets.ModelViewSet):
         # Check direct league reference
         elif league_id:
             try:
-                from .models import League
-
                 league = League.objects.get(pk=league_id)
-                from .permissions_org import has_league_staff_access
-
                 if not has_league_staff_access(self.request.user, league):
-                    from rest_framework.exceptions import PermissionDenied
-
                     raise PermissionDenied(
                         "You do not have permission to create games in this league."
                     )
@@ -1124,8 +1103,6 @@ class OrganizationView(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         """Set creator as owner and admin of the new organization."""
-        from org.models import OrgUser
-
         org = serializer.save(owner=self.request.user)
         org.admins.add(self.request.user)
         OrgUser.objects.get_or_create(user=self.request.user, organization=org)
@@ -1153,12 +1130,19 @@ class OrganizationView(viewsets.ModelViewSet):
             return serializer.data
 
         data = get_data()
-        return Response(data)
+        org = Organization.objects.get(pk=data["pk"])
+        return Response(
+            {**data, "can_view_members": can_view_org_members(request.user, org)}
+        )
 
     @action(detail=True, methods=["get"])
     def users(self, request, pk=None):
         """Get all users who are members of this organization (via OrgUser)."""
         org = self.get_object()
+        if not can_view_org_members(request.user, org):
+            raise PermissionDenied(
+                "You do not have access to this organization's members."
+            )
         cache_key = f"organization_users:{pk}"
 
         @cached_as(

@@ -440,6 +440,7 @@ class OrganizationSerializer(serializers.ModelSerializer):
             "discord_server_id",
             "rules_template",
             "timezone",
+            "members_private",
             "owner",
             "owner_id",
             "admins",
@@ -1134,9 +1135,7 @@ class TournamentSerializer(serializers.ModelSerializer):
 
     def to_representation(self, instance: Tournament) -> dict:
         data = super().to_representation(instance)
-        data["draft_options"] = DraftOptionsSerializer(
-            self._options_for(instance)
-        ).data
+        data["draft_options"] = DraftOptionsSerializer(self._options_for(instance)).data
         return data
 
     def _options_for(self, instance: Tournament) -> DraftOptions:

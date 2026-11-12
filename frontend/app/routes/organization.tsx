@@ -45,7 +45,7 @@ export function meta({ data }: Route.MetaArgs) {
     description: 'Organization profile and events',
   });
 }
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { addOrgMember, checkDiscordBotStatus } from '~/components/api/api';
@@ -241,12 +241,29 @@ export default function OrganizationDetailPage() {
   const orgUsers = useOrgUsers(pk ?? 0);
   const currentOrg = useOrgStore((s) => s.currentOrg);
 
-  // Fetch org users when switching to users tab
+  const canViewMembers = organization?.can_view_members ?? false;
+
+  // can_view_members is per-viewer; login/logout happen without a reload.
+  const viewerPk = currentUser?.pk ?? null;
+  const lastViewerPk = useRef(viewerPk);
   useEffect(() => {
-    if (activeTab === 'users' && pk) {
+    if (lastViewerPk.current === viewerPk) return;
+    lastViewerPk.current = viewerPk;
+    useOrgStore.getState().clearOrgUsers();
+    refetch();
+  }, [viewerPk, refetch]);
+
+  useEffect(() => {
+    if (activeTab === 'users' && pk && canViewMembers) {
       getOrgUsers(pk);
     }
-  }, [activeTab, pk, getOrgUsers]);
+  }, [activeTab, pk, canViewMembers, getOrgUsers]);
+
+  useEffect(() => {
+    if (organization && !canViewMembers && activeTab === 'users') {
+      setActiveTab('leagues');
+    }
+  }, [organization, canViewMembers, activeTab, setActiveTab]);
 
   const isOwner = useIsOrganizationOwner(organization);
   const isOrgAdmin = useIsOrganizationAdmin(organization);
@@ -296,13 +313,15 @@ export default function OrganizationDetailPage() {
     const opts = [
       { value: 'leagues', label: `Leagues (${leagues.length})` },
       { value: 'events', label: `Events (${events.length})` },
-      { value: 'users', label: `Users (${userCountDisplay})` },
     ];
+    if (canViewMembers) {
+      opts.push({ value: 'users', label: `Users (${userCountDisplay})` });
+    }
     if (isOrgAdmin) {
       opts.push({ value: 'claims', label: 'Claims' });
     }
     return opts;
-  }, [leagues.length, events.length, userCountDisplay, isOrgAdmin]);
+  }, [leagues.length, events.length, userCountDisplay, canViewMembers, isOrgAdmin]);
 
   usePageNav(organization ? pageNavOptions : null, activeTab, setActiveTab);
 
@@ -414,10 +433,12 @@ export default function OrganizationDetailPage() {
               <Calendar className="w-4 h-4 mr-2" />
               Events ({events.length})
             </TabsTrigger>
-            <TabsTrigger value="users" data-testid="org-tab-users">
-              <Users className="w-4 h-4 mr-2" />
-              Users ({orgUsersLoading || orgUsersOrgId !== pk ? '...' : orgUserPks.length})
-            </TabsTrigger>
+            {canViewMembers && (
+              <TabsTrigger value="users" data-testid="org-tab-users">
+                <Users className="w-4 h-4 mr-2" />
+                Users ({userCountDisplay})
+              </TabsTrigger>
+            )}
             {isOrgStaff && (
               <TabsTrigger value="claims" data-testid="org-tab-claims">
                 <ClipboardList className="w-4 h-4 mr-2" />
@@ -516,46 +537,47 @@ export default function OrganizationDetailPage() {
             </div>
           </TabsContent>
 
-          {/* Users Tab */}
-          <TabsContent value="users">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold">Organization Members</h2>
-              <div className="flex items-center gap-3">
-                <span className="text-sm text-muted-foreground">
-                  {orgUsers.length} {orgUsers.length === 1 ? 'member' : 'members'}
-                </span>
-                {canAddMembers && (
-                  <>
-                    <PrimaryButton
-                      size="sm"
-                      onClick={() => setShowCSVImport(true)}
-                      data-testid="org-csv-import-btn"
-                    >
-                      <Upload className="w-4 h-4 mr-2" />
-                      Import CSV
-                    </PrimaryButton>
-                    <PrimaryButton
-                      size="sm"
-                      onClick={() => setShowAddUser(true)}
-                      data-testid="org-add-member-btn"
-                    >
-                      <Plus className="w-4 h-4 mr-2" />
-                      Add Member
-                    </PrimaryButton>
-                  </>
-                )}
+          {canViewMembers && (
+            <TabsContent value="users">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-semibold">Organization Members</h2>
+                <div className="flex items-center gap-3">
+                  <span className="text-sm text-muted-foreground">
+                    {orgUsers.length} {orgUsers.length === 1 ? 'member' : 'members'}
+                  </span>
+                  {canAddMembers && (
+                    <>
+                      <PrimaryButton
+                        size="sm"
+                        onClick={() => setShowCSVImport(true)}
+                        data-testid="org-csv-import-btn"
+                      >
+                        <Upload className="w-4 h-4 mr-2" />
+                        Import CSV
+                      </PrimaryButton>
+                      <PrimaryButton
+                        size="sm"
+                        onClick={() => setShowAddUser(true)}
+                        data-testid="org-add-member-btn"
+                      >
+                        <Plus className="w-4 h-4 mr-2" />
+                        Add Member
+                      </PrimaryButton>
+                    </>
+                  )}
+                </div>
               </div>
-            </div>
 
-            <UserList
-              users={orgUsers}
-              isLoading={orgUsersLoading}
-              showSearch={orgUsers.length > 5}
-              searchPlaceholder="Search members..."
-              emptyMessage="No members in this organization"
-              organizationId={pk}
-            />
-          </TabsContent>
+              <UserList
+                users={orgUsers}
+                isLoading={orgUsersLoading}
+                showSearch={orgUsers.length > 5}
+                searchPlaceholder="Search members..."
+                emptyMessage="No members in this organization"
+                organizationId={pk}
+              />
+            </TabsContent>
+          )}
 
           {/* Claims Tab (Staff+) */}
           {isOrgStaff && pk && (

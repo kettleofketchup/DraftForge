@@ -21,6 +21,7 @@ import { API_URL } from '../../fixtures/base-url';
 import {
   test,
   expect,
+  loginAdmin as loginAdminContext,
   visitAndWaitForHydration,
   openEditModal,
   fillEditField,
@@ -38,6 +39,8 @@ let targetUserPk: number;
 test.describe('User cache merge after org PATCH (@cicd)', () => {
   test.beforeAll(async ({ browser }) => {
     const context = await browser.newContext({ ignoreHTTPSErrors: true });
+    // The org member list is restricted to members and org staff.
+    await loginAdminContext(context);
     const orgs = await (await context.request.get(`${API_URL}/organizations/`)).json();
     const orgList = Array.isArray(orgs) ? orgs : orgs.results ?? [];
     const editOrg = orgList.find((o: { name: string }) => o.name === USER_EDIT_ORG_NAME);

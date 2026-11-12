@@ -131,12 +131,14 @@ export default function EventPage() {
   const isAdmin = event?.user_can_manage ?? false;
 
   // Populate the org users cache so signup rows can read per-org MMR via the
-  // user entity adapter (UserEntry.orgData[orgId].mmr).
+  // user entity adapter (UserEntry.orgData[orgId].mmr). Viewers without member
+  // access fall back to signup.org_user_mmr.
+  const canViewOrgMembers = eventOrg?.can_view_members ?? false;
   useEffect(() => {
-    if (event?.organization) {
+    if (event?.organization && canViewOrgMembers) {
       useOrgStore.getState().getOrgUsers(event.organization);
     }
-  }, [event?.organization]);
+  }, [event?.organization, canViewOrgMembers]);
 
   // Set the current game type in the game type store for context-aware components
   const setCurrentGameType = useGameTypeStore((s) => s.setCurrentGameType);

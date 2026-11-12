@@ -98,10 +98,11 @@ The five entry points locked by `e2e/17-auth/01-create-gates.spec.ts`.
 
 ## Edit + Bracket Matrix
 
-The five entry points locked by `e2e/17-auth/02-edit-and-bracket-gates.spec.ts`.
+The six entry points locked by `e2e/17-auth/02-edit-and-bracket-gates.spec.ts`.
 
 |                                        | siteAdmin | siteStaff | orgOwner | orgAdmin | orgStaff | orgMember | leagueAdmin | leagueStaff | anonymous |
 | -------------------------------------- | :-------: | :-------: | :------: | :------: | :------: | :-------: | :---------: | :---------: | :-------: |
+| Org Users tab (not private)            |     ✓     |     ✓     |    ✓     |    ✓     |    ✓     |     ✓     |      ✓      |      ✓      |     ✗     |
 | Edit User (org members tab)            |     ✓     |     ✓     |    ✓     |    ✓     |    ✓     |     ✗     |      ✗      |      ✗      |     ✗     |
 | Edit User (tournament players tab)     |     ✓     |     ✓     |    ✗     |    ✗     |    ✗     |     ✗     |      ✓      |      ✗      |     ✗     |
 | Generate Bracket                       |     ✓     |     ✓     |    ✓     |    ✓     |    ✓     |     ✗     |      ✓      |      ✓      |     ✗     |
@@ -110,6 +111,14 @@ The five entry points locked by `e2e/17-auth/02-edit-and-bracket-gates.spec.ts`.
 
 **Why some rows look this way:**
 
+- **Org Users tab** follows `GET /api/organizations/<pk>/users/`, gated by
+  `can_view_org_members`: org members plus the org staff tier. The matrix's
+  league roles count as members (reading a league tournament auto-enrolls
+  everyone in its payload as an OrgUser). When an org
+  admin turns on **Private members list** (`members_private`), plain members
+  lose access and only staff/admins/owner/site admins keep it. The org detail
+  response carries a per-viewer `can_view_members` flag the frontend uses to
+  hide the tab.
 - **Edit User (org members tab)** uses `useIsOrganizationStaff(currentOrg)`
   via the UserCard's org-scoped editScope — staff-permissive.
 - **Edit User (tournament players tab)** is a **known divergence**.
