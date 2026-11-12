@@ -378,7 +378,8 @@ def apply_signup_input(*, org_user, event, patch):
     Used by both the web `/signup/` endpoint and the Discord adapters so the
     write path is identical. Per-field branches:
       - unverified_friend_id: site-wide uniqueness check, then write.
-      - positions: writes pos_1..pos_5 booleans from a list of ints.
+      - positions: priorities dict or list[int] of roles; writes pos_1..pos_5
+        booleans and CustomUser.positions priorities.
       - rank_status: validated against event.allow_* flags before writing.
       - rank_medal, battle_cup_tier: written as-is.
       - rank_screenshot, battlecup_screenshot: URL shape validated, then written.
@@ -646,10 +647,10 @@ def cancel_signup(signup):
 def apply_signup_writethrough(signup):
     """Mirror signup-submitted PlayerDotaProfile fields to the User-level fields.
 
-    Issue #196a — positions are last-write-wins on User.positions, steam_account_id
-    is first-write-wins on User.steam_account_id (sourced from
-    PlayerDotaProfile.unverified_friend_id — a CharField of digits on
-    PlayerProfileMixin), MMR is NOT touched here (it routes through approve_signup).
+    Issue #196a — steam_account_id is first-write-wins on User.steam_account_id
+    (sourced from PlayerDotaProfile.unverified_friend_id — a CharField of digits on
+    PlayerProfileMixin). Positions are NOT mirrored (apply_signup_input owns them)
+    and MMR is NOT touched here (it routes through approve_signup).
     Cache invalidation is deferred to commit so the 'incomplete profile' panel
     reflects the writethrough on the next render rather than after the cacheops
     1-hour TTL.
@@ -673,13 +674,9 @@ def apply_signup_writethrough(signup):
     except PlayerDotaProfile.DoesNotExist:
         return signup
 
-    # Positions used to be force-mapped here from PlayerDotaProfile.pos_N
-    # booleans → PositionsModel priority=1 (flattening any real user-picked
-    # priorities). The web signup modal now sends a priorities dict directly
-    # via apply_signup_input which writes CustomUser.positions properly, so
-    # there's nothing to do at approval time. (Discord users still go through
-    # apply_signup_input via the list[int] legacy path, which derives
-    # priority=1 the same way as before — no regression.)
+    # Positions are not mirrored from pos_N here: apply_signup_input already
+    # writes the user's priorities to CustomUser.positions, and copying the
+    # binary pos_N flags would flatten them.
     user_positions = user.positions
     if user_positions is None:
         user_positions = PositionsModel.objects.create()

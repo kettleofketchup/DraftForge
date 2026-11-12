@@ -118,7 +118,7 @@ class EnsureTournamentWithSignupsTest(TestCase):
 
 
 class EnsureTournamentRollCallRosterTest(TestCase):
-    """#378: starting from roll call keeps only CONFIRMED players."""
+    """Roster by event state: ROLL_CALL keeps only CONFIRMED players (#378)."""
 
     def setUp(self) -> None:
         self.org = Organization.objects.create(name="Roll Call Roster Org")

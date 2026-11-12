@@ -260,7 +260,7 @@ test.describe('Event Signup Management (@cicd)', () => {
   });
 
   test('staff can admin-add a user during roll_call (@cicd)', async ({ page, context }) => {
-    // Force the event into ROLL_CALL via the existing test API.
+    // Force the event into ROLL_CALL via the API.
     const startResp = await postWithCsrf(
       context,
       `${API_URL}/events/${eventInfo.pk}/start_roll_call/`,
@@ -271,7 +271,7 @@ test.describe('Event Signup Management (@cicd)', () => {
     await visitAndWaitForHydration(page, `/events/${eventInfo.pk}/signups`);
     await expect(page.getByTestId('event-state-badge')).toHaveText(/Roll Call/i);
 
-    // Open AddUserModal via canonical testid (gate widened to ROLL_CALL in Task 16).
+    // Open AddUserModal via canonical testid (the gate includes ROLL_CALL).
     await page.getByTestId('admin-add-signup-btn').click();
     await waitForAddUserModal(page);
 
