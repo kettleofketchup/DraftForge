@@ -7,14 +7,13 @@ import time
 from typing import TYPE_CHECKING, Any
 
 from asgiref.sync import sync_to_async
-from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
 from django.db import transaction
 from django.utils import timezone
 
 from app.broadcast import broadcast_herodraft_state
 from app.cache_utils import invalidate_obj
-from app.consumers_base import BaseDraftConsumer
+from app.consumers_base import BaseDraftConsumer, consumer_db
 from app.draft_state import build_draft_state
 from app.functions.teamdraft import emit_event, team_payload
 from app.models import (
@@ -56,15 +55,15 @@ class DraftConsumer(BaseDraftConsumer):
     def get_redis_prefix(self) -> str:
         return "teamdraft"
 
-    @database_sync_to_async
+    @consumer_db
     def draft_exists(self, draft_id: int) -> bool:
         return Draft.objects.filter(pk=draft_id).exists()
 
-    @database_sync_to_async
+    @consumer_db
     def get_initial_state_data(self, draft_id: int) -> dict | None:
         return build_draft_state(draft_id, fresh=False)
 
-    @database_sync_to_async
+    @consumer_db
     def get_captain_draft_team(
         self, draft_id: int, user: "AbstractBaseUser"
     ) -> "Team | None":
@@ -85,7 +84,7 @@ class DraftConsumer(BaseDraftConsumer):
             )
         )
 
-    @database_sync_to_async
+    @consumer_db
     def _set_presence(
         self, draft_id: int, user: "AbstractBaseUser", is_connected: bool
     ) -> None:
@@ -147,9 +146,11 @@ class DraftConsumer(BaseDraftConsumer):
                 )
             if count > 0:
                 return
-        await self._set_presence(draft_id, user, is_connected)
+        await self.in_draft_order(
+            lambda: self._set_presence(draft_id, user, is_connected)
+        )
 
-    @database_sync_to_async
+    @consumer_db
     def _restore_presence(self, draft_id: int, user: "AbstractBaseUser") -> None:
         team = Team.objects.filter(tournament__draft__pk=draft_id, captain=user).first()
         if team is None or team.draft_has_connected:
@@ -185,7 +186,9 @@ class DraftConsumer(BaseDraftConsumer):
             )
         if not await sync_to_async(self._extend_captain_conn, thread_sensitive=False)():
             return
-        await self._restore_presence(self.draft_id, self.user)
+        await self.in_draft_order(
+            lambda: self._restore_presence(self.draft_id, self.user)
+        )
 
     def _captain_is_fresh(self) -> bool:
         return captain_is_fresh(self._redis(), self.draft_id, self.user.id, time.time())
@@ -327,7 +330,7 @@ class DraftConsumer(BaseDraftConsumer):
         # Daphne only lets a server send 1000 or 3000-4999; 1012 crashed the consumer.
         await self.close(code=4012)
 
-    @database_sync_to_async
+    @consumer_db
     def get_recent_events(self, draft_id: int, limit: int = 20) -> list[dict]:
         events = DraftEvent.objects.filter(draft_id=draft_id)[:limit]
         return DraftEventSerializer(events, many=True).data
@@ -381,11 +384,11 @@ class TournamentConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
             message["draft_state"] = event["draft_state"]
         await self.send(text_data=json.dumps(message))
 
-    @database_sync_to_async
+    @consumer_db
     def tournament_exists(self, tournament_id: int) -> bool:
         return Tournament.objects.filter(pk=tournament_id).exists()
 
-    @database_sync_to_async
+    @consumer_db
     def get_recent_events(self, tournament_id: int, limit: int = 20) -> list[dict]:
         # Get events from the tournament's draft
         try:
@@ -408,11 +411,11 @@ class HeroDraftConsumer(BaseDraftConsumer):
     def get_room_group_prefix(self) -> str:
         return "herodraft"
 
-    @database_sync_to_async
+    @consumer_db
     def draft_exists(self, draft_id: int) -> bool:
         return HeroDraft.objects.filter(id=draft_id).exists()
 
-    @database_sync_to_async
+    @consumer_db
     def get_initial_state_data(self, draft_id: int) -> dict:
         draft = HeroDraft.objects.prefetch_related(
             "draft_teams__tournament_team__captain",
@@ -421,7 +424,7 @@ class HeroDraftConsumer(BaseDraftConsumer):
         ).get(id=draft_id)
         return HeroDraftSerializer(draft).data
 
-    @database_sync_to_async
+    @consumer_db
     def get_captain_draft_team(
         self, draft_id: int, user: "AbstractBaseUser"
     ) -> DraftTeam | None:
@@ -510,8 +513,15 @@ class HeroDraftConsumer(BaseDraftConsumer):
 
     # --- Captain state change (pause-on-disconnect) ---
 
-    @database_sync_to_async
-    def on_captain_state_change(
+    async def on_captain_state_change(
+        self, draft_id: int, user: "AbstractBaseUser", is_connected: bool
+    ) -> None:
+        await self.in_draft_order(
+            lambda: self._apply_captain_state_change(draft_id, user, is_connected)
+        )
+
+    @consumer_db
+    def _apply_captain_state_change(
         self, draft_id: int, user: "AbstractBaseUser", is_connected: bool
     ) -> None:
         """Mark captain connected/disconnected and handle pause-on-disconnect.
