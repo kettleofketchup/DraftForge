@@ -1,0 +1,2 @@
+- **Player modal league stats never loaded.** The modal sent DraftForge's league id where the Steam ticket league id was expected, so it always showed "No league stats available". `/api/steam/league-stats/<user>/` now also accepts a `league` (DraftForge league) parameter; the existing `league_id` (Steam id) still works.
+- **Leaderboard failed with its default sort.** The default `league_mmr` sort used a field removed from the user model; the leaderboard now sorts by win rate by default.
