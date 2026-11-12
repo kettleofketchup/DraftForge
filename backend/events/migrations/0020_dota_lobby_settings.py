@@ -6,6 +6,9 @@ from django.db import migrations, models
 # not change if that module does.
 ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"
 LENGTH = 12
+# Most permissive first: a disagreeing series takes the settings that keep
+# lobbies on where staff had turned them on.
+MODE_RANK = {"auto": 2, "manual": 1, "off": 0}
 LOBBY_FIELDS = (
     "dota_lobby_mode",
     "dota_lobby_launch",
@@ -27,8 +30,12 @@ def backfill_lobby_settings(apps, schema_editor):
     tournament's when it has one, else a new one, which the tournament then
     shares.
 
-    A series takes its upcoming on-schedule events' settings when they all
-    agree, for the same reason; otherwise it stays off and staff set it.
+    A series takes its upcoming on-schedule events' settings, for the same
+    reason: the next series save copies them onto those events. When they
+    disagree it takes the most permissive (auto, then manual, then off; the
+    most common settings among the events with that mode, then the earliest
+    event's), so a series save never switches off lobbies staff had turned
+    on, though it may turn them on for the series' other upcoming events.
     """
     Event = apps.get_model("events", "Event")
     EventRepeater = apps.get_model("events", "EventRepeater")
@@ -60,16 +67,25 @@ def backfill_lobby_settings(apps, schema_editor):
         )
 
     for repeater in EventRepeater.objects.iterator():
-        settings = {
+        settings = [
             tuple(getattr(event, name) for name in LOBBY_FIELDS)
             for event in Event.objects.filter(
                 event_repeater=repeater, state="upcoming", is_off_schedule=False
-            )
-        }
-        if len(settings) == 1:
-            for name, value in zip(LOBBY_FIELDS, settings.pop()):
-                setattr(repeater, name, value)
-            repeater.save(update_fields=list(LOBBY_FIELDS))
+            ).order_by("scheduled_at", "pk")
+        ]
+        if not settings:
+            continue
+        chosen = max(
+            settings,
+            key=lambda row: (
+                MODE_RANK.get(row[0], 0),
+                settings.count(row),
+                -settings.index(row),
+            ),
+        )
+        for name, value in zip(LOBBY_FIELDS, chosen):
+            setattr(repeater, name, value)
+        repeater.save(update_fields=list(LOBBY_FIELDS))
 
 
 class Migration(migrations.Migration):

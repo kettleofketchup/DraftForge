@@ -101,7 +101,16 @@ class EventLobbySettingsMigrationTest(MigratorTestCase):
                 organization=org, name=name, scheduled_at=date, **fields
             ).pk
 
+        empty = EventRepeater.objects.create(
+            organization=org,
+            name="No upcoming events",
+            frequency="weekly",
+            day_of_week=3,
+            time_of_day="20:00",
+            starts_at="2026-11-01",
+        )
         self.pks = {
+            "empty": empty.pk,
             "on": on.pk,
             "no_password": no_password.pk,
             "agreeing": agreeing.pk,
@@ -156,8 +165,12 @@ class EventLobbySettingsMigrationTest(MigratorTestCase):
         self.assertEqual(agreeing.dota_lobby_region, "europe")
         self.assertEqual(agreeing.dota_lobby_password_mode, "random")
         self.assertEqual(agreeing.dota_lobby_password, "")
+        # Disagreeing events (manual and off): the series keeps lobbies on, so
+        # its next save does not switch them off on the manual event.
         mixed = EventRepeater.objects.get(pk=self.pks["mixed"])
-        self.assertEqual(mixed.dota_lobby_mode, "off")
+        self.assertEqual(mixed.dota_lobby_mode, "manual")
+        empty = EventRepeater.objects.get(pk=self.pks["empty"])
+        self.assertEqual(empty.dota_lobby_mode, "off")
 
 
 class GameLobbyPasswordMigrationTest(MigratorTestCase):
