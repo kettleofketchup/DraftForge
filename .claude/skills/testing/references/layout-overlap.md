@@ -34,12 +34,20 @@ same document to 1440x900.
   ancestor, and `elementFromPoint` in that strip lands on the element, its subtree, or
   a `pointer-events:none` ancestor that paints it. Geometry alone is never reported.
 
-Each finding names a **state**: `base`, or `scroll:<container>@<fraction>`. Page
-content lives in the `#outlet_root` scroll area (state `scroll:scroll-area-viewport@…`), so findings below the first screen
-show up only in scroll states.
+Each finding names a **state**: `base`, or `scroll:<container>@<fraction>`. A container
+is named by its own `data-testid`/`id`, else by its nearest named ancestor plus its
+`data-slot` (`~2`, `~3` break ties). Page content lives in the `#outlet_root` scroll
+area, state `scroll:outlet_root>scroll-area-viewport@<fraction>`, so findings below the
+first screen show up only there.
 
-A finding must survive a 300ms re-measure. Timers of 250ms or more are dropped while
-the probe runs, so polling cannot move boxes mid-measure.
+A finding must survive a 300ms re-measure. While a state is measured, timers of 250ms or
+more are held and started afterwards, so polling cannot move boxes mid-measure and no
+retry or debounced handler is lost.
+
+The route test also fails when a state was skipped over the time budget or was still
+loading (an on-screen skeleton, `aria-busy`, or image) when measured: an unmeasured state
+must not pass as a clean one. `unprobeable` is reported, not gated. Route tests do not
+retry.
 
 ## A red route
 
@@ -55,9 +63,9 @@ Add a row to `layout-known-findings.json`:
 
 ```json
 {
-  "route": "/",
+  "route": "/events/:eventId",
   "viewport": "1440x900",
-  "state": "scroll:scroll-area-viewport@1",
+  "state": "scroll:outlet_root>scroll-area-viewport@1",
   "kind": "escape",
   "findingKey": "<elKey, or 'keyA keyB' for a collision>",
   "owner": "<github login>",
@@ -67,8 +75,10 @@ Add a row to `layout-known-findings.json`:
 }
 ```
 
-Matching is exact on route, viewport, state, kind and key; the key is text-free
-(`tag|testid|firstClass|domPath`). A quarantined finding that stops firing fails the
+`route` is the route's `name` in `helpers/audit-routes.ts`, never a resolved path, so
+rows survive a reseed. Matching is exact on route, viewport, state, kind and key. The key
+is text-free, `tag|testid|firstClass|@anchor/sibling.path`, with the path starting at
+the nearest ancestor that has a `data-testid` or hand-written `id`. A quarantined finding that stops firing fails the
 route as stale until its row is deleted. `"intermittent": true` is the only exemption.
 
 ## Changing the detector

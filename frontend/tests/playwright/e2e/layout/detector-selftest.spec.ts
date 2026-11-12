@@ -593,4 +593,157 @@ test.describe('layout detector self-test (@cicd)', () => {
 
     expect(() => loadKnownFindings(), 'the checked-in quarantine must parse and validate').not.toThrow();
   });
+
+  test('only on-screen loading content makes a state unsettled', async ({ page }) => {
+    // An image whose request never completes, far below the fold, as a lazy avatar would be.
+    await page.route('**/layout-selftest-never.png', () => {});
+    await page.evaluate(() => {
+      const img = document.createElement('img');
+      img.setAttribute('data-testid', 'lazy-selftest');
+      img.loading = 'lazy';
+      img.width = 40;
+      img.height = 40;
+      img.style.cssText = 'display:block;margin-top:5000px';
+      img.src = '/layout-selftest-never.png';
+      document.body.appendChild(img);
+    });
+    const lazy = await page.evaluate(() => {
+      const img = document.querySelector('[data-testid=lazy-selftest]') as HTMLImageElement;
+      return { complete: img.complete, top: img.getBoundingClientRect().top, vh: window.innerHeight };
+    });
+    expect(lazy.complete, 'the image must still be loading').toBe(false);
+    expect(lazy.top, 'the image must be below the fold').toBeGreaterThan(lazy.vh);
+
+    const quiet = await sweepLayoutOnce(page);
+    expect(quiet.ledger.statesUnsettled, 'an off-screen loading image must not block measuring').toEqual([]);
+
+    await injectBelowNavbar(page, {
+      id: 'busy-selftest',
+      offset: 24,
+      css: 'width:120px;height:40px;background:#333',
+      html: '<div aria-busy="true" style="width:100px;height:20px"></div>',
+    });
+    const busy = await sweepLayoutOnce(page, { settleCapMs: 200 });
+    expect(busy.ledger.statesUnsettled, 'on-screen aria-busy content must leave base unmeasured').toEqual(['base']);
+    expect(busy.states.find((st) => st.state === 'base')?.settled).toBe('busy');
+  });
+
+  test('a slow timer scheduled while measuring is deferred, not dropped', async ({ page }) => {
+    // Schedules a 300ms timer from inside the probe's first read, i.e. while the gate is
+    // closed, and gives the probe a finding so it holds the gate through the stability window.
+    await page.evaluate((html) => {
+      const host = document.createElement('div');
+      host.id = 'timer-selftest';
+      host.innerHTML = html;
+      (document.querySelector('[data-testid=nav-root]')?.parentElement ?? document.body).appendChild(host);
+      const w = window as unknown as { __timerFired?: boolean };
+      w.__timerFired = false;
+      const lower = document.querySelector('[data-testid=timer-selftest-lower]') as HTMLElement;
+      const original = lower.getClientRects.bind(lower);
+      let reads = 0;
+      lower.getClientRects = function patched() {
+        if (++reads === 1) window.setTimeout(() => { w.__timerFired = true; }, 300);
+        return original();
+      };
+    }, pair('timer-selftest'));
+
+    const report = await sweepLayoutOnce(page);
+    expect(report.ledger.timersDeferred, 'the timer must have been held while measuring').toBeGreaterThanOrEqual(1);
+    await expect
+      .poll(() => page.evaluate(() => (window as unknown as { __timerFired?: boolean }).__timerFired), {
+        timeout: 5_000,
+      })
+      .toBe(true);
+  });
+
+  test('scroll containers get distinct, stable state names', async ({ page }) => {
+    await page.evaluate(() => {
+      const anchor = document.createElement('div');
+      anchor.setAttribute('data-testid', 'scroll-pair-anchor');
+      for (const h of [100000, 90000]) {
+        const sc = document.createElement('div');
+        sc.style.cssText = 'height:60px;overflow-y:auto';
+        sc.innerHTML = `<div style="height:${h}px"></div>`;
+        anchor.appendChild(sc);
+      }
+      (document.querySelector('[data-testid=nav-root]')?.parentElement ?? document.body).appendChild(anchor);
+    });
+
+    const [report] = await sweepLayout(page, {
+      viewports: [V375],
+      states: ['scroll'],
+      scrollFractions: [1],
+      maxScrollContainers: 2,
+    });
+    expect(report.ledger.statesExercised).toEqual(
+      expect.arrayContaining(['scroll:scroll-pair-anchor>div@1', 'scroll:scroll-pair-anchor>div~2@1']),
+    );
+  });
+
+  test('a wrapped inline overlapping a neighbour is reported once', async ({ page }) => {
+    await page.evaluate(() => {
+      const host = document.createElement('div');
+      host.id = 'dedupe-selftest';
+      host.style.cssText = 'width:150px;font:14px/18px sans-serif';
+      host.innerHTML =
+        '<div><span data-testid="dedupe-span">one two three four five six seven eight nine ten eleven</span></div>' +
+        '<div data-testid="dedupe-block" style="margin-top:-54px;height:54px;font:14px sans-serif">covering block</div>';
+      (document.querySelector('[data-testid=nav-root]')?.parentElement ?? document.body).appendChild(host);
+    });
+    const covered = await page.evaluate(() => {
+      const block = document.querySelector('[data-testid=dedupe-block]')!.getBoundingClientRect();
+      const lines = [...document.querySelector('[data-testid=dedupe-span]')!.getClientRects()];
+      return lines.filter((r) => {
+        const w = Math.min(r.right, block.right) - Math.max(r.left, block.left);
+        const h = Math.min(r.bottom, block.bottom) - Math.max(r.top, block.top);
+        return w > 0 && h > 0 && w * h >= 64;
+      }).length;
+    });
+    expect(covered, 'the block must overlap at least two of the span lines').toBeGreaterThanOrEqual(2);
+
+    const hits = (await collisions(page)).filter(
+      (c) => /dedupe-span/.test(`${c.a}${c.b}`) && /dedupe-block/.test(`${c.a}${c.b}`),
+    );
+    expect(hits.length, `one finding per element pair:\n${JSON.stringify(hits, null, 2)}`).toBe(1);
+  });
+
+  test('a visible child of a visibility:hidden parent is still measured', async ({ page }) => {
+    await page.evaluate((html) => {
+      const host = document.createElement('div');
+      host.style.visibility = 'hidden';
+      host.innerHTML = `<div data-testid="visible-child" style="visibility:visible">${html}</div>`;
+      (document.querySelector('[data-testid=nav-root]')?.parentElement ?? document.body).appendChild(host);
+    }, pair('hidden-parent-selftest'));
+    const vis = await page.evaluate(
+      () => getComputedStyle(document.querySelector('[data-testid=hidden-parent-selftest-upper]')!).visibility,
+    );
+    expect(vis, 'the pair must be visible').toBe('visible');
+
+    const hits = (await collisions(page)).filter((c) => /hidden-parent-selftest/.test(`${c.a}${c.b}`));
+    expect(hits.length, 'overlapping visible content under a hidden parent must be reported').toBeGreaterThan(0);
+  });
+
+  test('keys survive content inserted before their named ancestor', async ({ page }) => {
+    await page.evaluate((html) => {
+      const anchor = document.createElement('div');
+      anchor.setAttribute('data-testid', 'key-anchor');
+      anchor.innerHTML = `<div>${html}</div>`;
+      (document.querySelector('[data-testid=nav-root]')?.parentElement ?? document.body).appendChild(anchor);
+    }, pair('key-selftest'));
+    const keyOf = async () => {
+      const pop = await sweepLayoutOnce(page, { debugKeys: true });
+      return pop.debugKeys!.candidates.find((k) => k.startsWith(keyPrefix('p', 'key-selftest-upper')));
+    };
+    const before = await keyOf();
+    expect(before, 'the fixture must be measured').toBeDefined();
+    expect(before, 'the path must start at the named ancestor').toContain('|@key-anchor/');
+
+    await page.evaluate(() => {
+      const banner = document.createElement('div');
+      banner.textContent = 'an inserted banner';
+      const anchor = document.querySelector('[data-testid=key-anchor]')!;
+      anchor.parentElement!.insertBefore(banner, anchor);
+    });
+    expect(await keyOf(), 'a sibling inserted before the anchor must not change the key').toBe(before);
+  });
 });

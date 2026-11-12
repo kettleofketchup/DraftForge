@@ -16,7 +16,11 @@ import { AUDIT_ROUTE_COUNT, resolveAuditRoutes, type AuditRoute } from '../../he
  *
  * Page content lives inside the #outlet_root scroll area, so the scroll walk is what reaches
  * anything below the first screen.
+ *
+ * No retries: a layout defect that shows only sometimes is still a defect, and a retry would
+ * pass it.
  */
+test.describe.configure({ retries: 0 });
 
 // Module scope: a malformed quarantine row fails collection once, not once per route.
 const KNOWN = loadKnownFindings();
@@ -46,7 +50,7 @@ test.describe('layout overlap audit (@cicd)', () => {
         scrollFractions: [0.25, 0.5, 0.75, 1],
         budgetMs: 15_000,
       });
-      const { fresh, matched, stale } = partitionFindings(reports, route.path, KNOWN);
+      const { fresh, matched, stale } = partitionFindings(reports, route.name, KNOWN);
 
       await testInfo.attach('layout-states', {
         contentType: 'application/json',
@@ -70,7 +74,7 @@ test.describe('layout overlap audit (@cicd)', () => {
       testInfo.annotations.push({
         type: 'layout',
         description:
-          `${route.path} states=${totals.states} unprobeable=${totals.unprobeable} ` +
+          `${route.name} states=${totals.states} unprobeable=${totals.unprobeable} ` +
           `unsettled=${totals.unsettled} skipped=${totals.skipped} scrollers=${totals.scrollers} ` +
           `known=${matched.length}`,
       });
@@ -84,6 +88,16 @@ test.describe('layout overlap audit (@cicd)', () => {
       ).toEqual([]);
 
       expect(fresh, `${route.path}\n${formatReports(reports, matched)}`).toEqual([]);
+
+      // A state that was skipped or never settled was never measured; passing on it would make
+      // a blind run indistinguishable from a clean one. `unprobeable` is reported, not gated:
+      // clipped table cells past the viewport edge are routine.
+      for (const r of reports) {
+        const vp = `${r.viewport.width}x${r.viewport.height}`;
+        expect(r.ledger.statesUnsettled, `${vp}: states still loading when measured`).toEqual([]);
+        expect(r.ledger.statesSkipped, `${vp}: states skipped over the time budget`).toEqual([]);
+        expect(r.ledger.candidates, `${vp}: the base state measured no content`).toBeGreaterThan(0);
+      }
 
       expect(new URL(page.url()).pathname, 'the sweep must not navigate away').toBe(expectedPath);
     });

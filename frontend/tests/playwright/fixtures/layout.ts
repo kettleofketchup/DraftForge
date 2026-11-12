@@ -67,7 +67,7 @@ export interface LayoutLedger {
   unprobeable: number;
   budgetExceededMs: number | null;
   navbarHeightPx: number;
-  timersDropped: number;
+  timersDeferred: number;
 }
 
 export interface LayoutReport {
@@ -88,6 +88,8 @@ export interface ProbeConfig {
   budgetMs: number;
   settleCapMs: number;
   stabilityMs: number;
+  /** Minimum quiet time before the base measure; set after a viewport change. */
+  baseQuietMs: number;
   states: Array<'scroll'>;
   debugKeys: boolean;
 }
@@ -100,6 +102,7 @@ export interface SweepOptions extends Partial<ProbeConfig> {
 
 /** A quarantined finding: known, owned, and tracked by an issue. */
 export interface KnownFinding {
+  /** The AuditRoute name (a pattern such as `/events/:eventId`), never a resolved path. */
   route: string;
   viewport: string;
   state: string;
@@ -130,17 +133,24 @@ const DEFAULTS: ProbeConfig = {
   budgetMs: 6000,
   settleCapMs: 800,
   stabilityMs: 300,
+  baseQuietMs: 0,
   states: [],
   debugKeys: false,
 };
 
 interface LayoutProbeGlobals {
   __layoutPrepared?: boolean;
-  __layoutDropped?: number;
-  __layoutRestore?: () => void;
+  __layoutDeferred?: number;
+  __layoutFreeze?: () => void;
+  __layoutThaw?: () => void;
 }
 
-/** Call once per document, after navigation and before any measurement. */
+/**
+ * Call once per document, after navigation and before any measurement. Installs a gate the
+ * probe closes while it measures a state: timers of 250ms or more scheduled while closed are
+ * held and started when it reopens, so polling cannot move boxes mid-measure and nothing
+ * (query retries, debounced handlers) is lost for the rest of the page's life.
+ */
 export async function prepareLayoutProbe(page: Page): Promise<void> {
   await expect(page.getByTestId('nav-root')).toBeVisible({ timeout: 30_000 });
   await page.addStyleTag({ content: KILL_ANIMATIONS });
@@ -149,32 +159,67 @@ export async function prepareLayoutProbe(page: Page): Promise<void> {
     const w = window as unknown as LayoutProbeGlobals;
     if (w.__layoutPrepared) return;
     w.__layoutPrepared = true;
-    w.__layoutDropped = 0;
+    w.__layoutDeferred = 0;
 
-    // Drop slow timers (>= 250ms) so polling re-renders cannot move boxes mid-measure. Short
-    // timers are library internals (Radix sizing, react-query) and pass through.
-    const realTimeout = window.setTimeout;
-    const realInterval = window.setInterval;
+    interface Held {
+      fn: TimerHandler;
+      ms: number;
+      args: unknown[];
+      repeat: boolean;
+      real: number | null;
+      cancelled: boolean;
+    }
+    const realTimeout = window.setTimeout.bind(window);
+    const realInterval = window.setInterval.bind(window);
+    const realClearTimeout = window.clearTimeout.bind(window);
+    const realClearInterval = window.clearInterval.bind(window);
+    const held = new Map<number, Held>();
+    let frozen = false;
     let fake = 1 << 24;
-    window.setTimeout = ((fn: TimerHandler, ms?: number, ...a: unknown[]) => {
-      if ((ms ?? 0) >= 250) {
-        w.__layoutDropped! += 1;
-        return (fake += 1);
-      }
-      return realTimeout(fn, ms, ...a);
-    }) as typeof window.setTimeout;
-    window.setInterval = ((fn: TimerHandler, ms?: number, ...a: unknown[]) => {
-      if ((ms ?? 0) >= 250) {
-        w.__layoutDropped! += 1;
-        return (fake += 1);
-      }
-      return realInterval(fn, ms, ...a);
-    }) as typeof window.setInterval;
 
-    w.__layoutRestore = () => {
-      window.setTimeout = realTimeout;
-      window.setInterval = realInterval;
-      w.__layoutPrepared = false;
+    const start = (h: Held): void => {
+      h.real = h.repeat
+        ? realInterval(h.fn, h.ms, ...h.args)
+        : realTimeout(h.fn, h.ms, ...h.args);
+    };
+    const schedule = (fn: TimerHandler, ms: number | undefined, args: unknown[], repeat: boolean): number => {
+      if (!frozen || (ms ?? 0) < 250) {
+        return repeat ? realInterval(fn, ms, ...args) : realTimeout(fn, ms, ...args);
+      }
+      w.__layoutDeferred! += 1;
+      fake += 1;
+      held.set(fake, { fn, ms: ms ?? 0, args, repeat, real: null, cancelled: false });
+      return fake;
+    };
+    const clear = (id: number | undefined, repeat: boolean): void => {
+      const h = id === undefined ? undefined : held.get(id);
+      if (!h) {
+        if (repeat) realClearInterval(id);
+        else realClearTimeout(id);
+        return;
+      }
+      h.cancelled = true;
+      if (h.real !== null) (h.repeat ? realClearInterval : realClearTimeout)(h.real);
+      held.delete(id!);
+    };
+
+    window.setTimeout = ((fn: TimerHandler, ms?: number, ...a: unknown[]) =>
+      schedule(fn, ms, a, false)) as typeof window.setTimeout;
+    window.setInterval = ((fn: TimerHandler, ms?: number, ...a: unknown[]) =>
+      schedule(fn, ms, a, true)) as typeof window.setInterval;
+    window.clearTimeout = ((id?: number) => clear(id, false)) as typeof window.clearTimeout;
+    window.clearInterval = ((id?: number) => clear(id, true)) as typeof window.clearInterval;
+
+    w.__layoutFreeze = () => {
+      frozen = true;
+    };
+    w.__layoutThaw = () => {
+      frozen = false;
+      // Entries stay mapped after starting so clearTimeout/clearInterval on the handed-out id
+      // still reaches the real timer.
+      for (const h of held.values()) {
+        if (!h.cancelled && h.real === null) start(h);
+      }
     };
   });
 
@@ -197,38 +242,6 @@ export async function sweepLayoutOnce(page: Page, opts: Partial<ProbeConfig> = {
   return page.evaluate(layoutProbeMain, { ...DEFAULTS, ...opts });
 }
 
-/** rAF-only (slow timers are dropped) and free of closures, since it is serialised. */
-function settleViewportInPage(capMs: number): Promise<'stable' | 'capped'> {
-  return new Promise<'stable' | 'capped'>((resolve) => {
-    const geometryHash = (): number => {
-      let h = 2166136261;
-      const els = document.body.querySelectorAll('*');
-      for (let i = 0; i < els.length; i += 1) {
-        const r = els[i].getBoundingClientRect();
-        const v = [Math.round(r.x), Math.round(r.y), Math.round(r.width), Math.round(r.height)];
-        for (let k = 0; k < 4; k += 1) h = Math.imul(h ^ v[k], 16777619);
-      }
-      return h >>> 0;
-    };
-    const t0 = performance.now();
-    let prev = geometryHash();
-    const tick = () => {
-      const next = geometryHash();
-      if (next === prev) {
-        resolve('stable');
-        return;
-      }
-      if (performance.now() - t0 >= capMs) {
-        resolve('capped');
-        return;
-      }
-      prev = next;
-      requestAnimationFrame(tick);
-    };
-    requestAnimationFrame(tick);
-  });
-}
-
 /**
  * One probe per viewport on the same document. The first viewport must match the page's
  * current size; later ones are reached with setViewportSize.
@@ -240,8 +253,8 @@ export async function sweepLayout(page: Page, opts: SweepOptions): Promise<Layou
   for (let i = 0; i < viewports.length; i += 1) {
     const vp = viewports[i];
     if (i > 0) await page.setViewportSize(vp);
-    await page.evaluate(settleViewportInPage, cfg.settleCapMs);
-    const report = await page.evaluate(layoutProbeMain, cfg);
+    // After a resize, wait out debounced resize/media-query handlers before measuring.
+    const report = await page.evaluate(layoutProbeMain, { ...cfg, baseQuietMs: i > 0 ? 400 : cfg.baseQuietMs });
     if (budgetIsFatal && report.ledger.budgetExceededMs !== null) {
       throw new Error(`layout probe exceeded ${cfg.budgetMs}ms at ${vp.width}x${vp.height}`);
     }
@@ -281,7 +294,7 @@ export function formatReports(
     const l = r.ledger;
     lines.push(
       `  ledger  unprobeable=${l.unprobeable}  unsettled=${l.statesUnsettled.length}  ` +
-        `skipped=${l.statesSkipped.length}  timersDropped=${l.timersDropped}`,
+        `skipped=${l.statesSkipped.length}  timersDeferred=${l.timersDeferred}`,
     );
     if (r.docOverflow > 0) lines.push(`  docOverflow  ${r.docOverflow}px wider than the viewport`);
   }
@@ -348,7 +361,7 @@ export interface FreshFinding {
 }
 
 /**
- * Splits a route's findings: `fresh` gates, `matched` is quarantined, and `stale` (a quarantined
+ * Splits a route's findings (`route` is the AuditRoute name): `fresh` gates, `matched` is quarantined, and `stale` (a quarantined
  * key that no longer fires) gates too so the file cannot quietly grow. Matching is exact.
  */
 export function partitionFindings(

@@ -4,8 +4,11 @@ import { API_URL } from '../fixtures/base-url';
 import { getEventsTestData } from '../fixtures/events';
 import { getTournamentByKey } from './tournament';
 
-/** Routes swept by the page-wide audits (overflow, hydration, layout). */
-export type AuditRoute = { path: string };
+/**
+ * Routes swept by the page-wide audits (overflow, hydration, layout). `name` is the route
+ * pattern: stable across reseeds, unlike `path`, which carries database ids.
+ */
+export type AuditRoute = { name: string; path: string };
 
 // Tests are generated before the routes resolve, so the count is fixed up front.
 // resolveAuditRoutes throws if it drifts.
@@ -27,18 +30,18 @@ export async function resolveAuditRoutes(browser: Browser): Promise<AuditRoute[]
       throw new Error("Repeater 'Weekly Inhouse' not found. Run `just db::populate::all`.");
     }
     const routes: AuditRoute[] = [
-      { path: '/' },
-      { path: '/events' },
-      { path: `/events/${events.pk}` },
-      { path: '/tournaments' },
-      { path: `/tournament/${tournament.pk}/players` },
-      { path: `/organizations/${events.orgPk}` },
-      { path: '/leagues' },
-      { path: '/user/1003' },
-      { path: '/leagues/1' },
-      { path: `/tournament/${tournament.pk}/bracket` },
-      { path: `/events/${events.pk}/discord` },
-      { path: `/event-series/${series.id}` },
+      { name: '/', path: '/' },
+      { name: '/events', path: '/events' },
+      { name: '/events/:eventId', path: `/events/${events.pk}` },
+      { name: '/tournaments', path: '/tournaments' },
+      { name: '/tournament/:pk/players', path: `/tournament/${tournament.pk}/players` },
+      { name: '/organizations/:organizationId', path: `/organizations/${events.orgPk}` },
+      { name: '/leagues', path: '/leagues' },
+      { name: '/user/:pk', path: '/user/1003' },
+      { name: '/leagues/:leagueId', path: '/leagues/1' },
+      { name: '/tournament/:pk/bracket', path: `/tournament/${tournament.pk}/bracket` },
+      { name: '/events/:eventId/discord', path: `/events/${events.pk}/discord` },
+      { name: '/event-series/:repeaterId', path: `/event-series/${series.id}` },
     ];
     if (routes.length !== AUDIT_ROUTE_COUNT) {
       throw new Error(`AUDIT_ROUTE_COUNT is ${AUDIT_ROUTE_COUNT} but ${routes.length} routes resolved`);

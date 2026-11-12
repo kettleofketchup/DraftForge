@@ -60,7 +60,7 @@ interface LayoutLedger {
   unprobeable: number;
   budgetExceededMs: number | null;
   navbarHeightPx: number;
-  timersDropped: number;
+  timersDeferred: number;
 }
 
 interface LayoutReport {
@@ -80,13 +80,15 @@ interface ProbeConfig {
   budgetMs: number;
   settleCapMs: number;
   stabilityMs: number;
+  /** Minimum quiet time before the base measure; set after a viewport change. */
+  baseQuietMs: number;
   states: Array<'scroll'>;
   debugKeys: boolean;
 }
 
 /**
- * Measures one viewport across every requested state. All waits are rAF-driven because
- * prepareLayoutProbe drops timers >= 250ms.
+ * Measures one viewport across every requested state. Slow timers are deferred while a state
+ * is measured, so the probe's own waits are rAF-driven.
  */
 export async function layoutProbeMain(config: ProbeConfig): Promise<LayoutReport> {
   const t0 = performance.now();
@@ -159,9 +161,21 @@ export async function layoutProbeMain(config: ProbeConfig): Promise<LayoutReport
 
   // `key` is text-free so the stability window and the quarantine survive seed-data changes;
   // `label` carries text for humans.
+  /** A testid or a hand-written id; React/Radix generated ids (`:r1:`, `radix-…`) change per render. */
+  const anchorName = (el: Element): string | null => {
+    const testid = el.getAttribute('data-testid');
+    if (testid) return `@${testid}`;
+    const id = el.id;
+    if (id && !id.includes(':') && !id.startsWith('radix-')) return `#${id}`;
+    return null;
+  };
+
+  // Sibling indices up to the nearest named ancestor, so a conditional banner earlier in the
+  // page does not shift the key of everything after it.
   const domPath = (el: Element): string => {
     const parts: number[] = [];
     let cur: Element | null = el;
+    let anchor = '';
     while (cur && cur !== document.body && parts.length < 24) {
       const parent: Element | null = cur.parentElement;
       if (!parent) break;
@@ -173,9 +187,14 @@ export async function layoutProbeMain(config: ProbeConfig): Promise<LayoutReport
         }
       }
       parts.push(i);
+      const named = parent === document.body ? null : anchorName(parent);
+      if (named) {
+        anchor = named;
+        break;
+      }
       cur = parent;
     }
-    return parts.reverse().join('.');
+    return `${anchor}/${parts.reverse().join('.')}`;
   };
 
   const key = (el: Element): string => {
@@ -208,7 +227,7 @@ export async function layoutProbeMain(config: ProbeConfig): Promise<LayoutReport
     unprobeable: 0,
     budgetExceededMs: null,
     navbarHeightPx,
-    timersDropped: 0,
+    timersDeferred: 0,
   };
 
   const geometryHash = (): number => {
@@ -222,39 +241,52 @@ export async function layoutProbeMain(config: ProbeConfig): Promise<LayoutReport
     return h >>> 0;
   };
 
-  const onScreen = (el: Element): boolean => {
+  // In the viewport, not merely sized: a below-the-fold `loading="lazy"` image never loads, and
+  // counting it would mark every state busy.
+  const inViewport = (el: Element): boolean => {
     const r = el.getBoundingClientRect();
-    return r.width > 0 && r.height > 0;
+    return r.width > 0 && r.height > 0 && r.bottom > 0 && r.right > 0 &&
+      r.top < window.innerHeight && r.left < window.innerWidth;
   };
 
   const isBusy = (): boolean => {
     const pending = document.querySelectorAll('[aria-busy="true"],[data-slot="skeleton"]');
     for (let i = 0; i < pending.length; i += 1) {
-      if (onScreen(pending[i])) return true;
+      if (inViewport(pending[i])) return true;
     }
     const imgs = document.images;
     for (let i = 0; i < imgs.length; i += 1) {
       const img = imgs[i];
-      if (img.getAttribute('src') && !img.complete && onScreen(img)) return true;
+      if (img.getAttribute('src') && !img.complete && inViewport(img)) return true;
     }
     return false;
   };
 
   // Three identical geometry samples, not two: one lull between renders is a single equal pair.
-  const settle = (capMs: number): Promise<'stable' | 'capped' | 'busy'> =>
+  // `quietMs` additionally holds out for that long since the last change, which is what lets a
+  // debounced resize handler land after a viewport change.
+  const settle = (capMs: number, quietMs: number): Promise<'stable' | 'capped' | 'busy'> =>
     new Promise((resolve) => {
       const start = performance.now();
+      const cap = Math.max(capMs, quietMs + capMs);
       let prev = geometryHash();
+      let changedAt = start;
       let held = 0;
       const tick = (): void => {
+        const now = performance.now();
         const next = geometryHash();
         const busy = isBusy();
-        held = next === prev ? held + 1 : 0;
-        if (held >= 2 && !busy) {
+        if (next === prev) {
+          held += 1;
+        } else {
+          held = 0;
+          changedAt = now;
+        }
+        if (held >= 2 && now - changedAt >= quietMs && !busy) {
           resolve('stable');
           return;
         }
-        if (performance.now() - start >= capMs) {
+        if (now - start >= cap) {
           resolve(busy ? 'busy' : 'capped');
           return;
         }
@@ -317,7 +349,10 @@ export async function layoutProbeMain(config: ProbeConfig): Promise<LayoutReport
         const child = node.children[i];
         if (child.matches(IGNORE)) continue;
         const cs = getComputedStyle(child);
-        if (cs.display === 'none' || cs.visibility === 'hidden' || cs.opacity === '0') continue;
+        if (cs.display === 'none' || cs.opacity === '0') continue;
+        // visibility:hidden does not paint, but a descendant set back to visible does, so the
+        // subtree is still walked; each child checks its own visibility.
+        const painted = cs.visibility !== 'hidden';
 
         const pos = cs.position;
         const own = pos === 'fixed' ? ctx.fix : pos === 'absolute' ? ctx.abs : ctx.stat;
@@ -330,7 +365,7 @@ export async function layoutProbeMain(config: ProbeConfig): Promise<LayoutReport
         const tag = child.tagName.toLowerCase();
         const isSvg = tag === 'svg';
         const r = child.getBoundingClientRect();
-        const bigEnough = r.width >= 2 && r.height >= 2;
+        const bigEnough = painted && r.width >= 2 && r.height >= 2;
 
         // An <svg> is one object: lucide's `X` is two crossing <path>s that would otherwise
         // collide with each other at exactly minOverlapArea.
@@ -382,7 +417,9 @@ export async function layoutProbeMain(config: ProbeConfig): Promise<LayoutReport
     }
     boxes.sort((p, q) => p.top - q.top);
 
-    const hits: Collision[] = [];
+    // One entry per element pair: a wrapped inline overlapping a neighbour on two lines is one
+    // defect, reported with its largest overlap.
+    const byPair = new Map<string, Collision>();
     for (let i = 0; i < boxes.length; i += 1) {
       const a = boxes[i];
       for (let j = i + 1; j < boxes.length; j += 1) {
@@ -395,10 +432,18 @@ export async function layoutProbeMain(config: ProbeConfig): Promise<LayoutReport
         if (w <= 0 || h <= 0) continue;
         const px = Math.round(w * h);
         if (px < config.minOverlapArea) continue;
-        hits.push({ a: label(a.el), b: label(b.el), keyA: key(a.el), keyB: key(b.el), area: px });
+        // Document order, so the pair's key does not depend on which line box sorted first.
+        const [first, second] =
+          a.el.compareDocumentPosition(b.el) & Node.DOCUMENT_POSITION_FOLLOWING ? [a.el, b.el] : [b.el, a.el];
+        const keyA = key(first);
+        const keyB = key(second);
+        const pairKey = `${keyA} ${keyB}`;
+        const prior = byPair.get(pairKey);
+        if (prior && prior.area >= px) continue;
+        byPair.set(pairKey, { a: label(first), b: label(second), keyA, keyB, area: px });
       }
     }
-    return { hits, keys };
+    return { hits: Array.from(byPair.values()), keys };
   };
 
   // Clip escapes. Geometry alone proves nothing (a scrolled-out box is outside its clip rect
@@ -553,9 +598,22 @@ export async function layoutProbeMain(config: ProbeConfig): Promise<LayoutReport
     return true;
   };
 
+  const timerGate = window as unknown as { __layoutFreeze?: () => void; __layoutThaw?: () => void };
+
   const runState = async (state: string): Promise<void> => {
+    try {
+      await runStateFrozen(state);
+    } finally {
+      // Timers deferred during the measure fire now; the next state settles after them.
+      timerGate.__layoutThaw?.();
+    }
+  };
+
+  const runStateFrozen = async (state: string): Promise<void> => {
     const started = performance.now();
-    const settled = await settle(config.settleCapMs);
+    // Timers run while settling, so debounced handlers and query retries land first.
+    const settled = await settle(config.settleCapMs, state === 'base' ? config.baseQuietMs : 0);
+    timerGate.__layoutFreeze?.();
     let candidates = 0;
     let escapeCandidates = 0;
     let restabilised = false;
@@ -607,6 +665,18 @@ export async function layoutProbeMain(config: ProbeConfig): Promise<LayoutReport
     });
   };
 
+  /** Own name, else nearest named ancestor plus the element's data-slot or tag. */
+  const scrollerLabel = (el: Element): string => {
+    const own = anchorName(el);
+    if (own) return own.slice(1);
+    const kind = el.getAttribute('data-slot') ?? el.tagName.toLowerCase();
+    for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
+      const named = anchorName(p);
+      if (named) return `${named.slice(1)}>${kind}`;
+    }
+    return kind;
+  };
+
   const scrollWalk = async (): Promise<void> => {
     interface Scroller {
       el: Element;
@@ -625,13 +695,15 @@ export async function layoutProbeMain(config: ProbeConfig): Promise<LayoutReport
       const maxY = (cs.overflowY === 'auto' || cs.overflowY === 'scroll') ? el.scrollHeight - el.clientHeight : 0;
       const maxX = (cs.overflowX === 'auto' || cs.overflowX === 'scroll') ? el.scrollWidth - el.clientWidth : 0;
       if (maxY <= 8 && maxX <= 8) continue;
-      found.push({
-        el,
-        extent: Math.max(maxY, maxX),
-        maxY,
-        maxX,
-        label: el.getAttribute('data-testid') || el.id || el.getAttribute('data-slot') || key(el),
-      });
+      found.push({ el, extent: Math.max(maxY, maxX), maxY, maxX, label: scrollerLabel(el) });
+    }
+    // Two unnamed ScrollArea viewports under one anchor would otherwise share a state name,
+    // and a quarantine row for one would cover the other. Suffixes follow document order.
+    const seenLabels = new Map<string, number>();
+    for (const sc of found) {
+      const n = (seenLabels.get(sc.label) ?? 0) + 1;
+      seenLabels.set(sc.label, n);
+      if (n > 1) sc.label = `${sc.label}~${n}`;
     }
     ledger.scrollContainers = found.length;
     // Deepest range first: maxScrollContainers is a budget, not a sample.
@@ -666,8 +738,8 @@ export async function layoutProbeMain(config: ProbeConfig): Promise<LayoutReport
   await runState('base');
   if (config.states.indexOf('scroll') !== -1) await scrollWalk();
 
-  const globals = window as unknown as { __layoutDropped?: number };
-  ledger.timersDropped = globals.__layoutDropped ?? 0;
+  const globals = window as unknown as { __layoutDeferred?: number };
+  ledger.timersDeferred = globals.__layoutDeferred ?? 0;
 
   const report: LayoutReport = {
     viewport: { width: window.innerWidth, height: window.innerHeight },
