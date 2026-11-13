@@ -52,6 +52,8 @@ export const LeagueMinimalSchema = z.object({
   pk: z.number(),
   name: z.string(),
   organization_name: z.string().nullable(),
+  organization_id: z.number().nullable().optional(),
+  organization_logo: z.string().nullable().optional(),
 });
 
 export const SourceEventSchema = z.object({
@@ -101,6 +103,13 @@ export const TournamentSchema = z.object({
   // Read-only lobby context (edited through the event settings)
   game_mode: z.string().nullable().optional(),
   lobby_steam_league_id: z.number().nullable().optional(),
+});
+
+export const PaginatedTournamentsSchema = z.object({
+  count: z.number(),
+  next: z.string().nullable(),
+  previous: z.string().nullable(),
+  results: z.array(TournamentSchema),
 });
 
 // Schema for creating a new tournament
