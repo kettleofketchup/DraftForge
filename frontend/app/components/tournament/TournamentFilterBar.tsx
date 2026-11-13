@@ -137,7 +137,6 @@ export function TournamentFilterBar({
           >
             <SelectValue
               id={orgValueId}
-              className="truncate"
               placeholder={orgsLoading ? 'Loading organizations…' : 'Unknown organization'}
             />
           </BrandSelectTrigger>
@@ -168,7 +167,6 @@ export function TournamentFilterBar({
           >
             <SelectValue
               id={leagueValueId}
-              className="truncate"
               placeholder={leaguesLoading ? 'Loading leagues…' : 'Unknown league'}
             />
           </BrandSelectTrigger>
