@@ -43,8 +43,7 @@ def populate_auth_matrix_data(force=False):
 
     # 1. Org. Pin the pk explicitly so the matrix spec's
     # AUTH_MATRIX_ORG_PK = 8 survives anyone reordering populate steps
-    # above this one — previously the pk landed by autoincrement
-    # side-effect, which was fragile.
+    # above this one.
     org, created = Organization.objects.update_or_create(
         name=AUTH_MATRIX_ORG.name,
         defaults={
@@ -72,7 +71,9 @@ def populate_auth_matrix_data(force=False):
     if league.organization != org:
         league.organization = org
         league.save()
-    print(f"  {'Created' if created else 'Updated'} league: {league.name} (pk={league.pk})")
+    print(
+        f"  {'Created' if created else 'Updated'} league: {league.name} (pk={league.pk})"
+    )
 
     if org.default_league != league:
         org.default_league = league
@@ -85,8 +86,12 @@ def populate_auth_matrix_data(force=False):
     org_admin = CustomUser.objects.filter(pk=AUTH_MATRIX_ORG_ADMIN_USER.pk).first()
     org_staff = CustomUser.objects.filter(pk=AUTH_MATRIX_ORG_STAFF_USER.pk).first()
     org_member = CustomUser.objects.filter(pk=AUTH_MATRIX_ORG_MEMBER_USER.pk).first()
-    league_admin = CustomUser.objects.filter(pk=AUTH_MATRIX_LEAGUE_ADMIN_USER.pk).first()
-    league_staff = CustomUser.objects.filter(pk=AUTH_MATRIX_LEAGUE_STAFF_USER.pk).first()
+    league_admin = CustomUser.objects.filter(
+        pk=AUTH_MATRIX_LEAGUE_ADMIN_USER.pk
+    ).first()
+    league_staff = CustomUser.objects.filter(
+        pk=AUTH_MATRIX_LEAGUE_STAFF_USER.pk
+    ).first()
 
     # Owner is the Organization.owner FK — NOT added to admins, so the
     # matrix can verify the owner-implies-admin cascade independently.

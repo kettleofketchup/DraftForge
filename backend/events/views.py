@@ -761,7 +761,8 @@ class EventViewSet(viewsets.ModelViewSet):
             return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
         return Response(
-            EventSignupSerializer(signup).data, status=status.HTTP_201_CREATED
+            EventSignupSerializer(signup, context={"request": request}).data,
+            status=status.HTTP_201_CREATED,
         )
 
     @action(detail=True, methods=["post"], url_path="admin-signup")
@@ -788,7 +789,8 @@ class EventViewSet(viewsets.ModelViewSet):
         try:
             signup = staff_add_signup(event, user)
             return Response(
-                EventSignupSerializer(signup).data, status=status.HTTP_201_CREATED
+                EventSignupSerializer(signup, context={"request": request}).data,
+                status=status.HTTP_201_CREATED,
             )
         except ValueError as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
@@ -1030,7 +1032,9 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
                 details={"mmr": mmr_override, "event_id": signup.event.pk},
             )
 
-        return Response(EventSignupSerializer(result).data)
+        return Response(
+            EventSignupSerializer(result, context={"request": request}).data
+        )
 
     @action(detail=True, methods=["post"])
     def reject(self, request, pk=None):
@@ -1038,7 +1042,11 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
         if not has_event_staff_access(request.user, signup.event):
             return Response(status=status.HTTP_403_FORBIDDEN)
         try:
-            return Response(EventSignupSerializer(reject_signup(signup)).data)
+            return Response(
+                EventSignupSerializer(
+                    reject_signup(signup), context={"request": request}
+                ).data
+            )
         except ValueError as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -1048,7 +1056,11 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
         if not has_event_staff_access(request.user, signup.event):
             return Response(status=status.HTTP_403_FORBIDDEN)
         try:
-            return Response(EventSignupSerializer(confirm_signup(signup)).data)
+            return Response(
+                EventSignupSerializer(
+                    confirm_signup(signup), context={"request": request}
+                ).data
+            )
         except ValueError as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -1060,7 +1072,11 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
         ):
             return Response(status=status.HTTP_403_FORBIDDEN)
         try:
-            return Response(EventSignupSerializer(cancel_signup(signup)).data)
+            return Response(
+                EventSignupSerializer(
+                    cancel_signup(signup), context={"request": request}
+                ).data
+            )
         except ValueError as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -1071,7 +1087,11 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
         if not has_event_staff_access(request.user, signup.event):
             return Response(status=status.HTTP_403_FORBIDDEN)
         try:
-            return Response(EventSignupSerializer(unconfirm_signup(signup)).data)
+            return Response(
+                EventSignupSerializer(
+                    unconfirm_signup(signup), context={"request": request}
+                ).data
+            )
         except ValueError as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -1082,7 +1102,11 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
         if not has_event_staff_access(request.user, signup.event):
             return Response(status=status.HTTP_403_FORBIDDEN)
         try:
-            return Response(EventSignupSerializer(demote_to_waitlist(signup)).data)
+            return Response(
+                EventSignupSerializer(
+                    demote_to_waitlist(signup), context={"request": request}
+                ).data
+            )
         except ValueError as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -1095,7 +1119,11 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
         ):
             return Response(status=status.HTTP_403_FORBIDDEN)
         try:
-            return Response(EventSignupSerializer(reinstate_signup(signup)).data)
+            return Response(
+                EventSignupSerializer(
+                    reinstate_signup(signup), context={"request": request}
+                ).data
+            )
         except ValueError as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 

@@ -11,6 +11,9 @@ import type { LeagueType } from '~/components/league/schemas';
 import { getLogger } from '~/lib/logger';
 import { useUserCacheStore } from '~/store/userCacheStore';
 
+// Bumped per request and on clear so a superseded response is dropped.
+let leagueUsersRequest = 0;
+
 const log = getLogger('leagueStore');
 
 interface LeagueState {
@@ -63,7 +66,8 @@ export const useLeagueStore = create<LeagueState>((set, get) => ({
     }
   },
 
-  reset: () =>
+  reset: () => {
+    leagueUsersRequest++;
     set({
       currentLeague: null,
       currentLeagueLoading: false,
@@ -71,7 +75,8 @@ export const useLeagueStore = create<LeagueState>((set, get) => ({
       leagueUsersLoading: false,
       leagueUsersLeagueId: null,
       leagueUsersError: null,
-    }),
+    });
+  },
 
   getLeagueUsers: async (leagueId: number) => {
     // Skip if already loaded for this league
@@ -80,10 +85,14 @@ export const useLeagueStore = create<LeagueState>((set, get) => ({
       return;
     }
 
+    if (get().leagueUsersLoading && get().leagueUsersLeagueId === leagueId) return;
+
+    const request = ++leagueUsersRequest;
     set({ leagueUsersLoading: true, leagueUsersError: null, leagueUsersLeagueId: leagueId, leagueUserPks: [] });
 
     try {
       const users = await getLeagueUsers(leagueId);
+      if (request !== leagueUsersRequest) return;
       useUserCacheStore.getState().upsert(users, { leagueId });
       set({
         leagueUserPks: users.filter((u) => u.pk != null).map((u) => u.pk!),
@@ -91,6 +100,7 @@ export const useLeagueStore = create<LeagueState>((set, get) => ({
       });
       log.debug('LeagueUsers fetched successfully:', users.length, 'users');
     } catch (error) {
+      if (request !== leagueUsersRequest) return;
       log.error('Error fetching league users:', error);
       set({
         leagueUsersError:
@@ -101,8 +111,10 @@ export const useLeagueStore = create<LeagueState>((set, get) => ({
     }
   },
 
-  clearLeagueUsers: () =>
-    set({ leagueUserPks: [], leagueUsersLeagueId: null, leagueUsersError: null }),
+  clearLeagueUsers: () => {
+    leagueUsersRequest++;
+    set({ leagueUserPks: [], leagueUsersLeagueId: null, leagueUsersError: null, leagueUsersLoading: false });
+  },
 }));
 
 // Selectors

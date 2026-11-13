@@ -140,6 +140,8 @@ export const FormDialog = React.forwardRef<HTMLDivElement, FormDialogProps>(
       (e: React.KeyboardEvent<HTMLDivElement>) => {
         if (e.key !== 'Enter' || e.shiftKey || e.metaKey || e.ctrlKey || e.altKey) return;
         const target = e.target as HTMLElement | null;
+        // React bubbles keys from portaled children (e.g. a nested confirm dialog) here too.
+        if (!target || !e.currentTarget.contains(target)) return;
         const tag = target?.tagName;
         if (tag === 'TEXTAREA' || tag === 'BUTTON' || target?.isContentEditable) return;
         const role = target?.getAttribute('role');

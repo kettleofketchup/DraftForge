@@ -98,6 +98,32 @@ test.describe.serial('Edit league + event fields @cicd', () => {
     ).toBeVisible();
   });
 
+  test('delete league button opens the confirm dialog without submitting the edit form', async ({
+    page,
+    context,
+  }) => {
+    const eventInfo = await getEventsTestData(context);
+    await loginAdmin(context);
+
+    await visitAndWaitForHydration(page, `/leagues/${eventInfo.eventsLeaguePk}`);
+    await expect(page.getByTestId('edit-league-button')).toBeVisible({ timeout: 15000 });
+    await page.getByTestId('edit-league-button').click();
+
+    const patches: string[] = [];
+    page.on('request', (req) => {
+      if (req.method() === 'PATCH' && req.url().includes('/api/leagues/')) patches.push(req.url());
+    });
+
+    await page.getByTestId('open-delete-league-dialog').click();
+
+    await expect(page.getByTestId('delete-league-dialog')).toBeVisible();
+    await expect(page.getByTestId('edit-league-modal')).toBeVisible();
+    expect(patches).toEqual([]);
+
+    await page.getByTestId('delete-league-cancel').click();
+    await expect(page.getByTestId('delete-league-dialog')).not.toBeVisible();
+  });
+
   test('edit league steam_league_id collision', async ({ page, context }) => {
     const eventInfo = await getEventsTestData(context);
     await loginAdmin(context);

@@ -11,6 +11,9 @@ import type { OrganizationType } from '~/components/organization/schemas';
 import { getLogger } from '~/lib/logger';
 import { useUserCacheStore } from '~/store/userCacheStore';
 
+// Bumped per request and on clear so a superseded response is dropped.
+let orgUsersRequest = 0;
+
 const log = getLogger('orgStore');
 
 interface OrgState {
@@ -63,7 +66,8 @@ export const useOrgStore = create<OrgState>((set, get) => ({
     }
   },
 
-  reset: () =>
+  reset: () => {
+    orgUsersRequest++;
     set({
       currentOrg: null,
       currentOrgLoading: false,
@@ -71,7 +75,8 @@ export const useOrgStore = create<OrgState>((set, get) => ({
       orgUsersLoading: false,
       orgUsersOrgId: null,
       orgUsersError: null,
-    }),
+    });
+  },
 
   getOrgUsers: async (orgId: number) => {
     // Skip if already loaded for this org
@@ -80,10 +85,14 @@ export const useOrgStore = create<OrgState>((set, get) => ({
       return;
     }
 
+    if (get().orgUsersLoading && get().orgUsersOrgId === orgId) return;
+
+    const request = ++orgUsersRequest;
     set({ orgUsersLoading: true, orgUsersError: null, orgUsersOrgId: orgId, orgUserPks: [] });
 
     try {
       const users = await getOrganizationUsers(orgId);
+      if (request !== orgUsersRequest) return;
       useUserCacheStore.getState().upsert(users, { orgId });
       set({
         orgUserPks: users.filter((u) => u.pk != null).map((u) => u.pk!),
@@ -91,6 +100,7 @@ export const useOrgStore = create<OrgState>((set, get) => ({
       });
       log.debug('OrgUsers fetched successfully:', users.length, 'users');
     } catch (error) {
+      if (request !== orgUsersRequest) return;
       log.error('Error fetching org users:', error);
       set({
         orgUsersError:
@@ -101,8 +111,10 @@ export const useOrgStore = create<OrgState>((set, get) => ({
     }
   },
 
-  clearOrgUsers: () =>
-    set({ orgUserPks: [], orgUsersOrgId: null, orgUsersError: null }),
+  clearOrgUsers: () => {
+    orgUsersRequest++;
+    set({ orgUserPks: [], orgUsersOrgId: null, orgUsersError: null, orgUsersLoading: false });
+  },
 }));
 
 // Selectors

@@ -48,6 +48,8 @@ import { useLeague, LeagueTabs, EditLeagueModal } from '~/components/league';
 import { useUserStore } from '~/store/userStore';
 import { useOrgStore } from '~/store/orgStore';
 import { useLeagueStore } from '~/store/leagueStore';
+import { useUserCacheStore } from '~/store/userCacheStore';
+import { useMemberAccess } from '~/hooks/useMemberAccess';
 import { useIsLeagueAdmin } from '~/hooks/usePermissions';
 import { usePageNav } from '~/hooks/usePageNav';
 import { EntityBreadcrumb, type BreadcrumbSegment } from '~/components/ui/entity-breadcrumb';
@@ -58,7 +60,6 @@ export default function LeaguePage() {
   const pk = leagueId ? parseInt(leagueId, 10) : undefined;
 
   const { league, isLoading, error, refetch } = useLeague(pk);
-  const currentUser = useUserStore((state) => state.currentUser);
   const tournaments = useUserStore((state) => state.tournaments);
   const getTournaments = useUserStore((state) => state.getTournaments);
 
@@ -97,6 +98,22 @@ export default function LeaguePage() {
       useLeagueStore.getState().setCurrentLeague(null);
     };
   }, [league]);
+
+  const onMemberViewerChange = useCallback(() => {
+    useLeagueStore.getState().clearLeagueUsers();
+    if (pk) useUserCacheStore.getState().dropScoped({ leagueId: pk });
+    refetch({ silent: true });
+  }, [pk, refetch]);
+  const { canView: canViewMembers, settled: memberAccessSettled } = useMemberAccess(
+    league,
+    onMemberViewerChange,
+  );
+
+  useEffect(() => {
+    if (memberAccessSettled && !canViewMembers && activeTab === 'users') {
+      setActiveTab('info');
+    }
+  }, [memberAccessSettled, canViewMembers, activeTab]);
 
   const handleTabChange = useCallback((newTab: string) => {
     setActiveTab(newTab);
@@ -145,9 +162,9 @@ export default function LeaguePage() {
   const pageNavOptions = useMemo(() => [
     { value: 'info', label: 'Info' },
     { value: 'tournaments', label: `${leagueTournaments.length} Tourneys` },
-    { value: 'users', label: `${userCountDisplay} Users` },
+    ...(canViewMembers ? [{ value: 'users', label: `${userCountDisplay} Users` }] : []),
     { value: 'matches', label: 'Matches' },
-  ], [leagueTournaments.length, userCountDisplay]);
+  ], [leagueTournaments.length, userCountDisplay, canViewMembers]);
 
   usePageNav(league ? pageNavOptions : null, activeTab, handleTabChange);
 
@@ -212,6 +229,8 @@ export default function LeaguePage() {
           tournaments={leagueTournaments}
           activeTab={activeTab}
           onTabChange={handleTabChange}
+          canViewMembers={canViewMembers}
+          memberAccessSettled={memberAccessSettled}
         />
       </div>
 
