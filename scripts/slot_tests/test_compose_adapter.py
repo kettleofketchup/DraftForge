@@ -71,7 +71,7 @@ def test_playwright_env_local_slot(
     monkeypatch.setenv("DF_SLOT", "3")
     slots.ensure_slot()
     assert playwright_env() == {
-        "DF_BASE_URL": "https://localhost:13443",
+        "DF_BASE_URL": "https://s3.localhost:13443",
         "DF_BASE_URL_SOURCE": "runner",
     }
 
@@ -103,7 +103,7 @@ def test_env_cli_prints_shell_quoted_exports(
     slots.ensure_slot()
     assert main(["env"]) == 0
     assert capsys.readouterr().out.splitlines() == [
-        "export DF_BASE_URL=https://localhost:13443",
+        "export DF_BASE_URL=https://s3.localhost:13443",
         "export DF_BASE_URL_SOURCE=runner",
     ]
 

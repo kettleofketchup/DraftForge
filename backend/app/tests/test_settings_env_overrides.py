@@ -115,7 +115,7 @@ class SettingsEnvOverrideTests(SimpleTestCase):
         self.assertEqual(mod.CELERY_RESULT_BACKEND, f"redis://{mod.REDIS_HOST}:6379/1")
         expected_hosts = list(DEFAULT_ALLOWED_HOSTS)
         if mod.TEST or mod.DEBUG:
-            expected_hosts += [".ngrok-free.dev", ".ngrok.io"]
+            expected_hosts += [".ngrok-free.dev", ".ngrok.io", ".localhost"]
         self.assertEqual(mod.ALLOWED_HOSTS, expected_hosts)
         self.assertEqual(mod.CSRF_TRUSTED_ORIGINS, DEFAULT_CSRF_TRUSTED_ORIGINS)
         self.assertFalse(hasattr(mod, "SECURE_PROXY_SSL_HEADER"))

@@ -26,7 +26,7 @@ RECORDER = """#!/usr/bin/env bash
     printf '\\036'
 }} >> {log}
 if [[ "${{1-}} ${{2-}} ${{3-}}" == "-m scripts.compose env" ]]; then
-    echo "export DF_BASE_URL='https://localhost:13443'"
+    echo "export DF_BASE_URL='https://s3.localhost:13443'"
     echo "export DF_BASE_URL_SOURCE=runner"
 fi
 if [[ " $* " == *" compose --stack dev ps backend "* ]]; then
@@ -309,7 +309,7 @@ def test_playwright_runs_in_frontend_with_the_slot_url(run: Runner) -> None:
     assert env_call.argv == ["-m", "scripts.compose", "env"]
     assert flush_call.argv == ["-m", "scripts.compose", "flush-redis"]
     assert npx.tool == "npx" and npx.cwd == ROOT / "frontend"
-    assert npx.base_url == "https://localhost:13443"
+    assert npx.base_url == "https://s3.localhost:13443"
     assert npx.argv == ["playwright", "test", "--grep", "@cicd", "--project=chromium", "--no-deps", "--shard=1/4"]
 
 

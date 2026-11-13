@@ -40,7 +40,7 @@ def test_slot_n_values(tmp_path: Path, n: int, port: int) -> None:
         e.http_port,
         e.base_url,
         e.background,
-    ) == (f"df-s{n}", f"-s{n}", port, None, f"https://localhost:{port}", False)
+    ) == (f"df-s{n}", f"-s{n}", port, None, f"https://s{n}.localhost:{port}", False)
 
 
 @pytest.mark.parametrize("n", [-1, 10])

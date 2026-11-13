@@ -26,7 +26,7 @@ export default defineConfig({
     },
   },
   server: {
-    allowedHosts: ['localhost', 'dota.kettle.sh', 'nginx'],
+    allowedHosts: ['.localhost', 'dota.kettle.sh', 'nginx'],
     // Don't watch Playwright artifact directories — they churn during
     // test runs (HTML reports, traces, screenshots, videos) and Vite's
     // file watcher fires HMR page-reloads on every write, invalidating
@@ -43,9 +43,9 @@ export default defineConfig({
       ],
     },
     // HMR goes through nginx on the stack's published HTTPS port, not Vite's 3000.
+    // No host: the client uses the page's hostname (localhost, sN.localhost, nginx).
     hmr: {
       protocol: 'wss',
-      host: 'localhost',
       clientPort: Number(process.env.DF_HTTPS_PORT || 443),
       path: '/__vite_hmr',
     },

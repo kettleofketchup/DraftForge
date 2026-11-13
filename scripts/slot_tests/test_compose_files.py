@@ -9,7 +9,7 @@ from scripts.slot_tests._helpers import ROOT, render, render_raw
 SLOT3 = {
     "DF_SUFFIX": "-s3",
     "DF_HTTPS_PORT": "13443",
-    "DF_BASE_URL": "https://localhost:13443",
+    "DF_BASE_URL": "https://s3.localhost:13443",
 }
 
 
@@ -27,11 +27,11 @@ def test_slot_render() -> None:
     ]
     assert s["frontend"]["environment"]["DF_HTTPS_PORT"] == "13443"
     for svc in ["backend", "celery-worker", "celery-beat", "discord-bot"]:
-        assert s[svc]["environment"]["SITE_URL"] == "https://localhost:13443"
+        assert s[svc]["environment"]["SITE_URL"] == "https://s3.localhost:13443"
     assert s["backend"]["environment"]["OTEL_SERVICE_NAME"] == "backend"
     assert (
         s["backend"]["environment"]["DF_EXTRA_CSRF_ORIGINS"]
-        == "https://localhost:13443"
+        == "https://s3.localhost:13443"
     )
     assert s["backend"]["environment"]["DF_SESSION_COOKIE_NAME"] == "sessionid-s3"
     assert s["backend"]["environment"]["DF_CSRF_COOKIE_NAME"] == "csrftoken-s3"

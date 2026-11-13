@@ -114,7 +114,7 @@ def test_compose_env_overrides_stale_project(monkeypatch: pytest.MonkeyPatch) ->
     env = compose_env("test", slot_env_for(3, ROOTX, "t", REG))
     assert (env["COMPOSE_PROJECT_NAME"], env["DF_BASE_URL"]) == (
         "df-s3",
-        "https://localhost:13443",
+        "https://s3.localhost:13443",
     )
 
 

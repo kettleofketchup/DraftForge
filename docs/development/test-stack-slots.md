@@ -22,7 +22,8 @@ The dev stack is separate. It is always compose project `df-dev`, one per machin
 | Containers | `frontend`, `backend`, `redis`, `nginx`, `df-celery-*-1`, `df-discord-bot-1` | `frontend-sN`, `backend-sN`, `redis-sN`, `nginx-sN`, `df-sN-celery-*-1` |
 | HTTPS port | 443 | `10443 + N*1000` (11443, 12443, ... 19443) |
 | HTTP port | 80 | not published |
-| Base URL | `https://localhost` | `https://localhost:1N443` |
+| Hostname | `localhost` | `sN.localhost` |
+| Base URL | `https://localhost` | `https://sN.localhost:1N443` |
 | Discord bot + celery beat | on | off (`just test::background on` to enable) |
 | Discord/Steam tokens | real | blanked while background is off |
 | Redis data | volume `df_redis_data` | volume `df-sN_redis_data` |
@@ -30,6 +31,32 @@ The dev stack is separate. It is always compose project `df-dev`, one per machin
 There are 10 slots (0-9). Slot 0 is exactly the stack CI and older docs assume.
 Slots N ≥ 1 publish HTTPS only: nginx's HTTP→HTTPS redirect drops the port, so an HTTP
 port would send the browser to slot 0.
+
+### Hostnames
+
+Each slot N ≥ 1 has its own hostname as well as its own port, because browsers scope
+cookies by host and ignore the port. With one host per slot, each slot gets its own
+cookie jar (session, CSRF, `df-locale`, Django `messages`), the way production has one
+host per stack.
+
+- Chromium (Playwright's included), Firefox, curl, and glibc with `nss-myhostname` or
+  systemd-resolved resolve `*.localhost` to loopback, so `/etc/hosts` needs no entries.
+  Check with `getent hosts s1.localhost`.
+- Every slot keeps its own nginx on its own port. There is no shared listener that
+  routes by `Host`, so one slot's nginx cannot take the others down, and rootless podman
+  needs no privileged port beyond slot 0's 443.
+- nginx has a single server block, so it serves any `Host`. It forwards the hostname
+  without the port, so Django sees `sN.localhost`. Test and dev settings allow
+  `.localhost` in `ALLOWED_HOSTS`, and `DF_EXTRA_CSRF_ORIGINS` / `SITE_URL` are the
+  slot's base URL.
+- Vite allows `.localhost`, and the HMR client connects to the page's own hostname.
+- The self-signed cert in `nginx/data/ssl/` covers `localhost`, `*.localhost`,
+  `s1.localhost` through `s9.localhost` (listed one by one because some TLS clients
+  reject a wildcard directly under a TLD) and `nginx`.
+  `nginx/data/ssl/gen_cert.sh` regenerates it from `cert.key`. If your browser trusted
+  the old cert, trust the new one.
+- `https://localhost:1N443` still reaches slot N, but it shares slot 0's cookie jar.
+  Use the URL `just test::slot` prints.
 
 The dev stack (`df-dev`) uses containers `frontend-dev`, `backend-dev`, `redis-dev`,
 `nginx-dev`, `backend/.redis_data-dev`, and ports 80/443. It cannot run at the same
@@ -238,12 +265,10 @@ workflow files are unchanged.
 
 ## Known limitations
 
-- **One browser profile per slot.** Cookies ignore the port, so one browser logged into
-  two slots shares `sessionid` and `csrftoken`. Use a separate profile or a private
-  window per slot. Playwright contexts are isolated and unaffected.
-- **Real Discord OAuth login works on slot 0 only.** Nginx forwards `Host: localhost`
-  without the port, so the OAuth `redirect_uri` (and mail links built from the request)
-  point at `https://localhost`. On N ≥ 1, log in through the test-login endpoints.
+- **Real Discord OAuth login works on slot 0 only.** Nginx forwards `Host: sN.localhost`
+  without the port, and the Discord app registers only `https://localhost` redirect
+  URIs, so the OAuth `redirect_uri` (and mail links built from the request) do not
+  work on N ≥ 1. Log in through the test-login endpoints there.
 - **Dev images are shared.** `ghcr.io/kettleofketchup/draftforge/{backend-dev,frontend-dev,nginx}:latest`
   are the same for every slot. `just test::setup` rebuilds them, so a worktree that
   changes Python/npm dependencies or Dockerfiles affects other stacks the next time
@@ -273,6 +298,9 @@ workflow files are unchanged.
 
 - `DOCKER_HOST` no longer sets the Playwright host. Unset any `DF_BASE_URL` you exported
   by hand.
+- Slots N ≥ 1 moved from `https://localhost:1N443` to `https://sN.localhost:1N443`. The
+  next allocating verb (`just test::slot`, `test::upd`) rewrites `docker/.env.slot`;
+  until then Playwright keeps using the old URL, which still works.
 
 ## Auto-reap
 

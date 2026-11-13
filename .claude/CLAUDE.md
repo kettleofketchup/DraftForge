@@ -369,7 +369,7 @@ worktree allocates a **slot** (0-9) and writes `docker/.env.slot`:
 | Slot | Compose project | URL |
 |------|-----------------|-----|
 | 0 | `df` | `https://localhost` (ports 80/443) |
-| N ≥ 1 | `df-sN` | `https://localhost:1N443` (HTTPS only) |
+| N ≥ 1 | `df-sN` | `https://sN.localhost:1N443` (HTTPS only; own host, so own cookie jar) |
 
 The dev stack is separate (project `df-dev`, one per machine).
 

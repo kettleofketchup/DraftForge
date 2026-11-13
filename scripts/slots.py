@@ -120,7 +120,9 @@ def slot_env_for(
         project="df" if n == 0 else f"df-s{n}",
         https_port=https_port,
         http_port=80 if n == 0 else None,
-        base_url="https://localhost" if n == 0 else f"https://localhost:{https_port}",
+        base_url=(
+            "https://localhost" if n == 0 else f"https://s{n}.localhost:{https_port}"
+        ),
         background=(n == 0) if background is None else background,
         worktree=worktree.resolve(),
         token=token,

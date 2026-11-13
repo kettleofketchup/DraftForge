@@ -534,9 +534,9 @@ ALLOWED_HOSTS = [
     "backend",
 ]
 
-# Allow ngrok domains in test/dev for Discord interaction webhook verification
+# ngrok for Discord interaction webhooks; sN.localhost for test stack slots N >= 1.
 if TEST or DEBUG:
-    ALLOWED_HOSTS += [".ngrok-free.dev", ".ngrok.io"]
+    ALLOWED_HOSTS += [".ngrok-free.dev", ".ngrok.io", ".localhost"]
 
 # Extra hosts for deployments such as PR previews; local_settings still wins.
 ALLOWED_HOSTS += env_list("EXTRA_ALLOWED_HOSTS")

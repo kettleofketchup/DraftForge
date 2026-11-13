@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { NO_SLOT_MESSAGE, parseSlotFile, resolveBaseUrl } from '../playwright/fixtures/base-url-resolve';
 
 const slot = (o: Record<string, string> = {}) =>
-  Object.entries({ DF_SLOT: '2', DF_BASE_URL: 'https://localhost:12443', DF_WORKTREE: '/wt', DF_SLOT_TOKEN: 'tok', DF_REGISTRY: '/reg', ...o })
+  Object.entries({ DF_SLOT: '2', DF_BASE_URL: 'https://s2.localhost:12443', DF_WORKTREE: '/wt', DF_SLOT_TOKEN: 'tok', DF_REGISTRY: '/reg', ...o })
     .map(([k, v]) => `${k}=${v}`).join('\n');
 const RES = 'owner=/wt\ntoken=tok\nlast_used=1';
 const OK = { '/wt/docker/.env.slot': slot(), '/reg/slot-2': RES };
@@ -14,8 +14,8 @@ const input = (env: Record<string, string | undefined>, fsMap: Record<string, st
 
 describe('resolveBaseUrl', () => {
   it('env with marker=runner wins and never reads files', () => {
-    const i = input({ DF_BASE_URL: 'https://localhost:15443', DF_BASE_URL_SOURCE: 'runner' }, OK);
-    expect(resolveBaseUrl(i)).toBe('https://localhost:15443');
+    const i = input({ DF_BASE_URL: 'https://s5.localhost:15443', DF_BASE_URL_SOURCE: 'runner' }, OK);
+    expect(resolveBaseUrl(i)).toBe('https://s5.localhost:15443');
     expect(i.readFile).not.toHaveBeenCalled();
   });
   it('marker=container with a disagreeing slot file returns env without reading files', () => {
@@ -30,7 +30,7 @@ describe('resolveBaseUrl', () => {
     expect(i.readFile.mock.results[0].value).toBeNull();
   });
   it('slot file used when env unset', () => {
-    expect(resolveBaseUrl(input({}, OK))).toBe('https://localhost:12443');
+    expect(resolveBaseUrl(input({}, OK))).toBe('https://s2.localhost:12443');
   });
   it('GITHUB_ACTIONS fallback', () => {
     expect(resolveBaseUrl(input({ GITHUB_ACTIONS: 'true' }, {}))).toBe('https://localhost');
@@ -43,7 +43,7 @@ describe('resolveBaseUrl', () => {
     expect(() => resolveBaseUrl(i)).toThrow('`.env.slot` was written for /other');
   });
   it('repoRoot with trailing slash still matches', () => {
-    expect(resolveBaseUrl(input({}, OK, '/wt/'))).toBe('https://localhost:12443');
+    expect(resolveBaseUrl(input({}, OK, '/wt/'))).toBe('https://s2.localhost:12443');
   });
   it('registry token mismatch throws "now belongs to"', () => {
     const i = input({}, { '/wt/docker/.env.slot': slot(), '/reg/slot-2': 'owner=/other\ntoken=x\nlast_used=1' });
@@ -56,7 +56,7 @@ describe('resolveBaseUrl', () => {
     expect(() => resolveBaseUrl(input({ DF_BASE_URL: 'https://localhost' }, OK))).toThrow('disagrees');
   });
   it('stale export with matching slot passes', () => {
-    expect(resolveBaseUrl(input({ DF_BASE_URL: 'https://localhost:12443' }, OK))).toBe('https://localhost:12443');
+    expect(resolveBaseUrl(input({ DF_BASE_URL: 'https://s2.localhost:12443' }, OK))).toBe('https://s2.localhost:12443');
   });
   it('slot file without DF_BASE_URL throws', () => {
     const i = input({}, { '/wt/docker/.env.slot': slot({ DF_BASE_URL: '' }), '/reg/slot-2': RES });
