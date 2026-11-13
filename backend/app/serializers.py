@@ -1,3 +1,5 @@
+from zoneinfo import available_timezones
+
 import nh3
 from django.db import transaction
 from django.db.models import Prefetch, QuerySet
@@ -492,6 +494,11 @@ class OrganizationSerializer(serializers.ModelSerializer):
         """Sanitize markdown to prevent XSS."""
         if value:
             return nh3.clean(value)
+        return value
+
+    def validate_timezone(self, value: str) -> str:
+        if value not in available_timezones():
+            raise serializers.ValidationError(f"Unknown timezone {value!r}.")
         return value
 
 
