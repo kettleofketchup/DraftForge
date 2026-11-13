@@ -10,7 +10,7 @@ from unittest.mock import patch
 from channels.routing import URLRouter
 from channels.testing import WebsocketCommunicator
 from django.contrib.auth import get_user_model
-from django.db import close_old_connections
+from django.db import close_old_connections, transaction
 from django.test import SimpleTestCase, TransactionTestCase
 from django.urls import re_path
 
@@ -38,8 +38,16 @@ class Gate:
         self.entered.set()
         self.release.wait(10)
 
-    async def wait_entered(self) -> None:
+    async def wait_entered(
+        self, worker: "asyncio.Future[Any] | None" = None, timeout: float = 10.0
+    ) -> None:
+        deadline = time.monotonic() + timeout
         while not self.entered.is_set():
+            if worker is not None and worker.done():
+                await worker
+                raise AssertionError("worker finished without reaching the gate")
+            if time.monotonic() > deadline:
+                raise AssertionError(f"gate not reached within {timeout}s")
             await asyncio.sleep(0.01)
 
 
@@ -182,7 +190,7 @@ class ConsumerDbIsolationTests(TransactionTestCase):
             leaving = asyncio.ensure_future(
                 consumer().on_captain_state_change(draft.pk, self.cap_a, False)
             )
-            await gate.wait_entered()
+            await gate.wait_entered(leaving)
             joining = asyncio.ensure_future(
                 consumer().on_captain_state_change(draft.pk, self.cap_a, True)
             )
@@ -200,6 +208,39 @@ class ConsumerDbIsolationTests(TransactionTestCase):
             r.delete(key)
         team.refresh_from_db()
         self.assertTrue(team.draft_is_connected)
+
+
+class ConsumerDbContentionTests(TransactionTestCase):
+    """Pool threads each hold their own connection, as daphne does in production."""
+
+    def test_read_succeeds_while_another_pool_thread_holds_a_write(self) -> None:
+        captain1 = User.objects.create_user(username="lock-c1", password="x")
+        captain2 = User.objects.create_user(username="lock-c2", password="x")
+        draft = _hero_draft("lock", captain1, captain2)
+        gate = Gate()
+
+        @consumer_db
+        def hold_write() -> None:
+            with transaction.atomic():
+                DraftTeam.objects.filter(draft=draft).update(is_connected=True)
+                gate.hold()
+
+        @consumer_db
+        def read_captain_team() -> int:
+            return DraftTeam.objects.filter(
+                draft=draft, tournament_team__captain=captain2
+            ).count()
+
+        async def scenario() -> int:
+            writer = asyncio.ensure_future(hold_write())
+            await gate.wait_entered(writer)
+            try:
+                return await asyncio.wait_for(read_captain_team(), VICTIM_DEADLINE_S)
+            finally:
+                gate.release.set()
+                await writer
+
+        self.assertEqual(asyncio.run(scenario()), 1)
 
 
 class ConsumerDbConnectionCleanupTests(SimpleTestCase):
