@@ -259,6 +259,63 @@ class ContributionsPermissionMatrixTest(ContributionsApiBase):
                         else:
                             self.assertDenied(response, role)
 
+    def test_admin_entry_edit_delete_matrix(self) -> None:
+        self.unlock()
+        for private in (False, True):
+            self.set_private(private)
+            for role in ROLES:
+                with self.subTest(private=private, role=role):
+                    entry = create_manual_award(
+                        org=self.org,
+                        user=self.target,
+                        points=5,
+                        reason="matrix",
+                        on_date=date(2026, 11, 1),
+                        actor=self.users["owner"],
+                    )
+                    path = f"{base(self.org.pk)}entries/{entry.pk}/"
+                    patched = self.request(role, "patch", path, {"points": 9})
+                    if role in ADMIN_ROLES:
+                        self.assertEqual(patched.status_code, 200, patched.content)
+                        self.assertEqual(patched.json()["points"], 9)
+                    else:
+                        self.assertDenied(patched, role)
+                        entry.refresh_from_db()
+                        self.assertEqual(entry.points, 5)
+                    deleted = self.request(role, "delete", path)
+                    exists = ContributionEntry.objects.filter(pk=entry.pk).exists()
+                    if role in ADMIN_ROLES:
+                        self.assertEqual(deleted.status_code, 204, deleted.content)
+                        self.assertFalse(exists)
+                    else:
+                        self.assertDenied(deleted, role)
+                        self.assertTrue(exists)
+                        entry.delete()
+
+    def test_league_staff_sees_rows_and_breakdown_on_private_org(self) -> None:
+        self.unlock()
+        self.set_private(True)
+        league = League.objects.create(
+            name="Contributions League Staff",
+            organization=self.org,
+            steam_league_id=99792,
+        )
+        for field in ("admins", "staff"):
+            user = CustomUser.objects.create_user(
+                username=f"capi_league_{field}", password="x"
+            )
+            getattr(league, field).add(user)
+            self.client.force_authenticate(user=user)
+            with self.subTest(league_role=field):
+                board = self.client.get(f"{base(self.org.pk)}leaderboard/")
+                self.assertEqual(board.status_code, 200)
+                self.assertTrue(board.json()["rows_visible"])
+                self.assertEqual(len(board.json()["rows"]), 3)
+                breakdown = self.client.get(
+                    f"{base(self.org.pk)}members/{self.target_ou.pk}/"
+                )
+                self.assertEqual(breakdown.status_code, 200, breakdown.content)
+
     def test_anonymous_on_public_org_sees_total_only(self) -> None:
         self.unlock()
         self.set_private(False)

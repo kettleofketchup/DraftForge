@@ -332,6 +332,19 @@ class ContributionServicesTest(TestCase):
         self.assertEqual(log.details["points"], 6)
         self.assertEqual(log.details["reason"], "Oops")
 
+    def test_edit_and_delete_after_concurrent_delete_raise_does_not_exist(
+        self,
+    ) -> None:
+        entry = self._manual(points=6)
+        stale = ContributionEntry.objects.get(pk=entry.pk)
+        delete_manual_award(entry, actor=self.admin)
+        with self.assertRaises(ContributionEntry.DoesNotExist):
+            update_manual_award(stale, actor=self.admin, points=3)
+        with self.assertRaises(ContributionEntry.DoesNotExist):
+            delete_manual_award(stale, actor=self.admin)
+        self.assertEqual(OrgLog.objects.filter(action="delete_award").count(), 1)
+        self.assertFalse(OrgLog.objects.filter(action="edit_award").exists())
+
     # set_point_value
 
     def test_set_point_value_future_only_leaves_old_entries(self) -> None:

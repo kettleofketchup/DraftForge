@@ -2,6 +2,7 @@ from typing import Any
 
 from django.contrib.auth.models import AnonymousUser
 from django.db.models import Count, Sum
+from django.http import Http404
 from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.decorators import api_view, parser_classes, permission_classes
@@ -207,7 +208,7 @@ def _org_event(org: Organization, event_id: int | None) -> Event | None:
 
 def _admin_entry(entry_pk: int) -> ContributionEntry:
     return with_user_profiles(
-        ContributionEntry.objects.select_related("event", "awarded_by"),
+        ContributionEntry.objects.nocache().select_related("event", "awarded_by"),
         "org_user__user",
     ).get(pk=entry_pk)
 
@@ -291,7 +292,10 @@ def contributions_entry(request: Request, org_id: int, entry_pk: int) -> Respons
         raise ValidationError({"detail": "only manual awards can be edited or deleted"})
 
     if request.method == "DELETE":
-        delete_manual_award(entry, actor=request.user)
+        try:
+            delete_manual_award(entry, actor=request.user)
+        except ContributionEntry.DoesNotExist as exc:
+            raise Http404 from exc
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     body = ManualAwardUpdateSerializer(data=request.data)
@@ -311,4 +315,6 @@ def contributions_entry(request: Request, org_id: int, entry_pk: int) -> Respons
         )
     except ValueError as exc:
         raise ValidationError({"detail": str(exc)}) from exc
+    except ContributionEntry.DoesNotExist as exc:
+        raise Http404 from exc
     return Response(admin_entry_data(_admin_entry(entry.pk)))

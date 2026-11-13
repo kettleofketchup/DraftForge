@@ -161,6 +161,16 @@ def create_manual_award(
     return entry
 
 
+def _lock_entry(pk: int) -> ContributionEntry:
+    """Raises ContributionEntry.DoesNotExist if a concurrent delete won."""
+    return (
+        ContributionEntry.objects.nocache()
+        .select_for_update()
+        .select_related("organization", "org_user__user")
+        .get(pk=pk)
+    )
+
+
 @transaction.atomic
 def update_manual_award(
     entry: ContributionEntry,
@@ -178,7 +188,7 @@ def update_manual_award(
     new_occurred_at = local_noon_utc(org, on_date) if on_date is not None else None
     if event is not UNSET:
         _check_event(org, event)
-    entry = ContributionEntry.objects.nocache().select_for_update().get(pk=entry.pk)
+    entry = _lock_entry(entry.pk)
     old = _manual_snapshot(entry)
     fields: list[str] = []
     if new_points is not None:
@@ -219,6 +229,7 @@ def update_manual_award(
 @transaction.atomic
 def delete_manual_award(entry: ContributionEntry, *, actor: CustomUser | None) -> None:
     _require_manual(entry)
+    entry = _lock_entry(entry.pk)
     pk = entry.pk
     org = entry.organization
     details = {"pk": pk, "points": entry.points, "reason": entry.reason}
