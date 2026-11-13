@@ -1,9 +1,8 @@
-import os
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
-from django.db.transaction import atomic
 from dotenv import load_dotenv
 
 # Add the parent directory to Python path for paths module
@@ -11,7 +10,6 @@ try:
     from paths import TEST_DB_PATH, TEST_ENV_FILE
 
 except ModuleNotFoundError:
-
     sys.path.insert(0, str(Path(__file__).parent.parent.parent))
     from paths import TEST_DB_PATH, TEST_ENV_FILE
 
@@ -26,12 +24,30 @@ try:
 
 
 except ModuleNotFoundError:
-
     sys.path.insert(0, str(Path(__file__).parent))
     from paths import TEST_DB_PATH, TEST_ENV_FILE
 
 from app.models import CustomUser
+from backend.test_runner import (
+    assign_isolated_db_names,
+    remove_isolated_db_files,
+    remove_stale_isolated_dbs,
+)
 from tests.populate import populate_users
+
+
+@pytest.fixture(scope="session")
+def django_db_modify_db_settings(
+    django_db_modify_db_settings_parallel_suffix: None, django_db_keepdb: bool
+) -> Iterator[None]:
+    """Same temp-file test DB as BackendDiscoverRunner.setup_databases."""
+    remove_stale_isolated_dbs()
+    names = assign_isolated_db_names(django_db_keepdb)
+    yield
+    if not django_db_keepdb:
+        for name in names:
+            remove_isolated_db_files(name)
+
 
 # @pytest.fixture(autouse=True)
 # def disable_db_cleanup(request, django_db_setup, django_db_blocker):

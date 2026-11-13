@@ -15,7 +15,6 @@ import functools
 import os
 import secrets
 import sys
-import tempfile
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -305,13 +304,6 @@ DATABASES = {
             # workload (we can resync from Steam on disaster). Requires
             # Django 5.2+ (init_command for SQLite).
             "init_command": "PRAGMA journal_mode=WAL;PRAGMA synchronous=NORMAL;",
-        },
-        # A file, not Django's default in-memory shared-cache DB: consumer DB calls run on
-        # pool threads with their own connections, and shared cache fails a read of a table
-        # another connection is writing with "database table is locked" instead of waiting.
-        # Per-process so a killed run never leaves a file the next one has to clobber.
-        "TEST": {
-            "NAME": str(Path(tempfile.gettempdir()) / f"draftforge-test-{os.getpid()}.sqlite3"),
         },
     }
 }
