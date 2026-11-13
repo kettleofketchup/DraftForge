@@ -251,25 +251,6 @@ const TrophyIcon = () => (
   </svg>
 );
 
-const UsersIcon = () => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className="h-5 w-5"
-    aria-hidden="true"
-  >
-    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-    <circle cx="9" cy="7" r="4" />
-    <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
-    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-  </svg>
-);
-
 const BuildingIcon = () => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
@@ -489,14 +470,6 @@ const NavLinks = ({ className }: { className?: string }) => {
         subtitle={t('nav.tournaments_subtitle')}
         hideTextOnSmall
         className="[&_svg]:text-warning"
-      />
-      <NavItem
-        to="/users"
-        icon={<UsersIcon />}
-        title={t('nav.users')}
-        subtitle={t('nav.users_subtitle')}
-        hideTextOnSmall
-        className="[&_svg]:text-interactive"
       />
       <NavItem
         to="/organizations"

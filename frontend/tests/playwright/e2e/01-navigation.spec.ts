@@ -22,7 +22,7 @@ test.describe('Navigation and Basic Functionality', () => {
 
   test('should have working navigation links', async ({ page }) => {
     // Test navigation to different routes
-    const routes = ['/tournaments', '/about', '/users'];
+    const routes = ['/tournaments', '/about', '/organizations'];
 
     for (const route of routes) {
       // Use smart navigation that handles responsive design
@@ -79,6 +79,10 @@ test.describe('Navigation and Basic Functionality', () => {
       // Go back to home for next iteration
       await visitAndWaitForHydration(page, '/');
     }
+  });
+
+  test('does not link to the users page from the navbar', async ({ page }) => {
+    await expect(page.locator('a[href="/users"]')).toHaveCount(0);
   });
 
   test('should be responsive and mobile-friendly', async ({ page }) => {
