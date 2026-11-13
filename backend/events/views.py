@@ -1,6 +1,15 @@
 from cacheops import cached_as
 from django.db import transaction
-from django.db.models import BooleanField, Count, Exists, F, OuterRef, Q, Value
+from django.db.models import (
+    BooleanField,
+    Count,
+    Exists,
+    F,
+    OuterRef,
+    Prefetch,
+    Q,
+    Value,
+)
 from django.utils import timezone
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
@@ -8,12 +17,7 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 
 from app.cache_utils import invalidate_obj
-from telemetry.logging import get_logger
-from user.querysets import with_user_profiles
-
-logger = get_logger(__name__)
-
-from app.models import Organization
+from app.models import CustomUser, Organization
 from app.permissions_org import has_event_staff_access, has_org_staff_access
 from events.constants import EventState, SignupStatus
 from events.models import (
@@ -57,6 +61,11 @@ from events.services import (
 )
 from events.utils import starts_in_future
 from lobby.passwords import PasswordMode
+from telemetry.logging import get_logger
+from user.models import BaseUserProfile
+from user.querysets import with_user_profiles
+
+logger = get_logger(__name__)
 
 
 class IsOrgStaff(permissions.BasePermission):
@@ -467,6 +476,17 @@ class EventViewSet(viewsets.ModelViewSet):
                 "organization", "tournament_league", "created_by", "tournament"
             )
         )
+        if self.action == "retrieve":
+            qs = (
+                qs.select_related("host__base_profile")
+                .prefetch_related(
+                    Prefetch(
+                        "helpers",
+                        queryset=with_user_profiles(CustomUser.objects.all()),
+                    )
+                )
+                .nocache()
+            )
         params = self.request.query_params
 
         # Filter by organization
@@ -555,6 +575,8 @@ class EventViewSet(viewsets.ModelViewSet):
         @cached_as(
             Event.objects.filter(pk=pk),
             EventSignup,
+            CustomUser,
+            BaseUserProfile,
             keep_fresh=True,
             extra=cache_key,
             timeout=60 * 60,

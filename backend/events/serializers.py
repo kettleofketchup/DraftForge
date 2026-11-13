@@ -1,9 +1,11 @@
+from typing import Any
+
 import nh3
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.utils import timezone
 from rest_framework import serializers
 
-from app.models import League
+from app.models import CustomUser, League, Organization
 from app.permissions_org import can_view_org_members
 from events.models import (
     Event,
@@ -230,6 +232,15 @@ class EventRepeaterSerializer(TournamentLeagueOrgMixin, serializers.ModelSeriali
         return data
 
 
+class EventStaffUserSerializer(serializers.ModelSerializer):
+    avatarUrl = serializers.CharField(read_only=True)
+
+    class Meta:
+        model = CustomUser
+        fields = ["pk", "username", "nickname", "avatarUrl"]
+        read_only_fields = fields
+
+
 class EventSlimSerializer(serializers.ModelSerializer):
     """Lightweight serializer for event list views — only fields needed for cards."""
 
@@ -247,6 +258,7 @@ class EventSlimSerializer(serializers.ModelSerializer):
             "organization_name",
             "name",
             "scheduled_at",
+            "ends_at",
             "state",
             "game_type",
             "tournament_name",
@@ -273,6 +285,7 @@ class EventSlimSerializer(serializers.ModelSerializer):
             "discord_profile_reminder",
             "discord_profile_reminder_hours",
         ]
+        read_only_fields = ["ends_at"]
 
 
 class EventSerializer(TournamentLeagueOrgMixin, serializers.ModelSerializer):
@@ -288,6 +301,11 @@ class EventSerializer(TournamentLeagueOrgMixin, serializers.ModelSerializer):
     # Per-request override; populated in the view layer AFTER the cached payload
     # is resolved, so the cache stays user-agnostic.
     user_can_manage = serializers.BooleanField(read_only=True, default=False)
+    user_can_manage_event_staff = serializers.BooleanField(
+        read_only=True, default=False
+    )
+    host = EventStaffUserSerializer(read_only=True)
+    helpers = EventStaffUserSerializer(many=True, read_only=True)
 
     class Meta:
         model = Event
@@ -300,8 +318,12 @@ class EventSerializer(TournamentLeagueOrgMixin, serializers.ModelSerializer):
             "name",
             "description",
             "scheduled_at",
+            "ends_at",
             "signups_open_at",
             "state",
+            "host",
+            "helpers",
+            "contributions_awarded_at",
             "tournament",
             "created_by",
             "created_at",
@@ -373,10 +395,13 @@ class EventSerializer(TournamentLeagueOrgMixin, serializers.ModelSerializer):
             "dota_lobby_password_mode",
             "dota_lobby_password",
             "user_can_manage",
+            "user_can_manage_event_staff",
             "is_off_schedule",
         ]
         read_only_fields = [
             "id",
+            "state",
+            "contributions_awarded_at",
             "event_repeater",
             "is_off_schedule",
             "tournament",
@@ -388,6 +413,13 @@ class EventSerializer(TournamentLeagueOrgMixin, serializers.ModelSerializer):
 
     def validate_description(self, value):
         return nh3.clean(value) if value else value
+
+    def validate_organization(self, value: Organization) -> Organization:
+        if self.instance is not None and value.pk != self.instance.organization_id:
+            raise serializers.ValidationError(
+                "An event cannot move to another organization."
+            )
+        return value
 
     def validate(self, data):
         game_type = data.get(
@@ -427,13 +459,9 @@ class EventSerializer(TournamentLeagueOrgMixin, serializers.ModelSerializer):
             # separately. The validator still rejects explicit signup_reminder=True
             # on a single event.
             default_reminder = (
-                self.instance.discord_signup_reminder
-                if self.instance
-                else False
+                self.instance.discord_signup_reminder if self.instance else False
             )
-            signup_reminder = data.get(
-                "discord_signup_reminder", default_reminder
-            )
+            signup_reminder = data.get("discord_signup_reminder", default_reminder)
             if repeater is None and signup_reminder:
                 raise serializers.ValidationError(
                     {
@@ -443,8 +471,21 @@ class EventSerializer(TournamentLeagueOrgMixin, serializers.ModelSerializer):
                         )
                     }
                 )
+        self._validate_ends_at(data)
         self._validate_lobby_password(data)
         return data
+
+    def _validate_ends_at(self, data: dict[str, Any]) -> None:
+        ends_at = data.get("ends_at")
+        if ends_at is None:
+            return
+        scheduled_at = data.get(
+            "scheduled_at", self.instance.scheduled_at if self.instance else None
+        )
+        if scheduled_at is not None and ends_at <= scheduled_at:
+            raise serializers.ValidationError(
+                {"ends_at": "End time must be after the start time."}
+            )
 
     def _validate_lobby_password(self, data):
         """Fixed needs a valid password; random keeps or generates one.
@@ -504,7 +545,9 @@ class EventSignupSerializer(serializers.ModelSerializer):
     dota_profile = serializers.SerializerMethodField()
     org_user_mmr = serializers.SerializerMethodField()
     org_user_pk = serializers.SerializerMethodField()
-    organization = serializers.IntegerField(source="event.organization_id", read_only=True)
+    organization = serializers.IntegerField(
+        source="event.organization_id", read_only=True
+    )
     suggested_mmr = serializers.SerializerMethodField()
     suggested_mmr_range = serializers.SerializerMethodField()
     suggested_mmr_range_source = serializers.SerializerMethodField()
@@ -764,11 +807,12 @@ class OneOffEventCreateSerializer(serializers.ModelSerializer):
     OVERRIDE_FIELDS = ONE_OFF_OVERRIDE_FIELDS
 
     scheduled_at = serializers.DateTimeField()
+    ends_at = serializers.DateTimeField(required=False, allow_null=True)
     open_signups = serializers.BooleanField(required=False, default=False)
 
     class Meta:
         model = Event
-        fields = ONE_OFF_OVERRIDE_FIELDS + ["scheduled_at", "open_signups"]
+        fields = ONE_OFF_OVERRIDE_FIELDS + ["scheduled_at", "ends_at", "open_signups"]
         extra_kwargs = {
             **{name: {"required": False} for name in ONE_OFF_OVERRIDE_FIELDS},
             "dota_lobby_password": LOBBY_PASSWORD_FIELD_KWARGS,
@@ -802,6 +846,11 @@ class OneOffEventCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"game_mode": f"'{game_mode}' is only valid for Dota 2 events."}
             )
+        ends_at = data.get("ends_at")
+        if ends_at is not None and ends_at <= data["scheduled_at"]:
+            raise serializers.ValidationError(
+                {"ends_at": "End time must be after the start time."}
+            )
         # The effective mode decides: fixed needs a password (typed here or
         # the series' fixed one); random generates one, so any typed
         # password is dropped.
@@ -830,4 +879,6 @@ class OneOffEventCreateSerializer(serializers.ModelSerializer):
             for k in self.OVERRIDE_FIELDS
             if k in data and k in validated
         }
+        if validated.get("ends_at") is not None:
+            validated["overrides"]["ends_at"] = validated["ends_at"]
         return validated

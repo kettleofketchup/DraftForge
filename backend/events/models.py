@@ -347,10 +347,22 @@ class Event(
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True, default="")
     scheduled_at = models.DateTimeField()
+    ends_at = models.DateTimeField(null=True, blank=True)
     signups_open_at = models.DateTimeField(null=True, blank=True)
     state = models.CharField(
         max_length=20, choices=EventState.choices, default=EventState.UPCOMING
     )
+    host = models.ForeignKey(
+        "app.CustomUser",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="hosted_events",
+    )
+    helpers = models.ManyToManyField(
+        "app.CustomUser", blank=True, related_name="helped_events"
+    )
+    contributions_awarded_at = models.DateTimeField(null=True, blank=True)
     is_off_schedule = models.BooleanField(
         default=False,
         help_text=(

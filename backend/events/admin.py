@@ -11,8 +11,17 @@ class EventRepeaterAdmin(admin.ModelAdmin):
 
 @admin.register(Event)
 class EventAdmin(admin.ModelAdmin):
-    list_display = ["name", "organization", "scheduled_at", "state", "created_at"]
+    list_display = [
+        "name",
+        "organization",
+        "scheduled_at",
+        "ends_at",
+        "state",
+        "created_at",
+    ]
     list_filter = ["state", "organization"]
+    raw_id_fields = ["host", "helpers"]
+    readonly_fields = ["contributions_awarded_at"]
 
 
 @admin.register(EventTeam)
