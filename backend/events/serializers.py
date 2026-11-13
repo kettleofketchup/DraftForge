@@ -4,6 +4,7 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from app.models import League
+from app.permissions_org import can_view_org_members
 from events.models import (
     Event,
     EventRepeater,
@@ -585,10 +586,13 @@ class EventSignupSerializer(serializers.ModelSerializer):
 
         We surface any non-zero MMR for display purposes regardless of the
         has_active_dota_mmr flag — that flag is for requirements gating
-        (auto-approve), not for whether the value is shown.
+        (auto-approve), not for whether the value is shown. Hidden from
+        viewers who may not see the org's member list.
         """
         from org.models import OrgUser
 
+        if not self._viewer_sees_org_mmr(obj):
+            return None
         try:
             org_user = OrgUser.objects.get(
                 user=obj.user, organization=obj.event.organization
@@ -596,6 +600,19 @@ class EventSignupSerializer(serializers.ModelSerializer):
         except OrgUser.DoesNotExist:
             return None
         return org_user.mmr if org_user.mmr else None
+
+    def _viewer_sees_org_mmr(self, obj: EventSignup) -> bool:
+        request = self.context.get("request")
+        if request is None:
+            return False
+        user = request.user
+        if user.is_authenticated and user.pk == obj.user_id:
+            return True
+        cache: dict[int, bool] = self.context.setdefault("_org_mmr_visible", {})
+        org = obj.event.organization
+        if org.pk not in cache:
+            cache[org.pk] = can_view_org_members(user, org)
+        return cache[org.pk]
 
     def get_org_user_pk(self, obj):
         """Return the OrgUser pk for this user in the event's org.

@@ -118,7 +118,9 @@ The six entry points locked by `e2e/17-auth/02-edit-and-bracket-gates.spec.ts`.
   admin turns on **Private members list** (`members_private`), plain members
   lose access and only staff/admins/owner/site admins keep it. The org detail
   response carries a per-viewer `can_view_members` flag the frontend uses to
-  hide the tab.
+  hide the tab. The league Users tab (`GET /api/leagues/<pk>/users/`, gated by
+  `can_view_league_members`) adds league staff on top of the same rule, and
+  event signups blank `org_user_mmr` for viewers outside it.
 - **Edit User (org members tab)** uses `useIsOrganizationStaff(currentOrg)`
   via the UserCard's org-scoped editScope — staff-permissive.
 - **Edit User (tournament players tab)** is a **known divergence**.

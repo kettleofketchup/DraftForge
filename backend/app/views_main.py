@@ -74,6 +74,7 @@ from .permissions_org import (
     IsOrgAdmin,
     IsOrgOwner,
     can_manage_game,
+    can_view_league_members,
     can_view_org_members,
     has_league_admin_access,
     has_league_staff_access,
@@ -1273,7 +1274,10 @@ class LeagueView(viewsets.ModelViewSet):
             return serializer.data
 
         data = get_data()
-        return Response(data)
+        league = League.objects.select_related("organization").get(pk=data["pk"])
+        return Response(
+            {**data, "can_view_members": can_view_league_members(request.user, league)}
+        )
 
     @action(detail=True, methods=["get"])
     def matches(self, request: Request, pk: str | None = None) -> Response:
@@ -1310,6 +1314,8 @@ class LeagueView(viewsets.ModelViewSet):
     def users(self, request: Request, pk: str | None = None) -> Response:
         """Get all users who are members of this league (via LeagueUser)."""
         league = self.get_object()
+        if not can_view_league_members(request.user, league):
+            raise PermissionDenied("You do not have access to this league's members.")
         cache_key = f"league_users:{pk}"
 
         @cached_as(

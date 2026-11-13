@@ -3,7 +3,7 @@
 from django.contrib.auth.models import AnonymousUser
 from rest_framework import permissions
 
-from app.models import CustomUser, Organization
+from app.models import CustomUser, League, Organization
 
 
 def is_org_owner(user, obj):
@@ -129,6 +129,15 @@ def has_event_staff_access(user, event):
     ):
         return True
     return False
+
+
+def can_view_league_members(user: CustomUser | AnonymousUser, league: League) -> bool:
+    """League staff always; otherwise whoever may view the linked org's members."""
+    if has_league_staff_access(user, league):
+        return True
+    return league.organization is not None and can_view_org_members(
+        user, league.organization
+    )
 
 
 class IsOrgOwner(permissions.BasePermission):

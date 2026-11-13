@@ -31,6 +31,7 @@ export const LeagueSchema = z.object({
   staff_ids: z.array(z.number()).optional(),
   tournament_count: z.number().optional(),
   users_count: z.number().optional(),
+  can_view_members: z.boolean().optional(), // per-viewer, detail endpoint only
   last_synced: z.string().nullable().optional(),
   created_at: z.string().optional(),
   updated_at: z.string().optional(),

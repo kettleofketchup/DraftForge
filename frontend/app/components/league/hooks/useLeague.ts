@@ -7,9 +7,9 @@ export function useLeague(pk: number | undefined) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
-  const refetch = useCallback(() => {
+  const refetch = useCallback((opts?: { silent?: boolean }) => {
     if (pk) {
-      setIsLoading(true);
+      if (!opts?.silent) setIsLoading(true);
       setError(null);
       fetchLeague(pk)
         .then(setLeague)

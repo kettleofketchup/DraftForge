@@ -39,7 +39,7 @@ export function meta({ data }: Route.MetaArgs) {
     description: 'League standings and tournament schedule',
   });
 }
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Trophy, Building2, Loader2, Pencil } from 'lucide-react';
 
 import { Badge } from '~/components/ui/badge';
@@ -98,6 +98,23 @@ export default function LeaguePage() {
     };
   }, [league]);
 
+  const canViewMembers = league?.can_view_members ?? false;
+
+  // can_view_members is per-viewer; login/logout happen without a reload.
+  const viewerPk = currentUser?.pk ?? null;
+  const lastViewerPk = useRef(viewerPk);
+  useEffect(() => {
+    if (lastViewerPk.current === viewerPk) return;
+    lastViewerPk.current = viewerPk;
+    refetch({ silent: true });
+  }, [viewerPk, refetch]);
+
+  useEffect(() => {
+    if (league && !canViewMembers && activeTab === 'users') {
+      setActiveTab('info');
+    }
+  }, [league, canViewMembers, activeTab]);
+
   const handleTabChange = useCallback((newTab: string) => {
     setActiveTab(newTab);
     // Don't use replace: true - we want history entries for browser back/forward
@@ -145,9 +162,9 @@ export default function LeaguePage() {
   const pageNavOptions = useMemo(() => [
     { value: 'info', label: 'Info' },
     { value: 'tournaments', label: `${leagueTournaments.length} Tourneys` },
-    { value: 'users', label: `${userCountDisplay} Users` },
+    ...(canViewMembers ? [{ value: 'users', label: `${userCountDisplay} Users` }] : []),
     { value: 'matches', label: 'Matches' },
-  ], [leagueTournaments.length, userCountDisplay]);
+  ], [leagueTournaments.length, userCountDisplay, canViewMembers]);
 
   usePageNav(league ? pageNavOptions : null, activeTab, handleTabChange);
 

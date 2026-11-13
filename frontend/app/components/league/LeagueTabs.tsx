@@ -26,23 +26,27 @@ export const LeagueTabs: React.FC<Props> = ({
   const leagueUsersLeagueId = useLeagueStore((state) => state.leagueUsersLeagueId);
 
   // Show "..." if loading or if we haven't fetched for this league yet
+  const canViewMembers = league.can_view_members ?? false;
+
   const userCountDisplay = leagueUsersLoading || leagueUsersLeagueId !== league.pk
     ? '...'
     : leagueUserPks.length;
 
   return (
     <Tabs value={activeTab} onValueChange={onTabChange} className="w-full">
-      <TabsList className="hidden md:grid w-full grid-cols-4">
+      <TabsList className={`hidden md:grid w-full ${canViewMembers ? 'grid-cols-4' : 'grid-cols-3'}`}>
         <TabsTrigger value="info" data-testid="league-tab-info">
           Info
         </TabsTrigger>
         <TabsTrigger value="tournaments" data-testid="league-tab-tournaments">
           Tournaments ({tournaments.length})
         </TabsTrigger>
-        <TabsTrigger value="users" data-testid="league-tab-users">
-          <Users className="w-4 h-4 mr-2" />
-          Users ({userCountDisplay})
-        </TabsTrigger>
+        {canViewMembers && (
+          <TabsTrigger value="users" data-testid="league-tab-users">
+            <Users className="w-4 h-4 mr-2" />
+            Users ({userCountDisplay})
+          </TabsTrigger>
+        )}
         <TabsTrigger value="matches" data-testid="league-tab-matches">
           Matches
         </TabsTrigger>
@@ -56,9 +60,11 @@ export const LeagueTabs: React.FC<Props> = ({
         <TournamentsTab league={league} tournaments={tournaments} />
       </TabsContent>
 
-      <TabsContent value="users" className="mt-6">
-        {league.pk && <UsersTab leaguePk={league.pk} />}
-      </TabsContent>
+      {canViewMembers && (
+        <TabsContent value="users" className="mt-6">
+          {league.pk && <UsersTab leaguePk={league.pk} />}
+        </TabsContent>
+      )}
 
       <TabsContent value="matches" className="mt-6">
         {league.pk && <MatchesTab leaguePk={league.pk} />}
