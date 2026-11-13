@@ -72,7 +72,9 @@ the frontend gates on: `admin_organization_ids`, `staff_organization_ids`,
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `organization` | int | | Filter by the league's organization ID |
+| `organization` | int | | Filter by the league's organization ID. Cannot be combined with `organizations` (400) |
+| `organizations` | string | | Comma-separated organization IDs (at most 100, each a positive integer, otherwise 400). Matches tournaments of any of them; an empty value matches none |
+| `open_signups` | `1` or `0` | `0` | `1` adds tournaments whose source event currently takes user signups (see below) to the organization filter, or returns only those without one. Any other value returns 400 |
 | `league` | int | | Filter by league ID |
 | `bucket` | string | | `upcoming` or `archived` (see below). Any other value returns 400 |
 | `search` | string | | Trimmed. Ignored under 2 characters, cut to 64. Case-insensitive match on tournament, organization or league name |
@@ -86,6 +88,16 @@ the frontend gates on: `admin_organization_ids`, `staff_organization_ids`,
   then the recent past, each by `date_played` ascending.
 - **`archived`**: everything not upcoming, newest `date_played` first.
 - No `bucket`: every tournament, newest `date_played` first.
+
+**Open signups:** a tournament's signups are open when one of its source events
+(`Event.tournament`) is in state `signups_open`, has `allow_user_signups`, has no
+`signups_open_at` or one that has passed, and, if `signup_deadline_hours` is set, is
+still more than that many hours before `scheduled_at`. The `/tournaments` page's
+"My organizations" view sends `organizations=<member org ids>&open_signups=1` on
+Upcoming and only `organizations` on Archived. The endpoint never reads the request's
+user, so its cache stays shared.
+
+`league`, `bucket` and `search` narrow whatever the organization filters select.
 
 **Response:**
 
@@ -111,7 +123,8 @@ Without `page`, a bare array. With `page`, the paged envelope:
         "organization_id": 1,
         "organization_logo": "https://..."
       },
-      "user_count": 40
+      "user_count": 40,
+      "signups_open": false
     }
   ]
 }
@@ -119,11 +132,15 @@ Without `page`, a bare array. With `page`, the paged envelope:
 
 `league` is `null` for a tournament without a league; `organization_id`,
 `organization_name` and `organization_logo` are `null` when the league has no organization
-(or, for the logo, when the organization has none).
+(or, for the logo, when the organization has none). `signups_open` tells whether the
+tournament's signups are open as defined above.
 
 !!! note
     Search results are not cached. Other results are cached for 10 minutes and invalidated
-    when any Tournament, League or Organization changes.
+    when any Tournament, League, Organization or Event changes. Because open signups depend
+    on the clock, cache keys also include a 5-minute UTC window and signups are evaluated at
+    the window's start, so `signups_open` and `open_signups=1` results lag the clock by at
+    most 5 minutes. Event state changes still take effect immediately.
 
 ## Teams
 

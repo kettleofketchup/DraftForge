@@ -12,10 +12,36 @@ tournaments from every organization on the site.
 
 The selected tab is kept in the URL (`?tab=archived`), so a link opens the same view.
 
+## My Organizations
+
+Signed-in users start on **My organizations** in the Organization dropdown. It shows one list
+(no tiers):
+
+- **Upcoming**: tournaments from your organizations, plus tournaments from any other
+  organization whose signups are open right now. Those carry a **Signups open** badge so it is
+  clear why they are listed. Signups are open when the tournament's source event is in the
+  Signups Open state, allows user signups, has reached its signups open time and has not
+  passed its signup deadline.
+- **Archived**: tournaments from your organizations only.
+
+If nothing matches, the empty state offers **Browse all organizations**.
+
+The dropdown lists **My organizations**, **All organizations**, then a **Your organizations**
+group and an **Other organizations** group. Anonymous visitors see **All organizations** as the
+default and no **My organizations** option.
+
+| Selection | URL | Upcoming view |
+|-----------|-----|---------------|
+| My organizations | no `organization` param (default when signed in), or `?organization=mine` | One list |
+| All organizations | `?organization=all` (no param when signed out) | Tiers, see below |
+| One organization | `?organization=<id>` | One list |
+
+**Clear filters** returns to the default for the viewer.
+
 ## Your Organizations First
 
-When a signed-in user belongs to at least one organization, the Upcoming tab splits into two
-tiers:
+With **All organizations** selected, when a signed-in user belongs to at least one
+organization, the Upcoming tab splits into two tiers:
 
 1. **Your organizations**: tournaments from organizations you are a member of, admin or staff,
    or that own a league you admin or staff.
@@ -34,17 +60,22 @@ Membership comes from `member_organization_ids` on
 
 Every card shows the tournament's organization: its logo, or a building icon when it has no
 logo or the logo fails to load, next to the organization name ("No organization" when the
-league has none). Tournaments that are in progress carry a **Live** badge.
+league has none). Tournaments that are in progress carry a **Live** badge. Under
+**My organizations**, open-signup tournaments from organizations you are not in carry a
+**Signups open** badge.
 
 ## Search and Filters
 
 - **Search** matches tournament, organization and league names (case-insensitive). It starts
   at 2 characters and waits briefly after typing stops.
 - **Organization** and **League** dropdowns are kept in the URL
-  (`?organization=1&league=2`), so a link can open the page pre-filtered.
+  (`?organization=1&league=2`, `?organization=all`), so a link can open the page pre-filtered.
 - Filters apply to both tabs. An empty result offers a hint to clear them.
 
 ## API
 
 The page reads [`GET /api/tournaments-list/`](../api/endpoints.md#tournament-list) with
-`bucket=upcoming` (one unpaged request) or `bucket=archived&page=N` (paged).
+`bucket=upcoming` (one unpaged request) or `bucket=archived&page=N` (paged). Under
+**My organizations** it adds `organizations=<your org ids>` and, on Upcoming only,
+`open_signups=1`. Before the signed-in user is known, the default view waits rather than
+fetching every organization first.
