@@ -174,6 +174,7 @@ MIDDLEWARE = [
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
+    "app.middleware.CsrfCookieNameHeaderMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "telemetry.middleware.TelemetryMiddleware",  # AFTER AuthenticationMiddleware
     "telemetry.db.QueryStatsMiddleware",  # AFTER TelemetryMiddleware (uses its context)
