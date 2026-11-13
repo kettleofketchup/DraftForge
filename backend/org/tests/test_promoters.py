@@ -165,11 +165,15 @@ class PromoterEndpointsTest(TestCase):
 
     def test_anon_on_unlocked_org_is_plain_403(self) -> None:
         self._unlock()
-        response = self.client.post(
-            promoters_url(self.org.pk), {"user_id": self.target.pk}, format="json"
-        )
-        self.assertEqual(response.status_code, 403)
-        self.assertNotIn("code", response.json())
+        for response in (
+            self.client.get(promoters_url(self.org.pk)),
+            self.client.post(
+                promoters_url(self.org.pk), {"user_id": self.target.pk}, format="json"
+            ),
+            self.client.delete(promoter_url(self.org.pk, self.target.pk)),
+        ):
+            self.assertEqual(response.status_code, 403)
+            self.assertNotIn("code", response.json())
         self.assertFalse(self.org.promoters.exists())
 
     def test_admin_lists_promoters(self) -> None:
@@ -214,7 +218,7 @@ class PromoterEndpointsTest(TestCase):
         self.assertTrue(all("positions" in row for row in response.json()))
         self.assertEqual(count, baseline)
 
-    def test_list_reflects_add_after_cached_read(self) -> None:
+    def test_list_shows_newly_added_promoter(self) -> None:
         self._unlock()
         self.client.force_authenticate(self.admin)
         self.assertEqual(self.client.get(promoters_url(self.org.pk)).json(), [])
