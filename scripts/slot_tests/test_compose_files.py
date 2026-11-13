@@ -1,3 +1,4 @@
+import re
 import shutil
 from pathlib import Path
 
@@ -129,3 +130,83 @@ def test_dev_render(f: str) -> None:
         "443",
         "80",
     ]
+
+
+DOTA_LOBBY_PROFILE = {"COMPOSE_PROFILES": "dota-lobby"}
+
+
+def test_dota_lobby_simulator_is_behind_a_profile() -> None:
+    # Off by default: CI and plain `test::up` never pull the simulator image.
+    for files, env in (
+        (["docker-compose.test.yaml"], {}),
+        (["docker-compose.test.yaml", "docker-compose.slot.yaml"], SLOT3),
+    ):
+        assert "dota-lobby" not in render(files, env)["services"]
+
+
+@pytest.mark.parametrize(
+    ("env", "image"),
+    [
+        ({}, "ghcr.io/kettleofketchup/dota_lobby:0.2.0"),
+        ({"DOTA_LOBBY_IMAGE_TAG": "1.4.0"}, "ghcr.io/kettleofketchup/dota_lobby:1.4.0"),
+        (
+            {"DOTA_LOBBY_IMAGE": "ghcr.io/kettleofketchup/dota_lobby:local"},
+            "ghcr.io/kettleofketchup/dota_lobby:local",
+        ),
+    ],
+)
+def test_dota_lobby_simulator_render(env: dict[str, str], image: str) -> None:
+    cfg = render(
+        ["docker-compose.test.yaml", "docker-compose.slot.yaml"],
+        SLOT3 | DOTA_LOBBY_PROFILE | env,
+    )
+    svc = cfg["services"]["dota-lobby"]
+    assert svc["image"] == image
+    assert svc["command"] == ["serve", "--simulate"]
+    assert svc["profiles"] == ["dota-lobby"]
+    # Project-scoped name, so every slot runs its own simulator.
+    assert "container_name" not in svc
+    assert "ports" not in svc
+    assert [v["target"] for v in svc["volumes"]] == [
+        "/app/config/config.yaml",
+        "/app/config/secrets.yaml",
+    ]
+    assert all(v["read_only"] for v in svc["volumes"])
+    assert svc["tmpfs"] == ["/app/state:mode=1777"]
+    assert svc["environment"]["DOTA_LOBBY_SECRETS_FILE"] == "/app/config/secrets.yaml"
+
+
+def _env_file(path: Path) -> dict[str, str]:
+    out = {}
+    for line in path.read_text().splitlines():
+        line = line.strip()
+        if line and not line.startswith("#") and "=" in line:
+            key, value = line.split("=", 1)
+            out[key] = value.strip().strip('"')
+    return out
+
+
+def test_dota_lobby_simulator_matches_the_test_env() -> None:
+    import yaml
+
+    env = _env_file(ROOT / "docker" / ".env.test")
+    sim_dir = ROOT / "docker" / "dota-lobby"
+    config = yaml.safe_load((sim_dir / "simulator.yaml").read_text())
+    secrets = yaml.safe_load((sim_dir / "simulator-secrets.yaml").read_text())[
+        "secrets"
+    ]
+    [hook] = config["webhooks"]
+    assert env["DOTA_LOBBY_ENABLED"] == "true"
+    assert env["DOTA_LOBBY_URL"] == "http://dota-lobby:8080"
+    assert secrets["api_key"] == env["DOTA_LOBBY_API_KEY"]
+    assert hook["url"] == "http://backend:8000/api/internal/lobbies/events/"
+    assert hook["token_header"] == "X-Internal-Token"
+    assert secrets["webhook_secrets"] == {hook["url"]: env["DOTA_LOBBY_WEBHOOK_SECRET"]}
+    assert secrets["webhook_tokens"] == {hook["url"]: env["INTERNAL_SERVICE_TOKEN"]}
+    assert config["simulation"]["enabled"] is True
+    # Simulation mode refuses bots with Steam credentials.
+    assert all(set(bot) <= {"name", "leagues"} for bot in config["bots"])
+    # The bots administer the league the dota_lobby test data uses.
+    data = (ROOT / "backend" / "tests" / "data" / "dota_lobby.py").read_text()
+    league = int(re.search(r"^LOBBY_STEAM_LEAGUE_ID = (\d+)$", data, re.M).group(1))
+    assert all(bot["leagues"] == [league] for bot in config["bots"])

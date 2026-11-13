@@ -1,6 +1,8 @@
-from django.contrib import admin
+from django.contrib import admin, messages
+from django.db.models import QuerySet
 from django.http import HttpRequest
 
+from lobby import services
 from lobby.models import GameLobby, GameLobbyEvent
 
 
@@ -19,7 +21,7 @@ class GameLobbyAdmin(admin.ModelAdmin):
         "last_error_code",
         "created_at",
     )
-    list_filter = ("state", "ended", "trigger")
+    list_filter = ("state", "ended", "close_pending", "trigger")
     search_fields = ("external_ref", "lobby_id", "gc_lobby_id", "bot")
     raw_id_fields = (
         "game",
@@ -37,17 +39,55 @@ class GameLobbyAdmin(admin.ModelAdmin):
         "state",
         "state_reason",
         "ended",
+        "close_pending",
         "last_seq",
         "created_at",
         "updated_at",
         "accepted_at",
         "ended_at",
-        "password_key_id",
     )
+    # Players' lobby password: not for the admin.
+    exclude = ("password",)
+
+    actions = ("create_new_lobby", "close_lobbies")
 
     def has_add_permission(self, request: HttpRequest) -> bool:
         # Lobbies are created through dota_lobby, never by hand.
         return False
+
+    # Both actions change lobbies in dota_lobby, so view-only staff get
+    # neither.
+    @admin.action(
+        description="Create a new lobby for these games (retry)",
+        permissions=("change",),
+    )
+    def create_new_lobby(self, request: HttpRequest, queryset: QuerySet) -> None:
+        games = {row.game_id: row.game for row in queryset.select_related("game")}
+        for game in games.values():
+            eligibility = services.queue_create(game, user_id=request.user.pk)
+            if eligibility.ok:
+                self.message_user(request, f"Lobby requested for game {game.pk}.")
+            else:
+                self.message_user(
+                    request,
+                    f"Game {game.pk}: {eligibility.code} {eligibility.details or ''}",
+                    level=messages.WARNING,
+                )
+
+    @admin.action(
+        description="Close these lobbies (before the match starts)",
+        permissions=("change",),
+    )
+    def close_lobbies(self, request: HttpRequest, queryset: QuerySet) -> None:
+        closed = skipped = 0
+        for row in queryset.filter(ended=False):
+            if services.close_lobby(row, "closed_by_staff"):
+                closed += 1
+            else:
+                skipped += 1
+        self.message_user(
+            request, f"Closed {closed} lobbies; {skipped} already in a match."
+        )
 
 
 @admin.register(GameLobbyEvent)

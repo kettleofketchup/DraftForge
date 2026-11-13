@@ -84,6 +84,12 @@ USER node
 # Preview images build with true to show the test login menu; prod keeps false.
 ARG VITE_PREVIEW_TEST_FEATURES=false
 ENV VITE_PREVIEW_TEST_FEATURES=$VITE_PREVIEW_TEST_FEATURES
+# Sentry reports only from builds that enable it; dev servers and tests never
+# set it, and preview images pass false. VITE_SENTRY_DSN overrides the project DSN in app/lib/sentry.ts.
+ARG VITE_SENTRY_ENABLED=true
+ARG VITE_SENTRY_DSN=
+ENV VITE_SENTRY_ENABLED=$VITE_SENTRY_ENABLED
+ENV VITE_SENTRY_DSN=$VITE_SENTRY_DSN
 RUN npm run build
 
 # ---- Runtime (production) ----

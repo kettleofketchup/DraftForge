@@ -254,6 +254,18 @@ describe('draftWebSocketStore timer', () => {
     expect(draftWsSelectors.activeRoundPk(useDraftWebSocketStore.getState())).toBe(22);
   });
 
+  it('a repeated captain_heartbeat with an unchanged value does not notify subscribers', () => {
+    emit({ type: 'initial_state', draft_state: state(), captain_fresh: { '7': true } });
+    emit({ type: 'captain_heartbeat', captain_id: 7, fresh: false });
+    const renders = vi.fn();
+    const unsubscribe = useDraftWebSocketStore.subscribe(renders);
+    emit({ type: 'captain_heartbeat', captain_id: 7, fresh: false });
+    expect(renders).not.toHaveBeenCalled();
+    emit({ type: 'captain_heartbeat', captain_id: 7, fresh: true });
+    expect(renders).toHaveBeenCalledTimes(1);
+    unsubscribe();
+  });
+
   it('a burst of draft events renders once with the newest state; toasts fire as events arrive', () => {
     emit({ type: 'initial_state', draft_state: state({ latest_round: 21 }) });
     const renders = vi.fn();

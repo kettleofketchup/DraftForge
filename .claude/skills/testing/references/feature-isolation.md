@@ -125,5 +125,8 @@ await visitAndWait(page, '/organizations/3/');  // Fragile!
 | Users | 3000-3019 | Tournament 38 real users |
 | Users | 4000-4019 | Shuffle Tie (4 captains + 16 players) |
 | Users | 5000-5020 | Events (admin + 20 players) |
+| Users | 6000-6003 | Org Delete |
+| Users | 7200-7233 | dota_lobby (5 roles + rostered players; Steam account IDs 307000000 + offset) |
+| Org / League | by name | dota_lobby: "Lobby Test Org" / "Lobby Test League" (steam=17940, the simulator's bots administer it). Created last in `populate_all`, pks auto-assigned |
 
 When adding new features, pick the next available 1000-increment PK range.

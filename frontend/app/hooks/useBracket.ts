@@ -74,7 +74,7 @@ export function useBracketQuery(tournamentId: number | null) {
 
     // Compare to avoid unnecessary rerenders (same logic as old bracketStore.loadBracket)
     const newKey = mappedMatches
-      .map((m) => `${m.id}-${m.winner}-${m.status}-${m.radiantTeam?.pk}-${m.direTeam?.pk}`)
+      .map((m) => `${m.id}-${m.winner}-${m.status}-${m.radiantTeam?.pk}-${m.direTeam?.pk}-${m.lobbyState}`)
       .join('|');
 
     if (newKey === previousDataRef.current) return;

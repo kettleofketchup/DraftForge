@@ -28,8 +28,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { ApprovalConfigSection } from './ApprovalConfigSection';
 import { DiscordConfigSection, DiscordIcon } from './DiscordConfigSection';
 import { LobbyConfigSection } from './LobbyConfigSection';
+import { DotaLobbyEventSettings } from './DotaLobbyEventSettings';
+import { lobbyPasswordPayload, refineLobbyPassword } from '~/components/lobby/password';
 import { z } from 'zod';
-import { createEventInputSchema, GameMode, Frequency, FREQUENCY_LABELS, DAY_LABELS, DISCORD_CONFIG_DEFAULTS, COMMON_TIMEZONES, localToUTC, type CreateEventInput } from './schemas';
+import { createEventInputSchema, GameMode, Frequency, FREQUENCY_LABELS, DAY_LABELS, DISCORD_CONFIG_DEFAULTS, DOTA_LOBBY_CONFIG_DEFAULTS, COMMON_TIMEZONES, localToUTC, type CreateEventInput } from './schemas';
+
+// The fixed lobby password must be valid. Refined here, not on the shared
+// schema, because createSeriesEventInputSchema .omit()s from it.
+const createEventFormSchema = createEventInputSchema.superRefine(refineLobbyPassword);
 import { GAME_TYPE } from '~/components/game/constants';
 import { LeagueCombobox } from '~/components/league/LeagueCombobox';
 
@@ -67,8 +73,8 @@ export function CreateEventModal({
   // TTransformedValues = z.output<S> (what onSubmit receives after parse)
   // For schemas without transforms these are structurally identical but
   // TypeScript still treats them as distinct due to zod 4 type branding.
-  const form = useForm<z.input<typeof createEventInputSchema>, unknown, CreateEventInput>({
-    resolver: zodResolver(createEventInputSchema),
+  const form = useForm<z.input<typeof createEventFormSchema>, unknown, CreateEventInput>({
+    resolver: zodResolver(createEventFormSchema),
     defaultValues: {
       name: '',
       description: '',
@@ -87,6 +93,7 @@ export function CreateEventModal({
       timezone: '',
       discord_notify_new_events: true,
       ...DISCORD_CONFIG_DEFAULTS,
+      ...DOTA_LOBBY_CONFIG_DEFAULTS,
       signup_mode: 'immediate' as const,
       signup_days_before: 3,
       is_recurring: false,
@@ -150,6 +157,9 @@ export function CreateEventModal({
         is_recurring: false,
         frequency: Frequency.WEEKLY,
         generate_days_ahead: 7,
+        // Org defaults have no lobby settings: new events start with lobbies
+        // off and a random password.
+        ...DOTA_LOBBY_CONFIG_DEFAULTS,
       });
       setDefaultsApplied(true);
     }
@@ -165,7 +175,11 @@ export function CreateEventModal({
     if (isSubmitting) return;
     setIsSubmitting(true);
     try {
-      const { is_recurring, frequency, day_of_week, time_of_day, starts_at, ends_at, generate_days_ahead, scheduled_at: rawScheduledAt, discord_notify_new_events, signup_mode, signup_days_before, ...shared } = data;
+      const { is_recurring, frequency, day_of_week, time_of_day, starts_at, ends_at, generate_days_ahead, scheduled_at: rawScheduledAt, discord_notify_new_events, signup_mode, signup_days_before, dota_lobby_password_mode, dota_lobby_password, dota_lobby_password_saved: _saved, ...rest } = data;
+      const shared = {
+        ...rest,
+        ...lobbyPasswordPayload({ game_type: data.game_type, dota_lobby_password_mode, dota_lobby_password }),
+      };
       // Convert naive datetime-local to UTC using the selected timezone
       const scheduled_at = rawScheduledAt ? localToUTC(rawScheduledAt, data.timezone) : rawScheduledAt;
 
@@ -469,6 +483,11 @@ export function CreateEventModal({
         </div>
 
         <LobbyConfigSection control={form.control} watch={form.watch} />
+        <DotaLobbyEventSettings
+          control={form.control}
+          watch={form.watch}
+          scope={isRecurring ? 'series' : 'event'}
+        />
 
         {/* Signup mode */}
         {!isRecurring && (

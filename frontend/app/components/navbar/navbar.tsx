@@ -602,6 +602,7 @@ export const ResponsiveAppBar: React.FC = memo(() => {
         className="sticky z-50 top-0 flex items-center w-full h-16 xl:h-18 px-4 py-2 bg-base-600 shadow-elevated border-b border-border"
         role="navigation"
         aria-label={t('aria.main_nav')}
+        data-testid="nav-root"
       >
         <div className="flex grow shrink-0 basis-0 items-center justify-start w-1/2 gap-2">
           <MobileNav />

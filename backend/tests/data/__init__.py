@@ -10,6 +10,17 @@ Usage:
     from tests.data.teams import REAL_TOURNAMENT_38_TEAMS
 """
 
+# dota_lobby E2E (org, league, series, events, tournaments, users)
+from tests.data.dota_lobby import (
+    LOBBY_FIXED_PASSWORD,
+    LOBBY_LEAGUE,
+    LOBBY_ORG,
+    LOBBY_ROLE_USERS,
+    LOBBY_SERIES_NAME,
+    LOBBY_STEAM_LEAGUE_ID,
+    LOBBY_USERS,
+)
+
 # Leagues
 from tests.data.leagues import (
     ALL_LEAGUES,
@@ -277,4 +288,12 @@ __all__ = [
     "CSV_IMPORT_TOURNAMENT",
     "USER_EDIT_TOURNAMENT",
     "SHUFFLE_TIE_TOURNAMENT",
+    # dota_lobby E2E
+    "LOBBY_ORG",
+    "LOBBY_LEAGUE",
+    "LOBBY_STEAM_LEAGUE_ID",
+    "LOBBY_SERIES_NAME",
+    "LOBBY_FIXED_PASSWORD",
+    "LOBBY_ROLE_USERS",
+    "LOBBY_USERS",
 ]

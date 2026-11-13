@@ -156,6 +156,22 @@ slot-reap *args:
 background state:
     {{slots_py}} background "$1"
 
+# The simulated dota_lobby for the 18-dota-lobby specs: just test::dota-lobby [up|down|restart|logs|ps]
+[group('test')]
+dota-lobby action="up":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "$1" in
+        # The whole stack with the profile on, not `up dota-lobby`: slots N >= 1
+        # scale celery-beat and discord-bot to 0, which needs them in the selection.
+        up) COMPOSE_PROFILES=dota-lobby exec {{compose}} up -d ;;
+        down) exec {{compose}} rm --stop --force dota-lobby ;;
+        restart) exec {{compose}} restart dota-lobby ;;
+        logs) exec {{compose}} logs -f dota-lobby ;;
+        ps) exec {{compose}} ps dota-lobby ;;
+        *) echo "usage: just test::dota-lobby [up|down|restart|logs|ps]" >&2; exit 2 ;;
+    esac
+
 # Run compose against this worktree's slot (--stack S, --as-slot 0 for config)
 [group('test')]
 compose *args:

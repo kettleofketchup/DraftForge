@@ -30,13 +30,16 @@ export async function getEvent(eventId: number): Promise<EventType> {
   return data;
 }
 
-export async function createEvent(payload: Partial<EventType>, openSignups = false): Promise<EventType> {
+/** An event create/update body: the readable fields plus the write-only password. */
+export type EventWritePayload = Partial<EventType> & { dota_lobby_password?: string };
+
+export async function createEvent(payload: EventWritePayload, openSignups = false): Promise<EventType> {
   const params = openSignups ? '?open_signups=true' : '';
   const { data } = await axios.post<EventType>(`/events/${params}`, payload);
   return data;
 }
 
-export async function updateEvent(eventId: number, payload: Partial<EventType>): Promise<EventType> {
+export async function updateEvent(eventId: number, payload: EventWritePayload): Promise<EventType> {
   const { data } = await axios.patch<EventType>(`/events/${eventId}/`, payload);
   return data;
 }
@@ -205,6 +208,13 @@ export interface EventRepeaterType {
   auto_create_hero_drafts: boolean;
   discord_send_draft_link: boolean;
   discord_send_herodraft_link: boolean;
+  dota_lobby_mode?: 'off' | 'manual' | 'auto';
+  dota_lobby_launch?: 'manual' | 'auto';
+  dota_lobby_region?: string;
+  discord_send_lobby_info?: boolean;
+  dota_lobby_password_mode?: 'random' | 'fixed';
+  /** Write-only: never in responses (staff read it from lobby-password/). */
+  dota_lobby_password?: string;
   subscriber_count: number;
   is_subscribed: boolean;
   next_event_date: string | null;
@@ -329,9 +339,18 @@ export async function adminAddSignup(
   return data;
 }
 
+/** A one-off event body. A random lobby password mode sends no password. */
+export type SeriesOneOffPayload = Omit<
+  CreateSeriesEventInput,
+  'dota_lobby_password_mode' | 'dota_lobby_password' | 'dota_lobby_password_saved'
+> & {
+  dota_lobby_password_mode?: 'random' | 'fixed';
+  dota_lobby_password?: string;
+};
+
 export async function createSeriesOneOffEvent(
   repeaterId: number,
-  payload: CreateSeriesEventInput,
+  payload: SeriesOneOffPayload,
 ): Promise<EventType> {
   const { data } = await axios.post<EventType>(
     `/events/repeaters/${repeaterId}/create-event/`,

@@ -37,6 +37,15 @@ from .test_auth import (
 from .test_bracket import force_mismatched_winning_team
 from .test_csv import reset_csv_import
 from .test_demo import generate_demo_bracket, get_demo_tournament, reset_demo_tournament
+from .test_dota_lobby import (
+    dota_lobby_data,
+    dota_lobby_game_lobby,
+    dota_lobby_sim_proxy,
+    dota_lobby_simulator,
+    login_dota_lobby,
+    reset_dota_lobby,
+    seed_dota_lobby_row,
+)
 from .test_health import healthz
 from .test_discord import seed_discord_members
 from .test_events_discord import (
@@ -143,6 +152,12 @@ urlpatterns = [
         "login-auth-matrix-league-staff/",
         login_auth_matrix_league_staff,
         name="login-auth-matrix-league-staff",
+    ),
+    # dota_lobby E2E users (tests.data.dota_lobby.LOBBY_ROLE_USERS)
+    path(
+        "login-dota-lobby/<str:role>/",
+        login_dota_lobby,
+        name="test-login-dota-lobby",
     ),
     path(
         "login-as/",
@@ -304,6 +319,29 @@ urlpatterns = [
         "demo/<str:key>/",
         get_demo_tournament,
         name="test-demo-get",
+    ),
+    # dota_lobby E2E data and the simulated dota_lobby (test_dota_lobby.py)
+    path("dota-lobby/data/", dota_lobby_data, name="test-dota-lobby-data"),
+    path("dota-lobby/reset/", reset_dota_lobby, name="test-dota-lobby-reset"),
+    path(
+        "dota-lobby/games/<int:game_pk>/lobby/",
+        dota_lobby_game_lobby,
+        name="test-dota-lobby-game-lobby",
+    ),
+    path(
+        "dota-lobby/games/<int:game_pk>/lobby/seed/",
+        seed_dota_lobby_row,
+        name="test-dota-lobby-seed-lobby",
+    ),
+    path(
+        "dota-lobby/simulator/",
+        dota_lobby_simulator,
+        name="test-dota-lobby-simulator",
+    ),
+    path(
+        "dota-lobby-sim/<path:path>",
+        dota_lobby_sim_proxy,
+        name="test-dota-lobby-sim",
     ),
     path("healthz/", healthz, name="test-healthz"),
     # Bracket scenario helpers (gated on TEST=true)

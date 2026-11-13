@@ -55,6 +55,8 @@ Events are created from the organization page via a tabbed modal:
 
 Recurring events automatically generate individual events based on the schedule, each inheriting the repeater's configuration.
 
+For Dota 2 the configuration includes the hosted-lobby settings (off, manual or automatic lobbies; match start; region; the lobby info DM) and the **lobby password**: fixed (typed by staff on the series or event) or random (generated once per event). Every lobby of an event uses its one password; registered players (approved or confirmed signups, or rostered on a team) see it on the event page ahead of time. Each event copies these settings onto its tournament. See [Dota 2 lobbies: Event lobby passwords](planned/dota-lobbies.md#event-lobby-passwords).
+
 ### Organization Event Defaults
 
 Admins configure default settings per organization. When creating new events, the form pre-fills from these defaults — no need to re-enter Discord channels, tournament config, or approval settings each time.
@@ -172,6 +174,8 @@ See [Roll Call](events/roll-call.md) for the dedicated roll call feature documen
 | POST | `/api/events/{id}/start_tournament/` | Start tournament with the confirmed roster |
 | POST | `/api/events/{id}/cancel/` | Cancel event. Deletes the linked tournament **and** the event's live Discord scheduled event, then clears `scheduled_event_id` so the 60-second `sync-discord-events` beat can't resurrect it. |
 | GET | `/api/events/{id}/discord-logs/` | Discord notification audit log for the event's tournament |
+| GET | `/api/events/{id}/lobby-password/` | The event's lobby password. Org staff get `{mode, password, source, can_manage}`, registered players (approved or confirmed signup, or rostered) get `{password}`, anyone else `404`. Never cached. |
+| POST | `/api/events/{id}/lobby-password/regenerate/` | New random lobby password (org staff); `409` in fixed mode. Existing lobbies keep theirs. |
 
 ### Signup actions (admin)
 
@@ -193,6 +197,7 @@ See [Roll Call](events/roll-call.md) for the dedicated roll call feature documen
 | POST | `/api/events/repeaters/{id}/subscribe/` | Subscribe to repeater |
 | POST | `/api/events/repeaters/{id}/unsubscribe/` | Unsubscribe |
 | POST | `/api/events/repeaters/{id}/create-event/` | Create an extra ("one-off") event attached to the series (org staff). Body: `{"scheduled_at": <ISO8601>, "open_signups": <bool>, ...config overrides}`. Returns `201` with the event; `409` on an occurrence collision, `400` on a past/out-of-range time or an invalid override, `403` for non-staff. |
+| GET | `/api/events/repeaters/{id}/lobby-password/` | The series' lobby password mode and fixed password (org staff; `404` for anyone else). |
 | POST | `/api/events/repeaters/{id}/reactivate/` | Reactivate a paused series and realign its upcoming events (org staff). Returns `200` with `{"detail", "created_count", "is_active"}`. |
 | GET | `/api/events/defaults/` | Get org event defaults |
 | PATCH | `/api/events/defaults/{id}/` | Update org defaults |

@@ -131,6 +131,47 @@ Other specs mention Discord only through populated Discord IDs, `loginAsDiscordI
 "Login with Discord" label, and need no external service. No e2e spec calls the real
 Steam API; Steam match specs use populated data.
 
+### Simulated dota_lobby
+
+The dota_lobby integration specs (`e2e/18-dota-lobby/`) run against the real dota_lobby
+service in simulation mode: simulated bots, players and matches, no Steam logon. It is
+the `dota-lobby` service in `docker-compose.test.yaml`, behind the `dota-lobby` compose
+profile, so `just test::up`, `test::setup` and CI never start or pull it.
+
+```bash
+# Until a dota_lobby release with simulation mode exists, build it in dota_lobby
+# (`just docker::build`, tag ghcr.io/kettleofketchup/dota_lobby:local) and use that:
+DOTA_LOBBY_IMAGE=ghcr.io/kettleofketchup/dota_lobby:local just test::dota-lobby up
+just test::pw::dota-lobby          # the 18-dota-lobby specs, in order
+just test::dota-lobby logs         # follow it; also down, restart, ps
+```
+
+- **Image:** `DOTA_LOBBY_IMAGE`, default `ghcr.io/kettleofketchup/dota_lobby:${DOTA_LOBBY_IMAGE_TAG}`.
+  The tag defaults to `0.2.0`, the first dota_lobby release with simulation mode; bump the
+  default in `docker-compose.test.yaml` (and `scripts/slot_tests/test_compose_files.py`)
+  to take a newer release.
+- **Config:** `docker/dota-lobby/simulator.yaml` (three bots that administer the
+  Lobby Test League, auto join, auto start, a 5 s post-game linger) and
+  `simulator-secrets.yaml`. Every secret in them is a test-only value that
+  `docker/.env.test` repeats for the backend and Celery: `DOTA_LOBBY_API_KEY`,
+  `DOTA_LOBBY_WEBHOOK_SECRET` and `INTERNAL_SERVICE_TOKEN` (the simulator sends it
+  with each webhook). `docker/.env.test` also sets `DOTA_LOBBY_ENABLED=true` and
+  `DOTA_LOBBY_URL=http://dota-lobby:8080`, so test stacks have lobbies on even without
+  the simulator; the backend unit tests still start with them off
+  (`backend/backend/test_runner.py`).
+- **Per slot:** the container name is project-scoped and it publishes no port, so every
+  slot runs its own. It posts webhooks to its own stack's backend.
+- **Teardown:** `test::down`, `stop`, `kill` and `rm` add `--profile '*'`, so the
+  simulator goes with its stack.
+- **State:** lobbies live in memory and the database on a tmpfs: `just test::dota-lobby
+  restart` starts from nothing.
+- **Without it,** the specs that need it skip. `just test::pw::dota-lobby` and
+  `cicd-dota-lobby` set `DOTA_LOBBY_SIMULATOR_REQUIRED=1` when this slot's simulator is
+  running, so a simulator that is up but never becomes available within 60 s (bots not
+  ready, test league not verified) fails the run rather than skipping it.
+  `03-password-visibility` falls back to a seeded lobby row and `05-modal-fit` needs
+  only lobbies on: both always run, CI included.
+
 ### Backend suites that skip without tokens
 
 `events.tests.test_discord_integration` (with helpers in `discordbot/test_utils.py`)
