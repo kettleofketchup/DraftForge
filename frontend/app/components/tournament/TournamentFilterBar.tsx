@@ -3,12 +3,24 @@ import { useEffect, useId, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { useLeagues } from '~/components/league';
 import { useOrganizations } from '~/components/organization';
+import {
+  ORG_SCOPE_ALL,
+  ORG_SCOPE_MINE,
+  groupOrganizations,
+  isDefaultOrgScope,
+  isExplicitOrgScope,
+  orgScopeParam,
+  orgScopeValue,
+  parseOrgScope,
+} from '~/components/tournament/orgScope';
 import { filtersActive, parseFilterId } from '~/components/tournament/tournamentBuckets';
 import {
   BrandSelect,
   BrandSelectContent,
   BrandSelectItem,
   BrandSelectTrigger,
+  SelectGroup,
+  SelectLabel,
   SelectValue,
 } from '~/components/ui/brand-select';
 import { SecondaryButton } from '~/components/ui/buttons';
@@ -24,12 +36,15 @@ export function nextFilterParams(
   params: URLSearchParams,
   key: FilterKey,
   value: string,
+  isLoggedIn = false,
 ): URLSearchParams {
   const next = new URLSearchParams(params);
-  if (value === ALL) {
+  const param =
+    key === 'organization' ? orgScopeParam(value, isLoggedIn) : value === ALL ? null : value;
+  if (param === null) {
     next.delete(key);
   } else {
-    next.set(key, value);
+    next.set(key, param);
   }
   if (key === 'organization') {
     next.delete('league');
@@ -45,14 +60,22 @@ function selectValue(
   return known.some((item) => item.pk === id) ? String(id) : '';
 }
 
+const GROUP_LABEL = 'px-2 py-1.5 text-xs font-semibold text-muted-foreground';
+
 interface TournamentFilterBarProps {
   searchInput: string;
   onSearchInputChange: (value: string) => void;
+  isLoggedIn: boolean;
+  memberOrgIds: number[] | undefined;
+  membershipPending: boolean;
 }
 
 export function TournamentFilterBar({
   searchInput,
   onSearchInputChange,
+  isLoggedIn,
+  memberOrgIds,
+  membershipPending,
 }: TournamentFilterBarProps) {
   const [mounted, setMounted] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -65,16 +88,29 @@ export function TournamentFilterBar({
     setMounted(true);
   }, []);
 
-  const organization = parseFilterId(searchParams.get('organization'));
+  const rawOrganization = searchParams.get('organization');
+  const scope = parseOrgScope(rawOrganization, isLoggedIn);
+  const scopePending = membershipPending && !isExplicitOrgScope(rawOrganization);
+  const organization = scope.kind === 'org' ? scope.id : undefined;
   const league = parseFilterId(searchParams.get('league'));
 
   const { organizations, isLoading: orgsLoading } = useOrganizations();
   const { leagues, isLoading: leaguesLoading } = useLeagues(organization);
+  const { yours, others } = groupOrganizations(
+    organizations,
+    isLoggedIn ? memberOrgIds : undefined,
+  );
 
-  const active = filtersActive({ organization, league, searchInput });
+  const active = filtersActive({
+    scopeChanged: !scopePending && !isDefaultOrgScope(scope, isLoggedIn),
+    league,
+    searchInput,
+  });
+  const orgValue =
+    scope.kind === 'org' ? selectValue(scope.id, organizations) : orgScopeValue(scope);
 
   const setFilter = (key: FilterKey, value: string) => {
-    setSearchParams(nextFilterParams(searchParams, key, value));
+    setSearchParams(nextFilterParams(searchParams, key, value, isLoggedIn));
   };
 
   const clearFilters = () => {
@@ -126,31 +162,62 @@ export function TournamentFilterBar({
         <Label id={orgLabelId} className="text-xs text-muted-foreground">
           Organization
         </Label>
-        <BrandSelect
-          value={selectValue(organization, organizations)}
-          onValueChange={(v) => setFilter('organization', v)}
-        >
-          <BrandSelectTrigger
-            aria-labelledby={`${orgLabelId} ${orgValueId}`}
-            data-testid="tournaments-filter-organization"
-            className="w-full min-w-0 max-w-full sm:w-48"
+        {scopePending ? (
+          <Skeleton
+            data-testid="tournaments-filter-organization-pending"
+            className="h-9 w-full sm:w-48"
+          />
+        ) : (
+          <BrandSelect
+            value={orgValue}
+            onValueChange={(v) => setFilter('organization', v)}
           >
-            <SelectValue
-              id={orgValueId}
-              placeholder={orgsLoading ? 'Loading organizations…' : 'Unknown organization'}
-            />
-          </BrandSelectTrigger>
-          <BrandSelectContent>
-            <BrandSelectItem value={ALL}>All organizations</BrandSelectItem>
-            {organizations
-              .filter((org) => org.pk != null)
-              .map((org) => (
-                <BrandSelectItem key={org.pk} value={String(org.pk)}>
-                  {org.name}
-                </BrandSelectItem>
-              ))}
-          </BrandSelectContent>
-        </BrandSelect>
+            <BrandSelectTrigger
+              aria-labelledby={`${orgLabelId} ${orgValueId}`}
+              data-testid="tournaments-filter-organization"
+              className="w-full min-w-0 max-w-full sm:w-48"
+            >
+              <SelectValue
+                id={orgValueId}
+                placeholder={orgsLoading ? 'Loading organizations…' : 'Unknown organization'}
+              />
+            </BrandSelectTrigger>
+            <BrandSelectContent>
+              {isLoggedIn && (
+                <BrandSelectItem value={ORG_SCOPE_MINE}>My organizations</BrandSelectItem>
+              )}
+              <BrandSelectItem value={ORG_SCOPE_ALL}>All organizations</BrandSelectItem>
+              {isLoggedIn && yours.length > 0 ? (
+                <>
+                  <SelectGroup>
+                    <SelectLabel className={GROUP_LABEL}>Your organizations</SelectLabel>
+                    {yours.map((org) => (
+                      <BrandSelectItem key={org.pk} value={String(org.pk)}>
+                        {org.name}
+                      </BrandSelectItem>
+                    ))}
+                  </SelectGroup>
+                  {others.length > 0 && (
+                    <SelectGroup>
+                      <SelectLabel className={GROUP_LABEL}>Other organizations</SelectLabel>
+                      {others.map((org) => (
+                        <BrandSelectItem key={org.pk} value={String(org.pk)}>
+                          {org.name}
+                        </BrandSelectItem>
+                      ))}
+                    </SelectGroup>
+                  )}
+                </>
+              ) : (
+                others.map((org) => (
+                  <BrandSelectItem key={org.pk} value={String(org.pk)}>
+                    {org.name}
+                  </BrandSelectItem>
+                ))
+              )}
+            </BrandSelectContent>
+          </BrandSelect>
+        )}
       </div>
       <div className="flex w-full flex-col gap-1 sm:w-48">
         <Label id={leagueLabelId} className="text-xs text-muted-foreground">

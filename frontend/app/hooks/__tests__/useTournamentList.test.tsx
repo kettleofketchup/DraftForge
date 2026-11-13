@@ -94,6 +94,57 @@ describe('useUpcomingTournaments', () => {
   });
 });
 
+describe('organization scope', () => {
+  it('maps member organizations and open signups to the request and key', async () => {
+    const { queryClient, wrapper } = setup();
+    const { result } = renderHook(
+      () =>
+        useUpcomingTournaments(
+          { organizations: [32, 30], openSignups: true },
+          { enabled: true },
+        ),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(getTournamentsMock).toHaveBeenCalledWith({
+      bucket: 'upcoming',
+      organizationIds: [30, 32],
+      openSignups: true,
+    });
+    const [key] = queryClient.getQueryCache().getAll().map((q) => q.queryKey);
+    expect(key).toEqual(
+      tournamentListKeys.upcoming({
+        organizations: [30, 32],
+        openSignups: true,
+        day: cutoffDayKey(new Date()),
+      }),
+    );
+  });
+
+  it('keys the empty member list apart from no organization filter', async () => {
+    const { queryClient, wrapper } = setup();
+    renderHook(() => useUpcomingTournaments({ organizations: [] }, { enabled: true }), {
+      wrapper,
+    });
+    renderHook(() => useUpcomingTournaments({}, { enabled: true }), { wrapper });
+    await waitFor(() => expect(getTournamentsMock).toHaveBeenCalledTimes(2));
+    expect(queryClient.getQueryCache().getAll()).toHaveLength(2);
+  });
+
+  it('passes member organizations to archived pages', async () => {
+    getTournamentsPageMock.mockResolvedValueOnce(page([1], null));
+    const { wrapper } = setup();
+    const { result } = renderHook(
+      () => useArchivedTournaments({ organizations: [30] }, { enabled: true }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(getTournamentsPageMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ organizationIds: [30], page: 1 }),
+    );
+  });
+});
+
 describe('useArchivedTournaments', () => {
   it('does not fetch while disabled', async () => {
     const { wrapper } = setup();

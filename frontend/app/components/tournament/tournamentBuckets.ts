@@ -115,12 +115,13 @@ export function dedupeByPk(ts: TournamentType[]): TournamentType[] {
 }
 
 export function filtersActive(f: {
-  organization?: number;
+  /** The organization scope differs from the viewer's default. */
+  scopeChanged?: boolean;
   league?: number;
   searchInput: string;
 }): boolean {
   return (
-    f.organization !== undefined ||
+    f.scopeChanged === true ||
     f.league !== undefined ||
     normalizeSearch(f.searchInput) !== undefined
   );

@@ -12,7 +12,17 @@ import {
 } from '~/components/tournament/tournamentBuckets';
 import { cn } from '~/lib/utils';
 
-import { Building2, Calendar, Clock, Crown, Eye, Swords, Trophy, Users } from 'lucide-react';
+import {
+  Building2,
+  Calendar,
+  Clock,
+  Crown,
+  Eye,
+  Swords,
+  Trophy,
+  UserPlus,
+  Users,
+} from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router';
 import { useUserStore } from '~/store/userStore';
@@ -39,6 +49,8 @@ interface Props {
   /** Animation delay index for staggered loading */
   animationIndex?: number;
   bucket?: TournamentBucket;
+  /** Show a "Signups open" badge (listed for its open signups, not membership). */
+  signupsOpen?: boolean;
 }
 
 /** className that lets the cell trim its content with native CSS ellipsis. */
@@ -145,6 +157,7 @@ export const TournamentCard: React.FC<Props> = React.memo(({
   tournament,
   animationIndex = 0,
   bucket,
+  signupsOpen = false,
 }) => {
   const navigate = useNavigate();
   const currentUser = useUserStore((state) => state.currentUser);
@@ -171,6 +184,16 @@ export const TournamentCard: React.FC<Props> = React.memo(({
             >
               <span aria-hidden className="size-1.5 rounded-full bg-primary motion-safe:animate-pulse" />
               Live
+            </Badge>
+          )}
+          {signupsOpen && (
+            <Badge
+              variant="outline"
+              data-testid="tournament-signups-open-badge"
+              className="h-5 shrink-0 gap-1 border-success/30 bg-success/20 py-0 leading-none text-success"
+            >
+              <UserPlus className="size-3" aria-hidden />
+              Signups open
             </Badge>
           )}
           <OrgCell key={league?.organization_logo || 'none'} league={league} />
@@ -381,6 +404,7 @@ export const TournamentCard: React.FC<Props> = React.memo(({
     prevLeague?.organization_logo === nextLeague?.organization_logo &&
     prev.user_count === next.user_count &&
     prevProps.animationIndex === nextProps.animationIndex &&
-    prevProps.bucket === nextProps.bucket
+    prevProps.bucket === nextProps.bucket &&
+    prevProps.signupsOpen === nextProps.signupsOpen
   );
 });

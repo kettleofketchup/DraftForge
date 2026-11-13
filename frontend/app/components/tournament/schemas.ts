@@ -87,6 +87,7 @@ export const TournamentSchema = z.object({
   steam_league_id: z.number().nullable().optional(),
   // User count from lightweight list endpoint (instead of full users array)
   user_count: z.number().optional(),
+  signups_open: z.boolean().optional(),
   // Organization PK from the tournament's league
   organization_pk: z.number().nullable().optional(),
   // League PK

@@ -216,7 +216,8 @@ describe('filtersActive', () => {
   });
 
   it('counts an organization filter', () => {
-    expect(filtersActive({ organization: 3, searchInput: '' })).toBe(true);
+    expect(filtersActive({ scopeChanged: true, searchInput: '' })).toBe(true);
+    expect(filtersActive({ scopeChanged: false, searchInput: '' })).toBe(false);
   });
 
   it('counts a league filter and a real search', () => {

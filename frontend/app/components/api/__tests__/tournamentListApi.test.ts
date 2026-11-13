@@ -55,6 +55,22 @@ describe('getTournaments', () => {
     await getTournaments({ organizationId: 0 });
     expect(requestedParams().get('organization')).toBe('0');
   });
+
+  it('sends an organizations list and open_signups', async () => {
+    await getTournaments({ bucket: 'upcoming', organizationIds: [30, 32], openSignups: true });
+    const params = requestedParams();
+    expect(params.get('organizations')).toBe('30,32');
+    expect(params.get('open_signups')).toBe('1');
+    expect(params.has('organization')).toBe(false);
+  });
+
+  it('sends an empty organizations list and omits open_signups when false', async () => {
+    await getTournaments({ bucket: 'archived', organizationIds: [], openSignups: false });
+    const params = requestedParams();
+    expect(params.has('organizations')).toBe(true);
+    expect(params.get('organizations')).toBe('');
+    expect(params.has('open_signups')).toBe(false);
+  });
 });
 
 describe('getTournamentsPage', () => {

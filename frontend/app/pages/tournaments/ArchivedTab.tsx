@@ -3,7 +3,12 @@ import type { ArchivedTournamentsResult } from '~/hooks/useTournamentList';
 import { SecondaryButton } from '~/components/ui/buttons';
 import { getLogger } from '~/lib/logger';
 import { ListError } from './ListError';
-import { EmptyState, TournamentGrid, TournamentGridSkeleton } from './TournamentGrid';
+import {
+  BrowseAllButton,
+  EmptyState,
+  TournamentGrid,
+  TournamentGridSkeleton,
+} from './TournamentGrid';
 
 const log = getLogger('tournaments');
 
@@ -24,10 +29,14 @@ type ArchivedQuery = Pick<
 
 export function ArchivedTab({
   query,
+  mine,
   showClearHint,
+  onBrowseAll,
 }: {
   query: ArchivedQuery;
+  mine: boolean;
   showClearHint: boolean;
+  onBrowseAll: () => void;
 }) {
   const {
     data,
@@ -67,8 +76,11 @@ export function ArchivedTab({
     content = (
       <EmptyState
         testId="tournaments-empty-archived"
-        message="No archived tournaments"
+        message={
+          mine ? 'No archived tournaments in your organizations' : 'No archived tournaments'
+        }
         showClearHint={showClearHint}
+        action={mine ? <BrowseAllButton onClick={onBrowseAll} /> : undefined}
       />
     );
   } else {

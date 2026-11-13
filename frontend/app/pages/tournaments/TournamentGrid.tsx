@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, type ReactNode } from 'react';
 import { TournamentCard } from '~/components/tournament/card/TournamentCard';
 import {
   TOURNAMENT_CARD_CELL,
@@ -8,6 +8,7 @@ import type {
   TournamentBucket,
   TournamentType,
 } from '~/components/tournament/types';
+import { SecondaryButton } from '~/components/ui/buttons';
 import { Skeleton } from '~/components/ui/skeleton';
 import { cn } from '~/lib/utils';
 
@@ -18,10 +19,12 @@ const GridCell = memo(function GridCell({
   tournament,
   bucket,
   animationIndex,
+  signupsOpen,
 }: {
   tournament: TournamentType;
   bucket: TournamentBucket;
   animationIndex: number;
+  signupsOpen: boolean;
 }) {
   return (
     <div className="col-span-1 flex h-full">
@@ -29,6 +32,7 @@ const GridCell = memo(function GridCell({
         tournament={tournament}
         bucket={bucket}
         animationIndex={animationIndex}
+        signupsOpen={signupsOpen}
       />
     </div>
   );
@@ -38,10 +42,13 @@ export function TournamentGrid({
   tournaments,
   bucket,
   testId,
+  showSignupsOpen,
 }: {
   tournaments: TournamentType[];
   bucket: TournamentBucket;
   testId?: string;
+  /** Which cards get a "Signups open" badge. */
+  showSignupsOpen?: (t: TournamentType) => boolean;
 }) {
   return (
     <div className={GRID_CLASSES} data-testid={testId}>
@@ -51,6 +58,7 @@ export function TournamentGrid({
           tournament={t}
           bucket={bucket}
           animationIndex={index}
+          signupsOpen={showSignupsOpen?.(t) ?? false}
         />
       ))}
     </div>
@@ -85,10 +93,12 @@ export function EmptyState({
   testId,
   message,
   showClearHint,
+  action,
 }: {
   testId: string;
   message: string;
   showClearHint: boolean;
+  action?: ReactNode;
 }) {
   return (
     <div
@@ -97,6 +107,15 @@ export function EmptyState({
     >
       <p className="text-base font-medium">{message}</p>
       {showClearHint && <p className="text-sm">Try clearing filters</p>}
+      {action && <div className="mt-3">{action}</div>}
     </div>
+  );
+}
+
+export function BrowseAllButton({ onClick }: { onClick: () => void }) {
+  return (
+    <SecondaryButton size="sm" data-testid="tournaments-empty-browse-all" onClick={onClick}>
+      Browse all organizations
+    </SecondaryButton>
   );
 }

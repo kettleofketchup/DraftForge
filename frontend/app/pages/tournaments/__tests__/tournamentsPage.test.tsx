@@ -72,8 +72,10 @@ function tournament(
   pk: number,
   orgId: number,
   state: TournamentType['state'] = 'future',
+  signupsOpen = false,
 ): TournamentType {
   return {
+    signups_open: signupsOpen,
     pk,
     name: `Cup ${pk}`,
     date_played: '2099-11-20T18:00:00Z',
@@ -223,10 +225,98 @@ describe('tournaments page tabs', () => {
   });
 });
 
+describe('organization scope', () => {
+  it('defaults a member to their organizations plus open signups on upcoming', () => {
+    renderPage();
+    expect(upcomingMock).toHaveBeenLastCalledWith(
+      { organizations: [30], openSignups: true, league: undefined, search: '' },
+      { enabled: true },
+    );
+  });
+
+  it('asks for member organizations only on archived', () => {
+    renderPage('/tournaments?tab=archived');
+    expect(archivedMock).toHaveBeenLastCalledWith(
+      { organizations: [30], league: undefined, search: '' },
+      { enabled: true },
+    );
+  });
+
+  it('sends no organization scope for all organizations', () => {
+    renderPage('/tournaments?organization=all');
+    expect(upcomingMock).toHaveBeenLastCalledWith(
+      { league: undefined, search: '' },
+      { enabled: true },
+    );
+  });
+
+  it('sends no organization scope when logged out, even for ?organization=mine', () => {
+    stubMembership(undefined, { isLoggedIn: false });
+    renderPage('/tournaments?organization=mine');
+    expect(upcomingMock).toHaveBeenLastCalledWith(
+      { league: undefined, search: '' },
+      { enabled: true },
+    );
+  });
+
+  it('holds the default query until membership resolves', () => {
+    stubMembership(undefined, { isLoggedIn: false, membershipPending: true });
+    renderPage();
+    expect(upcomingMock).toHaveBeenLastCalledWith(expect.anything(), { enabled: false });
+  });
+
+  it('does not wait for membership on an explicit organization', () => {
+    stubMembership(undefined, { isLoggedIn: false, membershipPending: true });
+    renderPage('/tournaments?organization=30');
+    expect(upcomingMock).toHaveBeenLastCalledWith(
+      { organization: 30, league: undefined, search: '' },
+      { enabled: true },
+    );
+  });
+
+  it('renders my organizations as one list and badges other orgs with open signups', () => {
+    stubUpcoming({ data: [tournament(1, 30, 'future', true), tournament(2, 32, 'future', true)] });
+    renderPage();
+    expect(screen.queryByTestId('tournaments-tier-yours')).toBeNull();
+    expect(screen.queryByTestId('tournaments-tier-others')).toBeNull();
+    const member = screen.getByTestId('tournament-card-1');
+    const open = screen.getByTestId('tournament-card-2');
+    expect(within(member).queryByTestId('tournament-signups-open-badge')).toBeNull();
+    expect(within(open).getByTestId('tournament-signups-open-badge')).toHaveTextContent(
+      'Signups open',
+    );
+  });
+
+  it('shows no signups badge outside my organizations', () => {
+    stubUpcoming({ data: [tournament(2, 32, 'future', true)] });
+    renderPage('/tournaments?organization=all');
+    expect(screen.queryByTestId('tournament-signups-open-badge')).toBeNull();
+  });
+
+  it('offers all organizations when my organizations have nothing upcoming', () => {
+    stubUpcoming({ data: [] });
+    renderPage();
+    const empty = screen.getByTestId('tournaments-empty-upcoming');
+    expect(empty).toHaveTextContent('No upcoming tournaments in your organizations');
+    fireEvent.click(within(empty).getByTestId('tournaments-empty-browse-all'));
+    expect(locationParams().get('organization')).toBe('all');
+  });
+
+  it('offers all organizations when my organizations have no archive', () => {
+    stubArchived({ tournaments: [] });
+    renderPage('/tournaments?tab=archived');
+    const empty = screen.getByTestId('tournaments-empty-archived');
+    expect(empty).toHaveTextContent('No archived tournaments in your organizations');
+    fireEvent.click(within(empty).getByTestId('tournaments-empty-browse-all'));
+    expect(locationParams().get('organization')).toBe('all');
+    expect(locationParams().get('tab')).toBe('archived');
+  });
+});
+
 describe('upcoming tiers', () => {
   it('splits into yours and others with counts', () => {
     stubUpcoming({ data: [tournament(1, 30), tournament(2, 31), tournament(3, 31)] });
-    renderPage();
+    renderPage('/tournaments?organization=all');
     expect(screen.getByTestId('tournaments-tier-yours')).toHaveTextContent(
       /Your organizations\s*\(1\)/,
     );
@@ -249,14 +339,14 @@ describe('upcoming tiers', () => {
 
   it('omits the others tier when it is empty', () => {
     stubUpcoming({ data: [tournament(1, 30)] });
-    renderPage();
+    renderPage('/tournaments?organization=all');
     expect(screen.getByTestId('tournaments-tier-yours')).toBeInTheDocument();
     expect(screen.queryByTestId('tournaments-tier-others')).toBeNull();
   });
 
   it('offers the archive when your organizations have nothing upcoming', async () => {
     stubUpcoming({ data: [tournament(2, 31)] });
-    renderPage();
+    renderPage('/tournaments?organization=all');
     expect(screen.getByTestId('tournaments-tier-yours')).toBeInTheDocument();
     expect(
       screen.getByText('No upcoming tournaments in your organizations.'),
@@ -305,6 +395,7 @@ describe('upcoming states', () => {
 
   it('does not suggest clearing filters without filters', () => {
     stubUpcoming({ data: [] });
+    stubMembership(undefined, { isLoggedIn: false });
     renderPage();
     expect(screen.getByTestId('tournaments-empty-upcoming')).toHaveTextContent(
       'No upcoming tournaments',
@@ -329,7 +420,7 @@ describe('upcoming states', () => {
     second.unmount();
 
     stubUpcoming({ data: [tournament(1, 30), tournament(2, 31)], isFetching: true });
-    renderPage();
+    renderPage('/tournaments?organization=all');
     panel = screen.getByTestId('tournaments-panel-upcoming');
     expect(panel).toHaveAttribute('data-fetching', 'true');
     expect(within(panel).getByTestId('tournaments-tier-others')).toBeInTheDocument();
@@ -412,6 +503,7 @@ describe('archived tab', () => {
 
   it('shows the archived empty state', () => {
     stubArchived({ tournaments: [] });
+    stubMembership(undefined, { isLoggedIn: false });
     renderPage('/tournaments?tab=archived');
     expect(screen.getByTestId('tournaments-empty-archived')).toHaveTextContent(
       'No archived tournaments',

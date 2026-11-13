@@ -3,7 +3,13 @@ import { useEffect, useId, type ReactNode } from 'react';
 import type { TournamentsType, TournamentType } from '~/components/tournament/types';
 import { SecondaryButton } from '~/components/ui/buttons';
 import { getLogger } from '~/lib/logger';
-import { EmptyState, TournamentGrid, TournamentGridSkeleton } from './TournamentGrid';
+import { showsSignupsOpenBadge } from '~/components/tournament/orgScope';
+import {
+  BrowseAllButton,
+  EmptyState,
+  TournamentGrid,
+  TournamentGridSkeleton,
+} from './TournamentGrid';
 import type { Membership } from './useMembership';
 import { resolveUpcomingView } from './upcomingView';
 import { ListError } from './ListError';
@@ -42,14 +48,18 @@ export function UpcomingTab({
   query,
   membership,
   orgOrLeagueFilter,
+  mine,
   showClearHint,
   onViewArchived,
+  onBrowseAll,
 }: {
   query: Pick<UseQueryResult<TournamentsType>, 'data' | 'isError' | 'isFetching' | 'refetch' | 'error'>;
   membership: Membership;
   orgOrLeagueFilter: boolean;
+  mine: boolean;
   showClearHint: boolean;
   onViewArchived: () => void;
+  onBrowseAll: () => void;
 }) {
   const { data, isError, isFetching, refetch, error } = query;
   const failed = isError && !data;
@@ -81,12 +91,26 @@ export function UpcomingTab({
     content = (
       <EmptyState
         testId="tournaments-empty-upcoming"
-        message="No upcoming tournaments"
+        message={
+          mine
+            ? 'No upcoming tournaments in your organizations or with open signups'
+            : 'No upcoming tournaments'
+        }
         showClearHint={showClearHint}
+        action={mine ? <BrowseAllButton onClick={onBrowseAll} /> : undefined}
       />
     );
   } else if (view.kind === 'flat') {
-    content = <TournamentGrid tournaments={view.items} bucket="upcoming" />;
+    const memberOrgIds = membership.memberOrgIds;
+    content = (
+      <TournamentGrid
+        tournaments={view.items}
+        bucket="upcoming"
+        showSignupsOpen={
+          mine ? (t) => showsSignupsOpenBadge(t, memberOrgIds) : undefined
+        }
+      />
+    );
   } else {
     content = (
       <div className="flex flex-col gap-8">

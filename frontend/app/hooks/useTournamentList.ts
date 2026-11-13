@@ -21,12 +21,16 @@ const STALE_TIME_MS = 5 * 60_000;
 
 export interface TournamentListQuery {
   organization?: number;
+  organizations?: number[];
+  openSignups?: boolean;
   league?: number;
   search?: string;
 }
 
 export interface NormalizedListKeyParams {
   organization?: number;
+  organizations?: number[];
+  openSignups?: boolean;
   league?: number;
   search?: string;
   day: string;
@@ -43,6 +47,11 @@ export const tournamentListKeys = {
 function normalizeParams(params: TournamentListQuery): NormalizedListKeyParams {
   return {
     organization: params.organization,
+    organizations:
+      params.organizations === undefined
+        ? undefined
+        : [...params.organizations].sort((a, b) => a - b),
+    openSignups: params.openSignups || undefined,
     league: params.league,
     search: params.search === undefined ? undefined : normalizeSearch(params.search),
     day: cutoffDayKey(new Date()),
@@ -60,6 +69,8 @@ export function useUpcomingTournaments(
       getTournaments({
         bucket: 'upcoming',
         organizationId: key.organization,
+        organizationIds: key.organizations,
+        openSignups: key.openSignups,
         leagueId: key.league,
         search: key.search,
       }),
@@ -84,6 +95,8 @@ export function useArchivedTournaments(
       getTournamentsPage({
         bucket: 'archived',
         organizationId: key.organization,
+        organizationIds: key.organizations,
+        openSignups: key.openSignups,
         leagueId: key.league,
         search: key.search,
         page: pageParam,
