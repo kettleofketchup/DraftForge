@@ -1096,11 +1096,12 @@ class AutoPauseTests(TransactionTestCase):
             freshness(self.fx.draft.pk)
             sent.clear()
             freshness(self.fx.draft.pk)
-            self.assertEqual(sent, [])
+            mine = [m for m in sent if m["captain_id"] == self.rnd.captain_id]
+            self.assertEqual(mine, [])
             self.r.delete(self.hb)
             freshness(self.fx.draft.pk)
         self.assertEqual(
-            sent,
+            [m for m in sent if m["captain_id"] == self.rnd.captain_id],
             [
                 {
                     "group": f"draft_{self.fx.draft.pk}",
@@ -1110,6 +1111,25 @@ class AutoPauseTests(TransactionTestCase):
                 }
             ],
         )
+
+    def test_paused_draft_resends_stale_captains_every_pass(self) -> None:
+        sent: list[dict] = []
+
+        class Layer:
+            async def group_send(self, group: str, message: dict) -> None:
+                sent.append(message)
+
+        draft = Draft.objects.get(pk=self.fx.draft.pk)
+        draft.state = TeamDraftState.PAUSED
+        draft.save()
+        self.r.delete(self.hb)
+        self.addCleanup(teamdraft_tick._paused_freshness.pop, self.fx.draft.pk, None)
+        freshness = async_to_sync(teamdraft_tick.broadcast_paused_freshness)
+        with patch("app.tasks.teamdraft_tick.get_channel_layer", return_value=Layer()):
+            freshness(self.fx.draft.pk)
+            freshness(self.fx.draft.pk)
+        mine = [m["fresh"] for m in sent if m["captain_id"] == self.rnd.captain_id]
+        self.assertEqual(mine, [False, False])
 
     def test_a_failed_freshness_send_is_logged_and_retried(self):
         sent: list[dict] = []
@@ -1444,6 +1464,35 @@ class DraftConsumerTimerTests(TransactionTestCase):
             frame,
             {"type": "captain_heartbeat", "captain_id": self.cap.pk, "fresh": True},
         )
+        await spectator.disconnect()
+        await captain.disconnect()
+
+    async def _captain_freshness(self, comm: WebsocketCommunicator) -> bool:
+        while True:
+            frame = await read_until_type(comm, "captain_heartbeat")
+            if frame["captain_id"] == self.cap.pk:
+                return frame["fresh"]
+
+    @patch("app.tasks.draft_tick.start_tick_broadcaster", return_value=True)
+    async def test_paused_captain_reconnecting_then_going_stale_is_announced(
+        self, mock_start
+    ) -> None:
+        await database_sync_to_async(self.fx.start)()
+        draft = await database_sync_to_async(Draft.objects.get)(pk=self.fx.draft.pk)
+        draft.state = TeamDraftState.PAUSED
+        await database_sync_to_async(draft.save)()
+        self.addCleanup(teamdraft_tick._paused_freshness.pop, self.fx.draft.pk, None)
+        spectator, _, _ = await self.connect(self.fx.players[0])
+
+        await teamdraft_tick.broadcast_paused_freshness(self.fx.draft.pk)
+        self.assertFalse(await self._captain_freshness(spectator))
+
+        captain, _, _ = await self.connect(self.cap)
+        self.assertTrue(await self._captain_freshness(spectator))
+
+        self.r.delete(heartbeat_key("teamdraft", self.fx.draft.pk, self.cap.pk))
+        await teamdraft_tick.broadcast_paused_freshness(self.fx.draft.pk)
+        self.assertFalse(await self._captain_freshness(spectator))
         await spectator.disconnect()
         await captain.disconnect()
 

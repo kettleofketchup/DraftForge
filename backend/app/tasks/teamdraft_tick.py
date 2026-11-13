@@ -177,6 +177,9 @@ async def broadcast_paused_freshness(draft_id: int) -> None:
     No clock ticks run during a pause, and a socket only announces fresh=True, so
     without this a captain whose heartbeats stop mid-pause stays fresh for every
     viewer and Resume stays enabled.
+
+    Stale captains are re-sent every pass: a reconnecting socket announces
+    fresh=True without updating this memo, so a recorded False can't be trusted.
     """
 
     @database_sync_to_async
@@ -200,7 +203,7 @@ async def broadcast_paused_freshness(draft_id: int) -> None:
     sent = dict(_paused_freshness.get(draft_id, {}))
     channel_layer = get_channel_layer()
     for captain_id, is_fresh in fresh.items():
-        if sent.get(captain_id) == is_fresh:
+        if is_fresh and sent.get(captain_id) is True:
             continue
         if channel_layer is not None:
             try:
