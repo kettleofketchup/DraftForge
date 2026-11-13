@@ -64,6 +64,24 @@ Comma-separated key=value pairs:
 OTEL_EXPORTER_OTLP_HEADERS="api-key=abc123,x-org-id=myorg"
 ```
 
+## Frontend Error Reporting (Sentry)
+
+The frontend reports errors, traces and session replays to Sentry only from builds
+that turn it on. Vite inlines these at build time, so they are build args, not
+container environment variables.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `VITE_SENTRY_ENABLED` | unset; `true` in `frontend/Dockerfile` | Only `true` initialises Sentry. Dev servers (`react-router dev`), test stacks and vitest leave it unset and send nothing. |
+| `VITE_SENTRY_DSN` | the project DSN | Optional override for the DSN in `app/lib/sentry.ts`. |
+
+Production images build the `runtime` target, whose builder stage sets
+`VITE_SENTRY_ENABLED=true`, so they keep reporting. PR preview images build the same target
+with `VITE_SENTRY_ENABLED=false` (`.github/workflows/preview-images.yml`), so preview
+deploys send nothing. To build any other image that does not report, pass
+`--build-arg VITE_SENTRY_ENABLED=false`. To try Sentry from a local dev
+server, start it with `VITE_SENTRY_ENABLED=true` in its environment.
+
 ## Context Fields
 
 Fields automatically added to logs by telemetry components.

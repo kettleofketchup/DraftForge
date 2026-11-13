@@ -1,0 +1,68 @@
+{
+  "password": {
+    "copy": {
+      "done": "Contraseña copiada",
+      "failed": "No se pudo copiar la contraseña",
+      "label": "Copiar la contraseña del lobby"
+    },
+    "errors": {
+      "invalid_characters": "Usa solo letras, dígitos, espacios y signos de puntuación estándar.",
+      "required": "Escribe una contraseña para el lobby.",
+      "surrounding_spaces": "La contraseña no puede empezar ni terminar con un espacio.",
+      "too_long": "La contraseña puede tener como máximo {{max}} caracteres."
+    },
+    "event": {
+      "description": "Úsala para entrar en todos los lobbies de este evento. No la compartas.",
+      "title": "Contraseña del lobby"
+    },
+    "settings": {
+      "current": "Contraseña actual:",
+      "from_series": "Este evento sigue a su serie. Mientras el evento esté próximo, guardar la serie de nuevo reemplaza la contraseña puesta aquí.",
+      "help_changes": "Un cambio se aplica a los lobbies creados después. Los lobbies que ya existen conservan su contraseña.",
+      "help_shared": "Todos los lobbies del evento usan esta contraseña, así que quien la tenga puede entrar en cualquiera.",
+      "hide": "Ocultar contraseña",
+      "keep_placeholder": "Déjala vacía para conservar la contraseña actual",
+      "leak": {
+        "fixed": "Si se filtra, define una nueva aquí y vuelve a crear los lobbies del evento que siguen esperando: los lobbies existentes conservan la contraseña anterior.",
+        "regenerate": "Si se filtra, regénerala y vuelve a crear los lobbies del evento que siguen esperando: los lobbies existentes conservan la contraseña anterior.",
+        "series_random": "Si se filtra la contraseña de un evento, regénerala en los ajustes de ese evento y vuelve a crear sus lobbies que siguen esperando."
+      },
+      "mode": {
+        "fixed": "Fija: definirla ahora",
+        "random": "Aleatoria: generada para cada evento"
+      },
+      "mode_label": "Contraseña",
+      "overrides_series": "Este evento reemplaza la contraseña de su serie. Mientras el evento esté próximo, guardar la serie de nuevo la sustituye por el ajuste de la serie.",
+      "password_label": "Contraseña del lobby",
+      "random_new": "Se genera una contraseña al guardar.",
+      "random_series": "Cada evento de la serie recibe su propia contraseña generada.",
+      "regenerate": "Regenerar",
+      "show": "Mostrar contraseña",
+      "title": "Contraseña del lobby"
+    }
+  },
+  "player": {
+    "no_steam": "Sin cuenta de Steam",
+    "ready": "Listo",
+    "seat": {
+      "broadcaster": "Transmisor",
+      "dire": "Dire",
+      "dire_slot": "Dire {{slot}}",
+      "player_pool": "Reserva de jugadores",
+      "radiant": "Radiant",
+      "radiant_slot": "Radiant {{slot}}",
+      "spectator": "Espectador"
+    },
+    "separator": " · ",
+    "status": {
+      "invited": "Invitado",
+      "invited_times": "Invitado ({{times}}×)",
+      "joined": "En el lobby",
+      "kicked": "Expulsado",
+      "left": "Salió del lobby",
+      "not_invited": "Sin invitar",
+      "pending": "Invitación pendiente",
+      "seated": "Sentado"
+    }
+  }
+}

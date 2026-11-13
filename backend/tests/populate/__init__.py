@@ -46,6 +46,7 @@ from tests.populate.constants import (
 )
 from tests.populate.csv_import import populate_csv_import_data
 from tests.populate.demo import populate_demo_tournaments
+from tests.populate.dota_lobby import populate_dota_lobby_data
 from tests.populate.events import populate_events_data
 from tests.populate.league_stats import (
     populate_league_stats_data,
@@ -100,6 +101,9 @@ def populate_all(force: bool = False) -> None:
         ("Demo Tournaments", populate_demo_tournaments),
         ("League Stats Data", populate_league_stats_data),
         ("League Stats Showcase", populate_league_stats_showcase),
+        # Last: its org and league take auto-incremented pks, so it must not
+        # shift the pks the steps above expect.
+        ("Dota Lobby Data", populate_dota_lobby_data),
     ]
 
     console = Console()
@@ -150,6 +154,7 @@ __all__ = [
     "populate_demo_tournaments",
     "populate_league_stats_data",
     "populate_league_stats_showcase",
+    "populate_dota_lobby_data",
     "populate_test_tournaments",
     # Utilities
     "create_user",

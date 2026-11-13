@@ -101,7 +101,7 @@ AUTH_MATRIX_LEAGUE: TestLeague = TestLeague(
     organization_names=["Auth Matrix Test Org"],
 )
 
-# Strip league stats E2E tests. Created by the last populate step with a pinned
+# Strip league stats E2E tests. Created by populate_league_stats_data with a pinned
 # pk above every autoincrement league; deliberately not in ALL_LEAGUES.
 STRIP_STATS_LEAGUE: TestLeague = TestLeague(
     pk=20,

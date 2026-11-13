@@ -97,3 +97,46 @@ def build_herodraft_link_components(herodraft_pk):
     if emoji:
         btn["emoji"] = emoji
     return [{"type": 1, "components": [btn]}]
+
+
+COLOR_LOBBY = 0x57F287
+
+
+def build_lobby_info_embed(
+    tournament_name: str,
+    *,
+    lobby_name: str,
+    password: str,
+    side: str,
+    team_name: str,
+    matchup: str,
+    region: str = "",
+) -> dict:
+    """Rich embed for the in-game lobby DM: where to join and on which side.
+
+    Carries the lobby password, so callers must not log it or store it
+    (send it without a tournament_log_id).
+    """
+    fields = [
+        {"name": "Lobby", "value": lobby_name or "-", "inline": False},
+        {
+            "name": "Password",
+            "value": f"||{password}||" if password else "(none)",
+            "inline": True,
+        },
+        {"name": "Your side", "value": f"{side.title()} ({team_name})", "inline": True},
+    ]
+    if region:
+        fields.append({"name": "Region", "value": region, "inline": True})
+    return {
+        "author": {"name": "DraftForge", "icon_url": LOGO_URL},
+        "thumbnail": {"url": LOGO_URL},
+        "title": "Your Dota 2 Lobby Is Ready",
+        "description": (
+            f"**{tournament_name}**: **{matchup}**\n\n"
+            "Accept the lobby invite in Dota 2, or join from the custom lobby "
+            "browser with the password below."
+        ),
+        "color": COLOR_LOBBY,
+        "fields": fields,
+    }

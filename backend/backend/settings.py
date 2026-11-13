@@ -96,8 +96,8 @@ BASE_DIR_PATH = Path(BASE_DIR)
 # Public, so code deriving secrets from SECRET_KEY can refuse it in production.
 INSECURE_DEV_SECRET_KEY = "v*kswpdyi3+*-=q4a)7&_!xwb%@udm1vi56r690!!j6e*p3^mn"
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY") or INSECURE_DEV_SECRET_KEY
-# Previous keys, comma-separated, while rotating DJANGO_SECRET_KEY: sessions,
-# signed values and lobby passwords made under them stay valid.
+# Previous keys, comma-separated, while rotating DJANGO_SECRET_KEY: sessions
+# and signed values made under them stay valid.
 SECRET_KEY_FALLBACKS = env_list("DJANGO_SECRET_KEY_FALLBACKS")
 
 # SECURITY WARNING: don't run with debug turned on in production!
