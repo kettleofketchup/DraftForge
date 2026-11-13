@@ -74,17 +74,19 @@ def set_org_feature(
             details={"feature": key.value, "notes": row.notes},
         )
         invalidate_after_commit(org)
+        transaction.on_commit(
+            lambda: log.info(
+                "org_feature_set",
+                system="org",
+                subsystem="features",
+                org_id=org.pk,
+                feature=key.value,
+                enabled=enabled,
+                enabled_changed=enabled_changed,
+                notes_changed=notes_changed,
+                created=created,
+                actor_id=actor.pk if actor else None,
+            )
+        )
 
-    log.info(
-        "org_feature_set",
-        system="org",
-        subsystem="features",
-        org_id=org.pk,
-        feature=key.value,
-        enabled=enabled,
-        enabled_changed=enabled_changed,
-        notes_changed=notes_changed,
-        created=created,
-        actor_id=actor.pk if actor else None,
-    )
     return row

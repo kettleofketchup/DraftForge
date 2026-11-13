@@ -1,3 +1,5 @@
+from unittest.mock import MagicMock, patch
+
 from django.db import IntegrityError
 from django.test import TestCase
 
@@ -34,22 +36,27 @@ class OrgFeatureServiceTest(TestCase):
         self.assertEqual(active_features(self.org.pk), ["contributions", "promotion"])
 
     def test_enable_then_disable_keeps_row_and_notes(self) -> None:
-        set_org_feature(
+        enabled_row = set_org_feature(
             self.org,
             FeatureKey.PROMOTION,
             enabled=True,
             actor=self.actor,
             notes="paid via PayPal",
         )
+        enabled_at = enabled_row.enabled_at
+        self.assertIsNotNone(enabled_at)
+        other = CustomUser.objects.create_user(
+            username="feature_actor_2", password="x", is_staff=True
+        )
         row = set_org_feature(
-            self.org, FeatureKey.PROMOTION, enabled=False, actor=self.actor, notes=None
+            self.org, FeatureKey.PROMOTION, enabled=False, actor=other, notes=None
         )
         self.assertEqual(OrgFeature.objects.filter(organization=self.org).count(), 1)
         row.refresh_from_db()
         self.assertIs(row.enabled, False)
         self.assertEqual(row.notes, "paid via PayPal")
         self.assertEqual(row.enabled_by, self.actor)
-        self.assertIsNotNone(row.enabled_at)
+        self.assertEqual(row.enabled_at, enabled_at)
         self.assertIs(org_has_feature(self.org, "promotion"), False)
 
     def test_writes_orglog_per_change(self) -> None:
@@ -82,6 +89,23 @@ class OrgFeatureServiceTest(TestCase):
             ).count(),
             2,
         )
+
+    @patch("app.cache_utils._cacheops_invalidate_obj")
+    def test_change_invalidates_org_cache_on_commit(
+        self, invalidate: MagicMock
+    ) -> None:
+        with self.captureOnCommitCallbacks(execute=True):
+            set_org_feature(
+                self.org, FeatureKey.PROMOTION, enabled=True, actor=self.actor
+            )
+        invalidate.assert_called_once_with(self.org)
+
+        invalidate.reset_mock()
+        with self.captureOnCommitCallbacks(execute=True):
+            set_org_feature(
+                self.org, FeatureKey.PROMOTION, enabled=True, actor=self.actor
+            )
+        invalidate.assert_not_called()
 
     def test_unique_per_org_feature(self) -> None:
         OrgFeature.objects.create(organization=self.org, feature="promotion")
