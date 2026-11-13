@@ -103,6 +103,7 @@ export default function Tournament() {
     }
   }, [currentUser?.pk, getCurrentUser]);
   const [query, setQuery] = useState('');
+  const [searchInput, setSearchInput] = useState('');
   const [isPending, startTransition] = useTransition();
 
   const [loading, setLoading] = useState(true);
@@ -141,7 +142,7 @@ export default function Tournament() {
 
   if (error) {
     return (
-      <div className="flex justify-center align-middle content-center pt-10 text-red-500">
+      <div className="flex justify-center align-middle content-center pt-10 text-error">
         Error: {error}
       </div>
     );
@@ -178,7 +179,15 @@ export default function Tournament() {
 
   return (
     <div className="flex flex-col items-start p-4">
-      <TournamentFilterBar actions={<TournamentCreateModal />} />
+      <div className="mb-4 flex w-full flex-col gap-2">
+        <div className="flex justify-end">
+          <TournamentCreateModal />
+        </div>
+        <TournamentFilterBar
+          searchInput={searchInput}
+          onSearchInputChange={setSearchInput}
+        />
+      </div>
 
       {/* Tournament grid - affected by transitions */}
       {renderTournamentGrid()}
