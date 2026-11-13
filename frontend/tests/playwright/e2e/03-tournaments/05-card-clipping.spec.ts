@@ -4,8 +4,10 @@
  * scrolls inside a Radix ScrollArea whose viewport hides horizontal
  * overflow, so anything wider than it is cut off rather than scrollable.
  *
- * Seed: backend/tests/data/tournament_discovery.py (user 1100 is a member of
- * the discovery home org, so logging in renders the tiered Upcoming view).
+ * Seed: backend/tests/data/tournament_discovery.py. User 1100 is a member of
+ * the discovery home org: logged in, the default is the flat My organizations
+ * view with a Signups open badge, and the tiered view needs ?organization=all.
+ * League 30 is the discovery home league, used for the league Tournaments tab.
  */
 
 import type { Locator, Page } from '@playwright/test';
@@ -14,6 +16,7 @@ import { expect, loginAsUser, test, visitAndWaitForHydration } from '../../fixtu
 import { CARD_SELECTOR } from '../../helpers/tournament';
 
 const DISCOVERY_MEMBER_PK = 1100;
+const DISCOVERY_HOME_LEAGUE_PK = 30;
 const WIDTHS = [1280, 1366, 1680, 1920, 2560];
 const CONTROLS = [
   'tournaments-search',
@@ -137,6 +140,64 @@ async function checkWidths(page: Page, tab: Tab, path: string): Promise<void> {
   }
 }
 
+/** The league Tournaments tab renders the same cards in its own grid. */
+async function expectLeagueTabNothingClipped(page: Page, width: number): Promise<void> {
+  const where = `league tab @ ${width}px`;
+  const cards = page.locator(CARD_SELECTOR);
+  await expect(cards.first()).toBeVisible({ timeout: 15000 });
+
+  const idle = await scrollAreaOverflow(page);
+  expect(idle.scrollWidth, `scroll area overflows (${where})`).toBeLessThanOrEqual(idle.clientWidth);
+
+  const boxes = await cards.evaluateAll((els) =>
+    els.map((el) => {
+      const r = el.getBoundingClientRect();
+      const view = el.querySelector('[data-testid^="tournament-view-"]')!.getBoundingClientRect();
+      return {
+        card: { left: r.left, right: r.right, top: r.top, bottom: r.bottom },
+        view: { left: view.left, right: view.right, top: view.top, bottom: view.bottom },
+      };
+    }),
+  );
+  expect(boxes.length, `need at least two league cards (${where})`).toBeGreaterThan(1);
+
+  for (const { card, view } of boxes) {
+    expect(card.left, `card clipped left (${where})`).toBeGreaterThanOrEqual(0);
+    expect(card.right, `card clipped right (${where})`).toBeLessThanOrEqual(width);
+    expect(view.left, `view button outside card (${where})`).toBeGreaterThanOrEqual(card.left);
+    expect(view.right, `view button outside card (${where})`).toBeLessThanOrEqual(card.right);
+    expect(view.bottom, `view button outside card (${where})`).toBeLessThanOrEqual(card.bottom);
+  }
+
+  // Cards in a row keep the grid's gap-4 between them, the same as /tournaments.
+  const rows = new Map<number, Box[]>();
+  for (const { card } of boxes) {
+    const key = Math.round(card.top);
+    rows.set(key, [...(rows.get(key) ?? []), card]);
+  }
+  for (const row of rows.values()) {
+    const sorted = [...row].sort((a, b) => a.left - b.left);
+    for (let i = 1; i < sorted.length; i++) {
+      const gap = sorted[i].left - sorted[i - 1].right;
+      expect(gap, `cards closer than the grid gap (${where})`).toBeGreaterThanOrEqual(15);
+    }
+  }
+
+  const firstRowTop = Math.min(...boxes.map((b) => b.card.top));
+  const rightmost = boxes
+    .map((b, i) => ({ ...b, i }))
+    .filter((b) => Math.abs(b.card.top - firstRowTop) < 1)
+    .sort((a, b) => b.card.right - a.card.right)[0];
+  await cards.nth(rightmost.i).hover();
+  await expect(async () => {
+    const hovered = await scrollAreaOverflow(page);
+    expect(hovered.scrollWidth, `hovered card overflows (${where})`).toBeLessThanOrEqual(
+      hovered.clientWidth,
+    );
+  }).toPass({ timeout: 3000 });
+  await page.mouse.move(0, 0);
+}
+
 test.describe('Tournaments - nothing is clipped', () => {
   test.describe.configure({ timeout: 120_000 });
 
@@ -164,5 +225,15 @@ test.describe('Tournaments - nothing is clipped', () => {
   }) => {
     await loginAsUser(context, DISCOVERY_MEMBER_PK);
     await checkWidths(page, 'upcoming', '/tournaments');
+  });
+
+  test('@cicd league Tournaments tab: cards fit and keep their gap at desktop widths', async ({
+    page,
+  }) => {
+    for (const width of [1024, ...WIDTHS]) {
+      await page.setViewportSize({ width, height: 1000 });
+      await visitAndWaitForHydration(page, `/leagues/${DISCOVERY_HOME_LEAGUE_PK}/tournaments`);
+      await expectLeagueTabNothingClipped(page, width);
+    }
   });
 });
