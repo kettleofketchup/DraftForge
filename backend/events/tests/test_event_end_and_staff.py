@@ -4,7 +4,9 @@ from datetime import time, timedelta
 from typing import Any
 from unittest.mock import patch
 
-from django.test import TransactionTestCase
+from django.contrib.admin.sites import site as admin_site
+from django.core.exceptions import ValidationError
+from django.test import RequestFactory, TransactionTestCase
 from django.utils import timezone as tz
 from rest_framework.test import APIClient
 
@@ -113,9 +115,85 @@ class EndsAtValidationTest(EventEndAndStaffTestBase):
         self.assertEqual(resp.status_code, 400, resp.content)
         self.assertIn("ends_at", resp.json())
 
+    def test_patch_only_start_past_stored_end_rejected(self) -> None:
+        ends_at = self.event.scheduled_at + timedelta(hours=2)
+        Event.objects.filter(pk=self.event.pk).update(ends_at=ends_at)
+        resp = self._patch({"scheduled_at": (ends_at + timedelta(days=7)).isoformat()})
+        self.assertEqual(resp.status_code, 400, resp.content)
+        self.assertIn("ends_at", resp.json())
+        self.event.refresh_from_db()
+        self.assertEqual(self.event.ends_at, ends_at)
+
+    def test_patch_only_start_before_stored_end_accepted(self) -> None:
+        ends_at = self.event.scheduled_at + timedelta(hours=4)
+        Event.objects.filter(pk=self.event.pk).update(ends_at=ends_at)
+        start = self.event.scheduled_at + timedelta(hours=1)
+        resp = self._patch({"scheduled_at": start.isoformat()})
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.event.refresh_from_db()
+        self.assertEqual(self.event.scheduled_at, start)
+
+    def test_patch_new_start_with_null_end_accepted(self) -> None:
+        ends_at = self.event.scheduled_at + timedelta(hours=2)
+        Event.objects.filter(pk=self.event.pk).update(ends_at=ends_at)
+        start = ends_at + timedelta(days=7)
+        resp = self._patch({"scheduled_at": start.isoformat(), "ends_at": None})
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.event.refresh_from_db()
+        self.assertEqual(self.event.scheduled_at, start)
+        self.assertIsNone(self.event.ends_at)
+
+    def test_unrelated_patch_not_blocked_by_stored_bad_end(self) -> None:
+        Event.objects.filter(pk=self.event.pk).update(
+            ends_at=self.event.scheduled_at - timedelta(hours=1)
+        )
+        resp = self._patch({"name": "Renamed"})
+        self.assertEqual(resp.status_code, 200, resp.content)
+
     def test_slim_serializer_exposes_ends_at_read_only(self) -> None:
         self.assertIn("ends_at", EventSlimSerializer.Meta.fields)
         self.assertTrue(EventSlimSerializer().fields["ends_at"].read_only)
+
+
+class EventModelCleanTest(EventTestCase):
+    def test_clean_rejects_end_not_after_start(self) -> None:
+        for offset in (timedelta(0), -timedelta(hours=1)):
+            self.event.ends_at = self.event.scheduled_at + offset
+            with self.assertRaises(ValidationError) as ctx:
+                self.event.clean()
+            self.assertIn("ends_at", ctx.exception.message_dict)
+
+    def test_clean_accepts_end_after_start_or_none(self) -> None:
+        self.event.ends_at = self.event.scheduled_at + timedelta(hours=1)
+        self.event.clean()
+        self.event.ends_at = None
+        self.event.clean()
+
+
+class EventAdminStaffReadOnlyTest(EventTestCase):
+    def setUp(self) -> None:
+        self.superuser = CustomUser.objects.create_superuser(
+            username="event_admin_site", password="x", email="eas@example.com"
+        )
+        self.client.force_login(self.superuser)
+
+    def test_host_and_helpers_not_in_admin_form(self) -> None:
+        model_admin = admin_site._registry[Event]
+        request = RequestFactory().get("/")
+        request.user = self.superuser
+        form_class = model_admin.get_form(request, self.event)
+        self.assertNotIn("host", form_class.base_fields)
+        self.assertNotIn("helpers", form_class.base_fields)
+        readonly = model_admin.get_readonly_fields(request, self.event)
+        self.assertIn("host", readonly)
+        self.assertIn("helpers", readonly)
+
+    def test_admin_change_page_renders(self) -> None:
+        self.event.host = self.user
+        self.event.save()
+        self.event.helpers.add(self.unrelated_user)
+        resp = self.client.get(f"/admin/events/event/{self.event.pk}/change/")
+        self.assertEqual(resp.status_code, 200)
 
 
 class OrganizationImmutableTest(EventEndAndStaffTestBase):

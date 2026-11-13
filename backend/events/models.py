@@ -1,4 +1,5 @@
 import nh3
+from django.core.exceptions import ValidationError
 from django.core.validators import RegexValidator
 from django.db import models
 
@@ -406,6 +407,15 @@ class Event(
 
     def __str__(self):
         return f"{self.name} ({self.scheduled_at:%Y-%m-%d})"
+
+    def clean(self) -> None:
+        super().clean()
+        if (
+            self.ends_at is not None
+            and self.scheduled_at is not None
+            and self.ends_at <= self.scheduled_at
+        ):
+            raise ValidationError({"ends_at": "End time must be after the start time."})
 
     def save(self, *args, **kwargs):
         if self.description:

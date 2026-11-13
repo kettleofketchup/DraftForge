@@ -476,11 +476,14 @@ class EventSerializer(TournamentLeagueOrgMixin, serializers.ModelSerializer):
         return data
 
     def _validate_ends_at(self, data: dict[str, Any]) -> None:
-        ends_at = data.get("ends_at")
+        if "ends_at" not in data and "scheduled_at" not in data:
+            return
+        instance = self.instance
+        ends_at = data.get("ends_at", instance.ends_at if instance else None)
         if ends_at is None:
             return
         scheduled_at = data.get(
-            "scheduled_at", self.instance.scheduled_at if self.instance else None
+            "scheduled_at", instance.scheduled_at if instance else None
         )
         if scheduled_at is not None and ends_at <= scheduled_at:
             raise serializers.ValidationError(
