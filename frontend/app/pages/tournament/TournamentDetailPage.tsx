@@ -22,6 +22,7 @@ import { ConfirmDialog } from '~/components/ui/dialogs';
 import { toast } from 'sonner';
 
 import { getLogger } from '~/lib/logger';
+import { canEditTournament, isSiteStaff } from '~/lib/tournamentPermissions';
 import { tournamentEditContext } from './tournamentEditContext';
 import { Spinner } from '~/components/ui/spinner';
 import { Alert, AlertDescription } from '~/components/ui/alert';
@@ -180,7 +181,10 @@ export const TournamentDetailPage: React.FC = () => {
 
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [showDeleteTournament, setShowDeleteTournament] = useState(false);
-  const isAdmin = currentUser?.is_staff || currentUser?.is_superuser;
+  const leagueOrgPk =
+    typeof tournament?.league === 'object' ? (tournament?.league?.organization?.pk ?? null) : null;
+  const canEdit = canEditTournament(currentUser, { leaguePk: tournament?.league_pk, leagueOrgPk });
+  const canDelete = isSiteStaff(currentUser);
 
   const openDeleteDialog = () => {
     if (!tournament?.pk) return;
@@ -199,26 +203,30 @@ export const TournamentDetailPage: React.FC = () => {
   };
 
   const adminActions = useMemo((): BrandDropdownAction[] => {
-    if (!isAdmin || !tournament) return [];
-    return [
-      {
+    if (!tournament) return [];
+    const actions: BrandDropdownAction[] = [];
+    if (canEdit) {
+      actions.push({
         key: 'edit',
         icon: <Pencil className="h-4 w-4 mr-1.5" />,
         label: 'Edit',
         onClick: () => setSettingsOpen(true),
         variant: 'edit',
         'data-testid': 'tournament-edit-btn',
-      },
-      {
+      });
+    }
+    if (canDelete) {
+      actions.push({
         key: 'delete',
         icon: <Trash2 className="h-4 w-4 mr-1.5" />,
         label: 'Delete',
         onClick: openDeleteDialog,
         variant: 'destructive',
         'data-testid': 'tournament-delete-btn',
-      },
-    ];
-  }, [isAdmin, tournament]);
+      });
+    }
+    return actions;
+  }, [canEdit, canDelete, tournament]);
 
   if (isLoading) {
     return (
@@ -256,45 +264,54 @@ export const TournamentDetailPage: React.FC = () => {
 
   const title = () => {
     if (!tournament.name) return null;
-    const adminActionsNode = isAdmin && hydratedTournament && (
+    const adminActionsNode = (canEdit || canDelete) && hydratedTournament && (
       <div className="flex items-center gap-2 mb-3">
         {/* Desktop: brand Edit + Delete pair, equal min-width so the
             shorter label doesn't render a visibly narrower pill. */}
         <div className="hidden md:flex items-center gap-2">
-          <EditButton
-            size="sm"
-            className="min-w-24 justify-center"
-            onClick={() => setSettingsOpen(true)}
-            data-testid="tournament-edit-btn"
-          >
-            <Pencil className="h-4 w-4 mr-1.5" />
-            Edit
-          </EditButton>
-          <DestructiveButton
-            size="sm"
-            className="min-w-24 justify-center"
-            onClick={openDeleteDialog}
-            data-testid="tournament-delete-btn"
-          >
-            <Trash2 className="h-4 w-4 mr-1.5" />
-            Delete
-          </DestructiveButton>
+          {canEdit && (
+            <EditButton
+              size="sm"
+              className="min-w-24 justify-center"
+              onClick={() => setSettingsOpen(true)}
+              data-testid="tournament-edit-btn"
+            >
+              <Pencil className="h-4 w-4 mr-1.5" />
+              Edit
+            </EditButton>
+          )}
+          {canDelete && (
+            <DestructiveButton
+              size="sm"
+              className="min-w-24 justify-center"
+              onClick={openDeleteDialog}
+              data-testid="tournament-delete-btn"
+            >
+              <Trash2 className="h-4 w-4 mr-1.5" />
+              Delete
+            </DestructiveButton>
+          )}
         </div>
         {/* Mobile: dropdown */}
-        <div className="md:hidden">
-          <BrandDropdownMenu
-            label="Admin"
-            icon={<ShieldAlert className="h-4 w-4 mr-1.5" />}
-            actions={adminActions}
-            variant="admin"
-            data-testid="tournament-admin-actions-mobile"
+        {adminActions.length > 0 && (
+          <div className="md:hidden">
+            <BrandDropdownMenu
+              label="Admin"
+              icon={<ShieldAlert className="h-4 w-4 mr-1.5" />}
+              actions={adminActions}
+              variant="admin"
+              data-testid="tournament-admin-actions-mobile"
+            />
+          </div>
+        )}
+        {canEdit && (
+          <TournamentSettingsModal
+            tournament={hydratedTournament}
+            open={settingsOpen}
+            onOpenChange={setSettingsOpen}
+            canEdit={canEdit}
           />
-        </div>
-        <TournamentSettingsModal
-          tournament={hydratedTournament}
-          open={settingsOpen}
-          onOpenChange={setSettingsOpen}
-        />
+        )}
       </div>
     );
     const playedOn = getDate();

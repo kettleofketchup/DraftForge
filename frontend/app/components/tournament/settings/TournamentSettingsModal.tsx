@@ -16,9 +16,10 @@ interface Props {
   tournament: TournamentType;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  canEdit: boolean;
 }
 
-export function TournamentSettingsModal({ tournament, open, onOpenChange }: Props) {
+export function TournamentSettingsModal({ tournament, open, onOpenChange, canEdit }: Props) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-screen max-w-none sm:max-w-none h-screen max-h-none rounded-none border-0 overflow-hidden flex flex-col">
@@ -42,6 +43,7 @@ export function TournamentSettingsModal({ tournament, open, onOpenChange }: Prop
             <TournamentEditForm
               tourn={tournament as TournamentClassType}
               onSuccess={() => onOpenChange(false)}
+              canEdit={canEdit}
             />
           </TabsContent>
 

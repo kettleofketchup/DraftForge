@@ -342,34 +342,6 @@ export function useCanManageGames(
 }
 
 /**
- * Check if the current user can create a tournament anywhere in the app.
- *
- * Used to gate the global Create Tournament entry point on
- * ``/tournaments/`` where no specific league is in scope yet — the
- * form's league picker and the backend's per-league check are the real
- * authorisation. Mirrors the backend's ``has_league_admin_access``
- * cascade: site admin OR admin of any organisation OR admin of any
- * league.
- */
-export function useCanCreateAnyTournament(): boolean {
-  const currentUser = useUserStore((state) => state.currentUser);
-
-  return useMemo(() => {
-    if (!currentUser?.pk) return false;
-    if (currentUser.is_staff || currentUser.is_superuser) return true;
-    if ((currentUser.admin_organization_ids?.length ?? 0) > 0) return true;
-    if ((currentUser.admin_league_ids?.length ?? 0) > 0) return true;
-    return false;
-  }, [
-    currentUser?.pk,
-    currentUser?.is_staff,
-    currentUser?.is_superuser,
-    currentUser?.admin_organization_ids,
-    currentUser?.admin_league_ids,
-  ]);
-}
-
-/**
  * Get all permission flags for convenience.
  * Useful when you need to check multiple permissions at once.
  */
