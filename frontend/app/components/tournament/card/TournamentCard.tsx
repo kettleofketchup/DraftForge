@@ -1,11 +1,22 @@
-import React, { useState } from 'react';
-import type { TournamentType } from '~/components/tournament/types';
-import { STATE_CHOICES } from '../constants';
+import React, { memo, useState } from 'react';
+import type {
+  LeagueMinimal,
+  TournamentBucket,
+  TournamentType,
+} from '~/components/tournament/types';
+import {
+  displayState,
+  isTournamentLive,
+  leagueId,
+  leagueInfo,
+} from '~/components/tournament/tournamentBuckets';
+import { cn } from '~/lib/utils';
 
 import { Building2, Calendar, Clock, Crown, Eye, Swords, Trophy, Users } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router';
 import { useUserStore } from '~/store/userStore';
+import { Badge } from '../../ui/badge';
 import { EditIconButton, PrimaryButton } from '../../ui/buttons';
 import {
   CardAction,
@@ -14,95 +25,149 @@ import {
   CardTitle,
 } from '../../ui/card';
 import { Item, ItemContent, ItemMedia, ItemTitle } from '../../ui/item';
+import { SimpleAvatar } from '../../ui/simple-avatar';
 import { TournamentRemoveButton } from './deleteButton';
 import { TournamentEditModal } from './TournamentEditModal';
 interface Props {
   tournament: TournamentType;
   /** Animation delay index for staggered loading */
   animationIndex?: number;
+  bucket?: TournamentBucket;
 }
-
-/** Truncate text to max 12 characters with ellipsis (fallback for unstyled callers). */
-const truncateText = (text: string, maxLength = 12): string => {
-  if (!text) return '';
-  return text.length > maxLength ? `${text.slice(0, maxLength)}…` : text;
-};
 
 /** className that lets the cell trim its content with native CSS ellipsis. */
 const CELL_TRUNCATE = 'block w-full overflow-hidden text-ellipsis whitespace-nowrap';
 
+const LeagueCell = memo(function LeagueCell({
+  league,
+}: {
+  league: LeagueMinimal | number | null | undefined;
+}) {
+  const hasLeague = league != null;
+  const leagueName = !hasLeague
+    ? 'No league'
+    : typeof league === 'number'
+      ? `League #${league}`
+      : league.name || 'Unknown League';
+
+  return (
+    <Item size="sm" variant="muted" className="!p-1.5 min-w-0" data-testid="tournament-cell-league">
+      <ItemMedia
+        variant="icon"
+        className={cn('!size-6', hasLeague ? 'bg-primary/20 border-primary/30' : 'bg-muted border-border')}
+      >
+        <Trophy className={cn('size-3', hasLeague ? 'text-primary' : 'text-muted-foreground')} aria-hidden />
+      </ItemMedia>
+      <ItemContent className="!gap-0 min-w-0">
+        <ItemTitle className="!text-xs text-muted-foreground">League</ItemTitle>
+        <span
+          className={cn('text-sm font-medium', !hasLeague && 'text-muted-foreground', CELL_TRUNCATE)}
+          title={leagueName}
+        >
+          {leagueName}
+        </span>
+      </ItemContent>
+    </Item>
+  );
+});
+
+const OrgCell = memo(function OrgCell({ league }: { league: LeagueMinimal | null }) {
+  const [logoFailed, setLogoFailed] = useState(false);
+  const orgName = league?.organization_name || null;
+  const logo = league?.organization_logo || null;
+  const hasOrg = !!orgName;
+
+  let media: React.ReactNode;
+  if (hasOrg && logo && !logoFailed) {
+    media = (
+      <SimpleAvatar
+        src={logo}
+        alt=""
+        fallback=""
+        className="size-full rounded-sm"
+        onError={() => setLogoFailed(true)}
+      />
+    );
+  } else if (hasOrg) {
+    media = (
+      <div
+        data-testid="tournament-card-org-fallback"
+        className="flex size-full items-center justify-center rounded-sm border border-primary/30 bg-primary/20"
+      >
+        <Building2 className="size-3.5 text-primary" aria-hidden />
+      </div>
+    );
+  } else {
+    media = (
+      <div
+        data-testid="tournament-card-org-fallback"
+        className="flex size-full items-center justify-center rounded-sm border border-border bg-muted"
+      >
+        <Building2 className="size-3.5 text-muted-foreground" aria-hidden />
+      </div>
+    );
+  }
+
+  const label = orgName ?? 'No organization';
+
+  return (
+    <Item size="sm" variant="muted" className="!p-1.5 min-w-0" data-testid="tournament-cell-org">
+      <ItemMedia
+        variant="image"
+        className="!size-6 rounded-sm"
+        aria-hidden
+        data-testid="tournament-card-org-media"
+      >
+        {media}
+      </ItemMedia>
+      <ItemContent className="!gap-0 min-w-0">
+        <ItemTitle className="!text-xs text-muted-foreground">Organization</ItemTitle>
+        <span
+          className={cn('text-sm font-medium', !hasOrg && 'text-muted-foreground', CELL_TRUNCATE)}
+          title={label}
+        >
+          {label}
+        </span>
+      </ItemContent>
+    </Item>
+  );
+});
+
 export const TournamentCard: React.FC<Props> = React.memo(({
   tournament,
   animationIndex = 0,
+  bucket,
 }) => {
   const navigate = useNavigate();
   const currentUser = useUserStore((state) => state.currentUser);
   const [editModalOpen, setEditModalOpen] = useState(false);
-
-  const getHeaderName = () => {
-    return tournament.name || '';
-  };
+  const now = new Date();
+  const live = isTournamentLive(tournament, now, bucket);
+  const shownState = displayState(tournament, now, bucket);
+  const league = leagueInfo(tournament);
 
   const TournamentHeaderContent = () => {
     if (!tournament || !tournament.name) return null;
     return (
       <>
         <CardTitle className="text-base truncate">
-          {getHeaderName()}
+          {tournament.name}
         </CardTitle>
-        <CardDescription className="text-xs text-muted-foreground">
-          Tournament
-        </CardDescription>
+        {live ? (
+          <Badge
+            variant="outline"
+            data-testid="tournament-live-badge"
+            className="h-4 py-0 leading-none gap-1 bg-primary/20 text-primary border-primary/30"
+          >
+            <span aria-hidden className="size-1.5 rounded-full bg-primary motion-safe:animate-pulse" />
+            Live
+          </Badge>
+        ) : (
+          <CardDescription className="text-xs text-muted-foreground">
+            Tournament
+          </CardDescription>
+        )}
       </>
-    );
-  };
-  // Helper for League display with avatar
-  const LeagueItem = () => {
-    // League can be a number (ID) or an object with league details
-    const leagueData = typeof tournament.league === 'object'
-      ? (tournament.league as unknown as { pk?: number; name?: string; organization_name?: string })
-      : null;
-    const hasLeague = tournament.league != null;
-    const leagueName = hasLeague
-      ? (leagueData?.name || (typeof tournament.league === 'number' ? `League #${tournament.league}` : 'Unknown League'))
-      : 'None';
-
-    return (
-      <Item size="sm" variant="muted" className={`!p-1.5 min-w-0 ${!hasLeague ? 'bg-red-500/20' : ''}`}>
-        <ItemMedia variant="icon" className={`!size-6 ${hasLeague ? 'bg-primary/20 border-primary/30' : 'bg-red-500/30 border-red-500/40'}`}>
-          <Trophy className={`h-3 w-3 ${hasLeague ? 'text-primary' : 'text-red-500'}`} />
-        </ItemMedia>
-        <ItemContent className="!gap-0 min-w-0">
-          <ItemTitle className="!text-xs text-muted-foreground">League</ItemTitle>
-          <span className={`text-sm font-medium ${!hasLeague ? 'text-red-500' : ''} ${CELL_TRUNCATE}`} title={leagueName}>
-            {leagueName}
-          </span>
-        </ItemContent>
-      </Item>
-    );
-  };
-
-  // Helper for Organization display with avatar
-  const OrganizationItem = () => {
-    // Get organization from league data if available
-    const leagueData = typeof tournament.league === 'object'
-      ? (tournament.league as unknown as { organization_name?: string })
-      : null;
-    const orgName = leagueData?.organization_name;
-    const hasOrg = !!orgName;
-
-    return (
-      <Item size="sm" variant="muted" className={`!p-1.5 min-w-0 ${!hasOrg ? 'bg-red-500/20' : ''}`}>
-        <ItemMedia variant="icon" className={`!size-6 ${hasOrg ? 'bg-purple-500/20 border-purple-500/30' : 'bg-red-500/30 border-red-500/40'}`}>
-          <Building2 className={`h-3 w-3 ${hasOrg ? 'text-purple-500' : 'text-red-500'}`} />
-        </ItemMedia>
-        <ItemContent className="!gap-0 min-w-0">
-          <ItemTitle className="!text-xs text-muted-foreground">Organization</ItemTitle>
-          <span className={`text-sm font-medium ${!hasOrg ? 'text-red-500' : ''} ${CELL_TRUNCATE}`} title={orgName || 'None'}>
-            {orgName || 'None'}
-          </span>
-        </ItemContent>
-      </Item>
     );
   };
 
@@ -143,11 +208,11 @@ export const TournamentCard: React.FC<Props> = React.memo(({
           {tournament.date_played && (
             <Item size="sm" variant="muted" className="!p-1.5 min-w-0">
               <ItemMedia variant="icon" className="!size-6 bg-sky-500/20 border-sky-500/30">
-                <Calendar className="h-3 w-3 text-sky-500" />
+                <Calendar className="size-3 text-sky-500" aria-hidden />
               </ItemMedia>
               <ItemContent className="!gap-0 min-w-0">
                 <ItemTitle className="!text-xs text-muted-foreground">Date</ItemTitle>
-                <span className={`text-sm ${CELL_TRUNCATE}`} title={tournament.date_played} data-testid="tournament-card-date">
+                <span className={cn('text-sm', CELL_TRUNCATE)} title={tournament.date_played} data-testid="tournament-card-date">
                   {getDateFromDate(tournament.date_played)}
                 </span>
               </ItemContent>
@@ -155,11 +220,11 @@ export const TournamentCard: React.FC<Props> = React.memo(({
           )}
           <Item size="sm" variant="muted" className="!p-1.5 min-w-0">
             <ItemMedia variant="icon" className="!size-6 bg-indigo-500/20 border-indigo-500/30">
-              <Clock className="h-3 w-3 text-indigo-500" />
+              <Clock className="size-3 text-indigo-500" aria-hidden />
             </ItemMedia>
             <ItemContent className="!gap-0 min-w-0">
               <ItemTitle className="!text-xs text-muted-foreground">Time</ItemTitle>
-              <span className={`text-sm ${CELL_TRUNCATE}`} title={`${getTimeFromDate(tournament.date_played)} (${tournament.timezone || 'UTC'})`}>
+              <span className={cn('text-sm', CELL_TRUNCATE)} title={`${getTimeFromDate(tournament.date_played)} (${tournament.timezone || 'UTC'})`}>
                 {`${getTimeFromDate(tournament.date_played)} ${formatTimezone(tournament.timezone)}`}
               </span>
             </ItemContent>
@@ -170,11 +235,11 @@ export const TournamentCard: React.FC<Props> = React.memo(({
         {tournament.tournament_type && (
           <Item size="sm" variant="muted" className="!p-1.5 min-w-0">
             <ItemMedia variant="icon" className="!size-6 bg-orange-500/20 border-orange-500/30">
-              <Swords className="h-3 w-3 text-orange-500" />
+              <Swords className="size-3 text-orange-500" aria-hidden />
             </ItemMedia>
             <ItemContent className="!gap-0 min-w-0">
               <ItemTitle className="!text-xs text-muted-foreground">Style</ItemTitle>
-              <span className={`text-sm capitalize ${CELL_TRUNCATE}`} title={tournament.tournament_type.replace('_', ' ')}>
+              <span className={cn('text-sm capitalize', CELL_TRUNCATE)} title={tournament.tournament_type.replace('_', ' ')}>
                 {tournament.tournament_type.replace('_', ' ')}
               </span>
             </ItemContent>
@@ -183,8 +248,8 @@ export const TournamentCard: React.FC<Props> = React.memo(({
 
         {/* Second row: League and Organization */}
         <div className="grid grid-cols-1 min-[360px]:grid-cols-2 gap-1">
-          <LeagueItem />
-          <OrganizationItem />
+          <LeagueCell league={typeof tournament.league === 'number' ? tournament.league : league} />
+          <OrgCell key={league?.organization_logo || 'none'} league={league} />
         </div>
 
         {/* Third row: State and Players */}
@@ -192,12 +257,16 @@ export const TournamentCard: React.FC<Props> = React.memo(({
           {tournament.state && (
             <Item size="sm" variant="muted" className="!p-1.5 min-w-0">
               <ItemMedia variant="icon" className="!size-6 bg-emerald-500/20 border-emerald-500/30">
-                <Crown className="h-3 w-3 text-emerald-500" />
+                <Crown className="size-3 text-emerald-500" aria-hidden />
               </ItemMedia>
               <ItemContent className="!gap-0 min-w-0">
                 <ItemTitle className="!text-xs text-muted-foreground">State</ItemTitle>
-                <span className={`text-sm capitalize ${CELL_TRUNCATE}`} title={STATE_CHOICES[tournament.state] || tournament.state}>
-                  {STATE_CHOICES[tournament.state] || tournament.state}
+                <span
+                  className={cn('text-sm', shownState.muted && 'text-muted-foreground', CELL_TRUNCATE)}
+                  title={shownState.label}
+                  data-testid="tournament-card-state"
+                >
+                  {shownState.label}
                 </span>
               </ItemContent>
             </Item>
@@ -206,7 +275,7 @@ export const TournamentCard: React.FC<Props> = React.memo(({
           {/* Players count */}
           <Item size="sm" variant="muted" className="!p-1.5 min-w-0">
             <ItemMedia variant="icon" className="!size-6 bg-cyan-500/20 border-cyan-500/30">
-              <Users className="h-3 w-3 text-cyan-500" />
+              <Users className="size-3 text-cyan-500" aria-hidden />
             </ItemMedia>
             <ItemContent className="!gap-0 min-w-0">
               <ItemTitle className="!text-xs text-muted-foreground">Players</ItemTitle>
@@ -216,20 +285,6 @@ export const TournamentCard: React.FC<Props> = React.memo(({
         </div>
       </div>
     );
-  };
-
-  const getKeyName = () => {
-    let result = '';
-    if (tournament.pk) {
-      result += tournament.pk.toString();
-    }
-    if (tournament.date_played) {
-      result += tournament.date_played.toString();
-    }
-    if (tournament.name) {
-      result += tournament.name;
-    }
-    return result;
   };
 
   const ActionButtons = () => {
@@ -242,7 +297,6 @@ export const TournamentCard: React.FC<Props> = React.memo(({
             onClick={() => setEditModalOpen(true)}
             tooltip="Edit Tournament"
             data-testid="tournament-edit-button"
-            className="bg-gradient-to-r from-violet-500/30 to-blue-500/20 ring-1 ring-violet-300/60 border-0 shadow-none"
           />
         )}
       </>
@@ -254,7 +308,6 @@ export const TournamentCard: React.FC<Props> = React.memo(({
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.15, delay: Math.min(animationIndex * 0.02, 0.2) }}
-        key={`Tournamentcard:${getKeyName()} base`}
         className="flex items-stretch justify-center p-4 gap-6 w-full h-full"
         whileHover={{ scale: 1.02 }}
       >
@@ -285,7 +338,7 @@ export const TournamentCard: React.FC<Props> = React.memo(({
               onClick={() => navigate(`/tournament/${tournament.pk}`)}
               data-testid={`tournament-view-${tournament.pk}`}
             >
-              <Eye className="h-4 w-4" />
+              <Eye className="size-4" aria-hidden />
               View Tournament
             </PrimaryButton>
             <TournamentRemoveButton tournament={tournament} />
@@ -302,21 +355,23 @@ export const TournamentCard: React.FC<Props> = React.memo(({
     </>
   );
 }, (prevProps, nextProps) => {
-  // Custom comparison - only re-render if these values actually change
-  const prevLeagueId = typeof prevProps.tournament.league === 'object'
-    ? prevProps.tournament.league?.pk
-    : prevProps.tournament.league;
-  const nextLeagueId = typeof nextProps.tournament.league === 'object'
-    ? nextProps.tournament.league?.pk
-    : nextProps.tournament.league;
+  const prev = prevProps.tournament;
+  const next = nextProps.tournament;
+  const prevLeague = leagueInfo(prev);
+  const nextLeague = leagueInfo(next);
   return (
-    prevProps.tournament.pk === nextProps.tournament.pk &&
-    prevProps.tournament.name === nextProps.tournament.name &&
-    prevProps.tournament.state === nextProps.tournament.state &&
-    prevProps.tournament.date_played === nextProps.tournament.date_played &&
-    prevProps.tournament.tournament_type === nextProps.tournament.tournament_type &&
-    prevLeagueId === nextLeagueId &&
-    prevProps.tournament.user_count === nextProps.tournament.user_count &&
-    prevProps.animationIndex === nextProps.animationIndex
+    prev.pk === next.pk &&
+    prev.name === next.name &&
+    prev.state === next.state &&
+    prev.date_played === next.date_played &&
+    prev.tournament_type === next.tournament_type &&
+    leagueId(prev) === leagueId(next) &&
+    prevLeague?.name === nextLeague?.name &&
+    prevLeague?.organization_id === nextLeague?.organization_id &&
+    prevLeague?.organization_name === nextLeague?.organization_name &&
+    prevLeague?.organization_logo === nextLeague?.organization_logo &&
+    prev.user_count === next.user_count &&
+    prevProps.animationIndex === nextProps.animationIndex &&
+    prevProps.bucket === nextProps.bucket
   );
 });
