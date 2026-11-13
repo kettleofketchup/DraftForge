@@ -197,6 +197,19 @@ exports `BASE_URL` and `API_URL` and resolves them at import time:
 Never write `https://localhost` or read `DOCKER_HOST` in specs, fixtures or configs. A
 vitest guard (`frontend/tests/unit/playwright-literal-guard.test.ts`) fails on either.
 
+## Cookie names
+
+Browsers scope cookies by host, not port, so every slot shares one cookie jar for
+`localhost`. To keep a login on one slot from logging you out of another, slots N ≥ 1
+suffix their cookie names: `sessionid-sN` and `csrftoken-sN`. Ephemeral `just test::run`
+stacks do the same with their `-run-<hex>` suffix.
+`docker-compose.slot.yaml` sets `DF_SESSION_COOKIE_NAME` and `DF_CSRF_COOKIE_NAME` on
+the backend and `VITE_CSRF_COOKIE_NAME` on the frontend, which reads the CSRF cookie
+for the `X-CSRFToken` header. Slot 0, CI and production keep Django's default names.
+
+In Playwright fixtures, find cookies with `isCsrfCookie` / `isSessionCookie` from
+`fixtures/cookies.ts` rather than comparing against `csrftoken` or `sessionid`.
+
 ## CI
 
 CI has no slot file and never allocates. With `GITHUB_ACTIONS=true` the helper uses a

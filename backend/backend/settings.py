@@ -15,6 +15,7 @@ import functools
 import os
 import secrets
 import sys
+import tempfile
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -305,6 +306,13 @@ DATABASES = {
             # Django 5.2+ (init_command for SQLite).
             "init_command": "PRAGMA journal_mode=WAL;PRAGMA synchronous=NORMAL;",
         },
+        # A file, not Django's default in-memory shared-cache DB: consumer DB calls run on
+        # pool threads with their own connections, and shared cache fails a read of a table
+        # another connection is writing with "database table is locked" instead of waiting.
+        # Per-process so a killed run never leaves a file the next one has to clobber.
+        "TEST": {
+            "NAME": str(Path(tempfile.gettempdir()) / f"draftforge-test-{os.getpid()}.sqlite3"),
+        },
     }
 }
 if os.environ.get("SQLITE_PATH"):
@@ -518,6 +526,9 @@ USE_L10N = True
 USE_TZ = True
 
 SESSION_COOKIE_SAMESITE = None
+# Test stack slots share the `localhost` cookie jar (cookies ignore the port), so each slot names its own.
+SESSION_COOKIE_NAME = os.environ.get("DF_SESSION_COOKIE_NAME") or "sessionid"
+CSRF_COOKIE_NAME = os.environ.get("DF_CSRF_COOKIE_NAME") or "csrftoken"
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/1.10/howto/static-files/
 
