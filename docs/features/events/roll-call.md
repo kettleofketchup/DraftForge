@@ -63,7 +63,7 @@ When enough players are confirmed (meets `min_players` threshold), the "Start To
 
 > "Start the tournament with X confirmed players?"
 
-After confirming, the tournament is created with the confirmed roster and the browser navigates back to the event page.
+After confirming, the tournament is created with the confirmed roster and the browser navigates back to the event page. Approved players who never confirmed stay out of the tournament.
 
 ---
 

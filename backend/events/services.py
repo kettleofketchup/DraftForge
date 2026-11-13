@@ -380,7 +380,8 @@ def apply_signup_input(*, org_user, event, patch):
     Used by both the web `/signup/` endpoint and the Discord adapters so the
     write path is identical. Per-field branches:
       - unverified_friend_id: site-wide uniqueness check, then write.
-      - positions: writes pos_1..pos_5 booleans from a list of ints.
+      - positions: priorities dict or list[int] of roles; writes pos_1..pos_5
+        booleans and CustomUser.positions priorities.
       - rank_status: validated against event.allow_* flags before writing.
       - rank_medal, battle_cup_tier: written as-is.
       - rank_screenshot, battlecup_screenshot: URL shape validated, then written.
@@ -648,10 +649,10 @@ def cancel_signup(signup):
 def apply_signup_writethrough(signup):
     """Mirror signup-submitted PlayerDotaProfile fields to the User-level fields.
 
-    Issue #196a — positions are last-write-wins on User.positions, steam_account_id
-    is first-write-wins on User.steam_account_id (sourced from
-    PlayerDotaProfile.unverified_friend_id — a CharField of digits on
-    PlayerProfileMixin), MMR is NOT touched here (it routes through approve_signup).
+    Issue #196a — steam_account_id is first-write-wins on User.steam_account_id
+    (sourced from PlayerDotaProfile.unverified_friend_id — a CharField of digits on
+    PlayerProfileMixin). Positions are NOT mirrored (apply_signup_input owns them)
+    and MMR is NOT touched here (it routes through approve_signup).
     Cache invalidation is deferred to commit so the 'incomplete profile' panel
     reflects the writethrough on the next render rather than after the cacheops
     1-hour TTL.
@@ -675,13 +676,9 @@ def apply_signup_writethrough(signup):
     except PlayerDotaProfile.DoesNotExist:
         return signup
 
-    # Positions used to be force-mapped here from PlayerDotaProfile.pos_N
-    # booleans → PositionsModel priority=1 (flattening any real user-picked
-    # priorities). The web signup modal now sends a priorities dict directly
-    # via apply_signup_input which writes CustomUser.positions properly, so
-    # there's nothing to do at approval time. (Discord users still go through
-    # apply_signup_input via the list[int] legacy path, which derives
-    # priority=1 the same way as before — no regression.)
+    # Positions are not mirrored from pos_N here: apply_signup_input already
+    # writes the user's priorities to CustomUser.positions, and copying the
+    # binary pos_N flags would flatten them.
     user_positions = user.positions
     if user_positions is None:
         user_positions = PositionsModel.objects.create()
@@ -962,8 +959,12 @@ def sync_tournament_from_event(event):
 
 
 @transaction.atomic
-def restart_event_tournament(event):
-    """Delete existing tournament, create fresh one, re-add confirmed users."""
+def restart_event_tournament(event: Event) -> Tournament:
+    """Delete existing tournament, create fresh one, reopen signups.
+
+    Re-adds the SIGNUPS_OPEN roster: CONFIRMED, plus APPROVED when roll call
+    is disabled (same rule as approve_signup).
+    """
     if not event.tournament:
         raise ValueError("No tournament to restart.")
 
@@ -974,11 +975,13 @@ def restart_event_tournament(event):
 
     tournament = create_tournament_for_event(event)
 
-    confirmed = EventSignup.objects.filter(
-        event=event,
-        status__in=[SignupStatus.CONFIRMED, SignupStatus.APPROVED],
+    statuses = [SignupStatus.CONFIRMED]
+    if not event.roll_call_enabled:
+        statuses.append(SignupStatus.APPROVED)
+    roster = EventSignup.objects.filter(
+        event=event, status__in=statuses
     ).select_related("user")
-    for signup in confirmed:
+    for signup in roster:
         tournament.users.add(signup.user)
 
     event.state = EventState.SIGNUPS_OPEN
@@ -988,14 +991,19 @@ def restart_event_tournament(event):
 
 
 @transaction.atomic
-def ensure_tournament_with_signups(event):
-    """Self-heal: create event.tournament if missing, bulk-add APPROVED + CONFIRMED users.
+def ensure_tournament_with_signups(event: Event) -> Tournament:
+    """Self-heal: create event.tournament if missing, then sync its roster.
+
+    From ROLL_CALL only CONFIRMED players belong in the tournament (#378), so
+    APPROVED signups (did not confirm) are left out, and removed if present.
+    Otherwise APPROVED + CONFIRMED are added.
 
     Issue #200 — start_tournament previously silently no-op'd when event.tournament
     was None (legacy events created before perform_create wired create_tournament_for_event).
-    Idempotent: safe to call multiple times; M2M add() is a no-op for existing users.
+    Idempotent: safe to call multiple times; M2M add()/remove() are no-ops when
+    already applied.
 
-    Cache invalidation deferred to commit so the tournament UI reflects the bulk-add
+    Cache invalidation deferred to commit so the tournament UI reflects the change
     immediately rather than after the cacheops 1-hour TTL — Django M2M does NOT
     auto-invalidate cacheops.
     """
@@ -1004,19 +1012,41 @@ def ensure_tournament_with_signups(event):
         event.refresh_from_db()
 
     tournament = event.tournament
-    confirmed_or_approved = EventSignup.objects.filter(
-        event=event,
-        status__in=[SignupStatus.APPROVED, SignupStatus.CONFIRMED],
-    ).select_related("user")
+    from_roll_call = event.state == EventState.ROLL_CALL
+    statuses = [SignupStatus.CONFIRMED]
+    if not from_roll_call:
+        statuses.append(SignupStatus.APPROVED)
 
-    added_users = []
-    for signup in confirmed_or_approved:
-        tournament.users.add(signup.user)
-        added_users.append(signup.user)
+    roster = EventSignup.objects.filter(
+        event=event, status__in=statuses
+    ).select_related("user")
+    added_users = [signup.user for signup in roster]
+    tournament.users.add(*added_users)
+
+    removed_users: list[CustomUser] = []
+    if from_roll_call:
+        removed_users = list(
+            tournament.users.filter(
+                event_signups__event=event,
+                event_signups__status=SignupStatus.APPROVED,
+            )
+        )
+        tournament.users.remove(*removed_users)
+
+    log.info(
+        "event_tournament_roster_synced",
+        system="events",
+        subsystem="services",
+        event_id=event.pk,
+        tournament_id=tournament.pk,
+        from_roll_call=from_roll_call,
+        added_count=len(added_users),
+        removed_count=len(removed_users),
+    )
 
     # M2M change invalidates both sides: tournament.users.all() AND user.tournament_set.all().
     # cacheops doesn't auto-track M2M, so we invalidate every user we touched.
-    invalidate_after_commit(tournament, event, *added_users)
+    invalidate_after_commit(tournament, event, *added_users, *removed_users)
     return tournament
 
 
