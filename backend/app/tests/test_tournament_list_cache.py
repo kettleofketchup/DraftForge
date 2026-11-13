@@ -144,14 +144,16 @@ class TournamentListCacheTests(TransactionTestCase):
         self.assertEqual(response.status_code, 200)
         return {row["pk"] for row in response.json()}
 
-    def test_signup_deadline_takes_effect_by_the_next_window(self) -> None:
-        # Deadline at 12:57; the 12:55-13:00 window evaluates signups at 12:55.
+    def test_passing_the_signup_deadline_keeps_the_tournament_listed(self) -> None:
+        # The signup endpoint ignores signup_deadline_hours, so the list does too.
         tournament = self._open_signup_tournament(
             starts_in=timedelta(hours=1, minutes=57), deadline_hours=1
         )
-        self.assertEqual(self._open_pks(NOW + timedelta(minutes=56)), {tournament.pk})
-        self.assertEqual(self._open_pks(NOW + timedelta(minutes=58)), {tournament.pk})
-        self.assertEqual(self._open_pks(NOW + timedelta(minutes=60)), set())
+        for minutes in (56, 58, 60, 90):
+            with self.subTest(minutes=minutes):
+                self.assertEqual(
+                    self._open_pks(NOW + timedelta(minutes=minutes)), {tournament.pk}
+                )
 
     def test_event_state_change_invalidates(self) -> None:
         tournament = self._open_signup_tournament()
