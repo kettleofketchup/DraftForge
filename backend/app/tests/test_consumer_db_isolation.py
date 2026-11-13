@@ -38,8 +38,16 @@ class Gate:
         self.entered.set()
         self.release.wait(10)
 
-    async def wait_entered(self) -> None:
+    async def wait_entered(
+        self, worker: "asyncio.Future[Any] | None" = None, timeout: float = 10.0
+    ) -> None:
+        deadline = time.monotonic() + timeout
         while not self.entered.is_set():
+            if worker is not None and worker.done():
+                await worker
+                raise AssertionError("worker finished without reaching the gate")
+            if time.monotonic() > deadline:
+                raise AssertionError(f"gate not reached within {timeout}s")
             await asyncio.sleep(0.01)
 
 
@@ -89,7 +97,7 @@ class ConsumerDbIsolationTests(TransactionTestCase):
         captain = WebsocketCommunicator(APP, blocked_path)
         captain.scope["user"] = self.cap_a
         captain_connect = asyncio.ensure_future(captain.connect(timeout=20))
-        await gate.wait_entered()
+        await gate.wait_entered(captain_connect)
 
         spectator = WebsocketCommunicator(APP, victim_path)
         spectator.scope["user"] = self.spectator
@@ -182,7 +190,7 @@ class ConsumerDbIsolationTests(TransactionTestCase):
             leaving = asyncio.ensure_future(
                 consumer().on_captain_state_change(draft.pk, self.cap_a, False)
             )
-            await gate.wait_entered()
+            await gate.wait_entered(leaving)
             joining = asyncio.ensure_future(
                 consumer().on_captain_state_change(draft.pk, self.cap_a, True)
             )
@@ -225,7 +233,7 @@ class ConsumerDbContentionTests(TransactionTestCase):
 
         async def scenario() -> int:
             writer = asyncio.ensure_future(hold_write())
-            await gate.wait_entered()
+            await gate.wait_entered(writer)
             try:
                 return await asyncio.wait_for(read_captain_team(), VICTIM_DEADLINE_S)
             finally:
