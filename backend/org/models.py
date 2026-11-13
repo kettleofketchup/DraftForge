@@ -1,8 +1,11 @@
 from django.db import models
 from django.utils import timezone
 
-from org.models_profiles import PlayerDeadlockProfile  # noqa: F401
-from org.models_profiles import PlayerDotaProfile  # noqa: F401
+from org.models_features import OrgFeature  # noqa: F401
+from org.models_profiles import (
+    PlayerDeadlockProfile,  # noqa: F401
+    PlayerDotaProfile,  # noqa: F401
+)
 
 
 class OrgUser(models.Model):
@@ -40,5 +43,5 @@ class OrgUser(models.Model):
     class Meta:
         unique_together = ["user", "organization"]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.user.username} @ {self.organization.name}"
