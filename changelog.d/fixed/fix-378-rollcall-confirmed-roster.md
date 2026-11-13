@@ -1,1 +1,0 @@
-- Starting a tournament from roll call now adds only the players who confirmed attendance; approved players who never confirmed are left out ([#378](https://github.com/kettleofketchup/DraftForge/issues/378)). Restarting the tournament of a roll-call event re-adds only confirmed players.

@@ -14,6 +14,160 @@ Releases made before this file was added are not listed here; see the git tags a
 
 <!-- Do not edit. Unreleased changes live in changelog.d/; `just version::set` assembles them here. -->
 
+## [0.11.0] - 2026-11-13
+
+### Upgrading
+
+Test stacks now run with dota_lobby lobbies on (`docker/.env.test`): `DOTA_LOBBY_URL`
+points at the stack's simulated `dota-lobby` service, and `DOTA_LOBBY_API_KEY`,
+`DOTA_LOBBY_WEBHOOK_SECRET` and `INTERNAL_SERVICE_TOKEN` are test-only values that
+replace the ones in `backend/.env` for test stacks. Backend unit tests still start with
+lobbies off. Repopulate the test database (`just db::populate::fresh`) for the
+dota_lobby test data.
+
+The simulator image is `DOTA_LOBBY_IMAGE`, by default
+`ghcr.io/kettleofketchup/dota_lobby:${DOTA_LOBBY_IMAGE_TAG}`, whose default tag is a
+placeholder until the first dota_lobby release with simulation mode. Until then, build
+it in dota_lobby (`just docker::build`) and run
+`DOTA_LOBBY_IMAGE=ghcr.io/kettleofketchup/dota_lobby:local just test::dota-lobby up`.
+With it running, `just test::pw::dota-lobby` and `cicd-dota-lobby` set
+`DOTA_LOBBY_SIMULATOR_REQUIRED=1`: a simulator that never becomes available fails the
+run instead of skipping its specs.
+
+Run the migrations `app.0102_tournament_dota_lobby_password`, `events.0020_dota_lobby_settings` and `lobby.0004_gamelobby_password`. They give every tournament with lobbies enabled a random lobby password, copy each event's lobby settings and password from its tournament (a series takes the settings of its upcoming events; when they disagree it takes the most permissive, so lobbies stay on where staff had turned them on), store the password of every lobby that has not ended, and drop `GameLobby.password_key_id`. Run them while `DJANGO_SECRET_KEY` (and any `DJANGO_SECRET_KEY_FALLBACKS`) still hold the keys open lobbies were created under, so their stored passwords match.
+
+Lobby passwords no longer depend on `DJANGO_SECRET_KEY`: `DJANGO_SECRET_KEY_FALLBACKS` is no longer needed for lobbies. Check the lobby settings of series whose upcoming events disagreed: the next series save copies the series' settings onto its upcoming events and their tournaments, which can turn lobbies on for events where they were off. See `docs/features/planned/dota-lobbies.md`.
+
+Rolling `lobby` back to `0003` restores derived passwords: a lobby that has not ended keeps its password only if `DJANGO_SECRET_KEY` or `DJANGO_SECRET_KEY_FALLBACKS` derives it. Lobbies created after the upgrade use their tournament's password and get a different one, so recreate any that are still waiting.
+
+Run the migrations `discordbot.0011_discordtournamentlog_lobby_info` (adds the `lobby_info` Discord log type) and `lobby.0002_gamelobby_next_attempt_at` (adds a nullable column); neither changes data.
+
+Celery beat has a new entry, `reconcile-dota-lobbies` (every 60 s, in both `config/celery.py` and `config/celery_light.py`). It does nothing until `DOTA_LOBBY_ENABLED=true`.
+
+To receive dota_lobby's webhooks, configure dota_lobby with a webhook for `https://<draftforge>/api/internal/lobbies/events/` with `token_header: X-Internal-Token`, give it DraftForge's `INTERNAL_SERVICE_TOKEN` as that URL's token and the same signing secret as `DOTA_LOBBY_WEBHOOK_SECRET`, and, when dota_lobby is not on a private network, allow its address in `INTERNAL_SERVICE_ALLOWED_IPS`. Setting that variable replaces the built-in loopback and RFC 1918 allowlist instead of adding to it, so list those ranges too (`127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,<dota_lobby address>`); otherwise the Celery workers and the Discord bot get `403` from the internal API. While the secret is empty the receiver answers `503` and dota_lobby keeps retrying. On Helm, `ingress.blockInternalApi` blocks this path at the ingress: deliver to the backend Service inside the cluster or add an ingress exception. See `docs/features/planned/dota-lobbies.md`.
+
+Run the migration `lobby.0003_gamelobby_close_pending`. It adds a boolean column with a default and changes no data.
+
+If production's `backend/.env` has no `DJANGO_SECRET_KEY`, the first `just dev::release` after
+this upgrade generates one. Sessions and other values signed with the old development key
+stop working, so everyone has to log in again once. Back up `backend/.env` afterwards: losing
+the key ends every session again.
+
+Lobbies are enabled on the release stack. Before deploying, put `DOTA_LOBBY_URL`,
+`DOTA_LOBBY_API_KEY` and `DOTA_LOBBY_WEBHOOK_SECRET` in `backend/.env`, and set
+`INTERNAL_SERVICE_ALLOWED_IPS` to the private ranges plus dota_lobby's public address
+(`127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,<address>`) when dota_lobby is not on
+a private network. See `docs/features/planned/dota-lobbies.md`.
+
+### Security
+
+- `just dev::release` no longer starts production with Django's public development secret
+  key. When `backend/.env` has no `DJANGO_SECRET_KEY` (or an empty one), it prints a warning,
+  generates a random key and saves it there before the containers start.
+
+### Added
+
+- End-to-end tests of the dota_lobby integration against the real dota_lobby service in
+  simulation mode: the test stack's `dota-lobby` service (`just test::dota-lobby up`,
+  compose profile `dota-lobby`) and the `18-dota-lobby` Playwright specs (lobby
+  passwords, who sees them, the lobby lifecycle and the match dialog's fit on small
+  screens), with their own test data and `/api/tests/dota-lobby*` endpoints.
+- Dota 2 lobby passwords per event: on a series or an event, staff choose a fixed
+  password typed ahead of time or a random one generated for each event, and can
+  regenerate a random one. Every lobby of the event uses it.
+- Registered players (approved or confirmed signups, or rostered on a team) see the
+  event's lobby password on the event page ahead of time, with a copy button.
+- Series and event forms have the hosted-lobby settings (lobbies off, manual or
+  automatic, match start, region, lobby info DM), which generated events and their
+  tournaments inherit.
+- In-game Dota 2 lobbies through the dota_lobby service (#56), for tournaments that opt in
+  with `dota_lobby_mode`: a game gets a lobby automatically once both teams are set
+  (`auto`), or when staff request one (`manual`; Django admin action or
+  `manage.py create_dota_lobby`). Changing a game's teams before the match closes the lobby
+  and requests a new one; completing a game before its lobby's match starts closes the lobby;
+  and the lobby's sides follow the hero draft's side choice.
+- dota_lobby events are received at `/api/internal/lobbies/events/` (signed and
+  de-duplicated) and kept in step by a reconcile task every minute. A started match marks the
+  game live and keeps its match ID on the lobby, leaving `Game.gameid` to the Steam link; a
+  match that ends unscored, or a lobby that ends before a scored result, returns the game to
+  pending so a new lobby can be requested. The lobby's reported result is kept as
+  provisional for staff to confirm and never advances the bracket.
+- The tournament websocket now sends `lobby_event` and `bracket_update` messages, so the
+  bracket refreshes when a lobby's match starts.
+- Optional Discord DM with the lobby name, password and side for rostered players
+  (`discord_send_lobby_info`).
+- Organizer and player controls for dota_lobby lobbies (#56). The match dialog shows a game's
+  lobby state, and to its players and tournament staff the lobby name, password and each
+  player's invite and seat status in the selected language, with the name above its status so
+  long names stay readable.
+  Staff can create, retry, recreate, close and launch the lobby and re-invite players, and
+  players can invite themselves. Invite actions show only while someone is missing from the
+  lobby, and a lobby whose match was played is not retried: staff confirm the winner instead,
+  or replay the match on purpose. A match abandoned after it started can always get a new lobby.
+  The API is under `/api/games/<id>/lobby/`.
+- A lobby's provisional result is shown in the match dialog and highlights the matching winner
+  button without submitting it. Bracket nodes show a ringed dot for the lobby state: amber while
+  it waits for players, pulsing green during the match, red when it needs attention.
+- Tournament settings for hosted lobbies (mode, match start, region) and the "Send lobby info"
+  Discord toggle in the tournament edit dialog. The tournament API exposes the lobby fields.
+- **League stats on player strips.** In the team draft's available players, the completed draft, the teams tab, roll call and the mobile captain list, each player strip shows their league rank, games played and win rate, their last 5 results (oldest to newest) and a win or loss streak badge after 3 in a row. The numbers come from the league's Steam ticket matches. Players are ranked by win rate among those with at least 5 games; players with fewer games show their record without a rank.
+- **Ranked distribution in the player panel.** Opening a player shows their rank out of the league's ranked players with a top-percent figure, their W–L record, current streak and last 10 results, plus a win-rate histogram of the league with the player's bucket highlighted.
+- **League player summaries API.** `GET /api/steam/leagues/<league_pk>/player-summaries/` returns per-player rank, record, recent form, streak and the league's win-rate distribution, cached for 30 minutes.
+- **League summary in player hover cards.** Hovering a player's name or their stats badge shows a compact league summary: rank, games, win rate, streak, recent form and the win-rate histogram. Clicking the badge or the card opens the full player panel.
+
+### Changed
+
+- One password per event replaces the per-lobby passwords derived from the Django secret
+  key. A recreated lobby keeps the event's password; a changed password applies to lobbies
+  created afterwards, and existing lobbies keep theirs.
+- A tournament created from an event takes its lobby settings from the event and shows them
+  read-only; standalone tournaments keep their own.
+- The frontend reports to Sentry only when built with `VITE_SENTRY_ENABLED=true`, which the
+  production image build sets by default. Dev servers, test stacks, unit tests and PR preview
+  images no longer send events to the project's Sentry. `VITE_SENTRY_DSN` optionally overrides the DSN.
+- dota_lobby lobbies are on for the release and prod stacks (`DOTA_LOBBY_ENABLED=true` in
+  `docker/.env.release` and `docker/.env.prod`). Tournaments still default to
+  `dota_lobby_mode: off`, so no lobby is created until staff turn one on.
+- Shuffle draft tie breaks now show as a dice-roll popup for everyone watching the draft,
+  instead of a full-screen dialog with a Continue button. It names each tied captain, rolls
+  the dice round by round, highlights who picks next and closes on its own.
+- When a tie is rolled, the next captain's pick clock waits for the dice roll (5 seconds)
+  before grace starts, so no time is lost while the popup is on screen.
+- The team draft clock bar now shows grace and reserve as two equal clocks side by side.
+  Once grace runs out, the reserve clock turns red and counts down the active team's
+  reserve, and the draft screen gets a red tint while reserve is draining.
+- Each captain in the Pick Order and Upcoming Picks lists now shows their remaining reserve
+  time, highlighted red while it is being used.
+- The draft lobby's Ready and Start buttons are sized to their labels instead of spanning
+  the whole dialog.
+
+### Fixed
+
+- The bracket's Match Details dialog no longer grows past the screen: its body scrolls while the
+  title and close button stay in view, on phones and desktops.
+- **Player modal league stats never loaded.** The modal sent DraftForge's league id where the Steam ticket league id was expected, so it always showed "No league stats available". `/api/steam/league-stats/<user>/` now also accepts a `league` (DraftForge league) parameter; the existing `league_id` (Steam id) still works.
+- **Leaderboard failed with its default sort.** The default `league_mmr` sort used a field removed from the user model; the leaderboard now sorts by win rate by default.
+- **Player and team hover cards closed before you could click them.** Moving the pointer from a name onto its hover card closed the card on the way, and the card's padding didn't count as part of the card. Hover cards now stay open for 150ms after the pointer leaves, so you can move onto them and click; Escape still closes them immediately.
+- **Draft League filter did nothing.** The High WR, 10+ Games and New buttons in the team draft were permanently disabled and read data the page never received. They now filter the available players by league ticket stats: ranked players at 55% or more, players with 10 or more games, and players below the 5-game ranking threshold.
+- **Resume could stay enabled for a disconnected captain.** If the active captain
+  reconnected to a paused team draft and their heartbeats then stopped, viewers kept
+  seeing them as connected and the Resume button stayed enabled. A paused draft now
+  re-announces stale captains every few seconds, so Resume disables again (#376).
+- Starting a tournament from roll call now adds only the players who confirmed attendance; approved players who never confirmed are left out ([#378](https://github.com/kettleofketchup/DraftForge/issues/378)). Restarting the tournament of a roll-call event re-adds only confirmed players.
+- Captain buttons are now the same size whether they pick or remove a captain,
+  including the compact icon version, and the Profile and Logout items in the
+  navbar user menu are the same height.
+- Cancel buttons in the Create/Edit Tournament and CSV import dialogs now match
+  the height of the button next to them, and the bracket toolbar's Auto-Assign
+  Matches button lines up with Save and Reset.
+- Long league and organization names on tournament cards are now trimmed with an ellipsis instead
+  of running into the neighbouring cell.
+
+### Documentation
+
+- The Dota 2 lobbies page now says how production reaches its dota_lobby instance, which
+  Steam bot is deployed, how to rotate the API key, and what webhooks will need.
+
 ## [0.10.0] - 2026-11-12
 
 ### Upgrading
