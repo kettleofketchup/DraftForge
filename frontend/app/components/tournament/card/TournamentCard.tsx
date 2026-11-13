@@ -117,25 +117,25 @@ const OrgCell = memo(function OrgCell({ league }: { league: LeagueMinimal | null
   const label = orgName ?? 'No organization';
 
   return (
-    <Item size="sm" variant="muted" className="!p-1.5 min-w-0" data-testid="tournament-cell-org">
-      <ItemMedia
-        variant="image"
-        className="!size-6 rounded-sm"
+    <div className="flex min-w-0 items-center gap-2" data-testid="tournament-cell-org">
+      <div
+        className="flex size-6 shrink-0 overflow-hidden rounded-sm"
         aria-hidden
         data-testid="tournament-card-org-media"
       >
         {media}
-      </ItemMedia>
-      <ItemContent className="!gap-0 min-w-0">
-        <ItemTitle className="!text-xs text-muted-foreground">Organization</ItemTitle>
-        <span
-          className={cn('text-sm font-medium', !hasOrg && 'text-muted-foreground', CELL_TRUNCATE)}
-          title={label}
-        >
-          {label}
-        </span>
-      </ItemContent>
-    </Item>
+      </div>
+      <span
+        className={cn(
+          'text-sm font-medium',
+          hasOrg ? 'text-text-secondary' : 'text-muted-foreground',
+          CELL_TRUNCATE,
+        )}
+        title={label}
+      >
+        {label}
+      </span>
+    </div>
   );
 });
 
@@ -153,27 +153,26 @@ export const TournamentCard: React.FC<Props> = React.memo(({
   const tone = stateTone(shownState);
   const league = leagueInfo(tournament);
 
-  const TournamentHeaderContent = () => {
+  const headerContent = () => {
     if (!tournament || !tournament.name) return null;
     return (
       <>
         <CardTitle className="text-base truncate">
           {tournament.name}
         </CardTitle>
-        {live ? (
-          <Badge
-            variant="outline"
-            data-testid="tournament-live-badge"
-            className="h-4 py-0 leading-none gap-1 bg-primary/20 text-primary border-primary/30"
-          >
-            <span aria-hidden className="size-1.5 rounded-full bg-primary motion-safe:animate-pulse" />
-            Live
-          </Badge>
-        ) : (
-          <CardDescription className="text-xs text-muted-foreground">
-            Tournament
-          </CardDescription>
-        )}
+        <CardDescription className="flex min-w-0 items-center gap-2">
+          {live && (
+            <Badge
+              variant="outline"
+              data-testid="tournament-live-badge"
+              className="h-5 shrink-0 gap-1 bg-primary/20 py-0 leading-none text-primary border-primary/30"
+            >
+              <span aria-hidden className="size-1.5 rounded-full bg-primary motion-safe:animate-pulse" />
+              Live
+            </Badge>
+          )}
+          <OrgCell key={league?.organization_logo || 'none'} league={league} />
+        </CardDescription>
       </>
     );
   };
@@ -253,11 +252,7 @@ export const TournamentCard: React.FC<Props> = React.memo(({
           </Item>
         )}
 
-        {/* Second row: League and Organization */}
-        <div className="grid grid-cols-1 min-[360px]:grid-cols-2 gap-1">
-          <LeagueCell league={typeof tournament.league === 'number' ? tournament.league : league} />
-          <OrgCell key={league?.organization_logo || 'none'} league={league} />
-        </div>
+        <LeagueCell league={typeof tournament.league === 'number' ? tournament.league : league} />
 
         {/* Third row: State and Players */}
         <div className="grid grid-cols-1 min-[360px]:grid-cols-2 gap-1">
@@ -332,7 +327,7 @@ export const TournamentCard: React.FC<Props> = React.memo(({
         >
           {/* Header: 2-col layout with name/type left, actions right */}
           <CardHeader className="p-0 gap-0.5">
-            <TournamentHeaderContent />
+            {headerContent()}
             <CardAction className="flex items-center gap-1">
               <ActionButtons />
             </CardAction>
