@@ -30,23 +30,17 @@ import ResponsiveAppBar from './components/navbar/navbar';
 
 const log = getLogger('root');
 
-// ✅ All fonts and external styles live here
 export const links: Route.LinksFunction = () => [];
 
 export async function loader({ request }: LoaderFunctionArgs) {
   // Dynamic import keeps server-only code (`remix-i18next/server`, cookie
   // wiring) out of the client bundle.
-  const { i18nServer, localeCookie } = await import('~/i18n/i18n.server');
-  const locale = await i18nServer.getLocale(request);
-  const existing = await localeCookie.parse(request.headers.get('Cookie'));
-  if (existing === locale) return { locale };
-  return data(
-    { locale },
-    { headers: { 'Set-Cookie': await localeCookie.serialize(locale) } },
-  );
+  const { resolveRequestLocale } = await import('~/i18n/i18n.server');
+  const { locale, setCookie } = await resolveRequestLocale(request);
+  if (!setCookie) return { locale };
+  return data({ locale }, { headers: { 'Set-Cookie': setCookie } });
 }
 
-// ✅ Meta tags live here
 export const meta: Route.MetaFunction = () => [
   { title: 'Tournament Tracker' },
   { name: 'description', content: 'Track your tournament progress' },
