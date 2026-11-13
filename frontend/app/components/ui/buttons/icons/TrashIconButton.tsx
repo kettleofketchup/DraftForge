@@ -32,12 +32,13 @@ const sizeClasses: Record<IconButtonSize, { button: string; icon: string }> = {
 const TrashIconButton = React.forwardRef<
   HTMLButtonElement,
   TrashIconButtonProps
->(({ tooltip, size = 'default', className, ...props }, ref) => {
+>(({ tooltip, size = 'default', className, type = 'button', ...props }, ref) => {
   const sizeConfig = sizeClasses[size];
 
   const button = (
     <Button
       ref={ref}
+      type={type}
       variant="destructive"
       size="icon"
       className={cn(
