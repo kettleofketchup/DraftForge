@@ -1,4 +1,7 @@
+from typing import Any
+
 from cacheops import cached_as
+from django.contrib.auth.models import AnonymousUser
 from django.db import transaction
 from django.db.models import (
     BooleanField,
@@ -12,14 +15,20 @@ from django.db.models import (
     Value,
 )
 from django.utils import timezone
-from rest_framework import permissions, status, viewsets
+from rest_framework import permissions, serializers, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import NotAuthenticated, PermissionDenied
+from rest_framework.request import Request
 from rest_framework.response import Response
 
-from app.cache_utils import invalidate_obj
-from app.models import CustomUser, Organization
-from app.permissions_org import has_event_staff_access, has_org_staff_access
+from app.cache_utils import invalidate_after_commit, invalidate_obj
+from app.models import CustomUser, Organization, OrgLog
+from app.permissions_org import (
+    has_event_staff_access,
+    has_org_admin_access,
+    has_org_staff_access,
+)
+from events.completion import close_event
 from events.constants import EventState, SignupStatus
 from events.models import (
     Event,
@@ -53,6 +62,7 @@ from events.services import (
     regenerate_event_lobby_password,
     reinstate_signup,
     reject_signup,
+    resolve_or_create_org_user,
     restart_event_tournament,
     staff_add_signup,
     sync_future_events,
@@ -62,6 +72,8 @@ from events.services import (
 )
 from events.utils import starts_in_future
 from lobby.passwords import PasswordMode
+from org.contributions.services import should_sync_staff, sync_event_staff_entries
+from org.feature_errors import not_permitted
 from telemetry.logging import get_logger
 from user.models import BaseUserProfile
 from user.querysets import with_user_profiles
@@ -106,7 +118,9 @@ def with_event_staff(qs: QuerySet[Event]) -> QuerySet[Event]:
     )
 
 
-def _attach_user_can_manage(payload, user):
+def _attach_user_can_manage(
+    payload: dict[str, Any] | list[dict[str, Any]], user: CustomUser | AnonymousUser
+) -> dict[str, Any] | list[dict[str, Any]]:
     """Mutate a serialized Event payload (or list of them) to set user_can_manage per-request.
 
     Called AFTER cached_as serves a payload, so the cache itself stays user-agnostic.
@@ -124,11 +138,57 @@ def _attach_user_can_manage(payload, user):
             "organization", "tournament_league"
         )
     }
+    admin_by_org: dict[int, bool] = {}
     for p in items:
         ev = events_by_pk.get(p["id"])
         if ev is not None:
             p["user_can_manage"] = has_event_staff_access(user, ev)
+            if ev.organization_id not in admin_by_org:
+                admin_by_org[ev.organization_id] = has_org_admin_access(
+                    user, ev.organization
+                )
+            p["user_can_manage_event_staff"] = admin_by_org[ev.organization_id]
     return payload
+
+
+def _event_payload(event_pk: int, user: CustomUser) -> dict[str, Any]:
+    qs = with_event_staff(_annotate_event_qs(Event.objects.filter(pk=event_pk)))
+    data = EventSerializer(qs.first()).data
+    _attach_user_can_manage(data, user)
+    return data
+
+
+def _require_event_staff_manager(user: CustomUser, event: Event) -> None:
+    if not user.is_authenticated:
+        raise NotAuthenticated()
+    if not has_org_admin_access(user, event.organization):
+        raise not_permitted()
+
+
+class EventStaffInputSerializer(serializers.Serializer):
+    host_id = serializers.IntegerField(allow_null=True)
+    helper_ids = serializers.ListField(
+        child=serializers.IntegerField(), allow_empty=True
+    )
+
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
+        host_id: int | None = attrs["host_id"]
+        helper_ids: list[int] = list(dict.fromkeys(attrs["helper_ids"]))
+        if host_id is not None and host_id in helper_ids:
+            raise serializers.ValidationError(
+                {"helper_ids": "The host cannot also be a helper."}
+            )
+        wanted = set(helper_ids) | ({host_id} if host_id is not None else set())
+        found = set(
+            CustomUser.objects.nocache()
+            .filter(pk__in=wanted)
+            .values_list("pk", flat=True)
+        )
+        missing = sorted(wanted - found)
+        if missing:
+            raise serializers.ValidationError({"users": f"Unknown user ids: {missing}"})
+        attrs["helper_ids"] = helper_ids
+        return attrs
 
 
 def _pk_or_none(pk: str | None) -> int | None:
@@ -614,12 +674,23 @@ class EventViewSet(viewsets.ModelViewSet):
 
         notify_create_discord_event(event)
 
-    def perform_update(self, serializer):
+    def perform_update(self, serializer: EventSerializer) -> None:
         from app.cache_utils import invalidate_after_commit
 
         previous_password = serializer.instance.dota_lobby_password
+        previous_ledger_fields = (
+            serializer.instance.scheduled_at,
+            serializer.instance.ends_at,
+            serializer.instance.name,
+        )
         event = serializer.save()
         invalidate_after_commit(event)
+        if (
+            event.scheduled_at,
+            event.ends_at,
+            event.name,
+        ) != previous_ledger_fields and should_sync_staff(event):
+            sync_event_staff_entries(event)
         if event.dota_lobby_password != previous_password:
             log_lobby_password_changed(event, "event_update")
         result = sync_tournament_from_event(event)
@@ -948,6 +1019,76 @@ class EventViewSet(viewsets.ModelViewSet):
             return Response(data)
         except ValueError as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=True, methods=["post"])
+    def complete(self, request: Request, pk: str | None = None) -> Response:
+        event = self.get_object()
+        _require_event_staff_manager(request.user, event)
+        if event.state not in (EventState.ROLL_CALL, EventState.IN_PROGRESS):
+            return Response(
+                {"error": f"Cannot complete an event in '{event.state}' state."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        result = close_event(
+            event, new_state=EventState.COMPLETED, source="admin", actor=request.user
+        )
+        if not result.closed:
+            return Response(
+                {"error": f"Cannot complete an event in '{result.state}' state."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(_event_payload(event.pk, request.user))
+
+    @action(detail=True, methods=["put"], url_path="staff")
+    def staff(self, request: Request, pk: str | None = None) -> Response:
+        event = self.get_object()
+        _require_event_staff_manager(request.user, event)
+        body = EventStaffInputSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        host_id: int | None = body.validated_data["host_id"]
+        helper_ids: list[int] = body.validated_data["helper_ids"]
+        org = event.organization
+        with transaction.atomic():
+            users = CustomUser.objects.nocache().in_bulk(
+                [*helper_ids, *([host_id] if host_id is not None else [])]
+            )
+            for user in users.values():
+                resolve_or_create_org_user(user, org)
+            previous_host_id = event.host_id
+            previous_helper_ids = sorted(
+                event.helpers.nocache().values_list("pk", flat=True)
+            )
+            event.host_id = host_id
+            event.save(update_fields=["host", "updated_at"])
+            event.helpers.set(helper_ids)
+            synced = should_sync_staff(event)
+            if synced:
+                sync_event_staff_entries(event)
+            OrgLog.objects.create(
+                organization=org,
+                actor=request.user,
+                action="set_event_staff",
+                details={
+                    "event_id": event.pk,
+                    "host_id": host_id,
+                    "helper_ids": helper_ids,
+                    "previous_host_id": previous_host_id,
+                    "previous_helper_ids": previous_helper_ids,
+                },
+            )
+            invalidate_after_commit(event)
+        logger.info(
+            "event_staff_set",
+            system="events",
+            subsystem="views",
+            event_id=event.pk,
+            org_id=org.pk,
+            actor_id=request.user.pk,
+            host_id=host_id,
+            helper_count=len(helper_ids),
+            synced=synced,
+        )
+        return Response(_event_payload(event.pk, request.user))
 
     @action(detail=True, methods=["get"])
     def discord(self, request, pk=None):
