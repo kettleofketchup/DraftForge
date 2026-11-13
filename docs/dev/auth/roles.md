@@ -80,7 +80,7 @@ The five entry points locked by `e2e/17-auth/01-create-gates.spec.ts`.
 | Create League (org-detail)   |     ✓     |     ✓     |    ✓     |    ✓     |    ✓     |     ✗     |      ✗      |      ✗      |     ✗     |
 | Create Event (org-detail)    |     ✓     |     ✓     |    ✓     |    ✓     |    ✓     |     ✗     |      ✗      |      ✗      |     ✗     |
 | Create Event (`/events`)     |     ✓     |     ✓     |    ✓     |    ✓     |    ✓     |     ✗     |      ✗      |      ✗      |     ✗     |
-| Create Tournament            |     ✓     |     ✓     |    ✓     |    ✓     |    ✗     |     ✗     |      ✓      |      ✗      |     ✗     |
+| Create Tournament            |     ✓     |     ✓     |    ✗     |    ✗     |    ✗     |     ✗     |      ✗      |      ✗      |     ✗     |
 
 **Why some rows look this way:**
 
@@ -90,15 +90,16 @@ The five entry points locked by `e2e/17-auth/01-create-gates.spec.ts`.
 - **Create League** and **Create Event** track `useIsOrganizationStaff` —
   events are operational, not governance, so staff get the gate. Both
   the org-detail tabs and `/events?organization=X` use the same hook.
-- **Create Tournament** mirrors the backend's `has_league_admin_access`
-  cascade via `useCanCreateAnyTournament`: site admin, admin of any
-  organisation (via `admin_organization_ids`), or admin of any league
-  (via `admin_league_ids`). Staff roles can't create tournaments —
-  matching the backend's `perform_create` check.
+- **Create Tournament** uses `canCreateTournament` in
+  `~/lib/tournamentPermissions.ts`: `is_staff` only, matching `IsStaff` on
+  `/api/tournament/register`, the endpoint the Create dialog posts to. A
+  superuser without `is_staff` does not see the button, because that
+  endpoint would reject them with 403. Org and league roles can't create
+  tournaments.
 
 ## Edit + Bracket Matrix
 
-The six entry points locked by `e2e/17-auth/02-edit-and-bracket-gates.spec.ts`.
+The eight entry points locked by `e2e/17-auth/02-edit-and-bracket-gates.spec.ts`.
 
 |                                        | siteAdmin | siteStaff | orgOwner | orgAdmin | orgStaff | orgMember | leagueAdmin | leagueStaff | anonymous |
 | -------------------------------------- | :-------: | :-------: | :------: | :------: | :------: | :-------: | :---------: | :---------: | :-------: |
@@ -108,6 +109,8 @@ The six entry points locked by `e2e/17-auth/02-edit-and-bracket-gates.spec.ts`.
 | Generate Bracket                       |     ✓     |     ✓     |    ✓     |    ✓     |    ✓     |     ✗     |      ✓      |      ✓      |     ✗     |
 | Set Bracket Match Winner               |     ✓     |     ✓     |    ✓     |    ✓     |    ✓     |     ✗     |      ✓      |      ✓      |     ✗     |
 | Link Steam Match (bracket)             |     ✓     |     ✓     |    ✗     |    ✗     |    ✗     |     ✗     |      ✗      |      ✗      |     ✗     |
+| Edit Tournament (detail page)          |     ✓     |     ✓     |    ✓     |    ✓     |    ✓     |     ✗     |      ✓      |      ✓      |     ✗     |
+| Delete Tournament (detail page)        |     ✓     |     ✓     |    ✗     |    ✗     |    ✗     |     ✗     |      ✗      |      ✗      |     ✗     |
 
 **Why some rows look this way:**
 
@@ -156,6 +159,18 @@ The six entry points locked by `e2e/17-auth/02-edit-and-bracket-gates.spec.ts`.
   `useUserStore.isStaff()` (site staff/superuser only) while the rest
   of the MatchStatsModal uses `useIsLeagueStaff`. If you're widening
   it, lift the gate to `useIsLeagueStaff` and flip the matrix row.
+- **Edit Tournament** uses `canEditTournament` in
+  `~/lib/tournamentPermissions.ts`, computed from the user's id lists
+  (`admin_league_ids`, `staff_league_ids`, `admin_organization_ids`,
+  `staff_organization_ids`). It mirrors the backend's `can_edit_tournament`:
+  site staff, admins and staff of the tournament's league, or admins and
+  staff of the league's own organization. It reads the league's org, never
+  the tournament's `organization_pk`, which falls back to the source event's
+  org. On a tournament with no league it is false for everyone but site
+  staff. In the dialog, moving the tournament to another league needs admin
+  access to both leagues, and only site staff can clear the league.
+- **Delete Tournament** stays site staff (`is_staff || is_superuser`), even
+  though the backend `destroy` action uses `CanEditTournament`.
 
 ## Adding a New Gate
 

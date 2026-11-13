@@ -176,10 +176,14 @@ data, websocket messages or logs. It is shown only while the lobby is active.
 
 The bracket (`GET /api/bracket/tournaments/<id>/`) gives each game a `lobby_state`: the state
 of its latest lobby, or `null`. The tournament API exposes `dota_lobby_mode`,
-`dota_lobby_launch`, `dota_lobby_region` and `discord_send_lobby_info`, and the read-only
-`game_mode` and `lobby_steam_league_id`. Staff edit the four lobby settings on a standalone
-tournament only: a tournament created from an event takes them from the event, and a change
-to them answers `400`. The tournament's password is never in the tournament API.
+`dota_lobby_launch`, `dota_lobby_region` and `discord_send_lobby_info`, the writable
+`game_mode`, `lobby_steam_league_id`, `captains_draft_time` and `custom_game_name`, and the
+read-only `game_type`. Captain's Mode and Turbo are Dota 2 only; setting either on another game
+answers `400` keyed on `game_mode`. Tournament editors (`can_edit_tournament`) can change all
+of these on any tournament, including event and series tournaments and ones in progress. A
+tournament created from an event starts with the event's settings, and editing the event
+while the tournament is still `future` overwrites them. The lobby password still comes from
+the event, and the tournament's password is never in the tournament API.
 
 **UI.**
 
@@ -195,9 +199,10 @@ to them answers `400`. The tournament's password is never in the tournament API.
   winner button is highlighted as "(lobby result)". Nothing is submitted: staff still click it.
 - Bracket nodes show a coloured dot for the lobby state; lobbies that closed or finished
   normally show none.
-- The tournament edit dialog has a "Dota Lobbies" section on the Config tab (off, manual or
-  automatic; match start; region) and a "Send lobby info" toggle on the Discord tab. For a
-  tournament created from an event they are read-only, with a link to the event.
+- The tournament edit dialog has the "Lobby & Tournament Config" section and a "Dota Lobbies"
+  section on the Config tab (off, manual or automatic; match start; region), and a "Send lobby
+  info" toggle on the Discord tab. They are editable on every tournament. For a tournament
+  created from an event, the dialog shows a note linking the event.
 - Series and event forms (create, edit and one-off) have the same settings for Dota 2, and a
   "Lobby password" section: see [Event lobby passwords](#event-lobby-passwords).
 - The panel refreshes on the tournament websocket's `lobby_event` message. The bracket is
