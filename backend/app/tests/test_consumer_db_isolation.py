@@ -97,7 +97,7 @@ class ConsumerDbIsolationTests(TransactionTestCase):
         captain = WebsocketCommunicator(APP, blocked_path)
         captain.scope["user"] = self.cap_a
         captain_connect = asyncio.ensure_future(captain.connect(timeout=20))
-        await gate.wait_entered(captain_connect)
+        await gate.wait_entered()
 
         spectator = WebsocketCommunicator(APP, victim_path)
         spectator.scope["user"] = self.spectator
