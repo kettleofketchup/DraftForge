@@ -229,7 +229,7 @@ describe('organization scope', () => {
   it('defaults a member to their organizations plus open signups on upcoming', () => {
     renderPage();
     expect(upcomingMock).toHaveBeenLastCalledWith(
-      { organizations: [30], openSignups: true, league: undefined, search: '' },
+      { mine: true, memberOrgIds: [30], openSignups: true, league: undefined, search: '' },
       { enabled: true },
     );
   });
@@ -237,7 +237,7 @@ describe('organization scope', () => {
   it('asks for member organizations only on archived', () => {
     renderPage('/tournaments?tab=archived');
     expect(archivedMock).toHaveBeenLastCalledWith(
-      { organizations: [30], league: undefined, search: '' },
+      { mine: true, memberOrgIds: [30], league: undefined, search: '' },
       { enabled: true },
     );
   });

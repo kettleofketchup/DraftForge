@@ -92,26 +92,30 @@ describe('orgScopeParam', () => {
 });
 
 describe('orgScopeRequest', () => {
-  it('sends member orgs plus open signups for mine on upcoming', () => {
+  it('asks the server for mine plus open signups on upcoming', () => {
     expect(orgScopeRequest({ kind: 'mine' }, 'upcoming', [31, 30])).toEqual({
-      organizations: [30, 31],
+      mine: true,
+      memberOrgIds: [30, 31],
       openSignups: true,
     });
   });
 
-  it('sends member orgs only for mine on archived', () => {
+  it('asks for mine only on archived', () => {
     expect(orgScopeRequest({ kind: 'mine' }, 'archived', [30])).toEqual({
-      organizations: [30],
+      mine: true,
+      memberOrgIds: [30],
     });
   });
 
-  it('sends an empty organization list for a user without memberships', () => {
+  it('still asks for mine for a user without memberships', () => {
     expect(orgScopeRequest({ kind: 'mine' }, 'upcoming', undefined)).toEqual({
-      organizations: [],
+      mine: true,
+      memberOrgIds: [],
       openSignups: true,
     });
     expect(orgScopeRequest({ kind: 'mine' }, 'archived', [])).toEqual({
-      organizations: [],
+      mine: true,
+      memberOrgIds: [],
     });
   });
 

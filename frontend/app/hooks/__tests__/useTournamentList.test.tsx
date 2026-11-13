@@ -4,6 +4,7 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import type { TournamentType } from '~/components/tournament/types';
+import type { TournamentListQuery } from '../useTournamentList';
 import type { PaginatedTournaments } from '~/components/tournament/types';
 import { cutoffDayKey } from '~/components/tournament/tournamentBuckets';
 
@@ -95,12 +96,12 @@ describe('useUpcomingTournaments', () => {
 });
 
 describe('organization scope', () => {
-  it('maps member organizations and open signups to the request and key', async () => {
+  it('sends mine without member ids and keys by the membership', async () => {
     const { queryClient, wrapper } = setup();
     const { result } = renderHook(
       () =>
         useUpcomingTournaments(
-          { organizations: [32, 30], openSignups: true },
+          { mine: true, memberOrgIds: [32, 30], openSignups: true },
           { enabled: true },
         ),
       { wrapper },
@@ -108,22 +109,38 @@ describe('organization scope', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(getTournamentsMock).toHaveBeenCalledWith({
       bucket: 'upcoming',
-      organizationIds: [30, 32],
+      mine: true,
       openSignups: true,
     });
+    expect(JSON.stringify(getTournamentsMock.mock.calls[0])).not.toContain('30');
     const [key] = queryClient.getQueryCache().getAll().map((q) => q.queryKey);
     expect(key).toEqual(
       tournamentListKeys.upcoming({
-        organizations: [30, 32],
+        mine: true,
+        memberOrgIds: [30, 32],
         openSignups: true,
         day: cutoffDayKey(new Date()),
       }),
     );
   });
 
-  it('keys the empty member list apart from no organization filter', async () => {
+  it('keys mine for different memberships apart', async () => {
     const { queryClient, wrapper } = setup();
-    renderHook(() => useUpcomingTournaments({ organizations: [] }, { enabled: true }), {
+    renderHook(
+      () => useUpcomingTournaments({ mine: true, memberOrgIds: [30] }, { enabled: true }),
+      { wrapper },
+    );
+    renderHook(
+      () => useUpcomingTournaments({ mine: true, memberOrgIds: [31] }, { enabled: true }),
+      { wrapper },
+    );
+    await waitFor(() => expect(getTournamentsMock).toHaveBeenCalledTimes(2));
+    expect(queryClient.getQueryCache().getAll()).toHaveLength(2);
+  });
+
+  it('keys mine without memberships apart from no organization filter', async () => {
+    const { queryClient, wrapper } = setup();
+    renderHook(() => useUpcomingTournaments({ mine: true, memberOrgIds: [] }, { enabled: true }), {
       wrapper,
     });
     renderHook(() => useUpcomingTournaments({}, { enabled: true }), { wrapper });
@@ -135,13 +152,70 @@ describe('organization scope', () => {
     getTournamentsPageMock.mockResolvedValueOnce(page([1], null));
     const { wrapper } = setup();
     const { result } = renderHook(
-      () => useArchivedTournaments({ organizations: [30] }, { enabled: true }),
+      () => useArchivedTournaments({ mine: true, memberOrgIds: [30] }, { enabled: true }),
       { wrapper },
     );
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(getTournamentsPageMock).toHaveBeenLastCalledWith(
-      expect.objectContaining({ organizationIds: [30], page: 1 }),
+      expect.objectContaining({ mine: true, page: 1 }),
     );
+  });
+});
+
+describe('placeholder data across scopes', () => {
+  function pending<T>(): Promise<T> {
+    return new Promise<T>(() => {});
+  }
+
+  async function switchUpcoming(from: TournamentListQuery, to: TournamentListQuery) {
+    getTournamentsMock.mockResolvedValueOnce([tournament(1)]);
+    const { wrapper } = setup();
+    const { result, rerender } = renderHook(
+      ({ params }: { params: TournamentListQuery }) =>
+        useUpcomingTournaments(params, { enabled: true }),
+      { wrapper, initialProps: { params: from } },
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    getTournamentsMock.mockReturnValueOnce(pending());
+    rerender({ params: to });
+    await waitFor(() => expect(getTournamentsMock).toHaveBeenCalledTimes(2));
+    return result;
+  }
+
+  it('drops the previous list when switching all to mine', async () => {
+    const result = await switchUpcoming({}, { mine: true, memberOrgIds: [30], openSignups: true });
+    expect(result.current.data).toBeUndefined();
+    expect(result.current.isPlaceholderData).toBe(false);
+  });
+
+  it('drops the previous list when switching mine to all', async () => {
+    const result = await switchUpcoming({ mine: true, memberOrgIds: [30] }, {});
+    expect(result.current.data).toBeUndefined();
+  });
+
+  it('keeps the previous list while a filter changes within the same scope', async () => {
+    const result = await switchUpcoming(
+      { mine: true, memberOrgIds: [30] },
+      { mine: true, memberOrgIds: [30], league: 31 },
+    );
+    expect(result.current.isPlaceholderData).toBe(true);
+    expect(result.current.data?.map((t) => t.pk)).toEqual([1]);
+  });
+
+  it('drops archived pages when the scope kind changes', async () => {
+    getTournamentsPageMock.mockResolvedValueOnce(page([1], null));
+    const { wrapper } = setup();
+    const { result, rerender } = renderHook(
+      ({ params }: { params: TournamentListQuery }) =>
+        useArchivedTournaments(params, { enabled: true }),
+      { wrapper, initialProps: { params: { organization: 30 } as TournamentListQuery } },
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    getTournamentsPageMock.mockReturnValueOnce(pending());
+    rerender({ params: { mine: true, memberOrgIds: [30] } });
+    await waitFor(() => expect(getTournamentsPageMock).toHaveBeenCalledTimes(2));
+    expect(result.current.data).toBeUndefined();
+    expect(result.current.tournaments).toEqual([]);
   });
 });
 

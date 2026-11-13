@@ -8,7 +8,8 @@ export type OrgScope = { kind: 'mine' } | { kind: 'all' } | { kind: 'org'; id: n
 
 export interface OrgScopeRequest {
   organization?: number;
-  organizations?: number[];
+  mine?: boolean;
+  memberOrgIds?: number[];
   openSignups?: boolean;
 }
 
@@ -49,9 +50,9 @@ export function orgScopeRequest(
 ): OrgScopeRequest {
   if (scope.kind === 'org') return { organization: scope.id };
   if (scope.kind === 'all') return {};
-  const organizations = [...(memberOrgIds ?? [])].sort((a, b) => a - b);
+  const mine = { mine: true, memberOrgIds: [...(memberOrgIds ?? [])].sort((a, b) => a - b) };
   // Signups only matter for what is still ahead.
-  return bucket === 'upcoming' ? { organizations, openSignups: true } : { organizations };
+  return bucket === 'upcoming' ? { ...mine, openSignups: true } : mine;
 }
 
 export function groupOrganizations<T extends { pk?: number | null }>(

@@ -75,6 +75,6 @@ league has none). Tournaments that are in progress carry a **Live** badge. Under
 
 The page reads [`GET /api/tournaments-list/`](../api/endpoints.md#tournament-list) with
 `bucket=upcoming` (one unpaged request) or `bucket=archived&page=N` (paged). Under
-**My organizations** it adds `organizations=<your org ids>` and, on Upcoming only,
+**My organizations** it adds `organizations=mine` (the server looks up your organizations) and, on Upcoming only,
 `open_signups=1`. Before the signed-in user is known, the default view waits rather than
 fetching every organization first.

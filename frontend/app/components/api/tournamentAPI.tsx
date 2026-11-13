@@ -26,8 +26,8 @@ export async function getTournamentsBasic(): Promise<TournamentsType> {
 
 export interface TournamentListFilters {
   organizationId?: number;
-  /** Any of these organizations; an empty list matches none. */
-  organizationIds?: number[];
+  /** The viewer's organizations (`organizations=mine`), resolved by the server. */
+  mine?: boolean;
   /** Also include tournaments whose source event takes user signups. */
   openSignups?: boolean;
   leagueId?: number;
@@ -41,9 +41,7 @@ function tournamentListParams(filters?: TournamentListFilters): URLSearchParams 
   if (Number.isFinite(filters?.organizationId)) {
     params.append('organization', String(filters?.organizationId));
   }
-  if (filters?.organizationIds !== undefined) {
-    params.append('organizations', filters.organizationIds.join(','));
-  }
+  if (filters?.mine) params.append('organizations', 'mine');
   if (filters?.openSignups) params.append('open_signups', '1');
   if (Number.isFinite(filters?.leagueId)) {
     params.append('league', String(filters?.leagueId));

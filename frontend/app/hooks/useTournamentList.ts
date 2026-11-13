@@ -1,5 +1,4 @@
 import {
-  keepPreviousData,
   useInfiniteQuery,
   useQuery,
   type InfiniteData,
@@ -21,7 +20,10 @@ const STALE_TIME_MS = 5 * 60_000;
 
 export interface TournamentListQuery {
   organization?: number;
-  organizations?: number[];
+  /** The viewer's organizations, resolved by the server (`organizations=mine`). */
+  mine?: boolean;
+  /** Keys a `mine` query to the membership it was fetched for; never sent. */
+  memberOrgIds?: number[];
   openSignups?: boolean;
   league?: number;
   search?: string;
@@ -29,7 +31,8 @@ export interface TournamentListQuery {
 
 export interface NormalizedListKeyParams {
   organization?: number;
-  organizations?: number[];
+  mine?: true;
+  memberOrgIds?: number[];
   openSignups?: boolean;
   league?: number;
   search?: string;
@@ -47,14 +50,34 @@ export const tournamentListKeys = {
 function normalizeParams(params: TournamentListQuery): NormalizedListKeyParams {
   return {
     organization: params.organization,
-    organizations:
-      params.organizations === undefined
-        ? undefined
-        : [...params.organizations].sort((a, b) => a - b),
+    mine: params.mine || undefined,
+    memberOrgIds: params.mine
+      ? [...(params.memberOrgIds ?? [])].sort((a, b) => a - b)
+      : undefined,
     openSignups: params.openSignups || undefined,
     league: params.league,
     search: params.search === undefined ? undefined : normalizeSearch(params.search),
     day: cutoffDayKey(new Date()),
+  };
+}
+
+type ScopeKind = 'org' | 'mine' | 'all';
+
+function scopeKind(key: NormalizedListKeyParams): ScopeKind {
+  if (key.organization !== undefined) return 'org';
+  return key.mine ? 'mine' : 'all';
+}
+
+/** Previous data stands in only while the scope kind is unchanged: a list from
+ * another kind would get this kind's badges and layout. */
+function sameScopePlaceholder<T>(key: NormalizedListKeyParams) {
+  return (
+    previous: T | undefined,
+    previousQuery: { queryKey: readonly unknown[] } | undefined,
+  ): T | undefined => {
+    const previousKey = previousQuery?.queryKey[3] as NormalizedListKeyParams | undefined;
+    if (previousKey === undefined) return undefined;
+    return scopeKind(previousKey) === scopeKind(key) ? previous : undefined;
   };
 }
 
@@ -69,13 +92,13 @@ export function useUpcomingTournaments(
       getTournaments({
         bucket: 'upcoming',
         organizationId: key.organization,
-        organizationIds: key.organizations,
+        mine: key.mine,
         openSignups: key.openSignups,
         leagueId: key.league,
         search: key.search,
       }),
     enabled: opts.enabled,
-    placeholderData: keepPreviousData,
+    placeholderData: sameScopePlaceholder<TournamentsType>(key),
     staleTime: STALE_TIME_MS,
   });
 }
@@ -95,7 +118,7 @@ export function useArchivedTournaments(
       getTournamentsPage({
         bucket: 'archived',
         organizationId: key.organization,
-        organizationIds: key.organizations,
+        mine: key.mine,
         openSignups: key.openSignups,
         leagueId: key.league,
         search: key.search,
@@ -105,7 +128,7 @@ export function useArchivedTournaments(
     getNextPageParam: (last, _all, lastParam) =>
       last.next !== null ? lastParam + 1 : undefined,
     enabled: opts.enabled,
-    placeholderData: keepPreviousData,
+    placeholderData: sameScopePlaceholder<InfiniteData<PaginatedTournaments, number>>(key),
     staleTime: STALE_TIME_MS,
     refetchOnWindowFocus: false,
   });
