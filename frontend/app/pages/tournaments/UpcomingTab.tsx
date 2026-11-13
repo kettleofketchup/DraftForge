@@ -26,7 +26,7 @@ function Tier({
 }) {
   const headingId = useId();
   return (
-    <section data-tier={tier} aria-labelledby={headingId} className="flex flex-col gap-2">
+    <section data-tier={tier} aria-labelledby={headingId} className="flex flex-col gap-3">
       <h2 id={headingId} data-testid={`tournaments-tier-${tier}`} className={TIER_HEADING}>
         {title} <span>({tournaments.length})</span>
       </h2>
@@ -89,7 +89,7 @@ export function UpcomingTab({
     content = <TournamentGrid tournaments={view.items} bucket="upcoming" />;
   } else {
     content = (
-      <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-8">
         <Tier tier="yours" title="Your organizations" tournaments={view.yours}>
           {view.yours.length === 0 && (
             <div className="flex flex-wrap items-center gap-2">

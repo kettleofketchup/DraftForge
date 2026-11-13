@@ -11,8 +11,9 @@ import type {
 import { Skeleton } from '~/components/ui/skeleton';
 import { cn } from '~/lib/utils';
 
+// -m-4 cancels the card cell's p-4 so cards line up with the filter row.
 const GRID_CLASSES =
-  'grid w-full grid-flow-row-dense content-center justify-center bg-background p-0 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5';
+  'grid -m-4 self-stretch grid-flow-row-dense content-center justify-center bg-background p-0 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5';
 
 const GridCell = memo(function GridCell({
   tournament,
