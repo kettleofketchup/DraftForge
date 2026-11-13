@@ -515,7 +515,9 @@ class TournamentView(viewsets.ModelViewSet):
                 apply_draft_options(serializer.instance, opts, actor=self.request.user)
 
     def get_permissions(self) -> list[BasePermission]:
-        if self.request.method == "GET":
+        if self.action == "discord_logs":
+            self.permission_classes = [CanEditTournament]
+        elif self.request.method == "GET":
             self.permission_classes = [AllowAny]
         elif self.action in ["update", "partial_update", "destroy"]:
             # Use object-level permission check for league admin
@@ -530,7 +532,7 @@ class TournamentView(viewsets.ModelViewSet):
         detail=True,
         methods=["get"],
         url_path="discord-logs",
-        permission_classes=[IsAuthenticated],
+        permission_classes=[CanEditTournament],
     )
     def discord_logs(self, request: Request, pk: str | None = None) -> Response:
         from discordbot.models import DiscordTournamentLog
@@ -630,7 +632,9 @@ class TeamView(viewsets.ModelViewSet):
         return Response(data)
 
     def get_permissions(self) -> list[BasePermission]:
-        if self.request.method == "GET":
+        if self.action == "discord_logs":
+            self.permission_classes = [CanEditTournament]
+        elif self.request.method == "GET":
             self.permission_classes = [AllowAny]
         elif self.action in ["update", "partial_update", "destroy"]:
             self.permission_classes = [CanEditTeam]
@@ -711,7 +715,9 @@ class DraftView(viewsets.ModelViewSet):
         return self.partial_update(request, *args, **kwargs)
 
     def get_permissions(self) -> list[BasePermission]:
-        if self.request.method == "GET":
+        if self.action == "discord_logs":
+            self.permission_classes = [CanEditTournament]
+        elif self.request.method == "GET":
             self.permission_classes = [AllowAny]
         elif self.action in ["update", "partial_update", "destroy"]:
             self.permission_classes = [CanEditDraft]
@@ -782,7 +788,9 @@ class DraftRoundView(viewsets.ModelViewSet):
         return self.partial_update(request, *args, **kwargs)
 
     def get_permissions(self) -> list[BasePermission]:
-        if self.request.method == "GET":
+        if self.action == "discord_logs":
+            self.permission_classes = [CanEditTournament]
+        elif self.request.method == "GET":
             self.permission_classes = [AllowAny]
         elif self.action in ["update", "partial_update", "destroy"]:
             self.permission_classes = [CanEditDraftRound]
@@ -956,7 +964,9 @@ class GameView(viewsets.ModelViewSet):
         return self.partial_update(request, *args, **kwargs)
 
     def get_permissions(self) -> list[BasePermission]:
-        if self.request.method == "GET":
+        if self.action == "discord_logs":
+            self.permission_classes = [CanEditTournament]
+        elif self.request.method == "GET":
             self.permission_classes = [AllowAny]
         elif self.action in ["update", "partial_update", "destroy"]:
             # Use object-level permission check for league staff
