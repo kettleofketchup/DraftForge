@@ -12,7 +12,7 @@ from rest_framework.test import APIClient
 
 from app.internal_client import auto_close_event
 from app.models import CustomUser, PositionsModel
-from events.completion import close_event
+from events.completion import CloseResult, close_event
 from events.constants import EventState
 from events.models import Event
 from events.schemas import EventTaskSchema
@@ -139,6 +139,26 @@ class AutoCloseEndpointTest(EventTestCase):
         )
         self.assertEqual(self._entries(ev), before)
 
+    def test_state_moved_after_read_is_not_cancelled(self) -> None:
+        ev = self._event(EventState.SIGNUPS_OPEN, staffed=True)
+
+        def move_then_close(event: Event, **kwargs: Any) -> CloseResult:
+            Event.objects.nocache().filter(pk=event.pk).update(
+                state=EventState.ROLL_CALL
+            )
+            return close_event(event, **kwargs)
+
+        with patch("app.views.internal.close_event", side_effect=move_then_close):
+            resp = self._post(ev.pk, **HEADERS)
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(
+            resp.json(), {"closed": False, "state": EventState.ROLL_CALL.value}
+        )
+        ev.refresh_from_db()
+        self.assertEqual(ev.state, EventState.ROLL_CALL)
+        self.assertEqual(self._entries(ev), 0)
+
 
 class StaleBeforeFilterTest(EventTestCase):
     def test_stale_before_uses_end_time(self) -> None:
@@ -182,6 +202,12 @@ class StaleBeforeFilterTest(EventTestCase):
         self.assertNotIn(multi_day.pk, ids)
         self.assertIn(no_end.pk, ids)
         self.assertIn(ended.pk, ids)
+
+    def test_malformed_stale_before_is_400(self) -> None:
+        for value in ("garbage", "2026-13-40T00:00:00"):
+            resp = APIClient().get("/api/events/", {"stale_before": value})
+            self.assertEqual(resp.status_code, 400, value)
+            self.assertIn("stale_before", resp.json())
 
 
 @override_settings(INTERNAL_SERVICE_TOKEN=TOKEN)
@@ -261,6 +287,33 @@ class CleanupStaleEventsTaskTest(EventTestCase):
             if call.args[0].startswith("event_auto_close"):
                 self.assertEqual(call.kwargs["system"], "events")
                 self.assertEqual(call.kwargs["subsystem"], "tasks")
+
+    @patch("events.tasks.log")
+    @patch("events.tasks.auto_close_event")
+    @patch("events.tasks.get_events_list")
+    def test_error_on_one_event_does_not_stop_sweep(
+        self,
+        mock_list: MagicMock,
+        mock_close: MagicMock,
+        mock_log: MagicMock,
+    ) -> None:
+        mock_list.side_effect = [[{"id": 1}, {"id": 2}], [{"id": 3}]]
+        mock_close.side_effect = [
+            RuntimeError("boom"),
+            {"closed": True, "state": "cancelled"},
+            {"closed": True, "state": "completed"},
+        ]
+
+        summary = cleanup_stale_events()
+
+        self.assertEqual([c.args[0] for c in mock_close.call_args_list], [1, 2, 3])
+        self.assertEqual(summary, "Auto-closed 2, skipped 0, failed 1")
+        mock_log.exception.assert_called_once()
+        call = mock_log.exception.call_args
+        self.assertEqual(call.args[0], "event_auto_close_error")
+        self.assertEqual(call.kwargs["system"], "events")
+        self.assertEqual(call.kwargs["subsystem"], "tasks")
+        self.assertEqual(call.kwargs["event_id"], 1)
 
 
 class DiscordScheduledEventEndTimeTest(EventTestCase):

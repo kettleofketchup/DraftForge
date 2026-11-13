@@ -851,7 +851,12 @@ def auto_close_event(request: Request, pk: int) -> Response:
             {"error": f"Cannot auto-close an event in state {event.state!r}"},
             status=status.HTTP_400_BAD_REQUEST,
         )
-    result = close_event(event, new_state=target, source="auto")
+    result = close_event(
+        event,
+        new_state=target,
+        source="auto",
+        expected_from=[s for s, t in _AUTO_CLOSE_TARGETS.items() if t == target],
+    )
     return Response({"closed": result.closed, "state": result.state})
 
 

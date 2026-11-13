@@ -1,4 +1,5 @@
 import copy
+from collections.abc import Collection
 from dataclasses import dataclass
 from typing import Literal
 
@@ -41,12 +42,15 @@ def close_event(
     new_state: EventState,
     source: CloseSource,
     actor: CustomUser | None = None,
+    expected_from: Collection[str] | None = None,
 ) -> CloseResult:
     new_state = EventState(new_state)
     if new_state not in _CLOSE_STATES:
         raise ValueError(f"close_event cannot move an event to {new_state.value!r}")
     allowed_from = [
-        state for state, nexts in EVENT_STATE_TRANSITIONS.items() if new_state in nexts
+        state
+        for state, nexts in EVENT_STATE_TRANSITIONS.items()
+        if new_state in nexts and (expected_from is None or state in expected_from)
     ]
     with transaction.atomic():
         now = timezone.now()

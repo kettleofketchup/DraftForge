@@ -16,6 +16,7 @@ from django.db.models import (
 )
 from django.db.models.functions import Abs, Coalesce, Now
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from rest_framework import permissions, serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import NotAuthenticated, PermissionDenied
@@ -584,8 +585,16 @@ class EventViewSet(viewsets.ModelViewSet):
             qs = qs.filter(scheduled_at__lt=scheduled_before)
         stale_before = params.get("stale_before")
         if stale_before:
+            try:
+                stale_cutoff = parse_datetime(stale_before)
+            except ValueError:
+                stale_cutoff = None
+            if stale_cutoff is None:
+                raise serializers.ValidationError(
+                    {"stale_before": "Must be an ISO 8601 datetime."}
+                )
             qs = qs.annotate(_end=Coalesce("ends_at", "scheduled_at")).filter(
-                _end__lt=stale_before
+                _end__lt=stale_cutoff
             )
         scheduled_after = params.get("scheduled_after")
         if scheduled_after:

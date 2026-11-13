@@ -130,6 +130,20 @@ class CloseEventTest(CompletionTestBase):
         self.assertIsNone(self.ev.contributions_awarded_at)
         self.assertEqual(self._entries().count(), 0)
 
+    def test_expected_from_mismatch_is_refused(self) -> None:
+        self._set_state(EventState.ROLL_CALL)
+        self._staff()
+        result = close_event(
+            self.ev,
+            new_state=EventState.CANCELLED,
+            source="auto",
+            expected_from=[EventState.UPCOMING, EventState.SIGNUPS_OPEN],
+        )
+        self.assertEqual(result, CloseResult(closed=False, state=EventState.ROLL_CALL))
+        self.ev.refresh_from_db()
+        self.assertEqual(self.ev.state, EventState.ROLL_CALL)
+        self.assertEqual(self._entries().count(), 0)
+
     def test_auto_cancel_with_host_awards(self) -> None:
         self._set_state(EventState.SIGNUPS_OPEN)
         self._staff(helpers=0)
