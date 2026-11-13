@@ -8,6 +8,10 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from app.models import CustomUser, GameType, League, Organization
+from app.permissions_org import (
+    can_view_org_members,
+    can_view_org_members_from_payload,
+)
 from events.models import Event, EventSignup, EventState, SignupStatus
 from org.models import OrgUser
 
@@ -77,6 +81,7 @@ class OrgMembersPrivacyTest(TestCase):
                 data = self.client.get(detail).data
                 self.assertIs(data["can_view_members"], expected)
                 self.assertIs(data["members_private"], False)
+                self.assertEqual(data["members_viewer_pk"], getattr(user, "pk", None))
 
     def test_retrieve_access_flag_respects_private(self) -> None:
         self._set_private(True)
@@ -99,6 +104,56 @@ class OrgMembersPrivacyTest(TestCase):
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.org.refresh_from_db()
         self.assertTrue(self.org.members_private)
+
+    def test_patch_response_reports_viewer_access(self) -> None:
+        self.client.force_authenticate(user=self.admin)
+        detail = f"/api/organizations/{self.org.pk}/"
+        resp = self.client.patch(detail, {"members_private": True}, format="json")
+        self.assertIs(resp.data["can_view_members"], True)
+        self.assertEqual(resp.data["members_viewer_pk"], self.admin.pk)
+
+    def test_league_staff_without_org_membership_can_view(self) -> None:
+        league_admin = CustomUser.objects.create_user(username="ladmin", password="x")
+        league_staff = CustomUser.objects.create_user(username="lstaff", password="x")
+        league = League.objects.create(
+            name="Org League", organization=self.org, steam_league_id=515151
+        )
+        league.admins.add(league_admin)
+        league.staff.add(league_staff)
+        self._set_private(True)
+        detail = f"/api/organizations/{self.org.pk}/"
+        for user in (league_admin, league_staff):
+            with self.subTest(user=user.username):
+                self.assertFalse(
+                    OrgUser.objects.filter(user=user, organization=self.org).exists()
+                )
+                self.assertEqual(self._status_for(user), status.HTTP_200_OK)
+                self.assertIs(self.client.get(detail).data["can_view_members"], True)
+
+    def test_staff_of_another_orgs_league_cannot_view(self) -> None:
+        other_org = Organization.objects.create(name="Other Org", owner=self.owner)
+        league = League.objects.create(
+            name="Other League", organization=other_org, steam_league_id=525252
+        )
+        league.staff.add(self.outsider)
+        self.assertEqual(self._status_for(self.outsider), status.HTTP_403_FORBIDDEN)
+
+    def test_permission_check_is_a_single_query(self) -> None:
+        with self.assertNumQueries(1):
+            self.assertTrue(can_view_org_members(self.member, self.org.pk))
+        with self.assertNumQueries(1):
+            self.assertFalse(can_view_org_members(self.outsider, self.org))
+
+    def test_payload_check_skips_query_for_listed_staff(self) -> None:
+        payload = {
+            "pk": self.org.pk,
+            "owner": {"pk": self.owner.pk},
+            "admins": [{"pk": self.admin.pk}],
+            "staff": [{"pk": self.staff.pk}],
+        }
+        with self.assertNumQueries(0):
+            for user in (self.owner, self.admin, self.staff, self.site_admin):
+                self.assertTrue(can_view_org_members_from_payload(user, payload))
 
 
 class LeagueMembersPrivacyTest(TestCase):
@@ -151,6 +206,27 @@ class LeagueMembersPrivacyTest(TestCase):
         self.assertEqual(self._status_for(self.member), status.HTTP_403_FORBIDDEN)
         self.assertIs(self._flag_for(self.member), False)
         self.assertEqual(self._status_for(self.league_staff), status.HTTP_200_OK)
+
+    def test_staff_of_sibling_league_can_read_league_members(self) -> None:
+        sibling = League.objects.create(
+            name="Sibling League", organization=self.org, steam_league_id=434343
+        )
+        sibling_admin = CustomUser.objects.create_user(username="sib", password="x")
+        sibling.admins.add(sibling_admin)
+        self.assertEqual(self._status_for(sibling_admin), status.HTTP_200_OK)
+        self.assertIs(self._flag_for(sibling_admin), True)
+
+    def test_orgless_league_members_visible_to_league_staff_only(self) -> None:
+        league = League.objects.create(name="Orgless", steam_league_id=444444)
+        league.staff.add(self.league_staff)
+        url = f"/api/leagues/{league.pk}/users/"
+        for user, expected in [
+            (self.league_staff, status.HTTP_200_OK),
+            (self.member, status.HTTP_403_FORBIDDEN),
+        ]:
+            with self.subTest(user=user.username):
+                self.client.force_authenticate(user=user)
+                self.assertEqual(self.client.get(url).status_code, expected)
 
 
 class EventSignupOrgMmrPrivacyTest(TestCase):

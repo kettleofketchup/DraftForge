@@ -45,7 +45,7 @@ export function meta({ data }: Route.MetaArgs) {
     description: 'Organization profile and events',
   });
 }
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { addOrgMember, checkDiscordBotStatus } from '~/components/api/api';
@@ -65,6 +65,7 @@ import { UserList } from '~/components/user';
 import { AddUserModal } from '~/components/user/AddUserModal';
 import { CSVImportModal } from '~/components/user/CSVImportModal';
 import type { UserType } from '~/components/user/types';
+import { useMemberAccess } from '~/hooks/useMemberAccess';
 import { useOrgUsers } from '~/hooks/useOrgUsers';
 import {
   useIsOrganizationAdmin,
@@ -241,29 +242,27 @@ export default function OrganizationDetailPage() {
   const orgUsers = useOrgUsers(pk ?? 0);
   const currentOrg = useOrgStore((s) => s.currentOrg);
 
-  const canViewMembers = organization?.can_view_members ?? false;
-
-  // can_view_members is per-viewer; login/logout happen without a reload.
-  const viewerPk = currentUser?.pk ?? null;
-  const lastViewerPk = useRef(viewerPk);
-  useEffect(() => {
-    if (lastViewerPk.current === viewerPk) return;
-    lastViewerPk.current = viewerPk;
+  const onMemberViewerChange = useCallback(() => {
     useOrgStore.getState().clearOrgUsers();
+    if (pk) useUserCacheStore.getState().dropScoped({ orgId: pk });
     refetch();
-  }, [viewerPk, refetch]);
+  }, [pk, refetch]);
+  const { canView: canViewMembers, settled: memberAccessSettled } = useMemberAccess(
+    organization,
+    onMemberViewerChange,
+  );
 
   useEffect(() => {
-    if (activeTab === 'users' && pk && canViewMembers) {
+    if (activeTab === 'users' && pk && memberAccessSettled && canViewMembers) {
       getOrgUsers(pk);
     }
-  }, [activeTab, pk, canViewMembers, getOrgUsers]);
+  }, [activeTab, pk, memberAccessSettled, canViewMembers, getOrgUsers, orgUsersOrgId]);
 
   useEffect(() => {
-    if (organization && !canViewMembers && activeTab === 'users') {
+    if (memberAccessSettled && !canViewMembers && activeTab === 'users') {
       setActiveTab('leagues');
     }
-  }, [organization, canViewMembers, activeTab, setActiveTab]);
+  }, [memberAccessSettled, canViewMembers, activeTab, setActiveTab]);
 
   const isOwner = useIsOrganizationOwner(organization);
   const isOrgAdmin = useIsOrganizationAdmin(organization);

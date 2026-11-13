@@ -8,6 +8,7 @@ from cacheops import cached_as
 from django.contrib.auth import login
 from django.contrib.auth import logout as auth_logout
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.models import AnonymousUser
 from django.core.cache import cache
 from django.db import transaction
 from django.db.models import Count, Q, QuerySet
@@ -22,6 +23,7 @@ from django.utils import timezone
 from rest_framework import generics, status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.exceptions import PermissionDenied, ValidationError
+from rest_framework.generics import get_object_or_404
 from rest_framework.permissions import (
     AllowAny,
     BasePermission,
@@ -75,7 +77,9 @@ from .permissions_org import (
     IsOrgOwner,
     can_manage_game,
     can_view_league_members,
+    can_view_league_members_from_payload,
     can_view_org_members,
+    can_view_org_members_from_payload,
     has_league_admin_access,
     has_league_staff_access,
     has_org_staff_access,
@@ -1085,6 +1089,16 @@ class TournamentListView(viewsets.ReadOnlyModelViewSet):
         return Response(data)
 
 
+def _member_access(
+    user: CustomUser | AnonymousUser, can_view: bool
+) -> dict[str, bool | int | None]:
+    """Per-viewer member-list flag plus the viewer it was computed for."""
+    return {
+        "can_view_members": can_view,
+        "members_viewer_pk": user.pk if user.is_authenticated else None,
+    }
+
+
 class OrganizationView(viewsets.ModelViewSet):
     """Organization CRUD endpoints."""
 
@@ -1124,6 +1138,17 @@ class OrganizationView(viewsets.ModelViewSet):
         org.admins.add(self.request.user)
         OrgUser.objects.get_or_create(user=self.request.user, organization=org)
 
+    def update(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        response = super().update(request, *args, **kwargs)
+        if response.status_code == status.HTTP_200_OK:
+            response.data.update(
+                _member_access(
+                    request.user,
+                    can_view_org_members_from_payload(request.user, response.data),
+                )
+            )
+        return response
+
     def list(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         cache_key = f"organization_list:{request.get_full_path()}"
 
@@ -1147,15 +1172,19 @@ class OrganizationView(viewsets.ModelViewSet):
             return serializer.data
 
         data = get_data()
-        org = Organization.objects.get(pk=data["pk"])
         return Response(
-            {**data, "can_view_members": can_view_org_members(request.user, org)}
+            {
+                **data,
+                **_member_access(
+                    request.user, can_view_org_members_from_payload(request.user, data)
+                ),
+            }
         )
 
     @action(detail=True, methods=["get"])
     def users(self, request: Request, pk: str | None = None) -> Response:
         """Get all users who are members of this organization (via OrgUser)."""
-        org = self.get_object()
+        org = get_object_or_404(Organization, pk=pk)
         if not can_view_org_members(request.user, org):
             raise PermissionDenied(
                 "You do not have access to this organization's members."
@@ -1274,9 +1303,14 @@ class LeagueView(viewsets.ModelViewSet):
             return serializer.data
 
         data = get_data()
-        league = League.objects.select_related("organization").get(pk=data["pk"])
         return Response(
-            {**data, "can_view_members": can_view_league_members(request.user, league)}
+            {
+                **data,
+                **_member_access(
+                    request.user,
+                    can_view_league_members_from_payload(request.user, data),
+                ),
+            }
         )
 
     @action(detail=True, methods=["get"])
@@ -1313,7 +1347,7 @@ class LeagueView(viewsets.ModelViewSet):
     @action(detail=True, methods=["get"])
     def users(self, request: Request, pk: str | None = None) -> Response:
         """Get all users who are members of this league (via LeagueUser)."""
-        league = self.get_object()
+        league = get_object_or_404(League, pk=pk)
         if not can_view_league_members(request.user, league):
             raise PermissionDenied("You do not have access to this league's members.")
         cache_key = f"league_users:{pk}"

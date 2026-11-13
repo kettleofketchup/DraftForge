@@ -39,7 +39,7 @@ export function meta({ data }: Route.MetaArgs) {
     description: 'League standings and tournament schedule',
   });
 }
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Trophy, Building2, Loader2, Pencil } from 'lucide-react';
 
 import { Badge } from '~/components/ui/badge';
@@ -48,6 +48,8 @@ import { useLeague, LeagueTabs, EditLeagueModal } from '~/components/league';
 import { useUserStore } from '~/store/userStore';
 import { useOrgStore } from '~/store/orgStore';
 import { useLeagueStore } from '~/store/leagueStore';
+import { useUserCacheStore } from '~/store/userCacheStore';
+import { useMemberAccess } from '~/hooks/useMemberAccess';
 import { useIsLeagueAdmin } from '~/hooks/usePermissions';
 import { usePageNav } from '~/hooks/usePageNav';
 import { EntityBreadcrumb, type BreadcrumbSegment } from '~/components/ui/entity-breadcrumb';
@@ -58,7 +60,6 @@ export default function LeaguePage() {
   const pk = leagueId ? parseInt(leagueId, 10) : undefined;
 
   const { league, isLoading, error, refetch } = useLeague(pk);
-  const currentUser = useUserStore((state) => state.currentUser);
   const tournaments = useUserStore((state) => state.tournaments);
   const getTournaments = useUserStore((state) => state.getTournaments);
 
@@ -98,22 +99,21 @@ export default function LeaguePage() {
     };
   }, [league]);
 
-  const canViewMembers = league?.can_view_members ?? false;
-
-  // can_view_members is per-viewer; login/logout happen without a reload.
-  const viewerPk = currentUser?.pk ?? null;
-  const lastViewerPk = useRef(viewerPk);
-  useEffect(() => {
-    if (lastViewerPk.current === viewerPk) return;
-    lastViewerPk.current = viewerPk;
+  const onMemberViewerChange = useCallback(() => {
+    useLeagueStore.getState().clearLeagueUsers();
+    if (pk) useUserCacheStore.getState().dropScoped({ leagueId: pk });
     refetch({ silent: true });
-  }, [viewerPk, refetch]);
+  }, [pk, refetch]);
+  const { canView: canViewMembers, settled: memberAccessSettled } = useMemberAccess(
+    league,
+    onMemberViewerChange,
+  );
 
   useEffect(() => {
-    if (league && !canViewMembers && activeTab === 'users') {
+    if (memberAccessSettled && !canViewMembers && activeTab === 'users') {
       setActiveTab('info');
     }
-  }, [league, canViewMembers, activeTab]);
+  }, [memberAccessSettled, canViewMembers, activeTab]);
 
   const handleTabChange = useCallback((newTab: string) => {
     setActiveTab(newTab);
@@ -229,6 +229,8 @@ export default function LeaguePage() {
           tournaments={leagueTournaments}
           activeTab={activeTab}
           onTabChange={handleTabChange}
+          canViewMembers={canViewMembers}
+          memberAccessSettled={memberAccessSettled}
         />
       </div>
 

@@ -1,9 +1,14 @@
 """Organization and League permission helpers."""
 
+from collections.abc import Mapping
+from typing import Any
+
 from django.contrib.auth.models import AnonymousUser
+from django.db.models import Exists, OuterRef, Q
 from rest_framework import permissions
 
 from app.models import CustomUser, League, Organization
+from org.models import OrgUser
 
 
 def is_org_owner(user, obj):
@@ -66,14 +71,63 @@ def has_org_staff_access(user, obj):
 
 
 def can_view_org_members(
-    user: CustomUser | AnonymousUser, organization: Organization
+    user: CustomUser | AnonymousUser, organization: Organization | int
 ) -> bool:
-    """Org staff always; plain members only while the member list isn't private."""
-    if has_org_staff_access(user, organization):
-        return True
-    if not user.is_authenticated or organization.members_private:
+    """Org staff and staff of any of the org's leagues always; plain members
+    only while the member list isn't private. One uncached query."""
+    if not user.is_authenticated:
         return False
-    return organization.members.filter(user_id=user.pk).exists()
+    if user.is_staff or user.is_superuser:
+        return True
+    org_pk = organization if isinstance(organization, int) else organization.pk
+    uid = user.pk
+    league_staff = League.objects.filter(organization_id=OuterRef("pk")).filter(
+        Q(admins__pk=uid) | Q(staff__pk=uid)
+    )
+    member = OrgUser.objects.filter(organization_id=OuterRef("pk"), user_id=uid)
+    return (
+        Organization.objects.nocache()
+        .filter(pk=org_pk)
+        .filter(
+            Q(owner_id=uid)
+            | Exists(
+                Organization.admins.through.objects.filter(
+                    organization_id=OuterRef("pk"), customuser_id=uid
+                )
+            )
+            | Exists(
+                Organization.staff.through.objects.filter(
+                    organization_id=OuterRef("pk"), customuser_id=uid
+                )
+            )
+            | Exists(league_staff)
+            | (Q(members_private=False) & Exists(member))
+        )
+        .exists()
+    )
+
+
+def _payload_lists_user(user: CustomUser, data: Mapping[str, Any]) -> bool:
+    owner = data.get("owner")
+    if isinstance(owner, Mapping) and owner.get("pk") == user.pk:
+        return True
+    return any(
+        entry.get("pk") == user.pk
+        for key in ("admins", "staff")
+        for entry in data.get(key) or ()
+    )
+
+
+def can_view_org_members_from_payload(
+    user: CustomUser | AnonymousUser, data: Mapping[str, Any]
+) -> bool:
+    """can_view_org_members for a serialized OrganizationSerializer payload,
+    skipping the query when the payload already names the user as staff."""
+    if not user.is_authenticated:
+        return False
+    if user.is_staff or user.is_superuser or _payload_lists_user(user, data):
+        return True
+    return can_view_org_members(user, data["pk"])
 
 
 def has_league_admin_access(user, league):
@@ -132,12 +186,24 @@ def has_event_staff_access(user, event):
 
 
 def can_view_league_members(user: CustomUser | AnonymousUser, league: League) -> bool:
-    """League staff always; otherwise whoever may view the linked org's members."""
-    if has_league_staff_access(user, league):
+    """Whoever may view the linked org's members; league staff for org-less leagues."""
+    if league.organization_id is not None:
+        return can_view_org_members(user, league.organization_id)
+    return has_league_staff_access(user, league)
+
+
+def can_view_league_members_from_payload(
+    user: CustomUser | AnonymousUser, data: Mapping[str, Any]
+) -> bool:
+    """can_view_league_members for a serialized LeagueSerializer payload."""
+    if not user.is_authenticated:
+        return False
+    if user.is_staff or user.is_superuser or _payload_lists_user(user, data):
         return True
-    return league.organization is not None and can_view_org_members(
-        user, league.organization
-    )
+    organization = data.get("organization")
+    if not isinstance(organization, Mapping):
+        return False
+    return can_view_org_members(user, organization["pk"])
 
 
 class IsOrgOwner(permissions.BasePermission):

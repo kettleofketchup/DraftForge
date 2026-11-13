@@ -112,15 +112,19 @@ The six entry points locked by `e2e/17-auth/02-edit-and-bracket-gates.spec.ts`.
 **Why some rows look this way:**
 
 - **Org Users tab** follows `GET /api/organizations/<pk>/users/`, gated by
-  `can_view_org_members`: org members plus the org staff tier. The matrix's
-  league roles count as members (reading a league tournament auto-enrolls
-  everyone in its payload as an OrgUser). When an org
-  admin turns on **Private members list** (`members_private`), plain members
-  lose access and only staff/admins/owner/site admins keep it. The org detail
-  response carries a per-viewer `can_view_members` flag the frontend uses to
-  hide the tab. The league Users tab (`GET /api/leagues/<pk>/users/`, gated by
-  `can_view_league_members`) adds league staff on top of the same rule, and
-  event signups blank `org_user_mmr` for viewers outside it.
+  `can_view_org_members`: the org staff tier, admins and staff of any league
+  in the org (no OrgUser needed), and plain org members. When an org admin
+  turns on **Private members list** (`members_private`), plain members lose
+  access; everyone else keeps it. The check is one uncached query. The org
+  detail and PATCH/PUT responses carry a per-viewer `can_view_members` flag
+  plus `members_viewer_pk`, the viewer it was computed for; the frontend
+  (`useMemberAccess`) hides the tab from the flag and, when the signed-in
+  viewer changes without a reload, drops member data and refetches instead
+  of acting on a flag computed for someone else. The league Users tab
+  (`GET /api/leagues/<pk>/users/`, gated by `can_view_league_members`) uses
+  the linked org's rule (so staff of a sibling league count), or league staff
+  for a league without an org. Event signups blank `org_user_mmr` for viewers
+  outside the org rule.
 - **Edit User (org members tab)** uses `useIsOrganizationStaff(currentOrg)`
   via the UserCard's org-scoped editScope — staff-permissive.
 - **Edit User (tournament players tab)** is a **known divergence**.

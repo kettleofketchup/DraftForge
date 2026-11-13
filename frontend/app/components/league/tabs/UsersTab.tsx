@@ -14,10 +14,13 @@ import { useOrgStore } from '~/store/orgStore';
 
 interface Props {
   leaguePk: number;
+  /** False while member access is still being resolved for a new viewer. */
+  canLoad?: boolean;
 }
 
-export const UsersTab: React.FC<Props> = ({ leaguePk }) => {
-  const { leagueUserPks, leagueUsersLoading, getLeagueUsers } = useLeagueStore();
+export const UsersTab: React.FC<Props> = ({ leaguePk, canLoad = true }) => {
+  const { leagueUserPks, leagueUsersLoading, leagueUsersLeagueId, getLeagueUsers } =
+    useLeagueStore();
   const leagueUsers = useLeagueUsers(leaguePk);
   const currentLeague = useLeagueStore((s) => s.currentLeague);
   const currentOrg = useOrgStore((s) => s.currentOrg);
@@ -26,10 +29,10 @@ export const UsersTab: React.FC<Props> = ({ leaguePk }) => {
   const canEdit = useIsLeagueAdmin(currentLeague);
 
   useEffect(() => {
-    if (leaguePk) {
+    if (leaguePk && canLoad) {
       getLeagueUsers(leaguePk);
     }
-  }, [leaguePk, getLeagueUsers]);
+  }, [leaguePk, canLoad, getLeagueUsers, leagueUsersLeagueId]);
 
   // AddUserModal callbacks
   const handleAddMember = useCallback(

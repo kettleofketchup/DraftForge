@@ -54,8 +54,7 @@ const TOURNAMENT_COMPLETED_BRACKET_PK = 202;
 type Expectations = Record<RoleName, boolean>;
 
 // Org Users tab → ``organization.can_view_members`` from the backend:
-// org members plus org staff tier. League roles are OrgUsers of the matrix
-// org (populate pins it; tournament reads would enroll them anyway). The
+// org members, org staff tier, and staff of the org's leagues. The
 // members_private=true case is covered by
 // app.tests.test_org_members_privacy (flipping it here would race other roles).
 const ORG_USERS_TAB_EXPECTATIONS: Expectations = {

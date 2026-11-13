@@ -117,12 +117,6 @@ def populate_auth_matrix_data(force=False):
     if league_staff and league_staff not in league.staff.all():
         league.staff.add(league_staff)
         print(f"  Added {league_staff.username} as staff of {league.name}")
-    # Reading a league tournament auto-creates OrgUsers for everyone in the
-    # payload, league staff included; pin it so member-gated rows don't
-    # depend on spec order.
-    for league_user in (league_admin, league_staff):
-        if league_user:
-            ensure_org_user(league_user, org)
 
     # 4. Bracket tournaments — delegate to the dynamic-tournament helper
     # so we get teams, captains, and (for the pending/completed variants)

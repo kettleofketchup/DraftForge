@@ -137,6 +137,8 @@ export interface UserCacheState extends EntityState<UserEntry> {
     context?: UpsertContext,
   ): void;
   remove(pk: number): void;
+  /** Forget org/league-scoped data (e.g. MMR) cached for every user. */
+  dropScoped(scope: UpsertContext): void;
 
   // Read operations
   getById(pk: number): UserEntry | undefined;
@@ -217,6 +219,31 @@ export const useUserCacheStore = create<UserCacheState>()(
           undefined,
           'remove',
         );
+      },
+
+      dropScoped(scope) {
+        const { orgId, leagueId } = scope;
+        if (!orgId && !leagueId) return;
+        const state = get();
+        let newEntities: Record<number, UserEntry> | null = null;
+        for (const entry of Object.values(state.entities)) {
+          const orgData = { ...entry.orgData };
+          const leagueData = { ...entry.leagueData };
+          let changed = false;
+          if (orgId != null && orgId in orgData) {
+            delete orgData[orgId];
+            changed = true;
+          }
+          if (leagueId != null && leagueId in leagueData) {
+            delete leagueData[leagueId];
+            changed = true;
+          }
+          if (!changed) continue;
+          if (!newEntities) newEntities = { ...state.entities };
+          newEntities[entry.pk] = { ...entry, orgData, leagueData };
+        }
+        if (!newEntities) return;
+        set({ entities: newEntities }, undefined, 'dropScoped');
       },
 
       getById(pk) {

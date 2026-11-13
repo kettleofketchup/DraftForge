@@ -13,6 +13,8 @@ interface Props {
   tournaments: TournamentType[];
   activeTab: string;
   onTabChange: (tab: string) => void;
+  canViewMembers: boolean;
+  memberAccessSettled: boolean;
 }
 
 export const LeagueTabs: React.FC<Props> = ({
@@ -20,14 +22,14 @@ export const LeagueTabs: React.FC<Props> = ({
   tournaments,
   activeTab,
   onTabChange,
+  canViewMembers,
+  memberAccessSettled,
 }) => {
   const leagueUserPks = useLeagueStore((state) => state.leagueUserPks);
   const leagueUsersLoading = useLeagueStore((state) => state.leagueUsersLoading);
   const leagueUsersLeagueId = useLeagueStore((state) => state.leagueUsersLeagueId);
 
   // Show "..." if loading or if we haven't fetched for this league yet
-  const canViewMembers = league.can_view_members ?? false;
-
   const userCountDisplay = leagueUsersLoading || leagueUsersLeagueId !== league.pk
     ? '...'
     : leagueUserPks.length;
@@ -62,7 +64,7 @@ export const LeagueTabs: React.FC<Props> = ({
 
       {canViewMembers && (
         <TabsContent value="users" className="mt-6">
-          {league.pk && <UsersTab leaguePk={league.pk} />}
+          {league.pk && <UsersTab leaguePk={league.pk} canLoad={memberAccessSettled} />}
         </TabsContent>
       )}
 
