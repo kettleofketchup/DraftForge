@@ -411,6 +411,12 @@ class EventSerializer(TournamentLeagueOrgMixin, serializers.ModelSerializer):
         ]
         extra_kwargs = {"dota_lobby_password": LOBBY_PASSWORD_FIELD_KWARGS}
 
+    def update(self, instance: Event, validated_data: dict[str, Any]) -> Event:
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save(update_fields=[*validated_data, "updated_at"])
+        return instance
+
     def validate_description(self, value):
         return nh3.clean(value) if value else value
 

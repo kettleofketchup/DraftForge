@@ -530,6 +530,9 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
         )
 
 
+_CONCURRENTLY_WRITTEN_EVENT_FIELDS = ["state", "contributions_awarded_at", "host"]
+
+
 class EventViewSet(viewsets.ModelViewSet):
     serializer_class = EventSerializer
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
@@ -683,14 +686,19 @@ class EventViewSet(viewsets.ModelViewSet):
             serializer.instance.ends_at,
             serializer.instance.name,
         )
-        event = serializer.save()
+        with transaction.atomic():
+            event = serializer.save()
+            event.refresh_from_db(
+                from_queryset=Event.objects.nocache().select_for_update(),
+                fields=_CONCURRENTLY_WRITTEN_EVENT_FIELDS,
+            )
+            if (
+                event.scheduled_at,
+                event.ends_at,
+                event.name,
+            ) != previous_ledger_fields and should_sync_staff(event):
+                sync_event_staff_entries(event)
         invalidate_after_commit(event)
-        if (
-            event.scheduled_at,
-            event.ends_at,
-            event.name,
-        ) != previous_ledger_fields and should_sync_staff(event):
-            sync_event_staff_entries(event)
         if event.dota_lobby_password != previous_password:
             log_lobby_password_changed(event, "event_update")
         result = sync_tournament_from_event(event)

@@ -1,5 +1,6 @@
 """Complete action, host/helper assignment endpoint and the staff-manage flag."""
 
+from collections.abc import Callable
 from datetime import timedelta
 from typing import Any
 from unittest.mock import patch
@@ -374,6 +375,78 @@ class EventEditResyncTest(EventStaffApiTestBase):
         resp = self._patch({"ends_at": new_end.isoformat()})
         self.assertEqual(resp.status_code, 200, resp.content)
         self.assertEqual(self._entries().get().occurred_at, new_end)
+
+    def _patch_racing(
+        self, body: dict[str, Any], race: Callable[[Event], None]
+    ) -> Response:
+        original = EventViewSet.get_object
+
+        def load_then_race(view: EventViewSet) -> Event:
+            stale = original(view)
+            if view.request.method == "PATCH":
+                race(stale)
+            return stale
+
+        with patch.object(EventViewSet, "get_object", load_then_race):
+            return self._patch(body)
+
+    def test_staff_put_during_patch_survives(self) -> None:
+        self._put_staff(self.org_admin, self.host.pk, [self.helper_a.pk])
+        self._complete(self.org_admin)
+        admin_client = APIClient()
+        admin_client.force_authenticate(self.org_admin)
+
+        def reassign(stale: Event) -> None:
+            resp = admin_client.put(
+                self.staff_url,
+                {"host_id": self.helper_b.pk, "helper_ids": []},
+                format="json",
+            )
+            self.assertEqual(resp.status_code, 200, resp.content)
+
+        resp = self._patch_racing({"name": "Renamed Event"}, reassign)
+        self.assertEqual(resp.status_code, 200, resp.content)
+        event = Event.objects.nocache().get(pk=self.event.pk)
+        self.assertEqual(event.host_id, self.helper_b.pk)
+        self.assertEqual(event.state, EventState.COMPLETED)
+        self.assertIsNotNone(event.contributions_awarded_at)
+        self.assertEqual(event.name, "Renamed Event")
+        self.assertEqual(
+            self._staff_keys(), {(self.helper_b.pk, ContributionKind.EVENT_HOST)}
+        )
+        self.assertEqual(
+            set(self._entries().values_list("event_name", flat=True)),
+            {"Renamed Event"},
+        )
+        self.assertEqual(resp.json()["host"]["pk"], self.helper_b.pk)
+        self.assertEqual(resp.json()["helpers"], [])
+
+    def test_close_during_patch_survives_and_resyncs(self) -> None:
+        self._put_staff(self.org_admin, self.host.pk, [])
+
+        def close(stale: Event) -> None:
+            result = close_event(
+                Event.objects.nocache().get(pk=stale.pk),
+                new_state=EventState.COMPLETED,
+                source="auto",
+            )
+            self.assertTrue(result.closed)
+
+        resp = self._patch_racing({"name": "Renamed Event"}, close)
+        self.assertEqual(resp.status_code, 200, resp.content)
+        event = Event.objects.nocache().get(pk=self.event.pk)
+        self.assertEqual(event.state, EventState.COMPLETED)
+        self.assertIsNotNone(event.contributions_awarded_at)
+        self.assertEqual(event.host_id, self.host.pk)
+        self.assertEqual(
+            self._staff_keys(), {(self.host.pk, ContributionKind.EVENT_HOST)}
+        )
+        self.assertEqual(
+            set(self._entries().values_list("event_name", flat=True)),
+            {"Renamed Event"},
+        )
+        self.assertEqual(resp.json()["state"], EventState.COMPLETED)
+        self.assertIsNotNone(resp.json()["contributions_awarded_at"])
 
     def test_renaming_open_event_creates_no_entries(self) -> None:
         self._put_staff(self.org_admin, self.host.pk, [])
