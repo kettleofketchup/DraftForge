@@ -2,6 +2,7 @@
 
 from datetime import timedelta
 from typing import Any
+from unittest.mock import patch
 
 from django.db.models import QuerySet
 from django.utils import timezone as tz
@@ -9,9 +10,11 @@ from rest_framework.response import Response
 from rest_framework.test import APIClient
 
 from app.models import CustomUser, OrgLog, PositionsModel
+from events.completion import close_event
 from events.constants import EventState
 from events.models import Event
 from events.tests.base import EventTestCase
+from events.views import EventViewSet
 from org.contributions.kinds import ContributionKind
 from org.feature_keys import FeatureKey
 from org.features import org_has_feature
@@ -276,6 +279,26 @@ class EventStaffEndpointTest(EventStaffApiTestBase):
         self._put_staff(self.org_admin, self.host.pk, [])
         self.assertEqual(
             self._staff_keys(), {(self.host.pk, ContributionKind.EVENT_HOST)}
+        )
+
+    def test_close_between_load_and_write_syncs_new_staff(self) -> None:
+        self._put_staff(self.org_admin, self.host.pk, [self.helper_a.pk])
+        original = EventViewSet.get_object
+
+        def load_then_close(view: EventViewSet) -> Event:
+            stale = original(view)
+            close_event(
+                Event.objects.nocache().get(pk=stale.pk),
+                new_state=EventState.COMPLETED,
+                source="auto",
+            )
+            return stale
+
+        with patch.object(EventViewSet, "get_object", load_then_close):
+            resp = self._put_staff(self.org_admin, self.helper_b.pk, [])
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertEqual(
+            self._staff_keys(), {(self.helper_b.pk, ContributionKind.EVENT_HOST)}
         )
 
     def test_edits_after_manual_cancel_create_none(self) -> None:

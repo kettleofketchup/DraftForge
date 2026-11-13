@@ -1049,6 +1049,7 @@ class EventViewSet(viewsets.ModelViewSet):
         helper_ids: list[int] = body.validated_data["helper_ids"]
         org = event.organization
         with transaction.atomic():
+            event = Event.objects.nocache().select_for_update().get(pk=event.pk)
             users = CustomUser.objects.nocache().in_bulk(
                 [*helper_ids, *([host_id] if host_id is not None else [])]
             )
