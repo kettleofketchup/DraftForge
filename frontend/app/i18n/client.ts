@@ -1,12 +1,9 @@
+import { readCookie } from '~/lib/cookies';
+
 import { createI18nInstance, FALLBACK_LOCALE, SUPPORTED_LOCALES, type SupportedLocale } from './config';
 
 function isSupported(value: string): value is SupportedLocale {
   return (SUPPORTED_LOCALES as readonly string[]).includes(value);
-}
-
-function readCookie(name: string): string | undefined {
-  const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
-  return match ? decodeURIComponent(match[1]) : undefined;
 }
 
 function writeCookie(name: string, value: string): void {
@@ -22,12 +19,12 @@ function resolveLocale(): SupportedLocale {
   const params = new URLSearchParams(location.search);
   const queryLocale = params.get('lang');
   if (queryLocale && isSupported(queryLocale)) {
-    if (readCookie('df-locale') !== queryLocale) {
+    if (readCookie(document.cookie, 'df-locale') !== queryLocale) {
       writeCookie('df-locale', queryLocale);
     }
     return queryLocale;
   }
-  const cookieLocale = readCookie('df-locale');
+  const cookieLocale = readCookie(document.cookie, 'df-locale');
   if (cookieLocale && isSupported(cookieLocale)) return cookieLocale;
   return FALLBACK_LOCALE;
 }

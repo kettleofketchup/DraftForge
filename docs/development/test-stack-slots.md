@@ -207,6 +207,25 @@ stacks do the same with their `-run-<hex>` suffix.
 the backend and `VITE_CSRF_COOKIE_NAME` on the frontend, which reads the CSRF cookie
 for the `X-CSRFToken` header. Slot 0, CI and production keep Django's default names.
 
+`VITE_CSRF_COOKIE_NAME` is fixed when the dev server starts or the image is built, so it
+is only the starting guess. Every backend response carries an `X-CSRF-Cookie-Name`
+header, and the axios client switches to that name (logging a `csrf` warning) when it
+differs. A stale frontend container or a prebuilt image on a slot therefore recovers
+after its first API response instead of failing every write with a 403.
+
+Cookies read in the browser go through `readCookie` in `frontend/app/lib/cookies.ts`,
+which matches the exact name and URL-decodes the value.
+
+Other cookies stay shared on purpose:
+
+- `df-locale` (the frontend's language choice) is a display preference of the person at
+  the browser, not tied to a stack's data or login. Sharing it across slots is harmless.
+- Django never sets its language cookie here: there is no `LocaleMiddleware` and no
+  `set_language` view.
+- Django's `messages` cookie only carries flash messages for Django-rendered pages
+  (admin, social-auth errors). The React app never reads it; at worst a message shows
+  up in another slot's admin.
+
 In Playwright fixtures, find cookies with `isCsrfCookie` / `isSessionCookie` from
 `fixtures/cookies.ts` rather than comparing against `csrftoken` or `sessionid`.
 

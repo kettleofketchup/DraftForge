@@ -152,7 +152,7 @@ INSTALLED_APPS = [
     "corsheaders",
     "bracket.apps.TournamentConfig",
     "user.apps.UserConfig",
-    "cacheops",  # Added for django-cacheops
+    "cacheops",
 ]
 
 # Default primary key field type
@@ -174,6 +174,7 @@ MIDDLEWARE = [
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
+    "app.middleware.CsrfCookieNameHeaderMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "telemetry.middleware.TelemetryMiddleware",  # AFTER AuthenticationMiddleware
     "telemetry.db.QueryStatsMiddleware",  # AFTER TelemetryMiddleware (uses its context)
@@ -437,10 +438,8 @@ def _deploy_version() -> str:
 
 
 # Version-prefix cacheops keys so deploys auto-invalidate while restarts
-# stay warm. Old prefixed keys orphan and TTL out naturally. Replaces the
-# brute `invalidate_all()` that AppConfig.ready() used to fire on every
-# boot — that wiped warm cache on every Daphne reload / worker restart /
-# OOM, with the only legitimate goal being "fresh data after a deploy".
+# (Daphne reload, worker restart, OOM) stay warm. Old prefixed keys orphan
+# and TTL out naturally.
 _CACHE_KEY_PREFIX = f"dtx-v{_deploy_version()}:{REDIS_KEY_NAMESPACE}"
 CACHEOPS_PREFIX = lambda _query: _CACHE_KEY_PREFIX  # noqa: E731
 
