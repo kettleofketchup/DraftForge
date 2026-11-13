@@ -736,8 +736,9 @@ class EventViewSet(viewsets.ModelViewSet):
 
                 notify_create_discord_event(event)
 
-    def update(self, request, *args, **kwargs):
+    def update(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         response = super().update(request, *args, **kwargs)
+        _attach_user_can_manage(response.data, request.user)
         if hasattr(self, "_cascade_warning") and self._cascade_warning:
             response.data["_warning"] = self._cascade_warning
         return response
