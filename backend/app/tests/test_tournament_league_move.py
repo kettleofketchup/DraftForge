@@ -209,7 +209,7 @@ class TournamentLeagueMoveTests(TestCase):
         self.assertEqual(resp.status_code, 400, resp.data)
         self.assertEqual(
             str(resp.data["league_id_write"]),
-            "You must be an admin of the league you are moving this tournament to.",
+            "You must be an admin of this league to create a tournament in it.",
         )
         self.assertFalse(Tournament.objects.filter(name="Sneak").exists())
 

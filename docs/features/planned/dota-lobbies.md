@@ -179,7 +179,11 @@ of its latest lobby, or `null`. The tournament API exposes `dota_lobby_mode`,
 `dota_lobby_launch`, `dota_lobby_region` and `discord_send_lobby_info`, the writable
 `game_mode`, `lobby_steam_league_id`, `captains_draft_time` and `custom_game_name`, and the
 read-only `game_type`. Captain's Mode and Turbo are Dota 2 only; setting either on another game
-answers `400` keyed on `game_mode`. Tournament editors (`can_edit_tournament`) can change all
+answers `400` keyed on `game_mode`. `lobby_steam_league_id` must be a positive integer, and a
+value owned by a league other than the tournament's own needs admin access to that league; the
+event, series, one-off and org-default forms apply the same rule against their
+`tournament_league`. `captains_draft_time` is at least 1 on all of them, and the tournament dialog
+only sends it in Captain's Mode. Tournament editors (`can_edit_tournament`) can change all
 of these on any tournament, including event and series tournaments and ones in progress. A
 tournament created from an event starts with the event's settings, and editing the event
 while the tournament is still `future` overwrites them. The lobby password still comes from

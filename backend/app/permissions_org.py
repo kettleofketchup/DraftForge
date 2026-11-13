@@ -301,14 +301,9 @@ def can_edit_tournament(user, tournament):
     if user.is_superuser or user.is_staff:
         return True
 
-    # If tournament has a league, check league staff access
-    # (which includes org admin/staff through has_league_staff_access)
+    # League staff access includes org admin/staff of the league's org.
     if tournament.league:
         return has_league_staff_access(user, tournament.league)
-
-    # No league - fall back to org staff if we can find the org
-    if tournament.league and tournament.league.organization:
-        return has_org_staff_access(user, tournament.league.organization)
 
     return False
 
@@ -350,8 +345,38 @@ def check_tournament_league_change(
             )
     if not has_league_admin_access(user, target):
         raise _league_change_error(
-            "You must be an admin of the league you are moving this tournament to."
+            "You must be an admin of this league to create a tournament in it."
+            if tournament is None
+            else "You must be an admin of the league you are moving this tournament to."
         )
+
+
+def _lobby_league_error(message: str) -> serializers.ValidationError:
+    return serializers.ValidationError({"lobby_steam_league_id": message})
+
+
+def check_lobby_steam_league_id(
+    user: CustomUser | AnonymousUser, value: int | None, target: League | None
+) -> None:
+    """Authorize a lobby ticket ID: the target league's own, unowned, or one
+    owned by a league the user admins."""
+    if value is None:
+        return
+    if value <= 0:
+        raise _lobby_league_error("Steam league ID must be a positive integer.")
+    if target is not None and target.steam_league_id == value:
+        return
+    owner = League.objects.filter(steam_league_id=value).nocache().first()
+    if owner is not None and not has_league_admin_access(user, owner):
+        raise _lobby_league_error(
+            f"Steam league ID {value} belongs to '{owner.name}'. "
+            "Only an admin of that league can use it."
+        )
+
+
+def request_user(context: Mapping[str, Any]) -> CustomUser | AnonymousUser:
+    request = context.get("request")
+    return getattr(request, "user", None) or AnonymousUser()
 
 
 def can_manage_game(user, game):

@@ -6,6 +6,7 @@ from rest_framework.utils.serializer_helpers import ReturnList
 from rest_framework.validators import UniqueValidator
 
 from app.cache_utils import invalidate_after_commit
+from app.permissions_org import check_lobby_steam_league_id, request_user
 from league.models import LeagueUser
 from org.models import OrgUser
 from telemetry.logging import get_logger
@@ -1230,9 +1231,22 @@ class TournamentSerializer(serializers.ModelSerializer):
         extra_kwargs = {"captains_draft_time": {"min_value": 1}}
 
     def validate(self, data: dict) -> dict:
+        self._validate_game_mode(data)
+        if "lobby_steam_league_id" in data and (
+            self.instance is None
+            or data["lobby_steam_league_id"] != self.instance.lobby_steam_league_id
+        ):
+            check_lobby_steam_league_id(
+                request_user(self.context),
+                data["lobby_steam_league_id"],
+                data.get("league", self.instance.league if self.instance else None),
+            )
+        return data
+
+    def _validate_game_mode(self, data: dict) -> None:
         mode = data.get("game_mode")
         if mode is None or (self.instance and mode == self.instance.game_mode):
-            return data
+            return
         game_type = (
             self.instance.game_type
             if self.instance
@@ -1245,7 +1259,6 @@ class TournamentSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"game_mode": f"{mode} is only available for Dota 2."}
             )
-        return data
 
     def to_representation(self, instance: Tournament) -> dict:
         data = super().to_representation(instance)

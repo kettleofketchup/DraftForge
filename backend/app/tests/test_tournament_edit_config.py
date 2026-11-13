@@ -2,6 +2,7 @@ from datetime import timedelta
 
 from django.test import TestCase
 from django.utils import timezone
+from rest_framework.response import Response
 from rest_framework.test import APIClient
 
 from app.models import (
@@ -16,13 +17,15 @@ from events.constants import EventState
 from events.models import Event
 
 
-class TournamentEditConfigTests(TestCase):
+class TournamentEditConfigBase(TestCase):
     def setUp(self) -> None:
         self.owner = CustomUser.objects.create_user(username="owner", password="x")
         self.league_admin = CustomUser.objects.create_user(
             username="league_admin", password="x"
         )
-        self.outsider = CustomUser.objects.create_user(username="outsider", password="x")
+        self.outsider = CustomUser.objects.create_user(
+            username="outsider", password="x"
+        )
         self.site_staff = CustomUser.objects.create_user(
             username="site_staff", password="x", is_staff=True
         )
@@ -31,6 +34,17 @@ class TournamentEditConfigTests(TestCase):
             name="Config League", organization=self.org, steam_league_id=4242
         )
         self.league.admins.add(self.league_admin)
+        self.league_staff = CustomUser.objects.create_user(
+            username="league_staff", password="x"
+        )
+        self.league.staff.add(self.league_staff)
+        other_owner = CustomUser.objects.create_user(
+            username="other_owner", password="x"
+        )
+        other_org = Organization.objects.create(name="Other Org", owner=other_owner)
+        self.other_league = League.objects.create(
+            name="Other League", organization=other_org, steam_league_id=7777
+        )
         self.tournament = Tournament.objects.create(
             name="Config Tourney",
             league=self.league,
@@ -50,7 +64,7 @@ class TournamentEditConfigTests(TestCase):
         self.client = APIClient()
         self.client.force_authenticate(self.league_admin)
 
-    def patch(self, data: dict) -> object:
+    def patch(self, data: dict[str, object]) -> Response:
         return self.client.patch(self.url, data, format="json")
 
     def full_config(self) -> dict:
@@ -65,7 +79,11 @@ class TournamentEditConfigTests(TestCase):
             "discord_send_lobby_info": True,
         }
 
-    def test_league_admin_sets_game_config_on_in_progress_event_tournament(self) -> None:
+
+class TournamentEditConfigTests(TournamentEditConfigBase):
+    def test_league_admin_sets_game_config_on_in_progress_event_tournament(
+        self,
+    ) -> None:
         payload = self.full_config()
         resp = self.patch(payload)
         self.assertEqual(resp.status_code, 200, resp.data)
@@ -146,3 +164,76 @@ class TournamentEditConfigTests(TestCase):
         resp = self.patch({"game_mode": "turbo"})
         self.assertEqual(resp.status_code, 200, resp.data)
         self.assertEqual(self.client.get(self.url).data["game_mode"], "turbo")
+
+
+class TournamentLobbySteamLeagueIdTests(TournamentEditConfigBase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.client.force_authenticate(self.league_staff)
+
+    def steam_id(self) -> int | None:
+        return Tournament.objects.get(pk=self.tournament.pk).lobby_steam_league_id
+
+    def test_league_staff_refused_another_leagues_steam_id(self) -> None:
+        resp = self.patch({"lobby_steam_league_id": 7777})
+        self.assertEqual(resp.status_code, 400, resp.data)
+        self.assertEqual(
+            str(resp.data["lobby_steam_league_id"][0]),
+            "Steam league ID 7777 belongs to 'Other League'. "
+            "Only an admin of that league can use it.",
+        )
+        self.assertIsNone(self.steam_id())
+
+    def test_own_league_steam_id_allowed(self) -> None:
+        resp = self.patch({"lobby_steam_league_id": 4242})
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertEqual(self.steam_id(), 4242)
+
+    def test_non_positive_steam_id_rejected(self) -> None:
+        for value in (0, -5):
+            with self.subTest(value=value):
+                resp = self.patch({"lobby_steam_league_id": value})
+                self.assertEqual(resp.status_code, 400, resp.data)
+                self.assertEqual(
+                    str(resp.data["lobby_steam_league_id"][0]),
+                    "Steam league ID must be a positive integer.",
+                )
+
+    def test_clearing_steam_id_allowed(self) -> None:
+        Tournament.objects.filter(pk=self.tournament.pk).update(
+            lobby_steam_league_id=4242
+        )
+        resp = self.patch({"lobby_steam_league_id": None})
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertIsNone(self.steam_id())
+
+    def test_admin_of_owning_league_may_use_its_id(self) -> None:
+        self.other_league.admins.add(self.league_staff)
+        resp = self.patch({"lobby_steam_league_id": 7777})
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertEqual(self.steam_id(), 7777)
+
+    def test_unchanged_foreign_id_does_not_block_other_edits(self) -> None:
+        Tournament.objects.filter(pk=self.tournament.pk).update(
+            lobby_steam_league_id=7777
+        )
+        resp = self.patch({"name": "Renamed", "lobby_steam_league_id": 7777})
+        self.assertEqual(resp.status_code, 200, resp.data)
+
+
+class TournamentDiscordLogsAccessTests(TournamentEditConfigBase):
+    def logs_url(self) -> str:
+        return f"{self.url}discord-logs/"
+
+    def test_anonymous_refused(self) -> None:
+        self.client.force_authenticate(None)
+        resp = self.client.get(self.logs_url())
+        self.assertIn(resp.status_code, (401, 403))
+
+    def test_outsider_refused(self) -> None:
+        self.client.force_authenticate(self.outsider)
+        self.assertEqual(self.client.get(self.logs_url()).status_code, 403)
+
+    def test_league_staff_allowed(self) -> None:
+        self.client.force_authenticate(self.league_staff)
+        self.assertEqual(self.client.get(self.logs_url()).status_code, 200)
