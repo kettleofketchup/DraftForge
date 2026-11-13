@@ -82,7 +82,7 @@ from app.views.ssr import (
 from app.views_joke import buy_tango, get_tangoes
 from common.utils import isTestEnvironment
 from org.views import ClaimRequestViewSet
-from org.views_features import org_features
+from org.views_features import org_features, org_promoters, remove_org_promoter
 from org.views_profiles import (
     delete_user_dota_profile,
     get_my_dota_profile,
@@ -274,6 +274,16 @@ urlpatterns = [
         "api/organizations/<int:org_id>/features/",
         org_features,
         name="org-features",
+    ),
+    path(
+        "api/organizations/<int:org_id>/promoters/",
+        org_promoters,
+        name="org-promoters",
+    ),
+    path(
+        "api/organizations/<int:org_id>/promoters/<int:user_id>/",
+        remove_org_promoter,
+        name="org-promoter-remove",
     ),
     # League admin team
     path(
