@@ -1,10 +1,11 @@
 from dataclasses import dataclass
 from datetime import date, datetime
 from enum import Enum
-from typing import Any, Final
+from typing import Any, Final, TypeGuard
 
 from django.db import transaction
 from django.db.models import Count
+from django.utils import timezone
 
 from app.models import CustomUser, Organization, OrgLog
 from app.permissions_org import is_org_role_holder
@@ -38,16 +39,12 @@ class RescoreResult:
     changed: int
 
 
-def _is_int(value: object) -> bool:
+def _is_int(value: object) -> TypeGuard[int]:
     return isinstance(value, int) and not isinstance(value, bool)
 
 
 def _check_manual_points(points: object) -> int:
-    if (
-        isinstance(points, int)
-        and not isinstance(points, bool)
-        and MANUAL_MIN_POINTS <= points <= MANUAL_MAX_POINTS
-    ):
+    if _is_int(points) and MANUAL_MIN_POINTS <= points <= MANUAL_MAX_POINTS:
         return points
     raise ValueError(
         f"points must be an integer from {MANUAL_MIN_POINTS} to {MANUAL_MAX_POINTS}"
@@ -176,23 +173,31 @@ def update_manual_award(
 ) -> ContributionEntry:
     _require_manual(entry)
     org = entry.organization
-    old = _manual_snapshot(entry)
     new_points = _check_manual_points(points) if points is not None else None
     new_reason = _check_reason(reason) if reason is not None else None
     new_occurred_at = local_noon_utc(org, on_date) if on_date is not None else None
     if event is not UNSET:
         _check_event(org, event)
+    entry = ContributionEntry.objects.nocache().select_for_update().get(pk=entry.pk)
+    old = _manual_snapshot(entry)
+    fields: list[str] = []
     if new_points is not None:
         entry.points = new_points
+        fields.append("points")
     if new_reason is not None:
         entry.reason = new_reason
+        fields.append("reason")
     if new_occurred_at is not None:
         entry.occurred_at = new_occurred_at
+        fields.append("occurred_at")
     if event is not UNSET:
         entry.event = event
         entry.event_name = event.name if event is not None else ""
-    entry.save()
+        fields += ["event", "event_name"]
     new = _manual_snapshot(entry)
+    if new == old:
+        return entry
+    entry.save(update_fields=[*fields, "updated_at"])
     OrgLog.objects.create(
         organization=org,
         actor=actor,
@@ -253,6 +258,8 @@ def set_point_value(
         not _is_int(points) or not 0 <= points <= POINT_VALUE_MAX
     ):
         raise ValueError(f"points must be an integer from 0 to {POINT_VALUE_MAX}")
+    if since is not None and not apply_to_past:
+        raise ValueError("since requires apply_to_past")
 
     old = points_for(org, kind)
     rows = ContributionPointValue.objects.nocache().filter(organization=org, kind=kind)
@@ -280,7 +287,7 @@ def set_point_value(
         )
         if since is not None:
             entries = entries.filter(occurred_at__gte=local_day_start_utc(org, since))
-        changed = entries.update(points=new)
+        changed = entries.update(points=new, updated_at=timezone.now())
         OrgLog.objects.create(
             organization=org,
             actor=actor,
@@ -319,7 +326,8 @@ def delete_user_entries(user: CustomUser, *, actor: CustomUser | None) -> int:
     }
     if not per_org:
         return 0
-    deleted, _ = entries.delete()
+    entries.delete()
+    deleted = sum(per_org.values())
     for org_id, count in per_org.items():
         OrgLog.objects.create(
             organization_id=org_id,

@@ -253,6 +253,8 @@ class ContributionServicesTest(TestCase):
         self.assertEqual(updated.event, self.event)
         self.assertEqual(updated.event_name, "Svc Event")
         log = OrgLog.objects.get(organization=self.org, action="edit_award")
+        self.assertEqual(log.actor, self.admin)
+        self.assertEqual(log.target_user, self.member)
         self.assertEqual(log.details["pk"], entry.pk)
         self.assertEqual(log.details["old"]["points"], 7)
         self.assertEqual(log.details["new"]["points"], 9)
@@ -277,11 +279,21 @@ class ContributionServicesTest(TestCase):
 
     def test_update_manual_award_rejects_out_of_range_points(self) -> None:
         entry = self._manual(points=7)
-        for points in (0, -5, 1001):
+        for points in (0, -5, 1001, True):
             with self.assertRaises(ValueError, msg=f"points={points!r}"):
                 update_manual_award(entry, actor=self.admin, points=points)
         entry.refresh_from_db()
         self.assertEqual(entry.points, 7)
+
+    def test_update_manual_award_noop_skips_save_and_log(self) -> None:
+        entry = self._manual(points=7, reason="Same", event=self.event)
+        before = ContributionEntry.objects.get(pk=entry.pk).updated_at
+        update_manual_award(entry, actor=self.admin)
+        update_manual_award(
+            entry, actor=self.admin, points=7, reason="Same", event=self.event
+        )
+        self.assertFalse(OrgLog.objects.filter(action="edit_award").exists())
+        self.assertEqual(ContributionEntry.objects.get(pk=entry.pk).updated_at, before)
 
     def test_update_manual_award_rejects_blank_reason(self) -> None:
         entry = self._manual()
@@ -385,6 +397,32 @@ class ContributionServicesTest(TestCase):
             log.details,
             {"kind": "promo_message", "old": 1, "new": 3, "since": None, "changed": 2},
         )
+
+    def test_apply_to_past_bumps_updated_at(self) -> None:
+        entry = self._auto(ContributionKind.PROMO_MESSAGE, timezone.now())
+        stale = timezone.now() - timedelta(days=3)
+        ContributionEntry.objects.filter(pk=entry.pk).update(updated_at=stale)
+        set_point_value(
+            self.org,
+            ContributionKind.PROMO_MESSAGE,
+            4,
+            actor=self.admin,
+            apply_to_past=True,
+        )
+        entry.refresh_from_db()
+        self.assertGreater(entry.updated_at, stale)
+
+    def test_set_point_value_rejects_since_without_apply_to_past(self) -> None:
+        with self.assertRaises(ValueError):
+            set_point_value(
+                self.org,
+                ContributionKind.EVENT_HOST,
+                20,
+                actor=self.admin,
+                since=date(2026, 11, 1),
+            )
+        self.assertFalse(ContributionPointValue.objects.exists())
+        self.assertFalse(OrgLog.objects.filter(action="set_point_value").exists())
 
     def test_apply_to_past_since_is_local_day_start(self) -> None:
         # NY local day start of 2026-11-01 is 2026-11-01T04:00Z.
