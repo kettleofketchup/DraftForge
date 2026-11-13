@@ -29,6 +29,8 @@ class TournamentDiscoverySeedTests(TestCase):
     def setUpTestData(cls) -> None:
         populate_tournament_discovery(force=True)
         populate_tournament_discovery(force=True)
+        # populate_all's default path: existing user kept, no duplicate membership.
+        populate_tournament_discovery()
 
     def setUp(self) -> None:
         self.client = APIClient()
