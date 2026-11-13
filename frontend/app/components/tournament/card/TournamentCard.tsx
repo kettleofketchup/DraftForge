@@ -43,6 +43,8 @@ interface Props {
 
 /** className that lets the cell trim its content with native CSS ellipsis. */
 const CELL_TRUNCATE = 'block w-full overflow-hidden text-ellipsis whitespace-nowrap';
+/** className for fixed-vocabulary values (date, time, style, state): wrap, never clip. */
+const CELL_WRAP = 'block w-full break-words';
 
 const LeagueCell = memo(function LeagueCell({
   league,
@@ -218,7 +220,7 @@ export const TournamentCard: React.FC<Props> = React.memo(({
               </ItemMedia>
               <ItemContent className="!gap-0 min-w-0">
                 <ItemTitle className="!text-xs text-muted-foreground">Date</ItemTitle>
-                <span className={cn('text-sm', CELL_TRUNCATE)} title={tournament.date_played} data-testid="tournament-card-date">
+                <span className={cn('text-sm', CELL_WRAP)} title={tournament.date_played} data-testid="tournament-card-date">
                   {getDateFromDate(tournament.date_played)}
                 </span>
               </ItemContent>
@@ -230,7 +232,7 @@ export const TournamentCard: React.FC<Props> = React.memo(({
             </ItemMedia>
             <ItemContent className="!gap-0 min-w-0">
               <ItemTitle className="!text-xs text-muted-foreground">Time</ItemTitle>
-              <span className={cn('text-sm', CELL_TRUNCATE)} title={`${getTimeFromDate(tournament.date_played)} (${tournament.timezone || 'UTC'})`}>
+              <span className={cn('text-sm', CELL_WRAP)} title={`${getTimeFromDate(tournament.date_played)} (${tournament.timezone || 'UTC'})`} data-testid="tournament-card-time">
                 {`${getTimeFromDate(tournament.date_played)} ${formatTimezone(tournament.timezone)}`}
               </span>
             </ItemContent>
@@ -245,7 +247,7 @@ export const TournamentCard: React.FC<Props> = React.memo(({
             </ItemMedia>
             <ItemContent className="!gap-0 min-w-0">
               <ItemTitle className="!text-xs text-muted-foreground">Style</ItemTitle>
-              <span className={cn('text-sm capitalize', CELL_TRUNCATE)} title={tournament.tournament_type.replace('_', ' ')}>
+              <span className={cn('text-sm capitalize', CELL_WRAP)} title={tournament.tournament_type.replace('_', ' ')}>
                 {tournament.tournament_type.replace('_', ' ')}
               </span>
             </ItemContent>
@@ -269,7 +271,7 @@ export const TournamentCard: React.FC<Props> = React.memo(({
               <ItemContent className="!gap-0 min-w-0">
                 <ItemTitle className="!text-xs text-muted-foreground">State</ItemTitle>
                 <span
-                  className={cn('text-sm', shownState.muted && 'text-muted-foreground', CELL_TRUNCATE)}
+                  className={cn('text-sm', shownState.muted && 'text-muted-foreground', CELL_WRAP)}
                   title={shownState.label}
                   data-testid="tournament-card-state"
                 >

@@ -2,10 +2,10 @@ import type { DisplayState } from '~/components/tournament/tournamentBuckets';
 
 /** Card surface shared with the grid skeleton so loading and loaded cards match. */
 export const TOURNAMENT_CARD_SURFACE =
-  'bg-base-300 w-full max-w-sm h-full flex flex-col card-3d px-4 py-2 rounded-[1.25rem]';
+  'bg-base-300 w-full h-full flex flex-col card-3d p-4 rounded-[1.25rem]';
 
-/** Outer cell wrapper shared with the grid skeleton. */
-export const TOURNAMENT_CARD_CELL = 'flex items-stretch justify-center p-4 gap-6 w-full h-full';
+/** Outer cell wrapper shared with the grid skeleton; the grid's gap spaces cards. */
+export const TOURNAMENT_CARD_CELL = 'flex items-stretch justify-center w-full h-full';
 
 export type StateTone = 'success' | 'primary' | 'muted';
 
