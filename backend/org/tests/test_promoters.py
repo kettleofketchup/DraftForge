@@ -1,6 +1,9 @@
+from collections.abc import Callable
 from typing import Any
 
+from django.db import connection
 from django.test import TestCase
+from rest_framework.response import Response
 from rest_framework.test import APIClient
 
 from app.models import CustomUser, Organization, OrgLog
@@ -177,6 +180,39 @@ class PromoterEndpointsTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual([u["pk"] for u in response.json()], [self.target.pk])
         self.assertEqual(response.json()[0]["username"], self.target.username)
+
+    def _get_counting_queries(self, url: str) -> tuple[Response, int]:
+        executed: list[str] = []
+
+        def record(
+            execute: Callable[..., Any],
+            sql: str,
+            params: Any,
+            many: bool,
+            context: dict[str, Any],
+        ) -> Any:
+            executed.append(sql)
+            return execute(sql, params, many, context)
+
+        with connection.execute_wrapper(record):
+            response = self.client.get(url)
+        return response, len(executed)
+
+    def test_list_query_count_is_constant_in_promoter_count(self) -> None:
+        self._unlock()
+        self.org.promoters.add(self.target)
+        self.client.force_authenticate(self.admin)
+        _, baseline = self._get_counting_queries(promoters_url(self.org.pk))
+        for i in range(3):
+            self.org.promoters.add(
+                CustomUser.objects.create_user(
+                    username=f"promo_extra_{i}", password="x"
+                )
+            )
+        response, count = self._get_counting_queries(promoters_url(self.org.pk))
+        self.assertEqual(len(response.json()), 4)
+        self.assertTrue(all("positions" in row for row in response.json()))
+        self.assertEqual(count, baseline)
 
     def test_list_reflects_add_after_cached_read(self) -> None:
         self._unlock()

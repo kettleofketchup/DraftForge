@@ -17,6 +17,7 @@ from org.feature_errors import not_permitted, require_org_admin
 from org.features import FeatureKey, set_org_feature
 from org.models import OrgFeature, OrgUser
 from telemetry.logging import get_logger
+from user.querysets import with_user_profiles
 
 log = get_logger(__name__)
 
@@ -104,11 +105,9 @@ def org_promoters(request: Request, org_id: int) -> Response:
     org = _promoter_org(request, org_id)
 
     if request.method == "GET":
-        promoters = (
-            CustomUser.objects.nocache()
-            .filter(promoter_organizations=org)
-            .order_by("username", "pk")
-        )
+        promoters = with_user_profiles(
+            CustomUser.objects.filter(promoter_organizations=org), dota=True
+        ).order_by("username", "pk")
         return Response(TournamentUserSerializer(promoters, many=True).data)
 
     serializer = PromoterAddSerializer(data=request.data)
