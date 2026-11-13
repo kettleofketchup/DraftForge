@@ -56,6 +56,17 @@ export function DeleteDialog({
 
   const nameMatches = value === entityName;
 
+  const handleInputKeyDown = async (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    if (!nameMatches || isLoading) return;
+    try {
+      await onConfirm();
+    } finally {
+      onOpenChange(false);
+    }
+  };
+
   const bodyContent = (
     <div className="flex flex-col gap-2">
       <Label htmlFor={inputId}>
@@ -66,6 +77,7 @@ export function DeleteDialog({
         data-testid={inputTestId}
         value={value}
         onChange={(e) => setValue(e.target.value)}
+        onKeyDown={handleInputKeyDown}
         placeholder={entityName}
         autoComplete="off"
         disabled={isLoading}

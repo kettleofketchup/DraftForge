@@ -1,0 +1,1 @@
+- Pressing Enter in the "type the league name" box of the Delete League dialog now deletes the league. It used to submit the Edit League form behind it, closing both dialogs without deleting anything.
