@@ -413,6 +413,7 @@ class TournamentListSerializer(serializers.ModelSerializer):
 
     league = LeagueMinimalSerializer(read_only=True)
     user_count = serializers.IntegerField(read_only=True)
+    signups_open = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = Tournament
@@ -425,6 +426,7 @@ class TournamentListSerializer(serializers.ModelSerializer):
             "state",
             "league",
             "user_count",
+            "signups_open",
         )
 
 

@@ -15,6 +15,8 @@ from rest_framework.response import Response
 from rest_framework.test import APIClient
 
 from app.models import League, Organization, Tournament
+from events.constants import EventState
+from events.models import Event
 from user.tests.test_cacheops_integration import _redis_reachable
 
 LIST_URL = "/api/tournaments-list/"
@@ -36,7 +38,7 @@ class TournamentListCacheTests(TransactionTestCase):
         )
         prefix.start()
         self.addCleanup(prefix.stop)
-        for model in (Tournament, League, Organization):
+        for model in (Tournament, League, Organization, Event):
             invalidate_model(model)
         self.client = APIClient()
 
@@ -118,3 +120,43 @@ class TournamentListCacheTests(TransactionTestCase):
         next_day = datetime(2026, 11, 14, 12, 0, tzinfo=UTC)
         self.assertNotIn(tournament.pk, pks("?bucket=upcoming", next_day))
         self.assertIn(tournament.pk, pks("?bucket=archived", next_day))
+
+    def _open_signup_tournament(
+        self, starts_in: timedelta = timedelta(hours=2), deadline_hours: int | None = None
+    ) -> Tournament:
+        org = Organization.objects.create(name="Open Org", logo="")
+        league = League.objects.create(organization=org, name="Open League")
+        tournament = Tournament.objects.create(
+            name="Open Cup", date_played=NOW + starts_in, league=league
+        )
+        Event.objects.create(
+            organization=org,
+            name="Open Event",
+            scheduled_at=NOW + starts_in,
+            state=EventState.SIGNUPS_OPEN,
+            signup_deadline_hours=deadline_hours,
+            tournament=tournament,
+        )
+        return tournament
+
+    def _open_pks(self, now: datetime) -> set[int]:
+        response = self._get("?bucket=upcoming&open_signups=1", now=now)
+        self.assertEqual(response.status_code, 200)
+        return {row["pk"] for row in response.json()}
+
+    def test_signup_deadline_takes_effect_by_the_next_window(self) -> None:
+        # Deadline at 12:57; the 12:55-13:00 window evaluates signups at 12:55.
+        tournament = self._open_signup_tournament(
+            starts_in=timedelta(hours=1, minutes=57), deadline_hours=1
+        )
+        self.assertEqual(self._open_pks(NOW + timedelta(minutes=56)), {tournament.pk})
+        self.assertEqual(self._open_pks(NOW + timedelta(minutes=58)), {tournament.pk})
+        self.assertEqual(self._open_pks(NOW + timedelta(minutes=60)), set())
+
+    def test_event_state_change_invalidates(self) -> None:
+        tournament = self._open_signup_tournament()
+        self.assertEqual(self._open_pks(NOW), {tournament.pk})
+        event = Event.objects.get(tournament=tournament)
+        event.state = EventState.ROLL_CALL
+        event.save()
+        self.assertEqual(self._open_pks(NOW), set())

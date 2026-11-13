@@ -10,7 +10,7 @@ from django.contrib.auth import logout as auth_logout
 from django.contrib.auth.decorators import login_required
 from django.core.cache import cache
 from django.db import transaction
-from django.db.models import Count, Q, QuerySet
+from django.db.models import BooleanField, Case, Count, Q, QuerySet, Value, When
 from django.http import (
     HttpRequest,
     HttpResponse,
@@ -48,8 +48,11 @@ from app.tournament_list import (
     TournamentListParams,
     build_page_envelope,
     parse_tournament_list_params,
+    signup_window_start,
     tournaments_list_cache_key,
 )
+from events.models import Event
+from events.signup_window import user_signups_open_tournament_ids
 from league.models import LeagueUser
 from league.serializers import LeagueUserSerializer
 from org.membership import member_organization_ids
@@ -1082,7 +1085,9 @@ class TournamentsBasicView(viewsets.ModelViewSet):
 class TournamentListView(viewsets.ReadOnlyModelViewSet):
     """Lightweight view for the tournament list page.
 
-    Filters: organization, league, bucket (upcoming|archived), search.
+    Filters: organization, organizations, open_signups, league,
+    bucket (upcoming|archived), search. ``open_signups=1`` adds tournaments
+    whose source event takes user signups to the organization scope.
     Paginates only when ``page`` is present (requires ``bucket``).
     """
 
@@ -1092,6 +1097,7 @@ class TournamentListView(viewsets.ReadOnlyModelViewSet):
     _now: datetime
     _cutoff: datetime
     _today_start: datetime
+    _signup_window: datetime
     _params: TournamentListParams
 
     def initial(self, request: Request, *args: Any, **kwargs: Any) -> None:
@@ -1099,6 +1105,7 @@ class TournamentListView(viewsets.ReadOnlyModelViewSet):
         self._now = tournament_buckets._now()
         self._cutoff = tournament_bucket_cutoff(self._now)
         self._today_start = utc_day_start(self._now)
+        self._signup_window = signup_window_start(self._now)
         self._params = parse_tournament_list_params(request.query_params)
 
     def get_queryset(self) -> QuerySet[Tournament]:
@@ -1107,8 +1114,27 @@ class TournamentListView(viewsets.ReadOnlyModelViewSet):
             "league", "league__organization"
         ).annotate(user_count=Count("users", distinct=True))
 
+        open_ids = user_signups_open_tournament_ids(self._signup_window)
+        qs = qs.annotate(
+            signups_open=Case(
+                When(pk__in=open_ids, then=Value(True)),
+                default=Value(False),
+                output_field=BooleanField(),
+            )
+            if open_ids
+            else Value(False, output_field=BooleanField())
+        )
+
+        scope: Q | None = None
         if params.organization is not None:
-            qs = qs.filter(league__organization__id=params.organization)
+            scope = Q(league__organization__id=params.organization)
+        elif params.organizations is not None:
+            scope = Q(league__organization__id__in=params.organizations)
+        if params.open_signups:
+            open_scope = Q(pk__in=open_ids)
+            scope = open_scope if scope is None else scope | open_scope
+        if scope is not None:
+            qs = qs.filter(scope)
         if params.league is not None:
             qs = qs.filter(league_id=params.league)
         if params.search is not None:
@@ -1130,11 +1156,11 @@ class TournamentListView(viewsets.ReadOnlyModelViewSet):
 
     def list(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         params = self._params
-        # cacheops' own queryset cache ignores select_related tables, so it
-        # would serve stale org/league fields; cached_as below owns caching.
-        queryset = self.filter_queryset(self.get_queryset()).nocache()
 
         def compute() -> Any:
+            # cacheops' own queryset cache ignores select_related tables, so it
+            # would serve stale org/league fields; cached_as below owns caching.
+            queryset = self.filter_queryset(self.get_queryset()).nocache()
             if params.page is None:
                 return list(self.get_serializer(queryset, many=True).data)
             page = self.paginator.paginate_queryset(queryset, request, view=self)
@@ -1150,7 +1176,10 @@ class TournamentListView(viewsets.ReadOnlyModelViewSet):
                 Tournament.objects.all(),
                 League.objects.all(),
                 Organization.objects.all(),
-                extra=tournaments_list_cache_key(params, self._cutoff),
+                Event.objects.all(),
+                extra=tournaments_list_cache_key(
+                    params, self._cutoff, self._signup_window
+                ),
                 timeout=60 * 10,
             )(compute)()
 
