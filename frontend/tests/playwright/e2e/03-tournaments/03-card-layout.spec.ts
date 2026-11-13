@@ -16,12 +16,9 @@ import {
   test,
   visitAndWaitForHydration,
 } from '../../fixtures';
+import { CARD_SELECTOR } from '../../helpers/tournament';
 
 type Tournament = Record<string, unknown>;
-
-// Matches the card itself, not the inner tournament-card-date span.
-const CARD_SELECTOR =
-  '[data-testid^="tournament-card-"]:has([data-testid^="tournament-view-"])';
 
 /**
  * Serve exactly one grid row of real tournaments. The second card loses its
@@ -47,6 +44,59 @@ async function serveOneRow(
     }
     await route.fulfill({ response, json: row });
   });
+}
+
+/**
+ * /tournaments asks for the filtered upcoming bucket, which may hold fewer
+ * than 4 rows, so fetch the unparameterised list instead and rewrite 4 rows
+ * into one upcoming org: row 0 LIVE, row 1 without its Style row (#301) and
+ * with a logo, row 2 without a logo, row 3 without a league.
+ */
+async function serveDiscoveryRows(page: Page): Promise<void> {
+  await page.route('**/api/tournaments-list/**', async (route) => {
+    const url = new URL(route.request().url());
+    if (url.searchParams.has('page')) {
+      await route.continue();
+      return;
+    }
+    const response = await route.fetch({ url: `${url.origin}/api/tournaments-list/` });
+    const tournaments = (await response.json()) as Tournament[];
+    const source = tournaments.find((t) => t.league && typeof t.league === 'object');
+    const baseLeague: Tournament = {
+      ...((source?.league as Tournament | undefined) ?? { pk: 1, name: 'Card Layout League' }),
+      organization_id: 1,
+      organization_name: 'Card Layout Org',
+      organization_logo: null,
+    };
+    const row: Tournament[] = tournaments.slice(0, 4).map((t, i) => ({
+      ...t,
+      state: 'future',
+      date_played: `2099-06-0${i + 1}T18:00:00Z`,
+      league: baseLeague,
+    }));
+    if (row.length > 0) row[0] = { ...row[0], state: 'in_progress' };
+    if (row.length > 1) {
+      row[1] = {
+        ...row[1],
+        tournament_type: null,
+        league: { ...baseLeague, organization_logo: '/logo192.png' },
+      };
+    }
+    if (row.length > 3) row[3] = { ...row[3], league: null };
+    await route.fulfill({ response, json: row });
+  });
+}
+
+async function expectSameY(locators: Locator): Promise<void> {
+  await expect(async () => {
+    const boxes = await Promise.all(
+      (await locators.all()).map((l) => l.boundingBox()),
+    );
+    for (const box of boxes) {
+      expect(box).not.toBeNull();
+      expect(Math.abs(box!.y - boxes[0]!.y)).toBeLessThanOrEqual(1);
+    }
+  }).toPass({ timeout: 10000 });
 }
 
 async function expectRowAligned(cards: Locator): Promise<void> {
@@ -93,13 +143,27 @@ test.describe('Tournaments - card layout', () => {
     // 1440px wide puts the /tournaments grid at its xl breakpoint (4 columns).
     const rowSize = 4;
     await page.setViewportSize({ width: 1440, height: 1200 });
-    await serveOneRow(page, rowSize);
+    await serveDiscoveryRows(page);
 
     await visitAndWaitForHydration(page, '/tournaments');
 
     const cards = page.locator(CARD_SELECTOR);
     await expect(cards).toHaveCount(rowSize, { timeout: 15000 });
     await expectRowAligned(cards);
+
+    // A LIVE header must not push the inner rows down.
+    await expect(cards.nth(0).getByTestId('tournament-live-badge')).toBeVisible();
+    await expect(page.getByTestId('tournament-live-badge')).toHaveCount(1);
+    await expectSameY(cards.getByTestId('tournament-card-date'));
+
+    // Logo, Building2 box and "No organization" all use a 24px media box.
+    const media = cards.getByTestId('tournament-card-org-media');
+    await expect(media).toHaveCount(rowSize);
+    for (const box of await media.all()) {
+      const bb = await box.boundingBox();
+      expect(bb).not.toBeNull();
+      expect(Math.abs(bb!.height - 24)).toBeLessThanOrEqual(0.5);
+    }
   });
 
   test('@cicd league tab cards in a row share one height and align their footers', async ({
