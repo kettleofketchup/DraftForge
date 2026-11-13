@@ -1,0 +1,1 @@
+- Deleting a league works again: the trash button in the Edit League dialog submitted the edit form and closed the dialog instead of opening the delete confirmation.
