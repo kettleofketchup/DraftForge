@@ -155,6 +155,14 @@ test.describe('Tournaments - nothing is clipped', () => {
     context,
   }) => {
     await loginAsUser(context, DISCOVERY_MEMBER_PK);
+    await checkWidths(page, 'upcoming', '/tournaments?organization=all');
+  });
+
+  test('@cicd organization member: My organizations with a signups badge fits at desktop widths', async ({
+    page,
+    context,
+  }) => {
+    await loginAsUser(context, DISCOVERY_MEMBER_PK);
     await checkWidths(page, 'upcoming', '/tournaments');
   });
 });

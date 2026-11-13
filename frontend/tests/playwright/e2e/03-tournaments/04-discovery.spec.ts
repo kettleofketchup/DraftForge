@@ -1,9 +1,11 @@
 /**
- * Tournament discovery: Upcoming | Archived tabs, "Your organizations" tiers,
- * filters, search, load more and list refresh after create/delete.
+ * Tournament discovery: Upcoming | Archived tabs, the "My organizations"
+ * default, "Your organizations" tiers, filters, search, load more and list
+ * refresh after create/delete.
  *
- * Seed: backend/tests/data/tournament_discovery.py (orgs 30/31, leagues 30/31,
- * user 1100 = discovery_member, tournaments 900-905).
+ * Seed: backend/tests/data/tournament_discovery.py (orgs 30-32, leagues 30-32,
+ * user 1100 = discovery_member of org 30, tournaments 900-906; 906 belongs to
+ * org 32 and its source event has signups open).
  */
 
 import type { BrowserContext, Locator, Page, Request } from '@playwright/test';
@@ -17,11 +19,16 @@ import {
   postWithCsrf,
   test,
 } from '../../fixtures';
-import { CARD_SELECTOR, findTournamentCard } from '../../helpers/tournament';
+import {
+  CARD_SELECTOR,
+  findTournamentCard,
+  showAllOrganizations,
+} from '../../helpers/tournament';
 
 const DISCOVERY_MEMBER_PK = 1100;
 const HOME_ORG = 30;
 const HOME_LEAGUE = 30;
+const AWAY_ORG = 31;
 const LIST_PATH = '/api/tournaments-list/';
 const FAR_FUTURE_DATE = '2099-12-31T18:00:00Z';
 
@@ -31,6 +38,8 @@ const HOME_LATER = 'Discovery Home Later';
 const HOME_FINISHED = 'Discovery Home Finished';
 const HOME_STALE = 'Discovery Home Stale';
 const AWAY_CUP = 'Discovery Away Cup';
+const OPEN_CUP = 'Discovery Open Signups Cup';
+const HOME_ORG_NAME = 'Discovery Home Organization';
 
 type Tournament = Record<string, unknown>;
 
@@ -137,12 +146,18 @@ test.describe('Tournament discovery (@cicd)', () => {
       await loginAsUser(context, DISCOVERY_MEMBER_PK);
       const urls = recordListRequests(page);
       await page.goto('/tournaments');
-      await expect(page.getByTestId('tournaments-tier-yours')).toBeVisible({ timeout: 15000 });
+      await expect(cardNamed(page, HOME_SOON).first()).toBeVisible({ timeout: 15000 });
       await waitForSettled(page, 'upcoming');
 
       expect(urls.length).toBeGreaterThan(0);
       expect(urls.filter((u) => bucketOf(u) === null)).toEqual([]);
       expect(urls.filter((u) => bucketOf(u) === 'archived')).toEqual([]);
+      // The default waits for the user, so it never fetches the unscoped list first.
+      for (const url of urls) {
+        const params = new URL(url).searchParams;
+        expect(params.get('organizations')).toBe(String(HOME_ORG));
+        expect(params.get('open_signups')).toBe('1');
+      }
     });
 
     test('@cicd archived tab never requests the upcoming list (logged out)', async ({
@@ -213,7 +228,7 @@ test.describe('Tournament discovery (@cicd)', () => {
         }).observe(document, { childList: true, subtree: true });
       }, CARD_SELECTOR);
 
-      await page.goto('/tournaments');
+      await page.goto('/tournaments?organization=all');
       await expect(page.getByTestId('tournaments-tier-yours')).toBeVisible({ timeout: 15000 });
       await waitForSettled(page, 'upcoming');
 
@@ -276,7 +291,7 @@ test.describe('Tournament discovery (@cicd)', () => {
     });
 
     test('@cicd a search with no match shows only the empty state', async ({ page }) => {
-      await page.goto('/tournaments');
+      await page.goto('/tournaments?organization=all');
       await expect(page.getByTestId('tournaments-tier-yours')).toBeVisible({ timeout: 15000 });
 
       await page.getByTestId('tournaments-search').fill('zzq no such tournament xyz');
@@ -285,6 +300,144 @@ test.describe('Tournament discovery (@cicd)', () => {
       await expect(page.getByTestId('tournaments-tier-yours')).toHaveCount(0);
       await expect(page.getByTestId('tournaments-tier-others')).toHaveCount(0);
     });
+  });
+
+  test.describe('My organizations (logged in as an organization member)', () => {
+    test.beforeEach(async ({ context }) => {
+      await loginAsUser(context, DISCOVERY_MEMBER_PK);
+    });
+
+    test('@cicd is the default: one list of own orgs plus open signups, badged', async ({
+      page,
+    }) => {
+      await page.goto('/tournaments');
+      await waitForFilterRow(page);
+      await waitForSettled(page, 'upcoming');
+      const upcoming = panel(page, 'upcoming');
+
+      await expect(page.getByTestId('tournaments-filter-organization')).toContainText(
+        'My organizations',
+      );
+      expect(new URL(page.url()).searchParams.has('organization')).toBe(false);
+      await expect(page.locator('[data-tier]')).toHaveCount(0);
+      await expect(page.getByTestId('tournaments-filter-clear')).toHaveCount(0);
+
+      for (const name of [HOME_LIVE, HOME_SOON, HOME_LATER, OPEN_CUP]) {
+        await expect(cardNamed(upcoming, name)).toHaveCount(1, { timeout: 15000 });
+      }
+      await expect(cardNamed(upcoming, AWAY_CUP)).toHaveCount(0);
+
+      const badge = 'tournament-signups-open-badge';
+      await expect(cardNamed(upcoming, OPEN_CUP).getByTestId(badge)).toHaveText('Signups open');
+      await expect(upcoming.getByTestId(badge)).toHaveCount(1);
+      await expect(cardNamed(upcoming, HOME_SOON).getByTestId(badge)).toHaveCount(0);
+    });
+
+    test('@cicd the dropdown lists My, All, then your and other organizations', async ({
+      page,
+    }) => {
+      await page.goto('/tournaments');
+      await waitForFilterRow(page);
+      await page.getByTestId('tournaments-filter-organization').click();
+      const listbox = page.getByRole('listbox');
+      await expect(listbox).toBeVisible();
+
+      const options = await listbox.getByRole('option').allInnerTexts();
+      expect(options.slice(0, 2)).toEqual(['My organizations', 'All organizations']);
+
+      const groups = listbox.getByRole('group');
+      await expect(groups).toHaveCount(2);
+      await expect(groups.nth(0)).toContainText('Your organizations');
+      await expect(groups.nth(0).getByRole('option')).toHaveCount(1);
+      await expect(groups.nth(0).getByRole('option')).toContainText(HOME_ORG_NAME);
+      await expect(groups.nth(1)).toContainText('Other organizations');
+      await expect(
+        groups.nth(1).getByRole('option', { name: 'Discovery Away Org', exact: true }),
+      ).toHaveCount(1);
+      await expect(
+        groups.nth(1).getByRole('option', { name: 'Discovery Open Org', exact: true }),
+      ).toHaveCount(1);
+      await page.keyboard.press('Escape');
+    });
+
+    test('@cicd switching to All organizations restores the tiers and the URL', async ({
+      page,
+    }) => {
+      await page.goto('/tournaments');
+      await waitForSettled(page, 'upcoming');
+      await showAllOrganizations(page);
+
+      await expect(page).toHaveURL(/organization=all/);
+      await expect(page.getByTestId('tournaments-tier-yours')).toBeVisible({ timeout: 15000 });
+      await waitForSettled(page, 'upcoming');
+      const others = page.locator('[data-tier="others"]');
+      await expect(cardNamed(others, AWAY_CUP)).toHaveCount(1);
+      await expect(cardNamed(others, OPEN_CUP)).toHaveCount(1);
+      await expect(page.getByTestId('tournament-signups-open-badge')).toHaveCount(0);
+
+      await page.getByTestId('tournaments-filter-clear').click();
+      await expect(page).not.toHaveURL(/organization=/);
+      await expect(page.getByTestId('tournaments-filter-organization')).toContainText(
+        'My organizations',
+      );
+      await waitForSettled(page, 'upcoming');
+      await expect(page.locator('[data-tier]')).toHaveCount(0);
+    });
+
+    test('@cicd ?organization=all and ?organization=<id> deep links keep working', async ({
+      page,
+    }) => {
+      await page.goto(`/tournaments?organization=${AWAY_ORG}`);
+      await waitForSettled(page, 'upcoming');
+      const upcoming = panel(page, 'upcoming');
+      await expect(cardNamed(upcoming, AWAY_CUP)).toHaveCount(1, { timeout: 15000 });
+      await expect(cardNamed(upcoming, HOME_SOON)).toHaveCount(0);
+      await expect(page.locator('[data-tier]')).toHaveCount(0);
+
+      await page.goto('/tournaments?organization=mine');
+      await waitForSettled(page, 'upcoming');
+      await expect(page.getByTestId('tournaments-filter-organization')).toContainText(
+        'My organizations',
+      );
+      await expect(cardNamed(panel(page, 'upcoming'), OPEN_CUP)).toHaveCount(1, {
+        timeout: 15000,
+      });
+    });
+
+    test('@cicd archived shows only member organizations', async ({ page }) => {
+      const urls = recordListRequests(page);
+      await page.goto('/tournaments?tab=archived');
+      await waitForSettled(page, 'archived');
+      const archived = panel(page, 'archived');
+      await expect(cardNamed(archived, HOME_FINISHED)).toHaveCount(1, { timeout: 15000 });
+
+      const cards = archived.locator(CARD_SELECTOR);
+      const total = await cards.count();
+      await expect(cards.filter({ hasText: HOME_ORG_NAME })).toHaveCount(total);
+
+      const archivedUrls = urls.filter((u) => bucketOf(u) === 'archived');
+      expect(archivedUrls.length).toBeGreaterThan(0);
+      for (const url of archivedUrls) {
+        const params = new URL(url).searchParams;
+        expect(params.get('organizations')).toBe(String(HOME_ORG));
+        expect(params.has('open_signups')).toBe(false);
+      }
+    });
+  });
+
+  test('@cicd logged out has no My organizations option', async ({ page }) => {
+    await page.goto('/tournaments');
+    await waitForFilterRow(page);
+    await waitForSettled(page, 'upcoming');
+    const trigger = page.getByTestId('tournaments-filter-organization');
+    await expect(trigger).toContainText('All organizations');
+    await trigger.click();
+    const listbox = page.getByRole('listbox');
+    await expect(listbox.getByRole('option', { name: 'All organizations' })).toBeVisible();
+    await expect(listbox.getByRole('option', { name: 'My organizations' })).toHaveCount(0);
+    await expect(listbox.getByRole('group')).toHaveCount(0);
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('tournament-signups-open-badge')).toHaveCount(0);
   });
 
   test('@cicd archived tab lists past and stale tournaments of an organization', async ({

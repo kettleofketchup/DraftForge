@@ -122,8 +122,22 @@ async function searchTab(
 }
 
 /**
- * Find a tournament card on `/tournaments` by searching for its name, first
- * on Upcoming and then, only if Upcoming is empty, on Archived.
+ * Widen `/tournaments` to every organization. Logged-in users start on
+ * "My organizations", which hides tournaments of organizations they are not in.
+ */
+export async function showAllOrganizations(page: Page, timeout = 30_000): Promise<void> {
+  const trigger = page.getByTestId('tournaments-filter-organization');
+  await expect(trigger).toBeVisible({ timeout });
+  if (!(await trigger.textContent())?.includes('My organizations')) return;
+  await trigger.click();
+  await page.getByRole('option', { name: 'All organizations', exact: true }).click();
+  await expect(trigger).toContainText('All organizations');
+}
+
+/**
+ * Find a tournament card on `/tournaments` by searching for its name across
+ * all organizations, first on Upcoming and then, only if Upcoming is empty,
+ * on Archived.
  */
 export async function findTournamentCard(
   page: Page,
@@ -131,6 +145,8 @@ export async function findTournamentCard(
   opts: { timeout?: number } = {},
 ): Promise<Locator> {
   const timeout = opts.timeout ?? 30_000;
+
+  await showAllOrganizations(page, timeout);
 
   const upcomingTab = page.getByTestId('tournaments-tab-upcoming');
   if ((await upcomingTab.getAttribute('aria-selected')) !== 'true') {

@@ -72,6 +72,8 @@ async function serveDiscoveryRows(page: Page): Promise<void> {
       ...t,
       state: 'future',
       date_played: `2099-06-0${i + 1}T18:00:00Z`,
+      // A long zone name wraps the Time tile and shifts the row; keep rows uniform.
+      timezone: 'UTC',
       league: baseLeague,
     }));
     if (row.length > 0) row[0] = { ...row[0], state: 'in_progress' };
