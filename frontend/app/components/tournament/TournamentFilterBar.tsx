@@ -95,7 +95,15 @@ export function TournamentFilterBar({
   const league = parseFilterId(searchParams.get('league'));
 
   const { organizations, isLoading: orgsLoading } = useOrganizations();
-  const { leagues, isLoading: leaguesLoading } = useLeagues(organization);
+  const { leagues: loadedLeagues, isLoading: leaguesLoading } = useLeagues(organization);
+  // Under My organizations a non-member league would match only its open-signup cups.
+  const leagues =
+    scope.kind === 'mine'
+      ? loadedLeagues.filter((l) => {
+          const orgId = l.organization?.pk ?? l.organization_id;
+          return orgId != null && (memberOrgIds ?? []).includes(orgId);
+        })
+      : loadedLeagues;
   const { yours, others } = groupOrganizations(
     organizations,
     isLoggedIn ? memberOrgIds : undefined,

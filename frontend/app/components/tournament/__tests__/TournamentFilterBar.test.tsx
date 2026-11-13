@@ -20,13 +20,24 @@ vi.mock('~/components/organization', () => ({
   }),
 }));
 
+const leagueState = vi.hoisted(() => ({
+  leagues: [{ pk: 31, name: 'Home League', organization: { pk: 30 } }] as Array<{
+    pk: number;
+    name: string;
+    organization?: { pk: number } | null;
+    organization_id?: number;
+  }>,
+}));
+
 vi.mock('~/components/league', () => ({
   useLeagues: () => ({
-    leagues: [{ pk: 31, name: 'Home League', organization: { pk: 30 } }],
+    leagues: leagueState.leagues,
     isLoading: false,
     refetch: vi.fn(),
   }),
 }));
+
+const DEFAULT_LEAGUES = leagueState.leagues;
 
 function LocationProbe() {
   const location = useLocation();
@@ -83,6 +94,7 @@ function searchParamsShown(): URLSearchParams {
 
 afterEach(() => {
   orgState.loading = false;
+  leagueState.leagues = DEFAULT_LEAGUES;
 });
 
 describe('TournamentFilterBar', () => {
@@ -312,5 +324,33 @@ describe('nextFilterParams', () => {
     const next = nextFilterParams(base(), 'league', '5');
     expect(next.get('league')).toBe('5');
     expect(next.get('organization')).toBe('30');
+  });
+});
+
+describe('TournamentFilterBar leagues under My organizations', () => {
+  function openLeagueSelect(): HTMLElement {
+    const trigger = screen.getByRole('combobox', { name: /league/i });
+    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false, pointerType: 'mouse' });
+    return screen.getByRole('listbox');
+  }
+
+  const MIXED = [
+    { pk: 31, name: 'Home League', organization: { pk: 30 } },
+    { pk: 32, name: 'Away League', organization: { pk: 31 } },
+    { pk: 33, name: 'Staffed League', organization_id: 30 },
+  ];
+
+  it('lists only leagues of member organizations', () => {
+    leagueState.leagues = MIXED;
+    renderBar('/tournaments', '', vi.fn(), MEMBER);
+    const options = within(openLeagueSelect()).getAllByRole('option').map((o) => o.textContent);
+    expect(options).toEqual(['All leagues', 'Home League', 'Staffed League']);
+  });
+
+  it('lists every league under All organizations', () => {
+    leagueState.leagues = MIXED;
+    renderBar('/tournaments?organization=all', '', vi.fn(), MEMBER);
+    const options = within(openLeagueSelect()).getAllByRole('option').map((o) => o.textContent);
+    expect(options).toEqual(['All leagues', 'Home League', 'Away League', 'Staffed League']);
   });
 });
