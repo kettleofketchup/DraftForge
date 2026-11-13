@@ -1,6 +1,7 @@
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
+from django.conf import settings
 from django.test import TestCase
 from django.utils import timezone
 
@@ -9,6 +10,7 @@ from events.models import Event
 from org.contributions.kinds import ContributionKind
 from org.contributions.periods import parse_period
 from org.contributions.queries import (
+    MAX_MONTHS,
     leaderboard,
     member_entries,
     member_monthly,
@@ -127,6 +129,17 @@ class ContributionQueriesTest(TestCase):
             member_totals(self._org_user(self.alice), now=NOW)["all_time"], 10
         )
 
+    def test_leaderboard_query_count_and_ledger_uncached(self) -> None:
+        self.assertNotIn("org.contributionentry", settings.CACHEOPS)
+        self._seed()
+        self._award(self.owner, 7, NOV_5)
+        period = parse_period(self.org, None)
+        with self.assertNumQueries(2):
+            rows = leaderboard(self.org, period)
+            avatars = [r["avatarUrl"] for r in rows]
+        self.assertEqual(len(rows), 3)
+        self.assertEqual(len(avatars), 3)
+
     def test_member_entries_newest_first_within_period(self) -> None:
         older = self._award(self.alice, 10, OCT31_11PM_NY, event=self.event)
         newer = self._award(self.alice, 5, NOV_5)
@@ -160,6 +173,17 @@ class ContributionQueriesTest(TestCase):
         self.assertEqual(months[0], {"month": "2025-12", "points": 0})
         self.assertEqual(months[1], {"month": "2026-01", "points": 2})
         self.assertEqual(months[-1]["month"], "2026-11")
+
+    def test_member_monthly_clamps_months(self) -> None:
+        self._award(self.alice, 5, NOV_5)
+        ou = self._org_user(self.alice)
+        self.assertEqual(
+            member_monthly(ou, months=0, now=NOW), [{"month": "2026-11", "points": 5}]
+        )
+        self.assertEqual(len(member_monthly(ou, months=-3, now=NOW)), 1)
+        huge = member_monthly(ou, months=10_000, now=NOW)
+        self.assertEqual(len(huge), MAX_MONTHS)
+        self.assertEqual(huge[-1], {"month": "2026-11", "points": 5})
 
     def test_member_totals(self) -> None:
         self._seed()

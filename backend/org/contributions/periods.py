@@ -64,8 +64,11 @@ def parse_period(org: Organization, value: str | None) -> Period:
         raise ValueError(f"invalid month in period {value!r}")
     if not _MIN_YEAR <= year <= _MAX_YEAR:
         raise ValueError(f"year out of range in period {value!r}")
+    return month_period(resolve_org_tz(org), year, month)
+
+
+def month_period(tz: ZoneInfo, year: int, month: int) -> Period:
     next_year, next_month = (year + 1, 1) if month == 12 else (year, month + 1)
-    tz = resolve_org_tz(org)
     return Period(
         start=_local_to_utc(tz, date(year, month, 1), time(0)),
         end=_local_to_utc(tz, date(next_year, next_month, 1), time(0)),

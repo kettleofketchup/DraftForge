@@ -6,7 +6,7 @@ from django.db.models import Count, Q, QuerySet, Sum
 from django.utils import timezone
 
 from app.models import Organization
-from org.contributions.periods import Period, parse_period, resolve_org_tz
+from org.contributions.periods import Period, month_period, resolve_org_tz
 from org.models import ContributionEntry, OrgUser
 from user.querysets import with_user_profiles
 
@@ -95,21 +95,24 @@ def _month_key(year: int, month: int) -> str:
     return f"{year:04d}-{month:02d}"
 
 
+MAX_MONTHS = 120
+
+
 def member_monthly(
     org_user: OrgUser, *, months: int = 12, now: datetime | None = None
 ) -> list[MonthPoints]:
-    org = org_user.organization
-    tz = resolve_org_tz(org)
+    months = max(1, min(months, MAX_MONTHS))
+    tz = resolve_org_tz(org_user.organization)
     local_now = (now or timezone.now()).astimezone(tz)
     index = local_now.year * 12 + local_now.month - 1
-    keys = [
-        _month_key(i // 12, i % 12 + 1) for i in range(index - months + 1, index + 1)
-    ]
-    start = parse_period(org, keys[0]).start
+    first = index - months + 1
+    keys = [_month_key(i // 12, i % 12 + 1) for i in range(first, index + 1)]
+    start = month_period(tz, first // 12, first % 12 + 1).start
+    end = month_period(tz, local_now.year, local_now.month).end
     buckets: defaultdict[str, int] = defaultdict(int)
     for occurred_at, points in (
         ContributionEntry.objects.nocache()
-        .filter(org_user=org_user, occurred_at__gte=start)
+        .filter(org_user=org_user, occurred_at__gte=start, occurred_at__lt=end)
         .values_list("occurred_at", "points")
     ):
         local = occurred_at.astimezone(tz)
@@ -118,8 +121,8 @@ def member_monthly(
 
 
 def member_totals(org_user: OrgUser, *, now: datetime | None = None) -> MemberTotals:
-    org = org_user.organization
-    local_now = (now or timezone.now()).astimezone(resolve_org_tz(org))
-    this_month = parse_period(org, _month_key(local_now.year, local_now.month))
+    tz = resolve_org_tz(org_user.organization)
+    local_now = (now or timezone.now()).astimezone(tz)
+    this_month = month_period(tz, local_now.year, local_now.month)
     qs = ContributionEntry.objects.nocache().filter(org_user=org_user)
     return MemberTotals(all_time=_sum(qs), this_month=_sum(_in_period(qs, this_month)))
