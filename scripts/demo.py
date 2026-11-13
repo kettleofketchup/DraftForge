@@ -94,21 +94,21 @@ def generate_bracket(tournament_pk: int) -> bool:
     return True
 
 
-def run_demo(spec: str = "", workers: int = 1) -> None:
+def run_demo(spec: str = "", workers: int = 1) -> int:
     flush_test_redis()
     pw_args = ["--config=playwright.demo.config.ts", f"--workers={workers}"]
     if spec:
         pw_args += ["--grep", spec]
     print(f"  Running: npx playwright test {' '.join(pw_args)}")
-    # A failing demo still leaves partial videos worth copying, so the exit
-    # status is reported, not raised.
+    # Returned, not raised: a failed run still leaves partial videos to copy.
     result = subprocess.run(
         ["npx", "playwright", "test", *pw_args],
         cwd=paths.FRONTEND_PATH,
         env={**os.environ, **playwright_env()},
     )
     if result.returncode != 0:
-        print(f"  Warning: playwright exited {result.returncode}")
+        print(f"  FAILED: playwright exited {result.returncode}", file=sys.stderr)
+    return result.returncode
 
 
 def copy_demo_videos() -> None:
@@ -156,29 +156,31 @@ def copy_demo_snapshots() -> None:
         print(f"\n{copied} snapshots saved to: {docs_snapshots}")
 
 
-def create(spec: str = "") -> None:
+def create(spec: str = "") -> int:
     print("=== Demo Recording ===")
     if spec:
         reset_demo_data(spec)
     else:
         for demo_key in DEMO_RESET_KEYS:
             reset_demo_data(demo_key)
-    run_demo(spec=spec, workers=1)
+    status = run_demo(spec=spec, workers=1)
     copy_demo_videos()
+    return status
 
 
-def _single(title: str, spec: str, reset_key: str | None = None) -> Callable[[], None]:
-    def record() -> None:
+def _single(title: str, spec: str, reset_key: str | None = None) -> Callable[[], int]:
+    def record() -> int:
         print(f"=== {title} ===")
         if reset_key:
             reset_demo_data(reset_key)
-        run_demo(spec=spec)
+        status = run_demo(spec=spec)
         copy_demo_videos()
+        return status
 
     return record
 
 
-SINGLE_DEMOS: dict[str, Callable[[], None]] = {
+SINGLE_DEMOS: dict[str, Callable[[], int]] = {
     "shuffle": _single("Shuffle Draft Demo", "shuffle", "shuffle"),
     "snake": _single("Snake Draft Demo", "snake", "snake"),
     "herodraft": _single("HeroDraft Demo", "herodraft", "herodraft"),
@@ -188,15 +190,16 @@ SINGLE_DEMOS: dict[str, Callable[[], None]] = {
 }
 
 
-def record_all() -> None:
+def record_all() -> int:
     print("=== Recording All Demos ===")
     done: set[str] = set()
     for demo_key, reset_key in DEMO_RESET_KEYS.items():
         if reset_key not in done:
             reset_demo_data(demo_key)
             done.add(reset_key)
-    run_demo(workers=1)
+    status = run_demo(workers=1)
     copy_demo_videos()
+    return status
 
 
 def clean() -> None:
@@ -301,7 +304,9 @@ def gifs(
             text=True,
         )
         if result.returncode == 0:
-            print(f"  Created: {gif_path.name} ({gif_path.stat().st_size / 1024:.1f} KB)")
+            print(
+                f"  Created: {gif_path.name} ({gif_path.stat().st_size / 1024:.1f} KB)"
+            )
         else:
             failed += 1
             print(f"  FAILED: {gif_path.name}")
@@ -398,19 +403,20 @@ def trim(trim_start: float | None = None, auto: bool = True) -> int:
 
 
 def quick(duration: int = 10, fps: int = 12, width: int = 400) -> int:
-    create()
+    recorded = create()
     trimmed = trim()
     converted = gifs(duration=duration, fps=fps, width=width)
-    return trimmed or converted
+    return recorded or trimmed or converted
 
 
-def snapshots() -> None:
+def snapshots() -> int:
     print("=== Site Snapshots ===")
     reset = reset_demo_data("herodraft")
     if reset and reset.get("tournament_pk"):
         generate_bracket(reset["tournament_pk"])
-    run_demo(spec="Site Snapshots")
+    status = run_demo(spec="Site Snapshots")
     copy_demo_snapshots()
+    return status
 
 
 def _git_out(cmd: str) -> str | None:
@@ -548,13 +554,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     ns = _parser().parse_args(argv)
     try:
         if ns.cmd == "all":
-            record_all()
+            return record_all()
         elif ns.cmd == "create":
-            create(ns.spec)
+            return create(ns.spec)
         elif ns.cmd in SINGLE_DEMOS:
-            SINGLE_DEMOS[ns.cmd]()
+            return SINGLE_DEMOS[ns.cmd]()
         elif ns.cmd == "snapshots":
-            snapshots()
+            return snapshots()
         elif ns.cmd == "clean":
             clean()
         elif ns.cmd == "git-cleanup":
