@@ -3,7 +3,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("app", "0100_draftevent_options_changed"),
+        ("app", "0102_tournament_dota_lobby_password"),
     ]
 
     operations = [
