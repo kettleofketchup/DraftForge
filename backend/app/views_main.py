@@ -75,6 +75,7 @@ from .permissions_org import (
     IsOrgAdmin,
     IsOrgOwner,
     can_manage_game,
+    check_tournament_league_change,
     can_view_league_members,
     can_view_league_members_from_payload,
     can_view_org_members,
@@ -503,6 +504,11 @@ class TournamentView(viewsets.ModelViewSet):
         return self.partial_update(request, *args, **kwargs)
 
     def perform_update(self, serializer: TournamentSerializer) -> None:
+        check_tournament_league_change(
+            self.request.user,
+            serializer.instance,
+            serializer.validated_data.get("league", serializer.instance.league),
+        )
         opts = serializer.validated_data.pop("draft_options", None)
         with transaction.atomic():
             serializer.save()
@@ -548,19 +554,9 @@ class TournamentView(viewsets.ModelViewSet):
 
     def perform_create(self, serializer: TournamentSerializer) -> None:
         """Check that user can create tournament in the specified league."""
-        league_id = self.request.data.get("league")
-        if not league_id:
-            raise ValidationError(
-                {"league": "A league is required when creating a tournament."}
-            )
-        try:
-            league = League.objects.get(pk=league_id)
-            if not has_league_admin_access(self.request.user, league):
-                raise PermissionDenied(
-                    "You do not have permission to create tournaments in this league."
-                )
-        except League.DoesNotExist:
-            raise ValidationError({"league": "League not found."})
+        check_tournament_league_change(
+            self.request.user, None, serializer.validated_data.get("league")
+        )
         opts = serializer.validated_data.pop("draft_options", None)
         with transaction.atomic():
             serializer.save()
