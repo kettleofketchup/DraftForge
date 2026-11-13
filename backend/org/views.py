@@ -11,7 +11,9 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from app.cache_utils import invalidate_after_commit
 from app.models import (
+    CustomUser,
     DraftRound,
     LeagueLog,
     LeagueMatchParticipant,
@@ -23,6 +25,7 @@ from app.models import (
 )
 from app.permissions_org import IsOrgStaff
 from league.models import LeagueUser
+from org.contributions.services import reassign_member, repoint_user_attribution
 from org.models import OrgUser
 from org.serializers import ProfileClaimRequestSerializer
 from steam.models import LeaguePlayerStats, PlayerMatchStats
@@ -181,7 +184,7 @@ class ClaimRequestViewSet(viewsets.ModelViewSet):
             status=status.HTTP_200_OK,
         )
 
-    def _merge_profiles(self, claimer, target_user):
+    def _merge_profiles(self, claimer: CustomUser, target_user: CustomUser) -> None:
         """
         Merge target_user's profile into claimer.
 
@@ -224,6 +227,7 @@ class ClaimRequestViewSet(viewsets.ModelViewSet):
                 if org_user.mmr > existing.mmr:
                     existing.mmr = org_user.mmr
                     existing.save()
+                reassign_member(org_user, existing)
                 org_user.delete()
             else:
                 org_user.user = claimer
@@ -281,7 +285,9 @@ class ClaimRequestViewSet(viewsets.ModelViewSet):
         LeagueMatchParticipant.objects.filter(player=target_user).update(player=claimer)
 
         # Steam match stats
-        PlayerMatchStats.objects.filter(user=target_user).invalidated_update(user=claimer)
+        PlayerMatchStats.objects.filter(user=target_user).invalidated_update(
+            user=claimer
+        )
 
         # League player stats
         for stats in LeaguePlayerStats.objects.filter(user=target_user):
@@ -310,6 +316,13 @@ class ClaimRequestViewSet(viewsets.ModelViewSet):
         OrgLog.objects.filter(target_user=target_user).update(target_user=claimer)
         LeagueLog.objects.filter(actor=target_user).update(actor=claimer)
         LeagueLog.objects.filter(target_user=target_user).update(target_user=claimer)
+
+        repoint_user_attribution(target_user, claimer)
+
+        for org in list(target_user.promoter_organizations.all()):
+            org.promoters.add(claimer)
+            org.promoters.remove(target_user)
+            invalidate_after_commit(org)
 
         # Clear steam_account_id from target before saving claimer (to avoid UNIQUE constraint)
         target_user.steam_account_id = None

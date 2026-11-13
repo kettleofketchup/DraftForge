@@ -11,10 +11,15 @@ from app.models import CustomUser, Organization, OrgLog
 from app.permissions_org import is_org_role_holder
 from events.models import Event
 from events.services import resolve_or_create_org_user
-from org.contributions.kinds import DEFAULT_POINTS, RATED_KINDS, ContributionKind
+from org.contributions.kinds import (
+    DEFAULT_POINTS,
+    EVENT_STAFF_KINDS,
+    RATED_KINDS,
+    ContributionKind,
+)
 from org.contributions.periods import local_day_start_utc, local_noon_utc
 from org.contributions.points import points_for
-from org.models import ContributionEntry, ContributionPointValue, OrgUser
+from org.models import ContributionEntry, ContributionPointValue, OrgFeature, OrgUser
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
@@ -357,3 +362,60 @@ def delete_user_entries(user: CustomUser, *, actor: CustomUser | None) -> int:
         org_ids=sorted(per_org),
     )
     return deleted
+
+
+@transaction.atomic
+def reassign_member(drop: OrgUser, keep: OrgUser) -> int:
+    if drop.organization_id != keep.organization_id:
+        raise ValueError("cannot reassign contributions across organizations")
+    if drop.pk == keep.pk:
+        return 0
+    entries = ContributionEntry.objects.nocache()
+    kept_staff = set(
+        entries.filter(
+            org_user=keep, kind__in=EVENT_STAFF_KINDS, event__isnull=False
+        ).values_list("event_id", "kind")
+    )
+    discard: list[int] = []
+    move: list[int] = []
+    for pk, event_id, kind in entries.filter(org_user=drop).values_list(
+        "pk", "event_id", "kind"
+    ):
+        if event_id is not None and (event_id, kind) in kept_staff:
+            discard.append(pk)
+        else:
+            move.append(pk)
+    entries.filter(pk__in=discard).delete()
+    moved = entries.filter(pk__in=move).update(org_user=keep, updated_at=timezone.now())
+
+    hosted = entries.filter(
+        org_user=keep, kind=ContributionKind.EVENT_HOST, event__isnull=False
+    ).values("event_id")
+    deduped, _ = entries.filter(
+        org_user=keep, kind=ContributionKind.EVENT_HELPER, event_id__in=hosted
+    ).delete()
+
+    log.info(
+        "contributions_member_reassigned",
+        system="org",
+        subsystem="contributions",
+        org_id=keep.organization_id,
+        drop_org_user_id=drop.pk,
+        keep_org_user_id=keep.pk,
+        moved=moved,
+        discarded=len(discard),
+        helper_deduped=deduped,
+    )
+    return moved
+
+
+def repoint_user_attribution(drop: CustomUser, keep: CustomUser) -> int:
+    return (
+        ContributionEntry.objects.nocache()
+        .filter(awarded_by=drop)
+        .update(awarded_by=keep)
+        + OrgFeature.objects.nocache().filter(enabled_by=drop).update(enabled_by=keep)
+        + ContributionPointValue.objects.nocache()
+        .filter(updated_by=drop)
+        .update(updated_by=keep)
+    )

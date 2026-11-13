@@ -39,6 +39,7 @@ from social_django.utils import load_strategy, psa
 from app.functions.teamdraft import apply_draft_options
 from league.models import LeagueUser
 from league.serializers import LeagueUserSerializer
+from org.contributions.services import delete_user_entries
 from org.features import FeatureKey, active_features
 from org.models import OrgUser
 from org.serializers import OrgUserSerializer
@@ -296,6 +297,11 @@ class UserView(viewsets.ModelViewSet):
             )
             if not has_access:
                 self.permission_denied(request)
+
+    def perform_destroy(self, instance: CustomUser) -> None:
+        with transaction.atomic():
+            delete_user_entries(instance, actor=self.request.user)
+            instance.delete()
 
     @permission_classes((IsAdminUser,))
     def delete(self, request: Request, *args: Any, **kwargs: Any) -> Response:

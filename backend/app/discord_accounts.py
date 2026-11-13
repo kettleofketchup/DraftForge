@@ -18,6 +18,8 @@ from django.db import IntegrityError, transaction
 
 from app.cache_utils import invalidate_obj
 from app.models import CustomUser
+from org.contributions.services import reassign_member, repoint_user_attribution
+from org.models import OrgUser
 from telemetry.logging import get_logger
 
 logger = get_logger(__name__)
@@ -89,6 +91,16 @@ def merge_discord_accounts(keep: CustomUser, drop: CustomUser) -> CustomUser:
     # (some relations moved, both accounts still alive). (select_for_update is
     # a no-op on this project's SQLite, so atomicity is what guards us here.)
     with transaction.atomic():
+        keep_org_users = {
+            ou.organization_id: ou for ou in OrgUser.objects.filter(user=keep)
+        }
+        for drop_ou in OrgUser.objects.filter(user=drop):
+            keep_ou = keep_org_users.get(drop_ou.organization_id)
+            if keep_ou is not None:
+                reassign_member(drop_ou, keep_ou)
+                drop_ou.delete()
+        repoint_user_attribution(drop, keep)
+
         for rel in drop._meta.related_objects:
             accessor = rel.get_accessor_name()
             field_name = rel.field.name
