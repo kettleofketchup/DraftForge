@@ -52,6 +52,7 @@ from app.tournament_list import (
 )
 from league.models import LeagueUser
 from league.serializers import LeagueUserSerializer
+from org.membership import member_organization_ids
 from org.models import OrgUser
 from org.serializers import OrgUserSerializer
 from telemetry.logging import get_logger
@@ -820,6 +821,11 @@ def current_user(request: Request) -> Response:
     user = request.user
     if request.user.is_authenticated:
         data = UserSerializer(user).data
+        data["member_organization_ids"] = member_organization_ids(
+            user,
+            admin_org_ids=data["admin_organization_ids"],
+            staff_org_ids=data["staff_organization_ids"],
+        )
 
         # Add active drafts info
         active_drafts = []
