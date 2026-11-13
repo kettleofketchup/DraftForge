@@ -5,6 +5,7 @@ import { UserSchema } from '../user';
 import { DraftOptionsSchema, DraftSchema } from '../teamdraft/schemas';
 import { GameSchema } from '../game/schemas';
 import { TeamSchema } from '../team';
+import { LeagueOrganizationSchema } from '../league/schemas';
 
 // Tournament type values (keys from TOURNAMENT_TYPE enum)
 export const TOURNAMENT_TYPE_VALUES = ['single_elimination', 'double_elimination', 'swiss'] as const;
@@ -52,6 +53,7 @@ export const LeagueMinimalSchema = z.object({
   pk: z.number(),
   name: z.string(),
   organization_name: z.string().nullable(),
+  organization: LeagueOrganizationSchema.nullable().optional(),
 });
 
 export const SourceEventSchema = z.object({
@@ -61,6 +63,7 @@ export const SourceEventSchema = z.object({
     id: z.number(),
     name: z.string(),
   }).nullable(),
+  organization_id: z.number().optional(),
 });
 
 export const TournamentSchema = z.object({
@@ -98,9 +101,11 @@ export const TournamentSchema = z.object({
   dota_lobby_launch: DotaLobbyLaunchSchema.default('manual'),
   dota_lobby_region: z.string().default(''),
   discord_send_lobby_info: z.boolean().default(false),
-  // Read-only lobby context (edited through the event settings)
+  game_type: z.number().optional(),
   game_mode: z.string().nullable().optional(),
   lobby_steam_league_id: z.number().nullable().optional(),
+  captains_draft_time: z.number().optional(),
+  custom_game_name: z.string().optional(),
 });
 
 // Schema for creating a new tournament
@@ -119,6 +124,11 @@ export const CreateTournamentSchema = z.object({
   dota_lobby_launch: DotaLobbyLaunchSchema.default('manual'),
   dota_lobby_region: z.string().max(32, 'Region is at most 32 characters').default(''),
   discord_send_lobby_info: z.boolean().default(false),
+  game_type: z.number().default(1),
+  game_mode: z.string().default('normal'),
+  lobby_steam_league_id: z.number().nullable().default(null),
+  captains_draft_time: z.number().int().min(1, 'Draft time must be at least 1 second').default(10),
+  custom_game_name: z.string().max(255).default(''),
 });
 
 export type CreateTournamentInput = z.infer<typeof CreateTournamentSchema>;

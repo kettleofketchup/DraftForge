@@ -7,7 +7,7 @@ import {
 } from '~/components/organization/schemas';
 
 // Lightweight org schema for league list view
-const LeagueOrganizationSchema = z.object({
+export const LeagueOrganizationSchema = z.object({
   pk: z.number(),
   name: z.string(),
   logo: z.string().optional(),
