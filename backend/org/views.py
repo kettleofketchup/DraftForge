@@ -11,7 +11,7 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from app.cache_utils import invalidate_after_commit
+from app.cache_utils import invalidate_after_commit, invalidate_model
 from app.models import (
     CustomUser,
     DraftRound,
@@ -24,8 +24,13 @@ from app.models import (
     Team,
 )
 from app.permissions_org import IsOrgStaff
+from events.models import Event
 from league.models import LeagueUser
-from org.contributions.services import reassign_member, repoint_user_attribution
+from org.contributions.services import (
+    dedupe_event_staff,
+    reassign_member,
+    repoint_user_attribution,
+)
 from org.models import OrgUser
 from org.serializers import ProfileClaimRequestSerializer
 from steam.models import LeaguePlayerStats, PlayerMatchStats
@@ -232,6 +237,13 @@ class ClaimRequestViewSet(viewsets.ModelViewSet):
             else:
                 org_user.user = claimer
                 org_user.save()
+
+        Event.objects.filter(host=target_user).update(host=claimer)
+        for event in list(Event.objects.nocache().filter(helpers=target_user)):
+            event.helpers.add(claimer)
+            event.helpers.remove(target_user)
+        dedupe_event_staff(claimer)
+        invalidate_model(Event)
 
         # LeagueUser memberships
         for league_user in LeagueUser.objects.filter(user=target_user):

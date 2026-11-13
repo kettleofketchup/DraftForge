@@ -18,7 +18,11 @@ from django.db import IntegrityError, transaction
 
 from app.cache_utils import invalidate_obj
 from app.models import CustomUser
-from org.contributions.services import reassign_member, repoint_user_attribution
+from org.contributions.services import (
+    dedupe_event_staff,
+    reassign_member,
+    repoint_user_attribution,
+)
 from org.models import OrgUser
 from telemetry.logging import get_logger
 
@@ -131,6 +135,8 @@ def merge_discord_accounts(keep: CustomUser, drop: CustomUser) -> CustomUser:
             # Reverse FK (one-to-many): repoint each row at ``keep``.
             for obj in list(manager.all()):
                 _repoint(obj, field_name)
+
+        dedupe_event_staff(keep)
 
         # Purge keep's reverse-relation caches before reading/writing through
         # them in the carryover loop. The related-objects loop above poisoned

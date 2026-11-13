@@ -7,6 +7,7 @@ from django.db import transaction
 from django.db.models import Count
 from django.utils import timezone
 
+from app.cache_utils import invalidate_after_commit
 from app.models import CustomUser, Organization, OrgLog
 from app.permissions_org import is_org_role_holder
 from events.constants import EventState
@@ -500,3 +501,30 @@ def repoint_user_attribution(drop: CustomUser, keep: CustomUser) -> int:
         .filter(updated_by=drop)
         .update(updated_by=keep)
     )
+
+
+@transaction.atomic
+def dedupe_event_staff(user: CustomUser) -> int:
+    events = list(
+        Event.objects.nocache()
+        .filter(host=user, helpers=user)
+        .select_related("organization")
+        .distinct()
+    )
+    synced = 0
+    for event in events:
+        event.helpers.remove(user)
+        if should_sync_staff(event):
+            sync_event_staff_entries(event)
+            synced += 1
+    if events:
+        invalidate_after_commit(*events)
+    log.info(
+        "event_staff_deduped",
+        system="org",
+        subsystem="contributions",
+        user_id=user.pk,
+        event_ids=[event.pk for event in events],
+        synced=synced,
+    )
+    return len(events)

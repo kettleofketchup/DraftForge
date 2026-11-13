@@ -1,4 +1,5 @@
 from datetime import timedelta
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
 from django.contrib.auth.models import Permission
@@ -11,9 +12,14 @@ from rest_framework.test import APIClient
 
 from app.discord_accounts import merge_discord_accounts
 from app.models import CustomUser, Organization, ProfileClaimRequest
+from events.constants import EventState
 from events.models import Event
 from org.contributions.kinds import ContributionKind
-from org.contributions.services import reassign_member, repoint_user_attribution
+from org.contributions.services import (
+    dedupe_event_staff,
+    reassign_member,
+    repoint_user_attribution,
+)
 from org.feature_keys import FeatureKey
 from org.models import ContributionEntry, ContributionPointValue, OrgFeature, OrgUser
 
@@ -318,6 +324,164 @@ class DiscordReclaimContributionsTest(_LedgerFixture):
             ).values_list("customuser_id", flat=True)
         )
         self.assertEqual(promoter_ids, {self.keep.pk})
+
+
+class _EventStaffMergeCases(_LedgerFixture if TYPE_CHECKING else object):
+    src: CustomUser
+    dst: CustomUser
+    src_ou: OrgUser
+    dst_ou: OrgUser
+
+    def _merge(self) -> None:
+        raise NotImplementedError
+
+    def _complete(self, event: Event) -> None:
+        Event.objects.filter(pk=event.pk).update(
+            state=EventState.COMPLETED, contributions_awarded_at=timezone.now()
+        )
+
+    def _staff(self, event: Event) -> tuple[int | None, set[int]]:
+        fresh = Event.objects.nocache().get(pk=event.pk)
+        return fresh.host_id, set(fresh.helpers.nocache().values_list("pk", flat=True))
+
+    def _staff_entries(self, event: Event) -> list[tuple[str, int]]:
+        return list(
+            ContributionEntry.objects.nocache()
+            .filter(event=event)
+            .values_list("kind", "org_user_id")
+        )
+
+    def test_merge_src_host_dst_helper_same_event(self) -> None:
+        self._complete(self.event_a)
+        self.event_a.host = self.src
+        self.event_a.save(update_fields=["host"])
+        self.event_a.helpers.add(self.dst)
+        self._entry(self.src_ou, ContributionKind.EVENT_HOST, 10, self.event_a)
+        self._entry(self.dst_ou, ContributionKind.EVENT_HELPER, 5, self.event_a)
+
+        self._merge()
+
+        self.assertEqual(self._staff(self.event_a), (self.dst.pk, set()))
+        self.assertEqual(
+            self._staff_entries(self.event_a),
+            [(ContributionKind.EVENT_HOST, self.dst_ou.pk)],
+        )
+        self.assertEqual(self._total(self.dst_ou), 10)
+
+    def test_merge_dst_host_src_helper_same_event(self) -> None:
+        self._complete(self.event_a)
+        self.event_a.host = self.dst
+        self.event_a.save(update_fields=["host"])
+        self.event_a.helpers.add(self.src)
+        self._entry(self.dst_ou, ContributionKind.EVENT_HOST, 10, self.event_a)
+        self._entry(self.src_ou, ContributionKind.EVENT_HELPER, 5, self.event_a)
+
+        self._merge()
+
+        self.assertEqual(self._staff(self.event_a), (self.dst.pk, set()))
+        self.assertEqual(
+            self._staff_entries(self.event_a),
+            [(ContributionKind.EVENT_HOST, self.dst_ou.pk)],
+        )
+
+    def test_merge_moves_host_and_helper_roles(self) -> None:
+        self.event_a.host = self.src
+        self.event_a.save(update_fields=["host"])
+        self.event_b.helpers.add(self.src)
+
+        self._merge()
+
+        self.assertEqual(self._staff(self.event_a), (self.dst.pk, set()))
+        self.assertEqual(self._staff(self.event_b), (None, {self.dst.pk}))
+
+    def test_merge_dedupes_unawarded_event_without_entries(self) -> None:
+        self.event_a.host = self.src
+        self.event_a.save(update_fields=["host"])
+        self.event_a.helpers.add(self.dst)
+
+        self._merge()
+
+        self.assertEqual(self._staff(self.event_a), (self.dst.pk, set()))
+        self.assertEqual(self._staff_entries(self.event_a), [])
+
+
+class ClaimMergeEventStaffTest(_EventStaffMergeCases, _LedgerFixture):
+    def setUp(self) -> None:
+        super().setUp()
+        admin = CustomUser.objects.create_superuser(
+            username="claim_staff_admin", password="x"
+        )
+        self.src = CustomUser.objects.create_user(
+            username="claim_staff_target", password="x"
+        )
+        self.dst = CustomUser.objects.create_user(
+            username="claim_staff_claimer", password="x", discordId="777000222"
+        )
+        self.src_ou = OrgUser.objects.create(user=self.src, organization=self.org)
+        self.dst_ou = OrgUser.objects.create(user=self.dst, organization=self.org)
+        self.claim = ProfileClaimRequest.objects.create(
+            claimer=self.dst,
+            target_user=self.src,
+            organization=self.org,
+            status=ProfileClaimRequest.Status.PENDING,
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(admin)
+
+    def _merge(self) -> None:
+        response = self.client.post(f"/api/claim-requests/{self.claim.pk}/approve/")
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertFalse(CustomUser.objects.filter(pk=self.src.pk).exists())
+
+
+class DiscordReclaimEventStaffTest(_EventStaffMergeCases, _LedgerFixture):
+    def setUp(self) -> None:
+        super().setUp()
+        self.dst = CustomUser.objects.create(
+            username="dc_staff_keep", discordId="888222"
+        )
+        self.src = CustomUser.objects.create(username="dc_staff_drop")
+        self.dst_ou = OrgUser.objects.create(user=self.dst, organization=self.org)
+        self.src_ou = OrgUser.objects.create(user=self.src, organization=self.org)
+
+    def _merge(self) -> None:
+        merge_discord_accounts(keep=self.dst, drop=self.src)
+        self.assertFalse(CustomUser.objects.filter(pk=self.src.pk).exists())
+
+
+class DedupeEventStaffTest(_LedgerFixture):
+    def test_removes_host_from_helpers_and_syncs_awarded_event(self) -> None:
+        user = CustomUser.objects.create_user(username="dedupe_u", password="x")
+        ou = OrgUser.objects.create(user=user, organization=self.org)
+        Event.objects.filter(pk=self.event_a.pk).update(
+            state=EventState.COMPLETED,
+            contributions_awarded_at=timezone.now(),
+            host=user,
+        )
+        self.event_a.helpers.add(user)
+        self.event_b.helpers.add(user)
+        self._entry(ou, ContributionKind.EVENT_HOST, 10, self.event_a)
+        self._entry(ou, ContributionKind.EVENT_HELPER, 5, self.event_a)
+
+        self.assertEqual(dedupe_event_staff(user), 1)
+
+        self.assertFalse(
+            Event.objects.nocache().get(pk=self.event_a.pk).helpers.exists()
+        )
+        self.assertTrue(
+            Event.objects.nocache()
+            .get(pk=self.event_b.pk)
+            .helpers.filter(pk=user.pk)
+            .exists()
+        )
+        self.assertEqual(
+            list(
+                ContributionEntry.objects.nocache()
+                .filter(event=self.event_a)
+                .values_list("kind", flat=True)
+            ),
+            [ContributionKind.EVENT_HOST],
+        )
 
 
 class UserDeleteWithContributionsTest(_LedgerFixture):
