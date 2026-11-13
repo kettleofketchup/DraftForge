@@ -26,6 +26,12 @@ import {
 } from '../../ui/card';
 import { Item, ItemContent, ItemMedia, ItemTitle } from '../../ui/item';
 import { SimpleAvatar } from '../../ui/simple-avatar';
+import {
+  STATE_TILE_CLASSES,
+  TOURNAMENT_CARD_CELL,
+  TOURNAMENT_CARD_SURFACE,
+  stateTone,
+} from './cardStyles';
 import { TournamentRemoveButton } from './deleteButton';
 import { TournamentEditModal } from './TournamentEditModal';
 interface Props {
@@ -144,6 +150,7 @@ export const TournamentCard: React.FC<Props> = React.memo(({
   const now = new Date();
   const live = isTournamentLive(tournament, now, bucket);
   const shownState = displayState(tournament, now, bucket);
+  const tone = stateTone(shownState);
   const league = leagueInfo(tournament);
 
   const TournamentHeaderContent = () => {
@@ -207,8 +214,8 @@ export const TournamentCard: React.FC<Props> = React.memo(({
         <div className="grid grid-cols-1 min-[360px]:grid-cols-2 gap-1">
           {tournament.date_played && (
             <Item size="sm" variant="muted" className="!p-1.5 min-w-0">
-              <ItemMedia variant="icon" className="!size-6 bg-sky-500/20 border-sky-500/30">
-                <Calendar className="size-3 text-sky-500" aria-hidden />
+              <ItemMedia variant="icon" className="!size-6 bg-info/20 border-info/30">
+                <Calendar className="size-3 text-info" aria-hidden />
               </ItemMedia>
               <ItemContent className="!gap-0 min-w-0">
                 <ItemTitle className="!text-xs text-muted-foreground">Date</ItemTitle>
@@ -219,8 +226,8 @@ export const TournamentCard: React.FC<Props> = React.memo(({
             </Item>
           )}
           <Item size="sm" variant="muted" className="!p-1.5 min-w-0">
-            <ItemMedia variant="icon" className="!size-6 bg-indigo-500/20 border-indigo-500/30">
-              <Clock className="size-3 text-indigo-500" aria-hidden />
+            <ItemMedia variant="icon" className="!size-6 bg-primary/20 border-primary/30">
+              <Clock className="size-3 text-primary" aria-hidden />
             </ItemMedia>
             <ItemContent className="!gap-0 min-w-0">
               <ItemTitle className="!text-xs text-muted-foreground">Time</ItemTitle>
@@ -234,8 +241,8 @@ export const TournamentCard: React.FC<Props> = React.memo(({
         {/* Second row: Style */}
         {tournament.tournament_type && (
           <Item size="sm" variant="muted" className="!p-1.5 min-w-0">
-            <ItemMedia variant="icon" className="!size-6 bg-orange-500/20 border-orange-500/30">
-              <Swords className="size-3 text-orange-500" aria-hidden />
+            <ItemMedia variant="icon" className="!size-6 bg-secondary/20 border-secondary/30">
+              <Swords className="size-3 text-secondary" aria-hidden />
             </ItemMedia>
             <ItemContent className="!gap-0 min-w-0">
               <ItemTitle className="!text-xs text-muted-foreground">Style</ItemTitle>
@@ -256,8 +263,13 @@ export const TournamentCard: React.FC<Props> = React.memo(({
         <div className="grid grid-cols-1 min-[360px]:grid-cols-2 gap-1">
           {tournament.state && (
             <Item size="sm" variant="muted" className="!p-1.5 min-w-0">
-              <ItemMedia variant="icon" className="!size-6 bg-emerald-500/20 border-emerald-500/30">
-                <Crown className="size-3 text-emerald-500" aria-hidden />
+              <ItemMedia
+                variant="icon"
+                className={cn('!size-6', STATE_TILE_CLASSES[tone].media)}
+                data-testid="tournament-card-state-media"
+                data-tone={tone}
+              >
+                <Crown className={cn('size-3', STATE_TILE_CLASSES[tone].icon)} aria-hidden />
               </ItemMedia>
               <ItemContent className="!gap-0 min-w-0">
                 <ItemTitle className="!text-xs text-muted-foreground">State</ItemTitle>
@@ -274,8 +286,8 @@ export const TournamentCard: React.FC<Props> = React.memo(({
 
           {/* Players count */}
           <Item size="sm" variant="muted" className="!p-1.5 min-w-0">
-            <ItemMedia variant="icon" className="!size-6 bg-cyan-500/20 border-cyan-500/30">
-              <Users className="size-3 text-cyan-500" aria-hidden />
+            <ItemMedia variant="icon" className="!size-6 bg-accent/20 border-accent/30">
+              <Users className="size-3 text-accent" aria-hidden />
             </ItemMedia>
             <ItemContent className="!gap-0 min-w-0">
               <ItemTitle className="!text-xs text-muted-foreground">Players</ItemTitle>
@@ -308,14 +320,14 @@ export const TournamentCard: React.FC<Props> = React.memo(({
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.15, delay: Math.min(animationIndex * 0.02, 0.2) }}
-        className="flex items-stretch justify-center p-4 gap-6 w-full h-full"
+        className={TOURNAMENT_CARD_CELL}
         whileHover={{ scale: 1.02 }}
       >
         <div
-          className="bg-base-300 w-full max-w-sm h-full flex flex-col card-3d px-4 py-2 rounded-[1.25rem]
-              hover:bg-base-200 focus:outline-2
-              focus:outline-offset-2 focus:outline-primary
-              active:bg-base-200"
+          className={cn(
+            TOURNAMENT_CARD_SURFACE,
+            'hover:bg-base-200 focus:outline-2 focus:outline-offset-2 focus:outline-primary active:bg-base-200',
+          )}
           data-testid={`tournament-card-${tournament.pk}`}
         >
           {/* Header: 2-col layout with name/type left, actions right */}

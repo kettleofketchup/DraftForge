@@ -9,6 +9,7 @@ import {
   useArchivedTournaments,
   useUpcomingTournaments,
 } from '~/hooks/useTournamentList';
+import { TOURNAMENT_CARD_SURFACE } from '~/components/tournament/card/cardStyles';
 import { useMembership } from '../useMembership';
 import TournamentsPage from '../tournaments';
 
@@ -102,6 +103,7 @@ interface ArchivedStub {
   tournaments: TournamentType[];
   isError: boolean;
   isFetching: boolean;
+  isPlaceholderData: boolean;
   hasNextPage: boolean;
   isFetchingNextPage: boolean;
   isFetchNextPageError: boolean;
@@ -128,6 +130,7 @@ function stubArchived(over: Partial<ArchivedStub> = {}): ArchivedStub {
     tournaments,
     isError: false,
     isFetching: false,
+    isPlaceholderData: false,
     hasNextPage: false,
     isFetchingNextPage: false,
     isFetchNextPageError: false,
@@ -355,6 +358,27 @@ describe('archived tab', () => {
     renderPage('/tournaments?tab=archived');
     fireEvent.click(screen.getByTestId('tournaments-load-more'));
     expect(stub.fetchNextPage).toHaveBeenCalled();
+  });
+
+  it('hides load more while showing placeholder data from the previous filters', () => {
+    stubArchived({
+      tournaments: [tournament(5, 31, 'past')],
+      hasNextPage: true,
+      isPlaceholderData: true,
+      isFetching: true,
+    });
+    renderPage('/tournaments?tab=archived');
+    expect(screen.getByTestId('tournament-card-5')).toBeInTheDocument();
+    expect(screen.queryByTestId('tournaments-load-more')).toBeNull();
+  });
+
+  it('renders the skeleton on the same surface as a real card', () => {
+    stubArchived({ data: undefined, tournaments: [], isFetching: true });
+    renderPage('/tournaments?tab=archived');
+    const [card] = screen.getAllByTestId('tournaments-skeleton-card');
+    for (const cls of TOURNAMENT_CARD_SURFACE.split(' ')) {
+      expect(card).toHaveClass(cls);
+    }
   });
 
   it('hides load more without a next page', () => {

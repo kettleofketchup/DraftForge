@@ -172,6 +172,29 @@ describe('TournamentCard (non-staff)', () => {
     renderCard(tournament({ state: 'past', date_played: '2025-01-01T18:00:00Z' }));
     expect(screen.getByTestId('tournament-card-state')).toHaveTextContent(/^Past$/);
   });
+
+  it.each([
+    ['in_progress', 'upcoming', 'primary', 'text-primary'],
+    ['future', 'upcoming', 'primary', 'text-primary'],
+    ['past', 'archived', 'success', 'text-success'],
+    ['future', 'archived', 'muted', 'text-muted-foreground'],
+  ] as const)(
+    'colours the state tile for a %s row in the %s bucket as %s',
+    (state, bucket, tone, iconClass) => {
+      renderCard(tournament({ state }), bucket);
+      const media = screen.getByTestId('tournament-card-state-media');
+      expect(media).toHaveAttribute('data-tone', tone);
+      expect(media.querySelector('svg')).toHaveClass(iconClass);
+    },
+  );
+
+  it('uses semantic tokens, not raw palette colours, for the icon tiles', () => {
+    const { container } = renderCard(tournament());
+    const raw = /\b(?:bg|text|border)-(?:sky|indigo|orange|emerald|cyan)-\d+/;
+    for (const el of container.querySelectorAll('[class]')) {
+      expect(el.getAttribute('class')).not.toMatch(raw);
+    }
+  });
 });
 
 describe('TournamentCard (staff)', () => {

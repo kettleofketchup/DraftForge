@@ -14,6 +14,7 @@ type ArchivedQuery = Pick<
   | 'error'
   | 'isError'
   | 'isFetching'
+  | 'isPlaceholderData'
   | 'hasNextPage'
   | 'isFetchingNextPage'
   | 'isFetchNextPageError'
@@ -34,6 +35,7 @@ export function ArchivedTab({
     error,
     isError,
     isFetching,
+    isPlaceholderData,
     hasNextPage,
     isFetchingNextPage,
     isFetchNextPageError,
@@ -73,7 +75,7 @@ export function ArchivedTab({
     content = (
       <div className="flex flex-col items-center gap-4">
         <TournamentGrid tournaments={tournaments} bucket="archived" />
-        {hasNextPage && (
+        {hasNextPage && !isPlaceholderData && (
           <div className="flex flex-wrap items-center justify-center gap-2">
             <SecondaryButton
               data-testid="tournaments-load-more"

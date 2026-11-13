@@ -1,10 +1,15 @@
 import { memo } from 'react';
 import { TournamentCard } from '~/components/tournament/card/TournamentCard';
+import {
+  TOURNAMENT_CARD_CELL,
+  TOURNAMENT_CARD_SURFACE,
+} from '~/components/tournament/card/cardStyles';
 import type {
   TournamentBucket,
   TournamentType,
 } from '~/components/tournament/types';
 import { Skeleton } from '~/components/ui/skeleton';
+import { cn } from '~/lib/utils';
 
 const GRID_CLASSES =
   'grid w-full grid-flow-row-dense content-center justify-center bg-background p-0 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5';
@@ -56,14 +61,19 @@ export function TournamentGridSkeleton({ count = 8 }: { count?: number }) {
   return (
     <div className={GRID_CLASSES} aria-hidden data-testid="tournaments-skeleton">
       {Array.from({ length: count }, (_, index) => (
-        <div key={index} className="col-span-1 flex h-full p-4">
-          <div className="flex w-full flex-col gap-3 rounded-xl border border-border bg-base-200 p-6">
-            <Skeleton className="h-4 w-24" />
-            <Skeleton className="h-5 w-40" />
-            <Skeleton className="h-4 w-3/4" />
-            <Skeleton className="h-4 w-1/2" />
-            <Skeleton className="h-4 w-2/3" />
-            <Skeleton className="mt-2 h-9 w-full" />
+        <div key={index} className="col-span-1 flex h-full content-center gap-4">
+          <div className={TOURNAMENT_CARD_CELL}>
+            <div
+              data-testid="tournaments-skeleton-card"
+              className={cn(TOURNAMENT_CARD_SURFACE, 'pointer-events-none gap-3')}
+            >
+              <Skeleton className="h-5 w-40" />
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-4 w-3/4" />
+              <Skeleton className="h-4 w-1/2" />
+              <Skeleton className="h-4 w-2/3" />
+              <Skeleton className="mt-auto h-8 w-40" />
+            </div>
           </div>
         </div>
       ))}

@@ -1,16 +1,20 @@
 // @vitest-environment jsdom
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 import { TournamentFilterBar, nextFilterParams } from '../TournamentFilterBar';
 
+const orgState = vi.hoisted(() => ({ loading: false }));
+
 vi.mock('~/components/organization', () => ({
   useOrganizations: () => ({
-    organizations: [
-      { pk: 30, name: 'Discovery Home' },
-      { pk: 31, name: 'Discovery Away' },
-    ],
-    isLoading: false,
+    organizations: orgState.loading
+      ? []
+      : [
+          { pk: 30, name: 'Discovery Home' },
+          { pk: 31, name: 'Discovery Away' },
+        ],
+    isLoading: orgState.loading,
     refetch: vi.fn(),
   }),
 }));
@@ -57,7 +61,33 @@ function searchParamsShown(): URLSearchParams {
   return new URLSearchParams(screen.getByTestId('location-search').textContent ?? '');
 }
 
+afterEach(() => {
+  orgState.loading = false;
+});
+
 describe('TournamentFilterBar', () => {
+  it('shows a loading placeholder for the organization while organizations load', () => {
+    orgState.loading = true;
+    renderBar('/tournaments?organization=30');
+    const trigger = screen.getByRole('combobox', { name: /organization/i });
+    expect(trigger).toHaveTextContent('Loading organizations…');
+    expect(trigger).not.toHaveTextContent('Unknown organization');
+  });
+
+  it('shows Unknown organization for an organization outside the loaded list', () => {
+    renderBar('/tournaments?organization=999');
+    expect(screen.getByRole('combobox', { name: /organization/i })).toHaveTextContent(
+      'Unknown organization',
+    );
+  });
+
+  it('sizes the clear button to match the h-9 selects', () => {
+    renderBar('/tournaments?organization=30');
+    const clear = screen.getByTestId('tournaments-filter-clear');
+    expect(clear).toHaveClass('h-9');
+    expect(clear).not.toHaveClass('h-8');
+  });
+
   it('renders a named search box and named org and league selects', () => {
     renderBar('/tournaments?tab=archived&organization=30');
     expect(screen.getByRole('textbox', { name: 'Search tournaments' })).toBeInTheDocument();

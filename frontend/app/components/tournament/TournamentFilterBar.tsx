@@ -68,7 +68,7 @@ export function TournamentFilterBar({
   const organization = parseFilterId(searchParams.get('organization'));
   const league = parseFilterId(searchParams.get('league'));
 
-  const { organizations } = useOrganizations();
+  const { organizations, isLoading: orgsLoading } = useOrganizations();
   const { leagues, isLoading: leaguesLoading } = useLeagues(organization);
 
   const active = filtersActive({ organization, league, searchInput });
@@ -138,7 +138,7 @@ export function TournamentFilterBar({
             <SelectValue
               id={orgValueId}
               className="truncate"
-              placeholder="Unknown organization"
+              placeholder={orgsLoading ? 'Loading organizations…' : 'Unknown organization'}
             />
           </BrandSelectTrigger>
           <BrandSelectContent>
@@ -185,12 +185,7 @@ export function TournamentFilterBar({
         </BrandSelect>
       </div>
       {active && (
-        <SecondaryButton
-          size="sm"
-          data-testid="tournaments-filter-clear"
-          onClick={clearFilters}
-          className="h-9"
-        >
+        <SecondaryButton data-testid="tournaments-filter-clear" onClick={clearFilters}>
           <X className="size-4" aria-hidden />
           Clear filters
         </SecondaryButton>
