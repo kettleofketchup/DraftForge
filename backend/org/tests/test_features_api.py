@@ -135,7 +135,67 @@ class OrgFeaturesApiTest(TestCase):
         )
         self.assertEqual(response.status_code, 400)
 
+    def test_form_encoded_put_is_rejected(self) -> None:
+        self.client.force_authenticate(self.site_admin)
+        response = self.client.put(
+            features_url(self.org.pk),
+            "feature=promotion&notes=x",
+            content_type="application/x-www-form-urlencoded",
+        )
+        self.assertEqual(response.status_code, 415)
+        self.assertFalse(OrgFeature.objects.filter(organization=self.org).exists())
+
     def test_unknown_org_is_404(self) -> None:
         self.client.force_authenticate(self.site_admin)
         response = self.client.get(features_url(999999))
         self.assertEqual(response.status_code, 404)
+
+    def test_unknown_org_put_is_404(self) -> None:
+        self.client.force_authenticate(self.site_admin)
+        response = self.client.put(
+            features_url(999999),
+            {"feature": "promotion", "enabled": True},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 404)
+        self.assertFalse(OrgFeature.objects.exists())
+
+    def test_anon_put_is_plain_403(self) -> None:
+        response = self.client.put(
+            features_url(self.org.pk),
+            {"feature": "promotion", "enabled": True},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertNotIn("code", response.json())
+        self.assertFalse(OrgFeature.objects.filter(organization=self.org).exists())
+
+    def test_superuser_without_staff_is_allowed(self) -> None:
+        superuser = CustomUser.objects.create_user(
+            username="features_superuser",
+            password="x",
+            is_staff=False,
+            is_superuser=True,
+        )
+        self.client.force_authenticate(superuser)
+        response = self.client.get(features_url(self.org.pk))
+        self.assertEqual(response.status_code, 200)
+
+    def test_enabled_at_uses_drf_datetime_format(self) -> None:
+        self.client.force_authenticate(self.site_admin)
+        response = self.client.put(
+            features_url(self.org.pk),
+            {"feature": "promotion", "enabled": True},
+            format="json",
+        )
+        rows = {r["feature"]: r for r in response.json()}
+        self.assertTrue(rows["promotion"]["enabled_at"].endswith("Z"))
+
+    def test_repeated_identical_put_writes_no_extra_orglog(self) -> None:
+        self.client.force_authenticate(self.site_admin)
+        body = {"feature": "promotion", "enabled": True, "notes": "n"}
+        self.client.put(features_url(self.org.pk), body, format="json")
+        count = OrgLog.objects.filter(organization=self.org).count()
+        response = self.client.put(features_url(self.org.pk), body, format="json")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(OrgLog.objects.filter(organization=self.org).count(), count)

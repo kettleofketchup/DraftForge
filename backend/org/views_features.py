@@ -2,7 +2,8 @@ from typing import Any
 
 from django.shortcuts import get_object_or_404
 from rest_framework import serializers
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, parser_classes, permission_classes
+from rest_framework.parsers import JSONParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -42,7 +43,9 @@ def _feature_rows(org: Organization) -> list[dict[str, Any]]:
                     else None
                 ),
                 "enabled_at": (
-                    row.enabled_at.isoformat() if row and row.enabled_at else None
+                    serializers.DateTimeField().to_representation(row.enabled_at)
+                    if row and row.enabled_at
+                    else None
                 ),
             }
         )
@@ -50,6 +53,7 @@ def _feature_rows(org: Organization) -> list[dict[str, Any]]:
 
 
 @api_view(["GET", "PUT"])
+@parser_classes([JSONParser])
 @permission_classes([IsAuthenticated])
 def org_features(request: Request, org_id: int) -> Response:
     if not is_site_admin(request.user):
