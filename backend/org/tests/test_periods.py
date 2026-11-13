@@ -87,7 +87,16 @@ class OrgPeriodsTest(TestCase):
         self.assertEqual(resolve_org_tz(self.org), ZoneInfo("UTC"))
 
     def test_parse_period_rejects_garbage(self) -> None:
-        for value in ("garbage", "2026-13", "2026-1", "2026-00", "26-10", ""):
+        for value in (
+            "garbage",
+            "2026-13",
+            "2026-1",
+            "2026-00",
+            "26-10",
+            "",
+            "2026-10\n",
+            "\uff12\uff10\uff12\uff16-\uff11\uff10",
+        ):
             with self.subTest(value=value), self.assertRaises(ValueError):
                 parse_period(self.org, value)
 
@@ -126,3 +135,15 @@ class OrganizationTimezoneValidatorTest(TestCase):
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.org.refresh_from_db()
         self.assertEqual(self.org.timezone, "Europe/Berlin")
+
+    def test_org_patch_keeps_unchanged_legacy_timezone(self) -> None:
+        Organization.objects.filter(pk=self.org.pk).update(timezone="EST5EDT-legacy")
+        resp = self.client.patch(
+            self.url,
+            {"name": "Renamed TZ Org", "timezone": "EST5EDT-legacy"},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.org.refresh_from_db()
+        self.assertEqual(self.org.name, "Renamed TZ Org")
+        self.assertEqual(self.org.timezone, "EST5EDT-legacy")

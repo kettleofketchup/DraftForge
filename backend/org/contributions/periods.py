@@ -9,7 +9,7 @@ from telemetry.logging import get_logger
 log = get_logger(__name__)
 
 ALL_TIME = "all"
-_MONTH_RE = re.compile(r"^(\d{4})-(\d{2})$")
+_MONTH_RE = re.compile(r"(\d{4})-(\d{2})", re.ASCII)
 _MIN_YEAR = 1970
 _MAX_YEAR = 9998
 
@@ -56,7 +56,7 @@ def local_day_start_utc(org: Organization, d: date) -> datetime:
 def parse_period(org: Organization, value: str | None) -> Period:
     if value is None or value == ALL_TIME:
         return Period(start=None, end=None, label=ALL_TIME)
-    match = _MONTH_RE.match(value)
+    match = _MONTH_RE.fullmatch(value)
     if not match:
         raise ValueError(f"invalid period {value!r}, expected 'all' or YYYY-MM")
     year, month = int(match.group(1)), int(match.group(2))
@@ -69,5 +69,5 @@ def parse_period(org: Organization, value: str | None) -> Period:
     return Period(
         start=_local_to_utc(tz, date(year, month, 1), time(0)),
         end=_local_to_utc(tz, date(next_year, next_month, 1), time(0)),
-        label=value,
+        label=f"{year:04d}-{month:02d}",
     )

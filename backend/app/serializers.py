@@ -1,3 +1,4 @@
+from functools import cache
 from zoneinfo import available_timezones
 
 import nh3
@@ -33,6 +34,11 @@ from .models import (
 )
 
 log = get_logger(__name__)
+
+
+@cache
+def _known_timezones() -> frozenset[str]:
+    return frozenset(available_timezones())
 
 
 class UserPkField(serializers.RelatedField):
@@ -497,7 +503,11 @@ class OrganizationSerializer(serializers.ModelSerializer):
         return value
 
     def validate_timezone(self, value: str) -> str:
-        if value not in available_timezones():
+        if self.instance is not None and value == getattr(
+            self.instance, "timezone", None
+        ):
+            return value
+        if value not in _known_timezones():
             raise serializers.ValidationError(f"Unknown timezone {value!r}.")
         return value
 
