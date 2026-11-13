@@ -154,7 +154,7 @@ just test::slots-unit              # Slot helper and just recipe tests (no conta
 
 ```bash
 just test::run '<command>'    # One-off command in a test container, image entrypoint bypassed
-just test::backend::all       # pytest on the host on a fresh test DB (also ::steam, ::draft)
+just test::backend::all       # pytest on the host with the test env loaded (also ::steam, ::draft)
 ```
 
 ## Update Commands (`just update::*`)
@@ -191,7 +191,7 @@ just prod::run '<cmd>' [svc]
 just py::manage <command>    # Django management commands
 just py::shell               # Django shell (with cache disabled)
 just py::runserver           # Run server directly
-just py::test                # Run pytest locally (cache disabled)
+just py::test                # pytest on the host with docker/.env.test loaded
 just py::migrate             # Run migrations (cache disabled)
 ```
 

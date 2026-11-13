@@ -38,6 +38,7 @@ run *args:
 script *args:
     cd {{quote(backend)}} && PYTHONPATH={{quote(backend)}} DJANGO_SETTINGS_MODULE=backend.settings DISABLE_CACHE=true {{quote(python)}} "$@"
 
+# pytest on the host with docker/.env.test loaded and the cache on, as in the test container
 [group('py')]
 test *args:
-    {{nocache}} -m pytest "$@"
+    {{quote(root / "scripts/in-env.sh")}} test backend {{quote(python)}} -m pytest "$@"
