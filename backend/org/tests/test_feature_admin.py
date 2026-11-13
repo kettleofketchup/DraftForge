@@ -40,6 +40,7 @@ class OrgFeatureAdminTest(TestCase):
         log = OrgLog.objects.get(organization=self.org, action="enable_feature")
         self.assertEqual(log.actor, self.superuser)
         self.assertEqual(log.details["feature"], "promotion")
+        self.assertEqual(log.details["notes"], "paid via PayPal")
 
     def test_admin_change_disable_writes_orglog(self) -> None:
         row = set_org_feature(
@@ -49,6 +50,8 @@ class OrgFeatureAdminTest(TestCase):
             actor=self.superuser,
             notes="paid",
         )
+        enabled_by = row.enabled_by
+        enabled_at = row.enabled_at
         response = self.client.post(
             change_url(row.pk),
             {"notes": "paid", "_save": "Save"},
@@ -57,6 +60,8 @@ class OrgFeatureAdminTest(TestCase):
         row.refresh_from_db()
         self.assertIs(row.enabled, False)
         self.assertEqual(row.notes, "paid")
+        self.assertEqual(row.enabled_by, enabled_by)
+        self.assertEqual(row.enabled_at, enabled_at)
         self.assertTrue(
             OrgLog.objects.filter(
                 organization=self.org,
@@ -64,6 +69,53 @@ class OrgFeatureAdminTest(TestCase):
                 actor=self.superuser,
             ).exists()
         )
+
+    def test_admin_add_locked_row_writes_no_orglog(self) -> None:
+        response = self.client.post(
+            ADD_URL,
+            {
+                "organization": self.org.pk,
+                "feature": "promotion",
+                "notes": "quoted, not paid yet",
+                "_save": "Save",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        row = OrgFeature.objects.get(organization=self.org, feature="promotion")
+        self.assertIs(row.enabled, False)
+        self.assertEqual(row.notes, "quoted, not paid yet")
+        self.assertFalse(
+            OrgLog.objects.filter(
+                organization=self.org,
+                action__in=["enable_feature", "disable_feature"],
+            ).exists()
+        )
+
+    def test_admin_add_duplicate_rejected(self) -> None:
+        row = set_org_feature(
+            self.org,
+            FeatureKey.PROMOTION,
+            enabled=True,
+            actor=self.superuser,
+            notes="paid",
+        )
+        log_count = OrgLog.objects.count()
+        response = self.client.post(
+            ADD_URL,
+            {
+                "organization": self.org.pk,
+                "feature": "promotion",
+                "notes": "overwrite?",
+                "_save": "Save",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context["adminform"].form.errors)
+        self.assertEqual(OrgFeature.objects.count(), 1)
+        self.assertEqual(OrgLog.objects.count(), log_count)
+        row.refresh_from_db()
+        self.assertIs(row.enabled, True)
+        self.assertEqual(row.notes, "paid")
 
     def test_admin_change_cannot_move_row(self) -> None:
         row = set_org_feature(

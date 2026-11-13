@@ -1,10 +1,11 @@
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, cast
 
 from django.contrib import admin
 from django.forms import ModelForm
 from django.http import HttpRequest
 
+from app.models import CustomUser
 from org.features import FeatureKey, set_org_feature
 
 from .models import OrgFeature, OrgUser
@@ -41,10 +42,11 @@ class OrgFeatureAdmin(admin.ModelAdmin):
             obj.organization,
             FeatureKey(obj.feature),
             enabled=obj.enabled,
-            actor=request.user,
+            actor=cast(CustomUser, request.user),
             notes=obj.notes,
         )
         obj.pk = row.pk
+        obj.refresh_from_db()
 
     def has_delete_permission(
         self, request: HttpRequest, obj: OrgFeature | None = None

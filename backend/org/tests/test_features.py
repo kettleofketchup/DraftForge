@@ -90,6 +90,24 @@ class OrgFeatureServiceTest(TestCase):
             2,
         )
 
+    def test_creating_locked_row_writes_no_orglog(self) -> None:
+        row = set_org_feature(
+            self.org,
+            FeatureKey.PROMOTION,
+            enabled=False,
+            actor=self.actor,
+            notes="quoted",
+        )
+        row.refresh_from_db()
+        self.assertIs(row.enabled, False)
+        self.assertEqual(row.notes, "quoted")
+        self.assertIsNone(row.enabled_by)
+        self.assertFalse(
+            OrgLog.objects.filter(
+                organization=self.org, action__in=FEATURE_ACTIONS
+            ).exists()
+        )
+
     @patch("app.cache_utils._cacheops_invalidate_obj")
     def test_change_invalidates_org_cache_on_commit(
         self, invalidate: MagicMock

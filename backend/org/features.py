@@ -56,24 +56,26 @@ def set_org_feature(
         enabled_changed = row.enabled != enabled
         notes_changed = notes is not None and notes != row.notes
 
-        if not enabled_changed and not notes_changed:
+        if not created and not enabled_changed and not notes_changed:
             return row
 
-        row.enabled = enabled
-        if enabled_changed and enabled:
-            row.enabled_by = actor
-            row.enabled_at = timezone.now()
-        if notes_changed:
-            row.notes = notes
-        row.save()
+        if enabled_changed or notes_changed:
+            row.enabled = enabled
+            if enabled_changed and enabled:
+                row.enabled_by = actor
+                row.enabled_at = timezone.now()
+            if notes_changed:
+                row.notes = notes
+            row.save()
 
-        OrgLog.objects.create(
-            organization=org,
-            actor=actor,
-            action="enable_feature" if enabled else "disable_feature",
-            details={"feature": key.value, "notes": row.notes},
-        )
-        invalidate_after_commit(org)
+        if row.enabled or not created:
+            OrgLog.objects.create(
+                organization=org,
+                actor=actor,
+                action="enable_feature" if enabled else "disable_feature",
+                details={"feature": key.value, "notes": row.notes},
+            )
+            invalidate_after_commit(org)
         transaction.on_commit(
             lambda: log.info(
                 "org_feature_set",
