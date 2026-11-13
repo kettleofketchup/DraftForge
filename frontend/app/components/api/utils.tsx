@@ -30,7 +30,7 @@ export function getCsrfToken(): string {
 }
 
 export const api = axios.create({
-  baseURL: '/api', // your API base, e.g. 'http://localhost:8000'
+  baseURL: '/api', // relative; nginx proxies it to the backend
   withCredentials: true, // send cookies like sessionid
 });
 
