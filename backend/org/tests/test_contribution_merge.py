@@ -108,6 +108,20 @@ class ReassignMemberTest(_LedgerFixture):
         )
         self.assertEqual(kinds, [ContributionKind.EVENT_HOST])
 
+    def test_drop_host_and_keep_helper_on_same_event_keeps_host(self) -> None:
+        self._entry(self.keep, ContributionKind.EVENT_HELPER, 5, self.event_a)
+        self._entry(self.drop, ContributionKind.EVENT_HOST, 10, self.event_a)
+
+        reassign_member(self.drop, self.keep)
+
+        kinds = list(
+            ContributionEntry.objects.nocache()
+            .filter(org_user=self.keep, event=self.event_a)
+            .values_list("kind", flat=True)
+        )
+        self.assertEqual(kinds, [ContributionKind.EVENT_HOST])
+        self.assertEqual(self._total(self.keep), 10)
+
 
 class RepointAttributionTest(_LedgerFixture):
     def test_repoints_hidden_attribution_fks(self) -> None:
@@ -194,6 +208,20 @@ class ClaimMergeContributionsTest(_LedgerFixture):
             .count(),
             1,
         )
+        self.assertEqual(self._total(self.claimer_ou), 10)
+
+    def test_target_host_claimer_helper_same_event(self) -> None:
+        self._entry(self.target_ou, ContributionKind.EVENT_HOST, 10, self.event_a)
+        self._entry(self.claimer_ou, ContributionKind.EVENT_HELPER, 5, self.event_a)
+
+        self._approve()
+
+        remaining = list(
+            ContributionEntry.objects.nocache()
+            .filter(event=self.event_a)
+            .values_list("kind", "org_user_id")
+        )
+        self.assertEqual(remaining, [(ContributionKind.EVENT_HOST, self.claimer_ou.pk)])
         self.assertEqual(self._total(self.claimer_ou), 10)
 
     def test_target_attribution_moves_to_claimer(self) -> None:
