@@ -10,6 +10,8 @@ log = get_logger(__name__)
 
 ALL_TIME = "all"
 _MONTH_RE = re.compile(r"^(\d{4})-(\d{2})$")
+_MIN_YEAR = 1970
+_MAX_YEAR = 9998
 
 
 @dataclass(frozen=True)
@@ -37,7 +39,10 @@ def resolve_org_tz(org: Organization) -> ZoneInfo:
 
 
 def _local_to_utc(tz: ZoneInfo, d: date, t: time) -> datetime:
-    return datetime.combine(d, t, tzinfo=tz).astimezone(UTC)
+    try:
+        return datetime.combine(d, t, tzinfo=tz).astimezone(UTC)
+    except OverflowError as exc:
+        raise ValueError(f"date {d.isoformat()} out of range") from exc
 
 
 def local_noon_utc(org: Organization, d: date) -> datetime:
@@ -57,6 +62,8 @@ def parse_period(org: Organization, value: str | None) -> Period:
     year, month = int(match.group(1)), int(match.group(2))
     if not 1 <= month <= 12:
         raise ValueError(f"invalid month in period {value!r}")
+    if not _MIN_YEAR <= year <= _MAX_YEAR:
+        raise ValueError(f"year out of range in period {value!r}")
     next_year, next_month = (year + 1, 1) if month == 12 else (year, month + 1)
     tz = resolve_org_tz(org)
     return Period(

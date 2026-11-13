@@ -91,6 +91,20 @@ class OrgPeriodsTest(TestCase):
             with self.subTest(value=value), self.assertRaises(ValueError):
                 parse_period(self.org, value)
 
+    def test_parse_period_rejects_out_of_range_years(self) -> None:
+        for tz in ("Asia/Tokyo", "America/New_York", "UTC"):
+            Organization.objects.filter(pk=self.org.pk).update(timezone=tz)
+            self.org.refresh_from_db()
+            for value in ("0000-01", "0001-01", "9999-12"):
+                with self.subTest(tz=tz, value=value), self.assertRaises(ValueError):
+                    parse_period(self.org, value)
+
+    def test_local_day_start_raises_value_error_at_date_min(self) -> None:
+        Organization.objects.filter(pk=self.org.pk).update(timezone="Asia/Tokyo")
+        self.org.refresh_from_db()
+        with self.assertRaises(ValueError):
+            local_day_start_utc(self.org, date.min)
+
 
 class OrganizationTimezoneValidatorTest(TestCase):
     def setUp(self) -> None:
