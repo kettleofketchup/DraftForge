@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
 from cacheops import cached_as
@@ -34,8 +34,22 @@ from social_core.backends.oauth import BaseOAuth1, BaseOAuth2
 from social_django.utils import load_strategy, psa
 
 # Create your views here.
+from app import tournament_buckets
 from app.functions.teamdraft import apply_draft_options
 from app.permissions_org import has_org_staff_access
+from app.tournament_buckets import (
+    tournament_bucket_cutoff,
+    upcoming_q,
+    upcoming_rank,
+    utc_day_start,
+)
+from app.tournament_list import (
+    TournamentListPagination,
+    TournamentListParams,
+    build_page_envelope,
+    parse_tournament_list_params,
+    tournaments_list_cache_key,
+)
 from league.models import LeagueUser
 from league.serializers import LeagueUserSerializer
 from org.models import OrgUser
@@ -1060,49 +1074,91 @@ class TournamentsBasicView(viewsets.ModelViewSet):
 
 @permission_classes((AllowAny,))
 class TournamentListView(viewsets.ReadOnlyModelViewSet):
-    """Lightweight view for tournament list page.
+    """Lightweight view for the tournament list page.
 
-    Returns minimal tournament data without nested teams/users for fast loading.
-    Supports filtering by organization and league query params.
+    Filters: organization, league, bucket (upcoming|archived), search.
+    Paginates only when ``page`` is present (requires ``bucket``).
     """
 
     serializer_class = TournamentListSerializer
+    pagination_class = TournamentListPagination
+
+    _now: datetime
+    _cutoff: datetime
+    _today_start: datetime
+    _params: TournamentListParams
+
+    def initial(self, request: Request, *args: Any, **kwargs: Any) -> None:
+        super().initial(request, *args, **kwargs)
+        self._now = tournament_buckets._now()
+        self._cutoff = tournament_bucket_cutoff(self._now)
+        self._today_start = utc_day_start(self._now)
+        self._params = parse_tournament_list_params(request.query_params)
 
     def get_queryset(self) -> QuerySet[Tournament]:
-        """Annotate user_count and prefetch league/org for efficiency."""
-        qs = (
-            Tournament.objects.select_related("league", "league__organization")
-            .annotate(user_count=Count("users", distinct=True))
-            .order_by("-date_played")
-        )
+        params = self._params
+        qs = Tournament.objects.select_related(
+            "league", "league__organization"
+        ).annotate(user_count=Count("users", distinct=True))
 
-        # Filter by organization (League has FK to Organization)
-        org_id = self.request.query_params.get("organization")
-        if org_id:
-            qs = qs.filter(league__organization__id=org_id)
+        if params.organization is not None:
+            qs = qs.filter(league__organization__id=params.organization)
+        if params.league is not None:
+            qs = qs.filter(league_id=params.league)
+        if params.search is not None:
+            qs = qs.filter(
+                Q(name__icontains=params.search)
+                | Q(league__organization__name__icontains=params.search)
+                | Q(league__name__icontains=params.search)
+            )
 
-        # Filter by league
-        league_id = self.request.query_params.get("league")
-        if league_id:
-            qs = qs.filter(league_id=league_id)
-
-        return qs
+        if params.bucket == "upcoming":
+            return (
+                qs.filter(upcoming_q(self._cutoff))
+                .annotate(bucket_rank=upcoming_rank(self._today_start))
+                .order_by("bucket_rank", "date_played", "pk")
+            )
+        if params.bucket == "archived":
+            return qs.exclude(upcoming_q(self._cutoff)).order_by("-date_played", "-pk")
+        return qs.order_by("-date_played")
 
     def list(self, request: Request, *args: Any, **kwargs: Any) -> Response:
-        cache_key = f"tournaments_list_v2:{request.get_full_path()}"
+        params = self._params
+        # cacheops' own queryset cache ignores select_related tables, so it
+        # would serve stale org/league fields; cached_as below owns caching.
+        queryset = self.filter_queryset(self.get_queryset()).nocache()
 
-        @cached_as(
-            Tournament.objects.all(),
-            extra=cache_key,
-            timeout=60 * 10,
+        def compute() -> Any:
+            if params.page is None:
+                return list(self.get_serializer(queryset, many=True).data)
+            page = self.paginator.paginate_queryset(queryset, request, view=self)
+            return {
+                "count": self.paginator.page.paginator.count,
+                "results": list(self.get_serializer(page, many=True).data),
+            }
+
+        if params.search is not None:
+            data = compute()
+        else:
+            data = cached_as(
+                Tournament.objects.all(),
+                League.objects.all(),
+                Organization.objects.all(),
+                extra=tournaments_list_cache_key(params, self._cutoff),
+                timeout=60 * 10,
+            )(compute)()
+
+        if params.page is None:
+            return Response(data)
+        return Response(
+            build_page_envelope(
+                request,
+                count=data["count"],
+                page=params.page,
+                page_size=params.page_size,
+                results=data["results"],
+            )
         )
-        def get_data() -> Any:
-            queryset = self.filter_queryset(self.get_queryset())
-            serializer = self.get_serializer(queryset, many=True)
-            return serializer.data
-
-        data = get_data()
-        return Response(data)
 
 
 class OrganizationView(viewsets.ModelViewSet):
