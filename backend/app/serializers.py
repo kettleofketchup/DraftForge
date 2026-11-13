@@ -379,19 +379,29 @@ class LeagueMinimalSerializer(serializers.ModelSerializer):
     """Minimal league info for tournament list cards."""
 
     organization_name = serializers.SerializerMethodField()
+    organization_id = serializers.SerializerMethodField()
+    organization_logo = serializers.SerializerMethodField()
 
     class Meta:
         model = League
-        fields = ("pk", "name", "organization_name")
+        fields = (
+            "pk",
+            "name",
+            "organization_name",
+            "organization_id",
+            "organization_logo",
+        )
 
     def get_organization_name(self, obj: League) -> str | None:
-        """Get the first organization name, if any."""
-        # Use prefetched data if available, otherwise query
-        orgs = getattr(obj, "_prefetched_objects_cache", {}).get("organizations")
-        if orgs is not None:
-            return orgs[0].name if orgs else None
-        first_org = obj.organization
-        return first_org.name if first_org else None
+        org = obj.organization
+        return org.name if org else None
+
+    def get_organization_id(self, obj: League) -> int | None:
+        return obj.organization_id
+
+    def get_organization_logo(self, obj: League) -> str | None:
+        org = obj.organization
+        return (org.logo or None) if org else None
 
 
 class TournamentListSerializer(serializers.ModelSerializer):
