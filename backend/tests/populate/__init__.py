@@ -56,6 +56,7 @@ from tests.populate.org_delete import populate_org_delete
 from tests.populate.organizations import populate_organizations_and_leagues
 from tests.populate.shuffle_tie import populate_shuffle_tie_data
 from tests.populate.steam import populate_steam_matches
+from tests.populate.tournament_discovery import populate_tournament_discovery
 from tests.populate.tournaments import populate_real_tournament_38, populate_tournaments
 from tests.populate.user_edit import populate_user_edit_data
 from tests.populate.users import populate_test_auth_users, populate_users
@@ -101,9 +102,12 @@ def populate_all(force: bool = False) -> None:
         ("Demo Tournaments", populate_demo_tournaments),
         ("League Stats Data", populate_league_stats_data),
         ("League Stats Showcase", populate_league_stats_showcase),
-        # Last: its org and league take auto-incremented pks, so it must not
+        # Dota Lobby takes auto-incremented org/league pks, so it must not
         # shift the pks the steps above expect.
         ("Dota Lobby Data", populate_dota_lobby_data),
+        # Last: explicit pks (orgs/leagues 30-31, tournaments 900-905) would
+        # bump the auto-increment counters the steps above rely on.
+        ("Tournament Discovery Data", populate_tournament_discovery),
     ]
 
     console = Console()
@@ -155,6 +159,7 @@ __all__ = [
     "populate_league_stats_data",
     "populate_league_stats_showcase",
     "populate_dota_lobby_data",
+    "populate_tournament_discovery",
     "populate_test_tournaments",
     # Utilities
     "create_user",
