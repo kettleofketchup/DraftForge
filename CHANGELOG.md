@@ -14,6 +14,72 @@ Releases made before this file was added are not listed here; see the git tags a
 
 <!-- Do not edit. Unreleased changes live in changelog.d/; `just version::set` assembles them here. -->
 
+## [0.12.0] - 2026-11-13
+
+### Security
+
+- An organization's member list (and the MMR it carries) is no longer public:
+  `GET /api/organizations/<pk>/users/` now answers only org members and org
+  staff, and the Users tab is hidden from everyone else.
+- A league's member list follows the same rule: `GET /api/leagues/<pk>/users/`
+  answers league staff, the league's own members, and anyone who may see the
+  linked org's members. A private org list doesn't hide a league's list from
+  that league's members. The league Users tab is hidden from everyone else.
+- Event signups no longer show a player's org MMR (`org_user_mmr`) to viewers
+  who may not see the org's member list; players still see their own.
+
+### Added
+
+- Org admins can mark the member list private in Edit Organization, limiting it
+  to staff, admins and the owner.
+
+### Changed
+
+- The navbar no longer links to the Users page (desktop and mobile). The page
+  itself still works at `/users`.
+- Admins and staff of any league in an organization can now see that
+  organization's member list, even before they are enrolled as members. Staff
+  of a sibling league in the same org can see a league's member list too.
+
+### Fixed
+
+- nginx now keeps connections to the frontend open and reuses them. Before, it opened a
+  new connection for every proxied request. Under the Vite dev server (hundreds of
+  module requests per page) these piled up in `TIME_WAIT` and used up nginx's ephemeral
+  ports. nginx then returned 502 for documents, `__manifest` and module chunks. Pages
+  stayed on their server-rendered loading state (e.g. "Loading organization...") and
+  `17-auth` role-matrix specs timed out on first attempt.
+- Backend tests: the SQLite test database is now a uniquely named temp file set up by the
+  test runner (and the pytest `conftest`) instead of in `settings.py`, so production
+  processes no longer touch the temp dir at import. Its WAL sidecars and parallel clones
+  are removed on teardown, files from killed runs are swept after a day, and
+  `manage.py test --parallel` works under the `spawn` start method (macOS).
+- Deleting a league works again: the trash button in the Edit League dialog submitted the edit form and closed the dialog instead of opening the delete confirmation.
+- The `df-locale` language cookie is now written as the plain locale (`es`) by both the
+  server and the browser. Before, the server wrote base64 JSON (`ImVzIg==`) and the
+  browser wrote the plain value, so a language chosen on one side could be ignored by
+  the other. Cookies already saved in the old format are still honoured and are
+  rewritten in the plain format on the next visit.
+- Signing in or out without a reload no longer leaves organization, league or
+  event pages showing member lists or per-member org MMR fetched for the
+  previous account, or bouncing a newly signed-in user off the Users tab.
+- The organization Users tab count no longer sticks at "Users (...)" after
+  the page loads, and a hard load no longer fetches the organization twice.
+- `just py::test` (pytest) runs the backend suite again. `backend/pytest.ini` used a
+  `[tool:pytest]` header that pytest ignores in a `pytest.ini`, so none of its settings
+  applied, and the conftest failed to import on the host and in the container. pytest
+  now collects the same `test*.py` modules as `manage.py test`, on the same temp-file
+  test database and with the same `DOTA_LOBBY_*` defaults. `just py::test` and
+  `just test::backend::*` load `docker/.env.test` and keep the cache on, as the test
+  container does. The conftest no longer points Django at `backend/test.db.sqlite3` or
+  empties it, and `just test::backend::all` no longer resets that file.
+- Removed the unused `backend/scripts/run_tests.py`.
+- The Reseed Bracket and Bracket Actions dropdowns now match the height of the other bracket toolbar buttons ([#395](https://github.com/kettleofketchup/DraftForge/issues/395)).
+- The frontend now learns the CSRF cookie name from the backend's `X-CSRF-Cookie-Name`
+  response header, so a frontend built or started with a different name no longer
+  fails every write with a 403 on a test stack slot.
+- Browser cookie reads share one exact-match reader that URL-decodes values.
+
 ## [0.11.0] - 2026-11-13
 
 ### Upgrading

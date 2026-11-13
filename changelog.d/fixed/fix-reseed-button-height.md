@@ -1,1 +1,0 @@
-- The Reseed Bracket and Bracket Actions dropdowns now match the height of the other bracket toolbar buttons ([#395](https://github.com/kettleofketchup/DraftForge/issues/395)).
