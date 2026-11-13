@@ -1,6 +1,7 @@
 from datetime import timedelta
 from unittest.mock import MagicMock, patch
 
+from django.contrib.auth.models import Permission
 from django.core.management import call_command
 from django.db.models import Sum
 from django.test import TestCase
@@ -292,6 +293,32 @@ class DiscordReclaimContributionsTest(_LedgerFixture):
         self.assertEqual(entry.awarded_by_id, self.keep.pk)
         self.assertEqual(feature.enabled_by_id, self.keep.pk)
 
+    def test_same_event_host_on_both_keeps_one(self) -> None:
+        self._entry(self.keep_ou, ContributionKind.EVENT_HOST, 10, self.event_a)
+        self._entry(self.drop_ou, ContributionKind.EVENT_HOST, 10, self.event_a)
+
+        merge_discord_accounts(keep=self.keep, drop=self.drop)
+
+        self.assertEqual(
+            ContributionEntry.objects.nocache()
+            .filter(event=self.event_a, kind=ContributionKind.EVENT_HOST)
+            .count(),
+            1,
+        )
+        self.assertEqual(self._total(self.keep_ou), 10)
+
+    def test_promoter_membership_moves_to_keep(self) -> None:
+        self.org.promoters.add(self.drop)
+
+        merge_discord_accounts(keep=self.keep, drop=self.drop)
+
+        promoter_ids = set(
+            Organization.promoters.through.objects.filter(
+                organization=self.org
+            ).values_list("customuser_id", flat=True)
+        )
+        self.assertEqual(promoter_ids, {self.keep.pk})
+
 
 class UserDeleteWithContributionsTest(_LedgerFixture):
     def setUp(self) -> None:
@@ -333,6 +360,32 @@ class UserDeleteWithContributionsTest(_LedgerFixture):
         response = self.client.post(url, {"post": "yes"})
         self.assertEqual(response.status_code, 302)
         self._assert_gone()
+
+    def test_admin_delete_requires_entry_delete_permission(self) -> None:
+        staff = CustomUser.objects.create_user(
+            username="delete_staff", password="x", is_staff=True
+        )
+        staff.user_permissions.add(
+            Permission.objects.get(
+                content_type__app_label="app", codename="delete_customuser"
+            ),
+            Permission.objects.get(
+                content_type__app_label="app", codename="view_customuser"
+            ),
+        )
+        self.client.force_login(staff)
+        url = f"/admin/app/customuser/{self.victim.pk}/delete/"
+
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(
+            ContributionEntry._meta.verbose_name, response.context["perms_lacking"]
+        )
+
+        response = self.client.post(url, {"post": "yes"})
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(CustomUser.objects.filter(pk=self.victim.pk).exists())
+        self.assertEqual(ContributionEntry.objects.nocache().count(), 2)
 
     def test_admin_bulk_delete_selected_deletes(self) -> None:
         self.client.force_login(self.site_admin)

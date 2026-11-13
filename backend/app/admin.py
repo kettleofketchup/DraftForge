@@ -33,6 +33,8 @@ class CustomUserAdmin(admin.ModelAdmin):
         if entries:
             to_delete = [*to_delete, *(f"{prefix}{entry}" for entry in entries)]
             model_count = {**model_count, opts.verbose_name_plural: len(entries)}
+            if not request.user.has_perm(f"{opts.app_label}.delete_{opts.model_name}"):
+                perms_needed = {*perms_needed, opts.verbose_name}
         return to_delete, model_count, perms_needed, protected
 
     def delete_model(self, request: HttpRequest, obj: CustomUser) -> None:
@@ -55,7 +57,9 @@ class HeroDraftEventInline(admin.TabularInline):
     readonly_fields = ["event_type", "draft_team", "metadata", "created_at"]
     can_delete = False
 
-    def has_add_permission(self, request, obj=None):
+    def has_add_permission(
+        self, request: HttpRequest, obj: HeroDraft | None = None
+    ) -> bool:
         return False
 
 
@@ -81,14 +85,14 @@ class HeroDraftEventAdmin(admin.ModelAdmin):
     readonly_fields = ["draft", "event_type", "draft_team", "metadata", "created_at"]
     date_hierarchy = "created_at"
 
-    def get_team_name(self, obj):
+    def get_team_name(self, obj: HeroDraftEvent) -> str:
         if obj.draft_team and obj.draft_team.tournament_team:
             return obj.draft_team.tournament_team.name
         return "-"
 
     get_team_name.short_description = "Team"
 
-    def get_captain(self, obj):
+    def get_captain(self, obj: HeroDraftEvent) -> str:
         if obj.draft_team and obj.draft_team.tournament_team:
             captain = obj.draft_team.tournament_team.captain
             if captain:
