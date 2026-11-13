@@ -1,12 +1,13 @@
 """Event end time, read-only host/helpers/state and the event detail cache."""
 
+import inspect
 from datetime import time, timedelta
 from typing import Any
 from unittest.mock import patch
 
 from django.contrib.admin.sites import site as admin_site
 from django.core.exceptions import ValidationError
-from django.test import RequestFactory, TransactionTestCase
+from django.test import RequestFactory, SimpleTestCase, TransactionTestCase
 from django.utils import timezone as tz
 from rest_framework.test import APIClient
 
@@ -17,6 +18,11 @@ from events.models import Event, EventRepeater
 from events.serializers import ONE_OFF_OVERRIDE_FIELDS, EventSlimSerializer
 from events.services import REPEATER_CREATE_COPY_FIELDS
 from events.tests.base import EventTestCase
+from events.views import EventViewSet
+from org.contributions.kinds import ContributionKind
+from org.contributions.services import award_entry
+from org.feature_keys import FeatureKey
+from org.features import set_org_feature
 from user.models import BaseUserProfile
 from user.tests.test_cacheops_integration import _redis_reachable
 
@@ -188,6 +194,14 @@ class EventAdminStaffReadOnlyTest(EventTestCase):
         self.assertIn("host", readonly)
         self.assertIn("helpers", readonly)
 
+    def test_state_not_editable_in_admin_form(self) -> None:
+        model_admin = admin_site._registry[Event]
+        request = RequestFactory().get("/")
+        request.user = self.superuser
+        form_class = model_admin.get_form(request, self.event)
+        self.assertNotIn("state", form_class.base_fields)
+        self.assertIn("state", model_admin.get_readonly_fields(request, self.event))
+
     def test_admin_change_page_renders(self) -> None:
         self.event.host = self.user
         self.event.save()
@@ -260,6 +274,15 @@ class OneOffEndsAtTest(EventTestCase):
         self.assertIn("ends_at", resp.json())
 
 
+class EventDetailCacheDepsTest(SimpleTestCase):
+    """Guards the deps EventStaffCacheTest checks live; that class skips without Redis."""
+
+    def test_retrieve_cached_as_lists_user_and_profile(self) -> None:
+        source = inspect.getsource(EventViewSet.retrieve)
+        self.assertIn("CustomUser,", source)
+        self.assertIn("BaseUserProfile,", source)
+
+
 class EventStaffCacheTest(TransactionTestCase):
     """Real commits so cacheops caches and evicts between requests."""
 
@@ -326,6 +349,17 @@ class EventStaffCacheTest(TransactionTestCase):
         self.assertEqual(second["helpers"][0]["nickname"], "RenamedHelper")
 
     def test_anonymous_payload_has_no_points(self) -> None:
+        org = self.event.organization
+        org.members_private = True
+        org.save()
+        set_org_feature(org, FeatureKey.CONTRIBUTIONS, enabled=True, actor=None)
+        award_entry(
+            org=org,
+            user=self.helper,
+            kind=ContributionKind.EVENT_HOST,
+            occurred_at=tz.now(),
+            event=self.event,
+        )
         Event.objects.filter(pk=self.event.pk).update(host=self.helper)
         invalidate_obj(self.event)
         payload = self.client.get(self.url).json()

@@ -8,6 +8,7 @@ from django.db.models import (
     OuterRef,
     Prefetch,
     Q,
+    QuerySet,
     Value,
 )
 from django.utils import timezone
@@ -92,6 +93,16 @@ def _annotate_event_qs(qs):
             "signups",
             filter=Q(signups__status=SignupStatus.CONFIRMED),
         ),
+    )
+
+
+def with_event_staff(qs: QuerySet[Event]) -> QuerySet[Event]:
+    return (
+        qs.select_related("host__base_profile")
+        .prefetch_related(
+            Prefetch("helpers", queryset=with_user_profiles(CustomUser.objects.all()))
+        )
+        .nocache()
     )
 
 
@@ -476,17 +487,8 @@ class EventViewSet(viewsets.ModelViewSet):
                 "organization", "tournament_league", "created_by", "tournament"
             )
         )
-        if self.action == "retrieve":
-            qs = (
-                qs.select_related("host__base_profile")
-                .prefetch_related(
-                    Prefetch(
-                        "helpers",
-                        queryset=with_user_profiles(CustomUser.objects.all()),
-                    )
-                )
-                .nocache()
-            )
+        if self.action != "list":
+            qs = with_event_staff(qs)
         params = self.request.query_params
 
         # Filter by organization
@@ -824,7 +826,7 @@ class EventViewSet(viewsets.ModelViewSet):
             return Response(status=status.HTTP_403_FORBIDDEN)
         try:
             event.transition_state(EventState.SIGNUPS_OPEN)
-            qs = _annotate_event_qs(Event.objects.filter(pk=event.pk))
+            qs = with_event_staff(_annotate_event_qs(Event.objects.filter(pk=event.pk)))
             data = EventSerializer(qs.first()).data
             _attach_user_can_manage(data, request.user)
             return Response(data)
@@ -838,7 +840,7 @@ class EventViewSet(viewsets.ModelViewSet):
             return Response(status=status.HTTP_403_FORBIDDEN)
         try:
             event.transition_state(EventState.ROLL_CALL)
-            qs = _annotate_event_qs(Event.objects.filter(pk=event.pk))
+            qs = with_event_staff(_annotate_event_qs(Event.objects.filter(pk=event.pk)))
             data = EventSerializer(qs.first()).data
             _attach_user_can_manage(data, request.user)
             return Response(data)
@@ -861,7 +863,7 @@ class EventViewSet(viewsets.ModelViewSet):
             with transaction.atomic():
                 event.transition_state(EventState.SIGNUPS_OPEN)
                 invalidate_after_commit(event)
-            qs = _annotate_event_qs(Event.objects.filter(pk=event.pk))
+            qs = with_event_staff(_annotate_event_qs(Event.objects.filter(pk=event.pk)))
             data = EventSerializer(qs.first()).data
             _attach_user_can_manage(data, request.user)
             return Response(data)
@@ -893,7 +895,7 @@ class EventViewSet(viewsets.ModelViewSet):
                 )
 
                 start_auto_create_herodrafts(event.tournament)
-            qs = _annotate_event_qs(Event.objects.filter(pk=event.pk))
+            qs = with_event_staff(_annotate_event_qs(Event.objects.filter(pk=event.pk)))
             data = EventSerializer(qs.first()).data
             _attach_user_can_manage(data, request.user)
             return Response(data)
@@ -940,7 +942,7 @@ class EventViewSet(viewsets.ModelViewSet):
                         event_id=event.pk,
                         guild_id=discord_event.guild_id,
                     )
-            qs = _annotate_event_qs(Event.objects.filter(pk=event.pk))
+            qs = with_event_staff(_annotate_event_qs(Event.objects.filter(pk=event.pk)))
             data = EventSerializer(qs.first()).data
             _attach_user_can_manage(data, request.user)
             return Response(data)
@@ -988,7 +990,7 @@ class EventViewSet(viewsets.ModelViewSet):
         try:
             restart_event_tournament(event)
             event.refresh_from_db()
-            qs = _annotate_event_qs(Event.objects.filter(pk=event.pk))
+            qs = with_event_staff(_annotate_event_qs(Event.objects.filter(pk=event.pk)))
             data = EventSerializer(qs.first()).data
             _attach_user_can_manage(data, request.user)
             return Response(data)

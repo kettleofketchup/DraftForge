@@ -20,7 +20,7 @@ class EventAdmin(admin.ModelAdmin):
         "created_at",
     ]
     list_filter = ["state", "organization"]
-    readonly_fields = ["host", "helpers", "contributions_awarded_at"]
+    readonly_fields = ["state", "host", "helpers", "contributions_awarded_at"]
 
 
 @admin.register(EventTeam)
