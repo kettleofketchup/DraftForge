@@ -285,6 +285,10 @@ urlpatterns = [
         remove_org_promoter,
         name="org-promoter-remove",
     ),
+    path(
+        "api/organizations/<int:org_id>/contributions/",
+        include("org.contributions.urls"),
+    ),
     # League admin team
     path(
         "api/leagues/<int:league_id>/admins/",
