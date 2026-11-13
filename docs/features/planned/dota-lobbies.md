@@ -346,6 +346,33 @@ dota_lobby has to deliver webhooks to the backend Service from inside the cluste
 ingress needs an exception for `/api/internal/lobbies/events/`. Without webhooks the reconcile
 task still keeps lobbies up to date, a minute behind.
 
+### Where dota_lobby runs
+
+Production DraftForge uses its own dota_lobby instance, run on Kubernetes as described in the
+dota_lobby docs: [Kubernetes](https://kettleofketchup.github.io/dota_lobby/deployment/kubernetes/).
+
+- **Access:** the instance is published without SSO in front of it. An IP allowlist admits
+  only the DraftForge production server, but that check relies on a forwarded header, so
+  the API key is the real gate.
+- **Production settings:** `DOTA_LOBBY_URL` and `DOTA_LOBBY_API_KEY` are in
+  `backend/.env` on the production host. The key is also stored, encrypted, with the
+  instance's deployment; when rotating it, update both and restart the backend services.
+  `DOTA_LOBBY_ENABLED` stays `false` in `docker/.env.release` until DraftForge creates
+  lobbies.
+- **Bots:** one Steam bot, `draftforge1`. Its credentials live in the dota_lobby repository
+  (`secrets/bots/draftforge1.sops.yaml`) and are copied into the instance's Secret with
+  `just secrets k8s-secret`. A second bot (`draftforge2`) has credentials but is not
+  deployed. Each account may run in only one dota_lobby instance at a time, so do not run
+  these bots locally while the production instance is up.
+- **Checking it from production**, in the backend container:
+    ```bash
+    python /app/backend/manage.py shell -c \
+      "from lobby.client import DotaLobbyClient; print(DotaLobbyClient().list_lobbies())"
+    ```
+- **Webhooks:** none are configured yet. When the receiver lands, the dota_lobby instance
+  will post to production's `/api/internal/`, so its outbound address must be in
+  `INTERNAL_SERVICE_ALLOWED_IPS`, and the signing secret set on both sides.
+
 ---
 
 ## Goals
