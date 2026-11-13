@@ -226,35 +226,19 @@ vitest guard (`frontend/tests/unit/playwright-literal-guard.test.ts`) fails on e
 
 ## Cookie names
 
-Browsers scope cookies by host, not port, so every slot shares one cookie jar for
-`localhost`. To keep a login on one slot from logging you out of another, slots N ≥ 1
-suffix their cookie names: `sessionid-sN` and `csrftoken-sN`. Ephemeral `just test::run`
-stacks do the same with their `-run-<hex>` suffix.
-`docker-compose.slot.yaml` sets `DF_SESSION_COOKIE_NAME` and `DF_CSRF_COOKIE_NAME` on
-the backend and `VITE_CSRF_COOKIE_NAME` on the frontend, which reads the CSRF cookie
-for the `X-CSRFToken` header. Slot 0, CI and production keep Django's default names.
+Every stack uses Django's default cookie names, `sessionid` and `csrftoken`, as
+production does. Slots stay apart because each one has its own
+[hostname](#hostnames): cookies are host-only, so `s3.localhost` never sees
+`localhost`'s or `s4.localhost`'s cookies. Ephemeral `just test::run` stacks serve no
+browser.
 
-`VITE_CSRF_COOKIE_NAME` is fixed when the dev server starts or the image is built, so it
-is only the starting guess. Every backend response carries an `X-CSRF-Cookie-Name`
-header, and the axios client switches to that name (logging a `csrf` warning) when it
-differs. A stale frontend container or a prebuilt image on a slot therefore recovers
-after its first API response instead of failing every write with a 403.
+Slots used to suffix their cookie names (`sessionid-sN`, `csrftoken-sN`) and the backend
+sent an `X-CSRF-Cookie-Name` header for the frontend to follow. Per-slot hostnames
+replaced both, and they also separate `df-locale` and Django's `messages` cookie, which
+the renaming never covered.
 
 Cookies read in the browser go through `readCookie` in `frontend/app/lib/cookies.ts`,
 which matches the exact name and URL-decodes the value.
-
-Other cookies stay shared on purpose:
-
-- `df-locale` (the frontend's language choice) is a display preference of the person at
-  the browser, not tied to a stack's data or login. Sharing it across slots is harmless.
-- Django never sets its language cookie here: there is no `LocaleMiddleware` and no
-  `set_language` view.
-- Django's `messages` cookie only carries flash messages for Django-rendered pages
-  (admin, social-auth errors). The React app never reads it; at worst a message shows
-  up in another slot's admin.
-
-In Playwright fixtures, find cookies with `isCsrfCookie` / `isSessionCookie` from
-`fixtures/cookies.ts` rather than comparing against `csrftoken` or `sessionid`.
 
 ## CI
 

@@ -6,6 +6,12 @@ import pytest
 
 from scripts.slot_tests._helpers import ROOT, render, render_raw
 
+COOKIE_NAME_VARS = {
+    "DF_SESSION_COOKIE_NAME",
+    "DF_CSRF_COOKIE_NAME",
+    "VITE_CSRF_COOKIE_NAME",
+}
+
 SLOT3 = {
     "DF_SUFFIX": "-s3",
     "DF_HTTPS_PORT": "13443",
@@ -33,9 +39,8 @@ def test_slot_render() -> None:
         s["backend"]["environment"]["DF_EXTRA_CSRF_ORIGINS"]
         == "https://s3.localhost:13443"
     )
-    assert s["backend"]["environment"]["DF_SESSION_COOKIE_NAME"] == "sessionid-s3"
-    assert s["backend"]["environment"]["DF_CSRF_COOKIE_NAME"] == "csrftoken-s3"
-    assert s["frontend"]["environment"]["VITE_CSRF_COOKIE_NAME"] == "csrftoken-s3"
+    for svc in ("frontend", "backend"):
+        assert not COOKIE_NAME_VARS & set(s[svc]["environment"]), svc
     assert [(v["type"], v["source"]) for v in s["redis"]["volumes"]] == [
         ("volume", "redis_data")
     ]
@@ -105,7 +110,7 @@ def test_base_test_file_invariants() -> None:
     assert names <= {"frontend", "backend", "redis", "nginx"}
     for svc in ("frontend", "backend"):
         env = cfg["services"][svc].get("environment") or {}
-        assert not {"DF_SESSION_COOKIE_NAME", "DF_CSRF_COOKIE_NAME", "VITE_CSRF_COOKIE_NAME"} & set(env), svc
+        assert not COOKIE_NAME_VARS & set(env), svc
 
 
 @pytest.mark.parametrize(

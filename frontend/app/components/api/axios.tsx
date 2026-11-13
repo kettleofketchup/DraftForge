@@ -1,7 +1,7 @@
 import { Sentry } from '~/lib/sentry';
 import axios from 'axios';
 
-import { CSRF_COOKIE_NAME_HEADER, getCsrfToken, syncCsrfCookieName } from './utils';
+import { getCsrfToken } from './utils';
 
 // Determine the API base URL based on environment
 // On server (SSR): use internal URL (configurable via SSR_API_URL env var)
@@ -37,13 +37,7 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-const isBrowser = typeof window !== 'undefined';
-
-api.interceptors.response.use((response) => {
-  if (isBrowser) syncCsrfCookieName(response.headers?.[CSRF_COOKIE_NAME_HEADER]);
-  return response;
-}, (error) => {
-  if (isBrowser) syncCsrfCookieName(error.response?.headers?.[CSRF_COOKIE_NAME_HEADER]);
+api.interceptors.response.use(undefined, (error) => {
   const status = error.response?.status;
 
   // Session expired or not authenticated — notify user
