@@ -17,6 +17,7 @@ import { BASE_URL } from '../fixtures/base-url';
 import { test, chromium, type Page, type Locator } from '@playwright/test';
 import { loginAdmin, waitForHydration, API_URL } from '../fixtures/auth';
 import { waitForDemoReady } from '../fixtures/demo-utils';
+import { findTournamentCard } from '../helpers/tournament';
 import * as path from 'path';
 import * as fs from 'fs';
 import { fileURLToPath } from 'url';
@@ -267,25 +268,19 @@ test.describe('CSV Import Demo', () => {
     // Submit
     const submitButton = page.locator('[data-testid="tournament-submit-button"]');
     await demoClick(page, submitButton, 100);
-    await page.waitForLoadState('networkidle');
+    await nameInput.waitFor({ state: 'hidden', timeout: 15000 });
 
-    // Wait for card to appear
-    const createdCard = page
-      .locator('[data-slot="card-title"]')
-      .filter({ hasText: 'Demo CSV Import' })
-      .first();
-    await createdCard.scrollIntoViewIfNeeded();
-    await createdCard.waitFor({ state: 'visible', timeout: 15000 });
+    // Day 15 is Archived after about the 17th, so search both tabs
+    const tournamentCard = await findTournamentCard(page, 'Demo CSV Import', {
+      timeout: 15000,
+    });
+    await tournamentCard.scrollIntoViewIfNeeded();
 
     // =========================================================================
     // Step 3 — Click into tournament
     // =========================================================================
     console.log('Step 3: Navigate into tournament');
-    const tournamentCard = page
-      .locator('[data-testid^="tournament-card-"]')
-      .filter({ hasText: 'Demo CSV Import' })
-      .first();
-    const viewButton = tournamentCard.getByRole('button', { name: 'View' });
+    const viewButton = tournamentCard.locator('[data-testid^="tournament-view-"]');
     await demoClick(page, viewButton, 150);
 
     await page.locator('[data-testid="tournamentDetailPage"]').waitFor({

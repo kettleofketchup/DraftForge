@@ -6,7 +6,7 @@
  */
 
 import { test, expect, visitAndWaitForHydration } from '../../fixtures';
-import { TournamentPage } from '../../helpers/tournament';
+import { findTournamentCard } from '../../helpers/tournament';
 
 // Generate dynamic test data similar to Cypress constants
 const getDateYYYYMMDD = (): string => {
@@ -41,8 +41,6 @@ test.describe('Tournaments - create (e2e)', () => {
   test('logs in, creates a tournament via the UI and shows it in the list', async ({
     page,
   }) => {
-    const tournamentPage = new TournamentPage(page);
-
     // Wait for page data to load before interacting with create button
     const createButton = page.getByRole('button', { name: /create tournament/i });
     await createButton.waitFor({ state: 'visible', timeout: 30000 });
@@ -84,26 +82,16 @@ test.describe('Tournaments - create (e2e)', () => {
     // Submit the form
     await page.locator('[data-testid="tournament-submit-button"]').click();
 
-    // After submission, the created tournament should appear in the list.
-    // Wait for success toast or navigation
-    await page.waitForLoadState('networkidle');
+    await expect(page.locator('[data-testid="tournament-name-input"]')).toBeHidden({ timeout: 15000 });
 
-    // Wait up to 15s for backend work and UI update
-    // Use card-title to avoid matching the success toast, .first() to handle duplicates from reruns
-    const createdTournament = page.locator('[data-slot="card-title"]').filter({ hasText: thisName }).first();
-    await createdTournament.scrollIntoViewIfNeeded();
-    await expect(createdTournament).toBeVisible({ timeout: 15000 });
+    // Day 20 of this month can land on either tab; the helper searches both.
+    const createdCard = await findTournamentCard(page, thisName);
+    await createdCard.scrollIntoViewIfNeeded();
+    await expect(createdCard).toBeVisible();
   });
 
   test('Can edit a tournament via the form', async ({ page }) => {
-    // Use existing test tournament - wait for it to load
-    await expect(page.getByText(completedBracketTest)).toBeVisible({ timeout: 30000 });
-
-    // Find the tournament card containing our test tournament
-    const tournamentCard = page
-      .locator('[data-testid^="tournament-card-"]')
-      .filter({ hasText: completedBracketTest })
-      .first();
+    const tournamentCard = await findTournamentCard(page, completedBracketTest);
 
     // Open edit modal. Use Playwright's auto-waiting click (was previously
     // .evaluate(btn => btn.click()), which bypasses visible/enabled/stable
@@ -131,14 +119,8 @@ test.describe('Tournaments - create (e2e)', () => {
     // Wait for success message
     await expect(page.getByText(/successfully/i)).toBeVisible({ timeout: 10000 });
 
-    // Verify edited name appears
-    await expect(page.getByText(editedNameWithSuffix).first()).toBeVisible({ timeout: 10000 });
-
     // Revert the change to keep test data clean
-    const editedCard = page
-      .locator('[data-testid^="tournament-card-"]')
-      .filter({ hasText: editedNameWithSuffix })
-      .first();
+    const editedCard = await findTournamentCard(page, editedNameWithSuffix);
     const revertEditButton = editedCard.locator('[data-testid="tournament-edit-button"]');
     await revertEditButton.evaluate((btn) => (btn as HTMLButtonElement).click());
 
@@ -181,15 +163,10 @@ test.describe('Tournaments - create (e2e)', () => {
 
     // Submit to create
     await page.locator('[data-testid="tournament-submit-button"]').click();
-    await page.waitForLoadState('networkidle');
+    await expect(page.locator('[data-testid="tournament-name-input"]')).toBeHidden({ timeout: 15000 });
 
-    // Verify it was created
-    const createdTournament = page.locator('[data-slot="card-title"]').filter({ hasText: deletableName }).first();
-    await createdTournament.scrollIntoViewIfNeeded();
-    await expect(createdTournament).toBeVisible({ timeout: 15000 });
-
-    const tournamentCard = page.locator('div[data-testid^="tournament-card-"]').filter({ hasText: deletableName }).first();
-    await tournamentCard.waitFor({ state: 'visible', timeout: 10000 });
+    const tournamentCard = await findTournamentCard(page, deletableName);
+    await tournamentCard.scrollIntoViewIfNeeded();
 
     // Find the delete button - TrashIconButton uses variant="destructive" which applies bg-destructive
     // The button also has sr-only text "Delete" or "Delete tournament"
@@ -205,22 +182,14 @@ test.describe('Tournaments - create (e2e)', () => {
     // Wait for deletion success
     await expect(page.getByText(/deleted/i)).toBeVisible({ timeout: 10000 });
 
-    // Verify tournament is gone
-    await expect(page.locator('[data-slot="card-title"]').filter({ hasText: deletableName })).not.toBeVisible({ timeout: 5000 });
+    // Verify tournament is gone without a reload
+    await expect(tournamentCard).toHaveCount(0, { timeout: 10000 });
   });
 
   test('View Button works', async ({ page }) => {
-    // Wait for tournament data to load (API returns large payload)
-    await expect(page.getByText(completedBracketTest)).toBeVisible({ timeout: 30000 });
+    const tournamentCard = await findTournamentCard(page, completedBracketTest);
 
-    // Find the tournament card containing our test tournament using data-testid
-    const tournamentCard = page
-      .locator('[data-testid^="tournament-card-"]')
-      .filter({ hasText: completedBracketTest })
-      .first();
-
-    // Click the View button
-    await tournamentCard.getByRole('button', { name: 'View' }).click();
+    await tournamentCard.locator('[data-testid^="tournament-view-"]').click();
 
     // Verify URL changed to tournament detail page
     await expect(page).toHaveURL(/\/tournament\//);

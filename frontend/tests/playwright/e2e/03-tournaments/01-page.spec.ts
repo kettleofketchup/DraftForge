@@ -6,18 +6,22 @@
  */
 
 import { test, expect, visitAndWaitForHydration } from '../../fixtures';
+import { CARD_SELECTOR } from '../../helpers/tournament';
 
 test.describe('API Integration Tests', () => {
-  test.beforeEach(async ({ page }) => {
-    // No-op setup - tests handle their own navigation
-  });
-
-  test('should handle API requests for tournaments', async ({ page }) => {
-    // Navigate to tournaments page
+  test('@cicd default tab lists upcoming tournaments and hides archived ones', async ({
+    page,
+  }) => {
     await visitAndWaitForHydration(page, '/tournaments');
 
-    // Wait for tournament data to load - the API returns a large payload
-    // so we wait directly for the expected content with extended timeout
-    await expect(page.locator('body')).toContainText('Partial Bracket Test', { timeout: 30000 });
+    const panel = page.getByTestId('tournaments-panel-upcoming');
+    await expect(panel).toHaveAttribute('data-fetching', 'false', { timeout: 30000 });
+
+    const cardNamed = (name: string) =>
+      page.locator(CARD_SELECTOR).filter({ hasText: name });
+
+    await expect(cardNamed('Discovery Home Soon').first()).toBeVisible({ timeout: 30000 });
+    await expect(cardNamed('Discovery Home Finished')).toHaveCount(0);
+    await expect(cardNamed('Discovery Home Stale')).toHaveCount(0);
   });
 });
