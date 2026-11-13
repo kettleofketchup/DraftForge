@@ -265,6 +265,23 @@ describe('organization scope', () => {
     expect(upcomingMock).toHaveBeenLastCalledWith(expect.anything(), { enabled: false });
   });
 
+  it('marks both panels busy while the default scope waits for the user', () => {
+    stubUpcoming({ data: undefined, isFetching: false });
+    stubArchived({ data: undefined, tournaments: [], isFetching: false });
+    stubMembership(undefined, { isLoggedIn: false, membershipPending: true });
+    const { unmount } = renderPage();
+    expect(screen.getByTestId('tournaments-panel-upcoming')).toHaveAttribute(
+      'data-fetching',
+      'true',
+    );
+    unmount();
+    renderPage('/tournaments?tab=archived');
+    expect(screen.getByTestId('tournaments-panel-archived')).toHaveAttribute(
+      'aria-busy',
+      'true',
+    );
+  });
+
   it('does not wait for membership on an explicit organization', () => {
     stubMembership(undefined, { isLoggedIn: false, membershipPending: true });
     renderPage('/tournaments?organization=30');

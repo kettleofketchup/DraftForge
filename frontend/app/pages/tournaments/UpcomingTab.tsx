@@ -49,6 +49,7 @@ export function UpcomingTab({
   membership,
   orgOrLeagueFilter,
   mine,
+  waiting,
   showClearHint,
   onViewArchived,
   onBrowseAll,
@@ -57,12 +58,15 @@ export function UpcomingTab({
   membership: Membership;
   orgOrLeagueFilter: boolean;
   mine: boolean;
+  /** The query waits for the viewer before it can start. */
+  waiting: boolean;
   showClearHint: boolean;
   onViewArchived: () => void;
   onBrowseAll: () => void;
 }) {
   const { data, isError, isFetching, refetch, error } = query;
   const failed = isError && !data;
+  const busy = isFetching || waiting;
 
   useEffect(() => {
     if (failed) log.error('Failed to load upcoming tournaments', error);
@@ -140,8 +144,8 @@ export function UpcomingTab({
   return (
     <div
       data-testid="tournaments-panel-upcoming"
-      aria-busy={isFetching}
-      data-fetching={String(isFetching)}
+      aria-busy={busy}
+      data-fetching={String(busy)}
       className="w-full"
     >
       {content}

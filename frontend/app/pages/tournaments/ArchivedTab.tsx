@@ -30,11 +30,14 @@ type ArchivedQuery = Pick<
 export function ArchivedTab({
   query,
   mine,
+  waiting,
   showClearHint,
   onBrowseAll,
 }: {
   query: ArchivedQuery;
   mine: boolean;
+  /** The query waits for the viewer before it can start. */
+  waiting: boolean;
   showClearHint: boolean;
   onBrowseAll: () => void;
 }) {
@@ -52,6 +55,7 @@ export function ArchivedTab({
     refetch,
   } = query;
   const failed = isError && !data;
+  const busy = isFetching || waiting;
 
   useEffect(() => {
     if (failed) log.error('Failed to load archived tournaments', error);
@@ -113,8 +117,8 @@ export function ArchivedTab({
   return (
     <div
       data-testid="tournaments-panel-archived"
-      aria-busy={isFetching}
-      data-fetching={String(isFetching)}
+      aria-busy={busy}
+      data-fetching={String(busy)}
       className="w-full"
     >
       {content}

@@ -105,6 +105,7 @@ export default function TournamentsPage() {
             membership={membership}
             orgOrLeagueFilter={orgOrLeagueFilter}
             mine={mine}
+            waiting={!scopeReady}
             showClearHint={showClearHint}
             onViewArchived={showArchived}
             onBrowseAll={browseAllOrganizations}
@@ -114,6 +115,7 @@ export default function TournamentsPage() {
           <ArchivedTab
             query={archived}
             mine={mine}
+            waiting={!scopeReady}
             showClearHint={showClearHint}
             onBrowseAll={browseAllOrganizations}
           />
