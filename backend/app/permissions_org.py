@@ -165,6 +165,26 @@ def _payload_lists_user(user: CustomUser, data: Mapping[str, Any]) -> bool:
     )
 
 
+def _payload_has_user(user: CustomUser, entries: Any) -> bool:
+    return any(entry.get("pk") == user.pk for entry in entries or ())
+
+
+def org_admin_staff_from_payload(
+    user: CustomUser | AnonymousUser, data: Mapping[str, Any]
+) -> tuple[bool, bool]:
+    """(has_org_admin_access, has_org_staff_access) read from a serialized
+    OrganizationSerializer payload instead of the database."""
+    if not user.is_authenticated:
+        return False, False
+    owner = data.get("owner")
+    is_admin = (
+        is_site_admin(user)
+        or (isinstance(owner, Mapping) and owner.get("pk") == user.pk)
+        or _payload_has_user(user, data.get("admins"))
+    )
+    return is_admin, is_admin or _payload_has_user(user, data.get("staff"))
+
+
 def can_view_org_members_from_payload(
     user: CustomUser | AnonymousUser, data: Mapping[str, Any]
 ) -> bool:

@@ -82,10 +82,9 @@ from .permissions_org import (
     can_view_org_members_from_payload,
     has_league_admin_access,
     has_league_staff_access,
-    has_org_admin_access,
     has_org_staff_access,
     is_org_role_holder,
-    is_site_admin,
+    org_admin_staff_from_payload,
 )
 from .serializers import (
     DraftRoundSerializer,
@@ -1103,23 +1102,18 @@ def _member_access(
 
 
 def _feature_access(
-    user: CustomUser | AnonymousUser, org_pk: int, can_view: bool
+    user: CustomUser | AnonymousUser, data: Any, can_view: bool
 ) -> dict[str, list[str] | bool]:
     """Active feature keys plus per-viewer flags; merged after the cache."""
-    features = active_features(org_pk)
+    features = active_features(data["pk"])
     promotion = FeatureKey.PROMOTION.value in features
     contributions = FeatureKey.CONTRIBUTIONS.value in features
-    org = (
-        Organization.objects.nocache().get(pk=org_pk)
-        if features and user.is_authenticated
-        else None
-    )
-    is_admin = org is not None and has_org_admin_access(user, org)
-    is_staff = org is not None and has_org_staff_access(user, org)
+    is_admin, is_staff = org_admin_staff_from_payload(user, data)
     return {
         "features": features,
+        # Must match has_org_promoter_access (the require_promoter gate).
         "can_use_promotion": promotion
-        and (is_site_admin(user) or is_org_role_holder(user, org_pk)),
+        and (is_staff or is_org_role_holder(user, data["pk"])),
         "can_manage_promotion_templates": promotion and is_staff,
         "can_manage_promoters": promotion and is_admin,
         "can_view_contributions": contributions,
@@ -1134,7 +1128,7 @@ def _org_viewer_access(
     can_view = can_view_org_members_from_payload(user, data)
     return {
         **_member_access(user, can_view),
-        **_feature_access(user, data["pk"], can_view),
+        **_feature_access(user, data, can_view),
     }
 
 

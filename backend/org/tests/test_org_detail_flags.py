@@ -1,8 +1,12 @@
+from typing import Any
+
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, Organization
+from app.models import CustomUser, League, Organization
 from org.features import FeatureKey, org_has_feature, set_org_feature
 from org.models import OrgUser
 
@@ -95,7 +99,7 @@ class OrgDetailFeatureFlagsTest(TestCase):
     def _unlock(self, feature: FeatureKey) -> None:
         set_org_feature(self.org, feature, enabled=True, actor=self.site_admin)
 
-    def _get(self, user: CustomUser | None) -> dict:
+    def _get(self, user: CustomUser | None) -> dict[str, Any]:
         self.client.force_authenticate(user=user)
         resp = self.client.get(self.url)
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
@@ -159,6 +163,41 @@ class OrgDetailFeatureFlagsTest(TestCase):
         self.assertNotIn("enabled_by", resp.data)
         self.assertNotIn("enabled_at", resp.data)
         self.assertNotIn("notes", resp.data)
+
+    def test_members_private_hides_contributors_from_non_staff(self) -> None:
+        self._unlock(FeatureKey.CONTRIBUTIONS)
+        self.org.members_private = True
+        self.org.save()
+        league_staff = CustomUser.objects.create_user(
+            username="flags_league_staff", password="x"
+        )
+        League.objects.create(name="Flags League", organization=self.org).staff.add(
+            league_staff
+        )
+        expected = {
+            "owner": True,
+            "admin": True,
+            "staff": True,
+            "promoter": False,
+            "member": False,
+            "anon": False,
+        }
+        for role, user in self._users().items():
+            with self.subTest(role=role):
+                self.assertIs(self._get(user)["can_view_contributors"], expected[role])
+        self.assertIs(self._get(league_staff)["can_view_contributors"], True)
+
+    def _warm_query_count(self, user: CustomUser) -> int:
+        self._get(user)
+        with CaptureQueriesContext(connection) as ctx:
+            self._get(user)
+        return len(ctx.captured_queries)
+
+    def test_unlocked_flags_add_no_queries_for_staff(self) -> None:
+        locked = self._warm_query_count(self.staff)
+        self._unlock(FeatureKey.PROMOTION)
+        self._unlock(FeatureKey.CONTRIBUTIONS)
+        self.assertEqual(self._warm_query_count(self.staff), locked)
 
     def test_patch_cannot_write_flags(self) -> None:
         self.client.force_authenticate(user=self.admin)
