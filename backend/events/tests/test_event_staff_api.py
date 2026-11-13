@@ -457,6 +457,22 @@ class EventEditResyncTest(EventStaffApiTestBase):
         self.assertTrue(resp.json()["user_can_manage"])
         self.assertTrue(resp.json()["user_can_manage_event_staff"])
 
+    def test_admin_put_returns_manage_flags(self) -> None:
+        self._as(self.org_admin)
+        resp = self.client.put(
+            self.detail_url,
+            {
+                "organization": self.event.organization_id,
+                "name": "Renamed Event",
+                "scheduled_at": self.start.isoformat(),
+            },
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertEqual(resp.json()["name"], "Renamed Event")
+        self.assertTrue(resp.json()["user_can_manage"])
+        self.assertTrue(resp.json()["user_can_manage_event_staff"])
+
     def test_staff_patch_returns_staff_flags(self) -> None:
         resp = self._patch({"name": "Renamed Event"})
         self.assertEqual(resp.status_code, 200, resp.content)
