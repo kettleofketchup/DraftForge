@@ -149,14 +149,15 @@ class TournamentListScopeTests(TestCase):
                 self.assertEqual(response.status_code, 400, response.content)
                 self.assertIn(field, response.json())
 
-    def test_open_signups_follows_the_clock(self) -> None:
+    def test_open_signups_ignores_deadline_and_open_time(self) -> None:
         event = Event.objects.get(tournament=self.rows["away_open"])
         event.signup_deadline_hours = 1
+        event.signups_open_at = NOW + timedelta(hours=1)
+        event.allow_user_signups = False
         event.save()
-        self.assertEqual(
-            self.pks("?bucket=upcoming&open_signups=1"), self.pk_set("away_open")
-        )
         later = event.scheduled_at - timedelta(minutes=30)
         with mock.patch("app.tournament_buckets._now", return_value=later):
             response = self.client.get(f"{LIST_URL}?bucket=upcoming&open_signups=1")
-        self.assertEqual(response.json(), [])
+        self.assertEqual(
+            {row["pk"] for row in response.json()}, self.pk_set("away_open")
+        )

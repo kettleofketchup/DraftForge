@@ -20,8 +20,7 @@ Signed-in users start on **My organizations** in the Organization dropdown. It s
 - **Upcoming**: tournaments from your organizations, plus tournaments from any other
   organization whose signups are open right now. Those carry a **Signups open** badge so it is
   clear why they are listed. Signups are open when the tournament's source event is in the
-  Signups Open state, allows user signups, has reached its signups open time and has not
-  passed its signup deadline.
+  Signups Open state, the same check the signup button makes.
 - **Archived**: tournaments from your organizations only.
 
 If nothing matches, the empty state offers **Browse all organizations**.

@@ -1,7 +1,7 @@
 """Request plumbing for the tournament list: params, search, cache key, page envelope."""
 
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import datetime
 from typing import Any, Literal, cast
 from urllib.parse import urlencode
 
@@ -16,10 +16,7 @@ MAX_PAGE_SIZE = 100
 SEARCH_MIN = 2
 SEARCH_MAX = 64
 MAX_ORGANIZATIONS = 100
-TOURNAMENTS_LIST_CACHE_PREFIX = "tournaments_list_v4"
-# Open signups depend on the clock, so cached lists are keyed by a time window
-# and evaluate signup windows at its start: a list is at most this stale.
-SIGNUP_WINDOW = timedelta(minutes=5)
+TOURNAMENTS_LIST_CACHE_PREFIX = "tournaments_list_v5"
 
 Bucket = Literal["upcoming", "archived"]
 BUCKETS: tuple[Bucket, ...] = ("upcoming", "archived")
@@ -151,16 +148,7 @@ def parse_tournament_list_params(query_params: QueryDict) -> TournamentListParam
     )
 
 
-def signup_window_start(now: datetime) -> datetime:
-    """Start of the SIGNUP_WINDOW-long UTC window that contains ``now``."""
-    utc = now.astimezone(UTC)
-    day = datetime.combine(utc.date(), datetime.min.time(), tzinfo=UTC)
-    return day + ((utc - day) // SIGNUP_WINDOW) * SIGNUP_WINDOW
-
-
-def tournaments_list_cache_key(
-    params: TournamentListParams, cutoff: datetime, signup_window: datetime
-) -> str:
+def tournaments_list_cache_key(params: TournamentListParams, cutoff: datetime) -> str:
     pairs: list[tuple[str, str]] = []
     for name in ("organization", "league", "bucket", "search", "page"):
         value = getattr(params, name)
@@ -174,7 +162,7 @@ def tournaments_list_cache_key(
         pairs.append(("page_size", str(params.page_size)))
     return (
         f"{TOURNAMENTS_LIST_CACHE_PREFIX}:{cutoff.date().isoformat()}"
-        f":{signup_window.strftime('%H%M')}:{urlencode(sorted(pairs))}"
+        f":{urlencode(sorted(pairs))}"
     )
 
 

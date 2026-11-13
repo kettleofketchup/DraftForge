@@ -48,7 +48,6 @@ from app.tournament_list import (
     TournamentListParams,
     build_page_envelope,
     parse_tournament_list_params,
-    signup_window_start,
     tournaments_list_cache_key,
 )
 from events.models import Event
@@ -1097,7 +1096,6 @@ class TournamentListView(viewsets.ReadOnlyModelViewSet):
     _now: datetime
     _cutoff: datetime
     _today_start: datetime
-    _signup_window: datetime
     _params: TournamentListParams
 
     def initial(self, request: Request, *args: Any, **kwargs: Any) -> None:
@@ -1105,7 +1103,6 @@ class TournamentListView(viewsets.ReadOnlyModelViewSet):
         self._now = tournament_buckets._now()
         self._cutoff = tournament_bucket_cutoff(self._now)
         self._today_start = utc_day_start(self._now)
-        self._signup_window = signup_window_start(self._now)
         self._params = parse_tournament_list_params(request.query_params)
 
     def get_queryset(self) -> QuerySet[Tournament]:
@@ -1114,7 +1111,7 @@ class TournamentListView(viewsets.ReadOnlyModelViewSet):
             "league", "league__organization"
         ).annotate(user_count=Count("users", distinct=True))
 
-        open_ids = user_signups_open_tournament_ids(self._signup_window)
+        open_ids = user_signups_open_tournament_ids()
         qs = qs.annotate(
             signups_open=Case(
                 When(pk__in=open_ids, then=Value(True)),
@@ -1177,9 +1174,7 @@ class TournamentListView(viewsets.ReadOnlyModelViewSet):
                 League.objects.all(),
                 Organization.objects.all(),
                 Event.objects.all(),
-                extra=tournaments_list_cache_key(
-                    params, self._cutoff, self._signup_window
-                ),
+                extra=tournaments_list_cache_key(params, self._cutoff),
                 timeout=60 * 10,
             )(compute)()
 

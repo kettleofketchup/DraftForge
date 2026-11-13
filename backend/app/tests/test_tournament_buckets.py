@@ -19,18 +19,15 @@ from app.tournament_buckets import (
 from app.tournament_list import (
     DEFAULT_PAGE_SIZE,
     MAX_PAGE_SIZE,
-    SIGNUP_WINDOW,
     TournamentListPagination,
     build_page_envelope,
     normalize_search,
     parse_tournament_list_params,
-    signup_window_start,
     tournaments_list_cache_key,
 )
 
 NOW = datetime(2026, 11, 13, 15, 30, tzinfo=UTC)
 CUTOFF = datetime(2026, 11, 11, tzinfo=UTC)
-WINDOW = datetime(2026, 11, 13, 15, 30, tzinfo=UTC)
 
 
 class TournamentBucketCutoffTests(SimpleTestCase):
@@ -137,11 +134,9 @@ class ParseTournamentListParamsTests(SimpleTestCase):
 
 
 class TournamentsListCacheKeyTests(SimpleTestCase):
-    def _key(
-        self, qs: str, cutoff: datetime = CUTOFF, window: datetime = WINDOW
-    ) -> str:
+    def _key(self, qs: str, cutoff: datetime = CUTOFF) -> str:
         return tournaments_list_cache_key(
-            parse_tournament_list_params(QueryDict(qs)), cutoff, window
+            parse_tournament_list_params(QueryDict(qs)), cutoff
         )
 
     def test_cache_key_drops_unknown_and_normalizes_ints(self) -> None:
@@ -149,7 +144,7 @@ class TournamentsListCacheKeyTests(SimpleTestCase):
         b = self._key("organization=7")
         self.assertEqual(a, b)
         self.assertIn("2026-11-11", a)
-        self.assertTrue(a.startswith("tournaments_list_v4:"))
+        self.assertTrue(a.startswith("tournaments_list_v5:"))
 
     def test_cache_key_is_order_independent(self) -> None:
         self.assertEqual(
@@ -186,12 +181,6 @@ class TournamentsListCacheKeyTests(SimpleTestCase):
             self._key("bucket=upcoming", datetime(2026, 11, 12, tzinfo=UTC)),
         )
 
-    def test_cache_key_differs_by_signup_window(self) -> None:
-        self.assertNotEqual(
-            self._key("bucket=upcoming"),
-            self._key("bucket=upcoming", window=WINDOW + SIGNUP_WINDOW),
-        )
-
     def test_cache_key_normalizes_organizations(self) -> None:
         self.assertEqual(
             self._key("organizations=3,1,3&open_signups=1"),
@@ -208,24 +197,6 @@ class TournamentsListCacheKeyTests(SimpleTestCase):
     def test_cache_key_reads_prefix_at_call_time(self) -> None:
         with mock.patch("app.tournament_list.TOURNAMENTS_LIST_CACHE_PREFIX", "other"):
             self.assertTrue(self._key("bucket=upcoming").startswith("other:"))
-
-
-class SignupWindowStartTests(SimpleTestCase):
-    def test_floors_to_the_window(self) -> None:
-        self.assertEqual(
-            signup_window_start(datetime(2026, 11, 13, 12, 7, 59, tzinfo=UTC)),
-            datetime(2026, 11, 13, 12, 5, tzinfo=UTC),
-        )
-        self.assertEqual(
-            signup_window_start(datetime(2026, 11, 13, 12, 5, tzinfo=UTC)),
-            datetime(2026, 11, 13, 12, 5, tzinfo=UTC),
-        )
-
-    def test_uses_utc(self) -> None:
-        local = datetime(2026, 11, 13, 7, 3, tzinfo=timezone(timedelta(hours=-5)))
-        self.assertEqual(
-            signup_window_start(local), datetime(2026, 11, 13, 12, 0, tzinfo=UTC)
-        )
 
 
 class BuildPageEnvelopeTests(SimpleTestCase):
