@@ -9,6 +9,7 @@ from django.utils import timezone
 
 from app.models import CustomUser, Organization, OrgLog
 from app.permissions_org import is_org_role_holder
+from events.constants import EventState
 from events.models import Event
 from events.services import resolve_or_create_org_user
 from org.contributions.kinds import (
@@ -42,6 +43,13 @@ class RescoreResult:
     old: int
     new: int
     changed: int
+
+
+@dataclass(frozen=True)
+class SyncResult:
+    created: int
+    deleted: int
+    updated: int
 
 
 def _is_int(value: object) -> TypeGuard[int]:
@@ -125,6 +133,79 @@ def award_entry(
         awarded_by_id=awarded_by.pk if awarded_by is not None else None,
     )
     return entry
+
+
+def should_sync_staff(event: Event) -> bool:
+    return (
+        event.state == EventState.COMPLETED
+        or event.contributions_awarded_at is not None
+    )
+
+
+@transaction.atomic
+def sync_event_staff_entries(event: Event) -> SyncResult:
+    org = event.organization
+    occurred_at = event.ends_at or event.scheduled_at
+    wanted: dict[tuple[int, str], CustomUser] = {}
+    if event.host_id is not None:
+        host = CustomUser.objects.nocache().get(pk=event.host_id)
+        wanted[(host.pk, ContributionKind.EVENT_HOST.value)] = host
+    helpers = event.helpers.nocache().all()
+    if event.host_id is not None:
+        helpers = helpers.exclude(pk=event.host_id)
+    for helper in helpers:
+        wanted[(helper.pk, ContributionKind.EVENT_HELPER.value)] = helper
+
+    existing = ContributionEntry.objects.nocache().filter(
+        organization=org, event=event, kind__in=EVENT_STAFF_KINDS
+    )
+    have: set[tuple[int, str]] = set()
+    remove: list[int] = []
+    refresh: list[int] = []
+    for pk, user_id, kind, entry_at, entry_name in existing.values_list(
+        "pk", "org_user__user_id", "kind", "occurred_at", "event_name"
+    ):
+        key = (user_id, kind)
+        if key not in wanted or key in have:
+            remove.append(pk)
+            continue
+        have.add(key)
+        if entry_at != occurred_at or entry_name != event.name:
+            refresh.append(pk)
+
+    deleted = len(remove)
+    if remove:
+        ContributionEntry.objects.nocache().filter(pk__in=remove).delete()
+    updated = 0
+    if refresh:
+        updated = (
+            ContributionEntry.objects.nocache()
+            .filter(pk__in=refresh)
+            .update(
+                occurred_at=occurred_at,
+                event_name=event.name,
+                updated_at=timezone.now(),
+            )
+        )
+    created = 0
+    for (_, kind), user in wanted.items():
+        if (user.pk, kind) in have:
+            continue
+        award_entry(org=org, user=user, kind=kind, occurred_at=occurred_at, event=event)
+        created += 1
+
+    result = SyncResult(created=created, deleted=deleted, updated=updated)
+    log.info(
+        "event_staff_entries_synced",
+        system="org",
+        subsystem="contributions",
+        org_id=org.pk,
+        event_id=event.pk,
+        created=created,
+        deleted=deleted,
+        updated=updated,
+    )
+    return result
 
 
 @transaction.atomic
