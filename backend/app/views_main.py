@@ -48,13 +48,14 @@ from app.tournament_list import (
     TournamentListParams,
     build_page_envelope,
     parse_tournament_list_params,
+    resolve_organizations,
     tournaments_list_cache_key,
 )
 from events.models import Event
 from events.signup_window import user_signups_open_tournament_ids
 from league.models import LeagueUser
 from league.serializers import LeagueUserSerializer
-from org.membership import member_organization_ids
+from org.membership import member_organization_ids, viewer_member_organization_ids
 from org.models import OrgUser
 from org.serializers import OrgUserSerializer
 from telemetry.logging import get_logger
@@ -1084,8 +1085,8 @@ class TournamentsBasicView(viewsets.ModelViewSet):
 class TournamentListView(viewsets.ReadOnlyModelViewSet):
     """Lightweight view for the tournament list page.
 
-    Filters: organization, organizations, open_signups, league,
-    bucket (upcoming|archived), search. ``open_signups=1`` adds tournaments
+    Filters: organization, organizations (ids or ``mine``), open_signups,
+    league, bucket (upcoming|archived), search. ``open_signups=1`` adds tournaments
     whose source event takes user signups to the organization scope.
     Paginates only when ``page`` is present (requires ``bucket``).
     """
@@ -1103,7 +1104,10 @@ class TournamentListView(viewsets.ReadOnlyModelViewSet):
         self._now = tournament_buckets._now()
         self._cutoff = tournament_bucket_cutoff(self._now)
         self._today_start = utc_day_start(self._now)
-        self._params = parse_tournament_list_params(request.query_params)
+        self._params = resolve_organizations(
+            parse_tournament_list_params(request.query_params),
+            lambda: viewer_member_organization_ids(request.user),
+        )
 
     def get_queryset(self) -> QuerySet[Tournament]:
         params = self._params

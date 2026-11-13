@@ -1,6 +1,7 @@
 """Request plumbing for the tournament list: params, search, cache key, page envelope."""
 
-from dataclasses import dataclass
+from collections.abc import Callable, Iterable
+from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Any, Literal, cast
 from urllib.parse import urlencode
@@ -16,6 +17,7 @@ MAX_PAGE_SIZE = 100
 SEARCH_MIN = 2
 SEARCH_MAX = 64
 MAX_ORGANIZATIONS = 100
+ORGANIZATIONS_MINE = "mine"
 TOURNAMENTS_LIST_CACHE_PREFIX = "tournaments_list_v5"
 
 Bucket = Literal["upcoming", "archived"]
@@ -25,7 +27,9 @@ BUCKET_MESSAGE = "Must be 'upcoming' or 'archived'."
 INTEGER_MESSAGE = "A valid integer is required."
 MIN_ONE_MESSAGE = "Must be at least 1."
 REQUIRES_BUCKET_MESSAGE = "Requires 'bucket'."
-ORGANIZATIONS_MESSAGE = "Must be a comma-separated list of positive integers."
+ORGANIZATIONS_MESSAGE = (
+    f"Must be '{ORGANIZATIONS_MINE}' or a comma-separated list of positive integers."
+)
 TOO_MANY_ORGANIZATIONS_MESSAGE = f"At most {MAX_ORGANIZATIONS} organizations."
 ORGANIZATION_CONFLICT_MESSAGE = "Use either 'organization' or 'organizations'."
 OPEN_SIGNUPS_MESSAGE = "Must be '1' or '0'."
@@ -35,6 +39,7 @@ OPEN_SIGNUPS_MESSAGE = "Must be '1' or '0'."
 class TournamentListParams:
     organization: int | None
     organizations: tuple[int, ...] | None
+    organizations_mine: bool
     open_signups: bool
     league: int | None
     bucket: Bucket | None
@@ -85,7 +90,7 @@ def _parse_organizations(
     raw = query_params.get("organizations")
     if raw is None:
         return None
-    if raw.strip() == "":
+    if raw.strip() in ("", ORGANIZATIONS_MINE):
         return ()
     ids: set[int] = set()
     for part in raw.split(","):
@@ -125,6 +130,9 @@ def parse_tournament_list_params(query_params: QueryDict) -> TournamentListParam
     organizations = _parse_organizations(query_params, errors)
     if "organization" in query_params and "organizations" in query_params:
         errors["organizations"] = [ORGANIZATION_CONFLICT_MESSAGE]
+    organizations_mine = (query_params.get("organizations") or "").strip() == (
+        ORGANIZATIONS_MINE
+    )
     open_signups = _parse_open_signups(query_params, errors)
     league = _parse_int(query_params, "league", errors)
     page = _parse_int(query_params, "page", errors, min_value=1)
@@ -139,6 +147,7 @@ def parse_tournament_list_params(query_params: QueryDict) -> TournamentListParam
     return TournamentListParams(
         organization=organization,
         organizations=organizations,
+        organizations_mine=organizations_mine,
         open_signups=open_signups,
         league=league,
         bucket=bucket,
@@ -146,6 +155,15 @@ def parse_tournament_list_params(query_params: QueryDict) -> TournamentListParam
         page=page,
         page_size=min(page_size or DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE),
     )
+
+
+def resolve_organizations(
+    params: TournamentListParams, member_ids: Callable[[], Iterable[int]]
+) -> TournamentListParams:
+    """Expand ``organizations=mine`` into the viewer's member organization ids."""
+    if not params.organizations_mine:
+        return params
+    return replace(params, organizations=tuple(sorted(set(member_ids()))))
 
 
 def tournaments_list_cache_key(params: TournamentListParams, cutoff: datetime) -> str:

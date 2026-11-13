@@ -73,7 +73,7 @@ the frontend gates on: `admin_organization_ids`, `staff_organization_ids`,
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `organization` | int | | Filter by the league's organization ID. Cannot be combined with `organizations` (400) |
-| `organizations` | string | | Comma-separated organization IDs (at most 100, each a positive integer, otherwise 400). Matches tournaments of any of them; an empty value matches none |
+| `organizations` | string | | `mine`, or comma-separated organization IDs (at most 100, each a positive integer, otherwise 400). Matches tournaments of any of them; an empty value matches none. `mine` expands to the requesting user's `member_organization_ids` (none when anonymous) and has no cap |
 | `open_signups` | `1` or `0` | `0` | `1` adds tournaments whose source event currently takes user signups (see below) to the organization filter, or returns only those without one. Any other value returns 400 |
 | `league` | int | | Filter by league ID |
 | `bucket` | string | | `upcoming` or `archived` (see below). Any other value returns 400 |
@@ -93,9 +93,9 @@ the frontend gates on: `admin_organization_ids`, `staff_organization_ids`,
 (`Event.tournament`) is in state `signups_open`. That is the same rule the signup
 endpoint, `process_rsvp` and the Discord buttons apply; `signups_open_at`,
 `signup_deadline_hours` and `allow_user_signups` do not change it. The `/tournaments` page's
-"My organizations" view sends `organizations=<member org ids>&open_signups=1` on
-Upcoming and only `organizations` on Archived. The endpoint never reads the request's
-user, so its cache stays shared.
+"My organizations" view sends `organizations=mine&open_signups=1` on Upcoming and only
+`organizations=mine` on Archived. The cache key holds the expanded organization IDs, so
+users with the same memberships share an entry and nothing is cached per user.
 
 `league`, `bucket` and `search` narrow whatever the organization filters select.
 

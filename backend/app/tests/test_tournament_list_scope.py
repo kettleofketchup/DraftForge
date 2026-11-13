@@ -8,9 +8,10 @@ from django.test import TestCase, override_settings
 from rest_framework.response import Response
 from rest_framework.test import APIClient
 
-from app.models import League, Organization, Tournament
+from app.models import CustomUser, League, Organization, Tournament
 from events.constants import EventState
 from events.models import Event
+from org.models import OrgUser
 
 LIST_URL = "/api/tournaments-list/"
 NOW = datetime(2026, 11, 13, 12, 0, tzinfo=UTC)
@@ -131,6 +132,39 @@ class TournamentListScopeTests(TestCase):
         self.assertEqual(data["count"], 1)
         self.assertEqual(data["results"][0]["pk"], self.rows["home_past"].pk)
 
+    def test_mine_expands_to_the_viewers_organizations(self) -> None:
+        user = CustomUser.objects.create_user(username="scope_member", password="x")
+        OrgUser.objects.create(user=user, organization=self.home)
+        self.side.staff.add(user)
+        self.client.force_authenticate(user)
+        self.assertEqual(
+            self.pks("?bucket=upcoming&organizations=mine&open_signups=1"),
+            self.pk_set("home_future", "side_future", "away_open"),
+        )
+        self.assertEqual(
+            self.pks("?bucket=archived&organizations=mine"), self.pk_set("home_past")
+        )
+
+    def test_mine_for_anonymous_is_empty(self) -> None:
+        self.assertEqual(self.pks("?bucket=upcoming&organizations=mine"), set())
+        self.assertEqual(
+            self.pks("?bucket=upcoming&organizations=mine&open_signups=1"),
+            self.pk_set("away_open"),
+        )
+
+    def test_mine_is_not_capped(self) -> None:
+        user = CustomUser.objects.create_user(username="scope_many", password="x")
+        orgs = Organization.objects.bulk_create(
+            Organization(name=f"Many {i}") for i in range(105)
+        )
+        OrgUser.objects.bulk_create(
+            OrgUser(user=user, organization=org) for org in [*orgs, self.home]
+        )
+        self.client.force_authenticate(user)
+        self.assertEqual(
+            self.pks("?bucket=upcoming&organizations=mine"), self.pk_set("home_future")
+        )
+
     def test_invalid_scope_params_400(self) -> None:
         cases = [
             ("organizations=abc", "organizations"),
@@ -142,6 +176,8 @@ class TournamentListScopeTests(TestCase):
             ("open_signups=yes", "open_signups"),
             ("open_signups=", "open_signups"),
             (f"organization={1}&organizations=2", "organizations"),
+            ("organization=1&organizations=mine", "organizations"),
+            ("organizations=mine,1", "organizations"),
         ]
         for qs, field in cases:
             with self.subTest(qs=qs):

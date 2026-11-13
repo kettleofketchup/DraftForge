@@ -23,6 +23,7 @@ from app.tournament_list import (
     build_page_envelope,
     normalize_search,
     parse_tournament_list_params,
+    resolve_organizations,
     tournaments_list_cache_key,
 )
 
@@ -131,6 +132,31 @@ class ParseTournamentListParamsTests(SimpleTestCase):
     def test_parse_organization_zero_is_valid(self) -> None:
         params = parse_tournament_list_params(QueryDict("organization=0"))
         self.assertEqual(params.organization, 0)
+
+
+class ResolveOrganizationsTests(SimpleTestCase):
+    def test_mine_expands_sorted_and_deduped(self) -> None:
+        params = parse_tournament_list_params(QueryDict("organizations=mine"))
+        self.assertTrue(params.organizations_mine)
+        resolved = resolve_organizations(params, lambda: [5, 2, 5])
+        self.assertEqual(resolved.organizations, (2, 5))
+
+    def test_explicit_ids_skip_the_lookup(self) -> None:
+        params = parse_tournament_list_params(QueryDict("organizations=3"))
+        lookup = mock.Mock(return_value=[9])
+        self.assertEqual(resolve_organizations(params, lookup).organizations, (3,))
+        lookup.assert_not_called()
+
+    def test_mine_cache_key_matches_the_expanded_ids(self) -> None:
+        mine = resolve_organizations(
+            parse_tournament_list_params(QueryDict("organizations=mine")),
+            lambda: [2, 1],
+        )
+        explicit = parse_tournament_list_params(QueryDict("organizations=1,2"))
+        self.assertEqual(
+            tournaments_list_cache_key(mine, CUTOFF),
+            tournaments_list_cache_key(explicit, CUTOFF),
+        )
 
 
 class TournamentsListCacheKeyTests(SimpleTestCase):

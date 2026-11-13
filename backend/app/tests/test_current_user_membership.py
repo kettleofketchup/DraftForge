@@ -1,12 +1,13 @@
 from unittest import mock
 
+from django.contrib.auth.models import AnonymousUser
 from django.db import connection
 from django.test import TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from rest_framework.test import APIClient
 
 from app.models import CustomUser, League, Organization
-from org.membership import member_organization_ids
+from org.membership import member_organization_ids, viewer_member_organization_ids
 from org.models import OrgUser
 
 CURRENT_USER_URL = "/api/current_user"
@@ -90,6 +91,20 @@ class MemberOrganizationIdsTests(TestCase):
     def test_helper_queries(self) -> None:
         with self.assertNumQueries(2):
             member_organization_ids(self.user, admin_org_ids=[], staff_org_ids=[])
+
+    def test_viewer_helper_matches_current_user(self) -> None:
+        OrgUser.objects.create(user=self.user, organization=self.orgs["G"])
+        self.orgs["A"].admins.add(self.user)
+        self.orgs["C"].staff.add(self.user)
+        self.orgs["D"].owner = self.user
+        self.orgs["D"].save()
+        league = League.objects.create(organization=self.orgs["E"], name="E League")
+        league.staff.add(self.user)
+        self.assertEqual(viewer_member_organization_ids(self.user), self._ids())
+        self.assertEqual(len(self._ids()), 5)
+
+    def test_viewer_helper_anonymous_is_empty(self) -> None:
+        self.assertEqual(viewer_member_organization_ids(AnonymousUser()), [])
 
     def test_helper_merges_passed_ids(self) -> None:
         result = member_organization_ids(
