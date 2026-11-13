@@ -115,8 +115,38 @@ describe('TournamentEditForm', () => {
     const payload = vi.mocked(updateTournament).mock.calls[0][1] as Record<string, unknown>;
     expect(payload.league_id_write).toBe(9);
     expect(payload.game_mode).toBe('normal');
-    expect(payload.captains_draft_time).toBe(10);
+    expect(payload).not.toHaveProperty('captains_draft_time');
     expect(payload).not.toHaveProperty('game_type');
+  });
+
+  it('saves when a hidden draft time is invalid outside Captains Mode', async () => {
+    setUser(siteStaff);
+    vi.mocked(updateTournament).mockResolvedValue({} as never);
+    render(<TournamentEditForm tourn={tournament({ captains_draft_time: 0 })} canEdit />, {
+      wrapper: Wrapper,
+    });
+
+    submit();
+    await waitFor(() => expect(updateTournament).toHaveBeenCalled());
+    const payload = vi.mocked(updateTournament).mock.calls[0][1] as Record<string, unknown>;
+    expect(payload).not.toHaveProperty('captains_draft_time');
+  });
+
+  it('sends the draft time in Captains Mode', async () => {
+    setUser(siteStaff);
+    vi.mocked(updateTournament).mockResolvedValue({} as never);
+    render(
+      <TournamentEditForm
+        tourn={tournament({ game_mode: 'captains_mode', captains_draft_time: 25 })}
+        canEdit
+      />,
+      { wrapper: Wrapper },
+    );
+
+    submit();
+    await waitFor(() => expect(updateTournament).toHaveBeenCalled());
+    const payload = vi.mocked(updateTournament).mock.calls[0][1] as Record<string, unknown>;
+    expect(payload.captains_draft_time).toBe(25);
   });
 
   it('shows a server error on a visible field in another tab', async () => {

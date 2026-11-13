@@ -134,7 +134,6 @@ export function DotaLobbyConfigSection<T extends FieldValues & DotaLobbyFields>(
                 <Input
                   placeholder="Service default"
                   data-testid="config-dota-lobby-region"
-                 
                   {...field}
                 />
               </FormControl>
@@ -158,7 +157,6 @@ export function DotaLobbyConfigSection<T extends FieldValues & DotaLobbyFields>(
                     data-testid="config-dota-lobby-send-info"
                     checked={field.value}
                     onChange={field.onChange}
-                   
                     className="h-4 w-4 rounded border-border accent-primary"
                   />
                 </FormControl>

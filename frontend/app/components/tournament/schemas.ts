@@ -127,8 +127,17 @@ export const CreateTournamentSchema = z.object({
   game_type: z.number().default(1),
   game_mode: z.string().default('normal'),
   lobby_steam_league_id: z.number().nullable().default(null),
-  captains_draft_time: z.number().int().min(1, 'Draft time must be at least 1 second').default(10),
+  captains_draft_time: z.number().int().default(10),
   custom_game_name: z.string().max(255).default(''),
+}).superRefine((data, ctx) => {
+  // Draft time is only shown and sent in Captain's Mode.
+  if (data.game_mode === 'captains_mode' && data.captains_draft_time < 1) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['captains_draft_time'],
+      message: 'Draft time must be at least 1 second',
+    });
+  }
 });
 
 export type CreateTournamentInput = z.infer<typeof CreateTournamentSchema>;

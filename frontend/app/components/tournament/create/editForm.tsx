@@ -210,7 +210,9 @@ export const TournamentEditForm: React.FC<Props> = ({
         discord_send_herodraft_link: data.discord_send_herodraft_link,
         game_mode: data.game_mode,
         lobby_steam_league_id: data.lobby_steam_league_id,
-        captains_draft_time: data.captains_draft_time,
+        ...(data.game_mode === 'captains_mode' && {
+          captains_draft_time: data.captains_draft_time,
+        }),
         custom_game_name: data.custom_game_name,
         dota_lobby_mode: data.dota_lobby_mode,
         dota_lobby_launch: data.dota_lobby_launch,

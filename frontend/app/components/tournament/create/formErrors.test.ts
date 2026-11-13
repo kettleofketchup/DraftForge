@@ -65,9 +65,18 @@ describe('CreateTournamentSchema lobby config', () => {
     expect(parsed.custom_game_name).toBe('');
   });
 
-  it('rejects a draft time below one second', () => {
-    const result = CreateTournamentSchema.safeParse({ ...minimalValid, captains_draft_time: 0 });
+  it('rejects a draft time below one second in Captains Mode', () => {
+    const result = CreateTournamentSchema.safeParse({
+      ...minimalValid,
+      game_mode: 'captains_mode',
+      captains_draft_time: 0,
+    });
     expect(result.success).toBe(false);
+  });
+
+  it('ignores the draft time outside Captains Mode', () => {
+    const result = CreateTournamentSchema.safeParse({ ...minimalValid, captains_draft_time: 0 });
+    expect(result.success).toBe(true);
   });
 });
 
