@@ -39,6 +39,17 @@ Returns user details and sets session cookies.
 | GET | `/api/users/` | List users |
 | GET | `/api/users/{id}/` | Get user details |
 | PUT | `/api/users/{id}/` | Update user |
+| GET | `/api/current_user` | Signed-in user's profile and role IDs |
+
+### Current User
+
+For a signed-in user, `/api/current_user` returns the user's profile plus the role ID lists
+the frontend gates on: `admin_organization_ids`, `staff_organization_ids`,
+`admin_league_ids` and `staff_league_ids` (see [Roles](../dev/auth/roles.md)), and:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `member_organization_ids` | int[] | Sorted, deduplicated union of the organizations the user is a member of (`OrgUser`), admins or staffs, and the organizations of leagues the user admins or staffs. The `/tournaments` page uses it to fill the "Your organizations" tier |
 
 ## Tournaments
 
@@ -49,6 +60,70 @@ Returns user details and sets session cookies.
 | GET | `/api/tournaments/{id}/` | Get tournament |
 | PUT | `/api/tournaments/{id}/` | Update tournament |
 | DELETE | `/api/tournaments/{id}/` | Delete tournament |
+| GET | `/api/tournaments-list/` | Lightweight tournament list (the `/tournaments` page) |
+
+### Tournament List
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| GET | `/api/tournaments-list/` | Tournament rows without nested teams or users | No |
+
+**Query Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `organization` | int | | Filter by the league's organization ID |
+| `league` | int | | Filter by league ID |
+| `bucket` | string | | `upcoming` or `archived` (see below). Any other value returns 400 |
+| `search` | string | | Trimmed. Ignored under 2 characters, cut to 64. Case-insensitive match on tournament, organization or league name |
+| `page` | int | | Page number, at least 1. Turns on pagination. Requires `bucket`, otherwise 400 |
+| `page_size` | int | 24 | Results per page, at most 100. Only applies with `page` |
+
+**Buckets:**
+
+- **`upcoming`**: state `future` or `in_progress` and `date_played` on or after the start
+  of the current UTC day minus 2 days. Ordered `in_progress` first, then today and later,
+  then the recent past, each by `date_played` ascending.
+- **`archived`**: everything not upcoming, newest `date_played` first.
+- No `bucket`: every tournament, newest `date_played` first.
+
+**Response:**
+
+Without `page`, a bare array. With `page`, the paged envelope:
+
+```json
+{
+  "count": 30,
+  "next": "https://.../api/tournaments-list/?bucket=upcoming&page=2",
+  "previous": null,
+  "results": [
+    {
+      "pk": 900,
+      "name": "Weekly Cup",
+      "date_played": "2026-11-14T18:00:00Z",
+      "timezone": "America/New_York",
+      "tournament_type": "double_elimination",
+      "state": "future",
+      "league": {
+        "pk": 1,
+        "name": "Spring League",
+        "organization_name": "DTX Gaming",
+        "organization_id": 1,
+        "organization_logo": "https://..."
+      },
+      "user_count": 40
+    }
+  ]
+}
+```
+
+`league` is `null` for a tournament without a league; `organization_id`,
+`organization_name` and `organization_logo` are `null` when the league has no organization
+(or, for the logo, when the organization has none).
+
+!!! note
+    Search results are not cached. Other results are cached for 10 minutes and invalidated
+    when any Tournament, League or Organization changes.
 
 ## Teams
 

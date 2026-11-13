@@ -127,6 +127,10 @@ await visitAndWait(page, '/organizations/3/');  // Fragile!
 | Users | 5000-5020 | Events (admin + 20 players) |
 | Users | 6000-6003 | Org Delete |
 | Users | 7200-7233 | dota_lobby (5 roles + rostered players; Steam account IDs 307000000 + offset) |
+| Org | 30-31 | Tournament discovery (home / away) |
+| League | 30-31 (steam=17950-17951) | Tournament discovery (home / away) |
+| Users | 1100 | Tournament discovery (`discovery_member`, member of org 30 only). Exception: sits just past the 1000-1099 roles range instead of a fresh 1000-increment block |
+| Tournament | 900-905 | Tournament discovery (live, future, past and stale rows; 2099 / 2020 dates) |
 | Org / League | by name | dota_lobby: "Lobby Test Org" / "Lobby Test League" (steam=17940, the simulator's bots administer it). Created last in `populate_all`, pks auto-assigned |
 
 When adding new features, pick the next available 1000-increment PK range.

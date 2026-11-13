@@ -86,6 +86,7 @@ nav:
       - Installation: getting-started/installation.md
       - Quick Start: getting-started/quick-start.md
   - Features:
+      - Tournament List: features/tournaments.md
       - Draft System: features/draft.md
       - Hero Draft: features/herodraft.md
       - Bracket: features/bracket.md
