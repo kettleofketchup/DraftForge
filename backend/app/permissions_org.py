@@ -8,6 +8,7 @@ from django.db.models import Exists, OuterRef, Q
 from rest_framework import permissions
 
 from app.models import CustomUser, League, Organization
+from league.models import LeagueUser
 from org.models import OrgUser
 
 
@@ -185,11 +186,25 @@ def has_event_staff_access(user, event):
     return False
 
 
+def _is_league_member(user: CustomUser, league_pk: int) -> bool:
+    return (
+        LeagueUser.objects.nocache()
+        .filter(league_id=league_pk, user_id=user.pk)
+        .exists()
+    )
+
+
 def can_view_league_members(user: CustomUser | AnonymousUser, league: League) -> bool:
-    """Whoever may view the linked org's members; league staff for org-less leagues."""
+    """Whoever may view the linked org's members, plus the league's own members even
+    when the org list is private; league staff and members for org-less leagues."""
+    if not user.is_authenticated:
+        return False
     if league.organization_id is not None:
-        return can_view_org_members(user, league.organization_id)
-    return has_league_staff_access(user, league)
+        if can_view_org_members(user, league.organization_id):
+            return True
+    elif has_league_staff_access(user, league):
+        return True
+    return _is_league_member(user, league.pk)
 
 
 def can_view_league_members_from_payload(
@@ -201,9 +216,11 @@ def can_view_league_members_from_payload(
     if user.is_staff or user.is_superuser or _payload_lists_user(user, data):
         return True
     organization = data.get("organization")
-    if not isinstance(organization, Mapping):
-        return False
-    return can_view_org_members(user, organization["pk"])
+    if isinstance(organization, Mapping) and can_view_org_members(
+        user, organization["pk"]
+    ):
+        return True
+    return _is_league_member(user, data["pk"])
 
 
 class IsOrgOwner(permissions.BasePermission):

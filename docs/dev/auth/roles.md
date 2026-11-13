@@ -123,7 +123,8 @@ The six entry points locked by `e2e/17-auth/02-edit-and-bracket-gates.spec.ts`.
   of acting on a flag computed for someone else. The league Users tab
   (`GET /api/leagues/<pk>/users/`, gated by `can_view_league_members`) uses
   the linked org's rule (so staff of a sibling league count), or league staff
-  for a league without an org. Event signups blank `org_user_mmr` for viewers
+  for a league without an org. The league's own members always see its list,
+  even when the org list is private. Event signups blank `org_user_mmr` for viewers
   outside the org rule.
 - **Edit User (org members tab)** uses `useIsOrganizationStaff(currentOrg)`
   via the UserCard's org-scoped editScope — staff-permissive.

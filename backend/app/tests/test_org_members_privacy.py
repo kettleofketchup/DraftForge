@@ -13,6 +13,7 @@ from app.permissions_org import (
     can_view_org_members_from_payload,
 )
 from events.models import Event, EventSignup, EventState, SignupStatus
+from league.models import LeagueUser
 from org.models import OrgUser
 
 
@@ -216,12 +217,42 @@ class LeagueMembersPrivacyTest(TestCase):
         self.assertEqual(self._status_for(sibling_admin), status.HTTP_200_OK)
         self.assertIs(self._flag_for(sibling_admin), True)
 
-    def test_orgless_league_members_visible_to_league_staff_only(self) -> None:
+    def _league_member(self, username: str, league: League) -> CustomUser:
+        user = CustomUser.objects.create_user(username=username, password="x")
+        org_user = OrgUser.objects.create(user=user, organization=self.org, mmr=3000)
+        LeagueUser.objects.create(user=user, org_user=org_user, league=league, mmr=3000)
+        return user
+
+    def test_private_org_still_shows_league_members_their_own_league(self) -> None:
+        player = self._league_member("player", self.league)
+        self.org.members_private = True
+        self.org.save()
+        self.assertEqual(self._status_for(player), status.HTTP_200_OK)
+        self.assertIs(self._flag_for(player), True)
+        self.client.force_authenticate(user=player)
+        org_users = self.client.get(f"/api/organizations/{self.org.pk}/users/")
+        self.assertEqual(org_users.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_private_org_hides_other_leagues_from_league_members(self) -> None:
+        sibling = League.objects.create(
+            name="Other League", organization=self.org, steam_league_id=454545
+        )
+        player = self._league_member("sibplayer", sibling)
+        self.org.members_private = True
+        self.org.save()
+        self.assertEqual(self._status_for(player), status.HTTP_403_FORBIDDEN)
+        self.assertIs(self._flag_for(player), False)
+
+    def test_orgless_league_members_visible_to_staff_and_its_members(self) -> None:
         league = League.objects.create(name="Orgless", steam_league_id=444444)
         league.staff.add(self.league_staff)
         url = f"/api/leagues/{league.pk}/users/"
+        player = CustomUser.objects.create_user(username="orgless", password="x")
+        org_user = OrgUser.objects.create(user=player, organization=self.org)
+        LeagueUser.objects.create(user=player, org_user=org_user, league=league)
         for user, expected in [
             (self.league_staff, status.HTTP_200_OK),
+            (player, status.HTTP_200_OK),
             (self.member, status.HTTP_403_FORBIDDEN),
         ]:
             with self.subTest(user=user.username):
