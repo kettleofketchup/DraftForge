@@ -168,6 +168,13 @@ local-prod:
 release:
     #!/usr/bin/env bash
     set -euo pipefail
+    env_file={{quote(root / "backend/.env")}}
+    if ! grep -qE '^DJANGO_SECRET_KEY=.+' "$env_file" 2>/dev/null; then
+        echo "WARNING: ${env_file} has no DJANGO_SECRET_KEY; Django would sign with the public development key." >&2
+        echo "WARNING: generating one and saving it there. Sessions signed with the old key end: everyone logs in again." >&2
+        key=$(python3 -c 'import secrets; print(secrets.token_urlsafe(50))')
+        printf '\nDJANGO_SECRET_KEY=%s\n' "$key" >> "$env_file"
+    fi
     {{just}} db::migrate-env release
     {{just}} docker::release::pull
     version=$(sed -n 's/^VERSION="\(.*\)"$/\1/p' {{quote(root / "docker/.env.release")}} | head -n 1)

@@ -357,21 +357,26 @@ dota_lobby docs: [Kubernetes](https://kettleofketchup.github.io/dota_lobby/deplo
 - **Production settings:** `DOTA_LOBBY_URL` and `DOTA_LOBBY_API_KEY` are in
   `backend/.env` on the production host. The key is also stored, encrypted, with the
   instance's deployment; when rotating it, update both and restart the backend services.
-  `DOTA_LOBBY_ENABLED` stays `false` in `docker/.env.release` until DraftForge creates
-  lobbies.
-- **Bots:** one Steam bot, `draftforge1`. Its credentials live in the dota_lobby repository
-  (`secrets/bots/draftforge1.sops.yaml`) and are copied into the instance's Secret with
-  `just secrets k8s-secret`. A second bot (`draftforge2`) has credentials but is not
-  deployed. Each account may run in only one dota_lobby instance at a time, so do not run
+  `DOTA_LOBBY_ENABLED` is `true` in `docker/.env.release`; no lobby is created until staff set
+  a tournament's `dota_lobby_mode`. `DOTA_LOBBY_WEBHOOK_SECRET` and
+  `INTERNAL_SERVICE_ALLOWED_IPS` (the private ranges plus the instance's public address) are
+  in `backend/.env`.
+- **Bots:** two Steam bots, `draftforge1` and `draftforge2`. Their credentials live in the
+  dota_lobby repository (`secrets/bots/<bot>.sops.yaml`) and are copied into the instance's
+  Secret with `just secrets k8s-secret`. Both are still limited accounts (no US$5 spent),
+  which may stop lobby invites and chat from working. Each account may run in only one dota_lobby instance at a time, so do not run
   these bots locally while the production instance is up.
 - **Checking it from production**, in the backend container:
     ```bash
     python /app/backend/manage.py shell -c \
       "from lobby.client import DotaLobbyClient; print(DotaLobbyClient().list_lobbies())"
     ```
-- **Webhooks:** none are configured yet. When the receiver lands, the dota_lobby instance
-  will post to production's `/api/internal/`, so its outbound address must be in
-  `INTERNAL_SERVICE_ALLOWED_IPS`, and the signing secret set on both sides.
+- **Webhooks:** the instance posts every event to production's
+  `/api/internal/lobbies/events/` with `X-Internal-Token`, signed with
+  `DOTA_LOBBY_WEBHOOK_SECRET`. The internal API reads the caller's address from the first
+  `X-Forwarded-For` value, so the instance's public address must stay in
+  `INTERNAL_SERVICE_ALLOWED_IPS`; if it changes, deliveries get `403` and the reconcile task
+  catches up every minute until the allowlist is updated.
 
 ---
 
