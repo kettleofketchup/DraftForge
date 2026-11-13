@@ -328,14 +328,20 @@ def check_tournament_league_change(
     is_site_staff = user.is_staff or user.is_superuser
     if target is None:
         if tournament is None:
-            raise _league_change_error("A league is required when creating a tournament.")
+            raise _league_change_error(
+                "A league is required when creating a tournament."
+            )
         if not is_site_staff:
-            raise _league_change_error("Only site staff can remove a tournament's league.")
+            raise _league_change_error(
+                "Only site staff can remove a tournament's league."
+            )
         return
     if tournament is not None:
         event = tournament.source_event.nocache().first()
         if event is not None and target.organization_id != event.organization_id:
-            raise _league_change_error("League must belong to the event's organization.")
+            raise _league_change_error(
+                "League must belong to the event's organization."
+            )
         if tournament.league is not None and not has_league_admin_access(
             user, tournament.league
         ):

@@ -80,7 +80,10 @@ class TournamentLeagueMoveTests(TestCase):
         return Tournament.objects.get(pk=(tournament or self.t).pk).league_id
 
     def assert_rejected(
-        self, resp: Response, message: str | None = None, expected_league: int | None = -1
+        self,
+        resp: Response,
+        message: str | None = None,
+        expected_league: int | None = -1,
     ) -> None:
         self.assertEqual(resp.status_code, 400, resp.data)
         self.assertIn("league_id_write", resp.data)
@@ -102,7 +105,9 @@ class TournamentLeagueMoveTests(TestCase):
         )
 
     def test_league_staff_of_source_admin_of_target_rejected(self) -> None:
-        resp = self.patch_as(self.staff_a_admin_b, {"league_id_write": self.league_b.pk})
+        resp = self.patch_as(
+            self.staff_a_admin_b, {"league_id_write": self.league_b.pk}
+        )
         self.assert_rejected(
             resp,
             "You must be an admin of the tournament's current league to move it.",
@@ -170,7 +175,9 @@ class TournamentLeagueMoveTests(TestCase):
         self.make_event(t0)
         resp = self.patch_as(self.site_staff, {"league_id_write": self.league_b.pk}, t0)
         self.assert_rejected(
-            resp, "League must belong to the event's organization.", expected_league=None
+            resp,
+            "League must belong to the event's organization.",
+            expected_league=None,
         )
         self.assertIsNone(self.league_id(t0))
         resp = self.patch_as(self.site_staff, {"league_id_write": self.league_a.pk}, t0)
@@ -200,7 +207,10 @@ class TournamentLeagueMoveTests(TestCase):
             {"league": self.league_a.pk, "league_id_write": self.league_b.pk},
         )
         self.assertEqual(resp.status_code, 400, resp.data)
-        self.assertIn("league_id_write", resp.data)
+        self.assertEqual(
+            str(resp.data["league_id_write"]),
+            "You must be an admin of the league you are moving this tournament to.",
+        )
         self.assertFalse(Tournament.objects.filter(name="Sneak").exists())
 
     def test_create_in_admin_league_allowed(self) -> None:
@@ -213,5 +223,8 @@ class TournamentLeagueMoveTests(TestCase):
     def test_create_without_league_rejected(self) -> None:
         resp = self.create_as(self.admin_a, {})
         self.assertEqual(resp.status_code, 400, resp.data)
-        self.assertIn("league_id_write", resp.data)
+        self.assertEqual(
+            str(resp.data["league_id_write"]),
+            "A league is required when creating a tournament.",
+        )
         self.assertFalse(Tournament.objects.filter(name="Sneak").exists())
