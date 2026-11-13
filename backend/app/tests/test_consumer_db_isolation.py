@@ -244,6 +244,9 @@ class ConsumerDbContentionTests(TransactionTestCase):
 
 
 class ConsumerDbConnectionCleanupTests(SimpleTestCase):
+    # close_old_connections checks a pool thread's connection left open by earlier tests.
+    databases: set[str] = {"default"}
+
     def test_pool_thread_closes_its_connection_around_each_call(self) -> None:
         events: list[tuple[str, str]] = []
 

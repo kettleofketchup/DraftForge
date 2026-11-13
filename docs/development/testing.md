@@ -192,6 +192,11 @@ anchors discovery at `backend/`, so every `test*.py` module in a package
 (a directory with `__init__.py`) under `backend/` runs, including the top-level
 `backend/tests/` package. New test modules are picked up without editing the workflow.
 
+`just py::test` runs the same modules with pytest on the host (`backend/pytest.ini`,
+`backend/conftest.py`): same temp-file test DB and `DOTA_LOBBY_*` defaults as
+`BackendDiscoverRunner`, with `docker/.env.test` loaded. Like the container it needs
+Redis, on `localhost:6379`. `just test::run 'python -m pytest'` runs it in the container.
+
 Write backend tests as Django/unittest `TestCase` or `SimpleTestCase` classes.
 The Django runner doesn't collect bare pytest `def test_*` functions, so CI
 would never run them.

@@ -75,7 +75,7 @@
       "enabled": true,
       "pattern": "python -m pytest",
       "just_command": "just py::test <args>",
-      "reason": "Runs pytest with DISABLE_CACHE=true and correct venv/directory"
+      "reason": "Runs pytest in backend/ with the project venv and docker/.env.test"
     },
     {
       "category": "python",
