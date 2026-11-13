@@ -14,6 +14,7 @@ from django.db.models import (
     QuerySet,
     Value,
 )
+from django.db.models.functions import Abs, Coalesce, Now
 from django.utils import timezone
 from rest_framework import permissions, serializers, status, viewsets
 from rest_framework.decorators import action
@@ -542,9 +543,7 @@ class EventViewSet(viewsets.ModelViewSet):
             return EventSlimSerializer
         return EventSerializer
 
-    def get_queryset(self):
-        from django.db.models.functions import Abs, Now
-
+    def get_queryset(self) -> QuerySet[Event]:
         qs = _annotate_event_qs(
             Event.objects.select_related(
                 "organization", "tournament_league", "created_by", "tournament"
@@ -583,6 +582,11 @@ class EventViewSet(viewsets.ModelViewSet):
         scheduled_before = params.get("scheduled_before")
         if scheduled_before:
             qs = qs.filter(scheduled_at__lt=scheduled_before)
+        stale_before = params.get("stale_before")
+        if stale_before:
+            qs = qs.annotate(_end=Coalesce("ends_at", "scheduled_at")).filter(
+                _end__lt=stale_before
+            )
         scheduled_after = params.get("scheduled_after")
         if scheduled_after:
             qs = qs.filter(scheduled_at__gte=scheduled_after)

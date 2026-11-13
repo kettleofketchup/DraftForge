@@ -406,6 +406,7 @@ urlpatterns += [
 
 # Internal API — celery workers and Discord bot (token auth via X-Internal-Token)
 from app.views.internal import (
+    auto_close_event,
     check_message_log_exists,
     claim_discord_message_log,
     clear_event_signup_state,
@@ -467,6 +468,7 @@ urlpatterns += [
     path("api/internal/discord/event-dm/<int:pk>/", update_event_dm),
     path("api/internal/discord/scheduled-events/<int:pk>/", update_scheduled_event),
     path("api/internal/events/<int:pk>/transition/", transition_event_state),
+    path("api/internal/events/<int:pk>/auto-close/", auto_close_event),
     path("api/internal/discord/check-log/", check_message_log_exists),
     path("api/internal/discord/message-logs/", search_message_logs),
     path("api/internal/discord/event-state/<int:event_id>/", get_discord_event_state),
