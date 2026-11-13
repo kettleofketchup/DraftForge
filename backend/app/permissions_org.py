@@ -9,6 +9,7 @@ from rest_framework import permissions
 
 from app.models import CustomUser, League, Organization
 from league.models import LeagueUser
+from org.features import FeatureKey, org_has_feature
 from org.models import OrgUser
 
 
@@ -68,6 +69,51 @@ def has_org_staff_access(user, obj):
     return (
         has_org_admin_access(user, obj)
         or organization.staff.filter(pk=user.pk).exists()
+    )
+
+
+def is_site_admin(user: CustomUser | AnonymousUser) -> bool:
+    return bool(user.is_authenticated and (user.is_staff or user.is_superuser))
+
+
+def is_org_role_holder(
+    user: CustomUser | AnonymousUser, organization: Organization | int
+) -> bool:
+    """Owner, admin, staff or promoter of the org. No site-admin shortcut."""
+    if not user.is_authenticated:
+        return False
+    org_pk = organization if isinstance(organization, int) else organization.pk
+    uid = user.pk
+    return (
+        Organization.objects.nocache()
+        .filter(pk=org_pk)
+        .filter(
+            Q(owner_id=uid)
+            | Exists(
+                Organization.admins.through.objects.filter(
+                    organization_id=OuterRef("pk"), customuser_id=uid
+                )
+            )
+            | Exists(
+                Organization.staff.through.objects.filter(
+                    organization_id=OuterRef("pk"), customuser_id=uid
+                )
+            )
+            | Exists(
+                Organization.promoters.through.objects.filter(
+                    organization_id=OuterRef("pk"), customuser_id=uid
+                )
+            )
+        )
+        .exists()
+    )
+
+
+def has_org_promoter_access(
+    user: CustomUser | AnonymousUser, organization: Organization | int
+) -> bool:
+    return org_has_feature(organization, FeatureKey.PROMOTION) and (
+        is_site_admin(user) or is_org_role_holder(user, organization)
     )
 
 
