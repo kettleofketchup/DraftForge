@@ -82,6 +82,7 @@ from app.views.ssr import (
 from app.views_joke import buy_tango, get_tangoes
 from common.utils import isTestEnvironment
 from org.views import ClaimRequestViewSet
+from org.views_features import org_features
 from org.views_profiles import (
     delete_user_dota_profile,
     get_my_dota_profile,
@@ -172,7 +173,9 @@ urlpatterns = [
         undo_last_pick,
         name="undo-pick",
     ),
-    path("api/draft/<int:draft_pk>/ready/", teamdraft_set_ready, name="teamdraft_ready"),
+    path(
+        "api/draft/<int:draft_pk>/ready/", teamdraft_set_ready, name="teamdraft_ready"
+    ),
     path("api/draft/<int:draft_pk>/start/", teamdraft_start, name="teamdraft_start"),
     path("api/draft/<int:draft_pk>/pause/", teamdraft_pause, name="teamdraft_pause"),
     path("api/draft/<int:draft_pk>/resume/", teamdraft_resume, name="teamdraft_resume"),
@@ -266,6 +269,11 @@ urlpatterns = [
         "api/organizations/<int:org_id>/transfer-ownership/",
         transfer_org_ownership,
         name="transfer_org_ownership",
+    ),
+    path(
+        "api/organizations/<int:org_id>/features/",
+        org_features,
+        name="org-features",
     ),
     # League admin team
     path(
