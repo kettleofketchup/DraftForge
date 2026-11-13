@@ -63,6 +63,7 @@ class ContributionServicesTest(TestCase):
             "actor": self.admin,
         }
         fields.update(overrides)
+        OrgUser.objects.get_or_create(user=fields["user"], organization=fields["org"])
         return create_manual_award(**fields)  # type: ignore[arg-type]
 
     def _auto(
@@ -149,6 +150,37 @@ class ContributionServicesTest(TestCase):
     def test_manual_award_rejects_foreign_event(self) -> None:
         with self.assertRaises(ValueError):
             self._manual(event=self.foreign_event)
+        self.assertFalse(ContributionEntry.objects.exists())
+
+    def test_manual_award_rejects_non_member(self) -> None:
+        outsider = CustomUser.objects.create_user(username="svc_outsider", password="x")
+        with self.assertRaises(ValueError):
+            create_manual_award(
+                org=self.org,
+                user=outsider,
+                points=5,
+                reason="Not a member",
+                on_date=date(2026, 11, 1),
+                actor=self.admin,
+            )
+        self.assertFalse(OrgUser.objects.filter(user=outsider).exists())
+        self.assertFalse(ContributionEntry.objects.exists())
+        self.assertFalse(OrgLog.objects.filter(action="award_points").exists())
+
+    def test_manual_award_rejects_member_of_other_org(self) -> None:
+        OrgUser.objects.create(user=self.member, organization=self.other_org)
+        with self.assertRaises(ValueError):
+            create_manual_award(
+                org=self.org,
+                user=self.member,
+                points=5,
+                reason="Wrong org",
+                on_date=date(2026, 11, 1),
+                actor=self.admin,
+            )
+        self.assertFalse(
+            OrgUser.objects.filter(user=self.member, organization=self.org).exists()
+        )
         self.assertFalse(ContributionEntry.objects.exists())
 
     def test_manual_award_writes_org_log(self) -> None:

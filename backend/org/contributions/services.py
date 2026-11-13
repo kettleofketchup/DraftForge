@@ -12,7 +12,7 @@ from events.services import resolve_or_create_org_user
 from org.contributions.kinds import DEFAULT_POINTS, RATED_KINDS, ContributionKind
 from org.contributions.periods import local_day_start_utc, local_noon_utc
 from org.contributions.points import points_for
-from org.models import ContributionEntry, ContributionPointValue
+from org.models import ContributionEntry, ContributionPointValue, OrgUser
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
@@ -137,6 +137,8 @@ def create_manual_award(
     points = _check_manual_points(points)
     cleaned = _check_reason(reason)
     _check_event(org, event)
+    if not OrgUser.objects.filter(user=user, organization=org).exists():
+        raise ValueError("user is not a member of this organization")
     entry = award_entry(
         org=org,
         user=user,
