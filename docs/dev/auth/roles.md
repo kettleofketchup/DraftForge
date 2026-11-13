@@ -169,6 +169,8 @@ The eight entry points locked by `e2e/17-auth/02-edit-and-bracket-gates.spec.ts`
   org. On a tournament with no league it is false for everyone but site
   staff. In the dialog, moving the tournament to another league needs admin
   access to both leagues, and only site staff can clear the league.
+  The dialog's Discord Activity tab reads `/api/tournaments/<pk>/discord-logs/`,
+  which uses the same `CanEditTournament` gate.
 - **Delete Tournament** stays site staff (`is_staff || is_superuser`), even
   though the backend `destroy` action uses `CanEditTournament`.
 
