@@ -19,6 +19,8 @@ from .models import (
     DraftRound,
     DraftTeam,
     Game,
+    GameMode,
+    GameType,
     HeroDraft,
     HeroDraftEvent,
     HeroDraftRound,
@@ -1223,41 +1225,25 @@ class TournamentSerializer(serializers.ModelSerializer):
             "captains_draft_time",
             "custom_game_name",
         )
-        # Lobby context the UI shows; edited through the event settings.
-        read_only_fields = (
-            "game_type",
-            "game_mode",
-            "lobby_steam_league_id",
-            "captains_draft_time",
-            "custom_game_name",
-        )
-
-    # A tournament created from an event takes these from the event
-    # (events.services.LOBBY_CONFIG_FIELDS); only standalone tournaments
-    # edit them here.
-    EVENT_LOBBY_FIELDS = (
-        "dota_lobby_mode",
-        "dota_lobby_launch",
-        "dota_lobby_region",
-        "discord_send_lobby_info",
-    )
+        # The game is fixed at creation; everything else is editable.
+        read_only_fields = ("game_type",)
+        extra_kwargs = {"captains_draft_time": {"min_value": 1}}
 
     def validate(self, data: dict) -> dict:
-        instance = self.instance
-        if instance is None or not instance.source_event.nocache().exists():
+        mode = data.get("game_mode")
+        if mode is None or (self.instance and mode == self.instance.game_mode):
             return data
-        changed = [
-            name
-            for name in self.EVENT_LOBBY_FIELDS
-            if name in data and data[name] != getattr(instance, name)
-        ]
-        if changed:
+        game_type = (
+            self.instance.game_type
+            if self.instance
+            else Tournament._meta.get_field("game_type").default
+        )
+        if game_type != GameType.DOTA2 and mode in (
+            GameMode.CAPTAINS_MODE,
+            GameMode.TURBO,
+        ):
             raise serializers.ValidationError(
-                {
-                    name: "This tournament's lobby settings come from its event: "
-                    "edit them in the event settings."
-                    for name in changed
-                }
+                {"game_mode": f"{mode} is only available for Dota 2."}
             )
         return data
 

@@ -628,18 +628,19 @@ class SeriesPasswordTests(EventTestCase):
 
 
 class TournamentLobbyFieldsTests(EventPasswordApiTestCase):
-    def test_event_tournament_lobby_settings_are_read_only(self):
-        url = f"/api/tournaments/{self.tournament.pk}/"
+    def test_event_tournament_lobby_settings_are_editable(self):
+        password = self.tournament.dota_lobby_password
         resp = self.as_user(self.admin).patch(
-            url, {"dota_lobby_mode": DotaLobbyMode.OFF}, format="json"
-        )
-        self.assertEqual(resp.status_code, 400)
-        self.assertIn("dota_lobby_mode", resp.data)
-        # Sending the current values back (a full form save) is fine.
-        resp = self.as_user(self.admin).patch(
-            url, {"dota_lobby_mode": DotaLobbyMode.MANUAL, "name": "X"}, format="json"
+            f"/api/tournaments/{self.tournament.pk}/",
+            {"dota_lobby_mode": DotaLobbyMode.OFF},
+            format="json",
         )
         self.assertEqual(resp.status_code, 200, resp.data)
+        self.tournament.refresh_from_db()
+        self.assertEqual(self.tournament.dota_lobby_mode, DotaLobbyMode.OFF)
+        self.assertEqual(self.tournament.dota_lobby_password, password)
+        self.event.refresh_from_db()
+        self.assertEqual(self.event.dota_lobby_mode, DotaLobbyMode.MANUAL)
 
     def test_standalone_tournament_keeps_its_own_settings(self):
         standalone = Tournament.objects.create(
