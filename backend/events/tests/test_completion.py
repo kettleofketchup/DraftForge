@@ -1,8 +1,9 @@
 """close_event and the event-staff ledger sync."""
 
-from datetime import timedelta
+from datetime import UTC, timedelta
 from unittest.mock import patch
 
+from django.db.models import QuerySet
 from django.utils import timezone as tz
 
 from app.models import CustomUser, Organization, OrgLog, PositionsModel
@@ -12,6 +13,8 @@ from events.models import Event
 from events.services import resolve_or_create_org_user
 from events.tests.base import EventTestCase
 from org.contributions.kinds import ContributionKind
+from org.contributions.periods import parse_period
+from org.contributions.queries import leaderboard
 from org.contributions.services import (
     SyncResult,
     should_sync_staff,
@@ -55,7 +58,7 @@ class CompletionTestBase(EventTestCase):
             self.ev.save(update_fields=["host"])
         self.ev.helpers.add(*[self.helper_a, self.helper_b][:helpers])
 
-    def _entries(self, event: Event | None = None):
+    def _entries(self, event: Event | None = None) -> QuerySet[ContributionEntry]:
         return ContributionEntry.objects.nocache().filter(event=event or self.ev)
 
     def _set_state(self, state: EventState) -> None:
@@ -160,6 +163,22 @@ class CloseEventTest(CompletionTestBase):
         self.ev.refresh_from_db()
         self.assertIsNone(self.ev.contributions_awarded_at)
         self.assertEqual(self._entries().count(), 0)
+        self.assertFalse(OrgLog.objects.filter(action="complete_event").exists())
+
+    def test_non_close_state_is_rejected(self) -> None:
+        self._set_state(EventState.ROLL_CALL)
+        with self.assertRaises(ValueError):
+            close_event(self.ev, new_state=EventState.IN_PROGRESS, source="admin")
+        self.ev.refresh_from_db()
+        self.assertEqual(self.ev.state, EventState.ROLL_CALL)
+        self.assertFalse(OrgLog.objects.filter(action="complete_event").exists())
+
+    def test_org_log_records_db_state_not_stale_instance(self) -> None:
+        stale = Event.objects.nocache().get(pk=self.ev.pk)
+        self._set_state(EventState.ROLL_CALL)
+        close_event(stale, new_state=EventState.COMPLETED, source="admin")
+        log = OrgLog.objects.get(action="complete_event")
+        self.assertEqual(log.details["from"], EventState.ROLL_CALL)
 
     def test_admin_close_writes_org_log(self) -> None:
         close_event(
@@ -201,6 +220,11 @@ class CloseEventTest(CompletionTestBase):
         result = close_event(self.ev, new_state=EventState.COMPLETED, source="admin")
         self.assertTrue(result.closed)
         self.assertEqual(self._entries().count(), 3)
+        org = Organization.objects.nocache().get(pk=self.org.pk)
+        month = parse_period(org, self.end.astimezone(UTC).strftime("%Y-%m"))
+        rows = leaderboard(org, month)
+        self.assertEqual(sum(r["entries"] for r in rows), 3)
+        self.assertEqual(sum(r["points"] for r in rows), 20)
 
     def test_locked_contributions_org_still_gets_entries(self) -> None:
         set_org_feature(

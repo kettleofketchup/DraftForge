@@ -16,6 +16,10 @@ log = get_logger(__name__)
 
 CloseSource = Literal["admin", "auto"]
 
+_CLOSE_STATES: frozenset[EventState] = frozenset(
+    {EventState.COMPLETED, EventState.CANCELLED}
+)
+
 
 @dataclass(frozen=True)
 class CloseResult:
@@ -39,23 +43,29 @@ def close_event(
     actor: CustomUser | None = None,
 ) -> CloseResult:
     new_state = EventState(new_state)
+    if new_state not in _CLOSE_STATES:
+        raise ValueError(f"close_event cannot move an event to {new_state.value!r}")
     allowed_from = [
         state for state, nexts in EVENT_STATE_TRANSITIONS.items() if new_state in nexts
     ]
     with transaction.atomic():
         now = timezone.now()
-        changed = (
+        current = (
             Event.objects.nocache()
-            .filter(pk=event.pk, state__in=allowed_from)
-            .update(state=new_state, updated_at=now)
-        )
+            .filter(pk=event.pk)
+            .values_list("state", flat=True)
+            .first()
+        ) or event.state
+        changed = current in allowed_from and Event.objects.nocache().filter(
+            pk=event.pk, state=current
+        ).update(state=new_state, updated_at=now)
         if not changed:
             current = (
                 Event.objects.nocache()
                 .filter(pk=event.pk)
                 .values_list("state", flat=True)
                 .first()
-            ) or event.state
+            ) or current
             log.info(
                 "event_close_skipped",
                 system="events",
@@ -68,7 +78,7 @@ def close_event(
             )
             return CloseResult(closed=False, state=current)
 
-        old_state = event.state
+        old_state = current
         stale = copy.copy(event)
         event.refresh_from_db(from_queryset=Event.objects.nocache().all())
 
@@ -80,7 +90,7 @@ def close_event(
             )
             event.contributions_awarded_at = now
 
-        if source == "admin":
+        if source == "admin" and new_state == EventState.COMPLETED:
             OrgLog.objects.create(
                 organization_id=event.organization_id,
                 actor=actor,
