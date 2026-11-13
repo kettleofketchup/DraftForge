@@ -111,6 +111,7 @@ export function BracketToolbar({
         <BrandDropdownMenu
           label={hasMatches ? 'Reseed Bracket' : 'Generate Bracket'}
           variant="primary"
+          className="min-h-11 px-4"
           data-testid={hasMatches ? 'reseedBracketButton' : 'generateBracketButton'}
           actions={[
             {
@@ -147,7 +148,7 @@ export function BracketToolbar({
           label="Bracket Actions"
           actions={mobileActions}
           variant="admin"
-          className="sm:hidden"
+          className="min-h-11 px-4 sm:hidden"
           data-testid="bracketActionsDropdown"
         />
       )}
