@@ -31,6 +31,8 @@ export const LeagueSchema = z.object({
   staff_ids: z.array(z.number()).optional(),
   tournament_count: z.number().optional(),
   users_count: z.number().optional(),
+  can_view_members: z.boolean().optional(), // per-viewer, detail endpoint only
+  members_viewer_pk: z.number().nullable().optional(),
   last_synced: z.string().nullable().optional(),
   created_at: z.string().optional(),
   updated_at: z.string().optional(),
@@ -75,7 +77,7 @@ export type LeagueMatchType = z.infer<typeof LeagueMatchSchema>;
 
 // Edit league schema — adds steam_league_id; CreateLeagueSchema places it first,
 // so we match that for muscle-memory consistency on the field-validation order
-// (rendering order is set in EditLeagueModal.tsx — Task 8).
+// (rendering order is set in EditLeagueModal.tsx).
 export const EditLeagueSchema = z.object({
   steam_league_id: z.number().min(1).nullable().optional(),
   name: z.string().min(1, 'League name is required').max(255),

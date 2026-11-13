@@ -8,6 +8,7 @@ from cacheops import cached_as
 from django.contrib.auth import login
 from django.contrib.auth import logout as auth_logout
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.models import AnonymousUser
 from django.core.cache import cache
 from django.db import transaction
 from django.db.models import Count, Q, QuerySet
@@ -21,6 +22,8 @@ from django.shortcuts import redirect
 from django.utils import timezone
 from rest_framework import generics, status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.exceptions import PermissionDenied, ValidationError
+from rest_framework.generics import get_object_or_404
 from rest_framework.permissions import (
     AllowAny,
     BasePermission,
@@ -33,9 +36,7 @@ from rest_framework.serializers import BaseSerializer
 from social_core.backends.oauth import BaseOAuth1, BaseOAuth2
 from social_django.utils import load_strategy, psa
 
-# Create your views here.
 from app.functions.teamdraft import apply_draft_options
-from app.permissions_org import has_org_staff_access
 from league.models import LeagueUser
 from league.serializers import LeagueUserSerializer
 from org.models import OrgUser
@@ -55,6 +56,7 @@ from .models import (
     CustomUser,
     Draft,
     DraftRound,
+    DraftTeam,
     Game,
     League,
     Organization,
@@ -73,7 +75,13 @@ from .permissions_org import (
     IsOrgAdmin,
     IsOrgOwner,
     can_manage_game,
+    can_view_league_members,
+    can_view_league_members_from_payload,
+    can_view_org_members,
+    can_view_org_members_from_payload,
     has_league_admin_access,
+    has_league_staff_access,
+    has_org_staff_access,
 )
 from .serializers import (
     DraftRoundSerializer,
@@ -275,9 +283,6 @@ class UserView(viewsets.ModelViewSet):
         """Allow org admins/staff to edit users in their organizations."""
         super().check_object_permissions(request, obj)
         if request.method in ("PATCH", "PUT") and not request.user.is_staff:
-            from app.permissions_org import has_org_staff_access
-            from org.models import OrgUser
-
             # Check if the target user shares an org where requester is staff
             target_orgs = OrgUser.objects.filter(user=obj).select_related(
                 "organization"
@@ -315,8 +320,6 @@ class UserView(viewsets.ModelViewSet):
 
         Creates a ProfileClaimRequest that must be approved by an org admin.
         """
-        from org.models import OrgUser
-
         current_user = request.user
         if not current_user.is_authenticated:
             return Response(
@@ -545,8 +548,6 @@ class TournamentView(viewsets.ModelViewSet):
 
     def perform_create(self, serializer: TournamentSerializer) -> None:
         """Check that user can create tournament in the specified league."""
-        from rest_framework.exceptions import PermissionDenied, ValidationError
-
         league_id = self.request.data.get("league")
         if not league_id:
             raise ValidationError(
@@ -811,8 +812,6 @@ def current_user(request: Request) -> Response:
         active_drafts = []
 
         # Team drafts: user is captain with pending pick in in_progress tournament
-        from app.models import DraftTeam
-
         pending_team_round = (
             DraftRound.objects.filter(
                 captain=user,
@@ -880,13 +879,9 @@ class GameCreateView(generics.CreateAPIView):
             try:
                 tournament = Tournament.objects.get(pk=tournament_id)
                 if tournament.league:
-                    from .permissions_org import has_league_staff_access
-
                     if not has_league_staff_access(
                         self.request.user, tournament.league
                     ):
-                        from rest_framework.exceptions import PermissionDenied
-
                         raise PermissionDenied(
                             "You do not have permission to create games in this tournament."
                         )
@@ -896,11 +891,7 @@ class GameCreateView(generics.CreateAPIView):
         elif league_id:
             try:
                 league = League.objects.get(pk=league_id)
-                from .permissions_org import has_league_staff_access
-
                 if not has_league_staff_access(self.request.user, league):
-                    from rest_framework.exceptions import PermissionDenied
-
                     raise PermissionDenied(
                         "You do not have permission to create games in this league."
                     )
@@ -998,8 +989,6 @@ class GameView(viewsets.ModelViewSet):
                         {"league": tournament.league, "tournament": tournament},
                     )(),
                 ):
-                    from rest_framework.exceptions import PermissionDenied
-
                     raise PermissionDenied(
                         "You do not have permission to create games in this tournament."
                     )
@@ -1008,14 +997,8 @@ class GameView(viewsets.ModelViewSet):
         # Check direct league reference
         elif league_id:
             try:
-                from .models import League
-
                 league = League.objects.get(pk=league_id)
-                from .permissions_org import has_league_staff_access
-
                 if not has_league_staff_access(self.request.user, league):
-                    from rest_framework.exceptions import PermissionDenied
-
                     raise PermissionDenied(
                         "You do not have permission to create games in this league."
                     )
@@ -1105,6 +1088,16 @@ class TournamentListView(viewsets.ReadOnlyModelViewSet):
         return Response(data)
 
 
+def _member_access(
+    user: CustomUser | AnonymousUser, can_view: bool
+) -> dict[str, bool | int | None]:
+    """Per-viewer member-list flag plus the viewer it was computed for."""
+    return {
+        "can_view_members": can_view,
+        "members_viewer_pk": user.pk if user.is_authenticated else None,
+    }
+
+
 class OrganizationView(viewsets.ModelViewSet):
     """Organization CRUD endpoints."""
 
@@ -1140,11 +1133,20 @@ class OrganizationView(viewsets.ModelViewSet):
 
     def perform_create(self, serializer: OrganizationSerializer) -> None:
         """Set creator as owner and admin of the new organization."""
-        from org.models import OrgUser
-
         org = serializer.save(owner=self.request.user)
         org.admins.add(self.request.user)
         OrgUser.objects.get_or_create(user=self.request.user, organization=org)
+
+    def update(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        response = super().update(request, *args, **kwargs)
+        if response.status_code == status.HTTP_200_OK:
+            response.data.update(
+                _member_access(
+                    request.user,
+                    can_view_org_members_from_payload(request.user, response.data),
+                )
+            )
+        return response
 
     def list(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         cache_key = f"organization_list:{request.get_full_path()}"
@@ -1169,12 +1171,23 @@ class OrganizationView(viewsets.ModelViewSet):
             return serializer.data
 
         data = get_data()
-        return Response(data)
+        return Response(
+            {
+                **data,
+                **_member_access(
+                    request.user, can_view_org_members_from_payload(request.user, data)
+                ),
+            }
+        )
 
     @action(detail=True, methods=["get"])
     def users(self, request: Request, pk: str | None = None) -> Response:
         """Get all users who are members of this organization (via OrgUser)."""
-        org = self.get_object()
+        org = get_object_or_404(Organization, pk=pk)
+        if not can_view_org_members(request.user, org):
+            raise PermissionDenied(
+                "You do not have access to this organization's members."
+            )
         cache_key = f"organization_users:{pk}"
 
         @cached_as(
@@ -1289,7 +1302,15 @@ class LeagueView(viewsets.ModelViewSet):
             return serializer.data
 
         data = get_data()
-        return Response(data)
+        return Response(
+            {
+                **data,
+                **_member_access(
+                    request.user,
+                    can_view_league_members_from_payload(request.user, data),
+                ),
+            }
+        )
 
     @action(detail=True, methods=["get"])
     def matches(self, request: Request, pk: str | None = None) -> Response:
@@ -1325,7 +1346,9 @@ class LeagueView(viewsets.ModelViewSet):
     @action(detail=True, methods=["get"])
     def users(self, request: Request, pk: str | None = None) -> Response:
         """Get all users who are members of this league (via LeagueUser)."""
-        league = self.get_object()
+        league = get_object_or_404(League, pk=pk)
+        if not can_view_league_members(request.user, league):
+            raise PermissionDenied("You do not have access to this league's members.")
         cache_key = f"league_users:{pk}"
 
         @cached_as(
@@ -1505,9 +1528,7 @@ def refresh_all_avatars(request: Request) -> Response:
     .refresh_avatars_batched`.
 
     Rate-limited to once per hour. The cache key is set BEFORE dispatch so
-    concurrent calls can't double-queue the task — previously the cache was
-    set after the (synchronous, 27s) loop, which let two concurrent callers
-    each run the full work and block Daphne for ~54s.
+    concurrent calls can't double-queue the task.
     """
     cache_key = "avatar_refresh_last_run"
     last_run = cache.get(cache_key)

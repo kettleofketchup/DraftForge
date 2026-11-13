@@ -459,6 +459,7 @@ class OrganizationSerializer(serializers.ModelSerializer):
             "discord_server_id",
             "rules_template",
             "timezone",
+            "members_private",
             "owner",
             "owner_id",
             "admins",

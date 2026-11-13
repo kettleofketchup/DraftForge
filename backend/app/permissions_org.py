@@ -1,6 +1,15 @@
 """Organization and League permission helpers."""
 
+from collections.abc import Mapping
+from typing import Any
+
+from django.contrib.auth.models import AnonymousUser
+from django.db.models import Exists, OuterRef, Q
 from rest_framework import permissions
+
+from app.models import CustomUser, League, Organization
+from league.models import LeagueUser
+from org.models import OrgUser
 
 
 def is_org_owner(user, obj):
@@ -62,6 +71,66 @@ def has_org_staff_access(user, obj):
     )
 
 
+def can_view_org_members(
+    user: CustomUser | AnonymousUser, organization: Organization | int
+) -> bool:
+    """Org staff and staff of any of the org's leagues always; plain members
+    only while the member list isn't private. One uncached query."""
+    if not user.is_authenticated:
+        return False
+    if user.is_staff or user.is_superuser:
+        return True
+    org_pk = organization if isinstance(organization, int) else organization.pk
+    uid = user.pk
+    league_staff = League.objects.filter(organization_id=OuterRef("pk")).filter(
+        Q(admins__pk=uid) | Q(staff__pk=uid)
+    )
+    member = OrgUser.objects.filter(organization_id=OuterRef("pk"), user_id=uid)
+    return (
+        Organization.objects.nocache()
+        .filter(pk=org_pk)
+        .filter(
+            Q(owner_id=uid)
+            | Exists(
+                Organization.admins.through.objects.filter(
+                    organization_id=OuterRef("pk"), customuser_id=uid
+                )
+            )
+            | Exists(
+                Organization.staff.through.objects.filter(
+                    organization_id=OuterRef("pk"), customuser_id=uid
+                )
+            )
+            | Exists(league_staff)
+            | (Q(members_private=False) & Exists(member))
+        )
+        .exists()
+    )
+
+
+def _payload_lists_user(user: CustomUser, data: Mapping[str, Any]) -> bool:
+    owner = data.get("owner")
+    if isinstance(owner, Mapping) and owner.get("pk") == user.pk:
+        return True
+    return any(
+        entry.get("pk") == user.pk
+        for key in ("admins", "staff")
+        for entry in data.get(key) or ()
+    )
+
+
+def can_view_org_members_from_payload(
+    user: CustomUser | AnonymousUser, data: Mapping[str, Any]
+) -> bool:
+    """can_view_org_members for a serialized OrganizationSerializer payload,
+    skipping the query when the payload already names the user as staff."""
+    if not user.is_authenticated:
+        return False
+    if user.is_staff or user.is_superuser or _payload_lists_user(user, data):
+        return True
+    return can_view_org_members(user, data["pk"])
+
+
 def has_league_admin_access(user, league):
     """Check if user is league admin, admin of any linked org, or site admin."""
     if not user.is_authenticated:
@@ -110,9 +179,48 @@ def has_event_staff_access(user, event):
         return False
     if has_org_staff_access(user, event.organization):
         return True
-    if event.tournament_league_id and has_league_staff_access(user, event.tournament_league):
+    if event.tournament_league_id and has_league_staff_access(
+        user, event.tournament_league
+    ):
         return True
     return False
+
+
+def _is_league_member(user: CustomUser, league_pk: int) -> bool:
+    return (
+        LeagueUser.objects.nocache()
+        .filter(league_id=league_pk, user_id=user.pk)
+        .exists()
+    )
+
+
+def can_view_league_members(user: CustomUser | AnonymousUser, league: League) -> bool:
+    """Whoever may view the linked org's members, plus the league's own members even
+    when the org list is private; league staff and members for org-less leagues."""
+    if not user.is_authenticated:
+        return False
+    if league.organization_id is not None:
+        if can_view_org_members(user, league.organization_id):
+            return True
+    elif has_league_staff_access(user, league):
+        return True
+    return _is_league_member(user, league.pk)
+
+
+def can_view_league_members_from_payload(
+    user: CustomUser | AnonymousUser, data: Mapping[str, Any]
+) -> bool:
+    """can_view_league_members for a serialized LeagueSerializer payload."""
+    if not user.is_authenticated:
+        return False
+    if user.is_staff or user.is_superuser or _payload_lists_user(user, data):
+        return True
+    organization = data.get("organization")
+    if isinstance(organization, Mapping) and can_view_org_members(
+        user, organization["pk"]
+    ):
+        return True
+    return _is_league_member(user, data["pk"])
 
 
 class IsOrgOwner(permissions.BasePermission):

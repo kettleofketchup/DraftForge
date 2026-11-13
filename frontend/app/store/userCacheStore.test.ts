@@ -31,3 +31,26 @@ describe('userCacheStore.upsert', () => {
     expect(useUserCacheStore.getState().entities[5].positions?.carry).toBe(1);
   });
 });
+
+describe('userCacheStore.dropScoped', () => {
+  beforeEach(() => {
+    useUserCacheStore.getState().reset();
+  });
+
+  it('drops only the named org slot', () => {
+    const store = useUserCacheStore.getState();
+    store.upsert({ pk: 5, username: 'x', mmr: 4000, orgUserPk: 11 } as never, { orgId: 1 });
+    store.upsert({ pk: 5, username: 'x', mmr: 3000, orgUserPk: 12 } as never, { orgId: 2 });
+    useUserCacheStore.getState().dropScoped({ orgId: 1 });
+    const entry = useUserCacheStore.getState().entities[5];
+    expect(entry.orgData[1]).toBeUndefined();
+    expect(entry.orgData[2]?.mmr).toBe(3000);
+  });
+
+  it('leaves entities untouched when nothing is cached for the scope', () => {
+    useUserCacheStore.getState().upsert(user());
+    const before = useUserCacheStore.getState().entities;
+    useUserCacheStore.getState().dropScoped({ leagueId: 9 });
+    expect(useUserCacheStore.getState().entities).toBe(before);
+  });
+});

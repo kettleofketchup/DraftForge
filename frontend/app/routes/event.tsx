@@ -96,6 +96,8 @@ import { usePageNav } from '~/hooks/usePageNav';
 import type { UserType } from '~/components/user/types';
 import type { AddMemberPayload } from '~/components/api/api';
 import { useOrgStore } from '~/store/orgStore';
+import { useUserCacheStore } from '~/store/userCacheStore';
+import { useMemberAccess } from '~/hooks/useMemberAccess';
 import { useUserStore } from '~/store/userStore';
 import { isUserEntry } from '~/store/userCacheTypes';
 import { useGameTypeStore } from '~/store/gameTypeStore';
@@ -127,17 +129,12 @@ export default function EventPage() {
   });
 
   // Fetch the specific org for this event (needed for org logo and discord server id)
-  const { organization: eventOrg } = useOrganization(event?.organization ?? undefined);
+  const { organization: eventOrg, refetch: refetchEventOrg } = useOrganization(
+    event?.organization ?? undefined,
+  );
   // Permission check uses backend-derived flag (covers org staff AND league staff).
   const isAdmin = event?.user_can_manage ?? false;
 
-  // Populate the org users cache so signup rows can read per-org MMR via the
-  // user entity adapter (UserEntry.orgData[orgId].mmr).
-  useEffect(() => {
-    if (event?.organization) {
-      useOrgStore.getState().getOrgUsers(event.organization);
-    }
-  }, [event?.organization]);
 
   // Set the current game type in the game type store for context-aware components
   const setCurrentGameType = useGameTypeStore((s) => s.setCurrentGameType);
@@ -152,6 +149,30 @@ export default function EventPage() {
 
   // Mutations
   const queryClient = useQueryClient();
+
+  // Populate the org users cache so signup rows can read per-org MMR via the
+  // user entity adapter (UserEntry.orgData[orgId].mmr). Viewers without member
+  // access fall back to signup.org_user_mmr.
+  const eventOrgPk = event?.organization ?? null;
+  const onMemberViewerChange = useCallback(() => {
+    if (!eventOrgPk) return;
+    if (useOrgStore.getState().orgUsersOrgId === eventOrgPk) {
+      useOrgStore.getState().clearOrgUsers();
+    }
+    useUserCacheStore.getState().dropScoped({ orgId: eventOrgPk });
+    queryClient.invalidateQueries({ queryKey: ['event-signups', id] });
+    refetchEventOrg();
+  }, [eventOrgPk, id, queryClient, refetchEventOrg]);
+  const { canView: canViewOrgMembers, settled: orgMemberAccessSettled } = useMemberAccess(
+    eventOrg,
+    onMemberViewerChange,
+  );
+  const orgUsersOrgId = useOrgStore((s) => s.orgUsersOrgId);
+  useEffect(() => {
+    if (eventOrgPk && orgMemberAccessSettled && canViewOrgMembers) {
+      useOrgStore.getState().getOrgUsers(eventOrgPk);
+    }
+  }, [eventOrgPk, orgMemberAccessSettled, canViewOrgMembers, orgUsersOrgId]);
   const signupMutation = useSignupMutation(id ?? 0);
   const actions = useEventActionMutation(id ?? 0);
   const signupActions = useSignupActionMutations(id ?? 0);

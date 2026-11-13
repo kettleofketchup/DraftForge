@@ -540,6 +540,10 @@ class Organization(models.Model):
     )
     rules_template = models.TextField(blank=True, default="", max_length=50000)
     timezone = models.CharField(max_length=50, default="America/New_York")
+    members_private = models.BooleanField(
+        default=False,
+        help_text="Restrict the member list to org staff (hides it from regular members)",
+    )
     owner = models.ForeignKey(
         "CustomUser",
         on_delete=models.PROTECT,

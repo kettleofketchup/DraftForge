@@ -24,6 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '~/components/ui/select';
+import { Switch } from '~/components/ui/switch';
 import { Textarea } from '~/components/ui/textarea';
 import { COMMON_TIMEZONES } from '~/components/tournament/schemas';
 import { useIsOrganizationAdmin } from '~/hooks/usePermissions';
@@ -62,6 +63,7 @@ export function EditOrganizationModal({
       discord_server_id: organization.discord_server_id || '',
       rules_template: organization.rules_template || '',
       timezone: organization.timezone || 'America/New_York',
+      members_private: organization.members_private ?? false,
     },
   });
 
@@ -76,6 +78,7 @@ export function EditOrganizationModal({
         discord_server_id: organization.discord_server_id || '',
         rules_template: organization.rules_template || '',
         timezone: organization.timezone || 'America/New_York',
+        members_private: organization.members_private ?? false,
       });
     }
   }, [open, organization, form]);
@@ -214,6 +217,28 @@ export function EditOrganizationModal({
                 Default timezone for events and tournaments
               </FormDescription>
               <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="members_private"
+          render={({ field }) => (
+            <FormItem className="flex items-center justify-between gap-4 rounded-md border border-border p-3">
+              <div className="space-y-0.5">
+                <FormLabel>Private members list</FormLabel>
+                <FormDescription>
+                  When on, only staff and admins can see the member list. When off, every member can.
+                </FormDescription>
+              </div>
+              <FormControl>
+                <Switch
+                  checked={field.value ?? false}
+                  onCheckedChange={field.onChange}
+                  data-testid="org-members-private-switch"
+                />
+              </FormControl>
             </FormItem>
           )}
         />
