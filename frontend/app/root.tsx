@@ -30,7 +30,6 @@ import ResponsiveAppBar from './components/navbar/navbar';
 
 const log = getLogger('root');
 
-// ✅ All fonts and external styles live here
 export const links: Route.LinksFunction = () => [];
 
 export async function loader({ request }: LoaderFunctionArgs) {
@@ -42,7 +41,6 @@ export async function loader({ request }: LoaderFunctionArgs) {
   return data({ locale }, { headers: { 'Set-Cookie': setCookie } });
 }
 
-// ✅ Meta tags live here
 export const meta: Route.MetaFunction = () => [
   { title: 'Tournament Tracker' },
   { name: 'description', content: 'Track your tournament progress' },
