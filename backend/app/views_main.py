@@ -39,6 +39,7 @@ from social_django.utils import load_strategy, psa
 from app.functions.teamdraft import apply_draft_options
 from league.models import LeagueUser
 from league.serializers import LeagueUserSerializer
+from org.features import FeatureKey, active_features
 from org.models import OrgUser
 from org.serializers import OrgUserSerializer
 from telemetry.logging import get_logger
@@ -81,7 +82,10 @@ from .permissions_org import (
     can_view_org_members_from_payload,
     has_league_admin_access,
     has_league_staff_access,
+    has_org_admin_access,
     has_org_staff_access,
+    is_org_role_holder,
+    is_site_admin,
 )
 from .serializers import (
     DraftRoundSerializer,
@@ -1098,6 +1102,42 @@ def _member_access(
     }
 
 
+def _feature_access(
+    user: CustomUser | AnonymousUser, org_pk: int, can_view: bool
+) -> dict[str, list[str] | bool]:
+    """Active feature keys plus per-viewer flags; merged after the cache."""
+    features = active_features(org_pk)
+    promotion = FeatureKey.PROMOTION.value in features
+    contributions = FeatureKey.CONTRIBUTIONS.value in features
+    org = (
+        Organization.objects.nocache().get(pk=org_pk)
+        if features and user.is_authenticated
+        else None
+    )
+    is_admin = org is not None and has_org_admin_access(user, org)
+    is_staff = org is not None and has_org_staff_access(user, org)
+    return {
+        "features": features,
+        "can_use_promotion": promotion
+        and (is_site_admin(user) or is_org_role_holder(user, org_pk)),
+        "can_manage_promotion_templates": promotion and is_staff,
+        "can_manage_promoters": promotion and is_admin,
+        "can_view_contributions": contributions,
+        "can_view_contributors": contributions and can_view,
+        "can_manage_contributions": contributions and is_admin,
+    }
+
+
+def _org_viewer_access(
+    user: CustomUser | AnonymousUser, data: Any
+) -> dict[str, list[str] | bool | int | None]:
+    can_view = can_view_org_members_from_payload(user, data)
+    return {
+        **_member_access(user, can_view),
+        **_feature_access(user, data["pk"], can_view),
+    }
+
+
 class OrganizationView(viewsets.ModelViewSet):
     """Organization CRUD endpoints."""
 
@@ -1140,12 +1180,7 @@ class OrganizationView(viewsets.ModelViewSet):
     def update(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         response = super().update(request, *args, **kwargs)
         if response.status_code == status.HTTP_200_OK:
-            response.data.update(
-                _member_access(
-                    request.user,
-                    can_view_org_members_from_payload(request.user, response.data),
-                )
-            )
+            response.data.update(_org_viewer_access(request.user, response.data))
         return response
 
     def list(self, request: Request, *args: Any, **kwargs: Any) -> Response:
@@ -1171,14 +1206,7 @@ class OrganizationView(viewsets.ModelViewSet):
             return serializer.data
 
         data = get_data()
-        return Response(
-            {
-                **data,
-                **_member_access(
-                    request.user, can_view_org_members_from_payload(request.user, data)
-                ),
-            }
-        )
+        return Response({**data, **_org_viewer_access(request.user, data)})
 
     @action(detail=True, methods=["get"])
     def users(self, request: Request, pk: str | None = None) -> Response:
