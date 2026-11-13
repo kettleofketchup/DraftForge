@@ -1171,7 +1171,12 @@ class TournamentSerializer(serializers.ModelSerializer):
         event = events.first()
         if not event:
             return None
-        result = {"id": event.id, "name": event.name, "event_repeater": None}
+        result = {
+            "id": event.id,
+            "name": event.name,
+            "organization_id": event.organization_id,
+            "event_repeater": None,
+        }
         if event.event_repeater:
             result["event_repeater"] = {
                 "id": event.event_repeater.id,
@@ -1212,11 +1217,20 @@ class TournamentSerializer(serializers.ModelSerializer):
             "dota_lobby_launch",
             "dota_lobby_region",
             "discord_send_lobby_info",
+            "game_type",
             "game_mode",
             "lobby_steam_league_id",
+            "captains_draft_time",
+            "custom_game_name",
         )
         # Lobby context the UI shows; edited through the event settings.
-        read_only_fields = ("game_mode", "lobby_steam_league_id")
+        read_only_fields = (
+            "game_type",
+            "game_mode",
+            "lobby_steam_league_id",
+            "captains_draft_time",
+            "custom_game_name",
+        )
 
     # A tournament created from an event takes these from the event
     # (events.services.LOBBY_CONFIG_FIELDS); only standalone tournaments

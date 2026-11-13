@@ -1,8 +1,9 @@
 from django.test import TestCase
 from django.utils import timezone
 
-from app.models import CustomUser, League, Organization, Tournament
+from app.models import CustomUser, GameMode, GameType, League, Organization, Tournament
 from app.serializers import TournamentSerializer
+from events.models import Event, EventRepeater
 
 
 class TournamentSourceEventSerializerTest(TestCase):
@@ -31,10 +32,6 @@ class TournamentSourceEventSerializerTest(TestCase):
         self.assertIsNone(serializer.data["source_event"])
 
     def test_source_event_with_event(self):
-        from django.utils import timezone
-
-        from events.models import Event, EventRepeater
-
         repeater = EventRepeater.objects.create(
             organization=self.org,
             name="Weekly Inhouse",
@@ -61,10 +58,6 @@ class TournamentSourceEventSerializerTest(TestCase):
         self.assertEqual(source["event_repeater"]["name"], "Weekly Inhouse")
 
     def test_source_event_without_repeater(self):
-        from django.utils import timezone
-
-        from events.models import Event
-
         event = Event.objects.create(
             organization=self.org,
             name="One-off Event",
@@ -78,3 +71,37 @@ class TournamentSourceEventSerializerTest(TestCase):
         self.assertEqual(source["id"], event.id)
         self.assertEqual(source["name"], "One-off Event")
         self.assertIsNone(source["event_repeater"])
+
+    def test_source_event_includes_organization_id(self) -> None:
+        Event.objects.create(
+            organization=self.org,
+            name="Org Event",
+            scheduled_at=timezone.now(),
+            tournament=self.tournament,
+        )
+
+        serializer = TournamentSerializer(self.tournament)
+        self.assertEqual(
+            serializer.data["source_event"]["organization_id"], self.org.pk
+        )
+
+
+class TournamentLobbyConfigFieldsTest(TestCase):
+    def test_lobby_config_fields_serialized(self) -> None:
+        tournament = Tournament.objects.create(
+            name="Turbo Night",
+            tournament_type="double_elimination",
+            date_played=timezone.now(),
+            game_mode=GameMode.TURBO,
+            captains_draft_time=25,
+            custom_game_name="x",
+            lobby_steam_league_id=17940,
+        )
+
+        data = TournamentSerializer(tournament).data
+        self.assertEqual(data["game_type"], GameType.DOTA2)
+        self.assertEqual(data["game_type"], 1)
+        self.assertEqual(data["game_mode"], "turbo")
+        self.assertEqual(data["captains_draft_time"], 25)
+        self.assertEqual(data["custom_game_name"], "x")
+        self.assertEqual(data["lobby_steam_league_id"], 17940)
