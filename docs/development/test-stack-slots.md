@@ -201,7 +201,8 @@ vitest guard (`frontend/tests/unit/playwright-literal-guard.test.ts`) fails on e
 
 Browsers scope cookies by host, not port, so every slot shares one cookie jar for
 `localhost`. To keep a login on one slot from logging you out of another, slots N ≥ 1
-suffix their cookie names: `sessionid-sN` and `csrftoken-sN`.
+suffix their cookie names: `sessionid-sN` and `csrftoken-sN`. Ephemeral `just test::run`
+stacks do the same with their `-run-<hex>` suffix.
 `docker-compose.slot.yaml` sets `DF_SESSION_COOKIE_NAME` and `DF_CSRF_COOKIE_NAME` on
 the backend and `VITE_CSRF_COOKIE_NAME` on the frontend, which reads the CSRF cookie
 for the `X-CSRFToken` header. Slot 0, CI and production keep Django's default names.

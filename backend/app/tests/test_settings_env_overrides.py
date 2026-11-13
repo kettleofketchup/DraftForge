@@ -89,19 +89,19 @@ def tearDownModule():
 
 
 class SettingsEnvOverrideTests(SimpleTestCase):
-    def test_cookie_names_default_to_django_names(self):
+    def test_cookie_names_default_to_django_names(self) -> None:
         mod = _reload()
         self.assertEqual(mod.SESSION_COOKIE_NAME, "sessionid")
         self.assertEqual(mod.CSRF_COOKIE_NAME, "csrftoken")
 
-    def test_slot_cookie_names_come_from_env(self):
+    def test_slot_cookie_names_come_from_env(self) -> None:
         mod = _reload(
             {"DF_SESSION_COOKIE_NAME": "sessionid-s4", "DF_CSRF_COOKIE_NAME": "csrftoken-s4"}
         )
         self.assertEqual(mod.SESSION_COOKIE_NAME, "sessionid-s4")
         self.assertEqual(mod.CSRF_COOKIE_NAME, "csrftoken-s4")
 
-    def test_blank_cookie_names_fall_back_to_defaults(self):
+    def test_blank_cookie_names_fall_back_to_defaults(self) -> None:
         mod = _reload({"DF_SESSION_COOKIE_NAME": "", "DF_CSRF_COOKIE_NAME": ""})
         self.assertEqual(mod.SESSION_COOKIE_NAME, "sessionid")
         self.assertEqual(mod.CSRF_COOKIE_NAME, "csrftoken")

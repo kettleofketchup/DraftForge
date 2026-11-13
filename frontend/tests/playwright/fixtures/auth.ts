@@ -536,7 +536,7 @@ async function setSessionCookies(
   cookieHeader: string
 ): Promise<void> {
   // Parse multiple cookies from header
-  const cookieStrings = cookieHeader.split(/,(?=\s*\w+=)/);
+  const cookieStrings = cookieHeader.split(/,(?=\s*[\w-]+=)/);
 
   // Use URL instead of domain/path for more reliable cookie setting
   const cookieUrl = `${BASE_URL}/`;

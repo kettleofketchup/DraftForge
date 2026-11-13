@@ -21,6 +21,7 @@ import { expect, type APIResponse, type BrowserContext, type Locator, type Page 
 
 import { visitAndWaitForHydration } from '../helpers/utils';
 import { API_URL } from './base-url';
+import { isCsrfCookie } from './cookies';
 
 export type DotaLobbyRole = 'staff' | 'rostered' | 'registered' | 'unregistered' | 'league-staff';
 
@@ -241,7 +242,7 @@ export async function requestLobby(
   body: Record<string, unknown> = {},
 ): Promise<void> {
   const cookies = await context.cookies();
-  const csrf = cookies.find((c) => c.name === 'csrftoken')?.value ?? '';
+  const csrf = cookies.find((c) => isCsrfCookie(c.name))?.value ?? '';
   const resp = await context.request.post(`${API_URL}/games/${gamePk}/lobby/`, {
     data: body,
     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
