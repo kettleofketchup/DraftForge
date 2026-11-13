@@ -33,7 +33,7 @@ def not_permitted() -> PermissionDenied:
 
 
 def require_feature(org: Organization | int, feature: FeatureKey | str) -> None:
-    if not org_has_feature(org, feature):
+    if not org_has_feature(org, FeatureKey(feature)):
         raise feature_locked()
 
 

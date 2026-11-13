@@ -82,12 +82,24 @@ class FeatureAccessTest(TestCase):
             self.admin,
             self.owner,
             self.site_admin,
+            self.superuser,
             self.member,
             self.outsider,
             self.anon,
         ):
             with self.subTest(user=str(user)):
                 self.assertIs(has_org_promoter_access(user, self.org), False)
+
+    def test_promoter_access_false_after_disable(self) -> None:
+        self._unlock()
+        set_org_feature(
+            self.org, FeatureKey.PROMOTION, enabled=False, actor=self.site_admin
+        )
+        self.assertIs(has_org_promoter_access(self.promoter, self.org), False)
+        self.assertEqual(
+            self._code(lambda: require_promoter(self.promoter, self.org)),
+            "feature_locked",
+        )
 
     def test_contributions_switch_does_not_unlock_promotion(self) -> None:
         self._unlock(FeatureKey.CONTRIBUTIONS)
@@ -126,6 +138,10 @@ class FeatureAccessTest(TestCase):
         self._unlock()
         require_feature(self.org, FeatureKey.PROMOTION)
         require_feature(self.org.pk, "promotion")
+
+    def test_require_feature_unknown_key_raises(self) -> None:
+        with self.assertRaises(ValueError):
+            require_feature(self.org, "promotoin")
 
     def test_require_org_staff(self) -> None:
         feature = FeatureKey.CONTRIBUTIONS
@@ -171,26 +187,49 @@ class FeatureAccessTest(TestCase):
     def test_require_helpers_anon_unlocked_not_authenticated(self) -> None:
         self._unlock(FeatureKey.PROMOTION)
         self._unlock(FeatureKey.CONTRIBUTIONS)
-        calls: list[Callable[[], None]] = [
-            lambda: require_promoter(self.anon, self.org),
-            lambda: require_org_staff(self.anon, self.org, FeatureKey.CONTRIBUTIONS),
-            lambda: require_org_admin(self.anon, self.org, FeatureKey.CONTRIBUTIONS),
-            lambda: require_org_admin(self.anon, self.org, None),
+        calls: list[tuple[str, Callable[[], None]]] = [
+            ("require_promoter", lambda: require_promoter(self.anon, self.org)),
+            (
+                "require_org_staff",
+                lambda: require_org_staff(
+                    self.anon, self.org, FeatureKey.CONTRIBUTIONS
+                ),
+            ),
+            (
+                "require_org_admin",
+                lambda: require_org_admin(
+                    self.anon, self.org, FeatureKey.CONTRIBUTIONS
+                ),
+            ),
+            (
+                "require_org_admin_no_feature",
+                lambda: require_org_admin(self.anon, self.org, None),
+            ),
         ]
-        for call in calls:
-            with self.subTest(call=call):
+        for name, call in calls:
+            with self.subTest(helper=name):
                 with self.assertRaises(NotAuthenticated) as ctx:
                     call()
                 self.assertNotIsInstance(ctx.exception.detail, dict)
 
     def test_require_helpers_anon_locked_feature_locked(self) -> None:
-        calls: list[Callable[[], None]] = [
-            lambda: require_promoter(self.anon, self.org),
-            lambda: require_org_staff(self.anon, self.org, FeatureKey.CONTRIBUTIONS),
-            lambda: require_org_admin(self.anon, self.org, FeatureKey.CONTRIBUTIONS),
+        calls: list[tuple[str, Callable[[], None]]] = [
+            ("require_promoter", lambda: require_promoter(self.anon, self.org)),
+            (
+                "require_org_staff",
+                lambda: require_org_staff(
+                    self.anon, self.org, FeatureKey.CONTRIBUTIONS
+                ),
+            ),
+            (
+                "require_org_admin",
+                lambda: require_org_admin(
+                    self.anon, self.org, FeatureKey.CONTRIBUTIONS
+                ),
+            ),
         ]
-        for call in calls:
-            with self.subTest(call=call):
+        for name, call in calls:
+            with self.subTest(helper=name):
                 self.assertEqual(self._code(call), "feature_locked")
 
     def test_error_factories(self) -> None:
