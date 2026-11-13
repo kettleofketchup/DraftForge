@@ -36,7 +36,6 @@ from rest_framework.serializers import BaseSerializer
 from social_core.backends.oauth import BaseOAuth1, BaseOAuth2
 from social_django.utils import load_strategy, psa
 
-# Create your views here.
 from app.functions.teamdraft import apply_draft_options
 from league.models import LeagueUser
 from league.serializers import LeagueUserSerializer
@@ -1529,9 +1528,7 @@ def refresh_all_avatars(request: Request) -> Response:
     .refresh_avatars_batched`.
 
     Rate-limited to once per hour. The cache key is set BEFORE dispatch so
-    concurrent calls can't double-queue the task — previously the cache was
-    set after the (synchronous, 27s) loop, which let two concurrent callers
-    each run the full work and block Daphne for ~54s.
+    concurrent calls can't double-queue the task.
     """
     cache_key = "avatar_refresh_last_run"
     last_run = cache.get(cache_key)

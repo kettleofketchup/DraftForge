@@ -77,7 +77,7 @@ export type LeagueMatchType = z.infer<typeof LeagueMatchSchema>;
 
 // Edit league schema — adds steam_league_id; CreateLeagueSchema places it first,
 // so we match that for muscle-memory consistency on the field-validation order
-// (rendering order is set in EditLeagueModal.tsx — Task 8).
+// (rendering order is set in EditLeagueModal.tsx).
 export const EditLeagueSchema = z.object({
   steam_league_id: z.number().min(1).nullable().optional(),
   name: z.string().min(1, 'League name is required').max(255),

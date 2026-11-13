@@ -43,8 +43,7 @@ def populate_auth_matrix_data(force=False):
 
     # 1. Org. Pin the pk explicitly so the matrix spec's
     # AUTH_MATRIX_ORG_PK = 8 survives anyone reordering populate steps
-    # above this one — previously the pk landed by autoincrement
-    # side-effect, which was fragile.
+    # above this one.
     org, created = Organization.objects.update_or_create(
         name=AUTH_MATRIX_ORG.name,
         defaults={
