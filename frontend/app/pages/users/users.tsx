@@ -12,7 +12,7 @@ const UserCardSkeleton = () => (
   <div
     className="flex w-full sm:gap-2 md:gap-4 py-4 justify-center content-center"
   >
-    <div className="justify-between p-2 h-full card bg-base-200 shadow-md w-full max-w-sm animate-pulse">
+    <div className="justify-between h-full bg-base-200 shadow-md w-full max-w-sm animate-pulse p-8">
       {/* Top bar skeleton - avatar + header */}
       <div className="flex items-center gap-2 justify-start">
         <div className="w-16 h-16 rounded-full bg-base-300" />

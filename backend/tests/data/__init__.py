@@ -10,9 +10,23 @@ Usage:
     from tests.data.teams import REAL_TOURNAMENT_38_TEAMS
 """
 
+# dota_lobby E2E (org, league, series, events, tournaments, users)
+from tests.data.dota_lobby import (
+    LOBBY_FIXED_PASSWORD,
+    LOBBY_LEAGUE,
+    LOBBY_ORG,
+    LOBBY_ROLE_USERS,
+    LOBBY_SERIES_NAME,
+    LOBBY_STEAM_LEAGUE_ID,
+    LOBBY_USERS,
+)
+
 # Leagues
 from tests.data.leagues import (
     ALL_LEAGUES,
+    AUTH_MATRIX_LEAGUE,
+    AUTH_MATRIX_LEAGUE_NAME,
+    AUTH_MATRIX_LEAGUE_STEAM_ID,
     CSV_LEAGUE,
     CSV_LEAGUE_NAME,
     CSV_STEAM_LEAGUE_ID,
@@ -31,15 +45,15 @@ from tests.data.leagues import (
     SHUFFLE_TIE_LEAGUE,
     SHUFFLE_TIE_LEAGUE_NAME,
     SHUFFLE_TIE_STEAM_LEAGUE_ID,
+    STRIP_STATS_LEAGUE,
+    STRIP_STATS_LEAGUE_NAME,
+    STRIP_STATS_STEAM_LEAGUE_ID,
     TEST_LEAGUE,
     TEST_LEAGUE_NAME,
     TEST_STEAM_LEAGUE_ID,
     USER_EDIT_LEAGUE,
     USER_EDIT_LEAGUE_NAME,
     USER_EDIT_STEAM_LEAGUE_ID,
-    AUTH_MATRIX_LEAGUE,
-    AUTH_MATRIX_LEAGUE_NAME,
-    AUTH_MATRIX_LEAGUE_STEAM_ID,
 )
 
 # Models
@@ -55,6 +69,8 @@ from tests.data.models import (
 # Organizations
 from tests.data.organizations import (
     ALL_ORGANIZATIONS,
+    AUTH_MATRIX_ORG,
+    AUTH_MATRIX_ORG_NAME,
     CSV_ORG,
     CSV_ORG_NAME,
     DEMO_CSV_ORG,
@@ -65,12 +81,12 @@ from tests.data.organizations import (
     EVENTS_ORG_NAME,
     SHUFFLE_TIE_ORG,
     SHUFFLE_TIE_ORG_NAME,
+    STRIP_STATS_ORG,
+    STRIP_STATS_ORG_NAME,
     TEST_ORG,
     TEST_ORG_NAME,
     USER_EDIT_ORG,
     USER_EDIT_ORG_NAME,
-    AUTH_MATRIX_ORG,
-    AUTH_MATRIX_ORG_NAME,
 )
 
 # Teams
@@ -101,6 +117,13 @@ from tests.data.tournaments import (
 from tests.data.users import (
     ADMIN_USER,
     ALL_TEST_USERS,
+    AUTH_MATRIX_LEAGUE_ADMIN_USER,
+    AUTH_MATRIX_LEAGUE_STAFF_USER,
+    AUTH_MATRIX_ORG_ADMIN_USER,
+    AUTH_MATRIX_ORG_MEMBER_USER,
+    AUTH_MATRIX_ORG_OWNER_USER,
+    AUTH_MATRIX_ORG_STAFF_USER,
+    AUTH_MATRIX_USERS,
     AUTH_TEST_USERS,
     CLAIMABLE_USER,
     EVENT_ADMIN_USER,
@@ -130,13 +153,6 @@ from tests.data.users import (
     ORG_ADMIN_USER,
     ORG_MEMBER_USER,
     ORG_STAFF_USER,
-    AUTH_MATRIX_ORG_OWNER_USER,
-    AUTH_MATRIX_ORG_ADMIN_USER,
-    AUTH_MATRIX_ORG_STAFF_USER,
-    AUTH_MATRIX_ORG_MEMBER_USER,
-    AUTH_MATRIX_LEAGUE_ADMIN_USER,
-    AUTH_MATRIX_LEAGUE_STAFF_USER,
-    AUTH_MATRIX_USERS,
     REGULAR_USER,
     SHUFFLE_TIE_CAPTAINS,
     SHUFFLE_TIE_PLAYERS,
@@ -170,6 +186,8 @@ __all__ = [
     "SHUFFLE_TIE_ORG_NAME",
     "EVENTS_ORG",
     "EVENTS_ORG_NAME",
+    "STRIP_STATS_ORG",
+    "STRIP_STATS_ORG_NAME",
     "ALL_ORGANIZATIONS",
     # Leagues
     "DTX_LEAGUE",
@@ -196,6 +214,9 @@ __all__ = [
     "EVENTS_LEAGUE_ALT",
     "EVENTS_LEAGUE_ALT_NAME",
     "EVENTS_LEAGUE_ALT_STEAM_ID",
+    "STRIP_STATS_LEAGUE",
+    "STRIP_STATS_LEAGUE_NAME",
+    "STRIP_STATS_STEAM_LEAGUE_ID",
     "ALL_LEAGUES",
     # Users
     "ADMIN_USER",
@@ -267,4 +288,12 @@ __all__ = [
     "CSV_IMPORT_TOURNAMENT",
     "USER_EDIT_TOURNAMENT",
     "SHUFFLE_TIE_TOURNAMENT",
+    # dota_lobby E2E
+    "LOBBY_ORG",
+    "LOBBY_LEAGUE",
+    "LOBBY_STEAM_LEAGUE_ID",
+    "LOBBY_SERIES_NAME",
+    "LOBBY_FIXED_PASSWORD",
+    "LOBBY_ROLE_USERS",
+    "LOBBY_USERS",
 ]

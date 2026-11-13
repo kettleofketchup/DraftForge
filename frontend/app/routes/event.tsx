@@ -104,6 +104,7 @@ import { ConfirmDialog } from '~/components/ui/dialogs';
 import { EntityBreadcrumb, type BreadcrumbSegment } from '~/components/ui/entity-breadcrumb';
 import api from '~/components/api/axios';
 import { extractApiError } from '~/lib/apiError';
+import { EventLobbyPassword } from '~/components/lobby/EventLobbyPassword';
 
 export default function EventPage() {
   const { eventId, tab } = useParams<{ eventId: string; tab?: string }>();
@@ -263,7 +264,6 @@ export default function EventPage() {
     [signups, currentUser?.pk],
   );
 
-  // Split signups into active and waitlisted
   const activeSignups = useMemo(
     () => (signups ?? []).filter((s) => !['waitlisted', 'tentative', 'cancelled', 'rejected'].includes(s.status)),
     [signups],
@@ -531,7 +531,7 @@ export default function EventPage() {
           </TabsList>
 
           <TabsContent value="details">
-            <DetailsTab event={event} />
+            <DetailsTab event={event} signedIn={!!currentUser?.pk} />
             {isAdmin && event.event_repeater && (
               <div className="mt-4">
                 <SubscriberList repeaterId={event.event_repeater} />
@@ -609,6 +609,7 @@ export default function EventPage() {
             toast.error('Failed to start roll call');
           }
         }}
+        confirmTestId="event-rollcall-dialog-confirm"
       />
 
       <ConfirmDialog
@@ -674,9 +675,20 @@ function Stat({ label, value }: { label: string; value: ReactNode }) {
 }
 
 /** Details tab — Tournament Info + Signup Rules + optional Description cards. */
-function DetailsTab({ event }: { event: NonNullable<ReturnType<typeof useEvent>['data']> }) {
+function DetailsTab({
+  event,
+  signedIn,
+}: {
+  event: NonNullable<ReturnType<typeof useEvent>['data']>;
+  signedIn: boolean;
+}) {
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <EventLobbyPassword
+        eventId={event.id}
+        lobbiesEnabled={event.game_type === 1 && event.dota_lobby_mode !== 'off'}
+        signedIn={signedIn}
+      />
       <Card>
         <CardHeader>
           <h3 className="font-semibold">Tournament Info</h3>
@@ -766,7 +778,7 @@ function SignupsTab({
     }
     const resp = await adminAddSignup(eventId!, payload.user_id);
     queryClient.invalidateQueries({ queryKey: ['event-signups', eventId] });
-    // Backend now adds the user as an OrgUser when admin signs them up; reset
+    // Backend adds the user as an OrgUser when an admin signs them up; reset
     // the org-users cache so the org page reflects the new membership.
     if (orgId) useOrgStore.getState().clearOrgUsers();
     // AddUserModal reads `.pk` off this to track optimistic adds — the signup
@@ -821,10 +833,8 @@ function SignupsTab({
       {signups.map((signup, index) => {
         const user = userMap.get(signup.user);
         const position = signup.waitlist_position ?? index + 1;
-        // "Waitlist" in the UI fires the `demote` mutation on the server —
-        // moving an approved/rsvp signup down to waitlisted is conceptually
-        // a demotion. Named handler so the JSX stays readable and the
-        // semantic gap between button label and mutation name is documented.
+        // "Waitlist" fires the server's `demote` mutation
+        // (approved/rsvp → waitlisted); named so the label/mutation gap is explicit.
         const handleWaitlist = () => signupActions.demote.mutate(signup.id);
 
         const adminActions = isAdmin ? (

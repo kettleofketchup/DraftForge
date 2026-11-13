@@ -16,13 +16,13 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 JUST = shutil.which("just")
 SLOTS = ["-m", "scripts.slots", "--root", str(ROOT), "compose"]
-APPS = ["steam", "app", "bracket", "discordbot", "events", "org", "user"]
+APPS = ["steam", "app", "bracket", "discordbot", "events", "org", "user", "lobby"]
 
 pytestmark = pytest.mark.skipif(JUST is None, reason="just is not on PATH")
 
 RECORDER = """#!/usr/bin/env bash
 {{
-    printf '%s\\0' "$PWD" "${{DISABLE_CACHE-}}" "${{TEST-}}" "${{DF_BASE_URL-}}" "$(basename "$0")" "$@"
+    printf '%s\\0' "$PWD" "${{DISABLE_CACHE-}}" "${{TEST-}}" "${{DF_BASE_URL-}}" "${{DOTA_LOBBY_SIMULATOR_REQUIRED-}}" "$(basename "$0")" "$@"
     printf '\\036'
 }} >> {log}
 if [[ "${{1-}} ${{2-}} ${{3-}}" == "-m scripts.compose env" ]]; then
@@ -34,6 +34,11 @@ if [[ " $* " == *" compose --stack dev ps backend "* ]]; then
     n=$(( $(cat "{log}.ps" 2>/dev/null || echo 0) + 1 ))
     echo "$n" > "{log}.ps"
     (( n > ${{DF_FAKE_PS_FAILS:-0}} )) && echo '[{{"State":"running"}}]'
+    exit 0
+fi
+if [[ " $* " == *" compose ps --status running --quiet dota-lobby "* ]]; then
+    # This slot's simulated dota_lobby, running when DF_FAKE_SIM_RUNNING is set.
+    [[ -n "${{DF_FAKE_SIM_RUNNING-}}" ]] && echo 0123abcd
     exit 0
 fi
 if [[ "${{1-}} ${{2-}}" == "-m scripts.slots" && " $* " == *" ensure "* && -n "${{DF_FAKE_ENSURE_FAIL-}}" ]]; then
@@ -50,6 +55,7 @@ class Call:
     disable_cache: str
     test: str
     base_url: str
+    sim_required: str
     tool: str
     argv: list[str]
 
@@ -79,8 +85,8 @@ class Runner:
         for record in self.log.read_bytes().split(b"\x1e"):
             if not record:
                 continue
-            cwd, cache, test, url, tool, *argv = record.decode().split("\0")[:-1]
-            out.append(Call(Path(cwd), cache, test, url, tool, argv))
+            cwd, cache, test, url, sim, tool, *argv = record.decode().split("\0")[:-1]
+            out.append(Call(Path(cwd), cache, test, url, sim, tool, argv))
         return out
 
     def dry_run(self, *args: str) -> str:
@@ -110,7 +116,7 @@ def run(tmp_path: Path) -> Runner:
         "DF_JUST_PYTHON": str(bin_dir / "python"),
         "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
     }
-    for key in ("TEST", "DISABLE_CACHE", "DF_BASE_URL"):
+    for key in ("TEST", "DISABLE_CACHE", "DF_BASE_URL", "DOTA_LOBBY_SIMULATOR_REQUIRED"):
         env.pop(key, None)
     return Runner(log, env)
 
@@ -180,6 +186,30 @@ def test_stack_verbs_go_through_the_slot_helper(run: Runner, recipe: str, tail: 
     assert run(recipe, *args).returncode == 0, recipe
     [call] = run.calls()
     assert call.argv == [*SLOTS, *tail]
+
+
+@pytest.mark.parametrize(
+    "action,tail",
+    [
+        # The whole stack with the profile on: slots N >= 1 scale services
+        # that `up dota-lobby` would leave out of the selection.
+        ("up", ["up", "-d"]),
+        ("down", ["rm", "--stop", "--force", "dota-lobby"]),
+        ("restart", ["restart", "dota-lobby"]),
+        ("logs", ["logs", "-f", "dota-lobby"]),
+        ("ps", ["ps", "dota-lobby"]),
+    ],
+)
+def test_dota_lobby_simulator_recipe(run: Runner, action: str, tail: list[str]) -> None:
+    assert run("test::dota-lobby", action).returncode == 0
+    [call] = run.calls()
+    assert call.argv == [*SLOTS, *tail]
+
+
+def test_dota_lobby_simulator_recipe_rejects_unknown_actions(run: Runner) -> None:
+    result = run("test::dota-lobby", "bogus")
+    assert result.returncode == 2 and "usage" in result.stderr
+    assert run.calls() == []
 
 
 def test_test_compose_passes_args_verbatim(run: Runner) -> None:
@@ -281,6 +311,37 @@ def test_playwright_runs_in_frontend_with_the_slot_url(run: Runner) -> None:
     assert npx.tool == "npx" and npx.cwd == ROOT / "frontend"
     assert npx.base_url == "https://localhost:13443"
     assert npx.argv == ["playwright", "test", "--grep", "@cicd", "--project=chromium", "--no-deps", "--shard=1/4"]
+
+
+SIM_PS = [*SLOTS, "ps", "--status", "running", "--quiet", "dota-lobby"]
+DOTA_LOBBY_PW = ["--project=dota-lobby-sequential", "--no-deps", "--workers=1"]
+
+
+@pytest.mark.parametrize(
+    "recipe,grep",
+    [("test::pw::dota-lobby", []), ("test::pw::cicd-dota-lobby", ["--grep", "@cicd"])],
+)
+def test_dota_lobby_specs_skip_without_the_simulator(run: Runner, recipe: str, grep: list[str]) -> None:
+    assert run(recipe, "--workers=1").returncode == 0
+    ps, *_, npx = run.calls()
+    assert ps.argv == SIM_PS
+    assert npx.tool == "npx" and npx.argv == ["playwright", "test", *grep, *DOTA_LOBBY_PW]
+    assert npx.sim_required == ""
+
+
+@pytest.mark.parametrize("recipe", ["test::pw::dota-lobby", "test::pw::cicd-dota-lobby"])
+def test_dota_lobby_specs_require_a_running_simulator(run: Runner, recipe: str) -> None:
+    assert run(recipe, "--workers=1", DF_FAKE_SIM_RUNNING="1").returncode == 0
+    npx = run.calls()[-1]
+    assert npx.tool == "npx" and npx.sim_required == "1"
+
+
+def test_dota_lobby_specs_keep_the_callers_choice(run: Runner) -> None:
+    result = run("test::pw::dota-lobby", DOTA_LOBBY_SIMULATOR_REQUIRED="0", DF_FAKE_SIM_RUNNING="1")
+    assert result.returncode == 0
+    calls = run.calls()
+    assert SIM_PS not in [c.argv for c in calls]
+    assert calls[-1].tool == "npx" and calls[-1].sim_required == "0"
 
 
 def test_playwright_grep_keeps_spaces(run: Runner) -> None:

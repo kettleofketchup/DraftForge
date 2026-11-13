@@ -2,6 +2,7 @@ import { Combobox, ComboboxInput } from '@headlessui/react';
 import React from 'react';
 import type { TeamType } from '~/components/tournament/types';
 import { getLogger } from '~/lib/logger';
+import { Input } from '~/components/ui/input';
 
 const log = getLogger('searchTeams');
 interface Props {
@@ -19,7 +20,7 @@ export const SearchTeamsDropdown: React.FC<Props> = ({
       {teams && (
         <Combobox value={query}>
           <ComboboxInput
-            className="input input-bordered w-full"
+            as={Input}
             placeholder="Search by team name or member"
             onChange={(event) => setQuery(event.target.value)}
             onClick={(event) => log.debug(event.target)}

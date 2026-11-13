@@ -297,6 +297,8 @@ export const useDraftWebSocketStore = create<DraftWebSocketState>((set, get) => 
             tied_teams: trPayload.tied_teams,
             roll_rounds: trPayload.roll_rounds,
             winner_id: trPayload.winner_id,
+            pick_number: trPayload.pick_number,
+            hold_ms: trPayload.hold_ms,
           };
         }
         if (
@@ -350,7 +352,11 @@ export const useDraftWebSocketStore = create<DraftWebSocketState>((set, get) => 
             : {}),
         }));
       } else if (message.type === 'captain_heartbeat') {
-        set((state) => ({ captainFresh: { ...state.captainFresh, [message.captain_id]: message.fresh } }));
+        set((state) =>
+          state.captainFresh[message.captain_id] === message.fresh
+            ? state
+            : { captainFresh: { ...state.captainFresh, [message.captain_id]: message.fresh } }
+        );
       }
     });
 

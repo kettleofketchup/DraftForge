@@ -68,11 +68,11 @@ export const TournamentCard: React.FC<Props> = React.memo(({
       : 'None';
 
     return (
-      <Item size="sm" variant="muted" className={`!p-1.5 ${!hasLeague ? 'bg-red-500/20' : ''}`}>
+      <Item size="sm" variant="muted" className={`!p-1.5 min-w-0 ${!hasLeague ? 'bg-red-500/20' : ''}`}>
         <ItemMedia variant="icon" className={`!size-6 ${hasLeague ? 'bg-primary/20 border-primary/30' : 'bg-red-500/30 border-red-500/40'}`}>
           <Trophy className={`h-3 w-3 ${hasLeague ? 'text-primary' : 'text-red-500'}`} />
         </ItemMedia>
-        <ItemContent className="!gap-0">
+        <ItemContent className="!gap-0 min-w-0">
           <ItemTitle className="!text-xs text-muted-foreground">League</ItemTitle>
           <span className={`text-sm font-medium ${!hasLeague ? 'text-red-500' : ''} ${CELL_TRUNCATE}`} title={leagueName}>
             {leagueName}
@@ -92,11 +92,11 @@ export const TournamentCard: React.FC<Props> = React.memo(({
     const hasOrg = !!orgName;
 
     return (
-      <Item size="sm" variant="muted" className={`!p-1.5 ${!hasOrg ? 'bg-red-500/20' : ''}`}>
+      <Item size="sm" variant="muted" className={`!p-1.5 min-w-0 ${!hasOrg ? 'bg-red-500/20' : ''}`}>
         <ItemMedia variant="icon" className={`!size-6 ${hasOrg ? 'bg-purple-500/20 border-purple-500/30' : 'bg-red-500/30 border-red-500/40'}`}>
           <Building2 className={`h-3 w-3 ${hasOrg ? 'text-purple-500' : 'text-red-500'}`} />
         </ItemMedia>
-        <ItemContent className="!gap-0">
+        <ItemContent className="!gap-0 min-w-0">
           <ItemTitle className="!text-xs text-muted-foreground">Organization</ItemTitle>
           <span className={`text-sm font-medium ${!hasOrg ? 'text-red-500' : ''} ${CELL_TRUNCATE}`} title={orgName || 'None'}>
             {orgName || 'None'}
@@ -141,11 +141,11 @@ export const TournamentCard: React.FC<Props> = React.memo(({
         {/* Top row: Date and Time/Timezone */}
         <div className="grid grid-cols-1 min-[360px]:grid-cols-2 gap-1">
           {tournament.date_played && (
-            <Item size="sm" variant="muted" className="!p-1.5">
+            <Item size="sm" variant="muted" className="!p-1.5 min-w-0">
               <ItemMedia variant="icon" className="!size-6 bg-sky-500/20 border-sky-500/30">
                 <Calendar className="h-3 w-3 text-sky-500" />
               </ItemMedia>
-              <ItemContent className="!gap-0">
+              <ItemContent className="!gap-0 min-w-0">
                 <ItemTitle className="!text-xs text-muted-foreground">Date</ItemTitle>
                 <span className={`text-sm ${CELL_TRUNCATE}`} title={tournament.date_played} data-testid="tournament-card-date">
                   {getDateFromDate(tournament.date_played)}
@@ -153,11 +153,11 @@ export const TournamentCard: React.FC<Props> = React.memo(({
               </ItemContent>
             </Item>
           )}
-          <Item size="sm" variant="muted" className="!p-1.5">
+          <Item size="sm" variant="muted" className="!p-1.5 min-w-0">
             <ItemMedia variant="icon" className="!size-6 bg-indigo-500/20 border-indigo-500/30">
               <Clock className="h-3 w-3 text-indigo-500" />
             </ItemMedia>
-            <ItemContent className="!gap-0">
+            <ItemContent className="!gap-0 min-w-0">
               <ItemTitle className="!text-xs text-muted-foreground">Time</ItemTitle>
               <span className={`text-sm ${CELL_TRUNCATE}`} title={`${getTimeFromDate(tournament.date_played)} (${tournament.timezone || 'UTC'})`}>
                 {`${getTimeFromDate(tournament.date_played)} ${formatTimezone(tournament.timezone)}`}
@@ -168,11 +168,11 @@ export const TournamentCard: React.FC<Props> = React.memo(({
 
         {/* Second row: Style */}
         {tournament.tournament_type && (
-          <Item size="sm" variant="muted" className="!p-1.5">
+          <Item size="sm" variant="muted" className="!p-1.5 min-w-0">
             <ItemMedia variant="icon" className="!size-6 bg-orange-500/20 border-orange-500/30">
               <Swords className="h-3 w-3 text-orange-500" />
             </ItemMedia>
-            <ItemContent className="!gap-0">
+            <ItemContent className="!gap-0 min-w-0">
               <ItemTitle className="!text-xs text-muted-foreground">Style</ItemTitle>
               <span className={`text-sm capitalize ${CELL_TRUNCATE}`} title={tournament.tournament_type.replace('_', ' ')}>
                 {tournament.tournament_type.replace('_', ' ')}
@@ -190,11 +190,11 @@ export const TournamentCard: React.FC<Props> = React.memo(({
         {/* Third row: State and Players */}
         <div className="grid grid-cols-1 min-[360px]:grid-cols-2 gap-1">
           {tournament.state && (
-            <Item size="sm" variant="muted" className="!p-1.5">
+            <Item size="sm" variant="muted" className="!p-1.5 min-w-0">
               <ItemMedia variant="icon" className="!size-6 bg-emerald-500/20 border-emerald-500/30">
                 <Crown className="h-3 w-3 text-emerald-500" />
               </ItemMedia>
-              <ItemContent className="!gap-0">
+              <ItemContent className="!gap-0 min-w-0">
                 <ItemTitle className="!text-xs text-muted-foreground">State</ItemTitle>
                 <span className={`text-sm capitalize ${CELL_TRUNCATE}`} title={STATE_CHOICES[tournament.state] || tournament.state}>
                   {STATE_CHOICES[tournament.state] || tournament.state}
@@ -204,11 +204,11 @@ export const TournamentCard: React.FC<Props> = React.memo(({
           )}
 
           {/* Players count */}
-          <Item size="sm" variant="muted" className="!p-1.5">
+          <Item size="sm" variant="muted" className="!p-1.5 min-w-0">
             <ItemMedia variant="icon" className="!size-6 bg-cyan-500/20 border-cyan-500/30">
               <Users className="h-3 w-3 text-cyan-500" />
             </ItemMedia>
-            <ItemContent className="!gap-0">
+            <ItemContent className="!gap-0 min-w-0">
               <ItemTitle className="!text-xs text-muted-foreground">Players</ItemTitle>
               <span className="text-sm font-medium">{tournament.user_count ?? tournament.users?.length ?? 0}</span>
             </ItemContent>
@@ -259,7 +259,7 @@ export const TournamentCard: React.FC<Props> = React.memo(({
         whileHover={{ scale: 1.02 }}
       >
         <div
-          className="card card-compact bg-base-300 rounded-2xl w-full max-w-sm h-full flex flex-col
+          className="bg-base-300 w-full max-w-sm h-full flex flex-col card-3d px-4 py-2 rounded-[1.25rem]
               hover:bg-base-200 focus:outline-2
               focus:outline-offset-2 focus:outline-primary
               active:bg-base-200"

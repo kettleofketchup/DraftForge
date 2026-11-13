@@ -13,9 +13,9 @@ export function HistorySection() {
       animate={{ opacity: 1 }}
       transition={{ duration: 0.5, delay: 0.2 }}
     >
-      <div className="card bg-base-200/50 backdrop-blur border border-primary/10 mb-12">
-        <div className="card-body">
-          <h2 className="card-title text-2xl text-primary mb-6 flex items-center gap-2">
+      <div className="bg-base-200/50 backdrop-blur border border-primary/10 mb-12 p-8">
+        <div className="flex flex-col gap-2 p-6">
+          <h2 className="text-primary mb-6 flex items-center gap-2 text-xl font-semibold leading-snug">
             <GitBranch className="w-6 h-6 flex-shrink-0" />
             <span>Our History</span>
           </h2>

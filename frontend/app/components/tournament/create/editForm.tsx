@@ -9,7 +9,7 @@ import { toast } from 'sonner';
 import { createTournament, updateTournament } from '~/components/api/api';
 import type { LeagueType } from '~/components/league/schemas';
 import { Button } from '~/components/ui/button';
-import { SecondaryButton, SubmitButton } from '~/components/ui/buttons';
+import { CancelButton, SubmitButton } from '~/components/ui/buttons';
 import { Calendar } from '~/components/ui/calendar';
 import { DialogClose } from '~/components/ui/dialog';
 import {
@@ -47,6 +47,7 @@ import {
 import type { TournamentClassType, TournamentType } from '../types';
 import { TournamentConfigSection } from './TournamentConfigSection';
 import { DiscordTournamentConfigSection } from './DiscordTournamentConfigSection';
+import { DotaLobbyConfigSection } from './DotaLobbyConfigSection';
 import { getLogger } from '~/lib/logger';
 import { SCROLLAREA_CSS } from '~/components/reusable/modal';
 
@@ -112,6 +113,9 @@ export const TournamentEditForm: React.FC<Props> = ({
   const [calendarOpen, setCalendarOpen] = useState(false);
 
   const isEditing = !!tourn?.pk;
+  const sourceEvent = tourn?.source_event
+    ? { id: tourn.source_event.id, name: tourn.source_event.name }
+    : null;
 
   // Extract initial date and time from existing tournament
   const initialDateTime = extractDateAndTime(tourn?.date_played);
@@ -147,6 +151,10 @@ export const TournamentEditForm: React.FC<Props> = ({
       auto_create_hero_drafts: tourn?.auto_create_hero_drafts ?? false,
       discord_send_draft_link: tourn?.discord_send_draft_link ?? false,
       discord_send_herodraft_link: tourn?.discord_send_herodraft_link ?? false,
+      dota_lobby_mode: tourn?.dota_lobby_mode ?? 'off',
+      dota_lobby_launch: tourn?.dota_lobby_launch ?? 'manual',
+      dota_lobby_region: tourn?.dota_lobby_region ?? '',
+      discord_send_lobby_info: tourn?.discord_send_lobby_info ?? false,
     },
   });
 
@@ -178,6 +186,15 @@ export const TournamentEditForm: React.FC<Props> = ({
         auto_create_hero_drafts: data.auto_create_hero_drafts,
         discord_send_draft_link: data.discord_send_draft_link,
         discord_send_herodraft_link: data.discord_send_herodraft_link,
+        // A tournament created from an event takes these from the event.
+        ...(sourceEvent
+          ? {}
+          : {
+              dota_lobby_mode: data.dota_lobby_mode,
+              dota_lobby_launch: data.dota_lobby_launch,
+              dota_lobby_region: data.dota_lobby_region.trim(),
+              discord_send_lobby_info: data.discord_send_lobby_info,
+            }),
       };
 
       if (isEditing) {
@@ -433,23 +450,27 @@ export const TournamentEditForm: React.FC<Props> = ({
 
             <TabsContent value="config" className="mt-4">
               <TournamentConfigSection control={form.control} />
+              <DotaLobbyConfigSection control={form.control} sourceEvent={sourceEvent} />
             </TabsContent>
 
             <TabsContent value="discord" className="mt-4">
-              <DiscordTournamentConfigSection control={form.control} />
+              <DiscordTournamentConfigSection
+                control={form.control}
+                lobbyInfoFromEvent={sourceEvent != null}
+              />
             </TabsContent>
           </Tabs>
 
           {/* Submit Button — sticky bottom */}
           <div className="flex flex-row justify-end gap-2 pt-4 mt-auto sticky bottom-0 bg-background/95 backdrop-blur-sm pb-2 -mb-2">
             <DialogClose asChild>
-              <SecondaryButton
+              <CancelButton
                 type="button"
                 disabled={isSubmitting}
                 data-testid="tournament-cancel-button"
               >
                 Cancel
-              </SecondaryButton>
+              </CancelButton>
             </DialogClose>
             <SubmitButton
               loading={isSubmitting}

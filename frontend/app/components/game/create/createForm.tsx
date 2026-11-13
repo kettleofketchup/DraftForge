@@ -12,9 +12,11 @@ import { Label } from '~/components/ui/label';
 import type { GameType, TeamType, UserType } from '~/index';
 import { TeamComboBox } from '../helpers/teamCombobox';
 import { createGameHook } from '../hooks/createGameHook';
+import { PrimaryButton } from '~/components/ui/buttons';
+import { Input } from '~/components/ui/input';
 
 export const GameCreateForm: React.FC = () => {
-  const currentUser: UserType = useUserStore((state) => state.currentUser); // Zustand setter
+  const currentUser: UserType = useUserStore((state) => state.currentUser);
   const [errorMessage, setErrorMessage] = useState<
     Partial<Record<keyof GameType, string>>
   >({});
@@ -25,7 +27,7 @@ export const GameCreateForm: React.FC = () => {
   const [radiantPK, setRadiantPK] = useState(0);
   const [direPK, setDirePK] = useState(0);
 
-  const setTournament = useUserStore((state) => state.setTournament); // Zustand setter
+  const setTournament = useUserStore((state) => state.setTournament);
   const [form, setForm] = useState<GameType>({} as GameType);
   const handleChange = (field: keyof GameType, value: any) => {
     setForm((prev: GameType) => ({ ...prev, [field]: value }) as GameType);
@@ -53,13 +55,14 @@ export const GameCreateForm: React.FC = () => {
     return (
       <div>
         <label className="font-semibold">{label}</label>
-        <input
+        <Input
           type={type}
           placeholder={form[key] ?? ''}
           value={form[key] ?? ''}
           onFocus={() => handleChange(key as keyof GameType, form[key])}
           onChange={(e) => handleChange(key as keyof GameType, e.target.value)}
-          className={`input input-bordered w-full mt-1 ${errorMessage[key] ? 'input-error' : ''}`}
+          aria-invalid={!!errorMessage[key]}
+          className="mt-1"
         />
         {errorMessage[key] && (
           <p className="text-error text-sm mt-1">{errorMessage[key]}</p>
@@ -98,13 +101,14 @@ export const GameCreateForm: React.FC = () => {
       {teamPicker()}
       <div className="flex flex-row items-start gap-4">
         <DialogClose asChild>
-          <button
+          <PrimaryButton
+            size="sm"
             onClick={handleSave}
-            className="btn btn-primary btn-sm mt-3"
+            className="mt-3"
             disabled={isSaving}
           >
-            <div>Create Game</div>
-          </button>
+            Create Game
+          </PrimaryButton>
         </DialogClose>
       </div>
     </>

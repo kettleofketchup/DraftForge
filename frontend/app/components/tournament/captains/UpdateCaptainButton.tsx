@@ -95,8 +95,9 @@ export const UpdateCaptainButton: React.FC<UpdateCaptainButtonProps> = ({
   }
 
   const triggerClass = cn(
-    compact ? 'h-9 w-9 p-0 [&_svg]:size-4' : 'w-40',
+    compact ? 'h-9 w-9 p-0 [&_svg]:size-4' : 'w-40 min-h-11',
   );
+  const triggerSize = compact ? 'icon' : undefined;
 
   const compactLabel = isCaptain ? 'Remove' : 'Pick';
 
@@ -119,6 +120,7 @@ export const UpdateCaptainButton: React.FC<UpdateCaptainButtonProps> = ({
       {isCaptain ? (
         <DestructiveButton
           className={triggerClass}
+          size={triggerSize}
           onClick={() => setShowConfirm(true)}
           aria-label={compact ? `${msg()} captain ${user.username ?? ''}`.trim() : undefined}
           data-testid={`captain-action-${user.pk}`}
@@ -128,6 +130,7 @@ export const UpdateCaptainButton: React.FC<UpdateCaptainButtonProps> = ({
       ) : (
         <PrimaryButton
           className={triggerClass}
+          size={triggerSize}
           onClick={() => setShowConfirm(true)}
           aria-label={compact ? `${msg()} captain ${user.username ?? ''}`.trim() : undefined}
           data-testid={`captain-action-${user.pk}`}

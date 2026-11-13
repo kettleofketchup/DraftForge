@@ -1,6 +1,7 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useSharedPopover } from './shared-popover-context';
+import { PlayerLeagueSummary } from '~/components/player/PlayerLeagueSummary';
 import { RolePositions } from '~/components/user/positions';
 import type { UserType } from '~/components/user/types';
 import { UserAvatar } from '~/components/user/UserAvatar';
@@ -13,17 +14,12 @@ import { useOrgStore } from '~/store/orgStore';
 // Player popover content
 const PlayerPopoverContent: React.FC<{
   player: UserType;
-  onMouseEnter: () => void;
-  onMouseLeave: () => void;
-}> = ({ player, onMouseEnter, onMouseLeave }) => {
+  statsLeagueId?: number | null;
+}> = ({ player, statsLeagueId }) => {
   const playerName = player.nickname || player.username || 'Unknown';
 
   return (
-    <div
-      className="flex flex-col gap-3 w-full overflow-hidden"
-      onMouseEnter={onMouseEnter}
-      onMouseLeave={onMouseLeave}
-    >
+    <div className="flex flex-col gap-3 w-full overflow-hidden">
       {/* Header: Avatar + Name/MMR */}
       <div className="flex items-center gap-4 min-w-0">
         <UserAvatar user={player} size="xl" className="shrink-0" />
@@ -42,6 +38,9 @@ const PlayerPopoverContent: React.FC<{
           <RolePositions user={player} disableTooltips />
         </div>
       </div>
+      {statsLeagueId != null && player.pk != null && (
+        <PlayerLeagueSummary leaguePk={statsLeagueId} userId={player.pk} compact />
+      )}
       <p className="text-xs text-foreground/60 text-center">
         Click for full profile
       </p>
@@ -52,7 +51,8 @@ const PlayerPopoverContent: React.FC<{
 export const SharedPopoverRenderer: React.FC = () => {
   const {
     state,
-    hidePopover,
+    scheduleHidePopover,
+    cancelHidePopover,
     showPlayerPopover,
     openPlayerModal,
     openTeamModal,
@@ -69,12 +69,13 @@ export const SharedPopoverRenderer: React.FC = () => {
   const [position, setPosition] = useState({ top: 0, left: 0 });
   const isHoveringPopoverRef = useRef(false);
 
-  // Calculate position when anchor changes
-  useEffect(() => {
+  // Place the card from its measured size; re-place when it resizes (e.g. league stats load).
+  const placePopover = useCallback(() => {
     if (state.anchorEl && state.isOpen) {
       const rect = state.anchorEl.getBoundingClientRect();
       const popoverWidth = state.type === 'team' ? 640 : 400;
-      const popoverHeight = state.type === 'team' ? 400 : 280;
+      const popoverHeight =
+        popoverRef.current?.offsetHeight || (state.type === 'team' ? 400 : 280);
 
       let top = rect.bottom + 4;
       let left = rect.left + rect.width / 2 - popoverWidth / 2;
@@ -87,25 +88,38 @@ export const SharedPopoverRenderer: React.FC = () => {
       if (top + popoverHeight > window.innerHeight - 8) {
         top = rect.top - popoverHeight - 4;
       }
+      if (top < 8) top = 8;
 
-      setPosition({ top, left });
+      setPosition((prev) => (prev.top === top && prev.left === left ? prev : { top, left }));
     }
   }, [state.anchorEl, state.isOpen, state.type]);
 
+  useLayoutEffect(placePopover, [placePopover]);
+
+  useEffect(() => {
+    const el = popoverRef.current;
+    if (!state.isOpen || !el || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(placePopover);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [state.isOpen, placePopover]);
+
   const handlePopoverMouseEnter = useCallback(() => {
     isHoveringPopoverRef.current = true;
-  }, []);
+    cancelHidePopover();
+  }, [cancelHidePopover]);
 
   const handlePopoverMouseLeave = useCallback(() => {
     isHoveringPopoverRef.current = false;
-    hidePopover();
-  }, [hidePopover]);
+    scheduleHidePopover();
+  }, [scheduleHidePopover]);
 
   const handleClick = useCallback(() => {
     if (state.type === 'player' && state.player) {
       openPlayerModal(state.player, {
         organizationId: currentOrg?.pk,
         leagueId: currentLeague?.pk,
+        statsLeagueId: state.context?.statsLeagueId,
       });
     } else if (state.type === 'team' && state.team) {
       openTeamModal(state.team);
@@ -147,22 +161,21 @@ export const SharedPopoverRenderer: React.FC = () => {
         }`}
         style={{ top: position.top, left: position.left }}
         onClick={handleClick}
+        onMouseEnter={handlePopoverMouseEnter}
+        onMouseLeave={handlePopoverMouseLeave}
         role="tooltip"
       >
         {state.type === 'player' && state.player && (
           <PlayerPopoverContent
             player={state.player}
-            onMouseEnter={handlePopoverMouseEnter}
-            onMouseLeave={handlePopoverMouseLeave}
+            statsLeagueId={state.context?.statsLeagueId}
           />
         )}
         {state.type === 'team' && state.team && (
           <TeamPopoverContent
             team={state.team}
-            onMouseEnter={handlePopoverMouseEnter}
-            onMouseLeave={handlePopoverMouseLeave}
             onPlayerHover={showPlayerPopover}
-            onPlayerLeave={hidePopover}
+            onPlayerLeave={scheduleHidePopover}
             onPlayerClick={openPlayerModal}
           />
         )}

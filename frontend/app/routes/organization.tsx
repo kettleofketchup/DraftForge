@@ -352,8 +352,8 @@ export default function OrganizationDetailPage() {
     <div className="container mx-auto p-4">
         <EntityBreadcrumb segments={breadcrumbSegments} />
         {/* Organization Header */}
-        <div className="card bg-base-200 shadow-lg mb-8">
-          <div className="card-body">
+        <div className="bg-base-200 shadow-lg mb-8 p-8">
+          <div className="flex flex-col gap-2 p-6">
             <div className="flex flex-col md:flex-row gap-6">
               {/* Organization Logo */}
               <div className="flex-shrink-0">

@@ -26,6 +26,7 @@ import logging
 import warnings
 
 from backend.env_utils import env_bool, env_list
+from config.dota_lobby import DotaLobbyConfig
 from config.installed_apps import MODEL_APPS
 from config.leagues import app_config
 from telemetry.config import init_telemetry
@@ -53,6 +54,18 @@ INTERNAL_SERVICE_ALLOWED_IPS = [
     ip.strip() for ip in _raw_ips.split(",") if ip.strip()
 ] or None
 
+# dota_lobby integration (lobby app). Off unless DOTA_LOBBY_ENABLED is set.
+# Parsed in config/dota_lobby.py, shared with config/settings_celery.py.
+_dota_lobby = DotaLobbyConfig.from_env()
+DOTA_LOBBY_ENABLED = _dota_lobby.enabled
+DOTA_LOBBY_URL = _dota_lobby.url
+DOTA_LOBBY_API_KEY = _dota_lobby.api_key
+DOTA_LOBBY_WEBHOOK_SECRETS = _dota_lobby.webhook_secrets
+DOTA_LOBBY_TIMEOUT_SECONDS = _dota_lobby.timeout_seconds
+DOTA_LOBBY_REF_PREFIX = _dota_lobby.ref_prefix
+DOTA_LOBBY_WEBHOOK_TOLERANCE_SECONDS = _dota_lobby.webhook_tolerance_seconds
+DOTA_LOBBY_REGION = _dota_lobby.region
+
 # Test bot tokens for multi-user Discord integration tests.
 # Create additional bot applications at https://discord.com/developers/applications
 # and invite them to the test server. Each simulates a different "player" reacting.
@@ -79,10 +92,12 @@ BASE_DIR_PATH = Path(BASE_DIR)
 # See https://docs.djangoproject.com/en/1.10/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = (
-    os.environ.get("DJANGO_SECRET_KEY")
-    or "v*kswpdyi3+*-=q4a)7&_!xwb%@udm1vi56r690!!j6e*p3^mn"
-)
+# Public, so code deriving secrets from SECRET_KEY can refuse it in production.
+INSECURE_DEV_SECRET_KEY = "v*kswpdyi3+*-=q4a)7&_!xwb%@udm1vi56r690!!j6e*p3^mn"
+SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY") or INSECURE_DEV_SECRET_KEY
+# Previous keys, comma-separated, while rotating DJANGO_SECRET_KEY: sessions
+# and signed values made under them stay valid.
+SECRET_KEY_FALLBACKS = env_list("DJANGO_SECRET_KEY_FALLBACKS")
 
 # SECURITY WARNING: don't run with debug turned on in production!
 

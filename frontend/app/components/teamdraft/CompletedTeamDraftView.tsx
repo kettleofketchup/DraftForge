@@ -18,6 +18,7 @@ import type { UserType } from '~/components/user/types';
 interface CompletedTeamDraftViewProps {
   teams: TeamType[];
   organizationId?: number;
+  leaguePk: number | null;
   rounds?: DraftRoundType[];
 }
 
@@ -25,11 +26,24 @@ interface TeamCardProps {
   team: TeamType;
   rank: number;
   organizationId?: number;
+  leaguePk: number | null;
   rounds?: DraftRoundType[];
 }
 
 // Team Members List component
-function TeamMembersList({ members, captain, organizationId, rounds }: { members: UserType[]; captain: UserType | undefined; organizationId?: number; rounds?: DraftRoundType[] }) {
+function TeamMembersList({
+  members,
+  captain,
+  organizationId,
+  leaguePk,
+  rounds,
+}: {
+  members: UserType[];
+  captain: UserType | undefined;
+  organizationId?: number;
+  leaguePk: number | null;
+  rounds?: DraftRoundType[];
+}) {
   // Sort by MMR (highest first)
   const sortedMembers = useMemo(() => {
     return [...members].sort((a, b) => (b.mmr || 0) - (a.mmr || 0));
@@ -49,7 +63,8 @@ function TeamMembersList({ members, captain, organizationId, rounds }: { members
             compact
             showBorder={false}
             organizationId={organizationId}
-            className="bg-slate-700/30 hover:bg-slate-700/50"
+            statsLeagueId={leaguePk}
+            className="bg-base-700/30 hover:bg-base-700/50"
             contextSlot={
               isCaptain || hasDuration || hasSkips ? (
                 <div className="flex items-center gap-1">
@@ -78,7 +93,7 @@ function TeamMembersList({ members, captain, organizationId, rounds }: { members
   );
 }
 
-function TeamCard({ team, rank, organizationId, rounds }: TeamCardProps) {
+function TeamCard({ team, rank, organizationId, leaguePk, rounds }: TeamCardProps) {
   const { openTeamModal } = useSharedPopoverActions();
   const captain = team.captain;
   const displayName = captain ? DisplayName(captain) : team.name;
@@ -169,11 +184,11 @@ function TeamCard({ team, rank, organizationId, rounds }: TeamCardProps) {
                 <TeamPositionCoverageRow team={team} teamName={team.name || displayName} showFullTable />
               </TabsContent>
               <TabsContent value="members" className="mt-0 flex-1 overflow-y-auto">
-                <TeamMembersList members={team.members || []} captain={captain} organizationId={organizationId} rounds={rounds} />
+                <TeamMembersList members={team.members || []} captain={captain} organizationId={organizationId} leaguePk={leaguePk} rounds={rounds} />
               </TabsContent>
             </Tabs>
           ) : (
-            <TeamMembersList members={team.members || []} captain={captain} organizationId={organizationId} rounds={rounds} />
+            <TeamMembersList members={team.members || []} captain={captain} organizationId={organizationId} leaguePk={leaguePk} rounds={rounds} />
           )}
         </div>
       </CardContent>
@@ -184,7 +199,7 @@ function TeamCard({ team, rank, organizationId, rounds }: TeamCardProps) {
 // Export TeamCard and TeamMembersList for reuse in TeamsTab
 export { TeamCard, TeamMembersList };
 
-export function CompletedTeamDraftView({ teams, organizationId, rounds }: CompletedTeamDraftViewProps) {
+export function CompletedTeamDraftView({ teams, organizationId, leaguePk, rounds }: CompletedTeamDraftViewProps) {
   // Sort teams by average MMR (highest first)
   const sortedTeams = useMemo(() => {
     return [...teams].sort((a, b) => {
@@ -218,7 +233,7 @@ export function CompletedTeamDraftView({ teams, organizationId, rounds }: Comple
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 w-full max-w-6xl">
         {sortedTeams.map((team, index) => (
-          <TeamCard key={team.pk} team={team} rank={index + 1} organizationId={organizationId} rounds={rounds} />
+          <TeamCard key={team.pk} team={team} rank={index + 1} organizationId={organizationId} leaguePk={leaguePk} rounds={rounds} />
         ))}
       </div>
     </div>

@@ -11,7 +11,7 @@ image := env("DF_TEST_DB_IMAGE", "draftforge/test-db")
 
 # makemigrations takes an explicit app list (it does not read INSTALLED_APPS):
 # add new Django apps here.
-apps := "steam app bracket discordbot events org user"
+apps := "steam app bracket discordbot events org user lobby"
 
 mod migrate 'migrate.just'
 mod populate 'populate.just'

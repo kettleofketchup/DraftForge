@@ -40,9 +40,9 @@ export const TeamCard: React.FC<Props> = memo(({
       <>
         {!editMode && (
           <div className="flex-1 justify-between text-center">
-            <h2 className="card-title text-lg" data-testid="team-card-name">{team.name}</h2>
+            <h2 className="text-xl font-semibold leading-snug" data-testid="team-card-name">{team.name}</h2>
 
-            <h3 className="card-title text-lg"><span data-testid="team-avg-mmr-label">Avg MMR</span>: {averageMMR}</h3>
+            <h3 className="text-xl font-semibold leading-snug"><span data-testid="team-avg-mmr-label">Avg MMR</span>: {averageMMR}</h3>
           </div>
         )}
       </>
@@ -77,14 +77,12 @@ export const TeamCard: React.FC<Props> = memo(({
   return (
     <div
       key={`teamCard:${getKeyName()} base`}
-      className="flex flex-grow flex-col items-center px-6 py-4 content-center justify-center w-full justify-between p-2 h-full card bg-base-300 shadow-elevated w-full
+      className="flex flex-grow flex-col items-center content-center justify-center w-full justify-between h-full bg-base-300 shadow-elevated p-8
             hover:bg-base-200 shadow-hover focus:outline-2
             focus:outline-offset-2 focus:outline-primary
-            focus:outline-offset-2 active:bg-base-200
+            active:bg-base-200
             transition-all duration-300 ease-in-out
-            [content-visibility: auto] [contain-intrinsic-size: 400px 220px]
-
-            "
+            [content-visibility: auto] [contain-intrinsic-size: 400px 220px]"
     >
       <motion.div
         initial={{ opacity: 0 }}

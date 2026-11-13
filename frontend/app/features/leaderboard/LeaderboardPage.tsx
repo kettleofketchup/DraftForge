@@ -4,14 +4,16 @@ import { useLeaderboard } from "./queries";
 import { LeaderboardTable } from "./LeaderboardTable";
 import type { SortField, SortOrder } from "./types";
 
+const PAGE_SIZE = 20;
+
 export function LeaderboardPage() {
   const [page, setPage] = useState(1);
-  const [sortBy, setSortBy] = useState<SortField>("league_mmr");
+  const [sortBy, setSortBy] = useState<SortField>("win_rate");
   const [order, setOrder] = useState<SortOrder>("desc");
 
   const { data, isLoading, error } = useLeaderboard({
     page,
-    pageSize: 20,
+    pageSize: PAGE_SIZE,
     sortBy,
     order,
   });
@@ -52,6 +54,7 @@ export function LeaderboardPage() {
           sortBy={sortBy}
           order={order}
           onSort={handleSort}
+          rankOffset={(page - 1) * PAGE_SIZE}
         />
       </div>
 

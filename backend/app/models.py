@@ -103,6 +103,21 @@ class GameMode(models.TextChoices):
     CUSTOM = "custom", "Custom Lobby"
 
 
+class DotaLobbyMode(models.TextChoices):
+    """Whether DraftForge asks dota_lobby for in-game lobbies (lobby app)."""
+
+    OFF = "off", "Off"
+    MANUAL = "manual", "Manual"
+    AUTO = "auto", "Automatic"
+
+
+class DotaLobbyLaunch(models.TextChoices):
+    """dota_lobby's `launch` request field: who starts the match."""
+
+    MANUAL = "manual", "Manual"
+    AUTO = "auto", "Automatic"
+
+
 class CustomUser(AbstractUser):
     # Override username to allow blank (users can be created from Steam only)
     username = models.CharField(max_length=150, unique=True, blank=True, null=True)
@@ -775,11 +790,40 @@ class Tournament(models.Model):
     auto_create_hero_drafts = models.BooleanField(default=False)
     discord_send_draft_link = models.BooleanField(default=True)
     discord_send_herodraft_link = models.BooleanField(default=True)
+    # dota_lobby integration (lobby app). Off by default; the global
+    # DOTA_LOBBY_ENABLED setting must also be on.
+    dota_lobby_mode = models.CharField(
+        max_length=8, choices=DotaLobbyMode.choices, default=DotaLobbyMode.OFF
+    )
+    dota_lobby_launch = models.CharField(
+        max_length=8, choices=DotaLobbyLaunch.choices, default=DotaLobbyLaunch.MANUAL
+    )
+    dota_lobby_region = models.CharField(
+        max_length=32,
+        blank=True,
+        default="",
+        help_text="dota_lobby region name; empty uses DOTA_LOBBY_REGION",
+    )
+    discord_send_lobby_info = models.BooleanField(
+        default=False,
+        help_text="DM rostered players the lobby name and password",
+    )
+    # The password of every lobby created for this tournament: copied from
+    # the source event, or generated for a standalone tournament once lobbies
+    # are enabled (lobby.passwords). Never in public serializers.
+    dota_lobby_password = models.CharField(max_length=32, blank=True, default="")
 
     def __str__(self) -> str:
         return self.name
 
     def save(self, *args: object, **kwargs: object) -> None:
+        if self.dota_lobby_mode != DotaLobbyMode.OFF and not self.dota_lobby_password:
+            from lobby.passwords import generate_password
+
+            self.dota_lobby_password = generate_password()
+            update_fields = kwargs.get("update_fields")
+            if update_fields is not None:
+                kwargs["update_fields"] = {*update_fields, "dota_lobby_password"}
         super().save(*args, **kwargs)
         # Self-invalidation handled by cacheops post_save signal; the
         # cascade to league + org refreshes those parents' embedded
@@ -1026,8 +1070,8 @@ class Game(models.Model):
         default="pending",
     )
 
-    # steam gameid if it exists
-    gameid = models.IntegerField(null=True, blank=True)
+    # Steam match ID if it exists (64-bit)
+    gameid = models.BigIntegerField(null=True, blank=True)
 
     radiant_team = models.ForeignKey(
         Team,

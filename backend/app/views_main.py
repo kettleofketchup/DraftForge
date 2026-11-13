@@ -1,20 +1,36 @@
+from __future__ import annotations
+
 import json
 from datetime import timedelta
+from typing import Any
 
 from cacheops import cached_as
 from django.contrib.auth import login
 from django.contrib.auth import logout as auth_logout
 from django.contrib.auth.decorators import login_required
+from django.core.cache import cache
 from django.db import transaction
-from django.db.models import Count, Q
-from django.http import HttpResponse, HttpResponseBadRequest
+from django.db.models import Count, Q, QuerySet
+from django.http import (
+    HttpRequest,
+    HttpResponse,
+    HttpResponseBadRequest,
+    HttpResponseRedirect,
+)
 from django.shortcuts import redirect
 from django.utils import timezone
 from rest_framework import generics, status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.exceptions import PermissionDenied, ValidationError
-from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
+from rest_framework.permissions import (
+    AllowAny,
+    BasePermission,
+    IsAdminUser,
+    IsAuthenticated,
+)
+from rest_framework.request import Request
 from rest_framework.response import Response
+from rest_framework.serializers import BaseSerializer
 from social_core.backends.oauth import BaseOAuth1, BaseOAuth2
 from social_django.utils import load_strategy, psa
 
@@ -81,19 +97,19 @@ from .serializers import (
 )
 from .steam_accounts import steam_account_id_holder, steam_account_id_identity
 from .user_cache import serialize_user_core
-
-log = get_logger(__name__)
 from .utils.avatar_utils import refresh_user_avatar
 
+log = get_logger(__name__)
 
-def logout(request):
+
+def logout(request: HttpRequest) -> HttpResponseRedirect:
     """Logs out user"""
     auth_logout(request)
     return redirect("/")
 
 
 @render_to("home.html")
-def home(request):
+def home(request: HttpRequest) -> HttpResponseRedirect | None:
     """Home view, displays login mechanism"""
     if request.user.is_authenticated:
         return redirect("done")
@@ -102,13 +118,13 @@ def home(request):
 
 @login_required
 @render_to("home.html")
-def done(request):
+def done(request: HttpRequest) -> None:
     """Login complete view, displays user data"""
     return
 
 
 @render_to("home.html")
-def validation_sent(request):
+def validation_sent(request: HttpRequest) -> dict[str, Any]:
     """Email validation sent confirmation page"""
     return {
         "validation_sent": True,
@@ -117,7 +133,7 @@ def validation_sent(request):
 
 
 @render_to("home.html")
-def require_email(request):
+def require_email(request: HttpRequest) -> dict[str, Any]:
     """Email required page"""
     strategy = load_strategy()
     partial_token = request.GET.get("partial_token")
@@ -130,7 +146,7 @@ def require_email(request):
 
 
 @render_to("home.html")
-def require_country(request):
+def require_country(request: HttpRequest) -> dict[str, Any]:
     """Country required page"""
     strategy = load_strategy()
     partial_token = request.GET.get("partial_token")
@@ -143,7 +159,7 @@ def require_country(request):
 
 
 @render_to("home.html")
-def require_city(request):
+def require_city(request: HttpRequest) -> dict[str, Any]:
     """City required page"""
     strategy = load_strategy()
     partial_token = request.GET.get("partial_token")
@@ -156,7 +172,7 @@ def require_city(request):
 
 
 @psa("social:complete")
-def ajax_auth(request, backend):
+def ajax_auth(request: HttpRequest, backend: str) -> HttpResponse:
     """AJAX authentication endpoint"""
     if isinstance(request.backend, BaseOAuth1):
         token = {
@@ -203,7 +219,7 @@ class UserView(viewsets.ModelViewSet):
         "trace",
     ]
 
-    def list(self, request, *args, **kwargs):
+    def list(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         cache_key = f"user_list:{request.get_full_path()}"
 
         @cached_as(
@@ -216,7 +232,7 @@ class UserView(viewsets.ModelViewSet):
             extra=cache_key,
             timeout=60 * 60,
         )
-        def get_data():
+        def get_data() -> Any:
             queryset = self.filter_queryset(self.get_queryset())
             serializer = self.get_serializer(queryset, many=True)
             return serializer.data
@@ -224,7 +240,7 @@ class UserView(viewsets.ModelViewSet):
         data = get_data()
         return Response(data)
 
-    def retrieve(self, request, *args, **kwargs):
+    def retrieve(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         pk = kwargs["pk"]
         cache_key = f"user_detail:{pk}"
 
@@ -239,7 +255,7 @@ class UserView(viewsets.ModelViewSet):
             extra=cache_key,
             timeout=60 * 60,
         )
-        def get_data():
+        def get_data() -> Any:
             instance = self.get_object()
             serializer = self.get_serializer(instance)
             return serializer.data
@@ -247,10 +263,10 @@ class UserView(viewsets.ModelViewSet):
         data = get_data()
         return Response(data)
 
-    def patch(self, request, *args, **kwargs):
+    def patch(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         return self.partial_update(request, *args, **kwargs)
 
-    def get_permissions(self):
+    def get_permissions(self) -> list[BasePermission]:
         if self.request.method == "GET":
             self.permission_classes = [AllowAny]
         elif self.request.method in ("PATCH", "PUT"):
@@ -259,7 +275,7 @@ class UserView(viewsets.ModelViewSet):
             self.permission_classes = [IsStaff]
         return super(UserView, self).get_permissions()
 
-    def check_object_permissions(self, request, obj):
+    def check_object_permissions(self, request: Request, obj: CustomUser) -> None:
         """Allow org admins/staff to edit users in their organizations."""
         super().check_object_permissions(request, obj)
         if request.method in ("PATCH", "PUT") and not request.user.is_staff:
@@ -275,7 +291,7 @@ class UserView(viewsets.ModelViewSet):
                 self.permission_denied(request)
 
     @permission_classes((IsAdminUser,))
-    def delete(self, request, *args, **kwargs):
+    def delete(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         try:
             user = self.get_object()
             user.delete()
@@ -284,7 +300,7 @@ class UserView(viewsets.ModelViewSet):
             return Response(status=status.HTTP_404_NOT_FOUND)
 
     @action(detail=True, methods=["post"])
-    def claim(self, request, pk=None):
+    def claim(self, request: Request, pk: str | None = None) -> Response:
         """
         Request to claim a user profile.
 
@@ -392,7 +408,7 @@ class TournamentView(viewsets.ModelViewSet):
         "trace",
     ]
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet[Tournament]:
         queryset = Tournament.objects.all().order_by("-date_played")
         org_id = self.request.query_params.get("organization")
         league_id = self.request.query_params.get("league")
@@ -418,7 +434,7 @@ class TournamentView(viewsets.ModelViewSet):
             "teams__left_members__base_profile__dota_user_profile__positions",
         )
 
-    def list(self, request, *args, **kwargs):
+    def list(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         cache_key = f"tournament_list:{request.get_full_path()}"
 
         @cached_as(
@@ -433,7 +449,7 @@ class TournamentView(viewsets.ModelViewSet):
             extra=cache_key,
             timeout=60 * 10,
         )
-        def get_data():
+        def get_data() -> Any:
             queryset = self.filter_queryset(self.get_queryset())
             serializer = self.get_serializer(queryset, many=True)
             return serializer.data
@@ -441,7 +457,7 @@ class TournamentView(viewsets.ModelViewSet):
         data = get_data()
         return Response(data)
 
-    def retrieve(self, request, *args, **kwargs):
+    def retrieve(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         pk = kwargs["pk"]
         cache_key = f"tournament_detail_v2:{pk}"
 
@@ -460,7 +476,7 @@ class TournamentView(viewsets.ModelViewSet):
             # must not cache the pre-commit payload for the full timeout.
             keep_fresh=True,
         )
-        def get_data():
+        def get_data() -> Any:
             log.debug(
                 "tournament_cache_miss",
                 system="api",
@@ -479,7 +495,7 @@ class TournamentView(viewsets.ModelViewSet):
         data = get_data()
         return Response(data)
 
-    def patch(self, request, *args, **kwargs):
+    def patch(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         return self.partial_update(request, *args, **kwargs)
 
     def perform_update(self, serializer: TournamentSerializer) -> None:
@@ -489,7 +505,7 @@ class TournamentView(viewsets.ModelViewSet):
             if opts is not None:
                 apply_draft_options(serializer.instance, opts, actor=self.request.user)
 
-    def get_permissions(self):
+    def get_permissions(self) -> list[BasePermission]:
         if self.request.method == "GET":
             self.permission_classes = [AllowAny]
         elif self.action in ["update", "partial_update", "destroy"]:
@@ -507,7 +523,7 @@ class TournamentView(viewsets.ModelViewSet):
         url_path="discord-logs",
         permission_classes=[IsAuthenticated],
     )
-    def discord_logs(self, request, pk=None):
+    def discord_logs(self, request: Request, pk: str | None = None) -> Response:
         from discordbot.models import DiscordTournamentLog
 
         tournament = self.get_object()
@@ -563,7 +579,7 @@ class TeamView(viewsets.ModelViewSet):
         "trace",
     ]
 
-    def list(self, request, *args, **kwargs):
+    def list(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         cache_key = f"team_list:{request.get_full_path()}"
 
         @cached_as(
@@ -578,7 +594,7 @@ class TeamView(viewsets.ModelViewSet):
             extra=cache_key,
             timeout=60 * 60,
         )
-        def get_data():
+        def get_data() -> Any:
             log.debug("team_list_cache_miss", system="api", subsystem="main")
             queryset = self.filter_queryset(self.get_queryset())
             serializer = self.get_serializer(queryset, many=True)
@@ -587,7 +603,7 @@ class TeamView(viewsets.ModelViewSet):
         data = get_data()
         return Response(data)
 
-    def retrieve(self, request, *args, **kwargs):
+    def retrieve(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         pk = kwargs["pk"]
         cache_key = f"team_detail:{pk}"
 
@@ -606,7 +622,7 @@ class TeamView(viewsets.ModelViewSet):
             extra=cache_key,
             timeout=60 * 60,
         )
-        def get_data():
+        def get_data() -> Any:
             instance = self.get_object()
             serializer = self.get_serializer(instance)
             return serializer.data
@@ -614,7 +630,7 @@ class TeamView(viewsets.ModelViewSet):
         data = get_data()
         return Response(data)
 
-    def get_permissions(self):
+    def get_permissions(self) -> list[BasePermission]:
         if self.request.method == "GET":
             self.permission_classes = [AllowAny]
         elif self.action in ["update", "partial_update", "destroy"]:
@@ -623,7 +639,7 @@ class TeamView(viewsets.ModelViewSet):
             self.permission_classes = [IsAuthenticated]
         return super(TeamView, self).get_permissions()
 
-    def patch(self, request, *args, **kwargs):
+    def patch(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         return self.partial_update(request, *args, **kwargs)
 
 
@@ -642,7 +658,7 @@ class DraftView(viewsets.ModelViewSet):
         "trace",
     ]
 
-    def list(self, request, *args, **kwargs):
+    def list(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         cache_key = f"draft_list:{request.get_full_path()}"
 
         @cached_as(
@@ -656,7 +672,7 @@ class DraftView(viewsets.ModelViewSet):
             extra=cache_key,
             timeout=60 * 60,
         )
-        def get_data():
+        def get_data() -> Any:
             queryset = self.filter_queryset(self.get_queryset())
             serializer = self.get_serializer(queryset, many=True)
             return serializer.data
@@ -664,7 +680,7 @@ class DraftView(viewsets.ModelViewSet):
         data = get_data()
         return Response(data)
 
-    def retrieve(self, request, *args, **kwargs):
+    def retrieve(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         pk = kwargs["pk"]
         cache_key = f"draft_detail:{pk}"
 
@@ -679,7 +695,7 @@ class DraftView(viewsets.ModelViewSet):
             extra=cache_key,
             timeout=60 * 60,
         )
-        def get_data():
+        def get_data() -> Any:
             instance = self.get_object()
             serializer = self.get_serializer(instance)
             data = serializer.data
@@ -692,10 +708,10 @@ class DraftView(viewsets.ModelViewSet):
         data = get_data()
         return Response(data)
 
-    def patch(self, request, *args, **kwargs):
+    def patch(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         return self.partial_update(request, *args, **kwargs)
 
-    def get_permissions(self):
+    def get_permissions(self) -> list[BasePermission]:
         if self.request.method == "GET":
             self.permission_classes = [AllowAny]
         elif self.action in ["update", "partial_update", "destroy"]:
@@ -720,7 +736,7 @@ class DraftRoundView(viewsets.ModelViewSet):
         "trace",
     ]
 
-    def list(self, request, *args, **kwargs):
+    def list(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         cache_key = f"draftround_list:{request.get_full_path()}"
 
         @cached_as(
@@ -733,7 +749,7 @@ class DraftRoundView(viewsets.ModelViewSet):
             extra=cache_key,
             timeout=60 * 10,
         )
-        def get_data():
+        def get_data() -> Any:
             queryset = self.filter_queryset(self.get_queryset())
             serializer = self.get_serializer(queryset, many=True)
             return serializer.data
@@ -741,7 +757,7 @@ class DraftRoundView(viewsets.ModelViewSet):
         data = get_data()
         return Response(data)
 
-    def retrieve(self, request, *args, **kwargs):
+    def retrieve(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         pk = kwargs["pk"]
         cache_key = f"draftround_detail:{pk}"
 
@@ -755,7 +771,7 @@ class DraftRoundView(viewsets.ModelViewSet):
             extra=cache_key,
             timeout=60 * 10,
         )
-        def get_data():
+        def get_data() -> Any:
             instance = self.get_object()
             serializer = self.get_serializer(instance)
             return serializer.data
@@ -763,10 +779,10 @@ class DraftRoundView(viewsets.ModelViewSet):
         data = get_data()
         return Response(data)
 
-    def patch(self, request, *args, **kwargs):
+    def patch(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         return self.partial_update(request, *args, **kwargs)
 
-    def get_permissions(self):
+    def get_permissions(self) -> list[BasePermission]:
         if self.request.method == "GET":
             self.permission_classes = [AllowAny]
         elif self.action in ["update", "partial_update", "destroy"]:
@@ -783,7 +799,7 @@ class UserCreateView(generics.CreateAPIView):
 
 @api_view(["GET"])
 @permission_classes((AllowAny,))
-def current_user(request):
+def current_user(request: Request) -> Response:
     user = request.user
     if request.user.is_authenticated:
         data = UserSerializer(user).data
@@ -843,16 +859,13 @@ def current_user(request):
         return Response()
 
 
-from django.core.cache import cache
-
-
 class GameCreateView(generics.CreateAPIView):
     """Create a new game - requires league staff access."""
 
     serializer_class = GameSerializer
     permission_classes = [IsAuthenticated]
 
-    def perform_create(self, serializer):
+    def perform_create(self, serializer: GameSerializer) -> None:
         """Check that user can create game in the specified tournament/league."""
         tournament_id = self.request.data.get("tournament")
         league_id = self.request.data.get("league")
@@ -897,7 +910,7 @@ class GameView(viewsets.ModelViewSet):
         "trace",
     ]
 
-    def list(self, request, *args, **kwargs):
+    def list(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         cache_key = f"game_list:{request.get_full_path()}"
 
         @cached_as(
@@ -910,7 +923,7 @@ class GameView(viewsets.ModelViewSet):
             extra=cache_key,
             timeout=60 * 10,
         )
-        def get_data():
+        def get_data() -> Any:
             queryset = self.filter_queryset(self.get_queryset())
             serializer = self.get_serializer(queryset, many=True)
             return serializer.data
@@ -918,7 +931,7 @@ class GameView(viewsets.ModelViewSet):
         data = get_data()
         return Response(data)
 
-    def retrieve(self, request, *args, **kwargs):
+    def retrieve(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         pk = kwargs["pk"]
         cache_key = f"game_detail:{pk}"
 
@@ -932,7 +945,7 @@ class GameView(viewsets.ModelViewSet):
             extra=cache_key,
             timeout=60 * 10,
         )
-        def get_data():
+        def get_data() -> Any:
             instance = self.get_object()
             serializer = self.get_serializer(instance)
             return serializer.data
@@ -940,10 +953,10 @@ class GameView(viewsets.ModelViewSet):
         data = get_data()
         return Response(data)
 
-    def patch(self, request, *args, **kwargs):
+    def patch(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         return self.partial_update(request, *args, **kwargs)
 
-    def get_permissions(self):
+    def get_permissions(self) -> list[BasePermission]:
         if self.request.method == "GET":
             self.permission_classes = [AllowAny]
         elif self.action in ["update", "partial_update", "destroy"]:
@@ -955,7 +968,7 @@ class GameView(viewsets.ModelViewSet):
             self.permission_classes = [IsAuthenticated]
         return super(GameView, self).get_permissions()
 
-    def perform_create(self, serializer):
+    def perform_create(self, serializer: GameSerializer) -> None:
         """Check that user can create game in the specified tournament/league."""
         tournament_id = self.request.data.get("tournament")
         league_id = self.request.data.get("league")
@@ -1002,7 +1015,7 @@ class TournamentsBasicView(viewsets.ModelViewSet):
         "get",
     ]
 
-    def list(self, request, *args, **kwargs):
+    def list(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         cache_key = f"tournaments_list:{request.get_full_path()}"
 
         @cached_as(
@@ -1015,7 +1028,7 @@ class TournamentsBasicView(viewsets.ModelViewSet):
             extra=cache_key,
             timeout=60 * 10,
         )
-        def get_data():
+        def get_data() -> Any:
             queryset = self.filter_queryset(self.get_queryset())
             serializer = self.get_serializer(queryset, many=True)
             return serializer.data
@@ -1034,7 +1047,7 @@ class TournamentListView(viewsets.ReadOnlyModelViewSet):
 
     serializer_class = TournamentListSerializer
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet[Tournament]:
         """Annotate user_count and prefetch league/org for efficiency."""
         qs = (
             Tournament.objects.select_related("league", "league__organization")
@@ -1054,7 +1067,7 @@ class TournamentListView(viewsets.ReadOnlyModelViewSet):
 
         return qs
 
-    def list(self, request, *args, **kwargs):
+    def list(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         cache_key = f"tournaments_list_v2:{request.get_full_path()}"
 
         @cached_as(
@@ -1062,7 +1075,7 @@ class TournamentListView(viewsets.ReadOnlyModelViewSet):
             extra=cache_key,
             timeout=60 * 10,
         )
-        def get_data():
+        def get_data() -> Any:
             queryset = self.filter_queryset(self.get_queryset())
             serializer = self.get_serializer(queryset, many=True)
             return serializer.data
@@ -1076,12 +1089,12 @@ class OrganizationView(viewsets.ModelViewSet):
 
     queryset = Organization.objects.all()
 
-    def get_serializer_class(self):
+    def get_serializer_class(self) -> type[BaseSerializer]:
         if self.action == "list":
             return OrganizationsSerializer
         return OrganizationSerializer
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet[Organization]:
         """Annotate counts and prefetch M2M to avoid N+1 queries."""
         return (
             Organization.objects.prefetch_related("admins", "staff")
@@ -1093,7 +1106,7 @@ class OrganizationView(viewsets.ModelViewSet):
             .order_by("name")
         )
 
-    def get_permissions(self):
+    def get_permissions(self) -> list[BasePermission]:
         if self.action == "destroy":
             self.permission_classes = [IsOrgOwner]
         elif self.action == "create":
@@ -1104,17 +1117,17 @@ class OrganizationView(viewsets.ModelViewSet):
             self.permission_classes = [AllowAny]
         return super().get_permissions()
 
-    def perform_create(self, serializer):
+    def perform_create(self, serializer: OrganizationSerializer) -> None:
         """Set creator as owner and admin of the new organization."""
         org = serializer.save(owner=self.request.user)
         org.admins.add(self.request.user)
         OrgUser.objects.get_or_create(user=self.request.user, organization=org)
 
-    def list(self, request, *args, **kwargs):
+    def list(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         cache_key = f"organization_list:{request.get_full_path()}"
 
         @cached_as(Organization, League, Tournament, extra=cache_key, timeout=60 * 10)
-        def get_data():
+        def get_data() -> Any:
             queryset = self.filter_queryset(self.get_queryset())
             serializer = self.get_serializer(queryset, many=True)
             return serializer.data
@@ -1122,12 +1135,12 @@ class OrganizationView(viewsets.ModelViewSet):
         data = get_data()
         return Response(data)
 
-    def retrieve(self, request, *args, **kwargs):
+    def retrieve(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         pk = kwargs.get("pk")
         cache_key = f"organization_detail:{pk}"
 
         @cached_as(Organization, League, Tournament, extra=cache_key, timeout=60 * 10)
-        def get_data():
+        def get_data() -> Any:
             instance = self.get_object()
             serializer = self.get_serializer(instance)
             return serializer.data
@@ -1139,7 +1152,7 @@ class OrganizationView(viewsets.ModelViewSet):
         )
 
     @action(detail=True, methods=["get"])
-    def users(self, request, pk=None):
+    def users(self, request: Request, pk: str | None = None) -> Response:
         """Get all users who are members of this organization (via OrgUser)."""
         org = self.get_object()
         if not can_view_org_members(request.user, org):
@@ -1156,7 +1169,7 @@ class OrganizationView(viewsets.ModelViewSet):
             extra=cache_key,
             timeout=60 * 10,
         )
-        def get_data():
+        def get_data() -> Any:
             org_users = with_user_profiles(
                 OrgUser.objects.filter(organization=org), "user", dota=True
             )
@@ -1172,12 +1185,12 @@ class LeagueView(viewsets.ModelViewSet):
 
     queryset = League.objects.all()
 
-    def get_serializer_class(self):
+    def get_serializer_class(self) -> type[BaseSerializer]:
         if self.action == "list":
             return LeaguesSerializer
         return LeagueSerializer
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet[League]:
         """Optimize with select_related, prefetch_related, and annotations."""
         queryset = (
             League.objects.select_related("organization")
@@ -1194,7 +1207,7 @@ class LeagueView(viewsets.ModelViewSet):
             queryset = queryset.filter(organization__pk=org_id)
         return queryset
 
-    def get_permissions(self):
+    def get_permissions(self) -> list[BasePermission]:
         if self.action == "create":
             self.permission_classes = [IsAuthenticated]
         elif self.action in ["update", "partial_update", "destroy"]:
@@ -1203,7 +1216,7 @@ class LeagueView(viewsets.ModelViewSet):
             self.permission_classes = [AllowAny]
         return super().get_permissions()
 
-    def create(self, request, *args, **kwargs):
+    def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         # Check permission for organization (singular field from serializer)
         org_id = request.data.get("organization")
         if org_id:
@@ -1237,11 +1250,11 @@ class LeagueView(viewsets.ModelViewSet):
                 )
         return super().create(request, *args, **kwargs)
 
-    def list(self, request, *args, **kwargs):
+    def list(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         cache_key = f"league_list:{request.get_full_path()}"
 
         @cached_as(League, Tournament, Organization, extra=cache_key, timeout=60 * 10)
-        def get_data():
+        def get_data() -> Any:
             queryset = self.filter_queryset(self.get_queryset())
             serializer = self.get_serializer(queryset, many=True)
             return serializer.data
@@ -1249,12 +1262,12 @@ class LeagueView(viewsets.ModelViewSet):
         data = get_data()
         return Response(data)
 
-    def retrieve(self, request, *args, **kwargs):
+    def retrieve(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         pk = kwargs.get("pk")
         cache_key = f"league_detail:{pk}"
 
         @cached_as(League, Tournament, Organization, extra=cache_key, timeout=60 * 10)
-        def get_data():
+        def get_data() -> Any:
             instance = self.get_object()
             serializer = self.get_serializer(instance)
             return serializer.data
@@ -1263,7 +1276,7 @@ class LeagueView(viewsets.ModelViewSet):
         return Response(data)
 
     @action(detail=True, methods=["get"])
-    def matches(self, request, pk=None):
+    def matches(self, request: Request, pk: str | None = None) -> Response:
         """Get all matches for this league (direct or via tournaments)."""
         league = self.get_object()
         # Games directly belonging to league OR games in tournaments belonging to league
@@ -1294,7 +1307,7 @@ class LeagueView(viewsets.ModelViewSet):
         return Response(serializer.data)
 
     @action(detail=True, methods=["get"])
-    def users(self, request, pk=None):
+    def users(self, request: Request, pk: str | None = None) -> Response:
         """Get all users who are members of this league (via LeagueUser)."""
         league = self.get_object()
         cache_key = f"league_users:{pk}"
@@ -1307,7 +1320,7 @@ class LeagueView(viewsets.ModelViewSet):
             extra=cache_key,
             timeout=60 * 10,
         )
-        def get_data():
+        def get_data() -> Any:
             league_users = with_user_profiles(
                 LeagueUser.objects.filter(league=league), "user", dota=True
             )
@@ -1323,7 +1336,7 @@ class TeamCreateView(generics.CreateAPIView):
     permission_classes = [IsStaff]
 
     @transaction.atomic
-    def perform_create(self, serializer):
+    def perform_create(self, serializer: TeamSerializer) -> None:
         serializer.save()
 
 
@@ -1344,7 +1357,7 @@ class DraftRoundCreateView(generics.CreateAPIView):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
-def bulk_users(request):
+def bulk_users(request: Request) -> Response:
     """Fetch multiple users by pk for entity cache hydration.
     Returns core fields only — scoped data (MMR) comes from context-specific fetches.
     """
@@ -1360,7 +1373,7 @@ def bulk_users(request):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
-def steam_account_id_lookup(request, steam_account_id: int) -> Response:
+def steam_account_id_lookup(request: Request, steam_account_id: int) -> Response:
     """Who already holds this Friend ID? Returns {"holder": null} when free.
 
     Lets the edit-user form warn on blur instead of letting the save fail.
@@ -1371,7 +1384,7 @@ def steam_account_id_lookup(request, steam_account_id: int) -> Response:
 
 @api_view(["GET"])
 @permission_classes([AllowAny])
-def home_stats(request):
+def home_stats(request: Request) -> Response:
     """
     Cached endpoint for home page statistics.
     Returns counts only, much more efficient than fetching full objects.
@@ -1386,7 +1399,7 @@ def home_stats(request):
         extra=cache_key,
         timeout=60 * 5,  # 5 minutes cache
     )
-    def get_stats():
+    def get_stats() -> dict[str, int]:
         return {
             "tournament_count": Tournament.objects.count(),
             "game_count": Game.objects.count(),
@@ -1399,7 +1412,7 @@ def home_stats(request):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
-def refresh_avatar(request):
+def refresh_avatar(request: Request) -> Response:
     """
     Refresh the current user's Discord avatar by fetching the latest from Discord API.
     """
@@ -1437,7 +1450,7 @@ def refresh_avatar(request):
 
 @api_view(["POST"])
 @permission_classes([IsAdminUser])
-def refresh_user_avatar_admin(request, user_id):
+def refresh_user_avatar_admin(request: Request, user_id: int) -> Response:
     """
     Admin endpoint to refresh any user's Discord avatar.
     """
@@ -1467,7 +1480,7 @@ def refresh_user_avatar_admin(request, user_id):
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
-def refresh_all_avatars(request):
+def refresh_all_avatars(request: Request) -> Response:
     """Queue an asynchronous avatar refresh.
 
     Returns immediately (202 Accepted) and dispatches a Celery task that

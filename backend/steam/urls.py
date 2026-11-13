@@ -2,7 +2,12 @@ from django.urls import path
 
 from . import views
 from .functions import api as steam_api
-from .views import LeaderboardView, LeagueStatsView, MyLeagueStatsView
+from .views import (
+    LeaderboardView,
+    LeaguePlayerSummariesView,
+    LeagueStatsView,
+    MyLeagueStatsView,
+)
 
 urlpatterns = [
     # Match endpoints
@@ -47,6 +52,11 @@ urlpatterns = [
     path("leaderboard/", LeaderboardView.as_view(), name="leaderboard"),
     path("league-stats/me/", MyLeagueStatsView.as_view(), name="my-league-stats"),
     path("league-stats/<int:user_id>/", LeagueStatsView.as_view(), name="league-stats"),
+    path(
+        "leagues/<int:league_pk>/player-summaries/",
+        LeaguePlayerSummariesView.as_view(),
+        name="league-player-summaries",
+    ),
     # Game Match Linking
     path(
         "games/<int:game_id>/match-suggestions/",

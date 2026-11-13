@@ -72,7 +72,6 @@ export default function RollCallPage() {
   const [rejectSignup, setRejectSignup] = useState<EventSignupType | null>(null);
   const [cancelSignup, setCancelSignup] = useState<EventSignupType | null>(null);
 
-  // Resolve all signup users from cache
   const userPks = useMemo(() => signups.map((s) => s.user), [signups]);
   const resolvedUsers = useResolvedUsers(userPks);
   const userMap = useMemo(
@@ -150,7 +149,6 @@ export default function RollCallPage() {
     );
   }
 
-  // Separate signups by status
   const confirmed = signups.filter((s) => s.status === 'confirmed');
   const approved = signups.filter((s) => s.status === 'approved');
   const others = signups.filter((s) => !['confirmed', 'approved'].includes(s.status));
@@ -234,6 +232,7 @@ export default function RollCallPage() {
                   userMap={userMap}
                   isAdmin={isAdmin}
                   gameType={event.game_type}
+                  leaguePk={event.tournament_league ?? null}
                   signupActions={signupActions}
                   onRequestApproval={setApprovalSignup}
                   onRequestConfirm={setConfirmSignup}
@@ -260,6 +259,7 @@ export default function RollCallPage() {
                   userMap={userMap}
                   isAdmin={isAdmin}
                   gameType={event.game_type}
+                  leaguePk={event.tournament_league ?? null}
                   signupActions={signupActions}
                   onRequestApproval={setApprovalSignup}
                   onRequestConfirm={setConfirmSignup}
@@ -287,6 +287,7 @@ export default function RollCallPage() {
                   userMap={userMap}
                   isAdmin={isAdmin}
                   gameType={event.game_type}
+                  leaguePk={event.tournament_league ?? null}
                   signupActions={signupActions}
                   onRequestApproval={setApprovalSignup}
                   onRequestConfirm={setConfirmSignup}
@@ -457,7 +458,6 @@ export default function RollCallPage() {
             setIsNavigating(true);
             const result = await actions.startTournament.mutateAsync();
             toast.success('Tournament started!');
-            // Navigate to the tournament page if available, otherwise back to event.
             // Land on the tournament overview rather than jumping straight into the
             // draft view so the organizer can pick the draft type from there (#267).
             const tournamentPk = result?.tournament;
@@ -471,6 +471,7 @@ export default function RollCallPage() {
             toast.error('Failed to start tournament');
           }
         }}
+        confirmTestId="rollcall-start-dialog-confirm"
       />
     </div>
   );
@@ -482,6 +483,7 @@ function SignupStrip({
   userMap,
   isAdmin,
   gameType,
+  leaguePk,
   signupActions,
   onRequestApproval,
   onRequestConfirm,
@@ -494,6 +496,7 @@ function SignupStrip({
   userMap: Map<number, import('~/store/userCacheTypes').UserEntry>;
   isAdmin: boolean;
   gameType: number;
+  leaguePk: number | null;
   signupActions: ReturnType<typeof useSignupActionMutations>;
   onRequestApproval: (signup: EventSignupType) => void;
   onRequestConfirm: (signup: EventSignupType) => void;
@@ -601,6 +604,8 @@ function SignupStrip({
         compact
         showPositions
         organizationId={signup.organization ?? undefined}
+        statsLeagueId={leaguePk}
+        statsBreakpoint="wide"
         contextSlot={<EventStateBadge state={signup.status} />}
         actionSlot={actionSlot}
       />

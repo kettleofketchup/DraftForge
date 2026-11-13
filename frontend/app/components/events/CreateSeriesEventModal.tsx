@@ -31,6 +31,9 @@ import { Textarea } from '~/components/ui/textarea';
 import { ApprovalConfigSection } from './ApprovalConfigSection';
 import { DiscordConfigSection, DiscordIcon } from './DiscordConfigSection';
 import { LobbyConfigSection } from './LobbyConfigSection';
+import { DotaLobbyEventSettings } from './DotaLobbyEventSettings';
+import { lobbyPasswordPayload, refineLobbyPassword } from '~/components/lobby/password';
+import { useRepeaterLobbyPassword } from '~/hooks/useLobbyPassword';
 import {
   COMMON_TIMEZONES,
   createSeriesEventInputSchema,
@@ -38,6 +41,8 @@ import {
   localToUTC,
   type CreateSeriesEventInput,
 } from './schemas';
+
+const createSeriesEventFormSchema = createSeriesEventInputSchema.superRefine(refineLobbyPassword);
 
 interface CreateSeriesEventModalProps {
   repeater: EventRepeaterType;
@@ -61,12 +66,13 @@ export function CreateSeriesEventModal({
   // 3-generic useForm to align TFieldValues=z.input and TTransformedValues=z.output
   // — zodResolver returns Resolver<z.input<S>, _, z.output<S>> under zod 4.
   const form = useForm<
-    z.input<typeof createSeriesEventInputSchema>,
+    z.input<typeof createSeriesEventFormSchema>,
     unknown,
     CreateSeriesEventInput
   >({
-    resolver: zodResolver(createSeriesEventInputSchema),
+    resolver: zodResolver(createSeriesEventFormSchema),
   });
+  const { data: seriesPassword } = useRepeaterLobbyPassword(repeater.id, open);
 
   // Every key the schema keeps is named here; a partial reset leaves the
   // missing key `undefined` and zod rejects the submit with no visible error.
@@ -120,15 +126,39 @@ export function CreateSeriesEventModal({
       require_steam_id: repeater.require_steam_id ?? false,
       require_mmr_verified: repeater.require_mmr_verified ?? false,
       require_profile_complete: repeater.require_profile_complete ?? false,
+      dota_lobby_mode: repeater.dota_lobby_mode ?? 'off',
+      dota_lobby_launch: repeater.dota_lobby_launch ?? 'manual',
+      dota_lobby_region: repeater.dota_lobby_region ?? '',
+      discord_send_lobby_info: repeater.discord_send_lobby_info ?? false,
+      dota_lobby_password_mode: repeater.dota_lobby_password_mode ?? 'random',
+      dota_lobby_password: '',
     });
   }, [repeater, open]);
+
+  // Start from the series' fixed password, which is write-only on the series.
+  useEffect(() => {
+    if (open && seriesPassword?.mode === 'fixed' && !form.getFieldState('dota_lobby_password').isDirty) {
+      form.setValue('dota_lobby_password', seriesPassword.password ?? '');
+    }
+  }, [seriesPassword, open]);
 
   async function onSubmit(data: CreateSeriesEventInput) {
     if (isSubmitting) return;
     setIsSubmitting(true);
     try {
+      const {
+        dota_lobby_password_mode,
+        dota_lobby_password,
+        dota_lobby_password_saved: _saved,
+        ...rest
+      } = data;
       await createSeriesOneOffEvent(repeater.id, {
-        ...data,
+        ...rest,
+        ...lobbyPasswordPayload({
+          game_type: data.game_type,
+          dota_lobby_password_mode,
+          dota_lobby_password,
+        }),
         tournament_league: data.tournament_league ?? null,
         scheduled_at: data.scheduled_at
           ? localToUTC(data.scheduled_at, data.timezone)
@@ -474,6 +504,7 @@ export function CreateSeriesEventModal({
             </div>
 
             <LobbyConfigSection control={form.control} watch={form.watch} />
+            <DotaLobbyEventSettings control={form.control} watch={form.watch} scope="event" />
           </TabsContent>
 
           <TabsContent value="approval" className="space-y-4">

@@ -42,6 +42,10 @@ secrets:
   create: false
   djangoSecretKey: ""
   internalServiceToken: ""
+  # dota_lobby integration (backend/lobby): rendered only when set. Turn the
+  # feature on with env.extra DOTA_LOBBY_ENABLED and DOTA_LOBBY_URL.
+  dotaLobbyApiKey: ""
+  dotaLobbyWebhookSecret: ""   # comma-separated while rotating
 # Secrets loaded with envFrom after the ConfigMap, so their keys win. Outside
 # preview mode one of secrets.create or extraEnvSecrets is required, and the
 # Secret must hold DJANGO_SECRET_KEY. The chart cannot see Secret contents: a

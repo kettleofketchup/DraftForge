@@ -1189,6 +1189,11 @@ READ_VERBS: Final = frozenset(
     {"ps", "logs", "top", "exec", "restart", "down", "stop", "config", "images", "port"}
 )
 SCALE_VERBS: Final = frozenset({"up", "create"})
+# Verbs that take a test stack down: they also reach services behind a
+# compose profile (the dota-lobby simulator), so none is left holding the
+# project's network.
+TEARDOWN_VERBS: Final = frozenset({"down", "stop", "kill", "rm"})
+ALL_PROFILES: Final = ("--profile", "*")
 GLOBAL_OPTS_WITH_VALUE: Final = frozenset(
     {
         "--ansi",
@@ -1317,10 +1322,17 @@ def compose_argv(
         and not slot.background
     ):
         scale = list(SCALE_ARGS)
+    profiles: list[str] = []
+    if (
+        stack == "test"
+        and verb in TEARDOWN_VERBS
+        and not any(o.split("=", 1)[0] == "--profile" for o in opts)
+    ):
+        profiles = list(ALL_PROFILES)
     argv = _base_argv(
         _stack_project(stack, slot, root), compose_files(stack, slot, root), root
     )
-    return [*argv, *opts, *([verb] if verb else []), *scale, *rest]
+    return [*argv, *opts, *profiles, *([verb] if verb else []), *scale, *rest]
 
 
 def compose_env(stack: Stack, slot: SlotEnv | None = None) -> dict[str, str]:

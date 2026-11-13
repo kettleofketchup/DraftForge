@@ -29,7 +29,7 @@ import {
   updateEvent as updateEventAPI,
   updateOrgEventDefaults,
 } from '~/components/api/api';
-import type { EventRepeaterType, SignupBody } from '~/components/api/api';
+import type { EventRepeaterType, EventWritePayload, SignupBody } from '~/components/api/api';
 import type { EventSignupType, EventType } from '~/components/events/schemas';
 import type { UserType } from '~/components/user/types';
 import { useOrgStore } from '~/store/orgStore';
@@ -77,6 +77,7 @@ export function useSignupMutation(eventId: number) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['event', eventId] });
       queryClient.invalidateQueries({ queryKey: ['event-signups', eventId] });
+      queryClient.invalidateQueries({ queryKey: ['event-lobby-password', eventId] });
       if (currentUserPk != null) {
         // Match useUserDotaProfile's queryKey shape: ['user-dota-profile', userPk, orgId].
         // We don't have orgId in scope here, so invalidate the prefix — TanStack
@@ -172,6 +173,9 @@ export function useUpdateEventRepeaterMutation(repeaterId: number) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['event-repeaters'] });
       queryClient.invalidateQueries({ queryKey: ['events'] });
+      // The series cascade may have changed its events' passwords.
+      queryClient.invalidateQueries({ queryKey: ['repeater-lobby-password', repeaterId] });
+      queryClient.invalidateQueries({ queryKey: ['event-lobby-password'] });
     },
   });
 }
@@ -179,7 +183,7 @@ export function useUpdateEventRepeaterMutation(repeaterId: number) {
 export function useUpdateEventMutation(eventId: number) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (payload: Partial<EventType>) => updateEventAPI(eventId, payload),
+    mutationFn: (payload: EventWritePayload) => updateEventAPI(eventId, payload),
     onSuccess: (data) => {
       queryClient.setQueryData(['event', eventId], data);
       queryClient.invalidateQueries({ queryKey: ['events'] });
@@ -188,6 +192,7 @@ export function useUpdateEventMutation(eventId: number) {
       // immediately instead of after the next 15s poll.
       queryClient.invalidateQueries({ queryKey: ['event-discord', eventId] });
       queryClient.invalidateQueries({ queryKey: ['event-task-schedule', eventId] });
+      queryClient.invalidateQueries({ queryKey: ['event-lobby-password', eventId] });
     },
   });
 }
@@ -198,6 +203,7 @@ export function useSignupActionMutations(eventId: number) {
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['event-signups', eventId] });
     queryClient.invalidateQueries({ queryKey: ['event', eventId] });
+    queryClient.invalidateQueries({ queryKey: ['event-lobby-password', eventId] });
   };
   return {
     approve: useMutation({ mutationFn: ({ id, mmr }: { id: number; mmr?: number }) => approveSignupAPI(id, mmr), onSuccess: invalidate }),

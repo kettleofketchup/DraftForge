@@ -3,8 +3,10 @@
 A repeatable loop for fixing mobile-viewport regressions (horizontal overflow,
 hydration mismatch, cramped layouts). Built on three artifacts already on `main`:
 
-- `frontend/tests/playwright/e2e/mobile/overflow-audit.spec.ts` — 11 routes × 3
-  viewports × {overflow, hydration} audits.
+- `frontend/tests/playwright/e2e/mobile/overflow-audit.spec.ts` — the audit
+  routes (`helpers/audit-routes.ts`) × 3 viewports × {overflow, hydration} audits.
+  Overlapping or clip-escaping content is the layout sweep's job: see
+  [layout-overlap.md](layout-overlap.md).
 - `frontend/scripts/find-overflow.ts` — DOM walker that returns offending
   elements with `domPath`, `overshootPx`, classes, computed width. Serializable
   through `page.evaluate()`.

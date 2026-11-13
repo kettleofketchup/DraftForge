@@ -36,7 +36,7 @@ export function UserPopover({
           <button className="cursor-pointer hover:underline">{displayName}</button>
         )}
       </HoverCardTrigger>
-      <HoverCardContent className="w-64 border-gray-700 bg-gray-800">
+      <HoverCardContent className="w-64 border-border bg-base-800">
         <div className="space-y-3">
           <div className="flex items-center gap-3">
             <UserAvatar
@@ -46,7 +46,7 @@ export function UserPopover({
             <div className="font-semibold text-white">{displayName}</div>
           </div>
           {isLoading ? (
-            <div className="text-sm text-gray-400">Loading stats...</div>
+            <div className="text-sm text-muted-foreground">Loading stats...</div>
           ) : stats ? (
             <LeagueStatsCard
               stats={stats}
@@ -55,7 +55,7 @@ export function UserPopover({
               compact
             />
           ) : (
-            <div className="text-sm text-gray-400">No league stats</div>
+            <div className="text-sm text-muted-foreground">No league stats</div>
           )}
         </div>
       </HoverCardContent>

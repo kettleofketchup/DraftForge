@@ -1,14 +1,13 @@
 """Bracket API views for tournament bracket management."""
 
-from app.cache_utils import invalidate_obj
 from django.db import transaction
-from django.db.models import Max
+from django.db.models import Max, Prefetch
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
-from app.cache_utils import invalidate_after_commit
+from app.cache_utils import invalidate_after_commit, invalidate_obj
 from app.models import Game, Team, Tournament
 from app.permissions_org import IsTournamentStaff
 from app.serializers import (
@@ -16,6 +15,7 @@ from app.serializers import (
     BracketGenerateSerializer,
     BracketSaveSerializer,
 )
+from lobby.models import GameLobby
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
@@ -43,6 +43,13 @@ def get_bracket(request, tournament_id):
         Game.objects.filter(tournament=tournament)
         .select_related(
             "radiant_team", "dire_team", "winning_team", "next_game", "loser_next_game"
+        )
+        .prefetch_related(
+            Prefetch(
+                "lobbies",
+                queryset=GameLobby.objects.only("id", "game_id", "state", "created_at"),
+                to_attr="latest_lobbies",
+            )
         )
         .order_by("bracket_type", "round", "position")
     )
@@ -248,9 +255,7 @@ def save_bracket(request, tournament_id):
                 wired_next += 1
                 updated = True
             else:
-                missing_next_targets.append(
-                    {"from": match["id"], "to": next_match_id}
-                )
+                missing_next_targets.append({"from": match["id"], "to": next_match_id})
 
         loser_next_match_id = match.get("loserNextMatchId")
         if loser_next_match_id:

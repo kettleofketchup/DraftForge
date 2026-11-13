@@ -1,160 +1,119 @@
 /**
- * Shuffle Draft Tie Resolution Overlay Tests
+ * Shuffle draft tie roll popup
  *
- * Tests that the TieResolutionOverlay dialog appears for all connected
- * users when a shuffle draft tie occurs. Uses the shuffle_tie_resolution
- * tournament which has controlled MMR values:
- *
+ * Uses the shuffle_tie_resolution tournament (controlled MMR):
  * - Captain 1 (2000 MMR) picks first (no tie)
- * - Captains 2, 3, 4 (3000 MMR each) tie after first pick
- * - All available players have 2000 MMR
+ * - Captains 2, 3, 4 (3000 MMR each); every available player is 2000 MMR
  *
- * After Captain 1 picks any player (2000 MMR):
- * - Team 1 = 4000, Teams 2/3/4 = 3000 → 3-way tie → tie_roll event → overlay
+ * After Captain 1 picks: Team 1 = 4000, Teams 2/3/4 = 3000 -> 3-way tie for pick #2.
+ * Each test resets the tournament, so every test starts at pick #1.
  */
 
+import type { Page } from '@playwright/test';
 import {
   test,
   expect,
-  getTournamentByKey,
+  loginAdmin,
   resetTournamentByKey,
   type TournamentData,
 } from '../../fixtures';
 
-test.describe('Shuffle Draft - Tie Resolution Overlay', () => {
-  let tournamentData: TournamentData;
+const KEY = 'shuffle_tie_resolution';
 
-  test.beforeAll(async ({ browser }) => {
-    const context = await browser.newContext({ ignoreHTTPSErrors: true });
-    // Reset tournament to fresh state (picks cleared, draft rebuilt)
-    const tournament = await resetTournamentByKey(context, 'shuffle_tie_resolution')
-      ?? await getTournamentByKey(context, 'shuffle_tie_resolution');
-    if (!tournament) {
-      throw new Error(
-        'Could not find shuffle_tie_resolution tournament. ' +
-        'Run: just db::populate::fresh'
-      );
+async function openDraft(page: Page, tournamentPk: number): Promise<void> {
+  await page.goto(`/tournament/${tournamentPk}`);
+  await page.getByTestId('tournamentDetailPage').waitFor({ state: 'visible', timeout: 15_000 });
+  await page.getByTestId('teamsTab').click();
+  await page.getByTestId('teamsTabContent').waitFor({ state: 'visible' });
+  await page
+    .locator(
+      '[data-testid="liveTeamDraftButton"], [data-testid="startTeamDraftButton"], [data-testid="viewTeamDraftButton"]'
+    )
+    .first()
+    .click();
+  await expect(page.getByRole('dialog')).toBeVisible({ timeout: 10_000 });
+}
+
+async function pickFirstPlayer(page: Page): Promise<void> {
+  const pick = page.getByRole('dialog').getByTestId('pickPlayerButton').first();
+  await pick.waitFor({ state: 'visible', timeout: 10_000 });
+  await pick.click();
+  const confirm = page.getByRole('alertdialog');
+  if (await confirm.isVisible({ timeout: 3_000 }).catch(() => false)) {
+    await confirm.getByTestId('confirmPickButton').click();
+  }
+}
+
+test.describe.serial('Shuffle draft - tie roll popup', () => {
+  // Two logged-in browsers plus the 5 s dice hold do not fit the default 30 s on a CI runner.
+  test.describe.configure({ timeout: 60_000 });
+  let t: TournamentData;
+
+  test.beforeEach(async ({ browser, context, loginAdmin: login }) => {
+    const admin = await browser.newContext({ ignoreHTTPSErrors: true });
+    try {
+      await loginAdmin(admin);
+      const reset = await resetTournamentByKey(admin, KEY);
+      if (!reset) throw new Error(`Could not reset ${KEY}. Run: just db::populate::fresh`);
+      t = reset;
+    } finally {
+      await admin.close();
     }
-    tournamentData = tournament;
-    console.log(`Tournament: ${tournamentData.name} (pk=${tournamentData.pk})`);
-    await context.close();
-  });
-
-  test.beforeEach(async ({ context, loginAdmin }) => {
     await context.clearCookies();
-    await loginAdmin();
+    await login();
   });
 
-  test('should show TieResolutionOverlay after first pick triggers 3-way tie', async ({
+  test('@cicd every viewer sees the dice roll, with no Continue, and it closes itself', async ({
     page,
+    browser,
   }) => {
-    // Navigate to tournament
-    await page.goto(`/tournament/${tournamentData.pk}`);
-    await page.locator('[data-testid="tournamentDetailPage"]').waitFor({
-      state: 'visible',
-      timeout: 15000,
-    });
+    const spectatorCtx = await browser.newContext({ ignoreHTTPSErrors: true });
+    try {
+      await loginAdmin(spectatorCtx);
+      const spectator = await spectatorCtx.newPage();
+      await openDraft(spectator, t.pk);
+      await openDraft(page, t.pk);
 
-    // Go to Teams tab
-    await page.locator('[data-testid="teamsTab"]').click();
-    await page.locator('[data-testid="teamsTabContent"]').waitFor({
-      state: 'visible',
-    });
+      await pickFirstPlayer(page);
 
-    // Open draft modal
-    const draftButton = page.locator(
-      '[data-testid="liveTeamDraftButton"], [data-testid="startTeamDraftButton"], [data-testid="viewTeamDraftButton"]'
-    ).first();
-    await draftButton.click();
+      for (const viewer of [page, spectator]) {
+        const popup = viewer.getByTestId('tie-roll-popup');
+        await expect(popup).toBeVisible({ timeout: 15_000 });
+        await expect(popup).toHaveCount(1);
+        await expect(popup).toHaveAttribute('data-pick-number', '2');
+        await expect(popup).toContainText('Tie for pick #2');
+        await expect(popup.locator('[data-testid^="tie-roll-row-"]')).toHaveCount(3);
+        await expect(popup.getByRole('button', { name: /continue/i })).toHaveCount(0);
+      }
 
-    const dialog = page.locator('[role="dialog"]');
-    await expect(dialog).toBeVisible({ timeout: 10000 });
+      const winnerId = await page.getByTestId('tie-roll-popup').getAttribute('data-winner-id');
+      await expect(spectator.getByTestId('tie-roll-popup')).toHaveAttribute('data-winner-id', winnerId!);
+      for (const viewer of [page, spectator]) {
+        await expect(viewer.getByTestId('tie-roll-result')).toContainText('picks next', { timeout: 6_000 });
+        await expect(viewer.getByTestId(`tie-roll-row-${winnerId}`)).toHaveAttribute('data-winner', 'true');
+      }
 
-    // Find and click first available pick button
-    const pickButtons = dialog.locator('[data-testid="pickPlayerButton"]');
-    await pickButtons.first().waitFor({ state: 'visible', timeout: 10000 });
-    const pickCount = await pickButtons.count();
-    expect(pickCount).toBeGreaterThan(0);
-
-    await pickButtons.first().click();
-
-    // Confirm the pick if a confirmation dialog appears
-    const alertDialog = page.locator('[role="alertdialog"]');
-    if (await alertDialog.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await alertDialog.locator('[data-testid="confirmPickButton"]').click();
+      for (const viewer of [page, spectator]) {
+        await expect(viewer.getByTestId('tie-roll-popup')).toHaveCount(0, { timeout: 8_000 });
+      }
+      await expect(page.getByRole('dialog').first()).toBeVisible();
+    } finally {
+      await spectatorCtx.close();
     }
-
-    // Wait for the TieResolutionOverlay to appear
-    // The WebSocket tie_roll event triggers this overlay
-    const tieOverlay = page.locator('[data-testid="tie-resolution-overlay"]');
-    await expect(tieOverlay).toBeVisible({ timeout: 15000 });
-
-    // Verify overlay content
-    // Title should say "Tie Breaker!"
-    await expect(tieOverlay.locator('text=Tie Breaker!')).toBeVisible();
-
-    // Should show 3 tied team names (Teams 2, 3, 4 at 3000 MMR)
-    // The tied teams all have "3,000 MMR" displayed
-    const mmrLabels = tieOverlay.locator('text=3,000 MMR');
-    await expect(mmrLabels.first()).toBeVisible();
-
-    // Should show roll round(s)
-    await expect(tieOverlay.locator('text=Round 1:')).toBeVisible();
-
-    // Should show winner announcement
-    const winnerAnnouncement = tieOverlay.locator('[data-testid="tie-resolution-winner"]');
-    await expect(winnerAnnouncement).toBeVisible();
-    await expect(winnerAnnouncement).toContainText('picks next!');
-
-    // Continue button should be visible
-    const continueBtn = tieOverlay.locator('[data-testid="tie-resolution-continue"]');
-    await expect(continueBtn).toBeVisible();
   });
 
-  test('should dismiss TieResolutionOverlay when Continue is clicked', async ({
+  test('@cicd closing the popup early keeps it closed (HTTP and WS copies are one roll)', async ({
     page,
   }) => {
-    // Navigate to tournament
-    await page.goto(`/tournament/${tournamentData.pk}`);
-    await page.locator('[data-testid="tournamentDetailPage"]').waitFor({
-      state: 'visible',
-      timeout: 15000,
-    });
+    await openDraft(page, t.pk);
+    await pickFirstPlayer(page);
 
-    // Go to Teams tab and open draft
-    await page.locator('[data-testid="teamsTab"]').click();
-    await page.locator('[data-testid="teamsTabContent"]').waitFor({ state: 'visible' });
-
-    const draftButton = page.locator(
-      '[data-testid="liveTeamDraftButton"], [data-testid="startTeamDraftButton"], [data-testid="viewTeamDraftButton"]'
-    ).first();
-    await draftButton.click();
-
-    const dialog = page.locator('[role="dialog"]');
-    await expect(dialog).toBeVisible({ timeout: 10000 });
-
-    // Make a pick to trigger the tie
-    const pickButtons = dialog.locator('[data-testid="pickPlayerButton"]');
-    await pickButtons.first().waitFor({ state: 'visible', timeout: 10000 });
-    await pickButtons.first().click();
-
-    // Confirm pick
-    const alertDialog = page.locator('[role="alertdialog"]');
-    if (await alertDialog.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await alertDialog.locator('[data-testid="confirmPickButton"]').click();
-    }
-
-    // Wait for overlay
-    const tieOverlay = page.locator('[data-testid="tie-resolution-overlay"]');
-    await expect(tieOverlay).toBeVisible({ timeout: 15000 });
-
-    // Click Continue
-    await tieOverlay.locator('[data-testid="tie-resolution-continue"]').click();
-
-    // Overlay should be dismissed
-    await expect(tieOverlay).not.toBeVisible({ timeout: 5000 });
-
-    // Draft dialog should still be open
-    await expect(dialog).toBeVisible();
+    const popup = page.getByTestId('tie-roll-popup');
+    await expect(popup).toBeVisible({ timeout: 15_000 });
+    await page.getByTestId('tie-roll-close').click();
+    await expect(popup).toHaveCount(0);
+    // The picker receives the roll twice (pick response + tie_roll event); the second must not reopen it.
+    await page.waitForTimeout(2_000);
+    await expect(popup).toHaveCount(0);
   });
 });
