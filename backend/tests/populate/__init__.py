@@ -105,7 +105,7 @@ def populate_all(force: bool = False) -> None:
         # Dota Lobby takes auto-incremented org/league pks, so it must not
         # shift the pks the steps above expect.
         ("Dota Lobby Data", populate_dota_lobby_data),
-        # Last: explicit pks (orgs/leagues 30-31, tournaments 900-905) would
+        # Last: explicit pks (orgs/leagues 30-32, tournaments 900-906) would
         # bump the auto-increment counters the steps above rely on.
         ("Tournament Discovery Data", populate_tournament_discovery),
     ]

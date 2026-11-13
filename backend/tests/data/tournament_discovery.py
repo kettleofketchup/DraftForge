@@ -1,7 +1,9 @@
 """Tournament discovery test data for the /tournaments redesign E2E specs.
 
 DISCOVERY_MEMBER belongs to the home org only, so the home org's tournaments
-land in "Your organizations" and the away cup in "Other organizations".
+land in "Your organizations" and the away cup in "Other organizations". The
+open org's cup has a source event taking user signups, so it also shows under
+"My organizations" with a "Signups open" badge.
 Dates are absolute: 2099 rows stay upcoming, 2020 rows stay archived.
 """
 
@@ -33,6 +35,13 @@ DISCOVERY_AWAY_ORG: TestOrganization = TestOrganization(
     timezone="America/New_York",
 )
 
+DISCOVERY_OPEN_ORG: TestOrganization = TestOrganization(
+    pk=32,
+    name="Discovery Open Org",
+    description="Organization whose cup has user signups open.",
+    timezone="America/New_York",
+)
+
 DISCOVERY_HOME_LEAGUE: TestLeague = TestLeague(
     pk=30,
     name="Discovery Home League With An Exceptionally Long Name",
@@ -46,6 +55,15 @@ DISCOVERY_AWAY_LEAGUE: TestLeague = TestLeague(
     steam_league_id=17951,
     organization_names=[DISCOVERY_AWAY_ORG.name],
 )
+
+DISCOVERY_OPEN_LEAGUE: TestLeague = TestLeague(
+    pk=32,
+    name="Discovery Open League",
+    steam_league_id=17952,
+    organization_names=[DISCOVERY_OPEN_ORG.name],
+)
+
+DISCOVERY_OPEN_EVENT_NAME = "Discovery Open Signups Event"
 
 DISCOVERY_MEMBER: TestUser = TestUser(
     pk=1100,
@@ -78,4 +96,13 @@ DISCOVERY_TOURNAMENTS: tuple[DiscoveryTournament, ...] = (
     DiscoveryTournament(
         905, "Discovery Away Cup", "future", datetime(2099, 1, 15, 18, tzinfo=UTC), 31
     ),
+    DiscoveryTournament(
+        906,
+        "Discovery Open Signups Cup",
+        "future",
+        datetime(2099, 1, 20, 18, tzinfo=UTC),
+        32,
+    ),
 )
+
+DISCOVERY_OPEN_SIGNUPS_TOURNAMENT_PK = 906
