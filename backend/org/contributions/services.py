@@ -7,6 +7,7 @@ from django.db import transaction
 from django.db.models import Count
 
 from app.models import CustomUser, Organization, OrgLog
+from app.permissions_org import is_org_role_holder
 from events.models import Event
 from events.services import resolve_or_create_org_user
 from org.contributions.kinds import DEFAULT_POINTS, RATED_KINDS, ContributionKind
@@ -20,6 +21,7 @@ log = get_logger(__name__)
 MANUAL_MIN_POINTS: Final = 1
 MANUAL_MAX_POINTS: Final = 1000
 REASON_MAX_LENGTH: Final = 500
+POINT_VALUE_MAX: Final = 1000
 
 
 class _Unset(Enum):
@@ -137,7 +139,10 @@ def create_manual_award(
     points = _check_manual_points(points)
     cleaned = _check_reason(reason)
     _check_event(org, event)
-    if not OrgUser.objects.filter(user=user, organization=org).exists():
+    if not (
+        OrgUser.objects.filter(user=user, organization=org).exists()
+        or is_org_role_holder(user, org)
+    ):
         raise ValueError("user is not a member of this organization")
     entry = award_entry(
         org=org,
@@ -244,8 +249,10 @@ def set_point_value(
     if kind not in RATED_KINDS:
         raise ValueError(f"kind {str(kind)!r} has no point value")
     kind = ContributionKind(kind).value
-    if points is not None and (not _is_int(points) or points < 0):
-        raise ValueError("points must be a non-negative integer")
+    if points is not None and (
+        not _is_int(points) or not 0 <= points <= POINT_VALUE_MAX
+    ):
+        raise ValueError(f"points must be an integer from 0 to {POINT_VALUE_MAX}")
 
     old = points_for(org, kind)
     rows = ContributionPointValue.objects.nocache().filter(organization=org, kind=kind)

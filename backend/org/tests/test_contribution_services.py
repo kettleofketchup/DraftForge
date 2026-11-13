@@ -8,6 +8,7 @@ from events.models import Event
 from org.contributions.kinds import DEFAULT_POINTS, ContributionKind
 from org.contributions.points import points_for
 from org.contributions.services import (
+    POINT_VALUE_MAX,
     RescoreResult,
     award_entry,
     create_manual_award,
@@ -181,6 +182,47 @@ class ContributionServicesTest(TestCase):
         self.assertFalse(
             OrgUser.objects.filter(user=self.member, organization=self.org).exists()
         )
+        self.assertFalse(ContributionEntry.objects.exists())
+
+    def test_manual_award_to_role_holders_without_org_user_creates_row(self) -> None:
+        holders: dict[str, CustomUser] = {
+            role: CustomUser.objects.create_user(username=f"svc_{role}", password="x")
+            for role in ("co_admin", "staffer", "promoter")
+        }
+        self.org.admins.add(holders["co_admin"])
+        self.org.staff.add(holders["staffer"])
+        self.org.promoters.add(holders["promoter"])
+        for role, user in [*holders.items(), ("owner", self.admin)]:
+            with self.subTest(role=role):
+                self.assertFalse(
+                    OrgUser.objects.filter(user=user, organization=self.org).exists()
+                )
+                entry = create_manual_award(
+                    org=self.org,
+                    user=user,
+                    points=5,
+                    reason="Helped out",
+                    on_date=date(2026, 11, 1),
+                    actor=self.admin,
+                )
+                self.assertEqual(entry.org_user.user, user)
+                self.assertEqual(entry.org_user.organization, self.org)
+
+    def test_manual_award_rejects_role_holder_of_other_org(self) -> None:
+        other_admin = CustomUser.objects.create_user(
+            username="svc_other_admin", password="x"
+        )
+        self.other_org.admins.add(other_admin)
+        with self.assertRaises(ValueError):
+            create_manual_award(
+                org=self.org,
+                user=other_admin,
+                points=5,
+                reason="Wrong org",
+                on_date=date(2026, 11, 1),
+                actor=self.admin,
+            )
+        self.assertFalse(OrgUser.objects.filter(user=other_admin).exists())
         self.assertFalse(ContributionEntry.objects.exists())
 
     def test_manual_award_writes_org_log(self) -> None:
@@ -417,6 +459,32 @@ class ContributionServicesTest(TestCase):
             set_point_value(self.org, ContributionKind.EVENT_HOST, -1, actor=self.admin)
         self.assertFalse(ContributionPointValue.objects.exists())
         self.assertFalse(OrgLog.objects.filter(action="set_point_value").exists())
+
+    def test_set_point_value_rejects_above_max(self) -> None:
+        self._auto(ContributionKind.PROMO_MESSAGE, timezone.now())
+        for points in (POINT_VALUE_MAX + 1, 10**30):
+            with self.subTest(points=points), self.assertRaises(ValueError):
+                set_point_value(
+                    self.org,
+                    ContributionKind.PROMO_MESSAGE,
+                    points,
+                    actor=self.admin,
+                    apply_to_past=True,
+                )
+        self.assertFalse(ContributionPointValue.objects.exists())
+        self.assertFalse(
+            OrgLog.objects.filter(action__in=["set_point_value", "rescore"]).exists()
+        )
+        self.assertEqual(
+            ContributionEntry.objects.get().points,
+            DEFAULT_POINTS[ContributionKind.PROMO_MESSAGE],
+        )
+
+    def test_set_point_value_accepts_max(self) -> None:
+        result = set_point_value(
+            self.org, ContributionKind.EVENT_HOST, POINT_VALUE_MAX, actor=self.admin
+        )
+        self.assertEqual(result.new, POINT_VALUE_MAX)
 
     # delete_user_entries
 
