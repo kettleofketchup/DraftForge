@@ -63,6 +63,22 @@ class ContributionModelsTest(TestCase):
         with self.assertRaises(IntegrityError), transaction.atomic():
             self._entry()
 
+    def test_points_for_unrated_kind_raises_value_error(self) -> None:
+        with self.assertRaises(ValueError):
+            points_for(self.org, ContributionKind.MANUAL)
+        with self.assertRaises(ValueError):
+            points_for(self.org, "bogus")
+
+    def test_duplicate_event_helper_entry_rejected(self) -> None:
+        self._entry(kind=ContributionKind.EVENT_HELPER, points=5)
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            self._entry(kind=ContributionKind.EVENT_HELPER, points=5)
+
+    def test_host_and_helper_same_event_allowed(self) -> None:
+        self._entry()
+        self._entry(kind=ContributionKind.EVENT_HELPER, points=5)
+        self.assertEqual(ContributionEntry.objects.count(), 2)
+
     def test_two_manual_entries_same_event_allowed(self) -> None:
         self._entry(kind=ContributionKind.MANUAL, points=3, reason="setup")
         self._entry(kind=ContributionKind.MANUAL, points=4, reason="teardown")

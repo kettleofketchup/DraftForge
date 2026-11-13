@@ -4,6 +4,8 @@ from org.models import ContributionPointValue
 
 
 def points_for(org: Organization, kind: str) -> int:
+    if str(kind) not in DEFAULT_POINTS:
+        raise ValueError(f"no default points for kind {str(kind)!r}")
     value = (
         ContributionPointValue.objects.nocache()
         .filter(organization=org, kind=str(kind))
