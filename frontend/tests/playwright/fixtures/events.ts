@@ -15,6 +15,7 @@
  */
 
 import { API_URL } from './base-url';
+import { isCsrfCookie } from './cookies';
 import type { BrowserContext } from '@playwright/test';
 
 
@@ -24,7 +25,7 @@ export const EVENTS_EVENT_NAME = 'E2E Signup Event';
 /** Extract CSRF token from context cookies. Must be called after login. */
 export async function getCsrfToken(context: BrowserContext): Promise<string> {
   const cookies = await context.cookies();
-  const csrf = cookies.find((c) => c.name === 'csrftoken');
+  const csrf = cookies.find((c) => isCsrfCookie(c.name));
   return csrf?.value || '';
 }
 

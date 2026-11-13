@@ -6,6 +6,7 @@
  */
 
 import { API_URL, BASE_URL } from '../fixtures/base-url';
+import { isCsrfCookie, isSessionCookie } from '../fixtures/cookies';
 import { test, expect, chromium } from '@playwright/test';
 import { loginAdminFromPage, waitForHydration } from '../fixtures/auth';
 import { waitForDemoReady, waitForDraftReady, waitForLoadingComplete } from '../fixtures/demo-utils';
@@ -131,7 +132,7 @@ export async function runDraftDemo(config: DraftDemoConfig): Promise<void> {
 
   // Get CSRF token from cookies
   const cookies = await setupContext.cookies();
-  const csrfCookie = cookies.find(c => c.name === 'csrftoken');
+  const csrfCookie = cookies.find(c => isCsrfCookie(c.name));
   const csrfToken = csrfCookie?.value || '';
   console.log(`Setup: CSRF token available: ${!!csrfToken}`);
 
@@ -360,8 +361,8 @@ export async function runDraftDemo(config: DraftDemoConfig): Promise<void> {
   await page.goto(`${BASE_URL}/`);
   await loginAdminFromPage(page);
   const videoCookies = await videoContext.cookies();
-  const hasSession = videoCookies.some(c => c.name === 'sessionid');
-  const hasCSRF = videoCookies.some(c => c.name === 'csrftoken');
+  const hasSession = videoCookies.some(c => isSessionCookie(c.name));
+  const hasCSRF = videoCookies.some(c => isCsrfCookie(c.name));
   console.log(`Video: Fresh login (sessionid: ${hasSession}, csrftoken: ${hasCSRF})`);
 
   // Capture console errors for debugging (filter out harmless React DevTools errors)

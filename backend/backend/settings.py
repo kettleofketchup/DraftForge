@@ -518,6 +518,9 @@ USE_L10N = True
 USE_TZ = True
 
 SESSION_COOKIE_SAMESITE = None
+# Test stack slots share the `localhost` cookie jar (cookies ignore the port), so each slot names its own.
+SESSION_COOKIE_NAME = os.environ.get("DF_SESSION_COOKIE_NAME") or "sessionid"
+CSRF_COOKIE_NAME = os.environ.get("DF_CSRF_COOKIE_NAME") or "csrftoken"
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/1.10/howto/static-files/
 

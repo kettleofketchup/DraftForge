@@ -14,6 +14,7 @@
  */
 
 import { BASE_URL } from '../fixtures/base-url';
+import { isCsrfCookie } from '../fixtures/cookies';
 import { test, expect, chromium, type Page, type Locator } from '@playwright/test';
 import { loginAdmin, waitForHydration, API_URL } from '../fixtures/auth';
 import { waitForDemoReady } from '../fixtures/demo-utils';
@@ -188,7 +189,7 @@ test.describe('Roll Call Demo', () => {
     console.log('Step 0: Reset events data, create event, and bulk RSVP');
 
     const cookies = await context.cookies();
-    const csrfToken = cookies.find((c) => c.name === 'csrftoken')?.value || '';
+    const csrfToken = cookies.find((c) => isCsrfCookie(c.name))?.value || '';
 
     // Wipe all events for a clean slate
     const resetResponse = await context.request.post(
