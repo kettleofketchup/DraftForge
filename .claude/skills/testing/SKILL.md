@@ -36,6 +36,10 @@ See [references/feature-isolation.md](references/feature-isolation.md) for the f
 just test::run 'python manage.py test app.tests.test_csv_import -v 2'
 # Same thing through the slot-aware compose wrapper (never raw docker compose)
 just test::compose run --rm --entrypoint "" backend python manage.py test app.tests.test_csv_import -v 2
+# Whole backend suite, exactly what CI runs (no labels = discover all of backend/)
+just test::run 'python manage.py test -v 2'
+# CI discovers new modules automatically; write TestCase/SimpleTestCase classes,
+# not bare pytest functions (the Django runner skips those).
 
 # Playwright
 just test::pw::headless              # All tests

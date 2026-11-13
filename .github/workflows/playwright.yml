@@ -262,7 +262,7 @@ jobs:
         run: docker compose --project-directory . -f docker/docker-compose.test.yaml -f docker/docker-compose.ci.override.yaml down -v || true
 
   backend:
-    name: Backend tests (test_bracket)
+    name: Backend tests
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -277,60 +277,13 @@ jobs:
           github-actor: ${{ github.actor }}
           image-prefix: ${{ env.IMAGE_PREFIX }}
 
+      # No labels: BackendDiscoverRunner discovers every test*.py module under backend/.
       - name: Run backend tests
         env:
           CI: 'true'
         run: |
           docker compose --project-directory . -f docker/docker-compose.test.yaml -f docker/docker-compose.ci.override.yaml exec -T backend \
-            python manage.py test \
-              app.tests.test_bracket \
-              app.tests.test_discord_reclaim \
-              events.discord.tests \
-              events.tests.test_signup_interactions \
-              events.tests.test_series_oneoff \
-              user.tests \
-              steam.tests \
-              org.tests \
-              tests.test_populate_utils \
-              discordbot.tests.test_components \
-              discordbot.tests.test_discord_http_timeouts \
-              discordbot.tests.test_custom_ids \
-              discordbot.tests.test_interaction_router \
-              discordbot.tests.test_log_context \
-              events.tests.test_discord_decline_button \
-              events.tests.test_provider_registry \
-              events.tests.test_create_discord_scheduled_event \
-              events.tests.test_sync_discord_scheduled_event_window \
-              app.tests.test_task_schedule \
-              app.tests.test_build_users_dict \
-              app.tests.test_herodraft_tick \
-              app.tests.test_herodraft_consumers \
-              app.tests.test_consumers_base \
-              app.tests.test_stale_connection \
-              app.tests.test_draft_consumers \
-              app.tests.test_shuffle_draft \
-              app.tests.test_draft_tick \
-              app.tests.test_draft_consumers_base \
-              app.tests.test_draft_options \
-              app.tests.test_teamdraft_timer \
-              app.tests.test_teamdraft_timeout \
-              app.tests.test_tie_roll_hold \
-              app.tests.test_draft_events \
-              app.tests.test_draft_state_queries \
-              tests.test_populate \
-              tests.test_populate_offline \
-              discordbot.tests.test_signup_logging \
-              events.tests.test_modal_config_contract \
-              events.tests.test_discord \
-              events.tests.test_reaction_signup \
-              app.tests.test_env_utils \
-              app.tests.test_settings_env_overrides \
-              app.tests.test_redis_namespace \
-              app.tests.test_test_runner \
-              lobby.tests \
-              app.tests.test_dota_lobby_migration \
-              tests.test_dota_lobby_support \
-              -v 2
+            python manage.py test -v 2
 
       - name: Run frontend Vitest
         env:
