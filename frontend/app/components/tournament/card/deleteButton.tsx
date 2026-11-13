@@ -55,6 +55,7 @@ export const TournamentRemoveButton: React.FC<PropsRemoveButton> = ({
   return (
     <>
       <TrashIconButton
+        data-testid={`tournament-delete-${tournament.pk}`}
         size="sm"
         disabled={disabled}
         tooltip="Delete tournament"

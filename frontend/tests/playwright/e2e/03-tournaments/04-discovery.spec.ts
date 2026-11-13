@@ -155,7 +155,7 @@ test.describe('Tournament discovery (@cicd)', () => {
       // The default waits for the user, so it never fetches the unscoped list first.
       for (const url of urls) {
         const params = new URL(url).searchParams;
-        expect(params.get('organizations')).toBe(String(HOME_ORG));
+        expect(params.get('organizations')).toBe('mine');
         expect(params.get('open_signups')).toBe('1');
       }
     });
@@ -327,10 +327,13 @@ test.describe('Tournament discovery (@cicd)', () => {
       }
       await expect(cardNamed(upcoming, AWAY_CUP)).toHaveCount(0);
 
+      // Other specs add open-signup tournaments in parallel, so only the seeded
+      // cards are asserted, never the panel's badge count.
       const badge = 'tournament-signups-open-badge';
       await expect(cardNamed(upcoming, OPEN_CUP).getByTestId(badge)).toHaveText('Signups open');
-      await expect(upcoming.getByTestId(badge)).toHaveCount(1);
-      await expect(cardNamed(upcoming, HOME_SOON).getByTestId(badge)).toHaveCount(0);
+      for (const name of [HOME_LIVE, HOME_SOON, HOME_LATER]) {
+        await expect(cardNamed(upcoming, name).getByTestId(badge)).toHaveCount(0);
+      }
     });
 
     test('@cicd the dropdown lists My, All, then your and other organizations', async ({
@@ -419,7 +422,7 @@ test.describe('Tournament discovery (@cicd)', () => {
       expect(archivedUrls.length).toBeGreaterThan(0);
       for (const url of archivedUrls) {
         const params = new URL(url).searchParams;
-        expect(params.get('organizations')).toBe(String(HOME_ORG));
+        expect(params.get('organizations')).toBe('mine');
         expect(params.has('open_signups')).toBe(false);
       }
     });
@@ -611,7 +614,7 @@ test.describe('Tournament discovery (@cicd)', () => {
         const card = await findTournamentCard(page, name);
         await expect(card).toHaveAttribute('data-testid', `tournament-card-${pk}`);
 
-        await card.getByRole('button', { name: /delete/i }).first().click();
+        await card.getByTestId(`tournament-delete-${pk}`).click();
         await page.getByRole('button', { name: 'Confirm Delete' }).click();
 
         await expect(cardNamed(page, name)).toHaveCount(0, { timeout: 15000 });

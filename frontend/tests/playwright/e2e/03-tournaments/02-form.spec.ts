@@ -168,9 +168,10 @@ test.describe('Tournaments - create (e2e)', () => {
     const tournamentCard = await findTournamentCard(page, deletableName);
     await tournamentCard.scrollIntoViewIfNeeded();
 
-    // Find the delete button - TrashIconButton uses variant="destructive" which applies bg-destructive
-    // The button also has sr-only text "Delete" or "Delete tournament"
-    const deleteButton = tournamentCard.getByRole('button', { name: /delete/i }).first();
+    const cardTestId = await tournamentCard.getAttribute('data-testid');
+    const pk = cardTestId?.replace('tournament-card-', '');
+    expect(pk, 'card carries its tournament pk').toMatch(/^\d+$/);
+    const deleteButton = tournamentCard.getByTestId(`tournament-delete-${pk}`);
     await deleteButton.waitFor({ state: 'visible', timeout: 10000 });
     await deleteButton.evaluate((btn) => (btn as HTMLButtonElement).click());
 
