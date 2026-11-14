@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test';
+import type { Page, Response } from '@playwright/test';
 
 import { BASE_URL } from '../../fixtures/base-url';
 import {
@@ -14,6 +14,32 @@ import {
 } from '../../fixtures';
 
 const ROWS = '[data-testid^="contributions-row-"]';
+
+function collectGets(page: Page, matches: (path: string) => boolean): Response[] {
+  const seen: Response[] = [];
+  page.on('response', (r) => {
+    if (r.request().method() === 'GET' && matches(new URL(r.url()).pathname)) seen.push(r);
+  });
+  return seen;
+}
+
+async function bodiesOf<T>(seen: Response[]): Promise<T[]> {
+  await expect.poll(() => seen.length, 'refetch after logout').toBeGreaterThan(0);
+  return Promise.all(
+    seen.map(async (r) => {
+      expect(r.ok(), r.url()).toBe(true);
+      return (await r.json()) as T;
+    }),
+  );
+}
+
+async function expectAnonymousLeaderboard(seen: Response[]): Promise<void> {
+  const bodies = await bodiesOf<{ rows: unknown[]; own_row: unknown }>(seen);
+  for (const body of bodies) {
+    expect(body.rows).toEqual([]);
+    expect(body.own_row).toBeNull();
+  }
+}
 
 async function logoutWithoutReload(page: Page): Promise<void> {
   await page.locator('header [data-testid="user-avatar"]').first().click();
@@ -42,11 +68,16 @@ test.describe('Org features: viewer changes @cicd', () => {
     await expect(rows.first()).toHaveAttribute('data-own', 'true');
     await expect(rows.first().locator('td').nth(1)).toHaveText('3');
 
+    const refetches = collectGets(page, (p) =>
+      p.endsWith(`/organizations/${data.orgs.private.pk}/contributions/leaderboard/`),
+    );
     await logoutWithoutReload(page);
     await expect(rows).toHaveCount(0);
     await expect(page.getByTestId('contributions-org-total')).toContainText('5');
     await expect(page.getByTestId('contributions-members-private')).toBeVisible();
     await expectNoSessionToast(page);
+    await expectAnonymousLeaderboard(refetches);
+    await expect(rows).toHaveCount(0);
   });
 
   test('anonymous visitor sees only the private org total @cicd', async ({ page }) => {
@@ -63,12 +94,18 @@ test.describe('Org features: viewer changes @cicd', () => {
     await expect(rows).toHaveCount(2);
     await expect(page.getByTestId('contributions-admin')).toBeVisible();
 
+    const refetches = collectGets(page, (p) =>
+      p.endsWith(`/organizations/${data.orgs.features.pk}/contributions/leaderboard/`),
+    );
     await logoutWithoutReload(page);
     await expect(rows).toHaveCount(0);
     await expect(page.getByTestId('contributions-admin')).toHaveCount(0);
     await expect(page.getByTestId('contributions-members-signin')).toBeVisible();
     await expect(page.getByTestId('contributions-org-total')).toContainText('15');
     await expectNoSessionToast(page);
+    await expectAnonymousLeaderboard(refetches);
+    await expect(rows).toHaveCount(0);
+    await expect(page.getByTestId('contributions-admin')).toHaveCount(0);
   });
 
   test('a revoked promoter gets no session toast and the tab bounces @cicd', async ({
@@ -124,9 +161,18 @@ test.describe('Org features: viewer changes @cicd', () => {
     await expect(page.getByTestId('event-complete-btn')).toBeVisible();
     await expect(page.getByTestId('event-host-edit-btn')).toBeVisible();
 
+    const refetches = collectGets(page, (p) => p.endsWith(`/events/${eventPk}/`));
     await logoutWithoutReload(page);
     await expect(page.getByTestId('event-complete-btn')).toHaveCount(0);
     await expect(page.getByTestId('event-host-edit-btn')).toHaveCount(0);
     await expectNoSessionToast(page);
+    type EventFlags = { user_can_manage: boolean; user_can_manage_event_staff: boolean };
+    const bodies = await bodiesOf<EventFlags>(refetches);
+    for (const body of bodies) {
+      expect(body.user_can_manage).toBe(false);
+      expect(body.user_can_manage_event_staff).toBe(false);
+    }
+    await expect(page.getByTestId('event-complete-btn')).toHaveCount(0);
+    await expect(page.getByTestId('event-host-edit-btn')).toHaveCount(0);
   });
 });
