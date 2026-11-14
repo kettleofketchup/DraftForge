@@ -75,8 +75,8 @@ test.describe('Org features: viewer changes @cicd', () => {
     await expect(rows).toHaveCount(0);
     await expect(page.getByTestId('contributions-org-total')).toHaveText(/^5\s*points$/);
     await expect(page.getByTestId('contributions-members-private')).toBeVisible();
-    await expectNoSessionToast(page);
     await expectAnonymousLeaderboard(refetches);
+    await expectNoSessionToast(page);
     await expect(rows).toHaveCount(0);
   });
 
@@ -102,8 +102,8 @@ test.describe('Org features: viewer changes @cicd', () => {
     await expect(page.getByTestId('contributions-admin')).toHaveCount(0);
     await expect(page.getByTestId('contributions-members-signin')).toBeVisible();
     await expect(page.getByTestId('contributions-org-total')).toHaveText(/^15\s*points$/);
-    await expectNoSessionToast(page);
     await expectAnonymousLeaderboard(refetches);
+    await expectNoSessionToast(page);
     await expect(rows).toHaveCount(0);
     await expect(page.getByTestId('contributions-admin')).toHaveCount(0);
   });
@@ -165,13 +165,13 @@ test.describe('Org features: viewer changes @cicd', () => {
     await logoutWithoutReload(page);
     await expect(page.getByTestId('event-complete-btn')).toHaveCount(0);
     await expect(page.getByTestId('event-host-edit-btn')).toHaveCount(0);
-    await expectNoSessionToast(page);
     type EventFlags = { user_can_manage: boolean; user_can_manage_event_staff: boolean };
     const bodies = await bodiesOf<EventFlags>(refetches);
     for (const body of bodies) {
       expect(body.user_can_manage).toBe(false);
       expect(body.user_can_manage_event_staff).toBe(false);
     }
+    await expectNoSessionToast(page);
     await expect(page.getByTestId('event-complete-btn')).toHaveCount(0);
     await expect(page.getByTestId('event-host-edit-btn')).toHaveCount(0);
   });

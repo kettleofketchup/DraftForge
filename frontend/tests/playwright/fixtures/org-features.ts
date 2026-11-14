@@ -116,20 +116,26 @@ export async function moveEventToRollCall(context: BrowserContext, eventPk: numb
 }
 
 /**
- * Assert no "Session expired" toast fired. Waits for the network to settle, checks the
- * interceptor's synchronous flag (set before sonner's dynamic import), then holds the
- * toast count at zero over a window so a late toast still fails the test.
+ * Assert no "Session expired" toast fired. `networkidle` only settles a navigation load,
+ * so callers that trigger in-page refetches (e.g. logout without reload) must await those
+ * responses first. Over the hold window the interceptor's synchronous flag (set before
+ * sonner's dynamic import) and the toast count are both checked on every tick and once
+ * more at the end, so a late 401/403 still fails the test.
  */
 export async function expectNoSessionToast(page: Page, holdMs = 2000): Promise<void> {
   await page.waitForLoadState('networkidle');
-  const flagged = await page.evaluate(
-    () => (window as unknown as Record<string, unknown>)._auth_toast_shown === true,
-  );
-  expect(flagged, 'axios interceptor flagged a session-expired response').toBe(false);
   const toast = page.getByText(/Session expired/);
+  const assertClean = async (): Promise<void> => {
+    const flagged = await page.evaluate(
+      () => (window as unknown as Record<string, unknown>)._auth_toast_shown === true,
+    );
+    expect(flagged, 'axios interceptor flagged a session-expired response').toBe(false);
+    expect(await toast.count(), 'Session expired toast is visible').toBe(0);
+  };
   const deadline = Date.now() + holdMs;
   while (Date.now() < deadline) {
-    expect(await toast.count(), 'Session expired toast is visible').toBe(0);
+    await assertClean();
     await page.waitForTimeout(250);
   }
+  await assertClean();
 }
