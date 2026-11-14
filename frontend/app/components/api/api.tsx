@@ -137,6 +137,7 @@ export {
   getEvents, getEvent, createEvent, updateEvent, deleteEvent,
   signupForEvent, openSignups, startRollCall, startTournament, cancelEvent,
   reopenSignups,
+  completeEvent, setEventStaff,
   restartTournament,
   getEventSignups, approveSignup, rejectSignup, confirmSignup, cancelSignup,
   unconfirmSignup, demoteSignup, reinstateSignup,
@@ -152,5 +153,5 @@ export {
   updateOrgEventDefaults,
 } from './eventsAPI';
 
-export type { EventRepeaterType, EventWritePayload, RepeaterSubscriber, DiscordChannel, DiscordRole, OrgEventDefaultsType, SignupBody } from './eventsAPI';
+export type { EventRepeaterType, EventStaffPayload, EventWritePayload, RepeaterSubscriber, DiscordChannel, DiscordRole, OrgEventDefaultsType, SignupBody } from './eventsAPI';
 export type { EventType, EventSignupType, EventTeamType } from '~/components/events/schemas';

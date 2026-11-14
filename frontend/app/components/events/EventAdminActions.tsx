@@ -1,4 +1,4 @@
-import { CheckCircle2, Clock, Pencil, ShieldAlert, Trash2, Undo2, Users, XCircle } from 'lucide-react';
+import { CheckCheck, CheckCircle2, Clock, Pencil, ShieldAlert, Trash2, Undo2, Users, XCircle } from 'lucide-react';
 import { useState } from 'react';
 
 import { ConfirmDialog } from '~/components/ui/dialogs/ConfirmDialog';
@@ -16,7 +16,7 @@ import type { useEventActionMutation } from '~/hooks/useEvent';
 
 type EventActions = Pick<
   ReturnType<typeof useEventActionMutation>,
-  'openSignups' | 'startRollCall' | 'reopenSignups' | 'cancelEvent' | 'deleteEvent'
+  'openSignups' | 'startRollCall' | 'reopenSignups' | 'cancelEvent' | 'deleteEvent' | 'completeEvent'
 >;
 
 interface EventAdminActionsProps {
@@ -27,6 +27,8 @@ interface EventAdminActionsProps {
   onReopenSignupsClick: () => void;
   onOpenRollCallClick: () => void;
   onDeleteConfirmed: () => void;
+  canComplete: boolean;
+  onCompleteConfirmed: () => void | Promise<void>;
 }
 
 export function EventAdminActions({
@@ -37,8 +39,11 @@ export function EventAdminActions({
   onReopenSignupsClick,
   onOpenRollCallClick,
   onDeleteConfirmed,
+  canComplete,
+  onCompleteConfirmed,
 }: EventAdminActionsProps) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
   const isCancellable = event.state !== EventState.COMPLETED && event.state !== EventState.CANCELLED;
 
   // Mobile dropdown actions — NO data-testid here (would collide with desktop).
@@ -94,6 +99,17 @@ export function EventAdminActions({
       label: 'Open Roll Call',
       onClick: onOpenRollCallClick,
       variant: 'primary',
+    });
+  }
+
+  if (canComplete) {
+    dropdownActions.push({
+      key: 'complete',
+      icon: <CheckCheck className="h-4 w-4 mr-1.5" />,
+      label: 'Complete',
+      onClick: () => setShowCompleteConfirm(true),
+      variant: 'success',
+      disabled: actions.completeEvent.isPending,
     });
   }
 
@@ -178,6 +194,19 @@ export function EventAdminActions({
           </>
         )}
 
+        {canComplete && (
+          <SecondaryButton
+            color="emerald"
+            size="sm"
+            onClick={() => setShowCompleteConfirm(true)}
+            disabled={actions.completeEvent.isPending}
+            data-testid="event-complete-btn"
+          >
+            <CheckCheck className="h-4 w-4 mr-1.5" />
+            Complete
+          </SecondaryButton>
+        )}
+
         {isCancellable && (
           <DestructiveButton
             size="sm"
@@ -221,6 +250,17 @@ export function EventAdminActions({
         confirmLabel="Delete Event"
         variant="destructive"
         onConfirm={onDeleteConfirmed}
+      />
+
+      <ConfirmDialog
+        open={showCompleteConfirm}
+        onOpenChange={setShowCompleteConfirm}
+        title="Complete Event"
+        description={`Mark "${event.name}" as completed? Host and helper points are awarded when it completes.`}
+        confirmLabel="Complete Event"
+        isLoading={actions.completeEvent.isPending}
+        onConfirm={onCompleteConfirmed}
+        confirmTestId="event-complete-dialog-confirm"
       />
     </>
   );

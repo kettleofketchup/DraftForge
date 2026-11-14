@@ -97,7 +97,8 @@ import type { UserType } from '~/components/user/types';
 import type { AddMemberPayload } from '~/components/api/api';
 import { useOrgStore } from '~/store/orgStore';
 import { useUserCacheStore } from '~/store/userCacheStore';
-import { removeFeatureQueries } from '~/features/org-features';
+import { removeFeatureQueries, useOrgFeatureAccess } from '~/features/org-features';
+import { EventStaffSection } from '~/components/events/EventStaffCard';
 import { useMemberAccess } from '~/hooks/useMemberAccess';
 import { useUserStore } from '~/store/userStore';
 import { isUserEntry } from '~/store/userCacheTypes';
@@ -135,6 +136,11 @@ export default function EventPage() {
   );
   // Permission check uses backend-derived flag (covers org staff AND league staff).
   const isAdmin = event?.user_can_manage ?? false;
+  const eventOrgAccess = useOrgFeatureAccess(eventOrg ?? undefined);
+  const canCompleteEvent =
+    !!event?.user_can_manage_event_staff &&
+    eventOrgAccess.settled &&
+    (event.state === EventState.ROLL_CALL || event.state === EventState.IN_PROGRESS);
 
 
   // Set the current game type in the game type store for context-aware components
@@ -443,6 +449,15 @@ export default function EventPage() {
                 onDeleteConfirmed={() => {
                   actions.deleteEvent.mutate(undefined, { onSuccess: () => navigate('/events') });
                 }}
+                canComplete={canCompleteEvent}
+                onCompleteConfirmed={async () => {
+                  try {
+                    await actions.completeEvent.mutateAsync();
+                    toast.success('Event completed');
+                  } catch (err: unknown) {
+                    toast.error(extractApiError(err) || 'Failed to complete event');
+                  }
+                }}
               />
             ) : (
               <div />
@@ -565,7 +580,17 @@ export default function EventPage() {
           </TabsList>
 
           <TabsContent value="details">
-            <DetailsTab event={event} signedIn={!!currentUser?.pk} />
+            <DetailsTab
+              event={event}
+              signedIn={!!currentUser?.pk}
+              staff={
+                <EventStaffSection
+                  event={event}
+                  access={eventOrgAccess}
+                  hasDiscordServer={!!eventOrg?.discord_server_id}
+                />
+              }
+            />
             {isAdmin && event.event_repeater && (
               <div className="mt-4">
                 <SubscriberList repeaterId={event.event_repeater} />
@@ -712,9 +737,11 @@ function Stat({ label, value }: { label: string; value: ReactNode }) {
 function DetailsTab({
   event,
   signedIn,
+  staff,
 }: {
   event: NonNullable<ReturnType<typeof useEvent>['data']>;
   signedIn: boolean;
+  staff: ReactNode;
 }) {
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -753,6 +780,8 @@ function DetailsTab({
           />
         </CardContent>
       </Card>
+
+      {staff}
 
       {event.description && (
         <Card className="md:col-span-2 lg:col-span-1">

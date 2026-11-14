@@ -86,6 +86,21 @@ export async function cancelEvent(eventId: number): Promise<EventType> {
   return data;
 }
 
+export async function completeEvent(eventId: number): Promise<EventType> {
+  const { data } = await axios.post<EventType>(`/events/${eventId}/complete/`);
+  return data;
+}
+
+export interface EventStaffPayload {
+  host_id: number | null;
+  helper_ids: number[];
+}
+
+export async function setEventStaff(eventId: number, payload: EventStaffPayload): Promise<EventType> {
+  const { data } = await axios.put<EventType>(`/events/${eventId}/staff/`, payload);
+  return data;
+}
+
 export async function restartTournament(eventId: number): Promise<EventType> {
   const { data } = await axios.post<EventType>(`/events/${eventId}/restart_tournament/`);
   return data;

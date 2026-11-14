@@ -4,7 +4,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   approveSignup as approveSignupAPI,
   cancelEvent as cancelEventAPI,
+  completeEvent as completeEventAPI,
   deleteEvent as deleteEventAPI,
+  setEventStaff as setEventStaffAPI,
   restartTournament as restartTournamentAPI,
   cancelSignup as cancelSignupAPI,
   confirmSignup as confirmSignupAPI,
@@ -29,7 +31,12 @@ import {
   updateEvent as updateEventAPI,
   updateOrgEventDefaults,
 } from '~/components/api/api';
-import type { EventRepeaterType, EventWritePayload, SignupBody } from '~/components/api/api';
+import type {
+  EventRepeaterType,
+  EventStaffPayload,
+  EventWritePayload,
+  SignupBody,
+} from '~/components/api/api';
 import type { EventSignupType, EventType } from '~/components/events/schemas';
 import type { UserType } from '~/components/user/types';
 import { useOrgStore } from '~/store/orgStore';
@@ -133,6 +140,21 @@ export function useEventActionMutation(eventId: number) {
       onSuccess: (data) => {
         queryClient.setQueryData(['event', eventId], data);
         queryClient.invalidateQueries({ queryKey: ['events'] });
+      },
+    }),
+    completeEvent: useMutation({
+      mutationFn: () => completeEventAPI(eventId),
+      onSuccess: (data) => {
+        queryClient.setQueryData(['event', eventId], data);
+        queryClient.invalidateQueries({ queryKey: ['events'] });
+        queryClient.invalidateQueries({ queryKey: ['org-contributions', data.organization] });
+      },
+    }),
+    setEventStaff: useMutation({
+      mutationFn: (payload: EventStaffPayload) => setEventStaffAPI(eventId, payload),
+      onSuccess: (data) => {
+        queryClient.setQueryData(['event', eventId], data);
+        queryClient.invalidateQueries({ queryKey: ['org-contributions', data.organization] });
       },
     }),
   };
