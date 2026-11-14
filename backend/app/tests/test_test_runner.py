@@ -5,6 +5,8 @@ the top-level directory up to / and imports `app.backend...`, which fails.
 """
 
 import contextvars
+import json
+import multiprocessing
 import os
 import pickle
 import sqlite3
@@ -16,9 +18,12 @@ from collections.abc import Iterator
 from multiprocessing.reduction import ForkingPickler
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 from unittest import mock
 
+from cacheops.conf import settings as cacheops_settings
 from django.conf import settings
+from django.core.cache import caches
 from django.db.backends.sqlite3.creation import DatabaseCreation
 from django.db.utils import ConnectionHandler
 from django.test import SimpleTestCase
@@ -261,6 +266,73 @@ class ParallelPicklingTests(SimpleTestCase):
         case = AsyncCase("test_it")
         sent = pickle.loads(ForkingPickler.dumps(case._asyncioTestContext))
         self.assertIsInstance(sent, contextvars.Context)
+
+
+def _redis_names() -> dict[str, Any]:
+    return {
+        "pid": os.getpid(),
+        "namespace": settings.REDIS_KEY_NAMESPACE,
+        "cacheops_prefix": cacheops_settings.CACHEOPS_PREFIX(None),
+        "cache_key_prefix": settings.CACHES["default"].get("KEY_PREFIX"),
+        "live_cache_key_prefix": caches["default"].key_prefix,
+        "channel_prefix": settings.CHANNEL_LAYERS["default"]
+        .get("CONFIG", {})
+        .get("prefix"),
+    }
+
+
+def _forked_worker_redis_names() -> dict[str, Any]:
+    """Fork like ParallelTestSuite does, run init_worker, report the child's names.
+
+    os.fork, not a Pool: under --parallel this test already runs in a daemonic
+    pool worker, which may not start child processes.
+    """
+    read_fd, write_fd = os.pipe()
+    pid = os.fork()
+    if pid == 0:
+        os.close(read_fd)
+        status = 1
+        try:
+            init_worker(multiprocessing.Value("i", 0), used_aliases=set())
+            os.write(write_fd, json.dumps(_redis_names()).encode())
+            status = 0
+        finally:
+            os._exit(status)
+    os.close(write_fd)
+    with os.fdopen(read_fd, "rb") as pipe:
+        payload = pipe.read()
+    _, status = os.waitpid(pid, 0)
+    assert os.waitstatus_to_exitcode(status) == 0, "forked worker failed"
+    return json.loads(payload)
+
+
+class ParallelWorkerRedisNamespaceTests(SimpleTestCase):
+    """Fork workers each clone their own DB, so they must not share cached rows."""
+
+    def test_forked_worker_gets_its_own_namespace(self) -> None:
+        parent = _redis_names()
+        worker = _forked_worker_redis_names()
+        ns = worker["namespace"]
+
+        self.assertNotEqual(worker["pid"], parent["pid"])
+        self.assertTrue(ns.startswith(f"test-{worker['pid']}-"), ns)
+        self.assertNotEqual(ns, parent["namespace"])
+        self.assertEqual(
+            worker["cacheops_prefix"],
+            parent["cacheops_prefix"].removesuffix(parent["namespace"]) + ns,
+        )
+        self.assertEqual(
+            worker["live_cache_key_prefix"], worker["cache_key_prefix"] or ""
+        )
+        if parent["cache_key_prefix"] is not None:
+            self.assertEqual(worker["cache_key_prefix"], ns)
+        if parent["channel_prefix"] is not None:
+            self.assertEqual(worker["channel_prefix"], f"asgi:{ns}")
+
+    def test_two_workers_get_different_namespaces(self) -> None:
+        first = _forked_worker_redis_names()["namespace"]
+        second = _forked_worker_redis_names()["namespace"]
+        self.assertNotEqual(first, second)
 
 
 class WalCloneTests(SimpleTestCase):
