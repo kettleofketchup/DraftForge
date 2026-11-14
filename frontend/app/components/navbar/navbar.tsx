@@ -1,11 +1,11 @@
 import { Slot } from '@radix-ui/react-slot';
 import * as React from 'react';
 import { memo } from 'react';
-import { Link } from 'react-router';
 import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router';
 import { cn } from '~/lib/utils';
-import { PreviewLoginMenu } from '../preview/PreviewLoginMenu';
 import { useUserStore } from '../../store/userStore';
+import { PreviewLoginMenu } from '../preview/PreviewLoginMenu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 import { LoginWithDiscordButton } from './login';
 import { MobileNav } from './MobileNav';
@@ -22,8 +22,10 @@ const BUG_REPORT_URL = `${GITHUB_REPO_URL}/issues/new?template=bug_report.md`;
  *   - 2xl+ (1536px): icon + title + inline subtitle stacked vertically.
  * Nine nav items fit horizontally below 2xl; stacking earlier overflows (#252).
  */
-interface NavItemProps
-  extends Omit<React.AnchorHTMLAttributes<HTMLAnchorElement>, 'href'> {
+interface NavItemProps extends Omit<
+  React.AnchorHTMLAttributes<HTMLAnchorElement>,
+  'href'
+> {
   icon?: React.ReactNode;
   title: string;
   subtitle?: string;
@@ -62,7 +64,8 @@ const NavItem = React.forwardRef<HTMLAnchorElement, NavItemProps>(
     },
     ref,
   ) => {
-    const testId = dataTestId || (to ? `nav-link-${to.replace(/^\//, '')}` : undefined);
+    const testId =
+      dataTestId || (to ? `nav-link-${to.replace(/^\//, '')}` : undefined);
     const baseClassName = cn(
       'flex items-center gap-1 xl:gap-2 rounded-md px-1.5 xl:px-2 py-1.5 h-9',
       'text-sm font-medium',
@@ -83,7 +86,12 @@ const NavItem = React.forwardRef<HTMLAnchorElement, NavItemProps>(
           )}
         >
           <div className="flex items-center justify-center gap-1">
-            <span className={cn("text-xs font-bold leading-normal truncate text-center text-outline-sm text-[#646cff]", titleClassName)}>
+            <span
+              className={cn(
+                'text-xs font-bold leading-normal truncate text-center text-outline-sm text-[#646cff]',
+                titleClassName,
+              )}
+            >
               {title}
             </span>
             {badge}
@@ -100,19 +108,36 @@ const NavItem = React.forwardRef<HTMLAnchorElement, NavItemProps>(
     let navContent: React.ReactElement;
     if (asChild) {
       navContent = (
-        <Slot ref={ref} className={baseClassName} data-testid={testId} {...props}>
+        <Slot
+          ref={ref}
+          className={baseClassName}
+          data-testid={testId}
+          {...props}
+        >
           {content}
         </Slot>
       );
     } else if (to) {
       navContent = (
-        <Link ref={ref} to={to} className={baseClassName} data-testid={testId} {...props}>
+        <Link
+          ref={ref}
+          to={to}
+          className={baseClassName}
+          data-testid={testId}
+          {...props}
+        >
           {content}
         </Link>
       );
     } else {
       navContent = (
-        <a ref={ref} href={href} className={baseClassName} data-testid={testId} {...props}>
+        <a
+          ref={ref}
+          href={href}
+          className={baseClassName}
+          data-testid={testId}
+          {...props}
+        >
           {content}
         </a>
       );
@@ -379,7 +404,10 @@ const StarBadge = ({
   }
   if (count === null) return null;
   return (
-    <span className="inline-flex items-center gap-0.5 text-[10px] bg-base-400 text-text-primary font-semibold rounded px-1 py-0.5 leading-none">
+    <span
+      data-testid="githubStarCount"
+      className="inline-flex items-center gap-0.5 text-[10px] bg-base-400 text-text-primary font-semibold rounded px-1 py-0.5 leading-none"
+    >
       <svg
         xmlns="http://www.w3.org/2000/svg"
         viewBox="0 0 24 24"
