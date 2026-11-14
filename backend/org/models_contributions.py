@@ -59,6 +59,13 @@ class ContributionEntry(models.Model):
         related_name="contribution_entries",
     )
     event_name = models.CharField(max_length=255, blank=True, default="")
+    promo_send = models.ForeignKey(
+        "org.PromoSend",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="contribution_entries",
+    )
     reason = models.TextField(
         blank=True, default="", validators=[MaxLengthValidator(500)]
     )
@@ -80,6 +87,11 @@ class ContributionEntry(models.Model):
                 condition=models.Q(kind__in=EVENT_STAFF_KINDS)
                 & models.Q(event__isnull=False),
                 name="uniq_event_staff_entry",
+            ),
+            models.UniqueConstraint(
+                fields=["promo_send"],
+                condition=models.Q(promo_send__isnull=False),
+                name="uniq_entry_per_promo_send",
             ),
         ]
         indexes = [

@@ -5,6 +5,7 @@ from app.cache_utils import invalidate_after_commit
 from app.models import CustomUser, Organization, OrgLog
 from org.feature_keys import FeatureKey
 from org.models import OrgFeature
+from org.promotion import starter
 from telemetry.logging import get_logger
 
 __all__ = [
@@ -67,6 +68,8 @@ def set_org_feature(
             if notes_changed:
                 row.notes = notes
             row.save()
+            if enabled_changed and enabled and key == FeatureKey.PROMOTION:
+                starter.seed_starter_template(org, actor)
 
         if row.enabled or not created:
             OrgLog.objects.create(

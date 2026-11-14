@@ -21,7 +21,13 @@ from org.contributions.kinds import (
 )
 from org.contributions.periods import local_day_start_utc, local_noon_utc
 from org.contributions.points import points_for
-from org.models import ContributionEntry, ContributionPointValue, OrgFeature, OrgUser
+from org.models import (
+    ContributionEntry,
+    ContributionPointValue,
+    OrgFeature,
+    OrgUser,
+    PromoTemplate,
+)
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
@@ -500,6 +506,7 @@ def repoint_user_attribution(drop: CustomUser, keep: CustomUser) -> int:
         + ContributionPointValue.objects.nocache()
         .filter(updated_by=drop)
         .update(updated_by=keep)
+        + PromoTemplate.objects.filter(created_by=drop).update(created_by=keep)
     )
 
 

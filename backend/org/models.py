@@ -10,6 +10,10 @@ from org.models_profiles import (
     PlayerDeadlockProfile,  # noqa: F401
     PlayerDotaProfile,  # noqa: F401
 )
+from org.models_promotion import (
+    PromoSend,  # noqa: F401
+    PromoTemplate,  # noqa: F401
+)
 
 
 class OrgUser(models.Model):
