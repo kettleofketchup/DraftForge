@@ -78,8 +78,9 @@ the frontend gates on: `admin_organization_ids`, `staff_organization_ids`,
 | `league` | int | | Filter by league ID |
 | `bucket` | string | | `upcoming` or `archived` (see below). Any other value returns 400 |
 | `search` | string | | Trimmed. Ignored under 2 characters, cut to 64. Case-insensitive match on tournament, organization or league name |
-| `page` | int | | Page number, at least 1. Turns on pagination. Requires `bucket`, otherwise 400 |
-| `page_size` | int | 24 | Results per page, at most 100. Only applies with `page` |
+| `page` | int | | Page number, at least 1. Turns on pagination. Requires `bucket`, otherwise 400. For `archived`, use `page=1` for the first page and follow `next` |
+| `cursor` | string | | Opaque archived position, taken from a previous page's `next`. Turns on pagination. Requires `bucket=archived` and no `page`; a malformed value returns 400 |
+| `page_size` | int | 24 | Results per page, at most 100. Only applies with `page` or `cursor` |
 
 **Buckets:**
 
@@ -101,12 +102,12 @@ users with the same memberships share an entry and nothing is cached per user.
 
 **Response:**
 
-Without `page`, a bare array. With `page`, the paged envelope:
+Without `page` or `cursor`, a bare array (unchanged). With either, the paged envelope:
 
 ```json
 {
   "count": 30,
-  "next": "https://.../api/tournaments-list/?bucket=upcoming&page=2",
+  "next": "https://.../api/tournaments-list/?bucket=archived&page_size=24&cursor=MjAyNi0xMS0x...",
   "previous": null,
   "results": [
     {
@@ -130,13 +131,23 @@ Without `page`, a bare array. With `page`, the paged envelope:
 }
 ```
 
+**Archived pages use a keyset cursor.** `next` on an `archived` page drops `page` and
+carries `cursor`, which encodes the last row's `(date_played, pk)`. The next page holds the
+rows strictly after it in `date_played` descending, `pk` descending order, so a tournament
+that enters or leaves the archive between requests cannot shift later rows: none is skipped
+or repeated. Archived pages are forward-only, so `previous` is always `null`; `count` is the
+current archive size. Clients should read `cursor` out of `next` rather than build it. A
+legacy `page=N` request past the first still returns that offset page, but its `next` is a
+cursor. `upcoming` keeps page numbers.
+
 `league` is `null` for a tournament without a league; `organization_id`,
 `organization_name` and `organization_logo` are `null` when the league has no organization
 (or, for the logo, when the organization has none). `signups_open` tells whether the
 tournament's signups are open as defined above.
 
 !!! note
-    Search results are not cached. Other results are cached for 10 minutes and invalidated
+    Search results are not cached. Other results are cached for 10 minutes, keyed by every
+    parameter including `cursor` and `page_size`, and invalidated
     when any Tournament, League, Organization or Event changes, so an event state change
     shows up in `signups_open` and `open_signups=1` results on the next request.
 

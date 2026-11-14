@@ -1,11 +1,14 @@
 """Request plumbing for the tournament list: params, search, cache key, page envelope."""
 
+import binascii
+from base64 import urlsafe_b64decode, urlsafe_b64encode
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, replace
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Literal, cast
 from urllib.parse import urlencode
 
+from django.db.models import Q
 from django.http import QueryDict
 from rest_framework.exceptions import ValidationError
 from rest_framework.pagination import PageNumberPagination
@@ -18,7 +21,7 @@ SEARCH_MIN = 2
 SEARCH_MAX = 64
 MAX_ORGANIZATIONS = 100
 ORGANIZATIONS_MINE = "mine"
-TOURNAMENTS_LIST_CACHE_PREFIX = "tournaments_list_v5"
+TOURNAMENTS_LIST_CACHE_PREFIX = "tournaments_list_v6"
 
 Bucket = Literal["upcoming", "archived"]
 BUCKETS: tuple[Bucket, ...] = ("upcoming", "archived")
@@ -33,6 +36,42 @@ ORGANIZATIONS_MESSAGE = (
 TOO_MANY_ORGANIZATIONS_MESSAGE = f"At most {MAX_ORGANIZATIONS} organizations."
 ORGANIZATION_CONFLICT_MESSAGE = "Use either 'organization' or 'organizations'."
 OPEN_SIGNUPS_MESSAGE = "Must be '1' or '0'."
+CURSOR_MESSAGE = "Invalid cursor."
+CURSOR_BUCKET_MESSAGE = "Requires 'bucket=archived'."
+CURSOR_PAGE_MESSAGE = "Use either 'page' or 'cursor'."
+
+
+@dataclass(frozen=True)
+class ArchiveCursor:
+    """Keyset position in the archived order (date_played desc, pk desc)."""
+
+    date_played: datetime
+    pk: int
+
+    @property
+    def token(self) -> str:
+        raw = f"{self.date_played.astimezone(UTC).isoformat()}|{self.pk}"
+        return urlsafe_b64encode(raw.encode()).decode().rstrip("=")
+
+
+def archive_after_q(cursor: ArchiveCursor) -> Q:
+    """Rows strictly after ``cursor`` in the archived order."""
+    return Q(date_played__lt=cursor.date_played) | Q(
+        date_played=cursor.date_played, pk__lt=cursor.pk
+    )
+
+
+def decode_archive_cursor(token: str) -> ArchiveCursor:
+    try:
+        raw = urlsafe_b64decode(token + "=" * (-len(token) % 4)).decode()
+        played_text, pk_text = raw.split("|")
+        played = datetime.fromisoformat(played_text)
+        pk = int(pk_text)
+    except (binascii.Error, UnicodeDecodeError, ValueError) as exc:
+        raise ValueError(CURSOR_MESSAGE) from exc
+    if not token or played.tzinfo is None or pk < 1:
+        raise ValueError(CURSOR_MESSAGE)
+    return ArchiveCursor(played.astimezone(UTC), pk)
 
 
 @dataclass(frozen=True)
@@ -46,6 +85,11 @@ class TournamentListParams:
     search: str | None
     page: int | None
     page_size: int
+    cursor: ArchiveCursor | None = None
+
+    @property
+    def paginated(self) -> bool:
+        return self.page is not None or self.cursor is not None
 
 
 class TournamentListPagination(PageNumberPagination):
@@ -115,6 +159,25 @@ def _parse_open_signups(query_params: QueryDict, errors: dict[str, list[str]]) -
     return False
 
 
+def _parse_cursor(
+    query_params: QueryDict, raw_bucket: str | None, errors: dict[str, list[str]]
+) -> ArchiveCursor | None:
+    raw = query_params.get("cursor")
+    if raw is None:
+        return None
+    if raw_bucket != "archived":
+        errors["cursor"] = [CURSOR_BUCKET_MESSAGE]
+        return None
+    if "page" in query_params:
+        errors["cursor"] = [CURSOR_PAGE_MESSAGE]
+        return None
+    try:
+        return decode_archive_cursor(raw)
+    except ValueError:
+        errors["cursor"] = [CURSOR_MESSAGE]
+        return None
+
+
 def parse_tournament_list_params(query_params: QueryDict) -> TournamentListParams:
     errors: dict[str, list[str]] = {}
 
@@ -140,6 +203,7 @@ def parse_tournament_list_params(query_params: QueryDict) -> TournamentListParam
 
     if "page" in query_params and raw_bucket is None and "page" not in errors:
         errors["page"] = [REQUIRES_BUCKET_MESSAGE]
+    cursor = _parse_cursor(query_params, raw_bucket, errors)
 
     if errors:
         raise ValidationError(errors)
@@ -154,6 +218,7 @@ def parse_tournament_list_params(query_params: QueryDict) -> TournamentListParam
         search=normalize_search(query_params.get("search")),
         page=page,
         page_size=min(page_size or DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE),
+        cursor=cursor,
     )
 
 
@@ -176,7 +241,9 @@ def tournaments_list_cache_key(params: TournamentListParams, cutoff: datetime) -
         pairs.append(("organizations", ",".join(map(str, params.organizations))))
     if params.open_signups:
         pairs.append(("open_signups", "1"))
-    if params.page is not None:
+    if params.cursor is not None:
+        pairs.append(("cursor", params.cursor.token))
+    if params.paginated:
         pairs.append(("page_size", str(params.page_size)))
     return (
         f"{TOURNAMENTS_LIST_CACHE_PREFIX}:{cutoff.date().isoformat()}"
@@ -208,3 +275,18 @@ def build_page_envelope(
         "previous": previous_url,
         "results": results,
     }
+
+
+def build_cursor_envelope(
+    request: Request,
+    *,
+    count: int,
+    next_cursor: str | None,
+    results: list[Any],
+) -> dict[str, Any]:
+    """Forward-only envelope: ``next`` carries the keyset cursor, ``previous`` is null."""
+    next_url = None
+    if next_cursor is not None:
+        url = remove_query_param(request.build_absolute_uri(), "page")
+        next_url = replace_query_param(url, "cursor", next_cursor)
+    return {"count": count, "next": next_url, "previous": None, "results": results}

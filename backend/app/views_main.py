@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, cast
 
 from cacheops import cached_as
 from django.contrib.auth import login
@@ -45,8 +45,11 @@ from app.tournament_buckets import (
     utc_day_start,
 )
 from app.tournament_list import (
+    ArchiveCursor,
     TournamentListPagination,
     TournamentListParams,
+    archive_after_q,
+    build_cursor_envelope,
     build_page_envelope,
     parse_tournament_list_params,
     resolve_organizations,
@@ -1071,7 +1074,8 @@ class TournamentListView(viewsets.ReadOnlyModelViewSet):
     Filters: organization, organizations (ids or ``mine``), open_signups,
     league, bucket (upcoming|archived), search. ``open_signups=1`` adds tournaments
     whose source event takes user signups to the organization scope.
-    Paginates only when ``page`` is present (requires ``bucket``).
+    Paginates only when ``page`` or ``cursor`` is present (requires ``bucket``).
+    Archived pages link onward with a keyset ``cursor`` on (date_played, pk).
     """
 
     serializer_class = TournamentListSerializer
@@ -1140,17 +1144,38 @@ class TournamentListView(viewsets.ReadOnlyModelViewSet):
 
     def list(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         params = self._params
+        archived = params.bucket == "archived"
 
         def compute() -> Any:
             # cacheops' own queryset cache ignores select_related tables, so it
             # would serve stale org/league fields; cached_as below owns caching.
             queryset = self.filter_queryset(self.get_queryset()).nocache()
-            if params.page is None:
+            if not params.paginated:
                 return list(self.get_serializer(queryset, many=True).data)
-            page = self.paginator.paginate_queryset(queryset, request, view=self)
+            if params.cursor is None:
+                rows = list(
+                    self.paginator.paginate_queryset(queryset, request, view=self)
+                )
+                count = self.paginator.page.paginator.count
+                has_next = self.paginator.page.has_next()
+            else:
+                count = queryset.count()
+                rows = list(
+                    queryset.filter(archive_after_q(params.cursor))[
+                        : params.page_size + 1
+                    ]
+                )
+                has_next = len(rows) > params.page_size
+                rows = rows[: params.page_size]
+            next_cursor = (
+                ArchiveCursor(rows[-1].date_played, rows[-1].pk).token
+                if archived and has_next and rows
+                else None
+            )
             return {
-                "count": self.paginator.page.paginator.count,
-                "results": list(self.get_serializer(page, many=True).data),
+                "count": count,
+                "next_cursor": next_cursor,
+                "results": list(self.get_serializer(rows, many=True).data),
             }
 
         if params.search is not None:
@@ -1165,13 +1190,22 @@ class TournamentListView(viewsets.ReadOnlyModelViewSet):
                 timeout=60 * 10,
             )(compute)()
 
-        if params.page is None:
+        if not params.paginated:
             return Response(data)
+        if archived:
+            return Response(
+                build_cursor_envelope(
+                    request,
+                    count=data["count"],
+                    next_cursor=data["next_cursor"],
+                    results=data["results"],
+                )
+            )
         return Response(
             build_page_envelope(
                 request,
                 count=data["count"],
-                page=params.page,
+                page=cast(int, params.page),
                 page_size=params.page_size,
                 results=data["results"],
             )
