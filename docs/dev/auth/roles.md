@@ -104,6 +104,11 @@ The five entry points locked by `e2e/17-auth/01-create-gates.spec.ts`.
   organisation (via `admin_organization_ids`), or admin of any league
   (via `admin_league_ids`). Staff roles can't create tournaments —
   matching the backend's `perform_create` check.
+- **"Your organizations"** on `/tournaments` is not a permission gate.
+  It reads `member_organization_ids` from `/api/current_user`: the
+  organizations the user is a member of (`OrgUser`), admins or staffs,
+  plus the organizations of leagues the user admins or staffs
+  (`org/membership.py`). Tournaments from those organizations list first.
 
 ## Edit + Bracket Matrix
 

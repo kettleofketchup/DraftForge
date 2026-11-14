@@ -9,6 +9,7 @@
 export {
   getTournamentsBasic,
   getTournaments,
+  getTournamentsPage,
   fetchTournament,
   createTournament,
   updateTournament,
@@ -17,7 +18,7 @@ export {
   fetchDiscordTournamentLogs,
 } from './tournamentAPI';
 
-export type { DiscordTournamentLogEntry } from './tournamentAPI';
+export type { DiscordTournamentLogEntry, TournamentListFilters } from './tournamentAPI';
 
 // Draft
 export {

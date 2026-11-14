@@ -31,7 +31,7 @@ frontend/tests/playwright/
 ├── e2e/                    # Test specs organized by feature
 │   ├── 00-hydration-handling.spec.ts
 │   ├── 01-navigation.spec.ts
-│   ├── 03-tournaments/     # Tournament list tests
+│   ├── 03-tournaments/     # Tournament list: page, form, card layout, discovery (tabs, tiers, search)
 │   ├── 04-tournament/      # Single tournament tests
 │   ├── 05-match-stats/     # Match statistics tests
 │   ├── 06-mobile/          # Mobile responsive tests

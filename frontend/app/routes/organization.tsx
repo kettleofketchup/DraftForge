@@ -2,6 +2,7 @@ import { generateMeta } from '~/lib/seo';
 import { fetchOrganization } from '~/components/api/api';
 import { queryClient } from '~/root';
 import { Award, Building2, Calendar, ClipboardList, ExternalLink, Mail, MailCheck, Megaphone, Pencil, Plus, Settings, Trash2, Upload, Users } from 'lucide-react';
+import type { ShouldRevalidateFunctionArgs } from 'react-router';
 import type { Route } from './+types/organization';
 import type { OrganizationSSR } from '~/lib/ssr-types';
 
@@ -23,6 +24,17 @@ export async function clientLoader({ params }: Route.ClientLoaderArgs) {
   } catch {
     return { organization: null };
   }
+}
+
+// Tabs live in ?tab=; switching them must not refetch the org through clientLoader.
+export function shouldRevalidate({
+  currentUrl,
+  nextUrl,
+  formMethod,
+  defaultShouldRevalidate,
+}: ShouldRevalidateFunctionArgs) {
+  if (!formMethod && currentUrl.pathname === nextUrl.pathname) return false;
+  return defaultShouldRevalidate;
 }
 
 export function meta({ data }: Route.MetaArgs) {

@@ -165,7 +165,11 @@ export function useIsOrganizationStaff(
  * carry no staff/admin arrays, so the league-level checks below skip and only
  * the `organizations` cascade decides — such call sites must pass the org.
  */
-export type LeagueLike = Partial<LeagueType> | number | null | undefined;
+export type LeagueLike =
+  | (Partial<Omit<LeagueType, 'organization_id'>> & { organization_id?: number | null })
+  | number
+  | null
+  | undefined;
 
 /**
  * Check if the current user is an admin of the given league.

@@ -59,6 +59,7 @@ export const UserSchema = z.object({
   staff_organization_ids: z.array(z.number()).optional(),
   admin_league_ids: z.array(z.number()).optional(),
   staff_league_ids: z.array(z.number()).optional(),
+  member_organization_ids: z.array(z.number()).optional(),
 });
 
 /**
