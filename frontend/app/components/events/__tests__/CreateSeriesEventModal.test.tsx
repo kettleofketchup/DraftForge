@@ -9,6 +9,7 @@ import { TooltipProvider } from '~/components/ui/tooltip';
 const createSeriesOneOffEvent = vi.fn().mockResolvedValue({ id: 99 });
 vi.mock('~/components/api/api', () => ({
   createSeriesOneOffEvent: (...args: unknown[]) => createSeriesOneOffEvent(...args),
+  fetchCurrentUser: vi.fn().mockResolvedValue({}),
   getDiscordChannels: vi.fn().mockResolvedValue([]),
   getDiscordRoles: vi.fn().mockResolvedValue([]),
   getLeagues: vi.fn().mockResolvedValue([]),
