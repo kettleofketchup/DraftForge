@@ -225,6 +225,87 @@ without a `steam_league_id` returns an empty summary; an unknown `league_pk` ret
 }
 ```
 
+The detail (and PATCH/PUT) response also carries per-viewer fields merged after the
+cached block, so a lock or role change shows on the next request. None of them is
+writable:
+
+| Field | Meaning |
+|-------|---------|
+| `features` | Unlocked feature keys, e.g. `["contributions", "promotion"]` |
+| `can_use_promotion` | Promotion unlocked and the viewer is promoter, staff, admin, owner or site admin |
+| `can_manage_promotion_templates` | Promotion unlocked and the viewer is org staff or above |
+| `can_manage_promoters` | Promotion unlocked and the viewer is org admin or above |
+| `can_view_contributions` | Contributions unlocked |
+| `can_view_contributors` | Contributions unlocked and the viewer passes `can_view_org_members` |
+| `can_manage_contributions` | Contributions unlocked and the viewer is org admin or above |
+
+The detail never includes feature notes, `enabled_by` or `enabled_at`.
+
+## Organization Paid Features
+
+Guide: [Organization Paid Features](../features/organization-paid-features.md).
+
+**Denials.** Every endpoint below returns `403` with a `code`:
+`{"code": "feature_locked", "detail": ...}` when the feature is locked (checked first,
+even for anonymous callers) and `{"code": "not_permitted", "detail": ...}` when the role
+check fails. Validation errors are `400`. Objects named by pk in the URL or body are
+looked up within the URL's organization; a pk from another org is `404` (or `400` for a
+body field).
+
+### Feature switches and promoters
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| GET | `/api/organizations/{id}/features/` | Every feature row: `[{feature, enabled, notes, enabled_by: {pk, username} \| null, enabled_at}]`, locked rows included | Site admin |
+| PUT | `/api/organizations/{id}/features/` | Body `{"feature": "contributions" \| "promotion", "enabled": bool, "notes"?: str}`. Logs `enable_feature`/`disable_feature`; first Promotion unlock seeds the starter template. Returns the rows. | Site admin |
+| GET | `/api/organizations/{id}/promoters/` | List promoters (user objects) | Org admin, Promotion |
+| POST | `/api/organizations/{id}/promoters/` | Body `{"user_id": int}`. Creates the `OrgUser` if missing, logs `add_promoter`. `400` if already a promoter. | Org admin, Promotion |
+| DELETE | `/api/organizations/{id}/promoters/{user_id}/` | Remove a promoter, logs `remove_promoter`. `400` if not a promoter. | Org admin, Promotion |
+
+### Contributions
+
+All under `/api/organizations/{id}/contributions/`, all gated on Contributions.
+`period` is `all` (default) or `YYYY-MM`, a calendar month in the org's timezone (UTC if
+invalid).
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| GET | `leaderboard/?period=` | `{period, total, rows_visible, rows, own_row}`. `rows` is empty unless the viewer passes `can_view_org_members`; `own_row` is the viewer's row, or `null` without entries. | Anyone |
+| GET | `members/{org_user_pk}/?period=` | `{member, totals, monthly, entries}` for one member. Entries carry `reason` only for org staff and above; never promo recipients or text. | Own row, or `can_view_org_members` |
+| GET | `point-values/` | `[{kind, points, default, is_default}]` for `promo_message`, `event_host`, `event_helper` | Org admin |
+| PUT | `point-values/{kind}/` | Body `{"points": int 0-1000 \| null, "apply_to_past"?: bool, "since"?: "YYYY-MM-DD"}`. `null` resets to the default. `apply_to_past` rescores existing entries of that kind (from `since` if given). Returns `{kind, old, new, changed}`. Logs `set_point_value` and `rescore`. | Org admin |
+| GET | `entries/?period=&kind=&member=&limit=&offset=` | Full ledger, newest first, `{count, limit, offset, results}`; `limit` 1-500, default 100 | Org admin |
+| POST | `entries/` | Manual award. Body `{"user_id", "points": 1-1000, "reason": max 500, "date": "YYYY-MM-DD", "event_id"?: int \| null}`. `201` with the entry. | Org admin |
+| PATCH | `entries/{entry_pk}/` | Edit a manual award (any of `points`, `reason`, `date`, `event_id`). `400` for non-manual entries. | Org admin |
+| DELETE | `entries/{entry_pk}/` | Delete a manual award. `204`; `400` for non-manual entries. | Org admin |
+
+### Promotion
+
+All under `/api/organizations/{id}/promotion/`, all gated on Promotion. "Promoter" means
+promoter, org staff, admin, owner or site admin.
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| GET | `placeholders/` | `[{key, description}]`, the fixed placeholder list | Promoter |
+| GET | `templates/` | `[{id, name, body, updated_at}]` | Promoter |
+| POST | `templates/` | Body `{"name", "body": max 2000}`. `201` with the template plus `warnings` (unknown placeholders, stray braces). | Org staff |
+| PATCH | `templates/{template_pk}/` | Edit a template; returns it with `warnings` | Org staff |
+| DELETE | `templates/{template_pk}/` | Delete a template. `204`. | Org staff |
+| GET | `events/` | Promotable events (`upcoming`, `signups_open`): `[{id, name, scheduled_at, ends_at, state, signups_open_at}]` | Promoter |
+| GET | `events/{event_id}/candidates/?n=&hide_signed_up=&hide_messaged=&q=` | Recipient pool from the last `n` past tournaments (default 3, clamped 1-10). `{n, rows}`; each row has the player, tournaments played, `signed_up`, `earning_send_exists` and `last_messaged` (with `can_undo`). | Promoter |
+| POST | `events/{event_id}/render/` | Body `{"template_id", "recipient_id"}`. Returns `{text, warnings, will_earn}`. | Promoter |
+| POST | `events/{event_id}/sends/` | Mark sent. Body `{"template_id"?: int \| null, "recipient_id", "text": max 4000}`. `201` with `{id, earns_points, points_awarded, sent_at}`; `points_awarded` is `null` while Contributions is locked. `400` if the event is not promotable or the recipient is outside the pool (checked at N=10), unlinked from Discord or the sender. | Promoter |
+| DELETE | `sends/{send_pk}/` | Undo a send and its ledger entry. `204`. | Its sender while still a promoter, or org staff |
+
+### Internal
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/internal/events/{id}/auto-close/` | Used by `cleanup_stale_events` (X-Internal-Token). Closes to `completed` from `roll_call`/`in_progress`, or `cancelled` from `upcoming`/`signups_open`. `200 {"closed": true, "state"}` when it closed the event, `200 {"closed": false, "state"}` when it was already terminal or lost the race, `400` for other states, `404` if missing. |
+
+Event endpoints added with these features (`complete/`, `staff/`, `stale_before`) are
+listed in [Events: API Endpoints](../features/events.md#api-endpoints).
+
 ## Leagues
 
 | Method | Endpoint | Description | Auth |

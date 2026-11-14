@@ -93,6 +93,7 @@ nav:
       - Events:
           - Overview: features/events.md
           - Roll Call: features/events/roll-call.md
+      - Organization Paid Features: features/organization-paid-features.md
       - Planned:
           - Overview: features/planned/index.md
           - Team Management & Seasons: features/planned/team-management.md

@@ -1,7 +1,7 @@
 # Auth Roles and Permission Matrix
 
 This page is the **single source of truth** for the permission contract
-across the eight roles in DraftForge. The matrix here mirrors what the
+across the roles in DraftForge. The matrix here mirrors what the
 Playwright role-matrix tests enforce at runtime — if a row here drifts
 from a row there, the tests fail (or you have a documentation bug).
 
@@ -17,7 +17,7 @@ from a row there, the tests fail (or you have a documentation bug).
 >
 > Any one of those four out of sync produces silent permission drift.
 
-## The Eight Roles
+## The Roles
 
 | Role          | Test fixture                      | Test user pk | Defining attribute                                                      |
 | ------------- | --------------------------------- | -----------: | ----------------------------------------------------------------------- |
@@ -27,6 +27,7 @@ from a row there, the tests fail (or you have a documentation bug).
 | `orgAdmin`    | `loginAuthMatrixOrgAdmin()`       |         1090 | In `Organization.admins` (Auth Matrix Test Org, pk=8)                   |
 | `orgStaff`    | `loginAuthMatrixOrgStaff()`       |         1091 | In `Organization.staff` (Auth Matrix Test Org, pk=8)                    |
 | `orgMember`   | `loginAuthMatrixOrgMember()`      |         1092 | `OrgUser` row only, no admin/staff role                                 |
+| `promoter`    | `loginAuthMatrixOrgPromoter()`    |         1096 | In `Organization.promoters` (Auth Matrix Test Org, pk=8); Promotion stays locked there |
 | `leagueAdmin` | `loginAuthMatrixLeagueAdmin()`    |         1093 | In `League.admins` (Auth Matrix League, pk=9)                           |
 | `leagueStaff` | `loginAuthMatrixLeagueStaff()`    |         1094 | In `League.staff` (Auth Matrix League, pk=9)                            |
 | `anonymous`   | _(none — fresh context)_          |            — | No session                                                              |
@@ -47,7 +48,7 @@ mirrors the feature-isolation rule in
 `.claude/skills/testing/references/feature-isolation.md`.
 
 The hierarchy is **site admin > org owner ≥ org admin > org staff >
-league admin > league staff > org member > anonymous**. Each tier
+league admin > league staff > promoter > org member > anonymous**. Each tier
 inherits the abilities of the tiers below it (the bypass is implemented
 in the `useIs*` hooks), **except** that staff roles do not cascade
 upward into admin abilities — a league admin is _not_ an org admin and
@@ -74,13 +75,13 @@ hasn't loaded yet.
 The five entry points locked by `e2e/17-auth/01-create-gates.spec.ts`.
 ✓ = button visible to that role; ✗ = button hidden.
 
-|                              | siteAdmin | siteStaff | orgOwner | orgAdmin | orgStaff | orgMember | leagueAdmin | leagueStaff | anonymous |
-| ---------------------------- | :-------: | :-------: | :------: | :------: | :------: | :-------: | :---------: | :---------: | :-------: |
-| Create Organization          |     ✓     |     ✓     |    ✓     |    ✓     |    ✓     |     ✓     |      ✓      |      ✓      |     ✗     |
-| Create League (org-detail)   |     ✓     |     ✓     |    ✓     |    ✓     |    ✓     |     ✗     |      ✗      |      ✗      |     ✗     |
-| Create Event (org-detail)    |     ✓     |     ✓     |    ✓     |    ✓     |    ✓     |     ✗     |      ✗      |      ✗      |     ✗     |
-| Create Event (`/events`)     |     ✓     |     ✓     |    ✓     |    ✓     |    ✓     |     ✗     |      ✗      |      ✗      |     ✗     |
-| Create Tournament            |     ✓     |     ✓     |    ✓     |    ✓     |    ✗     |     ✗     |      ✓      |      ✗      |     ✗     |
+|                              | siteAdmin | siteStaff | orgOwner | orgAdmin | orgStaff | orgMember | promoter | leagueAdmin | leagueStaff | anonymous |
+| ---------------------------- | :-------: | :-------: | :------: | :------: | :------: | :-------: | :------: | :---------: | :---------: | :-------: |
+| Create Organization          |     ✓     |     ✓     |    ✓     |    ✓     |    ✓     |     ✓     |     ✓     |      ✓      |      ✓      |     ✗     |
+| Create League (org-detail)   |     ✓     |     ✓     |    ✓     |    ✓     |    ✓     |     ✗     |     ✗     |      ✗      |      ✗      |     ✗     |
+| Create Event (org-detail)    |     ✓     |     ✓     |    ✓     |    ✓     |    ✓     |     ✗     |     ✗     |      ✗      |      ✗      |     ✗     |
+| Create Event (`/events`)     |     ✓     |     ✓     |    ✓     |    ✓     |    ✓     |     ✗     |     ✗     |      ✗      |      ✗      |     ✗     |
+| Create Tournament            |     ✓     |     ✓     |    ✓     |    ✓     |    ✗     |     ✗     |     ✗     |      ✓      |      ✗      |     ✗     |
 
 **Why some rows look this way:**
 
@@ -100,14 +101,14 @@ The five entry points locked by `e2e/17-auth/01-create-gates.spec.ts`.
 
 The six entry points locked by `e2e/17-auth/02-edit-and-bracket-gates.spec.ts`.
 
-|                                        | siteAdmin | siteStaff | orgOwner | orgAdmin | orgStaff | orgMember | leagueAdmin | leagueStaff | anonymous |
-| -------------------------------------- | :-------: | :-------: | :------: | :------: | :------: | :-------: | :---------: | :---------: | :-------: |
-| Org Users tab (not private)            |     ✓     |     ✓     |    ✓     |    ✓     |    ✓     |     ✓     |      ✓      |      ✓      |     ✗     |
-| Edit User (org members tab)            |     ✓     |     ✓     |    ✓     |    ✓     |    ✓     |     ✗     |      ✗      |      ✗      |     ✗     |
-| Edit User (tournament players tab)     |     ✓     |     ✓     |    ✗     |    ✗     |    ✗     |     ✗     |      ✓      |      ✗      |     ✗     |
-| Generate Bracket                       |     ✓     |     ✓     |    ✓     |    ✓     |    ✓     |     ✗     |      ✓      |      ✓      |     ✗     |
-| Set Bracket Match Winner               |     ✓     |     ✓     |    ✓     |    ✓     |    ✓     |     ✗     |      ✓      |      ✓      |     ✗     |
-| Link Steam Match (bracket)             |     ✓     |     ✓     |    ✗     |    ✗     |    ✗     |     ✗     |      ✗      |      ✗      |     ✗     |
+|                                        | siteAdmin | siteStaff | orgOwner | orgAdmin | orgStaff | orgMember | promoter | leagueAdmin | leagueStaff | anonymous |
+| -------------------------------------- | :-------: | :-------: | :------: | :------: | :------: | :-------: | :------: | :---------: | :---------: | :-------: |
+| Org Users tab (not private)            |     ✓     |     ✓     |    ✓     |    ✓     |    ✓     |     ✓     |     ✓     |      ✓      |      ✓      |     ✗     |
+| Edit User (org members tab)            |     ✓     |     ✓     |    ✓     |    ✓     |    ✓     |     ✗     |     ✗     |      ✗      |      ✗      |     ✗     |
+| Edit User (tournament players tab)     |     ✓     |     ✓     |    ✗     |    ✗     |    ✗     |     ✗     |     ✗     |      ✓      |      ✗      |     ✗     |
+| Generate Bracket                       |     ✓     |     ✓     |    ✓     |    ✓     |    ✓     |     ✗     |     ✗     |      ✓      |      ✓      |     ✗     |
+| Set Bracket Match Winner               |     ✓     |     ✓     |    ✓     |    ✓     |    ✓     |     ✗     |     ✗     |      ✓      |      ✓      |     ✗     |
+| Link Steam Match (bracket)             |     ✓     |     ✓     |    ✗     |    ✗     |    ✗     |     ✗     |     ✗     |      ✗      |      ✗      |     ✗     |
 
 **Why some rows look this way:**
 
@@ -157,6 +158,44 @@ The six entry points locked by `e2e/17-auth/02-edit-and-bracket-gates.spec.ts`.
   of the MatchStatsModal uses `useIsLeagueStaff`. If you're widening
   it, lift the gate to `useIsLeagueStaff` and flip the matrix row.
 
+## Promoter and Paid Features
+
+`promoter` is a member of `Organization.promoters`. The role only does anything while
+the org's **Promotion** feature is unlocked: then it opens the Promotion dashboard and
+nothing else. In the auth matrix org (pk=8) both paid features stay **locked**, so the
+`promoter` column above reads the same as `orgMember`. For a private member list a
+promoter also counts as a plain member.
+
+The paid-feature gates are checked against the dedicated org-features test data
+(orgs 30-32, users 7300-7307; see
+[Organization Paid Features](../../features/organization-paid-features.md)) by the
+backend permission tests (`org/tests/test_features_api.py`, `test_promoters.py`,
+`test_contributions_api.py`, `test_promotion_api.py`,
+`events/tests/test_event_staff_api.py`) and the Playwright specs in
+`frontend/tests/playwright/e2e/19-org-features/`, which log in with
+`loginOrgFeatures(context, role)`.
+
+| Action | Who | Switch |
+| ------ | --- | ------ |
+| Unlock or lock a feature, see payment notes | site admin | — |
+| Add or remove promoters | org owner, admin | Promotion |
+| Write promo templates | org staff and above | Promotion |
+| Use the Promotion dashboard, mark sent | promoter and above (`has_org_promoter_access`) | Promotion |
+| Undo a send | its sender while still a promoter, or org staff and above | Promotion |
+| Edit point values, rescore, manual awards, full ledger | org owner, admin | Contributions |
+| Leaderboard rows and member breakdowns | `can_view_org_members`, plus the viewer's own row | Contributions |
+| Org-wide contribution total | anyone | Contributions |
+| Assign host/helpers, Complete event | org owner, admin (`has_org_admin_access`) | none |
+
+Site admins pass every row through the usual cascade, but a site admin with no org role
+earns no points from promo sends. A denial from a switched endpoint is a `403` with
+`code: "feature_locked"` (switch off, checked first) or `code: "not_permitted"` (role);
+the axios interceptor skips the "Session expired" toast for both. The frontend reads
+the per-viewer flags on the org detail (`can_use_promotion`,
+`can_manage_promotion_templates`, `can_manage_promoters`, `can_view_contributions`,
+`can_view_contributors`, `can_manage_contributions`) through `useOrgFeatureAccess`, and
+`user_can_manage_event_staff` on the event payload.
+
 ## Adding a New Gate
 
 1. Pick the right hook in `usePermissions.ts` — or add one if none fits
@@ -202,6 +241,7 @@ The auth matrix owns:
 | `auth_matrix_org_admin` user        | 1090 | `populate_test_auth_users` + wiring |
 | `auth_matrix_org_staff` user        | 1091 | `populate_test_auth_users` + wiring |
 | `auth_matrix_org_member` user       | 1092 | `populate_test_auth_users` + wiring |
+| `auth_matrix_org_promoter` user     | 1096 | `populate_test_auth_users` + wiring |
 | `auth_matrix_league_admin` user     | 1093 | `populate_test_auth_users` + wiring |
 | `auth_matrix_league_staff` user     | 1094 | `populate_test_auth_users` + wiring |
 
@@ -228,6 +268,7 @@ feature suites.
 | Test users                        | `backend/tests/data/users.py`                                                         |
 | Create-action matrix              | `frontend/tests/playwright/e2e/17-auth/01-create-gates.spec.ts`                        |
 | Edit + bracket matrix             | `frontend/tests/playwright/e2e/17-auth/02-edit-and-bracket-gates.spec.ts`              |
+| Paid-feature gates                | `backend/org/feature_errors.py`, `frontend/tests/playwright/e2e/19-org-features/`      |
 
 [hooks]: ../../../frontend/app/hooks/usePermissions.ts
 [permissions]: ../../../backend/app/permissions_org.py

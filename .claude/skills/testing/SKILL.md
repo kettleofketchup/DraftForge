@@ -110,6 +110,9 @@ See [references/backend-test-endpoints.md](references/backend-test-endpoints.md)
 | League | CSV Import League | 3 | 17931 |
 | League | Events Test League | 7 | 17935 |
 | Org / League | Lobby Test Org / Lobby Test League | auto (look up by name) | 17940 |
+| Org / League | Features Test Org / Features Test League (both paid features unlocked) | 30 | 17941 |
+| Org / League | Locked Features Org / Locked Features League (both locked) | 31 | 17942 |
+| Org / League | Private Features Org / Private Features League (unlocked, `members_private`) | 32 | 17943 |
 
 | User | PK | Role | Login fixture |
 |------|----|------|--------------|
@@ -123,5 +126,8 @@ See [references/backend-test-endpoints.md](references/backend-test-endpoints.md)
 | event_org_admin | 1080 | org admin (org 7) | `loginEventAdmin()` |
 | event_player_1 | 1081 | regular | `loginEventPlayer()` |
 | lobby_staff, lobby_rostered, lobby_registered, lobby_unregistered, lobby_league_staff | 7200-7204 | dota_lobby roles | `loginDotaLobby(context, role)` |
+| auth_matrix_org_promoter | 1096 | promoter (org 8, Promotion locked) | `loginAuthMatrixOrgPromoter()` |
+| of_owner, of_admin, of_staff, of_promoter, of_member, of_outsider, of_locked_admin, of_private_member | 7300-7307 | org features roles (orgs 30-32) | `loginOrgFeatures(context, role)` (`owner`, `admin`, `staff`, `promoter`, `member`, `outsider`, `locked_admin`, `private_member`) |
+| of_player_1 .. of_player_10 | 7310-7319 | Discord-linked players of org 30's past tournaments (promotion candidates) | — |
 
 > **NOTE**: When this table drifts from source, read `backend/tests/data/users.py` and `backend/tests/data/organizations.py` for truth.
