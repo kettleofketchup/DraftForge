@@ -10,10 +10,10 @@
 import type { BrowserContext } from '@playwright/test';
 
 import {
-  test,
   expect,
   loginAuthMatrixOrgAdmin,
   postWithCsrf,
+  test,
   visitAndWaitForHydration,
 } from '../../fixtures';
 import { API_URL } from '../../fixtures/base-url';
@@ -68,12 +68,17 @@ test.describe('Tournament game config editing (e2e)', () => {
     }
     for (const pk of createdTournamentPks) {
       const resp = await context.request.get(`${API_URL}/tournaments/${pk}/`);
-      expect(resp.status(), `Tournament ${pk} leaked after event delete`).toBe(404);
+      expect(resp.status(), `Tournament ${pk} leaked after event delete`).toBe(
+        404,
+      );
     }
     await context.close();
   });
 
-  test('org admin sets Turbo on an event tournament', async ({ context, page }) => {
+  test('org admin sets Turbo on an event tournament', async ({
+    context,
+    page,
+  }) => {
     tournamentPk = await createEventTournament(context, AUTH_MATRIX_LEAGUE_PK);
 
     await visitAndWaitForHydration(page, `/tournament/${tournamentPk}`);
@@ -83,14 +88,18 @@ test.describe('Tournament game config editing (e2e)', () => {
     const gameMode = page.getByTestId('lobby-config-game-mode');
     await expect(gameMode).toBeVisible();
     await gameMode.click();
-    await expect(page.getByRole('option', { name: 'Turbo', exact: true })).toBeVisible();
+    await expect(
+      page.getByRole('option', { name: 'Turbo', exact: true }),
+    ).toBeVisible();
     await expect(
       page.getByRole('option', { name: "Captain's Mode", exact: true }),
     ).toBeVisible();
     await page.getByRole('option', { name: 'Turbo', exact: true }).click();
 
     await expect(page.getByTestId('config-dota-lobby-mode')).toBeEnabled();
-    await expect(page.getByTestId('config-dota-lobby-from-event')).toBeVisible();
+    await expect(
+      page.getByTestId('config-dota-lobby-from-event'),
+    ).toBeVisible();
 
     await page.getByTestId('tournament-submit-button').click();
     await expect(page.getByRole('dialog')).toBeHidden({ timeout: 10000 });
@@ -98,9 +107,13 @@ test.describe('Tournament game config editing (e2e)', () => {
     await page.reload();
     await page.getByTestId('tournament-edit-btn').click();
     await page.getByTestId('tournament-form-tab-config').click();
-    await expect(page.getByTestId('lobby-config-game-mode')).toHaveText('Turbo');
+    await expect(page.getByTestId('lobby-config-game-mode')).toHaveText(
+      'Turbo',
+    );
 
-    const resp = await context.request.get(`${API_URL}/tournaments/${tournamentPk}/`);
+    const resp = await context.request.get(
+      `${API_URL}/tournaments/${tournamentPk}/`,
+    );
     expect(resp.ok()).toBeTruthy();
     expect((await resp.json()).game_mode).toBe('turbo');
   });
@@ -119,6 +132,8 @@ test.describe('Tournament game config editing (e2e)', () => {
     const leaguelessPk = await createEventTournament(context, null);
     await visitAndWaitForHydration(page, `/tournament/${leaguelessPk}`);
     await expect(page.getByTestId('tournamentDetailPage')).toBeVisible();
-    await expect(page.getByTestId('tournament-edit-btn')).toBeHidden({ timeout: 5000 });
+    await expect(page.getByTestId('tournament-edit-btn')).toBeHidden({
+      timeout: 5000,
+    });
   });
 });

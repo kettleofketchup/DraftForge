@@ -39,10 +39,7 @@ export const TournamentCreateModal: React.FC<Props> = () => {
         <Tooltip>
           <TooltipTrigger asChild>
             <DialogTrigger asChild>
-              <PrimaryButton
-                size="lg"
-                data-testid="tournament-create-button"
-              >
+              <PrimaryButton size="lg" data-testid="tournament-create-button">
                 <PlusCircleIcon className="text-white" />
                 Create Tournament
               </PrimaryButton>
@@ -54,7 +51,10 @@ export const TournamentCreateModal: React.FC<Props> = () => {
         </Tooltip>
       </TooltipProvider>
 
-      <DialogContent className={DIALOG_CSS} data-testid="tournament-create-modal">
+      <DialogContent
+        className={DIALOG_CSS}
+        data-testid="tournament-create-modal"
+      >
         <DialogHeader>
           <DialogTitle>Create Tournament</DialogTitle>
           <DialogDescription>

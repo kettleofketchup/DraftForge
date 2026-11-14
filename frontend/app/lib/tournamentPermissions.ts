@@ -20,8 +20,10 @@ export type LeagueRef = {
   organization_id?: number;
 };
 
-const has = (ids: number[] | undefined, pk: number | null | undefined): boolean =>
-  pk != null && (ids?.includes(pk) ?? false);
+const has = (
+  ids: number[] | undefined,
+  pk: number | null | undefined,
+): boolean => pk != null && (ids?.includes(pk) ?? false);
 
 const leagueOrgPk = (league: LeagueRef): number | undefined =>
   league.organization?.pk ?? league.organization_id;
@@ -36,7 +38,10 @@ export function canCreateTournament(user: PermUser): boolean {
 
 export function canEditTournament(
   user: PermUser,
-  t: { leaguePk: number | null | undefined; leagueOrgPk: number | null | undefined },
+  t: {
+    leaguePk: number | null | undefined;
+    leagueOrgPk: number | null | undefined;
+  },
 ): boolean {
   if (!user) return false;
   if (isSiteStaff(user)) return true;

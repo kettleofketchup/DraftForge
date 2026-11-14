@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { CreateTournamentSchema, LeagueMinimalSchema, SourceEventSchema, TournamentSchema } from '../schemas';
+import {
+  CreateTournamentSchema,
+  LeagueMinimalSchema,
+  SourceEventSchema,
+  TournamentSchema,
+} from '../schemas';
 import { fieldErrorsFrom, tabForField } from './formErrors';
 
 const minimalValid = {
@@ -35,16 +40,25 @@ describe('tabForField', () => {
 
 describe('fieldErrorsFrom', () => {
   it('maps league_id_write onto league', () => {
-    expect(fieldErrorsFrom({ league_id_write: ['x'] })).toEqual([{ field: 'league', message: 'x' }]);
+    expect(fieldErrorsFrom({ league_id_write: ['x'] })).toEqual([
+      { field: 'league', message: 'x' },
+    ]);
   });
 
   it('accepts a plain string message', () => {
-    expect(fieldErrorsFrom({ game_mode: 'y' })).toEqual([{ field: 'game_mode', message: 'y' }]);
+    expect(fieldErrorsFrom({ game_mode: 'y' })).toEqual([
+      { field: 'game_mode', message: 'y' },
+    ]);
   });
 
   it('drops keys that are not form fields', () => {
     expect(
-      fieldErrorsFrom({ detail: 'nope', error: 'e', non_field_errors: ['n'], draft_options: ['d'] }),
+      fieldErrorsFrom({
+        detail: 'nope',
+        error: 'e',
+        non_field_errors: ['n'],
+        draft_options: ['d'],
+      }),
     ).toEqual([]);
   });
 
@@ -75,7 +89,10 @@ describe('CreateTournamentSchema lobby config', () => {
   });
 
   it('ignores the draft time outside Captains Mode', () => {
-    const result = CreateTournamentSchema.safeParse({ ...minimalValid, captains_draft_time: 0 });
+    const result = CreateTournamentSchema.safeParse({
+      ...minimalValid,
+      captains_draft_time: 0,
+    });
     expect(result.success).toBe(true);
   });
 });
@@ -105,7 +122,12 @@ describe('read schemas', () => {
     });
     expect(league.organization?.pk).toBe(8);
 
-    const ev = SourceEventSchema.parse({ id: 1, name: 'E', event_repeater: null, organization_id: 8 });
+    const ev = SourceEventSchema.parse({
+      id: 1,
+      name: 'E',
+      event_repeater: null,
+      organization_id: 8,
+    });
     expect(ev.organization_id).toBe(8);
   });
 });

@@ -1,31 +1,37 @@
+import { CircleX, Pencil, ShieldAlert, Trash2 } from 'lucide-react';
 import React, { useEffect, useMemo, useState } from 'react';
-import { useParams, useNavigate } from 'react-router';
-import { CircleX, Pencil, Trash2, ShieldAlert } from 'lucide-react';
+import { useNavigate, useParams } from 'react-router';
+import { toast } from 'sonner';
+import { deleteTournament } from '~/components/api/api';
+import { TournamentSettingsModal } from '~/components/tournament/settings/TournamentSettingsModal';
+import type { TournamentType } from '~/components/tournament/types';
+import {
+  BrandDropdownMenu,
+  type BrandDropdownAction,
+} from '~/components/ui/brand-dropdown-menu';
+import { DestructiveButton, EditButton } from '~/components/ui/buttons';
+import { ConfirmDialog } from '~/components/ui/dialogs';
+import {
+  EntityBreadcrumb,
+  type BreadcrumbSegment,
+} from '~/components/ui/entity-breadcrumb';
+import { PageHeader } from '~/components/ui/page-header';
 import type { UserType } from '~/components/user/types';
+import { useTournament } from '~/hooks/useTournament';
+import { useTournamentSocket } from '~/hooks/useTournamentSocket';
+import { hydrateTournament } from '~/lib/hydrateTournament';
 import { useLeagueStore } from '~/store/leagueStore';
 import { useOrgStore } from '~/store/orgStore';
 import { useTournamentStore } from '~/store/tournamentStore';
 import { useUserCacheStore } from '~/store/userCacheStore';
 import { useUserStore } from '~/store/userStore';
-import { useTournament } from '~/hooks/useTournament';
-import { useTournamentSocket } from '~/hooks/useTournamentSocket';
-import { hydrateTournament } from '~/lib/hydrateTournament';
-import { deleteTournament } from '~/components/api/api';
-import type { TournamentType } from '~/components/tournament/types';
 import TournamentTabs from './tabs/TournamentTabs';
-import { EntityBreadcrumb, type BreadcrumbSegment } from '~/components/ui/entity-breadcrumb';
-import { PageHeader } from '~/components/ui/page-header';
-import { TournamentSettingsModal } from '~/components/tournament/settings/TournamentSettingsModal';
-import { DestructiveButton, EditButton } from '~/components/ui/buttons';
-import { BrandDropdownMenu, type BrandDropdownAction } from '~/components/ui/brand-dropdown-menu';
-import { ConfirmDialog } from '~/components/ui/dialogs';
-import { toast } from 'sonner';
 
+import { Alert, AlertDescription } from '~/components/ui/alert';
+import { Spinner } from '~/components/ui/spinner';
 import { getLogger } from '~/lib/logger';
 import { canEditTournament, isSiteStaff } from '~/lib/tournamentPermissions';
 import { tournamentEditContext } from './tournamentEditContext';
-import { Spinner } from '~/components/ui/spinner';
-import { Alert, AlertDescription } from '~/components/ui/alert';
 const log = getLogger('TournamentDetailPage');
 
 export const TournamentDetailPage: React.FC = () => {
@@ -36,9 +42,11 @@ export const TournamentDetailPage: React.FC = () => {
   const currentUser = useUserStore((state) => state.currentUser);
 
   // TanStack Query for tournament data
-  const { data: tournament, isLoading, error } = useTournament(
-    pkNum && !Number.isNaN(pkNum) ? pkNum : null,
-  );
+  const {
+    data: tournament,
+    isLoading,
+    error,
+  } = useTournament(pkNum && !Number.isNaN(pkNum) ? pkNum : null);
 
   // WebSocket for real-time cache invalidation
   useTournamentSocket(pkNum && !Number.isNaN(pkNum) ? pkNum : null);
@@ -48,7 +56,9 @@ export const TournamentDetailPage: React.FC = () => {
   // continue to receive UserType objects.
   const hydratedTournament = useMemo(() => {
     if (!tournament) return null;
-    return hydrateTournament(tournament as TournamentType & { _users?: Record<number, UserType> });
+    return hydrateTournament(
+      tournament as TournamentType & { _users?: Record<number, UserType> },
+    );
   }, [tournament]);
 
   // Sync hydrated data to userStore for ~35 existing consumers
@@ -60,7 +70,8 @@ export const TournamentDetailPage: React.FC = () => {
         | undefined;
       if (_users) {
         const users = Object.values(_users);
-        const { organizationId: orgId, leagueId } = tournamentEditContext(hydratedTournament);
+        const { organizationId: orgId, leagueId } =
+          tournamentEditContext(hydratedTournament);
         useUserCacheStore.getState().upsert(users, { orgId, leagueId });
       }
       useUserStore.getState().setTournament(hydratedTournament);
@@ -75,7 +86,8 @@ export const TournamentDetailPage: React.FC = () => {
     const segments: BreadcrumbSegment[] = [];
 
     // Organization (from league)
-    const league = typeof tournament.league === 'object' ? tournament.league : null;
+    const league =
+      typeof tournament.league === 'object' ? tournament.league : null;
     if (league?.organization_name && tournament.organization_pk) {
       segments.push({
         type: 'organization',
@@ -126,8 +138,12 @@ export const TournamentDetailPage: React.FC = () => {
   const setLive = useTournamentStore((state) => state.setLive);
   const setActiveTab = useTournamentStore((state) => state.setActiveTab);
   const setAutoAdvance = useTournamentStore((state) => state.setAutoAdvance);
-  const setPendingDraftId = useTournamentStore((state) => state.setPendingDraftId);
-  const setPendingMatchId = useTournamentStore((state) => state.setPendingMatchId);
+  const setPendingDraftId = useTournamentStore(
+    (state) => state.setPendingDraftId,
+  );
+  const setPendingMatchId = useTournamentStore(
+    (state) => state.setPendingMatchId,
+  );
 
   // Parse URL slug for tabs and deep-linking
   useEffect(() => {
@@ -137,7 +153,8 @@ export const TournamentDetailPage: React.FC = () => {
       tab = 'bracket';
     }
     const isLive = parts[1] === 'draft';
-    const draftId = parts[1] === 'draft' && parts[2] ? parseInt(parts[2], 10) : null;
+    const draftId =
+      parts[1] === 'draft' && parts[2] ? parseInt(parts[2], 10) : null;
     const matchId = parts[1] === 'match' && parts[2] ? parts[2] : null;
 
     // Redirect /tournament/:pk/bracket/draft/:draftId to /herodraft/:draftId
@@ -153,7 +170,15 @@ export const TournamentDetailPage: React.FC = () => {
     if (isLive) {
       setAutoAdvance(true);
     }
-  }, [slug, setActiveTab, setLive, setAutoAdvance, setPendingDraftId, setPendingMatchId, navigate]);
+  }, [
+    slug,
+    setActiveTab,
+    setLive,
+    setAutoAdvance,
+    setPendingDraftId,
+    setPendingMatchId,
+    navigate,
+  ]);
 
   // Set org context from tournament
   useEffect(() => {
@@ -182,8 +207,13 @@ export const TournamentDetailPage: React.FC = () => {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [showDeleteTournament, setShowDeleteTournament] = useState(false);
   const leagueOrgPk =
-    typeof tournament?.league === 'object' ? (tournament?.league?.organization?.pk ?? null) : null;
-  const canEdit = canEditTournament(currentUser, { leaguePk: tournament?.league_pk, leagueOrgPk });
+    typeof tournament?.league === 'object'
+      ? (tournament?.league?.organization?.pk ?? null)
+      : null;
+  const canEdit = canEditTournament(currentUser, {
+    leaguePk: tournament?.league_pk,
+    leagueOrgPk,
+  });
   const canDelete = isSiteStaff(currentUser);
 
   const openDeleteDialog = () => {
@@ -241,7 +271,9 @@ export const TournamentDetailPage: React.FC = () => {
       <div className="flex justify-center items-center h-screen">
         <Alert variant="destructive" className="w-auto">
           <CircleX />
-          <AlertDescription>Failed to load tournament details. Please try again later.</AlertDescription>
+          <AlertDescription>
+            Failed to load tournament details. Please try again later.
+          </AlertDescription>
         </Alert>
       </div>
     );
@@ -259,7 +291,11 @@ export const TournamentDetailPage: React.FC = () => {
     if (!tournament.date_played) return '';
     const d = new Date(tournament.date_played);
     if (Number.isNaN(d.getTime())) return '';
-    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+    return d.toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
   };
 
   const title = () => {
@@ -328,7 +364,6 @@ export const TournamentDetailPage: React.FC = () => {
         actions={adminActionsNode || undefined}
         data-testid="tournamentTitle"
       />
-
     );
   };
 
@@ -337,7 +372,9 @@ export const TournamentDetailPage: React.FC = () => {
       className="max-w-full overflow-x-hidden px-3 py-3 sm:container sm:mx-auto sm:p-4"
       data-testid="tournamentDetailPage"
     >
-      {breadcrumbSegments.length > 1 && <EntityBreadcrumb segments={breadcrumbSegments} />}
+      {breadcrumbSegments.length > 1 && (
+        <EntityBreadcrumb segments={breadcrumbSegments} />
+      )}
       {title()}
       <TournamentTabs />
       <ConfirmDialog
@@ -346,7 +383,8 @@ export const TournamentDetailPage: React.FC = () => {
         title="Delete tournament?"
         description={
           <>
-            This will permanently delete <strong>{tournament?.name}</strong>, its brackets, matches, and signups. This cannot be undone.
+            This will permanently delete <strong>{tournament?.name}</strong>,
+            its brackets, matches, and signups. This cannot be undone.
           </>
         }
         confirmLabel="Delete tournament"

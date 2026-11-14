@@ -54,7 +54,7 @@ export function useIsSuperuser(): boolean {
  * @returns true if user is org owner
  */
 export function useIsOrganizationOwner(
-  organization: OrganizationType | null | undefined
+  organization: OrganizationType | null | undefined,
 ): boolean {
   const currentUser = useUserStore((state) => state.currentUser);
 
@@ -79,7 +79,7 @@ export function useIsOrganizationOwner(
  * @returns true if user is org owner, org admin, or superuser
  */
 export function useIsOrganizationAdmin(
-  organization: OrganizationType | null | undefined
+  organization: OrganizationType | null | undefined,
 ): boolean {
   const currentUser = useUserStore((state) => state.currentUser);
   const isOwner = useIsOrganizationOwner(organization);
@@ -123,7 +123,7 @@ export function useIsOrganizationAdmin(
  * @returns true if user is org owner, org admin, org staff, or superuser
  */
 export function useIsOrganizationStaff(
-  organization: OrganizationType | null | undefined
+  organization: OrganizationType | null | undefined,
 ): boolean {
   const currentUser = useUserStore((state) => state.currentUser);
   const isOrgAdmin = useIsOrganizationAdmin(organization);
@@ -166,7 +166,9 @@ export function useIsOrganizationStaff(
  * the `organizations` cascade decides — such call sites must pass the org.
  */
 export type LeagueLike =
-  | (Partial<Omit<LeagueType, 'organization_id'>> & { organization_id?: number | null })
+  | (Partial<Omit<LeagueType, 'organization_id'>> & {
+      organization_id?: number | null;
+    })
   | number
   | null
   | undefined;
@@ -181,7 +183,7 @@ export type LeagueLike =
  */
 export function useIsLeagueAdmin(
   league: LeagueLike,
-  organizations?: OrganizationType[] | OrganizationType | null
+  organizations?: OrganizationType[] | OrganizationType | null,
 ): boolean {
   const currentUser = useUserStore((state) => state.currentUser);
   // Narrow away the bare-pk form; only objects carry staff/admin arrays.
@@ -226,8 +228,10 @@ export function useIsLeagueAdmin(
       if (org.admin_ids?.includes(currentUser.pk)) return true;
 
       // Check admins array
-      // @ts-expect-error - admins may exist
-      if (org.admins?.some((admin: { pk: number }) => admin.pk === currentUser.pk)) {
+      if (
+        // @ts-expect-error - admins may exist
+        org.admins?.some((admin: { pk: number }) => admin.pk === currentUser.pk)
+      ) {
         return true;
       }
     }
@@ -252,7 +256,7 @@ export function useIsLeagueAdmin(
  */
 export function useIsLeagueStaff(
   league: LeagueLike,
-  organizations?: OrganizationType[] | OrganizationType | null
+  organizations?: OrganizationType[] | OrganizationType | null,
 ): boolean {
   const currentUser = useUserStore((state) => state.currentUser);
   // Narrow away the bare-pk form; only objects carry staff/admin arrays.
@@ -296,8 +300,10 @@ export function useIsLeagueStaff(
       if (org.staff_ids?.includes(currentUser.pk)) return true;
 
       // Check staff array
-      // @ts-expect-error - staff may exist
-      if (org.staff?.some((staff: { pk: number }) => staff.pk === currentUser.pk)) {
+      if (
+        // @ts-expect-error - staff may exist
+        org.staff?.some((staff: { pk: number }) => staff.pk === currentUser.pk)
+      ) {
         return true;
       }
     }
@@ -325,7 +331,7 @@ export function useIsLeagueStaff(
  */
 export function useCanEditTournament(
   league: LeagueLike,
-  organizations?: OrganizationType[] | OrganizationType | null
+  organizations?: OrganizationType[] | OrganizationType | null,
 ): boolean {
   return useIsLeagueStaff(league, organizations);
 }
@@ -340,7 +346,7 @@ export function useCanEditTournament(
  */
 export function useCanManageGames(
   league: LeagueLike,
-  organizations?: OrganizationType[] | OrganizationType | null
+  organizations?: OrganizationType[] | OrganizationType | null,
 ): boolean {
   return useIsLeagueStaff(league, organizations);
 }
@@ -351,7 +357,7 @@ export function useCanManageGames(
  */
 export function usePermissions(
   organization: OrganizationType | null | undefined,
-  league: LeagueLike
+  league: LeagueLike,
 ) {
   const isSuperuser = useIsSuperuser();
   const isOrgOwner = useIsOrganizationOwner(organization);
@@ -382,6 +388,6 @@ export function usePermissions(
       isLeagueStaff,
       canEditTournament,
       canManageGames,
-    ]
+    ],
   );
 }

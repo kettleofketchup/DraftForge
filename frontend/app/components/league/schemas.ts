@@ -1,10 +1,5 @@
 import { z } from 'zod';
-import type { UserType } from '~/components/user/types';
 import { UserSchema } from '~/components/user/schemas';
-import {
-  OrganizationSchema,
-  type OrganizationType,
-} from '~/components/organization/schemas';
 
 // Lightweight org schema for league list view
 export const LeagueOrganizationSchema = z.object({

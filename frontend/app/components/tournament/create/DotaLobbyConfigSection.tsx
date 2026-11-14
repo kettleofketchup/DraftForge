@@ -46,7 +46,9 @@ const LAUNCH_OPTIONS = [
 ] as const;
 
 /** Settings for dota_lobby-hosted in-game lobbies (tournament, event, series). */
-export function DotaLobbyConfigSection<T extends FieldValues & DotaLobbyFields>({
+export function DotaLobbyConfigSection<
+  T extends FieldValues & DotaLobbyFields,
+>({
   control: parentControl,
   includeLobbyInfo = false,
   sourceEvent = null,
@@ -57,13 +59,17 @@ export function DotaLobbyConfigSection<T extends FieldValues & DotaLobbyFields>(
       <h3 className="text-sm font-semibold">Dota Lobbies</h3>
       <div className="rounded-md border border-border p-3 space-y-3">
         {sourceEvent && (
-          <p className="text-sm text-muted-foreground" data-testid="config-dota-lobby-from-event">
+          <p
+            className="text-sm text-muted-foreground"
+            data-testid="config-dota-lobby-from-event"
+          >
             These settings started from the event{' '}
             <Link to={`/events/${sourceEvent.id}`} className="underline">
               {sourceEvent.name}
             </Link>
-            . Changes here apply only to this tournament; editing the event before the
-            tournament starts overwrites them. The lobby password still comes from the event.
+            . Changes here apply only to this tournament; editing the event
+            before the tournament starts overwrites them. The lobby password
+            still comes from the event.
           </p>
         )}
         <FormField
@@ -91,8 +97,9 @@ export function DotaLobbyConfigSection<T extends FieldValues & DotaLobbyFields>(
                 </SelectContent>
               </Select>
               <FormDescription>
-                A lobby bot creates each match&apos;s in-game lobby and invites the players.
-                Needs a Normal, Captain&apos;s Mode or Turbo game mode.
+                A lobby bot creates each match&apos;s in-game lobby and invites
+                the players. Needs a Normal, Captain&apos;s Mode or Turbo game
+                mode.
               </FormDescription>
             </FormItem>
           )}
@@ -138,8 +145,8 @@ export function DotaLobbyConfigSection<T extends FieldValues & DotaLobbyFields>(
                 />
               </FormControl>
               <FormDescription>
-                A region name the lobby service knows, such as us_east. Leave empty for its
-                default.
+                A region name the lobby service knows, such as us_east. Leave
+                empty for its default.
               </FormDescription>
               <FormMessage />
             </FormItem>
@@ -165,8 +172,8 @@ export function DotaLobbyConfigSection<T extends FieldValues & DotaLobbyFields>(
                     Send lobby info
                   </FormLabel>
                   <FormDescription>
-                    DM players the in-game lobby name, password and side when their lobby is
-                    created
+                    DM players the in-game lobby name, password and side when
+                    their lobby is created
                   </FormDescription>
                 </div>
               </FormItem>

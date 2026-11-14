@@ -35,7 +35,9 @@ export function fieldErrorsFrom(
   for (const [key, value] of Object.entries(data as Record<string, unknown>)) {
     const field = key === 'league_id_write' ? 'league' : key;
     if (!FORM_FIELDS.has(field)) continue;
-    const message = Array.isArray(value) ? value.map(String).join(' ') : String(value);
+    const message = Array.isArray(value)
+      ? value.map(String).join(' ')
+      : String(value);
     if (!message) continue;
     out.push({ field: field as keyof CreateTournamentInput, message });
   }

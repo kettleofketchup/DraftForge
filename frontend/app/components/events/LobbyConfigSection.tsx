@@ -1,4 +1,5 @@
 import type { Control, FieldValues, UseFormWatch } from 'react-hook-form';
+import { GAME_TYPE } from '~/components/game/constants';
 import {
   FormControl,
   FormField,
@@ -15,7 +16,6 @@ import {
   SelectValue,
 } from '~/components/ui/select';
 import { GameMode } from './schemas';
-import { GAME_TYPE } from '~/components/game/constants';
 
 /** Field set this section renders. Not extracted as a zod sub-schema (yet) —
  *  these keys are inline on createEventInputSchema, editEventSchema,
@@ -41,7 +41,10 @@ const GAME_MODE_LABELS: Record<string, string> = {
   [GameMode.CUSTOM]: 'Custom Lobby',
 };
 
-const DOTA_ONLY_MODES: Set<string> = new Set([GameMode.CAPTAINS_MODE, GameMode.TURBO]);
+const DOTA_ONLY_MODES: Set<string> = new Set([
+  GameMode.CAPTAINS_MODE,
+  GameMode.TURBO,
+]);
 
 export function LobbyConfigSection<T extends FieldValues & LobbyFields>({
   control: parentControl,
@@ -58,7 +61,9 @@ export function LobbyConfigSection<T extends FieldValues & LobbyFields>({
 
   return (
     <div className="space-y-4">
-      <h4 className="text-sm font-medium text-muted-foreground">Lobby & Tournament Config</h4>
+      <h4 className="text-sm font-medium text-muted-foreground">
+        Lobby & Tournament Config
+      </h4>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <FormField
@@ -67,12 +72,12 @@ export function LobbyConfigSection<T extends FieldValues & LobbyFields>({
           render={({ field }) => (
             <FormItem>
               <FormLabel>Game Mode</FormLabel>
-              <Select
-                onValueChange={field.onChange}
-                value={field.value}
-              >
+              <Select onValueChange={field.onChange} value={field.value}>
                 <FormControl>
-                  <SelectTrigger className="w-full" data-testid="lobby-config-game-mode">
+                  <SelectTrigger
+                    className="w-full"
+                    data-testid="lobby-config-game-mode"
+                  >
                     <SelectValue />
                   </SelectTrigger>
                 </FormControl>
@@ -80,7 +85,9 @@ export function LobbyConfigSection<T extends FieldValues & LobbyFields>({
                   {Object.entries(GAME_MODE_LABELS)
                     .filter(([key]) => isDota || !DOTA_ONLY_MODES.has(key))
                     .map(([val, label]) => (
-                      <SelectItem key={val} value={val}>{label}</SelectItem>
+                      <SelectItem key={val} value={val}>
+                        {label}
+                      </SelectItem>
                     ))}
                 </SelectContent>
               </Select>
@@ -128,7 +135,11 @@ export function LobbyConfigSection<T extends FieldValues & LobbyFields>({
                   min={1}
                   data-testid="lobby-config-draft-time"
                   {...field}
-                  onChange={(e) => field.onChange(Math.max(1, parseInt(e.target.value, 10) || 10))}
+                  onChange={(e) =>
+                    field.onChange(
+                      Math.max(1, parseInt(e.target.value, 10) || 10),
+                    )
+                  }
                 />
               </FormControl>
               <p className="text-xs text-muted-foreground">

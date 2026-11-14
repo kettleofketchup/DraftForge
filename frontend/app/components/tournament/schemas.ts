@@ -2,14 +2,18 @@ import { z } from 'zod';
 
 import { UserSchema } from '../user';
 
-import { DraftOptionsSchema, DraftSchema } from '../teamdraft/schemas';
 import { GameSchema } from '../game/schemas';
-import { TeamSchema } from '../team';
 import { LeagueOrganizationSchema } from '../league/schemas';
+import { TeamSchema } from '../team';
+import { DraftOptionsSchema, DraftSchema } from '../teamdraft/schemas';
 
 // Tournament type values (keys from TOURNAMENT_TYPE enum)
-export const TOURNAMENT_TYPE_VALUES = ['single_elimination', 'double_elimination', 'swiss'] as const;
-export type TournamentTypeValue = typeof TOURNAMENT_TYPE_VALUES[number];
+export const TOURNAMENT_TYPE_VALUES = [
+  'single_elimination',
+  'double_elimination',
+  'swiss',
+] as const;
+export type TournamentTypeValue = (typeof TOURNAMENT_TYPE_VALUES)[number];
 
 // State values (keys from STATE_CHOICES enum)
 export const STATE_VALUES = ['future', 'in_progress', 'past'] as const;
@@ -20,7 +24,7 @@ export const DotaLobbyModeSchema = z.enum(DOTA_LOBBY_MODE_VALUES);
 // Who starts the match: staff (or `!start` in lobby chat), or the bot once everyone is ready.
 export const DOTA_LOBBY_LAUNCH_VALUES = ['manual', 'auto'] as const;
 export const DotaLobbyLaunchSchema = z.enum(DOTA_LOBBY_LAUNCH_VALUES);
-export type StateValue = typeof STATE_VALUES[number];
+export type StateValue = (typeof STATE_VALUES)[number];
 
 // Common timezone values for tournament scheduling
 export const COMMON_TIMEZONES = [
@@ -46,7 +50,7 @@ export const COMMON_TIMEZONES = [
   'Pacific/Auckland',
 ] as const;
 
-export type TimezoneValue = typeof COMMON_TIMEZONES[number] | string;
+export type TimezoneValue = (typeof COMMON_TIMEZONES)[number] | string;
 
 // Minimal league info returned by lightweight tournament list endpoint
 export const LeagueMinimalSchema = z.object({
@@ -61,10 +65,12 @@ export const LeagueMinimalSchema = z.object({
 export const SourceEventSchema = z.object({
   id: z.number(),
   name: z.string(),
-  event_repeater: z.object({
-    id: z.number(),
-    name: z.string(),
-  }).nullable(),
+  event_repeater: z
+    .object({
+      id: z.number(),
+      name: z.string(),
+    })
+    .nullable(),
   organization_id: z.number().optional(),
 });
 
@@ -119,36 +125,41 @@ export const PaginatedTournamentsSchema = z.object({
 });
 
 // Schema for creating a new tournament
-export const CreateTournamentSchema = z.object({
-  name: z.string().min(1, 'Tournament name is required').max(255),
-  tournament_type: z.enum(TOURNAMENT_TYPE_VALUES, {
-    message: 'Tournament type is required',
-  }),
-  date_played: z.string().min(1, 'Date and time is required'),
-  timezone: z.string().min(1, 'Timezone is required'),
-  league: z.number().nullable().optional(),
-  auto_create_hero_drafts: z.boolean().default(false),
-  discord_send_draft_link: z.boolean().default(false),
-  discord_send_herodraft_link: z.boolean().default(false),
-  dota_lobby_mode: DotaLobbyModeSchema.default('off'),
-  dota_lobby_launch: DotaLobbyLaunchSchema.default('manual'),
-  dota_lobby_region: z.string().max(32, 'Region is at most 32 characters').default(''),
-  discord_send_lobby_info: z.boolean().default(false),
-  game_type: z.number().default(1),
-  game_mode: z.string().default('normal'),
-  lobby_steam_league_id: z.number().nullable().default(null),
-  captains_draft_time: z.number().int().default(10),
-  custom_game_name: z.string().max(255).default(''),
-}).superRefine((data, ctx) => {
-  // Draft time is only shown and sent in Captain's Mode.
-  if (data.game_mode === 'captains_mode' && data.captains_draft_time < 1) {
-    ctx.addIssue({
-      code: 'custom',
-      path: ['captains_draft_time'],
-      message: 'Draft time must be at least 1 second',
-    });
-  }
-});
+export const CreateTournamentSchema = z
+  .object({
+    name: z.string().min(1, 'Tournament name is required').max(255),
+    tournament_type: z.enum(TOURNAMENT_TYPE_VALUES, {
+      message: 'Tournament type is required',
+    }),
+    date_played: z.string().min(1, 'Date and time is required'),
+    timezone: z.string().min(1, 'Timezone is required'),
+    league: z.number().nullable().optional(),
+    auto_create_hero_drafts: z.boolean().default(false),
+    discord_send_draft_link: z.boolean().default(false),
+    discord_send_herodraft_link: z.boolean().default(false),
+    dota_lobby_mode: DotaLobbyModeSchema.default('off'),
+    dota_lobby_launch: DotaLobbyLaunchSchema.default('manual'),
+    dota_lobby_region: z
+      .string()
+      .max(32, 'Region is at most 32 characters')
+      .default(''),
+    discord_send_lobby_info: z.boolean().default(false),
+    game_type: z.number().default(1),
+    game_mode: z.string().default('normal'),
+    lobby_steam_league_id: z.number().nullable().default(null),
+    captains_draft_time: z.number().int().default(10),
+    custom_game_name: z.string().max(255).default(''),
+  })
+  .superRefine((data, ctx) => {
+    // Draft time is only shown and sent in Captain's Mode.
+    if (data.game_mode === 'captains_mode' && data.captains_draft_time < 1) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['captains_draft_time'],
+        message: 'Draft time must be at least 1 second',
+      });
+    }
+  });
 
 export type CreateTournamentInput = z.infer<typeof CreateTournamentSchema>;
 
@@ -162,4 +173,6 @@ export const DiscordTournamentLogSchema = z.object({
   created_at: z.string(),
 });
 
-export type DiscordTournamentLogEntry = z.infer<typeof DiscordTournamentLogSchema>;
+export type DiscordTournamentLogEntry = z.infer<
+  typeof DiscordTournamentLogSchema
+>;

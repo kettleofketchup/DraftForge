@@ -1,4 +1,5 @@
 import type { Control } from 'react-hook-form';
+import { DiscordIcon } from '~/components/events/DiscordConfigSection';
 import {
   FormControl,
   FormDescription,
@@ -6,7 +7,6 @@ import {
   FormItem,
   FormLabel,
 } from '~/components/ui/form';
-import { DiscordIcon } from '~/components/events/DiscordConfigSection';
 import type { CreateTournamentInput } from '../schemas';
 
 interface Props {
@@ -43,7 +43,8 @@ export function DiscordTournamentConfigSection({ control }: Props) {
                   Send draft link on team draft start
                 </FormLabel>
                 <FormDescription>
-                  DM captains and participants their draft link when the team draft begins
+                  DM captains and participants their draft link when the team
+                  draft begins
                 </FormDescription>
               </div>
             </FormItem>
@@ -70,7 +71,8 @@ export function DiscordTournamentConfigSection({ control }: Props) {
                   Send hero draft link on creation
                 </FormLabel>
                 <FormDescription>
-                  DM team members their hero draft link when a hero draft is created for their match
+                  DM team members their hero draft link when a hero draft is
+                  created for their match
                 </FormDescription>
               </div>
             </FormItem>
@@ -97,7 +99,8 @@ export function DiscordTournamentConfigSection({ control }: Props) {
                   Send lobby info
                 </FormLabel>
                 <FormDescription>
-                  DM players the in-game lobby name, password and side when their lobby is created
+                  DM players the in-game lobby name, password and side when
+                  their lobby is created
                 </FormDescription>
               </div>
             </FormItem>

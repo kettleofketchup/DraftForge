@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { I18nextProvider } from 'react-i18next';
 import { MemoryRouter } from 'react-router';
-import { afterEach, describe, expect, it, vi } from 'vitest';
 import { toast } from 'sonner';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { updateTournament } from '~/components/api/api';
 import { Dialog } from '~/components/ui/dialog';
 import { TooltipProvider } from '~/components/ui/tooltip';
@@ -39,7 +39,8 @@ class ResizeObserverStub {
   unobserve() {}
   disconnect() {}
 }
-globalThis.ResizeObserver ??= ResizeObserverStub as unknown as typeof ResizeObserver;
+globalThis.ResizeObserver ??=
+  ResizeObserverStub as unknown as typeof ResizeObserver;
 
 function Wrapper({ children }: { children: ReactNode }) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -66,7 +67,9 @@ function setUser(user: Record<string, unknown>, leagues: unknown[] = []) {
   } as unknown as Parameters<typeof useUserStore.setState>[0]);
 }
 
-function tournament(overrides: Record<string, unknown> = {}): TournamentClassType {
+function tournament(
+  overrides: Record<string, unknown> = {},
+): TournamentClassType {
   return {
     pk: 5,
     name: 'Cup',
@@ -74,7 +77,12 @@ function tournament(overrides: Record<string, unknown> = {}): TournamentClassTyp
     timezone: 'America/New_York',
     state: 'future',
     tournament_type: 'double_elimination',
-    league: { pk: 9, name: 'L9', organization_name: 'Org8', organization: { pk: 8 } },
+    league: {
+      pk: 9,
+      name: 'L9',
+      organization_name: 'Org8',
+      organization: { pk: 8 },
+    },
     source_event: null,
     auto_create_hero_drafts: false,
     discord_send_draft_link: false,
@@ -104,10 +112,17 @@ describe('TournamentEditForm', () => {
 
   it('locks a league the user cannot admin and sends it unchanged', async () => {
     setUser({ pk: 2, staff_league_ids: [9] }, [
-      { pk: 31, name: 'Other', organization_name: 'OrgB', organization: { pk: 30 } },
+      {
+        pk: 31,
+        name: 'Other',
+        organization_name: 'OrgB',
+        organization: { pk: 30 },
+      },
     ]);
     vi.mocked(updateTournament).mockResolvedValue({} as never);
-    render(<TournamentEditForm tourn={tournament()} canEdit />, { wrapper: Wrapper });
+    render(<TournamentEditForm tourn={tournament()} canEdit />, {
+      wrapper: Wrapper,
+    });
 
     const trigger = screen.getByTestId('tournament-league-select');
     expect(trigger).toHaveTextContent('L9');
@@ -115,7 +130,10 @@ describe('TournamentEditForm', () => {
 
     submit();
     await waitFor(() => expect(updateTournament).toHaveBeenCalled());
-    const payload = vi.mocked(updateTournament).mock.calls[0][1] as Record<string, unknown>;
+    const payload = vi.mocked(updateTournament).mock.calls[0][1] as Record<
+      string,
+      unknown
+    >;
     expect(payload.league_id_write).toBe(9);
     expect(payload.game_mode).toBe('normal');
     expect(payload).not.toHaveProperty('captains_draft_time');
@@ -125,13 +143,22 @@ describe('TournamentEditForm', () => {
   it('saves when a hidden draft time is invalid outside Captains Mode', async () => {
     setUser(siteStaff);
     vi.mocked(updateTournament).mockResolvedValue({} as never);
-    render(<TournamentEditForm tourn={tournament({ captains_draft_time: 0 })} canEdit />, {
-      wrapper: Wrapper,
-    });
+    render(
+      <TournamentEditForm
+        tourn={tournament({ captains_draft_time: 0 })}
+        canEdit
+      />,
+      {
+        wrapper: Wrapper,
+      },
+    );
 
     submit();
     await waitFor(() => expect(updateTournament).toHaveBeenCalled());
-    const payload = vi.mocked(updateTournament).mock.calls[0][1] as Record<string, unknown>;
+    const payload = vi.mocked(updateTournament).mock.calls[0][1] as Record<
+      string,
+      unknown
+    >;
     expect(payload).not.toHaveProperty('captains_draft_time');
   });
 
@@ -140,7 +167,10 @@ describe('TournamentEditForm', () => {
     vi.mocked(updateTournament).mockResolvedValue({} as never);
     render(
       <TournamentEditForm
-        tourn={tournament({ game_mode: 'captains_mode', captains_draft_time: 25 })}
+        tourn={tournament({
+          game_mode: 'captains_mode',
+          captains_draft_time: 25,
+        })}
         canEdit
       />,
       { wrapper: Wrapper },
@@ -148,7 +178,10 @@ describe('TournamentEditForm', () => {
 
     submit();
     await waitFor(() => expect(updateTournament).toHaveBeenCalled());
-    const payload = vi.mocked(updateTournament).mock.calls[0][1] as Record<string, unknown>;
+    const payload = vi.mocked(updateTournament).mock.calls[0][1] as Record<
+      string,
+      unknown
+    >;
     expect(payload.captains_draft_time).toBe(25);
   });
 
@@ -157,9 +190,15 @@ describe('TournamentEditForm', () => {
     vi.mocked(updateTournament).mockRejectedValue({
       response: { data: { captains_draft_time: ['bad'] } },
     });
-    render(<TournamentEditForm tourn={tournament({ game_mode: 'captains_mode' })} canEdit />, {
-      wrapper: Wrapper,
-    });
+    render(
+      <TournamentEditForm
+        tourn={tournament({ game_mode: 'captains_mode' })}
+        canEdit
+      />,
+      {
+        wrapper: Wrapper,
+      },
+    );
     expect(tabState('general')).toBe('active');
 
     submit();
@@ -172,7 +211,9 @@ describe('TournamentEditForm', () => {
     vi.mocked(updateTournament).mockRejectedValue({
       response: { data: { captains_draft_time: ['bad'] } },
     });
-    render(<TournamentEditForm tourn={tournament()} canEdit />, { wrapper: Wrapper });
+    render(<TournamentEditForm tourn={tournament()} canEdit />, {
+      wrapper: Wrapper,
+    });
 
     submit();
     await waitFor(() => expect(tabState('config')).toBe('active'));
@@ -186,7 +227,10 @@ describe('TournamentEditForm', () => {
     setUser(siteStaff);
     render(
       <TournamentEditForm
-        tourn={tournament({ game_mode: 'captains_mode', captains_draft_time: 0 })}
+        tourn={tournament({
+          game_mode: 'captains_mode',
+          captains_draft_time: 0,
+        })}
         canEdit
       />,
       { wrapper: Wrapper },
@@ -200,19 +244,25 @@ describe('TournamentEditForm', () => {
 
   it('blocks editing without permission', () => {
     setUser(siteStaff);
-    render(<TournamentEditForm tourn={tournament()} canEdit={false} />, { wrapper: Wrapper });
+    render(<TournamentEditForm tourn={tournament()} canEdit={false} />, {
+      wrapper: Wrapper,
+    });
     expect(screen.getByText(/You do not have permission/)).toBeInTheDocument();
   });
 
   it('blocks create for a superuser who is not staff', () => {
     setUser({ pk: 3, is_staff: false, is_superuser: true });
-    render(<TournamentEditForm tourn={{} as TournamentClassType} />, { wrapper: Wrapper });
+    render(<TournamentEditForm tourn={{} as TournamentClassType} />, {
+      wrapper: Wrapper,
+    });
     expect(screen.getByText(/You do not have permission/)).toBeInTheDocument();
   });
 
   it('allows create for site staff', () => {
     setUser(siteStaff);
-    render(<TournamentEditForm tourn={{} as TournamentClassType} />, { wrapper: Wrapper });
+    render(<TournamentEditForm tourn={{} as TournamentClassType} />, {
+      wrapper: Wrapper,
+    });
     expect(screen.getByTestId('tournament-form')).toBeInTheDocument();
   });
 });

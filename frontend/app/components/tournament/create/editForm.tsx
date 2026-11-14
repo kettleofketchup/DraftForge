@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import { createTournament, updateTournament } from '~/components/api/api';
 import { LobbyConfigSection } from '~/components/events/LobbyConfigSection';
 import type { LeagueType } from '~/components/league/schemas';
+import { SCROLLAREA_CSS } from '~/components/reusable/modal';
 import { Button } from '~/components/ui/button';
 import { CancelButton, SubmitButton } from '~/components/ui/buttons';
 import { Calendar } from '~/components/ui/calendar';
@@ -39,7 +40,11 @@ import {
 } from '~/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { extractApiError } from '~/lib/apiError';
-import { canCreateTournament, leagueOptionsFor } from '~/lib/tournamentPermissions';
+import { getLogger } from '~/lib/logger';
+import {
+  canCreateTournament,
+  leagueOptionsFor,
+} from '~/lib/tournamentPermissions';
 import { cn } from '~/lib/utils';
 import { useUserStore } from '~/store/userStore';
 import {
@@ -49,12 +54,10 @@ import {
   type TournamentTypeValue,
 } from '../schemas';
 import type { TournamentClassType, TournamentType } from '../types';
-import { TournamentConfigSection } from './TournamentConfigSection';
 import { DiscordTournamentConfigSection } from './DiscordTournamentConfigSection';
 import { DotaLobbyConfigSection } from './DotaLobbyConfigSection';
 import { fieldErrorsFrom, tabForField, type FormTab } from './formErrors';
-import { getLogger } from '~/lib/logger';
-import { SCROLLAREA_CSS } from '~/components/reusable/modal';
+import { TournamentConfigSection } from './TournamentConfigSection';
 
 const log = getLogger('TournamentEditForm');
 
@@ -65,7 +68,10 @@ function formatTimezoneLabel(tz: string): string {
 }
 
 // Helper to extract date and time from ISO string
-function extractDateAndTime(isoString: string | null | undefined): { date: string; time: string } {
+function extractDateAndTime(isoString: string | null | undefined): {
+  date: string;
+  time: string;
+} {
   if (!isoString) {
     const now = new Date();
     return {
@@ -170,12 +176,20 @@ export const TournamentEditForm: React.FC<Props> = ({
     // the schema uses z.coerce, so RHF's inferred Resolver doesn't unify
     // with our explicit CreateTournamentInput. Same workaround as in
     // editUser/editModal.tsx — the runtime resolver is correct.
-    resolver: zodResolver(CreateTournamentSchema) as unknown as import('react-hook-form').Resolver<CreateTournamentInput>,
+    resolver: zodResolver(
+      CreateTournamentSchema,
+    ) as unknown as import('react-hook-form').Resolver<CreateTournamentInput>,
     defaultValues: {
       name: tourn?.name || '',
-      tournament_type: (tourn?.tournament_type as TournamentTypeValue) || 'double_elimination',
-      date_played: combineDateAndTime(initialDateTime.date, initialDateTime.time),
-      timezone: (tourn as unknown as { timezone?: string })?.timezone || 'America/New_York',
+      tournament_type:
+        (tourn?.tournament_type as TournamentTypeValue) || 'double_elimination',
+      date_played: combineDateAndTime(
+        initialDateTime.date,
+        initialDateTime.time,
+      ),
+      timezone:
+        (tourn as unknown as { timezone?: string })?.timezone ||
+        'America/New_York',
       league: leagueDefault,
       auto_create_hero_drafts: tourn?.auto_create_hero_drafts ?? false,
       discord_send_draft_link: tourn?.discord_send_draft_link ?? false,
@@ -194,18 +208,26 @@ export const TournamentEditForm: React.FC<Props> = ({
 
   // Update date_played when date or time changes
   useEffect(() => {
-    form.setValue('date_played', combineDateAndTime(selectedDate, selectedTime));
+    form.setValue(
+      'date_played',
+      combineDateAndTime(selectedDate, selectedTime),
+    );
   }, [selectedDate, selectedTime, form]);
 
   const currentLeague: LeagueOption | null =
     typeof tourn?.league === 'object' && tourn.league !== null
       ? (tourn.league as LeagueOption)
-      : ((leagues as LeagueOption[] | undefined)?.find((l) => l.pk === leagueDefault) ?? null);
-  const { options: leagueOptions, allowNone, locked: leagueLocked } = leagueOptionsFor(
-    currentUser,
-    (leagues ?? []) as LeagueOption[],
-    { currentLeague, eventOrgPk: tourn?.source_event?.organization_id ?? null },
-  );
+      : ((leagues as LeagueOption[] | undefined)?.find(
+          (l) => l.pk === leagueDefault,
+        ) ?? null);
+  const {
+    options: leagueOptions,
+    allowNone,
+    locked: leagueLocked,
+  } = leagueOptionsFor(currentUser, (leagues ?? []) as LeagueOption[], {
+    currentLeague,
+    eventOrgPk: tourn?.source_event?.organization_id ?? null,
+  });
 
   const allowed = isEditing ? !!canEdit : canCreateTournament(currentUser);
   if (!allowed) {
@@ -221,7 +243,10 @@ export const TournamentEditForm: React.FC<Props> = ({
     setIsSubmitting(true);
 
     try {
-      const payload: Partial<TournamentType> & { timezone?: string; league_id_write?: number | null } = {
+      const payload: Partial<TournamentType> & {
+        timezone?: string;
+        league_id_write?: number | null;
+      } = {
         name: data.name,
         tournament_type: data.tournament_type,
         date_played: data.date_played,
@@ -260,17 +285,24 @@ export const TournamentEditForm: React.FC<Props> = ({
       form.reset();
     } catch (err: unknown) {
       log.error('Failed to save tournament:', err);
-      const title = isEditing ? 'Failed to update tournament' : 'Failed to create tournament';
+      const title = isEditing
+        ? 'Failed to update tournament'
+        : 'Failed to create tournament';
       const fieldErrors = fieldErrorsFrom(
         (err as { response?: { data?: unknown } })?.response?.data,
       );
       if (fieldErrors.length > 0) {
-        fieldErrors.forEach(({ field, message }) => form.setError(field, { message }));
+        fieldErrors.forEach(({ field, message }) =>
+          form.setError(field, { message }),
+        );
         setTab(tabForField(fieldErrors[0].field));
         toast.error(title, { description: fieldErrors[0].message });
       } else {
-        const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-        toast.error(title, { description: extractApiError(err) ?? errorMessage });
+        const errorMessage =
+          err instanceof Error ? err.message : 'Unknown error';
+        toast.error(title, {
+          description: extractApiError(err) ?? errorMessage,
+        });
       }
     } finally {
       setIsSubmitting(false);
@@ -282,7 +314,8 @@ export const TournamentEditForm: React.FC<Props> = ({
     if (!key) return;
     setTab(tabForField(key));
     toast.error('Please fix the highlighted fields', {
-      description: typeof error?.message === 'string' ? error.message : undefined,
+      description:
+        typeof error?.message === 'string' ? error.message : undefined,
     });
   }
 
@@ -296,13 +329,25 @@ export const TournamentEditForm: React.FC<Props> = ({
         >
           <Tabs value={tab} onValueChange={(v) => setTab(v as FormTab)}>
             <TabsList className="w-full">
-              <TabsTrigger value="general" className="flex-1" data-testid="tournament-form-tab-general">
+              <TabsTrigger
+                value="general"
+                className="flex-1"
+                data-testid="tournament-form-tab-general"
+              >
                 General
               </TabsTrigger>
-              <TabsTrigger value="config" className="flex-1" data-testid="tournament-form-tab-config">
+              <TabsTrigger
+                value="config"
+                className="flex-1"
+                data-testid="tournament-form-tab-config"
+              >
                 Config
               </TabsTrigger>
-              <TabsTrigger value="discord" className="flex-1" data-testid="tournament-form-tab-discord">
+              <TabsTrigger
+                value="discord"
+                className="flex-1"
+                data-testid="tournament-form-tab-discord"
+              >
                 Discord
               </TabsTrigger>
             </TabsList>
@@ -378,14 +423,18 @@ export const TournamentEditForm: React.FC<Props> = ({
                     <FormLabel>Tournament Date & Time</FormLabel>
                     <div className="flex flex-wrap gap-2">
                       {/* Date Picker */}
-                      <Popover open={calendarOpen} onOpenChange={setCalendarOpen} modal={true}>
+                      <Popover
+                        open={calendarOpen}
+                        onOpenChange={setCalendarOpen}
+                        modal={true}
+                      >
                         <PopoverTrigger asChild>
                           <FormControl>
                             <Button
                               variant="outline"
                               className={cn(
                                 'pl-3 text-left font-normal',
-                                !selectedDate && 'text-muted-foreground'
+                                !selectedDate && 'text-muted-foreground',
                               )}
                               data-testid="tournament-date-picker"
                             >
@@ -401,7 +450,9 @@ export const TournamentEditForm: React.FC<Props> = ({
                         <PopoverContent className="w-auto p-0" align="start">
                           <Calendar
                             mode="single"
-                            selected={selectedDate ? localDate(selectedDate) : undefined}
+                            selected={
+                              selectedDate ? localDate(selectedDate) : undefined
+                            }
                             onSelect={(date) => {
                               if (date) {
                                 setSelectedDate(format(date, 'yyyy-MM-dd'));
@@ -437,10 +488,7 @@ export const TournamentEditForm: React.FC<Props> = ({
                       <Globe className="h-4 w-4" />
                       Timezone
                     </FormLabel>
-                    <Select
-                      onValueChange={field.onChange}
-                      value={field.value}
-                    >
+                    <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger data-testid="tournament-timezone-select">
                           <SelectValue placeholder="Select timezone" />
@@ -453,7 +501,9 @@ export const TournamentEditForm: React.FC<Props> = ({
                             value={tz}
                             data-testid={`tournament-timezone-${tz}`}
                           >
-                            {tz === 'UTC' ? 'UTC' : `${formatTimezoneLabel(tz)} (${tz})`}
+                            {tz === 'UTC'
+                              ? 'UTC'
+                              : `${formatTimezoneLabel(tz)} (${tz})`}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -475,10 +525,13 @@ export const TournamentEditForm: React.FC<Props> = ({
                     <FormLabel>League (Optional)</FormLabel>
                     <Select
                       onValueChange={(value) => {
-                        const leagueId = value === 'none' ? null : parseInt(value, 10);
+                        const leagueId =
+                          value === 'none' ? null : parseInt(value, 10);
                         field.onChange(leagueId);
                         if (leagueId) {
-                          const selectedLeague = leagueOptions.find((l) => l.pk === leagueId);
+                          const selectedLeague = leagueOptions.find(
+                            (l) => l.pk === leagueId,
+                          );
                           if (selectedLeague?.timezone) {
                             form.setValue('timezone', selectedLeague.timezone);
                           }
@@ -494,7 +547,10 @@ export const TournamentEditForm: React.FC<Props> = ({
                       </FormControl>
                       <SelectContent>
                         {allowNone && (
-                          <SelectItem value="none" data-testid="tournament-league-none">
+                          <SelectItem
+                            value="none"
+                            data-testid="tournament-league-none"
+                          >
                             No League
                           </SelectItem>
                         )}
@@ -523,7 +579,10 @@ export const TournamentEditForm: React.FC<Props> = ({
             <TabsContent value="config" className="mt-4">
               <LobbyConfigSection control={form.control} watch={form.watch} />
               <TournamentConfigSection control={form.control} />
-              <DotaLobbyConfigSection control={form.control} sourceEvent={sourceEvent} />
+              <DotaLobbyConfigSection
+                control={form.control}
+                sourceEvent={sourceEvent}
+              />
             </TabsContent>
 
             <TabsContent value="discord" className="mt-4">
