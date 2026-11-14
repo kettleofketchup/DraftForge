@@ -1,4 +1,3 @@
-import { Slot } from '@radix-ui/react-slot';
 import * as React from 'react';
 import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -7,158 +6,12 @@ import { cn } from '~/lib/utils';
 import { useUserStore } from '../../store/userStore';
 import { PreviewLoginMenu } from '../preview/PreviewLoginMenu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
+import { DocsIcon } from './icons';
+import { BUG_REPORT_URL, DOCS_URL, GITHUB_REPO_URL } from './links';
 import { LoginWithDiscordButton } from './login';
 import { MobileNav } from './MobileNav';
+import { NavItem } from './NavItem';
 import { PageNavBar } from './PageNavBar';
-
-const GITHUB_REPO_URL = 'https://github.com/kettleofketchup/draftforge';
-const DOCS_URL = 'https://kettleofketchup.github.io/DraftForge/';
-const BUG_REPORT_URL = `${GITHUB_REPO_URL}/issues/new?template=bug_report.md`;
-
-/**
- * NavItem layout tiers (above md/768px — below is the MobileNav drawer):
- *   - md → <1100px: icon only; subtitle in tooltip (showSubtitleTooltip).
- *   - 1100px → <2xl: icon + title inline, subtitle still tooltip-only.
- *   - 2xl+ (1536px): icon + title + inline subtitle stacked vertically.
- * Nine nav items fit horizontally below 2xl; stacking earlier overflows (#252).
- */
-interface NavItemProps extends Omit<
-  React.AnchorHTMLAttributes<HTMLAnchorElement>,
-  'href'
-> {
-  icon?: React.ReactNode;
-  title: string;
-  subtitle?: string;
-  badge?: React.ReactNode;
-  asChild?: boolean;
-  /** When true: hides text below 1100px, shows icons only with tooltip */
-  hideTextOnSmall?: boolean;
-  /** Show subtitle as tooltip on small screens (below xl) */
-  showSubtitleTooltip?: boolean;
-  /** Use for internal routes (uses React Router Link) */
-  to?: string;
-  /** Use for external links (uses <a> tag) */
-  href?: string;
-  /** Custom class for title text (overrides default color) */
-  titleClassName?: string;
-  /** Test ID for Playwright/testing - auto-generated from route if not provided */
-  'data-testid'?: string;
-}
-
-const NavItem = React.forwardRef<HTMLAnchorElement, NavItemProps>(
-  (
-    {
-      className,
-      icon,
-      title,
-      subtitle,
-      badge,
-      asChild = false,
-      hideTextOnSmall = false,
-      showSubtitleTooltip = false,
-      to,
-      href,
-      titleClassName,
-      'data-testid': dataTestId,
-      ...props
-    },
-    ref,
-  ) => {
-    const testId =
-      dataTestId || (to ? `nav-link-${to.replace(/^\//, '')}` : undefined);
-    const baseClassName = cn(
-      'flex items-center gap-1 xl:gap-2 rounded-md px-1.5 xl:px-2 py-1.5 h-9',
-      'text-sm font-medium',
-      'text-text-primary',
-      'hover:bg-base-400/50',
-      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-      'transition-colors',
-      className,
-    );
-
-    const content = (
-      <>
-        {icon && <span className="shrink-0">{icon}</span>}
-        <div
-          className={cn(
-            'flex min-w-0 items-center 2xl:flex-col 2xl:items-center',
-            hideTextOnSmall && 'hidden min-[1100px]:flex',
-          )}
-        >
-          <div className="flex items-center justify-center gap-1">
-            <span
-              className={cn(
-                'text-xs font-bold leading-normal truncate text-center text-outline-sm text-[#646cff]',
-                titleClassName,
-              )}
-            >
-              {title}
-            </span>
-            {badge}
-          </div>
-          {subtitle && (
-            <span className="text-[10px] text-text-muted leading-normal truncate hidden 2xl:block text-center">
-              {subtitle}
-            </span>
-          )}
-        </div>
-      </>
-    );
-
-    let navContent: React.ReactElement;
-    if (asChild) {
-      navContent = (
-        <Slot
-          ref={ref}
-          className={baseClassName}
-          data-testid={testId}
-          {...props}
-        >
-          {content}
-        </Slot>
-      );
-    } else if (to) {
-      navContent = (
-        <Link
-          ref={ref}
-          to={to}
-          className={baseClassName}
-          data-testid={testId}
-          {...props}
-        >
-          {content}
-        </Link>
-      );
-    } else {
-      navContent = (
-        <a
-          ref={ref}
-          href={href}
-          className={baseClassName}
-          data-testid={testId}
-          {...props}
-        >
-          {content}
-        </a>
-      );
-    }
-
-    if (showSubtitleTooltip && subtitle) {
-      return (
-        <Tooltip>
-          <TooltipTrigger asChild>{navContent}</TooltipTrigger>
-          <TooltipContent className="2xl:hidden">
-            <p className="font-medium">{title}</p>
-            <p className="text-xs opacity-80">{subtitle}</p>
-          </TooltipContent>
-        </Tooltip>
-      );
-    }
-
-    return navContent;
-  },
-);
-NavItem.displayName = 'NavItem';
 
 const GitHubIcon = () => (
   <svg
@@ -211,22 +64,6 @@ const useGitHubStars = () => {
 
   return { stars, isLoading };
 };
-
-const DocsIcon = () => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className="h-5 w-5"
-    aria-hidden="true"
-  >
-    <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20" />
-  </svg>
-);
 
 const BugIcon = () => (
   <svg

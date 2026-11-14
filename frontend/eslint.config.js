@@ -48,6 +48,7 @@ export default [
   // Strict i18n enforcement scoped to navbar
   {
     files: ['app/components/navbar/**/*.{ts,tsx}'],
+    ignores: ['**/__tests__/**'],
     plugins: { i18next },
     rules: {
       'i18next/no-literal-string': [
