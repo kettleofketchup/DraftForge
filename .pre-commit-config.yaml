@@ -34,4 +34,5 @@ repos:
         entry: frontend/scripts/prettier-check-files.sh
         language: system
         files: ^frontend/
+        exclude: ^frontend/app/data/CHANGELOG\.md$
         pass_filenames: true
