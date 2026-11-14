@@ -9,6 +9,7 @@ from django.utils.text import capfirst
 
 from org.contributions.services import delete_user_entries
 from org.models import ContributionEntry
+from org.promotion.services import release_earning_sends
 
 from .models import CustomUser, HeroDraft, HeroDraftEvent
 
@@ -39,6 +40,7 @@ class CustomUserAdmin(admin.ModelAdmin):
 
     def delete_model(self, request: HttpRequest, obj: CustomUser) -> None:
         with transaction.atomic():
+            release_earning_sends(obj)
             delete_user_entries(obj, actor=request.user)
             super().delete_model(request, obj)
 
@@ -47,6 +49,7 @@ class CustomUserAdmin(admin.ModelAdmin):
     ) -> None:
         with transaction.atomic():
             for user in queryset:
+                release_earning_sends(user)
                 delete_user_entries(user, actor=request.user)
             super().delete_queryset(request, queryset)
 

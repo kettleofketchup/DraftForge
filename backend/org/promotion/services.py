@@ -142,6 +142,72 @@ def record_promo_send(
     return send
 
 
+def _promote_next_send(
+    event: Event, recipient_id: int, *, exclude_sender_id: int | None = None
+) -> PromoSend | None:
+    remaining = (
+        PromoSend.objects.filter(
+            event=event,
+            recipient_id=recipient_id,
+            sender__isnull=False,
+            earns_points=False,
+        )
+        .select_related("sender")
+        .order_by("sent_at", "pk")
+    )
+    if exclude_sender_id is not None:
+        remaining = remaining.exclude(sender_id=exclude_sender_id)
+    promoted = next(
+        (
+            candidate
+            for candidate in remaining
+            if is_org_role_holder(candidate.sender, event.organization_id)
+        ),
+        None,
+    )
+    if promoted is None:
+        return None
+    promoted.earns_points = True
+    promoted.save(update_fields=["earns_points"])
+    if not ContributionEntry.objects.nocache().filter(promo_send=promoted).exists():
+        _award_send(promoted, event, promoted.sender)
+    return promoted
+
+
+@transaction.atomic
+def release_earning_sends(user: CustomUser) -> int:
+    event_ids = sorted(
+        set(
+            PromoSend.objects.filter(sender=user, earns_points=True).values_list(
+                "event_id", flat=True
+            )
+        )
+    )
+    released = 0
+    for event_id in event_ids:
+        event = _lock_event(Event(pk=event_id))
+        sends = list(
+            PromoSend.objects.select_for_update().filter(
+                event=event, sender=user, earns_points=True
+            )
+        )
+        for send in sends:
+            send.earns_points = False
+            send.save(update_fields=["earns_points"])
+            if send.recipient_id is not None:
+                _promote_next_send(event, send.recipient_id, exclude_sender_id=user.pk)
+            released += 1
+    if released:
+        log.info(
+            "promo_sends_released_for_deleted_sender",
+            system="org",
+            subsystem="promotion",
+            user_id=user.pk,
+            released=released,
+        )
+    return released
+
+
 @transaction.atomic
 def undo_promo_send(send: PromoSend, *, actor: CustomUser | None) -> None:
     event = _lock_event(send.event)
@@ -157,26 +223,7 @@ def undo_promo_send(send: PromoSend, *, actor: CustomUser | None) -> None:
 
     promoted: PromoSend | None = None
     if was_earning and recipient_id is not None:
-        remaining = (
-            PromoSend.objects.filter(
-                event=event, recipient_id=recipient_id, sender__isnull=False
-            )
-            .select_related("sender")
-            .order_by("sent_at", "pk")
-        )
-        for candidate in remaining:
-            if is_org_role_holder(candidate.sender, event.organization_id):
-                promoted = candidate
-                break
-        if promoted is not None:
-            promoted.earns_points = True
-            promoted.save(update_fields=["earns_points"])
-            if (
-                not ContributionEntry.objects.nocache()
-                .filter(promo_send=promoted)
-                .exists()
-            ):
-                _award_send(promoted, event, promoted.sender)
+        promoted = _promote_next_send(event, recipient_id)
 
     log.info(
         "promo_send_undone",

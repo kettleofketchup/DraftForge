@@ -42,6 +42,7 @@ from league.serializers import LeagueUserSerializer
 from org.contributions.services import delete_user_entries
 from org.features import FeatureKey, active_features
 from org.models import OrgUser
+from org.promotion.services import release_earning_sends
 from org.serializers import OrgUserSerializer
 from telemetry.logging import get_logger
 
@@ -300,6 +301,7 @@ class UserView(viewsets.ModelViewSet):
 
     def perform_destroy(self, instance: CustomUser) -> None:
         with transaction.atomic():
+            release_earning_sends(instance)
             delete_user_entries(instance, actor=self.request.user)
             instance.delete()
 

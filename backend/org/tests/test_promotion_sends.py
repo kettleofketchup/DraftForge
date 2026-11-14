@@ -1,8 +1,11 @@
+from collections.abc import Callable
 from datetime import timedelta
 from unittest.mock import patch
 
 from django.test import TestCase
+from django.urls import reverse
 from django.utils import timezone
+from rest_framework.test import APIClient
 
 from app.models import CustomUser, League, Organization, Tournament
 from events.constants import EventState
@@ -321,3 +324,80 @@ class CanUndoTest(_SendFixture):
         send = self._send(self.promoter)
         set_org_feature(self.org, FeatureKey.PROMOTION, enabled=False, actor=None)
         self.assertFalse(can_undo(self.promoter, send))
+
+
+class SenderDeletionTest(_SendFixture):
+    def setUp(self) -> None:
+        super().setUp()
+        self.site_admin.is_superuser = True
+        self.site_admin.save()
+
+    def _api_delete(self, user: CustomUser) -> None:
+        client = APIClient()
+        client.force_authenticate(self.site_admin)
+        response = client.delete(reverse("users-detail", args=[user.pk]))
+        self.assertEqual(response.status_code, 204, response.content)
+
+    def _admin_delete(self, user: CustomUser) -> None:
+        self.client.force_login(self.site_admin)
+        response = self.client.post(
+            f"/admin/app/customuser/{user.pk}/delete/", {"post": "yes"}
+        )
+        self.assertEqual(response.status_code, 302)
+
+    def _admin_bulk_delete(self, user: CustomUser) -> None:
+        self.client.force_login(self.site_admin)
+        response = self.client.post(
+            "/admin/app/customuser/",
+            {
+                "action": "delete_selected",
+                "_selected_action": [str(user.pk)],
+                "post": "yes",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+
+    def _assert_next_send_promoted(self, delete: Callable[[CustomUser], None]) -> None:
+        first = self._send(self.promoter)
+        second = self._send(self.promoter_b)
+        self.assertFalse(second.earns_points)
+
+        delete(self.promoter)
+
+        first.refresh_from_db()
+        self.assertIsNone(first.sender_id)
+        self.assertFalse(first.earns_points)
+        second.refresh_from_db()
+        self.assertTrue(second.earns_points)
+        entries = self._entries(second)
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0].org_user.user, self.promoter_b)
+        self.assertEqual(ContributionEntry.objects.nocache().count(), 1)
+
+    def _assert_slot_freed(self, delete: Callable[[CustomUser], None]) -> None:
+        self._send(self.staff)
+
+        delete(self.staff)
+
+        self.assertTrue(will_earn(self.promoter_b, self.event, self.recipient))
+        later = self._send(self.promoter_b)
+        self.assertTrue(later.earns_points)
+        self.assertEqual(len(self._entries(later)), 1)
+
+    def test_api_delete_promotes_next_send(self) -> None:
+        self._assert_next_send_promoted(self._api_delete)
+
+    def test_admin_delete_promotes_next_send(self) -> None:
+        self._assert_next_send_promoted(self._admin_delete)
+
+    def test_admin_bulk_delete_promotes_next_send(self) -> None:
+        self._assert_next_send_promoted(self._admin_bulk_delete)
+
+    def test_api_delete_frees_earning_slot(self) -> None:
+        self._assert_slot_freed(self._api_delete)
+
+    def test_admin_delete_frees_earning_slot(self) -> None:
+        self._assert_slot_freed(self._admin_delete)
+
+    def test_admin_bulk_delete_frees_earning_slot(self) -> None:
+        self._assert_slot_freed(self._admin_bulk_delete)
