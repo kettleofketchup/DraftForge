@@ -4,7 +4,12 @@ import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 import { Skeleton } from '~/components/ui/skeleton';
 
-const ChangelogPreview = lazy(() => import('./ChangelogPreview'));
+const loadPreview = () => import('./ChangelogPreview');
+let ChangelogPreview = lazy(loadPreview);
+
+function retryNextMount(): void {
+  ChangelogPreview = lazy(loadPreview);
+}
 
 type LazyChangelogPreviewProps = {
   'data-testid': string;
@@ -20,6 +25,7 @@ export function LazyChangelogPreview({
   return (
     <div data-testid={testId}>
       <ErrorBoundary
+        onError={retryNextMount}
         fallback={
           <div className="flex flex-col gap-2 text-sm">
             <p className="text-muted-foreground">
