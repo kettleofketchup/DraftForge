@@ -7,7 +7,8 @@
 
 The release (`just version::set`, scripts/version.py) calls release_preflight(),
 fragment_paths() and release(); there is deliberately no CLI for assembling, since
-that would leave the consumed fragments in place.
+that would leave the consumed fragments in place. The release also writes
+frontend/app/data/CHANGELOG.md, an identical copy the frontend image imports.
 
 PRs add files under changelog.d/<section>/ and never edit CHANGELOG.md, so a branch
 that merges after a release cannot drop its notes under the version already released.
@@ -28,6 +29,7 @@ from typing import Any
 
 POINTER = "<!-- Do not edit. Unreleased changes live in changelog.d/; `just version::set` assembles them here. -->"
 FRAGMENT_DIR = "changelog.d"
+FRONTEND_COPY = "frontend/app/data/CHANGELOG.md"
 NO_CHANGES = "- No notable changes."
 
 SLUG = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
@@ -480,6 +482,9 @@ def assemble(root: Path, version: str, date: str) -> list[str]:
     new = text[: match.start()] + f"## [Unreleased]\n\n{POINTER}\n\n{section}"
     new += f"\n{tail}" if tail else ""
     path.write_text(new, encoding="utf-8")
+    copy = root / FRONTEND_COPY
+    copy.parent.mkdir(parents=True, exist_ok=True)
+    copy.write_text(new, encoding="utf-8")
     return paths
 
 
@@ -520,7 +525,12 @@ VERSION_FILES: tuple[str, ...] = (
     "docker/.env.release",
 )
 # FRAGMENT_DIR's deletions are staged by assemble_release's git rm.
-RELEASE_PATHS: tuple[str, ...] = (*VERSION_FILES, "CHANGELOG.md", FRAGMENT_DIR)
+RELEASE_PATHS: tuple[str, ...] = (
+    *VERSION_FILES,
+    "CHANGELOG.md",
+    FRONTEND_COPY,
+    FRAGMENT_DIR,
+)
 
 
 def release_subject(version: str) -> str:
@@ -629,7 +639,7 @@ def release_commit_tag_push(
     Undoes everything before the branch push on failure; raises ChangelogError.
     """
     root = Path(root)
-    add = _git(root, "add", "--", *VERSION_FILES, "CHANGELOG.md")
+    add = _git(root, "add", "--", *VERSION_FILES, "CHANGELOG.md", FRONTEND_COPY)
     if add.returncode != 0:
         rollback_release(root)
         raise ChangelogError(f"git add failed: {add.stderr.strip()}; rolled back")

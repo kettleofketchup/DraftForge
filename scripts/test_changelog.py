@@ -11,6 +11,7 @@ import io
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -30,6 +31,7 @@ changelog = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(changelog)
 
 POINTER = changelog.POINTER
+FRONTEND_COPY = "frontend/app/data/CHANGELOG.md"
 
 SECTIONS = [
     {"dir": "upgrading", "heading": "Upgrading", "prose": True},
@@ -122,12 +124,14 @@ class Repo:
         if changelog_text is not None:
             self.write("CHANGELOG.md", changelog_text)
 
-    def write(self, rel, text, add=True):
+    def write(self, rel, text, add=True, mirror=True):
         path = self.root / rel
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text, encoding="utf-8")
         if add:
             git(self.root, "add", "--", rel)
+        if rel == "CHANGELOG.md" and mirror:
+            self.write(FRONTEND_COPY, text, add=add)
         return path
 
     def fragment(self, rel, text):
@@ -157,6 +161,15 @@ class RepoCase(unittest.TestCase):
 
 
 class AssembleTests(RepoCase):
+    def test_assemble_writes_an_identical_frontend_copy(self):
+        shutil.rmtree(self.repo.root / "frontend")
+        self.repo.fragment("added/x.md", "- A feature.\n")
+        changelog.assemble(self.repo.root, "9.9.9", "2026-10-09")
+        copy = (self.repo.root / FRONTEND_COPY).read_bytes()
+        assert copy == (self.repo.root / "CHANGELOG.md").read_bytes()
+        assert b"## [9.9.9] - 2026-10-09" in copy
+        assert changelog.FRONTEND_COPY == FRONTEND_COPY
+
     def test_sections_follow_sections_json_order_with_their_headings(self):
         self.repo.fragment("fixed/b.md", "- A fix.\n")
         self.repo.fragment("added/a.md", "- A feature.\n")
@@ -867,9 +880,13 @@ class ReleaseFlowTests(unittest.TestCase):
         assert self.repo.status() == ""
 
     def test_rollback_after_git_rm_restores_the_fragments(self):
+        before = git(self.repo.root, "show", f"HEAD:{FRONTEND_COPY}").stdout
         changelog.assemble_release(self.repo.root, "0.3.0", "2026-10-03")
+        copy = self.repo.root / FRONTEND_COPY
+        assert copy.read_text(encoding="utf-8") != before
         changelog.rollback_release(self.repo.root)
         assert self.repo.status() == ""
+        assert copy.read_text(encoding="utf-8") == before
         assert (self.repo.root / "changelog.d/added/a.md").exists()
 
     def test_rollback_leaves_files_outside_the_release_paths_alone(self):
@@ -900,6 +917,11 @@ class ReleaseFlowTests(unittest.TestCase):
         assert log.splitlines()[0] == "Updated version to 0.3.0"
         assert "D\tchangelog.d/added/a.md" in log
         assert "M\tCHANGELOG.md" in log
+        assert f"M\t{FRONTEND_COPY}" in log
+        assert (
+            git(self.repo.root, "show", f"HEAD:{FRONTEND_COPY}").stdout
+            == git(self.repo.root, "show", "HEAD:CHANGELOG.md").stdout
+        )
         assert git(self.repo.root, "rev-parse", "HEAD~1").stdout.strip() == before
         head = git(self.repo.root, "rev-parse", "HEAD").stdout.strip()
         assert git(self.repo.origin, "rev-parse", "main").stdout.strip() == head
@@ -933,11 +955,19 @@ class ReleaseFlowTests(unittest.TestCase):
         assert git(self.repo.root, "tag", "-l", "0.3.0").stdout.strip() == "0.3.0"
 
     def test_failed_commit_rolls_back(self):
+        flag_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(flag_dir.cleanup)
+        flag = Path(flag_dir.name) / "copy-staged"
         hook = self.repo.root / ".git" / "hooks" / "pre-commit"
-        hook.write_text("#!/bin/sh\necho hook says no >&2\nexit 1\n")
+        hook.write_text(
+            "#!/bin/sh\n"
+            f"git diff --cached --quiet -- {FRONTEND_COPY} || touch '{flag}'\n"
+            "echo hook says no >&2\nexit 1\n"
+        )
         hook.chmod(0o755)
         before = git(self.repo.root, "rev-parse", "HEAD").stdout.strip()
         refused(self.release, "git commit failed: hook says no; rolled back")
+        assert flag.exists()
         assert git(self.repo.root, "rev-parse", "HEAD").stdout.strip() == before
         assert self.repo.status() == ""
 
