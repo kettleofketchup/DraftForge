@@ -1,5 +1,5 @@
 import type { FormEvent } from 'react';
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import type { UserType } from '~/components/user/types';
 
 import { PlusIconButton } from '~/components/ui/buttons';

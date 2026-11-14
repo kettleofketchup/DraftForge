@@ -9,8 +9,8 @@ import { User } from '~/components/user/user';
 import { UserAvatar } from '~/components/user/UserAvatar';
 
 import { useState, type FormEvent } from 'react';
-import { getLogger } from '~/lib/logger';
 import { Input } from '~/components/ui/input';
+import { getLogger } from '~/lib/logger';
 
 const log = getLogger('addPlayerDropdown');
 interface Props {

@@ -1,7 +1,6 @@
 import { Loader2, Users } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { SearchUserDropdown } from '~/components/user/searchUser';
-import type { UserType } from '~/components/user/types';
 import { VirtualizedUserGrid } from '~/components/user/VirtualizedUserGrid';
 import { useDebouncedValue } from '~/hooks/useDebouncedValue';
 import { useResolvedUsers } from '~/hooks/useResolvedUsers';
@@ -9,9 +8,7 @@ import { useUserStore } from '~/store/userStore';
 
 /** Skeleton loader for user cards */
 const UserCardSkeleton = () => (
-  <div
-    className="flex w-full sm:gap-2 md:gap-4 py-4 justify-center content-center"
-  >
+  <div className="flex w-full sm:gap-2 md:gap-4 py-4 justify-center content-center">
     <div className="justify-between h-full bg-base-200 shadow-md w-full max-w-sm animate-pulse p-8">
       {/* Top bar skeleton - avatar + header */}
       <div className="flex items-center gap-2 justify-start">
@@ -90,9 +87,10 @@ export function UsersPage() {
   const filteredUsers = useMemo(() => {
     if (debouncedQuery === '') return users;
     const q = debouncedQuery.toLowerCase();
-    return users.filter((person) =>
-      person.username?.toLowerCase().includes(q) ||
-      person.nickname?.toLowerCase().includes(q)
+    return users.filter(
+      (person) =>
+        person.username?.toLowerCase().includes(q) ||
+        person.nickname?.toLowerCase().includes(q),
     );
   }, [users, debouncedQuery]);
 
@@ -175,11 +173,7 @@ export function UsersPage() {
         </div>
 
         <div className="w-full">
-          <SearchUserDropdown
-            users={users}
-            query={query}
-            setQuery={setQuery}
-          />
+          <SearchUserDropdown users={users} query={query} setQuery={setQuery} />
         </div>
       </div>
 

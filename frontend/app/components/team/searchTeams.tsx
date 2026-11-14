@@ -1,8 +1,8 @@
 import { Combobox, ComboboxInput } from '@headlessui/react';
 import React from 'react';
 import type { TeamType } from '~/components/tournament/types';
-import { getLogger } from '~/lib/logger';
 import { Input } from '~/components/ui/input';
+import { getLogger } from '~/lib/logger';
 
 const log = getLogger('searchTeams');
 interface Props {

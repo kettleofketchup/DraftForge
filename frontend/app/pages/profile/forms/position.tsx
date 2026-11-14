@@ -63,7 +63,9 @@ export const PositionFormFields = ({
               >
                 <FormControl>
                   <SelectTrigger data-testid="position-choice-carry">
-                    <SelectValue placeholder={PositionChoiceEnum[field.value]} />
+                    <SelectValue
+                      placeholder={PositionChoiceEnum[field.value]}
+                    />
                   </SelectTrigger>
                 </FormControl>
                 {positionChoices()}
@@ -88,7 +90,9 @@ export const PositionFormFields = ({
               >
                 <FormControl>
                   <SelectTrigger data-testid="position-choice-mid">
-                    <SelectValue placeholder={PositionChoiceEnum[field.value]} />
+                    <SelectValue
+                      placeholder={PositionChoiceEnum[field.value]}
+                    />
                   </SelectTrigger>
                 </FormControl>
                 {positionChoices()}
@@ -113,7 +117,9 @@ export const PositionFormFields = ({
               >
                 <FormControl>
                   <SelectTrigger data-testid="position-choice-offlane">
-                    <SelectValue placeholder={PositionChoiceEnum[field.value]} />
+                    <SelectValue
+                      placeholder={PositionChoiceEnum[field.value]}
+                    />
                   </SelectTrigger>
                 </FormControl>
                 {positionChoices()}
@@ -138,7 +144,9 @@ export const PositionFormFields = ({
               >
                 <FormControl>
                   <SelectTrigger data-testid="position-choice-soft_support">
-                    <SelectValue placeholder={PositionChoiceEnum[field.value]} />
+                    <SelectValue
+                      placeholder={PositionChoiceEnum[field.value]}
+                    />
                   </SelectTrigger>
                 </FormControl>
                 {positionChoices()}
@@ -163,7 +171,9 @@ export const PositionFormFields = ({
               >
                 <FormControl>
                   <SelectTrigger data-testid="position-choice-hard_support">
-                    <SelectValue placeholder={PositionChoiceEnum[field.value]} />
+                    <SelectValue
+                      placeholder={PositionChoiceEnum[field.value]}
+                    />
                   </SelectTrigger>
                 </FormControl>
                 {positionChoices()}

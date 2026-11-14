@@ -1,14 +1,101 @@
-import { generateMeta } from '~/lib/seo';
-import { fetchOrganization } from '~/components/api/api';
-import { queryClient } from '~/root';
-import { Building2, Calendar, ClipboardList, ExternalLink, Mail, MailCheck, Pencil, Plus, Settings, Trash2, Upload, Users } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  Building2,
+  Calendar,
+  CalendarDays,
+  ClipboardList,
+  ExternalLink,
+  Mail,
+  MailCheck,
+  Pencil,
+  Plus,
+  Repeat,
+  Settings,
+  Upload,
+  Users,
+} from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ShouldRevalidateFunctionArgs } from 'react-router';
-import type { Route } from './+types/organization';
+import { Link, useParams } from 'react-router';
+import { toast } from 'sonner';
+import type { AddMemberPayload, EventRepeaterType } from '~/components/api/api';
+import {
+  addOrgMember,
+  checkDiscordBotStatus,
+  fetchOrganization,
+} from '~/components/api/api';
+import {
+  CreateEventModal,
+  EditEventModal,
+  EditOrgDefaultsModal,
+  EditRepeaterModal,
+  EventStrip,
+  type EventType,
+} from '~/components/events';
+import {
+  DAY_LABELS,
+  FREQUENCY_SHORT_LABELS,
+} from '~/components/events/schemas';
+import { CreateLeagueModal, LeagueCard, useLeagues } from '~/components/league';
+import {
+  ClaimsTab,
+  DeleteOrganizationDangerZone,
+  EditOrganizationModal,
+  useOrganization,
+} from '~/components/organization';
+import { Badge } from '~/components/ui/badge';
+import {
+  AddDiscordBotButton,
+  PrimaryButton,
+  SecondaryButton,
+} from '~/components/ui/buttons';
+import {
+  EntityBreadcrumb,
+  type BreadcrumbSegment,
+} from '~/components/ui/entity-breadcrumb';
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+  useUrlTabs,
+} from '~/components/ui/tabs';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '~/components/ui/tooltip';
+import { UserList } from '~/components/user';
+import { AddUserModal } from '~/components/user/AddUserModal';
+import { CSVImportModal } from '~/components/user/CSVImportModal';
+import type { UserType } from '~/components/user/types';
+import {
+  useEventRepeaters,
+  useEvents,
+  useRepeaterSubscriptionMutation,
+} from '~/hooks/useEvent';
+import { useMemberAccess } from '~/hooks/useMemberAccess';
+import { useOrgUsers } from '~/hooks/useOrgUsers';
+import { usePageNav } from '~/hooks/usePageNav';
+import {
+  useIsOrganizationAdmin,
+  useIsOrganizationOwner,
+  useIsOrganizationStaff,
+} from '~/hooks/usePermissions';
+import { generateMeta } from '~/lib/seo';
 import type { OrganizationSSR } from '~/lib/ssr-types';
+import { cn } from '~/lib/utils';
+import { queryClient } from '~/root';
+import { useOrgStore } from '~/store/orgStore';
+import { useUserCacheStore } from '~/store/userCacheStore';
+import { useUserStore } from '~/store/userStore';
+import type { Route } from './+types/organization';
 
 export async function loader({ params }: Route.LoaderArgs) {
   const { fetchSSR } = await import('~/lib/ssr.server');
-  const organization = await fetchSSR<OrganizationSSR>(`/organizations/${params.organizationId}/ssr/`);
+  const organization = await fetchSSR<OrganizationSSR>(
+    `/organizations/${params.organizationId}/ssr/`,
+  );
   return { organization };
 }
 
@@ -57,40 +144,6 @@ export function meta({ data }: Route.MetaArgs) {
     description: 'Organization profile and events',
   });
 }
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { addOrgMember, checkDiscordBotStatus } from '~/components/api/api';
-import type { AddMemberPayload } from '~/components/api/api';
-import { CreateEventModal, EditEventModal, EditOrgDefaultsModal, EditRepeaterModal, EventStrip, type EventType } from '~/components/events';
-import { DAY_LABELS, FREQUENCY_SHORT_LABELS } from '~/components/events/schemas';
-import type { EventRepeaterType } from '~/components/api/api';
-import { useEvents, useEventRepeaters, useRepeaterSubscriptionMutation } from '~/hooks/useEvent';
-import { Repeat, CalendarDays } from 'lucide-react';
-import { CreateLeagueModal, LeagueCard, useLeagues } from '~/components/league';
-import { ClaimsTab, DeleteOrganizationDangerZone, EditOrganizationModal, useOrganization } from '~/components/organization';
-import { Badge } from '~/components/ui/badge';
-import { AddDiscordBotButton, PrimaryButton, SecondaryButton } from '~/components/ui/buttons';
-import { Tooltip, TooltipContent, TooltipTrigger } from '~/components/ui/tooltip';
-import { Tabs, TabsContent, TabsList, TabsTrigger, useUrlTabs } from '~/components/ui/tabs';
-import { UserList } from '~/components/user';
-import { AddUserModal } from '~/components/user/AddUserModal';
-import { CSVImportModal } from '~/components/user/CSVImportModal';
-import type { UserType } from '~/components/user/types';
-import { useMemberAccess } from '~/hooks/useMemberAccess';
-import { useOrgUsers } from '~/hooks/useOrgUsers';
-import {
-  useIsOrganizationAdmin,
-  useIsOrganizationOwner,
-  useIsOrganizationStaff,
-} from '~/hooks/usePermissions';
-import { useOrgStore } from '~/store/orgStore';
-import { useUserCacheStore } from '~/store/userCacheStore';
-import { useUserStore } from '~/store/userStore';
-import { usePageNav } from '~/hooks/usePageNav';
-import { cn } from '~/lib/utils';
-import { toast } from 'sonner';
-import { EntityBreadcrumb, type BreadcrumbSegment } from '~/components/ui/entity-breadcrumb';
 
 // Discord icon component
 const DiscordIcon = ({ className }: { className?: string }) => (
@@ -104,12 +157,30 @@ const DiscordIcon = ({ className }: { className?: string }) => (
   </svg>
 );
 
-function EventsList({ events, loading, onEdit, onEditSeries }: { events: EventType[]; loading: boolean; onEdit?: (event: EventType) => void; onEditSeries?: (repeaterId: number) => void }) {
+function EventsList({
+  events,
+  loading,
+  onEdit,
+  onEditSeries,
+}: {
+  events: EventType[];
+  loading: boolean;
+  onEdit?: (event: EventType) => void;
+  onEditSeries?: (repeaterId: number) => void;
+}) {
   if (loading) {
-    return <div className="text-center py-8 text-muted-foreground">Loading events...</div>;
+    return (
+      <div className="text-center py-8 text-muted-foreground">
+        Loading events...
+      </div>
+    );
   }
   if (events.length === 0) {
-    return <div className="text-center py-8 text-muted-foreground">No events found</div>;
+    return (
+      <div className="text-center py-8 text-muted-foreground">
+        No events found
+      </div>
+    );
   }
   return (
     <div>
@@ -119,23 +190,46 @@ function EventsList({ events, loading, onEdit, onEditSeries }: { events: EventTy
       </h3>
       <div className="grid gap-2">
         {events.map((event) => (
-          <EventStrip key={event.id} event={event} onEdit={onEdit} onEditSeries={onEditSeries} />
+          <EventStrip
+            key={event.id}
+            event={event}
+            onEdit={onEdit}
+            onEditSeries={onEditSeries}
+          />
         ))}
       </div>
     </div>
   );
 }
 
-function RepeatersList({ repeaters, loading, onEdit, onDelete }: { repeaters: EventRepeaterType[]; loading: boolean; onEdit?: (repeater: EventRepeaterType) => void; onDelete?: (repeater: EventRepeaterType) => void }) {
+function RepeatersList({
+  repeaters,
+  loading,
+  onEdit,
+  onDelete,
+}: {
+  repeaters: EventRepeaterType[];
+  loading: boolean;
+  onEdit?: (repeater: EventRepeaterType) => void;
+  onDelete?: (repeater: EventRepeaterType) => void;
+}) {
   const currentUser = useUserStore((state) => state.currentUser);
   const { subscribe, unsubscribe } = useRepeaterSubscriptionMutation();
   const isPending = subscribe.isPending || unsubscribe.isPending;
 
   if (loading) {
-    return <div className="text-center py-8 text-muted-foreground">Loading repeating events...</div>;
+    return (
+      <div className="text-center py-8 text-muted-foreground">
+        Loading repeating events...
+      </div>
+    );
   }
   if (repeaters.length === 0) {
-    return <div className="text-center py-8 text-muted-foreground">No repeating events found</div>;
+    return (
+      <div className="text-center py-8 text-muted-foreground">
+        No repeating events found
+      </div>
+    );
   }
   return (
     <div>
@@ -163,12 +257,17 @@ function RepeatersList({ repeaters, loading, onEdit, onDelete }: { repeaters: Ev
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 <p className="font-medium truncate text-sm">{r.name}</p>
-                <Badge variant={r.is_active ? 'default' : 'secondary'} className="shrink-0 text-[10px] px-1.5 py-0">
+                <Badge
+                  variant={r.is_active ? 'default' : 'secondary'}
+                  className="shrink-0 text-[10px] px-1.5 py-0"
+                >
                   {r.is_active ? 'Active' : 'Paused'}
                 </Badge>
               </div>
               <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground">
-                {r.day_of_week != null && <span>{DAY_LABELS[r.day_of_week]?.slice(0, 3)}</span>}
+                {r.day_of_week != null && (
+                  <span>{DAY_LABELS[r.day_of_week]?.slice(0, 3)}</span>
+                )}
                 {r.time_of_day && <span>{r.time_of_day?.slice(0, 5)}</span>}
                 <span className="inline-flex items-center gap-0.5">
                   <Users className="h-3 w-3" />
@@ -184,22 +283,37 @@ function RepeatersList({ repeaters, loading, onEdit, onDelete }: { repeaters: Ev
                   <TooltipTrigger asChild>
                     <SecondaryButton
                       size="icon"
-                      className={cn("size-9", r.is_subscribed && "text-interactive")}
+                      className={cn(
+                        'size-9',
+                        r.is_subscribed && 'text-interactive',
+                      )}
                       disabled={isPending}
                       aria-label={r.is_subscribed ? 'Unsubscribe' : 'Subscribe'}
                       onClick={(e) => {
-                        e.preventDefault(); e.stopPropagation();
+                        e.preventDefault();
+                        e.stopPropagation();
                         if (r.is_subscribed) {
-                          unsubscribe.mutate(r.id, { onError: () => toast.error('Failed to unsubscribe') });
+                          unsubscribe.mutate(r.id, {
+                            onError: () => toast.error('Failed to unsubscribe'),
+                          });
                         } else {
-                          subscribe.mutate(r.id, { onSuccess: () => toast.success('Subscribed'), onError: () => toast.error('Failed to subscribe') });
+                          subscribe.mutate(r.id, {
+                            onSuccess: () => toast.success('Subscribed'),
+                            onError: () => toast.error('Failed to subscribe'),
+                          });
                         }
                       }}
                     >
-                      {r.is_subscribed ? <MailCheck className="h-3.5 w-3.5" /> : <Mail className="h-3.5 w-3.5" />}
+                      {r.is_subscribed ? (
+                        <MailCheck className="h-3.5 w-3.5" />
+                      ) : (
+                        <Mail className="h-3.5 w-3.5" />
+                      )}
                     </SecondaryButton>
                   </TooltipTrigger>
-                  <TooltipContent>{r.is_subscribed ? 'Unsubscribe' : 'Subscribe'}</TooltipContent>
+                  <TooltipContent>
+                    {r.is_subscribed ? 'Unsubscribe' : 'Subscribe'}
+                  </TooltipContent>
                 </Tooltip>
               )}
               {onEdit && (
@@ -209,7 +323,11 @@ function RepeatersList({ repeaters, loading, onEdit, onDelete }: { repeaters: Ev
                       size="icon"
                       className="size-9"
                       aria-label="Edit series"
-                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); onEdit(r); }}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        onEdit(r);
+                      }}
                     >
                       <Pencil className="h-3.5 w-3.5" />
                     </SecondaryButton>
@@ -236,21 +354,23 @@ export default function OrganizationDetailPage() {
   const [createEventOpen, setCreateEventOpen] = useState(false);
   const [editOrgOpen, setEditOrgOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<EventType | null>(null);
-  const [editingRepeaterId, setEditingRepeaterId] = useState<number | null>(null);
+  const [editingRepeaterId, setEditingRepeaterId] = useState<number | null>(
+    null,
+  );
   const [showAddUser, setShowAddUser] = useState(false);
   const [showCSVImport, setShowCSVImport] = useState(false);
   const [editDefaultsOpen, setEditDefaultsOpen] = useState(false);
   const [activeTab, setActiveTab] = useUrlTabs('leagues');
 
   const { data: events = [], isLoading: eventsLoading } = useEvents(
-    pk ? { organization: pk } : undefined
+    pk ? { organization: pk } : undefined,
   );
-  const { data: repeaters = [], isLoading: repeatersLoading } = useEventRepeaters(
-    pk ? { organization: pk } : undefined
-  );
+  const { data: repeaters = [], isLoading: repeatersLoading } =
+    useEventRepeaters(pk ? { organization: pk } : undefined);
 
   // Org users from store (pk array) + cache resolution
-  const { orgUserPks, orgUsersLoading, orgUsersOrgId, getOrgUsers } = useOrgStore();
+  const { orgUserPks, orgUsersLoading, orgUsersOrgId, getOrgUsers } =
+    useOrgStore();
   const orgUsers = useOrgUsers(pk ?? 0);
   const currentOrg = useOrgStore((s) => s.currentOrg);
 
@@ -259,16 +379,21 @@ export default function OrganizationDetailPage() {
     if (pk) useUserCacheStore.getState().dropScoped({ orgId: pk });
     refetch();
   }, [pk, refetch]);
-  const { canView: canViewMembers, settled: memberAccessSettled } = useMemberAccess(
-    organization,
-    onMemberViewerChange,
-  );
+  const { canView: canViewMembers, settled: memberAccessSettled } =
+    useMemberAccess(organization, onMemberViewerChange);
 
   useEffect(() => {
     if (activeTab === 'users' && pk && memberAccessSettled && canViewMembers) {
       getOrgUsers(pk);
     }
-  }, [activeTab, pk, memberAccessSettled, canViewMembers, getOrgUsers, orgUsersOrgId]);
+  }, [
+    activeTab,
+    pk,
+    memberAccessSettled,
+    canViewMembers,
+    getOrgUsers,
+    orgUsersOrgId,
+  ]);
 
   useEffect(() => {
     if (memberAccessSettled && !canViewMembers && activeTab === 'users') {
@@ -295,16 +420,13 @@ export default function OrganizationDetailPage() {
       }
       return user;
     },
-    [pk]
+    [pk],
   );
 
-  const addedPkSet = useMemo(
-    () => new Set(orgUserPks),
-    [orgUserPks]
-  );
+  const addedPkSet = useMemo(() => new Set(orgUserPks), [orgUserPks]);
   const isUserAdded = useCallback(
     (user: UserType) => user.pk != null && addedPkSet.has(user.pk),
-    [addedPkSet]
+    [addedPkSet],
   );
 
   const hasDiscordServer = Boolean(organization?.discord_server_id);
@@ -313,13 +435,19 @@ export default function OrganizationDetailPage() {
   const { data: botStatus } = useQuery({
     queryKey: ['discordBotStatus', pk],
     queryFn: () => checkDiscordBotStatus(pk!),
-    enabled: !!pk && !!organization && !!currentUser && hasDiscordServer && !!isOrgAdmin,
+    enabled:
+      !!pk &&
+      !!organization &&
+      !!currentUser &&
+      hasDiscordServer &&
+      !!isOrgAdmin,
     staleTime: 5 * 60 * 1000, // match backend cache TTL
   });
   const hasBotAccess = botStatus?.has_bot ?? null;
 
   // Page nav options for mobile navbar dropdown
-  const userCountDisplay = orgUsersLoading || orgUsersOrgId !== pk ? '...' : orgUserPks.length;
+  const userCountDisplay =
+    orgUsersLoading || orgUsersOrgId !== pk ? '...' : orgUserPks.length;
   const pageNavOptions = useMemo(() => {
     const opts = [
       { value: 'leagues', label: `Leagues (${leagues.length})` },
@@ -332,15 +460,19 @@ export default function OrganizationDetailPage() {
       opts.push({ value: 'claims', label: 'Claims' });
     }
     return opts;
-  }, [leagues.length, events.length, userCountDisplay, canViewMembers, isOrgAdmin]);
+  }, [
+    leagues.length,
+    events.length,
+    userCountDisplay,
+    canViewMembers,
+    isOrgAdmin,
+  ]);
 
   usePageNav(organization ? pageNavOptions : null, activeTab, setActiveTab);
 
   const breadcrumbSegments = useMemo((): BreadcrumbSegment[] => {
     if (!organization) return [];
-    return [
-      { type: 'organization' as const, label: organization.name },
-    ];
+    return [{ type: 'organization' as const, label: organization.name }];
   }, [organization]);
 
   if (orgLoading) {
@@ -361,80 +493,80 @@ export default function OrganizationDetailPage() {
 
   return (
     <div className="container mx-auto p-4">
-        <EntityBreadcrumb segments={breadcrumbSegments} />
-        {/* Organization Header */}
-        <div className="bg-base-200 shadow-lg mb-8 p-8">
-          <div className="flex flex-col gap-2 p-6">
-            <div className="flex flex-col md:flex-row gap-6">
-              {/* Organization Logo */}
-              <div className="flex-shrink-0">
-                {organization.logo ? (
-                  <img
-                    src={organization.logo}
-                    alt={organization.name}
-                    className="w-32 h-32 rounded-xl object-cover shadow-md"
+      <EntityBreadcrumb segments={breadcrumbSegments} />
+      {/* Organization Header */}
+      <div className="bg-base-200 shadow-lg mb-8 p-8">
+        <div className="flex flex-col gap-2 p-6">
+          <div className="flex flex-col md:flex-row gap-6">
+            {/* Organization Logo */}
+            <div className="flex-shrink-0">
+              {organization.logo ? (
+                <img
+                  src={organization.logo}
+                  alt={organization.name}
+                  className="w-32 h-32 rounded-xl object-cover shadow-md"
+                />
+              ) : (
+                <div className="w-32 h-32 rounded-xl bg-base-300 flex items-center justify-center shadow-md">
+                  <Building2 className="w-16 h-16 text-muted-foreground" />
+                </div>
+              )}
+            </div>
+
+            {/* Organization Info */}
+            <div className="flex-1">
+              <div className="flex items-start justify-between mb-2">
+                <h1 className="text-3xl font-bold">{organization.name}</h1>
+                {isOrgAdmin && (
+                  <PrimaryButton
+                    size="sm"
+                    onClick={() => setEditOrgOpen(true)}
+                    data-testid="edit-organization-button"
+                  >
+                    <Pencil className="w-4 h-4 mr-2" />
+                    Edit
+                  </PrimaryButton>
+                )}
+              </div>
+
+              {/* Discord Link + Bot Status */}
+              <div className="flex flex-wrap items-center gap-3 mb-4">
+                {organization.discord_link && (
+                  <a
+                    href={organization.discord_link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 text-indigo-400 hover:text-indigo-300 transition-colors"
+                  >
+                    <DiscordIcon className="w-5 h-5" />
+                    <span>Join our Discord</span>
+                    <ExternalLink className="w-4 h-4" />
+                  </a>
+                )}
+                {isOrgAdmin && hasDiscordServer && hasBotAccess === false && (
+                  <AddDiscordBotButton
+                    size="sm"
+                    compact
+                    tooltip="Enable Discord user search and event notifications"
                   />
-                ) : (
-                  <div className="w-32 h-32 rounded-xl bg-base-300 flex items-center justify-center shadow-md">
-                    <Building2 className="w-16 h-16 text-muted-foreground" />
-                  </div>
                 )}
               </div>
 
-              {/* Organization Info */}
-              <div className="flex-1">
-                <div className="flex items-start justify-between mb-2">
-                  <h1 className="text-3xl font-bold">{organization.name}</h1>
-                  {isOrgAdmin && (
-                    <PrimaryButton
-                      size="sm"
-                      onClick={() => setEditOrgOpen(true)}
-                      data-testid="edit-organization-button"
-                    >
-                      <Pencil className="w-4 h-4 mr-2" />
-                      Edit
-                    </PrimaryButton>
-                  )}
+              {/* Description */}
+              {organization.description && (
+                <div className="prose prose-sm max-w-none">
+                  <p className="text-base-content/80 whitespace-pre-wrap">
+                    {organization.description}
+                  </p>
                 </div>
-
-                {/* Discord Link + Bot Status */}
-                <div className="flex flex-wrap items-center gap-3 mb-4">
-                  {organization.discord_link && (
-                    <a
-                      href={organization.discord_link}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 text-indigo-400 hover:text-indigo-300 transition-colors"
-                    >
-                      <DiscordIcon className="w-5 h-5" />
-                      <span>Join our Discord</span>
-                      <ExternalLink className="w-4 h-4" />
-                    </a>
-                  )}
-                  {isOrgAdmin && hasDiscordServer && hasBotAccess === false && (
-                    <AddDiscordBotButton
-                      size="sm"
-                      compact
-                      tooltip="Enable Discord user search and event notifications"
-                    />
-                  )}
-                </div>
-
-                {/* Description */}
-                {organization.description && (
-                  <div className="prose prose-sm max-w-none">
-                    <p className="text-base-content/80 whitespace-pre-wrap">
-                      {organization.description}
-                    </p>
-                  </div>
-                )}
-              </div>
+              )}
             </div>
           </div>
         </div>
+      </div>
 
-        {/* Tabs Section */}
-        <div className="rounded-lg border border-border bg-base-200/50 p-4 md:p-6">
+      {/* Tabs Section */}
+      <div className="rounded-lg border border-border bg-base-200/50 p-4 md:p-6">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="hidden md:flex mb-4">
             <TabsTrigger value="leagues" data-testid="org-tab-leagues">
@@ -493,7 +625,12 @@ export default function OrganizationDetailPage() {
           {/* Events Tab */}
           <TabsContent value="events">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold" data-testid="org-events-heading">Events</h2>
+              <h2
+                className="text-xl font-semibold"
+                data-testid="org-events-heading"
+              >
+                Events
+              </h2>
               <div className="flex items-center gap-2">
                 {canEditEvents && (
                   <Tooltip>
@@ -511,7 +648,10 @@ export default function OrganizationDetailPage() {
                   </Tooltip>
                 )}
                 {isOrgStaff && (
-                  <PrimaryButton data-testid="create-event-btn" onClick={() => setCreateEventOpen(true)}>
+                  <PrimaryButton
+                    data-testid="create-event-btn"
+                    onClick={() => setCreateEventOpen(true)}
+                  >
                     <Plus className="w-4 h-4 mr-2" />
                     Create Event
                   </PrimaryButton>
@@ -521,8 +661,19 @@ export default function OrganizationDetailPage() {
 
             {/* Desktop: side-by-side columns */}
             <div className="hidden lg:grid lg:grid-cols-2 lg:gap-6">
-              <EventsList events={events} loading={eventsLoading} onEdit={canEditEvents ? setEditingEvent : undefined} onEditSeries={canEditEvents ? setEditingRepeaterId : undefined} />
-              <RepeatersList repeaters={repeaters} loading={repeatersLoading} onEdit={canEditEvents ? (r) => setEditingRepeaterId(r.id) : undefined} />
+              <EventsList
+                events={events}
+                loading={eventsLoading}
+                onEdit={canEditEvents ? setEditingEvent : undefined}
+                onEditSeries={canEditEvents ? setEditingRepeaterId : undefined}
+              />
+              <RepeatersList
+                repeaters={repeaters}
+                loading={repeatersLoading}
+                onEdit={
+                  canEditEvents ? (r) => setEditingRepeaterId(r.id) : undefined
+                }
+              />
             </div>
 
             {/* Mobile: sub-tabs */}
@@ -539,10 +690,25 @@ export default function OrganizationDetailPage() {
                   </TabsTrigger>
                 </TabsList>
                 <TabsContent value="upcoming">
-                  <EventsList events={events} loading={eventsLoading} onEdit={canEditEvents ? setEditingEvent : undefined} onEditSeries={canEditEvents ? setEditingRepeaterId : undefined} />
+                  <EventsList
+                    events={events}
+                    loading={eventsLoading}
+                    onEdit={canEditEvents ? setEditingEvent : undefined}
+                    onEditSeries={
+                      canEditEvents ? setEditingRepeaterId : undefined
+                    }
+                  />
                 </TabsContent>
                 <TabsContent value="repeaters">
-                  <RepeatersList repeaters={repeaters} loading={repeatersLoading} onEdit={canEditEvents ? (r) => setEditingRepeaterId(r.id) : undefined} />
+                  <RepeatersList
+                    repeaters={repeaters}
+                    loading={repeatersLoading}
+                    onEdit={
+                      canEditEvents
+                        ? (r) => setEditingRepeaterId(r.id)
+                        : undefined
+                    }
+                  />
                 </TabsContent>
               </Tabs>
             </div>
@@ -554,7 +720,8 @@ export default function OrganizationDetailPage() {
                 <h2 className="text-xl font-semibold">Organization Members</h2>
                 <div className="flex items-center gap-3">
                   <span className="text-sm text-muted-foreground">
-                    {orgUsers.length} {orgUsers.length === 1 ? 'member' : 'members'}
+                    {orgUsers.length}{' '}
+                    {orgUsers.length === 1 ? 'member' : 'members'}
                   </span>
                   {canAddMembers && (
                     <>
@@ -597,86 +764,92 @@ export default function OrganizationDetailPage() {
             </TabsContent>
           )}
         </Tabs>
-        </div>
+      </div>
 
-        {organization && isOwner && (
-          <DeleteOrganizationDangerZone organization={organization} />
-        )}
+      {organization && isOwner && (
+        <DeleteOrganizationDangerZone organization={organization} />
+      )}
 
-        {pk && (
-          <CreateLeagueModal
-            open={createLeagueOpen}
-            onOpenChange={setCreateLeagueOpen}
-            organizationId={pk}
-          />
-        )}
-
-        {isOrgStaff && pk && (
-          <CreateEventModal
-            open={createEventOpen}
-            onOpenChange={setCreateEventOpen}
-            organizationId={pk}
-          />
-        )}
-
-        {editingEvent && (
-          <EditEventModal
-            event={editingEvent}
-            open={true}
-            onOpenChange={(open) => { if (!open) setEditingEvent(null); }}
-          />
-        )}
-
-        <EditRepeaterModal
-          repeater={repeaters.find((r) => r.id === editingRepeaterId) ?? null}
-          open={editingRepeaterId !== null}
-          onOpenChange={(open) => { if (!open) setEditingRepeaterId(null); }}
+      {pk && (
+        <CreateLeagueModal
+          open={createLeagueOpen}
+          onOpenChange={setCreateLeagueOpen}
+          organizationId={pk}
         />
+      )}
 
-        {organization && (
-          <EditOrganizationModal
-            open={editOrgOpen}
-            onOpenChange={setEditOrgOpen}
-            organization={organization}
-            onSuccess={() => {
-              refetch();
-              queryClient.invalidateQueries({ queryKey: ['discordBotStatus', pk] });
-            }}
-          />
-        )}
+      {isOrgStaff && pk && (
+        <CreateEventModal
+          open={createEventOpen}
+          onOpenChange={setCreateEventOpen}
+          organizationId={pk}
+        />
+      )}
 
-        {canAddMembers && pk && (
-          <CSVImportModal
-            open={showCSVImport}
-            onOpenChange={setShowCSVImport}
-            entityContext={{ orgId: pk }}
-            onComplete={() => {
-              const { clearOrgUsers, getOrgUsers } = useOrgStore.getState();
-              clearOrgUsers();
-              getOrgUsers(pk!);
-            }}
-          />
-        )}
+      {editingEvent && (
+        <EditEventModal
+          event={editingEvent}
+          open={true}
+          onOpenChange={(open) => {
+            if (!open) setEditingEvent(null);
+          }}
+        />
+      )}
 
-        {canAddMembers && pk && (
-          <AddUserModal
-            open={showAddUser}
-            onOpenChange={setShowAddUser}
-            title={`Add Member to ${organization?.name || 'Organization'}`}
-            entityContext={{ orgId: pk }}
-            onAdd={handleAddMember}
-            isAdded={isUserAdded}
-                        hasDiscordServer={hasDiscordServer}
-          />
-        )}
+      <EditRepeaterModal
+        repeater={repeaters.find((r) => r.id === editingRepeaterId) ?? null}
+        open={editingRepeaterId !== null}
+        onOpenChange={(open) => {
+          if (!open) setEditingRepeaterId(null);
+        }}
+      />
 
-        {editDefaultsOpen && pk && (
-          <EditOrgDefaultsModal
-            organizationId={pk}
-            open={editDefaultsOpen}
-            onOpenChange={setEditDefaultsOpen}
-          />
-        )}
+      {organization && (
+        <EditOrganizationModal
+          open={editOrgOpen}
+          onOpenChange={setEditOrgOpen}
+          organization={organization}
+          onSuccess={() => {
+            refetch();
+            queryClient.invalidateQueries({
+              queryKey: ['discordBotStatus', pk],
+            });
+          }}
+        />
+      )}
+
+      {canAddMembers && pk && (
+        <CSVImportModal
+          open={showCSVImport}
+          onOpenChange={setShowCSVImport}
+          entityContext={{ orgId: pk }}
+          onComplete={() => {
+            const { clearOrgUsers, getOrgUsers } = useOrgStore.getState();
+            clearOrgUsers();
+            getOrgUsers(pk!);
+          }}
+        />
+      )}
+
+      {canAddMembers && pk && (
+        <AddUserModal
+          open={showAddUser}
+          onOpenChange={setShowAddUser}
+          title={`Add Member to ${organization?.name || 'Organization'}`}
+          entityContext={{ orgId: pk }}
+          onAdd={handleAddMember}
+          isAdded={isUserAdded}
+          hasDiscordServer={hasDiscordServer}
+        />
+      )}
+
+      {editDefaultsOpen && pk && (
+        <EditOrgDefaultsModal
+          organizationId={pk}
+          open={editDefaultsOpen}
+          onOpenChange={setEditDefaultsOpen}
+        />
+      )}
     </div>
   );
 }

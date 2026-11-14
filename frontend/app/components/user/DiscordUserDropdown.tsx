@@ -5,13 +5,13 @@ import {
   ComboboxOptions,
 } from '@headlessui/react';
 import React, { useCallback, useEffect, useState } from 'react';
+import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
 import { UserAvatar } from '~/components/user/UserAvatar';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '../../store/userStore';
 import { get_dtx_members } from '../api/api';
 import type { GuildMember, GuildMembers, UsersType } from '../user/types';
-import { Input } from '~/components/ui/input';
 
 const log = getLogger('DiscordUserDropdown');
 interface Props {
@@ -200,7 +200,12 @@ const DiscordUserDropdown: React.FC<Props> = ({
   };
   return (
     <div className="w-full max-w-md">
-      <Combobox value={discordUser} onChange={(u) => { if (u) onSelect(u); }}>
+      <Combobox
+        value={discordUser}
+        onChange={(u) => {
+          if (u) onSelect(u);
+        }}
+      >
         <ComboboxInput
           as={Input}
           placeholder="Search DTX members..."

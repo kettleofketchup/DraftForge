@@ -9,7 +9,9 @@ interface LiveViewProps {
 }
 
 /** Just the Live/Auto toggle buttons - for placing in header */
-export const LiveAutoButtons: React.FC<{ isPolling: boolean }> = ({ isPolling }) => {
+export const LiveAutoButtons: React.FC<{ isPolling: boolean }> = ({
+  isPolling,
+}) => {
   const toggleLivePolling = useTournamentStore(
     (state) => state.toggleLivePolling,
   );
@@ -64,7 +66,8 @@ export const DraftRoundIndicator: React.FC = () => {
       <h3 className="text-base font-semibold">Draft</h3>
       {curDraftRound?.pick_number && (
         <span className="text-xs font-medium px-1.5 py-0.5 bg-primary/20 text-primary rounded">
-          #{curDraftRound.pick_number}{totalRounds > 0 ? `/${totalRounds}` : ''}
+          #{curDraftRound.pick_number}
+          {totalRounds > 0 ? `/${totalRounds}` : ''}
         </span>
       )}
     </div>

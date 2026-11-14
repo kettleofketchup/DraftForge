@@ -1,7 +1,7 @@
-import { Award, Users, FileText } from 'lucide-react';
+import { Award, FileText, Users } from 'lucide-react';
 
-import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card';
 import { Badge } from '~/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card';
 import { UserStrip } from '~/components/user/UserStrip';
 import type { LeagueType } from '../schemas';
 
@@ -76,7 +76,9 @@ export const InfoTab: React.FC<Props> = ({ league }) => {
                   leagueId={league.pk}
                   organizationId={league.organization?.pk}
                   actionSlot={
-                    <Badge variant="secondary" className="text-xs">Admin</Badge>
+                    <Badge variant="secondary" className="text-xs">
+                      Admin
+                    </Badge>
                   }
                 />
               ))}

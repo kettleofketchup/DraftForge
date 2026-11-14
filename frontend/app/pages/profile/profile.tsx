@@ -14,8 +14,6 @@ import { z } from 'zod';
 
 import { UpdateProfile } from '~/components/api/api';
 import { GAME_TYPE } from '~/components/game/constants';
-import { selectPositions } from '~/store/selectPositions';
-import { useUserCacheStore } from '~/store/userCacheStore';
 import { SubmitButton } from '~/components/ui/buttons';
 import {
   Form,
@@ -28,6 +26,8 @@ import {
 } from '~/components/ui/form';
 import { Input } from '~/components/ui/input';
 import { UserSchema } from '~/components/user/schemas';
+import { selectPositions } from '~/store/selectPositions';
+import { useUserCacheStore } from '~/store/userCacheStore';
 import { PositionForm } from './forms/position';
 export const ProfilePage: React.FC = () => {
   const currentUser = useUserStore((state) => state.currentUser);
@@ -39,7 +39,11 @@ export const ProfilePage: React.FC = () => {
   // fine for form init; the write path (UpdateProfile) is unchanged.
   const seedPositions = () =>
     (currentUser?.pk != null
-      ? selectPositions(useUserCacheStore.getState(), currentUser.pk, GAME_TYPE.DOTA2)
+      ? selectPositions(
+          useUserCacheStore.getState(),
+          currentUser.pk,
+          GAME_TYPE.DOTA2,
+        )
       : undefined) ?? currentUser?.positions;
 
   const form = useForm<z.infer<typeof UserSchema>>({
@@ -101,61 +105,61 @@ export const ProfilePage: React.FC = () => {
 
   return (
     <div className="container px-1 sm:mx-auto sm:p-4">
-        <div className="flex flex-col  gap-4">
-          <div className="flex flex-col  sm:flex-row w-90 justify-center text-center align-center w-full">
-            <h1 className="text-title text-pretty text-center">
-              {DisplayName(currentUser)}
-            </h1>
-          </div>
+      <div className="flex flex-col  gap-4">
+        <div className="flex flex-col  sm:flex-row w-90 justify-center text-center align-center w-full">
+          <h1 className="text-title text-pretty text-center">
+            {DisplayName(currentUser)}
+          </h1>
+        </div>
 
-          <div className="flex-1 w-full justify-center align-center self-center ">
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="">
-                <PositionForm form={form} />
+        <div className="flex-1 w-full justify-center align-center self-center ">
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="">
+              <PositionForm form={form} />
 
-                <FormField
-                  control={form.control}
-                  name="steam_account_id"
-                  rules={{
-                    validate: (value) => {
-                      if (currentUser?.steam_account_id && !value) {
-                        return 'Friend ID cannot be cleared once set';
-                      }
-                      return true;
-                    },
-                  }}
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Friend ID</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          placeholder="Enter your Friend ID"
-                          {...field}
-                          value={field.value ?? ''}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            field.onChange(val ? parseInt(val, 10) : null);
-                          }}
-                        />
-                      </FormControl>
-                      {currentUser?.steam_account_id && (
-                        <FormDescription>
-                          Friend ID cannot be removed once set
-                        </FormDescription>
-                      )}
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+              <FormField
+                control={form.control}
+                name="steam_account_id"
+                rules={{
+                  validate: (value) => {
+                    if (currentUser?.steam_account_id && !value) {
+                      return 'Friend ID cannot be cleared once set';
+                    }
+                    return true;
+                  },
+                }}
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Friend ID</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        placeholder="Enter your Friend ID"
+                        {...field}
+                        value={field.value ?? ''}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          field.onChange(val ? parseInt(val, 10) : null);
+                        }}
+                      />
+                    </FormControl>
+                    {currentUser?.steam_account_id && (
+                      <FormDescription>
+                        Friend ID cannot be removed once set
+                      </FormDescription>
+                    )}
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-                <div className="flex justify-center align-center self-center">
-                  <SubmitButton>Submit</SubmitButton>
-                </div>
-              </form>
-            </Form>
-          </div>
+              <div className="flex justify-center align-center self-center">
+                <SubmitButton>Submit</SubmitButton>
+              </div>
+            </form>
+          </Form>
         </div>
       </div>
+    </div>
   );
 };
