@@ -21,14 +21,28 @@ export interface ContributionsTabProps {
   access: OrgFeatureAccess;
 }
 
-export function ContributionsTab({ orgId, timeZone, membersPrivate, access }: ContributionsTabProps) {
+export function ContributionsTab({
+  orgId,
+  timeZone,
+  membersPrivate,
+  access,
+}: ContributionsTabProps) {
   const [period, setPeriod] = useState<string>(ALL_TIME);
-  const [selected, setSelected] = useState<number | null>(null);
+  const [selected, setSelected] = useState<{
+    orgUserPk: number;
+    own: boolean;
+  } | null>(null);
   const options = useMemo(() => periodOptions(timeZone), [timeZone]);
-  const { data, isLoading, isError, error } = useLeaderboard(orgId, access, period);
+  const { data, isLoading, isError, error } = useLeaderboard(
+    orgId,
+    access,
+    period,
+  );
 
+  const isOwnRow = (orgUserPk: number): boolean =>
+    data?.own_row?.org_user_pk === orgUserPk;
   const canOpen = (orgUserPk: number): boolean =>
-    data != null && (data.rows_visible || data.own_row?.org_user_pk === orgUserPk);
+    data != null && (data.rows_visible || isOwnRow(orgUserPk));
 
   return (
     <div className="flex flex-col gap-4" data-testid="contributions-tab">
@@ -61,7 +75,11 @@ export function ContributionsTab({ orgId, timeZone, membersPrivate, access }: Co
         </BrandSelect>
       </div>
 
-      {isLoading && <div className="py-6 text-center text-muted-foreground">Loading contributions...</div>}
+      {isLoading && (
+        <div className="py-6 text-center text-muted-foreground">
+          Loading contributions...
+        </div>
+      )}
       {isError && (
         <div className="text-destructive" data-testid="contributions-error">
           {extractApiError(error) ?? 'Could not load contributions.'}
@@ -75,13 +93,14 @@ export function ContributionsTab({ orgId, timeZone, membersPrivate, access }: Co
             viewerPk={access.viewerPk}
             membersPrivate={membersPrivate}
             onSelectMember={(pk) => {
-              if (canOpen(pk)) setSelected(pk);
+              if (canOpen(pk))
+                setSelected({ orgUserPk: pk, own: isOwnRow(pk) });
             }}
           />
-          {selected != null && canOpen(selected) && (
+          {selected != null && (data.rows_visible || selected.own) && (
             <MemberBreakdown
               orgId={orgId}
-              orgUserPk={selected}
+              orgUserPk={selected.orgUserPk}
               period={period}
               timeZone={timeZone}
               access={access}

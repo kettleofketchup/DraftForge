@@ -603,6 +603,7 @@ export default function OrganizationDetailPage() {
           {canViewContributions && pk && (
             <TabsContent value="contributions">
               <ContributionsTab
+                key={pk}
                 orgId={pk}
                 timeZone={organization.timezone}
                 membersPrivate={organization.members_private ?? false}

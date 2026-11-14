@@ -58,8 +58,17 @@ function HiddenRowsNote({
   );
 }
 
-export function Leaderboard({ data, viewerPk, membersPrivate, onSelectMember }: LeaderboardProps) {
-  const rows = data.rows_visible ? data.rows : data.own_row ? [data.own_row] : [];
+export function Leaderboard({
+  data,
+  viewerPk,
+  membersPrivate,
+  onSelectMember,
+}: LeaderboardProps) {
+  const rows = data.rows_visible
+    ? data.rows
+    : data.own_row
+      ? [data.own_row]
+      : [];
   const ownPk = data.own_row?.org_user_pk ?? null;
   const isOwn = (row: LeaderboardRow): boolean =>
     row.org_user_pk === ownPk || (viewerPk != null && row.user_pk === viewerPk);
@@ -68,9 +77,14 @@ export function Leaderboard({ data, viewerPk, membersPrivate, onSelectMember }: 
     <div className="flex flex-col gap-4">
       <div className="rounded-lg border border-border bg-base-300/40 p-4">
         <div className="text-sm text-muted-foreground">Organization total</div>
-        <div className="text-3xl font-bold tabular-nums" data-testid="contributions-org-total">
+        <div
+          className="text-3xl font-bold tabular-nums"
+          data-testid="contributions-org-total"
+        >
           {data.total.toLocaleString('en-US')}
-          <span className="ml-1.5 text-base font-normal text-muted-foreground">points</span>
+          <span className="ml-1.5 text-base font-normal text-muted-foreground">
+            points
+          </span>
         </div>
       </div>
 
@@ -84,7 +98,10 @@ export function Leaderboard({ data, viewerPk, membersPrivate, onSelectMember }: 
 
       {rows.length === 0 ? (
         data.rows_visible && (
-            <div className="py-6 text-center text-muted-foreground" data-testid="contributions-empty">
+          <div
+            className="py-6 text-center text-muted-foreground"
+            data-testid="contributions-empty"
+          >
             No contributions in this period
           </div>
         )
@@ -95,7 +112,9 @@ export function Leaderboard({ data, viewerPk, membersPrivate, onSelectMember }: 
               {data.rows_visible && <TableHead className="w-12">#</TableHead>}
               <TableHead>Member</TableHead>
               <TableHead className="text-right">Points</TableHead>
-              <TableHead className="hidden text-right sm:table-cell">Entries</TableHead>
+              <TableHead className="hidden text-right sm:table-cell">
+                Entries
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -111,6 +130,8 @@ export function Leaderboard({ data, viewerPk, membersPrivate, onSelectMember }: 
                   data-testid={`contributions-row-${row.org_user_pk}`}
                   data-own={own ? 'true' : 'false'}
                   aria-current={own ? 'true' : undefined}
+                  role="button"
+                  aria-label={`View ${displayName(row)}'s contributions`}
                   tabIndex={0}
                   onClick={() => onSelectMember(row.org_user_pk)}
                   onKeyDown={(e) => {
@@ -121,7 +142,9 @@ export function Leaderboard({ data, viewerPk, membersPrivate, onSelectMember }: 
                   }}
                 >
                   {data.rows_visible && (
-                    <TableCell className="font-medium text-muted-foreground">{index + 1}</TableCell>
+                    <TableCell className="font-medium text-muted-foreground">
+                      {index + 1}
+                    </TableCell>
                   )}
                   <TableCell>
                     <div className="flex items-center gap-2">
@@ -135,7 +158,9 @@ export function Leaderboard({ data, viewerPk, membersPrivate, onSelectMember }: 
                         size="sm"
                       />
                       <span className="font-medium">{displayName(row)}</span>
-                      {own && <span className="text-xs text-primary">(you)</span>}
+                      {own && (
+                        <span className="text-xs text-primary">(you)</span>
+                      )}
                     </div>
                   </TableCell>
                   <TableCell className="text-right font-semibold tabular-nums">

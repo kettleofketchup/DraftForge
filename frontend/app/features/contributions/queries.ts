@@ -1,5 +1,8 @@
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
-import { contributionsKeys, type OrgFeatureAccess } from '~/features/org-features';
+import {
+  contributionsKeys,
+  type OrgFeatureAccess,
+} from '~/features/org-features';
 import { getLeaderboard, getMemberBreakdown } from './api';
 import type { LeaderboardResponse, MemberBreakdown } from './schemas';
 
@@ -12,6 +15,11 @@ export function useLeaderboard(
     queryKey: contributionsKeys.leaderboard(orgId, access.viewerPk, period),
     queryFn: () => getLeaderboard(orgId, period),
     enabled: access.settled && access.canViewContributions,
+    placeholderData: (previous, previousQuery) =>
+      previousQuery?.queryKey[1] === orgId &&
+      previousQuery.queryKey[2] === access.viewerPk
+        ? previous
+        : undefined,
   });
 }
 
@@ -22,7 +30,12 @@ export function useMemberBreakdown(
   period: string,
 ): UseQueryResult<MemberBreakdown> {
   return useQuery({
-    queryKey: contributionsKeys.member(orgId, access.viewerPk, orgUserPk ?? 0, period),
+    queryKey: contributionsKeys.member(
+      orgId,
+      access.viewerPk,
+      orgUserPk ?? 0,
+      period,
+    ),
     queryFn: () => getMemberBreakdown(orgId, orgUserPk!, period),
     enabled: access.settled && access.canViewContributions && orgUserPk != null,
   });
