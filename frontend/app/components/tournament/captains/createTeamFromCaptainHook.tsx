@@ -68,7 +68,7 @@ export const createTeamFromCaptainHook = async ({
   const getTeam = () => {
     return tournament?.teams?.find((t) => t.captain?.pk === captain.pk);
   };
-  var newTournament: Partial<TournamentType> = {
+  const newTournament: Partial<TournamentType> = {
     pk: tournament.pk,
   };
   const team = getTeam();
@@ -87,7 +87,11 @@ export const createTeamFromCaptainHook = async ({
       },
     });
     const rawData = await fetchTournament(tournament.pk);
-    setTournament(hydrateTournament(rawData as TournamentType & { _users?: Record<number, unknown> }) as TournamentType);
+    setTournament(
+      hydrateTournament(
+        rawData as TournamentType & { _users?: Record<number, unknown> },
+      ) as TournamentType,
+    );
     // If the captain is being removed, update state
     return;
   }
@@ -100,13 +104,17 @@ export const createTeamFromCaptainHook = async ({
     draft_order: parseInt(draft_order),
   };
 
-  var msg = isCaptain() ? 'Removing' : 'adding';
+  const msg = isCaptain() ? 'Removing' : 'adding';
   log.debug(`${msg} captain for user: ${captain.username}`, newTournament);
 
   toast.promise(createTeamFromCaptain(data), {
     loading: `${msg} ${captain.username} as captain...`,
     success: (rawData) => {
-      setTournament(hydrateTournament(rawData as TournamentType & { _users?: Record<number, unknown> }) as TournamentType);
+      setTournament(
+        hydrateTournament(
+          rawData as TournamentType & { _users?: Record<number, unknown> },
+        ) as TournamentType,
+      );
 
       if (setIsCaptain) setIsCaptain(!isCaptain());
 
