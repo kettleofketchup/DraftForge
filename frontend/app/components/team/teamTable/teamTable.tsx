@@ -13,8 +13,8 @@ import {
 import { DisplayName } from '~/components/user/avatar';
 import { RolePositions } from '~/components/user/positions';
 import type { UserType } from '~/components/user/types';
-import { UserStrip } from '~/components/user/UserStrip';
 import { UserAvatar } from '~/components/user/UserAvatar';
+import { UserStrip } from '~/components/user/UserStrip';
 
 interface TeamTableProps {
   team?: TeamType;
@@ -29,7 +29,7 @@ interface TeamTableProps {
 // Custom comparison function for memo that properly detects team member changes
 const teamTablePropsAreEqual = (
   prevProps: TeamTableProps,
-  nextProps: TeamTableProps
+  nextProps: TeamTableProps,
 ): boolean => {
   // If compact, useStrips, or organizationId changed, re-render
   if (prevProps.compact !== nextProps.compact) return false;
@@ -58,93 +58,100 @@ const teamTablePropsAreEqual = (
   return true;
 };
 
-export const TeamTable: React.FC<TeamTableProps> = memo(({ team, compact = false, useStrips = false, organizationId }) => {
-  // Memoize sorted members to avoid mutation and recalculation
-  const members = useMemo(() => {
-    if (!team?.members || team.members.length === 0) return [];
+export const TeamTable: React.FC<TeamTableProps> = memo(
+  ({ team, compact = false, useStrips = false, organizationId }) => {
+    // Memoize sorted members to avoid mutation and recalculation
+    const members = useMemo(() => {
+      if (!team?.members || team.members.length === 0) return [];
 
-    // Use spread to avoid mutating original array
-    return [...team.members].sort((a: UserType, b: UserType) => {
-      if (!a.mmr && !b.mmr) return 0;
-      if (!a.mmr) return 1; // Treat undefined MMR as lower
-      if (!b.mmr) return -1; // Treat undefined MMR as lower
-      if (a.mmr === b.mmr) {
-        if (a.username && b.username) {
-          return a.username.localeCompare(b.username);
+      // Use spread to avoid mutating original array
+      return [...team.members].sort((a: UserType, b: UserType) => {
+        if (!a.mmr && !b.mmr) return 0;
+        if (!a.mmr) return 1; // Treat undefined MMR as lower
+        if (!b.mmr) return -1; // Treat undefined MMR as lower
+        if (a.mmr === b.mmr) {
+          if (a.username && b.username) {
+            return a.username.localeCompare(b.username);
+          }
         }
-      }
-      if (a.mmr >= b.mmr) return -1;
-      if (a.mmr < b.mmr) return 1;
-      return 0;
-    });
-  }, [team?.members]);
+        if (a.mmr >= b.mmr) return -1;
+        if (a.mmr < b.mmr) return 1;
+        return 0;
+      });
+    }, [team?.members]);
 
-  // Early return if team is undefined or has no members
-  if (!team || members.length === 0) {
+    // Early return if team is undefined or has no members
+    if (!team || members.length === 0) {
+      return (
+        <div className="p-4 text-center text-gray-500">
+          <p>No team members found</p>
+        </div>
+      );
+    }
+
+    // UserStrip layout - compact horizontal cards with responsive grid
+    if (useStrips) {
+      return (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-1.5">
+          {members.map((user: UserType) => (
+            <UserStrip
+              key={`TeamStrip-${user.pk}`}
+              user={user}
+              organizationId={organizationId}
+              data-testid={`team-member-${user.pk}`}
+            />
+          ))}
+        </div>
+      );
+    }
+
+    // Default table layout
     return (
-      <div className="p-4 text-center text-gray-500">
-        <p>No team members found</p>
-      </div>
-    );
-  }
-
-  // UserStrip layout - compact horizontal cards with responsive grid
-  if (useStrips) {
-    return (
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-1.5">
-        {members.map((user: UserType) => (
-          <UserStrip
-            key={`TeamStrip-${user.pk}`}
-            user={user}
-            organizationId={organizationId}
-            data-testid={`team-member-${user.pk}`}
-          />
-        ))}
-      </div>
-    );
-  }
-
-  // Default table layout
-  return (
-    <Table>
-      <TableCaption>Team Members</TableCaption>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Member</TableHead>
-          <TableHead>MMR</TableHead>
-          <TableHead className="hidden md:table-cell">Positions</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {members.map((user: UserType, idx: number) => (
-          <TableRow key={`TeamTableRow-${user.pk}`}>
-            <TableCell>
-              <PlayerPopover player={user}>
-                <div className="flex items-center gap-2 hover:text-primary transition-colors">
-                  <UserAvatar
-                    user={user}
-                    size="md"
-                    className="hover:ring-2 hover:ring-primary transition-all"
-                  />
-                  <span className={compact ? "hidden" : "hidden 3xl:inline"}>
-                    {DisplayName(user)}
-                  </span>
-                  <span
-                    className={compact ? "inline" : "inline 3xl:hidden"}
-                    title={DisplayName(user)}
-                  >
-                    {DisplayName(user, compact ? 6 : 12)}
-                  </span>
-                </div>
-              </PlayerPopover>
-            </TableCell>
-            <TableCell>{user.mmr ?? 'N/A'}</TableCell>
-            <TableCell className="hidden md:table-cell">
-              <RolePositions user={user} compact={compact} disableTooltips={compact} />
-            </TableCell>
+      <Table>
+        <TableCaption>Team Members</TableCaption>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Member</TableHead>
+            <TableHead>MMR</TableHead>
+            <TableHead className="hidden md:table-cell">Positions</TableHead>
           </TableRow>
-        ))}
-      </TableBody>
-    </Table>
-  );
-}, teamTablePropsAreEqual);
+        </TableHeader>
+        <TableBody>
+          {members.map((user: UserType, idx: number) => (
+            <TableRow key={`TeamTableRow-${user.pk}`}>
+              <TableCell>
+                <PlayerPopover player={user}>
+                  <div className="flex items-center gap-2 hover:text-primary transition-colors">
+                    <UserAvatar
+                      user={user}
+                      size="md"
+                      className="hover:ring-2 hover:ring-primary transition-all"
+                    />
+                    <span className={compact ? 'hidden' : 'hidden 3xl:inline'}>
+                      {DisplayName(user)}
+                    </span>
+                    <span
+                      className={compact ? 'inline' : 'inline 3xl:hidden'}
+                      title={DisplayName(user)}
+                    >
+                      {DisplayName(user, compact ? 6 : 12)}
+                    </span>
+                  </div>
+                </PlayerPopover>
+              </TableCell>
+              <TableCell>{user.mmr ?? 'N/A'}</TableCell>
+              <TableCell className="hidden md:table-cell">
+                <RolePositions
+                  user={user}
+                  compact={compact}
+                  disableTooltips={compact}
+                />
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    );
+  },
+  teamTablePropsAreEqual,
+);
