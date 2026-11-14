@@ -27,7 +27,7 @@ const createErrorMessage = (
 export const createGameHook = async ({ game }: hookParams) => {
   log.debug('Creating Game', { game });
 
-  let data: GameType = {
+  const data: GameType = {
     radiant_team_id: game.radiant_team?.pk,
     dire_team_id: game.radiant_team?.pk,
     ...game,

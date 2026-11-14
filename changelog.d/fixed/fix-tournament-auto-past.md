@@ -1,0 +1,1 @@
+- A tournament now moves to Past on its own once its bracket final has a winner, whether the result is set from the bracket, saved with the bracket or linked from a Steam match. Clearing the final's result moves it back to In Progress (#419).

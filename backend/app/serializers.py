@@ -1,4 +1,5 @@
 from functools import cache
+from typing import Any
 from zoneinfo import available_timezones
 
 import nh3
@@ -439,30 +440,10 @@ class TournamentListSerializer(serializers.ModelSerializer):
 
 
 class OrganizationSerializer(serializers.ModelSerializer):
+    # Roles change only through the admin_team endpoints.
     owner = TournamentUserSerializer(read_only=True)
-    owner_id = serializers.PrimaryKeyRelatedField(
-        queryset=CustomUser.objects.all(),
-        write_only=True,
-        source="owner",
-        required=False,
-        allow_null=True,
-    )
     admins = TournamentUserSerializer(many=True, read_only=True)
     staff = TournamentUserSerializer(many=True, read_only=True)
-    admin_ids = serializers.PrimaryKeyRelatedField(
-        queryset=CustomUser.objects.all(),
-        many=True,
-        write_only=True,
-        source="admins",
-        required=False,
-    )
-    staff_ids = serializers.PrimaryKeyRelatedField(
-        queryset=CustomUser.objects.all(),
-        many=True,
-        write_only=True,
-        source="staff",
-        required=False,
-    )
     # Use annotated fields from ViewSet queryset (avoids N+1)
     league_count = serializers.IntegerField(read_only=True)
     tournament_count = serializers.IntegerField(read_only=True)
@@ -481,11 +462,8 @@ class OrganizationSerializer(serializers.ModelSerializer):
             "timezone",
             "members_private",
             "owner",
-            "owner_id",
             "admins",
             "staff",
-            "admin_ids",
-            "staff_ids",
             "default_league",
             "league_count",
             "tournament_count",
@@ -538,28 +516,16 @@ class OrganizationsSerializer(serializers.ModelSerializer):
 
 class LeagueSerializer(serializers.ModelSerializer):
     organization = OrganizationsSerializer(read_only=True)
+    # Create-only: update() drops it so a league can't be moved between orgs.
     organization_id = serializers.PrimaryKeyRelatedField(
         queryset=Organization.objects.all(),
         write_only=True,
         source="organization",
         required=False,
     )
+    # Roles change only through the admin_team league endpoints.
     admins = TournamentUserSerializer(many=True, read_only=True)
     staff = TournamentUserSerializer(many=True, read_only=True)
-    admin_ids = serializers.PrimaryKeyRelatedField(
-        queryset=CustomUser.objects.all(),
-        many=True,
-        write_only=True,
-        source="admins",
-        required=False,
-    )
-    staff_ids = serializers.PrimaryKeyRelatedField(
-        queryset=CustomUser.objects.all(),
-        many=True,
-        write_only=True,
-        source="staff",
-        required=False,
-    )
     tournament_count = serializers.IntegerField(read_only=True)
     users_count = serializers.IntegerField(read_only=True)
     # For backwards compatibility, return first org name
@@ -587,8 +553,6 @@ class LeagueSerializer(serializers.ModelSerializer):
             "timezone",
             "admins",
             "staff",
-            "admin_ids",
-            "staff_ids",
             "tournament_count",
             "users_count",
             "last_synced",
@@ -608,6 +572,10 @@ class LeagueSerializer(serializers.ModelSerializer):
         """Return first organization name for backwards compatibility."""
         first_org = obj.organization
         return first_org.name if first_org else None
+
+    def update(self, instance: League, validated_data: dict[str, Any]) -> League:
+        validated_data.pop("organization", None)
+        return super().update(instance, validated_data)
 
     def validate_steam_league_id(self, value: int | None) -> int | None:
         if value is None:

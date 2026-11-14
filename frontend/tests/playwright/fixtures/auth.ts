@@ -8,7 +8,7 @@
  */
 
 import type { BrowserContext, Page } from '@playwright/test';
-import { test as base } from '@playwright/test';
+import { test as base } from './external-apis';
 
 import { API_URL, BASE_URL } from './base-url';
 import { isSessionCookie } from './cookies';

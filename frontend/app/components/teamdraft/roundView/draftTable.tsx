@@ -1,4 +1,5 @@
 import { Suspense, useEffect, useMemo } from 'react';
+import { PlayerPopover } from '~/components/player';
 import {
   Table,
   TableBody,
@@ -9,15 +10,14 @@ import {
   TableRow,
 } from '~/components/ui/table';
 import type { UserType } from '~/components/user/types';
-import { DisplayName, type TeamType } from '~/index';
 import { UserAvatar } from '~/components/user/UserAvatar';
-import { cn } from '~/lib/utils';
+import { DisplayName, type TeamType } from '~/index';
 import { getLogger } from '~/lib/logger';
+import { cn } from '~/lib/utils';
 import { useUserStore } from '~/store/userStore';
 import { RolePositions } from '../../user/positions';
 import { ChoosePlayerButton } from '../buttons/choosePlayerButtons';
 import type { DraftRoundType } from '../types';
-import { PlayerPopover } from '~/components/player';
 const log = getLogger('draftTable');
 
 const MAX_TEAM_SIZE = 5;
@@ -34,7 +34,7 @@ const getOrdinal = (n: number): string => {
   return n + (s[(v - 20) % 10] || s[v] || s[0]);
 };
 interface DraftTableProps {}
-export const DraftTable: React.FC<DraftTableProps> = ({}) => {
+export const DraftTable: React.FC<DraftTableProps> = () => {
   const tournament = useUserStore((state) => state.tournament);
   const curRound: DraftRoundType = useUserStore((state) => state.curDraftRound);
   const draft = useUserStore((state) => state.draft);
@@ -63,7 +63,7 @@ export const DraftTable: React.FC<DraftTableProps> = ({}) => {
 
   const getCurrentTeam = (): TeamType | undefined => {
     return tournament?.teams?.find(
-      (t) => t.captain?.pk === curRound?.captain?.pk
+      (t) => t.captain?.pk === curRound?.captain?.pk,
     );
   };
 
@@ -99,7 +99,11 @@ export const DraftTable: React.FC<DraftTableProps> = ({}) => {
 
     // If no other active teams, we're the only one picking
     if (otherActiveTeamMmrs.length === 0) {
-      return { newTeamMmr, newPickOrder: 1, isDoublePick: !wouldBeMaxedAfterPick };
+      return {
+        newTeamMmr,
+        newPickOrder: 1,
+        isDoublePick: !wouldBeMaxedAfterPick,
+      };
     }
 
     const allMmrs = [...otherActiveTeamMmrs, newTeamMmr].sort((a, b) => a - b);
@@ -180,7 +184,7 @@ export const DraftTable: React.FC<DraftTableProps> = ({}) => {
                         className={cn(
                           projected.isDoublePick
                             ? 'text-green-400 font-medium'
-                            : 'text-muted-foreground'
+                            : 'text-muted-foreground',
                         )}
                       >
                         {getOrdinal(projected.newPickOrder)} pick

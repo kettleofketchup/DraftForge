@@ -7,7 +7,7 @@ import { DoublePickThreshold } from '../shuffle/DoublePickThreshold';
 import { DraftTable } from './draftTable';
 const log = getLogger('choiceCard');
 interface PlayerChoiceViewProps {}
-export const PlayerChoiceView: React.FC<PlayerChoiceViewProps> = ({}) => {
+export const PlayerChoiceView: React.FC<PlayerChoiceViewProps> = () => {
   const draft = useUserStore((state) => state.draft);
   const curRound = useUserStore((state) => state.curDraftRound);
   useEffect(() => {
