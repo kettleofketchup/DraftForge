@@ -14,12 +14,7 @@ from events.models import Event
 from org.feature_errors import not_permitted, require_org_staff, require_promoter
 from org.features import FeatureKey
 from org.models import ContributionEntry, PromoSend, PromoTemplate
-from org.promotion.recipients import (
-    CandidateRow,
-    candidates,
-    clamp_pool_n,
-    in_pool,
-)
+from org.promotion.recipients import CandidateRow, candidates, clamp_pool_n
 from org.promotion.render import (
     PLACEHOLDERS,
     build_context,
@@ -40,6 +35,7 @@ from org.promotion.services import (
     can_undo,
     record_promo_send,
     undo_promo_send,
+    validate_send_target,
     will_earn,
 )
 from telemetry.logging import get_logger
@@ -171,8 +167,11 @@ def _fill_can_undo(
     if has_org_staff_access(user, org):
         allowed = set(send_ids)
     else:
-        own = PromoSend.objects.filter(pk__in=send_ids, sender_id=user.pk)
-        allowed = {send.pk for send in own if can_undo(user, send)}
+        allowed = set(
+            PromoSend.objects.filter(pk__in=send_ids, sender_id=user.pk).values_list(
+                "pk", flat=True
+            )
+        )
     for row in rows:
         last = row["last_messaged"]
         if last is not None:
@@ -211,10 +210,12 @@ def promotion_render(request: Request, org_id: int, event_id: int) -> Response:
     body.is_valid(raise_exception=True)
     template = _template(org, body.validated_data["template_id"])
     recipient = _recipient(body.validated_data["recipient_id"])
-    if not in_pool(org, event, recipient):
-        raise ValidationError(
-            {"recipient_id": ["recipient is not in this event's player pool"]}
+    try:
+        validate_send_target(
+            sender=request.user, event=event, recipient=recipient, template=template
         )
+    except PromoSendError as exc:
+        raise ValidationError({exc.field: [str(exc)]}) from exc
     context = build_context(
         event=event, recipient=recipient, sender=request.user, org=org
     )

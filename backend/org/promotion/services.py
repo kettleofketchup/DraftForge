@@ -53,13 +53,12 @@ def _lock_event(event: Event) -> Event:
     )
 
 
-def _validate_send(
+def validate_send_target(
     *,
     sender: CustomUser,
     event: Event,
     recipient: CustomUser,
     template: PromoTemplate | None,
-    text: str,
 ) -> None:
     if event.state not in PROMOTABLE_STATES:
         raise PromoSendError("event", "event is not open for promotion")
@@ -73,6 +72,19 @@ def _validate_send(
         raise PromoSendError(
             "recipient_id", "recipient is not in this event's player pool"
         )
+
+
+def _validate_send(
+    *,
+    sender: CustomUser,
+    event: Event,
+    recipient: CustomUser,
+    template: PromoTemplate | None,
+    text: str,
+) -> None:
+    validate_send_target(
+        sender=sender, event=event, recipient=recipient, template=template
+    )
     if len(text) > MAX_SEND_TEXT:
         raise PromoSendError(
             "text", f"message must be at most {MAX_SEND_TEXT} characters"

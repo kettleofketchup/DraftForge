@@ -364,6 +364,28 @@ class PromotionRenderAndSendTest(PromotionApiBase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("recipient_id", response.json())
 
+    def test_render_rejects_completed_event(self) -> None:
+        response = self.request(
+            "promoter",
+            "post",
+            self.render_url(self.completed_event),
+            {"template_id": self.template.pk, "recipient_id": self.recipient.pk},
+        )
+        self.assertEqual(response.status_code, 400, response.content)
+        self.assertIn("event", response.json())
+
+    def test_render_rejects_self(self) -> None:
+        promoter = self.users["promoter"]
+        Tournament.objects.get(name="Promotion API Past").users.add(promoter)
+        response = self.request(
+            "promoter",
+            "post",
+            self.render_url(),
+            {"template_id": self.template.pk, "recipient_id": promoter.pk},
+        )
+        self.assertEqual(response.status_code, 400, response.content)
+        self.assertIn("recipient_id", response.json())
+
     def test_render_as_roleless_site_admin_will_not_earn(self) -> None:
         response = self.request(
             "site_admin",
