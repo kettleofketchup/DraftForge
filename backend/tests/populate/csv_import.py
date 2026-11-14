@@ -25,6 +25,7 @@ from tests.data.leagues import CSV_LEAGUE
 from tests.data.organizations import CSV_ORG
 from tests.data.tournaments import CSV_IMPORT_TOURNAMENT
 from tests.data.users import ADMIN_USER, CSV_IMPORT_USERS
+from tests.populate.utils import delete_ledger_for_users
 
 # Path for CSV fixture files (repo_root/frontend/tests/playwright/fixtures/csv/)
 # __file__ = backend/tests/populate/csv_import.py → 4 levels up to repo root
@@ -113,6 +114,7 @@ def populate_csv_import_data(force=False):
             continue
 
         if existing and force:
+            delete_ledger_for_users([existing.pk])
             existing.delete()
 
         positions = PositionsModel.objects.create()

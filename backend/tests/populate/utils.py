@@ -5,6 +5,7 @@ Utility functions for test database population.
 import os
 import random
 import re
+from collections.abc import Iterable
 from typing import Any, Final
 
 import redis
@@ -12,8 +13,10 @@ from cacheops.redis import redis_client as cacheops_redis
 from django.conf import settings
 from django.core.cache import cache
 from django.db import transaction
+from django.db.models import Q
 
 from app.models import CustomUser, Organization, PositionsModel
+from org.models import ContributionEntry, PromoSend
 
 from .constants import (
     BRACKET_STEAM_ID_BASE,
@@ -149,6 +152,19 @@ def ensure_org_user(user, organization, mmr=None):
         org_user.mmr = mmr
         org_user.save()
     return org_user
+
+
+def delete_ledger_for_users(pks: Iterable[int]) -> None:
+    """Drop these users' ledger rows and promo sends so the users can be deleted.
+
+    ContributionEntry.org_user is RESTRICT: deleting a user whose OrgUser
+    holds ledger rows raises RestrictedError.
+    """
+    pks = list(pks)
+    ContributionEntry.objects.nocache().filter(org_user__user_id__in=pks).delete()
+    PromoSend.objects.nocache().filter(
+        Q(sender_id__in=pks) | Q(recipient_id__in=pks)
+    ).delete()
 
 
 def ensure_league_user(user, org_user, league):

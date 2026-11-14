@@ -66,6 +66,19 @@ from tests.data.models import (
     TestUser,
 )
 
+# Org paid features E2E (orgs 30-32, users 7300-7319)
+from tests.data.org_features import (
+    FEATURES_LEAGUE,
+    FEATURES_ORG,
+    LOCKED_FEATURES_LEAGUE,
+    LOCKED_FEATURES_ORG,
+    ORG_FEATURES_PLAYERS,
+    ORG_FEATURES_ROLE_USERS,
+    ORG_FEATURES_USERS,
+    PRIVATE_FEATURES_LEAGUE,
+    PRIVATE_FEATURES_ORG,
+)
+
 # Organizations
 from tests.data.organizations import (
     ALL_ORGANIZATIONS,
@@ -296,4 +309,14 @@ __all__ = [
     "LOBBY_FIXED_PASSWORD",
     "LOBBY_ROLE_USERS",
     "LOBBY_USERS",
+    # Org paid features E2E
+    "FEATURES_ORG",
+    "LOCKED_FEATURES_ORG",
+    "PRIVATE_FEATURES_ORG",
+    "FEATURES_LEAGUE",
+    "LOCKED_FEATURES_LEAGUE",
+    "PRIVATE_FEATURES_LEAGUE",
+    "ORG_FEATURES_ROLE_USERS",
+    "ORG_FEATURES_PLAYERS",
+    "ORG_FEATURES_USERS",
 ]
