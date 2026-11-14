@@ -1,11 +1,11 @@
 import { Slot } from '@radix-ui/react-slot';
 import * as React from 'react';
 import { memo } from 'react';
-import { Link } from 'react-router';
 import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router';
 import { cn } from '~/lib/utils';
-import { PreviewLoginMenu } from '../preview/PreviewLoginMenu';
 import { useUserStore } from '../../store/userStore';
+import { PreviewLoginMenu } from '../preview/PreviewLoginMenu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 import { LoginWithDiscordButton } from './login';
 import { MobileNav } from './MobileNav';
@@ -37,8 +37,10 @@ const LABEL_TIERS = {
 
 type LabelTier = keyof typeof LABEL_TIERS;
 
-interface NavItemProps
-  extends Omit<React.AnchorHTMLAttributes<HTMLAnchorElement>, 'href'> {
+interface NavItemProps extends Omit<
+  React.AnchorHTMLAttributes<HTMLAnchorElement>,
+  'href'
+> {
   icon?: React.ReactNode;
   title: string;
   subtitle?: string;
@@ -78,7 +80,8 @@ const NavItem = React.forwardRef<HTMLAnchorElement, NavItemProps>(
     ref,
   ) => {
     const tiers = LABEL_TIERS[tier];
-    const testId = dataTestId || (to ? `nav-link-${to.replace(/^\//, '')}` : undefined);
+    const testId =
+      dataTestId || (to ? `nav-link-${to.replace(/^\//, '')}` : undefined);
     const baseClassName = cn(
       'flex items-center gap-1 xl:gap-2 rounded-md px-1.5 xl:px-2 py-1.5 h-9',
       'text-sm font-medium',
@@ -93,16 +96,30 @@ const NavItem = React.forwardRef<HTMLAnchorElement, NavItemProps>(
       <>
         {icon && <span className="shrink-0">{icon}</span>}
         <div
-          className={cn('items-center whitespace-nowrap', tiers.text, tiers.stacked)}
+          className={cn(
+            'items-center whitespace-nowrap',
+            tiers.text,
+            tiers.stacked,
+          )}
         >
           <div className="flex items-center justify-center gap-1">
-            <span className={cn("text-xs font-bold leading-normal text-center text-outline-sm text-[#646cff]", titleClassName)}>
+            <span
+              className={cn(
+                'text-xs font-bold leading-normal text-center text-outline-sm text-[#646cff]',
+                titleClassName,
+              )}
+            >
               {title}
             </span>
             {badge}
           </div>
           {subtitle && (
-            <span className={cn('text-[10px] text-text-muted leading-normal text-center', tiers.subtitle)}>
+            <span
+              className={cn(
+                'text-[10px] text-text-muted leading-normal text-center',
+                tiers.subtitle,
+              )}
+            >
               {subtitle}
             </span>
           )}
@@ -113,19 +130,38 @@ const NavItem = React.forwardRef<HTMLAnchorElement, NavItemProps>(
     let navContent: React.ReactElement;
     if (asChild) {
       navContent = (
-        <Slot ref={ref} className={baseClassName} data-testid={testId} {...props}>
+        <Slot
+          ref={ref}
+          className={baseClassName}
+          data-testid={testId}
+          {...props}
+        >
           {content}
         </Slot>
       );
     } else if (to) {
       navContent = (
-        <Link ref={ref} to={to} className={baseClassName} data-testid={testId} aria-label={title} {...props}>
+        <Link
+          ref={ref}
+          to={to}
+          className={baseClassName}
+          data-testid={testId}
+          aria-label={title}
+          {...props}
+        >
           {content}
         </Link>
       );
     } else {
       navContent = (
-        <a ref={ref} href={href} className={baseClassName} data-testid={testId} aria-label={title} {...props}>
+        <a
+          ref={ref}
+          href={href}
+          className={baseClassName}
+          data-testid={testId}
+          aria-label={title}
+          {...props}
+        >
           {content}
         </a>
       );

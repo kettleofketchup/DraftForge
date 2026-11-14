@@ -4,17 +4,22 @@
  * up to 2560px, logged in or out, with or without the preview login buttons,
  * once the GitHub star badge has loaded.
  */
+import type { Browser, BrowserContext, Page } from '@playwright/test';
 import fs from 'node:fs';
 import path from 'node:path';
-import type { Browser, BrowserContext, Page } from '@playwright/test';
-import { test, expect, loginAdmin } from '../fixtures';
+import { expect, loginAdmin, test } from '../fixtures';
 
 // Screenshotted widths; the sweep also walks every 16px between them so a
 // breakpoint can't hide a collision between two sampled widths.
-const WIDTHS = [768, 900, 1024, 1100, 1180, 1280, 1366, 1440, 1536, 1680, 1920, 2560];
-const SWEEP = [...new Set([...WIDTHS, ...Array.from({ length: 113 }, (_, i) => 768 + i * 16)])].sort(
-  (a, b) => a - b,
-);
+const WIDTHS = [
+  768, 900, 1024, 1100, 1180, 1280, 1366, 1440, 1536, 1680, 1920, 2560,
+];
+const SWEEP = [
+  ...new Set([
+    ...WIDTHS,
+    ...Array.from({ length: 113 }, (_, i) => 768 + i * 16),
+  ]),
+].sort((a, b) => a - b);
 const STAR_COUNT = 1234;
 const SHOT_DIR = process.env.NAVBAR_SHOT_DIR;
 
@@ -53,21 +58,33 @@ async function openNavbar(
     ? page.locator('header [data-testid="user-avatar"]')
     : page.locator('[data-testid="navbarLoginButton"]');
   await expect(account).toBeVisible();
-  if (opts.loggedIn) await expect(page.locator('[data-testid="nav-link-admin"]')).toBeAttached();
-  await expect(page.locator('[data-testid="nav-github-stars"]')).toHaveText(String(STAR_COUNT));
-  await expect(page.locator('[data-testid="preview-login-admin"]')).toHaveCount(opts.preview ? 1 : 0);
+  if (opts.loggedIn)
+    await expect(page.locator('[data-testid="nav-link-admin"]')).toBeAttached();
+  await expect(page.locator('[data-testid="nav-github-stars"]')).toHaveText(
+    String(STAR_COUNT),
+  );
+  await expect(page.locator('[data-testid="preview-login-admin"]')).toHaveCount(
+    opts.preview ? 1 : 0,
+  );
   await page.evaluate(() => document.fonts.ready);
   return { context, page };
 }
 
 function measure(page: Page): Promise<Measurement> {
   return page.evaluate(() => {
-    const nav = document.querySelector<HTMLElement>('[data-testid="nav-root"]')!;
+    const nav = document.querySelector<HTMLElement>(
+      '[data-testid="nav-root"]',
+    )!;
     const navRect = nav.getBoundingClientRect();
     const visible = (el: Element) => {
       const r = el.getBoundingClientRect();
       const s = getComputedStyle(el);
-      return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none';
+      return (
+        r.width > 0 &&
+        r.height > 0 &&
+        s.visibility !== 'hidden' &&
+        s.display !== 'none'
+      );
     };
     const items = Array.from(nav.querySelectorAll('a, button')).filter(
       (el) => visible(el) && !el.parentElement?.closest('a, button'),
@@ -93,7 +110,9 @@ function measure(page: Page): Promise<Measurement> {
       navLeft: navRect.left,
       navRight: navRect.right,
       truncated,
-      pageOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+      pageOverflow:
+        document.documentElement.scrollWidth >
+        document.documentElement.clientWidth,
     };
   });
 }
@@ -110,11 +129,13 @@ function problems(m: Measurement): string[] {
       const b = m.boxes[j];
       const dx = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
       const dy = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
-      if (dx > eps && dy > eps) found.push(`"${a.label}" overlaps "${b.label}" by ${dx.toFixed(1)}px`);
+      if (dx > eps && dy > eps)
+        found.push(`"${a.label}" overlaps "${b.label}" by ${dx.toFixed(1)}px`);
     }
   }
   for (const text of m.truncated) found.push(`label "${text}" is truncated`);
-  if (m.overflowingGroups) found.push(`${m.overflowingGroups} navbar group(s) overflow their box`);
+  if (m.overflowingGroups)
+    found.push(`${m.overflowingGroups} navbar group(s) overflow their box`);
   if (m.pageOverflow) found.push('page scrolls horizontally');
   return found;
 }
@@ -139,13 +160,18 @@ test.describe('Navbar width sweep (#252)', () => {
       const failures: string[] = [];
       for (const width of SWEEP) {
         await page.setViewportSize({ width, height: 800 });
-        await page.waitForFunction(() => new Promise((r) => requestAnimationFrame(() => r(true))));
+        await page.waitForFunction(
+          () => new Promise((r) => requestAnimationFrame(() => r(true))),
+        );
         if (SHOT_DIR && WIDTHS.includes(width)) {
           fs.mkdirSync(SHOT_DIR, { recursive: true });
           const file = `${name.replace(/[^a-z0-9]+/gi, '-')}-${width}.png`;
-          await page.locator('[data-testid="nav-root"]').screenshot({ path: path.join(SHOT_DIR, file) });
+          await page
+            .locator('[data-testid="nav-root"]')
+            .screenshot({ path: path.join(SHOT_DIR, file) });
         }
-        for (const p of problems(await measure(page))) failures.push(`${width}px: ${p}`);
+        for (const p of problems(await measure(page)))
+          failures.push(`${width}px: ${p}`);
       }
       await context.close();
       expect(failures, failures.join('\n')).toEqual([]);
