@@ -111,7 +111,7 @@ describe('useOrgFeatureAccess', () => {
 });
 
 describe('removeFeatureQueries', () => {
-  it('removes contributions and promotion queries for the org only', () => {
+  it('removes contributions, promotion and feature-row queries for the org only', () => {
     const qc = new QueryClient();
     qc.setQueryData(contributionsKeys.leaderboard(7, 5, 'all'), ['row']);
     qc.setQueryData(contributionsKeys.member(7, 5, 11, 'all'), ['entry']);
@@ -131,9 +131,9 @@ describe('removeFeatureQueries', () => {
       .getAll()
       .map((q) => q.queryKey);
     expect(remaining).toEqual(
-      expect.arrayContaining([['organization', 7], orgFeaturesKey(7), contributionsKeys.leaderboard(8, 5, 'all')]),
+      expect.arrayContaining([['organization', 7], contributionsKeys.leaderboard(8, 5, 'all')]),
     );
-    expect(remaining).toHaveLength(3);
+    expect(remaining).toHaveLength(2);
   });
 
   it('nests every contributions and promotion key under its all() prefix', () => {

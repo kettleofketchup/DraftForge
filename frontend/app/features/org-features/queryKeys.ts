@@ -33,4 +33,5 @@ export const orgFeaturesKey = (orgId: number) => ['org-features', orgId] as cons
 export function removeFeatureQueries(queryClient: QueryClient, orgId: number): void {
   queryClient.removeQueries({ queryKey: [CONTRIBUTIONS, orgId] });
   queryClient.removeQueries({ queryKey: [PROMOTION, orgId] });
+  queryClient.removeQueries({ queryKey: orgFeaturesKey(orgId) });
 }
