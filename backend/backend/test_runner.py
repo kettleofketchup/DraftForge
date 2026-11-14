@@ -167,11 +167,8 @@ def init_worker(
 
 
 def checkpoint_before_clone(connection: BaseDatabaseWrapper) -> None:
-    """Fold the WAL into the main file before Django clones it with a plain file copy.
-
-    The DB runs in WAL mode (settings.py), so without this the --parallel clones miss
-    whatever migrations had not been checkpointed yet.
-    """
+    """Checkpoint the WAL (settings.py enables it) before Django clones the DB by file
+    copy, or --parallel clones miss migrations not yet checkpointed."""
     clone_test_db = connection.creation.clone_test_db
 
     def checkpointed_clone_test_db(*args: Any, **kwargs: Any) -> None:
