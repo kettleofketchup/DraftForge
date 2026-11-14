@@ -61,8 +61,8 @@ from org.models import OrgUser
 from org.serializers import OrgUserSerializer
 from telemetry.logging import get_logger
 
-# BaseUserProfile owns nickname/avatar (T1 epic); DotaUserProfile owns
-# positions/dota-mmr (T2 epic). Every @cached_as site below that ships
+# BaseUserProfile owns nickname/avatar; DotaUserProfile owns
+# positions/dota-mmr. Every @cached_as site below that ships
 # nickname/avatar/positions MUST list both as dependencies, otherwise PATCH
 # /api/users/me/profile/base/ or /game/dota/ won't invalidate the cached
 # response. See backend/user/tests/test_cacheops.py for the grep guardrail.
@@ -125,7 +125,6 @@ log = get_logger(__name__)
 
 
 def logout(request: HttpRequest) -> HttpResponseRedirect:
-    """Logs out user"""
     auth_logout(request)
     return redirect("/")
 
@@ -147,7 +146,6 @@ def done(request: HttpRequest) -> None:
 
 @render_to("home.html")
 def validation_sent(request: HttpRequest) -> dict[str, Any]:
-    """Email validation sent confirmation page"""
     return {
         "validation_sent": True,
         "email": request.session.get("email_validation_address"),
@@ -156,7 +154,6 @@ def validation_sent(request: HttpRequest) -> dict[str, Any]:
 
 @render_to("home.html")
 def require_email(request: HttpRequest) -> dict[str, Any]:
-    """Email required page"""
     strategy = load_strategy()
     partial_token = request.GET.get("partial_token")
     partial = strategy.partial_load(partial_token)
@@ -169,7 +166,6 @@ def require_email(request: HttpRequest) -> dict[str, Any]:
 
 @render_to("home.html")
 def require_country(request: HttpRequest) -> dict[str, Any]:
-    """Country required page"""
     strategy = load_strategy()
     partial_token = request.GET.get("partial_token")
     partial = strategy.partial_load(partial_token)
@@ -182,7 +178,6 @@ def require_country(request: HttpRequest) -> dict[str, Any]:
 
 @render_to("home.html")
 def require_city(request: HttpRequest) -> dict[str, Any]:
-    """City required page"""
     strategy = load_strategy()
     partial_token = request.GET.get("partial_token")
     partial = strategy.partial_load(partial_token)
@@ -195,7 +190,6 @@ def require_city(request: HttpRequest) -> dict[str, Any]:
 
 @psa("social:complete")
 def ajax_auth(request: HttpRequest, backend: str) -> HttpResponse:
-    """AJAX authentication endpoint"""
     if isinstance(request.backend, BaseOAuth1):
         token = {
             "oauth_token": request.REQUEST.get("access_token"),
@@ -217,8 +211,8 @@ class UserView(viewsets.ModelViewSet):
     # Prefetch the M2M reverse relations that UserSerializer exposes as
     # role-membership lists. Without these the four SerializerMethodFields
     # on the list endpoint fire 4·N extra queries on a cold cacheops key.
-    # base_profile is required because nickname/avatar now resolve via the
-    # @property on CustomUser, which reads self.base_profile.* (T1 epic).
+    # base_profile is required because nickname/avatar resolve via the
+    # @property on CustomUser, which reads self.base_profile.*.
     queryset = (
         with_user_profiles(CustomUser.objects.all(), dota=True)
         .prefetch_related(
@@ -249,8 +243,8 @@ class UserView(viewsets.ModelViewSet):
             BaseUserProfile,
             DotaUserProfile,
             # No keep_fresh: it defeats predictable eviction after a profile
-            # edit (lesson #24 — nickname/avatar/positions edits would serve
-            # stale until TTL). Strict eviction is correct for user payloads.
+            # edit, so nickname/avatar/positions edits would serve stale until
+            # TTL. Strict eviction is correct for user payloads.
             extra=cache_key,
             timeout=60 * 60,
         )
@@ -270,10 +264,10 @@ class UserView(viewsets.ModelViewSet):
             CustomUser.objects.filter(pk=pk),
             BaseUserProfile,
             DotaUserProfile,
-            # No keep_fresh: it served a stale nickname/avatar after a profile
-            # edit (lesson #24 keep_fresh/eviction deferral). This is the
-            # `/api/users/<pk>/` payload the profile header reads — strict
-            # eviction makes edits reflect without a manual refresh.
+            # No keep_fresh: its deferred eviction served a stale nickname/avatar
+            # after a profile edit. This is the `/api/users/<pk>/` payload the
+            # profile header reads — strict eviction makes edits reflect without
+            # a manual refresh.
             extra=cache_key,
             timeout=60 * 60,
         )
@@ -301,7 +295,6 @@ class UserView(viewsets.ModelViewSet):
         """Allow org admins/staff to edit users in their organizations."""
         super().check_object_permissions(request, obj)
         if request.method in ("PATCH", "PUT") and not request.user.is_staff:
-            # Check if the target user shares an org where requester is staff
             target_orgs = OrgUser.objects.filter(user=obj).select_related(
                 "organization"
             )
@@ -369,14 +362,12 @@ class UserView(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # If current user already has a Steam ID, it must match target's
         if current_user.steamid and current_user.steamid != target_user.steamid:
             return Response(
                 {"error": "Your account already has a different Steam ID linked"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Target must be a member of at least one organization
         org_membership = OrgUser.objects.filter(user=target_user).first()
         if not org_membership:
             return Response(
@@ -384,7 +375,6 @@ class UserView(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Check for existing pending request
         existing_request = ProfileClaimRequest.objects.filter(
             claimer=current_user,
             target_user=target_user,
@@ -397,7 +387,6 @@ class UserView(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Create the claim request
         claim_request = ProfileClaimRequest.objects.create(
             claimer=current_user,
             target_user=target_user,
@@ -538,7 +527,6 @@ class TournamentView(viewsets.ModelViewSet):
         elif self.request.method == "GET":
             self.permission_classes = [AllowAny]
         elif self.action in ["update", "partial_update", "destroy"]:
-            # Use object-level permission check for league admin
             self.permission_classes = [CanEditTournament]
         else:
             # For create, require at least league admin on some league
@@ -636,8 +624,8 @@ class TeamView(viewsets.ModelViewSet):
             Draft,
             DraftRound,
             # No keep_fresh: team detail ships member nickname/avatar/positions;
-            # keep_fresh would serve stale members after a profile edit (lesson
-            # #24), same as the user list/detail blocks above.
+            # keep_fresh would serve stale members after a profile edit, same as
+            # the user list/detail blocks above.
             extra=cache_key,
             timeout=60 * 60,
         )
@@ -834,7 +822,6 @@ def current_user(request: Request) -> Response:
             staff_org_ids=data["staff_organization_ids"],
         )
 
-        # Add active drafts info
         active_drafts = []
 
         # Team drafts: user is captain with pending pick in in_progress tournament
@@ -900,7 +887,6 @@ class GameCreateView(generics.CreateAPIView):
         tournament_id = self.request.data.get("tournament")
         league_id = self.request.data.get("league")
 
-        # Check tournament's league
         if tournament_id:
             try:
                 tournament = Tournament.objects.get(pk=tournament_id)
@@ -913,7 +899,6 @@ class GameCreateView(generics.CreateAPIView):
                         )
             except Tournament.DoesNotExist:
                 pass
-        # Check direct league reference
         elif league_id:
             try:
                 league = League.objects.get(pk=league_id)
@@ -992,7 +977,6 @@ class GameView(viewsets.ModelViewSet):
         elif self.request.method == "GET":
             self.permission_classes = [AllowAny]
         elif self.action in ["update", "partial_update", "destroy"]:
-            # Use object-level permission check for league staff
             self.permission_classes = [CanManageGame]
         else:
             # For create, require league staff access
@@ -1005,7 +989,6 @@ class GameView(viewsets.ModelViewSet):
         tournament_id = self.request.data.get("tournament")
         league_id = self.request.data.get("league")
 
-        # Check tournament's league
         if tournament_id:
             try:
                 tournament = Tournament.objects.get(pk=tournament_id)
@@ -1022,7 +1005,6 @@ class GameView(viewsets.ModelViewSet):
                     )
             except Tournament.DoesNotExist:
                 pass
-        # Check direct league reference
         elif league_id:
             try:
                 league = League.objects.get(pk=league_id)
@@ -1315,7 +1297,6 @@ class LeagueView(viewsets.ModelViewSet):
         return LeagueSerializer
 
     def get_queryset(self) -> QuerySet[League]:
-        """Optimize with select_related, prefetch_related, and annotations."""
         queryset = (
             League.objects.select_related("organization")
             .prefetch_related("admins", "staff")
@@ -1433,7 +1414,6 @@ class LeagueView(viewsets.ModelViewSet):
             .order_by("-pk")
         )
 
-        # Optional filtering
         tournament_pk = request.query_params.get("tournament")
         if tournament_pk:
             games = games.filter(tournament_id=tournament_pk)
@@ -1538,7 +1518,7 @@ def home_stats(request: Request) -> Response:
         Organization,
         League,
         extra=cache_key,
-        timeout=60 * 5,  # 5 minutes cache
+        timeout=60 * 5,
     )
     def get_stats() -> dict[str, int]:
         return {
@@ -1565,7 +1545,6 @@ def refresh_avatar(request: Request) -> Response:
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Use force_refresh=True to always fetch from Discord
         result = refresh_user_avatar(user.id)
 
         if result["success"]:
@@ -1629,8 +1608,7 @@ def refresh_all_avatars(request: Request) -> Response:
     org) and updates avatars in bulk. See `app.tasks.avatar_refresh
     .refresh_avatars_batched`.
 
-    Rate-limited to once per hour. The cache key is set BEFORE dispatch so
-    concurrent calls can't double-queue the task.
+    Rate-limited to once per hour.
     """
     cache_key = "avatar_refresh_last_run"
     last_run = cache.get(cache_key)
