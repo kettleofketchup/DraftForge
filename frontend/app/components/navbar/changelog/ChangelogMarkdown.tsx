@@ -1,4 +1,9 @@
-import type { ComponentPropsWithoutRef } from 'react';
+import {
+  type ComponentPropsWithoutRef,
+  createContext,
+  useContext,
+  useMemo,
+} from 'react';
 import ReactMarkdown, {
   type Components,
   type ExtraProps,
@@ -17,6 +22,26 @@ const HEADING_CLASS: Record<HeadingTag, string> = {
 };
 
 const EXTERNAL_LINK = /^https?:\/\//i;
+
+const InCodeBlock = createContext(false);
+
+function Code({
+  node: _node,
+  className,
+  ...props
+}: ComponentPropsWithoutRef<'code'> & ExtraProps) {
+  const block = useContext(InCodeBlock);
+  return (
+    <code
+      className={cn(
+        'font-mono text-xs',
+        !block && 'bg-muted rounded px-1 break-all',
+        className,
+      )}
+      {...props}
+    />
+  );
+}
 
 function headingTag(level: number, offset: number): HeadingTag {
   return `h${Math.min(6, Math.max(1, level + offset))}` as HeadingTag;
@@ -65,12 +90,15 @@ function buildComponents(headingOffset: number): Components {
         />
       );
     },
-    code: ({ node: _node, ...props }) => (
-      <code
-        className="bg-muted rounded px-1 font-mono text-xs break-all [overflow-wrap:anywhere]"
-        {...props}
-      />
+    pre: ({ node: _node, ...props }) => (
+      <InCodeBlock.Provider value={true}>
+        <pre
+          className="bg-muted rounded p-2 whitespace-pre-wrap [overflow-wrap:anywhere]"
+          {...props}
+        />
+      </InCodeBlock.Provider>
     ),
+    code: Code,
   };
 }
 
@@ -81,9 +109,13 @@ export function ChangelogMarkdown({
   markdown: string;
   headingOffset: number;
 }): React.JSX.Element {
+  const components = useMemo(
+    () => buildComponents(headingOffset),
+    [headingOffset],
+  );
   return (
     <div className="flex flex-col gap-2 text-sm text-foreground">
-      <ReactMarkdown skipHtml components={buildComponents(headingOffset)}>
+      <ReactMarkdown skipHtml components={components}>
         {markdown}
       </ReactMarkdown>
     </div>

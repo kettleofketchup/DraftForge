@@ -84,4 +84,32 @@ describe('ChangelogMarkdown', () => {
     );
     expect(container.querySelector('code')?.className).toContain('break-all');
   });
+
+  it('keeps the rendered DOM across a parent re-render', () => {
+    const { container, rerender } = render(
+      <ChangelogMarkdown markdown={'- one\n- two'} headingOffset={1} />,
+    );
+    const before = container.querySelector('li');
+    rerender(
+      <ChangelogMarkdown markdown={'- one\n- two'} headingOffset={1} />,
+    );
+    expect(container.querySelector('li')).toBe(before);
+  });
+
+  it('wraps fenced code blocks inside the panel', () => {
+    const { container } = render(
+      <ChangelogMarkdown
+        markdown={'```\n' + 'x'.repeat(300) + '\n```\n\nand `inline`'}
+        headingOffset={0}
+      />,
+    );
+    const pre = container.querySelector('pre');
+    expect(pre?.className).toContain('whitespace-pre-wrap');
+    expect(pre?.className).toContain('[overflow-wrap:anywhere]');
+    const block = pre?.querySelector('code');
+    expect(block?.className ?? '').not.toContain('px-1');
+    const inline = container.querySelector('p code');
+    expect(inline?.className).toContain('px-1');
+    expect(inline?.className).not.toContain('[overflow-wrap:anywhere]');
+  });
 });
