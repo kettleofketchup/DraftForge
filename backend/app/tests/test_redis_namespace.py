@@ -87,7 +87,8 @@ def _layer_config(mod: types.ModuleType) -> dict[str, object]:
 class RunningTestsSettingsTests(SimpleTestCase):
     def test_active_settings_flag_this_process_as_a_test_run(self) -> None:
         self.assertTrue(settings.RUNNING_TESTS)
-        self.assertIn(str(os.getpid()), settings.REDIS_KEY_NAMESPACE)
+        ns = settings.REDIS_KEY_NAMESPACE
+        self.assertTrue(ns.startswith(f"test-{os.getpid()}-"), ns)
 
     def test_manage_py_test_gets_a_namespace(self) -> None:
         mod = _reload(["manage.py", "test", "app.tests"])
