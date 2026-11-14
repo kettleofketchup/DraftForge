@@ -120,6 +120,43 @@ class CloseEventTest(CompletionTestBase):
         self.assertEqual(self._entries().count(), 3)
         self.assertEqual(OrgLog.objects.filter(action="complete_event").count(), 1)
 
+    def test_close_racing_between_read_and_update_awards_once(self) -> None:
+        self._staff()
+        queryset_cls = type(Event.objects.nocache().all())
+        original_update = queryset_cls.update
+        raced: dict[str, object] = {}
+
+        def racing_update(qs: QuerySet[Event], **kwargs: object) -> int:
+            if "state" in kwargs and "started" not in raced:
+                raced["started"] = True
+                raced["inner"] = close_event(
+                    Event.objects.nocache().get(pk=self.ev.pk),
+                    new_state=EventState.COMPLETED,
+                    source="admin",
+                    actor=self.admin,
+                )
+                raced["awarded_at"] = (
+                    Event.objects.nocache()
+                    .filter(pk=self.ev.pk)
+                    .values_list("contributions_awarded_at", flat=True)
+                    .get()
+                )
+            return original_update(qs, **kwargs)
+
+        with patch.object(queryset_cls, "update", autospec=True) as update:
+            update.side_effect = racing_update
+            outer = close_event(self.ev, new_state=EventState.COMPLETED, source="auto")
+
+        self.assertEqual(
+            raced["inner"], CloseResult(closed=True, state=EventState.COMPLETED)
+        )
+        self.assertEqual(outer, CloseResult(closed=False, state=EventState.COMPLETED))
+        self.assertEqual(self._entries().count(), 3)
+        self.ev.refresh_from_db()
+        self.assertIsNotNone(raced["awarded_at"])
+        self.assertEqual(self.ev.contributions_awarded_at, raced["awarded_at"])
+        self.assertEqual(OrgLog.objects.filter(action="complete_event").count(), 1)
+
     def test_complete_from_upcoming_is_refused(self) -> None:
         self._set_state(EventState.UPCOMING)
         self._staff()
