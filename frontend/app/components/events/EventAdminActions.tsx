@@ -28,6 +28,7 @@ interface EventAdminActionsProps {
   onOpenRollCallClick: () => void;
   onDeleteConfirmed: () => void;
   canComplete: boolean;
+  showCompletePointsNote?: boolean;
   onCompleteConfirmed: () => void | Promise<void>;
 }
 
@@ -40,6 +41,7 @@ export function EventAdminActions({
   onOpenRollCallClick,
   onDeleteConfirmed,
   canComplete,
+  showCompletePointsNote = false,
   onCompleteConfirmed,
 }: EventAdminActionsProps) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -256,7 +258,11 @@ export function EventAdminActions({
         open={showCompleteConfirm}
         onOpenChange={setShowCompleteConfirm}
         title="Complete Event"
-        description={`Mark "${event.name}" as completed? Host and helper points are awarded when it completes.`}
+        description={
+          showCompletePointsNote
+            ? `Mark "${event.name}" as completed? Host and helper points are awarded when it completes.`
+            : `Mark "${event.name}" as completed?`
+        }
         confirmLabel="Complete Event"
         isLoading={actions.completeEvent.isPending}
         onConfirm={onCompleteConfirmed}

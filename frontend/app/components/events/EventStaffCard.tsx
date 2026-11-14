@@ -3,7 +3,11 @@ import { Crown, UserPlus, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
-import type { AddMemberPayload, SearchUserResult } from '~/components/api/api';
+import type {
+  AddMemberPayload,
+  DiscordSearchResult,
+  SearchUserResult,
+} from '~/components/api/api';
 import type { EventStaffUser, EventType } from '~/components/events/schemas';
 import { Card, CardContent, CardHeader } from '~/components/ui/card';
 import { PrimaryButton, SecondaryButton } from '~/components/ui/buttons';
@@ -39,7 +43,10 @@ interface StaffState {
 type PickerMode = 'host' | 'helper';
 
 function staffKey(state: StaffState): string {
-  return JSON.stringify([state.host?.pk ?? null, state.helpers.map((h) => h.pk)]);
+  return JSON.stringify([
+    state.host?.pk ?? null,
+    state.helpers.map((h) => h.pk).sort((a, b) => a - b),
+  ]);
 }
 
 function displayName(user: EventStaffUser): string {
@@ -60,7 +67,32 @@ function findSearchedUser(queryClient: QueryClient, pk: number): EventStaffUser 
       };
     }
   }
+  for (const [, results] of queryClient.getQueriesData<DiscordSearchResult[]>({
+    queryKey: ['discordSearch'],
+  })) {
+    const member = results?.find((m) => m.site_user_pk === pk);
+    if (member) {
+      return {
+        pk,
+        username: member.user.username,
+        nickname: member.nick || member.user.global_name || null,
+        avatarUrl: member.user.avatar
+          ? `https://cdn.discordapp.com/avatars/${member.user.id}/${member.user.avatar}`
+          : null,
+      };
+    }
+  }
   return null;
+}
+
+function logSaveFailure(eventId: number, err: unknown): void {
+  const status = (err as { response?: { status?: number } })?.response?.status;
+  const context = { eventId, status, error: extractApiError(err) };
+  if (status != null && status >= 400 && status < 500) {
+    log.warn('event_staff_save_failed', context);
+  } else {
+    log.error('event_staff_save_failed', context);
+  }
 }
 
 function StaffRow({
@@ -120,10 +152,17 @@ export function EventStaffCard({
   const [baseKey, setBaseKey] = useState(serverKey);
   const [picker, setPicker] = useState<PickerMode | null>(null);
   const [pickerSession, setPickerSession] = useState(0);
+  const [draftConflict, setDraftConflict] = useState(false);
 
   if (baseKey !== serverKey) {
+    const pendingKey = staffKey(pending);
     setBaseKey(serverKey);
-    setPending(server);
+    if (pendingKey === baseKey || pendingKey === serverKey) {
+      setPending(server);
+      setDraftConflict(false);
+    } else {
+      setDraftConflict(true);
+    }
   }
 
   const openPicker = (mode: PickerMode): void => {
@@ -173,16 +212,22 @@ export function EventStaffCard({
     return pending.helpers.some((h) => h.pk === user.pk);
   };
 
-  const save = async () => {
+  const discard = (): void => {
+    setPending(server);
+    setDraftConflict(false);
+  };
+
+  const save = async (): Promise<void> => {
     const payload = {
       host_id: pending.host?.pk ?? null,
       helper_ids: pending.helpers.map((h) => h.pk),
     };
     try {
       await setEventStaff.mutateAsync(payload);
+      setDraftConflict(false);
       toast.success('Event staff saved');
     } catch (err: unknown) {
-      log.warn('event_staff_save_failed', { eventId: event.id, error: extractApiError(err) });
+      logSaveFailure(event.id, err);
       toast.error(extractApiError(err) || 'Failed to save event staff');
     }
   };
@@ -245,12 +290,17 @@ export function EventStaffCard({
             removeTestId={`event-helper-remove-${helper.pk}`}
           />
         ))}
+        {canEdit && dirty && draftConflict && (
+          <p className="text-xs text-muted-foreground" data-testid="event-staff-conflict-note">
+            Host or helpers were changed elsewhere. Saving replaces those changes; Discard loads them.
+          </p>
+        )}
         {canEdit && dirty && (
           <div className="flex justify-end gap-2 pt-2">
             <SecondaryButton
               type="button"
               size="sm"
-              onClick={() => setPending(server)}
+              onClick={discard}
               disabled={setEventStaff.isPending}
               data-testid="event-staff-reset-btn"
             >

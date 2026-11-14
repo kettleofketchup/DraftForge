@@ -205,7 +205,118 @@ describe('EventStaffCard', () => {
   });
 });
 
+describe('EventStaffCard drafts', () => {
+  it('treats re-adding a removed helper as no change', async () => {
+    render(<EventStaffCard event={event} canEdit showPoints={false} />, { wrapper });
+
+    fireEvent.click(screen.getByTestId('event-helper-remove-2'));
+    expect(screen.getByTestId('event-staff-save-btn')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('event-helper-add-btn'));
+    fireEvent.click(await screen.findByTestId('stub-pick-2'));
+
+    await waitFor(() => expect(screen.queryByTestId('event-staff-save-btn')).toBeNull());
+  });
+
+  it('keeps unsaved edits and warns when the server staff changes', () => {
+    const { rerender } = render(<EventStaffCard event={event} canEdit showPoints={false} />, {
+      wrapper,
+    });
+    fireEvent.click(screen.getByTestId('event-helper-remove-2'));
+
+    rerender(
+      <EventStaffCard event={{ ...event, helpers: [alice] }} canEdit showPoints={false} />,
+    );
+
+    expect(screen.queryByTestId('event-helper-remove-2')).toBeNull();
+    expect(screen.getByTestId('event-helper-remove-3')).toBeTruthy();
+    expect(screen.getByTestId('event-staff-conflict-note')).toBeTruthy();
+  });
+
+  it('follows server changes when there are no unsaved edits', () => {
+    const { rerender } = render(<EventStaffCard event={event} canEdit showPoints={false} />, {
+      wrapper,
+    });
+
+    rerender(
+      <EventStaffCard event={{ ...event, helpers: [alice] }} canEdit showPoints={false} />,
+    );
+
+    expect(screen.queryByTestId('event-helper-remove-3')).toBeNull();
+    expect(screen.queryByTestId('event-staff-conflict-note')).toBeNull();
+  });
+
+  it('shows the Discord name of a member picked from Discord results', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    client.setQueryData(
+      ['discordSearch', 'dee', 1],
+      [
+        {
+          user: { id: '555', username: 'dee_discord', global_name: 'Dee', avatar: 'abc' },
+          has_site_account: true,
+          site_user_pk: 9,
+        },
+      ],
+    );
+    render(
+      <QueryClientProvider client={client}>
+        <EventStaffCard event={event} canEdit showPoints={false} />
+      </QueryClientProvider>,
+    );
+
+    fireEvent.click(screen.getByTestId('event-helper-add-btn'));
+    fireEvent.click(await screen.findByTestId('stub-pick-9'));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('event-staff-card').textContent).toContain('Dee'),
+    );
+    expect(screen.getByTestId('event-staff-card').textContent).not.toContain('User #9');
+  });
+});
+
 describe('EventStaffSection', () => {
+  it('shows no editing controls until feature access has settled', () => {
+    render(
+      <EventStaffSection
+        event={event}
+        access={{ ...access, settled: false }}
+        hasDiscordServer={false}
+      />,
+      { wrapper },
+    );
+
+    expect(screen.getByTestId('event-staff-card')).toBeTruthy();
+    expect(screen.queryByTestId('event-host-edit-btn')).toBeNull();
+    expect(screen.queryByTestId('event-helper-add-btn')).toBeNull();
+  });
+
+  it('shows no editing controls without the event staff permission', () => {
+    render(
+      <EventStaffSection
+        event={{ ...event, user_can_manage_event_staff: false }}
+        access={access}
+        hasDiscordServer={false}
+      />,
+      { wrapper },
+    );
+
+    expect(screen.getByTestId('event-staff-card')).toBeTruthy();
+    expect(screen.queryByTestId('event-host-edit-btn')).toBeNull();
+    expect(screen.queryByTestId('event-helper-remove-2')).toBeNull();
+  });
+
+  it('hides the card from non-editors when there is no staff', () => {
+    render(
+      <EventStaffSection
+        event={{ ...event, host: null, helpers: [], user_can_manage_event_staff: false }}
+        access={access}
+        hasDiscordServer={false}
+      />,
+      { wrapper },
+    );
+
+    expect(screen.queryByTestId('event-staff-card')).toBeNull();
+  });
+
   it('makes no point-values request when the viewer cannot manage contributions', async () => {
     render(<EventStaffSection event={event} access={access} hasDiscordServer={false} />, {
       wrapper,

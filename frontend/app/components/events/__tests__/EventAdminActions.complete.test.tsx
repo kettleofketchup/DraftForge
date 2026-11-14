@@ -20,13 +20,18 @@ const actions = {
 
 const event = { id: 11, name: 'Night 4', state: 'in_progress' } as unknown as EventType;
 
-function renderActions(canComplete: boolean, onCompleteConfirmed = vi.fn()) {
+function renderActions(
+  canComplete: boolean,
+  onCompleteConfirmed = vi.fn(),
+  showCompletePointsNote = false,
+) {
   render(
     <TooltipProvider>
       <EventAdminActions
         event={event}
         actions={actions}
         canComplete={canComplete}
+        showCompletePointsNote={showCompletePointsNote}
         onEditClick={vi.fn()}
         onStartRollCallClick={vi.fn()}
         onReopenSignupsClick={vi.fn()}
@@ -51,5 +56,19 @@ describe('EventAdminActions complete', () => {
     expect(onCompleteConfirmed).not.toHaveBeenCalled();
     fireEvent.click(await screen.findByTestId('event-complete-dialog-confirm'));
     await waitFor(() => expect(onCompleteConfirmed).toHaveBeenCalled());
+  });
+
+  it('leaves points out of the confirm text when contributions are hidden', async () => {
+    renderActions(true);
+    fireEvent.click(screen.getByTestId('event-complete-btn'));
+    await screen.findByTestId('event-complete-dialog-confirm');
+    expect(document.body.textContent).not.toMatch(/points/i);
+  });
+
+  it('mentions host and helper points when contributions are visible', async () => {
+    renderActions(true, vi.fn(), true);
+    fireEvent.click(screen.getByTestId('event-complete-btn'));
+    await screen.findByTestId('event-complete-dialog-confirm');
+    expect(document.body.textContent).toMatch(/helper points are awarded/i);
   });
 });

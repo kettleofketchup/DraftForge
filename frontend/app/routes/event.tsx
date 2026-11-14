@@ -99,6 +99,7 @@ import { useOrgStore } from '~/store/orgStore';
 import { useUserCacheStore } from '~/store/userCacheStore';
 import { removeFeatureQueries, useOrgFeatureAccess } from '~/features/org-features';
 import { EventStaffSection } from '~/components/events/EventStaffCard';
+import { canCompleteEvent } from '~/components/events/eventCompletion';
 import { useMemberAccess } from '~/hooks/useMemberAccess';
 import { useUserStore } from '~/store/userStore';
 import { isUserEntry } from '~/store/userCacheTypes';
@@ -108,7 +109,10 @@ import { ConfirmDialog } from '~/components/ui/dialogs';
 import { EntityBreadcrumb, type BreadcrumbSegment } from '~/components/ui/entity-breadcrumb';
 import api from '~/components/api/axios';
 import { extractApiError } from '~/lib/apiError';
+import { getLogger } from '~/lib/logger';
 import { EventLobbyPassword } from '~/components/lobby/EventLobbyPassword';
+
+const log = getLogger('EventPage');
 
 export default function EventPage() {
   const { eventId, tab } = useParams<{ eventId: string; tab?: string }>();
@@ -137,10 +141,9 @@ export default function EventPage() {
   // Permission check uses backend-derived flag (covers org staff AND league staff).
   const isAdmin = event?.user_can_manage ?? false;
   const eventOrgAccess = useOrgFeatureAccess(eventOrg ?? undefined);
-  const canCompleteEvent =
-    !!event?.user_can_manage_event_staff &&
-    eventOrgAccess.settled &&
-    (event.state === EventState.ROLL_CALL || event.state === EventState.IN_PROGRESS);
+  const canComplete = canCompleteEvent(event, eventOrgAccess);
+  const showCompletePointsNote =
+    eventOrgAccess.canViewContributions || eventOrgAccess.canManageContributions;
 
 
   // Set the current game type in the game type store for context-aware components
@@ -449,12 +452,20 @@ export default function EventPage() {
                 onDeleteConfirmed={() => {
                   actions.deleteEvent.mutate(undefined, { onSuccess: () => navigate('/events') });
                 }}
-                canComplete={canCompleteEvent}
+                canComplete={canComplete}
+                showCompletePointsNote={showCompletePointsNote}
                 onCompleteConfirmed={async () => {
                   try {
                     await actions.completeEvent.mutateAsync();
                     toast.success('Event completed');
                   } catch (err: unknown) {
+                    const status = (err as { response?: { status?: number } })?.response?.status;
+                    const context = { eventId: event.id, status, error: extractApiError(err) };
+                    if (status != null && status >= 400 && status < 500) {
+                      log.warn('event_complete_failed', context);
+                    } else {
+                      log.error('event_complete_failed', context);
+                    }
                     toast.error(extractApiError(err) || 'Failed to complete event');
                   }
                 }}
