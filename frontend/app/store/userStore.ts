@@ -27,8 +27,11 @@ import { useUserProfileStore } from '~/store/userProfileStore';
 
 const log = getLogger('userStore');
 
+export type CurrentUserStatus = 'unknown' | 'loading' | 'resolved';
+
 interface UserState {
   currentUser: UserType;
+  currentUserStatus: CurrentUserStatus;
   selectedUser: UserType;
   hasHydrated: boolean;
   setHasHydrated: (hydrated: boolean) => void;
@@ -160,6 +163,7 @@ export const useUserStore = create<UserState>()(
       setCurDraftRound: (round: DraftRoundType) =>
         set({ curDraftRound: round }),
       currentUser: new User({} as UserType),
+      currentUserStatus: 'unknown',
       userQuery: '',
       addUserQuery: '',
       setAddUserQuery: (query: string) => set({ addUserQuery: query }),
@@ -265,13 +269,21 @@ export const useUserStore = create<UserState>()(
       },
 
       getCurrentUser: async () => {
+        set({ currentUserStatus: 'loading' });
         try {
           const response = await fetchCurrentUser();
-          set({ currentUser: response });
+          set({
+            currentUser:
+              response && typeof response === 'object'
+                ? response
+                : ({} as UserType),
+          });
           log.debug('User fetched successfully:', response);
         } catch (error) {
           log.debug('No User logged in:', error);
           set({ currentUser: {} as UserType });
+        } finally {
+          set({ currentUserStatus: 'resolved' });
         }
       },
 

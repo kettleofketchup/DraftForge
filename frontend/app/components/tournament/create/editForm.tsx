@@ -1,9 +1,10 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { format, parseISO } from 'date-fns';
 import { CalendarIcon, Globe } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
+import { useLocation } from 'react-router';
 import { toast } from 'sonner';
 
 import { createTournament, updateTournament } from '~/components/api/api';
@@ -94,6 +95,26 @@ function localDate(dateStr: string): Date {
   return new Date(dateStr + 'T00:00:00');
 }
 
+export function refreshAfterSave({
+  pathname,
+  getTournaments,
+  queryClient,
+  pk,
+}: {
+  pathname: string;
+  getTournaments: () => unknown;
+  queryClient: QueryClient;
+  pk?: number;
+}): void {
+  if (pathname.replace(/\/+$/, '') !== '/tournaments') {
+    getTournaments();
+  }
+  queryClient.invalidateQueries({ queryKey: ['tournaments'] });
+  if (pk) {
+    queryClient.invalidateQueries({ queryKey: ['tournament', pk] });
+  }
+}
+
 interface Props {
   tourn: TournamentClassType;
   onSuccess?: () => void;
@@ -104,6 +125,7 @@ export const TournamentEditForm: React.FC<Props> = ({
   onSuccess,
 }) => {
   const queryClient = useQueryClient();
+  const { pathname } = useLocation();
   const currentUser = useUserStore((state) => state.currentUser);
   const getTournaments = useUserStore((state) => state.getTournaments);
   const leagues = useUserStore((state) => state.leagues);
@@ -205,11 +227,12 @@ export const TournamentEditForm: React.FC<Props> = ({
         toast.success(`Tournament "${data.name}" created successfully`);
       }
 
-      getTournaments();
-      queryClient.invalidateQueries({ queryKey: ['tournaments'] });
-      if (isEditing && tourn?.pk) {
-        queryClient.invalidateQueries({ queryKey: ['tournament', tourn.pk] });
-      }
+      refreshAfterSave({
+        pathname,
+        getTournaments,
+        queryClient,
+        pk: isEditing ? (tourn?.pk ?? undefined) : undefined,
+      });
       onSuccess?.();
       form.reset();
     } catch (err: unknown) {
