@@ -46,6 +46,7 @@ from events.models import (
     OrgEventDefaults,
     RepeaterSubscription,
 )
+from events.reopen import ReopenNotPermitted
 from events.serializers import (
     EventRepeaterSerializer,
     EventRepeaterSlimSerializer,
@@ -1154,18 +1155,24 @@ class EventViewSet(viewsets.ModelViewSet):
         return Response(get_data())
 
     @action(detail=True, methods=["post"])
-    def restart_tournament(self, request, pk=None):
+    def restart_tournament(self, request: Request, pk: str | None = None) -> Response:
         """Delete current tournament, create fresh one, reopen signups."""
         event = self.get_object()
         if not has_event_staff_access(request.user, event):
             return Response(status=status.HTTP_403_FORBIDDEN)
         try:
-            restart_event_tournament(event)
+            restart_event_tournament(
+                event,
+                actor=request.user,
+                can_reopen=has_org_admin_access(request.user, event.organization),
+            )
             event.refresh_from_db()
             qs = with_event_staff(_annotate_event_qs(Event.objects.filter(pk=event.pk)))
             data = EventSerializer(qs.first()).data
             _attach_user_can_manage(data, request.user)
             return Response(data)
+        except ReopenNotPermitted as e:
+            return Response({"error": str(e)}, status=status.HTTP_403_FORBIDDEN)
         except ValueError as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 

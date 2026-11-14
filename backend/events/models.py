@@ -1,4 +1,5 @@
 import copy
+from collections.abc import Mapping, Sequence
 
 import nh3
 from django.core.exceptions import ValidationError
@@ -434,8 +435,13 @@ class Event(
                 kwargs["update_fields"] = {*update_fields, "dota_lobby_password"}
         super().save(*args, **kwargs)
 
-    def transition_state(self, new_state: str) -> None:
-        allowed = EVENT_STATE_TRANSITIONS.get(self.state, [])
+    def transition_state(
+        self,
+        new_state: str,
+        *,
+        transitions: Mapping[str, Sequence[str]] = EVENT_STATE_TRANSITIONS,
+    ) -> None:
+        allowed = transitions.get(self.state, [])
         if new_state not in allowed:
             raise ValueError(
                 f"Cannot transition from '{self.state}' to '{new_state}'. "
