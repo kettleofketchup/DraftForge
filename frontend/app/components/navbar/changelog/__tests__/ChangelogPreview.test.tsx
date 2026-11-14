@@ -2,6 +2,7 @@
 import { cleanup, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import '../ChangelogPreview';
 import { LazyChangelogPreview } from '../LazyChangelogPreview';
 
 vi.mock('react-i18next', () => ({
