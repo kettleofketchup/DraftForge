@@ -40,7 +40,12 @@ export default defineConfig([
       // Raw palette classes and hex values instead of brand tokens.
       'shadcn/no-raw-colors': 'error',
       // Classes Tailwind generates no CSS for: typos, v3 names, missing plugins.
-      'shadcn/no-unknown-classes': 'error',
+      // allow: runtime hook classes, not Tailwind utilities. nodrag/nopan are read by
+      // React Flow, toaster by sonner, spinner by node-status-indicator's inline <style>.
+      'shadcn/no-unknown-classes': [
+        'error',
+        { allow: ['nodrag', 'nopan', 'toaster', 'spinner'] },
+      ],
 
       // Off: conflicts with the brand guide or is a design decision, not a lint one.
       'shadcn/no-restyle': 'off',

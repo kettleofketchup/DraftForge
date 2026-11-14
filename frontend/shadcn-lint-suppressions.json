@@ -335,9 +335,6 @@
   "app/components/ui/button-handle.tsx": {
     "shadcn/no-raw-colors": {
       "count": 1
-    },
-    "shadcn/no-unknown-classes": {
-      "count": 2
     }
   },
   "app/components/ui/buttons/AddDiscordBotButton.tsx": {
@@ -388,19 +385,11 @@
   "app/components/ui/node-status-indicator.tsx": {
     "shadcn/no-raw-colors": {
       "count": 5
-    },
-    "shadcn/no-unknown-classes": {
-      "count": 1
     }
   },
   "app/components/ui/placeholder-node.tsx": {
     "shadcn/no-raw-colors": {
       "count": 2
-    }
-  },
-  "app/components/ui/sonner.tsx": {
-    "shadcn/no-unknown-classes": {
-      "count": 1
     }
   },
   "app/components/ui/tabs.tsx": {
