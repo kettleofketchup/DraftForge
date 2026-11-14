@@ -292,15 +292,17 @@ export function ComposePanel({
             </div>
           </div>
 
-          {rendered.data && !rendered.data.will_earn && (
-            <p
-              className="text-sm text-muted-foreground"
-              data-testid="promo-no-points-note"
-            >
-              This message won't earn points: this player was already messaged
-              for this event, or your role doesn't earn points.
-            </p>
-          )}
+          {rendered.data &&
+            !rendered.data.will_earn &&
+            access.canViewContributions && (
+              <p
+                className="text-sm text-muted-foreground"
+                data-testid="promo-no-points-note"
+              >
+                This message won't earn points: this player was already messaged
+                for this event, or your role doesn't earn points.
+              </p>
+            )}
           {rendered.data?.will_earn && access.canViewContributions && (
             <p
               className="text-sm text-muted-foreground"

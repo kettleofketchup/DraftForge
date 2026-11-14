@@ -76,11 +76,11 @@ function Wrapper({ children }: { children: ReactNode }) {
   );
 }
 
-function renderPanel(): void {
+function renderPanel(panelAccess: OrgFeatureAccess = access): void {
   render(
     <ComposePanel
       orgId={1}
-      access={access}
+      access={panelAccess}
       event={event}
       candidate={candidate}
       templates={templates}
@@ -184,6 +184,19 @@ describe('ComposePanel', () => {
     renderPanel();
     await loadedText();
     expect(screen.getByTestId('promo-no-points-note')).toBeInTheDocument();
+  });
+
+  it('hides the no-points note when Contributions is locked', async () => {
+    vi.mocked(renderPromo).mockResolvedValue({
+      text: RENDERED,
+      warnings: [],
+      will_earn: false,
+    });
+    renderPanel({ ...access, canViewContributions: false });
+    await loadedText();
+    expect(
+      screen.queryByTestId('promo-no-points-note'),
+    ).not.toBeInTheDocument();
   });
 
   it('links to the recipient Discord profile', async () => {
