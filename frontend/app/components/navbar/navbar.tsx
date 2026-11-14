@@ -6,8 +6,8 @@ import { cn } from '~/lib/utils';
 import { useUserStore } from '../../store/userStore';
 import { PreviewLoginMenu } from '../preview/PreviewLoginMenu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
-import { DocsIcon } from './icons';
-import { BUG_REPORT_URL, DOCS_URL, GITHUB_REPO_URL } from './links';
+import { DocsDropdown } from './DocsDropdown';
+import { BUG_REPORT_URL, GITHUB_REPO_URL } from './links';
 import { LoginWithDiscordButton } from './login';
 import { MobileNav } from './MobileNav';
 import { NavItem } from './NavItem';
@@ -284,18 +284,7 @@ const ExternalLinks = ({ className }: { className?: string }) => {
         hideTextOnSmall
         className="[&_svg]:text-text-primary"
       />
-      <NavItem
-        href={DOCS_URL}
-        target="_blank"
-        rel="noopener noreferrer"
-        icon={<DocsIcon />}
-        title={t('nav.docs')}
-        subtitle={t('nav.docs_subtitle')}
-        aria-label={t('aria.documentation')}
-        hideTextOnSmall
-        showSubtitleTooltip
-        className="[&_svg]:text-info"
-      />
+      <DocsDropdown />
       <NavItem
         href={BUG_REPORT_URL}
         target="_blank"
