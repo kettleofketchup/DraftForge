@@ -78,6 +78,20 @@ export async function removeOrgStaff(orgId: number, userId: number): Promise<voi
   await axios.delete(`/organizations/${orgId}/staff/${userId}/`);
 }
 
+export async function getOrgPromoters(orgId: number): Promise<UserType[]> {
+  const response = await axios.get<UserType[]>(`/organizations/${orgId}/promoters/`);
+  return response.data;
+}
+
+export async function addOrgPromoter(orgId: number, userId: number): Promise<UserType> {
+  const response = await axios.post<AddUserResponse>(`/organizations/${orgId}/promoters/`, { user_id: userId });
+  return response.data.user;
+}
+
+export async function removeOrgPromoter(orgId: number, userId: number): Promise<void> {
+  await axios.delete(`/organizations/${orgId}/promoters/${userId}/`);
+}
+
 export async function transferOrgOwnership(orgId: number, userId: number): Promise<UserType> {
   const response = await axios.post<TransferOwnershipResponse>(`/organizations/${orgId}/transfer-ownership/`, { user_id: userId });
   return response.data.new_owner;

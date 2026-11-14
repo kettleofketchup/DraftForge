@@ -9,8 +9,18 @@
  */
 
 import { useState, useCallback, useMemo } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { ChevronDown, ChevronRight, Crown, Loader2, Plus, Shield, User, X } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  ChevronDown,
+  ChevronRight,
+  Crown,
+  Loader2,
+  Megaphone,
+  Plus,
+  Shield,
+  User,
+  X,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import type { UserType } from '~/components/user/types';
 import { UserAvatar } from '~/components/user/UserAvatar';
@@ -23,6 +33,9 @@ import {
   removeOrgAdmin,
   addOrgStaff,
   removeOrgStaff,
+  getOrgPromoters,
+  addOrgPromoter,
+  removeOrgPromoter,
   transferOrgOwnership,
   addLeagueAdmin,
   removeLeagueAdmin,
@@ -39,7 +52,13 @@ import { organizationQueryKey } from '~/components/organization/hooks/useOrganiz
 import { useOrgStore } from '~/store/orgStore';
 import { AddUserModal } from '~/components/user/AddUserModal';
 import { Button } from '~/components/ui/button';
+import { SecondaryButton } from '~/components/ui/buttons';
 import { ConfirmDialog } from '~/components/ui/dialogs';
+import { promotionKeys, useOrgFeatureAccess } from '~/features/org-features';
+import { extractApiError } from '~/lib/apiError';
+import { getLogger } from '~/lib/logger';
+
+const log = getLogger('AdminTeamSection');
 
 interface AdminTeamSectionProps {
   organization?: OrganizationType | null;
@@ -49,7 +68,7 @@ interface AdminTeamSectionProps {
 
 interface UserRowProps {
   user: UserType;
-  role: 'owner' | 'admin' | 'staff';
+  role: 'owner' | 'admin' | 'staff' | 'promoter';
   canRemove: boolean;
   canTransfer?: boolean;
   onRemove?: () => void;
@@ -70,6 +89,7 @@ function UserRow({
     owner: <Crown className="h-4 w-4 text-yellow-500" />,
     admin: <Shield className="h-4 w-4 text-blue-500" />,
     staff: <User className="h-4 w-4 text-gray-500" />,
+    promoter: <Megaphone className="h-4 w-4 text-primary" />,
   };
 
   return (
@@ -101,6 +121,7 @@ function UserRow({
             disabled={isRemoving}
             className="text-destructive"
             title="Remove"
+            data-testid={`remove-${role}-${user.username}`}
           >
             {isRemoving ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -124,6 +145,7 @@ export function AdminTeamSection({
   const [showTransferConfirm, setShowTransferConfirm] = useState(false);
   const [showAddAdmin, setShowAddAdmin] = useState(false);
   const [showAddStaff, setShowAddStaff] = useState(false);
+  const [showAddPromoter, setShowAddPromoter] = useState(false);
 
   const queryClient = useQueryClient();
   const isSuperuser = useIsSuperuser();
@@ -153,6 +175,12 @@ export function AdminTeamSection({
     : isLeagueAdmin || isSuperuser;
   const canManageStaff = canManageAdmins;
   const canTransferOwnership = isOrgMode && (isOrgOwner || isSuperuser);
+  const featureAccess = useOrgFeatureAccess(isOrgMode ? (liveOrg ?? undefined) : undefined);
+  const canManagePromoters = isOrgMode && !!entityId && featureAccess.canManagePromoters;
+  const promotersKey = useMemo(
+    () => [...promotionKeys.all(entityId ?? 0, featureAccess.viewerPk), 'promoters'] as const,
+    [entityId, featureAccess.viewerPk],
+  );
 
   // Helper: optimistically update org in both Zustand store and TanStack Query cache
   const updateOrg = useCallback(
@@ -263,6 +291,35 @@ export function AdminTeamSection({
     onError: (error: Error) => toast.error(error.message),
   });
 
+  const promotersQuery = useQuery({
+    queryKey: promotersKey,
+    queryFn: () => getOrgPromoters(entityId!),
+    enabled: canManagePromoters,
+  });
+  const promoters = promotersQuery.data ?? [];
+
+  // AddUserModal toasts the outcome; surface the API message instead of the axios one.
+  const addPromoterMutation = useMutation({
+    mutationFn: (userId: number) =>
+      addOrgPromoter(entityId!, userId).catch((err: unknown) => {
+        log.error('Failed to add promoter', { orgId: entityId, userId, err });
+        throw new Error(extractApiError(err) ?? 'Failed to add promoter');
+      }),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: promotersKey }),
+  });
+
+  const removePromoterMutation = useMutation({
+    mutationFn: (userId: number) => removeOrgPromoter(entityId!, userId),
+    onSuccess: () => {
+      toast.success('Promoter removed');
+    },
+    onError: (err: unknown, userId) => {
+      log.error('Failed to remove promoter', { orgId: entityId, userId, err });
+      toast.error(extractApiError(err) ?? 'Failed to remove promoter');
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: promotersKey }),
+  });
+
   // --- AddUserModal handlers ---
 
   const adminPkSet = useMemo(() => {
@@ -306,6 +363,24 @@ export function AdminTeamSection({
   const isStaffAdded = useCallback(
     (user: UserType) => user.pk != null && staffPkSet.has(user.pk),
     [staffPkSet]
+  );
+
+  const promoterPkSet = useMemo(
+    () => new Set(promoters.flatMap((p) => (p.pk != null ? [p.pk] : []))),
+    [promoters],
+  );
+
+  const handleAddPromoter = useCallback(
+    async (payload: AddMemberPayload): Promise<UserType> => {
+      if (!payload.user_id) throw new Error('User ID required');
+      return addPromoterMutation.mutateAsync(payload.user_id);
+    },
+    [addPromoterMutation.mutateAsync],
+  );
+
+  const isPromoterAdded = useCallback(
+    (user: UserType) => user.pk != null && promoterPkSet.has(user.pk),
+    [promoterPkSet],
   );
 
   const handleTransferClick = (user: UserType) => {
@@ -458,6 +533,51 @@ export function AdminTeamSection({
               )}
             </div>
           </div>
+
+          {canManagePromoters && (
+            <div data-testid="promoters-section">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="font-medium flex items-center gap-2">
+                  <Megaphone className="h-4 w-4 text-primary" />
+                  Promoters
+                </h4>
+                <SecondaryButton
+                  type="button"
+                  size="sm"
+                  onClick={() => setShowAddPromoter(true)}
+                  data-testid="add-promoter-btn"
+                >
+                  <Plus className="h-4 w-4 mr-1" />
+                  Add Promoter
+                </SecondaryButton>
+              </div>
+              <div className="space-y-2">
+                {promotersQuery.isLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                ) : promotersQuery.isError ? (
+                  <p className="text-sm text-destructive" data-testid="promoters-error">
+                    {extractApiError(promotersQuery.error) ?? 'Failed to load promoters'}
+                  </p>
+                ) : promoters.length > 0 ? (
+                  promoters.map((promoter) => (
+                    <UserRow
+                      key={promoter.pk}
+                      user={promoter}
+                      role="promoter"
+                      canRemove
+                      onRemove={() => promoter.pk && removePromoterMutation.mutate(promoter.pk)}
+                      isRemoving={
+                        removePromoterMutation.isPending &&
+                        removePromoterMutation.variables === promoter.pk
+                      }
+                    />
+                  ))
+                ) : (
+                  <p className="text-sm text-muted-foreground italic">No promoters</p>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -513,6 +633,18 @@ export function AdminTeamSection({
           entityContext={entityContext}
           onAdd={handleAddStaff}
           isAdded={isStaffAdded}
+          hasDiscordServer={false}
+        />
+      )}
+
+      {canManagePromoters && (
+        <AddUserModal
+          open={showAddPromoter}
+          onOpenChange={setShowAddPromoter}
+          title={`Add Promoter to ${organization?.name || 'Organization'}`}
+          entityContext={entityContext}
+          onAdd={handleAddPromoter}
+          isAdded={isPromoterAdded}
           hasDiscordServer={false}
         />
       )}
