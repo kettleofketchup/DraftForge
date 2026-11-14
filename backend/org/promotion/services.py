@@ -133,7 +133,10 @@ def record_promo_send(
 @transaction.atomic
 def undo_promo_send(send: PromoSend, *, actor: CustomUser | None) -> None:
     event = _lock_event(send.event)
-    send = PromoSend.objects.select_for_update().get(pk=send.pk)
+    locked = PromoSend.objects.select_for_update().filter(pk=send.pk).first()
+    if locked is None:
+        return
+    send = locked
     was_earning = send.earns_points
     send_id = send.pk
     recipient_id = send.recipient_id
@@ -156,7 +159,12 @@ def undo_promo_send(send: PromoSend, *, actor: CustomUser | None) -> None:
         if promoted is not None:
             promoted.earns_points = True
             promoted.save(update_fields=["earns_points"])
-            _award_send(promoted, event, promoted.sender)
+            if (
+                not ContributionEntry.objects.nocache()
+                .filter(promo_send=promoted)
+                .exists()
+            ):
+                _award_send(promoted, event, promoted.sender)
 
     log.info(
         "promo_send_undone",

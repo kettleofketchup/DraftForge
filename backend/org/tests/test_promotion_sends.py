@@ -1,4 +1,5 @@
 from datetime import timedelta
+from unittest.mock import patch
 
 from django.test import TestCase
 from django.utils import timezone
@@ -7,6 +8,7 @@ from app.models import CustomUser, League, Organization, Tournament
 from events.constants import EventState
 from events.models import Event
 from org.contributions.kinds import ContributionKind
+from org.contributions.services import award_entry
 from org.feature_keys import FeatureKey
 from org.features import org_has_feature, set_org_feature
 from org.models import ContributionEntry, OrgUser, PromoSend, PromoTemplate
@@ -126,7 +128,14 @@ class RecordPromoSendValidationTest(_SendFixture):
         self._assert_field("recipient_id", recipient=self.promoter)
 
     def test_rejects_recipient_without_discord(self) -> None:
-        self._assert_field("recipient_id", recipient=self.no_discord)
+        with (
+            patch("org.promotion.services.in_pool", return_value=True),
+            self.assertRaises(PromoSendError) as ctx,
+        ):
+            self._send(self.promoter, recipient=self.no_discord)
+        self.assertEqual(ctx.exception.field, "recipient_id")
+        self.assertIn("no Discord account", str(ctx.exception))
+        self.assertFalse(PromoSend.objects.exists())
 
     def test_rejects_text_over_limit(self) -> None:
         self.assertEqual(MAX_SEND_TEXT, 4000)
@@ -180,6 +189,38 @@ class RecordPromoSendEarningTest(_SendFixture):
         self.assertEqual(len(entries), 1)
         self.assertEqual(entries[0].org_user.user, self.promoter_b)
         self.assertEqual(entries[0].occurred_at, second.sent_at)
+        self.assertEqual(ContributionEntry.objects.nocache().count(), 1)
+
+    def test_undo_promotes_demoted_send_reusing_its_entry(self) -> None:
+        first = self._send(self.promoter)
+        second = self._send(self.promoter_b)
+        kept = award_entry(
+            org=self.org,
+            user=self.promoter_b,
+            kind=ContributionKind.PROMO_MESSAGE,
+            occurred_at=second.sent_at,
+            event=self.event,
+            promo_send=second,
+        )
+
+        undo_promo_send(first, actor=self.promoter)
+
+        second.refresh_from_db()
+        self.assertTrue(second.earns_points)
+        self.assertEqual([e.pk for e in self._entries(second)], [kept.pk])
+        self.assertEqual(ContributionEntry.objects.nocache().count(), 1)
+
+    def test_undo_already_deleted_send_is_noop(self) -> None:
+        first = self._send(self.promoter)
+        stale = PromoSend.objects.get(pk=first.pk)
+        second = self._send(self.promoter_b)
+
+        undo_promo_send(first, actor=self.promoter)
+        undo_promo_send(stale, actor=self.promoter)
+
+        second.refresh_from_db()
+        self.assertTrue(second.earns_points)
+        self.assertEqual(len(self._entries(second)), 1)
         self.assertEqual(ContributionEntry.objects.nocache().count(), 1)
 
     def test_undo_non_earning_send_leaves_earning_send(self) -> None:
