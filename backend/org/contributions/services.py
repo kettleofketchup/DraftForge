@@ -506,7 +506,9 @@ def repoint_user_attribution(drop: CustomUser, keep: CustomUser) -> int:
         + ContributionPointValue.objects.nocache()
         .filter(updated_by=drop)
         .update(updated_by=keep)
-        + PromoTemplate.objects.filter(created_by=drop).update(created_by=keep)
+        + PromoTemplate.objects.nocache()
+        .filter(created_by=drop)
+        .update(created_by=keep)
     )
 
 

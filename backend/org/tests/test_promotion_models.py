@@ -28,6 +28,10 @@ class DiscordTimestampTest(SimpleTestCase):
         dt = datetime(2026, 11, 15, 1, 0, tzinfo=UTC)
         self.assertEqual(discord_timestamp(dt), "<t:1794704400:F>")
 
+    def test_naive_datetime_rejected(self) -> None:
+        with self.assertRaises(ValueError):
+            discord_timestamp(datetime(2026, 11, 15, 1, 0))
+
 
 class _PromoFixture(TestCase):
     def setUp(self) -> None:
