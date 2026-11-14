@@ -7,6 +7,7 @@ import pickle
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from unittest import mock
+from urllib.parse import urlsplit
 
 from cacheops import invalidate_model
 from cacheops.getset import cache_thing
@@ -54,7 +55,9 @@ class TournamentListCacheTests(TransactionTestCase):
         ]
 
     def test_org_rename_invalidates(self) -> None:
-        org = Organization.objects.create(name="Original", logo="https://cdn.example/old.png")
+        org = Organization.objects.create(
+            name="Original", logo="https://cdn.example/old.png"
+        )
         league = League.objects.create(organization=org, name="Cache League")
         tournament = Tournament.objects.create(
             name="Cache Cup", date_played=NOW + timedelta(days=2), league=league
@@ -74,7 +77,9 @@ class TournamentListCacheTests(TransactionTestCase):
 
         org.logo = "https://cdn.example/new.png"
         org.save()
-        self.assertEqual(league_row()["organization_logo"], "https://cdn.example/new.png")
+        self.assertEqual(
+            league_row()["organization_logo"], "https://cdn.example/new.png"
+        )
 
     @override_settings(ALLOWED_HOSTS=["a.example", "b.example", "testserver"])
     def test_cached_page_is_host_free(self) -> None:
@@ -106,6 +111,35 @@ class TournamentListCacheTests(TransactionTestCase):
         self.assertEqual(second.json()["count"], 30)
         self.assertIn("b.example", second.json()["next"])
 
+    def _walk_archived(self, page_size: int) -> list[int]:
+        pks: list[int] = []
+        data = self._get(f"?bucket=archived&page=1&page_size={page_size}").json()
+        pks += [r["pk"] for r in data["results"]]
+        while data["next"] is not None:
+            response = self._get(f"?{urlsplit(data['next']).query}")
+            self.assertEqual(response.status_code, 200, response.content)
+            data = response.json()
+            pks += [r["pk"] for r in data["results"]]
+        return pks
+
+    def test_cached_cursor_pages_are_keyed_by_cursor(self) -> None:
+        Tournament.objects.bulk_create(
+            Tournament(
+                name=f"Walk {i}", state="past", date_played=NOW - timedelta(days=10 + i)
+            )
+            for i in range(30)
+        )
+        expected = list(
+            Tournament.objects.order_by("-date_played", "-pk").values_list(
+                "pk", flat=True
+            )
+        )
+        self.assertEqual(self._walk_archived(7), expected)
+        with mock.patch("cacheops.query.cache_thing", wraps=cache_thing) as spy:
+            self.assertEqual(self._walk_archived(7), expected)
+        self.assertEqual(self._stored_pages(spy), [])
+        self.assertEqual(self._walk_archived(4), expected)
+
     def test_cutoff_rollover(self) -> None:
         tournament = Tournament.objects.create(
             name="Rollover Cup", date_played=datetime(2026, 11, 11, tzinfo=UTC)
@@ -122,7 +156,9 @@ class TournamentListCacheTests(TransactionTestCase):
         self.assertIn(tournament.pk, pks("?bucket=archived", next_day))
 
     def _open_signup_tournament(
-        self, starts_in: timedelta = timedelta(hours=2), deadline_hours: int | None = None
+        self,
+        starts_in: timedelta = timedelta(hours=2),
+        deadline_hours: int | None = None,
     ) -> Tournament:
         org = Organization.objects.create(name="Open Org", logo="")
         league = League.objects.create(organization=org, name="Open League")
