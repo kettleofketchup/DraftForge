@@ -26,18 +26,18 @@ import {
   type OrgFeatureRow,
 } from './schemas';
 
-const log = getLogger('PaidFeaturesPanel');
+const log = getLogger('LockedFeaturesPanel');
 
 const FEATURE_LABELS: Record<FeatureKey, string> = {
   contributions: 'Contributions',
   promotion: 'Promotion',
 };
 
-export interface PaidFeaturesPanelProps {
+export interface LockedFeaturesPanelProps {
   orgId: number;
 }
 
-export function PaidFeaturesPanel({ orgId }: PaidFeaturesPanelProps) {
+export function LockedFeaturesPanel({ orgId }: LockedFeaturesPanelProps) {
   const isSuperuser = useIsSuperuser();
   const {
     data: rows,
@@ -54,10 +54,10 @@ export function PaidFeaturesPanel({ orgId }: PaidFeaturesPanelProps) {
 
   return (
     <section
-      data-testid="paid-features-panel"
+      data-testid="locked-features-panel"
       className="mt-12 rounded-lg border border-primary/40 bg-base-900/40 p-6"
     >
-      <h2 className="text-lg font-semibold">Paid features</h2>
+      <h2 className="text-lg font-semibold">Locked features</h2>
       <p className="mt-2 text-sm text-muted-foreground">
         Site admins only. Locked features are hidden from the organization;
         their data is kept.
@@ -68,14 +68,14 @@ export function PaidFeaturesPanel({ orgId }: PaidFeaturesPanelProps) {
       {isError && (
         <p
           className="mt-4 text-sm text-destructive"
-          data-testid="paid-features-error"
+          data-testid="locked-features-error"
         >
-          {extractApiError(error) ?? 'Failed to load paid features'}
+          {extractApiError(error) ?? 'Failed to load locked features'}
         </p>
       )}
       <div className="mt-4 flex flex-col gap-4">
         {rows?.map((row) => (
-          <PaidFeatureRow
+          <LockedFeatureRow
             key={`${row.feature}:${row.enabled}:${row.notes}:${row.enabled_at ?? ''}`}
             orgId={orgId}
             row={row}
@@ -86,12 +86,12 @@ export function PaidFeaturesPanel({ orgId }: PaidFeaturesPanelProps) {
   );
 }
 
-interface PaidFeatureRowProps {
+interface LockedFeatureRowProps {
   orgId: number;
   row: OrgFeatureRow;
 }
 
-function PaidFeatureRow({ orgId, row }: PaidFeatureRowProps) {
+function LockedFeatureRow({ orgId, row }: LockedFeatureRowProps) {
   const queryClient = useQueryClient();
   const label = FEATURE_LABELS[row.feature];
   const form = useForm<OrgFeatureFormValues>({
@@ -128,7 +128,7 @@ function PaidFeatureRow({ orgId, row }: PaidFeatureRowProps) {
       <form
         onSubmit={form.handleSubmit((values) => mutation.mutate(values))}
         className="flex flex-col gap-3 rounded-md border border-border p-4"
-        data-testid={`paid-feature-row-${row.feature}`}
+        data-testid={`locked-feature-row-${row.feature}`}
       >
         <FormField
           control={form.control}
@@ -140,7 +140,7 @@ function PaidFeatureRow({ orgId, row }: PaidFeatureRowProps) {
                   checked={field.value}
                   onCheckedChange={field.onChange}
                   disabled={mutation.isPending}
-                  data-testid={`paid-feature-switch-${row.feature}`}
+                  data-testid={`locked-feature-switch-${row.feature}`}
                 />
               </FormControl>
               <FormLabel className="font-medium">{label}</FormLabel>
@@ -166,7 +166,7 @@ function PaidFeatureRow({ orgId, row }: PaidFeatureRowProps) {
                   rows={2}
                   disabled={mutation.isPending}
                   placeholder="Payment reference, trial end, ..."
-                  data-testid={`paid-feature-notes-${row.feature}`}
+                  data-testid={`locked-feature-notes-${row.feature}`}
                 />
               </FormControl>
             </FormItem>
@@ -176,7 +176,7 @@ function PaidFeatureRow({ orgId, row }: PaidFeatureRowProps) {
           <SecondaryButton
             type="submit"
             disabled={mutation.isPending}
-            data-testid={`paid-feature-save-${row.feature}`}
+            data-testid={`locked-feature-save-${row.feature}`}
           >
             {mutation.isPending ? 'Saving...' : 'Save'}
           </SecondaryButton>

@@ -1,4 +1,4 @@
-export { PaidFeaturesPanel } from './PaidFeaturesPanel';
+export { LockedFeaturesPanel } from './LockedFeaturesPanel';
 export {
   contributionsKeys,
   orgFeaturesKey,

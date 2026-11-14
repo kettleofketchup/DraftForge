@@ -119,7 +119,7 @@ cicd-events *args:
     {{cicd}} --project=events-sequential --no-deps "$@"
 
 # The 19-org-features specs in order (org-features-sequential): they share
-# the seeded paid features orgs and reset them per test
+# the seeded locked features orgs and reset them per test
 [group('test::pw')]
 cicd-org-features *args:
     {{cicd}} --project=org-features-sequential --no-deps "$@"

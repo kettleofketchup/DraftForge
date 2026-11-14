@@ -110,7 +110,7 @@ See [references/backend-test-endpoints.md](references/backend-test-endpoints.md)
 | League | CSV Import League | 3 | 17931 |
 | League | Events Test League | 7 | 17935 |
 | Org / League | Lobby Test Org / Lobby Test League | auto (look up by name) | 17940 |
-| Org / League | Features Test Org / Features Test League (both paid features unlocked) | 40 | 17941 |
+| Org / League | Features Test Org / Features Test League (both locked features unlocked) | 40 | 17941 |
 | Org / League | Locked Features Org / Locked Features League (both locked) | 41 | 17942 |
 | Org / League | Private Features Org / Private Features League (unlocked, `members_private`) | 42 | 17943 |
 | Org | Discovery Home / Away / Open (tournament discovery) | 30 / 31 / 32 | - |

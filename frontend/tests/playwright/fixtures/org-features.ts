@@ -1,5 +1,5 @@
 /**
- * Org paid features E2E fixtures (19-org-features specs).
+ * Org locked features E2E fixtures (19-org-features specs).
  *
  * Infrastructure (backend/tests/populate/org_features.py, tests.data.org_features):
  * - Features Test Org: contributions and promotion unlocked, public members

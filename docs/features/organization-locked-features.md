@@ -1,14 +1,14 @@
-# Organization Paid Features
+# Organization Locked Features
 
-Two paid features can be unlocked per organization: **Promotion** (a dashboard for
+Two locked features can be unlocked per organization: **Promotion** (a dashboard for
 inviting past players to upcoming events over Discord DMs) and **Contributions** (a
 points ledger and leaderboard for the people who host, help and promote). This page is
 the guide for org owners and admins. The API is listed in
-[API Endpoints: Organization paid features](../api/endpoints.md#organization-paid-features),
-and the permission rules in [Roles & Permission Matrix](../dev/auth/roles.md#promoter-and-paid-features).
+[API Endpoints: Organization locked features](../api/endpoints.md#organization-locked-features),
+and the permission rules in [Roles & Permission Matrix](../dev/auth/roles.md#promoter-and-locked-features).
 
 Host and helper assignment, the **Complete** action and the event end time are not
-paid: they work for every organization. See [Events](events.md#end-time-completion-and-staff).
+locked: they work for every organization. See [Events](events.md#end-time-completion-and-staff).
 
 ---
 
@@ -17,7 +17,7 @@ paid: they work for every organization. See [Events](events.md#end-time-completi
 Only a site admin (`is_staff` or `is_superuser`) can unlock or lock a feature. There
 are two places to do it:
 
-- the **Paid features** panel at the bottom of the organization page (shown only to
+- the **Locked features** panel at the bottom of the organization page (shown only to
   site admins), with a switch and a notes field per feature;
 - Django admin, under **Org features**.
 

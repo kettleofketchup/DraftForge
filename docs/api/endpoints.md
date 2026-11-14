@@ -331,9 +331,9 @@ writable:
 
 The detail never includes feature notes, `enabled_by` or `enabled_at`.
 
-## Organization Paid Features
+## Organization Locked Features
 
-Guide: [Organization Paid Features](../features/organization-paid-features.md).
+Guide: [Organization Locked Features](../features/organization-locked-features.md).
 
 **Denials.** Feature and role denials return `403` with a `code`:
 `{"code": "feature_locked", "detail": ...}` when the feature is locked and

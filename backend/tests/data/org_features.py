@@ -1,4 +1,4 @@
-"""Org paid features E2E test data: Contributions and Promotion.
+"""Org locked features E2E test data: Contributions and Promotion.
 
 Used by frontend/tests/playwright/e2e/19-org-features/.
 populate_org_features_data creates it and reset_org_features_data puts it
@@ -24,19 +24,19 @@ from tests.data.models import TestLeague, TestOrganization, TestUser
 FEATURES_ORG: TestOrganization = TestOrganization(
     pk=40,
     name="Features Test Org",
-    description="Isolated organization for the paid features E2E tests.",
+    description="Isolated organization for the locked features E2E tests.",
     timezone="America/New_York",
 )
 LOCKED_FEATURES_ORG: TestOrganization = TestOrganization(
     pk=41,
     name="Locked Features Org",
-    description="Paid features locked.",
+    description="Both locked features stay locked.",
     timezone="America/New_York",
 )
 PRIVATE_FEATURES_ORG: TestOrganization = TestOrganization(
     pk=42,
     name="Private Features Org",
-    description="Paid features unlocked with a private member list.",
+    description="Both locked features unlocked, with a private member list.",
     timezone="America/New_York",
 )
 

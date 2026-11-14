@@ -164,7 +164,7 @@ urlpatterns = [
         login_dota_lobby,
         name="test-login-dota-lobby",
     ),
-    # Org paid features E2E users (tests.data.org_features.ORG_FEATURES_ROLE_USERS)
+    # Org locked features E2E users (tests.data.org_features.ORG_FEATURES_ROLE_USERS)
     path(
         "login-org-features/<str:role>/",
         login_org_features,
@@ -354,7 +354,7 @@ urlpatterns = [
         dota_lobby_sim_proxy,
         name="test-dota-lobby-sim",
     ),
-    # Org paid features E2E data (test_org_features.py)
+    # Org locked features E2E data (test_org_features.py)
     path("org-features/data/", org_features_data, name="test-org-features-data"),
     path("org-features/reset/", reset_org_features, name="test-org-features-reset"),
     path("healthz/", healthz, name="test-healthz"),

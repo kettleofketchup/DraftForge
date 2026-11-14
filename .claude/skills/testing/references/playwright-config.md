@@ -45,7 +45,7 @@ testIgnore: **/fixtures/**, **/helpers/**, **/constants.ts, **/*.d.ts
   that never becomes available (bots not ready, test league not verified within
   60 s) fails the run instead of skipping it
 - `org-features-sequential` sets `workers: 1`: every file resets the same seeded
-  paid features orgs, ledger and promo sends via `/api/tests/org-features/reset/`.
+  locked features orgs, ledger and promo sends via `/api/tests/org-features/reset/`.
   `just test::pw::cicd-org-features` runs its @cicd specs
 
 ### 3. `demo` - Video Recording

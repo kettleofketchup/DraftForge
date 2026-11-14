@@ -66,7 +66,7 @@ from tests.data.models import (
     TestUser,
 )
 
-# Org paid features E2E (orgs/leagues 40-42, users 7300-7319)
+# Org locked features E2E (orgs/leagues 40-42, users 7300-7319)
 from tests.data.org_features import (
     FEATURES_LEAGUE,
     FEATURES_ORG,
@@ -311,7 +311,7 @@ __all__ = [
     "LOBBY_FIXED_PASSWORD",
     "LOBBY_ROLE_USERS",
     "LOBBY_USERS",
-    # Org paid features E2E
+    # Org locked features E2E
     "FEATURES_ORG",
     "LOCKED_FEATURES_ORG",
     "PRIVATE_FEATURES_ORG",

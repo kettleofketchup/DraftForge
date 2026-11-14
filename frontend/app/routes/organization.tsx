@@ -73,7 +73,7 @@ import { CSVImportModal } from '~/components/user/CSVImportModal';
 import type { UserType } from '~/components/user/types';
 import { ContributionsTab } from '~/features/contributions';
 import {
-  PaidFeaturesPanel,
+  LockedFeaturesPanel,
   removeFeatureQueries,
   useOrgFeatureAccess,
 } from '~/features/org-features';
@@ -854,7 +854,7 @@ export default function OrganizationDetailPage() {
         <DeleteOrganizationDangerZone organization={organization} />
       )}
 
-      {pk && <PaidFeaturesPanel orgId={pk} />}
+      {pk && <LockedFeaturesPanel orgId={pk} />}
 
       {pk && (
         <CreateLeagueModal

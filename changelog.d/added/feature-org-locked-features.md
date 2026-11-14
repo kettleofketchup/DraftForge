@@ -1,4 +1,4 @@
-- Paid feature switches per organization: Contributions and Promotion stay locked
+- Lockable feature switches per organization: Contributions and Promotion stay locked
   until a site admin unlocks them, and locked features are hidden from the org page.
 - A Promoter role for organizations. Org admins add and remove promoters in the
   admin team section.

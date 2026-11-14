@@ -171,17 +171,17 @@ The six entry points locked by `e2e/17-auth/02-edit-and-bracket-gates.spec.ts`.
   of the MatchStatsModal uses `useIsLeagueStaff`. If you're widening
   it, lift the gate to `useIsLeagueStaff` and flip the matrix row.
 
-## Promoter and Paid Features
+## Promoter and Locked Features
 
 `promoter` is a member of `Organization.promoters`. The role only does anything while
 the org's **Promotion** feature is unlocked: then it opens the Promotion dashboard and
-nothing else. In the auth matrix org (pk=8) both paid features stay **locked**, so the
-`promoter` column above reads the same as `orgMember`. For a private member list a
-promoter also counts as a plain member.
+nothing else. In the auth matrix org (pk=8) Contributions and Promotion both stay
+**locked**, so the `promoter` column above reads the same as `orgMember`. For a private
+member list a promoter also counts as a plain member.
 
-The paid-feature gates are checked against the dedicated org-features test data
+The locked-feature gates are checked against the dedicated org-features test data
 (orgs 40-42, users 7300-7307; see
-[Organization Paid Features](../../features/organization-paid-features.md)) by the
+[Organization Locked Features](../../features/organization-locked-features.md)) by the
 backend permission tests (`org/tests/test_features_api.py`, `test_promoters.py`,
 `test_contributions_api.py`, `test_promotion_api.py`,
 `events/tests/test_event_staff_api.py`) and the Playwright specs in
@@ -281,7 +281,7 @@ feature suites.
 | Test users                        | `backend/tests/data/users.py`                                                         |
 | Create-action matrix              | `frontend/tests/playwright/e2e/17-auth/01-create-gates.spec.ts`                        |
 | Edit + bracket matrix             | `frontend/tests/playwright/e2e/17-auth/02-edit-and-bracket-gates.spec.ts`              |
-| Paid-feature gates                | `backend/org/feature_errors.py`, `frontend/tests/playwright/e2e/19-org-features/`      |
+| Locked-feature gates              | `backend/org/feature_errors.py`, `frontend/tests/playwright/e2e/19-org-features/`      |
 
 [hooks]: ../../../frontend/app/hooks/usePermissions.ts
 [permissions]: ../../../backend/app/permissions_org.py

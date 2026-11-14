@@ -1,4 +1,4 @@
-"""Populate and reset the org paid features E2E data (tests.data.org_features).
+"""Populate and reset the org locked features E2E data (tests.data.org_features).
 
 populate_org_features_data creates the orgs, leagues, users, memberships and
 past tournaments, then runs the reset. reset_org_features_data, behind
@@ -115,7 +115,7 @@ def _ensure_tournaments() -> None:
 
 
 def populate_org_features_data(force: bool = False) -> None:
-    """Create the paid features orgs, users and tournaments, then reset.
+    """Create the locked features orgs, users and tournaments, then reset.
 
     Users are updated in place, never deleted, so `force` changes nothing.
     """
@@ -196,7 +196,7 @@ def _create_events(org: Organization, users: dict[int, CustomUser]) -> None:
         Event.objects.create(
             organization=org,
             name=name,
-            description="Upcoming event for the paid features E2E tests.",
+            description="Upcoming event for the locked features E2E tests.",
             scheduled_at=start,
             ends_at=start + timedelta(hours=3),
             state=EventState.UPCOMING,
@@ -261,7 +261,7 @@ def _rebuild() -> list[Organization]:
 
 
 def reset_org_features_data() -> dict[str, Any]:
-    """Put the paid features data back to the seeded state; returns the lookup."""
+    """Put the locked features data back to the seeded state; returns the lookup."""
     orgs = _rebuild()
     for model in (
         Event,

@@ -65,7 +65,7 @@ Every log MUST include `system` and `subsystem` kwargs. These are the primary Gr
 | `steam` | `api`, `game_linking`, `match`, `mmr`, `stats`, `model`, `league_sync`, `retry`, `ingest` | — | `steam/**` | Steam API, account/game linking, match fetch/store, MMR/stats, league sync, retry, internal store_match ingest |
 | `bracket` | `generate`, `model` | — | `bracket/**` | Bracket generation + model-level cache logging |
 | `org` | `views` | — | `org/views.py` | Org admin actions (user delete/merge) |
-| `org` | `features` | — | `org/features.py` | Paid feature switch writes (`org_feature_set`, after commit) |
+| `org` | `features` | — | `org/features.py` | Locked feature switch writes (`org_feature_set`, after commit) |
 | `org` | `promoters` | — | `org/views_features.py` | Promoter add/remove (`org_promoter_added`, `org_promoter_removed`) |
 | `org` | `contributions` | — | `org/contributions/services.py`, `org/contributions/periods.py` | Ledger writes: awards, host/helper sync, manual award edit/delete, point values and rescores, merge reassign/dedupe, user-delete cleanup; invalid org timezone fallback (`org_timezone_invalid`) |
 | `org` | `promotion` | — | `org/promotion/services.py`, `org/promotion/views.py`, `org/promotion/starter.py` | Promo send record/undo, merge demotions, template create/update/delete, starter template seeding. Never message text |

@@ -1,8 +1,8 @@
-"""Test endpoints for the org paid features E2E specs (TEST=true only).
+"""Test endpoints for the org locked features E2E specs (TEST=true only).
 
 Routes under /api/tests/ (tests/urls.py):
 
-- POST login-org-features/<role>/: log in as a paid features test user
+- POST login-org-features/<role>/: log in as a locked features test user
   (tests.data.org_features.ORG_FEATURES_ROLE_USERS).
 - GET org-features/data/: the seeded orgs, users, events and templates.
 - POST org-features/reset/: rebuild the ledger, promo sends, point values,

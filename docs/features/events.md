@@ -155,7 +155,7 @@ Subscribing is what earns you the pre-event signup-reminder DM. The new-event an
 
 ## End Time, Completion and Staff
 
-These work for every organization; none of them need a paid feature.
+These work for every organization; none of them are locked features.
 
 ### End time
 
@@ -207,7 +207,7 @@ points.
 Once an event is `completed` or has `contributions_awarded_at` set, changing its host or
 helpers updates the ledger immediately, and so does changing its name, `scheduled_at` or
 `ends_at`. Points and the ledger are covered in
-[Organization Paid Features](organization-paid-features.md#contributions).
+[Organization Locked Features](organization-locked-features.md#contributions).
 
 ---
 

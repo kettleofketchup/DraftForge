@@ -4,7 +4,7 @@ from org.feature_keys import FeatureKey
 
 
 class OrgFeature(models.Model):
-    """Paid feature switch for one organization, unlocked by a site admin."""
+    """Lockable feature switch for one organization, unlocked by a site admin."""
 
     organization = models.ForeignKey(
         "app.Organization",

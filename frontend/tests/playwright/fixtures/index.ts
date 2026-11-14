@@ -198,7 +198,7 @@ export {
   type SimulatorStatus,
 } from './dota-lobby';
 
-// Org paid features utilities (19-org-features specs)
+// Org locked features utilities (19-org-features specs)
 export {
   expectNoSessionToast,
   getOrgFeaturesData,

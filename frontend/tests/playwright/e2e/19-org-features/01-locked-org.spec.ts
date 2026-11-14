@@ -16,7 +16,7 @@ test.describe('Org features: locked org @cicd', () => {
     data = await resetOrgFeatures(request);
   });
 
-  test('locked admin sees no paid feature tabs or promoter section @cicd', async ({
+  test('locked admin sees no locked feature tabs or promoter section @cicd', async ({
     page,
     context,
   }) => {

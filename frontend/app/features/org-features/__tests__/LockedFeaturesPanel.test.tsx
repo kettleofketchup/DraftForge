@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { UserType } from '~/components/user/types';
 import { useUserStore } from '~/store/userStore';
 import { getOrgFeatures, setOrgFeature } from '../api';
-import { PaidFeaturesPanel } from '../PaidFeaturesPanel';
+import { LockedFeaturesPanel } from '../LockedFeaturesPanel';
 import { orgFeaturesKey } from '../queryKeys';
 import type { OrgFeatureRow } from '../schemas';
 
@@ -52,7 +52,7 @@ function renderPanel(
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={qc}>{children}</QueryClientProvider>
   );
-  return { qc, ...render(<PaidFeaturesPanel orgId={7} />, { wrapper }) };
+  return { qc, ...render(<LockedFeaturesPanel orgId={7} />, { wrapper }) };
 }
 
 beforeEach(() => {
@@ -67,7 +67,7 @@ afterEach(() => {
   vi.mocked(toast.error).mockClear();
 });
 
-describe('PaidFeaturesPanel', () => {
+describe('LockedFeaturesPanel', () => {
   it('renders nothing and never fetches for a non-site-admin', async () => {
     setViewer({
       pk: 3,
@@ -90,21 +90,20 @@ describe('PaidFeaturesPanel', () => {
     });
     renderPanel();
     expect(
-      await screen.findByTestId('paid-features-panel'),
+      await screen.findByTestId('locked-features-panel'),
     ).toBeInTheDocument();
     const promoNotes = await screen.findByTestId(
-      'paid-feature-notes-promotion',
+      'locked-feature-notes-promotion',
     );
     expect(promoNotes).toHaveValue('Paid via invoice 42');
-    expect(screen.getByTestId('paid-feature-notes-contributions')).toHaveValue(
-      '',
-    );
-    expect(screen.getByTestId('paid-feature-switch-promotion')).toHaveAttribute(
-      'aria-checked',
-      'true',
-    );
     expect(
-      screen.getByTestId('paid-feature-switch-contributions'),
+      screen.getByTestId('locked-feature-notes-contributions'),
+    ).toHaveValue('');
+    expect(
+      screen.getByTestId('locked-feature-switch-promotion'),
+    ).toHaveAttribute('aria-checked', 'true');
+    expect(
+      screen.getByTestId('locked-feature-switch-contributions'),
     ).toHaveAttribute('aria-checked', 'false');
     expect(getOrgFeatures).toHaveBeenCalledWith(7);
   });
@@ -115,12 +114,12 @@ describe('PaidFeaturesPanel', () => {
     const { qc } = renderPanel();
     const invalidate = vi.spyOn(qc, 'invalidateQueries');
     fireEvent.click(
-      await screen.findByTestId('paid-feature-switch-contributions'),
+      await screen.findByTestId('locked-feature-switch-contributions'),
     );
-    fireEvent.change(screen.getByTestId('paid-feature-notes-contributions'), {
+    fireEvent.change(screen.getByTestId('locked-feature-notes-contributions'), {
       target: { value: 'Trial' },
     });
-    fireEvent.click(screen.getByTestId('paid-feature-save-contributions'));
+    fireEvent.click(screen.getByTestId('locked-feature-save-contributions'));
     await vi.waitFor(() =>
       expect(setOrgFeature).toHaveBeenCalledWith(7, {
         feature: 'contributions',
@@ -143,12 +142,12 @@ describe('PaidFeaturesPanel', () => {
     vi.mocked(setOrgFeature).mockResolvedValue(rows);
     renderPanel();
     fireEvent.change(
-      await screen.findByTestId('paid-feature-notes-promotion'),
+      await screen.findByTestId('locked-feature-notes-promotion'),
       {
         target: { value: 'Renewed' },
       },
     );
-    fireEvent.click(screen.getByTestId('paid-feature-save-promotion'));
+    fireEvent.click(screen.getByTestId('locked-feature-save-promotion'));
     await vi.waitFor(() =>
       expect(toast.success).toHaveBeenCalledWith('Promotion notes saved'),
     );
@@ -161,7 +160,7 @@ describe('PaidFeaturesPanel', () => {
     });
     renderPanel();
     fireEvent.click(
-      await screen.findByTestId('paid-feature-save-contributions'),
+      await screen.findByTestId('locked-feature-save-contributions'),
     );
     await vi.waitFor(() => expect(toast.error).toHaveBeenCalledWith('x'));
   });
@@ -172,8 +171,8 @@ describe('PaidFeaturesPanel', () => {
       response: { data: { detail: 'Nope' } },
     });
     renderPanel();
-    expect(await screen.findByTestId('paid-features-error')).toHaveTextContent(
-      'Nope',
-    );
+    expect(
+      await screen.findByTestId('locked-features-error'),
+    ).toHaveTextContent('Nope');
   });
 });
