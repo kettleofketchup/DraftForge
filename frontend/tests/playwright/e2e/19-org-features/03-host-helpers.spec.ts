@@ -58,7 +58,7 @@ test.describe('Org features: host and helpers @cicd', () => {
     await expect(page.getByTestId('event-staff-save-btn')).toHaveCount(0);
 
     await moveEventToRollCall(context, eventPk);
-    await page.reload();
+    await visitAndWaitForHydration(page, `/events/${eventPk}`);
     await page.getByTestId('event-complete-btn').click();
     const completed = page.waitForResponse(
       (r) => r.request().method() === 'POST' && r.url().includes(`/events/${eventPk}/complete/`),

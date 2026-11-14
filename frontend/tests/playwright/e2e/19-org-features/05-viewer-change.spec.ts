@@ -61,7 +61,7 @@ test.describe('Org features: viewer changes @cicd', () => {
     await loginOrgFeatures(context, 'private_member');
     await visitAndWaitForHydration(page, `/organizations/${data.orgs.private.pk}?tab=contributions`);
 
-    await expect(page.getByTestId('contributions-org-total')).toContainText('5');
+    await expect(page.getByTestId('contributions-org-total')).toHaveText(/^5\s*points$/);
     await expect(page.getByTestId('contributions-members-private')).toBeVisible();
     const rows = page.locator(ROWS);
     await expect(rows).toHaveCount(1);
@@ -73,7 +73,7 @@ test.describe('Org features: viewer changes @cicd', () => {
     );
     await logoutWithoutReload(page);
     await expect(rows).toHaveCount(0);
-    await expect(page.getByTestId('contributions-org-total')).toContainText('5');
+    await expect(page.getByTestId('contributions-org-total')).toHaveText(/^5\s*points$/);
     await expect(page.getByTestId('contributions-members-private')).toBeVisible();
     await expectNoSessionToast(page);
     await expectAnonymousLeaderboard(refetches);
@@ -82,7 +82,7 @@ test.describe('Org features: viewer changes @cicd', () => {
 
   test('anonymous visitor sees only the private org total @cicd', async ({ page }) => {
     await visitAndWaitForHydration(page, `/organizations/${data.orgs.private.pk}?tab=contributions`);
-    await expect(page.getByTestId('contributions-org-total')).toContainText('5');
+    await expect(page.getByTestId('contributions-org-total')).toHaveText(/^5\s*points$/);
     await expect(page.getByTestId('contributions-members-private')).toBeVisible();
     await expect(page.locator(ROWS)).toHaveCount(0);
   });
@@ -101,7 +101,7 @@ test.describe('Org features: viewer changes @cicd', () => {
     await expect(rows).toHaveCount(0);
     await expect(page.getByTestId('contributions-admin')).toHaveCount(0);
     await expect(page.getByTestId('contributions-members-signin')).toBeVisible();
-    await expect(page.getByTestId('contributions-org-total')).toContainText('15');
+    await expect(page.getByTestId('contributions-org-total')).toHaveText(/^15\s*points$/);
     await expectNoSessionToast(page);
     await expectAnonymousLeaderboard(refetches);
     await expect(rows).toHaveCount(0);

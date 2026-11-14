@@ -64,18 +64,23 @@ test.describe('Org features: promoter flow @cicd', () => {
     const banner = page.getByTestId('promo-sent-banner');
     await expect(banner).toBeVisible();
     await expect(banner.getByTestId(`promo-undo-${send.id}`)).toBeVisible();
-    await expect(page.getByTestId('promo-earned-hint')).toContainText('1');
+    await expect(page.getByTestId('promo-earned-hint')).toHaveText('You earned 1 points.');
     await expect(page.getByTestId('promo-mark-sent-btn')).toBeDisabled();
 
-    // Org staff can promote too, but this player already has an earning send for the event.
+    // Org staff stands in as the second sender: this player already has an earning send for the event.
     const staffContext = await browser.newContext({ baseURL: BASE_URL, ignoreHTTPSErrors: true });
     const adminContext = await browser.newContext({ baseURL: BASE_URL, ignoreHTTPSErrors: true });
     try {
       await loginOrgFeatures(staffContext, 'staff');
       const staffPage = await staffContext.newPage();
+      const staffCandidates = staffPage.waitForResponse(
+        (r) => r.request().method() === 'GET' && r.url().includes(`/events/${eventPk}/candidates/`),
+      );
       await visitAndWaitForHydration(staffPage, `/organizations/${orgPk}?tab=promotion&event=${eventPk}`);
       await expect(staffPage.getByTestId(`promo-event-${eventPk}`)).toHaveAttribute('aria-pressed', 'true');
+      expect((await staffCandidates).status()).toBe(200);
       await expect(staffPage.getByTestId('promo-candidate-list')).toBeVisible();
+      await expect(staffPage.getByText('Loading players...')).toHaveCount(0);
       await expect(staffPage.getByTestId(`promo-candidate-${recipientPk}`)).toHaveCount(0);
       await staffPage.getByTestId('promo-hide-messaged').click();
       await expect(staffPage.getByTestId(`promo-last-messaged-${recipientPk}`)).toBeVisible();
