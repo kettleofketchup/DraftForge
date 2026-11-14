@@ -74,7 +74,7 @@ changelog-check:
         if [ "$rc" -eq 0 ]; then
             echo "CHANGELOG.md changed; allowed by the changelog:edit label."
         elif [ "$rc" -eq 1 ]; then
-            echo "::error file=CHANGELOG.md::This PR edits CHANGELOG.md. Move the new bullets into changelog.d/<section>/<branch-slug>.md (see changelog.d/README.md) and revert the CHANGELOG.md hunk. For a deliberate correction to a released section, add the changelog:edit label, then re-run the failed job (gh run rerun <id> --failed)."
+            echo "::error file=CHANGELOG.md::This PR edits CHANGELOG.md. Move the new bullets into changelog.d/<section>/<branch-slug>.md (see changelog.d/README.md) and revert the CHANGELOG.md hunk. For a deliberate correction to a released section, add the changelog:edit label, copy CHANGELOG.md to frontend/app/data/CHANGELOG.md, then re-run the failed job (gh run rerun <id> --failed)."
             fail=1
         else
             echo "::error file=CHANGELOG.md::could not read PR labels (exit $rc); re-run the changelog job."

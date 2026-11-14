@@ -1,6 +1,7 @@
 # Changelog fragments
 
-Never edit `CHANGELOG.md` in a PR. Add one file per section you touch instead:
+Never edit `CHANGELOG.md` (or its copy, `frontend/app/data/CHANGELOG.md`) in a PR; the
+release writes both. Add one file per section you touch instead:
 
     mkdir -p changelog.d/<section>   # a release removes emptied section directories
     changelog.d/<section>/<slug>.md
@@ -24,6 +25,9 @@ checked too, ignored files are not):
 
 `just ci::changelog-check` runs the same check plus the checker's tests (and, in CI,
 the label and push rules).
+
+A deliberate `changelog:edit` correction updates the copy in the same PR:
+`cp CHANGELOG.md frontend/app/data/CHANGELOG.md`.
 
 The full reference, including the `changelog:edit` label and releasing, is
 `docs/development/changelog.md`.

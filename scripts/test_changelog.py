@@ -162,13 +162,20 @@ class RepoCase(unittest.TestCase):
 
 class AssembleTests(RepoCase):
     def test_assemble_writes_an_identical_frontend_copy(self):
-        shutil.rmtree(self.repo.root / "frontend")
         self.repo.fragment("added/x.md", "- A feature.\n")
         changelog.assemble(self.repo.root, "9.9.9", "2026-10-09")
         copy = (self.repo.root / FRONTEND_COPY).read_bytes()
         assert copy == (self.repo.root / "CHANGELOG.md").read_bytes()
         assert b"## [9.9.9] - 2026-10-09" in copy
         assert changelog.FRONTEND_COPY == FRONTEND_COPY
+
+    def test_assemble_creates_the_copy_directory(self):
+        shutil.rmtree(self.repo.root / "frontend")
+        self.repo.fragment("added/x.md", "- A feature.\n")
+        with mock.patch.object(changelog, "check", return_value=[]):
+            changelog.assemble(self.repo.root, "9.9.9", "2026-10-09")
+        copy = self.repo.root / FRONTEND_COPY
+        assert copy.read_bytes() == (self.repo.root / "CHANGELOG.md").read_bytes()
 
     def test_sections_follow_sections_json_order_with_their_headings(self):
         self.repo.fragment("fixed/b.md", "- A fix.\n")
@@ -545,6 +552,42 @@ class CheckTests(RepoCase):
         assert any("unprintable characters" in line for line in lines), lines
 
 
+class FrontendCopyTests(RepoCase):
+    CP = "cp CHANGELOG.md frontend/app/data/CHANGELOG.md"
+
+    def test_identical_copy_is_clean(self):
+        self.expect_clean()
+
+    def test_missing_copy_fails(self):
+        (self.repo.root / FRONTEND_COPY).unlink()
+        problems = self.repo.problems()
+        assert len(problems) == 1, problems
+        assert problems[0].startswith(f"{FRONTEND_COPY}:1: missing"), problems
+        assert self.CP in problems[0]
+
+    def test_differing_copy_fails(self):
+        self.repo.write("CHANGELOG.md", BASE_CHANGELOG + "\nx\n", mirror=False)
+        problems = self.repo.problems()
+        assert len(problems) == 1, problems
+        assert problems[0].startswith(
+            f"{FRONTEND_COPY}:1: differs from CHANGELOG.md"
+        ), problems
+        assert self.CP in problems[0]
+
+    def test_copy_with_crlf_differs(self):
+        (self.repo.root / FRONTEND_COPY).write_bytes(
+            BASE_CHANGELOG.replace("\n", "\r\n").encode("utf-8")
+        )
+        self.expect_problem("differs from CHANGELOG.md")
+
+    def test_no_changelog_ignores_a_stray_copy(self):
+        repo = Repo(changelog_text=None)
+        self.addCleanup(repo.close)
+        assert changelog.check(repo.root) == []
+        repo.write(FRONTEND_COPY, "stray\n")
+        assert changelog.check(repo.root) == []
+
+
 class ResurrectionTests(RepoCase):
     def test_a_released_bullet_fails_and_names_the_version(self):
         self.repo.fragment(
@@ -858,6 +901,30 @@ class ReleaseFlowTests(unittest.TestCase):
         git(self.repo.root, "push", "-q", "origin", "refs/tags/0.3.0")
         git(self.repo.root, "tag", "-d", "0.3.0")
         refused(self.preflight(), "already exists on origin")
+
+    def test_refuses_a_missing_frontend_copy(self):
+        git(self.repo.root, "rm", "-q", FRONTEND_COPY)
+        git(self.repo.root, "commit", "-q", "-m", "drop copy")
+        git(self.repo.root, "push", "-q", "origin", "main")
+        refused(self.preflight(), r"cp CHANGELOG\.md frontend/app/data/CHANGELOG\.md")
+        assert self.repo.status() == ""
+        assert 'version = "0.2.0"' in (self.repo.root / "pyproject.toml").read_text()
+
+    def test_refuses_a_differing_frontend_copy(self):
+        self.repo.write(FRONTEND_COPY, BASE_CHANGELOG + "\nx\n")
+        git(self.repo.root, "commit", "-q", "-m", "drift")
+        git(self.repo.root, "push", "-q", "origin", "main")
+        refused(self.preflight(), r"cp CHANGELOG\.md frontend/app/data/CHANGELOG\.md")
+        assert self.repo.status() == ""
+
+    def test_refuses_a_frontend_copy_not_tracked_in_head(self):
+        git(self.repo.root, "rm", "-q", "--cached", FRONTEND_COPY)
+        git(self.repo.root, "commit", "-q", "-m", "untrack copy")
+        git(self.repo.root, "push", "-q", "origin", "main")
+        copy = self.repo.root / FRONTEND_COPY
+        assert copy.read_bytes() == (self.repo.root / "CHANGELOG.md").read_bytes()
+        refused(self.preflight(), "commit it")
+        assert copy.exists()
 
     def test_assemble_release_stages_removal_of_exactly_the_consumed_fragments(self):
         consumed = changelog.assemble_release(self.repo.root, "0.3.0", "2026-10-03")

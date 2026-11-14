@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Changelog fragments: validate changelog.d/ and assemble it into CHANGELOG.md.
 
-    scripts/changelog.py check           # every fragment rule; exit 1 on a problem
+    scripts/changelog.py check           # every fragment rule and the frontend copy; exit 1 on a problem
     scripts/changelog.py slug [BRANCH]   # the conventional fragment slug (default: current branch)
     scripts/changelog.py has-label NAME  # exit 0 if the PR has NAME, 1 if not, 2 on API error
 
@@ -377,6 +377,17 @@ def _check_resurrection(
     return problems
 
 
+def _copy_problem(root: Path) -> str | None:
+    """The frontend copy must match CHANGELOG.md byte for byte."""
+    fix = f"run: cp CHANGELOG.md {FRONTEND_COPY}"
+    copy = root / FRONTEND_COPY
+    if not copy.exists():
+        return f"{FRONTEND_COPY}:1: missing; {fix}"
+    if copy.read_bytes() != (root / "CHANGELOG.md").read_bytes():
+        return f"{FRONTEND_COPY}:1: differs from CHANGELOG.md; {fix}"
+    return None
+
+
 def check(root: Path) -> list[str]:
     """Every rule, over tracked and untracked (not ignored) files under changelog.d/."""
     root = Path(root)
@@ -393,6 +404,9 @@ def check(root: Path) -> list[str]:
         text = changelog.read_text(encoding="utf-8")
         history = released(text)
         problems += _unreleased_problems(text)
+        drift = _copy_problem(root)
+        if drift:
+            problems.append(drift)
     gone = released_paths(root)
     for path in sorted(set(_tracked(root)) | set(_untracked(root))):
         if path in (f"{FRAGMENT_DIR}/sections.json", f"{FRAGMENT_DIR}/README.md"):
@@ -561,6 +575,14 @@ def release_preflight(
         )
     if not (root / "CHANGELOG.md").exists():
         raise ChangelogError("CHANGELOG.md is missing; restore it from main")
+    drift = _copy_problem(root)
+    if drift:
+        raise ChangelogError(drift)
+    if _git(root, "cat-file", "-e", f"HEAD:{FRONTEND_COPY}").returncode != 0:
+        raise ChangelogError(
+            f"{FRONTEND_COPY} is not tracked in HEAD (a rollback would abort on it); "
+            f"cp CHANGELOG.md {FRONTEND_COPY} if needed, then commit it"
+        )
     current = _git(root, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
     if current != branch:
         raise ChangelogError(
