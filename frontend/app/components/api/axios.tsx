@@ -46,8 +46,11 @@ api.interceptors.response.use((response) => {
   if (isBrowser) syncCsrfCookieName(error.response?.headers?.[CSRF_COOKIE_NAME_HEADER]);
   const status = error.response?.status;
 
+  // A coded 403 (feature_locked, not_permitted) is a permission answer, not an expired session.
+  const coded403 = status === 403 && typeof error.response?.data?.code === 'string';
+
   // Session expired or not authenticated — notify user
-  if (status === 401 || status === 403) {
+  if (status === 401 || (status === 403 && !coded403)) {
     const url = error.config?.url || '';
     // Don't redirect on auth check endpoints (they're expected to 401)
     const isAuthCheck = url.includes('/auth/') || url.includes('/tests/login');

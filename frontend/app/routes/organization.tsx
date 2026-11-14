@@ -65,6 +65,7 @@ import { UserList } from '~/components/user';
 import { AddUserModal } from '~/components/user/AddUserModal';
 import { CSVImportModal } from '~/components/user/CSVImportModal';
 import type { UserType } from '~/components/user/types';
+import { removeFeatureQueries } from '~/features/org-features';
 import { useMemberAccess } from '~/hooks/useMemberAccess';
 import { useOrgUsers } from '~/hooks/useOrgUsers';
 import {
@@ -244,9 +245,12 @@ export default function OrganizationDetailPage() {
 
   const onMemberViewerChange = useCallback(() => {
     useOrgStore.getState().clearOrgUsers();
-    if (pk) useUserCacheStore.getState().dropScoped({ orgId: pk });
+    if (pk) {
+      useUserCacheStore.getState().dropScoped({ orgId: pk });
+      removeFeatureQueries(queryClient, pk);
+    }
     refetch();
-  }, [pk, refetch]);
+  }, [pk, queryClient, refetch]);
   const { canView: canViewMembers, settled: memberAccessSettled } = useMemberAccess(
     organization,
     onMemberViewerChange,

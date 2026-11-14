@@ -97,6 +97,7 @@ import type { UserType } from '~/components/user/types';
 import type { AddMemberPayload } from '~/components/api/api';
 import { useOrgStore } from '~/store/orgStore';
 import { useUserCacheStore } from '~/store/userCacheStore';
+import { removeFeatureQueries } from '~/features/org-features';
 import { useMemberAccess } from '~/hooks/useMemberAccess';
 import { useUserStore } from '~/store/userStore';
 import { isUserEntry } from '~/store/userCacheTypes';
@@ -160,6 +161,8 @@ export default function EventPage() {
       useOrgStore.getState().clearOrgUsers();
     }
     useUserCacheStore.getState().dropScoped({ orgId: eventOrgPk });
+    removeFeatureQueries(queryClient, eventOrgPk);
+    queryClient.invalidateQueries({ queryKey: ['event', id] });
     queryClient.invalidateQueries({ queryKey: ['event-signups', id] });
     refetchEventOrg();
   }, [eventOrgPk, id, queryClient, refetchEventOrg]);

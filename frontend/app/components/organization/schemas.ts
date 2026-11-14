@@ -13,6 +13,13 @@ export const OrganizationSchema = z.object({
   members_private: z.boolean().optional().default(false),
   can_view_members: z.boolean().optional(), // per-viewer; absent means unknown
   members_viewer_pk: z.number().nullable().optional(),
+  features: z.array(z.string()).optional().default([]),
+  can_use_promotion: z.boolean().optional().default(false),
+  can_manage_promotion_templates: z.boolean().optional().default(false),
+  can_manage_promoters: z.boolean().optional().default(false),
+  can_view_contributions: z.boolean().optional().default(false),
+  can_view_contributors: z.boolean().optional().default(false),
+  can_manage_contributions: z.boolean().optional().default(false),
   owner_id: z.number().nullable().optional(),
   admin_ids: z.array(z.number()).optional(),
   staff_ids: z.array(z.number()).optional(),
