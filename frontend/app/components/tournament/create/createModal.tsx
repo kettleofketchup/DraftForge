@@ -16,19 +16,19 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '~/components/ui/tooltip';
-import { useCanCreateAnyTournament } from '~/hooks/usePermissions';
+import { canCreateTournament } from '~/lib/tournamentPermissions';
+import { useUserStore } from '~/store/userStore';
 import type { TournamentClassType } from '../types';
 import { TournamentEditForm } from './editForm';
 
 interface Props {}
 
 export const TournamentCreateModal: React.FC<Props> = () => {
-  const canCreate = useCanCreateAnyTournament();
+  const currentUser = useUserStore((state) => state.currentUser);
+  // Matches IsStaff on /api/tournament/register.
+  const canCreate = canCreateTournament(currentUser);
   const [open, setOpen] = useState(false);
 
-  // Mirror the backend's per-league admin cascade: site admin, or admin
-  // of any organisation, or admin of any league. Keeps the button from
-  // showing to users the backend would reject on submit.
   if (!canCreate) {
     return <></>;
   }
@@ -39,10 +39,7 @@ export const TournamentCreateModal: React.FC<Props> = () => {
         <Tooltip>
           <TooltipTrigger asChild>
             <DialogTrigger asChild>
-              <PrimaryButton
-                size="lg"
-                data-testid="tournament-create-button"
-              >
+              <PrimaryButton size="lg" data-testid="tournament-create-button">
                 <PlusCircleIcon className="text-white" />
                 Create Tournament
               </PrimaryButton>
@@ -54,7 +51,10 @@ export const TournamentCreateModal: React.FC<Props> = () => {
         </Tooltip>
       </TooltipProvider>
 
-      <DialogContent className={DIALOG_CSS} data-testid="tournament-create-modal">
+      <DialogContent
+        className={DIALOG_CSS}
+        data-testid="tournament-create-modal"
+      >
         <DialogHeader>
           <DialogTitle>Create Tournament</DialogTitle>
           <DialogDescription>

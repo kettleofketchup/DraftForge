@@ -25,7 +25,7 @@
  *   createLeague    (org-detail)        ✓         ✓         ✓        ✓        ✓        ✗         ✗        ✗           ✗           ✗
  *   createEvent     (org-detail)        ✓         ✓         ✓        ✓        ✓        ✗         ✗        ✗           ✗           ✗
  *   createEvent     (/events?org=X)     ✓         ✓         ✓        ✓        ✓        ✗         ✗        ✗           ✗           ✗
- *   createTournament                    ✓         ✓         ✓        ✓        ✗        ✗         ✗        ✓           ✗           ✗
+ *   createTournament                    ✓         ✓         ✗        ✗        ✗        ✗         ✗        ✗           ✗           ✗
  *
  * The site-admin row exists because the permission hooks
  * (``useIsLeagueStaff`` / ``useIsOrganizationAdmin`` etc.) bypass on
@@ -119,20 +119,17 @@ const CREATE_EVENT_EVENTS_PAGE_EXPECTATIONS: Expectations = {
   anonymous: false,
 };
 
-// Tournament gate mirrors the backend's ``has_league_admin_access``
-// cascade via ``useCanCreateAnyTournament``: site admin OR admin of any
-// org (admin_organization_ids non-empty) OR admin of any league
-// (admin_league_ids non-empty). Staff roles can't create tournaments —
-// only admins can, matching the backend perform_create check.
+// Tournament gate is ``canCreateTournament`` (``is_staff`` only), matching
+// ``IsStaff`` on /api/tournament/register. Org and league roles can't create.
 const CREATE_TOURNAMENT_EXPECTATIONS: Expectations = {
-  siteAdmin: true, // is_superuser
-  siteStaff: true, // is_staff bypass (matches frontend convention)
-  orgOwner: true, // owner pk merged into admin_organization_ids
-  orgAdmin: true, // admin_organization_ids: [8]
-  orgStaff: false, // staff doesn't cascade to admin
+  siteAdmin: true, // site admin fixture has is_staff
+  siteStaff: true,
+  orgOwner: false,
+  orgAdmin: false,
+  orgStaff: false,
   orgMember: false,
   promoter: false,
-  leagueAdmin: true, // admin_league_ids: [9]
+  leagueAdmin: false,
   leagueStaff: false,
   anonymous: false,
 };

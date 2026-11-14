@@ -1,4 +1,5 @@
 import type { Control } from 'react-hook-form';
+import { DiscordIcon } from '~/components/events/DiscordConfigSection';
 import {
   FormControl,
   FormDescription,
@@ -6,16 +7,13 @@ import {
   FormItem,
   FormLabel,
 } from '~/components/ui/form';
-import { DiscordIcon } from '~/components/events/DiscordConfigSection';
 import type { CreateTournamentInput } from '../schemas';
 
 interface Props {
   control: Control<CreateTournamentInput>;
-  /** The tournament's event sets "send lobby info": shown read-only. */
-  lobbyInfoFromEvent?: boolean;
 }
 
-export function DiscordTournamentConfigSection({ control, lobbyInfoFromEvent = false }: Props) {
+export function DiscordTournamentConfigSection({ control }: Props) {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2 mb-2">
@@ -45,7 +43,8 @@ export function DiscordTournamentConfigSection({ control, lobbyInfoFromEvent = f
                   Send draft link on team draft start
                 </FormLabel>
                 <FormDescription>
-                  DM captains and participants their draft link when the team draft begins
+                  DM captains and participants their draft link when the team
+                  draft begins
                 </FormDescription>
               </div>
             </FormItem>
@@ -72,7 +71,8 @@ export function DiscordTournamentConfigSection({ control, lobbyInfoFromEvent = f
                   Send hero draft link on creation
                 </FormLabel>
                 <FormDescription>
-                  DM team members their hero draft link when a hero draft is created for their match
+                  DM team members their hero draft link when a hero draft is
+                  created for their match
                 </FormDescription>
               </div>
             </FormItem>
@@ -91,7 +91,6 @@ export function DiscordTournamentConfigSection({ control, lobbyInfoFromEvent = f
                   data-testid="discord-discord_send_lobby_info"
                   checked={field.value}
                   onChange={field.onChange}
-                  disabled={lobbyInfoFromEvent}
                   className="h-4 w-4 rounded border-border accent-primary"
                 />
               </FormControl>
@@ -100,8 +99,8 @@ export function DiscordTournamentConfigSection({ control, lobbyInfoFromEvent = f
                   Send lobby info
                 </FormLabel>
                 <FormDescription>
-                  DM players the in-game lobby name, password and side when their lobby is created
-                  {lobbyInfoFromEvent && ' (set in the event settings)'}
+                  DM players the in-game lobby name, password and side when
+                  their lobby is created
                 </FormDescription>
               </div>
             </FormItem>

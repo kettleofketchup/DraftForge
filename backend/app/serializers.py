@@ -10,6 +10,7 @@ from rest_framework.utils.serializer_helpers import ReturnList
 from rest_framework.validators import UniqueValidator
 
 from app.cache_utils import invalidate_after_commit
+from app.permissions_org import check_lobby_steam_league_id, request_user
 from league.models import LeagueUser
 from org.models import OrgUser
 from telemetry.logging import get_logger
@@ -23,6 +24,8 @@ from .models import (
     DraftRound,
     DraftTeam,
     Game,
+    GameMode,
+    GameType,
     HeroDraft,
     HeroDraftEvent,
     HeroDraftRound,
@@ -1168,7 +1171,12 @@ class TournamentSerializer(serializers.ModelSerializer):
         event = events.first()
         if not event:
             return None
-        result = {"id": event.id, "name": event.name, "event_repeater": None}
+        result = {
+            "id": event.id,
+            "name": event.name,
+            "organization_id": event.organization_id,
+            "event_repeater": None,
+        }
         if event.event_repeater:
             result["event_repeater"] = {
                 "id": event.event_repeater.id,
@@ -1209,40 +1217,45 @@ class TournamentSerializer(serializers.ModelSerializer):
             "dota_lobby_launch",
             "dota_lobby_region",
             "discord_send_lobby_info",
+            "game_type",
             "game_mode",
             "lobby_steam_league_id",
+            "captains_draft_time",
+            "custom_game_name",
         )
-        # Lobby context the UI shows; edited through the event settings.
-        read_only_fields = ("game_mode", "lobby_steam_league_id")
-
-    # A tournament created from an event takes these from the event
-    # (events.services.LOBBY_CONFIG_FIELDS); only standalone tournaments
-    # edit them here.
-    EVENT_LOBBY_FIELDS = (
-        "dota_lobby_mode",
-        "dota_lobby_launch",
-        "dota_lobby_region",
-        "discord_send_lobby_info",
-    )
+        # The game is fixed at creation; everything else is editable.
+        read_only_fields = ("game_type",)
+        extra_kwargs = {"captains_draft_time": {"min_value": 1}}
 
     def validate(self, data: dict) -> dict:
-        instance = self.instance
-        if instance is None or not instance.source_event.nocache().exists():
-            return data
-        changed = [
-            name
-            for name in self.EVENT_LOBBY_FIELDS
-            if name in data and data[name] != getattr(instance, name)
-        ]
-        if changed:
-            raise serializers.ValidationError(
-                {
-                    name: "This tournament's lobby settings come from its event: "
-                    "edit them in the event settings."
-                    for name in changed
-                }
+        self._validate_game_mode(data)
+        if "lobby_steam_league_id" in data and (
+            self.instance is None
+            or data["lobby_steam_league_id"] != self.instance.lobby_steam_league_id
+        ):
+            check_lobby_steam_league_id(
+                request_user(self.context),
+                data["lobby_steam_league_id"],
+                data.get("league", self.instance.league if self.instance else None),
             )
         return data
+
+    def _validate_game_mode(self, data: dict) -> None:
+        mode = data.get("game_mode")
+        if mode is None or (self.instance and mode == self.instance.game_mode):
+            return
+        game_type = (
+            self.instance.game_type
+            if self.instance
+            else Tournament._meta.get_field("game_type").default
+        )
+        if game_type != GameType.DOTA2 and mode in (
+            GameMode.CAPTAINS_MODE,
+            GameMode.TURBO,
+        ):
+            raise serializers.ValidationError(
+                {"game_mode": f"{mode} is only available for Dota 2."}
+            )
 
     def to_representation(self, instance: Tournament) -> dict:
         data = super().to_representation(instance)

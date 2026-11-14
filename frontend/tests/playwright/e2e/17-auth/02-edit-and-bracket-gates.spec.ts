@@ -16,6 +16,8 @@
  *   generateBracket                     ✓         ✓         ✓        ✓        ✓        ✗         ✗        ✓           ✓           ✗
  *   setMatchWinner (radiant)            ✓         ✓         ✓        ✓        ✓        ✗         ✗        ✓           ✓           ✗
  *   linkSteamMatch                      ✓         ✓         ✗        ✗        ✗        ✗         ✗        ✗           ✗           ✗
+ *   editTournament (detail page)        ✓         ✓         ✓        ✓        ✓        ✗         ✗        ✓           ✓           ✗
+ *   deleteTournament (detail page)      ✓         ✓         ✗        ✗        ✗        ✗         ✗        ✗           ✗           ✗
  *
  * Two known divergences:
  *
@@ -154,6 +156,35 @@ const LINK_STEAM_MATCH_EXPECTATIONS: Expectations = {
   siteAdmin: true,
   siteStaff: true,
   orgOwner: false, // gate is site-only; owner doesn't cascade here
+  orgAdmin: false,
+  orgStaff: false,
+  orgMember: false,
+  promoter: false,
+  leagueAdmin: false,
+  leagueStaff: false,
+  anonymous: false,
+};
+
+// Edit Tournament → ``canEditTournament`` mirrors backend ``can_edit_tournament``:
+// league admins/staff, or admins/staff of the league's own org.
+const EDIT_TOURNAMENT_EXPECTATIONS: Expectations = {
+  siteAdmin: true,
+  siteStaff: true,
+  orgOwner: true,
+  orgAdmin: true,
+  orgStaff: true,
+  orgMember: false,
+  promoter: false,
+  leagueAdmin: true,
+  leagueStaff: true,
+  anonymous: false,
+};
+
+// Delete Tournament stays site staff only.
+const DELETE_TOURNAMENT_EXPECTATIONS: Expectations = {
+  siteAdmin: true,
+  siteStaff: true,
+  orgOwner: false,
   orgAdmin: false,
   orgStaff: false,
   orgMember: false,
@@ -328,6 +359,28 @@ test.describe('Edit + Bracket permission matrix (all roles in parallel)', () => 
       `/tournament/${TOURNAMENT_COMPLETED_BRACKET_PK}/bracket`,
       'link-steam-match-btn',
       LINK_STEAM_MATCH_EXPECTATIONS,
+    );
+  });
+
+  test('Edit Tournament button visibility (detail page)', async ({
+    roleContexts,
+  }) => {
+    await assertGateAcrossRoles(
+      roleContexts,
+      `/tournament/${TOURNAMENT_NO_BRACKET_PK}`,
+      'tournament-edit-btn',
+      EDIT_TOURNAMENT_EXPECTATIONS,
+    );
+  });
+
+  test('Delete Tournament button visibility (detail page)', async ({
+    roleContexts,
+  }) => {
+    await assertGateAcrossRoles(
+      roleContexts,
+      `/tournament/${TOURNAMENT_NO_BRACKET_PK}`,
+      'tournament-delete-btn',
+      DELETE_TOURNAMENT_EXPECTATIONS,
     );
   });
 });
