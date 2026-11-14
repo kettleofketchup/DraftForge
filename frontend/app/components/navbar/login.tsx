@@ -74,8 +74,15 @@ export const ProfileButton: React.FC = () => {
   });
   const logoutClick = async () => {
     log.debug('Logout clicked');
-    clearUser();
-    await logout();
+    // Clear after the server drops the session: clearing first refetches
+    // per-viewer payloads that still carry the old session.
+    try {
+      await logout();
+    } catch (err) {
+      log.warn('logout_failed', { err });
+    } finally {
+      clearUser();
+    }
   };
 
   return (

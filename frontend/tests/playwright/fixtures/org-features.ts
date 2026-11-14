@@ -12,6 +12,7 @@
 import type { APIRequestContext, APIResponse, BrowserContext } from '@playwright/test';
 
 import { API_URL } from './base-url';
+import { isCsrfCookie } from './cookies';
 
 export type OrgFeaturesRole =
   | 'owner'
@@ -64,4 +65,52 @@ export async function loginOrgFeatures(context: BrowserContext, role: OrgFeature
     await context.request.post(`${API_URL}/tests/login-org-features/${role}/`),
     `login-org-features ${role}`,
   );
+}
+
+async function csrfHeaders(context: BrowserContext): Promise<Record<string, string>> {
+  const csrf = (await context.cookies()).find((c) => isCsrfCookie(c.name));
+  return { 'Content-Type': 'application/json', 'X-CSRFToken': csrf?.value ?? '' };
+}
+
+/** A same-session API call with the CSRF header; throws on a non-2xx answer. */
+export async function orgFeaturesApi<T = unknown>(
+  context: BrowserContext,
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE',
+  path: string,
+  data?: Record<string, unknown>,
+): Promise<T> {
+  const resp = await context.request.fetch(`${API_URL}${path}`, {
+    method,
+    data,
+    headers: await csrfHeaders(context),
+  });
+  if (!resp.ok()) {
+    throw new Error(`${method} ${path} failed: ${resp.status()} ${(await resp.text()).slice(0, 300)}`);
+  }
+  return (resp.status() === 204 ? undefined : await resp.json()) as T;
+}
+
+export interface LeaderboardRowRef {
+  org_user_pk: number;
+  user_pk: number;
+  points: number;
+}
+
+/** The viewer's all-time leaderboard rows for an org, keyed by user pk. */
+export async function leaderboardByUser(
+  context: BrowserContext,
+  orgPk: number,
+): Promise<Map<number, LeaderboardRowRef>> {
+  const body = await orgFeaturesApi<{ rows: LeaderboardRowRef[] }>(
+    context,
+    'GET',
+    `/organizations/${orgPk}/contributions/leaderboard/`,
+  );
+  return new Map(body.rows.map((row) => [row.user_pk, row]));
+}
+
+/** Move an upcoming event to roll call (open signups, then start roll call). */
+export async function moveEventToRollCall(context: BrowserContext, eventPk: number): Promise<void> {
+  await orgFeaturesApi(context, 'POST', `/events/${eventPk}/open_signups/`);
+  await orgFeaturesApi(context, 'POST', `/events/${eventPk}/start_roll_call/`);
 }
