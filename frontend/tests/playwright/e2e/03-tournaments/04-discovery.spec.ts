@@ -31,6 +31,7 @@ const HOME_LEAGUE = 30;
 const AWAY_ORG = 31;
 const LIST_PATH = '/api/tournaments-list/';
 const FAR_FUTURE_DATE = '2099-12-31T18:00:00Z';
+const LOAD_MORE_CURSOR = 'bG9hZC1tb3Jl';
 
 const HOME_LIVE = 'Discovery Home Live';
 const HOME_SOON = 'Discovery Home Soon';
@@ -513,14 +514,15 @@ test.describe('Tournament discovery (@cicd)', () => {
     await expect(page.getByRole('combobox', { name: /league/i })).toBeVisible();
   });
 
-  test('@cicd load more requests the next page on its own origin and grows the grid', async ({
+  test('@cicd load more follows the archived cursor on its own origin and grows the grid', async ({
     page,
   }) => {
     const pageRequests: URL[] = [];
     await page.route('**/api/tournaments-list/**', async (route) => {
       const url = new URL(route.request().url());
       const pageNo = url.searchParams.get('page');
-      if (pageNo === null) {
+      const cursor = url.searchParams.get('cursor');
+      if (pageNo === null && cursor === null) {
         await route.continue();
         return;
       }
@@ -535,7 +537,7 @@ test.describe('Tournament discovery (@cicd)', () => {
           response,
           json: {
             count: first.length * 2,
-            next: 'http://other-host/api/tournaments-list/?bucket=archived&page=2',
+            next: `http://other-host/api/tournaments-list/?bucket=archived&cursor=${LOAD_MORE_CURSOR}`,
             previous: null,
             results: first,
           },
@@ -547,7 +549,7 @@ test.describe('Tournament discovery (@cicd)', () => {
         json: {
           count: first.length * 2,
           next: null,
-          previous: 'http://other-host/api/tournaments-list/?bucket=archived&page=1',
+          previous: null,
           results: first.map((t, i) => ({
             ...t,
             pk: 990000 + i,
@@ -573,12 +575,49 @@ test.describe('Tournament discovery (@cicd)', () => {
     await expect(cardNamed(archived, 'Load More Row 0')).toHaveCount(1);
     await expect(loadMore).toHaveCount(0);
 
-    const second = pageRequests.find((u) => u.searchParams.get('page') === '2');
-    expect(second, 'no page=2 request was sent').toBeDefined();
+    const second = pageRequests.find((u) => u.searchParams.has('cursor'));
+    expect(second, 'no cursor request was sent').toBeDefined();
     expect(second!.origin).toBe(new URL(page.url()).origin);
     expect(second!.pathname).toBe(LIST_PATH);
     expect(second!.searchParams.get('bucket')).toBe('archived');
+    expect(second!.searchParams.get('cursor')).toBe(LOAD_MORE_CURSOR);
+    expect(second!.searchParams.has('page')).toBe(false);
+    expect(pageRequests.filter((u) => u.searchParams.has('page')).map((u) => u.searchParams.get('page'))).toEqual(['1']);
     expect(pageRequests.every((u) => u.hostname !== 'other-host')).toBe(true);
+  });
+
+  test('@cicd archived cursor pages cover the archive once, newest first', async ({
+    context,
+  }) => {
+    const all = await context.request.get(`${API_URL}/tournaments-list/?bucket=archived`);
+    expect(all.ok()).toBe(true);
+    const expected = ((await all.json()) as Tournament[]).map((t) => t.pk);
+    expect(expected.length).toBeGreaterThan(2);
+
+    const seen: Tournament[] = [];
+    let url: string | null = `${API_URL}/tournaments-list/?bucket=archived&page=1&page_size=2`;
+    while (url !== null) {
+      const res = await context.request.get(url);
+      expect(res.ok(), url).toBe(true);
+      const body = (await res.json()) as { next: string | null; results: Tournament[] };
+      seen.push(...body.results);
+      const cursor = body.next === null ? null : new URL(body.next).searchParams.get('cursor');
+      if (body.next !== null) expect(cursor, body.next).not.toBeNull();
+      url =
+        cursor === null
+          ? null
+          : `${API_URL}/tournaments-list/?bucket=archived&page_size=2&cursor=${cursor}`;
+    }
+    const pks = seen.map((t) => t.pk);
+    expect(new Set(pks).size, 'a row repeated across pages').toBe(pks.length);
+    expect(pks).toEqual(expect.arrayContaining(expected));
+    for (let i = 1; i < seen.length; i++) {
+      const [a, b] = [seen[i - 1], seen[i]];
+      const order = Date.parse(String(a.date_played)) - Date.parse(String(b.date_played));
+      expect(order > 0 || (order === 0 && Number(a.pk) > Number(b.pk)), `${a.pk} before ${b.pk}`).toBe(
+        true,
+      );
+    }
   });
 
   test.describe('as a site admin', () => {

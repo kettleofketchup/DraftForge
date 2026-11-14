@@ -83,6 +83,22 @@ describe('getTournamentsPage', () => {
     expect(params.has('page_size')).toBe(false);
   });
 
+  it('sends the cursor instead of a page number', async () => {
+    get.mockResolvedValue({ data: emptyPage });
+    await getTournamentsPage({ bucket: 'archived', cursor: 'abc_-1', pageSize: 5 });
+    const params = requestedParams();
+    expect(params.get('cursor')).toBe('abc_-1');
+    expect(params.has('page')).toBe(false);
+    expect(params.get('page_size')).toBe('5');
+  });
+
+  it('rejects a 404 on a cursor page', async () => {
+    get.mockRejectedValue(axiosErrorWithStatus(404));
+    await expect(
+      getTournamentsPage({ bucket: 'archived', cursor: 'abc' }),
+    ).rejects.toBeInstanceOf(AxiosError);
+  });
+
   it('sends page_size when given', async () => {
     get.mockResolvedValue({ data: emptyPage });
     await getTournamentsPage({ bucket: 'archived', page: 1, pageSize: 50 });
