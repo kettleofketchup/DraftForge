@@ -65,7 +65,7 @@ import { UserList } from '~/components/user';
 import { AddUserModal } from '~/components/user/AddUserModal';
 import { CSVImportModal } from '~/components/user/CSVImportModal';
 import type { UserType } from '~/components/user/types';
-import { removeFeatureQueries } from '~/features/org-features';
+import { PaidFeaturesPanel, removeFeatureQueries } from '~/features/org-features';
 import { useMemberAccess } from '~/hooks/useMemberAccess';
 import { useOrgUsers } from '~/hooks/useOrgUsers';
 import {
@@ -594,6 +594,8 @@ export default function OrganizationDetailPage() {
         {organization && isOwner && (
           <DeleteOrganizationDangerZone organization={organization} />
         )}
+
+        {pk && <PaidFeaturesPanel orgId={pk} />}
 
         {pk && (
           <CreateLeagueModal

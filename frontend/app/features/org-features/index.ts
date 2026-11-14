@@ -5,3 +5,4 @@ export {
   removeFeatureQueries,
 } from './queryKeys';
 export { type OrgFeatureAccess, useOrgFeatureAccess } from './useOrgFeatureAccess';
+export { PaidFeaturesPanel } from './PaidFeaturesPanel';
