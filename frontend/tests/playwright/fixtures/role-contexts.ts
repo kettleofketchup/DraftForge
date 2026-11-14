@@ -49,13 +49,13 @@
 import type { Browser, BrowserContext, Page } from '@playwright/test';
 import {
   loginAdmin,
-  loginStaff,
-  loginAuthMatrixOrgOwner,
-  loginAuthMatrixOrgAdmin,
-  loginAuthMatrixOrgStaff,
-  loginAuthMatrixOrgMember,
   loginAuthMatrixLeagueAdmin,
   loginAuthMatrixLeagueStaff,
+  loginAuthMatrixOrgAdmin,
+  loginAuthMatrixOrgMember,
+  loginAuthMatrixOrgOwner,
+  loginAuthMatrixOrgStaff,
+  loginStaff,
 } from './auth';
 import { test as base } from './external-apis';
 
@@ -125,7 +125,9 @@ const ROLE_LOGINS: Record<RoleName, RoleLogin> = {
  * cleanup the fixture's teardown never runs (it's tied to ``use()``)
  * and orphaned contexts leak across tests.
  */
-export async function setupRoleContexts(browser: Browser): Promise<RoleContexts> {
+export async function setupRoleContexts(
+  browser: Browser,
+): Promise<RoleContexts> {
   const createdContexts: BrowserContext[] = [];
   try {
     const entries = await Promise.all(

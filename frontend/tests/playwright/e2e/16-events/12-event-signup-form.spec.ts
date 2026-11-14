@@ -21,19 +21,21 @@
  *     no-profile player to guarantee the modal opens.
  */
 
-import { API_URL } from '../../fixtures/base-url';
 import { expect, type BrowserContext } from '@playwright/test';
-import { test } from '../../fixtures/external-apis';
 import {
+  getEventsTestData,
   loginEventPlayer,
   loginEventPlayerNoProfile,
-  getEventsTestData,
   resetEventsData,
   type EventInfo,
 } from '../../fixtures';
+import { API_URL } from '../../fixtures/base-url';
+import { test } from '../../fixtures/external-apis';
 
-
-async function getEventByName(context: BrowserContext, name: string): Promise<number> {
+async function getEventByName(
+  context: BrowserContext,
+  name: string,
+): Promise<number> {
   const resp = await context.request.get(
     `${API_URL}/events/?search=${encodeURIComponent(name)}`,
   );
@@ -43,7 +45,8 @@ async function getEventByName(context: BrowserContext, name: string): Promise<nu
     | { results: Array<{ id?: number; pk?: number; name: string }> };
   const events = Array.isArray(data) ? data : data.results;
   const found = events.find((e) => e.name === name);
-  if (!found) throw new Error(`Event not found: ${name}. Run just db::populate::all`);
+  if (!found)
+    throw new Error(`Event not found: ${name}. Run just db::populate::all`);
   const id = found.pk ?? found.id;
   if (id == null) throw new Error(`Event '${name}' has no pk/id field`);
   return id;
@@ -64,7 +67,10 @@ test.describe('Event Signup Form (@cicd)', () => {
     await resetEventsData(context);
   });
 
-  test('complete profile uses fast path (no modal)', async ({ page, context }) => {
+  test('complete profile uses fast path (no modal)', async ({
+    page,
+    context,
+  }) => {
     await loginEventPlayer(context);
     // event_player_1 has rank_status=active, rank_medal=Legend 3, positions set,
     // and rank_screenshot — complete for E2E Signup Event (Dota 2, no extras).
@@ -73,12 +79,20 @@ test.describe('Event Signup Form (@cicd)', () => {
     // Fast path: no modal opens, the signup is created, and the cancel button
     // appears in its place.
     await expect(page.getByTestId('event-signup-modal')).toHaveCount(0);
-    await expect(page.getByTestId('event-cancel-rsvp-btn')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId('event-cancel-rsvp-btn')).toBeVisible({
+      timeout: 10000,
+    });
   });
 
-  test('incomplete profile opens modal with all sections', async ({ page, context }) => {
+  test('incomplete profile opens modal with all sections', async ({
+    page,
+    context,
+  }) => {
     await loginEventPlayerNoProfile(context);
-    const eventId = await getEventByName(context, 'Test Dota Event With Screenshot');
+    const eventId = await getEventByName(
+      context,
+      'Test Dota Event With Screenshot',
+    );
     await page.goto(`/events/${eventId}`);
     await page.getByTestId('event-signup-btn').click();
     const modal = page.getByTestId('event-signup-modal');
@@ -93,7 +107,10 @@ test.describe('Event Signup Form (@cicd)', () => {
     context,
   }) => {
     await loginEventPlayerNoProfile(context);
-    const eventId = await getEventByName(context, 'Test Dota Event With Screenshot');
+    const eventId = await getEventByName(
+      context,
+      'Test Dota Event With Screenshot',
+    );
     await page.goto(`/events/${eventId}`);
     await page.getByTestId('event-signup-btn').click();
     const modal = page.getByTestId('event-signup-modal');
@@ -104,9 +121,15 @@ test.describe('Event Signup Form (@cicd)', () => {
     await expect(modal.getByTestId('signup-rank-star')).toHaveCount(0);
   });
 
-  test('screenshot-required event surfaces URL field', async ({ page, context }) => {
+  test('screenshot-required event surfaces URL field', async ({
+    page,
+    context,
+  }) => {
     await loginEventPlayerNoProfile(context);
-    const eventId = await getEventByName(context, 'Test Dota Event With Screenshot');
+    const eventId = await getEventByName(
+      context,
+      'Test Dota Event With Screenshot',
+    );
     await page.goto(`/events/${eventId}`);
     await page.getByTestId('event-signup-btn').click();
     const modal = page.getByTestId('event-signup-modal');
@@ -124,12 +147,17 @@ test.describe('Event Signup Form (@cicd)', () => {
     context,
   }) => {
     await loginEventPlayerNoProfile(context);
-    const eventId = await getEventByName(context, 'Test Dota Event With Screenshot');
+    const eventId = await getEventByName(
+      context,
+      'Test Dota Event With Screenshot',
+    );
     await page.goto(`/events/${eventId}`);
     await page.getByTestId('event-tentative-btn').click();
     const modal = page.getByTestId('event-signup-modal');
     await expect(modal).toBeVisible();
-    await expect(modal.getByTestId('event-signup-submit-btn')).toContainText('Mark Tentative');
+    await expect(modal.getByTestId('event-signup-submit-btn')).toContainText(
+      'Mark Tentative',
+    );
   });
 
   test('Friend ID universal across game types (Deadlock event)', async ({
@@ -148,7 +176,10 @@ test.describe('Event Signup Form (@cicd)', () => {
     await expect(modal.getByTestId('position-choices')).toHaveCount(0);
   });
 
-  test('upgrade tentative to rsvp re-runs gap evaluation', async ({ page, context }) => {
+  test('upgrade tentative to rsvp re-runs gap evaluation', async ({
+    page,
+    context,
+  }) => {
     // event_player_1's profile is complete for E2E Signup Event, so both the
     // tentative button AND the upgrade-to-rsvp button take the fast path.
     await loginEventPlayer(context);
@@ -159,7 +190,9 @@ test.describe('Event Signup Form (@cicd)', () => {
     });
     await expect(page.getByTestId('event-upgrade-rsvp-btn')).toBeVisible();
     await page.getByTestId('event-upgrade-rsvp-btn').click();
-    await expect(page.getByTestId('event-cancel-rsvp-btn')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId('event-cancel-rsvp-btn')).toBeVisible({
+      timeout: 10000,
+    });
     await expect(page.getByTestId('event-cancel-tentative-btn')).toHaveCount(0);
   });
 
@@ -172,9 +205,13 @@ test.describe('Event Signup Form (@cicd)', () => {
       .getByRole('alertdialog')
       .getByRole('button', { name: 'Cancel RSVP' })
       .click();
-    await expect(page.getByTestId('event-signup-btn')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId('event-signup-btn')).toBeVisible({
+      timeout: 10000,
+    });
     await page.getByTestId('event-signup-btn').click();
-    await expect(page.getByTestId('event-cancel-rsvp-btn')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId('event-cancel-rsvp-btn')).toBeVisible({
+      timeout: 10000,
+    });
   });
 
   test('mobile viewport renders Sheet variant with sticky submit', async ({
@@ -183,7 +220,10 @@ test.describe('Event Signup Form (@cicd)', () => {
   }) => {
     await page.setViewportSize({ width: 375, height: 812 });
     await loginEventPlayerNoProfile(context);
-    const eventId = await getEventByName(context, 'Test Dota Event With Screenshot');
+    const eventId = await getEventByName(
+      context,
+      'Test Dota Event With Screenshot',
+    );
     await page.goto(`/events/${eventId}`);
     // The signup button is testid-tagged regardless of nav state.
     const signupBtn = page.getByTestId('event-signup-btn');
