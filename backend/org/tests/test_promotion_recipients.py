@@ -10,6 +10,7 @@ from org.models import PromoSend
 from org.promotion.recipients import (
     DEFAULT_POOL_N,
     MAX_POOL_N,
+    CandidateRow,
     candidate_pool,
     candidates,
     clamp_pool_n,
@@ -227,6 +228,20 @@ class CandidatePoolTest(_PoolFixture):
 
         self.assertFalse(in_pool(self.org, self.event, eleventh))
 
+    def test_org_without_past_tournaments_has_empty_pool(self) -> None:
+        player = self._user("future_only")
+        self._tournament([player], days_ago=-2, league=self.league)
+
+        self.assertEqual(
+            recent_org_tournaments(self.org, exclude_event=self.event, n=3), []
+        )
+        self.assertEqual(self._pool_usernames(3), set())
+        self.assertEqual(
+            candidates(self.org, self.event, n=3, sender=self.sender, q="future"),
+            [],
+        )
+        self.assertFalse(in_pool(self.org, self.event, player))
+
     def test_in_pool_false_for_unrelated_user(self) -> None:
         self._tournament([self._user("played")], days_ago=1, league=self.league)
 
@@ -240,8 +255,22 @@ class CandidatesTest(_PoolFixture):
         self.bob = self._user("bob")
         self._tournament([self.ann, self.bob], days_ago=1, league=self.league)
 
-    def _rows_by_username(self, **kwargs: object) -> dict[str, dict]:
-        rows = candidates(self.org, self.event, n=3, sender=self.sender, **kwargs)
+    def _rows_by_username(
+        self,
+        *,
+        hide_signed_up: bool = True,
+        hide_messaged: bool = True,
+        q: str = "",
+    ) -> dict[str, CandidateRow]:
+        rows = candidates(
+            self.org,
+            self.event,
+            n=3,
+            sender=self.sender,
+            hide_signed_up=hide_signed_up,
+            hide_messaged=hide_messaged,
+            q=q,
+        )
         return {row["username"]: row for row in rows}
 
     def _signup(self, user: CustomUser, status: str) -> EventSignup:
@@ -377,6 +406,17 @@ class CandidatesTest(_PoolFixture):
     def test_name_search(self) -> None:
         self.assertEqual(set(self._rows_by_username(q="AN")), {"ann"})
         self.assertEqual(set(self._rows_by_username(q="bob_dc")), {"bob"})
+
+    def test_name_search_profile_and_guild_nicknames(self) -> None:
+        nick = self._user("nick_user")
+        nick.nickname = "Zephyrion"
+        guild = self._user("guild_user")
+        guild.guildNickname = "Quillfeather"
+        guild.save()
+        self._tournament([nick, guild], days_ago=2, league=self.league)
+
+        self.assertEqual(set(self._rows_by_username(q="zephyr")), {"nick_user"})
+        self.assertEqual(set(self._rows_by_username(q="quillfeather")), {"guild_user"})
 
     def test_ordered_by_recent_count(self) -> None:
         self._tournament([self.bob], days_ago=2, league=self.league)

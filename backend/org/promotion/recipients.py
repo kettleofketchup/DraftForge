@@ -74,16 +74,12 @@ def candidate_pool(
 ) -> QuerySet[CustomUser]:
     tournament_ids = recent_org_tournaments(org, exclude_event=event, n=n)
     qs = (
-        CustomUser.objects.annotate(
-            recent_count=Count(
-                "tournaments",
-                filter=Q(tournaments__pk__in=tournament_ids),
-                distinct=True,
-            )
+        CustomUser.objects.filter(
+            tournaments__pk__in=tournament_ids, discordId__isnull=False
         )
-        .filter(recent_count__gt=0, discordId__isnull=False)
         .exclude(discordId="")
         .exclude(pk=sender.pk)
+        .annotate(recent_count=Count("tournaments", distinct=True))
     )
     return with_user_profiles(qs)
 
