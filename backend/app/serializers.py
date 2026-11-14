@@ -1,3 +1,5 @@
+from typing import Any
+
 import nh3
 from django.db import transaction
 from django.db.models import Prefetch, QuerySet
@@ -521,28 +523,16 @@ class OrganizationsSerializer(serializers.ModelSerializer):
 
 class LeagueSerializer(serializers.ModelSerializer):
     organization = OrganizationsSerializer(read_only=True)
+    # Create-only: update() drops it so a league can't be moved between orgs.
     organization_id = serializers.PrimaryKeyRelatedField(
         queryset=Organization.objects.all(),
         write_only=True,
         source="organization",
         required=False,
     )
+    # Roles change only through the admin_team league endpoints.
     admins = TournamentUserSerializer(many=True, read_only=True)
     staff = TournamentUserSerializer(many=True, read_only=True)
-    admin_ids = serializers.PrimaryKeyRelatedField(
-        queryset=CustomUser.objects.all(),
-        many=True,
-        write_only=True,
-        source="admins",
-        required=False,
-    )
-    staff_ids = serializers.PrimaryKeyRelatedField(
-        queryset=CustomUser.objects.all(),
-        many=True,
-        write_only=True,
-        source="staff",
-        required=False,
-    )
     tournament_count = serializers.IntegerField(read_only=True)
     users_count = serializers.IntegerField(read_only=True)
     # For backwards compatibility, return first org name
@@ -570,8 +560,6 @@ class LeagueSerializer(serializers.ModelSerializer):
             "timezone",
             "admins",
             "staff",
-            "admin_ids",
-            "staff_ids",
             "tournament_count",
             "users_count",
             "last_synced",
@@ -591,6 +579,10 @@ class LeagueSerializer(serializers.ModelSerializer):
         """Return first organization name for backwards compatibility."""
         first_org = obj.organization
         return first_org.name if first_org else None
+
+    def update(self, instance: League, validated_data: dict[str, Any]) -> League:
+        validated_data.pop("organization", None)
+        return super().update(instance, validated_data)
 
     def validate_steam_league_id(self, value: int | None) -> int | None:
         if value is None:

@@ -1336,7 +1336,8 @@ class LeagueView(viewsets.ModelViewSet):
         return super().get_permissions()
 
     def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:
-        # Check permission for organization (singular field from serializer)
+        # Legacy `organization` key: the serializer ignores it (read-only), so
+        # the authoritative org check on `organization_id` is in perform_create.
         org_id = request.data.get("organization")
         if org_id:
             try:
@@ -1368,6 +1369,12 @@ class LeagueView(viewsets.ModelViewSet):
                     status=status.HTTP_404_NOT_FOUND,
                 )
         return super().create(request, *args, **kwargs)
+
+    def perform_create(self, serializer: BaseSerializer) -> None:
+        org = serializer.validated_data.get("organization")
+        if org is not None and not has_org_staff_access(self.request.user, org):
+            raise PermissionDenied("Must be organization staff to create league")
+        serializer.save()
 
     def list(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         cache_key = f"league_list:{request.get_full_path()}"
