@@ -197,3 +197,14 @@ export {
   type SimLobby,
   type SimulatorStatus,
 } from './dota-lobby';
+
+// Org paid features utilities (19-org-features specs)
+export {
+  getOrgFeaturesData,
+  resetOrgFeatures,
+  loginOrgFeatures,
+  type OrgFeaturesEvent,
+  type OrgFeaturesRef,
+  type OrgFeaturesRole,
+  type OrgFeaturesTestData,
+} from './org-features';

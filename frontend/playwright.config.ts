@@ -83,9 +83,17 @@ export default defineConfig({
       // 16-events specs (run in events-sequential project — those tests
       // share a single seeded event PK from getEventsTestData and race on
       // start_roll_call / resetEventsData when workers > 1 in the same shard),
-      // layout specs (layout project) and 18-dota-lobby specs
-      // (dota-lobby-sequential).
-      testIgnore: [/herodraft/i, /e2e\/mobile\//, /e2e\/16-events\//, /e2e\/layout\//, /e2e\/18-dota-lobby\//],
+      // layout specs (layout project), 18-dota-lobby specs
+      // (dota-lobby-sequential) and 19-org-features specs
+      // (org-features-sequential).
+      testIgnore: [
+        /herodraft/i,
+        /e2e\/mobile\//,
+        /e2e\/16-events\//,
+        /e2e\/layout\//,
+        /e2e\/18-dota-lobby\//,
+        /e2e\/19-org-features\//,
+      ],
       use: {
         ...devices['Desktop Chrome'],
         launchOptions: {
@@ -145,6 +153,28 @@ export default defineConfig({
       // of seeded lobby games, and each file resets them
       // (/api/tests/dota-lobby/reset/): files must not overlap, so one
       // worker runs them in order whatever --workers says.
+      dependencies: ['chromium'],
+      fullyParallel: false,
+      workers: 1,
+    },
+    {
+      name: 'org-features-sequential',
+      testMatch: /e2e\/19-org-features\/.*\.spec\.ts/,
+      use: {
+        ...devices['Desktop Chrome'],
+        headless: true,
+        launchOptions: {
+          executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
+          args: [
+            '--no-sandbox',
+            '--disable-gpu',
+            '--disable-dev-shm-usage',
+            '--disable-setuid-sandbox',
+          ],
+        },
+      },
+      // Every 19-org-features file resets the same seeded orgs, ledger and
+      // promo sends (/api/tests/org-features/reset/): one worker, in order.
       dependencies: ['chromium'],
       fullyParallel: false,
       workers: 1,
