@@ -2,8 +2,8 @@
 process.env.TZ = 'Europe/Berlin';
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { I18nextProvider } from 'react-i18next';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { TooltipProvider } from '~/components/ui/tooltip';
 import { createI18nInstance } from '~/i18n/config';
 import type { EventType } from '../schemas';
@@ -19,7 +19,10 @@ const savedPassword = vi.hoisted(() => ({ current: undefined as unknown }));
 const regenerate = vi.hoisted(() => vi.fn());
 vi.mock('~/hooks/useLobbyPassword', () => ({
   useEventLobbyPassword: () => ({ data: savedPassword.current }),
-  useRegenerateEventLobbyPassword: () => ({ mutateAsync: regenerate, isPending: false }),
+  useRegenerateEventLobbyPassword: () => ({
+    mutateAsync: regenerate,
+    isPending: false,
+  }),
 }));
 
 vi.mock('~/components/league/LeagueCombobox', () => ({
@@ -38,7 +41,8 @@ class ResizeObserverStub {
   unobserve() {}
   disconnect() {}
 }
-globalThis.ResizeObserver ??= ResizeObserverStub as unknown as typeof ResizeObserver;
+globalThis.ResizeObserver ??=
+  ResizeObserverStub as unknown as typeof ResizeObserver;
 
 function Wrapper({ children }: { children: React.ReactNode }) {
   return (
@@ -132,7 +136,9 @@ const event: EventType = {
 const fixedEvent: EventType = { ...event, dota_lobby_password_mode: 'fixed' };
 
 function renderModal(e: EventType) {
-  return render(<EditEventModal event={e} open onOpenChange={() => {}} />, { wrapper: Wrapper });
+  return render(<EditEventModal event={e} open onOpenChange={() => {}} />, {
+    wrapper: Wrapper,
+  });
 }
 
 async function submittedBody() {
@@ -149,9 +155,16 @@ describe('EditEventModal lobby password', () => {
   });
 
   it('prefills a fixed password from the staff endpoint and sends it', async () => {
-    savedPassword.current = { mode: 'fixed', password: 'night4', source: 'event', can_manage: true };
+    savedPassword.current = {
+      mode: 'fixed',
+      password: 'night4',
+      source: 'event',
+      can_manage: true,
+    };
     renderModal(fixedEvent);
-    await waitFor(() => expect(screen.getByTestId('lobby-password-input')).toHaveValue('night4'));
+    await waitFor(() =>
+      expect(screen.getByTestId('lobby-password-input')).toHaveValue('night4'),
+    );
     expect(await submittedBody()).toMatchObject({
       dota_lobby_password_mode: 'fixed',
       dota_lobby_password: 'night4',
@@ -168,17 +181,35 @@ describe('EditEventModal lobby password', () => {
   });
 
   it('refills the fixed password after the event prop changes', async () => {
-    savedPassword.current = { mode: 'fixed', password: 'night4', source: 'event', can_manage: true };
+    savedPassword.current = {
+      mode: 'fixed',
+      password: 'night4',
+      source: 'event',
+      can_manage: true,
+    };
     const { rerender } = renderModal(fixedEvent);
-    await waitFor(() => expect(screen.getByTestId('lobby-password-input')).toHaveValue('night4'));
-    rerender(
-      <EditEventModal event={{ ...fixedEvent, name: 'Night 4 (moved)' }} open onOpenChange={() => {}} />,
+    await waitFor(() =>
+      expect(screen.getByTestId('lobby-password-input')).toHaveValue('night4'),
     );
-    await waitFor(() => expect(screen.getByTestId('lobby-password-input')).toHaveValue('night4'));
+    rerender(
+      <EditEventModal
+        event={{ ...fixedEvent, name: 'Night 4 (moved)' }}
+        open
+        onOpenChange={() => {}}
+      />,
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId('lobby-password-input')).toHaveValue('night4'),
+    );
   });
 
   it('sends no password in random mode', async () => {
-    savedPassword.current = { mode: 'random', password: 'abcd2345wxyz', source: 'event', can_manage: true };
+    savedPassword.current = {
+      mode: 'random',
+      password: 'abcd2345wxyz',
+      source: 'event',
+      can_manage: true,
+    };
     renderModal(event);
     const body = await submittedBody();
     expect(body.dota_lobby_password_mode).toBe('random');
@@ -186,8 +217,17 @@ describe('EditEventModal lobby password', () => {
   });
 
   it('regenerates a random password', async () => {
-    savedPassword.current = { mode: 'random', password: 'abcd2345wxyz', source: 'event', can_manage: true };
-    regenerate.mockResolvedValue({ mode: 'random', password: 'newpw2345abc', can_manage: true });
+    savedPassword.current = {
+      mode: 'random',
+      password: 'abcd2345wxyz',
+      source: 'event',
+      can_manage: true,
+    };
+    regenerate.mockResolvedValue({
+      mode: 'random',
+      password: 'newpw2345abc',
+      can_manage: true,
+    });
     renderModal(event);
     fireEvent.click(screen.getByTestId('lobby-password-regenerate'));
     await waitFor(() => expect(regenerate).toHaveBeenCalledOnce());
@@ -195,12 +235,21 @@ describe('EditEventModal lobby password', () => {
   });
 
   it('notes the series cascade on an on-schedule series event only', () => {
-    savedPassword.current = { mode: 'fixed', password: 'night4', source: 'event', can_manage: true };
+    savedPassword.current = {
+      mode: 'fixed',
+      password: 'night4',
+      source: 'event',
+      can_manage: true,
+    };
     const { unmount } = renderModal({ ...fixedEvent, event_repeater: 3 });
-    expect(screen.getByTestId('lobby-password-from-series')).toHaveTextContent(/overrides its series/);
+    expect(screen.getByTestId('lobby-password-from-series')).toHaveTextContent(
+      /overrides its series/,
+    );
     unmount();
     renderModal({ ...fixedEvent, event_repeater: 3, is_off_schedule: true });
-    expect(screen.queryByTestId('lobby-password-from-series')).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId('lobby-password-from-series'),
+    ).not.toBeInTheDocument();
   });
 });
 
@@ -221,8 +270,14 @@ describe('EditEventModal end time', () => {
 
   it('prefills start and end in the event timezone and sends ends_at as UTC', async () => {
     renderModal(timed);
-    await waitFor(() => expect(screen.getByTestId('event-scheduled-input')).toHaveValue('2026-11-14T20:00'));
-    expect(screen.getByTestId('event-end-datetime-input')).toHaveValue('2026-11-14T22:00');
+    await waitFor(() =>
+      expect(screen.getByTestId('event-scheduled-input')).toHaveValue(
+        '2026-11-14T20:00',
+      ),
+    );
+    expect(screen.getByTestId('event-end-datetime-input')).toHaveValue(
+      '2026-11-14T22:00',
+    );
     expect(await submittedBody()).toMatchObject({
       scheduled_at: '2026-11-15T01:00:00.000Z',
       ends_at: '2026-11-15T03:00:00.000Z',

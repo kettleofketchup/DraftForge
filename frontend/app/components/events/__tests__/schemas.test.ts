@@ -1,15 +1,15 @@
-import { describe, it, expect } from 'vitest'
-import { z } from 'zod'
+import { describe, expect, it } from 'vitest';
+import { z } from 'zod';
 import {
   createSeriesEventInputSchema,
-  discordConfigSchema,
   DISCORD_CONFIG_DEFAULTS,
+  discordConfigSchema,
   DOTA_LOBBY_CONFIG_DEFAULTS,
   eventSchema,
   localToUTC,
   refineEventEnd,
   utcToLocalInput,
-} from '~/components/events/schemas'
+} from '~/components/events/schemas';
 
 // A complete discordConfigSchema payload that intentionally omits the
 // dropped `discord_subscriber_dm` and `discord_subscriber_dm_hours`
@@ -45,55 +45,75 @@ const baseDiscordConfig = {
   require_steam_id: false,
   require_mmr_verified: false,
   require_profile_complete: false,
-}
+};
 
 describe('discord_subscriber_dm tolerance', () => {
   it('discordConfigSchema parses payload missing the dropped fields', () => {
-    expect(() => discordConfigSchema.parse(baseDiscordConfig)).not.toThrow()
-  })
+    expect(() => discordConfigSchema.parse(baseDiscordConfig)).not.toThrow();
+  });
 
   it('discordConfigSchema also parses payloads that still include the fields', () => {
-    expect(() => discordConfigSchema.parse({
-      ...baseDiscordConfig,
-      discord_subscriber_dm: true,
-      discord_subscriber_dm_hours: 24,
-    })).not.toThrow()
-  })
-})
+    expect(() =>
+      discordConfigSchema.parse({
+        ...baseDiscordConfig,
+        discord_subscriber_dm: true,
+        discord_subscriber_dm_hours: 24,
+      }),
+    ).not.toThrow();
+  });
+});
 
 describe('refineEventEnd', () => {
   const schema = z
     .object({ scheduled_at: z.string(), event_ends_at: z.string().optional() })
-    .superRefine(refineEventEnd)
+    .superRefine(refineEventEnd);
 
   it('rejects an end before the start', () => {
-    const result = schema.safeParse({ scheduled_at: '2026-11-14T20:00', event_ends_at: '2026-11-14T19:00' })
-    expect(result.success).toBe(false)
+    const result = schema.safeParse({
+      scheduled_at: '2026-11-14T20:00',
+      event_ends_at: '2026-11-14T19:00',
+    });
+    expect(result.success).toBe(false);
     expect(result.error?.issues[0]).toMatchObject({
       path: ['event_ends_at'],
       message: 'End must be after start',
-    })
-  })
+    });
+  });
 
   it('rejects an end equal to the start', () => {
-    const result = schema.safeParse({ scheduled_at: '2026-11-14T20:00', event_ends_at: '2026-11-14T20:00' })
-    expect(result.success).toBe(false)
-  })
+    const result = schema.safeParse({
+      scheduled_at: '2026-11-14T20:00',
+      event_ends_at: '2026-11-14T20:00',
+    });
+    expect(result.success).toBe(false);
+  });
 
   it('accepts an end after the start, across midnight', () => {
-    expect(schema.safeParse({ scheduled_at: '2026-11-14T23:00', event_ends_at: '2026-11-15T01:00' }).success).toBe(true)
-  })
+    expect(
+      schema.safeParse({
+        scheduled_at: '2026-11-14T23:00',
+        event_ends_at: '2026-11-15T01:00',
+      }).success,
+    ).toBe(true);
+  });
 
   it('accepts an empty or missing end', () => {
-    expect(schema.safeParse({ scheduled_at: '2026-11-14T20:00', event_ends_at: '' }).success).toBe(true)
-    expect(schema.safeParse({ scheduled_at: '2026-11-14T20:00' }).success).toBe(true)
-  })
-})
+    expect(
+      schema.safeParse({ scheduled_at: '2026-11-14T20:00', event_ends_at: '' })
+        .success,
+    ).toBe(true);
+    expect(schema.safeParse({ scheduled_at: '2026-11-14T20:00' }).success).toBe(
+      true,
+    );
+  });
+});
 
 describe('createSeriesEventInputSchema', () => {
   it('has no event_ends_at key', () => {
-    expect(Object.keys(createSeriesEventInputSchema.shape)).not.toContain('event_ends_at')
-  })
+    expect(Object.keys(createSeriesEventInputSchema.shape)).not.toContain(
+      'event_ends_at',
+    );
+  });
 
   it('parses a series one-off payload', () => {
     const result = createSeriesEventInputSchema.safeParse({
@@ -114,25 +134,29 @@ describe('createSeriesEventInputSchema', () => {
       timezone: 'America/New_York',
       ...DISCORD_CONFIG_DEFAULTS,
       ...DOTA_LOBBY_CONFIG_DEFAULTS,
-    })
-    expect(result.success).toBe(true)
-  })
-})
+    });
+    expect(result.success).toBe(true);
+  });
+});
 
 describe('utcToLocalInput', () => {
   it('formats a UTC instant in the event timezone', () => {
-    expect(utcToLocalInput('2026-11-15T01:00:00Z', 'America/New_York')).toBe('2026-11-14T20:00')
-  })
+    expect(utcToLocalInput('2026-11-15T01:00:00Z', 'America/New_York')).toBe(
+      '2026-11-14T20:00',
+    );
+  });
 
   it('round-trips through localToUTC', () => {
-    const local = utcToLocalInput('2026-11-15T01:00:00Z', 'America/New_York')
-    expect(localToUTC(local, 'America/New_York')).toBe('2026-11-15T01:00:00.000Z')
-  })
+    const local = utcToLocalInput('2026-11-15T01:00:00Z', 'America/New_York');
+    expect(localToUTC(local, 'America/New_York')).toBe(
+      '2026-11-15T01:00:00.000Z',
+    );
+  });
 
   it('returns an empty string for a missing value', () => {
-    expect(utcToLocalInput(null, 'America/New_York')).toBe('')
-  })
-})
+    expect(utcToLocalInput(null, 'America/New_York')).toBe('');
+  });
+});
 
 describe('eventSchema end and staff fields', () => {
   it('declares ends_at, host, helpers, contributions_awarded_at and user_can_manage_event_staff', () => {
@@ -144,6 +168,6 @@ describe('eventSchema end and staff fields', () => {
         'contributions_awarded_at',
         'user_can_manage_event_staff',
       ]),
-    )
-  })
-})
+    );
+  });
+});

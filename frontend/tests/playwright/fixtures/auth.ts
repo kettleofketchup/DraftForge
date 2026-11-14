@@ -7,8 +7,8 @@
  * Ports the Cypress login commands to Playwright.
  */
 
-import { test as base, expect } from '@playwright/test';
 import type { BrowserContext, Page } from '@playwright/test';
+import { test as base } from '@playwright/test';
 
 import { API_URL, BASE_URL } from './base-url';
 import { isSessionCookie } from './cookies';
@@ -34,7 +34,7 @@ export interface LoginResponse {
  */
 export async function loginAsUser(
   context: BrowserContext,
-  userPk: number
+  userPk: number,
 ): Promise<LoginResponse> {
   const url = `${API_URL}/tests/login-as/`;
   console.log(`[auth] loginAsUser: POST ${url} (user_pk=${userPk})`);
@@ -85,7 +85,7 @@ export async function loginAsUser(
  */
 export async function loginAsDiscordId(
   context: BrowserContext,
-  discordId: string
+  discordId: string,
 ): Promise<LoginResponse> {
   const url = `${API_URL}/tests/login-as-discord/`;
   console.log(`[auth] loginAsDiscordId: POST ${url} (discord_id=${discordId})`);
@@ -105,13 +105,13 @@ export async function loginAsDiscordId(
     }
     console.error(`[auth] loginAsDiscordId FAILED: ${status} - ${body}`);
     throw new Error(
-      `loginAsDiscordId failed: ${status} - ${body.slice(0, 500)}`
+      `loginAsDiscordId failed: ${status} - ${body.slice(0, 500)}`,
     );
   }
 
   const data = await response.json();
   console.log(
-    `[auth] loginAsDiscordId: OK - logged in as ${data.user?.username}`
+    `[auth] loginAsDiscordId: OK - logged in as ${data.user?.username}`,
   );
 
   const cookies = response.headers()['set-cookie'];
@@ -166,7 +166,7 @@ export async function loginAdmin(context: BrowserContext): Promise<void> {
     console.error(`[auth]   - 404: Backend not running or route not found`);
     console.error(`[auth]   - 502/503: Nginx can't reach backend`);
     throw new Error(
-      `loginAdmin failed: ${status} ${statusText} - ${body.slice(0, 500)}`
+      `loginAdmin failed: ${status} ${statusText} - ${body.slice(0, 500)}`,
     );
   }
 
@@ -278,7 +278,9 @@ export async function loginUserClaimer(context: BrowserContext): Promise<void> {
       body = '[could not read body]';
     }
     console.error(`[auth] loginUserClaimer FAILED: ${status} - ${body}`);
-    throw new Error(`loginUserClaimer failed: ${status} - ${body.slice(0, 500)}`);
+    throw new Error(
+      `loginUserClaimer failed: ${status} - ${body.slice(0, 500)}`,
+    );
   }
 
   console.log(`[auth] loginUserClaimer: OK (${response.status()})`);
@@ -396,7 +398,9 @@ export async function loginLeagueAdmin(context: BrowserContext): Promise<void> {
       body = '[could not read body]';
     }
     console.error(`[auth] loginLeagueAdmin FAILED: ${status} - ${body}`);
-    throw new Error(`loginLeagueAdmin failed: ${status} - ${body.slice(0, 500)}`);
+    throw new Error(
+      `loginLeagueAdmin failed: ${status} - ${body.slice(0, 500)}`,
+    );
   }
 
   console.log(`[auth] loginLeagueAdmin: OK (${response.status()})`);
@@ -425,7 +429,9 @@ export async function loginLeagueStaff(context: BrowserContext): Promise<void> {
       body = '[could not read body]';
     }
     console.error(`[auth] loginLeagueStaff FAILED: ${status} - ${body}`);
-    throw new Error(`loginLeagueStaff failed: ${status} - ${body.slice(0, 500)}`);
+    throw new Error(
+      `loginLeagueStaff failed: ${status} - ${body.slice(0, 500)}`,
+    );
   }
 
   console.log(`[auth] loginLeagueStaff: OK (${response.status()})`);
@@ -474,39 +480,83 @@ async function _postAuthMatrixLogin(
   }
 }
 
-export function loginAuthMatrixOrgOwner(context: BrowserContext): Promise<void> {
-  return _postAuthMatrixLogin(context, 'login-auth-matrix-org-owner', 'loginAuthMatrixOrgOwner');
+export function loginAuthMatrixOrgOwner(
+  context: BrowserContext,
+): Promise<void> {
+  return _postAuthMatrixLogin(
+    context,
+    'login-auth-matrix-org-owner',
+    'loginAuthMatrixOrgOwner',
+  );
 }
 
-export function loginAuthMatrixOrgAdmin(context: BrowserContext): Promise<void> {
-  return _postAuthMatrixLogin(context, 'login-auth-matrix-org-admin', 'loginAuthMatrixOrgAdmin');
+export function loginAuthMatrixOrgAdmin(
+  context: BrowserContext,
+): Promise<void> {
+  return _postAuthMatrixLogin(
+    context,
+    'login-auth-matrix-org-admin',
+    'loginAuthMatrixOrgAdmin',
+  );
 }
 
-export function loginAuthMatrixOrgStaff(context: BrowserContext): Promise<void> {
-  return _postAuthMatrixLogin(context, 'login-auth-matrix-org-staff', 'loginAuthMatrixOrgStaff');
+export function loginAuthMatrixOrgStaff(
+  context: BrowserContext,
+): Promise<void> {
+  return _postAuthMatrixLogin(
+    context,
+    'login-auth-matrix-org-staff',
+    'loginAuthMatrixOrgStaff',
+  );
 }
 
-export function loginAuthMatrixOrgMember(context: BrowserContext): Promise<void> {
-  return _postAuthMatrixLogin(context, 'login-auth-matrix-org-member', 'loginAuthMatrixOrgMember');
+export function loginAuthMatrixOrgMember(
+  context: BrowserContext,
+): Promise<void> {
+  return _postAuthMatrixLogin(
+    context,
+    'login-auth-matrix-org-member',
+    'loginAuthMatrixOrgMember',
+  );
 }
 
-export function loginAuthMatrixOrgPromoter(context: BrowserContext): Promise<void> {
-  return _postAuthMatrixLogin(context, 'login-auth-matrix-org-promoter', 'loginAuthMatrixOrgPromoter');
+export function loginAuthMatrixOrgPromoter(
+  context: BrowserContext,
+): Promise<void> {
+  return _postAuthMatrixLogin(
+    context,
+    'login-auth-matrix-org-promoter',
+    'loginAuthMatrixOrgPromoter',
+  );
 }
 
-export function loginAuthMatrixLeagueAdmin(context: BrowserContext): Promise<void> {
-  return _postAuthMatrixLogin(context, 'login-auth-matrix-league-admin', 'loginAuthMatrixLeagueAdmin');
+export function loginAuthMatrixLeagueAdmin(
+  context: BrowserContext,
+): Promise<void> {
+  return _postAuthMatrixLogin(
+    context,
+    'login-auth-matrix-league-admin',
+    'loginAuthMatrixLeagueAdmin',
+  );
 }
 
-export function loginAuthMatrixLeagueStaff(context: BrowserContext): Promise<void> {
-  return _postAuthMatrixLogin(context, 'login-auth-matrix-league-staff', 'loginAuthMatrixLeagueStaff');
+export function loginAuthMatrixLeagueStaff(
+  context: BrowserContext,
+): Promise<void> {
+  return _postAuthMatrixLogin(
+    context,
+    'login-auth-matrix-league-staff',
+    'loginAuthMatrixLeagueStaff',
+  );
 }
 
 /**
  * Login as event-league-staff (staff of league 7 ONLY, not org 7).
  * Use to assert league-staff access on events tied to the Events Test League.
  */
-export async function loginEventLeagueStaff(context: BrowserContext): Promise<void> {
+export async function loginEventLeagueStaff(
+  context: BrowserContext,
+): Promise<void> {
   const url = `${API_URL}/tests/login-event-league-staff/`;
   console.log(`[auth] loginEventLeagueStaff: POST ${url}`);
 
@@ -521,7 +571,9 @@ export async function loginEventLeagueStaff(context: BrowserContext): Promise<vo
       body = '[could not read body]';
     }
     console.error(`[auth] loginEventLeagueStaff FAILED: ${status} - ${body}`);
-    throw new Error(`loginEventLeagueStaff failed: ${status} - ${body.slice(0, 500)}`);
+    throw new Error(
+      `loginEventLeagueStaff failed: ${status} - ${body.slice(0, 500)}`,
+    );
   }
 
   console.log(`[auth] loginEventLeagueStaff: OK (${response.status()})`);
@@ -537,7 +589,7 @@ export async function loginEventLeagueStaff(context: BrowserContext): Promise<vo
  */
 async function setSessionCookies(
   context: BrowserContext,
-  cookieHeader: string
+  cookieHeader: string,
 ): Promise<void> {
   // Parse multiple cookies from header
   const cookieStrings = cookieHeader.split(/,(?=\s*[\w-]+=)/);
@@ -554,7 +606,7 @@ async function setSessionCookies(
         {
           name: name.trim(),
           value: value.trim(),
-          url: cookieUrl,  // Use URL instead of domain/path
+          url: cookieUrl, // Use URL instead of domain/path
           httpOnly: isSessionCookie(name.trim()),
           // Note: sameSite defaults to 'Lax' when not specified
           // For same-origin requests, Lax should work

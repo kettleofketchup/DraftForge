@@ -1,5 +1,5 @@
-import { BASE_URL } from './tests/playwright/fixtures/base-url';
 import { defineConfig, devices } from '@playwright/test';
+import { BASE_URL } from './tests/playwright/fixtures/base-url';
 
 /**
  * Playwright configuration for E2E tests.
@@ -40,7 +40,9 @@ export default defineConfig({
   // Workers: Default to 1 to prevent herodraft parallel conflicts (shared draft + Redis keys).
   // Herodraft tests all use the same draft; parallel execution causes captain kick conflicts.
   // Override with --workers=2 for chromium-only runs, or via PLAYWRIGHT_WORKERS env var.
-  workers: process.env.PLAYWRIGHT_WORKERS ? parseInt(process.env.PLAYWRIGHT_WORKERS) : 1,
+  workers: process.env.PLAYWRIGHT_WORKERS
+    ? parseInt(process.env.PLAYWRIGHT_WORKERS)
+    : 1,
 
   // Reporters: html + list locally, add github reporter in CI. The
   // health-probe reporter pings /api/healthz/ after every test and writes a
@@ -50,7 +52,9 @@ export default defineConfig({
     ['html', { open: 'never' }],
     ['list'],
     ['./tests/playwright/reporters/health-probe-reporter.ts'],
-    ...(process.env.CI ? [['github', {}] as ['github', Record<string, unknown>]] : []),
+    ...(process.env.CI
+      ? [['github', {}] as ['github', Record<string, unknown>]]
+      : []),
   ],
 
   use: {
@@ -98,7 +102,8 @@ export default defineConfig({
         ...devices['Desktop Chrome'],
         launchOptions: {
           // Use system chromium in Docker (set via PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH)
-          executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
+          executablePath:
+            process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
           args: [
             // Container/WSL compatibility
             '--no-sandbox',
@@ -116,7 +121,8 @@ export default defineConfig({
         ...devices['Desktop Chrome'],
         headless: true,
         launchOptions: {
-          executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
+          executablePath:
+            process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
           args: [
             '--no-sandbox',
             '--disable-gpu',
@@ -140,7 +146,8 @@ export default defineConfig({
         ...devices['Desktop Chrome'],
         headless: true,
         launchOptions: {
-          executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
+          executablePath:
+            process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
           args: [
             '--no-sandbox',
             '--disable-gpu',
@@ -164,7 +171,8 @@ export default defineConfig({
         ...devices['Desktop Chrome'],
         headless: true,
         launchOptions: {
-          executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
+          executablePath:
+            process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
           args: [
             '--no-sandbox',
             '--disable-gpu',
@@ -189,7 +197,8 @@ export default defineConfig({
         // `npx playwright show-trace` instead.
         headless: true,
         launchOptions: {
-          executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
+          executablePath:
+            process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
           slowMo: 0,
           args: [
             '--no-sandbox',
@@ -215,7 +224,8 @@ export default defineConfig({
         ...devices['Desktop Chrome'],
         headless: true,
         launchOptions: {
-          executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
+          executablePath:
+            process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
           slowMo: 100, // Slow for video recording
           args: [
             '--no-sandbox',
@@ -239,7 +249,8 @@ export default defineConfig({
         ...devices['Desktop Chrome'],
         viewport: { width: 375, height: 667 },
         launchOptions: {
-          executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
+          executablePath:
+            process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
           args: [
             '--no-sandbox',
             '--disable-gpu',
@@ -255,7 +266,8 @@ export default defineConfig({
       use: {
         ...devices['Pixel 5'],
         launchOptions: {
-          executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
+          executablePath:
+            process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
           args: [
             '--no-sandbox',
             '--disable-gpu',
@@ -275,7 +287,8 @@ export default defineConfig({
         // string, deviceScaleFactor, and hasTouch flag still apply.
         browserName: 'chromium',
         launchOptions: {
-          executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
+          executablePath:
+            process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
           args: [
             '--no-sandbox',
             '--disable-gpu',
@@ -293,7 +306,8 @@ export default defineConfig({
         ...devices['iPhone SE'],
         browserName: 'chromium',
         launchOptions: {
-          executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
+          executablePath:
+            process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
           args: [
             '--no-sandbox',
             '--disable-gpu',

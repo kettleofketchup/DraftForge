@@ -8,8 +8,12 @@
  * For leagues, relies on onUpdate callback for parent refetch.
  */
 
-import { useState, useCallback, useMemo } from 'react';
-import { useMutation, useMutationState, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  useMutation,
+  useMutationState,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 import {
   ChevronDown,
   ChevronRight,
@@ -21,47 +25,52 @@ import {
   User,
   X,
 } from 'lucide-react';
+import { useCallback, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import type { UserType } from '~/components/user/types';
-import { UserAvatar } from '~/components/user/UserAvatar';
-import { DisplayName } from '~/components/user/avatar';
-import type { OrganizationType } from '~/components/organization/schemas';
-import type { LeagueType } from '~/components/league/schemas';
 import type { AddMemberPayload } from '~/components/api/api';
 import {
-  addOrgAdmin,
-  removeOrgAdmin,
-  addOrgStaff,
-  removeOrgStaff,
-  getOrgPromoters,
-  addOrgPromoter,
-  removeOrgPromoter,
-  transferOrgOwnership,
   addLeagueAdmin,
-  removeLeagueAdmin,
   addLeagueStaff,
+  addOrgAdmin,
+  addOrgPromoter,
+  addOrgStaff,
+  getOrgPromoters,
+  removeLeagueAdmin,
   removeLeagueStaff,
+  removeOrgAdmin,
+  removeOrgPromoter,
+  removeOrgStaff,
+  transferOrgOwnership,
 } from '~/components/api/api';
-import {
-  useIsOrganizationOwner,
-  useIsOrganizationAdmin,
-  useIsLeagueAdmin,
-  useIsSuperuser,
-} from '~/hooks/usePermissions';
+import type { LeagueType } from '~/components/league/schemas';
 import { organizationQueryKey } from '~/components/organization/hooks/useOrganization';
-import { useOrgStore } from '~/store/orgStore';
-import { AddUserModal } from '~/components/user/AddUserModal';
+import type { OrganizationType } from '~/components/organization/schemas';
 import { Button } from '~/components/ui/button';
 import { SecondaryButton } from '~/components/ui/buttons';
 import { ConfirmDialog } from '~/components/ui/dialogs';
+import { AddUserModal } from '~/components/user/AddUserModal';
+import { DisplayName } from '~/components/user/avatar';
+import type { UserType } from '~/components/user/types';
+import { UserAvatar } from '~/components/user/UserAvatar';
 import { promotionKeys, useOrgFeatureAccess } from '~/features/org-features';
+import {
+  useIsLeagueAdmin,
+  useIsOrganizationAdmin,
+  useIsOrganizationOwner,
+  useIsSuperuser,
+} from '~/hooks/usePermissions';
 import { extractApiError } from '~/lib/apiError';
 import { getLogger } from '~/lib/logger';
+import { useOrgStore } from '~/store/orgStore';
 
 const log = getLogger('AdminTeamSection');
 
 // Domain 4xx responses ("already a promoter", "not a promoter") are expected races, not faults.
-function logPromoterFailure(message: string, context: Record<string, unknown>, err: unknown): void {
+function logPromoterFailure(
+  message: string,
+  context: Record<string, unknown>,
+  err: unknown,
+): void {
   const status = (err as { response?: { status?: number } })?.response?.status;
   if (status != null && status >= 400 && status < 500) {
     log.warn(message, { ...context, status, err });
@@ -103,7 +112,10 @@ function UserRow({
   };
 
   return (
-    <div className="flex items-center justify-between py-2 px-3 bg-base-200 rounded-lg" data-testid={`team-member-${user.username}`}>
+    <div
+      className="flex items-center justify-between py-2 px-3 bg-base-200 rounded-lg"
+      data-testid={`team-member-${user.username}`}
+    >
       <div className="flex items-center gap-3">
         {roleIcon[role]}
         <UserAvatar user={user} size="md" />
@@ -161,7 +173,10 @@ export function AdminTeamSection({
   const isSuperuser = useIsSuperuser();
   const isOrgOwner = useIsOrganizationOwner(organization);
   const isOrgAdmin = useIsOrganizationAdmin(organization);
-  const isLeagueAdmin = useIsLeagueAdmin(league, organization ? [organization] : undefined);
+  const isLeagueAdmin = useIsLeagueAdmin(
+    league,
+    organization ? [organization] : undefined,
+  );
 
   const isOrgMode = !!organization && !league;
   const entityId = isOrgMode ? organization?.pk : league?.pk;
@@ -169,7 +184,10 @@ export function AdminTeamSection({
   // For org mode, subscribe to Zustand currentOrg for immediate optimistic updates.
   // Zustand subscription triggers re-render directly — no prop chain needed.
   const currentOrg = useOrgStore((s) => s.currentOrg);
-  const liveOrg = isOrgMode && currentOrg?.pk === organization?.pk ? currentOrg : organization;
+  const liveOrg =
+    isOrgMode && currentOrg?.pk === organization?.pk
+      ? currentOrg
+      : organization;
 
   // Derive team members from Zustand (org mode) or league prop
   const owner = isOrgMode ? liveOrg?.owner : null;
@@ -185,10 +203,17 @@ export function AdminTeamSection({
     : isLeagueAdmin || isSuperuser;
   const canManageStaff = canManageAdmins;
   const canTransferOwnership = isOrgMode && (isOrgOwner || isSuperuser);
-  const featureAccess = useOrgFeatureAccess(isOrgMode ? (liveOrg ?? undefined) : undefined);
-  const canManagePromoters = isOrgMode && !!entityId && featureAccess.canManagePromoters;
+  const featureAccess = useOrgFeatureAccess(
+    isOrgMode ? (liveOrg ?? undefined) : undefined,
+  );
+  const canManagePromoters =
+    isOrgMode && !!entityId && featureAccess.canManagePromoters;
   const promotersKey = useMemo(
-    () => [...promotionKeys.all(entityId ?? 0, featureAccess.viewerPk), 'promoters'] as const,
+    () =>
+      [
+        ...promotionKeys.all(entityId ?? 0, featureAccess.viewerPk),
+        'promoters',
+      ] as const,
     [entityId, featureAccess.viewerPk],
   );
 
@@ -215,7 +240,9 @@ export function AdminTeamSection({
   const addAdminMutation = useMutation({
     mutationFn: async (userId: number) => {
       if (!entityId) throw new Error('No entity ID');
-      return isOrgMode ? addOrgAdmin(entityId, userId) : addLeagueAdmin(entityId, userId);
+      return isOrgMode
+        ? addOrgAdmin(entityId, userId)
+        : addLeagueAdmin(entityId, userId);
     },
     onSuccess: (user) => {
       toast.success('Admin added');
@@ -249,7 +276,9 @@ export function AdminTeamSection({
   const addStaffMutation = useMutation({
     mutationFn: async (userId: number) => {
       if (!entityId) throw new Error('No entity ID');
-      return isOrgMode ? addOrgStaff(entityId, userId) : addLeagueStaff(entityId, userId);
+      return isOrgMode
+        ? addOrgStaff(entityId, userId)
+        : addLeagueStaff(entityId, userId);
     },
     onSuccess: (user) => {
       toast.success('Staff added');
@@ -312,13 +341,20 @@ export function AdminTeamSection({
   const addPromoterMutation = useMutation({
     mutationFn: (userId: number) =>
       addOrgPromoter(entityId!, userId).catch((err: unknown) => {
-        logPromoterFailure('Failed to add promoter', { orgId: entityId, userId }, err);
+        logPromoterFailure(
+          'Failed to add promoter',
+          { orgId: entityId, userId },
+          err,
+        );
         throw new Error(extractApiError(err) ?? 'Failed to add promoter');
       }),
     onSettled: () => queryClient.invalidateQueries({ queryKey: promotersKey }),
   });
 
-  const removePromoterKey = useMemo(() => ['removeOrgPromoter', entityId] as const, [entityId]);
+  const removePromoterKey = useMemo(
+    () => ['removeOrgPromoter', entityId] as const,
+    [entityId],
+  );
   const removePromoterMutation = useMutation({
     mutationKey: removePromoterKey,
     mutationFn: (userId: number) => removeOrgPromoter(entityId!, userId),
@@ -326,7 +362,11 @@ export function AdminTeamSection({
       toast.success('Promoter removed');
     },
     onError: (err: unknown, userId) => {
-      logPromoterFailure('Failed to remove promoter', { orgId: entityId, userId }, err);
+      logPromoterFailure(
+        'Failed to remove promoter',
+        { orgId: entityId, userId },
+        err,
+      );
       toast.error(extractApiError(err) ?? 'Failed to remove promoter');
     },
     onSettled: () => queryClient.invalidateQueries({ queryKey: promotersKey }),
@@ -360,7 +400,7 @@ export function AdminTeamSection({
       if (!payload.user_id) throw new Error('User ID required');
       return addAdminMutation.mutateAsync(payload.user_id);
     },
-    [addAdminMutation.mutateAsync]
+    [addAdminMutation.mutateAsync],
   );
 
   const handleAddStaff = useCallback(
@@ -368,17 +408,17 @@ export function AdminTeamSection({
       if (!payload.user_id) throw new Error('User ID required');
       return addStaffMutation.mutateAsync(payload.user_id);
     },
-    [addStaffMutation.mutateAsync]
+    [addStaffMutation.mutateAsync],
   );
 
   const isAdminAdded = useCallback(
     (user: UserType) => user.pk != null && adminPkSet.has(user.pk),
-    [adminPkSet]
+    [adminPkSet],
   );
 
   const isStaffAdded = useCallback(
     (user: UserType) => user.pk != null && staffPkSet.has(user.pk),
-    [staffPkSet]
+    [staffPkSet],
   );
 
   const promoterPkSet = useMemo(
@@ -407,7 +447,9 @@ export function AdminTeamSection({
   const confirmTransfer = async () => {
     if (transferTarget?.pk) {
       // onError already toasts; swallow so ConfirmDialog can close cleanly.
-      await transferOwnershipMutation.mutateAsync(transferTarget.pk).catch(() => undefined);
+      await transferOwnershipMutation
+        .mutateAsync(transferTarget.pk)
+        .catch(() => undefined);
     }
   };
 
@@ -501,7 +543,9 @@ export function AdminTeamSection({
                     role="admin"
                     canRemove={canRemoveAdmins}
                     canTransfer={canTransferOwnership}
-                    onRemove={() => admin.pk && removeAdminMutation.mutate(admin.pk)}
+                    onRemove={() =>
+                      admin.pk && removeAdminMutation.mutate(admin.pk)
+                    }
                     onTransfer={() => handleTransferClick(admin)}
                     isRemoving={removeAdminMutation.isPending}
                   />
@@ -540,7 +584,9 @@ export function AdminTeamSection({
                     user={member}
                     role="staff"
                     canRemove={canManageStaff}
-                    onRemove={() => member.pk && removeStaffMutation.mutate(member.pk)}
+                    onRemove={() =>
+                      member.pk && removeStaffMutation.mutate(member.pk)
+                    }
                     isRemoving={removeStaffMutation.isPending}
                   />
                 ))
@@ -571,8 +617,12 @@ export function AdminTeamSection({
                 {promotersQuery.isLoading ? (
                   <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                 ) : promotersQuery.isError ? (
-                  <p className="text-sm text-destructive" data-testid="promoters-error">
-                    {extractApiError(promotersQuery.error) ?? 'Failed to load promoters'}
+                  <p
+                    className="text-sm text-destructive"
+                    data-testid="promoters-error"
+                  >
+                    {extractApiError(promotersQuery.error) ??
+                      'Failed to load promoters'}
                   </p>
                 ) : promoters.length > 0 ? (
                   promoters.map((promoter) => (
@@ -581,14 +631,20 @@ export function AdminTeamSection({
                       user={promoter}
                       role="promoter"
                       canRemove
-                      onRemove={() => promoter.pk && removePromoterMutation.mutate(promoter.pk)}
+                      onRemove={() =>
+                        promoter.pk &&
+                        removePromoterMutation.mutate(promoter.pk)
+                      }
                       isRemoving={
-                        promoter.pk != null && pendingPromoterRemovals.includes(promoter.pk)
+                        promoter.pk != null &&
+                        pendingPromoterRemovals.includes(promoter.pk)
                       }
                     />
                   ))
                 ) : (
-                  <p className="text-sm text-muted-foreground italic">No promoters</p>
+                  <p className="text-sm text-muted-foreground italic">
+                    No promoters
+                  </p>
                 )}
               </div>
             </div>
@@ -625,9 +681,10 @@ export function AdminTeamSection({
         <AddUserModal
           open={showAddAdmin}
           onOpenChange={setShowAddAdmin}
-          title={isOrgMode
-            ? `Add Admin to ${organization?.name || 'Organization'}`
-            : `Add Admin to ${league?.name || 'League'}`
+          title={
+            isOrgMode
+              ? `Add Admin to ${organization?.name || 'Organization'}`
+              : `Add Admin to ${league?.name || 'League'}`
           }
           entityContext={entityContext}
           onAdd={handleAddAdmin}
@@ -641,9 +698,10 @@ export function AdminTeamSection({
         <AddUserModal
           open={showAddStaff}
           onOpenChange={setShowAddStaff}
-          title={isOrgMode
-            ? `Add Staff to ${organization?.name || 'Organization'}`
-            : `Add Staff to ${league?.name || 'League'}`
+          title={
+            isOrgMode
+              ? `Add Staff to ${organization?.name || 'Organization'}`
+              : `Add Staff to ${league?.name || 'League'}`
           }
           entityContext={entityContext}
           onAdd={handleAddStaff}

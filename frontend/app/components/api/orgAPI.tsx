@@ -4,10 +4,13 @@
  * API functions for organization-related operations.
  */
 
-import type { OrganizationType, OrganizationsType } from '~/components/organization/schemas';
+import type {
+  OrganizationType,
+  OrganizationsType,
+} from '~/components/organization/schemas';
 import type { UserType } from '~/index';
-import type { AddMemberPayload, AddUserResponse } from './types';
 import axios from './axios';
+import type { AddMemberPayload, AddUserResponse } from './types';
 
 interface TransferOwnershipResponse {
   status: string;
@@ -60,46 +63,83 @@ export async function deleteOrganization(pk: number): Promise<void> {
 }
 
 // Organization Admin Team
-export async function addOrgAdmin(orgId: number, userId: number): Promise<UserType> {
-  const response = await axios.post<AddUserResponse>(`/organizations/${orgId}/admins/`, { user_id: userId });
+export async function addOrgAdmin(
+  orgId: number,
+  userId: number,
+): Promise<UserType> {
+  const response = await axios.post<AddUserResponse>(
+    `/organizations/${orgId}/admins/`,
+    { user_id: userId },
+  );
   return response.data.user;
 }
 
-export async function removeOrgAdmin(orgId: number, userId: number): Promise<void> {
+export async function removeOrgAdmin(
+  orgId: number,
+  userId: number,
+): Promise<void> {
   await axios.delete(`/organizations/${orgId}/admins/${userId}/`);
 }
 
-export async function addOrgStaff(orgId: number, userId: number): Promise<UserType> {
-  const response = await axios.post<AddUserResponse>(`/organizations/${orgId}/staff/`, { user_id: userId });
+export async function addOrgStaff(
+  orgId: number,
+  userId: number,
+): Promise<UserType> {
+  const response = await axios.post<AddUserResponse>(
+    `/organizations/${orgId}/staff/`,
+    { user_id: userId },
+  );
   return response.data.user;
 }
 
-export async function removeOrgStaff(orgId: number, userId: number): Promise<void> {
+export async function removeOrgStaff(
+  orgId: number,
+  userId: number,
+): Promise<void> {
   await axios.delete(`/organizations/${orgId}/staff/${userId}/`);
 }
 
 export async function getOrgPromoters(orgId: number): Promise<UserType[]> {
-  const response = await axios.get<UserType[]>(`/organizations/${orgId}/promoters/`);
+  const response = await axios.get<UserType[]>(
+    `/organizations/${orgId}/promoters/`,
+  );
   return response.data;
 }
 
-export async function addOrgPromoter(orgId: number, userId: number): Promise<UserType> {
-  const response = await axios.post<AddUserResponse>(`/organizations/${orgId}/promoters/`, { user_id: userId });
+export async function addOrgPromoter(
+  orgId: number,
+  userId: number,
+): Promise<UserType> {
+  const response = await axios.post<AddUserResponse>(
+    `/organizations/${orgId}/promoters/`,
+    { user_id: userId },
+  );
   return response.data.user;
 }
 
-export async function removeOrgPromoter(orgId: number, userId: number): Promise<void> {
+export async function removeOrgPromoter(
+  orgId: number,
+  userId: number,
+): Promise<void> {
   await axios.delete(`/organizations/${orgId}/promoters/${userId}/`);
 }
 
-export async function transferOrgOwnership(orgId: number, userId: number): Promise<UserType> {
-  const response = await axios.post<TransferOwnershipResponse>(`/organizations/${orgId}/transfer-ownership/`, { user_id: userId });
+export async function transferOrgOwnership(
+  orgId: number,
+  userId: number,
+): Promise<UserType> {
+  const response = await axios.post<TransferOwnershipResponse>(
+    `/organizations/${orgId}/transfer-ownership/`,
+    { user_id: userId },
+  );
   return response.data.new_owner;
 }
 
 // Organization Users (members via OrgUser)
 export async function getOrganizationUsers(orgId: number): Promise<UserType[]> {
-  const response = await axios.get<UserType[]>(`/organizations/${orgId}/users/`);
+  const response = await axios.get<UserType[]>(
+    `/organizations/${orgId}/users/`,
+  );
   return response.data;
 }
 
@@ -110,14 +150,18 @@ export async function updateOrgUser(
 ): Promise<UserType> {
   const response = await axios.patch<UserType>(
     `/organizations/${organizationId}/users/${orgUserId}/`,
-    data
+    data,
   );
   return response.data;
 }
 
 // Organization Discord Members
-export async function getOrganizationDiscordMembers(orgId: number): Promise<DiscordMember[]> {
-  const response = await axios.get<{ members: DiscordMember[] }>(`/discord/organizations/${orgId}/discord-members/`);
+export async function getOrganizationDiscordMembers(
+  orgId: number,
+): Promise<DiscordMember[]> {
+  const response = await axios.get<{ members: DiscordMember[] }>(
+    `/discord/organizations/${orgId}/discord-members/`,
+  );
   return response.data.members;
 }
 
@@ -155,17 +199,29 @@ export async function getClaimRequests(options?: {
     params.append('organization', options.organizationId.toString());
   }
   const queryString = params.toString() ? `?${params.toString()}` : '';
-  const response = await axios.get<ProfileClaimRequest[]>(`/claim-requests/${queryString}`);
+  const response = await axios.get<ProfileClaimRequest[]>(
+    `/claim-requests/${queryString}`,
+  );
   return response.data;
 }
 
-export async function approveClaimRequest(claimId: number): Promise<{ message: string }> {
-  const response = await axios.post<{ message: string }>(`/claim-requests/${claimId}/approve/`);
+export async function approveClaimRequest(
+  claimId: number,
+): Promise<{ message: string }> {
+  const response = await axios.post<{ message: string }>(
+    `/claim-requests/${claimId}/approve/`,
+  );
   return response.data;
 }
 
-export async function rejectClaimRequest(claimId: number, reason?: string): Promise<{ message: string }> {
-  const response = await axios.post<{ message: string }>(`/claim-requests/${claimId}/reject/`, { reason });
+export async function rejectClaimRequest(
+  claimId: number,
+  reason?: string,
+): Promise<{ message: string }> {
+  const response = await axios.post<{ message: string }>(
+    `/claim-requests/${claimId}/reject/`,
+    { reason },
+  );
   return response.data;
 }
 
@@ -254,7 +310,13 @@ export interface CSVImportResultRow {
 }
 
 export interface CSVImportResponse {
-  summary: { added: number; skipped: number; created: number; errors: number; updated: number };
+  summary: {
+    added: number;
+    skipped: number;
+    created: number;
+    errors: number;
+    updated: number;
+  };
   results: CSVImportResultRow[];
 }
 

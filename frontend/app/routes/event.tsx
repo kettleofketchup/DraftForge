@@ -1,8 +1,8 @@
-import { generateMeta } from '~/lib/seo';
+import { useNavigate, useParams } from 'react-router';
 import { getEvent } from '~/components/api/api';
-import { useParams, useNavigate } from 'react-router';
-import type { Route } from './+types/event';
+import { generateMeta } from '~/lib/seo';
 import type { EventSSR } from '~/lib/ssr-types';
+import type { Route } from './+types/event';
 
 export async function loader({ params }: Route.LoaderArgs) {
   const { fetchSSR } = await import('~/lib/ssr.server');
@@ -40,78 +40,103 @@ export function meta({ data }: Route.MetaArgs) {
   });
 }
 
-import { useState, useCallback, useEffect, useMemo, type ReactNode } from 'react';
 import {
+  ArrowDownToLine,
   Bell,
   BellOff,
   Building2,
-  Loader2,
-  Users,
-  Clock,
   CheckCircle2,
-  XCircle,
-  UserCheck,
-  UserX,
+  Clock,
   HelpCircle,
+  Loader2,
   Repeat,
-  ArrowDownToLine,
   Undo2,
+  UserCheck,
   UserPlus,
+  Users,
+  UserX,
+  XCircle,
 } from 'lucide-react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react';
 import { toast } from 'sonner';
 
-import { Badge } from '~/components/ui/badge';
-import { Tooltip, TooltipContent, TooltipTrigger } from '~/components/ui/tooltip';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { AddMemberPayload } from '~/components/api/api';
+import {
+  adminAddSignup,
+  subscribeToRepeater,
+  unsubscribeFromRepeater,
+} from '~/components/api/api';
+import api from '~/components/api/axios';
 import { EventStateBadge } from '~/components/events';
-import { SubscriberList } from '~/components/events/SubscriberList';
-import { EventState } from '~/components/events/schemas';
-import { MmrApprovalModal } from '~/components/events/MmrApprovalModal';
 import { DiscordLogSection } from '~/components/events/DiscordLogSection';
 import { EditEventModal } from '~/components/events/EditEventModal';
-import type { EventSignupType, EventType } from '~/components/events/schemas';
-import { PrimaryButton, SecondaryButton, DestructiveButton, HighlightButton } from '~/components/ui/buttons';
 import { EventAdminActions } from '~/components/events/EventAdminActions';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
-import { Card, CardContent, CardHeader } from '~/components/ui/card';
-import { PageHeader } from '~/components/ui/page-header';
-import { UserEventStrip } from '~/components/user';
-import type { DotaProfileData } from '~/components/user';
-import {
-  useEvent,
-  useEventSignups,
-  useEventSignupUsers,
-  useSignupMutation,
-  useEventActionMutation,
-  useSignupActionMutations,
-} from '~/hooks/useEvent';
-import { useUserDotaProfile } from '~/hooks/useUserProfile';
 import { EventSignupModal } from '~/components/events/EventSignupModal';
 import { evaluateSignupGap } from '~/components/events/EventSignupModal/evaluateSignupGap';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { adminAddSignup, subscribeToRepeater, unsubscribeFromRepeater } from '~/components/api/api';
-import { AddUserModal } from '~/components/user/AddUserModal';
-import { useResolvedUsers } from '~/hooks/useResolvedUsers';
-import { useOrganization } from '~/components/organization';
-import { usePageNav } from '~/hooks/usePageNav';
-import type { UserType } from '~/components/user/types';
-import type { AddMemberPayload } from '~/components/api/api';
-import { useOrgStore } from '~/store/orgStore';
-import { useUserCacheStore } from '~/store/userCacheStore';
-import { removeFeatureQueries, useOrgFeatureAccess } from '~/features/org-features';
-import { canPromoteEvent, PromoteEventButton } from '~/features/promotion';
 import { EventStaffSection } from '~/components/events/EventStaffCard';
+import { MmrApprovalModal } from '~/components/events/MmrApprovalModal';
+import { SubscriberList } from '~/components/events/SubscriberList';
 import { canCompleteEvent } from '~/components/events/eventCompletion';
-import { useMemberAccess } from '~/hooks/useMemberAccess';
-import { useUserStore } from '~/store/userStore';
-import { isUserEntry } from '~/store/userCacheTypes';
-import { useGameTypeStore } from '~/store/gameTypeStore';
+import type { EventSignupType, EventType } from '~/components/events/schemas';
+import { EventState } from '~/components/events/schemas';
 import type { GameTypeValue } from '~/components/game/constants';
+import { EventLobbyPassword } from '~/components/lobby/EventLobbyPassword';
+import { useOrganization } from '~/components/organization';
+import { Badge } from '~/components/ui/badge';
+import {
+  DestructiveButton,
+  HighlightButton,
+  PrimaryButton,
+  SecondaryButton,
+} from '~/components/ui/buttons';
+import { Card, CardContent, CardHeader } from '~/components/ui/card';
 import { ConfirmDialog } from '~/components/ui/dialogs';
-import { EntityBreadcrumb, type BreadcrumbSegment } from '~/components/ui/entity-breadcrumb';
-import api from '~/components/api/axios';
+import {
+  EntityBreadcrumb,
+  type BreadcrumbSegment,
+} from '~/components/ui/entity-breadcrumb';
+import { PageHeader } from '~/components/ui/page-header';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '~/components/ui/tooltip';
+import type { DotaProfileData } from '~/components/user';
+import { UserEventStrip } from '~/components/user';
+import { AddUserModal } from '~/components/user/AddUserModal';
+import type { UserType } from '~/components/user/types';
+import {
+  removeFeatureQueries,
+  useOrgFeatureAccess,
+} from '~/features/org-features';
+import { canPromoteEvent, PromoteEventButton } from '~/features/promotion';
+import {
+  useEvent,
+  useEventActionMutation,
+  useEventSignups,
+  useEventSignupUsers,
+  useSignupActionMutations,
+  useSignupMutation,
+} from '~/hooks/useEvent';
+import { useMemberAccess } from '~/hooks/useMemberAccess';
+import { usePageNav } from '~/hooks/usePageNav';
+import { useResolvedUsers } from '~/hooks/useResolvedUsers';
+import { useUserDotaProfile } from '~/hooks/useUserProfile';
 import { extractApiError } from '~/lib/apiError';
 import { getLogger } from '~/lib/logger';
-import { EventLobbyPassword } from '~/components/lobby/EventLobbyPassword';
+import { useGameTypeStore } from '~/store/gameTypeStore';
+import { useOrgStore } from '~/store/orgStore';
+import { useUserCacheStore } from '~/store/userCacheStore';
+import { isUserEntry } from '~/store/userCacheTypes';
+import { useUserStore } from '~/store/userStore';
 
 const log = getLogger('EventPage');
 
@@ -130,7 +155,10 @@ export default function EventPage() {
   const [showReopenConfirm, setShowReopenConfirm] = useState(false);
   const [showCancelRsvpConfirm, setShowCancelRsvpConfirm] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
-  const [signupModal, setSignupModal] = useState<{ open: boolean; intent: 'rsvp' | 'tentative' }>({
+  const [signupModal, setSignupModal] = useState<{
+    open: boolean;
+    intent: 'rsvp' | 'tentative';
+  }>({
     open: false,
     intent: 'rsvp',
   });
@@ -144,8 +172,8 @@ export default function EventPage() {
   const eventOrgAccess = useOrgFeatureAccess(eventOrg ?? undefined);
   const canComplete = canCompleteEvent(event, eventOrgAccess);
   const showCompletePointsNote =
-    eventOrgAccess.canViewContributions || eventOrgAccess.canManageContributions;
-
+    eventOrgAccess.canViewContributions ||
+    eventOrgAccess.canManageContributions;
 
   // Set the current game type in the game type store for context-aware components
   const setCurrentGameType = useGameTypeStore((s) => s.setCurrentGameType);
@@ -176,10 +204,8 @@ export default function EventPage() {
     queryClient.invalidateQueries({ queryKey: ['event-signups', id] });
     refetchEventOrg();
   }, [eventOrgPk, id, queryClient, refetchEventOrg]);
-  const { canView: canViewOrgMembers, settled: orgMemberAccessSettled } = useMemberAccess(
-    eventOrg,
-    onMemberViewerChange,
-  );
+  const { canView: canViewOrgMembers, settled: orgMemberAccessSettled } =
+    useMemberAccess(eventOrg, onMemberViewerChange);
   const orgUsersOrgId = useOrgStore((s) => s.orgUsersOrgId);
   useEffect(() => {
     if (eventOrgPk && orgMemberAccessSettled && canViewOrgMembers) {
@@ -209,15 +235,19 @@ export default function EventPage() {
     async (intent: 'rsvp' | 'tentative') => {
       if (!event) return;
       const gap = evaluateSignupGap(event, profile);
-      const successMsg = intent === 'rsvp' ? 'Signed up!' : 'Marked as tentative!';
-      const errorMsg = intent === 'rsvp' ? 'Failed to sign up' : 'Failed to mark tentative';
+      const successMsg =
+        intent === 'rsvp' ? 'Signed up!' : 'Marked as tentative!';
+      const errorMsg =
+        intent === 'rsvp' ? 'Failed to sign up' : 'Failed to mark tentative';
       if (gap === 'complete') {
         try {
           await signupMutation.mutateAsync({ intent, profile: {} });
           toast.success(successMsg);
         } catch (err) {
           const refreshed = await profileQuery.refetch();
-          const newGap = event ? evaluateSignupGap(event, refreshed.data) : 'complete';
+          const newGap = event
+            ? evaluateSignupGap(event, refreshed.data)
+            : 'complete';
           if (newGap !== 'complete') {
             setSignupModal({ open: true, intent });
           } else {
@@ -235,7 +265,8 @@ export default function EventPage() {
   const repeaterId = event?.event_repeater;
   const { data: repeaterData } = useQuery({
     queryKey: ['repeater', repeaterId],
-    queryFn: () => api.get(`/events/repeaters/${repeaterId}/`).then((r) => r.data),
+    queryFn: () =>
+      api.get(`/events/repeaters/${repeaterId}/`).then((r) => r.data),
     enabled: !!repeaterId && !!currentUser,
   });
   const isSubscribed = repeaterData?.is_subscribed ?? false;
@@ -244,7 +275,9 @@ export default function EventPage() {
     mutationFn: () => subscribeToRepeater(repeaterId!),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['repeater', repeaterId] });
-      queryClient.invalidateQueries({ queryKey: ['repeater-subscribers', repeaterId] });
+      queryClient.invalidateQueries({
+        queryKey: ['repeater-subscribers', repeaterId],
+      });
       toast.success('Subscribed to event series notifications');
     },
   });
@@ -253,7 +286,9 @@ export default function EventPage() {
     mutationFn: () => unsubscribeFromRepeater(repeaterId!),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['repeater', repeaterId] });
-      queryClient.invalidateQueries({ queryKey: ['repeater-subscribers', repeaterId] });
+      queryClient.invalidateQueries({
+        queryKey: ['repeater-subscribers', repeaterId],
+      });
       toast.success('Unsubscribed from event series notifications');
     },
   });
@@ -286,18 +321,24 @@ export default function EventPage() {
   }, [event]);
 
   // Check if current user already has an active signup
-  const mySignup = useMemo(
-    () => {
-      if (!signups || !currentUser?.pk) return undefined;
-      return signups.find(
-        (s) => Number(s.user) === Number(currentUser.pk) && s.status !== 'cancelled' && s.status !== 'rejected'
-      );
-    },
-    [signups, currentUser?.pk],
-  );
+  const mySignup = useMemo(() => {
+    if (!signups || !currentUser?.pk) return undefined;
+    return signups.find(
+      (s) =>
+        Number(s.user) === Number(currentUser.pk) &&
+        s.status !== 'cancelled' &&
+        s.status !== 'rejected',
+    );
+  }, [signups, currentUser?.pk]);
 
   const activeSignups = useMemo(
-    () => (signups ?? []).filter((s) => !['waitlisted', 'tentative', 'cancelled', 'rejected'].includes(s.status)),
+    () =>
+      (signups ?? []).filter(
+        (s) =>
+          !['waitlisted', 'tentative', 'cancelled', 'rejected'].includes(
+            s.status,
+          ),
+      ),
     [signups],
   );
   const tentativeSignups = useMemo(
@@ -309,7 +350,10 @@ export default function EventPage() {
     [signups],
   );
   const removedSignups = useMemo(
-    () => (signups ?? []).filter((s) => s.status === 'cancelled' || s.status === 'rejected'),
+    () =>
+      (signups ?? []).filter(
+        (s) => s.status === 'cancelled' || s.status === 'rejected',
+      ),
     [signups],
   );
 
@@ -327,7 +371,12 @@ export default function EventPage() {
       { value: 'details', label: 'Details' },
       { value: 'signups', label: `${activeSignups.length} Signups` },
       ...(tentativeSignups.length > 0
-        ? [{ value: 'tentative', label: `${tentativeSignups.length} Tentative` }]
+        ? [
+            {
+              value: 'tentative',
+              label: `${tentativeSignups.length} Tentative`,
+            },
+          ]
         : []),
       { value: 'waitlist', label: `${waitlistedSignups.length} Waitlist` },
       ...(removedSignups.length > 0
@@ -335,7 +384,12 @@ export default function EventPage() {
         : []),
       { value: 'discord', label: 'Discord' },
     ],
-    [activeSignups.length, tentativeSignups.length, waitlistedSignups.length, removedSignups.length],
+    [
+      activeSignups.length,
+      tentativeSignups.length,
+      waitlistedSignups.length,
+      removedSignups.length,
+    ],
   );
   usePageNav(event ? pageNavOptions : null, activeTab, handleTabChange);
 
@@ -375,30 +429,54 @@ export default function EventPage() {
     timeZoneName: 'short',
   });
   const endDate = event.ends_at ? new Date(event.ends_at) : null;
-  const endSameDay = endDate !== null && endDate.toDateString() === scheduledDate.toDateString();
+  const endSameDay =
+    endDate !== null && endDate.toDateString() === scheduledDate.toDateString();
   const formattedEnd = endDate
-    ? endDate.toLocaleString(undefined, endSameDay
-      ? { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }
-      : { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })
+    ? endDate.toLocaleString(
+        undefined,
+        endSameDay
+          ? { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }
+          : {
+              weekday: 'short',
+              month: 'short',
+              day: 'numeric',
+              hour: 'numeric',
+              minute: '2-digit',
+              timeZoneName: 'short',
+            },
+      )
     : null;
 
   return (
     <div className="max-w-7xl mx-auto py-4 md:py-8 px-4 md:px-6 space-y-5 md:space-y-8">
       {/* Breadcrumb */}
-      {breadcrumbSegments.length > 1 && <EntityBreadcrumb segments={breadcrumbSegments} />}
+      {breadcrumbSegments.length > 1 && (
+        <EntityBreadcrumb segments={breadcrumbSegments} />
+      )}
 
       {/* Page Header — compact on mobile, lg+ adds an Org/Series side rail */}
       <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
         <PageHeader
           title={event.name}
-          badge={<EventStateBadge state={event.state} data-testid="event-state-badge" />}
+          badge={
+            <EventStateBadge
+              state={event.state}
+              data-testid="event-state-badge"
+            />
+          }
           subtitle={
-            <Badge variant="secondary" className="flex items-center gap-1 w-fit text-xs sm:text-sm">
+            <Badge
+              variant="secondary"
+              className="flex items-center gap-1 w-fit text-xs sm:text-sm"
+            >
               <Clock className="h-3 w-3" />
               <span className="sm:hidden">{shortDate}</span>
               <span className="hidden sm:inline">{formattedDate}</span>
               {formattedEnd && (
-                <span data-testid="event-end-time" className={endSameDay ? undefined : 'hidden sm:inline'}>
+                <span
+                  data-testid="event-end-time"
+                  className={endSameDay ? undefined : 'hidden sm:inline'}
+                >
                   – {formattedEnd}
                 </span>
               )}
@@ -410,7 +488,9 @@ export default function EventPage() {
         <div className="hidden lg:flex flex-wrap items-center gap-2 shrink-0">
           {event.organization_name && (
             <div className="flex flex-col items-center gap-0.5">
-              <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Organization</span>
+              <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                Organization
+              </span>
               <HighlightButton
                 size="sm"
                 onClick={() => navigate(`/organizations/${event.organization}`)}
@@ -424,10 +504,14 @@ export default function EventPage() {
           )}
           {event.event_repeater && event.event_repeater_name && (
             <div className="flex flex-col items-center gap-0.5">
-              <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Event Series</span>
+              <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                Event Series
+              </span>
               <HighlightButton
                 size="sm"
-                onClick={() => navigate(`/event-series/${event.event_repeater}`)}
+                onClick={() =>
+                  navigate(`/event-series/${event.event_repeater}`)
+                }
               >
                 <Repeat className="h-4 w-4 mr-1.5" />
                 {event.event_repeater_name}
@@ -437,9 +521,11 @@ export default function EventPage() {
         </div>
       </div>
       <div className="space-y-2 sm:space-y-4">
-
         {/* Row 3: Admin button group (left) + Subscribe/RSVP (right) */}
-        {(isAdmin || canPromoteEvent(event, eventOrgAccess) || (currentUser && event.state === EventState.SIGNUPS_OPEN && signups) || (currentUser && event.event_repeater)) && (
+        {(isAdmin ||
+          canPromoteEvent(event, eventOrgAccess) ||
+          (currentUser && event.state === EventState.SIGNUPS_OPEN && signups) ||
+          (currentUser && event.event_repeater)) && (
           <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3">
             {/* Admin actions — left side */}
             {isAdmin ? (
@@ -451,7 +537,9 @@ export default function EventPage() {
                 onReopenSignupsClick={() => setShowReopenConfirm(true)}
                 onOpenRollCallClick={() => navigate(`/rollcall/${eventId}`)}
                 onDeleteConfirmed={() => {
-                  actions.deleteEvent.mutate(undefined, { onSuccess: () => navigate('/events') });
+                  actions.deleteEvent.mutate(undefined, {
+                    onSuccess: () => navigate('/events'),
+                  });
                 }}
                 canComplete={canComplete}
                 showCompletePointsNote={showCompletePointsNote}
@@ -460,14 +548,21 @@ export default function EventPage() {
                     await actions.completeEvent.mutateAsync();
                     toast.success('Event completed');
                   } catch (err: unknown) {
-                    const status = (err as { response?: { status?: number } })?.response?.status;
-                    const context = { eventId: event.id, status, error: extractApiError(err) };
+                    const status = (err as { response?: { status?: number } })
+                      ?.response?.status;
+                    const context = {
+                      eventId: event.id,
+                      status,
+                      error: extractApiError(err),
+                    };
                     if (status != null && status >= 400 && status < 500) {
                       log.warn('event_complete_failed', context);
                     } else {
                       log.error('event_complete_failed', context);
                     }
-                    toast.error(extractApiError(err) || 'Failed to complete event');
+                    toast.error(
+                      extractApiError(err) || 'Failed to complete event',
+                    );
                   }
                 }}
               />
@@ -477,88 +572,114 @@ export default function EventPage() {
 
             {/* Right side: Subscribe + RSVP */}
             <div className="flex flex-wrap items-center gap-2">
-            <PromoteEventButton event={event} access={eventOrgAccess} />
-            {event.event_repeater && currentUser && (
-              isSubscribed ? (
-                <SecondaryButton
-                  size="sm"
-                  onClick={() => unsubscribeMutation.mutate()}
-                  disabled={unsubscribeMutation.isPending}
-                >
-                  <BellOff className="h-4 w-4 mr-1" />
-                  Unsubscribe
-                </SecondaryButton>
-              ) : (
-                <PrimaryButton
-                  size="sm"
-                  onClick={() => subscribeMutation.mutate()}
-                  disabled={subscribeMutation.isPending}
-                >
-                  <Bell className="h-4 w-4 mr-1" />
-                  Subscribe
-                </PrimaryButton>
-              )
-            )}
-            {/* Not signed up — show Sign Up + Tentative */}
-            {currentUser && event.state === EventState.SIGNUPS_OPEN && signups && !mySignup && (
-              <>
-                <PrimaryButton
-                  size="sm"
-                  onClick={() => trySignup('rsvp')}
-                  disabled={!event || !signups || !profileLoaded || signupMutation.isPending}
-                  data-testid="event-signup-btn"
-                >
-                  <CheckCircle2 className="h-4 w-4 mr-1.5" />
-                  Sign Up
-                </PrimaryButton>
-                <SecondaryButton
-                  size="sm"
-                  onClick={() => trySignup('tentative')}
-                  disabled={!event || !signups || !profileLoaded || signupMutation.isPending}
-                  data-testid="event-tentative-btn"
-                >
-                  <HelpCircle className="h-4 w-4 mr-1.5" />
-                  <span className="hidden sm:inline">Tentative</span>
-                </SecondaryButton>
-              </>
-            )}
-            {/* Signed up (active) — show status + cancel */}
-            {currentUser && event.state === EventState.SIGNUPS_OPEN && signups && mySignup && mySignup.status !== 'tentative' && (
-              <DestructiveButton
-                size="sm"
-                onClick={() => setShowCancelRsvpConfirm(true)}
-                loading={signupActions.cancel.isPending}
-                depth={false}
-                data-testid="event-cancel-rsvp-btn"
-              >
-                <XCircle className="h-4 w-4 mr-1.5" />
-                Cancel RSVP
-              </DestructiveButton>
-            )}
-            {/* Tentative — can upgrade to full signup or cancel */}
-            {currentUser && event.state === EventState.SIGNUPS_OPEN && signups && mySignup && mySignup.status === 'tentative' && (
-              <>
-                <PrimaryButton
-                  size="sm"
-                  onClick={() => trySignup('rsvp')}
-                  disabled={!event || !signups || !profileLoaded || signupMutation.isPending}
-                  data-testid="event-upgrade-rsvp-btn"
-                >
-                  <CheckCircle2 className="h-4 w-4 mr-1.5" />
-                  Sign Up
-                </PrimaryButton>
-                <DestructiveButton
-                  size="sm"
-                  onClick={() => setShowCancelRsvpConfirm(true)}
-                  loading={signupActions.cancel.isPending}
-                  depth={false}
-                  data-testid="event-cancel-tentative-btn"
-                >
-                  <XCircle className="h-4 w-4 mr-1.5" />
-                  Cancel
-                </DestructiveButton>
-              </>
-            )}
+              <PromoteEventButton event={event} access={eventOrgAccess} />
+              {event.event_repeater &&
+                currentUser &&
+                (isSubscribed ? (
+                  <SecondaryButton
+                    size="sm"
+                    onClick={() => unsubscribeMutation.mutate()}
+                    disabled={unsubscribeMutation.isPending}
+                  >
+                    <BellOff className="h-4 w-4 mr-1" />
+                    Unsubscribe
+                  </SecondaryButton>
+                ) : (
+                  <PrimaryButton
+                    size="sm"
+                    onClick={() => subscribeMutation.mutate()}
+                    disabled={subscribeMutation.isPending}
+                  >
+                    <Bell className="h-4 w-4 mr-1" />
+                    Subscribe
+                  </PrimaryButton>
+                ))}
+              {/* Not signed up — show Sign Up + Tentative */}
+              {currentUser &&
+                event.state === EventState.SIGNUPS_OPEN &&
+                signups &&
+                !mySignup && (
+                  <>
+                    <PrimaryButton
+                      size="sm"
+                      onClick={() => trySignup('rsvp')}
+                      disabled={
+                        !event ||
+                        !signups ||
+                        !profileLoaded ||
+                        signupMutation.isPending
+                      }
+                      data-testid="event-signup-btn"
+                    >
+                      <CheckCircle2 className="h-4 w-4 mr-1.5" />
+                      Sign Up
+                    </PrimaryButton>
+                    <SecondaryButton
+                      size="sm"
+                      onClick={() => trySignup('tentative')}
+                      disabled={
+                        !event ||
+                        !signups ||
+                        !profileLoaded ||
+                        signupMutation.isPending
+                      }
+                      data-testid="event-tentative-btn"
+                    >
+                      <HelpCircle className="h-4 w-4 mr-1.5" />
+                      <span className="hidden sm:inline">Tentative</span>
+                    </SecondaryButton>
+                  </>
+                )}
+              {/* Signed up (active) — show status + cancel */}
+              {currentUser &&
+                event.state === EventState.SIGNUPS_OPEN &&
+                signups &&
+                mySignup &&
+                mySignup.status !== 'tentative' && (
+                  <DestructiveButton
+                    size="sm"
+                    onClick={() => setShowCancelRsvpConfirm(true)}
+                    loading={signupActions.cancel.isPending}
+                    depth={false}
+                    data-testid="event-cancel-rsvp-btn"
+                  >
+                    <XCircle className="h-4 w-4 mr-1.5" />
+                    Cancel RSVP
+                  </DestructiveButton>
+                )}
+              {/* Tentative — can upgrade to full signup or cancel */}
+              {currentUser &&
+                event.state === EventState.SIGNUPS_OPEN &&
+                signups &&
+                mySignup &&
+                mySignup.status === 'tentative' && (
+                  <>
+                    <PrimaryButton
+                      size="sm"
+                      onClick={() => trySignup('rsvp')}
+                      disabled={
+                        !event ||
+                        !signups ||
+                        !profileLoaded ||
+                        signupMutation.isPending
+                      }
+                      data-testid="event-upgrade-rsvp-btn"
+                    >
+                      <CheckCircle2 className="h-4 w-4 mr-1.5" />
+                      Sign Up
+                    </PrimaryButton>
+                    <DestructiveButton
+                      size="sm"
+                      onClick={() => setShowCancelRsvpConfirm(true)}
+                      loading={signupActions.cancel.isPending}
+                      depth={false}
+                      data-testid="event-cancel-tentative-btn"
+                    >
+                      <XCircle className="h-4 w-4 mr-1.5" />
+                      Cancel
+                    </DestructiveButton>
+                  </>
+                )}
             </div>
           </div>
         )}
@@ -655,7 +776,11 @@ export default function EventPage() {
           </TabsContent>
 
           <TabsContent value="discord">
-            <DiscordLogSection eventId={event.id} isAdmin={isAdmin} eventTimezone={event.timezone} />
+            <DiscordLogSection
+              eventId={event.id}
+              isAdmin={isAdmin}
+              eventTimezone={event.timezone}
+            />
           </TabsContent>
         </Tabs>
       </div>
@@ -760,7 +885,9 @@ function DetailsTab({
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
       <EventLobbyPassword
         eventId={event.id}
-        lobbiesEnabled={event.game_type === 1 && event.dota_lobby_mode !== 'off'}
+        lobbiesEnabled={
+          event.game_type === 1 && event.dota_lobby_mode !== 'off'
+        }
         signedIn={signedIn}
       />
       <Card>
@@ -768,11 +895,29 @@ function DetailsTab({
           <h3 className="font-semibold">Tournament Info</h3>
         </CardHeader>
         <CardContent className="space-y-0">
-          {event.tournament_name && <Stat label="Tournament" value={event.tournament_name} />}
-          <Stat label="Type" value={<span className="capitalize">{event.tournament_type.replace(/_/g, ' ')}</span>} />
-          <Stat label="Draft" value={<span className="capitalize">{event.draft_type}</span>} />
-          <Stat label="Teams" value={`${event.number_of_teams} × ${event.people_per_team}`} />
-          <Stat label="Game" value={event.game_type === 1 ? 'Dota 2' : 'Deadlock'} />
+          {event.tournament_name && (
+            <Stat label="Tournament" value={event.tournament_name} />
+          )}
+          <Stat
+            label="Type"
+            value={
+              <span className="capitalize">
+                {event.tournament_type.replace(/_/g, ' ')}
+              </span>
+            }
+          />
+          <Stat
+            label="Draft"
+            value={<span className="capitalize">{event.draft_type}</span>}
+          />
+          <Stat
+            label="Teams"
+            value={`${event.number_of_teams} × ${event.people_per_team}`}
+          />
+          <Stat
+            label="Game"
+            value={event.game_type === 1 ? 'Dota 2' : 'Deadlock'}
+          />
         </CardContent>
       </Card>
 
@@ -785,8 +930,14 @@ function DetailsTab({
             label="Players"
             value={`${event.min_players ?? '?'} – ${event.max_players ?? '?'}`}
           />
-          <Stat label="Auto Approve" value={event.auto_approve ? 'Yes' : 'No'} />
-          <Stat label="Auto Confirm" value={event.auto_confirm ? 'Yes' : 'No'} />
+          <Stat
+            label="Auto Approve"
+            value={event.auto_approve ? 'Yes' : 'No'}
+          />
+          <Stat
+            label="Auto Confirm"
+            value={event.auto_confirm ? 'Yes' : 'No'}
+          />
           <Stat
             label="Roll Call"
             value={event.roll_call_enabled ? event.roll_call_mode : 'Disabled'}
@@ -832,8 +983,13 @@ function SignupsTab({
   hasDiscordServer?: boolean;
   state: EventType['state'];
 }) {
-  const [approvalSignup, setApprovalSignup] = useState<EventSignupType | null>(null);
-  const [removeSignup, setRemoveSignup] = useState<{ signup: EventSignupType; name: string } | null>(null);
+  const [approvalSignup, setApprovalSignup] = useState<EventSignupType | null>(
+    null,
+  );
+  const [removeSignup, setRemoveSignup] = useState<{
+    signup: EventSignupType;
+    name: string;
+  } | null>(null);
   const [addUserOpen, setAddUserOpen] = useState(false);
   const queryClient = useQueryClient();
 
@@ -844,61 +1000,72 @@ function SignupsTab({
     [resolvedUsers],
   );
 
-  const signupUserPks = useMemo(() => new Set(signups.map((s) => s.user)), [signups]);
+  const signupUserPks = useMemo(
+    () => new Set(signups.map((s) => s.user)),
+    [signups],
+  );
   const entityContext = useMemo(() => ({ orgId }), [orgId]);
-  const handleAddUser = useCallback(async (payload: AddMemberPayload): Promise<UserType> => {
-    // The modal's Discord tab can hand back a discord_id with no user_id, and
-    // adminAddSignup takes a site-user pk only; the throw surfaces as a toast.
-    if (payload.user_id == null) {
-      throw new Error('Select a site user — adding a Discord member directly is not supported here yet.');
-    }
-    const resp = await adminAddSignup(eventId!, payload.user_id);
-    queryClient.invalidateQueries({ queryKey: ['event-signups', eventId] });
-    // Backend adds the user as an OrgUser when an admin signs them up; reset
-    // the org-users cache so the org page reflects the new membership.
-    if (orgId) useOrgStore.getState().clearOrgUsers();
-    // AddUserModal reads `.pk` off this to track optimistic adds — the signup
-    // itself has no pk, so hand back the user it embeds.
-    const added = resp.user_data;
-    return added
-      ? {
-          ...added,
-          // The signup serializer nulls these; UserType models them as optional.
-          positions: added.positions ?? undefined,
-          avatarUrl: added.avatarUrl ?? undefined,
-        }
-      : { pk: payload.user_id, username: null };
-  }, [eventId, orgId, queryClient]);
+  const handleAddUser = useCallback(
+    async (payload: AddMemberPayload): Promise<UserType> => {
+      // The modal's Discord tab can hand back a discord_id with no user_id, and
+      // adminAddSignup takes a site-user pk only; the throw surfaces as a toast.
+      if (payload.user_id == null) {
+        throw new Error(
+          'Select a site user — adding a Discord member directly is not supported here yet.',
+        );
+      }
+      const resp = await adminAddSignup(eventId!, payload.user_id);
+      queryClient.invalidateQueries({ queryKey: ['event-signups', eventId] });
+      // Backend adds the user as an OrgUser when an admin signs them up; reset
+      // the org-users cache so the org page reflects the new membership.
+      if (orgId) useOrgStore.getState().clearOrgUsers();
+      // AddUserModal reads `.pk` off this to track optimistic adds — the signup
+      // itself has no pk, so hand back the user it embeds.
+      const added = resp.user_data;
+      return added
+        ? {
+            ...added,
+            // The signup serializer nulls these; UserType models them as optional.
+            positions: added.positions ?? undefined,
+            avatarUrl: added.avatarUrl ?? undefined,
+          }
+        : { pk: payload.user_id, username: null };
+    },
+    [eventId, orgId, queryClient],
+  );
   const checkIsAdded = useCallback(
     (user: UserType) => (user.pk != null ? signupUserPks.has(user.pk) : false),
-    [signupUserPks]
+    [signupUserPks],
   );
 
   return (
     <div className="space-y-3">
-      {isAdmin && eventId && (state === EventState.SIGNUPS_OPEN || state === EventState.ROLL_CALL) && (
-        <div className="flex justify-end">
-          <PrimaryButton
-            size="sm"
-            onClick={() => setAddUserOpen(true)}
-            data-testid="admin-add-signup-btn"
-          >
-            <UserPlus className="h-4 w-4 mr-1" />
-            Add User
-          </PrimaryButton>
-          {addUserOpen && (
-            <AddUserModal
-              open={addUserOpen}
-              onOpenChange={setAddUserOpen}
-              title="Add User to Event"
-              entityContext={entityContext}
-              onAdd={handleAddUser}
-              isAdded={checkIsAdded}
-              hasDiscordServer={!!hasDiscordServer}
-            />
-          )}
-        </div>
-      )}
+      {isAdmin &&
+        eventId &&
+        (state === EventState.SIGNUPS_OPEN ||
+          state === EventState.ROLL_CALL) && (
+          <div className="flex justify-end">
+            <PrimaryButton
+              size="sm"
+              onClick={() => setAddUserOpen(true)}
+              data-testid="admin-add-signup-btn"
+            >
+              <UserPlus className="h-4 w-4 mr-1" />
+              Add User
+            </PrimaryButton>
+            {addUserOpen && (
+              <AddUserModal
+                open={addUserOpen}
+                onOpenChange={setAddUserOpen}
+                title="Add User to Event"
+                entityContext={entityContext}
+                onAdd={handleAddUser}
+                isAdded={checkIsAdded}
+                hasDiscordServer={!!hasDiscordServer}
+              />
+            )}
+          </div>
+        )}
       {signups.length === 0 && (
         <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
           <Users className="w-12 h-12 mb-3 opacity-50" />
@@ -906,20 +1073,114 @@ function SignupsTab({
         </div>
       )}
       <div className="space-y-1.5">
-      {signups.map((signup, index) => {
-        const user = userMap.get(signup.user);
-        const position = signup.waitlist_position ?? index + 1;
-        // "Waitlist" fires the server's `demote` mutation
-        // (approved/rsvp → waitlisted); named so the label/mutation gap is explicit.
-        const handleWaitlist = () => signupActions.demote.mutate(signup.id);
+        {signups.map((signup, index) => {
+          const user = userMap.get(signup.user);
+          const position = signup.waitlist_position ?? index + 1;
+          // "Waitlist" fires the server's `demote` mutation
+          // (approved/rsvp → waitlisted); named so the label/mutation gap is explicit.
+          const handleWaitlist = () => signupActions.demote.mutate(signup.id);
 
-        const adminActions = isAdmin ? (
-          <div className="flex gap-1">
-            {(signup.status === 'rsvp' || signup.status === 'pending_approval') && (
-              <>
+          const adminActions = isAdmin ? (
+            <div className="flex gap-1">
+              {(signup.status === 'rsvp' ||
+                signup.status === 'pending_approval') && (
+                <>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <SecondaryButton
+                        color="green"
+                        size="sm"
+                        data-testid={`approve-signup-${signup.id}`}
+                        onClick={() => setApprovalSignup(signup)}
+                        disabled={signupActions.approve.isPending}
+                      >
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                        <span className="hidden lg:inline ml-1">Approve</span>
+                      </SecondaryButton>
+                    </TooltipTrigger>
+                    <TooltipContent className="lg:hidden">
+                      Approve
+                    </TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <DestructiveButton
+                        size="sm"
+                        data-testid={`waitlist-signup-${signup.id}`}
+                        onClick={handleWaitlist}
+                        loading={signupActions.demote.isPending}
+                        depth={false}
+                      >
+                        <ArrowDownToLine className="h-3.5 w-3.5" />
+                        <span className="hidden lg:inline ml-1">Waitlist</span>
+                      </DestructiveButton>
+                    </TooltipTrigger>
+                    <TooltipContent className="lg:hidden">
+                      Waitlist
+                    </TooltipContent>
+                  </Tooltip>
+                </>
+              )}
+              {signup.status === 'approved' && (
+                <>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <SecondaryButton
+                        color="blue"
+                        size="sm"
+                        onClick={() => signupActions.confirm.mutate(signup.id)}
+                        disabled={signupActions.confirm.isPending}
+                      >
+                        <UserCheck className="h-3.5 w-3.5" />
+                        <span className="hidden lg:inline ml-1">Confirm</span>
+                      </SecondaryButton>
+                    </TooltipTrigger>
+                    <TooltipContent className="lg:hidden">
+                      Confirm
+                    </TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <DestructiveButton
+                        size="sm"
+                        onClick={handleWaitlist}
+                        loading={signupActions.demote.isPending}
+                        depth={false}
+                      >
+                        <ArrowDownToLine className="h-3.5 w-3.5" />
+                        <span className="hidden lg:inline ml-1">Waitlist</span>
+                      </DestructiveButton>
+                    </TooltipTrigger>
+                    <TooltipContent className="lg:hidden">
+                      Waitlist
+                    </TooltipContent>
+                  </Tooltip>
+                </>
+              )}
+              {signup.status === 'confirmed' && (
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <SecondaryButton color="green" size="sm"
+                    <SecondaryButton
+                      color="orange"
+                      size="sm"
+                      onClick={() => signupActions.unconfirm.mutate(signup.id)}
+                      disabled={signupActions.unconfirm.isPending}
+                    >
+                      <Undo2 className="h-3.5 w-3.5" />
+                      <span className="hidden lg:inline ml-1">Unconfirm</span>
+                    </SecondaryButton>
+                  </TooltipTrigger>
+                  <TooltipContent className="lg:hidden">
+                    Unconfirm
+                  </TooltipContent>
+                </Tooltip>
+              )}
+              {signup.status === 'waitlisted' && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <SecondaryButton
+                      color="green"
+                      size="sm"
                       data-testid={`approve-signup-${signup.id}`}
                       onClick={() => setApprovalSignup(signup)}
                       disabled={signupActions.approve.isPending}
@@ -930,190 +1191,159 @@ function SignupsTab({
                   </TooltipTrigger>
                   <TooltipContent className="lg:hidden">Approve</TooltipContent>
                 </Tooltip>
+              )}
+              {(signup.status === 'cancelled' ||
+                signup.status === 'rejected') && (
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <DestructiveButton size="sm"
-                      data-testid={`waitlist-signup-${signup.id}`}
-                      onClick={handleWaitlist} loading={signupActions.demote.isPending} depth={false}>
-                      <ArrowDownToLine className="h-3.5 w-3.5" />
-                      <span className="hidden lg:inline ml-1">Waitlist</span>
-                    </DestructiveButton>
-                  </TooltipTrigger>
-                  <TooltipContent className="lg:hidden">Waitlist</TooltipContent>
-                </Tooltip>
-              </>
-            )}
-            {signup.status === 'approved' && (
-              <>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <SecondaryButton color="blue" size="sm" onClick={() => signupActions.confirm.mutate(signup.id)} disabled={signupActions.confirm.isPending}>
-                      <UserCheck className="h-3.5 w-3.5" />
-                      <span className="hidden lg:inline ml-1">Confirm</span>
+                    <SecondaryButton
+                      size="sm"
+                      data-testid="event-restore-btn"
+                      onClick={() => signupActions.reinstate.mutate(signup.id)}
+                      disabled={signupActions.reinstate.isPending}
+                    >
+                      <Undo2 className="h-3.5 w-3.5" />
+                      <span className="hidden lg:inline ml-1">Restore</span>
                     </SecondaryButton>
                   </TooltipTrigger>
-                  <TooltipContent className="lg:hidden">Confirm</TooltipContent>
+                  <TooltipContent className="lg:hidden">
+                    Restore signup
+                  </TooltipContent>
                 </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <DestructiveButton size="sm" onClick={handleWaitlist} loading={signupActions.demote.isPending} depth={false}>
-                      <ArrowDownToLine className="h-3.5 w-3.5" />
-                      <span className="hidden lg:inline ml-1">Waitlist</span>
-                    </DestructiveButton>
-                  </TooltipTrigger>
-                  <TooltipContent className="lg:hidden">Waitlist</TooltipContent>
-                </Tooltip>
-              </>
-            )}
-            {signup.status === 'confirmed' && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <SecondaryButton color="orange" size="sm" onClick={() => signupActions.unconfirm.mutate(signup.id)} disabled={signupActions.unconfirm.isPending}>
-                    <Undo2 className="h-3.5 w-3.5" />
-                    <span className="hidden lg:inline ml-1">Unconfirm</span>
-                  </SecondaryButton>
-                </TooltipTrigger>
-                <TooltipContent className="lg:hidden">Unconfirm</TooltipContent>
-              </Tooltip>
-            )}
-            {signup.status === 'waitlisted' && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <SecondaryButton color="green" size="sm"
-                    data-testid={`approve-signup-${signup.id}`}
-                    onClick={() => setApprovalSignup(signup)}
-                    disabled={signupActions.approve.isPending}
-                  >
-                    <CheckCircle2 className="h-3.5 w-3.5" />
-                    <span className="hidden lg:inline ml-1">Approve</span>
-                  </SecondaryButton>
-                </TooltipTrigger>
-                <TooltipContent className="lg:hidden">Approve</TooltipContent>
-              </Tooltip>
-            )}
-            {(signup.status === 'cancelled' || signup.status === 'rejected') && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <SecondaryButton size="sm"
-                    data-testid="event-restore-btn"
-                    onClick={() => signupActions.reinstate.mutate(signup.id)}
-                    disabled={signupActions.reinstate.isPending}
-                  >
-                    <Undo2 className="h-3.5 w-3.5" />
-                    <span className="hidden lg:inline ml-1">Restore</span>
-                  </SecondaryButton>
-                </TooltipTrigger>
-                <TooltipContent className="lg:hidden">Restore signup</TooltipContent>
-              </Tooltip>
-            )}
-            {signup.status !== 'cancelled' && signup.status !== 'rejected' && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <DestructiveButton size="sm" depth={false}
-                    onClick={() => {
-                      const name = user ? (user.nickname || user.username) : `User #${signup.user}`;
-                      setRemoveSignup({ signup, name });
-                    }}
-                  >
-                    <UserX className="h-3.5 w-3.5" />
-                    <span className="hidden lg:inline ml-1">Remove</span>
-                  </DestructiveButton>
-                </TooltipTrigger>
-                <TooltipContent className="lg:hidden">Remove user</TooltipContent>
-              </Tooltip>
-            )}
-          </div>
-        ) : undefined;
+              )}
+              {signup.status !== 'cancelled' &&
+                signup.status !== 'rejected' && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <DestructiveButton
+                        size="sm"
+                        depth={false}
+                        onClick={() => {
+                          const name = user
+                            ? user.nickname || user.username
+                            : `User #${signup.user}`;
+                          setRemoveSignup({ signup, name });
+                        }}
+                      >
+                        <UserX className="h-3.5 w-3.5" />
+                        <span className="hidden lg:inline ml-1">Remove</span>
+                      </DestructiveButton>
+                    </TooltipTrigger>
+                    <TooltipContent className="lg:hidden">
+                      Remove user
+                    </TooltipContent>
+                  </Tooltip>
+                )}
+            </div>
+          ) : undefined;
 
-        const statusSlot = (
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-mono text-muted-foreground">#{position}</span>
-            <EventStateBadge state={signup.status} />
-          </div>
-        );
-
-        if (user) {
-          // Prefer the org-approved MMR via the user entity adapter
-          // (UserEntry.orgData[orgId].mmr) over self-reported dota_profile.mmr.
-          // Fall back to signup.org_user_mmr from the API if the cache is cold.
-          const baseProfile = signup.dota_profile as DotaProfileData | null;
-          const orgMmr =
-            (orgId && isUserEntry(user) ? user.orgData[orgId]?.mmr : undefined) ??
-            signup.org_user_mmr ??
-            null;
-          const stripProfile = baseProfile
-            ? { ...baseProfile, mmr: orgMmr ?? baseProfile.mmr }
-            : orgMmr != null
-              ? ({
-                  unverified_friend_id: null,
-                  positions: { pos_1: false, pos_2: false, pos_3: false, pos_4: false, pos_5: false },
-                  rank_status: 'never',
-                  rank_medal: null,
-                  mmr: orgMmr,
-                  rank_screenshot: null,
-                  battlecup_screenshot: null,
-                  battle_cup_tier: null,
-                } as DotaProfileData)
-              : null;
-          return (
-            <UserEventStrip
-              key={signup.id}
-              data-testid={`event-signup-row-${signup.id}`}
-              user={user}
-              dotaProfile={stripProfile}
-              contextSlot={statusSlot}
-              actionSlot={adminActions}
-            />
+          const statusSlot = (
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-mono text-muted-foreground">
+                #{position}
+              </span>
+              <EventStateBadge state={signup.status} />
+            </div>
           );
-        }
 
-        // Fallback for signups not yet in cache
-        return (
-          <div
-            key={signup.id}
-            className="flex items-center gap-3 rounded-lg p-2 border border-border/50 bg-muted/25"
-          >
-            <div className="w-9 h-9 rounded-full bg-muted shrink-0 flex items-center justify-center text-xs text-muted-foreground">
-              {(signup.username ?? '?')[0]?.toUpperCase()}
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium truncate">
-                {signup.username ?? `User #${signup.user}`}
-              </p>
-            </div>
-            {statusSlot}
-            {adminActions}
-          </div>
-        );
-      })}
+          if (user) {
+            // Prefer the org-approved MMR via the user entity adapter
+            // (UserEntry.orgData[orgId].mmr) over self-reported dota_profile.mmr.
+            // Fall back to signup.org_user_mmr from the API if the cache is cold.
+            const baseProfile = signup.dota_profile as DotaProfileData | null;
+            const orgMmr =
+              (orgId && isUserEntry(user)
+                ? user.orgData[orgId]?.mmr
+                : undefined) ??
+              signup.org_user_mmr ??
+              null;
+            const stripProfile = baseProfile
+              ? { ...baseProfile, mmr: orgMmr ?? baseProfile.mmr }
+              : orgMmr != null
+                ? ({
+                    unverified_friend_id: null,
+                    positions: {
+                      pos_1: false,
+                      pos_2: false,
+                      pos_3: false,
+                      pos_4: false,
+                      pos_5: false,
+                    },
+                    rank_status: 'never',
+                    rank_medal: null,
+                    mmr: orgMmr,
+                    rank_screenshot: null,
+                    battlecup_screenshot: null,
+                    battle_cup_tier: null,
+                  } as DotaProfileData)
+                : null;
+            return (
+              <UserEventStrip
+                key={signup.id}
+                data-testid={`event-signup-row-${signup.id}`}
+                user={user}
+                dotaProfile={stripProfile}
+                contextSlot={statusSlot}
+                actionSlot={adminActions}
+              />
+            );
+          }
 
+          // Fallback for signups not yet in cache
+          return (
+            <div
+              key={signup.id}
+              className="flex items-center gap-3 rounded-lg p-2 border border-border/50 bg-muted/25"
+            >
+              <div className="w-9 h-9 rounded-full bg-muted shrink-0 flex items-center justify-center text-xs text-muted-foreground">
+                {(signup.username ?? '?')[0]?.toUpperCase()}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium truncate">
+                  {signup.username ?? `User #${signup.user}`}
+                </p>
+              </div>
+              {statusSlot}
+              {adminActions}
+            </div>
+          );
+        })}
       </div>
       <MmrApprovalModal
         signup={approvalSignup}
         open={!!approvalSignup}
-        onOpenChange={(open) => { if (!open) setApprovalSignup(null); }}
+        onOpenChange={(open) => {
+          if (!open) setApprovalSignup(null);
+        }}
         onApprove={(signupId, mmr) => {
           const previousMmr = approvalSignup?.org_user_mmr ?? null;
           const playerName =
             approvalSignup?.user_data?.username ??
             approvalSignup?.username ??
             `User #${approvalSignup?.user ?? signupId}`;
-          signupActions.approve.mutate({ id: signupId, mmr }, {
-            onSuccess: () => {
-              setApprovalSignup(null);
-              if (orgId) useOrgStore.getState().clearOrgUsers();
-              if (previousMmr != null && previousMmr !== mmr) {
-                const delta = mmr - previousMmr;
-                toast.success(
-                  `Approved ${playerName} — MMR ${previousMmr.toLocaleString()} → ${mmr.toLocaleString()} (${delta > 0 ? '+' : ''}${delta.toLocaleString()})`,
-                );
-              } else if (previousMmr == null) {
-                toast.success(`Approved ${playerName} at MMR ${mmr.toLocaleString()}`);
-              } else {
-                toast.success(`Approved ${playerName} (MMR unchanged at ${mmr.toLocaleString()})`);
-              }
+          signupActions.approve.mutate(
+            { id: signupId, mmr },
+            {
+              onSuccess: () => {
+                setApprovalSignup(null);
+                if (orgId) useOrgStore.getState().clearOrgUsers();
+                if (previousMmr != null && previousMmr !== mmr) {
+                  const delta = mmr - previousMmr;
+                  toast.success(
+                    `Approved ${playerName} — MMR ${previousMmr.toLocaleString()} → ${mmr.toLocaleString()} (${delta > 0 ? '+' : ''}${delta.toLocaleString()})`,
+                  );
+                } else if (previousMmr == null) {
+                  toast.success(
+                    `Approved ${playerName} at MMR ${mmr.toLocaleString()}`,
+                  );
+                } else {
+                  toast.success(
+                    `Approved ${playerName} (MMR unchanged at ${mmr.toLocaleString()})`,
+                  );
+                }
+              },
             },
-          });
+          );
         }}
         isApproving={signupActions.approve.isPending}
         isRejecting={signupActions.reject.isPending}
@@ -1133,7 +1363,9 @@ function SignupsTab({
       />
       <ConfirmDialog
         open={!!removeSignup}
-        onOpenChange={(open) => { if (!open) setRemoveSignup(null); }}
+        onOpenChange={(open) => {
+          if (!open) setRemoveSignup(null);
+        }}
         title="Remove User"
         description={`Remove ${removeSignup?.name ?? 'this user'} from the event? They will lose their signup position and need to re-sign up.`}
         confirmLabel="Remove"

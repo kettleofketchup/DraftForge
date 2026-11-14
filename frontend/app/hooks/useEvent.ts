@@ -1,41 +1,41 @@
-import { useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect } from 'react';
 
-import {
-  approveSignup as approveSignupAPI,
-  cancelEvent as cancelEventAPI,
-  completeEvent as completeEventAPI,
-  deleteEvent as deleteEventAPI,
-  setEventStaff as setEventStaffAPI,
-  restartTournament as restartTournamentAPI,
-  cancelSignup as cancelSignupAPI,
-  confirmSignup as confirmSignupAPI,
-  createEvent as createEventAPI,
-  createEventRepeater as createEventRepeaterAPI,
-  updateEventRepeater as updateEventRepeaterAPI,
-  getEvent,
-  getEvents,
-  getEventRepeaters,
-  getEventSignups,
-  openSignups as openSignupsAPI,
-  reopenSignups as reopenSignupsAPI,
-  rejectSignup as rejectSignupAPI,
-  unconfirmSignup as unconfirmSignupAPI,
-  demoteSignup as demoteSignupAPI,
-  reinstateSignup as reinstateSignupAPI,
-  signupForEvent,
-  startRollCall as startRollCallAPI,
-  startTournament as startTournamentAPI,
-  subscribeToRepeater,
-  unsubscribeFromRepeater,
-  updateEvent as updateEventAPI,
-  updateOrgEventDefaults,
-} from '~/components/api/api';
 import type {
   EventRepeaterType,
   EventStaffPayload,
   EventWritePayload,
   SignupBody,
+} from '~/components/api/api';
+import {
+  approveSignup as approveSignupAPI,
+  cancelEvent as cancelEventAPI,
+  cancelSignup as cancelSignupAPI,
+  completeEvent as completeEventAPI,
+  confirmSignup as confirmSignupAPI,
+  createEvent as createEventAPI,
+  createEventRepeater as createEventRepeaterAPI,
+  deleteEvent as deleteEventAPI,
+  demoteSignup as demoteSignupAPI,
+  getEvent,
+  getEventRepeaters,
+  getEvents,
+  getEventSignups,
+  openSignups as openSignupsAPI,
+  reinstateSignup as reinstateSignupAPI,
+  rejectSignup as rejectSignupAPI,
+  reopenSignups as reopenSignupsAPI,
+  restartTournament as restartTournamentAPI,
+  setEventStaff as setEventStaffAPI,
+  signupForEvent,
+  startRollCall as startRollCallAPI,
+  startTournament as startTournamentAPI,
+  subscribeToRepeater,
+  unconfirmSignup as unconfirmSignupAPI,
+  unsubscribeFromRepeater,
+  updateEvent as updateEventAPI,
+  updateEventRepeater as updateEventRepeaterAPI,
+  updateOrgEventDefaults,
 } from '~/components/api/api';
 import type { EventSignupType, EventType } from '~/components/events/schemas';
 import type { UserType } from '~/components/user/types';
@@ -84,12 +84,16 @@ export function useSignupMutation(eventId: number) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['event', eventId] });
       queryClient.invalidateQueries({ queryKey: ['event-signups', eventId] });
-      queryClient.invalidateQueries({ queryKey: ['event-lobby-password', eventId] });
+      queryClient.invalidateQueries({
+        queryKey: ['event-lobby-password', eventId],
+      });
       if (currentUserPk != null) {
         // Match useUserDotaProfile's queryKey shape: ['user-dota-profile', userPk, orgId].
         // We don't have orgId in scope here, so invalidate the prefix — TanStack
         // Query treats this as "match any orgId for this user."
-        queryClient.invalidateQueries({ queryKey: ['user-dota-profile', currentUserPk] });
+        queryClient.invalidateQueries({
+          queryKey: ['user-dota-profile', currentUserPk],
+        });
       }
       useOrgStore.getState().clearOrgUsers();
     },
@@ -147,14 +151,19 @@ export function useEventActionMutation(eventId: number) {
       onSuccess: (data) => {
         queryClient.setQueryData(['event', eventId], data);
         queryClient.invalidateQueries({ queryKey: ['events'] });
-        queryClient.invalidateQueries({ queryKey: ['org-contributions', data.organization] });
+        queryClient.invalidateQueries({
+          queryKey: ['org-contributions', data.organization],
+        });
       },
     }),
     setEventStaff: useMutation({
-      mutationFn: (payload: EventStaffPayload) => setEventStaffAPI(eventId, payload),
+      mutationFn: (payload: EventStaffPayload) =>
+        setEventStaffAPI(eventId, payload),
       onSuccess: (data) => {
         queryClient.setQueryData(['event', eventId], data);
-        queryClient.invalidateQueries({ queryKey: ['org-contributions', data.organization] });
+        queryClient.invalidateQueries({
+          queryKey: ['org-contributions', data.organization],
+        });
       },
     }),
   };
@@ -172,7 +181,9 @@ export function useCreateEventMutation(organizationId: number) {
   return useMutation({
     mutationFn: (payload: Partial<EventType>) => createEventAPI(payload),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['events', { organization: organizationId }] });
+      queryClient.invalidateQueries({
+        queryKey: ['events', { organization: organizationId }],
+      });
     },
   });
 }
@@ -180,10 +191,15 @@ export function useCreateEventMutation(organizationId: number) {
 export function useCreateEventRepeaterMutation(organizationId: number) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (payload: Partial<EventRepeaterType>) => createEventRepeaterAPI(payload),
+    mutationFn: (payload: Partial<EventRepeaterType>) =>
+      createEventRepeaterAPI(payload),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['events', { organization: organizationId }] });
-      queryClient.invalidateQueries({ queryKey: ['event-repeaters', { organization: organizationId }] });
+      queryClient.invalidateQueries({
+        queryKey: ['events', { organization: organizationId }],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ['event-repeaters', { organization: organizationId }],
+      });
     },
   });
 }
@@ -191,12 +207,15 @@ export function useCreateEventRepeaterMutation(organizationId: number) {
 export function useUpdateEventRepeaterMutation(repeaterId: number) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (payload: Partial<EventRepeaterType>) => updateEventRepeaterAPI(repeaterId, payload),
+    mutationFn: (payload: Partial<EventRepeaterType>) =>
+      updateEventRepeaterAPI(repeaterId, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['event-repeaters'] });
       queryClient.invalidateQueries({ queryKey: ['events'] });
       // The series cascade may have changed its events' passwords.
-      queryClient.invalidateQueries({ queryKey: ['repeater-lobby-password', repeaterId] });
+      queryClient.invalidateQueries({
+        queryKey: ['repeater-lobby-password', repeaterId],
+      });
       queryClient.invalidateQueries({ queryKey: ['event-lobby-password'] });
     },
   });
@@ -205,7 +224,8 @@ export function useUpdateEventRepeaterMutation(repeaterId: number) {
 export function useUpdateEventMutation(eventId: number) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (payload: EventWritePayload) => updateEventAPI(eventId, payload),
+    mutationFn: (payload: EventWritePayload) =>
+      updateEventAPI(eventId, payload),
     onSuccess: (data) => {
       queryClient.setQueryData(['event', eventId], data);
       queryClient.invalidateQueries({ queryKey: ['events'] });
@@ -213,8 +233,12 @@ export function useUpdateEventMutation(eventId: number) {
       // cadences; invalidate them here so reminder-timing edits surface
       // immediately instead of after the next 15s poll.
       queryClient.invalidateQueries({ queryKey: ['event-discord', eventId] });
-      queryClient.invalidateQueries({ queryKey: ['event-task-schedule', eventId] });
-      queryClient.invalidateQueries({ queryKey: ['event-lobby-password', eventId] });
+      queryClient.invalidateQueries({
+        queryKey: ['event-task-schedule', eventId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ['event-lobby-password', eventId],
+      });
     },
   });
 }
@@ -225,16 +249,40 @@ export function useSignupActionMutations(eventId: number) {
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['event-signups', eventId] });
     queryClient.invalidateQueries({ queryKey: ['event', eventId] });
-    queryClient.invalidateQueries({ queryKey: ['event-lobby-password', eventId] });
+    queryClient.invalidateQueries({
+      queryKey: ['event-lobby-password', eventId],
+    });
   };
   return {
-    approve: useMutation({ mutationFn: ({ id, mmr }: { id: number; mmr?: number }) => approveSignupAPI(id, mmr), onSuccess: invalidate }),
-    reject: useMutation({ mutationFn: (id: number) => rejectSignupAPI(id), onSuccess: invalidate }),
-    confirm: useMutation({ mutationFn: (id: number) => confirmSignupAPI(id), onSuccess: invalidate }),
-    cancel: useMutation({ mutationFn: (id: number) => cancelSignupAPI(id), onSuccess: invalidate }),
-    unconfirm: useMutation({ mutationFn: (id: number) => unconfirmSignupAPI(id), onSuccess: invalidate }),
-    demote: useMutation({ mutationFn: (id: number) => demoteSignupAPI(id), onSuccess: invalidate }),
-    reinstate: useMutation({ mutationFn: (id: number) => reinstateSignupAPI(id), onSuccess: invalidate }),
+    approve: useMutation({
+      mutationFn: ({ id, mmr }: { id: number; mmr?: number }) =>
+        approveSignupAPI(id, mmr),
+      onSuccess: invalidate,
+    }),
+    reject: useMutation({
+      mutationFn: (id: number) => rejectSignupAPI(id),
+      onSuccess: invalidate,
+    }),
+    confirm: useMutation({
+      mutationFn: (id: number) => confirmSignupAPI(id),
+      onSuccess: invalidate,
+    }),
+    cancel: useMutation({
+      mutationFn: (id: number) => cancelSignupAPI(id),
+      onSuccess: invalidate,
+    }),
+    unconfirm: useMutation({
+      mutationFn: (id: number) => unconfirmSignupAPI(id),
+      onSuccess: invalidate,
+    }),
+    demote: useMutation({
+      mutationFn: (id: number) => demoteSignupAPI(id),
+      onSuccess: invalidate,
+    }),
+    reinstate: useMutation({
+      mutationFn: (id: number) => reinstateSignupAPI(id),
+      onSuccess: invalidate,
+    }),
   };
 }
 
@@ -262,7 +310,9 @@ export function useUpdateOrgDefaultsMutation(orgId: number) {
     mutationFn: ({ id, data }: { id: number; data: Record<string, unknown> }) =>
       updateOrgEventDefaults(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['org-event-defaults', orgId] });
+      queryClient.invalidateQueries({
+        queryKey: ['org-event-defaults', orgId],
+      });
     },
   });
 }
@@ -296,10 +346,9 @@ export function useEventSignupUsers(
       users.push(base);
     }
     if (users.length > 0) {
-      useUserCacheStore.getState().upsert(
-        users,
-        eventOrgId ? { orgId: eventOrgId } : undefined,
-      );
+      useUserCacheStore
+        .getState()
+        .upsert(users, eventOrgId ? { orgId: eventOrgId } : undefined);
     }
   }, [signups, eventOrgId]);
 }

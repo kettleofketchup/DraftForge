@@ -37,8 +37,13 @@
  * next failure — acceptable for a contract matrix.
  */
 
-import { roleMatrixTest as test, expect, ROLE_NAMES, type RoleName } from '../../fixtures';
 import type { Page } from '@playwright/test';
+import {
+  expect,
+  ROLE_NAMES,
+  roleMatrixTest as test,
+  type RoleName,
+} from '../../fixtures';
 
 // Isolated org used by every non-site role in the matrix. Created by
 // populate_auth_matrix_data; keeps the gate contract independent of
@@ -69,11 +74,11 @@ const CREATE_ORG_EXPECTATIONS: Expectations = {
 // site-admin bypass, so a Django site-staff user gains org-staff
 // equivalence here.
 const CREATE_LEAGUE_EXPECTATIONS: Expectations = {
-  siteAdmin: true,    // is_superuser → useIsOrganizationStaff bypass
-  siteStaff: true,    // is_staff → same bypass
-  orgOwner: true,     // owner-implies-admin cascade in useIsOrganizationAdmin
-  orgAdmin: true,     // in AUTH_MATRIX_ORG.admins
-  orgStaff: true,     // in AUTH_MATRIX_ORG.staff
+  siteAdmin: true, // is_superuser → useIsOrganizationStaff bypass
+  siteStaff: true, // is_staff → same bypass
+  orgOwner: true, // owner-implies-admin cascade in useIsOrganizationAdmin
+  orgAdmin: true, // in AUTH_MATRIX_ORG.admins
+  orgStaff: true, // in AUTH_MATRIX_ORG.staff
   orgMember: false,
   promoter: false,
   leagueAdmin: false, // league role doesn't cascade UP to org
@@ -120,14 +125,14 @@ const CREATE_EVENT_EVENTS_PAGE_EXPECTATIONS: Expectations = {
 // (admin_league_ids non-empty). Staff roles can't create tournaments —
 // only admins can, matching the backend perform_create check.
 const CREATE_TOURNAMENT_EXPECTATIONS: Expectations = {
-  siteAdmin: true,    // is_superuser
-  siteStaff: true,    // is_staff bypass (matches frontend convention)
-  orgOwner: true,     // owner pk merged into admin_organization_ids
-  orgAdmin: true,     // admin_organization_ids: [8]
-  orgStaff: false,    // staff doesn't cascade to admin
+  siteAdmin: true, // is_superuser
+  siteStaff: true, // is_staff bypass (matches frontend convention)
+  orgOwner: true, // owner pk merged into admin_organization_ids
+  orgAdmin: true, // admin_organization_ids: [8]
+  orgStaff: false, // staff doesn't cascade to admin
   orgMember: false,
   promoter: false,
-  leagueAdmin: true,  // admin_league_ids: [9]
+  leagueAdmin: true, // admin_league_ids: [9]
   leagueStaff: false,
   anonymous: false,
 };
@@ -153,7 +158,9 @@ async function assertGate(
 
   const btn = page.locator(`[data-testid="${testid}"]`);
   if (expectVisible) {
-    await expect(btn, `${role} should see ${testid}`).toBeVisible({ timeout: 15000 });
+    await expect(btn, `${role} should see ${testid}`).toBeVisible({
+      timeout: 15000,
+    });
   } else {
     await expect(btn, `${role} should NOT see ${testid}`).not.toBeVisible({
       timeout: 5000,
@@ -174,7 +181,13 @@ async function assertGateAcrossRoles(
 ): Promise<void> {
   await Promise.all(
     ROLE_NAMES.map((role) =>
-      assertGate(role, roleContexts[role].page, url, testid, expectations[role]),
+      assertGate(
+        role,
+        roleContexts[role].page,
+        url,
+        testid,
+        expectations[role],
+      ),
     ),
   );
 }
@@ -189,7 +202,9 @@ test.describe('Create-action permission matrix (all roles in parallel)', () => {
     );
   });
 
-  test('Create League button visibility (auth-matrix org)', async ({ roleContexts }) => {
+  test('Create League button visibility (auth-matrix org)', async ({
+    roleContexts,
+  }) => {
     await assertGateAcrossRoles(
       roleContexts,
       `/organizations/${AUTH_MATRIX_ORG_PK}?tab=leagues`,
@@ -198,7 +213,9 @@ test.describe('Create-action permission matrix (all roles in parallel)', () => {
     );
   });
 
-  test('Create Event button visibility (org-detail events tab)', async ({ roleContexts }) => {
+  test('Create Event button visibility (org-detail events tab)', async ({
+    roleContexts,
+  }) => {
     await assertGateAcrossRoles(
       roleContexts,
       `/organizations/${AUTH_MATRIX_ORG_PK}?tab=events`,
@@ -207,7 +224,9 @@ test.describe('Create-action permission matrix (all roles in parallel)', () => {
     );
   });
 
-  test('Create Event button visibility (/events?organization=X)', async ({ roleContexts }) => {
+  test('Create Event button visibility (/events?organization=X)', async ({
+    roleContexts,
+  }) => {
     // Same testid and same gate as the org-detail tab — both use
     // ``useIsOrganizationStaff`` now. The /events route fetches the
     // full org via useOrganization(selectedOrgIdNum) so the staff/admin

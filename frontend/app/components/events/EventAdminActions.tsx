@@ -1,7 +1,22 @@
-import { CheckCheck, CheckCircle2, Clock, Pencil, ShieldAlert, Trash2, Undo2, Users, XCircle } from 'lucide-react';
+import {
+  CheckCheck,
+  CheckCircle2,
+  Clock,
+  Pencil,
+  ShieldAlert,
+  Trash2,
+  Undo2,
+  Users,
+  XCircle,
+} from 'lucide-react';
 import { useState } from 'react';
 
-import { ConfirmDialog } from '~/components/ui/dialogs/ConfirmDialog';
+import type { EventType } from '~/components/events/schemas';
+import { EventState } from '~/components/events/schemas';
+import {
+  BrandDropdownMenu,
+  type BrandDropdownAction,
+} from '~/components/ui/brand-dropdown-menu';
 import {
   DestructiveButton,
   EditButton,
@@ -9,14 +24,17 @@ import {
   SecondaryButton,
   WarningButton,
 } from '~/components/ui/buttons';
-import { BrandDropdownMenu, type BrandDropdownAction } from '~/components/ui/brand-dropdown-menu';
-import { EventState } from '~/components/events/schemas';
-import type { EventType } from '~/components/events/schemas';
+import { ConfirmDialog } from '~/components/ui/dialogs/ConfirmDialog';
 import type { useEventActionMutation } from '~/hooks/useEvent';
 
 type EventActions = Pick<
   ReturnType<typeof useEventActionMutation>,
-  'openSignups' | 'startRollCall' | 'reopenSignups' | 'cancelEvent' | 'deleteEvent' | 'completeEvent'
+  | 'openSignups'
+  | 'startRollCall'
+  | 'reopenSignups'
+  | 'cancelEvent'
+  | 'deleteEvent'
+  | 'completeEvent'
 >;
 
 interface EventAdminActionsProps {
@@ -46,7 +64,9 @@ export function EventAdminActions({
 }: EventAdminActionsProps) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
-  const isCancellable = event.state !== EventState.COMPLETED && event.state !== EventState.CANCELLED;
+  const isCancellable =
+    event.state !== EventState.COMPLETED &&
+    event.state !== EventState.CANCELLED;
 
   // Mobile dropdown actions — NO data-testid here (would collide with desktop).
   // Tests reach mobile actions via the parent `event-admin-actions-mobile`.
@@ -190,7 +210,11 @@ export function EventAdminActions({
               <Undo2 className="h-4 w-4 mr-1.5" />
               Reopen Signups
             </WarningButton>
-            <PrimaryButton size="sm" onClick={onOpenRollCallClick} data-testid="event-start-tournament-btn">
+            <PrimaryButton
+              size="sm"
+              onClick={onOpenRollCallClick}
+              data-testid="event-start-tournament-btn"
+            >
               Open Roll Call
             </PrimaryButton>
           </>

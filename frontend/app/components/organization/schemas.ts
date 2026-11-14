@@ -5,8 +5,14 @@ export const OrganizationSchema = z.object({
   pk: z.number().optional(),
   name: z.string().min(1, 'Name is required').max(255),
   description: z.string().optional().default(''),
-  logo: z.union([z.string().url(), z.literal('')]).optional().default(''),
-  discord_link: z.union([z.string().url(), z.literal('')]).optional().default(''),
+  logo: z
+    .union([z.string().url(), z.literal('')])
+    .optional()
+    .default(''),
+  discord_link: z
+    .union([z.string().url(), z.literal('')])
+    .optional()
+    .default(''),
   discord_server_id: z.string().max(20).nullable().optional(),
   rules_template: z.string().optional().default(''),
   timezone: z.string().optional().default('America/New_York'), // Default to US East

@@ -1,7 +1,11 @@
-import { Sentry } from '~/lib/sentry';
 import axios from 'axios';
+import { Sentry } from '~/lib/sentry';
 
-import { CSRF_COOKIE_NAME_HEADER, getCsrfToken, syncCsrfCookieName } from './utils';
+import {
+  CSRF_COOKIE_NAME_HEADER,
+  getCsrfToken,
+  syncCsrfCookieName,
+} from './utils';
 
 // Determine the API base URL based on environment
 // On server (SSR): use internal URL (configurable via SSR_API_URL env var)
@@ -39,47 +43,58 @@ api.interceptors.request.use((config) => {
 
 const isBrowser = typeof window !== 'undefined';
 
-api.interceptors.response.use((response) => {
-  if (isBrowser) syncCsrfCookieName(response.headers?.[CSRF_COOKIE_NAME_HEADER]);
-  return response;
-}, (error) => {
-  if (isBrowser) syncCsrfCookieName(error.response?.headers?.[CSRF_COOKIE_NAME_HEADER]);
-  const status = error.response?.status;
+api.interceptors.response.use(
+  (response) => {
+    if (isBrowser)
+      syncCsrfCookieName(response.headers?.[CSRF_COOKIE_NAME_HEADER]);
+    return response;
+  },
+  (error) => {
+    if (isBrowser)
+      syncCsrfCookieName(error.response?.headers?.[CSRF_COOKIE_NAME_HEADER]);
+    const status = error.response?.status;
 
-  // A coded 403 (feature_locked, not_permitted) is a permission answer, not an expired session.
-  const coded403 = status === 403 && typeof error.response?.data?.code === 'string';
+    // A coded 403 (feature_locked, not_permitted) is a permission answer, not an expired session.
+    const coded403 =
+      status === 403 && typeof error.response?.data?.code === 'string';
 
-  // Session expired or not authenticated — notify user
-  if (status === 401 || (status === 403 && !coded403)) {
-    const url = error.config?.url || '';
-    // Don't redirect on auth check endpoints (they're expected to 401)
-    const isAuthCheck = url.includes('/auth/') || url.includes('/tests/login');
-    if (!isAuthCheck && typeof window !== 'undefined') {
-      // Only show once per session to avoid toast spam
-      const key = '_auth_toast_shown';
-      if (!(window as unknown as Record<string, unknown>)[key]) {
-        (window as unknown as Record<string, unknown>)[key] = true;
-        // Dynamic import to avoid circular deps
-        import('sonner').then(({ toast }) => {
-          toast.error('Session expired — please log in again', {
-            duration: 10000,
-            action: {
-              label: 'Log In',
-              onClick: () => { window.location.href = '/login'; },
-            },
+    // Session expired or not authenticated — notify user
+    if (status === 401 || (status === 403 && !coded403)) {
+      const url = error.config?.url || '';
+      // Don't redirect on auth check endpoints (they're expected to 401)
+      const isAuthCheck =
+        url.includes('/auth/') || url.includes('/tests/login');
+      if (!isAuthCheck && typeof window !== 'undefined') {
+        // Only show once per session to avoid toast spam
+        const key = '_auth_toast_shown';
+        if (!(window as unknown as Record<string, unknown>)[key]) {
+          (window as unknown as Record<string, unknown>)[key] = true;
+          // Dynamic import to avoid circular deps
+          import('sonner').then(({ toast }) => {
+            toast.error('Session expired — please log in again', {
+              duration: 10000,
+              action: {
+                label: 'Log In',
+                onClick: () => {
+                  window.location.href = '/login';
+                },
+              },
+            });
           });
-        });
-        // Reset after 30s so it can show again if needed
-        setTimeout(() => { (window as unknown as Record<string, unknown>)[key] = false; }, 30000);
+          // Reset after 30s so it can show again if needed
+          setTimeout(() => {
+            (window as unknown as Record<string, unknown>)[key] = false;
+          }, 30000);
+        }
       }
     }
-  }
 
-  // Capture API errors in Sentry (skip 4xx client errors except 429)
-  if (!status || status >= 500 || status === 429) {
-    Sentry.captureException(error);
-  }
-  return Promise.reject(error);
-});
+    // Capture API errors in Sentry (skip 4xx client errors except 429)
+    if (!status || status >= 500 || status === 429) {
+      Sentry.captureException(error);
+    }
+    return Promise.reject(error);
+  },
+);
 
 export default api;
