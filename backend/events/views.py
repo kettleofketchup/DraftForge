@@ -964,7 +964,7 @@ class EventViewSet(viewsets.ModelViewSet):
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=True, methods=["post"])
-    def start_tournament(self, request, pk=None):
+    def start_tournament(self, request: Request, pk: str | None = None) -> Response:
         """Start the tournament (after roll call or directly).
 
         Self-heals legacy events whose tournament is missing or empty (#200).
@@ -978,9 +978,10 @@ class EventViewSet(viewsets.ModelViewSet):
                     {"error": f"Cannot start tournament from '{event.state}' state."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-            ensure_tournament_with_signups(event)
-            event.transition_state(EventState.IN_PROGRESS)
-            finalize_event_tournament(event)
+            with transaction.atomic():
+                ensure_tournament_with_signups(event)
+                event.transition_state(EventState.IN_PROGRESS)
+                finalize_event_tournament(event)
             # Start auto-create herodrafts polling if enabled
             if event.tournament and event.tournament.auto_create_hero_drafts:
                 from events.discord.tournament_dispatch import (

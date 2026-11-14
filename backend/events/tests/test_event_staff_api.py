@@ -11,9 +11,10 @@ from rest_framework.response import Response
 from rest_framework.test import APIClient
 
 from app.models import CustomUser, OrgLog, PositionsModel
-from events.completion import close_event
+from events.completion import CloseSource, close_event
 from events.constants import EventState
 from events.models import Event
+from events.services import create_tournament_for_event
 from events.tests.base import EventTestCase
 from events.views import EventViewSet
 from org.contributions.kinds import ContributionKind
@@ -484,3 +485,90 @@ class EventEditResyncTest(EventStaffApiTestBase):
         resp = self._patch({"name": "Renamed Event"})
         self.assertEqual(resp.status_code, 200, resp.content)
         self.assertEqual(self._entries().count(), 0)
+
+
+class StateTransitionRaceTest(EventStaffApiTestBase):
+    def _close_after_load(
+        self, new_state: EventState, source: CloseSource = "admin"
+    ) -> Callable[[EventViewSet], Event]:
+        original = EventViewSet.get_object
+
+        def load_then_close(view: EventViewSet) -> Event:
+            stale = original(view)
+            close_event(
+                Event.objects.nocache().get(pk=stale.pk),
+                new_state=new_state,
+                source=source,
+                actor=self.org_admin,
+            )
+            return stale
+
+        return load_then_close
+
+    def _post(self, action: str, loader: Callable[[EventViewSet], Event]) -> Response:
+        self._as(self.org_admin)
+        with patch.object(EventViewSet, "get_object", loader):
+            return self.client.post(f"/api/events/{self.event.pk}/{action}/")
+
+    def test_cancel_after_concurrent_complete_is_refused(self) -> None:
+        self._set_state(EventState.ROLL_CALL)
+        create_tournament_for_event(self.event)
+        self.event.host = self.host
+        self.event.save(update_fields=["host"])
+        tournament_id = self.event.tournament_id
+        resp = self._post("cancel", self._close_after_load(EventState.COMPLETED))
+        self.assertEqual(resp.status_code, 400, resp.content)
+        event = Event.objects.nocache().get(pk=self.event.pk)
+        self.assertEqual(event.state, EventState.COMPLETED)
+        self.assertIsNotNone(event.contributions_awarded_at)
+        self.assertEqual(event.tournament_id, tournament_id)
+        self.assertEqual(
+            self._staff_keys(), {(self.host.pk, ContributionKind.EVENT_HOST)}
+        )
+
+    def test_start_tournament_after_concurrent_complete_is_refused(self) -> None:
+        self._set_state(EventState.ROLL_CALL)
+        create_tournament_for_event(self.event)
+        resp = self._post(
+            "start_tournament", self._close_after_load(EventState.COMPLETED)
+        )
+        self.assertEqual(resp.status_code, 400, resp.content)
+        event = Event.objects.nocache().get(pk=self.event.pk)
+        self.assertEqual(event.state, EventState.COMPLETED)
+        self.assertEqual(event.tournament.state, "future")
+
+    def test_open_signups_after_concurrent_auto_cancel_is_refused(self) -> None:
+        self._set_state(EventState.UPCOMING)
+        resp = self._post(
+            "open_signups", self._close_after_load(EventState.CANCELLED, "auto")
+        )
+        self.assertEqual(resp.status_code, 400, resp.content)
+        event = Event.objects.nocache().get(pk=self.event.pk)
+        self.assertEqual(event.state, EventState.CANCELLED)
+
+    def test_stale_instance_transition_raises_and_keeps_db_state(self) -> None:
+        self._set_state(EventState.ROLL_CALL)
+        stale = Event.objects.nocache().get(pk=self.event.pk)
+        self._set_state(EventState.COMPLETED)
+        with self.assertRaises(ValueError):
+            stale.transition_state(EventState.CANCELLED)
+        self.assertEqual(
+            Event.objects.nocache().get(pk=self.event.pk).state,
+            EventState.COMPLETED,
+        )
+
+    def test_transition_updates_instance_and_invalidates(self) -> None:
+        self._set_state(EventState.ROLL_CALL)
+        invalidated: list[tuple[int, str]] = []
+        with patch(
+            "events.models.invalidate_after_commit",
+            side_effect=lambda *objs: invalidated.extend((o.pk, o.state) for o in objs),
+        ):
+            self.event.transition_state(EventState.IN_PROGRESS)
+        self.assertEqual(self.event.state, EventState.IN_PROGRESS)
+        self.assertEqual(
+            Event.objects.nocache().get(pk=self.event.pk).state,
+            EventState.IN_PROGRESS,
+        )
+        self.assertIn((self.event.pk, EventState.ROLL_CALL), invalidated)
+        self.assertIn((self.event.pk, EventState.IN_PROGRESS), invalidated)

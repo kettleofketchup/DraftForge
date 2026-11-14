@@ -812,16 +812,16 @@ def update_scheduled_event(request, pk):
 @api_view(["POST"])
 @authentication_classes(_auth)
 @permission_classes(_perm)
-def transition_event_state(request, pk):
+def transition_event_state(request: Request, pk: int) -> Response:
     """Transition event to a new state."""
-    from events.models import Event
-
-    event = Event.objects.get(pk=pk)
+    event = Event.objects.nocache().get(pk=pk)
     new_state = request.data.get("state")
     if not new_state:
         return Response({"error": "state required"}, status=status.HTTP_400_BAD_REQUEST)
-    event.transition_state(new_state)
-    invalidate_after_commit(event)
+    try:
+        event.transition_state(new_state)
+    except ValueError as e:
+        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
     return Response({"id": event.pk, "state": event.state})
 
 
