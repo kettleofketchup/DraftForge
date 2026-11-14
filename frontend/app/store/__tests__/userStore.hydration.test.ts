@@ -9,7 +9,9 @@ describe('userStore hydration under vitest', () => {
     api.defaults.adapter = adapter;
 
     const { useUserStore } = await import('~/store/userStore');
-    await vi.waitFor(() => expect(useUserStore.getState().hasHydrated).toBe(true));
+    await vi.waitFor(() =>
+      expect(useUserStore.getState().hasHydrated).toBe(true),
+    );
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     const urls = adapter.mock.calls.map(([config]) => config.url);

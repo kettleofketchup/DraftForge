@@ -8,7 +8,8 @@ import { TooltipProvider } from '~/components/ui/tooltip';
 // Mutation seam: the POST body is the assertion target.
 const createSeriesOneOffEvent = vi.fn().mockResolvedValue({ id: 99 });
 vi.mock('~/components/api/api', () => ({
-  createSeriesOneOffEvent: (...args: unknown[]) => createSeriesOneOffEvent(...args),
+  createSeriesOneOffEvent: (...args: unknown[]) =>
+    createSeriesOneOffEvent(...args),
   fetchCurrentUser: vi.fn().mockResolvedValue({}),
   getDiscordChannels: vi.fn().mockResolvedValue([]),
   getDiscordRoles: vi.fn().mockResolvedValue([]),
@@ -27,7 +28,8 @@ class ResizeObserverStub {
   unobserve() {}
   disconnect() {}
 }
-globalThis.ResizeObserver ??= ResizeObserverStub as unknown as typeof ResizeObserver;
+globalThis.ResizeObserver ??=
+  ResizeObserverStub as unknown as typeof ResizeObserver;
 
 // LeagueCombobox calls useMediaQuery, which jsdom does not implement.
 window.matchMedia ??= ((query: string) => ({
@@ -42,7 +44,9 @@ window.matchMedia ??= ((query: string) => ({
 })) as unknown as typeof window.matchMedia;
 
 function Wrapper({ children }: { children: React.ReactNode }) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
   return (
     <QueryClientProvider client={client}>
       <TooltipProvider>{children}</TooltipProvider>
@@ -128,7 +132,7 @@ const repeater = {
 function renderModal() {
   return render(
     <CreateSeriesEventModal repeater={repeater} open onOpenChange={() => {}} />,
-    { wrapper: Wrapper }
+    { wrapper: Wrapper },
   );
 }
 
@@ -151,7 +155,10 @@ describe('CreateSeriesEventModal', () => {
 
     expect(createSeriesOneOffEvent).toHaveBeenCalledWith(
       repeater.id,
-      expect.objectContaining({ name: 'Sunday Turbo', timezone: 'America/New_York' })
+      expect.objectContaining({
+        name: 'Sunday Turbo',
+        timezone: 'America/New_York',
+      }),
     );
   });
 

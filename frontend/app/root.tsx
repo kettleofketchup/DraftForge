@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useEffect } from 'react';
+import type { LoaderFunctionArgs } from 'react-router';
 import {
   data,
   isRouteErrorResponse,
@@ -10,23 +11,20 @@ import {
   ScrollRestoration,
   useLoaderData,
 } from 'react-router';
-import type { LoaderFunctionArgs } from 'react-router';
 import { useChangeLanguage } from 'remix-i18next/react';
-import './i18n/types';
 import { ScrollArea } from '~/components/ui/scroll-area';
-import { Toaster } from '~/components/ui/sonner';
 import { SharedPopoverProvider } from '~/components/ui/shared-popover-context';
 import { SharedPopoverRenderer } from '~/components/ui/shared-popover-renderer';
+import { Toaster } from '~/components/ui/sonner';
 import { TooltipProvider } from '~/components/ui/tooltip';
 import { getLogger } from '~/lib/logger';
 import { Sentry } from '~/lib/sentry';
 import type { Route } from './+types/root';
 import './app.css';
+import ResponsiveAppBar from './components/navbar/navbar';
 import { ActiveDraftBanner } from './components/teamdraft/ActiveDraftBanner';
 import { FloatingDraftIndicator } from './components/teamdraft/FloatingDraftIndicator';
-import ResponsiveAppBar from './components/navbar/navbar';
-
-('use client');
+import './i18n/types';
 
 const log = getLogger('root');
 
@@ -58,7 +56,8 @@ export function DevScripts() {
 
     // Skip react-scan under automation; navigator.webdriver also covers raw browser.newContext()
     const isPlaywright =
-      typeof window !== 'undefined' && ('playwright' in window || navigator.webdriver === true);
+      typeof window !== 'undefined' &&
+      ('playwright' in window || navigator.webdriver === true);
     const disableReactScan = import.meta.env.VITE_DISABLE_REACT_SCAN === 'true';
 
     if (import.meta.env.DEV && !isPlaywright && !disableReactScan) {
@@ -107,18 +106,18 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <body>
         <QueryClientProvider client={queryClient}>
           <TooltipProvider delayDuration={300}>
-          <SharedPopoverProvider>
-            <div className="flex flex-col w-screen h-screen justify-between">
-              <ResponsiveAppBar />
-              <ActiveDraftBanner />
-              <ScrollArea id="outlet_root" className="flex-grow h-0">
-                {children}
-              </ScrollArea>
-            </div>
-            <Toaster richColors closeButton position="top-center" />
-            <FloatingDraftIndicator />
-            <SharedPopoverRenderer />
-          </SharedPopoverProvider>
+            <SharedPopoverProvider>
+              <div className="flex flex-col w-screen h-screen justify-between">
+                <ResponsiveAppBar />
+                <ActiveDraftBanner />
+                <ScrollArea id="outlet_root" className="flex-grow h-0">
+                  {children}
+                </ScrollArea>
+              </div>
+              <Toaster richColors closeButton position="top-center" />
+              <FloatingDraftIndicator />
+              <SharedPopoverRenderer />
+            </SharedPopoverProvider>
           </TooltipProvider>
         </QueryClientProvider>
 

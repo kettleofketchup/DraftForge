@@ -1,9 +1,8 @@
-import type { FormEvent } from 'react';
 import React, { useCallback, useState } from 'react';
 import { toast } from 'sonner';
 import { useShallow } from 'zustand/react/shallow';
-import { ConfirmDialog } from '~/components/ui/dialogs';
 import { TrashIconButton } from '~/components/ui/buttons';
+import { ConfirmDialog } from '~/components/ui/dialogs';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
 import { User } from '../user';
@@ -31,7 +30,7 @@ export const UserRemoveButton: React.FC<PropsRemoveButton> = ({
   );
 
   const removeUser = useCallback(async () => {
-    let thisUser = new User(user as UserType);
+    const thisUser = new User(user as UserType);
     toast.promise(thisUser.dbDelete(), {
       loading: `Deleting User ${user.username}.`,
       success: (data) => {

@@ -1,10 +1,10 @@
 import js from '@eslint/js';
-import tseslint from 'typescript-eslint';
+import prettier from 'eslint-config-prettier';
+import i18next from 'eslint-plugin-i18next';
 import react from 'eslint-plugin-react';
 import reactHooks from 'eslint-plugin-react-hooks';
 import reactRefresh from 'eslint-plugin-react-refresh';
-import prettier from 'eslint-config-prettier';
-import i18next from 'eslint-plugin-i18next';
+import tseslint from 'typescript-eslint';
 
 export default [
   {
@@ -16,11 +16,17 @@ export default [
       'tests/playwright/**',
     ],
   },
+  // Kept disable comments target rules still off (react-hooks, no-explicit-any).
+  { linterOptions: { reportUnusedDisableDirectives: 'off' } },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
     files: ['**/*.{ts,tsx}'],
-    plugins: { react, 'react-hooks': reactHooks, 'react-refresh': reactRefresh },
+    plugins: {
+      react,
+      'react-hooks': reactHooks,
+      'react-refresh': reactRefresh,
+    },
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'module',
@@ -28,7 +34,7 @@ export default [
     },
     settings: { react: { version: 'detect' } },
     rules: {
-      // Permissive defaults — strictness is ratcheted in a separate cleanup PR.
+      // Permissive defaults until existing violations are cleaned up (#407).
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-unused-vars': 'off',
       '@typescript-eslint/no-empty-object-type': 'off',
