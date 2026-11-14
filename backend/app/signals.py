@@ -7,12 +7,13 @@ Handles:
 - Cascade removal from tournament.users to team.members
 - Auto-add tournament users to organization and league
 - Purge stale HeroDraft when a Game's teams change (issue #235)
+- Mark a tournament past when its bracket final is decided (issue #419)
 """
 
 from asgiref.sync import async_to_sync
 from channels import layers
 from django.db import transaction
-from django.db.models.signals import m2m_changed, pre_save
+from django.db.models.signals import m2m_changed, post_save, pre_save
 from django.dispatch import receiver
 
 from app.cache_utils import invalidate_after_commit
@@ -26,6 +27,7 @@ from app.models import (
     Team,
     Tournament,
 )
+from app.services.tournament_completion import sync_tournament_completion
 from league.models import LeagueUser
 from org.models import OrgUser
 from telemetry.logging import get_logger
@@ -397,3 +399,42 @@ def _broadcast_draft_event(draft_pk: int, event_type: str, game_id: int) -> None
             herodraft_id=draft_pk,
             error=str(exc),
         )
+
+
+@receiver(pre_save, sender="app.Game", dispatch_uid="game_track_winner_change")
+def track_game_winner_change(
+    sender: type[Game], instance: Game, raw: bool = False, **kwargs: object
+) -> None:
+    update_fields = kwargs.get("update_fields")
+    if raw or (update_fields is not None and "winning_team" not in update_fields):
+        instance._prior_winning_team_id = instance.winning_team_id
+        return
+    prior = (
+        sender.objects.nocache()
+        .filter(pk=instance.pk)
+        .values_list("winning_team_id", flat=True)
+        .first()
+        if instance.pk
+        else None
+    )
+    instance._prior_winning_team_id = prior
+
+
+@receiver(post_save, sender="app.Game", dispatch_uid="game_sync_tournament_completion")
+def sync_tournament_on_game_result(
+    sender: type[Game], instance: Game, raw: bool = False, **kwargs: object
+) -> None:
+    """Issue #419: re-check the tournament state when a game's winner changes."""
+    if raw or not instance.tournament_id:
+        return
+    prior = getattr(instance, "_prior_winning_team_id", instance.winning_team_id)
+    if prior == instance.winning_team_id:
+        return
+    tournament_id = instance.tournament_id
+    cleared_game_id = instance.pk if instance.winning_team_id is None else None
+    transaction.on_commit(
+        lambda: sync_tournament_completion(
+            tournament_id, cleared_game_id=cleared_game_id
+        ),
+        robust=True,
+    )
