@@ -46,9 +46,13 @@ export function PreviewLoginMenu({
   return (
     <div
       className={
-        inDrawer ? 'flex flex-col gap-2 px-3 mt-4' : 'hidden md:flex items-center gap-1 mr-2'
+        inDrawer
+          ? 'flex flex-col gap-2 px-3 mt-4'
+          : 'hidden md:flex items-center gap-1 mr-2'
       }
-      data-testid={inDrawer ? 'mobile-preview-login-menu' : 'preview-login-menu'}
+      data-testid={
+        inDrawer ? 'mobile-preview-login-menu' : 'preview-login-menu'
+      }
     >
       {ROLES.map((role) => (
         <Button
@@ -57,10 +61,14 @@ export function PreviewLoginMenu({
           size="sm"
           variant="outline"
           aria-label={`Login as ${role}`}
-          data-testid={inDrawer ? `mobile-preview-login-${role}` : `preview-login-${role}`}
+          data-testid={
+            inDrawer ? `mobile-preview-login-${role}` : `preview-login-${role}`
+          }
           onClick={() => loginAs(role)}
         >
-          <span className={inDrawer ? undefined : 'hidden lg:inline'}>Login as</span>
+          <span className={inDrawer ? undefined : 'hidden lg:inline'}>
+            Login as
+          </span>
           {role}
         </Button>
       ))}
