@@ -1,5 +1,6 @@
 import {
   expect,
+  expectNoSessionToast,
   loginOrgFeatures,
   orgFeaturesApi,
   resetOrgFeatures,
@@ -30,7 +31,7 @@ test.describe('Org features: locked org @cicd', () => {
     await addAdmin.scrollIntoViewIfNeeded();
     await expect(addAdmin).toBeVisible();
     await expect(page.getByTestId('promoters-section')).toHaveCount(0);
-    await expect(page.getByText(/Session expired/)).toHaveCount(0);
+    await expectNoSessionToast(page);
   });
 
   test('a promotion deep link bounces to leagues without a session toast @cicd', async ({
@@ -44,7 +45,7 @@ test.describe('Org features: locked org @cicd', () => {
     await expect(page).not.toHaveURL(/tab=promotion/);
     await expect(page.getByTestId('org-tab-leagues')).toHaveAttribute('data-state', 'active');
     await expect(page.getByTestId('promotion-tab')).toHaveCount(0);
-    await expect(page.getByText(/Session expired/)).toHaveCount(0);
+    await expectNoSessionToast(page);
   });
 
   test('locked admin sees no Promote button on the locked org event @cicd', async ({

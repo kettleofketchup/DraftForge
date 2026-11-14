@@ -200,6 +200,7 @@ export {
 
 // Org paid features utilities (19-org-features specs)
 export {
+  expectNoSessionToast,
   getOrgFeaturesData,
   resetOrgFeatures,
   loginOrgFeatures,

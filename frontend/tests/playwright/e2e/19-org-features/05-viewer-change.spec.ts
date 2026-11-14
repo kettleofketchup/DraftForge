@@ -3,6 +3,7 @@ import type { Page } from '@playwright/test';
 import { BASE_URL } from '../../fixtures/base-url';
 import {
   expect,
+  expectNoSessionToast,
   loginOrgFeatures,
   moveEventToRollCall,
   orgFeaturesApi,
@@ -45,7 +46,7 @@ test.describe('Org features: viewer changes @cicd', () => {
     await expect(rows).toHaveCount(0);
     await expect(page.getByTestId('contributions-org-total')).toContainText('5');
     await expect(page.getByTestId('contributions-members-private')).toBeVisible();
-    await expect(page.getByText(/Session expired/)).toHaveCount(0);
+    await expectNoSessionToast(page);
   });
 
   test('anonymous visitor sees only the private org total @cicd', async ({ page }) => {
@@ -67,7 +68,7 @@ test.describe('Org features: viewer changes @cicd', () => {
     await expect(page.getByTestId('contributions-admin')).toHaveCount(0);
     await expect(page.getByTestId('contributions-members-signin')).toBeVisible();
     await expect(page.getByTestId('contributions-org-total')).toContainText('15');
-    await expect(page.getByText(/Session expired/)).toHaveCount(0);
+    await expectNoSessionToast(page);
   });
 
   test('a revoked promoter gets no session toast and the tab bounces @cicd', async ({
@@ -101,7 +102,7 @@ test.describe('Org features: viewer changes @cicd', () => {
     const body = (await (await denied).json()) as { code?: string };
     expect(body.code).toBe('not_permitted');
     await expect(page.getByTestId('promo-candidates-error')).toBeVisible();
-    await expect(page.getByText(/Session expired/)).toHaveCount(0);
+    await expectNoSessionToast(page);
 
     await visitAndWaitForHydration(page, `/organizations/${orgPk}?tab=promotion`);
     await expect(page.getByTestId('org-tab-users')).toBeVisible();
@@ -109,7 +110,7 @@ test.describe('Org features: viewer changes @cicd', () => {
     await expect(page.getByTestId('org-tab-leagues')).toHaveAttribute('data-state', 'active');
     await expect(page.getByTestId('org-tab-promotion')).toHaveCount(0);
     await expect(page.getByTestId('org-tab-contributions')).toBeVisible();
-    await expect(page.getByText(/Session expired/)).toHaveCount(0);
+    await expectNoSessionToast(page);
   });
 
   test('logout without reload hides Complete and the staff editor on a roll-call event @cicd', async ({
@@ -126,6 +127,6 @@ test.describe('Org features: viewer changes @cicd', () => {
     await logoutWithoutReload(page);
     await expect(page.getByTestId('event-complete-btn')).toHaveCount(0);
     await expect(page.getByTestId('event-host-edit-btn')).toHaveCount(0);
-    await expect(page.getByText(/Session expired/)).toHaveCount(0);
+    await expectNoSessionToast(page);
   });
 });

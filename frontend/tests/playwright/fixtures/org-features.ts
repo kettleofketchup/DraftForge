@@ -9,7 +9,7 @@
  * Never hardcode PKs: read them from getOrgFeaturesData / resetOrgFeatures.
  */
 
-import type { APIRequestContext, APIResponse, BrowserContext } from '@playwright/test';
+import { expect, type APIRequestContext, type APIResponse, type BrowserContext, type Page } from '@playwright/test';
 
 import { API_URL } from './base-url';
 import { isCsrfCookie } from './cookies';
@@ -113,4 +113,23 @@ export async function leaderboardByUser(
 export async function moveEventToRollCall(context: BrowserContext, eventPk: number): Promise<void> {
   await orgFeaturesApi(context, 'POST', `/events/${eventPk}/open_signups/`);
   await orgFeaturesApi(context, 'POST', `/events/${eventPk}/start_roll_call/`);
+}
+
+/**
+ * Assert no "Session expired" toast fired. Waits for the network to settle, checks the
+ * interceptor's synchronous flag (set before sonner's dynamic import), then holds the
+ * toast count at zero over a window so a late toast still fails the test.
+ */
+export async function expectNoSessionToast(page: Page, holdMs = 2000): Promise<void> {
+  await page.waitForLoadState('networkidle');
+  const flagged = await page.evaluate(
+    () => (window as unknown as Record<string, unknown>)._auth_toast_shown === true,
+  );
+  expect(flagged, 'axios interceptor flagged a session-expired response').toBe(false);
+  const toast = page.getByText(/Session expired/);
+  const deadline = Date.now() + holdMs;
+  while (Date.now() < deadline) {
+    expect(await toast.count(), 'Session expired toast is visible').toBe(0);
+    await page.waitForTimeout(250);
+  }
 }
