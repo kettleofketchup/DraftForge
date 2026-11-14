@@ -6,12 +6,22 @@
  */
 
 import { create } from 'zustand';
-import { addClockOffsetSample, seedClockOffset, serverNowISO, startHeartbeatLoop } from '~/lib/draftClock';
-import { getLogger } from '~/lib/logger';
-import { getWebSocketManager } from '~/lib/websocket';
-import type { ConnectionStatus, Unsubscribe } from '~/lib/websocket';
-import type { HeroDraft, HeroDraftTick, HeroDraftEvent, DraftTeam } from '~/components/herodraft/types';
 import { HeroDraftWebSocketMessageSchema } from '~/components/herodraft/schemas';
+import type {
+  DraftTeam,
+  HeroDraft,
+  HeroDraftEvent,
+  HeroDraftTick,
+} from '~/components/herodraft/types';
+import {
+  addClockOffsetSample,
+  seedClockOffset,
+  serverNowISO,
+  startHeartbeatLoop,
+} from '~/lib/draftClock';
+import { getLogger } from '~/lib/logger';
+import type { ConnectionStatus, Unsubscribe } from '~/lib/websocket';
+import { getWebSocketManager } from '~/lib/websocket';
 
 const log = getLogger('heroDraftStore');
 
@@ -96,14 +106,22 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
     const current = get();
 
     // Already connected to same draft
-    if (current._currentDraftId === draftId && current.status !== 'disconnected') {
+    if (
+      current._currentDraftId === draftId &&
+      current.status !== 'disconnected'
+    ) {
       log.debug('Already connected to same draft, skipping');
       return;
     }
 
     // Different draft - disconnect first
-    if (current._currentDraftId !== null && current._currentDraftId !== draftId) {
-      log.debug(`Switching from draft ${current._currentDraftId} to ${draftId}`);
+    if (
+      current._currentDraftId !== null &&
+      current._currentDraftId !== draftId
+    ) {
+      log.debug(
+        `Switching from draft ${current._currentDraftId} to ${draftId}`,
+      );
       get().disconnect();
     }
 
@@ -136,10 +154,14 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
           log.debug(`Disconnected from ${connUrl}:`, reason);
         },
         onReconnecting: (connUrl, attempt, backoffMs) => {
-          log.debug(`Reconnecting to ${connUrl}, attempt ${attempt}, backoff ${backoffMs}ms`);
+          log.debug(
+            `Reconnecting to ${connUrl}, attempt ${attempt}, backoff ${backoffMs}ms`,
+          );
         },
         onStaleDetected: (connUrl, staleDurationMs) => {
-          log.warn(`Stale connection: ${connUrl} (${staleDurationMs}ms without messages)`);
+          log.warn(
+            `Stale connection: ${connUrl} (${staleDurationMs}ms without messages)`,
+          );
         },
       },
     });
@@ -149,7 +171,10 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
       const parseResult = HeroDraftWebSocketMessageSchema.safeParse(rawMessage);
       if (!parseResult.success) {
         log.warn('Invalid WebSocket message format:', parseResult.error.issues);
-        debugLog('Raw message that failed validation:', JSON.stringify(rawMessage, null, 2));
+        debugLog(
+          'Raw message that failed validation:',
+          JSON.stringify(rawMessage, null, 2),
+        );
         return;
       }
 
@@ -164,8 +189,16 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
             rounds_count: message.draft_state.rounds.length,
           });
           {
-            const clock = seedClockOffset(get()._offsetSamples, message.server_time, Date.now());
-            set({ draft: message.draft_state, _offsetSamples: clock.samples, serverClockOffsetMs: clock.offsetMs });
+            const clock = seedClockOffset(
+              get()._offsetSamples,
+              message.server_time,
+              Date.now(),
+            );
+            set({
+              draft: message.draft_state,
+              _offsetSamples: clock.samples,
+              serverClockOffsetMs: clock.offsetMs,
+            });
           }
           break;
 
@@ -177,7 +210,12 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
           });
 
           if (message.draft_state) {
-            debugLog('Updating draft state:', message.draft_state.state, 'current_round:', message.draft_state.current_round);
+            debugLog(
+              'Updating draft state:',
+              message.draft_state.state,
+              'current_round:',
+              message.draft_state.current_round,
+            );
             set({ draft: message.draft_state });
           }
 
@@ -193,7 +231,7 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
             const newRoundIdx = newDraft?.current_round ?? null;
             const newRound =
               newRoundIdx !== null && newDraft?.rounds
-                ? newDraft.rounds[newRoundIdx] ?? null
+                ? (newDraft.rounds[newRoundIdx] ?? null)
                 : null;
 
             if (prevTick && newRound && newDraft) {
@@ -234,7 +272,7 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
           set({ lastEvent: message as HeroDraftEvent });
           break;
 
-        case 'herodraft_tick':
+        case 'herodraft_tick': {
           debugLog('herodraft_tick received', {
             draft_state: message.draft_state,
             current_round: message.current_round,
@@ -246,7 +284,11 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
           // Offset from the least-delayed recent tick, so one tick stuck in a
           // queue can't shift this viewer's clock by its delay.
           const tickReceivedAtMs = Date.now();
-          const clock = addClockOffsetSample(get()._offsetSamples, message.server_time, tickReceivedAtMs);
+          const clock = addClockOffsetSample(
+            get()._offsetSamples,
+            message.server_time,
+            tickReceivedAtMs,
+          );
 
           // Gap detection — expected cadence is 1Hz. If we go >2s without
           // a tick, log it. This catches client-side delivery problems
@@ -285,6 +327,7 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
             },
           });
           break;
+        }
 
         case 'herodraft_kicked': {
           log.warn('Kicked from draft:', message.reason);
@@ -298,7 +341,7 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
             manager.disconnect(kickedConnId, 'Kicked by server');
           }
           // Clear connection state but preserve wasKicked flag.
-          // `isConnected` is a derived selector (line 353), not state — the
+          // `isConnected` is a derived selector (heroDraftSelectors), not state — the
           // canonical disconnected signal is `status: 'disconnected'`.
           set({
             _connectionId: null,
@@ -452,17 +495,19 @@ export const heroDraftSelectors = {
     if (s.draft?.state !== 'drafting') return false;
 
     // Get active team ID from tick first, then fall back to current round
-    const activeTeamId = s.tick?.active_team_id
-      ?? (s.draft.current_round !== null
+    const activeTeamId =
+      s.tick?.active_team_id ??
+      (s.draft.current_round !== null
         ? s.draft.rounds[s.draft.current_round]?.draft_team
         : null);
 
     if (!activeTeamId) return false;
 
     // Find user's team (as captain or member)
-    const myTeam = s.draft.draft_teams.find(t =>
-      t.captain?.pk === currentUserId ||
-      t.members?.some(m => m.pk === currentUserId)
+    const myTeam = s.draft.draft_teams.find(
+      (t) =>
+        t.captain?.pk === currentUserId ||
+        t.members?.some((m) => m.pk === currentUserId),
     );
 
     return myTeam?.id === activeTeamId;

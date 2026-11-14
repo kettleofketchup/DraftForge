@@ -49,12 +49,7 @@
  * independent failure boundaries.
  */
 
-import {
-  test as base,
-  type Browser,
-  type BrowserContext,
-  type Page,
-} from '@playwright/test';
+import type { Browser, BrowserContext, Page } from '@playwright/test';
 import {
   loginAdmin,
   loginAuthMatrixLeagueAdmin,
@@ -66,6 +61,7 @@ import {
   loginAuthMatrixOrgStaff,
   loginStaff,
 } from './auth';
+import { test as base } from './external-apis';
 
 export type RoleName =
   | 'siteAdmin'

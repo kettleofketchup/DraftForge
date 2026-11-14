@@ -27,7 +27,7 @@ export const addPlayerHook = async ({ team, player }: hookParams) => {
     return;
   }
 
-  let payload: Partial<TeamType> = {
+  const payload: Partial<TeamType> = {
     members_ids: [...(team.members_ids || []), player.pk],
   };
 
