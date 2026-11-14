@@ -35,10 +35,32 @@ describe('PreviewLoginMenu', () => {
   it('renders three login buttons when test features are on', () => {
     shouldShowTestFeatures.mockReturnValue(true);
     render(<PreviewLoginMenu />);
-    expect(screen.getByTestId('preview-login-admin')).toHaveTextContent('Login as admin');
-    expect(screen.getByTestId('preview-login-staff')).toHaveTextContent('Login as staff');
-    expect(screen.getByTestId('preview-login-user')).toHaveTextContent('Login as user');
+    expect(screen.getByTestId('preview-login-admin')).toHaveAccessibleName('Login as admin');
+    expect(screen.getByTestId('preview-login-staff')).toHaveAccessibleName('Login as staff');
+    expect(screen.getByTestId('preview-login-user')).toHaveAccessibleName('Login as user');
   });
+
+  it('keeps the navbar placement hidden below md, where the mobile toggle sits', () => {
+    shouldShowTestFeatures.mockReturnValue(true);
+    render(<PreviewLoginMenu />);
+    expect(screen.getByTestId('preview-login-menu')).toHaveClass('hidden', 'md:flex');
+    expect(screen.getByTestId('preview-login-admin')).toHaveAccessibleName('Login as admin');
+  });
+
+  it.each(['admin', 'staff', 'user'] as const)(
+    'logs in as %s from the drawer placement',
+    async (role) => {
+      shouldShowTestFeatures.mockReturnValue(true);
+      render(<PreviewLoginMenu placement="drawer" />);
+      expect(screen.queryByTestId(`preview-login-${role}`)).not.toBeInTheDocument();
+      fireEvent.click(screen.getByTestId(`mobile-preview-login-${role}`));
+      await waitFor(() => expect(reloadMock).toHaveBeenCalledTimes(1));
+      expect(fetchMock).toHaveBeenCalledWith(
+        `/api/tests/login-${role}/`,
+        expect.objectContaining({ method: 'POST', credentials: 'include' }),
+      );
+    },
+  );
 
   it.each(['admin', 'staff', 'user'] as const)(
     'logs in as %s via the test endpoint and reloads once',

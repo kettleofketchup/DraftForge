@@ -12,6 +12,7 @@ import {
 } from '~/components/ui/sheet';
 import { ScrollArea } from '~/components/ui/scroll-area';
 import { cn } from '~/lib/utils';
+import { PreviewLoginMenu } from '../preview/PreviewLoginMenu';
 import { useUserStore } from '../../store/userStore';
 
 const GITHUB_REPO_URL = 'https://github.com/kettleofketchup/draftforge';
@@ -292,6 +293,7 @@ export function MobileNav() {
             iconClassName="text-destructive"
             external
           />
+          <PreviewLoginMenu placement="drawer" />
         </nav>
         </ScrollArea>
       </SheetContent>
