@@ -8,7 +8,7 @@ import {
 const STAR_COUNT = '[data-testid="githubStarCount"]';
 const LOGIN_BUTTON = '[data-testid="navbarLoginButton"]';
 
-test.describe('external API stubs', () => {
+test.describe('external API stubs @cicd', () => {
   test('default page gets the stubbed GitHub star count', async ({ page }) => {
     await page.goto('/');
     await expect(page.locator(STAR_COUNT)).toHaveText(
