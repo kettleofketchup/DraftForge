@@ -1,5 +1,5 @@
 import type { FormEvent } from 'react';
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import type { UserType } from '~/components/user/types';
 
 import { PlusIconButton } from '~/components/ui/buttons';
@@ -98,7 +98,7 @@ export const AddPlayerModal: React.FC<Props> = ({
         size="md"
         showFooter={false}
       >
-        <div className="flex flex-col justify-start align-start items-start content-start w-full gap-4 mb-4">
+        <div className="flex flex-col justify-start items-start content-start w-full gap-4 mb-4">
           <div className="justify-self-start self-start w-full">
             {orgUsersLoading && orgId ? (
               <div className="text-sm text-gray-500">
@@ -121,7 +121,7 @@ export const AddPlayerModal: React.FC<Props> = ({
             )}
           </div>
         </div>
-        <div className="flex flex-row gap-x-4 sm:gap-x-8 justify-center align-center items-center w-full">
+        <div className="flex flex-row gap-x-4 sm:gap-x-8 justify-center items-center w-full">
           <UserCreateModal query={query} setQuery={setQuery} />
         </div>
       </FormDialog>

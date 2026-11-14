@@ -1,4 +1,5 @@
 import contextvars
+import copy
 import multiprocessing
 import os
 import secrets
@@ -11,11 +12,14 @@ from typing import Any, Callable
 
 import django
 import django.test.runner as django_runner
+from django.conf import settings
+from django.core.signals import setting_changed
 from django.db import connections
 from django.db.backends.base.base import BaseDatabaseWrapper
 from django.test.runner import DiscoverRunner, ParallelTestSuite
 from django.test.utils import override_settings, setup_test_environment
 
+from backend.settings import test_process_namespace
 from config.dota_lobby import DotaLobbyConfig
 
 BACKEND_DIR: str = str(Path(__file__).resolve().parent.parent)
@@ -134,6 +138,35 @@ def setup_worker_connection(connection: BaseDatabaseWrapper, worker_id: int) -> 
     connection.creation.setup_worker_connection(worker_id)
 
 
+def isolate_worker_redis_namespace() -> None:
+    """Give this worker its own Redis namespace and cacheops prefix.
+
+    Settings computes the namespace at import, so fork workers inherit the
+    parent's. Each worker writes its own DB clone with the same PKs, so a
+    shared cacheops prefix serves one worker's cached rows to another.
+    """
+    old: str = settings.REDIS_KEY_NAMESPACE
+    if not old:
+        return
+    new = test_process_namespace()
+    cacheops_prefix = settings.CACHEOPS_PREFIX(None).removesuffix(old) + new
+    changes: dict[str, Any] = {
+        "REDIS_KEY_NAMESPACE": new,
+        "CACHEOPS_PREFIX": lambda _query: cacheops_prefix,
+    }
+    cache_settings = copy.deepcopy(settings.CACHES)
+    if "KEY_PREFIX" in cache_settings["default"]:
+        cache_settings["default"]["KEY_PREFIX"] = new
+        changes["CACHES"] = cache_settings
+    layer_settings = copy.deepcopy(settings.CHANNEL_LAYERS)
+    if "prefix" in layer_settings["default"].get("CONFIG", {}):
+        layer_settings["default"]["CONFIG"]["prefix"] = f"asgi:{new}"
+        changes["CHANNEL_LAYERS"] = layer_settings
+    for name, value in changes.items():
+        setattr(settings, name, value)
+        setting_changed.send(sender=None, setting=name, value=value, enter=True)
+
+
 def init_worker(
     counter: Synchronized,
     initial_settings: dict[str, dict[str, Any]] | None = None,
@@ -155,6 +188,7 @@ def init_worker(
             process_setup(*(process_setup_args or ()))
         django.setup()
         setup_test_environment(debug=debug_mode)
+    isolate_worker_redis_namespace()
 
     for alias in used_aliases if used_aliases is not None else connections:
         connection = connections[alias]

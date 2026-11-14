@@ -37,7 +37,7 @@ type PositionFieldsProps = {
 };
 
 const DEFAULT_GRID_CLASS =
-  'sm:grid sm:grid-flow-col grid-rows-1 sm:grid-rows-3 gap-4 w-full align-center items-center justify-center h-auto';
+  'sm:grid sm:grid-flow-col grid-rows-1 sm:grid-rows-3 gap-4 w-full items-center justify-center h-auto';
 
 /** Inner-only variant of PositionForm — the 5 per-role priority selects without
  *  the page heading or card-shadow wrapper. Use this inside other modals. */
@@ -63,7 +63,9 @@ export const PositionFormFields = ({
               >
                 <FormControl>
                   <SelectTrigger data-testid="position-choice-carry">
-                    <SelectValue placeholder={PositionChoiceEnum[field.value]} />
+                    <SelectValue
+                      placeholder={PositionChoiceEnum[field.value]}
+                    />
                   </SelectTrigger>
                 </FormControl>
                 {positionChoices()}
@@ -88,7 +90,9 @@ export const PositionFormFields = ({
               >
                 <FormControl>
                   <SelectTrigger data-testid="position-choice-mid">
-                    <SelectValue placeholder={PositionChoiceEnum[field.value]} />
+                    <SelectValue
+                      placeholder={PositionChoiceEnum[field.value]}
+                    />
                   </SelectTrigger>
                 </FormControl>
                 {positionChoices()}
@@ -113,7 +117,9 @@ export const PositionFormFields = ({
               >
                 <FormControl>
                   <SelectTrigger data-testid="position-choice-offlane">
-                    <SelectValue placeholder={PositionChoiceEnum[field.value]} />
+                    <SelectValue
+                      placeholder={PositionChoiceEnum[field.value]}
+                    />
                   </SelectTrigger>
                 </FormControl>
                 {positionChoices()}
@@ -138,7 +144,9 @@ export const PositionFormFields = ({
               >
                 <FormControl>
                   <SelectTrigger data-testid="position-choice-soft_support">
-                    <SelectValue placeholder={PositionChoiceEnum[field.value]} />
+                    <SelectValue
+                      placeholder={PositionChoiceEnum[field.value]}
+                    />
                   </SelectTrigger>
                 </FormControl>
                 {positionChoices()}
@@ -163,7 +171,9 @@ export const PositionFormFields = ({
               >
                 <FormControl>
                   <SelectTrigger data-testid="position-choice-hard_support">
-                    <SelectValue placeholder={PositionChoiceEnum[field.value]} />
+                    <SelectValue
+                      placeholder={PositionChoiceEnum[field.value]}
+                    />
                   </SelectTrigger>
                 </FormControl>
                 {positionChoices()}
@@ -179,8 +189,8 @@ export const PositionFormFields = ({
 
 export const PositionForm = ({ form }: PositionFormProps) => {
   return (
-    <div className="items-center content-center justify-center flex-cols hover:shadow-lg hover:shadow-gray-800/50 p-4 rounded-lg w-full">
-      <div className="flex sm:row-span w-full">
+    <div className="items-center content-center justify-center hover:shadow-lg hover:shadow-gray-800/50 p-4 rounded-lg w-full">
+      <div className="flex w-full">
         <h2 className="text-2xl font-bold mb-4 text-center justify-center w-full">
           Edit Positions
         </h2>

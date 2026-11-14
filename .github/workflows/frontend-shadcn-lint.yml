@@ -1,0 +1,39 @@
+name: Frontend shadcn lint
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/frontend-shadcn-lint.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  shadcn-lint:
+    name: shadcn-lint (design system)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm --prefix frontend ci --ignore-scripts --no-audit --no-fund
+
+      # All of app/ against the baseline: new violations fail, and so do baseline
+      # entries that no longer occur (run `just frontend::lint-shadcn-prune`).
+      - name: shadcn-lint
+        run: npm --prefix frontend run lint:shadcn

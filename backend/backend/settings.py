@@ -110,9 +110,13 @@ DEBUG = env_bool("DEBUG")
 # Concurrent test runs share one Redis and number their drafts from 1, so each
 # test process namespaces its channel groups, raw Redis keys and cache keys.
 RUNNING_TESTS: bool = sys.argv[1:2] == ["test"] or "pytest" in sys.modules
-REDIS_KEY_NAMESPACE: str = (
-    f"test-{os.getpid()}-{secrets.token_hex(4)}:" if RUNNING_TESTS else ""
-)
+
+
+def test_process_namespace() -> str:
+    return f"test-{os.getpid()}-{secrets.token_hex(4)}:"
+
+
+REDIS_KEY_NAMESPACE: str = test_process_namespace() if RUNNING_TESTS else ""
 
 # In test environments, only send Discord DMs to this user ID.
 # All other DMs return a fake success. Prevents spamming real users during testing.

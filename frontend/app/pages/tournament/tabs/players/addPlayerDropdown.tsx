@@ -9,8 +9,8 @@ import { User } from '~/components/user/user';
 import { UserAvatar } from '~/components/user/UserAvatar';
 
 import { useState, type FormEvent } from 'react';
-import { getLogger } from '~/lib/logger';
 import { Input } from '~/components/ui/input';
+import { getLogger } from '~/lib/logger';
 
 const log = getLogger('addPlayerDropdown');
 interface Props {
@@ -89,7 +89,7 @@ export const AddPlayerDropdown: React.FC<Props> = ({
   };
 
   return (
-    <div className="justify-self-top content-self-center align-middle ">
+    <div className="align-middle">
       {users && (
         <Combobox value={query} onChange={handleSearchUserSelect}>
           <ComboboxInput
