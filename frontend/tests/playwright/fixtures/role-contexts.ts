@@ -20,8 +20,9 @@
  *     );
  *   });
  *
- * Nine roles in the hierarchy (site admin > org owner ≥ org admin >
- * org staff > org member > league admin > league staff > anonymous):
+ * Ten roles in the hierarchy (site admin > org owner ≥ org admin >
+ * org staff > promoter > org member > league admin > league staff >
+ * anonymous):
  *
  *   - siteAdmin     — is_superuser=True, is_staff=True (kettleofketchup)
  *   - siteStaff     — is_staff=True, is_superuser=False (hurk_)
@@ -31,6 +32,8 @@
  *   - orgAdmin      — Organization.admins of AUTH_MATRIX_ORG (pk=1090)
  *   - orgStaff      — Organization.staff of AUTH_MATRIX_ORG (pk=1091)
  *   - orgMember     — OrgUser of AUTH_MATRIX_ORG, no role (pk=1092)
+ *   - promoter      — Organization.promoters of AUTH_MATRIX_ORG (pk=1096);
+ *                     Promotion stays locked there, so it gates like orgMember
  *   - leagueAdmin   — League.admins of AUTH_MATRIX_LEAGUE (pk=1093)
  *   - leagueStaff   — League.staff of AUTH_MATRIX_LEAGUE (pk=1094)
  *   - anonymous     — fresh context, no login
@@ -39,7 +42,7 @@
  * AUTH_MATRIX_LEAGUE (pk=9) — not DTX. This keeps the matrix from
  * flapping when other suites mutate DTX memberships, and vice versa.
  *
- * All 8 contexts are created and authenticated concurrently in the fixture
+ * All contexts are created and authenticated concurrently in the fixture
  * setup; the test body then drives them in parallel as well. With Promise.all
  * the first failure short-circuits the rest — acceptable for "is the gate
  * correct" matrix checks; use per-test parallelism when you need
@@ -59,6 +62,7 @@ import {
   loginAuthMatrixOrgAdmin,
   loginAuthMatrixOrgStaff,
   loginAuthMatrixOrgMember,
+  loginAuthMatrixOrgPromoter,
   loginAuthMatrixLeagueAdmin,
   loginAuthMatrixLeagueStaff,
 } from './auth';
@@ -70,6 +74,7 @@ export type RoleName =
   | 'orgAdmin'
   | 'orgStaff'
   | 'orgMember'
+  | 'promoter'
   | 'leagueAdmin'
   | 'leagueStaff'
   | 'anonymous';
@@ -93,6 +98,7 @@ export const ROLE_NAMES: readonly RoleName[] = [
   'orgAdmin',
   'orgStaff',
   'orgMember',
+  'promoter',
   'leagueAdmin',
   'leagueStaff',
   'anonymous',
@@ -115,6 +121,7 @@ const ROLE_LOGINS: Record<RoleName, RoleLogin> = {
   orgAdmin: loginAuthMatrixOrgAdmin,
   orgStaff: loginAuthMatrixOrgStaff,
   orgMember: loginAuthMatrixOrgMember,
+  promoter: loginAuthMatrixOrgPromoter,
   leagueAdmin: loginAuthMatrixLeagueAdmin,
   leagueStaff: loginAuthMatrixLeagueStaff,
   anonymous: async () => {
@@ -123,7 +130,7 @@ const ROLE_LOGINS: Record<RoleName, RoleLogin> = {
 };
 
 /**
- * Build a RoleContexts object by creating 8 independent BrowserContexts
+ * Build a RoleContexts object by creating one BrowserContext per role
  * and logging each in concurrently. If any role's login fails, every
  * already-created context is closed before re-throwing — without the
  * cleanup the fixture's teardown never runs (it's tied to ``use()``)

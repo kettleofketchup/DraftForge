@@ -6,6 +6,7 @@
 import logging
 import random
 
+from cacheops import invalidate_obj
 from django.db import transaction
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework import status
@@ -15,11 +16,16 @@ from rest_framework.decorators import (
     permission_classes,
 )
 from rest_framework.permissions import AllowAny
+from rest_framework.request import Request
 from rest_framework.response import Response
 from social_django.models import UserSocialAuth
 
-from app.models import CustomUser, Draft
+from app.models import CustomUser, Draft, Organization
 from common.utils import isTestEnvironment
+from tests.data.tournaments import (
+    BRACKET_UNSET_WINNER_TOURNAMENT,
+    SHUFFLE_TIE_TOURNAMENT,
+)
 
 # Import test user configuration
 from tests.data.users import (
@@ -29,6 +35,7 @@ from tests.data.users import (
     AUTH_MATRIX_ORG_ADMIN_USER,
     AUTH_MATRIX_ORG_MEMBER_USER,
     AUTH_MATRIX_ORG_OWNER_USER,
+    AUTH_MATRIX_ORG_PROMOTER_USER,
     AUTH_MATRIX_ORG_STAFF_USER,
     CLAIMABLE_USER,
     LEAGUE_ADMIN_USER,
@@ -46,10 +53,7 @@ from tests.data.users import (
 # with no circular-import risk.
 from tests.populate.bracket import populate_bracket_unset_winner_tournament
 from tests.populate.shuffle_tie import populate_shuffle_tie_data
-from tests.data.tournaments import (
-    BRACKET_UNSET_WINNER_TOURNAMENT,
-    SHUFFLE_TIE_TOURNAMENT,
-)
+from tests.populate.utils import ensure_org_user
 from tests.test_teamdraft import clear_teamdraft_redis
 
 log = logging.getLogger(__name__)
@@ -77,10 +81,6 @@ def get_social_token(user, provider="discord"):
         "csrftoken": csrftoken,
         "sessionid": sessionid,
     }
-
-
-from django.db import transaction
-from social_django.models import UserSocialAuth
 
 
 def create_social_auth(user):
@@ -476,6 +476,10 @@ def createAuthMatrixOrgMemberTestUser() -> tuple[CustomUser, bool]:
     return _create_or_get_auth_matrix_user(AUTH_MATRIX_ORG_MEMBER_USER)
 
 
+def createAuthMatrixOrgPromoterTestUser() -> tuple[CustomUser, bool]:
+    return _create_or_get_auth_matrix_user(AUTH_MATRIX_ORG_PROMOTER_USER)
+
+
 def createAuthMatrixLeagueAdminTestUser() -> tuple[CustomUser, bool]:
     return _create_or_get_auth_matrix_user(AUTH_MATRIX_LEAGUE_ADMIN_USER)
 
@@ -488,9 +492,6 @@ def return_tokens(user):
     tokens = get_social_token(user)
     log.debug(tokens)
     return Response({"social_tokens": tokens})
-
-
-from django.test import Client
 
 
 @csrf_exempt
@@ -762,6 +763,26 @@ def login_auth_matrix_org_member(request):
 
     org = Organization.objects.filter(pk=AUTH_MATRIX_ORG_MEMBER_USER.org_id).first()
     if org:
+        ensure_org_user(user, org)
+
+    login(request, user, backend="django.contrib.auth.backends.ModelBackend")
+    return return_tokens(user)
+
+
+@csrf_exempt
+@api_view(["POST"])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def login_auth_matrix_org_promoter(request: Request) -> Response:
+    if not isTestEnvironment(request):
+        return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
+
+    user, _ = createAuthMatrixOrgPromoterTestUser()
+    org = Organization.objects.filter(pk=AUTH_MATRIX_ORG_PROMOTER_USER.org_id).first()
+    if org:
+        if user not in org.promoters.all():
+            org.promoters.add(user)
+            invalidate_obj(org)
         ensure_org_user(user, org)
 
     login(request, user, backend="django.contrib.auth.backends.ModelBackend")
@@ -1446,8 +1467,6 @@ def reset_events_demo(request):
     """
     if not isTestEnvironment(request):
         return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
-
-    from cacheops import invalidate_obj
 
     from app.models import Tournament
     from events.models import Event, EventRepeater, EventSignup, RepeaterSubscription

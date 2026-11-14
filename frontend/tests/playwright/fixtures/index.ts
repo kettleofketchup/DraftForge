@@ -26,6 +26,7 @@ export {
   loginAuthMatrixOrgAdmin,
   loginAuthMatrixOrgStaff,
   loginAuthMatrixOrgMember,
+  loginAuthMatrixOrgPromoter,
   loginAuthMatrixLeagueAdmin,
   loginAuthMatrixLeagueStaff,
   waitForHydration,

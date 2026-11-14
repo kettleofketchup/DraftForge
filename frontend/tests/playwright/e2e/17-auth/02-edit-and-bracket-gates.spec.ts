@@ -3,18 +3,19 @@
  *
  * Locks the per-role visibility contract for user-edit affordances and
  * the bracket lifecycle (generate / set winner / link Steam match)
- * across the 8 roles via ``roleMatrixTest``.
+ * across every role via ``roleMatrixTest``. The promoter column matches
+ * orgMember (Promotion stays locked on AUTH_MATRIX_ORG).
  *
  * Canonical matrix lives in ``docs/dev/auth/roles.md`` — keep that page
  * in sync with the expectations below. Quick reference:
  *
- *                                       siteAdmin siteStaff orgOwner orgAdmin orgStaff orgMember leagueAdmin leagueStaff anonymous
- *   orgUsersTab  (members_private off)    ✓         ✓         ✓        ✓        ✓        ✓         ✓           ✓          ✗
- *   editUser     (org members tab)        ✓         ✓         ✓        ✓        ✓        ✗         ✗           ✗          ✗
- *   editUser     (tournament players)     ✓         ✓         ✗        ✗        ✗        ✗         ✓           ✗          ✗
- *   generateBracket                       ✓         ✓         ✓        ✓        ✓        ✗         ✓           ✓          ✗
- *   setMatchWinner (radiant)              ✓         ✓         ✓        ✓        ✓        ✗         ✓           ✓          ✗
- *   linkSteamMatch                        ✓         ✓         ✗        ✗        ✗        ✗         ✗           ✗          ✗
+ *                                       siteAdmin siteStaff orgOwner orgAdmin orgStaff orgMember promoter leagueAdmin leagueStaff anonymous
+ *   orgUsersTab  (members_private off)  ✓         ✓         ✓        ✓        ✓        ✓         ✓        ✓           ✓           ✗
+ *   editUser     (org members tab)      ✓         ✓         ✓        ✓        ✓        ✗         ✗        ✗           ✗           ✗
+ *   editUser     (tournament players)   ✓         ✓         ✗        ✗        ✗        ✗         ✗        ✓           ✗           ✗
+ *   generateBracket                     ✓         ✓         ✓        ✓        ✓        ✗         ✗        ✓           ✓           ✗
+ *   setMatchWinner (radiant)            ✓         ✓         ✓        ✓        ✓        ✗         ✗        ✓           ✓           ✗
+ *   linkSteamMatch                      ✓         ✓         ✗        ✗        ✗        ✗         ✗        ✗           ✗           ✗
  *
  * Two known divergences:
  *
@@ -64,6 +65,7 @@ const ORG_USERS_TAB_EXPECTATIONS: Expectations = {
   orgAdmin: true,
   orgStaff: true,
   orgMember: true,
+  promoter: true,
   leagueAdmin: true,
   leagueStaff: true,
   anonymous: false,
@@ -78,6 +80,7 @@ const EDIT_USER_ORG_EXPECTATIONS: Expectations = {
   orgAdmin: true,
   orgStaff: true,
   orgMember: false,
+  promoter: false,
   leagueAdmin: false,
   leagueStaff: false,
   anonymous: false,
@@ -101,6 +104,7 @@ const EDIT_USER_TOURNAMENT_EXPECTATIONS: Expectations = {
   orgAdmin: false,   // org-admin cascade doesn't trigger (no embedded org)
   orgStaff: false,
   orgMember: false,
+  promoter: false,
   leagueAdmin: true,
   leagueStaff: false,
   anonymous: false,
@@ -116,6 +120,7 @@ const GENERATE_BRACKET_EXPECTATIONS: Expectations = {
   orgAdmin: true,
   orgStaff: true,
   orgMember: false,
+  promoter: false,
   leagueAdmin: true,
   leagueStaff: true,
   anonymous: false,
@@ -130,6 +135,7 @@ const SET_WINNER_EXPECTATIONS: Expectations = {
   orgAdmin: true,
   orgStaff: true,
   orgMember: false,
+  promoter: false,
   leagueAdmin: true,
   leagueStaff: true,
   anonymous: false,
@@ -146,6 +152,7 @@ const LINK_STEAM_MATCH_EXPECTATIONS: Expectations = {
   orgAdmin: false,
   orgStaff: false,
   orgMember: false,
+  promoter: false,
   leagueAdmin: false,
   leagueStaff: false,
   anonymous: false,
@@ -235,7 +242,7 @@ async function assertModalGateAcrossRoles(
   );
 }
 
-test.describe('Edit + Bracket permission matrix (8 roles in parallel)', () => {
+test.describe('Edit + Bracket permission matrix (all roles in parallel)', () => {
   test('Org Users tab visibility', async ({ roleContexts }) => {
     await assertGateAcrossRoles(
       roleContexts,

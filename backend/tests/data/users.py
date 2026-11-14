@@ -136,7 +136,7 @@ EVENT_LEAGUE_STAFF_USER: TestUser = TestUser(
 )
 
 # =============================================================================
-# Auth Matrix Role Test Users (pk=1090-1094)
+# Auth Matrix Role Test Users (pk=1090-1096)
 # Dedicated to the role-context matrix at /tests/playwright/e2e/17-auth/.
 # Scoped to AUTH_MATRIX_ORG (pk=8) and AUTH_MATRIX_LEAGUE (pk=9) so the
 # matrix is fully isolated from DTX-using suites — neither side can flap
@@ -179,6 +179,15 @@ AUTH_MATRIX_ORG_MEMBER_USER: TestUser = TestUser(
     org_id=8,
 )
 
+AUTH_MATRIX_ORG_PROMOTER_USER: TestUser = TestUser(
+    pk=1096,
+    username="auth_matrix_org_promoter",
+    nickname="Auth Matrix Org Promoter",
+    discord_id="100000000000000096",
+    steam_id_64=76561198012345696,
+    org_id=8,  # Promoter of Auth Matrix Test Org; Promotion stays locked
+)
+
 AUTH_MATRIX_LEAGUE_ADMIN_USER: TestUser = TestUser(
     pk=1093,
     username="auth_matrix_league_admin",
@@ -202,6 +211,7 @@ AUTH_MATRIX_USERS: list[TestUser] = [
     AUTH_MATRIX_ORG_ADMIN_USER,
     AUTH_MATRIX_ORG_STAFF_USER,
     AUTH_MATRIX_ORG_MEMBER_USER,
+    AUTH_MATRIX_ORG_PROMOTER_USER,
     AUTH_MATRIX_LEAGUE_ADMIN_USER,
     AUTH_MATRIX_LEAGUE_STAFF_USER,
 ]

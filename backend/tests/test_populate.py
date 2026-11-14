@@ -44,9 +44,10 @@ from tests.data.org_features import (
     ORG_FEATURES_UPCOMING_EVENT_NAME,
     PRIVATE_FEATURES_ORG,
 )
-from tests.data.organizations import EVENTS_ORG
-from tests.data.users import EVENT_LEAGUE_STAFF_USER
+from tests.data.organizations import AUTH_MATRIX_ORG, EVENTS_ORG
+from tests.data.users import AUTH_MATRIX_ORG_PROMOTER_USER, EVENT_LEAGUE_STAFF_USER
 from tests.helpers.tournament_config import TEST_TOURNAMENTS, populate_test_tournaments
+from tests.populate.auth_matrix import populate_auth_matrix_data
 from tests.populate.demo import (
     populate_demo_shuffle_draft_tournament,
     populate_demo_snake_draft_tournament,
@@ -60,7 +61,7 @@ from tests.populate.organizations import populate_organizations_and_leagues
 from tests.populate.shuffle_tie import populate_shuffle_tie_data
 from tests.populate.users import populate_test_auth_users, populate_users
 from tests.populate.utils import delete_ledger_for_users
-from tests.test_auth import reset_tournament_by_key
+from tests.test_auth import login_auth_matrix_org_promoter, reset_tournament_by_key
 from tests.test_org_features import (
     login_org_features,
     org_features_data,
@@ -477,3 +478,39 @@ class OrgFeaturesEndpointsTest(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertNotEqual(response.data["events"]["upcoming"]["pk"], before)
+
+
+@override_settings(DEBUG=True)
+class AuthMatrixPromoterTest(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        populate_organizations_and_leagues(force=True)
+        populate_test_auth_users(force=True)
+        populate_auth_matrix_data(force=True)
+
+    def _org(self) -> Organization:
+        return Organization.objects.get(pk=AUTH_MATRIX_ORG.pk)
+
+    def test_promoter_is_wired_into_auth_matrix_org(self) -> None:
+        org = self._org()
+        self.assertTrue(
+            org.promoters.filter(pk=AUTH_MATRIX_ORG_PROMOTER_USER.pk).exists()
+        )
+        self.assertTrue(
+            OrgUser.objects.filter(
+                user_id=AUTH_MATRIX_ORG_PROMOTER_USER.pk, organization=org
+            ).exists()
+        )
+
+    def test_auth_matrix_org_keeps_promotion_locked(self) -> None:
+        self.assertFalse(org_has_feature(self._org(), FeatureKey.PROMOTION))
+
+    def test_promoter_login_restores_membership(self) -> None:
+        org = self._org()
+        org.promoters.clear()
+        request = APIRequestFactory().post("/api/tests/login-auth-matrix-org-promoter/")
+        request.session = SessionStore()
+        self.assertEqual(login_auth_matrix_org_promoter(request).status_code, 200)
+        self.assertTrue(
+            org.promoters.filter(pk=AUTH_MATRIX_ORG_PROMOTER_USER.pk).exists()
+        )

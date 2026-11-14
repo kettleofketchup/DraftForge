@@ -16,6 +16,7 @@ from .test_auth import (
     login_auth_matrix_org_admin,
     login_auth_matrix_org_member,
     login_auth_matrix_org_owner,
+    login_auth_matrix_org_promoter,
     login_auth_matrix_org_staff,
     login_event_league_staff,
     login_league_admin,
@@ -141,6 +142,11 @@ urlpatterns = [
         "login-auth-matrix-org-member/",
         login_auth_matrix_org_member,
         name="login-auth-matrix-org-member",
+    ),
+    path(
+        "login-auth-matrix-org-promoter/",
+        login_auth_matrix_org_promoter,
+        name="login-auth-matrix-org-promoter",
     ),
     path(
         "login-auth-matrix-league-admin/",

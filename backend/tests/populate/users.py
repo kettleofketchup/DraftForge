@@ -9,7 +9,7 @@ from django.conf import settings
 from app.models import CustomUser, Organization
 
 from .constants import DTX_ORG_NAME
-from .utils import create_user, ensure_org_user, generate_mock_discord_members
+from .utils import create_user, generate_mock_discord_members
 
 
 def populate_users(force: bool = False) -> None:
@@ -104,6 +104,7 @@ def populate_test_auth_users(force=False):
         AUTH_MATRIX_ORG_ADMIN_USER,
         AUTH_MATRIX_ORG_MEMBER_USER,
         AUTH_MATRIX_ORG_OWNER_USER,
+        AUTH_MATRIX_ORG_PROMOTER_USER,
         AUTH_MATRIX_ORG_STAFF_USER,
         CLAIMABLE_USER,
         EVENT_LEAGUE_STAFF_USER,
@@ -237,7 +238,9 @@ def populate_test_auth_users(force=False):
     if events_league:
         if event_league_staff not in events_league.staff.all():
             events_league.staff.add(event_league_staff)
-            print(f"  Added {event_league_staff.username} as staff of {events_league.name}")
+            print(
+                f"  Added {event_league_staff.username} as staff of {events_league.name}"
+            )
 
     # Auth matrix users — create the CustomUser rows here (so social auth
     # is wired alongside everyone else) but defer the org/league role
@@ -248,7 +251,8 @@ def populate_test_auth_users(force=False):
     create_user_with_pk(AUTH_MATRIX_ORG_ADMIN_USER)
     create_user_with_pk(AUTH_MATRIX_ORG_STAFF_USER)
     create_user_with_pk(AUTH_MATRIX_ORG_MEMBER_USER)
+    create_user_with_pk(AUTH_MATRIX_ORG_PROMOTER_USER)
     create_user_with_pk(AUTH_MATRIX_LEAGUE_ADMIN_USER)
     create_user_with_pk(AUTH_MATRIX_LEAGUE_STAFF_USER)
 
-    print(f"Test auth users created/updated successfully!")
+    print("Test auth users created/updated successfully!")
