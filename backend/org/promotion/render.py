@@ -38,8 +38,7 @@ PLACEHOLDERS: tuple[PlaceholderSpec, ...] = (
 )
 
 TOKEN_RE = re.compile(
-    r"\{(player|promoter|event|event_time|event_time_relative|event_date"
-    r"|signups_open|event_link|org|discord_link)\}"
+    r"\{(" + "|".join(re.escape(spec["key"]) for spec in PLACEHOLDERS) + r")\}"
 )
 ANY_TOKEN_RE = re.compile(r"\{[^{}]*\}")
 
@@ -71,7 +70,7 @@ def validate_template_body(body: str) -> list[str]:
 
 
 def render_template(body: str, context: Mapping[str, str]) -> RenderResult:
-    text = TOKEN_RE.sub(lambda m: context[m[1]], body)
+    text = TOKEN_RE.sub(lambda m: context.get(m[1], m[0]), body)
     return RenderResult(text=text, warnings=_scan_warnings(body))
 
 

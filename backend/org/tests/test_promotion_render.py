@@ -91,6 +91,15 @@ class PlaceholderSpecTest(SimpleTestCase):
             self.assertIsNotNone(TOKEN_RE.fullmatch("{" + key + "}"))
         self.assertIsNone(TOKEN_RE.fullmatch("{player:>9}"))
         self.assertIsNotNone(ANY_TOKEN_RE.fullmatch("{player:>9}"))
+        alternation = TOKEN_RE.pattern.split("(", 1)[1].rsplit(")", 1)[0]
+        self.assertEqual(set(alternation.split("|")), set(EXPECTED_KEYS))
+        for near_miss in ("{players}", "{Player}", "{event_}", "{org }"):
+            self.assertIsNone(TOKEN_RE.fullmatch(near_miss))
+
+    def test_partial_context_leaves_missing_token_literal(self) -> None:
+        result = render_template("Hi {player}, join {event}", {"player": "Ann"})
+        self.assertEqual(result.text, "Hi Ann, join {event}")
+        self.assertEqual(result.warnings, [])
 
 
 class ValidateTemplateBodyTest(SimpleTestCase):
