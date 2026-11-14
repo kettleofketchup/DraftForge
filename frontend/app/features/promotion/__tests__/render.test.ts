@@ -110,4 +110,17 @@ describe('sampleContext', () => {
     expect(ctx.discord_link).toBe('');
     expect(ctx.promoter).toBe('');
   });
+
+  it('leaves the time placeholders empty for a malformed date', () => {
+    const ctx = sampleContext(
+      { ...event, scheduled_at: 'not-a-date', signups_open_at: 'nope' },
+      org,
+      sender,
+      'https://x',
+    );
+    expect(ctx.event_time).toBe('');
+    expect(ctx.event_time_relative).toBe('');
+    expect(ctx.event_date).toBe('');
+    expect(ctx.signups_open).toBe('');
+  });
 });

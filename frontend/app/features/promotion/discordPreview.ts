@@ -31,10 +31,10 @@ const RELATIVE_UNITS: ReadonlyArray<
   [Intl.RelativeTimeFormatUnit, number, number]
 > = [
   ['second', 1, 60],
-  ['minute', 60, 60 * 60],
-  ['hour', 60 * 60, 24 * 60 * 60],
-  ['day', 24 * 60 * 60, 30 * 24 * 60 * 60],
-  ['month', 30 * 24 * 60 * 60, 365 * 24 * 60 * 60],
+  ['minute', 60, 60],
+  ['hour', 60 * 60, 24],
+  ['day', 24 * 60 * 60, 30],
+  ['month', 30 * 24 * 60 * 60, 12],
   ['year', 365 * 24 * 60 * 60, Infinity],
 ];
 
@@ -50,10 +50,12 @@ function formatRelative(date: Date, now: Date, locale: string): string {
   const diffSeconds = (date.getTime() - now.getTime()) / 1000;
   const abs = Math.abs(diffSeconds);
   const rtf = new Intl.RelativeTimeFormat(locale, { numeric: 'always' });
-  const [unit, size] =
-    RELATIVE_UNITS.find(([, , limit]) => abs < limit) ??
-    RELATIVE_UNITS[RELATIVE_UNITS.length - 1];
-  return rtf.format(Math.round(diffSeconds / size), unit);
+  const sign = diffSeconds < 0 ? -1 : 1;
+  for (const [unit, size, maxCount] of RELATIVE_UNITS) {
+    const count = Math.round(abs / size);
+    if (count < maxCount) return rtf.format(sign * count, unit);
+  }
+  return '';
 }
 
 export function formatDiscordTimestamps(

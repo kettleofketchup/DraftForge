@@ -98,6 +98,18 @@ describe('formatDiscordTimestamps', () => {
     expect(at(2 * 365 * 86400)).toBe('in 2 years');
   });
 
+  it('R moves up a unit when the rounded count reaches the limit', () => {
+    const at = (s: number): string =>
+      formatDiscordTimestamps(`<t:${EPOCH}:R>`, {
+        ...OPTS,
+        now: new Date(EPOCH * 1000 - s * 1000),
+      });
+    expect(at(59.6)).toBe('in 1 minute');
+    expect(at(23.6 * 3600)).toBe('in 1 day');
+    expect(at(29.6 * 86400)).toBe('in 1 month');
+    expect(at(-59.6)).toBe('1 minute ago');
+  });
+
   it('replaces every code and leaves the rest of the text alone', () => {
     const out = formatDiscordTimestamps(
       `On <t:${EPOCH}:D> at <t:${EPOCH}:t>, see you`,
@@ -131,11 +143,20 @@ describe('formatDiscordTimestamps', () => {
   });
 
   it('falls back to en on an invalid locale instead of throwing', () => {
-    expect(() =>
-      formatDiscordTimestamps(`<t:${EPOCH}:F>`, {
-        locale: '!!bad',
+    const out = formatDiscordTimestamps(`<t:${EPOCH}:F>`, {
+      locale: '!!bad',
+      timeZone: 'UTC',
+    });
+    expect(out).toBe(
+      new Intl.DateTimeFormat('en', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
         timeZone: 'UTC',
-      }),
-    ).not.toThrow();
+      }).format(DATE),
+    );
   });
 });

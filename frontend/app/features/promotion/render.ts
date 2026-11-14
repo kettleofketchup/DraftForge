@@ -86,7 +86,9 @@ export function playerName(user: SampleSender | null | undefined): string {
 }
 
 function discordTimestamp(iso: string, style: string): string {
-  return `<t:${Math.floor(new Date(iso).getTime() / 1000)}:${style}>`;
+  const ms = new Date(iso).getTime();
+  if (Number.isNaN(ms)) return '';
+  return `<t:${Math.floor(ms / 1000)}:${style}>`;
 }
 
 function defaultOrigin(): string {
