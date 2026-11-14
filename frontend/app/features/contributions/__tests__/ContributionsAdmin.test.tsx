@@ -12,6 +12,7 @@ import {
   getLeaderboard,
   getPointValues,
   setPointValue,
+  updateManualAward,
 } from '../api';
 import { ContributionsTab } from '../ContributionsTab';
 import type { AdminEntry, PointValueRow } from '../schemas';
@@ -91,7 +92,7 @@ function entry(pk: number, kind: AdminEntry['kind']): AdminEntry {
   };
 }
 
-function renderTab(access: OrgFeatureAccess) {
+function renderTab(access: OrgFeatureAccess, timeZone = 'UTC') {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={qc}>
@@ -99,7 +100,7 @@ function renderTab(access: OrgFeatureAccess) {
     </QueryClientProvider>
   );
   return render(
-    <ContributionsTab orgId={7} timeZone="UTC" membersPrivate={false} access={access} />,
+    <ContributionsTab orgId={7} timeZone={timeZone} membersPrivate={false} access={access} />,
     { wrapper },
   );
 }
@@ -237,5 +238,61 @@ describe('contributions admin section', () => {
         event_id: null,
       }),
     );
+  });
+
+  it('edits a manual award in the org timezone without sending user_id', async () => {
+    vi.mocked(getEntries).mockResolvedValue({
+      count: 1,
+      limit: 50,
+      offset: 0,
+      results: [{ ...entry(31, 'manual'), occurred_at: '2026-11-01T03:00:00Z' }],
+    });
+    vi.mocked(updateManualAward).mockResolvedValue(entry(31, 'manual'));
+    renderTab(admin, 'America/Chicago');
+    fireEvent.click(await screen.findByTestId('ledger-edit-31'));
+    expect(await screen.findByTestId('manual-award-edit-date')).toHaveValue('2026-10-31');
+    fireEvent.change(screen.getByTestId('manual-award-edit-points'), { target: { value: '9' } });
+    fireEvent.click(screen.getByTestId('manual-award-edit-submit'));
+    await waitFor(() =>
+      expect(updateManualAward).toHaveBeenCalledWith(7, 31, {
+        points: 9,
+        reason: 'Casting',
+        date: '2026-10-31',
+        event_id: null,
+      }),
+    );
+  });
+
+  it('deletes a manual award after confirmation', async () => {
+    renderTab(admin);
+    fireEvent.click(await screen.findByTestId('ledger-delete-31'));
+    fireEvent.click(await screen.findByTestId('ledger-delete-confirm'));
+    await waitFor(() => expect(deleteManualAward).toHaveBeenCalledWith(7, 31));
+  });
+
+  it('falls back to the last page when the current page empties', async () => {
+    const pageTwo = { count: 51, limit: 50, offset: 50, results: [entry(99, 'manual')] };
+    const pageOne = {
+      count: 50,
+      limit: 50,
+      offset: 0,
+      results: [entry(31, 'manual')],
+    };
+    vi.mocked(getEntries).mockImplementation(async (_orgId, filters) =>
+      filters.offset === 0 ? { ...pageOne, count: pageTwo.count } : pageTwo,
+    );
+    renderTab(admin);
+    fireEvent.click(await screen.findByTestId('ledger-next'));
+    await screen.findByTestId('ledger-row-99');
+
+    vi.mocked(getEntries).mockImplementation(async (_orgId, filters) =>
+      filters.offset === 0 ? pageOne : { count: 50, limit: 50, offset: filters.offset, results: [] },
+    );
+    fireEvent.click(screen.getByTestId('ledger-delete-99'));
+    fireEvent.click(await screen.findByTestId('ledger-delete-confirm'));
+
+    await screen.findByTestId('ledger-row-31');
+    expect(getEntries).toHaveBeenLastCalledWith(7, expect.objectContaining({ offset: 0 }));
+    expect(screen.queryByText('No entries match these filters')).toBeNull();
   });
 });

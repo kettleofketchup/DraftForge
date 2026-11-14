@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { toast } from 'sonner';
 import {
@@ -17,6 +17,7 @@ import {
   DialogTitle,
 } from '~/components/ui/dialog';
 import { ConfirmDialog } from '~/components/ui/dialogs';
+import { UserAvatar } from '~/components/user/UserAvatar';
 import type { OrgFeatureAccess } from '~/features/org-features';
 import { extractApiError } from '~/lib/apiError';
 import { getLogger } from '~/lib/logger';
@@ -60,6 +61,15 @@ export function LedgerTable({ orgId, access, timeZone, members, events }: Ledger
     filters,
   );
   const remove = useDeleteManualAward(orgId, access);
+
+  useEffect(() => {
+    if (!data || data.offset === 0 || data.offset < data.count) return;
+    const lastPageOffset = Math.max(
+      0,
+      (Math.ceil(data.count / ENTRIES_PAGE_SIZE) - 1) * ENTRIES_PAGE_SIZE,
+    );
+    setFilters((f) => (f.offset === data.offset ? { ...f, offset: lastPageOffset } : f));
+  }, [data]);
 
   const confirmDelete = async (): Promise<void> => {
     if (!deleting) return;
@@ -148,9 +158,20 @@ export function LedgerTable({ orgId, access, timeZone, members, events }: Ledger
               data-testid={`ledger-row-${entry.pk}`}
             >
               <div className="min-w-0">
-                <div className="font-medium">
-                  {entry.member.nickname || entry.member.username}
-                  <span className="text-muted-foreground"> · {KIND_LABELS[entry.kind]}</span>
+                <div className="flex items-center gap-2 font-medium">
+                  <UserAvatar
+                    user={{
+                      pk: entry.member.user_pk,
+                      username: entry.member.username,
+                      nickname: entry.member.nickname,
+                      avatarUrl: entry.member.avatarUrl,
+                    }}
+                    size="sm"
+                  />
+                  <span className="min-w-0 truncate">
+                    {entry.member.nickname || entry.member.username}
+                    <span className="text-muted-foreground"> · {KIND_LABELS[entry.kind]}</span>
+                  </span>
                 </div>
                 <div className="truncate text-sm text-muted-foreground">
                   {formatOrgDate(entry.occurred_at, timeZone)}

@@ -1,7 +1,7 @@
 import type { QueryClient } from '@tanstack/react-query';
 
 type ViewerPk = number | null;
-type Filters = Record<string, unknown>;
+type Filters = object;
 
 const CONTRIBUTIONS = 'org-contributions';
 const PROMOTION = 'org-promotion';

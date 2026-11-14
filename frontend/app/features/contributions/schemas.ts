@@ -121,7 +121,6 @@ export interface EntriesFilters {
   period: string;
   kind: ContributionKind | null;
   offset: number;
-  [key: string]: unknown;
 }
 
 function isCalendarDate(value: string): boolean {
