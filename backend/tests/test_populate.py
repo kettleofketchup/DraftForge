@@ -335,6 +335,15 @@ class OrgFeaturesPopulateTest(TestCase):
         PromoTemplate.objects.filter(organization=org).delete()
         outsider = CustomUser.objects.get(pk=ORG_FEATURES_ROLE_USERS["outsider"].pk)
         OrgUser.objects.create(user=outsider, organization=org)
+        member_org_user_pk = (
+            OrgUser.objects.nocache()
+            .get(user_id=ORG_FEATURES_ROLE_USERS["member"].pk, organization=org)
+            .pk
+        )
+        seeded_pk, _, _, seeded_players = ORG_FEATURES_TOURNAMENTS[0]
+        seeded = Tournament.objects.get(pk=seeded_pk)
+        seeded.users.add(outsider)
+        Tournament.objects.filter(pk=seeded_pk).update(state="in_progress")
         stray = Tournament.objects.create(
             name="Stray",
             league_id=FEATURES_LEAGUE.pk,
@@ -367,7 +376,22 @@ class OrgFeaturesPopulateTest(TestCase):
         self.assertFalse(
             OrgUser.objects.nocache().filter(user=outsider, organization=org).exists()
         )
+        self.assertTrue(
+            OrgUser.objects.nocache()
+            .filter(
+                pk=member_org_user_pk,
+                user_id=ORG_FEATURES_ROLE_USERS["member"].pk,
+                organization=org,
+            )
+            .exists()
+        )
         self.assertFalse(Tournament.objects.nocache().filter(pk=stray.pk).exists())
+        seeded = Tournament.objects.nocache().get(pk=seeded_pk)
+        self.assertEqual(seeded.state, "past")
+        self.assertEqual(
+            set(seeded.users.values_list("pk", flat=True)),
+            {p.pk for p in seeded_players},
+        )
         self.assertEqual(
             Tournament.objects.nocache().filter(league_id=FEATURES_LEAGUE.pk).count(),
             len(ORG_FEATURES_TOURNAMENTS),

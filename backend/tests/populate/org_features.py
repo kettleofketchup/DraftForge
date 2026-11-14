@@ -3,8 +3,10 @@
 populate_org_features_data creates the orgs, leagues, users, memberships and
 past tournaments, then runs the reset. reset_org_features_data, behind
 POST /api/tests/org-features/reset/, rebuilds everything the specs change:
-ledger rows, promo sends, point values, events, templates, feature switches
-and role membership. org_features_test_data is the lookup the specs read.
+ledger rows, promo sends, point values, events, templates, feature switches,
+role membership, org memberships (non-seeded OrgUsers are deleted), the seeded
+tournaments (non-seeded ones in the features leagues are deleted) and org name
+and timezone. org_features_test_data is the lookup the specs read.
 """
 
 from datetime import timedelta
@@ -122,8 +124,6 @@ def populate_org_features_data(force: bool = False) -> None:
         _ensure_org_and_league(org_data, league_data)
     for data in ORG_FEATURES_USERS:
         _ensure_user(data)
-    _ensure_tournaments()
-    invalidate_model(Tournament)
     reset_org_features_data()
     print(f"    Created {', '.join(o.name for o in ORG_FEATURES_ORGS)}")
 
@@ -234,6 +234,7 @@ def _rebuild() -> list[Organization]:
     ).delete()
     PromoTemplate.objects.nocache().filter(organization__in=org_pks).delete()
 
+    _ensure_tournaments()
     _reset_roles(orgs, users)
     for org_pk in sorted(ORG_FEATURES_UNLOCKED_PKS):
         for name, body in ORG_FEATURES_TEMPLATES:
