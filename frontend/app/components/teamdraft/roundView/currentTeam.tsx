@@ -7,8 +7,7 @@ import { useUserStore } from '~/store/userStore';
 const log = getLogger('CurrentTeamView');
 interface CurrentTeamViewProps {
 }
-export const CurrentTeamView: React.FC<CurrentTeamViewProps> = ({
-}) => {
+export const CurrentTeamView: React.FC<CurrentTeamViewProps> = () => {
   const curRound: DraftRoundType = useUserStore((state) => state.curDraftRound);
   const tournament: TournamentType = useUserStore((state) => state.tournament);
   const [updating, setUpdating] = useState(false);

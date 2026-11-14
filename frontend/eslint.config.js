@@ -16,6 +16,8 @@ export default [
       'tests/playwright/**',
     ],
   },
+  // Kept disable comments target rules still off (react-hooks, no-explicit-any).
+  { linterOptions: { reportUnusedDisableDirectives: 'off' } },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {

@@ -31,7 +31,7 @@ export const UserRemoveButton: React.FC<PropsRemoveButton> = ({
   );
 
   const removeUser = useCallback(async () => {
-    let thisUser = new User(user as UserType);
+    const thisUser = new User(user as UserType);
     toast.promise(thisUser.dbDelete(), {
       loading: `Deleting User ${user.username}.`,
       success: (data) => {

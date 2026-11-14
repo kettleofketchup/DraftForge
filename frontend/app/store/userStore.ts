@@ -296,7 +296,7 @@ export const useUserStore = create<UserState>()(
         });
       },
       tournamentsByUser: (user) => {
-        var tourns = get().tournaments;
+        let tourns = get().tournaments;
         if (tourns.length === 0) {
           if (get().tournament) tourns.push(get().tournament);
         }
@@ -330,7 +330,7 @@ export const useUserStore = create<UserState>()(
       setTournamentPK: (pk: number) => set({ tournamentPK: pk }),
       tournamentPK: null,
       getCurrentTournament: async () => {
-        let id = get().tournamentPK;
+        const id = get().tournamentPK;
         if (id === null || id === undefined) {
           return;
         }

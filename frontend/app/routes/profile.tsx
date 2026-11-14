@@ -4,7 +4,7 @@ import { useUserStore } from '~/store/userStore';
 import type { Route } from './+types/home';
 import { Spinner } from '~/components/ui/spinner';
 
-export function meta({}: Route.MetaArgs) {
+export function meta() {
   return [
     { title: 'Profile' },
     { name: 'description', content: 'Your profile' },

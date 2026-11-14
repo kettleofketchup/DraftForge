@@ -8,7 +8,7 @@ import { DraftRoundCard } from './draftRoundCard';
 const log = getLogger('CaptainCards');
 interface CaptainCardsProps {}
 
-export const CaptainCards: React.FC<CaptainCardsProps> = ({}) => {
+export const CaptainCards: React.FC<CaptainCardsProps> = () => {
   const draft: DraftType = useUserStore((state) => state.draft);
   const curDraftRound = useUserStore((state) => state.curDraftRound);
   const draftIndex = deriveDraftIndex(draft?.draft_rounds, curDraftRound?.pk);

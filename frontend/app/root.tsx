@@ -26,8 +26,6 @@ import { ActiveDraftBanner } from './components/teamdraft/ActiveDraftBanner';
 import { FloatingDraftIndicator } from './components/teamdraft/FloatingDraftIndicator';
 import ResponsiveAppBar from './components/navbar/navbar';
 
-('use client');
-
 const log = getLogger('root');
 
 export const links: Route.LinksFunction = () => [];

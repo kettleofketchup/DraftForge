@@ -32,7 +32,7 @@ export const updateGameHook = async ({ game }: hookParams) => {
     return;
   }
 
-  let data: Partial<GameType> = {
+  const data: Partial<GameType> = {
     ...game,
   };
 

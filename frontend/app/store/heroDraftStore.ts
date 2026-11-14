@@ -234,57 +234,58 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
           set({ lastEvent: message as HeroDraftEvent });
           break;
 
-        case 'herodraft_tick':
-          debugLog('herodraft_tick received', {
-            draft_state: message.draft_state,
-            current_round: message.current_round,
-            active_team_id: message.active_team_id,
-            server_time: message.server_time,
-            round_started_at: message.round_started_at,
-          });
-
-          // Offset from the least-delayed recent tick, so one tick stuck in a
-          // queue can't shift this viewer's clock by its delay.
-          const tickReceivedAtMs = Date.now();
-          const clock = addClockOffsetSample(get()._offsetSamples, message.server_time, tickReceivedAtMs);
-
-          // Gap detection — expected cadence is 1Hz. If we go >2s without
-          // a tick, log it. This catches client-side delivery problems
-          // the server can't see (WS hiccup, throttled tab, queue
-          // saturation) and complements server's `tick_loop_stalled`.
-          const lastTickAt = get()._lastTickReceivedAtMs;
-          if (lastTickAt !== null) {
-            const gapMs = tickReceivedAtMs - lastTickAt;
-            if (gapMs > 2000) {
-              log.warn('client_tick_gap', {
-                draft_id: get()._currentDraftId,
-                expected_gap_ms: 1000,
-                actual_gap_ms: gapMs,
-                stall_ms: gapMs - 1000,
-              });
-            }
-          }
-
-          set({
-            _lastTickReceivedAtMs: tickReceivedAtMs,
-            _offsetSamples: clock.samples,
-            serverClockOffsetMs: clock.offsetMs,
-            tick: {
-              type: 'herodraft_tick',
+        case 'herodraft_tick': {
+            debugLog('herodraft_tick received', {
               draft_state: message.draft_state,
-              server_time: message.server_time,
               current_round: message.current_round,
               active_team_id: message.active_team_id,
+              server_time: message.server_time,
               round_started_at: message.round_started_at,
-              round_grace_time_ms: message.round_grace_time_ms,
-              team_a_id: message.team_a_id,
-              team_a_reserve_ms: message.team_a_reserve_ms,
-              team_b_id: message.team_b_id,
-              team_b_reserve_ms: message.team_b_reserve_ms,
-              resuming_until: message.resuming_until,
-            },
-          });
-          break;
+            });
+
+            // Offset from the least-delayed recent tick, so one tick stuck in a
+            // queue can't shift this viewer's clock by its delay.
+            const tickReceivedAtMs = Date.now();
+            const clock = addClockOffsetSample(get()._offsetSamples, message.server_time, tickReceivedAtMs);
+
+            // Gap detection — expected cadence is 1Hz. If we go >2s without
+            // a tick, log it. This catches client-side delivery problems
+            // the server can't see (WS hiccup, throttled tab, queue
+            // saturation) and complements server's `tick_loop_stalled`.
+            const lastTickAt = get()._lastTickReceivedAtMs;
+            if (lastTickAt !== null) {
+              const gapMs = tickReceivedAtMs - lastTickAt;
+              if (gapMs > 2000) {
+                log.warn('client_tick_gap', {
+                  draft_id: get()._currentDraftId,
+                  expected_gap_ms: 1000,
+                  actual_gap_ms: gapMs,
+                  stall_ms: gapMs - 1000,
+                });
+              }
+            }
+
+            set({
+              _lastTickReceivedAtMs: tickReceivedAtMs,
+              _offsetSamples: clock.samples,
+              serverClockOffsetMs: clock.offsetMs,
+              tick: {
+                type: 'herodraft_tick',
+                draft_state: message.draft_state,
+                server_time: message.server_time,
+                current_round: message.current_round,
+                active_team_id: message.active_team_id,
+                round_started_at: message.round_started_at,
+                round_grace_time_ms: message.round_grace_time_ms,
+                team_a_id: message.team_a_id,
+                team_a_reserve_ms: message.team_a_reserve_ms,
+                team_b_id: message.team_b_id,
+                team_b_reserve_ms: message.team_b_reserve_ms,
+                resuming_until: message.resuming_until,
+              },
+            });
+            break;
+        }
 
         case 'herodraft_kicked': {
           log.warn('Kicked from draft:', message.reason);

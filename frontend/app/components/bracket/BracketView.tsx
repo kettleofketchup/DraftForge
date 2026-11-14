@@ -367,7 +367,7 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
       });
 
       // Position grand finals aligned with winners final (in winners section, above divider)
-      let grandFinalsY = winnersFinal ? winnersFinal.position.y : 0;
+      const grandFinalsY = winnersFinal ? winnersFinal.position.y : 0;
 
       const grandFinalsNodes: MatchNodeType[] = grandFinalsMatches.map((match, i) => ({
         id: match.id,

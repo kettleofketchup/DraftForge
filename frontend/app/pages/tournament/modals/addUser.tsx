@@ -32,7 +32,7 @@ export default function PlayersTab({
     );
   }
 
-  let navigate = useNavigate();
+  const navigate = useNavigate();
 
   return (
     <Suspense fallback={<div>Loading...</div>}>

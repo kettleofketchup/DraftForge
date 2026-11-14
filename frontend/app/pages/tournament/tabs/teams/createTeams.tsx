@@ -30,7 +30,7 @@ export function createTeams(users: UserType[], teamSize: number): TeamType[] {
   // Sort by MMR after shuffling for balanced assignment
   const sorted = trimmed.sort((a, b) => (b.mmr ?? 0) - (a.mmr ?? 0));
   const numTeams = Math.floor(usableCount / teamSize);
-  var teams: TeamType[] = Array.from({ length: numTeams }, (_, t) => ({
+  const teams: TeamType[] = Array.from({ length: numTeams }, (_, t) => ({
     members: [],
     captain: undefined,
     name: `Team ${t + 1}`,
@@ -60,7 +60,7 @@ export function createTeams(users: UserType[], teamSize: number): TeamType[] {
     return mmrs.length ? mmrs.reduce((a: number, b: number) => a + b, 0) / mmrs.length : 0;
   };
   let improved = true;
-  let maxIterations = 100;
+  const maxIterations = 100;
 
   let curIteration = 0;
   while (improved && curIteration < maxIterations) {

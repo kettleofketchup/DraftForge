@@ -28,7 +28,7 @@ export const GameCard: React.FC<Props> = ({
   saveFunc,
   onEditModeChange,
 }) => {
-  let navigate = useNavigate();
+  const navigate = useNavigate();
   const [editMode, setEditMode] = useState(edit || false);
   const [form, setForm] = useState<GameType>(game ?? ({} as GameType));
   const [isSaving, setIsSaving] = useState(false);

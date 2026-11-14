@@ -38,13 +38,14 @@ export const refreshTournamentHook = async ({
     const data = hydrateTournament(rawData as TournamentType & { _users?: Record<number, unknown> }) as TournamentType;
     setTournament(data);
     if (setDraft && data.draft) setDraft(data.draft);
-    if (setCurDraftRound)
-      (log.debug('curDraftRound', { curDraftRound, tournament }),
-        setCurDraftRound(
-          data.draft?.draft_rounds?.find(
-            (round: DraftRoundType) => round?.pk === curDraftRound?.pk,
-          ) || ({} as DraftRoundType),
-        ));
+    if (setCurDraftRound) {
+      log.debug('curDraftRound', { curDraftRound, tournament });
+      setCurDraftRound(
+        data.draft?.draft_rounds?.find(
+          (round: DraftRoundType) => round?.pk === curDraftRound?.pk,
+        ) || ({} as DraftRoundType),
+      );
+    }
   } catch (error) {
     log.error('Tournament  has failed to refresh!', error);
   }

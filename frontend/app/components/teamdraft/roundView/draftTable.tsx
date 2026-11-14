@@ -34,7 +34,7 @@ const getOrdinal = (n: number): string => {
   return n + (s[(v - 20) % 10] || s[v] || s[0]);
 };
 interface DraftTableProps {}
-export const DraftTable: React.FC<DraftTableProps> = ({}) => {
+export const DraftTable: React.FC<DraftTableProps> = () => {
   const tournament = useUserStore((state) => state.tournament);
   const curRound: DraftRoundType = useUserStore((state) => state.curDraftRound);
   const draft = useUserStore((state) => state.draft);

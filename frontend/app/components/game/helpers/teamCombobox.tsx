@@ -42,7 +42,7 @@ export const TeamComboBox: React.FC<Props> = ({
 
   const [open, setOpen] = React.useState(false);
   const getDropboxValues = () => {
-    let comboBox: TeamComboBoxType[] = [];
+    const comboBox: TeamComboBoxType[] = [];
     let team: any;
     teams.forEach((value: TeamType) => {
       comboBox.push({
