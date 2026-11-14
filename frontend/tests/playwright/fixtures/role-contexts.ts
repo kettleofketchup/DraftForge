@@ -46,22 +46,18 @@
  * independent failure boundaries.
  */
 
-import {
-  test as base,
-  type Browser,
-  type BrowserContext,
-  type Page,
-} from '@playwright/test';
+import type { Browser, BrowserContext, Page } from '@playwright/test';
 import {
   loginAdmin,
-  loginStaff,
-  loginAuthMatrixOrgOwner,
-  loginAuthMatrixOrgAdmin,
-  loginAuthMatrixOrgStaff,
-  loginAuthMatrixOrgMember,
   loginAuthMatrixLeagueAdmin,
   loginAuthMatrixLeagueStaff,
+  loginAuthMatrixOrgAdmin,
+  loginAuthMatrixOrgMember,
+  loginAuthMatrixOrgOwner,
+  loginAuthMatrixOrgStaff,
+  loginStaff,
 } from './auth';
+import { test as base } from './external-apis';
 
 export type RoleName =
   | 'siteAdmin'
@@ -129,7 +125,9 @@ const ROLE_LOGINS: Record<RoleName, RoleLogin> = {
  * cleanup the fixture's teardown never runs (it's tied to ``use()``)
  * and orphaned contexts leak across tests.
  */
-export async function setupRoleContexts(browser: Browser): Promise<RoleContexts> {
+export async function setupRoleContexts(
+  browser: Browser,
+): Promise<RoleContexts> {
   const createdContexts: BrowserContext[] = [];
   try {
     const entries = await Promise.all(

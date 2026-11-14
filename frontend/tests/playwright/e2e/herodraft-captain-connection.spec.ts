@@ -1,13 +1,9 @@
+import { expect } from '@playwright/test';
+import { loginAsUser, waitForHydration } from '../fixtures/auth';
 import { BASE_URL } from '../fixtures/base-url';
-import { test as base, expect } from '@playwright/test';
-import type { BrowserContext, Page } from '@playwright/test';
-import {
-  loginAsUser,
-  waitForHydration,
-  API_URL,
-} from '../fixtures/auth';
-import { getHeroDraftByKey, resetHeroDraft } from '../fixtures/herodraft';
+import { test as base } from '../fixtures/external-apis';
 import type { HeroDraftInfo } from '../fixtures/herodraft';
+import { getHeroDraftByKey, resetHeroDraft } from '../fixtures/herodraft';
 
 /**
  * Test captain connection management for HeroDraft.
@@ -27,7 +23,9 @@ const test = base.extend<{
     const context = await browser.newContext({ ignoreHTTPSErrors: true });
     const draftInfo = await getHeroDraftByKey(context, 'two_captain_test');
     if (!draftInfo) {
-      throw new Error('Could not fetch HeroDraft test data. Ensure test data is populated.');
+      throw new Error(
+        'Could not fetch HeroDraft test data. Ensure test data is populated.',
+      );
     }
     // Reset draft to clean state
     await resetHeroDraft(context, draftInfo.pk);
@@ -72,7 +70,7 @@ test.describe('HeroDraft Captain Connection Management', () => {
 
     // Verify we're connected (no error shown)
     await expect(
-      page1.locator('[data-testid="herodraft-reconnecting"]')
+      page1.locator('[data-testid="herodraft-reconnecting"]'),
     ).not.toBeVisible();
 
     // Give time for WebSocket to establish and heartbeat to start
@@ -128,7 +126,7 @@ test.describe('HeroDraft Captain Connection Management', () => {
     // === Verify Second Context Is Still Connected ===
     // Second context should be working normally
     await expect(
-      page2.locator('[data-testid="herodraft-reconnecting"]')
+      page2.locator('[data-testid="herodraft-reconnecting"]'),
     ).not.toBeVisible();
 
     // Cleanup
@@ -183,7 +181,9 @@ test.describe('HeroDraft Captain Connection Management', () => {
 
     // === First Context Reconnects ===
     // Click reconnect button if visible, or just reload
-    const reconnectBtn = page1.locator('[data-testid="herodraft-reconnect-btn"]');
+    const reconnectBtn = page1.locator(
+      '[data-testid="herodraft-reconnect-btn"]',
+    );
     if (await reconnectBtn.isVisible().catch(() => false)) {
       await reconnectBtn.click();
     } else {
@@ -199,7 +199,7 @@ test.describe('HeroDraft Captain Connection Management', () => {
     // After reconnection, should not show error
     await page1.waitForTimeout(1000);
     await expect(
-      page1.locator('[data-testid="herodraft-reconnecting"]')
+      page1.locator('[data-testid="herodraft-reconnecting"]'),
     ).not.toBeVisible();
 
     // Cleanup
@@ -226,7 +226,9 @@ test.describe('HeroDraft Captain Connection Management', () => {
     await loginAsUser(captainAContext, captainPk);
     await captainAPage.goto(draftUrl);
     await waitForHydration(captainAPage);
-    await expect(captainAPage.locator('[data-testid="herodraft-modal"]')).toBeVisible({
+    await expect(
+      captainAPage.locator('[data-testid="herodraft-modal"]'),
+    ).toBeVisible({
       timeout: 10000,
     });
 
@@ -242,7 +244,9 @@ test.describe('HeroDraft Captain Connection Management', () => {
     await loginAsUser(captainBContext, otherCaptainPk);
     await captainBPage.goto(draftUrl);
     await waitForHydration(captainBPage);
-    await expect(captainBPage.locator('[data-testid="herodraft-modal"]')).toBeVisible({
+    await expect(
+      captainBPage.locator('[data-testid="herodraft-modal"]'),
+    ).toBeVisible({
       timeout: 10000,
     });
 
@@ -250,10 +254,10 @@ test.describe('HeroDraft Captain Connection Management', () => {
     await captainAPage.waitForTimeout(2000);
 
     await expect(
-      captainAPage.locator('[data-testid="herodraft-reconnecting"]')
+      captainAPage.locator('[data-testid="herodraft-reconnecting"]'),
     ).not.toBeVisible();
     await expect(
-      captainBPage.locator('[data-testid="herodraft-reconnecting"]')
+      captainBPage.locator('[data-testid="herodraft-reconnecting"]'),
     ).not.toBeVisible();
 
     // Now Captain A opens a second tab - should kick Captain A's first tab only
@@ -268,7 +272,9 @@ test.describe('HeroDraft Captain Connection Management', () => {
     await loginAsUser(captainAContext2, captainPk);
     await captainAPage2.goto(draftUrl);
     await waitForHydration(captainAPage2);
-    await expect(captainAPage2.locator('[data-testid="herodraft-modal"]')).toBeVisible({
+    await expect(
+      captainAPage2.locator('[data-testid="herodraft-modal"]'),
+    ).toBeVisible({
       timeout: 10000,
     });
 
@@ -288,13 +294,15 @@ test.describe('HeroDraft Captain Connection Management', () => {
 
     // Captain B should NOT be affected
     await expect(
-      captainBPage.getByTestId('herodraft-reconnecting')
+      captainBPage.getByTestId('herodraft-reconnecting'),
     ).not.toBeVisible();
-    await expect(captainBPage.getByTestId('herodraft-kicked-overlay')).not.toBeVisible();
+    await expect(
+      captainBPage.getByTestId('herodraft-kicked-overlay'),
+    ).not.toBeVisible();
 
     // Captain A's second tab should be fine
     await expect(
-      captainAPage2.locator('[data-testid="herodraft-reconnecting"]')
+      captainAPage2.locator('[data-testid="herodraft-reconnecting"]'),
     ).not.toBeVisible();
 
     // Cleanup

@@ -56,7 +56,7 @@ interface LoginResponse {
 
 ### Extended Test Fixture
 
-Auth.ts exports a `test` fixture extending Playwright's base:
+Auth.ts exports a `test` fixture extending the external-API stub base (below):
 - Overrides `context` to inject `window.playwright = true` (disables react-scan in tests)
 - Provides all login functions as fixtures
 - Provides `waitForHydration` and `visitAndWait` as fixtures
@@ -71,6 +71,23 @@ test('example', async ({ context, loginAdmin, visitAndWait, page }) => {
   await expect(page.getByText('DTX')).toBeVisible();
 });
 ```
+
+## External API Stubs (`fixtures/external-apis.ts`)
+
+E2E never talks to third-party APIs. `external-apis.ts` exports a `test` that wraps the
+worker's `browser.newContext`, so every context gets `stubExternalApis(context)`: the
+default `context`/`page` fixtures and contexts a spec opens with `browser.newContext()`.
+It fulfills `https://api.github.com/**` with `{ stargazers_count: STUB_GITHUB_STARS }`
+(the navbar star badge, `data-testid="githubStarCount"`), so a GitHub rate-limit 403
+can't log a console error into specs that assert on console output (#418).
+
+- `auth.ts`, `herodraft.ts` and `role-contexts.ts` extend it; a spec that imports `test`
+  straight from `@playwright/test` gets no stub, so import from `../fixtures` (or
+  `fixtures/external-apis`) instead.
+- Browsers a spec launches itself (`chromium.launch()`) bypass it; call
+  `stubExternalApis(context)` on their contexts if they load the navbar.
+- A spec can override the stub with its own `page.route(GITHUB_API_PATTERN, ...)`, since
+  later routes win (see `e2e/00-external-api-stubs.spec.ts`).
 
 ## HeroDraft Fixture (`fixtures/herodraft.ts`)
 
