@@ -31,10 +31,11 @@ testIgnore: **/fixtures/**, **/helpers/**, **/constants.ts, **/*.d.ts
 - `headless: true` in CI/Docker, `false` locally
 - `slowMo: 100ms` locally, `0ms` in CI
 
-### `events-sequential` / `dota-lobby-sequential` - Shared-State Suites
+### `events-sequential` / `dota-lobby-sequential` / `org-features-sequential` - Shared-State Suites
 
 - `events-sequential` matches `e2e/16-events/`, `dota-lobby-sequential` matches
-  `e2e/18-dota-lobby/`; `chromium` ignores both directories
+  `e2e/18-dota-lobby/`, `org-features-sequential` matches `e2e/19-org-features/`;
+  `chromium` ignores all three directories
 - `fullyParallel: false`, `dependencies: ['chromium']`
 - `dota-lobby-sequential` also sets `workers: 1`: its files share one simulated
   dota_lobby and reset the same seeded games
@@ -43,6 +44,9 @@ testIgnore: **/fixtures/**, **/helpers/**, **/constants.ts, **/*.d.ts
   `DOTA_LOBBY_SIMULATOR_REQUIRED=1` when this slot's simulator is running, so one
   that never becomes available (bots not ready, test league not verified within
   60 s) fails the run instead of skipping it
+- `org-features-sequential` sets `workers: 1`: every file resets the same seeded
+  paid features orgs, ledger and promo sends via `/api/tests/org-features/reset/`.
+  `just test::pw::cicd-org-features` runs its @cicd specs
 
 ### 3. `demo` - Video Recording
 
