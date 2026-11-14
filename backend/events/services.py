@@ -9,7 +9,14 @@ from django.db import models, transaction
 
 from app.cache_utils import invalidate_after_commit, invalidate_obj
 from app.models import CustomUser, Team, Tournament
-from events.constants import EventState, RepeatFrequency, SignupStatus, SignupType
+from events.constants import (
+    EVENT_REOPEN_TRANSITIONS,
+    EVENT_RESTART_TRANSITIONS,
+    EventState,
+    RepeatFrequency,
+    SignupStatus,
+    SignupType,
+)
 from events.discord import (
     notify_create_discord_event,
     notify_mark_interested,
@@ -26,6 +33,7 @@ from events.models import (
     EventSignup,
     TournamentTemplateMixin,
 )
+from events.reopen import ReopenNotPermitted, reopen_event
 from lobby.passwords import PasswordMode, generate_password
 from telemetry.logging import get_logger
 
@@ -959,14 +967,31 @@ def sync_tournament_from_event(event):
 
 
 @transaction.atomic
-def restart_event_tournament(event: Event) -> Tournament:
+def restart_event_tournament(
+    event: Event, *, actor: CustomUser | None = None, can_reopen: bool = False
+) -> Tournament:
     """Delete existing tournament, create fresh one, reopen signups.
 
     Re-adds the SIGNUPS_OPEN roster: CONFIRMED, plus APPROVED when roll call
-    is disabled (same rule as approve_signup).
+    is disabled (same rule as approve_signup). A completed or cancelled event
+    needs ``can_reopen`` and goes through reopen_event, which takes back the
+    host and helper points.
     """
+    event = Event.objects.nocache().select_for_update().get(pk=event.pk)
     if not event.tournament:
         raise ValueError("No tournament to restart.")
+
+    if event.state in EVENT_REOPEN_TRANSITIONS:
+        if not can_reopen:
+            raise ReopenNotPermitted(
+                "Only an organization admin can restart a closed event."
+            )
+        if not reopen_event(event, actor=actor).reopened:
+            raise ValueError("The event changed while restarting; try again.")
+    elif event.state != EventState.SIGNUPS_OPEN:
+        event.transition_state(
+            EventState.SIGNUPS_OPEN, transitions=EVENT_RESTART_TRANSITIONS
+        )
 
     old_tournament = event.tournament
     event.tournament = None
@@ -984,8 +1009,6 @@ def restart_event_tournament(event: Event) -> Tournament:
     for signup in roster:
         tournament.users.add(signup.user)
 
-    event.state = EventState.SIGNUPS_OPEN
-    event.save(update_fields=["state", "updated_at"])
     invalidate_after_commit(tournament, event)
     return tournament
 

@@ -2485,6 +2485,7 @@ class OrgLog(models.Model):
         ("edit_award", "Edit Award"),
         ("delete_award", "Delete Award"),
         ("complete_event", "Complete Event"),
+        ("reopen_event", "Reopen Event"),
         ("set_event_staff", "Set Event Staff"),
         ("delete_user_contributions", "Delete User Contributions"),
     ]
