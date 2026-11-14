@@ -1,3 +1,6 @@
+from functools import cache
+from zoneinfo import available_timezones
+
 import nh3
 from django.db import transaction
 from django.db.models import Prefetch, QuerySet
@@ -31,6 +34,11 @@ from .models import (
 )
 
 log = get_logger(__name__)
+
+
+@cache
+def _known_timezones() -> frozenset[str]:
+    return frozenset(available_timezones())
 
 
 class UserPkField(serializers.RelatedField):
@@ -504,6 +512,15 @@ class OrganizationSerializer(serializers.ModelSerializer):
         """Sanitize markdown to prevent XSS."""
         if value:
             return nh3.clean(value)
+        return value
+
+    def validate_timezone(self, value: str) -> str:
+        if self.instance is not None and value == getattr(
+            self.instance, "timezone", None
+        ):
+            return value
+        if value not in _known_timezones():
+            raise serializers.ValidationError(f"Unknown timezone {value!r}.")
         return value
 
 

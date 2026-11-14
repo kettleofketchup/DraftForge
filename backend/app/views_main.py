@@ -56,8 +56,11 @@ from events.models import Event
 from events.signup_window import user_signups_open_tournament_ids
 from league.models import LeagueUser
 from league.serializers import LeagueUserSerializer
+from org.contributions.services import delete_user_entries
+from org.features import FeatureKey, active_features
 from org.membership import member_organization_ids, viewer_member_organization_ids
 from org.models import OrgUser
+from org.promotion.services import release_earning_sends
 from org.serializers import OrgUserSerializer
 from telemetry.logging import get_logger
 
@@ -100,6 +103,8 @@ from .permissions_org import (
     has_league_admin_access,
     has_league_staff_access,
     has_org_staff_access,
+    is_org_role_holder,
+    org_admin_staff_from_payload,
 )
 from .serializers import (
     DraftRoundSerializer,
@@ -311,6 +316,12 @@ class UserView(viewsets.ModelViewSet):
             )
             if not has_access:
                 self.permission_denied(request)
+
+    def perform_destroy(self, instance: CustomUser) -> None:
+        with transaction.atomic():
+            release_earning_sends(instance)
+            delete_user_entries(instance, actor=self.request.user)
+            instance.delete()
 
     @permission_classes((IsAdminUser,))
     def delete(self, request: Request, *args: Any, **kwargs: Any) -> Response:
@@ -1188,6 +1199,37 @@ def _member_access(
     }
 
 
+def _feature_access(
+    user: CustomUser | AnonymousUser, data: Any, can_view: bool
+) -> dict[str, list[str] | bool]:
+    """Active feature keys plus per-viewer flags; merged after the cache."""
+    features = active_features(data["pk"])
+    promotion = FeatureKey.PROMOTION.value in features
+    contributions = FeatureKey.CONTRIBUTIONS.value in features
+    is_admin, is_staff = org_admin_staff_from_payload(user, data)
+    return {
+        "features": features,
+        # Must match has_org_promoter_access (the require_promoter gate).
+        "can_use_promotion": promotion
+        and (is_staff or is_org_role_holder(user, data["pk"])),
+        "can_manage_promotion_templates": promotion and is_staff,
+        "can_manage_promoters": promotion and is_admin,
+        "can_view_contributions": contributions,
+        "can_view_contributors": contributions and can_view,
+        "can_manage_contributions": contributions and is_admin,
+    }
+
+
+def _org_viewer_access(
+    user: CustomUser | AnonymousUser, data: Any
+) -> dict[str, list[str] | bool | int | None]:
+    can_view = can_view_org_members_from_payload(user, data)
+    return {
+        **_member_access(user, can_view),
+        **_feature_access(user, data, can_view),
+    }
+
+
 class OrganizationView(viewsets.ModelViewSet):
     """Organization CRUD endpoints."""
 
@@ -1230,12 +1272,7 @@ class OrganizationView(viewsets.ModelViewSet):
     def update(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         response = super().update(request, *args, **kwargs)
         if response.status_code == status.HTTP_200_OK:
-            response.data.update(
-                _member_access(
-                    request.user,
-                    can_view_org_members_from_payload(request.user, response.data),
-                )
-            )
+            response.data.update(_org_viewer_access(request.user, response.data))
         return response
 
     def list(self, request: Request, *args: Any, **kwargs: Any) -> Response:
@@ -1261,14 +1298,7 @@ class OrganizationView(viewsets.ModelViewSet):
             return serializer.data
 
         data = get_data()
-        return Response(
-            {
-                **data,
-                **_member_access(
-                    request.user, can_view_org_members_from_payload(request.user, data)
-                ),
-            }
-        )
+        return Response({**data, **_org_viewer_access(request.user, data)})
 
     @action(detail=True, methods=["get"])
     def users(self, request: Request, pk: str | None = None) -> Response:

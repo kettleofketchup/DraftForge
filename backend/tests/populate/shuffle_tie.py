@@ -39,7 +39,12 @@ from tests.data.organizations import SHUFFLE_TIE_ORG
 from tests.data.tournaments import SHUFFLE_TIE_TOURNAMENT
 from tests.data.users import ADMIN_USER, SHUFFLE_TIE_CAPTAINS, SHUFFLE_TIE_PLAYERS
 
-from .utils import ensure_league_user, ensure_org_user, flush_redis_cache
+from .utils import (
+    delete_ledger_for_users,
+    ensure_league_user,
+    ensure_org_user,
+    flush_redis_cache,
+)
 
 
 def populate_shuffle_tie_data(force=False):
@@ -104,6 +109,7 @@ def populate_shuffle_tie_data(force=False):
             continue
 
         if existing and force:
+            delete_ledger_for_users([existing.pk])
             existing.delete()
 
         positions = PositionsModel.objects.create()

@@ -9,6 +9,7 @@ from rest_framework import permissions
 
 from app.models import CustomUser, League, Organization
 from league.models import LeagueUser
+from org.features import FeatureKey, org_has_feature
 from org.models import OrgUser
 
 
@@ -71,6 +72,51 @@ def has_org_staff_access(user, obj):
     )
 
 
+def is_site_admin(user: CustomUser | AnonymousUser) -> bool:
+    return bool(user.is_authenticated and (user.is_staff or user.is_superuser))
+
+
+def is_org_role_holder(
+    user: CustomUser | AnonymousUser, organization: Organization | int
+) -> bool:
+    """Owner, admin, staff or promoter of the org. No site-admin shortcut."""
+    if not user.is_authenticated:
+        return False
+    org_pk = organization if isinstance(organization, int) else organization.pk
+    uid = user.pk
+    return (
+        Organization.objects.nocache()
+        .filter(pk=org_pk)
+        .filter(
+            Q(owner_id=uid)
+            | Exists(
+                Organization.admins.through.objects.filter(
+                    organization_id=OuterRef("pk"), customuser_id=uid
+                )
+            )
+            | Exists(
+                Organization.staff.through.objects.filter(
+                    organization_id=OuterRef("pk"), customuser_id=uid
+                )
+            )
+            | Exists(
+                Organization.promoters.through.objects.filter(
+                    organization_id=OuterRef("pk"), customuser_id=uid
+                )
+            )
+        )
+        .exists()
+    )
+
+
+def has_org_promoter_access(
+    user: CustomUser | AnonymousUser, organization: Organization | int
+) -> bool:
+    return org_has_feature(organization, FeatureKey.PROMOTION) and (
+        is_site_admin(user) or is_org_role_holder(user, organization)
+    )
+
+
 def can_view_org_members(
     user: CustomUser | AnonymousUser, organization: Organization | int
 ) -> bool:
@@ -117,6 +163,26 @@ def _payload_lists_user(user: CustomUser, data: Mapping[str, Any]) -> bool:
         for key in ("admins", "staff")
         for entry in data.get(key) or ()
     )
+
+
+def _payload_has_user(user: CustomUser, entries: Any) -> bool:
+    return any(entry.get("pk") == user.pk for entry in entries or ())
+
+
+def org_admin_staff_from_payload(
+    user: CustomUser | AnonymousUser, data: Mapping[str, Any]
+) -> tuple[bool, bool]:
+    """(has_org_admin_access, has_org_staff_access) read from a serialized
+    OrganizationSerializer payload instead of the database."""
+    if not user.is_authenticated:
+        return False, False
+    owner = data.get("owner")
+    is_admin = (
+        is_site_admin(user)
+        or (isinstance(owner, Mapping) and owner.get("pk") == user.pk)
+        or _payload_has_user(user, data.get("admins"))
+    )
+    return is_admin, is_admin or _payload_has_user(user, data.get("staff"))
 
 
 def can_view_org_members_from_payload(

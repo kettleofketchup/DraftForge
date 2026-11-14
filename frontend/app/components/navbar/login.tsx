@@ -16,12 +16,12 @@ import { UserAvatar } from '~/components/user/UserAvatar';
 import { useUserStore } from '../../store/userStore';
 import type { UserType } from '../user/types';
 
+import { logout } from '~/components/api/api';
 import { Button } from '~/components/ui/button';
 import { DestructiveButton, PrimaryButton } from '~/components/ui/buttons';
 import { DiscordIcon } from '~/components/ui/icons';
-import { getLogger } from '~/lib/logger';
-import { logout } from '~/components/api/api';
 import { Skeleton } from '~/components/ui/skeleton';
+import { getLogger } from '~/lib/logger';
 const log = getLogger('login');
 
 type AvatarProps = {
@@ -38,7 +38,6 @@ const AvatarContainer: React.FC<AvatarProps> = (props) => {
     </div>
   );
 };
-
 
 // Try to get cached user from sessionStorage (client-side only)
 const getCachedUser = (): UserType | null => {
@@ -74,8 +73,15 @@ export const ProfileButton: React.FC = () => {
   });
   const logoutClick = async () => {
     log.debug('Logout clicked');
-    clearUser();
-    await logout();
+    // Clear after the server drops the session: clearing first refetches
+    // per-viewer payloads that still carry the old session.
+    try {
+      await logout();
+    } catch (err) {
+      log.warn('logout_failed', { err });
+    } finally {
+      clearUser();
+    }
   };
 
   return (
@@ -90,7 +96,12 @@ export const ProfileButton: React.FC = () => {
             onFocusCapture={handleClick}
           >
             <AvatarContainer>
-              <UserAvatar user={currentUser} size="xl" className="w-full h-full" data-testid="user-avatar" />
+              <UserAvatar
+                user={currentUser}
+                size="xl"
+                className="w-full h-full"
+                data-testid="user-avatar"
+              />
             </AvatarContainer>
             <DraftNotificationBadge />
           </div>
@@ -106,7 +117,10 @@ export const ProfileButton: React.FC = () => {
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
           <DropdownMenuItem>
-            <DestructiveButton data-testid="navbarLogoutButton" onClick={logoutClick}>
+            <DestructiveButton
+              data-testid="navbarLogoutButton"
+              onClick={logoutClick}
+            >
               <LogOutIcon />
               {t('logout')}
             </DestructiveButton>
@@ -130,9 +144,15 @@ export const buildDiscordLoginUrl = (returnTo?: string | null): string => {
 export const LoginButton: React.FC = () => {
   const { t } = useTranslation('navbar');
   const location = useLocation();
-  const loginUrl = buildDiscordLoginUrl(`${location.pathname}${location.search}`);
+  const loginUrl = buildDiscordLoginUrl(
+    `${location.pathname}${location.search}`,
+  );
   return (
-    <PrimaryButton asChild data-testid="navbarLoginButton" aria-label={t('login')}>
+    <PrimaryButton
+      asChild
+      data-testid="navbarLoginButton"
+      aria-label={t('login')}
+    >
       <a href={loginUrl}>
         <DiscordIcon className="h-5 w-5" />
         {/* Text collapses below sm: so the icon-only button doesn't fight the
@@ -159,7 +179,11 @@ export const LoginWithDiscordButton: React.FC<props> = () => {
   }, []);
 
   // Use cached user after mount, then switch to store user after hydration
-  const user = hasHydrated ? currentUser : (mounted && cachedUser ? cachedUser : currentUser);
+  const user = hasHydrated
+    ? currentUser
+    : mounted && cachedUser
+      ? cachedUser
+      : currentUser;
 
   // Check auth after hydration - background refresh
   useEffect(() => {

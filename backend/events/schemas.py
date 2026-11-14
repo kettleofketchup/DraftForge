@@ -66,6 +66,7 @@ class EventTaskSchema(BaseModel):
     description: str = ""
     state: str
     scheduled_at: datetime
+    ends_at: datetime | None = None
     signups_open_at: Optional[datetime] = None
     organization_id: int = 0  # the raw PK
     organization_name: str = ""

@@ -250,6 +250,13 @@ def transition_event_state(event_pk, new_state):
     return _post(f"/events/{event_pk}/transition/", {"state": new_state})
 
 
+def auto_close_event(event_pk: int) -> dict | None:
+    resp = _post(f"/events/{event_pk}/auto-close/", {})
+    if resp is not None and resp.ok:
+        return resp.json()
+    return None
+
+
 # ---- Reads via public API (internal token accepted globally) ----
 
 

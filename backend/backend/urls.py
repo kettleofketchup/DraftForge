@@ -82,6 +82,7 @@ from app.views.ssr import (
 from app.views_joke import buy_tango, get_tangoes
 from common.utils import isTestEnvironment
 from org.views import ClaimRequestViewSet
+from org.views_features import org_features, org_promoters, remove_org_promoter
 from org.views_profiles import (
     delete_user_dota_profile,
     get_my_dota_profile,
@@ -172,7 +173,9 @@ urlpatterns = [
         undo_last_pick,
         name="undo-pick",
     ),
-    path("api/draft/<int:draft_pk>/ready/", teamdraft_set_ready, name="teamdraft_ready"),
+    path(
+        "api/draft/<int:draft_pk>/ready/", teamdraft_set_ready, name="teamdraft_ready"
+    ),
     path("api/draft/<int:draft_pk>/start/", teamdraft_start, name="teamdraft_start"),
     path("api/draft/<int:draft_pk>/pause/", teamdraft_pause, name="teamdraft_pause"),
     path("api/draft/<int:draft_pk>/resume/", teamdraft_resume, name="teamdraft_resume"),
@@ -266,6 +269,29 @@ urlpatterns = [
         "api/organizations/<int:org_id>/transfer-ownership/",
         transfer_org_ownership,
         name="transfer_org_ownership",
+    ),
+    path(
+        "api/organizations/<int:org_id>/features/",
+        org_features,
+        name="org-features",
+    ),
+    path(
+        "api/organizations/<int:org_id>/promoters/",
+        org_promoters,
+        name="org-promoters",
+    ),
+    path(
+        "api/organizations/<int:org_id>/promoters/<int:user_id>/",
+        remove_org_promoter,
+        name="org-promoter-remove",
+    ),
+    path(
+        "api/organizations/<int:org_id>/contributions/",
+        include("org.contributions.urls"),
+    ),
+    path(
+        "api/organizations/<int:org_id>/promotion/",
+        include("org.promotion.urls"),
     ),
     # League admin team
     path(
@@ -384,6 +410,7 @@ urlpatterns += [
 
 # Internal API — celery workers and Discord bot (token auth via X-Internal-Token)
 from app.views.internal import (
+    auto_close_event,
     check_message_log_exists,
     claim_discord_message_log,
     clear_event_signup_state,
@@ -445,6 +472,7 @@ urlpatterns += [
     path("api/internal/discord/event-dm/<int:pk>/", update_event_dm),
     path("api/internal/discord/scheduled-events/<int:pk>/", update_scheduled_event),
     path("api/internal/events/<int:pk>/transition/", transition_event_state),
+    path("api/internal/events/<int:pk>/auto-close/", auto_close_event),
     path("api/internal/discord/check-log/", check_message_log_exists),
     path("api/internal/discord/message-logs/", search_message_logs),
     path("api/internal/discord/event-state/<int:event_id>/", get_discord_event_state),

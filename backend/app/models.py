@@ -561,6 +561,11 @@ class Organization(models.Model):
         related_name="staff_organizations",
         blank=True,
     )
+    promoters = models.ManyToManyField(
+        "CustomUser",
+        related_name="promoter_organizations",
+        blank=True,
+    )
     default_league = models.ForeignKey(
         "League",
         on_delete=models.SET_NULL,
@@ -2470,6 +2475,18 @@ class OrgLog(models.Model):
         ("approve_claim", "Approve Profile Claim"),
         ("reject_claim", "Reject Profile Claim"),
         ("set_mmr", "Set MMR"),
+        ("enable_feature", "Enable Feature"),
+        ("disable_feature", "Disable Feature"),
+        ("add_promoter", "Add Promoter"),
+        ("remove_promoter", "Remove Promoter"),
+        ("set_point_value", "Set Point Value"),
+        ("rescore", "Rescore Contributions"),
+        ("award_points", "Award Points"),
+        ("edit_award", "Edit Award"),
+        ("delete_award", "Delete Award"),
+        ("complete_event", "Complete Event"),
+        ("set_event_staff", "Set Event Staff"),
+        ("delete_user_contributions", "Delete User Contributions"),
     ]
 
     organization = models.ForeignKey(

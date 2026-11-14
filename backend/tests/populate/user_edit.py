@@ -18,7 +18,11 @@ from tests.data.leagues import USER_EDIT_LEAGUE
 from tests.data.organizations import USER_EDIT_ORG
 from tests.data.tournaments import USER_EDIT_TOURNAMENT
 from tests.data.users import ADMIN_USER, ORG_ADMIN_USER, USER_EDIT_USERS
-from tests.populate.utils import ensure_league_user, ensure_org_user
+from tests.populate.utils import (
+    delete_ledger_for_users,
+    ensure_league_user,
+    ensure_org_user,
+)
 
 
 def populate_user_edit_data(force=False):
@@ -111,6 +115,7 @@ def populate_user_edit_data(force=False):
             continue
 
         if existing:
+            delete_ledger_for_users([existing.pk])
             existing.delete()
 
         positions = PositionsModel.objects.create()

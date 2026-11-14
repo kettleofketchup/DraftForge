@@ -265,6 +265,27 @@ class EventStateTransitionEndpointTest(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.json()["state"], "signups_open")
 
+    def test_transition_from_closed_state_returns_400(self) -> None:
+        from events.models import Event
+
+        org = Organization.objects.create(name="Closed Transition Org")
+        event = Event.objects.create(
+            organization=org,
+            scheduled_at="2026-12-01T00:00:00Z",
+            name="Closed Transition Test",
+            state="cancelled",
+        )
+        c = APIClient()
+        resp = c.post(
+            f"/api/internal/events/{event.pk}/transition/",
+            {"state": "signups_open"},
+            format="json",
+            **HEADERS,
+        )
+        self.assertEqual(resp.status_code, 400, resp.content)
+        event.refresh_from_db()
+        self.assertEqual(event.state, "cancelled")
+
     def test_transition_missing_state(self):
         from events.models import Event
 

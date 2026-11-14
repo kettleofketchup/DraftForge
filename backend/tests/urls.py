@@ -1,7 +1,5 @@
 from django.urls import path
 
-from common.utils import isTestEnvironment
-
 from .test_auth import (
     bulk_rsvp_for_event,
     create_claim_request,
@@ -18,6 +16,7 @@ from .test_auth import (
     login_auth_matrix_org_admin,
     login_auth_matrix_org_member,
     login_auth_matrix_org_owner,
+    login_auth_matrix_org_promoter,
     login_auth_matrix_org_staff,
     login_event_league_staff,
     login_league_admin,
@@ -37,6 +36,7 @@ from .test_auth import (
 from .test_bracket import force_mismatched_winning_team
 from .test_csv import reset_csv_import
 from .test_demo import generate_demo_bracket, get_demo_tournament, reset_demo_tournament
+from .test_discord import seed_discord_members
 from .test_dota_lobby import (
     dota_lobby_data,
     dota_lobby_game_lobby,
@@ -46,20 +46,20 @@ from .test_dota_lobby import (
     reset_dota_lobby,
     seed_dota_lobby_row,
 )
-from .test_health import healthz
-from .test_discord import seed_discord_members
 from .test_events_discord import (
     send_test_notification,
     set_org_user_approved_mmr,
     simulate_discord_signup,
     verify_discord_messages,
 )
+from .test_health import healthz
 from .test_herodraft import (
     force_herodraft_timeout,
     get_herodraft_by_key,
     reset_herodraft,
     warp_herodraft_round,
 )
+from .test_org_features import login_org_features, org_features_data, reset_org_features
 from .test_steam import create_test_match
 from .test_teamdraft import expire_draft_clock, stale_draft_heartbeat
 
@@ -144,6 +144,11 @@ urlpatterns = [
         name="login-auth-matrix-org-member",
     ),
     path(
+        "login-auth-matrix-org-promoter/",
+        login_auth_matrix_org_promoter,
+        name="login-auth-matrix-org-promoter",
+    ),
+    path(
         "login-auth-matrix-league-admin/",
         login_auth_matrix_league_admin,
         name="login-auth-matrix-league-admin",
@@ -158,6 +163,12 @@ urlpatterns = [
         "login-dota-lobby/<str:role>/",
         login_dota_lobby,
         name="test-login-dota-lobby",
+    ),
+    # Org locked features E2E users (tests.data.org_features.ORG_FEATURES_ROLE_USERS)
+    path(
+        "login-org-features/<str:role>/",
+        login_org_features,
+        name="test-login-org-features",
     ),
     path(
         "login-as/",
@@ -343,6 +354,9 @@ urlpatterns = [
         dota_lobby_sim_proxy,
         name="test-dota-lobby-sim",
     ),
+    # Org locked features E2E data (test_org_features.py)
+    path("org-features/data/", org_features_data, name="test-org-features-data"),
+    path("org-features/reset/", reset_org_features, name="test-org-features-reset"),
     path("healthz/", healthz, name="test-healthz"),
     # Bracket scenario helpers (gated on TEST=true)
     path(

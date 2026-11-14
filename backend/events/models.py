@@ -1,7 +1,12 @@
+import copy
+
 import nh3
+from django.core.exceptions import ValidationError
 from django.core.validators import RegexValidator
 from django.db import models
+from django.utils import timezone as tz
 
+from app.cache_utils import invalidate_after_commit
 from app.models import (
     TOURNAMNET_TYPE_CHOICES,
     DotaLobbyLaunch,
@@ -347,10 +352,22 @@ class Event(
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True, default="")
     scheduled_at = models.DateTimeField()
+    ends_at = models.DateTimeField(null=True, blank=True)
     signups_open_at = models.DateTimeField(null=True, blank=True)
     state = models.CharField(
         max_length=20, choices=EventState.choices, default=EventState.UPCOMING
     )
+    host = models.ForeignKey(
+        "app.CustomUser",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="hosted_events",
+    )
+    helpers = models.ManyToManyField(
+        "app.CustomUser", blank=True, related_name="helped_events"
+    )
+    contributions_awarded_at = models.DateTimeField(null=True, blank=True)
     is_off_schedule = models.BooleanField(
         default=False,
         help_text=(
@@ -395,6 +412,15 @@ class Event(
     def __str__(self):
         return f"{self.name} ({self.scheduled_at:%Y-%m-%d})"
 
+    def clean(self) -> None:
+        super().clean()
+        if (
+            self.ends_at is not None
+            and self.scheduled_at is not None
+            and self.ends_at <= self.scheduled_at
+        ):
+            raise ValidationError({"ends_at": "End time must be after the start time."})
+
     def save(self, *args, **kwargs):
         if self.description:
             self.description = nh3.clean(self.description)
@@ -408,15 +434,34 @@ class Event(
                 kwargs["update_fields"] = {*update_fields, "dota_lobby_password"}
         super().save(*args, **kwargs)
 
-    def transition_state(self, new_state):
+    def transition_state(self, new_state: str) -> None:
         allowed = EVENT_STATE_TRANSITIONS.get(self.state, [])
         if new_state not in allowed:
             raise ValueError(
                 f"Cannot transition from '{self.state}' to '{new_state}'. "
                 f"Allowed: {[s.value for s in allowed]}"
             )
+        now = tz.now()
+        changed = (
+            Event.objects.nocache()
+            .filter(pk=self.pk, state=self.state)
+            .update(state=new_state, updated_at=now)
+        )
+        if not changed:
+            current = (
+                Event.objects.nocache()
+                .filter(pk=self.pk)
+                .values_list("state", flat=True)
+                .first()
+            )
+            raise ValueError(
+                f"Cannot transition from '{self.state}' to '{new_state}': "
+                f"the event is now '{current}'."
+            )
+        stale = copy.copy(self)
         self.state = new_state
-        self.save(update_fields=["state", "updated_at"])
+        self.updated_at = now
+        invalidate_after_commit(stale, self)
 
 
 class EventTeam(models.Model):

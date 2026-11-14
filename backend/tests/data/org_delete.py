@@ -45,3 +45,9 @@ ORG_DELETE_MEMBER: TestUser = TestUser(
     discord_id="700000000000000004",
     steam_id_64=76561199100000004,
 )
+
+# (user, points) manual awards, so deleting the org covers a ledger.
+ORG_DELETE_LEDGER: list[tuple[TestUser, int]] = [
+    (ORG_DELETE_ADMIN, 5),
+    (ORG_DELETE_MEMBER, 2),
+]

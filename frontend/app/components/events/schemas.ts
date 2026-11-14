@@ -1,111 +1,140 @@
 import { z } from 'zod';
+import { refineLobbyPassword } from '~/components/lobby/password';
 
 export const EventState = {
-  UPCOMING: 'upcoming', SIGNUPS_OPEN: 'signups_open', ROLL_CALL: 'roll_call',
-  IN_PROGRESS: 'in_progress', COMPLETED: 'completed', CANCELLED: 'cancelled',
+  UPCOMING: 'upcoming',
+  SIGNUPS_OPEN: 'signups_open',
+  ROLL_CALL: 'roll_call',
+  IN_PROGRESS: 'in_progress',
+  COMPLETED: 'completed',
+  CANCELLED: 'cancelled',
 } as const;
 
 export const SignupStatus = {
-  RSVP: 'rsvp', PENDING_APPROVAL: 'pending_approval', APPROVED: 'approved',
-  CONFIRMED: 'confirmed', WAITLISTED: 'waitlisted', TENTATIVE: 'tentative',
-  REJECTED: 'rejected', CANCELLED: 'cancelled',
+  RSVP: 'rsvp',
+  PENDING_APPROVAL: 'pending_approval',
+  APPROVED: 'approved',
+  CONFIRMED: 'confirmed',
+  WAITLISTED: 'waitlisted',
+  TENTATIVE: 'tentative',
+  REJECTED: 'rejected',
+  CANCELLED: 'cancelled',
 } as const;
 
 export const GameMode = {
-  NORMAL: 'normal', CAPTAINS_MODE: 'captains_mode', TURBO: 'turbo', CUSTOM: 'custom',
+  NORMAL: 'normal',
+  CAPTAINS_MODE: 'captains_mode',
+  TURBO: 'turbo',
+  CUSTOM: 'custom',
 } as const;
 
-export const eventSchema = z.object({
-  id: z.number(),
-  organization: z.number(),
-  organization_name: z.string(),
-  event_repeater: z.number().nullable(),
-  event_repeater_name: z.string().nullable(),
-  name: z.string(),
-  description: z.string(),
-  scheduled_at: z.string(),
-  signups_open_at: z.string().nullable(),
-  state: z.nativeEnum(EventState),
-  tournament: z.number().nullable(),
-  created_by: z.number().nullable(),
-  created_at: z.string(),
-  updated_at: z.string(),
-  signup_count: z.number(),
-  confirmed_count: z.number(),
-  tournament_name: z.string(),
-  tournament_league: z.number().nullable(),
-  tournament_type: z.string(),
-  game_type: z.number(),
-  draft_type: z.string(),
-  game_mode: z.string(),
-  custom_game_name: z.string(),
-  captains_draft_time: z.number(),
-  lobby_steam_league_id: z.number().nullable(),
-  people_per_team: z.number(),
-  number_of_teams: z.number().nullable(),
-  tournament_date: z.string().nullable(),
-  timezone: z.string(),
-  min_players: z.number().nullable(),
-  max_players: z.number().nullable(),
-  signup_deadline_hours: z.number().nullable(),
-  allow_team_signups: z.boolean(),
-  allow_user_signups: z.boolean(),
-  auto_approve: z.boolean(),
-  auto_confirm: z.boolean(),
-  require_mmr_verified: z.boolean(),
-  require_steam_id: z.boolean(),
-  require_profile_complete: z.boolean(),
-  roll_call_enabled: z.boolean(),
-  roll_call_mode: z.string(),
-  allow_active_mmr: z.boolean(),
-  allow_previous_rank: z.boolean(),
-  allow_battlecup_rating: z.boolean(),
-  discord_create_event: z.boolean(),
-  discord_sync_signups: z.boolean(),
-  discord_event_title: z.string(),
-  discord_event_description: z.string(),
-  discord_event_info: z.string(),
-  discord_signup_reminder: z.boolean(),
-  discord_signup_reminder_hours: z.number(),
-  discord_confirm_attendance: z.boolean(),
-  discord_confirm_attendance_hours: z.number(),
-  discord_profile_reminder: z.boolean(),
-  discord_profile_reminder_hours: z.number(),
-  discord_mark_interested: z.boolean(),
-  discord_post_signups: z.boolean(),
-  discord_post_signups_channel_id: z.string(),
-  discord_announcement: z.boolean(),
-  discord_announcement_channel_id: z.string(),
-  discord_announcement_hours: z.number(),
-  discord_announcement_role_ids: z.array(z.string()).default([]),
-  discord_signup_role_ids: z.array(z.string()).default([]),
-  discord_subscriber_dm: z.boolean().optional(),
-  discord_subscriber_dm_hours: z.number().optional(),
-  discord_require_rank_screenshot: z.boolean(),
-  discord_require_battlecup_screenshot: z.boolean(),
-  min_mmr: z.number().nullable(),
-  is_off_schedule: z.boolean().optional(),
-  // dota_lobby settings (the password itself is never in event payloads).
-  dota_lobby_mode: z.enum(['off', 'manual', 'auto']).default('off'),
-  dota_lobby_launch: z.enum(['manual', 'auto']).default('manual'),
-  dota_lobby_region: z.string().default(''),
-  discord_send_lobby_info: z.boolean().default(false),
-  dota_lobby_password_mode: z.enum(['random', 'fixed']).default('random'),
-  user_can_manage: z.boolean().default(false),
-  _warning: z.string().optional(),
-}).superRefine((val, ctx) => {
-  // Single events have no subscriber list — discord_signup_reminder DMs
-  // subscribed users, which is a series-level concept on EventRepeater.
-  // Mirrors the backend EventSerializer.validate rejection (Task 2.2).
-  if (val.event_repeater === null && val.discord_signup_reminder === true) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['discord_signup_reminder'],
-      message:
-        'Signup reminder DMs require a recurring event series — single events have no subscribers.',
-    });
-  }
+export const eventStaffUserSchema = z.object({
+  pk: z.number(),
+  username: z.string(),
+  nickname: z.string().nullable(),
+  avatarUrl: z.string().nullable(),
 });
+
+export type EventStaffUser = z.infer<typeof eventStaffUserSchema>;
+
+export const eventSchema = z
+  .object({
+    id: z.number(),
+    organization: z.number(),
+    organization_name: z.string(),
+    event_repeater: z.number().nullable(),
+    event_repeater_name: z.string().nullable(),
+    name: z.string(),
+    description: z.string(),
+    scheduled_at: z.string(),
+    signups_open_at: z.string().nullable(),
+    state: z.nativeEnum(EventState),
+    tournament: z.number().nullable(),
+    created_by: z.number().nullable(),
+    created_at: z.string(),
+    updated_at: z.string(),
+    signup_count: z.number(),
+    confirmed_count: z.number(),
+    tournament_name: z.string(),
+    tournament_league: z.number().nullable(),
+    tournament_type: z.string(),
+    game_type: z.number(),
+    draft_type: z.string(),
+    game_mode: z.string(),
+    custom_game_name: z.string(),
+    captains_draft_time: z.number(),
+    lobby_steam_league_id: z.number().nullable(),
+    people_per_team: z.number(),
+    number_of_teams: z.number().nullable(),
+    tournament_date: z.string().nullable(),
+    timezone: z.string(),
+    min_players: z.number().nullable(),
+    max_players: z.number().nullable(),
+    signup_deadline_hours: z.number().nullable(),
+    allow_team_signups: z.boolean(),
+    allow_user_signups: z.boolean(),
+    auto_approve: z.boolean(),
+    auto_confirm: z.boolean(),
+    require_mmr_verified: z.boolean(),
+    require_steam_id: z.boolean(),
+    require_profile_complete: z.boolean(),
+    roll_call_enabled: z.boolean(),
+    roll_call_mode: z.string(),
+    allow_active_mmr: z.boolean(),
+    allow_previous_rank: z.boolean(),
+    allow_battlecup_rating: z.boolean(),
+    discord_create_event: z.boolean(),
+    discord_sync_signups: z.boolean(),
+    discord_event_title: z.string(),
+    discord_event_description: z.string(),
+    discord_event_info: z.string(),
+    discord_signup_reminder: z.boolean(),
+    discord_signup_reminder_hours: z.number(),
+    discord_confirm_attendance: z.boolean(),
+    discord_confirm_attendance_hours: z.number(),
+    discord_profile_reminder: z.boolean(),
+    discord_profile_reminder_hours: z.number(),
+    discord_mark_interested: z.boolean(),
+    discord_post_signups: z.boolean(),
+    discord_post_signups_channel_id: z.string(),
+    discord_announcement: z.boolean(),
+    discord_announcement_channel_id: z.string(),
+    discord_announcement_hours: z.number(),
+    discord_announcement_role_ids: z.array(z.string()).default([]),
+    discord_signup_role_ids: z.array(z.string()).default([]),
+    discord_subscriber_dm: z.boolean().optional(),
+    discord_subscriber_dm_hours: z.number().optional(),
+    discord_require_rank_screenshot: z.boolean(),
+    discord_require_battlecup_screenshot: z.boolean(),
+    min_mmr: z.number().nullable(),
+    is_off_schedule: z.boolean().optional(),
+    // dota_lobby settings (the password itself is never in event payloads).
+    dota_lobby_mode: z.enum(['off', 'manual', 'auto']).default('off'),
+    dota_lobby_launch: z.enum(['manual', 'auto']).default('manual'),
+    dota_lobby_region: z.string().default(''),
+    discord_send_lobby_info: z.boolean().default(false),
+    dota_lobby_password_mode: z.enum(['random', 'fixed']).default('random'),
+    user_can_manage: z.boolean().default(false),
+    ends_at: z.string().nullable().default(null),
+    host: eventStaffUserSchema.nullable().default(null),
+    helpers: z.array(eventStaffUserSchema).default([]),
+    contributions_awarded_at: z.string().nullable().default(null),
+    user_can_manage_event_staff: z.boolean().default(false),
+    _warning: z.string().optional(),
+  })
+  .superRefine((val, ctx) => {
+    // Single events have no subscriber list — discord_signup_reminder DMs
+    // subscribed users, which is a series-level concept on EventRepeater.
+    // Mirrors the backend EventSerializer.validate rejection (Task 2.2).
+    if (val.event_repeater === null && val.discord_signup_reminder === true) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['discord_signup_reminder'],
+        message:
+          'Signup reminder DMs require a recurring event series — single events have no subscribers.',
+      });
+    }
+  });
 
 export type EventType = z.infer<typeof eventSchema>;
 
@@ -115,38 +144,44 @@ export const eventSignupSchema = z.object({
   user: z.number(),
   username: z.string().nullable(),
   user_avatar: z.string().nullable(),
-  user_data: z.object({
-    pk: z.number(),
-    username: z.string(),
-    nickname: z.string().nullable(),
-    avatar: z.string().nullable(),
-    discordId: z.string().nullable(),
-    discordNickname: z.string().nullable(),
-    positions: z.object({
-      carry: z.number(),
-      mid: z.number(),
-      offlane: z.number(),
-      soft_support: z.number(),
-      hard_support: z.number(),
-    }).nullable(),
-    steam_account_id: z.number().nullable(),
-    avatarUrl: z.string().nullable(),
-  }).nullable(),
-  dota_profile: z.object({
-    positions: z.object({
-      pos_1: z.boolean(),
-      pos_2: z.boolean(),
-      pos_3: z.boolean(),
-      pos_4: z.boolean(),
-      pos_5: z.boolean(),
-    }),
-    rank_status: z.string(),
-    rank_medal: z.string().nullable(),
-    mmr: z.number().nullable(),
-    rank_screenshot: z.string().nullable(),
-    battlecup_screenshot: z.string().nullable(),
-    battle_cup_tier: z.number().nullable(),
-  }).nullable(),
+  user_data: z
+    .object({
+      pk: z.number(),
+      username: z.string(),
+      nickname: z.string().nullable(),
+      avatar: z.string().nullable(),
+      discordId: z.string().nullable(),
+      discordNickname: z.string().nullable(),
+      positions: z
+        .object({
+          carry: z.number(),
+          mid: z.number(),
+          offlane: z.number(),
+          soft_support: z.number(),
+          hard_support: z.number(),
+        })
+        .nullable(),
+      steam_account_id: z.number().nullable(),
+      avatarUrl: z.string().nullable(),
+    })
+    .nullable(),
+  dota_profile: z
+    .object({
+      positions: z.object({
+        pos_1: z.boolean(),
+        pos_2: z.boolean(),
+        pos_3: z.boolean(),
+        pos_4: z.boolean(),
+        pos_5: z.boolean(),
+      }),
+      rank_status: z.string(),
+      rank_medal: z.string().nullable(),
+      mmr: z.number().nullable(),
+      rank_screenshot: z.string().nullable(),
+      battlecup_screenshot: z.string().nullable(),
+      battle_cup_tier: z.number().nullable(),
+    })
+    .nullable(),
   org_user_mmr: z.number().nullable().default(null),
   org_user_pk: z.number().nullable().default(null),
   organization: z.number().nullable().default(null),
@@ -177,7 +212,10 @@ export const eventTeamSchema = z.object({
 export type EventTeamType = z.infer<typeof eventTeamSchema>;
 
 export const Frequency = {
-  DAILY: 'daily', WEEKLY: 'weekly', EVERY_TWO_WEEKS: 'every_two_weeks', MONTHLY: 'monthly',
+  DAILY: 'daily',
+  WEEKLY: 'weekly',
+  EVERY_TWO_WEEKS: 'every_two_weeks',
+  MONTHLY: 'monthly',
 } as const;
 
 export const FREQUENCY_LABELS: Record<string, string> = {
@@ -195,7 +233,15 @@ export const FREQUENCY_SHORT_LABELS: Record<string, string> = {
   [Frequency.MONTHLY]: 'Mo',
 };
 
-export const DAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+export const DAY_LABELS = [
+  'Sunday',
+  'Monday',
+  'Tuesday',
+  'Wednesday',
+  'Thursday',
+  'Friday',
+  'Saturday',
+];
 
 export const COMMON_TIMEZONES = [
   'America/New_York',
@@ -246,11 +292,15 @@ export function localToUTC(datetimeLocal: string, timezone: string): string {
   // Find what that UTC instant looks like in the target timezone
   const fmt = new Intl.DateTimeFormat('en-US', {
     timeZone: timezone,
-    year: 'numeric', month: 'numeric', day: 'numeric',
-    hour: 'numeric', minute: 'numeric', hour12: false,
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: 'numeric',
+    hour12: false,
   });
   const parts = Object.fromEntries(
-    fmt.formatToParts(new Date(utcGuess)).map((p) => [p.type, p.value])
+    fmt.formatToParts(new Date(utcGuess)).map((p) => [p.type, p.value]),
   );
   const tzHour = Number(parts.hour === '24' ? '0' : parts.hour);
   const tzMinute = Number(parts.minute);
@@ -263,9 +313,75 @@ export function localToUTC(datetimeLocal: string, timezone: string): string {
     Number(parts.month) - 1,
     tzDay,
     tzHour,
-    tzMinute
+    tzMinute,
   );
   return new Date(utcGuess + (utcGuess - tzAsUtc)).toISOString();
+}
+
+/** Format a UTC instant as a datetime-local value in the given IANA timezone. */
+export function utcToLocalInput(
+  iso: string | null | undefined,
+  timezone: string,
+): string {
+  if (!iso) return '';
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  let fmt: Intl.DateTimeFormat;
+  try {
+    fmt = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone || 'UTC',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    });
+  } catch {
+    return utcToLocalInput(iso, 'UTC');
+  }
+  const parts = Object.fromEntries(
+    fmt.formatToParts(date).map((p) => [p.type, p.value]),
+  );
+  return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`;
+}
+
+function naiveLocalToEpoch(value: string): number {
+  const [datePart, timePart] = value.split('T');
+  const [year, month, day] = datePart.split('-').map(Number);
+  const [hour, minute] = (timePart || '00:00').split(':').map(Number);
+  return Date.UTC(year, month - 1, day, hour, minute);
+}
+
+interface EventEndValues {
+  scheduled_at?: string;
+  event_ends_at?: string;
+}
+
+interface EventEndIssueContext {
+  addIssue: (issue: {
+    code: 'custom';
+    path: string[];
+    message: string;
+  }) => void;
+}
+
+/** zod superRefine: an event end, when set, is strictly after its start (both in the event timezone). */
+export function refineEventEnd(
+  values: EventEndValues,
+  ctx: EventEndIssueContext,
+): void {
+  if (!values.event_ends_at || !values.scheduled_at) return;
+  if (
+    naiveLocalToEpoch(values.event_ends_at) <=
+    naiveLocalToEpoch(values.scheduled_at)
+  ) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['event_ends_at'],
+      message: 'End must be after start',
+    });
+  }
 }
 
 export const discordConfigSchema = z.object({
@@ -347,7 +463,10 @@ export const DISCORD_CONFIG_DEFAULTS = {
 export const dotaLobbyConfigSchema = z.object({
   dota_lobby_mode: z.enum(['off', 'manual', 'auto']).default('off'),
   dota_lobby_launch: z.enum(['manual', 'auto']).default('manual'),
-  dota_lobby_region: z.string().max(32, 'Region is at most 32 characters').default(''),
+  dota_lobby_region: z
+    .string()
+    .max(32, 'Region is at most 32 characters')
+    .default(''),
   discord_send_lobby_info: z.boolean().default(false),
   dota_lobby_password_mode: z.enum(['random', 'fixed']).default('random'),
   dota_lobby_password: z.string().default(''),
@@ -365,35 +484,39 @@ export const DOTA_LOBBY_CONFIG_DEFAULTS = {
   dota_lobby_password_saved: false,
 } as const;
 
-export const createEventInputSchema = z.object({
-  name: z.string().min(1, 'Name is required'),
-  description: z.string(),
-  scheduled_at: z.string(),
-  organization: z.number(),
-  tournament_league: z.number().nullable().optional(),
-  tournament_name: z.string().min(1, 'Tournament name is required'),
-  tournament_type: z.string(),
-  game_type: z.number(),
-  draft_type: z.string(),
-  game_mode: z.string(),
-  custom_game_name: z.string(),
-  captains_draft_time: z.number().int().min(1),
-  lobby_steam_league_id: z.number().nullable(),
-  people_per_team: z.number().int().min(1),
-  number_of_teams: z.number().int().min(2).nullable(),
-  timezone: z.string().min(1, 'Timezone is required'),
-  discord_notify_new_events: z.boolean().optional(),
-  signup_mode: z.enum(['immediate', 'scheduled', 'manual']),
-  signup_days_before: z.number().int().min(1).optional(),
-  // Recurring fields
-  is_recurring: z.boolean(),
-  frequency: z.string().optional(),
-  day_of_week: z.number().int().min(0).max(6).optional(),
-  time_of_day: z.string().optional(),
-  starts_at: z.string().optional(),
-  ends_at: z.string().optional(),
-  generate_days_ahead: z.number().int().min(1),
-}).merge(discordConfigSchema).merge(dotaLobbyConfigSchema);
+export const createEventInputSchema = z
+  .object({
+    name: z.string().min(1, 'Name is required'),
+    description: z.string(),
+    scheduled_at: z.string(),
+    organization: z.number(),
+    tournament_league: z.number().nullable().optional(),
+    tournament_name: z.string().min(1, 'Tournament name is required'),
+    tournament_type: z.string(),
+    game_type: z.number(),
+    draft_type: z.string(),
+    game_mode: z.string(),
+    custom_game_name: z.string(),
+    captains_draft_time: z.number().int().min(1),
+    lobby_steam_league_id: z.number().nullable(),
+    people_per_team: z.number().int().min(1),
+    number_of_teams: z.number().int().min(2).nullable(),
+    timezone: z.string().min(1, 'Timezone is required'),
+    discord_notify_new_events: z.boolean().optional(),
+    signup_mode: z.enum(['immediate', 'scheduled', 'manual']),
+    signup_days_before: z.number().int().min(1).optional(),
+    // Recurring fields
+    is_recurring: z.boolean(),
+    frequency: z.string().optional(),
+    day_of_week: z.number().int().min(0).max(6).optional(),
+    time_of_day: z.string().optional(),
+    starts_at: z.string().optional(),
+    ends_at: z.string().optional(),
+    generate_days_ahead: z.number().int().min(1),
+    event_ends_at: z.string().optional(),
+  })
+  .merge(discordConfigSchema)
+  .merge(dotaLobbyConfigSchema);
 
 export type CreateEventInput = z.infer<typeof createEventInputSchema>;
 
@@ -413,12 +536,43 @@ export const createSeriesEventInputSchema = createEventInputSchema
     signup_days_before: true,
     organization: true,
     discord_notify_new_events: true,
+    event_ends_at: true,
   })
   .extend({ open_signups: z.boolean().default(false) })
   .merge(discordConfigSchema)
   .merge(dotaLobbyConfigSchema);
 
-export type CreateSeriesEventInput = z.output<typeof createSeriesEventInputSchema>;
+export type CreateSeriesEventInput = z.output<
+  typeof createSeriesEventInputSchema
+>;
+
+export const editEventFormSchema = z
+  .object({
+    name: z.string().min(1, 'Name is required'),
+    description: z.string(),
+    scheduled_at: z.string().min(1, 'Scheduled date is required'),
+    event_ends_at: z.string().optional(),
+    tournament_name: z.string().min(1, 'Tournament name is required'),
+    tournament_type: z.string(),
+    game_type: z.number(),
+    draft_type: z.string(),
+    game_mode: z.string(),
+    custom_game_name: z.string(),
+    captains_draft_time: z.number().int().min(1),
+    lobby_steam_league_id: z.number().nullable(),
+    people_per_team: z.number().int().min(1),
+    number_of_teams: z.number().int().min(2).nullable(),
+    timezone: z.string().min(1, 'Timezone is required'),
+    tournament_league: z.number().nullable(),
+  })
+  .merge(discordConfigSchema)
+  .merge(dotaLobbyConfigSchema)
+  .superRefine((values, ctx) => {
+    refineLobbyPassword(values, ctx);
+    refineEventEnd(values, ctx);
+  });
+
+export type EditEventFormInput = z.infer<typeof editEventFormSchema>;
 
 export const discordEventMsgSchema = z.object({
   id: z.number(),
