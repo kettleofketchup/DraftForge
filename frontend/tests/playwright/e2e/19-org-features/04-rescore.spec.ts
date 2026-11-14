@@ -1,4 +1,3 @@
-import { BASE_URL } from '../../fixtures/base-url';
 import {
   expect,
   leaderboardByUser,
@@ -9,6 +8,7 @@ import {
   visitAndWaitForHydration,
   type OrgFeaturesTestData,
 } from '../../fixtures';
+import { BASE_URL } from '../../fixtures/base-url';
 
 test.describe('Org features: rescoring @cicd', () => {
   let data: OrgFeaturesTestData;
@@ -29,7 +29,10 @@ test.describe('Org features: rescoring @cicd', () => {
     const template = data.templates.find((t) => t.org_pk === orgPk);
     expect(template).toBeDefined();
 
-    const promoterContext = await browser.newContext({ baseURL: BASE_URL, ignoreHTTPSErrors: true });
+    const promoterContext = await browser.newContext({
+      baseURL: BASE_URL,
+      ignoreHTTPSErrors: true,
+    });
     try {
       await loginOrgFeatures(promoterContext, 'promoter');
       const pool = await orgFeaturesApi<{ rows: { user_pk: number }[] }>(
@@ -38,21 +41,36 @@ test.describe('Org features: rescoring @cicd', () => {
         `/organizations/${orgPk}/promotion/events/${eventPk}/candidates/`,
       );
       expect(pool.rows.length).toBeGreaterThan(0);
-      await orgFeaturesApi(promoterContext, 'POST', `/organizations/${orgPk}/promotion/events/${eventPk}/sends/`, {
-        template_id: template!.pk,
-        recipient_id: pool.rows[0].user_pk,
-        text: 'Come play in the next event!',
-      });
+      await orgFeaturesApi(
+        promoterContext,
+        'POST',
+        `/organizations/${orgPk}/promotion/events/${eventPk}/sends/`,
+        {
+          template_id: template!.pk,
+          recipient_id: pool.rows[0].user_pk,
+          text: 'Come play in the next event!',
+        },
+      );
     } finally {
       await promoterContext.close();
     }
 
     await loginOrgFeatures(context, 'admin');
-    const promoterRow = (await leaderboardByUser(context, orgPk)).get(promoterPk);
-    expect(promoterRow?.points, 'promoter: 5 (seeded helper) + 1 (promo)').toBe(6);
+    const promoterRow = (await leaderboardByUser(context, orgPk)).get(
+      promoterPk,
+    );
+    expect(promoterRow?.points, 'promoter: 5 (seeded helper) + 1 (promo)').toBe(
+      6,
+    );
 
-    await visitAndWaitForHydration(page, `/organizations/${orgPk}?tab=contributions`);
-    const points = page.getByTestId(`contributions-row-${promoterRow!.org_user_pk}`).locator('td').nth(2);
+    await visitAndWaitForHydration(
+      page,
+      `/organizations/${orgPk}?tab=contributions`,
+    );
+    const points = page
+      .getByTestId(`contributions-row-${promoterRow!.org_user_pk}`)
+      .locator('td')
+      .nth(2);
     await expect(points).toHaveText('6');
 
     const badge = page.getByTestId('point-value-badge-promo_message');
@@ -74,7 +92,9 @@ test.describe('Org features: rescoring @cicd', () => {
     await expect(page.getByTestId('rescore-dialog')).toBeHidden();
 
     await expect(badge).toHaveText('Default');
-    await expect(page.getByTestId('point-value-reset-promo_message')).toHaveCount(0);
+    await expect(
+      page.getByTestId('point-value-reset-promo_message'),
+    ).toHaveCount(0);
     await expect(points).toHaveText('6');
   });
 });

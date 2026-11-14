@@ -19,9 +19,17 @@ import { extractApiError } from '~/lib/apiError';
 import { getLogger } from '~/lib/logger';
 import { cn } from '~/lib/utils';
 import { candidateName } from './ComposePanel';
-import { relativeFromIso, reportPromoError, usePreviewOptions } from './feedback';
+import {
+  relativeFromIso,
+  reportPromoError,
+  usePreviewOptions,
+} from './feedback';
 import { useCandidates, useUndoPromoSend } from './queries';
-import { MAX_POOL_N, type CandidateFilters, type CandidateRow } from './schemas';
+import {
+  MAX_POOL_N,
+  type CandidateFilters,
+  type CandidateRow,
+} from './schemas';
 
 const log = getLogger('CandidateList');
 
@@ -50,14 +58,22 @@ export function CandidateList({
   onSelect,
   hideUndoFor,
 }: CandidateListProps) {
-  const { data, isLoading, isError, error } = useCandidates(orgId, access, eventId, filters);
+  const { data, isLoading, isError, error } = useCandidates(
+    orgId,
+    access,
+    eventId,
+    filters,
+  );
   const undo = useUndoPromoSend(orgId, access);
   const previewOptions = usePreviewOptions();
   const [search, setSearch] = useState(filters.q);
 
   useEffect(() => {
     if (search === filters.q) return;
-    const timer = setTimeout(() => onFiltersChange({ ...filters, q: search }), SEARCH_DEBOUNCE_MS);
+    const timer = setTimeout(
+      () => onFiltersChange({ ...filters, q: search }),
+      SEARCH_DEBOUNCE_MS,
+    );
     return () => clearTimeout(timer);
   }, [search, filters, onFiltersChange]);
 
@@ -74,7 +90,10 @@ export function CandidateList({
     undo.mutate(sendId, {
       onSuccess: () => toast.success('Send undone'),
       onError: (err) => {
-        const message = reportPromoError(log, 'promo_undo_failed', err, { orgId, sendId });
+        const message = reportPromoError(log, 'promo_undo_failed', err, {
+          orgId,
+          sendId,
+        });
         toast.error(message || 'Could not undo the send');
       },
     });
@@ -86,10 +105,14 @@ export function CandidateList({
     <section className="flex flex-col gap-3" data-testid="promo-candidate-list">
       <div className="flex flex-wrap items-end gap-3">
         <div className="flex flex-col gap-1">
-          <Label className="text-xs text-muted-foreground">Recent tournaments</Label>
+          <Label className="text-xs text-muted-foreground">
+            Recent tournaments
+          </Label>
           <BrandSelect
             value={String(filters.n)}
-            onValueChange={(value) => onFiltersChange({ ...filters, n: Number(value) })}
+            onValueChange={(value) =>
+              onFiltersChange({ ...filters, n: Number(value) })
+            }
           >
             <BrandSelectTrigger
               className="w-24"
@@ -100,7 +123,11 @@ export function CandidateList({
             </BrandSelectTrigger>
             <BrandSelectContent>
               {POOL_OPTIONS.map((n) => (
-                <BrandSelectItem key={n} value={String(n)} data-testid={`promo-pool-n-${n}`}>
+                <BrandSelectItem
+                  key={n}
+                  value={String(n)}
+                  data-testid={`promo-pool-n-${n}`}
+                >
                   {n}
                 </BrandSelectItem>
               ))}
@@ -111,7 +138,9 @@ export function CandidateList({
           <Switch
             id="promo-hide-signed-up"
             checked={filters.hideSignedUp}
-            onCheckedChange={(checked) => onFiltersChange({ ...filters, hideSignedUp: checked })}
+            onCheckedChange={(checked) =>
+              onFiltersChange({ ...filters, hideSignedUp: checked })
+            }
             data-testid="promo-hide-signed-up"
           />
           <Label htmlFor="promo-hide-signed-up">Hide signed up</Label>
@@ -120,7 +149,9 @@ export function CandidateList({
           <Switch
             id="promo-hide-messaged"
             checked={filters.hideMessaged}
-            onCheckedChange={(checked) => onFiltersChange({ ...filters, hideMessaged: checked })}
+            onCheckedChange={(checked) =>
+              onFiltersChange({ ...filters, hideMessaged: checked })
+            }
             data-testid="promo-hide-messaged"
           />
           <Label htmlFor="promo-hide-messaged">Hide messaged</Label>
@@ -135,15 +166,24 @@ export function CandidateList({
         />
       </div>
 
-      {isLoading && <p className="text-sm text-muted-foreground">Loading players...</p>}
+      {isLoading && (
+        <p className="text-sm text-muted-foreground">Loading players...</p>
+      )}
       {isError && (
-        <p className="text-sm text-destructive" data-testid="promo-candidates-error">
+        <p
+          className="text-sm text-destructive"
+          data-testid="promo-candidates-error"
+        >
           {extractApiError(error) ?? 'Could not load players.'}
         </p>
       )}
       {data && data.rows.length === 0 && (
-        <p className="text-sm text-muted-foreground" data-testid="promo-candidates-empty">
-          No players match. Recent players without a linked Discord account are not listed.
+        <p
+          className="text-sm text-muted-foreground"
+          data-testid="promo-candidates-empty"
+        >
+          No players match. Recent players without a linked Discord account are
+          not listed.
         </p>
       )}
 
@@ -156,7 +196,9 @@ export function CandidateList({
               key={row.user_pk}
               className={cn(
                 'flex flex-wrap items-center gap-3 rounded-md border p-3',
-                selected ? 'border-primary bg-primary/10' : 'border-border bg-base-900/40',
+                selected
+                  ? 'border-primary bg-primary/10'
+                  : 'border-border bg-base-900/40',
               )}
               data-testid={`promo-candidate-${row.user_pk}`}
             >
@@ -173,7 +215,9 @@ export function CandidateList({
               <div className="flex min-w-0 flex-1 flex-col">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-medium">{candidateName(row)}</span>
-                  {row.signed_up && <Badge variant="secondary">Signed up</Badge>}
+                  {row.signed_up && (
+                    <Badge variant="secondary">Signed up</Badge>
+                  )}
                 </div>
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                   {row.discordUsername && (
@@ -196,7 +240,8 @@ export function CandidateList({
                   </span>
                   {last && (
                     <span data-testid={`promo-last-messaged-${row.user_pk}`}>
-                      Messaged by {last.by ?? 'someone'}, {relativeFromIso(last.sent_at, previewOptions)}
+                      Messaged by {last.by ?? 'someone'},{' '}
+                      {relativeFromIso(last.sent_at, previewOptions)}
                     </span>
                   )}
                 </div>

@@ -12,7 +12,10 @@ function renderButton(
 ): void {
   render(
     <MemoryRouter>
-      <PromoteEventButton event={{ id: 9, organization: 4, state }} access={access} />
+      <PromoteEventButton
+        event={{ id: 9, organization: 4, state }}
+        access={access}
+      />
     </MemoryRouter>,
   );
 }

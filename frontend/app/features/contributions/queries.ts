@@ -137,10 +137,15 @@ export function useCreateManualAward(
 export function useUpdateManualAward(
   orgId: number,
   access: OrgFeatureAccess,
-): UseMutationResult<AdminEntry, unknown, { entryPk: number; changes: ManualAwardUpdate }> {
+): UseMutationResult<
+  AdminEntry,
+  unknown,
+  { entryPk: number; changes: ManualAwardUpdate }
+> {
   const invalidate = useInvalidateContributions(orgId, access);
   return useMutation({
-    mutationFn: ({ entryPk, changes }) => updateManualAward(orgId, entryPk, changes),
+    mutationFn: ({ entryPk, changes }) =>
+      updateManualAward(orgId, entryPk, changes),
     onSettled: invalidate,
   });
 }

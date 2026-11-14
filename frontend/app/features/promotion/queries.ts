@@ -61,7 +61,12 @@ export function useCandidates(
   filters: CandidateFilters,
 ): UseQueryResult<CandidatesResponse> {
   return useQuery({
-    queryKey: promotionKeys.candidates(orgId, access.viewerPk, eventId ?? 0, filters),
+    queryKey: promotionKeys.candidates(
+      orgId,
+      access.viewerPk,
+      eventId ?? 0,
+      filters,
+    ),
     queryFn: () => getCandidates(orgId, eventId!, filters),
     enabled: canUse(access) && eventId != null,
     placeholderData: (previous, previousQuery) =>
@@ -89,7 +94,10 @@ export function useRenderPromo(
       recipientId,
     ],
     queryFn: () =>
-      renderPromo(orgId, eventId, { template_id: templateId!, recipient_id: recipientId }),
+      renderPromo(orgId, eventId, {
+        template_id: templateId!,
+        recipient_id: recipientId,
+      }),
     enabled: canUse(access) && templateId != null,
     staleTime: Infinity,
     refetchOnWindowFocus: false,
@@ -97,10 +105,15 @@ export function useRenderPromo(
   });
 }
 
-function useInvalidatePromotion(orgId: number, access: OrgFeatureAccess): () => Promise<void> {
+function useInvalidatePromotion(
+  orgId: number,
+  access: OrgFeatureAccess,
+): () => Promise<void> {
   const queryClient = useQueryClient();
   return () =>
-    queryClient.invalidateQueries({ queryKey: promotionKeys.all(orgId, access.viewerPk) });
+    queryClient.invalidateQueries({
+      queryKey: promotionKeys.all(orgId, access.viewerPk),
+    });
 }
 
 export function useSendPromo(
@@ -129,11 +142,17 @@ export function useUndoPromoSend(
 export function useSavePromoTemplate(
   orgId: number,
   access: OrgFeatureAccess,
-): UseMutationResult<PromoTemplate, unknown, { id: number | null; input: PromoTemplateForm }> {
+): UseMutationResult<
+  PromoTemplate,
+  unknown,
+  { id: number | null; input: PromoTemplateForm }
+> {
   const invalidate = useInvalidatePromotion(orgId, access);
   return useMutation({
     mutationFn: ({ id, input }) =>
-      id == null ? createPromoTemplate(orgId, input) : updatePromoTemplate(orgId, id, input),
+      id == null
+        ? createPromoTemplate(orgId, input)
+        : updatePromoTemplate(orgId, id, input),
     onSettled: invalidate,
   });
 }

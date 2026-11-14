@@ -9,7 +9,14 @@ import {
   SelectValue,
 } from '~/components/ui/brand-select';
 import { SecondaryButton, SubmitButton } from '~/components/ui/buttons';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '~/components/ui/form';
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '~/components/ui/form';
 import { Input } from '~/components/ui/input';
 import { Textarea } from '~/components/ui/textarea';
 import type { OrgFeatureAccess } from '~/features/org-features';
@@ -97,7 +104,10 @@ export function ManualAwardForm({
   });
 
   const onSubmit = async (values: ManualAwardInput): Promise<void> => {
-    const payload: ManualAwardInput = { ...values, event_id: values.event_id ?? null };
+    const payload: ManualAwardInput = {
+      ...values,
+      event_id: values.event_id ?? null,
+    };
     try {
       if (entry) {
         const { user_id: _userId, ...changes } = payload;
@@ -110,14 +120,19 @@ export function ManualAwardForm({
       }
       onDone?.();
     } catch (err) {
-      log.warn('Failed to save manual award', { orgId, entryPk: entry?.pk, err });
+      log.warn('Failed to save manual award', {
+        orgId,
+        entryPk: entry?.pk,
+        err,
+      });
       toast.error(extractApiError(err) ?? 'Failed to save award');
     }
   };
 
   const linkedEventMissing =
     entry?.event != null && !events.some((e) => e.id === entry.event?.id);
-  const eventOptions = linkedEventMissing && entry?.event ? [entry.event, ...events] : events;
+  const eventOptions =
+    linkedEventMissing && entry?.event ? [entry.event, ...events] : events;
 
   return (
     <Form {...form}>
@@ -129,7 +144,10 @@ export function ManualAwardForm({
       >
         {isEdit ? (
           <p className="text-sm">
-            Member: <span className="font-medium">{entry.member.nickname || entry.member.username}</span>
+            Member:{' '}
+            <span className="font-medium">
+              {entry.member.nickname || entry.member.username}
+            </span>
           </p>
         ) : (
           <FormField
@@ -144,7 +162,10 @@ export function ManualAwardForm({
                   disabled={pending}
                 >
                   <FormControl>
-                    <BrandSelectTrigger data-testid="manual-award-member" aria-label="Member">
+                    <BrandSelectTrigger
+                      data-testid="manual-award-member"
+                      aria-label="Member"
+                    >
                       <SelectValue placeholder="Choose a member" />
                     </BrandSelectTrigger>
                   </FormControl>
@@ -184,7 +205,9 @@ export function ManualAwardForm({
                     ref={field.ref}
                     onBlur={field.onBlur}
                     value={Number.isNaN(field.value) ? '' : field.value}
-                    onChange={(e) => field.onChange(numberOrNaN(e.target.value))}
+                    onChange={(e) =>
+                      field.onChange(numberOrNaN(e.target.value))
+                    }
                     disabled={pending}
                     data-testid={`${prefix}-points`}
                   />
@@ -241,11 +264,16 @@ export function ManualAwardForm({
               <FormLabel>Event (optional)</FormLabel>
               <BrandSelect
                 value={field.value ? String(field.value) : NO_EVENT}
-                onValueChange={(v) => field.onChange(v === NO_EVENT ? null : Number(v))}
+                onValueChange={(v) =>
+                  field.onChange(v === NO_EVENT ? null : Number(v))
+                }
                 disabled={pending}
               >
                 <FormControl>
-                  <BrandSelectTrigger data-testid={`${prefix}-event`} aria-label="Event">
+                  <BrandSelectTrigger
+                    data-testid={`${prefix}-event`}
+                    aria-label="Event"
+                  >
                     <SelectValue />
                   </BrandSelectTrigger>
                 </FormControl>

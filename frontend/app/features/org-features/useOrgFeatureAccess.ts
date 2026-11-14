@@ -13,11 +13,14 @@ export interface OrgFeatureAccess {
   canManageContributions: boolean;
 }
 
-export function useOrgFeatureAccess(org: OrganizationType | undefined): OrgFeatureAccess {
+export function useOrgFeatureAccess(
+  org: OrganizationType | undefined,
+): OrgFeatureAccess {
   const viewerPk = useUserStore((s) => s.currentUser?.pk ?? null);
   const settled =
     org?.members_viewer_pk !== undefined && org.members_viewer_pk === viewerPk;
-  const flag = (value: boolean | undefined): boolean => settled && value === true;
+  const flag = (value: boolean | undefined): boolean =>
+    settled && value === true;
   return {
     settled,
     viewerPk,

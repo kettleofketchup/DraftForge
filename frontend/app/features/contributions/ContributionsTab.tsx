@@ -129,7 +129,11 @@ interface ContributionsAdminProps {
   access: OrgFeatureAccess;
 }
 
-function ContributionsAdmin({ orgId, timeZone, access }: ContributionsAdminProps) {
+function ContributionsAdmin({
+  orgId,
+  timeZone,
+  access,
+}: ContributionsAdminProps) {
   const members = useOrgUsers(orgId);
   const { data: orgEvents } = useEvents({ organization: orgId });
   const events = useMemo<AwardEvent[]>(

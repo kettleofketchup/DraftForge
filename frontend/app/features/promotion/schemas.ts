@@ -6,7 +6,10 @@ export const DISCORD_DM_LIMIT = 2000;
 export const MAX_SEND_TEXT = 4000;
 export const DEFAULT_POOL_N = 3;
 export const MAX_POOL_N = 10;
-export const PROMOTABLE_STATES: readonly string[] = ['upcoming', 'signups_open'];
+export const PROMOTABLE_STATES: readonly string[] = [
+  'upcoming',
+  'signups_open',
+];
 
 export const PromoTemplateSchema = z.object({
   id: z.number(),

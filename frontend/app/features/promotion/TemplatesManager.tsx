@@ -3,16 +3,31 @@ import { Pencil, Plus, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { toast } from 'sonner';
-import { DestructiveButton, PrimaryButton, SecondaryButton } from '~/components/ui/buttons';
+import {
+  DestructiveButton,
+  PrimaryButton,
+  SecondaryButton,
+} from '~/components/ui/buttons';
 import { ConfirmDialog } from '~/components/ui/dialogs';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '~/components/ui/form';
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '~/components/ui/form';
 import { Input } from '~/components/ui/input';
 import { Textarea } from '~/components/ui/textarea';
 import type { OrgFeatureAccess } from '~/features/org-features';
 import { getLogger } from '~/lib/logger';
 import { formatDiscordTimestamps } from './discordPreview';
 import { reportPromoError, usePreviewOptions } from './feedback';
-import { useDeletePromoTemplate, usePromoTemplates, useSavePromoTemplate } from './queries';
+import {
+  useDeletePromoTemplate,
+  usePromoTemplates,
+  useSavePromoTemplate,
+} from './queries';
 import {
   PLACEHOLDER_KEYS,
   renderTemplate,
@@ -72,10 +87,15 @@ export function TemplatesManager({
       toast.success('Template deleted');
       setDeleting(null);
     } catch (err: unknown) {
-      const message = reportPromoError(log, 'promo_template_delete_failed', err, {
-        orgId,
-        templateId: deleting.id,
-      });
+      const message = reportPromoError(
+        log,
+        'promo_template_delete_failed',
+        err,
+        {
+          orgId,
+          templateId: deleting.id,
+        },
+      );
       toast.error(message || 'Could not delete the template');
     }
   };
@@ -88,7 +108,9 @@ export function TemplatesManager({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h3 className="text-lg font-semibold">Message templates</h3>
-          <p className="text-sm text-muted-foreground">Org staff and above can edit templates.</p>
+          <p className="text-sm text-muted-foreground">
+            Org staff and above can edit templates.
+          </p>
         </div>
         {editing == null && (
           <SecondaryButton
@@ -102,7 +124,9 @@ export function TemplatesManager({
         )}
       </div>
 
-      {isLoading && <p className="text-sm text-muted-foreground">Loading templates...</p>}
+      {isLoading && (
+        <p className="text-sm text-muted-foreground">Loading templates...</p>
+      )}
 
       {editing != null && (
         <TemplateEditor
@@ -126,7 +150,9 @@ export function TemplatesManager({
           >
             <div className="min-w-0 flex-1">
               <div className="font-medium">{template.name}</div>
-              <div className="truncate text-xs text-muted-foreground">{template.body}</div>
+              <div className="truncate text-xs text-muted-foreground">
+                {template.body}
+              </div>
             </div>
             <div className="flex items-center gap-2">
               <SecondaryButton
@@ -213,9 +239,14 @@ function TemplateEditor({
 
   const onSubmit = async (values: PromoTemplateForm): Promise<void> => {
     try {
-      const saved = await save.mutateAsync({ id: template?.id ?? null, input: values });
+      const saved = await save.mutateAsync({
+        id: template?.id ?? null,
+        input: values,
+      });
       if (saved.warnings && saved.warnings.length > 0) {
-        toast.warning(`Template saved with warnings: ${saved.warnings.join(', ')}`);
+        toast.warning(
+          `Template saved with warnings: ${saved.warnings.join(', ')}`,
+        );
       } else {
         toast.success('Template saved');
       }
@@ -243,7 +274,11 @@ function TemplateEditor({
             <FormItem>
               <FormLabel>Name</FormLabel>
               <FormControl>
-                <Input {...field} placeholder="First invite" data-testid="promo-template-name-input" />
+                <Input
+                  {...field}
+                  placeholder="First invite"
+                  data-testid="promo-template-name-input"
+                />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -272,11 +307,17 @@ function TemplateEditor({
             </FormItem>
           )}
         />
-        <p className="text-xs text-muted-foreground" data-testid="promo-template-placeholders">
+        <p
+          className="text-xs text-muted-foreground"
+          data-testid="promo-template-placeholders"
+        >
           Placeholders: {PLACEHOLDER_KEYS.map((key) => `{${key}}`).join(' ')}
         </p>
         {warnings.length > 0 && (
-          <ul className="list-disc pl-5 text-xs text-warning" data-testid="promo-template-warnings">
+          <ul
+            className="list-disc pl-5 text-xs text-warning"
+            data-testid="promo-template-warnings"
+          >
             {warnings.map((warning) => (
               <li key={warning}>{warning}</li>
             ))}
@@ -292,10 +333,18 @@ function TemplateEditor({
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          <PrimaryButton type="submit" disabled={save.isPending} data-testid="promo-template-save-btn">
+          <PrimaryButton
+            type="submit"
+            disabled={save.isPending}
+            data-testid="promo-template-save-btn"
+          >
             {save.isPending ? 'Saving...' : 'Save template'}
           </PrimaryButton>
-          <SecondaryButton type="button" onClick={onDone} data-testid="promo-template-cancel-btn">
+          <SecondaryButton
+            type="button"
+            onClick={onDone}
+            data-testid="promo-template-cancel-btn"
+          >
             Cancel
           </SecondaryButton>
         </div>

@@ -8,6 +8,7 @@ export function canCompleteEvent(
   return (
     !!event?.user_can_manage_event_staff &&
     access.settled &&
-    (event.state === EventState.ROLL_CALL || event.state === EventState.IN_PROGRESS)
+    (event.state === EventState.ROLL_CALL ||
+      event.state === EventState.IN_PROGRESS)
   );
 }

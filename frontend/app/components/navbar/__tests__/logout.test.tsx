@@ -15,11 +15,17 @@ vi.mock('~/store/userStore', () => ({
   useUserStore: (selector: (state: object) => unknown) =>
     selector({ currentUser: { pk: 7, username: 'viewer' }, clearUser }),
 }));
-vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
-vi.mock('~/components/teamdraft/DraftNotificationBadge', () => ({ DraftNotificationBadge: () => null }));
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({ t: (key: string) => key }),
+}));
+vi.mock('~/components/teamdraft/DraftNotificationBadge', () => ({
+  DraftNotificationBadge: () => null,
+}));
 vi.mock('~/components/user/UserAvatar', () => ({ UserAvatar: () => null }));
 vi.mock('~/components/ui/dropdown-menu', () => {
-  const Pass = ({ children }: { children?: ReactNode }) => <div>{children}</div>;
+  const Pass = ({ children }: { children?: ReactNode }) => (
+    <div>{children}</div>
+  );
   return {
     DropdownMenu: Pass,
     DropdownMenuContent: Pass,

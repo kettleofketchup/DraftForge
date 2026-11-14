@@ -1,13 +1,24 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { I18nextProvider } from 'react-i18next';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { OrgFeatureAccess } from '~/features/org-features';
 import { createI18nInstance } from '~/i18n/config';
-import { getCandidates, getPromoEvents, getPromoTemplates, renderPromo } from '../api';
+import {
+  getCandidates,
+  getPromoEvents,
+  getPromoTemplates,
+  renderPromo,
+} from '../api';
 import { PromotionDashboard } from '../PromotionDashboard';
 import type { CandidateRow, PromoEvent } from '../schemas';
 
@@ -76,22 +87,35 @@ describe('PromotionDashboard', () => {
     vi.mocked(getPromoEvents).mockResolvedValue([eventA, eventB]);
     vi.mocked(getPromoTemplates).mockResolvedValue([]);
     vi.mocked(getCandidates).mockResolvedValue({ n: 3, rows: [candidate] });
-    vi.mocked(renderPromo).mockResolvedValue({ text: 'Hey', warnings: [], will_earn: true });
+    vi.mocked(renderPromo).mockResolvedValue({
+      text: 'Hey',
+      warnings: [],
+      will_earn: true,
+    });
 
-    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const qc = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
     function Wrapper({ children }: { children: ReactNode }) {
       return (
         <I18nextProvider i18n={createI18nInstance('en')}>
           <QueryClientProvider client={qc}>
-            <MemoryRouter initialEntries={['/?tab=promotion&event=9']}>{children}</MemoryRouter>
+            <MemoryRouter initialEntries={['/?tab=promotion&event=9']}>
+              {children}
+            </MemoryRouter>
           </QueryClientProvider>
         </I18nextProvider>
       );
     }
-    render(<PromotionDashboard orgId={1} access={access} />, { wrapper: Wrapper });
+    render(<PromotionDashboard orgId={1} access={access} />, {
+      wrapper: Wrapper,
+    });
 
     await waitFor(() =>
-      expect(screen.getByTestId('promo-event-9')).toHaveAttribute('aria-pressed', 'true'),
+      expect(screen.getByTestId('promo-event-9')).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      ),
     );
     fireEvent.click(screen.getByTestId('promo-event-10'));
     fireEvent.click(await screen.findByTestId('promo-select-42'));
@@ -103,7 +127,10 @@ describe('PromotionDashboard', () => {
     });
 
     await waitFor(() =>
-      expect(screen.getByTestId('promo-event-9')).toHaveAttribute('aria-pressed', 'true'),
+      expect(screen.getByTestId('promo-event-9')).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      ),
     );
     expect(screen.queryByTestId('promo-event-10')).not.toBeInTheDocument();
     expect(screen.queryByTestId('promo-message-text')).not.toBeInTheDocument();

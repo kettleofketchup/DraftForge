@@ -14,9 +14,15 @@ test.describe('Org features: smoke @cicd', () => {
     data = await resetOrgFeatures(request);
   });
 
-  test('admin sees the contributions tab on the unlocked org @cicd', async ({ page, context }) => {
+  test('admin sees the contributions tab on the unlocked org @cicd', async ({
+    page,
+    context,
+  }) => {
     await loginOrgFeatures(context, 'admin');
-    await visitAndWaitForHydration(page, `/organizations/${data.orgs.features.pk}`);
+    await visitAndWaitForHydration(
+      page,
+      `/organizations/${data.orgs.features.pk}`,
+    );
     await expect(page.getByTestId('org-tab-contributions')).toBeVisible();
   });
 });

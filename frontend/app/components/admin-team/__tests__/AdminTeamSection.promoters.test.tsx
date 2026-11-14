@@ -1,10 +1,20 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { toast } from 'sonner';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { addOrgPromoter, getOrgPromoters, removeOrgPromoter } from '~/components/api/api';
+import {
+  addOrgPromoter,
+  getOrgPromoters,
+  removeOrgPromoter,
+} from '~/components/api/api';
 import type { OrganizationType } from '~/components/organization/schemas';
 import type { UserType } from '~/components/user/types';
 import { useOrgStore } from '~/store/orgStore';
@@ -74,7 +84,10 @@ function renderSection(org: OrganizationType) {
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={qc}>{children}</QueryClientProvider>
   );
-  return { qc, ...render(<AdminTeamSection organization={org} />, { wrapper }) };
+  return {
+    qc,
+    ...render(<AdminTeamSection organization={org} />, { wrapper }),
+  };
 }
 
 beforeEach(() => {
@@ -110,7 +123,9 @@ describe('AdminTeamSection promoters', () => {
   it('shows the promoter list and add button when the flag is set', async () => {
     renderSection(makeOrg());
     const section = await screen.findByTestId('promoters-section');
-    expect(await within(section).findByTestId('team-member-alice')).toBeInTheDocument();
+    expect(
+      await within(section).findByTestId('team-member-alice'),
+    ).toBeInTheDocument();
     expect(within(section).getByTestId('team-member-bob')).toBeInTheDocument();
     expect(within(section).getByTestId('add-promoter-btn')).toBeInTheDocument();
     expect(getOrgPromoters).toHaveBeenCalledWith(7);
@@ -120,8 +135,12 @@ describe('AdminTeamSection promoters', () => {
     vi.mocked(removeOrgPromoter).mockResolvedValue(undefined);
     renderSection(makeOrg());
     fireEvent.click(await screen.findByTestId('remove-promoter-alice'));
-    await vi.waitFor(() => expect(removeOrgPromoter).toHaveBeenCalledWith(7, 21));
-    await vi.waitFor(() => expect(toast.success).toHaveBeenCalledWith('Promoter removed'));
+    await vi.waitFor(() =>
+      expect(removeOrgPromoter).toHaveBeenCalledWith(7, 21),
+    );
+    await vi.waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith('Promoter removed'),
+    );
     await vi.waitFor(() => expect(getOrgPromoters).toHaveBeenCalledTimes(2));
   });
 
@@ -131,7 +150,9 @@ describe('AdminTeamSection promoters', () => {
     });
     renderSection(makeOrg());
     fireEvent.click(await screen.findByTestId('remove-promoter-bob'));
-    await vi.waitFor(() => expect(toast.error).toHaveBeenCalledWith('not a promoter'));
+    await vi.waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith('not a promoter'),
+    );
     await vi.waitFor(() => expect(getOrgPromoters).toHaveBeenCalledTimes(2));
   });
 
@@ -153,7 +174,9 @@ describe('AdminTeamSection promoters', () => {
     await screen.findByTestId('promoters-section');
     fireEvent.click(screen.getByTestId('stub-add-promoter'));
     await vi.waitFor(() =>
-      expect(screen.getByTestId('stub-result-promoter')).toHaveTextContent('already a promoter'),
+      expect(screen.getByTestId('stub-result-promoter')).toHaveTextContent(
+        'already a promoter',
+      ),
     );
     await vi.waitFor(() => expect(getOrgPromoters).toHaveBeenCalledTimes(2));
   });

@@ -2,7 +2,12 @@ import { z } from 'zod';
 
 export const ALL_TIME = 'all';
 
-export const CONTRIBUTION_KINDS = ['promo_message', 'event_host', 'event_helper', 'manual'] as const;
+export const CONTRIBUTION_KINDS = [
+  'promo_message',
+  'event_host',
+  'event_helper',
+  'manual',
+] as const;
 export const ContributionKindSchema = z.enum(CONTRIBUTION_KINDS);
 export type ContributionKind = z.infer<typeof ContributionKindSchema>;
 
@@ -62,7 +67,11 @@ export const MemberBreakdownSchema = z.object({
 });
 export type MemberBreakdown = z.infer<typeof MemberBreakdownSchema>;
 
-export const RATED_KINDS = ['promo_message', 'event_host', 'event_helper'] as const;
+export const RATED_KINDS = [
+  'promo_message',
+  'event_host',
+  'event_helper',
+] as const;
 export const RatedKindSchema = z.enum(RATED_KINDS);
 export type RatedKind = z.infer<typeof RatedKindSchema>;
 
@@ -85,7 +94,9 @@ export const PointValueUpdateResultSchema = z.object({
   new: z.number(),
   changed: z.number(),
 });
-export type PointValueUpdateResult = z.infer<typeof PointValueUpdateResultSchema>;
+export type PointValueUpdateResult = z.infer<
+  typeof PointValueUpdateResultSchema
+>;
 
 export interface PointValueUpdate {
   /** null resets the kind to its default. */

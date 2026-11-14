@@ -18,7 +18,11 @@ const actions = {
   completeEvent: idle(),
 } as unknown as Parameters<typeof EventAdminActions>[0]['actions'];
 
-const event = { id: 11, name: 'Night 4', state: 'in_progress' } as unknown as EventType;
+const event = {
+  id: 11,
+  name: 'Night 4',
+  state: 'in_progress',
+} as unknown as EventType;
 
 function renderActions(
   canComplete: boolean,

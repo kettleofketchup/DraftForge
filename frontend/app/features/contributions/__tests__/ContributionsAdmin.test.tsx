@@ -2,7 +2,15 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
 import { TooltipProvider } from '~/components/ui/tooltip';
 import type { OrgFeatureAccess } from '~/features/org-features';
 import {
@@ -34,8 +42,22 @@ vi.mock('~/components/api/eventsAPI', () => ({
 
 vi.mock('~/hooks/useOrgUsers', () => ({
   useOrgUsers: () => [
-    { pk: 3, username: 'alice', nickname: null, orgData: {}, leagueData: {}, _fetchedAt: 0 },
-    { pk: 4, username: 'bob', nickname: 'Bobby', orgData: {}, leagueData: {}, _fetchedAt: 0 },
+    {
+      pk: 3,
+      username: 'alice',
+      nickname: null,
+      orgData: {},
+      leagueData: {},
+      _fetchedAt: 0,
+    },
+    {
+      pk: 4,
+      username: 'bob',
+      nickname: 'Bobby',
+      orgData: {},
+      leagueData: {},
+      _fetchedAt: 0,
+    },
   ],
 }));
 
@@ -100,7 +122,12 @@ function renderTab(access: OrgFeatureAccess, timeZone = 'UTC') {
     </QueryClientProvider>
   );
   return render(
-    <ContributionsTab orgId={7} timeZone={timeZone} membersPrivate={false} access={access} />,
+    <ContributionsTab
+      orgId={7}
+      timeZone={timeZone}
+      membersPrivate={false}
+      access={access}
+    />,
     { wrapper },
   );
 }
@@ -120,7 +147,12 @@ beforeEach(() => {
     offset: 0,
     results: [entry(31, 'manual'), entry(32, 'event_host')],
   });
-  vi.mocked(setPointValue).mockResolvedValue({ kind: 'event_host', old: 10, new: 20, changed: 0 });
+  vi.mocked(setPointValue).mockResolvedValue({
+    kind: 'event_host',
+    old: 10,
+    new: 20,
+    changed: 0,
+  });
   vi.mocked(createManualAward).mockResolvedValue(entry(33, 'manual'));
   vi.mocked(deleteManualAward).mockResolvedValue(undefined);
 });
@@ -142,11 +174,15 @@ describe('contributions admin section', () => {
 
   it('shows default and changed badges with reset only for changed kinds', async () => {
     renderTab(admin);
-    expect(await screen.findByTestId('point-value-badge-event_helper')).toHaveTextContent(
-      'Changed',
-    );
-    expect(screen.getByTestId('point-value-badge-event_host')).toHaveTextContent('Default');
-    expect(screen.getByTestId('point-value-reset-event_helper')).toBeInTheDocument();
+    expect(
+      await screen.findByTestId('point-value-badge-event_helper'),
+    ).toHaveTextContent('Changed');
+    expect(
+      screen.getByTestId('point-value-badge-event_host'),
+    ).toHaveTextContent('Default');
+    expect(
+      screen.getByTestId('point-value-reset-event_helper'),
+    ).toBeInTheDocument();
     expect(screen.queryByTestId('point-value-reset-event_host')).toBeNull();
     expect(screen.getByTestId('point-value-event_helper')).toHaveValue(8);
     expect(getOrgUsers).toHaveBeenCalledWith(7);
@@ -176,7 +212,9 @@ describe('contributions admin section', () => {
 
   it('saves future-only by default and resets with a null value', async () => {
     renderTab(admin);
-    fireEvent.click(await screen.findByTestId('point-value-reset-event_helper'));
+    fireEvent.click(
+      await screen.findByTestId('point-value-reset-event_helper'),
+    );
     fireEvent.click(await screen.findByTestId('rescore-confirm'));
     await waitFor(() =>
       expect(setPointValue).toHaveBeenCalledWith(7, 'event_helper', {
@@ -221,7 +259,9 @@ describe('contributions admin section', () => {
     const trigger = await screen.findByTestId('manual-award-member');
     fireEvent.keyDown(trigger, { key: 'Enter' });
     fireEvent.click(await screen.findByTestId('manual-award-member-4'));
-    fireEvent.change(screen.getByTestId('manual-award-points'), { target: { value: '15' } });
+    fireEvent.change(screen.getByTestId('manual-award-points'), {
+      target: { value: '15' },
+    });
     fireEvent.change(screen.getByTestId('manual-award-reason'), {
       target: { value: '  Casting  ' },
     });
@@ -245,13 +285,19 @@ describe('contributions admin section', () => {
       count: 1,
       limit: 50,
       offset: 0,
-      results: [{ ...entry(31, 'manual'), occurred_at: '2026-11-01T03:00:00Z' }],
+      results: [
+        { ...entry(31, 'manual'), occurred_at: '2026-11-01T03:00:00Z' },
+      ],
     });
     vi.mocked(updateManualAward).mockResolvedValue(entry(31, 'manual'));
     renderTab(admin, 'America/Chicago');
     fireEvent.click(await screen.findByTestId('ledger-edit-31'));
-    expect(await screen.findByTestId('manual-award-edit-date')).toHaveValue('2026-10-31');
-    fireEvent.change(screen.getByTestId('manual-award-edit-points'), { target: { value: '9' } });
+    expect(await screen.findByTestId('manual-award-edit-date')).toHaveValue(
+      '2026-10-31',
+    );
+    fireEvent.change(screen.getByTestId('manual-award-edit-points'), {
+      target: { value: '9' },
+    });
     fireEvent.click(screen.getByTestId('manual-award-edit-submit'));
     await waitFor(() =>
       expect(updateManualAward).toHaveBeenCalledWith(7, 31, {
@@ -271,7 +317,12 @@ describe('contributions admin section', () => {
   });
 
   it('falls back to the last page when the current page empties', async () => {
-    const pageTwo = { count: 51, limit: 50, offset: 50, results: [entry(99, 'manual')] };
+    const pageTwo = {
+      count: 51,
+      limit: 50,
+      offset: 50,
+      results: [entry(99, 'manual')],
+    };
     const pageOne = {
       count: 50,
       limit: 50,
@@ -286,13 +337,18 @@ describe('contributions admin section', () => {
     await screen.findByTestId('ledger-row-99');
 
     vi.mocked(getEntries).mockImplementation(async (_orgId, filters) =>
-      filters.offset === 0 ? pageOne : { count: 50, limit: 50, offset: filters.offset, results: [] },
+      filters.offset === 0
+        ? pageOne
+        : { count: 50, limit: 50, offset: filters.offset, results: [] },
     );
     fireEvent.click(screen.getByTestId('ledger-delete-99'));
     fireEvent.click(await screen.findByTestId('ledger-delete-confirm'));
 
     await screen.findByTestId('ledger-row-31');
-    expect(getEntries).toHaveBeenLastCalledWith(7, expect.objectContaining({ offset: 0 }));
+    expect(getEntries).toHaveBeenLastCalledWith(
+      7,
+      expect.objectContaining({ offset: 0 }),
+    );
     expect(screen.queryByText('No entries match these filters')).toBeNull();
   });
 });

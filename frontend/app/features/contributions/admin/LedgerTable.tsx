@@ -8,7 +8,11 @@ import {
   BrandSelectTrigger,
   SelectValue,
 } from '~/components/ui/brand-select';
-import { EditIconButton, SecondaryButton, TrashIconButton } from '~/components/ui/buttons';
+import {
+  EditIconButton,
+  SecondaryButton,
+  TrashIconButton,
+} from '~/components/ui/buttons';
 import {
   Dialog,
   DialogContent,
@@ -32,7 +36,11 @@ import {
   type EntriesFilters,
 } from '../schemas';
 import { formatOrgDate, periodOptions } from '../timezone';
-import { ManualAwardForm, type AwardEvent, type AwardMember } from './ManualAwardForm';
+import {
+  ManualAwardForm,
+  type AwardEvent,
+  type AwardMember,
+} from './ManualAwardForm';
 
 const log = getLogger('LedgerTable');
 
@@ -46,7 +54,13 @@ export interface LedgerTableProps {
   events: AwardEvent[];
 }
 
-export function LedgerTable({ orgId, access, timeZone, members, events }: LedgerTableProps) {
+export function LedgerTable({
+  orgId,
+  access,
+  timeZone,
+  members,
+  events,
+}: LedgerTableProps) {
   const [filters, setFilters] = useState<EntriesFilters>({
     period: ALL_TIME,
     kind: null,
@@ -68,7 +82,9 @@ export function LedgerTable({ orgId, access, timeZone, members, events }: Ledger
       0,
       (Math.ceil(data.count / ENTRIES_PAGE_SIZE) - 1) * ENTRIES_PAGE_SIZE,
     );
-    setFilters((f) => (f.offset === data.offset ? { ...f, offset: lastPageOffset } : f));
+    setFilters((f) =>
+      f.offset === data.offset ? { ...f, offset: lastPageOffset } : f,
+    );
   }, [data]);
 
   const confirmDelete = async (): Promise<void> => {
@@ -77,13 +93,19 @@ export function LedgerTable({ orgId, access, timeZone, members, events }: Ledger
       await remove.mutateAsync(deleting.pk);
       toast.success('Award deleted');
     } catch (err) {
-      log.warn('Failed to delete manual award', { orgId, entryPk: deleting.pk, err });
+      log.warn('Failed to delete manual award', {
+        orgId,
+        entryPk: deleting.pk,
+        err,
+      });
       toast.error(extractApiError(err) ?? 'Failed to delete award');
     }
   };
 
   const page = data ? Math.floor(data.offset / ENTRIES_PAGE_SIZE) + 1 : 1;
-  const pages = data ? Math.max(1, Math.ceil(data.count / ENTRIES_PAGE_SIZE)) : 1;
+  const pages = data
+    ? Math.max(1, Math.ceil(data.count / ENTRIES_PAGE_SIZE))
+    : 1;
 
   return (
     <section className="flex flex-col gap-3" data-testid="contributions-ledger">
@@ -92,7 +114,9 @@ export function LedgerTable({ orgId, access, timeZone, members, events }: Ledger
         <div className="flex flex-wrap gap-2">
           <BrandSelect
             value={filters.period}
-            onValueChange={(period) => setFilters((f) => ({ ...f, period, offset: 0 }))}
+            onValueChange={(period) =>
+              setFilters((f) => ({ ...f, period, offset: 0 }))
+            }
           >
             <BrandSelectTrigger
               className="min-w-40"
@@ -138,7 +162,9 @@ export function LedgerTable({ orgId, access, timeZone, members, events }: Ledger
         </div>
       </div>
 
-      {isLoading && <p className="text-sm text-muted-foreground">Loading ledger...</p>}
+      {isLoading && (
+        <p className="text-sm text-muted-foreground">Loading ledger...</p>
+      )}
       {isError && (
         <p className="text-sm text-destructive" data-testid="ledger-error">
           {extractApiError(error) ?? 'Could not load the ledger.'}
@@ -146,7 +172,9 @@ export function LedgerTable({ orgId, access, timeZone, members, events }: Ledger
       )}
 
       {data && data.results.length === 0 && (
-        <p className="text-sm text-muted-foreground">No entries match these filters</p>
+        <p className="text-sm text-muted-foreground">
+          No entries match these filters
+        </p>
       )}
 
       {data && data.results.length > 0 && (
@@ -170,7 +198,10 @@ export function LedgerTable({ orgId, access, timeZone, members, events }: Ledger
                   />
                   <span className="min-w-0 truncate">
                     {entry.member.nickname || entry.member.username}
-                    <span className="text-muted-foreground"> · {KIND_LABELS[entry.kind]}</span>
+                    <span className="text-muted-foreground">
+                      {' '}
+                      · {KIND_LABELS[entry.kind]}
+                    </span>
                   </span>
                 </div>
                 <div className="truncate text-sm text-muted-foreground">
@@ -178,7 +209,10 @@ export function LedgerTable({ orgId, access, timeZone, members, events }: Ledger
                   {entry.event ? (
                     <>
                       {' · '}
-                      <Link to={`/events/${entry.event.id}`} className="hover:underline">
+                      <Link
+                        to={`/events/${entry.event.id}`}
+                        className="hover:underline"
+                      >
                         {entry.event.name}
                       </Link>
                     </>
@@ -188,11 +222,15 @@ export function LedgerTable({ orgId, access, timeZone, members, events }: Ledger
                   {entry.awarded_by && ` · by ${entry.awarded_by.username}`}
                 </div>
                 {entry.reason && (
-                  <div className="text-sm text-muted-foreground">{entry.reason}</div>
+                  <div className="text-sm text-muted-foreground">
+                    {entry.reason}
+                  </div>
                 )}
               </div>
               <div className="flex shrink-0 items-center gap-1">
-                <span className="mr-1 font-semibold tabular-nums">+{entry.points}</span>
+                <span className="mr-1 font-semibold tabular-nums">
+                  +{entry.points}
+                </span>
                 {entry.kind === 'manual' && (
                   <>
                     <EditIconButton
@@ -223,7 +261,10 @@ export function LedgerTable({ orgId, access, timeZone, members, events }: Ledger
             size="sm"
             disabled={filters.offset === 0 || isFetching}
             onClick={() =>
-              setFilters((f) => ({ ...f, offset: Math.max(0, f.offset - ENTRIES_PAGE_SIZE) }))
+              setFilters((f) => ({
+                ...f,
+                offset: Math.max(0, f.offset - ENTRIES_PAGE_SIZE),
+              }))
             }
             data-testid="ledger-prev"
           >
@@ -235,8 +276,15 @@ export function LedgerTable({ orgId, access, timeZone, members, events }: Ledger
           <SecondaryButton
             type="button"
             size="sm"
-            disabled={filters.offset + ENTRIES_PAGE_SIZE >= data.count || isFetching}
-            onClick={() => setFilters((f) => ({ ...f, offset: f.offset + ENTRIES_PAGE_SIZE }))}
+            disabled={
+              filters.offset + ENTRIES_PAGE_SIZE >= data.count || isFetching
+            }
+            onClick={() =>
+              setFilters((f) => ({
+                ...f,
+                offset: f.offset + ENTRIES_PAGE_SIZE,
+              }))
+            }
             data-testid="ledger-next"
           >
             Next
@@ -244,11 +292,19 @@ export function LedgerTable({ orgId, access, timeZone, members, events }: Ledger
         </div>
       )}
 
-      <Dialog open={editing != null} onOpenChange={(open) => !open && setEditing(null)}>
-        <DialogContent className="max-w-[calc(100%-2rem)] sm:max-w-lg" data-testid="ledger-edit-dialog">
+      <Dialog
+        open={editing != null}
+        onOpenChange={(open) => !open && setEditing(null)}
+      >
+        <DialogContent
+          className="max-w-[calc(100%-2rem)] sm:max-w-lg"
+          data-testid="ledger-edit-dialog"
+        >
           <DialogHeader>
             <DialogTitle>Edit manual award</DialogTitle>
-            <DialogDescription>Changes update this member's total right away.</DialogDescription>
+            <DialogDescription>
+              Changes update this member's total right away.
+            </DialogDescription>
           </DialogHeader>
           {editing && (
             <ManualAwardForm

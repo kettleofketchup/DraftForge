@@ -2,7 +2,10 @@ import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { extractApiError } from '~/lib/apiError';
 import type { getLogger } from '~/lib/logger';
-import { formatDiscordTimestamps, type DiscordPreviewOptions } from './discordPreview';
+import {
+  formatDiscordTimestamps,
+  type DiscordPreviewOptions,
+} from './discordPreview';
 
 export function reportPromoError(
   log: ReturnType<typeof getLogger>,
@@ -25,7 +28,10 @@ export function usePreviewOptions(): DiscordPreviewOptions {
   return useMemo(() => ({ locale, timeZone }), [locale, timeZone]);
 }
 
-export function relativeFromIso(iso: string, opts: DiscordPreviewOptions): string {
+export function relativeFromIso(
+  iso: string,
+  opts: DiscordPreviewOptions,
+): string {
   const ms = new Date(iso).getTime();
   if (Number.isNaN(ms)) return '';
   return formatDiscordTimestamps(`<t:${Math.floor(ms / 1000)}:R>`, opts);

@@ -9,7 +9,13 @@
  * Never hardcode PKs: read them from getOrgFeaturesData / resetOrgFeatures.
  */
 
-import { expect, type APIRequestContext, type APIResponse, type BrowserContext, type Page } from '@playwright/test';
+import {
+  expect,
+  type APIRequestContext,
+  type APIResponse,
+  type BrowserContext,
+  type Page,
+} from '@playwright/test';
 
 import { API_URL } from './base-url';
 import { isCsrfCookie } from './cookies';
@@ -45,31 +51,51 @@ export interface OrgFeaturesTestData {
 
 async function json<T>(resp: APIResponse, what: string): Promise<T> {
   if (!resp.ok()) {
-    throw new Error(`${what} failed: ${resp.status()} ${(await resp.text()).slice(0, 300)}`);
+    throw new Error(
+      `${what} failed: ${resp.status()} ${(await resp.text()).slice(0, 300)}`,
+    );
   }
   return (await resp.json()) as T;
 }
 
-export async function getOrgFeaturesData(request: APIRequestContext): Promise<OrgFeaturesTestData> {
-  return json(await request.get(`${API_URL}/tests/org-features/data/`), 'org-features data');
+export async function getOrgFeaturesData(
+  request: APIRequestContext,
+): Promise<OrgFeaturesTestData> {
+  return json(
+    await request.get(`${API_URL}/tests/org-features/data/`),
+    'org-features data',
+  );
 }
 
 /** Rebuild ledger, promo sends, point values, events, templates, switches and roles. */
-export async function resetOrgFeatures(request: APIRequestContext): Promise<OrgFeaturesTestData> {
-  return json(await request.post(`${API_URL}/tests/org-features/reset/`), 'org-features reset');
+export async function resetOrgFeatures(
+  request: APIRequestContext,
+): Promise<OrgFeaturesTestData> {
+  return json(
+    await request.post(`${API_URL}/tests/org-features/reset/`),
+    'org-features reset',
+  );
 }
 
 /** Log in as an org features test user (the context's cookies hold the session). */
-export async function loginOrgFeatures(context: BrowserContext, role: OrgFeaturesRole): Promise<void> {
+export async function loginOrgFeatures(
+  context: BrowserContext,
+  role: OrgFeaturesRole,
+): Promise<void> {
   await json(
     await context.request.post(`${API_URL}/tests/login-org-features/${role}/`),
     `login-org-features ${role}`,
   );
 }
 
-async function csrfHeaders(context: BrowserContext): Promise<Record<string, string>> {
+async function csrfHeaders(
+  context: BrowserContext,
+): Promise<Record<string, string>> {
   const csrf = (await context.cookies()).find((c) => isCsrfCookie(c.name));
-  return { 'Content-Type': 'application/json', 'X-CSRFToken': csrf?.value ?? '' };
+  return {
+    'Content-Type': 'application/json',
+    'X-CSRFToken': csrf?.value ?? '',
+  };
 }
 
 /** A same-session API call with the CSRF header; throws on a non-2xx answer. */
@@ -85,7 +111,9 @@ export async function orgFeaturesApi<T = unknown>(
     headers: await csrfHeaders(context),
   });
   if (!resp.ok()) {
-    throw new Error(`${method} ${path} failed: ${resp.status()} ${(await resp.text()).slice(0, 300)}`);
+    throw new Error(
+      `${method} ${path} failed: ${resp.status()} ${(await resp.text()).slice(0, 300)}`,
+    );
   }
   return (resp.status() === 204 ? undefined : await resp.json()) as T;
 }
@@ -110,7 +138,10 @@ export async function leaderboardByUser(
 }
 
 /** Move an upcoming event to roll call (open signups, then start roll call). */
-export async function moveEventToRollCall(context: BrowserContext, eventPk: number): Promise<void> {
+export async function moveEventToRollCall(
+  context: BrowserContext,
+  eventPk: number,
+): Promise<void> {
   await orgFeaturesApi(context, 'POST', `/events/${eventPk}/open_signups/`);
   await orgFeaturesApi(context, 'POST', `/events/${eventPk}/start_roll_call/`);
 }
@@ -122,14 +153,22 @@ export async function moveEventToRollCall(context: BrowserContext, eventPk: numb
  * sonner's dynamic import) and the toast count are both checked on every tick and once
  * more at the end, so a late 401/403 still fails the test.
  */
-export async function expectNoSessionToast(page: Page, holdMs = 2000): Promise<void> {
+export async function expectNoSessionToast(
+  page: Page,
+  holdMs = 2000,
+): Promise<void> {
   await page.waitForLoadState('networkidle');
   const toast = page.getByText(/Session expired/);
   const assertClean = async (): Promise<void> => {
     const flagged = await page.evaluate(
-      () => (window as unknown as Record<string, unknown>)._auth_toast_shown === true,
+      () =>
+        (window as unknown as Record<string, unknown>)._auth_toast_shown ===
+        true,
     );
-    expect(flagged, 'axios interceptor flagged a session-expired response').toBe(false);
+    expect(
+      flagged,
+      'axios interceptor flagged a session-expired response',
+    ).toBe(false);
     expect(await toast.count(), 'Session expired toast is visible').toBe(0);
   };
   const deadline = Date.now() + holdMs;

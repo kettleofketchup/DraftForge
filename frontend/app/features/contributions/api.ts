@@ -25,10 +25,16 @@ function periodParams(period: string): { period?: string } {
   return period && period !== ALL_TIME ? { period } : {};
 }
 
-export async function getLeaderboard(orgId: number, period: string): Promise<LeaderboardResponse> {
-  const response = await api.get(`/organizations/${orgId}/contributions/leaderboard/`, {
-    params: periodParams(period),
-  });
+export async function getLeaderboard(
+  orgId: number,
+  period: string,
+): Promise<LeaderboardResponse> {
+  const response = await api.get(
+    `/organizations/${orgId}/contributions/leaderboard/`,
+    {
+      params: periodParams(period),
+    },
+  );
   return LeaderboardResponseSchema.parse(response.data);
 }
 
@@ -37,14 +43,19 @@ export async function getMemberBreakdown(
   orgUserPk: number,
   period: string,
 ): Promise<MemberBreakdown> {
-  const response = await api.get(`/organizations/${orgId}/contributions/members/${orgUserPk}/`, {
-    params: periodParams(period),
-  });
+  const response = await api.get(
+    `/organizations/${orgId}/contributions/members/${orgUserPk}/`,
+    {
+      params: periodParams(period),
+    },
+  );
   return MemberBreakdownSchema.parse(response.data);
 }
 
 export async function getPointValues(orgId: number): Promise<PointValueRow[]> {
-  const response = await api.get(`/organizations/${orgId}/contributions/point-values/`);
+  const response = await api.get(
+    `/organizations/${orgId}/contributions/point-values/`,
+  );
   return z.array(PointValueRowSchema).parse(response.data);
 }
 
@@ -60,15 +71,21 @@ export async function setPointValue(
   return PointValueUpdateResultSchema.parse(response.data);
 }
 
-export async function getEntries(orgId: number, filters: EntriesFilters): Promise<EntriesPage> {
-  const response = await api.get(`/organizations/${orgId}/contributions/entries/`, {
-    params: {
-      ...periodParams(filters.period),
-      ...(filters.kind ? { kind: filters.kind } : {}),
-      limit: ENTRIES_PAGE_SIZE,
-      offset: filters.offset,
+export async function getEntries(
+  orgId: number,
+  filters: EntriesFilters,
+): Promise<EntriesPage> {
+  const response = await api.get(
+    `/organizations/${orgId}/contributions/entries/`,
+    {
+      params: {
+        ...periodParams(filters.period),
+        ...(filters.kind ? { kind: filters.kind } : {}),
+        limit: ENTRIES_PAGE_SIZE,
+        offset: filters.offset,
+      },
     },
-  });
+  );
   return EntriesPageSchema.parse(response.data);
 }
 
@@ -76,7 +93,10 @@ export async function createManualAward(
   orgId: number,
   input: ManualAwardInput,
 ): Promise<AdminEntry> {
-  const response = await api.post(`/organizations/${orgId}/contributions/entries/`, input);
+  const response = await api.post(
+    `/organizations/${orgId}/contributions/entries/`,
+    input,
+  );
   return AdminEntrySchema.parse(response.data);
 }
 
@@ -94,6 +114,9 @@ export async function updateManualAward(
   return AdminEntrySchema.parse(response.data);
 }
 
-export async function deleteManualAward(orgId: number, entryPk: number): Promise<void> {
+export async function deleteManualAward(
+  orgId: number,
+  entryPk: number,
+): Promise<void> {
   await api.delete(`/organizations/${orgId}/contributions/entries/${entryPk}/`);
 }

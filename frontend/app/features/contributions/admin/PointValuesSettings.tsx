@@ -5,14 +5,25 @@ import { toast } from 'sonner';
 import { z } from 'zod';
 import { Badge } from '~/components/ui/badge';
 import { SecondaryButton } from '~/components/ui/buttons';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '~/components/ui/form';
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '~/components/ui/form';
 import { Input } from '~/components/ui/input';
 import type { OrgFeatureAccess } from '~/features/org-features';
 import { extractApiError } from '~/lib/apiError';
 import { getLogger } from '~/lib/logger';
 import { describePointValue } from '../pointValues';
 import { usePointValues, useSetPointValue } from '../queries';
-import { KIND_LABELS, pointValueInputSchema, type PointValueRow } from '../schemas';
+import {
+  KIND_LABELS,
+  pointValueInputSchema,
+  type PointValueRow,
+} from '../schemas';
 import { RescoreDialog, type RescoreChoice } from './RescoreDialog';
 
 const log = getLogger('PointValuesSettings');
@@ -30,8 +41,16 @@ export interface PointValuesSettingsProps {
   access: OrgFeatureAccess;
 }
 
-export function PointValuesSettings({ orgId, access }: PointValuesSettingsProps) {
-  const { data: rows, isLoading, isError, error } = usePointValues(orgId, access);
+export function PointValuesSettings({
+  orgId,
+  access,
+}: PointValuesSettingsProps) {
+  const {
+    data: rows,
+    isLoading,
+    isError,
+    error,
+  } = usePointValues(orgId, access);
   const mutation = useSetPointValue(orgId, access);
   const [pending, setPending] = useState<PendingChange | null>(null);
 
@@ -56,11 +75,19 @@ export function PointValuesSettings({ orgId, access }: PointValuesSettingsProps)
   };
 
   return (
-    <section className="flex flex-col gap-3" data-testid="point-values-settings">
+    <section
+      className="flex flex-col gap-3"
+      data-testid="point-values-settings"
+    >
       <h4 className="font-semibold">Point values</h4>
-      {isLoading && <p className="text-sm text-muted-foreground">Loading point values...</p>}
+      {isLoading && (
+        <p className="text-sm text-muted-foreground">Loading point values...</p>
+      )}
       {isError && (
-        <p className="text-sm text-destructive" data-testid="point-values-error">
+        <p
+          className="text-sm text-destructive"
+          data-testid="point-values-error"
+        >
           {extractApiError(error) ?? 'Could not load point values.'}
         </p>
       )}
@@ -127,7 +154,9 @@ function PointValueRowForm({ row, disabled, onSave }: PointValueRowFormProps) {
                 >
                   {label}
                 </Badge>
-                <span className="text-xs text-muted-foreground">default {row.default}</span>
+                <span className="text-xs text-muted-foreground">
+                  default {row.default}
+                </span>
               </div>
               <FormControl>
                 <Input
@@ -141,7 +170,11 @@ function PointValueRowForm({ row, disabled, onSave }: PointValueRowFormProps) {
                   onBlur={field.onBlur}
                   value={Number.isNaN(field.value) ? '' : field.value}
                   onChange={(e) =>
-                    field.onChange(e.target.value === '' ? Number.NaN : Number(e.target.value))
+                    field.onChange(
+                      e.target.value === ''
+                        ? Number.NaN
+                        : Number(e.target.value),
+                    )
                   }
                   disabled={disabled}
                   data-testid={`point-value-${row.kind}`}

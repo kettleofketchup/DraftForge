@@ -21,7 +21,11 @@ export interface PromotionDashboardProps {
   access: OrgFeatureAccess;
 }
 
-function formatEventTime(iso: string, locale: string, timeZone: string): string {
+function formatEventTime(
+  iso: string,
+  locale: string,
+  timeZone: string,
+): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return '';
   try {
@@ -43,7 +47,9 @@ export function PromotionDashboard({ orgId, access }: PromotionDashboardProps) {
   const previewOptions = usePreviewOptions();
 
   const [eventId, setEventId] = useState<number | null>(null);
-  const [filters, setFilters] = useState<CandidateFilters>(DEFAULT_CANDIDATE_FILTERS);
+  const [filters, setFilters] = useState<CandidateFilters>(
+    DEFAULT_CANDIDATE_FILTERS,
+  );
   const [candidate, setCandidate] = useState<CandidateRow | null>(null);
   const [justSent, setJustSent] = useState<number | null>(null);
 
@@ -55,11 +61,16 @@ export function PromotionDashboard({ orgId, access }: PromotionDashboardProps) {
 
   useEffect(() => {
     if (eventId != null || !events.data) return;
-    if (events.data.some((e) => e.id === requestedEvent)) resetEvent(requestedEvent);
+    if (events.data.some((e) => e.id === requestedEvent))
+      resetEvent(requestedEvent);
   }, [eventId, events.data, requestedEvent, resetEvent]);
 
   useEffect(() => {
-    if (eventId != null && events.data && !events.data.some((e) => e.id === eventId)) {
+    if (
+      eventId != null &&
+      events.data &&
+      !events.data.some((e) => e.id === eventId)
+    ) {
       resetEvent(null);
     }
   }, [eventId, events.data, resetEvent]);
@@ -79,14 +90,22 @@ export function PromotionDashboard({ orgId, access }: PromotionDashboardProps) {
     <div className="flex flex-col gap-4" data-testid="promo-dashboard">
       <section className="flex flex-col gap-2">
         <h3 className="font-semibold">Upcoming events</h3>
-        {events.isLoading && <p className="text-sm text-muted-foreground">Loading events...</p>}
+        {events.isLoading && (
+          <p className="text-sm text-muted-foreground">Loading events...</p>
+        )}
         {events.isError && (
-          <p className="text-sm text-destructive" data-testid="promo-events-error">
+          <p
+            className="text-sm text-destructive"
+            data-testid="promo-events-error"
+          >
             {extractApiError(events.error) ?? 'Could not load events.'}
           </p>
         )}
         {events.data && events.data.length === 0 && (
-          <p className="text-sm text-muted-foreground" data-testid="promo-events-empty">
+          <p
+            className="text-sm text-muted-foreground"
+            data-testid="promo-events-empty"
+          >
             No upcoming events to promote.
           </p>
         )}
@@ -97,12 +116,19 @@ export function PromotionDashboard({ orgId, access }: PromotionDashboardProps) {
               type="button"
               onClick={() => selectEvent(event)}
               aria-pressed={event.id === eventId}
-              className={cn('h-auto flex-col items-start py-2', event.id === eventId && 'ring-2 ring-primary')}
+              className={cn(
+                'h-auto flex-col items-start py-2',
+                event.id === eventId && 'ring-2 ring-primary',
+              )}
               data-testid={`promo-event-${event.id}`}
             >
               <span className="font-medium">{event.name}</span>
               <span className="text-xs text-muted-foreground">
-                {formatEventTime(event.scheduled_at, previewOptions.locale, previewOptions.timeZone)}
+                {formatEventTime(
+                  event.scheduled_at,
+                  previewOptions.locale,
+                  previewOptions.timeZone,
+                )}
               </span>
             </SecondaryButton>
           ))}
@@ -133,7 +159,10 @@ export function PromotionDashboard({ orgId, access }: PromotionDashboardProps) {
               onSent={onSent}
             />
           ) : (
-            <p className="text-sm text-muted-foreground" data-testid="promo-pick-player">
+            <p
+              className="text-sm text-muted-foreground"
+              data-testid="promo-pick-player"
+            >
               Pick a player to write a message.
             </p>
           )}

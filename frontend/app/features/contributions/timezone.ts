@@ -21,7 +21,10 @@ const monthLabelFormat = new Intl.DateTimeFormat('en-US', {
   timeZone: 'UTC',
 });
 
-const shortMonthFormat = new Intl.DateTimeFormat('en-US', { month: 'short', timeZone: 'UTC' });
+const shortMonthFormat = new Intl.DateTimeFormat('en-US', {
+  month: 'short',
+  timeZone: 'UTC',
+});
 
 function monthDate(value: string): Date | null {
   const match = /^(\d{4})-(\d{2})$/.exec(value);
@@ -46,11 +49,15 @@ function currentMonth(tz: string, now: Date): { year: number; month: number } {
     year: 'numeric',
     month: 'numeric',
   }).formatToParts(now);
-  const get = (type: string): number => Number(parts.find((p) => p.type === type)?.value);
+  const get = (type: string): number =>
+    Number(parts.find((p) => p.type === type)?.value);
   return { year: get('year'), month: get('month') };
 }
 
-export function periodOptions(tz: string | undefined, now: Date = new Date()): PeriodOption[] {
+export function periodOptions(
+  tz: string | undefined,
+  now: Date = new Date(),
+): PeriodOption[] {
   const { year, month } = currentMonth(safeTimeZone(tz), now);
   const options: PeriodOption[] = [{ value: ALL_TIME, label: 'All time' }];
   for (let i = 0; i < 12; i++) {
@@ -69,14 +76,18 @@ export function formatOrgDate(iso: string, tz: string | undefined): string {
 }
 
 /** The org-local calendar date (YYYY-MM-DD) of `now`. */
-export function todayInZone(tz: string | undefined, now: Date = new Date()): string {
+export function todayInZone(
+  tz: string | undefined,
+  now: Date = new Date(),
+): string {
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone: safeTimeZone(tz),
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
   }).formatToParts(now);
-  const get = (type: string): string => parts.find((p) => p.type === type)?.value ?? '';
+  const get = (type: string): string =>
+    parts.find((p) => p.type === type)?.value ?? '';
   return `${get('year')}-${get('month')}-${get('day')}`;
 }
 

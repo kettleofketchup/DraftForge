@@ -1,5 +1,9 @@
 import api from '~/components/api/axios';
-import { OrgFeatureRowsSchema, type OrgFeatureRow, type SetOrgFeaturePayload } from './schemas';
+import {
+  OrgFeatureRowsSchema,
+  type OrgFeatureRow,
+  type SetOrgFeaturePayload,
+} from './schemas';
 
 export async function getOrgFeatures(orgId: number): Promise<OrgFeatureRow[]> {
   const response = await api.get(`/organizations/${orgId}/features/`);

@@ -26,20 +26,26 @@ describe('axios 403 handling', () => {
 
   it('does not show the session toast for a coded 403', async () => {
     reject(forbidden({ code: 'feature_locked', detail: 'Locked' }));
-    expect((window as unknown as Record<string, unknown>)._auth_toast_shown).toBeUndefined();
+    expect(
+      (window as unknown as Record<string, unknown>)._auth_toast_shown,
+    ).toBeUndefined();
     await new Promise((r) => setTimeout(r, 0));
     expect(toast.error).not.toHaveBeenCalled();
   });
 
   it('does not show the session toast for a not_permitted 403', async () => {
     reject(forbidden({ code: 'not_permitted', detail: 'No' }));
-    expect((window as unknown as Record<string, unknown>)._auth_toast_shown).toBeUndefined();
+    expect(
+      (window as unknown as Record<string, unknown>)._auth_toast_shown,
+    ).toBeUndefined();
     await new Promise((r) => setTimeout(r, 0));
     expect(toast.error).not.toHaveBeenCalled();
   });
 
   it('shows the session toast for an uncoded 403', async () => {
-    reject(forbidden({ detail: 'Authentication credentials were not provided.' }));
+    reject(
+      forbidden({ detail: 'Authentication credentials were not provided.' }),
+    );
     await vi.waitFor(() => expect(toast.error).toHaveBeenCalled());
   });
 });

@@ -20,12 +20,18 @@ describe('canCompleteEvent', () => {
   });
 
   it('is false until feature access has settled', () => {
-    const event = { state: EventState.IN_PROGRESS, user_can_manage_event_staff: true } as Gate;
+    const event = {
+      state: EventState.IN_PROGRESS,
+      user_can_manage_event_staff: true,
+    } as Gate;
     expect(canCompleteEvent(event, { settled: false })).toBe(false);
   });
 
   it('is false without the event staff permission', () => {
-    const event = { state: EventState.IN_PROGRESS, user_can_manage_event_staff: false } as Gate;
+    const event = {
+      state: EventState.IN_PROGRESS,
+      user_can_manage_event_staff: false,
+    } as Gate;
     expect(canCompleteEvent(event, settled)).toBe(false);
   });
 

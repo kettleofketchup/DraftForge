@@ -2,7 +2,10 @@
 import { QueryClient } from '@tanstack/react-query';
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { OrganizationSchema, type OrganizationType } from '~/components/organization/schemas';
+import {
+  OrganizationSchema,
+  type OrganizationType,
+} from '~/components/organization/schemas';
 import type { UserType } from '~/components/user/types';
 import { useUserStore } from '~/store/userStore';
 import {
@@ -30,7 +33,13 @@ const allTrue = {
 };
 
 function org(viewerPk: number | null): OrganizationType {
-  return { pk: 7, name: 'Org', members_viewer_pk: viewerPk, can_view_members: true, ...allTrue } as OrganizationType;
+  return {
+    pk: 7,
+    name: 'Org',
+    members_viewer_pk: viewerPk,
+    can_view_members: true,
+    ...allTrue,
+  } as OrganizationType;
 }
 
 const allFalseFlags = {
@@ -67,13 +76,21 @@ describe('useOrgFeatureAccess', () => {
   it('returns every flag false when the payload viewer is someone else', () => {
     setViewer(5);
     const { result } = renderHook(() => useOrgFeatureAccess(org(9)));
-    expect(result.current).toEqual({ settled: false, viewerPk: 5, ...allFalseFlags });
+    expect(result.current).toEqual({
+      settled: false,
+      viewerPk: 5,
+      ...allFalseFlags,
+    });
   });
 
   it('returns every flag false for an undefined org', () => {
     setViewer(5);
     const { result } = renderHook(() => useOrgFeatureAccess(undefined));
-    expect(result.current).toEqual({ settled: false, viewerPk: 5, ...allFalseFlags });
+    expect(result.current).toEqual({
+      settled: false,
+      viewerPk: 5,
+      ...allFalseFlags,
+    });
   });
 
   it('returns the payload flags once settled for the current viewer', () => {
@@ -93,7 +110,10 @@ describe('useOrgFeatureAccess', () => {
 
   it('settles for an anonymous viewer and an anonymous payload', () => {
     const { result } = renderHook(() =>
-      useOrgFeatureAccess({ ...org(null), can_use_promotion: false } as OrganizationType),
+      useOrgFeatureAccess({
+        ...org(null),
+        can_use_promotion: false,
+      } as OrganizationType),
     );
     expect(result.current.settled).toBe(true);
     expect(result.current.viewerPk).toBeNull();
@@ -106,7 +126,11 @@ describe('useOrgFeatureAccess', () => {
     const { result } = renderHook(() => useOrgFeatureAccess(org(5)));
     expect(result.current.canManageContributions).toBe(true);
     act(() => setViewer(null));
-    expect(result.current).toEqual({ settled: false, viewerPk: null, ...allFalseFlags });
+    expect(result.current).toEqual({
+      settled: false,
+      viewerPk: null,
+      ...allFalseFlags,
+    });
   });
 });
 
@@ -131,7 +155,10 @@ describe('removeFeatureQueries', () => {
       .getAll()
       .map((q) => q.queryKey);
     expect(remaining).toEqual(
-      expect.arrayContaining([['organization', 7], contributionsKeys.leaderboard(8, 5, 'all')]),
+      expect.arrayContaining([
+        ['organization', 7],
+        contributionsKeys.leaderboard(8, 5, 'all'),
+      ]),
     );
     expect(remaining).toHaveLength(2);
   });

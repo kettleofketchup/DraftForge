@@ -20,7 +20,8 @@ class ResizeObserverStub {
   unobserve() {}
   disconnect() {}
 }
-globalThis.ResizeObserver ??= ResizeObserverStub as unknown as typeof ResizeObserver;
+globalThis.ResizeObserver ??=
+  ResizeObserverStub as unknown as typeof ResizeObserver;
 
 const rows: OrgFeatureRow[] = [
   {
@@ -43,7 +44,11 @@ function setViewer(user: Partial<UserType> | null) {
   useUserStore.setState({ currentUser: (user ?? {}) as UserType });
 }
 
-function renderPanel(qc: QueryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
+function renderPanel(
+  qc: QueryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  }),
+) {
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={qc}>{children}</QueryClientProvider>
   );
@@ -64,7 +69,12 @@ afterEach(() => {
 
 describe('PaidFeaturesPanel', () => {
   it('renders nothing and never fetches for a non-site-admin', async () => {
-    setViewer({ pk: 3, username: 'owner', is_staff: false, is_superuser: false });
+    setViewer({
+      pk: 3,
+      username: 'owner',
+      is_staff: false,
+      is_superuser: false,
+    });
     const { container } = renderPanel();
     await new Promise((r) => setTimeout(r, 0));
     expect(container).toBeEmptyDOMElement();
@@ -72,14 +82,30 @@ describe('PaidFeaturesPanel', () => {
   });
 
   it('renders both rows with notes prefilled for a site admin', async () => {
-    setViewer({ pk: 1, username: 'admin', is_staff: true, is_superuser: false });
+    setViewer({
+      pk: 1,
+      username: 'admin',
+      is_staff: true,
+      is_superuser: false,
+    });
     renderPanel();
-    expect(await screen.findByTestId('paid-features-panel')).toBeInTheDocument();
-    const promoNotes = await screen.findByTestId('paid-feature-notes-promotion');
+    expect(
+      await screen.findByTestId('paid-features-panel'),
+    ).toBeInTheDocument();
+    const promoNotes = await screen.findByTestId(
+      'paid-feature-notes-promotion',
+    );
     expect(promoNotes).toHaveValue('Paid via invoice 42');
-    expect(screen.getByTestId('paid-feature-notes-contributions')).toHaveValue('');
-    expect(screen.getByTestId('paid-feature-switch-promotion')).toHaveAttribute('aria-checked', 'true');
-    expect(screen.getByTestId('paid-feature-switch-contributions')).toHaveAttribute('aria-checked', 'false');
+    expect(screen.getByTestId('paid-feature-notes-contributions')).toHaveValue(
+      '',
+    );
+    expect(screen.getByTestId('paid-feature-switch-promotion')).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    expect(
+      screen.getByTestId('paid-feature-switch-contributions'),
+    ).toHaveAttribute('aria-checked', 'false');
     expect(getOrgFeatures).toHaveBeenCalledWith(7);
   });
 
@@ -88,7 +114,9 @@ describe('PaidFeaturesPanel', () => {
     vi.mocked(setOrgFeature).mockResolvedValue(rows);
     const { qc } = renderPanel();
     const invalidate = vi.spyOn(qc, 'invalidateQueries');
-    fireEvent.click(await screen.findByTestId('paid-feature-switch-contributions'));
+    fireEvent.click(
+      await screen.findByTestId('paid-feature-switch-contributions'),
+    );
     fireEvent.change(screen.getByTestId('paid-feature-notes-contributions'), {
       target: { value: 'Trial' },
     });
@@ -101,7 +129,9 @@ describe('PaidFeaturesPanel', () => {
       }),
     );
     await vi.waitFor(() => {
-      expect(invalidate).toHaveBeenCalledWith({ queryKey: ['organization', 7] });
+      expect(invalidate).toHaveBeenCalledWith({
+        queryKey: ['organization', 7],
+      });
       expect(invalidate).toHaveBeenCalledWith({ queryKey: orgFeaturesKey(7) });
     });
     expect(qc.getQueryData(orgFeaturesKey(7))).toEqual(rows);
@@ -112,25 +142,38 @@ describe('PaidFeaturesPanel', () => {
     setViewer({ pk: 1, username: 'admin', is_superuser: true });
     vi.mocked(setOrgFeature).mockResolvedValue(rows);
     renderPanel();
-    fireEvent.change(await screen.findByTestId('paid-feature-notes-promotion'), {
-      target: { value: 'Renewed' },
-    });
+    fireEvent.change(
+      await screen.findByTestId('paid-feature-notes-promotion'),
+      {
+        target: { value: 'Renewed' },
+      },
+    );
     fireEvent.click(screen.getByTestId('paid-feature-save-promotion'));
-    await vi.waitFor(() => expect(toast.success).toHaveBeenCalledWith('Promotion notes saved'));
+    await vi.waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith('Promotion notes saved'),
+    );
   });
 
   it('toasts the API error when a save fails', async () => {
     setViewer({ pk: 1, username: 'admin', is_superuser: true });
-    vi.mocked(setOrgFeature).mockRejectedValue({ response: { data: { detail: 'x' } } });
+    vi.mocked(setOrgFeature).mockRejectedValue({
+      response: { data: { detail: 'x' } },
+    });
     renderPanel();
-    fireEvent.click(await screen.findByTestId('paid-feature-save-contributions'));
+    fireEvent.click(
+      await screen.findByTestId('paid-feature-save-contributions'),
+    );
     await vi.waitFor(() => expect(toast.error).toHaveBeenCalledWith('x'));
   });
 
   it('shows an inline error when the features fetch fails', async () => {
     setViewer({ pk: 1, username: 'admin', is_superuser: true });
-    vi.mocked(getOrgFeatures).mockRejectedValue({ response: { data: { detail: 'Nope' } } });
+    vi.mocked(getOrgFeatures).mockRejectedValue({
+      response: { data: { detail: 'Nope' } },
+    });
     renderPanel();
-    expect(await screen.findByTestId('paid-features-error')).toHaveTextContent('Nope');
+    expect(await screen.findByTestId('paid-features-error')).toHaveTextContent(
+      'Nope',
+    );
   });
 });

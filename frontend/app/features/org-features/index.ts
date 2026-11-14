@@ -1,8 +1,11 @@
+export { PaidFeaturesPanel } from './PaidFeaturesPanel';
 export {
   contributionsKeys,
   orgFeaturesKey,
   promotionKeys,
   removeFeatureQueries,
 } from './queryKeys';
-export { type OrgFeatureAccess, useOrgFeatureAccess } from './useOrgFeatureAccess';
-export { PaidFeaturesPanel } from './PaidFeaturesPanel';
+export {
+  useOrgFeatureAccess,
+  type OrgFeatureAccess,
+} from './useOrgFeatureAccess';

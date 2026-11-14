@@ -11,7 +11,11 @@ import {
   type OrgFeaturesTestData,
 } from '../../fixtures';
 
-async function pickUser(page: Page, opener: string, username: string): Promise<void> {
+async function pickUser(
+  page: Page,
+  opener: string,
+  username: string,
+): Promise<void> {
   await page.getByTestId(opener).click();
   const modal = page.getByTestId('add-user-modal');
   await expect(modal).toBeVisible();
@@ -48,10 +52,14 @@ test.describe('Org features: host and helpers @cicd', () => {
     await pickUser(page, 'event-helper-add-btn', helper.username);
     await page.keyboard.press('Escape');
     await expect(page.getByTestId('add-user-modal')).toBeHidden();
-    await expect(page.getByTestId(`event-helper-remove-${helper.pk}`)).toBeVisible();
+    await expect(
+      page.getByTestId(`event-helper-remove-${helper.pk}`),
+    ).toBeVisible();
 
     const saved = page.waitForResponse(
-      (r) => r.request().method() === 'PUT' && r.url().includes(`/events/${eventPk}/staff/`),
+      (r) =>
+        r.request().method() === 'PUT' &&
+        r.url().includes(`/events/${eventPk}/staff/`),
     );
     await page.getByTestId('event-staff-save-btn').click();
     expect((await saved).status()).toBe(200);
@@ -61,7 +69,9 @@ test.describe('Org features: host and helpers @cicd', () => {
     await visitAndWaitForHydration(page, `/events/${eventPk}`);
     await page.getByTestId('event-complete-btn').click();
     const completed = page.waitForResponse(
-      (r) => r.request().method() === 'POST' && r.url().includes(`/events/${eventPk}/complete/`),
+      (r) =>
+        r.request().method() === 'POST' &&
+        r.url().includes(`/events/${eventPk}/complete/`),
     );
     await page.getByTestId('event-complete-dialog-confirm').click();
     expect((await completed).status()).toBe(200);
@@ -71,12 +81,21 @@ test.describe('Org features: host and helpers @cicd', () => {
     expect(after.get(host.pk)?.points).toBe(10);
     expect(after.get(helper.pk)?.points).toBe(5);
 
-    await visitAndWaitForHydration(page, `/organizations/${orgPk}?tab=contributions`);
+    await visitAndWaitForHydration(
+      page,
+      `/organizations/${orgPk}?tab=contributions`,
+    );
     await expect(
-      page.getByTestId(`contributions-row-${after.get(host.pk)!.org_user_pk}`).locator('td').nth(2),
+      page
+        .getByTestId(`contributions-row-${after.get(host.pk)!.org_user_pk}`)
+        .locator('td')
+        .nth(2),
     ).toHaveText('10');
     await expect(
-      page.getByTestId(`contributions-row-${after.get(helper.pk)!.org_user_pk}`).locator('td').nth(2),
+      page
+        .getByTestId(`contributions-row-${after.get(helper.pk)!.org_user_pk}`)
+        .locator('td')
+        .nth(2),
     ).toHaveText('5');
   });
 });

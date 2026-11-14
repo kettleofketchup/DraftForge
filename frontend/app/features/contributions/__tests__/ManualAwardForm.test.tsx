@@ -17,12 +17,18 @@ function errorPaths(input: unknown): string[] {
 describe('manualAwardSchema', () => {
   it('accepts a valid award with and without an event', () => {
     expect(manualAwardSchema.parse(valid)).toEqual(valid);
-    expect(manualAwardSchema.parse({ ...valid, event_id: 12 }).event_id).toBe(12);
-    expect(manualAwardSchema.parse({ ...valid, event_id: null }).event_id).toBeNull();
+    expect(manualAwardSchema.parse({ ...valid, event_id: 12 }).event_id).toBe(
+      12,
+    );
+    expect(
+      manualAwardSchema.parse({ ...valid, event_id: null }).event_id,
+    ).toBeNull();
   });
 
   it('trims the reason', () => {
-    expect(manualAwardSchema.parse({ ...valid, reason: '  Casting  ' }).reason).toBe('Casting');
+    expect(
+      manualAwardSchema.parse({ ...valid, reason: '  Casting  ' }).reason,
+    ).toBe('Casting');
   });
 
   it('rejects a blank or whitespace-only reason', () => {
@@ -31,7 +37,9 @@ describe('manualAwardSchema', () => {
   });
 
   it('rejects a reason over 500 characters', () => {
-    expect(errorPaths({ ...valid, reason: 'x'.repeat(501) })).toEqual(['reason']);
+    expect(errorPaths({ ...valid, reason: 'x'.repeat(501) })).toEqual([
+      'reason',
+    ]);
     expect(errorPaths({ ...valid, reason: 'x'.repeat(500) })).toEqual([]);
   });
 
@@ -64,6 +72,8 @@ describe('todayInZone', () => {
   });
 
   it('falls back to UTC for a bad zone', () => {
-    expect(todayInZone('Not/AZone', new Date('2026-11-01T03:00:00Z'))).toBe('2026-11-01');
+    expect(todayInZone('Not/AZone', new Date('2026-11-01T03:00:00Z'))).toBe(
+      '2026-11-01',
+    );
   });
 });

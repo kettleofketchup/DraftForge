@@ -11,7 +11,14 @@ import {
   SelectValue,
 } from '~/components/ui/brand-select';
 import { PrimaryButton, SecondaryButton } from '~/components/ui/buttons';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '~/components/ui/form';
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '~/components/ui/form';
 import { Textarea } from '~/components/ui/textarea';
 import type { OrgFeatureAccess } from '~/features/org-features';
 import { extractApiError } from '~/lib/apiError';
@@ -41,7 +48,9 @@ export interface ComposePanelProps {
   onSent?: (send: PromoSendResult | null) => void;
 }
 
-export function candidateName(row: Pick<CandidateRow, 'nickname' | 'username'>): string {
+export function candidateName(
+  row: Pick<CandidateRow, 'nickname' | 'username'>,
+): string {
   return row.nickname || row.username;
 }
 
@@ -53,7 +62,9 @@ export function ComposePanel({
   templates,
   onSent,
 }: ComposePanelProps) {
-  const [templateId, setTemplateId] = useState<number | null>(templates[0]?.id ?? null);
+  const [templateId, setTemplateId] = useState<number | null>(
+    templates[0]?.id ?? null,
+  );
   const [sent, setSent] = useState<PromoSendResult | null>(null);
   const previewOptions = usePreviewOptions();
 
@@ -63,7 +74,13 @@ export function ComposePanel({
     }
   }, [templates, templateId]);
 
-  const rendered = useRenderPromo(orgId, access, event.id, templateId, candidate.user_pk);
+  const rendered = useRenderPromo(
+    orgId,
+    access,
+    event.id,
+    templateId,
+    candidate.user_pk,
+  );
   const send = useSendPromo(orgId, access, event.id);
   const undo = useUndoPromoSend(orgId, access);
 
@@ -83,7 +100,10 @@ export function ComposePanel({
     [text, previewOptions],
   );
   const overLimit = text.length > DISCORD_DM_LIMIT;
-  const canSubmit = promoSendSchema.safeParse({ text }).success && !send.isPending && sent == null;
+  const canSubmit =
+    promoSendSchema.safeParse({ text }).success &&
+    !send.isPending &&
+    sent == null;
 
   const copy = async (): Promise<void> => {
     try {
@@ -96,7 +116,11 @@ export function ComposePanel({
 
   const onSubmit = (values: PromoSendForm): void => {
     send.mutate(
-      { template_id: templateId, recipient_id: candidate.user_pk, text: values.text },
+      {
+        template_id: templateId,
+        recipient_id: candidate.user_pk,
+        text: values.text,
+      },
       {
         onSuccess: (result) => {
           setSent(result);
@@ -123,7 +147,10 @@ export function ComposePanel({
         toast.success('Send undone');
       },
       onError: (err) => {
-        const message = reportPromoError(log, 'promo_undo_failed', err, { orgId, sendId });
+        const message = reportPromoError(log, 'promo_undo_failed', err, {
+          orgId,
+          sendId,
+        });
         toast.error(message || 'Could not undo the send');
       },
     });
@@ -164,7 +191,10 @@ export function ComposePanel({
       </div>
 
       {templates.length === 0 ? (
-        <p className="text-sm text-muted-foreground" data-testid="promo-no-templates">
+        <p
+          className="text-sm text-muted-foreground"
+          data-testid="promo-no-templates"
+        >
           No templates yet. Ask an org staff member to add one.
         </p>
       ) : (
@@ -194,16 +224,24 @@ export function ComposePanel({
       )}
 
       {rendered.isLoading && (
-        <p className="text-sm text-muted-foreground">Filling in the template...</p>
+        <p className="text-sm text-muted-foreground">
+          Filling in the template...
+        </p>
       )}
       {renderError != null && (
-        <p className="text-sm text-destructive" data-testid="promo-render-error">
+        <p
+          className="text-sm text-destructive"
+          data-testid="promo-render-error"
+        >
           {renderError}
         </p>
       )}
 
       <Form {...form}>
-        <form className="flex flex-col gap-3" onSubmit={form.handleSubmit(onSubmit)}>
+        <form
+          className="flex flex-col gap-3"
+          onSubmit={form.handleSubmit(onSubmit)}
+        >
           <FormField
             control={form.control}
             name="text"
@@ -214,7 +252,9 @@ export function ComposePanel({
                   <span
                     className={cn(
                       'text-xs tabular-nums',
-                      overLimit ? 'text-warning font-semibold' : 'text-muted-foreground',
+                      overLimit
+                        ? 'text-warning font-semibold'
+                        : 'text-muted-foreground',
                     )}
                     data-testid="promo-char-count"
                   >
@@ -231,7 +271,8 @@ export function ComposePanel({
                 </FormControl>
                 {overLimit && (
                   <p className="text-xs text-warning">
-                    Over Discord's 2000-character limit for senders without Nitro.
+                    Over Discord's 2000-character limit for senders without
+                    Nitro.
                   </p>
                 )}
                 <FormMessage />
@@ -240,7 +281,9 @@ export function ComposePanel({
           />
 
           <div className="flex flex-col gap-1">
-            <span className="text-sm font-medium">How it will look in Discord</span>
+            <span className="text-sm font-medium">
+              How it will look in Discord
+            </span>
             <div
               className="min-h-16 whitespace-pre-wrap break-words rounded-md border border-border bg-base-800/60 p-3 text-sm"
               data-testid="promo-discord-preview"
@@ -250,13 +293,19 @@ export function ComposePanel({
           </div>
 
           {rendered.data && !rendered.data.will_earn && (
-            <p className="text-sm text-muted-foreground" data-testid="promo-no-points-note">
-              This message won't earn points: this player was already messaged for this event,
-              or your role doesn't earn points.
+            <p
+              className="text-sm text-muted-foreground"
+              data-testid="promo-no-points-note"
+            >
+              This message won't earn points: this player was already messaged
+              for this event, or your role doesn't earn points.
             </p>
           )}
           {rendered.data?.will_earn && access.canViewContributions && (
-            <p className="text-sm text-muted-foreground" data-testid="promo-earn-points-note">
+            <p
+              className="text-sm text-muted-foreground"
+              data-testid="promo-earn-points-note"
+            >
               Marking this sent earns you contribution points.
             </p>
           )}
@@ -271,7 +320,11 @@ export function ComposePanel({
               <Copy className="h-4 w-4 mr-1.5" />
               Copy
             </SecondaryButton>
-            <PrimaryButton type="submit" disabled={!canSubmit} data-testid="promo-mark-sent-btn">
+            <PrimaryButton
+              type="submit"
+              disabled={!canSubmit}
+              data-testid="promo-mark-sent-btn"
+            >
               {send.isPending ? 'Saving...' : 'Mark sent'}
             </PrimaryButton>
           </div>
@@ -286,7 +339,10 @@ export function ComposePanel({
           <span>
             Sent to {candidateName(candidate)}.
             {access.canViewContributions && sent.points_awarded != null && (
-              <span className="ml-1 text-primary" data-testid="promo-earned-hint">
+              <span
+                className="ml-1 text-primary"
+                data-testid="promo-earned-hint"
+              >
                 You earned {sent.points_awarded} points.
               </span>
             )}

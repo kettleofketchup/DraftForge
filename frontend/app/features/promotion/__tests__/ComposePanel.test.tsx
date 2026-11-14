@@ -56,10 +56,16 @@ const candidate: CandidateRow = {
 };
 
 const templates: PromoTemplate[] = [
-  { id: 3, name: 'First invite', body: 'Hey {player}', updated_at: '2026-11-01T00:00:00Z' },
+  {
+    id: 3,
+    name: 'First invite',
+    body: 'Hey {player}',
+    updated_at: '2026-11-01T00:00:00Z',
+  },
 ];
 
-const RENDERED = 'Hey Ana, Friday Inhouse is <t:1794704400:F> (<t:1794704400:R>)';
+const RENDERED =
+  'Hey Ana, Friday Inhouse is <t:1794704400:F> (<t:1794704400:R>)';
 
 function Wrapper({ children }: { children: ReactNode }) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -84,7 +90,9 @@ function renderPanel(): void {
 }
 
 async function loadedText(): Promise<HTMLTextAreaElement> {
-  const box = (await screen.findByTestId('promo-message-text')) as HTMLTextAreaElement;
+  const box = (await screen.findByTestId(
+    'promo-message-text',
+  )) as HTMLTextAreaElement;
   await waitFor(() => expect(box.value).toBe(RENDERED));
   return box;
 }
@@ -96,17 +104,28 @@ afterEach(() => {
 
 describe('ComposePanel', () => {
   it('fills the raw text from the server render and previews it without raw codes', async () => {
-    vi.mocked(renderPromo).mockResolvedValue({ text: RENDERED, warnings: [], will_earn: true });
+    vi.mocked(renderPromo).mockResolvedValue({
+      text: RENDERED,
+      warnings: [],
+      will_earn: true,
+    });
     renderPanel();
     await loadedText();
-    expect(renderPromo).toHaveBeenCalledWith(1, 9, { template_id: 3, recipient_id: 42 });
+    expect(renderPromo).toHaveBeenCalledWith(1, 9, {
+      template_id: 3,
+      recipient_id: 42,
+    });
     const preview = screen.getByTestId('promo-discord-preview');
     expect(preview.textContent).toContain('Hey Ana, Friday Inhouse is');
     expect(preview.textContent).not.toContain('<t:');
   });
 
   it('turns the character counter into a warning over 2000', async () => {
-    vi.mocked(renderPromo).mockResolvedValue({ text: RENDERED, warnings: [], will_earn: true });
+    vi.mocked(renderPromo).mockResolvedValue({
+      text: RENDERED,
+      warnings: [],
+      will_earn: true,
+    });
     renderPanel();
     const box = await loadedText();
     const counter = screen.getByTestId('promo-char-count');
@@ -118,18 +137,30 @@ describe('ComposePanel', () => {
   });
 
   it('disables Mark sent when the text is empty', async () => {
-    vi.mocked(renderPromo).mockResolvedValue({ text: RENDERED, warnings: [], will_earn: true });
+    vi.mocked(renderPromo).mockResolvedValue({
+      text: RENDERED,
+      warnings: [],
+      will_earn: true,
+    });
     renderPanel();
     const box = await loadedText();
     expect(screen.getByTestId('promo-mark-sent-btn')).toBeEnabled();
     fireEvent.change(box, { target: { value: '' } });
-    await waitFor(() => expect(screen.getByTestId('promo-mark-sent-btn')).toBeDisabled());
+    await waitFor(() =>
+      expect(screen.getByTestId('promo-mark-sent-btn')).toBeDisabled(),
+    );
     fireEvent.change(box, { target: { value: '   ' } });
-    await waitFor(() => expect(screen.getByTestId('promo-mark-sent-btn')).toBeDisabled());
+    await waitFor(() =>
+      expect(screen.getByTestId('promo-mark-sent-btn')).toBeDisabled(),
+    );
   });
 
   it('disables Mark sent after a successful send so the undo stays reachable', async () => {
-    vi.mocked(renderPromo).mockResolvedValue({ text: RENDERED, warnings: [], will_earn: true });
+    vi.mocked(renderPromo).mockResolvedValue({
+      text: RENDERED,
+      warnings: [],
+      will_earn: true,
+    });
     vi.mocked(sendPromo).mockResolvedValue({
       id: 77,
       earns_points: true,
@@ -145,14 +176,22 @@ describe('ComposePanel', () => {
   });
 
   it("says the message won't earn points when the server says so", async () => {
-    vi.mocked(renderPromo).mockResolvedValue({ text: RENDERED, warnings: [], will_earn: false });
+    vi.mocked(renderPromo).mockResolvedValue({
+      text: RENDERED,
+      warnings: [],
+      will_earn: false,
+    });
     renderPanel();
     await loadedText();
     expect(screen.getByTestId('promo-no-points-note')).toBeInTheDocument();
   });
 
   it('links to the recipient Discord profile', async () => {
-    vi.mocked(renderPromo).mockResolvedValue({ text: RENDERED, warnings: [], will_earn: true });
+    vi.mocked(renderPromo).mockResolvedValue({
+      text: RENDERED,
+      warnings: [],
+      will_earn: true,
+    });
     renderPanel();
     await loadedText();
     expect(screen.getByTestId('promo-discord-profile-link')).toHaveAttribute(

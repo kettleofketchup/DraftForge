@@ -9,8 +9,8 @@ import type {
   SearchUserResult,
 } from '~/components/api/api';
 import type { EventStaffUser, EventType } from '~/components/events/schemas';
-import { Card, CardContent, CardHeader } from '~/components/ui/card';
 import { PrimaryButton, SecondaryButton } from '~/components/ui/buttons';
+import { Card, CardContent, CardHeader } from '~/components/ui/card';
 import { AddUserModal } from '~/components/user/AddUserModal';
 import { UserAvatar } from '~/components/user/UserAvatar';
 import type { UserType } from '~/components/user/types';
@@ -53,7 +53,10 @@ function displayName(user: EventStaffUser): string {
   return user.nickname || user.username;
 }
 
-function findSearchedUser(queryClient: QueryClient, pk: number): EventStaffUser | null {
+function findSearchedUser(
+  queryClient: QueryClient,
+  pk: number,
+): EventStaffUser | null {
   for (const [, results] of queryClient.getQueriesData<SearchUserResult[]>({
     queryKey: ['userSearch'],
   })) {
@@ -112,7 +115,9 @@ function StaffRow({
     <div className="flex items-center gap-2 py-1.5">
       <UserAvatar user={user} size="sm" />
       <div className="flex min-w-0 flex-1 flex-col">
-        <span className="truncate text-sm font-semibold text-foreground">{displayName(user)}</span>
+        <span className="truncate text-sm font-semibold text-foreground">
+          {displayName(user)}
+        </span>
         <span className="text-xs text-muted-foreground">{role}</span>
       </div>
       {points !== null && (
@@ -172,12 +177,16 @@ export function EventStaffCard({
 
   const dirty = staffKey(pending) !== serverKey;
   const hostPoints = showPoints && pointValues ? pointValues.event_host : null;
-  const helperPoints = showPoints && pointValues ? pointValues.event_helper : null;
+  const helperPoints =
+    showPoints && pointValues ? pointValues.event_helper : null;
 
   const resolveUser = (pk: number): EventStaffUser => {
-    const known = [pending.host, ...pending.helpers, server.host, ...server.helpers].find(
-      (u) => u?.pk === pk,
-    );
+    const known = [
+      pending.host,
+      ...pending.helpers,
+      server.host,
+      ...server.helpers,
+    ].find((u) => u?.pk === pk);
     return (
       known ??
       findSearchedUser(queryClient, pk) ?? {
@@ -191,19 +200,30 @@ export function EventStaffCard({
 
   const handlePick = async (payload: AddMemberPayload): Promise<UserType> => {
     if (payload.user_id == null) {
-      throw new Error('Select a site user; Discord members without an account cannot be assigned.');
+      throw new Error(
+        'Select a site user; Discord members without an account cannot be assigned.',
+      );
     }
     const user = resolveUser(payload.user_id);
     if (picker === 'host') {
-      setPending((s) => ({ host: user, helpers: s.helpers.filter((h) => h.pk !== user.pk) }));
+      setPending((s) => ({
+        host: user,
+        helpers: s.helpers.filter((h) => h.pk !== user.pk),
+      }));
       setPicker(null);
     } else {
       setPending((s) => ({
         host: s.host?.pk === user.pk ? null : s.host,
-        helpers: s.helpers.some((h) => h.pk === user.pk) ? s.helpers : [...s.helpers, user],
+        helpers: s.helpers.some((h) => h.pk === user.pk)
+          ? s.helpers
+          : [...s.helpers, user],
       }));
     }
-    return { pk: user.pk, username: user.username, nickname: user.nickname } as UserType;
+    return {
+      pk: user.pk,
+      username: user.username,
+      nickname: user.nickname,
+    } as UserType;
   };
 
   const isPicked = (user: UserType): boolean => {
@@ -262,13 +282,21 @@ export function EventStaffCard({
         )}
       </CardHeader>
       <CardContent className="space-y-1">
-        {empty && <p className="text-sm text-muted-foreground">No host or helpers assigned.</p>}
+        {empty && (
+          <p className="text-sm text-muted-foreground">
+            No host or helpers assigned.
+          </p>
+        )}
         {pending.host && (
           <StaffRow
             user={pending.host}
             role="Host"
             points={hostPoints}
-            onRemove={canEdit ? () => setPending((s) => ({ ...s, host: null })) : undefined}
+            onRemove={
+              canEdit
+                ? () => setPending((s) => ({ ...s, host: null }))
+                : undefined
+            }
             removeTestId="event-host-remove-btn"
           />
         )}
@@ -291,8 +319,12 @@ export function EventStaffCard({
           />
         ))}
         {canEdit && dirty && draftConflict && (
-          <p className="text-xs text-muted-foreground" data-testid="event-staff-conflict-note">
-            Host or helpers were changed elsewhere. Saving replaces those changes; Discard loads them.
+          <p
+            className="text-xs text-muted-foreground"
+            data-testid="event-staff-conflict-note"
+          >
+            Host or helpers were changed elsewhere. Saving replaces those
+            changes; Discard loads them.
           </p>
         )}
         {canEdit && dirty && (
@@ -342,7 +374,11 @@ export interface EventStaffSectionProps {
   hasDiscordServer: boolean;
 }
 
-export function EventStaffSection({ event, access, hasDiscordServer }: EventStaffSectionProps) {
+export function EventStaffSection({
+  event,
+  access,
+  hasDiscordServer,
+}: EventStaffSectionProps) {
   const canEdit = event.user_can_manage_event_staff && access.settled;
   const showPoints = access.settled && access.canManageContributions;
   const { data: rows } = usePointValues(event.organization, access);

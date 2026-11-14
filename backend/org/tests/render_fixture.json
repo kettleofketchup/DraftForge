@@ -101,7 +101,10 @@
       "name": "case_sensitive",
       "body": "{Player} {PLAYER}",
       "text": "{Player} {PLAYER}",
-      "warnings": ["unknown placeholder {Player}", "unknown placeholder {PLAYER}"]
+      "warnings": [
+        "unknown placeholder {Player}",
+        "unknown placeholder {PLAYER}"
+      ]
     },
     {
       "name": "inner_whitespace",

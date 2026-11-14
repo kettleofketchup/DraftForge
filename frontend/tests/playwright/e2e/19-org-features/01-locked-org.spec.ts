@@ -16,9 +16,15 @@ test.describe('Org features: locked org @cicd', () => {
     data = await resetOrgFeatures(request);
   });
 
-  test('locked admin sees no paid feature tabs or promoter section @cicd', async ({ page, context }) => {
+  test('locked admin sees no paid feature tabs or promoter section @cicd', async ({
+    page,
+    context,
+  }) => {
     await loginOrgFeatures(context, 'locked_admin');
-    await visitAndWaitForHydration(page, `/organizations/${data.orgs.locked.pk}`);
+    await visitAndWaitForHydration(
+      page,
+      `/organizations/${data.orgs.locked.pk}`,
+    );
 
     await expect(page.getByTestId('org-tab-users')).toBeVisible();
     await expect(page.getByTestId('org-tab-claims')).toBeVisible();
@@ -39,11 +45,17 @@ test.describe('Org features: locked org @cicd', () => {
     context,
   }) => {
     await loginOrgFeatures(context, 'locked_admin');
-    await visitAndWaitForHydration(page, `/organizations/${data.orgs.locked.pk}?tab=promotion`);
+    await visitAndWaitForHydration(
+      page,
+      `/organizations/${data.orgs.locked.pk}?tab=promotion`,
+    );
 
     await expect(page.getByTestId('org-tab-users')).toBeVisible();
     await expect(page).not.toHaveURL(/tab=promotion/);
-    await expect(page.getByTestId('org-tab-leagues')).toHaveAttribute('data-state', 'active');
+    await expect(page.getByTestId('org-tab-leagues')).toHaveAttribute(
+      'data-state',
+      'active',
+    );
     await expect(page.getByTestId('promotion-tab')).toHaveCount(0);
     await expectNoSessionToast(page);
   });
@@ -54,12 +66,17 @@ test.describe('Org features: locked org @cicd', () => {
   }) => {
     await loginOrgFeatures(context, 'locked_admin');
     const start = new Date(Date.now() + 3 * 24 * 3600 * 1000);
-    const event = await orgFeaturesApi<{ id: number }>(context, 'POST', '/events/', {
-      organization: data.orgs.locked.pk,
-      name: 'Locked Upcoming Event',
-      description: 'Upcoming event on the locked org.',
-      scheduled_at: start.toISOString(),
-    });
+    const event = await orgFeaturesApi<{ id: number }>(
+      context,
+      'POST',
+      '/events/',
+      {
+        organization: data.orgs.locked.pk,
+        name: 'Locked Upcoming Event',
+        description: 'Upcoming event on the locked org.',
+        scheduled_at: start.toISOString(),
+      },
+    );
 
     await visitAndWaitForHydration(page, `/events/${event.id}`);
     // The staff editor needs the settled per-viewer org payload, like the Promote button.

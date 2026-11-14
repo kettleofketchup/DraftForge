@@ -5,7 +5,13 @@ import { toast } from 'sonner';
 
 import { organizationQueryKey } from '~/components/organization/hooks/useOrganization';
 import { SecondaryButton } from '~/components/ui/buttons';
-import { Form, FormControl, FormField, FormItem, FormLabel } from '~/components/ui/form';
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+} from '~/components/ui/form';
 import { Switch } from '~/components/ui/switch';
 import { Textarea } from '~/components/ui/textarea';
 import { useIsSuperuser } from '~/hooks/usePermissions';
@@ -33,7 +39,12 @@ export interface PaidFeaturesPanelProps {
 
 export function PaidFeaturesPanel({ orgId }: PaidFeaturesPanelProps) {
   const isSuperuser = useIsSuperuser();
-  const { data: rows, isLoading, isError, error } = useQuery({
+  const {
+    data: rows,
+    isLoading,
+    isError,
+    error,
+  } = useQuery({
     queryKey: orgFeaturesKey(orgId),
     queryFn: () => getOrgFeatures(orgId),
     enabled: isSuperuser,
@@ -48,11 +59,17 @@ export function PaidFeaturesPanel({ orgId }: PaidFeaturesPanelProps) {
     >
       <h2 className="text-lg font-semibold">Paid features</h2>
       <p className="mt-2 text-sm text-muted-foreground">
-        Site admins only. Locked features are hidden from the organization; their data is kept.
+        Site admins only. Locked features are hidden from the organization;
+        their data is kept.
       </p>
-      {isLoading && <p className="mt-4 text-sm text-muted-foreground">Loading...</p>}
+      {isLoading && (
+        <p className="mt-4 text-sm text-muted-foreground">Loading...</p>
+      )}
       {isError && (
-        <p className="mt-4 text-sm text-destructive" data-testid="paid-features-error">
+        <p
+          className="mt-4 text-sm text-destructive"
+          data-testid="paid-features-error"
+        >
           {extractApiError(error) ?? 'Failed to load paid features'}
         </p>
       )}
@@ -90,12 +107,18 @@ function PaidFeatureRow({ orgId, row }: PaidFeatureRowProps) {
       if (values.enabled === row.enabled) toast.success(`${label} notes saved`);
       else toast.success(`${label} ${values.enabled ? 'unlocked' : 'locked'}`);
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: organizationQueryKey(orgId) }),
+        queryClient.invalidateQueries({
+          queryKey: organizationQueryKey(orgId),
+        }),
         queryClient.invalidateQueries({ queryKey: orgFeaturesKey(orgId) }),
       ]);
     },
     onError: (err) => {
-      log.error('Failed to save org feature', { orgId, feature: row.feature, err });
+      log.error('Failed to save org feature', {
+        orgId,
+        feature: row.feature,
+        err,
+      });
       toast.error(extractApiError(err) ?? `Failed to save ${label}`);
     },
   });
@@ -127,7 +150,8 @@ function PaidFeatureRow({ orgId, row }: PaidFeatureRowProps) {
         {row.enabled_by && (
           <p className="text-xs text-muted-foreground">
             Last unlocked by {row.enabled_by.username}
-            {row.enabled_at && ` on ${new Date(row.enabled_at).toLocaleString()}`}
+            {row.enabled_at &&
+              ` on ${new Date(row.enabled_at).toLocaleString()}`}
           </p>
         )}
         <FormField

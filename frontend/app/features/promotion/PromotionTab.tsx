@@ -11,7 +11,12 @@ export interface PromotionTabProps {
   access: OrgFeatureAccess;
 }
 
-export function PromotionTab({ orgId, org, sender, access }: PromotionTabProps) {
+export function PromotionTab({
+  orgId,
+  org,
+  sender,
+  access,
+}: PromotionTabProps) {
   const { data: events } = usePromoEvents(orgId, access);
   return (
     <div className="flex flex-col gap-6" data-testid="promotion-tab">

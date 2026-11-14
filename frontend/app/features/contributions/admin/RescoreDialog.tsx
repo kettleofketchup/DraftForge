@@ -36,13 +36,18 @@ export function RescoreDialog({
   const [scope, setScope] = useState<Scope>('future');
   const [since, setSince] = useState('');
   const applyPast = scope === 'past';
-  const sinceInvalid = applyPast && since !== '' && !calendarDateSchema.safeParse(since).success;
+  const sinceInvalid =
+    applyPast && since !== '' && !calendarDateSchema.safeParse(since).success;
 
   return (
     <ConfirmDialog
       open={open}
       onOpenChange={onOpenChange}
-      title={isReset ? `Reset ${kindLabel} to default?` : `Change ${kindLabel} points?`}
+      title={
+        isReset
+          ? `Reset ${kindLabel} to default?`
+          : `Change ${kindLabel} points?`
+      }
       description={`${kindLabel}: ${from} → ${to} points. Manual awards are never rescored.`}
       confirmLabel={isReset ? 'Reset' : 'Save'}
       isLoading={isPending}
@@ -51,7 +56,10 @@ export function RescoreDialog({
       cancelTestId="rescore-cancel"
       contentTestId="rescore-dialog"
       onConfirm={() =>
-        onConfirm({ apply_to_past: applyPast, since: applyPast && since ? since : null })
+        onConfirm({
+          apply_to_past: applyPast,
+          since: applyPast && since ? since : null,
+        })
       }
       bodyContent={
         <div className="flex flex-col gap-3">
@@ -89,7 +97,9 @@ export function RescoreDialog({
               onChange={(e) => setSince(e.target.value)}
               data-testid="rescore-since-input"
             />
-            {sinceInvalid && <p className="text-sm text-destructive">Pick a valid date</p>}
+            {sinceInvalid && (
+              <p className="text-sm text-destructive">Pick a valid date</p>
+            )}
           </div>
         </div>
       }
