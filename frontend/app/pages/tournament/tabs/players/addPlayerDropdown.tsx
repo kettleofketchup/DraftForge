@@ -89,7 +89,7 @@ export const AddPlayerDropdown: React.FC<Props> = ({
   };
 
   return (
-    <div className="justify-self-top content-self-center align-middle ">
+    <div className="align-middle">
       {users && (
         <Combobox value={query} onChange={handleSearchUserSelect}>
           <ComboboxInput

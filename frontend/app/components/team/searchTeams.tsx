@@ -16,7 +16,7 @@ export const SearchTeamsDropdown: React.FC<Props> = ({
   setQuery,
 }) => {
   return (
-    <div className="justify-self-top content-self-center align-middle ">
+    <div className="align-middle">
       {teams && (
         <Combobox value={query}>
           <ComboboxInput

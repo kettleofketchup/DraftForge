@@ -36,7 +36,7 @@ export const InfoTab: React.FC<Props> = ({ league }) => {
               About
             </CardTitle>
           </CardHeader>
-          <CardContent className="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap">
+          <CardContent className="max-w-none whitespace-pre-wrap">
             {league.description}
           </CardContent>
         </Card>
@@ -51,7 +51,7 @@ export const InfoTab: React.FC<Props> = ({ league }) => {
               Rules
             </CardTitle>
           </CardHeader>
-          <CardContent className="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap">
+          <CardContent className="max-w-none whitespace-pre-wrap">
             {league.rules}
           </CardContent>
         </Card>

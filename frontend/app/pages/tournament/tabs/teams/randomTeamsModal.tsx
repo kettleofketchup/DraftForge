@@ -43,7 +43,7 @@ interface TeamsViewProps {
 
 const TeamsView: React.FC<TeamsViewProps> = ({ teams }) => (
   <div
-    className="flex grid grid-flow-row-dense grid-auto-rows
+    className="flex grid grid-flow-row-dense
         align-middle content-center justify-center
          grid-cols-1 lg:grid-cols-2 2xl:grid-cols-2
          mb-0 mt-0 p-0 bg-base-500 w-full"

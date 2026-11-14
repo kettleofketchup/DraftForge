@@ -64,7 +64,7 @@ export const SearchUserDropdown: React.FC<Props> = ({
   };
 
   return (
-    <div className="justify-self-top content-self-center align-middle w-full ">
+    <div className="align-middle w-full">
       {users && (
         <Combobox value={query} onChange={handleSearchUserSelect}>
           <ComboboxInput

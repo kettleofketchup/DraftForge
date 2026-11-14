@@ -554,7 +554,7 @@ export default function OrganizationDetailPage() {
 
               {/* Description */}
               {organization.description && (
-                <div className="prose prose-sm max-w-none">
+                <div className="max-w-none">
                   <p className="text-base-content/80 whitespace-pre-wrap">
                     {organization.description}
                   </p>

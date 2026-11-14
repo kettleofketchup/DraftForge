@@ -77,7 +77,7 @@ export const InitDraftButton: React.FC = () => {
             id="RestartDraftButtonMotion"
           >
             <Button
-              className="w-40 sm:w-20%"
+              className="w-40"
               variant="destructive"
               onClick={() => setOpen(true)}
             >

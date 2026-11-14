@@ -662,7 +662,7 @@ export const DraftModal: React.FC<DraftModalParams> = () => {
 
   const choiceButtons = () => {
     return (
-      <div className="w-full flex  gap-4 align-center justify-center ">
+      <div className="w-full flex gap-4 justify-center">
         <PrevRoundButton goToPrevRound={prevRound} />
         <LatestRoundButton goToLatestRound={goToLatestRound} />
         <NextRoundButton goToNextRound={nextRound} />

@@ -106,13 +106,13 @@ export const ProfilePage: React.FC = () => {
   return (
     <div className="container px-1 sm:mx-auto sm:p-4">
       <div className="flex flex-col  gap-4">
-        <div className="flex flex-col  sm:flex-row w-90 justify-center text-center align-center w-full">
+        <div className="flex flex-col sm:flex-row w-90 justify-center text-center w-full">
           <h1 className="text-title text-pretty text-center">
             {DisplayName(currentUser)}
           </h1>
         </div>
 
-        <div className="flex-1 w-full justify-center align-center self-center ">
+        <div className="flex-1 w-full justify-center self-center">
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="">
               <PositionForm form={form} />
@@ -153,7 +153,7 @@ export const ProfilePage: React.FC = () => {
                 )}
               />
 
-              <div className="flex justify-center align-center self-center">
+              <div className="flex justify-center self-center">
                 <SubmitButton>Submit</SubmitButton>
               </div>
             </form>

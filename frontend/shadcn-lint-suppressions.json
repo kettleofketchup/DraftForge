@@ -62,9 +62,6 @@
   "app/components/game/gameCard/gameCard.tsx": {
     "shadcn/no-raw-colors": {
       "count": 3
-    },
-    "shadcn/no-unknown-classes": {
-      "count": 4
     }
   },
   "app/components/herodraft/CompletedDraftView.tsx": {
@@ -104,11 +101,6 @@
   },
   "app/components/league/LeagueMatchCard.tsx": {
     "shadcn/no-raw-colors": {
-      "count": 6
-    }
-  },
-  "app/components/league/tabs/InfoTab.tsx": {
-    "shadcn/no-unknown-classes": {
       "count": 6
     }
   },
@@ -160,11 +152,6 @@
   "app/components/team/TeamPopoverContent.tsx": {
     "shadcn/no-raw-colors": {
       "count": 1
-    }
-  },
-  "app/components/team/searchTeams.tsx": {
-    "shadcn/no-unknown-classes": {
-      "count": 2
     }
   },
   "app/components/team/teamCard.tsx": {
@@ -236,9 +223,6 @@
   "app/components/teamdraft/buttons/initDraftDialog.tsx": {
     "shadcn/no-raw-colors": {
       "count": 1
-    },
-    "shadcn/no-unknown-classes": {
-      "count": 1
     }
   },
   "app/components/teamdraft/draftBalanceDisplay.tsx": {
@@ -249,17 +233,11 @@
   "app/components/teamdraft/draftModal.tsx": {
     "shadcn/no-raw-colors": {
       "count": 8
-    },
-    "shadcn/no-unknown-classes": {
-      "count": 1
     }
   },
   "app/components/teamdraft/liveView.tsx": {
     "shadcn/no-raw-colors": {
       "count": 5
-    },
-    "shadcn/no-unknown-classes": {
-      "count": 1
     }
   },
   "app/components/teamdraft/roundView/TurnIndicator.tsx": {
@@ -400,9 +378,6 @@
   "app/components/user/DiscordUserDropdown.tsx": {
     "shadcn/no-raw-colors": {
       "count": 6
-    },
-    "shadcn/no-unknown-classes": {
-      "count": 8
     }
   },
   "app/components/user/UserAvatar.tsx": {
@@ -413,11 +388,6 @@
   "app/components/user/UserEventStrip.tsx": {
     "shadcn/no-raw-colors": {
       "count": 6
-    }
-  },
-  "app/components/user/UserList.tsx": {
-    "shadcn/no-unknown-classes": {
-      "count": 1
     }
   },
   "app/components/user/positions/icons/carry.tsx": {
@@ -452,9 +422,6 @@
   },
   "app/components/user/searchUser.tsx": {
     "shadcn/no-raw-colors": {
-      "count": 2
-    },
-    "shadcn/no-unknown-classes": {
       "count": 2
     }
   },
@@ -491,17 +458,11 @@
   "app/pages/profile/forms/position.tsx": {
     "shadcn/no-raw-colors": {
       "count": 1
-    },
-    "shadcn/no-unknown-classes": {
-      "count": 3
     }
   },
   "app/pages/profile/profile.tsx": {
     "shadcn/no-raw-colors": {
       "count": 2
-    },
-    "shadcn/no-unknown-classes": {
-      "count": 3
     }
   },
   "app/pages/tournament/hasErrors.tsx": {
@@ -512,21 +473,10 @@
   "app/pages/tournament/tabs/players/addPlayerDropdown.tsx": {
     "shadcn/no-raw-colors": {
       "count": 2
-    },
-    "shadcn/no-unknown-classes": {
-      "count": 2
     }
   },
   "app/pages/tournament/tabs/players/addPlayerModal.tsx": {
     "shadcn/no-raw-colors": {
-      "count": 1
-    },
-    "shadcn/no-unknown-classes": {
-      "count": 2
-    }
-  },
-  "app/pages/tournament/tabs/teams/randomTeamsModal.tsx": {
-    "shadcn/no-unknown-classes": {
       "count": 1
     }
   },
@@ -538,16 +488,10 @@
   "app/pages/users/users.tsx": {
     "shadcn/no-raw-colors": {
       "count": 1
-    },
-    "shadcn/no-unknown-classes": {
-      "count": 1
     }
   },
   "app/routes/organization.tsx": {
     "shadcn/no-raw-colors": {
-      "count": 2
-    },
-    "shadcn/no-unknown-classes": {
       "count": 2
     }
   }

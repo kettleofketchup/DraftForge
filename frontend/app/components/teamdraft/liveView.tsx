@@ -28,9 +28,7 @@ export const LiveAutoButtons: React.FC<{ isPolling: boolean }> = ({
         size="sm"
         className={cn(
           'h-7 px-2 text-xs',
-          isPolling
-            ? 'secondary border-green-600 text-green-400'
-            : 'bg-muted/50',
+          isPolling ? 'border-green-600 text-green-400' : 'bg-muted/50',
         )}
       >
         <Radio className={cn('h-3 w-3 mr-1', isPolling && 'animate-pulse')} />
