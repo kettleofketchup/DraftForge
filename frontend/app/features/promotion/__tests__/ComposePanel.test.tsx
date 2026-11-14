@@ -6,7 +6,7 @@ import { I18nextProvider } from 'react-i18next';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { OrgFeatureAccess } from '~/features/org-features';
 import { createI18nInstance } from '~/i18n/config';
-import { renderPromo } from '../api';
+import { renderPromo, sendPromo } from '../api';
 import { ComposePanel } from '../ComposePanel';
 import type { CandidateRow, PromoEvent, PromoTemplate } from '../schemas';
 
@@ -91,6 +91,7 @@ async function loadedText(): Promise<HTMLTextAreaElement> {
 
 afterEach(() => {
   vi.mocked(renderPromo).mockReset();
+  vi.mocked(sendPromo).mockReset();
 });
 
 describe('ComposePanel', () => {
@@ -125,6 +126,22 @@ describe('ComposePanel', () => {
     await waitFor(() => expect(screen.getByTestId('promo-mark-sent-btn')).toBeDisabled());
     fireEvent.change(box, { target: { value: '   ' } });
     await waitFor(() => expect(screen.getByTestId('promo-mark-sent-btn')).toBeDisabled());
+  });
+
+  it('disables Mark sent after a successful send so the undo stays reachable', async () => {
+    vi.mocked(renderPromo).mockResolvedValue({ text: RENDERED, warnings: [], will_earn: true });
+    vi.mocked(sendPromo).mockResolvedValue({
+      id: 77,
+      earns_points: true,
+      points_awarded: 1,
+      sent_at: '2026-11-14T00:00:00Z',
+    });
+    renderPanel();
+    await loadedText();
+    fireEvent.click(screen.getByTestId('promo-mark-sent-btn'));
+    expect(await screen.findByTestId('promo-undo-77')).toBeInTheDocument();
+    expect(screen.getByTestId('promo-mark-sent-btn')).toBeDisabled();
+    expect(sendPromo).toHaveBeenCalledTimes(1);
   });
 
   it("says the message won't earn points when the server says so", async () => {

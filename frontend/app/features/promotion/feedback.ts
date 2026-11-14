@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { extractApiError } from '~/lib/apiError';
 import type { getLogger } from '~/lib/logger';
@@ -19,10 +20,9 @@ export function reportPromoError(
 
 export function usePreviewOptions(): DiscordPreviewOptions {
   const { i18n } = useTranslation();
-  return {
-    locale: i18n?.resolvedLanguage ?? 'en',
-    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-  };
+  const locale = i18n?.resolvedLanguage ?? 'en';
+  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  return useMemo(() => ({ locale, timeZone }), [locale, timeZone]);
 }
 
 export function relativeFromIso(iso: string, opts: DiscordPreviewOptions): string {

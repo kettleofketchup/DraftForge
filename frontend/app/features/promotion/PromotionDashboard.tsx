@@ -47,22 +47,24 @@ export function PromotionDashboard({ orgId, access }: PromotionDashboardProps) {
   const [candidate, setCandidate] = useState<CandidateRow | null>(null);
   const [justSent, setJustSent] = useState<number | null>(null);
 
+  const resetEvent = useCallback((id: number | null): void => {
+    setEventId(id);
+    setCandidate(null);
+    setJustSent(null);
+  }, []);
+
   useEffect(() => {
     if (eventId != null || !events.data) return;
-    if (events.data.some((e) => e.id === requestedEvent)) setEventId(requestedEvent);
-  }, [eventId, events.data, requestedEvent]);
+    if (events.data.some((e) => e.id === requestedEvent)) resetEvent(requestedEvent);
+  }, [eventId, events.data, requestedEvent, resetEvent]);
 
   useEffect(() => {
     if (eventId != null && events.data && !events.data.some((e) => e.id === eventId)) {
-      setEventId(null);
+      resetEvent(null);
     }
-  }, [eventId, events.data]);
+  }, [eventId, events.data, resetEvent]);
 
-  const selectEvent = (event: PromoEvent): void => {
-    setEventId(event.id);
-    setCandidate(null);
-    setJustSent(null);
-  };
+  const selectEvent = (event: PromoEvent): void => resetEvent(event.id);
   const onSent = useCallback((send: PromoSendResult | null) => {
     setJustSent(send?.id ?? null);
   }, []);

@@ -202,7 +202,7 @@ function TemplateEditor({
   const sample = useMemo(() => renderTemplate(body, context), [body, context]);
   const preview = useMemo(
     () => formatDiscordTimestamps(sample.text, previewOptions),
-    [sample.text, previewOptions.locale, previewOptions.timeZone],
+    [sample.text, previewOptions],
   );
   const warnings = [...sample.warnings];
   if (sample.text.length > DISCORD_DM_LIMIT) {

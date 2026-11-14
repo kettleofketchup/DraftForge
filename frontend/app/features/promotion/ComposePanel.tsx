@@ -63,10 +63,6 @@ export function ComposePanel({
     }
   }, [templates, templateId]);
 
-  useEffect(() => {
-    setSent(null);
-  }, [candidate.user_pk, event.id]);
-
   const rendered = useRenderPromo(orgId, access, event.id, templateId, candidate.user_pk);
   const send = useSendPromo(orgId, access, event.id);
   const undo = useUndoPromoSend(orgId, access);
@@ -84,10 +80,10 @@ export function ComposePanel({
   const text = useWatch({ control: form.control, name: 'text' }) ?? '';
   const preview = useMemo(
     () => formatDiscordTimestamps(text, previewOptions),
-    [text, previewOptions.locale, previewOptions.timeZone],
+    [text, previewOptions],
   );
   const overLimit = text.length > DISCORD_DM_LIMIT;
-  const canSubmit = promoSendSchema.safeParse({ text }).success && !send.isPending;
+  const canSubmit = promoSendSchema.safeParse({ text }).success && !send.isPending && sent == null;
 
   const copy = async (): Promise<void> => {
     try {
