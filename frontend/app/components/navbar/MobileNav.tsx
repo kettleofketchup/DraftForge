@@ -1,8 +1,13 @@
-import { Menu } from 'lucide-react';
+import { ChevronDown, Menu } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 import { Button } from '~/components/ui/button';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '~/components/ui/collapsible';
 import { ScrollArea } from '~/components/ui/scroll-area';
 import {
   Sheet,
@@ -14,6 +19,8 @@ import {
 import { cn } from '~/lib/utils';
 import { useUserStore } from '../../store/userStore';
 import { PreviewLoginMenu } from '../preview/PreviewLoginMenu';
+import { LazyChangelogPreview } from './changelog/LazyChangelogPreview';
+import { DocsIcon } from './icons';
 import { BUG_REPORT_URL, DOCS_URL, GITHUB_REPO_URL } from './links';
 
 // Icons (duplicated from navbar.tsx - could be extracted to shared file)
@@ -152,22 +159,6 @@ const GitHubIcon = () => (
   </svg>
 );
 
-const DocsIcon = () => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className="h-5 w-5"
-    aria-hidden="true"
-  >
-    <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20" />
-  </svg>
-);
-
 const BugIcon = () => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
@@ -221,7 +212,11 @@ interface MobileNavLinkProps {
   iconClassName?: string;
   external?: boolean;
   onClick?: () => void;
+  'data-testid'?: string;
 }
+
+const MOBILE_NAV_ROW_CLASS =
+  'flex items-center gap-3 p-3 hover:bg-muted rounded-lg transition-colors min-h-[48px]';
 
 const MobileNavLink: React.FC<MobileNavLinkProps> = ({
   to,
@@ -232,6 +227,7 @@ const MobileNavLink: React.FC<MobileNavLinkProps> = ({
   iconClassName,
   external,
   onClick,
+  'data-testid': testId,
 }) => {
   const content = (
     <>
@@ -245,12 +241,14 @@ const MobileNavLink: React.FC<MobileNavLinkProps> = ({
     </>
   );
 
-  const className =
-    'flex items-center gap-3 p-3 hover:bg-muted rounded-lg transition-colors min-h-[48px]';
-
   if (to) {
     return (
-      <Link to={to} className={className} onClick={onClick}>
+      <Link
+        to={to}
+        className={MOBILE_NAV_ROW_CLASS}
+        onClick={onClick}
+        data-testid={testId}
+      >
         {content}
       </Link>
     );
@@ -259,10 +257,11 @@ const MobileNavLink: React.FC<MobileNavLinkProps> = ({
   return (
     <a
       href={href}
-      className={className}
+      className={MOBILE_NAV_ROW_CLASS}
       target={external ? '_blank' : undefined}
       rel={external ? 'noopener noreferrer' : undefined}
       onClick={onClick}
+      data-testid={testId}
     >
       {content}
     </a>
@@ -315,7 +314,10 @@ export function MobileNav() {
             <span>DraftForge</span>
           </SheetTitle>
         </SheetHeader>
-        <ScrollArea type="always" className="flex-1 min-h-0 -mr-6 pr-6">
+        <ScrollArea
+          type="always"
+          className="flex-1 min-h-0 -mr-6 pr-6 [&_[data-slot=scroll-area-viewport]>div]:!block"
+        >
           <nav className="flex flex-col gap-1 mt-6 pb-6">
             {/* Main Navigation */}
             <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-3 py-2">
@@ -390,14 +392,57 @@ export function MobileNav() {
               subtitle={t('nav.github_subtitle_star')}
               external
             />
-            <MobileNavLink
-              href={DOCS_URL}
-              icon={<DocsIcon />}
-              title={t('nav.documentation')}
-              subtitle={t('nav.documentation_subtitle')}
-              iconClassName="text-info"
-              external
-            />
+            <Collapsible>
+              <CollapsibleTrigger asChild>
+                <Button
+                  variant="ghost"
+                  data-testid="mobile-nav-docs-trigger"
+                  className={cn(
+                    MOBILE_NAV_ROW_CLASS,
+                    'group w-full justify-start h-auto font-normal',
+                  )}
+                >
+                  <span className="shrink-0 text-info">
+                    <DocsIcon />
+                  </span>
+                  <span className="flex flex-col items-start text-left">
+                    <span className="font-medium">
+                      {t('nav.documentation')}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {t('nav.documentation_subtitle')}
+                    </span>
+                  </span>
+                  <ChevronDown className="size-4 ml-auto transition-transform group-data-[state=open]:rotate-180" />
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="flex flex-col gap-2 pl-3">
+                <MobileNavLink
+                  href={DOCS_URL}
+                  icon={<DocsIcon />}
+                  iconClassName="text-info"
+                  external
+                  title={t('nav.docs')}
+                />
+                <h2 className="px-3 pt-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  {t('nav.whats_new')}
+                </h2>
+                <div className="px-3 min-w-0 [overflow-wrap:anywhere]">
+                  <LazyChangelogPreview
+                    data-testid="mobile-nav-changelog-preview"
+                    onNavigate={closeNav}
+                  />
+                </div>
+                <Link
+                  data-testid="mobile-nav-changelog-full-link"
+                  to="/changelog"
+                  onClick={closeNav}
+                  className="px-3 py-2 text-sm text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  {t('nav.full_changelog')}
+                </Link>
+              </CollapsibleContent>
+            </Collapsible>
             <MobileNavLink
               href={BUG_REPORT_URL}
               icon={<BugIcon />}
@@ -405,6 +450,7 @@ export function MobileNav() {
               subtitle={t('nav.report_issue_subtitle_improve')}
               iconClassName="text-destructive"
               external
+              data-testid="mobile-nav-report-issue-link"
             />
             <PreviewLoginMenu placement="drawer" />
           </nav>
