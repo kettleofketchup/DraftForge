@@ -1246,7 +1246,8 @@ class LeagueView(viewsets.ModelViewSet):
         return super().get_permissions()
 
     def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:
-        # Check permission for organization (singular field from serializer)
+        # Legacy `organization` key: the serializer ignores it (read-only), so
+        # the authoritative org check on `organization_id` is in perform_create.
         org_id = request.data.get("organization")
         if org_id:
             try:
