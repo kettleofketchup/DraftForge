@@ -8,6 +8,11 @@ import { DraftStyleModal } from '../buttons/draftStyleModal';
 vi.mock('~/components/api/tournamentAPI', () => ({
   updateDraftOptions: vi.fn().mockResolvedValue({ pk: 1, draft: {} }),
 }));
+// Saving refreshes the predicted MMRs; the modal tests don't assert on them.
+vi.mock('~/components/api/draftAPI', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('~/components/api/draftAPI')>()),
+  getDraftStyleMMRs: vi.fn().mockResolvedValue({}),
+}));
 vi.mock('sonner', () => ({
   toast: { promise: vi.fn(), error: vi.fn(), success: vi.fn() },
 }));
