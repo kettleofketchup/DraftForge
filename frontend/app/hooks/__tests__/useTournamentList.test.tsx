@@ -227,10 +227,13 @@ describe('useArchivedTournaments', () => {
     expect(getTournamentsPageMock).not.toHaveBeenCalled();
   });
 
-  it('requests page numbers, never the next URL, and dedupes across pages', async () => {
+  it('follows the cursor in next on its own origin and dedupes across pages', async () => {
     getTournamentsPageMock
-      .mockResolvedValueOnce(page([1, 2], 'http://other/x?page=2'))
-      .mockResolvedValueOnce(page([2, 3], null));
+      .mockResolvedValueOnce(
+        page([1, 2], 'http://other/api/tournaments-list/?bucket=archived&cursor=tok%2D2'),
+      )
+      .mockResolvedValueOnce(page([2, 3], 'http://other/api/tournaments-list/?cursor=tok-3'))
+      .mockResolvedValueOnce(page([4], null));
     const { wrapper } = setup();
     const { result } = renderHook(
       () => useArchivedTournaments({ organization: 30 }, { enabled: true }),
@@ -249,16 +252,38 @@ describe('useArchivedTournaments', () => {
     await act(async () => {
       await result.current.fetchNextPage();
     });
+    expect(getTournamentsPageMock).toHaveBeenLastCalledWith({
+      bucket: 'archived',
+      organizationId: 30,
+      leagueId: undefined,
+      search: undefined,
+      cursor: 'tok-2',
+    });
+    await act(async () => {
+      await result.current.fetchNextPage();
+    });
 
     await waitFor(() => expect(result.current.hasNextPage).toBe(false));
-    expect(getTournamentsPageMock).toHaveBeenCalledTimes(2);
+    expect(getTournamentsPageMock).toHaveBeenCalledTimes(3);
     expect(getTournamentsPageMock).toHaveBeenLastCalledWith(
-      expect.objectContaining({ page: 2 }),
+      expect.objectContaining({ cursor: 'tok-3' }),
     );
     for (const call of getTournamentsPageMock.mock.calls) {
       expect(JSON.stringify(call)).not.toContain('http://other');
+      expect(call[0]).not.toHaveProperty('page', 2);
     }
-    expect(result.current.tournaments.map((t) => t.pk)).toEqual([1, 2, 3]);
+    expect(result.current.tournaments.map((t) => t.pk)).toEqual([1, 2, 3, 4]);
+  });
+
+  it('stops when next carries no cursor', async () => {
+    getTournamentsPageMock.mockResolvedValueOnce(page([1], 'http://other/x?page=2'));
+    const { wrapper } = setup();
+    const { result } = renderHook(
+      () => useArchivedTournaments({}, { enabled: true }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.hasNextPage).toBe(false);
   });
 
   it('has no next page when the first page is the last', async () => {

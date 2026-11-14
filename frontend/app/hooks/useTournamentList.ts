@@ -103,6 +103,16 @@ export function useUpcomingTournaments(
   });
 }
 
+/** Reads only the cursor from `next`, so requests stay on this origin. */
+export function nextCursor(next: string | null): string | undefined {
+  if (next === null) return undefined;
+  try {
+    return new URL(next).searchParams.get('cursor') ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export type ArchivedTournamentsResult = UseInfiniteQueryResult<
   InfiniteData<PaginatedTournaments>
 > & { tournaments: TournamentsType };
@@ -122,13 +132,14 @@ export function useArchivedTournaments(
         openSignups: key.openSignups,
         leagueId: key.league,
         search: key.search,
-        page: pageParam,
+        ...(pageParam === null ? { page: 1 } : { cursor: pageParam }),
       }),
-    initialPageParam: 1,
-    getNextPageParam: (last, _all, lastParam) =>
-      last.next !== null ? lastParam + 1 : undefined,
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) => nextCursor(last.next),
     enabled: opts.enabled,
-    placeholderData: sameScopePlaceholder<InfiniteData<PaginatedTournaments, number>>(key),
+    placeholderData: sameScopePlaceholder<InfiniteData<PaginatedTournaments, string | null>>(
+      key,
+    ),
     staleTime: STALE_TIME_MS,
     refetchOnWindowFocus: false,
   });

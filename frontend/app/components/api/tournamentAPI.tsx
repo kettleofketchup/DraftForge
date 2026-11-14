@@ -57,18 +57,24 @@ export async function getTournaments(filters?: TournamentListFilters): Promise<T
   return response.data;
 }
 
+export type TournamentPagePosition =
+  | { page: number; cursor?: never }
+  /** Opaque archived cursor taken from a previous page's `next`. */
+  | { cursor: string; page?: never };
+
 // An archive that shrank between loads 404s past its new last page: end of list.
 export async function getTournamentsPage(
-  filters: TournamentListFilters & { page: number; pageSize?: number },
+  filters: TournamentListFilters & TournamentPagePosition & { pageSize?: number },
 ): Promise<PaginatedTournaments> {
   const params = tournamentListParams(filters);
-  params.append('page', String(filters.page));
+  if (filters.cursor !== undefined) params.append('cursor', filters.cursor);
+  else params.append('page', String(filters.page));
   if (filters.pageSize !== undefined) params.append('page_size', String(filters.pageSize));
   try {
     const response = await axios.get<PaginatedTournaments>(`/tournaments-list/?${params.toString()}`);
     return response.data;
   } catch (e) {
-    if (isAxiosError(e) && e.response?.status === 404 && filters.page > 1) {
+    if (isAxiosError(e) && e.response?.status === 404 && (filters.page ?? 1) > 1) {
       return { count: 0, next: null, previous: null, results: [] };
     }
     throw e;
