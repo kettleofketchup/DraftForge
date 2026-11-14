@@ -9,7 +9,7 @@
  */
 
 import { useState, useCallback, useMemo } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useMutationState, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ChevronDown,
   ChevronRight,
@@ -59,6 +59,16 @@ import { extractApiError } from '~/lib/apiError';
 import { getLogger } from '~/lib/logger';
 
 const log = getLogger('AdminTeamSection');
+
+// Domain 4xx responses ("already a promoter", "not a promoter") are expected races, not faults.
+function logPromoterFailure(message: string, context: Record<string, unknown>, err: unknown): void {
+  const status = (err as { response?: { status?: number } })?.response?.status;
+  if (status != null && status >= 400 && status < 500) {
+    log.warn(message, { ...context, status, err });
+  } else {
+    log.error(message, { ...context, err });
+  }
+}
 
 interface AdminTeamSectionProps {
   organization?: OrganizationType | null;
@@ -302,22 +312,28 @@ export function AdminTeamSection({
   const addPromoterMutation = useMutation({
     mutationFn: (userId: number) =>
       addOrgPromoter(entityId!, userId).catch((err: unknown) => {
-        log.error('Failed to add promoter', { orgId: entityId, userId, err });
+        logPromoterFailure('Failed to add promoter', { orgId: entityId, userId }, err);
         throw new Error(extractApiError(err) ?? 'Failed to add promoter');
       }),
     onSettled: () => queryClient.invalidateQueries({ queryKey: promotersKey }),
   });
 
+  const removePromoterKey = useMemo(() => ['removeOrgPromoter', entityId] as const, [entityId]);
   const removePromoterMutation = useMutation({
+    mutationKey: removePromoterKey,
     mutationFn: (userId: number) => removeOrgPromoter(entityId!, userId),
     onSuccess: () => {
       toast.success('Promoter removed');
     },
     onError: (err: unknown, userId) => {
-      log.error('Failed to remove promoter', { orgId: entityId, userId, err });
+      logPromoterFailure('Failed to remove promoter', { orgId: entityId, userId }, err);
       toast.error(extractApiError(err) ?? 'Failed to remove promoter');
     },
     onSettled: () => queryClient.invalidateQueries({ queryKey: promotersKey }),
+  });
+  const pendingPromoterRemovals = useMutationState({
+    filters: { mutationKey: removePromoterKey, status: 'pending' },
+    select: (mutation) => mutation.state.variables as number,
   });
 
   // --- AddUserModal handlers ---
@@ -567,8 +583,7 @@ export function AdminTeamSection({
                       canRemove
                       onRemove={() => promoter.pk && removePromoterMutation.mutate(promoter.pk)}
                       isRemoving={
-                        removePromoterMutation.isPending &&
-                        removePromoterMutation.variables === promoter.pk
+                        promoter.pk != null && pendingPromoterRemovals.includes(promoter.pk)
                       }
                     />
                   ))

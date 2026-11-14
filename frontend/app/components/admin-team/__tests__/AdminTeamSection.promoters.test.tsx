@@ -20,17 +20,37 @@ vi.mock('~/components/api/api', async (importOriginal) => ({
 }));
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
-// AddUserModal calls window.matchMedia, which jsdom does not implement.
-window.matchMedia ??= ((query: string) => ({
-  matches: false,
-  media: query,
-  onchange: null,
-  addListener: () => {},
-  removeListener: () => {},
-  addEventListener: () => {},
-  removeEventListener: () => {},
-  dispatchEvent: () => false,
-})) as unknown as typeof window.matchMedia;
+// Stub the modal: one button per instance that adds user 21 and shows the outcome.
+vi.mock('~/components/user/AddUserModal', async () => {
+  const { useState } = await import('react');
+  return {
+    AddUserModal: ({
+      title,
+      onAdd,
+    }: {
+      title: string;
+      onAdd: (payload: { user_id: number }) => Promise<UserType>;
+    }) => {
+      const [result, setResult] = useState('');
+      const slug = title.split(' ')[1].toLowerCase();
+      return (
+        <div>
+          <button
+            type="button"
+            data-testid={`stub-add-${slug}`}
+            onClick={() =>
+              onAdd({ user_id: 21 }).then(
+                () => setResult('ok'),
+                (err: Error) => setResult(err.message),
+              )
+            }
+          />
+          <span data-testid={`stub-result-${slug}`}>{result}</span>
+        </div>
+      );
+    },
+  };
+});
 
 const owner = { pk: 1, username: 'owner' } as UserType;
 const alice = { pk: 21, username: 'alice' } as UserType;
@@ -113,5 +133,45 @@ describe('AdminTeamSection promoters', () => {
     fireEvent.click(await screen.findByTestId('remove-promoter-bob'));
     await vi.waitFor(() => expect(toast.error).toHaveBeenCalledWith('not a promoter'));
     await vi.waitFor(() => expect(getOrgPromoters).toHaveBeenCalledTimes(2));
+  });
+
+  it('adds a promoter and refetches the list', async () => {
+    vi.mocked(addOrgPromoter).mockResolvedValue(alice);
+    renderSection(makeOrg());
+    await screen.findByTestId('promoters-section');
+    fireEvent.click(screen.getByTestId('stub-add-promoter'));
+    await vi.waitFor(() => expect(addOrgPromoter).toHaveBeenCalledWith(7, 21));
+    expect(await screen.findByText('ok')).toBeInTheDocument();
+    await vi.waitFor(() => expect(getOrgPromoters).toHaveBeenCalledTimes(2));
+  });
+
+  it('rejects with the API message and refetches when the user is already a promoter', async () => {
+    vi.mocked(addOrgPromoter).mockRejectedValue({
+      response: { status: 400, data: { error: 'already a promoter' } },
+    });
+    renderSection(makeOrg());
+    await screen.findByTestId('promoters-section');
+    fireEvent.click(screen.getByTestId('stub-add-promoter'));
+    await vi.waitFor(() =>
+      expect(screen.getByTestId('stub-result-promoter')).toHaveTextContent('already a promoter'),
+    );
+    await vi.waitFor(() => expect(getOrgPromoters).toHaveBeenCalledTimes(2));
+  });
+
+  it('keeps each row disabled while its own removal is pending', async () => {
+    const pending: Array<() => void> = [];
+    vi.mocked(removeOrgPromoter).mockImplementation(
+      () => new Promise<void>((resolve) => pending.push(resolve)),
+    );
+    renderSection(makeOrg());
+    const removeAlice = await screen.findByTestId('remove-promoter-alice');
+    fireEvent.click(removeAlice);
+    await vi.waitFor(() => expect(removeAlice).toBeDisabled());
+    const removeBob = screen.getByTestId('remove-promoter-bob');
+    fireEvent.click(removeBob);
+    await vi.waitFor(() => expect(removeBob).toBeDisabled());
+    expect(removeAlice).toBeDisabled();
+    pending.forEach((resolve) => resolve());
+    await vi.waitFor(() => expect(toast.success).toHaveBeenCalledTimes(2));
   });
 });
