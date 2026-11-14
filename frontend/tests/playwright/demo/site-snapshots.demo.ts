@@ -6,7 +6,7 @@
  *
  * Pages captured:
  * - Home page
- * - Tournaments list
+ * - Tournaments list (Upcoming tab, waits for org-header cards)
  * - Tournament detail page
  * - Bracket view
  */
@@ -94,6 +94,10 @@ test.describe('Site Snapshots', () => {
     await page.goto(`${BASE_URL}/tournaments`);
     await waitForHydration(page);
     await waitForDemoReady(page, { timeout: 15000 });
+    await page
+      .locator('[data-testid="tournaments-panel-upcoming"][data-fetching="false"]')
+      .waitFor({ timeout: 15000 });
+    await page.locator('[data-testid="tournament-cell-org"]').first().waitFor({ timeout: 15000 });
     await page.waitForTimeout(500);
     await page.screenshot({
       path: path.join(outputDir, 'tournaments.png'),
