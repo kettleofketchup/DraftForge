@@ -2,6 +2,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
+import { toast } from 'sonner';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { UserType } from '~/components/user/types';
 import { useUserStore } from '~/store/userStore';
@@ -57,6 +58,8 @@ afterEach(() => {
   cleanup();
   vi.mocked(getOrgFeatures).mockReset();
   vi.mocked(setOrgFeature).mockReset();
+  vi.mocked(toast.success).mockClear();
+  vi.mocked(toast.error).mockClear();
 });
 
 describe('PaidFeaturesPanel', () => {
@@ -101,5 +104,33 @@ describe('PaidFeaturesPanel', () => {
       expect(invalidate).toHaveBeenCalledWith({ queryKey: ['organization', 7] });
       expect(invalidate).toHaveBeenCalledWith({ queryKey: orgFeaturesKey(7) });
     });
+    expect(qc.getQueryData(orgFeaturesKey(7))).toEqual(rows);
+    expect(toast.success).toHaveBeenCalledWith('Contributions unlocked');
+  });
+
+  it('says notes saved when only the notes changed', async () => {
+    setViewer({ pk: 1, username: 'admin', is_superuser: true });
+    vi.mocked(setOrgFeature).mockResolvedValue(rows);
+    renderPanel();
+    fireEvent.change(await screen.findByTestId('paid-feature-notes-promotion'), {
+      target: { value: 'Renewed' },
+    });
+    fireEvent.click(screen.getByTestId('paid-feature-save-promotion'));
+    await vi.waitFor(() => expect(toast.success).toHaveBeenCalledWith('Promotion notes saved'));
+  });
+
+  it('toasts the API error when a save fails', async () => {
+    setViewer({ pk: 1, username: 'admin', is_superuser: true });
+    vi.mocked(setOrgFeature).mockRejectedValue({ response: { data: { detail: 'x' } } });
+    renderPanel();
+    fireEvent.click(await screen.findByTestId('paid-feature-save-contributions'));
+    await vi.waitFor(() => expect(toast.error).toHaveBeenCalledWith('x'));
+  });
+
+  it('shows an inline error when the features fetch fails', async () => {
+    setViewer({ pk: 1, username: 'admin', is_superuser: true });
+    vi.mocked(getOrgFeatures).mockRejectedValue({ response: { data: { detail: 'Nope' } } });
+    renderPanel();
+    expect(await screen.findByTestId('paid-features-error')).toHaveTextContent('Nope');
   });
 });

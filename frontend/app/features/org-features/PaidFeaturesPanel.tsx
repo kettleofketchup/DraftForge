@@ -33,7 +33,7 @@ export interface PaidFeaturesPanelProps {
 
 export function PaidFeaturesPanel({ orgId }: PaidFeaturesPanelProps) {
   const isSuperuser = useIsSuperuser();
-  const { data: rows, isLoading } = useQuery({
+  const { data: rows, isLoading, isError, error } = useQuery({
     queryKey: orgFeaturesKey(orgId),
     queryFn: () => getOrgFeatures(orgId),
     enabled: isSuperuser,
@@ -51,6 +51,11 @@ export function PaidFeaturesPanel({ orgId }: PaidFeaturesPanelProps) {
         Site admins only. Locked features are hidden from the organization; their data is kept.
       </p>
       {isLoading && <p className="mt-4 text-sm text-muted-foreground">Loading...</p>}
+      {isError && (
+        <p className="mt-4 text-sm text-destructive" data-testid="paid-features-error">
+          {extractApiError(error) ?? 'Failed to load paid features'}
+        </p>
+      )}
       <div className="mt-4 flex flex-col gap-4">
         {rows?.map((row) => (
           <PaidFeatureRow
@@ -82,7 +87,8 @@ function PaidFeatureRow({ orgId, row }: PaidFeatureRowProps) {
       setOrgFeature(orgId, { feature: row.feature, ...values }),
     onSuccess: async (updated, values) => {
       queryClient.setQueryData(orgFeaturesKey(orgId), updated);
-      toast.success(`${label} ${values.enabled ? 'unlocked' : 'locked'}`);
+      if (values.enabled === row.enabled) toast.success(`${label} notes saved`);
+      else toast.success(`${label} ${values.enabled ? 'unlocked' : 'locked'}`);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: organizationQueryKey(orgId) }),
         queryClient.invalidateQueries({ queryKey: orgFeaturesKey(orgId) }),
@@ -110,6 +116,7 @@ function PaidFeatureRow({ orgId, row }: PaidFeatureRowProps) {
                 <Switch
                   checked={field.value}
                   onCheckedChange={field.onChange}
+                  disabled={mutation.isPending}
                   data-testid={`paid-feature-switch-${row.feature}`}
                 />
               </FormControl>
@@ -133,6 +140,7 @@ function PaidFeatureRow({ orgId, row }: PaidFeatureRowProps) {
                 <Textarea
                   {...field}
                   rows={2}
+                  disabled={mutation.isPending}
                   placeholder="Payment reference, trial end, ..."
                   data-testid={`paid-feature-notes-${row.feature}`}
                 />
