@@ -1,7 +1,7 @@
 import { generateMeta } from '~/lib/seo';
 import { fetchOrganization } from '~/components/api/api';
 import { queryClient } from '~/root';
-import { Award, Building2, Calendar, ClipboardList, ExternalLink, Mail, MailCheck, Pencil, Plus, Settings, Trash2, Upload, Users } from 'lucide-react';
+import { Award, Building2, Calendar, ClipboardList, ExternalLink, Mail, MailCheck, Megaphone, Pencil, Plus, Settings, Trash2, Upload, Users } from 'lucide-react';
 import type { Route } from './+types/organization';
 import type { OrganizationSSR } from '~/lib/ssr-types';
 
@@ -67,6 +67,7 @@ import { CSVImportModal } from '~/components/user/CSVImportModal';
 import type { UserType } from '~/components/user/types';
 import { ContributionsTab } from '~/features/contributions';
 import { PaidFeaturesPanel, removeFeatureQueries, useOrgFeatureAccess } from '~/features/org-features';
+import { PromotionTab } from '~/features/promotion';
 import { useMemberAccess } from '~/hooks/useMemberAccess';
 import { useOrgUsers } from '~/hooks/useOrgUsers';
 import {
@@ -276,6 +277,12 @@ export default function OrganizationDetailPage() {
       setActiveTab('leagues');
     }
   }, [featureAccess.settled, canViewContributions, activeTab, setActiveTab]);
+  const canUsePromotion = featureAccess.canUsePromotion;
+  useEffect(() => {
+    if (featureAccess.settled && !canUsePromotion && activeTab === 'promotion') {
+      setActiveTab('leagues');
+    }
+  }, [featureAccess.settled, canUsePromotion, activeTab, setActiveTab]);
 
   const isOwner = useIsOrganizationOwner(organization);
   const isOrgAdmin = useIsOrganizationAdmin(organization);
@@ -332,11 +339,14 @@ export default function OrganizationDetailPage() {
     if (canViewContributions) {
       opts.push({ value: 'contributions', label: 'Contributions' });
     }
+    if (canUsePromotion) {
+      opts.push({ value: 'promotion', label: 'Promotion' });
+    }
     if (isOrgAdmin) {
       opts.push({ value: 'claims', label: 'Claims' });
     }
     return opts;
-  }, [leagues.length, events.length, userCountDisplay, canViewMembers, canViewContributions, isOrgAdmin]);
+  }, [leagues.length, events.length, userCountDisplay, canViewMembers, canViewContributions, canUsePromotion, isOrgAdmin]);
 
   usePageNav(organization ? pageNavOptions : null, activeTab, setActiveTab);
 
@@ -458,6 +468,12 @@ export default function OrganizationDetailPage() {
               <TabsTrigger value="contributions" data-testid="org-tab-contributions">
                 <Award className="w-4 h-4 mr-2" />
                 Contributions
+              </TabsTrigger>
+            )}
+            {canUsePromotion && (
+              <TabsTrigger value="promotion" data-testid="org-tab-promotion">
+                <Megaphone className="w-4 h-4 mr-2" />
+                Promotion
               </TabsTrigger>
             )}
             {isOrgStaff && (
@@ -607,6 +623,18 @@ export default function OrganizationDetailPage() {
                 orgId={pk}
                 timeZone={organization.timezone}
                 membersPrivate={organization.members_private ?? false}
+                access={featureAccess}
+              />
+            </TabsContent>
+          )}
+
+          {canUsePromotion && pk && (
+            <TabsContent value="promotion">
+              <PromotionTab
+                key={pk}
+                orgId={pk}
+                org={{ name: organization.name, discord_link: organization.discord_link }}
+                sender={currentUser}
                 access={featureAccess}
               />
             </TabsContent>

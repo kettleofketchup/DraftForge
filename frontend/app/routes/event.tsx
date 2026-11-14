@@ -98,6 +98,7 @@ import type { AddMemberPayload } from '~/components/api/api';
 import { useOrgStore } from '~/store/orgStore';
 import { useUserCacheStore } from '~/store/userCacheStore';
 import { removeFeatureQueries, useOrgFeatureAccess } from '~/features/org-features';
+import { canPromoteEvent, PromoteEventButton } from '~/features/promotion';
 import { EventStaffSection } from '~/components/events/EventStaffCard';
 import { canCompleteEvent } from '~/components/events/eventCompletion';
 import { useMemberAccess } from '~/hooks/useMemberAccess';
@@ -438,7 +439,7 @@ export default function EventPage() {
       <div className="space-y-2 sm:space-y-4">
 
         {/* Row 3: Admin button group (left) + Subscribe/RSVP (right) */}
-        {(isAdmin || (currentUser && event.state === EventState.SIGNUPS_OPEN && signups) || (currentUser && event.event_repeater)) && (
+        {(isAdmin || canPromoteEvent(event, eventOrgAccess) || (currentUser && event.state === EventState.SIGNUPS_OPEN && signups) || (currentUser && event.event_repeater)) && (
           <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3">
             {/* Admin actions — left side */}
             {isAdmin ? (
@@ -476,6 +477,7 @@ export default function EventPage() {
 
             {/* Right side: Subscribe + RSVP */}
             <div className="flex flex-wrap items-center gap-2">
+            <PromoteEventButton event={event} access={eventOrgAccess} />
             {event.event_repeater && currentUser && (
               isSubscribed ? (
                 <SecondaryButton
