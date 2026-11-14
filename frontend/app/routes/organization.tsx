@@ -1,7 +1,7 @@
 import { generateMeta } from '~/lib/seo';
 import { fetchOrganization } from '~/components/api/api';
 import { queryClient } from '~/root';
-import { Building2, Calendar, ClipboardList, ExternalLink, Mail, MailCheck, Pencil, Plus, Settings, Trash2, Upload, Users } from 'lucide-react';
+import { Award, Building2, Calendar, ClipboardList, ExternalLink, Mail, MailCheck, Pencil, Plus, Settings, Trash2, Upload, Users } from 'lucide-react';
 import type { Route } from './+types/organization';
 import type { OrganizationSSR } from '~/lib/ssr-types';
 
@@ -65,7 +65,8 @@ import { UserList } from '~/components/user';
 import { AddUserModal } from '~/components/user/AddUserModal';
 import { CSVImportModal } from '~/components/user/CSVImportModal';
 import type { UserType } from '~/components/user/types';
-import { PaidFeaturesPanel, removeFeatureQueries } from '~/features/org-features';
+import { ContributionsTab } from '~/features/contributions';
+import { PaidFeaturesPanel, removeFeatureQueries, useOrgFeatureAccess } from '~/features/org-features';
 import { useMemberAccess } from '~/hooks/useMemberAccess';
 import { useOrgUsers } from '~/hooks/useOrgUsers';
 import {
@@ -268,6 +269,14 @@ export default function OrganizationDetailPage() {
     }
   }, [memberAccessSettled, canViewMembers, activeTab, setActiveTab]);
 
+  const featureAccess = useOrgFeatureAccess(organization ?? undefined);
+  const canViewContributions = featureAccess.canViewContributions;
+  useEffect(() => {
+    if (featureAccess.settled && !canViewContributions && activeTab === 'contributions') {
+      setActiveTab('leagues');
+    }
+  }, [featureAccess.settled, canViewContributions, activeTab, setActiveTab]);
+
   const isOwner = useIsOrganizationOwner(organization);
   const isOrgAdmin = useIsOrganizationAdmin(organization);
   const isOrgStaff = useIsOrganizationStaff(organization);
@@ -320,11 +329,14 @@ export default function OrganizationDetailPage() {
     if (canViewMembers) {
       opts.push({ value: 'users', label: `Users (${userCountDisplay})` });
     }
+    if (canViewContributions) {
+      opts.push({ value: 'contributions', label: 'Contributions' });
+    }
     if (isOrgAdmin) {
       opts.push({ value: 'claims', label: 'Claims' });
     }
     return opts;
-  }, [leagues.length, events.length, userCountDisplay, canViewMembers, isOrgAdmin]);
+  }, [leagues.length, events.length, userCountDisplay, canViewMembers, canViewContributions, isOrgAdmin]);
 
   usePageNav(organization ? pageNavOptions : null, activeTab, setActiveTab);
 
@@ -440,6 +452,12 @@ export default function OrganizationDetailPage() {
               <TabsTrigger value="users" data-testid="org-tab-users">
                 <Users className="w-4 h-4 mr-2" />
                 Users ({userCountDisplay})
+              </TabsTrigger>
+            )}
+            {canViewContributions && (
+              <TabsTrigger value="contributions" data-testid="org-tab-contributions">
+                <Award className="w-4 h-4 mr-2" />
+                Contributions
               </TabsTrigger>
             )}
             {isOrgStaff && (
@@ -578,6 +596,16 @@ export default function OrganizationDetailPage() {
                 searchPlaceholder="Search members..."
                 emptyMessage="No members in this organization"
                 organizationId={pk}
+              />
+            </TabsContent>
+          )}
+
+          {canViewContributions && pk && (
+            <TabsContent value="contributions">
+              <ContributionsTab
+                orgId={pk}
+                timeZone={organization.timezone}
+                access={featureAccess}
               />
             </TabsContent>
           )}
