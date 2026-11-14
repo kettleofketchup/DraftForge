@@ -41,12 +41,23 @@ function row(orgUserPk: number, userPk: number, username: string, points: number
   };
 }
 
-function renderTab(timeZone: string | undefined = 'America/New_York') {
+function renderTab(
+  timeZone: string | undefined = 'America/New_York',
+  { membersPrivate = true, viewer = access }: { membersPrivate?: boolean; viewer?: OrgFeatureAccess } = {},
+) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={qc}>{children}</QueryClientProvider>
   );
-  return render(<ContributionsTab orgId={7} timeZone={timeZone} access={access} />, { wrapper });
+  return render(
+    <ContributionsTab
+      orgId={7}
+      timeZone={timeZone}
+      membersPrivate={membersPrivate}
+      access={viewer}
+    />,
+    { wrapper },
+  );
 }
 
 afterEach(() => {
@@ -55,19 +66,67 @@ afterEach(() => {
 });
 
 describe('ContributionsTab leaderboard', () => {
-  it('shows the org total and the private note when rows are hidden', async () => {
-    const data: LeaderboardResponse = {
+  it('shows the private note without an own-standing promise to a non-member of a private org', async () => {
+    vi.mocked(getLeaderboard).mockResolvedValue({
       period: 'all',
       total: 42,
       rows_visible: false,
       rows: [],
       own_row: null,
-    };
-    vi.mocked(getLeaderboard).mockResolvedValue(data);
+    });
     renderTab();
     expect(await screen.findByTestId('contributions-org-total')).toHaveTextContent('42');
-    expect(screen.getByTestId('contributions-members-private')).toBeInTheDocument();
+    const note = screen.getByTestId('contributions-members-private');
+    expect(note).toHaveTextContent('Members are private in this organization.');
+    expect(note).not.toHaveTextContent('your own standing');
+    expect(screen.queryByTestId('contributions-empty')).not.toBeInTheDocument();
     expect(getLeaderboard).toHaveBeenCalledWith(7, 'all');
+  });
+
+  it('asks an anonymous viewer of a public org to sign in, not that members are private', async () => {
+    vi.mocked(getLeaderboard).mockResolvedValue({
+      period: 'all',
+      total: 42,
+      rows_visible: false,
+      rows: [],
+      own_row: null,
+    });
+    renderTab('UTC', { membersPrivate: false, viewer: { ...access, viewerPk: null } });
+    expect(await screen.findByTestId('contributions-members-signin')).toHaveTextContent(
+      'Sign in as a member to see the leaderboard.',
+    );
+    expect(screen.queryByTestId('contributions-members-private')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('contributions-empty')).not.toBeInTheDocument();
+  });
+
+  it('tells a signed-in outsider of a public org that only members see the leaderboard', async () => {
+    vi.mocked(getLeaderboard).mockResolvedValue({
+      period: 'all',
+      total: 42,
+      rows_visible: false,
+      rows: [],
+      own_row: null,
+    });
+    renderTab('UTC', { membersPrivate: false });
+    expect(await screen.findByTestId('contributions-members-only')).toHaveTextContent(
+      'Only members of this organization can see the leaderboard.',
+    );
+    expect(screen.queryByTestId('contributions-members-private')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('contributions-empty')).not.toBeInTheDocument();
+  });
+
+  it('still shows the empty state when the visible leaderboard has no rows', async () => {
+    vi.mocked(getLeaderboard).mockResolvedValue({
+      period: 'all',
+      total: 0,
+      rows_visible: true,
+      rows: [],
+      own_row: null,
+    });
+    renderTab('UTC', { membersPrivate: false });
+    expect(await screen.findByTestId('contributions-empty')).toHaveTextContent(
+      'No contributions in this period',
+    );
   });
 
   it('highlights the viewer own row in the visible leaderboard', async () => {
@@ -85,7 +144,7 @@ describe('ContributionsTab leaderboard', () => {
     expect(screen.queryByTestId('contributions-members-private')).not.toBeInTheDocument();
   });
 
-  it('shows only the own row, highlighted, when members are private', async () => {
+  it('shows only the own row, highlighted, to a member of a private org', async () => {
     vi.mocked(getLeaderboard).mockResolvedValue({
       period: 'all',
       total: 30,
@@ -97,6 +156,9 @@ describe('ContributionsTab leaderboard', () => {
     const own = await screen.findByTestId('contributions-row-12');
     expect(own).toHaveAttribute('data-own', 'true');
     expect(own).toHaveTextContent('10');
+    expect(screen.getByTestId('contributions-members-private')).toHaveTextContent(
+      'Members are private in this organization, so only your own standing is shown.',
+    );
   });
 
   it('renders period labels without throwing for an invalid org timezone', async () => {

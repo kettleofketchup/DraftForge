@@ -605,6 +605,7 @@ export default function OrganizationDetailPage() {
               <ContributionsTab
                 orgId={pk}
                 timeZone={organization.timezone}
+                membersPrivate={organization.members_private ?? false}
                 access={featureAccess}
               />
             </TabsContent>

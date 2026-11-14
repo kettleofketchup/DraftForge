@@ -17,10 +17,11 @@ import { periodOptions } from './timezone';
 export interface ContributionsTabProps {
   orgId: number;
   timeZone: string | undefined;
+  membersPrivate: boolean;
   access: OrgFeatureAccess;
 }
 
-export function ContributionsTab({ orgId, timeZone, access }: ContributionsTabProps) {
+export function ContributionsTab({ orgId, timeZone, membersPrivate, access }: ContributionsTabProps) {
   const [period, setPeriod] = useState<string>(ALL_TIME);
   const [selected, setSelected] = useState<number | null>(null);
   const options = useMemo(() => periodOptions(timeZone), [timeZone]);
@@ -72,6 +73,7 @@ export function ContributionsTab({ orgId, timeZone, access }: ContributionsTabPr
           <Leaderboard
             data={data}
             viewerPk={access.viewerPk}
+            membersPrivate={membersPrivate}
             onSelectMember={(pk) => {
               if (canOpen(pk)) setSelected(pk);
             }}

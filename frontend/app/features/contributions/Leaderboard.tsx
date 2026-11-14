@@ -14,6 +14,7 @@ import type { LeaderboardResponse, LeaderboardRow } from './schemas';
 export interface LeaderboardProps {
   data: LeaderboardResponse;
   viewerPk: number | null;
+  membersPrivate: boolean;
   onSelectMember: (orgUserPk: number) => void;
 }
 
@@ -21,7 +22,43 @@ function displayName(row: LeaderboardRow): string {
   return row.nickname || row.username;
 }
 
-export function Leaderboard({ data, viewerPk, onSelectMember }: LeaderboardProps) {
+function HiddenRowsNote({
+  membersPrivate,
+  signedIn,
+  hasOwnRow,
+}: {
+  membersPrivate: boolean;
+  signedIn: boolean;
+  hasOwnRow: boolean;
+}) {
+  const className = 'flex items-center gap-2 text-sm text-muted-foreground';
+  if (membersPrivate) {
+    return (
+      <p className={className} data-testid="contributions-members-private">
+        <Lock className="h-4 w-4" />
+        {hasOwnRow
+          ? 'Members are private in this organization, so only your own standing is shown.'
+          : 'Members are private in this organization.'}
+      </p>
+    );
+  }
+  if (!signedIn) {
+    return (
+      <p className={className} data-testid="contributions-members-signin">
+        <Lock className="h-4 w-4" />
+        Sign in as a member to see the leaderboard.
+      </p>
+    );
+  }
+  return (
+    <p className={className} data-testid="contributions-members-only">
+      <Lock className="h-4 w-4" />
+      Only members of this organization can see the leaderboard.
+    </p>
+  );
+}
+
+export function Leaderboard({ data, viewerPk, membersPrivate, onSelectMember }: LeaderboardProps) {
   const rows = data.rows_visible ? data.rows : data.own_row ? [data.own_row] : [];
   const ownPk = data.own_row?.org_user_pk ?? null;
   const isOwn = (row: LeaderboardRow): boolean =>
@@ -38,19 +75,19 @@ export function Leaderboard({ data, viewerPk, onSelectMember }: LeaderboardProps
       </div>
 
       {!data.rows_visible && (
-        <p
-          className="flex items-center gap-2 text-sm text-muted-foreground"
-          data-testid="contributions-members-private"
-        >
-          <Lock className="h-4 w-4" />
-          Members are private in this organization, so only your own standing is shown.
-        </p>
+        <HiddenRowsNote
+          membersPrivate={membersPrivate}
+          signedIn={viewerPk != null}
+          hasOwnRow={data.own_row != null}
+        />
       )}
 
       {rows.length === 0 ? (
-        <div className="py-6 text-center text-muted-foreground" data-testid="contributions-empty">
-          No contributions in this period
-        </div>
+        data.rows_visible && (
+            <div className="py-6 text-center text-muted-foreground" data-testid="contributions-empty">
+            No contributions in this period
+          </div>
+        )
       ) : (
         <Table>
           <TableHeader>
