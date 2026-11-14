@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query';
 import React, { useState } from 'react';
 import { toast } from 'sonner';
 import { useShallow } from 'zustand/react/shallow';
@@ -21,6 +22,7 @@ export const TournamentRemoveButton: React.FC<PropsRemoveButton> = ({
   disabled,
 }) => {
   const [open, setOpen] = useState(false);
+  const queryClient = useQueryClient();
   const delTournamentStore = useUserStore(
     useShallow((state) => state.delTournament),
   );
@@ -37,6 +39,7 @@ export const TournamentRemoveButton: React.FC<PropsRemoveButton> = ({
       success: (data) => {
         log.debug('Tournament deleted successfully');
         delTournamentStore(tournament);
+        queryClient.invalidateQueries({ queryKey: ['tournaments'] });
         setOpen(false);
         return `${tournament.pk} has been deleted`;
       },
@@ -52,6 +55,7 @@ export const TournamentRemoveButton: React.FC<PropsRemoveButton> = ({
   return (
     <>
       <TrashIconButton
+        data-testid={`tournament-delete-${tournament.pk}`}
         size="sm"
         disabled={disabled}
         tooltip="Delete tournament"
