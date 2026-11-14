@@ -127,11 +127,11 @@ export const TeamTable: React.FC<TeamTableProps> = memo(
                       size="md"
                       className="hover:ring-2 hover:ring-primary transition-all"
                     />
-                    <span className={compact ? 'hidden' : 'hidden 3xl:inline'}>
+                    <span className={compact ? 'hidden' : 'hidden 2xl:inline'}>
                       {DisplayName(user)}
                     </span>
                     <span
-                      className={compact ? 'inline' : 'inline 3xl:hidden'}
+                      className={compact ? 'inline' : 'inline 2xl:hidden'}
                       title={DisplayName(user)}
                     >
                       {DisplayName(user, compact ? 6 : 12)}

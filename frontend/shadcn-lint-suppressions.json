@@ -157,17 +157,11 @@
   "app/components/team/teamCard.tsx": {
     "shadcn/no-raw-colors": {
       "count": 2
-    },
-    "shadcn/no-unknown-classes": {
-      "count": 3
     }
   },
   "app/components/team/teamTable/teamTable.tsx": {
     "shadcn/no-raw-colors": {
       "count": 1
-    },
-    "shadcn/no-unknown-classes": {
-      "count": 2
     }
   },
   "app/components/teamdraft/CompletedTeamDraftView.tsx": {
@@ -298,11 +292,6 @@
   "app/components/ui/base-handle.tsx": {
     "shadcn/no-raw-colors": {
       "count": 2
-    }
-  },
-  "app/components/ui/base-node.tsx": {
-    "shadcn/no-unknown-classes": {
-      "count": 1
     }
   },
   "app/components/ui/brand-select.tsx": {

@@ -57,7 +57,7 @@ export const BaseNodeHeaderTitle = forwardRef<
   <h3
     ref={ref}
     data-slot="base-node-title"
-    className={cn('user-select-none flex-1 font-semibold', className)}
+    className={cn('select-none flex-1 font-semibold', className)}
     {...props}
   />
 ));

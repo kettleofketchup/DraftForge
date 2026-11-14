@@ -90,8 +90,7 @@ export const TeamCard: React.FC<Props> = memo(
             hover:bg-base-200 shadow-hover focus:outline-2
             focus:outline-offset-2 focus:outline-primary
             active:bg-base-200
-            transition-all duration-300 ease-in-out
-            [content-visibility: auto] [contain-intrinsic-size: 400px 220px]"
+            transition-all duration-300 ease-in-out"
       >
         <motion.div
           initial={{ opacity: 0 }}
