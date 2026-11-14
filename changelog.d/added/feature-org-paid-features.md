@@ -8,7 +8,8 @@
 - Promotion dashboard: promoters pick an upcoming event, write or reuse a message
   template with placeholders such as `{player}`, `{event_time}` and `{event_link}`
   (rendered as Discord timestamps where relevant), preview it, and log sends to
-  past players, with undo. Each send earns promotion points.
+  past players, with undo. The first send to each player for an event earns
+  promotion points.
 - Events can have an end time, shown on the event page.
 - Org admins (owners and admins) can mark an event complete with a Complete button.
 - Org admins (owners and admins) can assign an event's host and helpers, who earn
