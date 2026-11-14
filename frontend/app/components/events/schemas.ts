@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { refineLobbyPassword } from '~/components/lobby/password';
 
 export const EventState = {
   UPCOMING: 'upcoming', SIGNUPS_OPEN: 'signups_open', ROLL_CALL: 'roll_call',
@@ -14,6 +15,15 @@ export const SignupStatus = {
 export const GameMode = {
   NORMAL: 'normal', CAPTAINS_MODE: 'captains_mode', TURBO: 'turbo', CUSTOM: 'custom',
 } as const;
+
+export const eventStaffUserSchema = z.object({
+  pk: z.number(),
+  username: z.string(),
+  nickname: z.string().nullable(),
+  avatarUrl: z.string().nullable(),
+});
+
+export type EventStaffUser = z.infer<typeof eventStaffUserSchema>;
 
 export const eventSchema = z.object({
   id: z.number(),
@@ -92,6 +102,11 @@ export const eventSchema = z.object({
   discord_send_lobby_info: z.boolean().default(false),
   dota_lobby_password_mode: z.enum(['random', 'fixed']).default('random'),
   user_can_manage: z.boolean().default(false),
+  ends_at: z.string().nullable().default(null),
+  host: eventStaffUserSchema.nullable().default(null),
+  helpers: z.array(eventStaffUserSchema).default([]),
+  contributions_awarded_at: z.string().nullable().default(null),
+  user_can_manage_event_staff: z.boolean().default(false),
   _warning: z.string().optional(),
 }).superRefine((val, ctx) => {
   // Single events have no subscriber list — discord_signup_reminder DMs
@@ -268,6 +283,49 @@ export function localToUTC(datetimeLocal: string, timezone: string): string {
   return new Date(utcGuess + (utcGuess - tzAsUtc)).toISOString();
 }
 
+/** Format a UTC instant as a datetime-local value in the given IANA timezone. */
+export function utcToLocalInput(iso: string | null | undefined, timezone: string): string {
+  if (!iso) return '';
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  let fmt: Intl.DateTimeFormat;
+  try {
+    fmt = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone || 'UTC',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+    });
+  } catch {
+    return utcToLocalInput(iso, 'UTC');
+  }
+  const parts = Object.fromEntries(fmt.formatToParts(date).map((p) => [p.type, p.value]));
+  return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`;
+}
+
+function naiveLocalToEpoch(value: string): number {
+  const [datePart, timePart] = value.split('T');
+  const [year, month, day] = datePart.split('-').map(Number);
+  const [hour, minute] = (timePart || '00:00').split(':').map(Number);
+  return Date.UTC(year, month - 1, day, hour, minute);
+}
+
+interface EventEndValues {
+  scheduled_at?: string;
+  event_ends_at?: string;
+}
+
+interface EventEndIssueContext {
+  addIssue: (issue: { code: 'custom'; path: string[]; message: string }) => void;
+}
+
+/** zod superRefine: an event end, when set, is strictly after its start (both in the event timezone). */
+export function refineEventEnd(values: EventEndValues, ctx: EventEndIssueContext): void {
+  if (!values.event_ends_at || !values.scheduled_at) return;
+  if (naiveLocalToEpoch(values.event_ends_at) <= naiveLocalToEpoch(values.scheduled_at)) {
+    ctx.addIssue({ code: 'custom', path: ['event_ends_at'], message: 'End must be after start' });
+  }
+}
+
 export const discordConfigSchema = z.object({
   discord_create_event: z.boolean(),
   discord_sync_signups: z.boolean(),
@@ -393,6 +451,7 @@ export const createEventInputSchema = z.object({
   starts_at: z.string().optional(),
   ends_at: z.string().optional(),
   generate_days_ahead: z.number().int().min(1),
+  event_ends_at: z.string().optional(),
 }).merge(discordConfigSchema).merge(dotaLobbyConfigSchema);
 
 export type CreateEventInput = z.infer<typeof createEventInputSchema>;
@@ -413,12 +472,37 @@ export const createSeriesEventInputSchema = createEventInputSchema
     signup_days_before: true,
     organization: true,
     discord_notify_new_events: true,
+    event_ends_at: true,
   })
   .extend({ open_signups: z.boolean().default(false) })
   .merge(discordConfigSchema)
   .merge(dotaLobbyConfigSchema);
 
 export type CreateSeriesEventInput = z.output<typeof createSeriesEventInputSchema>;
+
+export const editEventFormSchema = z.object({
+  name: z.string().min(1, 'Name is required'),
+  description: z.string(),
+  scheduled_at: z.string().min(1, 'Scheduled date is required'),
+  event_ends_at: z.string().optional(),
+  tournament_name: z.string().min(1, 'Tournament name is required'),
+  tournament_type: z.string(),
+  game_type: z.number(),
+  draft_type: z.string(),
+  game_mode: z.string(),
+  custom_game_name: z.string(),
+  captains_draft_time: z.number().int().min(1),
+  lobby_steam_league_id: z.number().nullable(),
+  people_per_team: z.number().int().min(1),
+  number_of_teams: z.number().int().min(2).nullable(),
+  timezone: z.string().min(1, 'Timezone is required'),
+  tournament_league: z.number().nullable(),
+}).merge(discordConfigSchema).merge(dotaLobbyConfigSchema).superRefine((values, ctx) => {
+  refineLobbyPassword(values, ctx);
+  refineEventEnd(values, ctx);
+});
+
+export type EditEventFormInput = z.infer<typeof editEventFormSchema>;
 
 export const discordEventMsgSchema = z.object({
   id: z.number(),

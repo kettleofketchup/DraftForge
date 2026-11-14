@@ -31,11 +31,13 @@ import { LobbyConfigSection } from './LobbyConfigSection';
 import { DotaLobbyEventSettings } from './DotaLobbyEventSettings';
 import { lobbyPasswordPayload, refineLobbyPassword } from '~/components/lobby/password';
 import { z } from 'zod';
-import { createEventInputSchema, GameMode, Frequency, FREQUENCY_LABELS, DAY_LABELS, DISCORD_CONFIG_DEFAULTS, DOTA_LOBBY_CONFIG_DEFAULTS, COMMON_TIMEZONES, localToUTC, type CreateEventInput } from './schemas';
+import { createEventInputSchema, GameMode, Frequency, FREQUENCY_LABELS, DAY_LABELS, DISCORD_CONFIG_DEFAULTS, DOTA_LOBBY_CONFIG_DEFAULTS, COMMON_TIMEZONES, localToUTC, refineEventEnd, type CreateEventInput } from './schemas';
 
-// The fixed lobby password must be valid. Refined here, not on the shared
-// schema, because createSeriesEventInputSchema .omit()s from it.
-const createEventFormSchema = createEventInputSchema.superRefine(refineLobbyPassword);
+// Refined here, not on the shared schema, because createSeriesEventInputSchema .omit()s from it.
+const createEventFormSchema = createEventInputSchema.superRefine((values, ctx) => {
+  refineLobbyPassword(values, ctx);
+  if (!values.is_recurring) refineEventEnd(values, ctx);
+});
 import { GAME_TYPE } from '~/components/game/constants';
 import { LeagueCombobox } from '~/components/league/LeagueCombobox';
 
@@ -79,6 +81,7 @@ export function CreateEventModal({
       name: '',
       description: '',
       scheduled_at: '',
+      event_ends_at: '',
       organization: organizationId,
       tournament_name: '',
       tournament_type: 'double_elimination',
@@ -108,6 +111,7 @@ export function CreateEventModal({
         name: '',
         description: '',
         scheduled_at: '',
+        event_ends_at: '',
         organization: organizationId,
         tournament_name: orgDefaults.tournament_name || '',
         tournament_league: orgDefaults.tournament_league ?? null,
@@ -175,7 +179,7 @@ export function CreateEventModal({
     if (isSubmitting) return;
     setIsSubmitting(true);
     try {
-      const { is_recurring, frequency, day_of_week, time_of_day, starts_at, ends_at, generate_days_ahead, scheduled_at: rawScheduledAt, discord_notify_new_events, signup_mode, signup_days_before, dota_lobby_password_mode, dota_lobby_password, dota_lobby_password_saved: _saved, ...rest } = data;
+      const { is_recurring, frequency, day_of_week, time_of_day, starts_at, ends_at, generate_days_ahead, scheduled_at: rawScheduledAt, event_ends_at: rawEndsAt, discord_notify_new_events, signup_mode, signup_days_before, dota_lobby_password_mode, dota_lobby_password, dota_lobby_password_saved: _saved, ...rest } = data;
       const shared = {
         ...rest,
         ...lobbyPasswordPayload({ game_type: data.game_type, dota_lobby_password_mode, dota_lobby_password }),
@@ -214,6 +218,7 @@ export function CreateEventModal({
           ...shared,
           tournament_league: shared.tournament_league ?? null,
           scheduled_at,
+          ends_at: rawEndsAt ? localToUTC(rawEndsAt, data.timezone) : null,
           discord_signup_reminder: false,
           ...(signupsOpenAt ? { signups_open_at: signupsOpenAt } : {}),
         }, signup_mode === 'immediate');
@@ -708,19 +713,34 @@ export function CreateEventModal({
             />
           </>
         ) : (
-          <FormField
-            control={form.control}
-            name="scheduled_at"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Scheduled Date & Time</FormLabel>
-                <FormControl>
-                  <Input data-testid="event-scheduled-input" type="datetime-local" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <FormField
+              control={form.control}
+              name="scheduled_at"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Scheduled Date & Time</FormLabel>
+                  <FormControl>
+                    <Input data-testid="event-scheduled-input" type="datetime-local" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="event_ends_at"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>End Date & Time (optional)</FormLabel>
+                  <FormControl>
+                    <Input data-testid="event-end-datetime-input" type="datetime-local" {...field} value={field.value ?? ''} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
         )}
 
         <FormField

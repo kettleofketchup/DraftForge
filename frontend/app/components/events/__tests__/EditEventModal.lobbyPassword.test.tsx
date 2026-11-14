@@ -120,6 +120,11 @@ const event: EventType = {
   discord_send_lobby_info: false,
   dota_lobby_password_mode: 'random',
   user_can_manage: true,
+  ends_at: null,
+  host: null,
+  helpers: [],
+  contributions_awarded_at: null,
+  user_can_manage_event_staff: false,
 };
 
 const fixedEvent: EventType = { ...event, dota_lobby_password_mode: 'fixed' };

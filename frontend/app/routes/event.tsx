@@ -364,6 +364,13 @@ export default function EventPage() {
     minute: '2-digit',
     timeZoneName: 'short',
   });
+  const endDate = event.ends_at ? new Date(event.ends_at) : null;
+  const endSameDay = endDate !== null && endDate.toDateString() === scheduledDate.toDateString();
+  const formattedEnd = endDate
+    ? endDate.toLocaleString(undefined, endSameDay
+      ? { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }
+      : { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })
+    : null;
 
   return (
     <div className="max-w-7xl mx-auto py-4 md:py-8 px-4 md:px-6 space-y-5 md:space-y-8">
@@ -380,6 +387,7 @@ export default function EventPage() {
               <Clock className="h-3 w-3" />
               <span className="sm:hidden">{shortDate}</span>
               <span className="hidden sm:inline">{formattedDate}</span>
+              {formattedEnd && <span data-testid="event-end-time">– {formattedEnd}</span>}
             </Badge>
           }
           className="lg:min-w-0 flex-1"

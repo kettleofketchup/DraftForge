@@ -27,45 +27,21 @@ import { ShieldCheck } from 'lucide-react';
 import { LeagueCombobox } from '~/components/league/LeagueCombobox';
 import { useUpdateEventMutation } from '~/hooks/useEvent';
 import { useEventLobbyPassword, useRegenerateEventLobbyPassword } from '~/hooks/useLobbyPassword';
-import { lobbyPasswordPayload, refineLobbyPassword } from '~/components/lobby/password';
+import { lobbyPasswordPayload } from '~/components/lobby/password';
 import { DotaLobbyEventSettings } from './DotaLobbyEventSettings';
 import { ApprovalConfigSection } from './ApprovalConfigSection';
 import { DiscordConfigSection, DiscordIcon } from './DiscordConfigSection';
 import { LobbyConfigSection } from './LobbyConfigSection';
-import { discordConfigSchema, dotaLobbyConfigSchema, GameMode, DISCORD_CONFIG_DEFAULTS, DOTA_LOBBY_CONFIG_DEFAULTS, COMMON_TIMEZONES, localToUTC } from './schemas';
-import type { EventType } from './schemas';
+import { editEventFormSchema, GameMode, DISCORD_CONFIG_DEFAULTS, DOTA_LOBBY_CONFIG_DEFAULTS, COMMON_TIMEZONES, localToUTC, utcToLocalInput } from './schemas';
+import type { EditEventFormInput, EventType } from './schemas';
 import { GAME_TYPE } from '~/components/game/constants';
 
-const editEventSchema = z.object({
-  name: z.string().min(1, 'Name is required'),
-  description: z.string(),
-  scheduled_at: z.string().min(1, 'Scheduled date is required'),
-  tournament_name: z.string().min(1, 'Tournament name is required'),
-  tournament_type: z.string(),
-  game_type: z.number(),
-  draft_type: z.string(),
-  game_mode: z.string(),
-  custom_game_name: z.string(),
-  captains_draft_time: z.number().int().min(1),
-  lobby_steam_league_id: z.number().nullable(),
-  people_per_team: z.number().int().min(1),
-  number_of_teams: z.number().int().min(2).nullable(),
-  timezone: z.string().min(1, 'Timezone is required'),
-  tournament_league: z.number().nullable(),
-}).merge(discordConfigSchema).merge(dotaLobbyConfigSchema).superRefine(refineLobbyPassword);
-
-type EditEventInput = z.infer<typeof editEventSchema>;
+type EditEventInput = EditEventFormInput;
 
 interface EditEventModalProps {
   event: EventType | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-}
-
-function toDatetimeLocal(iso: string): string {
-  const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 export function EditEventModal({ event, open, onOpenChange }: EditEventModalProps) {
@@ -77,12 +53,13 @@ export function EditEventModal({ event, open, onOpenChange }: EditEventModalProp
   // 3-generic useForm to align TFieldValues=z.input and TTransformedValues=z.output
   // — zodResolver returns Resolver<z.input<S>, _, z.output<S>> under zod 4.
   // See https://github.com/react-hook-form/resolvers/issues/792.
-  const form = useForm<z.input<typeof editEventSchema>, unknown, EditEventInput>({
-    resolver: zodResolver(editEventSchema),
+  const form = useForm<z.input<typeof editEventFormSchema>, unknown, EditEventInput>({
+    resolver: zodResolver(editEventFormSchema),
     defaultValues: {
       name: '',
       description: '',
       scheduled_at: '',
+      event_ends_at: '',
       tournament_name: '',
       tournament_type: 'double_elimination',
       game_type: 1,
@@ -106,7 +83,8 @@ export function EditEventModal({ event, open, onOpenChange }: EditEventModalProp
       form.reset({
         name: event.name,
         description: event.description,
-        scheduled_at: toDatetimeLocal(event.scheduled_at),
+        scheduled_at: utcToLocalInput(event.scheduled_at, event.timezone),
+        event_ends_at: utcToLocalInput(event.ends_at, event.timezone),
         timezone: event.timezone,
         tournament_name: event.tournament_name,
         tournament_type: event.tournament_type,
@@ -192,6 +170,7 @@ export function EditEventModal({ event, open, onOpenChange }: EditEventModalProp
         dota_lobby_password_mode,
         dota_lobby_password,
         dota_lobby_password_saved,
+        event_ends_at,
         ...rest
       } = data;
       const payload = {
@@ -203,6 +182,7 @@ export function EditEventModal({ event, open, onOpenChange }: EditEventModalProp
           dota_lobby_password_saved,
         }),
         scheduled_at: data.scheduled_at ? localToUTC(data.scheduled_at, data.timezone) : data.scheduled_at,
+        ends_at: event_ends_at ? localToUTC(event_ends_at, data.timezone) : null,
       };
       const result = await mutation.mutateAsync(payload);
       if (result._warning) {
@@ -281,6 +261,20 @@ export function EditEventModal({ event, open, onOpenChange }: EditEventModalProp
               <FormLabel>Scheduled Date & Time</FormLabel>
               <FormControl>
                 <Input type="datetime-local" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="event_ends_at"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>End Date & Time (optional)</FormLabel>
+              <FormControl>
+                <Input data-testid="event-end-datetime-input" type="datetime-local" {...field} value={field.value ?? ''} />
               </FormControl>
               <FormMessage />
             </FormItem>
