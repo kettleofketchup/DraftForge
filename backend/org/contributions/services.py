@@ -507,9 +507,11 @@ def repoint_user_attribution(drop: CustomUser, keep: CustomUser) -> int:
 def dedupe_event_staff(user: CustomUser) -> int:
     events = list(
         Event.objects.nocache()
-        .filter(host=user, helpers=user)
+        .select_for_update(of=("self",))
+        .filter(
+            pk__in=Event.objects.nocache().filter(host=user, helpers=user).values("pk")
+        )
         .select_related("organization")
-        .distinct()
     )
     synced = 0
     for event in events:
@@ -517,8 +519,9 @@ def dedupe_event_staff(user: CustomUser) -> int:
         if should_sync_staff(event):
             sync_event_staff_entries(event)
             synced += 1
-    if events:
-        invalidate_after_commit(*events)
+    if not events:
+        return 0
+    invalidate_after_commit(*events)
     log.info(
         "event_staff_deduped",
         system="org",

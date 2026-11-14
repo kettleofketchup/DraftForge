@@ -5,13 +5,14 @@ Handles org admin functionality including claim request management.
 """
 
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from app.cache_utils import invalidate_after_commit, invalidate_model
+from app.cache_utils import invalidate_after_commit
 from app.models import (
     CustomUser,
     DraftRound,
@@ -238,12 +239,21 @@ class ClaimRequestViewSet(viewsets.ModelViewSet):
                 org_user.user = claimer
                 org_user.save()
 
+        staffed = Event.objects.nocache().filter(
+            Q(host=target_user) | Q(helpers=target_user)
+        )
+        staffed_ids = set(staffed.values_list("pk", flat=True))
+        stale_events = list(Event.objects.nocache().filter(pk__in=staffed_ids))
         Event.objects.filter(host=target_user).update(host=claimer)
         for event in list(Event.objects.nocache().filter(helpers=target_user)):
             event.helpers.add(claimer)
             event.helpers.remove(target_user)
         dedupe_event_staff(claimer)
-        invalidate_model(Event)
+        if staffed_ids:
+            invalidate_after_commit(
+                *stale_events,
+                *Event.objects.nocache().filter(pk__in=staffed_ids),
+            )
 
         # LeagueUser memberships
         for league_user in LeagueUser.objects.filter(user=target_user):
