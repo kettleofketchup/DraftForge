@@ -20,7 +20,7 @@ from events.models import Event
 from org.contributions.kinds import ContributionKind
 from org.contributions.services import award_entry, sync_event_staff_entries
 from org.features import FeatureKey, set_org_feature
-from org.models import ContributionEntry, ContributionPointValue, PromoSend
+from org.models import ContributionEntry, ContributionPointValue, OrgUser, PromoSend
 from org.models_promotion import PromoTemplate
 from tests.data.models import TestLeague, TestOrganization, TestUser
 from tests.data.org_features import (
@@ -147,19 +147,34 @@ def _users() -> dict[int, CustomUser]:
 
 
 def _reset_roles(orgs: dict[int, Organization], users: dict[int, CustomUser]) -> None:
+    seeded = {o.pk: o for o in ORG_FEATURES_ORGS}
     for org_pk, owner, admins, staff, promoters in _ROLES:
         org = orgs[org_pk]
         org.owner = users[owner.pk]
+        org.name = seeded[org_pk].name
+        org.timezone = seeded[org_pk].timezone
         org.members_private = org_pk in ORG_FEATURES_PRIVATE_PKS
         org.discord_link = (
             FEATURES_ORG_DISCORD_LINK if org_pk == FEATURES_ORG.pk else ""
         )
-        org.save(update_fields=["owner", "members_private", "discord_link"])
+        org.save(
+            update_fields=[
+                "owner",
+                "name",
+                "timezone",
+                "members_private",
+                "discord_link",
+            ]
+        )
         org.admins.set([users[u.pk] for u in admins])
         org.staff.set([users[u.pk] for u in staff])
         org.promoters.set([users[u.pk] for u in promoters])
-        for member in ORG_FEATURES_MEMBERS[org_pk]:
-            ensure_org_user(users[member.pk], org)
+        member_pks = [m.pk for m in ORG_FEATURES_MEMBERS[org_pk]]
+        OrgUser.objects.nocache().filter(organization=org).exclude(
+            user_id__in=member_pks
+        ).delete()
+        for pk in member_pks:
+            ensure_org_user(users[pk], org)
 
 
 def _reset_switches(orgs: dict[int, Organization]) -> None:
@@ -214,6 +229,9 @@ def _rebuild() -> list[Organization]:
     PromoSend.objects.nocache().filter(organization__in=org_pks).delete()
     ContributionPointValue.objects.nocache().filter(organization__in=org_pks).delete()
     Event.objects.nocache().filter(organization__in=org_pks).delete()
+    Tournament.objects.nocache().filter(league__organization__in=org_pks).exclude(
+        pk__in=[pk for pk, _, _, _ in ORG_FEATURES_TOURNAMENTS]
+    ).delete()
     PromoTemplate.objects.nocache().filter(organization__in=org_pks).delete()
 
     _reset_roles(orgs, users)
@@ -244,7 +262,14 @@ def _rebuild() -> list[Organization]:
 def reset_org_features_data() -> dict[str, Any]:
     """Put the paid features data back to the seeded state; returns the lookup."""
     orgs = _rebuild()
-    for model in (Event, ContributionEntry, PromoSend, PromoTemplate):
+    for model in (
+        Event,
+        ContributionEntry,
+        PromoSend,
+        PromoTemplate,
+        OrgUser,
+        Tournament,
+    ):
         invalidate_model(model)
     for org in orgs:
         invalidate_obj(org)

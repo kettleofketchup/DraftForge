@@ -6,12 +6,21 @@ broken, would silently invalidate Playwright auth fixtures and event-staff
 permission specs.
 """
 
+from datetime import timedelta
+
 from django.contrib.sessions.backends.db import SessionStore
 from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIRequestFactory
 
-from app.models import CustomUser, Draft, DraftRound, League, Organization
+from app.models import (
+    CustomUser,
+    Draft,
+    DraftRound,
+    League,
+    Organization,
+    Tournament,
+)
 from events.constants import EventState
 from events.models import Event
 from org.contributions.kinds import ContributionKind
@@ -24,12 +33,14 @@ from org.promotion.services import record_promo_send
 from tests.data.leagues import EVENTS_LEAGUE
 from tests.data.org_delete import ORG_DELETE_ORG
 from tests.data.org_features import (
+    FEATURES_LEAGUE,
     FEATURES_ORG,
     LOCKED_FEATURES_ORG,
     ORG_FEATURES_COMPLETED_EVENT_NAME,
     ORG_FEATURES_PLAYERS,
     ORG_FEATURES_ROLE_USERS,
     ORG_FEATURES_TEMPLATE_NAMES,
+    ORG_FEATURES_TOURNAMENTS,
     ORG_FEATURES_UPCOMING_EVENT_NAME,
     PRIVATE_FEATURES_ORG,
 )
@@ -322,6 +333,15 @@ class OrgFeaturesPopulateTest(TestCase):
         set_org_feature(org, FeatureKey.PROMOTION, enabled=False, actor=admin)
         org.promoters.clear()
         PromoTemplate.objects.filter(organization=org).delete()
+        outsider = CustomUser.objects.get(pk=ORG_FEATURES_ROLE_USERS["outsider"].pk)
+        OrgUser.objects.create(user=outsider, organization=org)
+        stray = Tournament.objects.create(
+            name="Stray",
+            league_id=FEATURES_LEAGUE.pk,
+            date_played=timezone.now() - timedelta(days=1),
+            state="past",
+        )
+        Organization.objects.filter(pk=org.pk).update(timezone="Not/AZone", name="X")
 
         data = reset_org_features_data()
 
@@ -344,6 +364,17 @@ class OrgFeaturesPopulateTest(TestCase):
         self.assertEqual(
             ContributionEntry.objects.nocache().filter(organization=org).count(), 2
         )
+        self.assertFalse(
+            OrgUser.objects.nocache().filter(user=outsider, organization=org).exists()
+        )
+        self.assertFalse(Tournament.objects.nocache().filter(pk=stray.pk).exists())
+        self.assertEqual(
+            Tournament.objects.nocache().filter(league_id=FEATURES_LEAGUE.pk).count(),
+            len(ORG_FEATURES_TOURNAMENTS),
+        )
+        org = Organization.objects.nocache().get(pk=org.pk)
+        self.assertEqual(org.timezone, FEATURES_ORG.timezone)
+        self.assertEqual(org.name, FEATURES_ORG.name)
 
 
 class ForceRepopulateWithLedgerRowsTest(TestCase):

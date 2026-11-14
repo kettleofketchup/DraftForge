@@ -25,18 +25,13 @@ from org.models import ContributionEntry
 from tests.data.models import TestUser
 from tests.data.org_delete import (
     ORG_DELETE_ADMIN,
+    ORG_DELETE_LEDGER,
     ORG_DELETE_MEMBER,
     ORG_DELETE_ORG,
     ORG_DELETE_OWNER,
     ORG_DELETE_STAFF,
 )
 from tests.populate.utils import delete_ledger_for_users, ensure_org_user
-
-# (user, points) manual awards, so deleting the org covers a ledger.
-ORG_DELETE_LEDGER: list[tuple[TestUser, int]] = [
-    (ORG_DELETE_ADMIN, 5),
-    (ORG_DELETE_MEMBER, 2),
-]
 
 
 def _get_or_create_user(user_data: TestUser, force: bool) -> CustomUser:
