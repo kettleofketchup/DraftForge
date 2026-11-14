@@ -1585,7 +1585,7 @@ class BracketGameSerializer(serializers.ModelSerializer):
             return obj.herodraft.id
         return None
 
-    def get_lobby_state(self, obj):
+    def get_lobby_state(self, obj: Game) -> str | None:
         """State of the game's latest dota_lobby lobby, or None. No password.
 
         get_bracket prefetches the lobbies into `latest_lobbies`; other
