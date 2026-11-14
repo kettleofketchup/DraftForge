@@ -26,6 +26,7 @@ from org.models import (
     ContributionPointValue,
     OrgFeature,
     OrgUser,
+    PromoSend,
     PromoTemplate,
 )
 from telemetry.logging import get_logger
@@ -110,6 +111,7 @@ def award_entry(
     awarded_by: CustomUser | None = None,
     reason: str = "",
     points: int | None = None,
+    promo_send: PromoSend | None = None,
 ) -> ContributionEntry:
     kind = ContributionKind(kind).value
     _check_event(org, event)
@@ -126,6 +128,7 @@ def award_entry(
         reason=reason,
         awarded_by=awarded_by,
         occurred_at=occurred_at,
+        promo_send=promo_send,
     )
     log.info(
         "contribution_awarded",
@@ -138,6 +141,7 @@ def award_entry(
         points=points,
         event_id=event.pk if event is not None else None,
         awarded_by_id=awarded_by.pk if awarded_by is not None else None,
+        promo_send_id=promo_send.pk if promo_send is not None else None,
     )
     return entry
 
