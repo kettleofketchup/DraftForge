@@ -9,7 +9,7 @@ from django.conf import settings
 from app.models import CustomUser, Organization
 
 from .constants import DTX_ORG_NAME
-from .utils import create_user, generate_mock_discord_members
+from .utils import create_user, ensure_org_user, generate_mock_discord_members
 
 
 def populate_users(force: bool = False) -> None:
@@ -218,8 +218,6 @@ def populate_test_auth_users(force=False):
         # Plain member: has an OrgUser row but NOT in admins/staff. The
         # permission matrix needs this to distinguish "member, no role"
         # from "unaffiliated user".
-        from tests.populate.utils import ensure_org_user
-
         ensure_org_user(org_member, org)
         print(f"  Ensured {org_member.username} OrgUser of {org.name}")
 

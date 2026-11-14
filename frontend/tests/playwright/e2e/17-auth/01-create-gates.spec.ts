@@ -3,7 +3,7 @@
  *
  * Locks the per-role visibility contract for the create entry points
  * across every role in the project's hierarchy (siteAdmin > siteStaff >
- * orgOwner > orgAdmin > orgStaff > promoter > orgMember > leagueAdmin >
+ * orgOwner > orgAdmin > orgStaff > orgMember / promoter > leagueAdmin >
  * leagueStaff > anonymous) using ``roleMatrixTest`` — one Playwright test
  * per gate, fanning out to one BrowserContext per role via ``Promise.all``.
  * The promoter column matches orgMember: the role grants nothing outside

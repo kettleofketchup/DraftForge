@@ -693,14 +693,13 @@ def login_league_staff(request):
 @api_view(["POST"])
 @authentication_classes([])
 @permission_classes([AllowAny])
-def login_auth_matrix_org_owner(request):
+def login_auth_matrix_org_owner(request: Request) -> Response:
     """Owner FK only — NOT in Organization.admins, so the matrix can
     verify that the owner-implies-admin cascade fires independently."""
     if not isTestEnvironment(request):
         return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
 
     user, _ = createAuthMatrixOrgOwnerTestUser()
-    from app.models import Organization
 
     org = Organization.objects.filter(pk=AUTH_MATRIX_ORG_OWNER_USER.org_id).first()
     if org and org.owner != user:
@@ -715,12 +714,11 @@ def login_auth_matrix_org_owner(request):
 @api_view(["POST"])
 @authentication_classes([])
 @permission_classes([AllowAny])
-def login_auth_matrix_org_admin(request):
+def login_auth_matrix_org_admin(request: Request) -> Response:
     if not isTestEnvironment(request):
         return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
 
     user, _ = createAuthMatrixOrgAdminTestUser()
-    from app.models import Organization
 
     org = Organization.objects.filter(pk=AUTH_MATRIX_ORG_ADMIN_USER.org_id).first()
     if org and user not in org.admins.all():
@@ -734,12 +732,11 @@ def login_auth_matrix_org_admin(request):
 @api_view(["POST"])
 @authentication_classes([])
 @permission_classes([AllowAny])
-def login_auth_matrix_org_staff(request):
+def login_auth_matrix_org_staff(request: Request) -> Response:
     if not isTestEnvironment(request):
         return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
 
     user, _ = createAuthMatrixOrgStaffTestUser()
-    from app.models import Organization
 
     org = Organization.objects.filter(pk=AUTH_MATRIX_ORG_STAFF_USER.org_id).first()
     if org and user not in org.staff.all():
@@ -753,13 +750,11 @@ def login_auth_matrix_org_staff(request):
 @api_view(["POST"])
 @authentication_classes([])
 @permission_classes([AllowAny])
-def login_auth_matrix_org_member(request):
+def login_auth_matrix_org_member(request: Request) -> Response:
     if not isTestEnvironment(request):
         return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
 
     user, _ = createAuthMatrixOrgMemberTestUser()
-    from app.models import Organization
-    from tests.populate.utils import ensure_org_user
 
     org = Organization.objects.filter(pk=AUTH_MATRIX_ORG_MEMBER_USER.org_id).first()
     if org:

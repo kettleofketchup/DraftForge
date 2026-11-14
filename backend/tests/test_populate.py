@@ -508,9 +508,17 @@ class AuthMatrixPromoterTest(TestCase):
     def test_promoter_login_restores_membership(self) -> None:
         org = self._org()
         org.promoters.clear()
+        OrgUser.objects.filter(
+            user_id=AUTH_MATRIX_ORG_PROMOTER_USER.pk, organization=org
+        ).delete()
         request = APIRequestFactory().post("/api/tests/login-auth-matrix-org-promoter/")
         request.session = SessionStore()
         self.assertEqual(login_auth_matrix_org_promoter(request).status_code, 200)
         self.assertTrue(
             org.promoters.filter(pk=AUTH_MATRIX_ORG_PROMOTER_USER.pk).exists()
+        )
+        self.assertTrue(
+            OrgUser.objects.filter(
+                user_id=AUTH_MATRIX_ORG_PROMOTER_USER.pk, organization=org
+            ).exists()
         )
