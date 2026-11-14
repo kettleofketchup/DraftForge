@@ -1,4 +1,10 @@
 import { Settings } from 'lucide-react';
+import { DiscordIcon } from '~/components/events/DiscordConfigSection';
+import { TournamentEditForm } from '~/components/tournament/create/editForm';
+import type {
+  TournamentClassType,
+  TournamentType,
+} from '~/components/tournament/types';
 import {
   Dialog,
   DialogContent,
@@ -6,19 +12,21 @@ import {
   DialogTitle,
 } from '~/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
-import type { TournamentClassType } from '~/components/tournament/types';
-import { TournamentEditForm } from '~/components/tournament/create/editForm';
 import { DiscordActivityLog } from './DiscordActivityLog';
-import { DiscordIcon } from '~/components/events/DiscordConfigSection';
-import type { TournamentType } from '~/components/tournament/types';
 
 interface Props {
   tournament: TournamentType;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  canEdit: boolean;
 }
 
-export function TournamentSettingsModal({ tournament, open, onOpenChange }: Props) {
+export function TournamentSettingsModal({
+  tournament,
+  open,
+  onOpenChange,
+  canEdit,
+}: Props) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-screen max-w-none sm:max-w-none h-screen max-h-none rounded-none border-0 overflow-hidden flex flex-col">
@@ -26,7 +34,10 @@ export function TournamentSettingsModal({ tournament, open, onOpenChange }: Prop
           <DialogTitle>Tournament Settings — {tournament.name}</DialogTitle>
         </DialogHeader>
 
-        <Tabs defaultValue="settings" className="flex-1 overflow-hidden flex flex-col">
+        <Tabs
+          defaultValue="settings"
+          className="flex-1 overflow-hidden flex flex-col"
+        >
           <TabsList className="w-full">
             <TabsTrigger value="settings" className="flex-1">
               <Settings className="h-4 w-4 mr-2" />
@@ -42,11 +53,14 @@ export function TournamentSettingsModal({ tournament, open, onOpenChange }: Prop
             <TournamentEditForm
               tourn={tournament as TournamentClassType}
               onSuccess={() => onOpenChange(false)}
+              canEdit={canEdit}
             />
           </TabsContent>
 
           <TabsContent value="discord" className="flex-1 overflow-auto mt-4">
-            {tournament.pk && <DiscordActivityLog tournamentId={tournament.pk} />}
+            {tournament.pk && (
+              <DiscordActivityLog tournamentId={tournament.pk} />
+            )}
           </TabsContent>
         </Tabs>
       </DialogContent>

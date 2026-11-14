@@ -4,7 +4,11 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from app.models import League
-from app.permissions_org import can_view_org_members
+from app.permissions_org import (
+    can_view_org_members,
+    check_lobby_steam_league_id,
+    request_user,
+)
 from events.models import (
     Event,
     EventRepeater,
@@ -40,6 +44,28 @@ def _valid_fixed_password(value: str) -> str:
         return validate_password(value)
     except DjangoValidationError as exc:
         raise serializers.ValidationError({"dota_lobby_password": exc.messages})
+
+
+DRAFT_TIME_KWARGS = {"min_value": 1}
+
+
+class LobbySteamLeagueMixin:
+    """Gate a changed lobby_steam_league_id; ``source`` holds the current or
+    inherited values (instance, or the series for a one-off)."""
+
+    def check_lobby_steam_league(
+        self, data: dict, source: Event | EventRepeater | OrgEventDefaults | None
+    ) -> None:
+        if "lobby_steam_league_id" not in data:
+            return
+        value = data["lobby_steam_league_id"]
+        if source is not None and value == source.lobby_steam_league_id:
+            return
+        check_lobby_steam_league_id(
+            request_user(self.context),
+            value,
+            data.get("tournament_league", getattr(source, "tournament_league", None)),
+        )
 
 
 class TournamentLeagueOrgMixin:
@@ -90,7 +116,9 @@ class EventRepeaterSlimSerializer(serializers.ModelSerializer):
         ]
 
 
-class EventRepeaterSerializer(TournamentLeagueOrgMixin, serializers.ModelSerializer):
+class EventRepeaterSerializer(
+    LobbySteamLeagueMixin, TournamentLeagueOrgMixin, serializers.ModelSerializer
+):
     organization_name = serializers.CharField(
         source="organization.name", read_only=True
     )
@@ -194,7 +222,10 @@ class EventRepeaterSerializer(TournamentLeagueOrgMixin, serializers.ModelSeriali
             "is_subscribed",
             "next_event_date",
         ]
-        extra_kwargs = {"dota_lobby_password": LOBBY_PASSWORD_FIELD_KWARGS}
+        extra_kwargs = {
+            "dota_lobby_password": LOBBY_PASSWORD_FIELD_KWARGS,
+            "captains_draft_time": DRAFT_TIME_KWARGS,
+        }
 
     def validate_description(self, value):
         return nh3.clean(value) if value else value
@@ -210,6 +241,7 @@ class EventRepeaterSerializer(TournamentLeagueOrgMixin, serializers.ModelSeriali
             raise serializers.ValidationError(
                 {"game_mode": f"{game_mode} is only available for Dota 2."}
             )
+        self.check_lobby_steam_league(data, self.instance)
         # Fixed: the series stores the password. Random: it stores none,
         # each event generates its own.
         mode = data.get(
@@ -275,7 +307,9 @@ class EventSlimSerializer(serializers.ModelSerializer):
         ]
 
 
-class EventSerializer(TournamentLeagueOrgMixin, serializers.ModelSerializer):
+class EventSerializer(
+    LobbySteamLeagueMixin, TournamentLeagueOrgMixin, serializers.ModelSerializer
+):
     organization_name = serializers.CharField(
         source="organization.name", read_only=True
     )
@@ -384,7 +418,10 @@ class EventSerializer(TournamentLeagueOrgMixin, serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
-        extra_kwargs = {"dota_lobby_password": LOBBY_PASSWORD_FIELD_KWARGS}
+        extra_kwargs = {
+            "dota_lobby_password": LOBBY_PASSWORD_FIELD_KWARGS,
+            "captains_draft_time": DRAFT_TIME_KWARGS,
+        }
 
     def validate_description(self, value):
         return nh3.clean(value) if value else value
@@ -400,6 +437,7 @@ class EventSerializer(TournamentLeagueOrgMixin, serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"game_mode": f"{game_mode} is only available for Dota 2."}
             )
+        self.check_lobby_steam_league(data, self.instance)
 
         # Single events have no subscriber list — discord_signup_reminder DMs
         # subscribed users, which is a series-level concept on EventRepeater.
@@ -665,7 +703,9 @@ class EventSignupSerializer(serializers.ModelSerializer):
         return obj._mmr_suggestion_cache
 
 
-class OrgEventDefaultsSerializer(TournamentLeagueOrgMixin, serializers.ModelSerializer):
+class OrgEventDefaultsSerializer(
+    LobbySteamLeagueMixin, TournamentLeagueOrgMixin, serializers.ModelSerializer
+):
     class Meta:
         model = OrgEventDefaults
         fields = [
@@ -729,6 +769,11 @@ class OrgEventDefaultsSerializer(TournamentLeagueOrgMixin, serializers.ModelSeri
             "discord_send_herodraft_link",
         ]
         read_only_fields = ["id", "organization"]
+        extra_kwargs = {"captains_draft_time": DRAFT_TIME_KWARGS}
+
+    def validate(self, data: dict) -> dict:
+        self.check_lobby_steam_league(data, self.instance)
+        return data
 
 
 class RepeaterSubscriptionSerializer(serializers.ModelSerializer):
@@ -753,7 +798,7 @@ ONE_OFF_OVERRIDE_FIELDS = (
 )
 
 
-class OneOffEventCreateSerializer(serializers.ModelSerializer):
+class OneOffEventCreateSerializer(LobbySteamLeagueMixin, serializers.ModelSerializer):
     """Validates the body of POST /events/repeaters/<pk>/create-event/.
 
     Every config key is optional: an absent key means "inherit from the series",
@@ -772,6 +817,7 @@ class OneOffEventCreateSerializer(serializers.ModelSerializer):
         extra_kwargs = {
             **{name: {"required": False} for name in ONE_OFF_OVERRIDE_FIELDS},
             "dota_lobby_password": LOBBY_PASSWORD_FIELD_KWARGS,
+            "captains_draft_time": {"required": False, **DRAFT_TIME_KWARGS},
         }
 
     def validate_scheduled_at(self, value):
@@ -802,6 +848,7 @@ class OneOffEventCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"game_mode": f"'{game_mode}' is only valid for Dota 2 events."}
             )
+        self.check_lobby_steam_league(data, repeater)
         # The effective mode decides: fixed needs a password (typed here or
         # the series' fixed one); random generates one, so any typed
         # password is dropped.

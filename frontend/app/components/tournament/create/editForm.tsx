@@ -3,12 +3,14 @@ import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { format, parseISO } from 'date-fns';
 import { CalendarIcon, Globe } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, type FieldErrors } from 'react-hook-form';
 import { useLocation } from 'react-router';
 import { toast } from 'sonner';
 
 import { createTournament, updateTournament } from '~/components/api/api';
+import { LobbyConfigSection } from '~/components/events/LobbyConfigSection';
 import type { LeagueType } from '~/components/league/schemas';
+import { SCROLLAREA_CSS } from '~/components/reusable/modal';
 import { Button } from '~/components/ui/button';
 import { CancelButton, SubmitButton } from '~/components/ui/buttons';
 import { Calendar } from '~/components/ui/calendar';
@@ -37,6 +39,12 @@ import {
   SelectValue,
 } from '~/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
+import { extractApiError } from '~/lib/apiError';
+import { getLogger } from '~/lib/logger';
+import {
+  canCreateTournament,
+  leagueOptionsFor,
+} from '~/lib/tournamentPermissions';
 import { cn } from '~/lib/utils';
 import { useUserStore } from '~/store/userStore';
 import {
@@ -46,11 +54,10 @@ import {
   type TournamentTypeValue,
 } from '../schemas';
 import type { TournamentClassType, TournamentType } from '../types';
-import { TournamentConfigSection } from './TournamentConfigSection';
 import { DiscordTournamentConfigSection } from './DiscordTournamentConfigSection';
 import { DotaLobbyConfigSection } from './DotaLobbyConfigSection';
-import { getLogger } from '~/lib/logger';
-import { SCROLLAREA_CSS } from '~/components/reusable/modal';
+import { fieldErrorsFrom, tabForField, type FormTab } from './formErrors';
+import { TournamentConfigSection } from './TournamentConfigSection';
 
 const log = getLogger('TournamentEditForm');
 
@@ -61,7 +68,10 @@ function formatTimezoneLabel(tz: string): string {
 }
 
 // Helper to extract date and time from ISO string
-function extractDateAndTime(isoString: string | null | undefined): { date: string; time: string } {
+function extractDateAndTime(isoString: string | null | undefined): {
+  date: string;
+  time: string;
+} {
   if (!isoString) {
     const now = new Date();
     return {
@@ -118,11 +128,15 @@ export function refreshAfterSave({
 interface Props {
   tourn: TournamentClassType;
   onSuccess?: () => void;
+  canEdit?: boolean;
 }
+
+type LeagueOption = LeagueType & { organization?: { pk: number } | null };
 
 export const TournamentEditForm: React.FC<Props> = ({
   tourn,
   onSuccess,
+  canEdit,
 }) => {
   const queryClient = useQueryClient();
   const { pathname } = useLocation();
@@ -130,9 +144,11 @@ export const TournamentEditForm: React.FC<Props> = ({
   const getTournaments = useUserStore((state) => state.getTournaments);
   const leagues = useUserStore((state) => state.leagues);
   const getLeagues = useUserStore((state) => state.getLeagues);
+  const leaguesOrgId = useUserStore((state) => state.leaguesOrgId);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [calendarOpen, setCalendarOpen] = useState(false);
+  const [tab, setTab] = useState<FormTab>('general');
 
   const isEditing = !!tourn?.pk;
   const sourceEvent = tourn?.source_event
@@ -144,12 +160,9 @@ export const TournamentEditForm: React.FC<Props> = ({
   const [selectedDate, setSelectedDate] = useState(initialDateTime.date);
   const [selectedTime, setSelectedTime] = useState(initialDateTime.time);
 
-  // Fetch leagues if not loaded
   useEffect(() => {
-    if (!leagues || leagues.length === 0) {
-      getLeagues();
-    }
-  }, [leagues, getLeagues]);
+    if (leaguesOrgId !== 'all') getLeagues();
+  }, [leaguesOrgId, getLeagues]);
 
   // tourn.league may be a number (id) or an embedded { pk, name, ... } —
   // the form field expects a numeric league id (or null).
@@ -163,12 +176,20 @@ export const TournamentEditForm: React.FC<Props> = ({
     // the schema uses z.coerce, so RHF's inferred Resolver doesn't unify
     // with our explicit CreateTournamentInput. Same workaround as in
     // editUser/editModal.tsx — the runtime resolver is correct.
-    resolver: zodResolver(CreateTournamentSchema) as unknown as import('react-hook-form').Resolver<CreateTournamentInput>,
+    resolver: zodResolver(
+      CreateTournamentSchema,
+    ) as unknown as import('react-hook-form').Resolver<CreateTournamentInput>,
     defaultValues: {
       name: tourn?.name || '',
-      tournament_type: (tourn?.tournament_type as TournamentTypeValue) || 'double_elimination',
-      date_played: combineDateAndTime(initialDateTime.date, initialDateTime.time),
-      timezone: (tourn as unknown as { timezone?: string })?.timezone || 'America/New_York',
+      tournament_type:
+        (tourn?.tournament_type as TournamentTypeValue) || 'double_elimination',
+      date_played: combineDateAndTime(
+        initialDateTime.date,
+        initialDateTime.time,
+      ),
+      timezone:
+        (tourn as unknown as { timezone?: string })?.timezone ||
+        'America/New_York',
       league: leagueDefault,
       auto_create_hero_drafts: tourn?.auto_create_hero_drafts ?? false,
       discord_send_draft_link: tourn?.discord_send_draft_link ?? false,
@@ -177,16 +198,39 @@ export const TournamentEditForm: React.FC<Props> = ({
       dota_lobby_launch: tourn?.dota_lobby_launch ?? 'manual',
       dota_lobby_region: tourn?.dota_lobby_region ?? '',
       discord_send_lobby_info: tourn?.discord_send_lobby_info ?? false,
+      game_type: tourn?.game_type ?? 1,
+      game_mode: tourn?.game_mode ?? 'normal',
+      lobby_steam_league_id: tourn?.lobby_steam_league_id ?? null,
+      captains_draft_time: tourn?.captains_draft_time ?? 10,
+      custom_game_name: tourn?.custom_game_name ?? '',
     },
   });
 
   // Update date_played when date or time changes
   useEffect(() => {
-    form.setValue('date_played', combineDateAndTime(selectedDate, selectedTime));
+    form.setValue(
+      'date_played',
+      combineDateAndTime(selectedDate, selectedTime),
+    );
   }, [selectedDate, selectedTime, form]);
 
-  // Permission check
-  if (!currentUser?.is_staff && !currentUser?.is_superuser) {
+  const currentLeague: LeagueOption | null =
+    typeof tourn?.league === 'object' && tourn.league !== null
+      ? (tourn.league as LeagueOption)
+      : ((leagues as LeagueOption[] | undefined)?.find(
+          (l) => l.pk === leagueDefault,
+        ) ?? null);
+  const {
+    options: leagueOptions,
+    allowNone,
+    locked: leagueLocked,
+  } = leagueOptionsFor(currentUser, (leagues ?? []) as LeagueOption[], {
+    currentLeague,
+    eventOrgPk: tourn?.source_event?.organization_id ?? null,
+  });
+
+  const allowed = isEditing ? !!canEdit : canCreateTournament(currentUser);
+  if (!allowed) {
     return (
       <div className="text-destructive p-4">
         You do not have permission to edit tournaments.
@@ -199,7 +243,10 @@ export const TournamentEditForm: React.FC<Props> = ({
     setIsSubmitting(true);
 
     try {
-      const payload: Partial<TournamentType> & { timezone?: string; league_id_write?: number | null } = {
+      const payload: Partial<TournamentType> & {
+        timezone?: string;
+        league_id_write?: number | null;
+      } = {
         name: data.name,
         tournament_type: data.tournament_type,
         date_played: data.date_played,
@@ -208,15 +255,16 @@ export const TournamentEditForm: React.FC<Props> = ({
         auto_create_hero_drafts: data.auto_create_hero_drafts,
         discord_send_draft_link: data.discord_send_draft_link,
         discord_send_herodraft_link: data.discord_send_herodraft_link,
-        // A tournament created from an event takes these from the event.
-        ...(sourceEvent
-          ? {}
-          : {
-              dota_lobby_mode: data.dota_lobby_mode,
-              dota_lobby_launch: data.dota_lobby_launch,
-              dota_lobby_region: data.dota_lobby_region.trim(),
-              discord_send_lobby_info: data.discord_send_lobby_info,
-            }),
+        game_mode: data.game_mode,
+        lobby_steam_league_id: data.lobby_steam_league_id,
+        ...(data.game_mode === 'captains_mode' && {
+          captains_draft_time: data.captains_draft_time,
+        }),
+        custom_game_name: data.custom_game_name,
+        dota_lobby_mode: data.dota_lobby_mode,
+        dota_lobby_launch: data.dota_lobby_launch,
+        dota_lobby_region: data.dota_lobby_region.trim(),
+        discord_send_lobby_info: data.discord_send_lobby_info,
       };
 
       if (isEditing) {
@@ -236,29 +284,72 @@ export const TournamentEditForm: React.FC<Props> = ({
       onSuccess?.();
       form.reset();
     } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
       log.error('Failed to save tournament:', err);
-      toast.error(isEditing ? 'Failed to update tournament' : 'Failed to create tournament', {
-        description: errorMessage,
-      });
+      const title = isEditing
+        ? 'Failed to update tournament'
+        : 'Failed to create tournament';
+      const fieldErrors = fieldErrorsFrom(
+        (err as { response?: { data?: unknown } })?.response?.data,
+      );
+      if (fieldErrors.length > 0) {
+        fieldErrors.forEach(({ field, message }) =>
+          form.setError(field, { message }),
+        );
+        setTab(tabForField(fieldErrors[0].field));
+        toast.error(title, { description: fieldErrors[0].message });
+      } else {
+        const errorMessage =
+          err instanceof Error ? err.message : 'Unknown error';
+        toast.error(title, {
+          description: extractApiError(err) ?? errorMessage,
+        });
+      }
     } finally {
       setIsSubmitting(false);
     }
+  }
+
+  function onInvalid(errors: FieldErrors<CreateTournamentInput>) {
+    const [key, error] = Object.entries(errors)[0] ?? [];
+    if (!key) return;
+    setTab(tabForField(key));
+    toast.error('Please fix the highlighted fields', {
+      description:
+        typeof error?.message === 'string' ? error.message : undefined,
+    });
   }
 
   return (
     <ScrollArea className={SCROLLAREA_CSS}>
       <Form {...form}>
         <form
-          onSubmit={form.handleSubmit(onSubmit)}
+          onSubmit={form.handleSubmit(onSubmit, onInvalid)}
           className="flex flex-col gap-4 p-1"
           data-testid="tournament-form"
         >
-          <Tabs defaultValue="general">
+          <Tabs value={tab} onValueChange={(v) => setTab(v as FormTab)}>
             <TabsList className="w-full">
-              <TabsTrigger value="general" className="flex-1">General</TabsTrigger>
-              <TabsTrigger value="config" className="flex-1">Config</TabsTrigger>
-              <TabsTrigger value="discord" className="flex-1">Discord</TabsTrigger>
+              <TabsTrigger
+                value="general"
+                className="flex-1"
+                data-testid="tournament-form-tab-general"
+              >
+                General
+              </TabsTrigger>
+              <TabsTrigger
+                value="config"
+                className="flex-1"
+                data-testid="tournament-form-tab-config"
+              >
+                Config
+              </TabsTrigger>
+              <TabsTrigger
+                value="discord"
+                className="flex-1"
+                data-testid="tournament-form-tab-discord"
+              >
+                Discord
+              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="general" className="space-y-4 mt-4">
@@ -332,14 +423,18 @@ export const TournamentEditForm: React.FC<Props> = ({
                     <FormLabel>Tournament Date & Time</FormLabel>
                     <div className="flex flex-wrap gap-2">
                       {/* Date Picker */}
-                      <Popover open={calendarOpen} onOpenChange={setCalendarOpen} modal={true}>
+                      <Popover
+                        open={calendarOpen}
+                        onOpenChange={setCalendarOpen}
+                        modal={true}
+                      >
                         <PopoverTrigger asChild>
                           <FormControl>
                             <Button
                               variant="outline"
                               className={cn(
                                 'pl-3 text-left font-normal',
-                                !selectedDate && 'text-muted-foreground'
+                                !selectedDate && 'text-muted-foreground',
                               )}
                               data-testid="tournament-date-picker"
                             >
@@ -355,7 +450,9 @@ export const TournamentEditForm: React.FC<Props> = ({
                         <PopoverContent className="w-auto p-0" align="start">
                           <Calendar
                             mode="single"
-                            selected={selectedDate ? localDate(selectedDate) : undefined}
+                            selected={
+                              selectedDate ? localDate(selectedDate) : undefined
+                            }
                             onSelect={(date) => {
                               if (date) {
                                 setSelectedDate(format(date, 'yyyy-MM-dd'));
@@ -391,10 +488,7 @@ export const TournamentEditForm: React.FC<Props> = ({
                       <Globe className="h-4 w-4" />
                       Timezone
                     </FormLabel>
-                    <Select
-                      onValueChange={field.onChange}
-                      value={field.value}
-                    >
+                    <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger data-testid="tournament-timezone-select">
                           <SelectValue placeholder="Select timezone" />
@@ -407,7 +501,9 @@ export const TournamentEditForm: React.FC<Props> = ({
                             value={tz}
                             data-testid={`tournament-timezone-${tz}`}
                           >
-                            {tz === 'UTC' ? 'UTC' : `${formatTimezoneLabel(tz)} (${tz})`}
+                            {tz === 'UTC'
+                              ? 'UTC'
+                              : `${formatTimezoneLabel(tz)} (${tz})`}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -429,16 +525,20 @@ export const TournamentEditForm: React.FC<Props> = ({
                     <FormLabel>League (Optional)</FormLabel>
                     <Select
                       onValueChange={(value) => {
-                        const leagueId = value === 'none' ? null : parseInt(value, 10);
+                        const leagueId =
+                          value === 'none' ? null : parseInt(value, 10);
                         field.onChange(leagueId);
-                        if (leagueId && leagues) {
-                          const selectedLeague = leagues.find((l: LeagueType) => l.pk === leagueId);
+                        if (leagueId) {
+                          const selectedLeague = leagueOptions.find(
+                            (l) => l.pk === leagueId,
+                          );
                           if (selectedLeague?.timezone) {
                             form.setValue('timezone', selectedLeague.timezone);
                           }
                         }
                       }}
                       value={field.value?.toString() || 'none'}
+                      disabled={leagueLocked}
                     >
                       <FormControl>
                         <SelectTrigger data-testid="tournament-league-select">
@@ -446,10 +546,15 @@ export const TournamentEditForm: React.FC<Props> = ({
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="none" data-testid="tournament-league-none">
-                          No League
-                        </SelectItem>
-                        {leagues?.map((league: LeagueType) => (
+                        {allowNone && (
+                          <SelectItem
+                            value="none"
+                            data-testid="tournament-league-none"
+                          >
+                            No League
+                          </SelectItem>
+                        )}
+                        {leagueOptions.map((league) => (
                           <SelectItem
                             key={league.pk}
                             value={league.pk?.toString() || ''}
@@ -472,15 +577,16 @@ export const TournamentEditForm: React.FC<Props> = ({
             </TabsContent>
 
             <TabsContent value="config" className="mt-4">
+              <LobbyConfigSection control={form.control} watch={form.watch} />
               <TournamentConfigSection control={form.control} />
-              <DotaLobbyConfigSection control={form.control} sourceEvent={sourceEvent} />
+              <DotaLobbyConfigSection
+                control={form.control}
+                sourceEvent={sourceEvent}
+              />
             </TabsContent>
 
             <TabsContent value="discord" className="mt-4">
-              <DiscordTournamentConfigSection
-                control={form.control}
-                lobbyInfoFromEvent={sourceEvent != null}
-              />
+              <DiscordTournamentConfigSection control={form.control} />
             </TabsContent>
           </Tabs>
 
