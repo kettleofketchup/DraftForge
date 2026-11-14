@@ -36,8 +36,6 @@ import { editEventFormSchema, GameMode, DISCORD_CONFIG_DEFAULTS, DOTA_LOBBY_CONF
 import type { EditEventFormInput, EventType } from './schemas';
 import { GAME_TYPE } from '~/components/game/constants';
 
-type EditEventInput = EditEventFormInput;
-
 interface EditEventModalProps {
   event: EventType | null;
   open: boolean;
@@ -53,7 +51,7 @@ export function EditEventModal({ event, open, onOpenChange }: EditEventModalProp
   // 3-generic useForm to align TFieldValues=z.input and TTransformedValues=z.output
   // — zodResolver returns Resolver<z.input<S>, _, z.output<S>> under zod 4.
   // See https://github.com/react-hook-form/resolvers/issues/792.
-  const form = useForm<z.input<typeof editEventFormSchema>, unknown, EditEventInput>({
+  const form = useForm<z.input<typeof editEventFormSchema>, unknown, EditEventFormInput>({
     resolver: zodResolver(editEventFormSchema),
     defaultValues: {
       name: '',
@@ -161,7 +159,7 @@ export function EditEventModal({ event, open, onOpenChange }: EditEventModalProp
     }
   }
 
-  async function onSubmit(data: EditEventInput) {
+  async function onSubmit(data: EditEventFormInput) {
     if (isSubmitting || !event) return;
     setIsSubmitting(true);
     try {
@@ -260,7 +258,7 @@ export function EditEventModal({ event, open, onOpenChange }: EditEventModalProp
             <FormItem>
               <FormLabel>Scheduled Date & Time</FormLabel>
               <FormControl>
-                <Input type="datetime-local" {...field} />
+                <Input data-testid="event-scheduled-input" type="datetime-local" {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>

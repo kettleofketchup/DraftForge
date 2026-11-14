@@ -387,7 +387,11 @@ export default function EventPage() {
               <Clock className="h-3 w-3" />
               <span className="sm:hidden">{shortDate}</span>
               <span className="hidden sm:inline">{formattedDate}</span>
-              {formattedEnd && <span data-testid="event-end-time">– {formattedEnd}</span>}
+              {formattedEnd && (
+                <span data-testid="event-end-time" className={endSameDay ? undefined : 'hidden sm:inline'}>
+                  – {formattedEnd}
+                </span>
+              )}
             </Badge>
           }
           className="lg:min-w-0 flex-1"

@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+process.env.TZ = 'Europe/Berlin';
+
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { I18nextProvider } from 'react-i18next';
@@ -199,5 +201,41 @@ describe('EditEventModal lobby password', () => {
     unmount();
     renderModal({ ...fixedEvent, event_repeater: 3, is_off_schedule: true });
     expect(screen.queryByTestId('lobby-password-from-series')).not.toBeInTheDocument();
+  });
+});
+
+describe('EditEventModal end time', () => {
+  const timed: EventType = {
+    ...event,
+    scheduled_at: '2026-11-15T01:00:00Z',
+    ends_at: '2026-11-15T03:00:00Z',
+  };
+
+  beforeEach(() => {
+    mutateAsync.mockClear();
+  });
+
+  it('runs under a non-UTC browser zone', () => {
+    expect(new Date('2026-11-14T12:00:00Z').getTimezoneOffset()).toBe(-60);
+  });
+
+  it('prefills start and end in the event timezone and sends ends_at as UTC', async () => {
+    renderModal(timed);
+    await waitFor(() => expect(screen.getByTestId('event-scheduled-input')).toHaveValue('2026-11-14T20:00'));
+    expect(screen.getByTestId('event-end-datetime-input')).toHaveValue('2026-11-14T22:00');
+    expect(await submittedBody()).toMatchObject({
+      scheduled_at: '2026-11-15T01:00:00.000Z',
+      ends_at: '2026-11-15T03:00:00.000Z',
+    });
+  });
+
+  it('sends ends_at null once the end is cleared', async () => {
+    renderModal(timed);
+    const end = screen.getByTestId('event-end-datetime-input');
+    await waitFor(() => expect(end).toHaveValue('2026-11-14T22:00'));
+    fireEvent.change(end, { target: { value: '' } });
+    const body = await submittedBody();
+    expect(body.ends_at).toBeNull();
+    expect(body).not.toHaveProperty('event_ends_at');
   });
 });
