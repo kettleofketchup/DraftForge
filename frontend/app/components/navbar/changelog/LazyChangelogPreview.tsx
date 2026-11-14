@@ -1,0 +1,44 @@
+import { lazy, Suspense } from 'react';
+import { ErrorBoundary } from 'react-error-boundary';
+import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router';
+import { Skeleton } from '~/components/ui/skeleton';
+
+const ChangelogPreview = lazy(() => import('./ChangelogPreview'));
+
+type LazyChangelogPreviewProps = {
+  'data-testid': string;
+  onNavigate?: () => void;
+};
+
+export function LazyChangelogPreview({
+  'data-testid': testId,
+  onNavigate,
+}: LazyChangelogPreviewProps): React.JSX.Element {
+  const { t } = useTranslation('navbar');
+
+  return (
+    <div data-testid={testId}>
+      <ErrorBoundary
+        fallback={
+          <div className="flex flex-col gap-2 text-sm">
+            <p className="text-muted-foreground">
+              {t('nav.changelog_load_error')}
+            </p>
+            <Link
+              to="/changelog"
+              onClick={onNavigate}
+              className="text-primary underline"
+            >
+              {t('nav.full_changelog')}
+            </Link>
+          </div>
+        }
+      >
+        <Suspense fallback={<Skeleton className="h-40 w-full" />}>
+          <ChangelogPreview />
+        </Suspense>
+      </ErrorBoundary>
+    </div>
+  );
+}
