@@ -1,6 +1,5 @@
 import * as React from 'react';
 import { Link } from 'react-router';
-import { Button } from '~/components/ui/button';
 import { cn } from '~/lib/utils';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 
@@ -16,6 +15,8 @@ type NavItemBaseProps = {
   title: string;
   subtitle?: string;
   badge?: React.ReactNode;
+  /** Shown after the text at every width, e.g. a dropdown chevron */
+  indicator?: React.ReactNode;
   /** When true: hides text below 1100px, shows icons only with tooltip */
   hideTextOnSmall?: boolean;
   /** Show subtitle as tooltip on small screens (below xl) */
@@ -47,6 +48,7 @@ export const NavItem = React.forwardRef<HTMLElement, NavItemProps>(
       title,
       subtitle,
       badge,
+      indicator,
       hideTextOnSmall = false,
       showSubtitleTooltip = false,
       titleClassName,
@@ -91,6 +93,7 @@ export const NavItem = React.forwardRef<HTMLElement, NavItemProps>(
             </span>
           )}
         </div>
+        {indicator}
       </>
     );
 
@@ -103,24 +106,24 @@ export const NavItem = React.forwardRef<HTMLElement, NavItemProps>(
         title: _title,
         subtitle: _subtitle,
         badge: _badge,
+        indicator: _indicator,
         hideTextOnSmall: _hideTextOnSmall,
         showSubtitleTooltip: _showSubtitleTooltip,
         titleClassName: _titleClassName,
         'data-testid': _dataTestId,
         ...buttonRest
       } = props;
+      // Plain button: shadcn Button's ghost and scale classes differ from the sibling links.
       navContent = (
-        <Button
+        <button
           ref={ref as React.Ref<HTMLButtonElement>}
-          variant="ghost"
-          size="sm"
           type="button"
           className={baseClassName}
           data-testid={testId}
           {...buttonRest}
         >
           {content}
-        </Button>
+        </button>
       );
     } else {
       const {
@@ -130,6 +133,7 @@ export const NavItem = React.forwardRef<HTMLElement, NavItemProps>(
         title: _title,
         subtitle: _subtitle,
         badge: _badge,
+        indicator: _indicator,
         hideTextOnSmall: _hideTextOnSmall,
         showSubtitleTooltip: _showSubtitleTooltip,
         titleClassName: _titleClassName,

@@ -16,7 +16,7 @@ function renderInShell(ui: React.ReactElement) {
 }
 
 describe('NavItem', () => {
-  it('renders a typed Button for as="button"', () => {
+  it('renders a typed button for as="button"', () => {
     const spy = vi.fn();
     const ref = React.createRef<HTMLElement>();
     renderInShell(
@@ -50,6 +50,18 @@ describe('NavItem', () => {
     fireEvent.click(trigger);
     expect(spy).toHaveBeenCalledTimes(1);
     expect(ref.current).toBe(trigger);
+  });
+
+  it('styles the button form like the link form', () => {
+    renderInShell(
+      <>
+        <NavItem as="button" title="Docs" data-testid="b" />
+        <NavItem href="https://x.test" title="X" data-testid="a" />
+      </>,
+    );
+    const button = screen.getByTestId('b');
+    expect(button.className).toBe(screen.getByTestId('a').className);
+    expect(button.className).not.toMatch(/scale|accent/);
   });
 
   it('still renders a router link for to=', () => {

@@ -77,14 +77,14 @@ describe('DocsDropdown with real timers', () => {
   it('opens on click with the docs link and the two latest releases', async () => {
     const trigger = renderDropdown();
     expect(trigger.tagName).toBe('BUTTON');
-    expect(trigger.getAttribute('aria-label')).toBe('aria.documentation');
+    expect(trigger.getAttribute('aria-label')).toBe('aria.docs_menu');
     expect(trigger.getAttribute('aria-expanded')).toBe('false');
 
     fireEvent.click(trigger);
 
     expect(trigger.getAttribute('aria-expanded')).toBe('true');
     expect(screen.getByTestId('nav-docs-panel')).toBeTruthy();
-    expect(screen.getByRole('dialog', { name: 'nav.whats_new' })).toBeTruthy();
+    expect(screen.getByRole('dialog', { name: 'aria.docs_menu' })).toBeTruthy();
     expect(
       screen.getByRole('heading', { level: 2, name: 'nav.whats_new' }),
     ).toBeTruthy();
@@ -101,6 +101,42 @@ describe('DocsDropdown with real timers', () => {
     expect(docs.getAttribute('href')).toBe(DOCS_URL);
     expect(docs.getAttribute('target')).toBe('_blank');
     expect(docs.getAttribute('rel')).toBe('noopener noreferrer');
+  });
+
+  it('lets the keyboard reach and scroll the release notes region', async () => {
+    fireEvent.click(renderDropdown());
+    const region = await screen.findByRole('region', {
+      name: 'nav.whats_new',
+    });
+    expect(region.getAttribute('data-slot')).toBe('scroll-area-viewport');
+    expect(region.tabIndex).toBe(0);
+    expect(region.className).toContain('focus-visible:ring-inset');
+  });
+
+  it('draws focus rings inside the edge-to-edge panel links', async () => {
+    fireEvent.click(renderDropdown());
+    for (const id of [
+      'nav-docs-documentation-link',
+      'nav-changelog-full-link',
+    ]) {
+      expect((await screen.findByTestId(id)).className).toContain(
+        'focus-visible:ring-inset',
+      );
+    }
+  });
+
+  it('keeps the Full changelog arrow out of the link name', async () => {
+    fireEvent.click(renderDropdown());
+    const link = await screen.findByTestId('nav-changelog-full-link');
+    expect(link.textContent).toBe('nav.full_changelog');
+    expect(link.querySelector('svg')?.getAttribute('aria-hidden')).toBe('true');
+  });
+
+  it('shows the dropdown chevron outside the text hidden at icon-only widths', () => {
+    const trigger = renderDropdown();
+    const chevron = trigger.querySelector('svg.lucide-chevron-down');
+    expect(chevron).not.toBeNull();
+    expect(chevron?.closest('.hidden')).toBeNull();
   });
 
   it('opens with Enter/Space (detail 0 click) and Escape returns focus to the trigger', async () => {
@@ -196,6 +232,12 @@ describe('DocsDropdown hover behaviour', () => {
     await advance(HIDE_DELAY_MS * 2);
     expect(panel()).not.toBeNull();
     fireEvent.click(trigger);
+    expect(panel()).toBeNull();
+  });
+
+  it('a hover-opened panel closes when the Documentation link is clicked', async () => {
+    await hoverOpen();
+    fireEvent.click(screen.getByTestId('nav-docs-documentation-link'));
     expect(panel()).toBeNull();
   });
 

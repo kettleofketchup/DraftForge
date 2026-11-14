@@ -90,9 +90,18 @@ describe('MobileNav Docs section', () => {
 
     const fullLink = screen.getByTestId('mobile-nav-changelog-full-link');
     expect(fullLink.getAttribute('href')).toBe('/changelog');
+    expect(fullLink.textContent).toBe('nav.full_changelog');
     fireEvent.click(fullLink);
 
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(screen.getByTestId('location').textContent).toBe('/changelog');
+  });
+
+  it('styles the Docs row like its sibling drawer rows', () => {
+    openDrawer();
+    const trigger = screen.getByTestId('mobile-nav-docs-trigger');
+    expect(trigger.getAttribute('type')).toBe('button');
+    expect(trigger.className).toContain('hover:bg-muted');
+    expect(trigger.className).not.toMatch(/scale|accent/);
   });
 });

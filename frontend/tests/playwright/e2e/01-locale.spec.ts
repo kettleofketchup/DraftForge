@@ -1,8 +1,8 @@
 // Import from project fixtures (provides waitForHydration, sets
 // window.playwright = true to disable react-scan, and exposes login helpers).
-import { BASE_URL } from '../fixtures/base-url';
-import { test, expect, loginUser } from '../fixtures';
 import type { Page } from '@playwright/test';
+import { expect, loginUser, test } from '../fixtures';
+import { BASE_URL } from '../fixtures/base-url';
 
 // i18n hydration bugs must surface immediately; no retries here.
 test.describe.configure({ retries: 0 });
@@ -26,7 +26,9 @@ function attachErrorCapture(page: Page): string[] {
 }
 
 test.describe('navbar i18n — anonymous', () => {
-  test('?lang=es renders Spanish login + correct <html lang>', async ({ page }) => {
+  test('?lang=es renders Spanish login + correct <html lang>', async ({
+    page,
+  }) => {
     const errors = attachErrorCapture(page);
     await page.goto('/?lang=es');
     await expect(page.locator(LOGIN_BUTTON)).toHaveText(ES_LOGIN);
@@ -34,7 +36,10 @@ test.describe('navbar i18n — anonymous', () => {
     expect(errors, 'unexpected runtime errors').toEqual([]);
   });
 
-  test('?lang=es writes df-locale cookie even on prerendered /', async ({ page, context }) => {
+  test('?lang=es writes df-locale cookie even on prerendered /', async ({
+    page,
+    context,
+  }) => {
     const errors = attachErrorCapture(page);
     await page.goto('/?lang=es');
     await expect(page.locator(LOGIN_BUTTON)).toHaveText(ES_LOGIN);
@@ -63,7 +68,9 @@ test.describe('navbar i18n — anonymous', () => {
     await ctx.close();
   });
 
-  test('es-ES context renders Spanish navbar + aria-labels', async ({ browser }) => {
+  test('es-ES context renders Spanish navbar + aria-labels', async ({
+    browser,
+  }) => {
     const ctx = await browser.newContext({ locale: 'es-ES' });
     const page = await ctx.newPage();
     const errors = attachErrorCapture(page);
@@ -72,13 +79,17 @@ test.describe('navbar i18n — anonymous', () => {
     await expect(page.locator('html')).toHaveAttribute('lang', 'es');
     // Aria-label regression check.
     await expect(
-      page.locator('[aria-label="Documentación"]').first(),
+      page
+        .locator('[aria-label="Documentación y registro de cambios"]')
+        .first(),
     ).toBeVisible();
     expect(errors).toEqual([]);
     await ctx.close();
   });
 
-  test('unsupported locale (fr-FR) falls back to English', async ({ browser }) => {
+  test('unsupported locale (fr-FR) falls back to English', async ({
+    browser,
+  }) => {
     const ctx = await browser.newContext({ locale: 'fr-FR' });
     const page = await ctx.newPage();
     const errors = attachErrorCapture(page);
@@ -91,9 +102,7 @@ test.describe('navbar i18n — anonymous', () => {
 
   test('?lang=en beats df-locale=es cookie', async ({ browser }) => {
     const ctx = await browser.newContext({ locale: 'en-US' });
-    await ctx.addCookies([
-      { name: 'df-locale', value: 'es', url: BASE_URL },
-    ]);
+    await ctx.addCookies([{ name: 'df-locale', value: 'es', url: BASE_URL }]);
     const page = await ctx.newPage();
     const errors = attachErrorCapture(page);
     await page.goto('/tournaments?lang=en');
@@ -102,14 +111,14 @@ test.describe('navbar i18n — anonymous', () => {
     await ctx.close();
   });
 
-  test('clearing df-locale falls back to Accept-Language (en-US → English)', async ({ browser }) => {
+  test('clearing df-locale falls back to Accept-Language (en-US → English)', async ({
+    browser,
+  }) => {
     // Sets cookie=es, asserts Spanish; clears cookie, asserts fallback to the
     // context's Accept-Language (en-US) → English. The cookie's clear behavior
     // is the actual subject; locale doesn't change between p1 and p2.
     const ctx = await browser.newContext({ locale: 'en-US' });
-    await ctx.addCookies([
-      { name: 'df-locale', value: 'es', url: BASE_URL },
-    ]);
+    await ctx.addCookies([{ name: 'df-locale', value: 'es', url: BASE_URL }]);
     const p1 = await ctx.newPage();
     const errorsP1 = attachErrorCapture(p1);
     await p1.goto('/tournaments');
@@ -124,7 +133,9 @@ test.describe('navbar i18n — anonymous', () => {
     await ctx.close();
   });
 
-  test('dynamic route SSR ships Spanish HTML (no flicker for es-ES)', async ({ browser }) => {
+  test('dynamic route SSR ships Spanish HTML (no flicker for es-ES)', async ({
+    browser,
+  }) => {
     const ctx = await browser.newContext({ locale: 'es-ES' });
     const page = await ctx.newPage();
     const errors = attachErrorCapture(page);
@@ -135,7 +146,9 @@ test.describe('navbar i18n — anonymous', () => {
     await ctx.close();
   });
 
-  test('prerendered / ships English HTML then swaps to Spanish (documented trade-off)', async ({ browser }) => {
+  test('prerendered / ships English HTML then swaps to Spanish (documented trade-off)', async ({
+    browser,
+  }) => {
     const ctx = await browser.newContext({ locale: 'es-ES' });
     const page = await ctx.newPage();
     const errors = attachErrorCapture(page);
@@ -149,7 +162,9 @@ test.describe('navbar i18n — anonymous', () => {
 });
 
 test.describe('navbar i18n — authenticated', () => {
-  test('logged-in es-ES context shows Cerrar sesión and Perfil', async ({ browser }) => {
+  test('logged-in es-ES context shows Cerrar sesión and Perfil', async ({
+    browser,
+  }) => {
     const ctx = await browser.newContext({ locale: 'es-ES' });
     await loginUser(ctx);
     const page = await ctx.newPage();

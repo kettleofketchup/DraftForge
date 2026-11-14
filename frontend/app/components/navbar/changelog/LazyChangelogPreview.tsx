@@ -1,3 +1,4 @@
+import { ArrowRight } from 'lucide-react';
 import { lazy, Suspense } from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
 import { useTranslation } from 'react-i18next';
@@ -34,9 +35,10 @@ export function LazyChangelogPreview({
             <Link
               to="/changelog"
               onClick={onNavigate}
-              className="text-primary underline"
+              className="flex items-center gap-1 text-primary underline"
             >
               {t('nav.full_changelog')}
+              <ArrowRight aria-hidden="true" className="size-3.5" />
             </Link>
           </div>
         }

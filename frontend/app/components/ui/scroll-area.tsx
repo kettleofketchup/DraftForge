@@ -6,12 +6,14 @@ import { cn } from "~/lib/utils"
 interface ScrollAreaProps extends React.ComponentProps<typeof ScrollAreaPrimitive.Root> {
   /** Control scrollbar visibility: "auto" (default), "always", "scroll", "hover" */
   type?: "auto" | "always" | "scroll" | "hover";
+  viewportProps?: React.ComponentProps<typeof ScrollAreaPrimitive.Viewport>;
 }
 
 function ScrollArea({
   className,
   children,
   type = "auto",
+  viewportProps,
   ...props
 }: ScrollAreaProps) {
   return (
@@ -23,7 +25,11 @@ function ScrollArea({
     >
       <ScrollAreaPrimitive.Viewport
         data-slot="scroll-area-viewport"
-        className="focus-visible:ring-ring/50 size-full rounded-[inherit] transition-[color,box-shadow] outline-none focus-visible:ring-[3px] focus-visible:outline-1"
+        {...viewportProps}
+        className={cn(
+          "focus-visible:ring-ring/50 size-full rounded-[inherit] transition-[color,box-shadow] outline-none focus-visible:ring-[3px] focus-visible:outline-1",
+          viewportProps?.className
+        )}
       >
         {children}
       </ScrollAreaPrimitive.Viewport>

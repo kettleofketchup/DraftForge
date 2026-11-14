@@ -1,6 +1,6 @@
 {
   "aria": {
-    "documentation": "Documentation",
+    "docs_menu": "Docs and changelog",
     "main_nav": "Main navigation",
     "open_menu": "Open menu",
     "report_bug": "Report a Bug",
@@ -22,7 +22,7 @@
     "documentation": "Documentation",
     "documentation_subtitle": "Learn how it works",
     "events": "Events",
-    "full_changelog": "Full changelog →",
+    "full_changelog": "Full changelog",
     "github": "GitHub",
     "github_subtitle": "Begging for Stars",
     "github_subtitle_star": "Star us!",

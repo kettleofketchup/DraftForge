@@ -1,4 +1,4 @@
-import { ChevronDown } from 'lucide-react';
+import { ArrowRight, ChevronDown } from 'lucide-react';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useLocation } from 'react-router';
@@ -17,7 +17,7 @@ import { NavItem } from './NavItem';
 
 export const HOVER_OPEN_DELAY_MS = 250;
 
-type OpenedBy = 'hover' | 'click' | 'keyboard' | null;
+type OpenedBy = 'hover' | 'pinned' | null;
 
 export function DocsDropdown(): React.JSX.Element {
   const { t } = useTranslation('navbar');
@@ -62,10 +62,7 @@ export function DocsDropdown(): React.JSX.Element {
   const handleTriggerClick = (e: React.MouseEvent) => {
     e.preventDefault();
     clearTimers();
-    const kind: OpenedBy = e.detail === 0 ? 'keyboard' : 'click';
-    if (openedByRef.current === 'hover') setOpenedBy(kind);
-    else if (openedByRef.current !== null) setOpenedBy(null);
-    else setOpenedBy(kind);
+    setOpenedBy(openedByRef.current === 'pinned' ? null : 'pinned');
   };
 
   const handlePointerEnter = (e: React.PointerEvent) => {
@@ -108,8 +105,8 @@ export function DocsDropdown(): React.JSX.Element {
           data-testid="nav-docs-trigger"
           icon={<DocsIcon />}
           title={t('nav.docs')}
-          aria-label={t('aria.documentation')}
-          badge={<ChevronDown className="size-3" />}
+          aria-label={t('aria.docs_menu')}
+          indicator={<ChevronDown className="size-3" />}
           hideTextOnSmall
           className="[&_svg]:text-info"
         />
@@ -118,7 +115,7 @@ export function DocsDropdown(): React.JSX.Element {
         ref={contentRef}
         data-testid="nav-docs-panel"
         align="end"
-        aria-labelledby={whatsNewHeadingId}
+        aria-label={t('aria.docs_menu')}
         className="bg-popover border-primary/30 w-96 p-0 flex flex-col overflow-hidden max-h-[min(32rem,var(--radix-popover-content-available-height))]"
         onPointerEnter={handlePointerEnter}
         onPointerLeave={handlePointerLeave}
@@ -130,7 +127,8 @@ export function DocsDropdown(): React.JSX.Element {
           href={DOCS_URL}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center gap-3 px-4 py-3 rounded-t-md hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&_svg]:text-info"
+          onClick={close}
+          className="flex items-center gap-3 px-4 py-3 rounded-t-md hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring [&_svg]:text-info"
         >
           <DocsIcon />
           <span className="flex flex-col">
@@ -149,7 +147,15 @@ export function DocsDropdown(): React.JSX.Element {
         >
           {t('nav.whats_new')}
         </h2>
-        <ScrollArea className="flex-1 min-h-0 max-h-72 flex flex-col [&>[data-slot=scroll-area-viewport]]:min-h-0 [&_[data-slot=scroll-area-viewport]>div]:!block">
+        <ScrollArea
+          viewportProps={{
+            tabIndex: 0,
+            role: 'region',
+            'aria-labelledby': whatsNewHeadingId,
+            className: 'focus-visible:ring-inset',
+          }}
+          className="flex-1 min-h-0 max-h-72 flex flex-col [&>[data-slot=scroll-area-viewport]]:min-h-0 [&_[data-slot=scroll-area-viewport]>div]:!block"
+        >
           <div className="px-4 pb-3">
             <LazyChangelogPreview
               data-testid="nav-changelog-preview"
@@ -162,9 +168,10 @@ export function DocsDropdown(): React.JSX.Element {
           data-testid="nav-changelog-full-link"
           to="/changelog"
           onClick={close}
-          className="px-4 py-2 text-sm text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="flex items-center gap-1 px-4 py-2 text-sm text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
         >
           {t('nav.full_changelog')}
+          <ArrowRight aria-hidden="true" className="size-3.5" />
         </Link>
       </PopoverContent>
     </Popover>

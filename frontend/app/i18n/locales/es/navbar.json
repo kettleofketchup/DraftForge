@@ -1,6 +1,6 @@
 {
   "aria": {
-    "documentation": "Documentación",
+    "docs_menu": "Documentación y registro de cambios",
     "main_nav": "Navegación principal",
     "open_menu": "Abrir menú",
     "report_bug": "Reportar un problema",
@@ -22,7 +22,7 @@
     "documentation": "Documentación",
     "documentation_subtitle": "Aprende cómo funciona",
     "events": "Eventos",
-    "full_changelog": "Registro de cambios completo →",
+    "full_changelog": "Registro de cambios completo",
     "github": "GitHub",
     "github_subtitle": "Pidiendo estrellas",
     "github_subtitle_star": "¡Danos una estrella!",

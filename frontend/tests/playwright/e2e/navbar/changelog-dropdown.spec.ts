@@ -1,7 +1,6 @@
+import { DOCS_URL } from '../../../../app/components/navbar/links';
 import { expect, test, visitAndWaitForHydration } from '../../fixtures';
 import { latestChangelogVersions } from '../../helpers/changelog';
-
-const DOCS_URL = 'https://kettleofketchup.github.io/DraftForge/';
 
 test.use({ viewport: { width: 1280, height: 800 } });
 
@@ -103,6 +102,36 @@ test.describe('Docs dropdown changelog (@cicd)', () => {
     await expect(panel).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(panel).toBeHidden();
+  });
+
+  test('the release notes region scrolls from the keyboard', async ({
+    page,
+  }) => {
+    const trigger = page.getByTestId('nav-docs-trigger');
+    await trigger.focus();
+    await page.keyboard.press('Enter');
+    const region = page
+      .getByTestId('nav-docs-panel')
+      .getByRole('region', { name: /what's new|novedades/i });
+    await expect(region).toBeVisible();
+    await expect(
+      page.getByTestId('nav-changelog-preview').getByRole('heading').first(),
+    ).toBeVisible();
+
+    const { scrollHeight, clientHeight } = await region.evaluate((el) => ({
+      scrollHeight: el.scrollHeight,
+      clientHeight: el.clientHeight,
+    }));
+    expect(scrollHeight, 'preview should overflow its region').toBeGreaterThan(
+      clientHeight,
+    );
+
+    await region.focus();
+    await expect(region).toBeFocused();
+    await page.keyboard.press('PageDown');
+    await expect
+      .poll(() => region.evaluate((el) => el.scrollTop))
+      .toBeGreaterThan(0);
   });
 
   test('Full changelog link opens the /changelog page', async ({ page }) => {

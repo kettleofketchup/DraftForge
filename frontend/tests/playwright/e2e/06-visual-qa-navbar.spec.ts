@@ -1,5 +1,5 @@
-import { test, expect, loginUser } from '../fixtures';
 import type { Page } from '@playwright/test';
+import { expect, loginUser, test } from '../fixtures';
 
 const VIEWPORTS = [
   { name: 'mobile', width: 375, height: 800 },
@@ -35,9 +35,13 @@ for (const vp of VIEWPORTS) {
       // Horizontal-overflow assertion at mobile width.
       if (vp.name === 'mobile') {
         const overflow = await page.evaluate(
-          () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+          () =>
+            document.documentElement.scrollWidth >
+            document.documentElement.clientWidth,
         );
-        expect(overflow, `horizontal overflow at ${vp.name} ${locale}`).toBe(false);
+        expect(overflow, `horizontal overflow at ${vp.name} ${locale}`).toBe(
+          false,
+        );
       }
 
       await page.screenshot({
@@ -120,7 +124,10 @@ for (const locale of LOCALES) {
 // Clicking the Docs item opens a dialog with the docs link and the latest
 // release notes. This scenario captures the open panel in both locales.
 for (const locale of LOCALES) {
-  const ariaLabel = locale === 'es' ? 'Documentación' : 'Documentation';
+  const ariaLabel =
+    locale === 'es'
+      ? 'Documentación y registro de cambios'
+      : 'Docs and changelog';
   test(`documentation dropdown @ desktop ${locale}`, async ({ browser }) => {
     const ctx = await browser.newContext({
       viewport: { width: 1280, height: 800 },

@@ -1,4 +1,4 @@
-import { ChevronDown, Menu } from 'lucide-react';
+import { ArrowRight, ChevronDown, Menu } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
@@ -394,13 +394,10 @@ export function MobileNav() {
             />
             <Collapsible>
               <CollapsibleTrigger asChild>
-                <Button
-                  variant="ghost"
+                <button
+                  type="button"
                   data-testid="mobile-nav-docs-trigger"
-                  className={cn(
-                    MOBILE_NAV_ROW_CLASS,
-                    'group w-full justify-start h-auto font-normal',
-                  )}
+                  className={cn(MOBILE_NAV_ROW_CLASS, 'group w-full text-left')}
                 >
                   <span className="shrink-0 text-info">
                     <DocsIcon />
@@ -414,7 +411,7 @@ export function MobileNav() {
                     </span>
                   </span>
                   <ChevronDown className="size-4 ml-auto transition-transform group-data-[state=open]:rotate-180" />
-                </Button>
+                </button>
               </CollapsibleTrigger>
               <CollapsibleContent className="flex flex-col gap-2 pl-3">
                 <MobileNavLink
@@ -437,9 +434,10 @@ export function MobileNav() {
                   data-testid="mobile-nav-changelog-full-link"
                   to="/changelog"
                   onClick={closeNav}
-                  className="px-3 py-2 text-sm text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="flex items-center gap-1 px-3 py-2 text-sm text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   {t('nav.full_changelog')}
+                  <ArrowRight aria-hidden="true" className="size-3.5" />
                 </Link>
               </CollapsibleContent>
             </Collapsible>
