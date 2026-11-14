@@ -19,7 +19,11 @@ just frontend::lint-shadcn-prune   # after fixing baselined violations
 | Rule | Catches |
 | --- | --- |
 | `shadcn/no-raw-colors` | Raw palette classes (`text-green-500`, `bg-slate-900`) and hex values instead of brand tokens. Same policy as the `brand` skill, now machine-checked. |
-| `shadcn/no-unknown-classes` | Classes Tailwind emits **no CSS** for: `align-center`, `justify-left`, `items-top`, `3xl:*` (no such breakpoint), `prose*` (`@tailwindcss/typography` is not installed). Each hit is a silent styling bug. |
+| `shadcn/no-unknown-classes` | Classes Tailwind emits **no CSS** for: `align-center`, `justify-left`, `items-top`, `3xl:*` (no such breakpoint), `prose*` (`@tailwindcss/typography` is not installed). Each hit is a silent styling bug. Zero baseline entries: every hit fails. |
+
+Runtime hook classes that are not Tailwind utilities go in the rule's `allow` list
+(`nodrag`/`nopan` for React Flow, `toaster` for sonner, `spinner` for an inline `<style>`).
+Add one only for a class some JS or CSS actually reads; a typo belongs in the fix, not the list.
 
 Off: `no-restyle` (className on primitives is the documented brand pattern),
 `no-inline-styles` (the brand guide allows dynamic computed styles),
