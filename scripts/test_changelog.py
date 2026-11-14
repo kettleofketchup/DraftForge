@@ -923,8 +923,24 @@ class ReleaseFlowTests(unittest.TestCase):
         git(self.repo.root, "push", "-q", "origin", "main")
         copy = self.repo.root / FRONTEND_COPY
         assert copy.read_bytes() == (self.repo.root / "CHANGELOG.md").read_bytes()
-        refused(self.preflight(), "commit it")
+        refused(self.preflight(), "in a PR")
         assert copy.exists()
+
+    def test_an_uncommitted_copy_edit_gets_the_commit_or_stash_message_first(self):
+        self.repo.write(FRONTEND_COPY, BASE_CHANGELOG + "\nx\n", add=False)
+        refused(self.preflight(), "uncommitted")
+
+    def test_a_drifted_copy_off_main_gets_the_switch_message_first(self):
+        git(self.repo.root, "switch", "-q", "-c", "side")
+        self.repo.write(FRONTEND_COPY, BASE_CHANGELOG + "\nx\n")
+        git(self.repo.root, "commit", "-q", "-m", "drift")
+        refused(self.preflight(), "from main")
+
+    def test_copy_refusals_point_to_a_pr_not_a_hand_edit_on_main(self):
+        self.repo.write(FRONTEND_COPY, BASE_CHANGELOG + "\nx\n")
+        git(self.repo.root, "commit", "-q", "-m", "drift")
+        git(self.repo.root, "push", "-q", "origin", "main")
+        refused(self.preflight(), "in a PR")
 
     def test_assemble_release_stages_removal_of_exactly_the_consumed_fragments(self):
         consumed = changelog.assemble_release(self.repo.root, "0.3.0", "2026-10-03")

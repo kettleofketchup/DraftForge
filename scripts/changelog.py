@@ -377,9 +377,12 @@ def _check_resurrection(
     return problems
 
 
-def _copy_problem(root: Path) -> str | None:
+COPY_FIX = f"run: cp CHANGELOG.md {FRONTEND_COPY}"
+COPY_FIX_IN_PR = f"fix it in a PR: cp CHANGELOG.md {FRONTEND_COPY} and commit"
+
+
+def _copy_problem(root: Path, fix: str = COPY_FIX) -> str | None:
     """The frontend copy must match CHANGELOG.md byte for byte."""
-    fix = f"run: cp CHANGELOG.md {FRONTEND_COPY}"
     copy = root / FRONTEND_COPY
     if not copy.exists():
         return f"{FRONTEND_COPY}:1: missing; {fix}"
@@ -575,14 +578,6 @@ def release_preflight(
         )
     if not (root / "CHANGELOG.md").exists():
         raise ChangelogError("CHANGELOG.md is missing; restore it from main")
-    drift = _copy_problem(root)
-    if drift:
-        raise ChangelogError(drift)
-    if _git(root, "cat-file", "-e", f"HEAD:{FRONTEND_COPY}").returncode != 0:
-        raise ChangelogError(
-            f"{FRONTEND_COPY} is not tracked in HEAD (a rollback would abort on it); "
-            f"cp CHANGELOG.md {FRONTEND_COPY} if needed, then commit it"
-        )
     current = _git(root, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
     if current != branch:
         raise ChangelogError(
@@ -591,6 +586,14 @@ def release_preflight(
     if _git(root, "status", "--porcelain", "--untracked-files=no").stdout.strip():
         raise ChangelogError(
             "uncommitted changes to tracked files; commit or stash them first"
+        )
+    drift = _copy_problem(root, COPY_FIX_IN_PR)
+    if drift:
+        raise ChangelogError(drift)
+    if _git(root, "cat-file", "-e", f"HEAD:{FRONTEND_COPY}").returncode != 0:
+        raise ChangelogError(
+            f"{FRONTEND_COPY} is not tracked in HEAD (a rollback would abort on it); "
+            f"{COPY_FIX_IN_PR}"
         )
     untracked = _git(
         root, "ls-files", "--others", "--exclude-standard", "--", FRAGMENT_DIR
