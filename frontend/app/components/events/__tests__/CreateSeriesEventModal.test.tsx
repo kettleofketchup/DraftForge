@@ -15,6 +15,12 @@ vi.mock('~/components/api/api', () => ({
   getLeagues: vi.fn().mockResolvedValue([]),
 }));
 
+// No saved series password settings.
+vi.mock('~/components/lobby/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('~/components/lobby/api')>()),
+  getRepeaterLobbyPassword: vi.fn().mockResolvedValue(null),
+}));
+
 vi.mock('sonner', () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));
