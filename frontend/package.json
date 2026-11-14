@@ -24,7 +24,9 @@
     "i18n:guard": "scripts/check-navbar-prop-strings.sh",
     "lint": "eslint app/components/navbar --max-warnings 0",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "lint:shadcn": "eslint -c eslint.shadcn.config.js app --suppressions-location shadcn-lint-suppressions.json",
+    "lint:shadcn:prune": "eslint -c eslint.shadcn.config.js app --suppressions-location shadcn-lint-suppressions.json --prune-suppressions"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.2.8",
@@ -97,6 +99,7 @@
     "@eslint/js": "^9.39.4",
     "@playwright/test": "1.64.1",
     "@react-router/dev": "^7.7.1",
+    "@shadcn/lint": "^0.2.5",
     "@tailwindcss/vite": "^4.1.11",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",

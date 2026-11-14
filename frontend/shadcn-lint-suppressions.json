@@ -1,0 +1,565 @@
+{
+  "app/components/admin-team/AdminTeamSection.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 11
+    }
+  },
+  "app/components/bracket/BracketView.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 2
+    }
+  },
+  "app/components/bracket/modals/AutoAssignModal.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 12
+    }
+  },
+  "app/components/bracket/modals/DotaMatchStatsModal.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 4
+    }
+  },
+  "app/components/bracket/modals/MatchStatsModal.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 8
+    }
+  },
+  "app/components/bracket/modals/PlayerStatsTable.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 15
+    }
+  },
+  "app/components/bracket/modals/SteamMatchCard.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 4
+    }
+  },
+  "app/components/bracket/nodes/HeroIconRow.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 1
+    }
+  },
+  "app/components/bracket/nodes/MatchNode.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 3
+    }
+  },
+  "app/components/events/DiscordLogSection.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 1
+    }
+  },
+  "app/components/events/MmrApprovalModal.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 10
+    }
+  },
+  "app/components/events/games/dota2/Dota2RankSignalsCard.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 7
+    }
+  },
+  "app/components/game/gameCard/gameCard.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 3
+    },
+    "shadcn/no-unknown-classes": {
+      "count": 4
+    }
+  },
+  "app/components/herodraft/CompletedDraftView.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 7
+    }
+  },
+  "app/components/herodraft/DraftPanel.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 35
+    }
+  },
+  "app/components/herodraft/DraftToasts.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 2
+    }
+  },
+  "app/components/herodraft/DraftTopBar.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 11
+    }
+  },
+  "app/components/herodraft/HeroDraftHistoryModal.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 6
+    }
+  },
+  "app/components/herodraft/HeroDraftModal.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 23
+    }
+  },
+  "app/components/herodraft/HeroGrid.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 13
+    }
+  },
+  "app/components/league/LeagueMatchCard.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 6
+    }
+  },
+  "app/components/league/tabs/InfoTab.tsx": {
+    "shadcn/no-unknown-classes": {
+      "count": 6
+    }
+  },
+  "app/components/lobby/LobbyPanel.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 4
+    }
+  },
+  "app/components/navbar/login.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 2
+    }
+  },
+  "app/components/navbar/navbar.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 4
+    }
+  },
+  "app/components/organization/tabs/ClaimCard.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 4
+    }
+  },
+  "app/components/player/PlayerModal.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 2
+    }
+  },
+  "app/components/player/PlayerUnderConstruction.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 5
+    }
+  },
+  "app/components/reusable/addButton.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 2
+    }
+  },
+  "app/components/reusable/adminButton.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 1
+    }
+  },
+  "app/components/team/TeamModal.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 1
+    }
+  },
+  "app/components/team/TeamPopoverContent.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 1
+    }
+  },
+  "app/components/team/searchTeams.tsx": {
+    "shadcn/no-unknown-classes": {
+      "count": 2
+    }
+  },
+  "app/components/team/teamCard.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 2
+    },
+    "shadcn/no-unknown-classes": {
+      "count": 3
+    }
+  },
+  "app/components/team/teamTable/teamTable.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 1
+    },
+    "shadcn/no-unknown-classes": {
+      "count": 2
+    }
+  },
+  "app/components/teamdraft/CompletedTeamDraftView.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 12
+    }
+  },
+  "app/components/teamdraft/DraftEventFab.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 1
+    }
+  },
+  "app/components/teamdraft/DraftLobby.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 3
+    }
+  },
+  "app/components/teamdraft/DraftNotificationBadge.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 1
+    }
+  },
+  "app/components/teamdraft/DraftToasts.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 4
+    }
+  },
+  "app/components/teamdraft/FloatingDraftIndicator.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 2
+    }
+  },
+  "app/components/teamdraft/TeamPositionCoverage.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 11
+    }
+  },
+  "app/components/teamdraft/TieRollPopup.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 5
+    }
+  },
+  "app/components/teamdraft/buttons/DraftModerationDropdown.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 4
+    }
+  },
+  "app/components/teamdraft/buttons/draftStyleModal.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 16
+    }
+  },
+  "app/components/teamdraft/buttons/initDraftDialog.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 1
+    },
+    "shadcn/no-unknown-classes": {
+      "count": 1
+    }
+  },
+  "app/components/teamdraft/draftBalanceDisplay.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 8
+    }
+  },
+  "app/components/teamdraft/draftModal.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 8
+    },
+    "shadcn/no-unknown-classes": {
+      "count": 1
+    }
+  },
+  "app/components/teamdraft/liveView.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 5
+    },
+    "shadcn/no-unknown-classes": {
+      "count": 1
+    }
+  },
+  "app/components/teamdraft/roundView/TurnIndicator.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 1
+    }
+  },
+  "app/components/teamdraft/roundView/draftRoundCard.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 2
+    }
+  },
+  "app/components/teamdraft/roundView/draftTable.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 2
+    }
+  },
+  "app/components/teamdraft/sections/AvailablePlayersSection.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 5
+    }
+  },
+  "app/components/teamdraft/sections/PickOrderSection.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 8
+    }
+  },
+  "app/components/teamdraft/shuffle/DoublePickThreshold.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 5
+    }
+  },
+  "app/components/teamdraft/shuffle/ShufflePickOrder.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 8
+    }
+  },
+  "app/components/teamdraft/timer/DraftClockBar.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 10
+    }
+  },
+  "app/components/teamdraft/timer/DraftPauseOverlay.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 3
+    }
+  },
+  "app/components/teamdraft/timer/PickOrderReserve.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 4
+    }
+  },
+  "app/components/tournament/captains/draftOrder.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 2
+    }
+  },
+  "app/components/ui/base-handle.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 2
+    }
+  },
+  "app/components/ui/base-node.tsx": {
+    "shadcn/no-unknown-classes": {
+      "count": 1
+    }
+  },
+  "app/components/ui/brand-select.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 18
+    }
+  },
+  "app/components/ui/button-handle.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 1
+    },
+    "shadcn/no-unknown-classes": {
+      "count": 2
+    }
+  },
+  "app/components/ui/buttons/AddDiscordBotButton.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 4
+    }
+  },
+  "app/components/ui/buttons/DestructiveButton.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 1
+    }
+  },
+  "app/components/ui/buttons/HighlightButton.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 9
+    }
+  },
+  "app/components/ui/buttons/SubmitButton.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 2
+    }
+  },
+  "app/components/ui/buttons/WarningButton.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 2
+    }
+  },
+  "app/components/ui/buttons/icons/TrashIconButton.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 1
+    }
+  },
+  "app/components/ui/buttons/user/DotabuffIconButton.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 1
+    }
+  },
+  "app/components/ui/dialog.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 4
+    }
+  },
+  "app/components/ui/labeled-group-node.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 2
+    }
+  },
+  "app/components/ui/node-status-indicator.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 5
+    },
+    "shadcn/no-unknown-classes": {
+      "count": 1
+    }
+  },
+  "app/components/ui/placeholder-node.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 2
+    }
+  },
+  "app/components/ui/sonner.tsx": {
+    "shadcn/no-unknown-classes": {
+      "count": 1
+    }
+  },
+  "app/components/ui/tabs.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 6
+    }
+  },
+  "app/components/user/DiscordUserDropdown.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 6
+    },
+    "shadcn/no-unknown-classes": {
+      "count": 8
+    }
+  },
+  "app/components/user/UserAvatar.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 2
+    }
+  },
+  "app/components/user/UserEventStrip.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 6
+    }
+  },
+  "app/components/user/UserList.tsx": {
+    "shadcn/no-unknown-classes": {
+      "count": 1
+    }
+  },
+  "app/components/user/positions/icons/carry.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 2
+    }
+  },
+  "app/components/user/positions/icons/hardSupportIcon.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 3
+    }
+  },
+  "app/components/user/positions/icons/mid.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 1
+    }
+  },
+  "app/components/user/positions/icons/offlane.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 2
+    }
+  },
+  "app/components/user/positions/icons/softSupport.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 3
+    }
+  },
+  "app/components/user/positions/index.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 28
+    }
+  },
+  "app/components/user/searchUser.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 2
+    },
+    "shadcn/no-unknown-classes": {
+      "count": 2
+    }
+  },
+  "app/components/user/userCard.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 6
+    }
+  },
+  "app/components/user/userCard/LoginAsUserButton.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 3
+    }
+  },
+  "app/features/leaderboard/LeaderboardPage.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 5
+    }
+  },
+  "app/features/leaderboard/LeaderboardTable.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 2
+    }
+  },
+  "app/pages/about/sections/MaintainerSection.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 5
+    }
+  },
+  "app/pages/herodraft/HeroDraftPage.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 3
+    }
+  },
+  "app/pages/profile/forms/position.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 1
+    },
+    "shadcn/no-unknown-classes": {
+      "count": 3
+    }
+  },
+  "app/pages/profile/profile.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 2
+    },
+    "shadcn/no-unknown-classes": {
+      "count": 3
+    }
+  },
+  "app/pages/tournament/hasErrors.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 2
+    }
+  },
+  "app/pages/tournament/tabs/players/addPlayerDropdown.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 2
+    },
+    "shadcn/no-unknown-classes": {
+      "count": 2
+    }
+  },
+  "app/pages/tournament/tabs/players/addPlayerModal.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 1
+    },
+    "shadcn/no-unknown-classes": {
+      "count": 2
+    }
+  },
+  "app/pages/tournament/tabs/teams/randomTeamsModal.tsx": {
+    "shadcn/no-unknown-classes": {
+      "count": 1
+    }
+  },
+  "app/pages/user/UserProfilePage.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 2
+    }
+  },
+  "app/pages/users/users.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 1
+    },
+    "shadcn/no-unknown-classes": {
+      "count": 1
+    }
+  },
+  "app/routes/organization.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 2
+    },
+    "shadcn/no-unknown-classes": {
+      "count": 2
+    }
+  }
+}
