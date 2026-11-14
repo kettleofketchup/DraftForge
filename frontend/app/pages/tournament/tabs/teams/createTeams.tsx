@@ -121,7 +121,7 @@ export function createTeams(users: UserType[], teamSize: number): TeamType[] {
     }
     log.debug(minMembers);
     if (bestSwap && maxTeam.members && minTeam.members) {
-      // Perform the best swap directly on the teams' members arrayss
+      // Perform the best swap directly on the teams' members arrays
       const [i, j] = bestSwap;
       const temp = maxTeam.members[i];
       maxTeam.members[i] = minTeam.members[j];

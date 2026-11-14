@@ -30,7 +30,7 @@ export default [
     },
     settings: { react: { version: 'detect' } },
     rules: {
-      // Permissive defaults — strictness is ratcheted in a separate cleanup PR.
+      // Permissive defaults until existing violations are cleaned up (#407).
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-unused-vars': 'off',
       '@typescript-eslint/no-empty-object-type': 'off',
