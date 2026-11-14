@@ -289,6 +289,10 @@ urlpatterns = [
         "api/organizations/<int:org_id>/contributions/",
         include("org.contributions.urls"),
     ),
+    path(
+        "api/organizations/<int:org_id>/promotion/",
+        include("org.promotion.urls"),
+    ),
     # League admin team
     path(
         "api/leagues/<int:league_id>/admins/",
