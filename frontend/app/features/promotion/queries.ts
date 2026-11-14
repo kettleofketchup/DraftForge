@@ -5,7 +5,11 @@ import {
   type UseMutationResult,
   type UseQueryResult,
 } from '@tanstack/react-query';
-import { promotionKeys, type OrgFeatureAccess } from '~/features/org-features';
+import {
+  contributionsKeys,
+  promotionKeys,
+  type OrgFeatureAccess,
+} from '~/features/org-features';
 import {
   createPromoTemplate,
   deletePromoTemplate,
@@ -116,12 +120,29 @@ function useInvalidatePromotion(
     });
 }
 
+function useInvalidatePromoLedger(
+  orgId: number,
+  access: OrgFeatureAccess,
+): () => Promise<void> {
+  const queryClient = useQueryClient();
+  return async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: promotionKeys.all(orgId, access.viewerPk),
+      }),
+      queryClient.invalidateQueries({
+        queryKey: contributionsKeys.all(orgId, access.viewerPk),
+      }),
+    ]);
+  };
+}
+
 export function useSendPromo(
   orgId: number,
   access: OrgFeatureAccess,
   eventId: number,
 ): UseMutationResult<PromoSendResult, unknown, PromoSendInput> {
-  const invalidate = useInvalidatePromotion(orgId, access);
+  const invalidate = useInvalidatePromoLedger(orgId, access);
   return useMutation({
     mutationFn: (input) => sendPromo(orgId, eventId, input),
     onSettled: invalidate,
@@ -132,7 +153,7 @@ export function useUndoPromoSend(
   orgId: number,
   access: OrgFeatureAccess,
 ): UseMutationResult<void, unknown, number> {
-  const invalidate = useInvalidatePromotion(orgId, access);
+  const invalidate = useInvalidatePromoLedger(orgId, access);
   return useMutation({
     mutationFn: (sendId) => undoPromoSend(orgId, sendId),
     onSettled: invalidate,
