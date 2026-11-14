@@ -1,5 +1,6 @@
 """Pure helpers behind the bucketed tournament list: cutoff, params, cache key, envelope."""
 
+from base64 import urlsafe_b64encode
 from datetime import UTC, datetime, timedelta, timezone
 from unittest import mock
 
@@ -19,8 +20,11 @@ from app.tournament_buckets import (
 from app.tournament_list import (
     DEFAULT_PAGE_SIZE,
     MAX_PAGE_SIZE,
+    ArchiveCursor,
     TournamentListPagination,
+    build_cursor_envelope,
     build_page_envelope,
+    decode_archive_cursor,
     normalize_search,
     parse_tournament_list_params,
     resolve_organizations,
@@ -170,7 +174,7 @@ class TournamentsListCacheKeyTests(SimpleTestCase):
         b = self._key("organization=7")
         self.assertEqual(a, b)
         self.assertIn("2026-11-11", a)
-        self.assertTrue(a.startswith("tournaments_list_v5:"))
+        self.assertTrue(a.startswith("tournaments_list_v6:"))
 
     def test_cache_key_is_order_independent(self) -> None:
         self.assertEqual(
@@ -283,6 +287,117 @@ class BuildPageEnvelopeTests(SimpleTestCase):
         )
         self.assertEqual(set(env), {"count", "next", "previous", "results"})
         self.assertEqual(env["results"], [{"pk": 1}])
+
+
+class ArchiveCursorTests(SimpleTestCase):
+    def test_round_trip(self) -> None:
+        cursor = ArchiveCursor(datetime(2026, 11, 1, 18, 30, 5, 123456, tzinfo=UTC), 42)
+        self.assertEqual(decode_archive_cursor(cursor.token), cursor)
+
+    def test_token_is_url_safe_and_unpadded(self) -> None:
+        token = ArchiveCursor(datetime(2026, 11, 1, tzinfo=UTC), 7).token
+        self.assertRegex(token, r"^[A-Za-z0-9_-]+$")
+
+    def test_non_utc_input_normalizes_to_utc(self) -> None:
+        plus_two = datetime(2026, 11, 1, 2, tzinfo=timezone(timedelta(hours=2)))
+        utc = datetime(2026, 11, 1, tzinfo=UTC)
+        self.assertEqual(ArchiveCursor(plus_two, 7).token, ArchiveCursor(utc, 7).token)
+
+    def test_rejects_malformed_tokens(self) -> None:
+        naive = ArchiveCursor(datetime(2026, 11, 1, tzinfo=UTC), 7).token
+        bad = [
+            "",
+            "%%",
+            "bm9wZQ",
+            naive[:-3],
+            _b64("2026-11-01T00:00:00|7"),
+            _b64("2026-11-01T00:00:00+00:00|0"),
+            _b64("2026-11-01T00:00:00+00:00|x"),
+            _b64("not-a-date|7"),
+            _b64("2026-11-01T00:00:00+00:00"),
+        ]
+        for token in bad:
+            with self.subTest(token=token):
+                with self.assertRaises(ValueError):
+                    decode_archive_cursor(token)
+
+    def test_parse_reads_cursor(self) -> None:
+        cursor = ArchiveCursor(datetime(2026, 11, 1, tzinfo=UTC), 7)
+        params = parse_tournament_list_params(
+            QueryDict(f"bucket=archived&cursor={cursor.token}&page_size=5")
+        )
+        self.assertEqual(params.cursor, cursor)
+        self.assertIsNone(params.page)
+        self.assertTrue(params.paginated)
+        self.assertFalse(
+            parse_tournament_list_params(QueryDict("bucket=archived")).paginated
+        )
+
+    def test_parse_cursor_errors(self) -> None:
+        token = ArchiveCursor(datetime(2026, 11, 1, tzinfo=UTC), 7).token
+        cases = [
+            ("bucket=archived&cursor=%%", {"cursor": ["Invalid cursor."]}),
+            (
+                f"bucket=upcoming&cursor={token}",
+                {"cursor": ["Requires 'bucket=archived'."]},
+            ),
+            (f"cursor={token}", {"cursor": ["Requires 'bucket=archived'."]}),
+            (
+                f"bucket=archived&page=1&cursor={token}",
+                {"cursor": ["Use either 'page' or 'cursor'."]},
+            ),
+        ]
+        for qs, expected in cases:
+            with self.subTest(qs=qs):
+                with self.assertRaises(ValidationError) as ctx:
+                    parse_tournament_list_params(QueryDict(qs))
+                self.assertEqual(ctx.exception.detail, expected)
+
+    def test_cache_key_includes_cursor_and_page_size(self) -> None:
+        a = ArchiveCursor(datetime(2026, 11, 1, tzinfo=UTC), 7).token
+        b = ArchiveCursor(datetime(2026, 11, 1, tzinfo=UTC), 6).token
+
+        def key(qs: str) -> str:
+            return tournaments_list_cache_key(
+                parse_tournament_list_params(QueryDict(qs)), CUTOFF
+            )
+
+        self.assertNotEqual(
+            key(f"bucket=archived&cursor={a}"), key(f"bucket=archived&cursor={b}")
+        )
+        self.assertNotEqual(
+            key(f"bucket=archived&cursor={a}"), key("bucket=archived&page=1")
+        )
+        self.assertNotEqual(key(f"bucket=archived&cursor={a}"), key("bucket=archived"))
+        self.assertNotEqual(
+            key(f"bucket=archived&cursor={a}&page_size=5"),
+            key(f"bucket=archived&cursor={a}&page_size=10"),
+        )
+        self.assertEqual(
+            key(f"bucket=archived&cursor={a}"),
+            key(f"bucket=archived&cursor={a}&page_size=24"),
+        )
+
+    def test_cursor_envelope(self) -> None:
+        req = Request(
+            APIRequestFactory().get(
+                "/api/tournaments-list/?bucket=archived&page=1&page_size=2"
+            )
+        )
+        env = build_cursor_envelope(
+            req, count=5, next_cursor="abc", results=[{"pk": 1}]
+        )
+        self.assertEqual(set(env), {"count", "next", "previous", "results"})
+        self.assertIsNone(env["previous"])
+        self.assertIn("cursor=abc", env["next"])
+        self.assertIn("page_size=2", env["next"])
+        self.assertNotIn("page=", env["next"].replace("page_size=", ""))
+        last = build_cursor_envelope(req, count=5, next_cursor=None, results=[])
+        self.assertIsNone(last["next"])
+
+
+def _b64(text: str) -> str:
+    return urlsafe_b64encode(text.encode()).decode().rstrip("=")
 
 
 class TournamentListPaginationTests(SimpleTestCase):

@@ -2,6 +2,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime, timedelta, timezone
 from typing import Any
 from unittest import mock
+from urllib.parse import parse_qs, urlsplit
 
 from django.db import connection
 from django.test import TestCase, override_settings
@@ -116,7 +117,9 @@ class _BucketFixtureMixin(TestCase):
     def setUpTestData(cls) -> None:
         alpha_org = Organization.objects.create(name="Alpha Org")
         beta_org = Organization.objects.create(name="Beta Org")
-        alpha_league = League.objects.create(organization=alpha_org, name="Alpha League")
+        alpha_league = League.objects.create(
+            organization=alpha_org, name="Alpha League"
+        )
         beta_league = League.objects.create(organization=beta_org, name="Beta League")
         specs: list[tuple[str, str, datetime, League | None]] = [
             ("future_ahead", "future", NOW + timedelta(days=5), alpha_league),
@@ -256,7 +259,9 @@ class TournamentListBucketTests(_BucketFixtureMixin):
 
     def test_search_name_org_league_case_insensitive(self) -> None:
         alpha_upcoming = self.pk_set(*(set(UPCOMING_KEYS) & self.alpha_keys))
-        self.assertEqual(set(self.pks("?bucket=upcoming&search=ALPHA ORG")), alpha_upcoming)
+        self.assertEqual(
+            set(self.pks("?bucket=upcoming&search=ALPHA ORG")), alpha_upcoming
+        )
         self.assertEqual(
             set(self.pks("?bucket=upcoming&search=alpha league")), alpha_upcoming
         )
@@ -274,7 +279,9 @@ class TournamentListBucketTests(_BucketFixtureMixin):
         self.assertIsInstance(data, list)
         self.assertEqual(
             [row["pk"] for row in data],
-            list(Tournament.objects.order_by("-date_played").values_list("pk", flat=True)),
+            list(
+                Tournament.objects.order_by("-date_played").values_list("pk", flat=True)
+            ),
         )
 
 
@@ -288,7 +295,7 @@ class TournamentListPaginationTests(_BucketFixtureMixin):
         self.assertEqual(data["count"], 3)
         self.assertEqual(len(data["results"]), 2)
         self.assertIsNone(data["previous"])
-        self.assertIn("page=2", data["next"])
+        self.assertIn("cursor=", data["next"])
 
         second = self.get("?bucket=archived&page=2&page_size=2").json()
         self.assertIsNone(second["next"])
@@ -307,3 +314,91 @@ class TournamentListPaginationTests(_BucketFixtureMixin):
         )
         data = self.get("?bucket=archived&page=1&page_size=500").json()
         self.assertEqual(len(data["results"]), 100)
+
+
+@override_settings(CACHEOPS_ENABLED=False)
+class TournamentListArchivedCursorTests(_BucketFixtureMixin):
+    def follow(self, next_url: str) -> dict[str, Any]:
+        response = self.get(f"?{urlsplit(next_url).query}")
+        self.assertEqual(response.status_code, 200, response.content)
+        return response.json()
+
+    def first_page(self, size: int = 2) -> dict[str, Any]:
+        response = self.get(f"?bucket=archived&page=1&page_size={size}")
+        self.assertEqual(response.status_code, 200, response.content)
+        return response.json()
+
+    def test_insert_between_pages_continues_after_the_last_row(self) -> None:
+        first = self.first_page()
+        self.assertEqual(
+            [r["pk"] for r in first["results"]],
+            [self.rows["past_ahead"].pk, self.rows["invalid_state"].pk],
+        )
+        Tournament.objects.create(
+            name="Newly Archived", state="past", date_played=NOW + timedelta(days=4)
+        )
+        second = self.follow(first["next"])
+        self.assertEqual(
+            [r["pk"] for r in second["results"]], [self.rows["stale_minus_1s"].pk]
+        )
+        self.assertIsNone(second["next"])
+
+    def test_row_leaving_between_pages_is_not_skipped(self) -> None:
+        first = self.first_page()
+        Tournament.objects.filter(pk=self.rows["past_ahead"].pk).update(state="future")
+        second = self.follow(first["next"])
+        self.assertEqual(
+            [r["pk"] for r in second["results"]], [self.rows["stale_minus_1s"].pk]
+        )
+
+    def test_next_is_an_opaque_cursor(self) -> None:
+        first = self.first_page()
+        query = parse_qs(urlsplit(first["next"]).query)
+        self.assertNotIn("page", query)
+        self.assertEqual(query["bucket"], ["archived"])
+        self.assertEqual(query["page_size"], ["2"])
+        self.assertEqual(len(query["cursor"]), 1)
+        self.assertNotIn(str(self.rows["invalid_state"].pk), query["cursor"][0])
+        second = self.follow(first["next"])
+        self.assertEqual(set(second), {"count", "next", "previous", "results"})
+        self.assertEqual(second["count"], 3)
+        self.assertIsNone(second["previous"])
+
+    def test_date_ties_page_by_pk_descending(self) -> None:
+        played = CUTOFF - timedelta(days=30)
+        tied = [
+            Tournament.objects.create(name=f"Tie {i}", state="past", date_played=played)
+            for i in range(5)
+        ]
+        seen: list[int] = []
+        data = self.first_page(size=2)
+        seen += [r["pk"] for r in data["results"]]
+        while data["next"] is not None:
+            data = self.follow(data["next"])
+            seen += [r["pk"] for r in data["results"]]
+        expected = [
+            self.rows[k].pk for k in ("past_ahead", "invalid_state", "stale_minus_1s")
+        ]
+        expected += sorted((t.pk for t in tied), reverse=True)
+        self.assertEqual(seen, expected)
+
+    def test_bad_cursor_params_400(self) -> None:
+        token = parse_qs(urlsplit(self.first_page()["next"]).query)["cursor"][0]
+        cases = [
+            ("bucket=archived&cursor=%25%25", {"cursor": ["Invalid cursor."]}),
+            ("bucket=archived&cursor=bm9wZQ", {"cursor": ["Invalid cursor."]}),
+            (
+                f"bucket=upcoming&cursor={token}",
+                {"cursor": ["Requires 'bucket=archived'."]},
+            ),
+            (f"cursor={token}", {"cursor": ["Requires 'bucket=archived'."]}),
+            (
+                f"bucket=archived&page=1&cursor={token}",
+                {"cursor": ["Use either 'page' or 'cursor'."]},
+            ),
+        ]
+        for qs, expected in cases:
+            with self.subTest(qs=qs):
+                response = self.get(f"?{qs}")
+                self.assertEqual(response.status_code, 400, response.content)
+                self.assertEqual(response.json(), expected)
