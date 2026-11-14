@@ -1,5 +1,6 @@
 import { BASE_URL } from '../fixtures/base-url';
-import { test as base, expect } from '@playwright/test';
+import { expect } from '@playwright/test';
+import { test as base } from '../fixtures/external-apis';
 import type { BrowserContext, Page } from '@playwright/test';
 import {
   loginAsUser,

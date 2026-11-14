@@ -142,6 +142,12 @@ Uses the same pattern as react-scan in `root.tsx`.
 - `frontend/app/components/user/userCard/LoginAsUserButton.tsx` - Button component
 - `frontend/app/components/user/userCard.tsx` - Integration point
 
+## External API Stubs
+
+Every context made through the project fixtures has `https://api.github.com/**` stubbed
+(`frontend/tests/playwright/fixtures/external-apis.ts`), so E2E never depends on
+GitHub's rate limit. Import `test` from `../fixtures`, not `@playwright/test`, to get it.
+
 ## Backend Test Endpoints
 
 The login fixtures call these backend endpoints (defined in `backend/tests/test_auth.py`):

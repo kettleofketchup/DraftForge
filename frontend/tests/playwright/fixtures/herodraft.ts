@@ -1,5 +1,6 @@
 import { API_URL, BASE_URL } from './base-url';
-import { test as base, expect } from '@playwright/test';
+import { expect } from '@playwright/test';
+import { test as base } from './external-apis';
 import type { Browser, BrowserContext, Page } from '@playwright/test';
 import { loginAsUser, waitForHydration } from './auth';
 import type { UserInfo } from './auth';

@@ -7,7 +7,8 @@
  * Ports the Cypress login commands to Playwright.
  */
 
-import { test as base, expect } from '@playwright/test';
+import { expect } from '@playwright/test';
+import { test as base } from './external-apis';
 import type { BrowserContext, Page } from '@playwright/test';
 
 import { API_URL, BASE_URL } from './base-url';

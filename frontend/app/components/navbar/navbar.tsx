@@ -379,7 +379,10 @@ const StarBadge = ({
   }
   if (count === null) return null;
   return (
-    <span className="inline-flex items-center gap-0.5 text-[10px] bg-base-400 text-text-primary font-semibold rounded px-1 py-0.5 leading-none">
+    <span
+      data-testid="githubStarCount"
+      className="inline-flex items-center gap-0.5 text-[10px] bg-base-400 text-text-primary font-semibold rounded px-1 py-0.5 leading-none"
+    >
       <svg
         xmlns="http://www.w3.org/2000/svg"
         viewBox="0 0 24 24"

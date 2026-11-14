@@ -22,7 +22,8 @@
  */
 
 import { API_URL } from '../../fixtures/base-url';
-import { test, expect, type BrowserContext } from '@playwright/test';
+import { expect, type BrowserContext } from '@playwright/test';
+import { test } from '../../fixtures/external-apis';
 import {
   loginEventPlayer,
   loginEventPlayerNoProfile,
