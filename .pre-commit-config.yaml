@@ -29,3 +29,9 @@ repos:
         language: system
         files: \.py$
         pass_filenames: true
+      - id: prettier-frontend
+        name: prettier (frontend)
+        entry: frontend/scripts/prettier-check-files.sh
+        language: system
+        files: ^frontend/
+        pass_filenames: true

@@ -110,6 +110,9 @@ See [references/backend-test-endpoints.md](references/backend-test-endpoints.md)
 | League | CSV Import League | 3 | 17931 |
 | League | Events Test League | 7 | 17935 |
 | Org / League | Lobby Test Org / Lobby Test League | auto (look up by name) | 17940 |
+| Org | Discovery Home / Away / Open (tournament discovery) | 30 / 31 / 32 | - |
+| League | Discovery Home / Away / Open League | 30 / 31 / 32 | 17950 / 17951 / 17952 |
+| Tournament | Discovery tournaments (906 has open signups, org 32) | 900-906 | - |
 
 | User | PK | Role | Login fixture |
 |------|----|------|--------------|
@@ -123,5 +126,6 @@ See [references/backend-test-endpoints.md](references/backend-test-endpoints.md)
 | event_org_admin | 1080 | org admin (org 7) | `loginEventAdmin()` |
 | event_player_1 | 1081 | regular | `loginEventPlayer()` |
 | lobby_staff, lobby_rostered, lobby_registered, lobby_unregistered, lobby_league_staff | 7200-7204 | dota_lobby roles | `loginDotaLobby(context, role)` |
+| discovery_member | 1100 | member of org 30 only (tournament discovery) | `loginAsUser(context, 1100)` |
 
 > **NOTE**: When this table drifts from source, read `backend/tests/data/users.py` and `backend/tests/data/organizations.py` for truth.

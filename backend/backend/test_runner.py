@@ -1,8 +1,10 @@
+import contextvars
 import multiprocessing
 import os
 import secrets
 import tempfile
 import time
+from multiprocessing.reduction import ForkingPickler
 from multiprocessing.sharedctypes import Synchronized
 from pathlib import Path
 from typing import Any, Callable
@@ -24,6 +26,16 @@ TEST_DB_PREFIX = "draftforge-test-"
 TEST_DB_SUFFIX = ".sqlite3"
 KEEPDB_TEST_DB_NAME = f"{TEST_DB_PREFIX}keepdb{TEST_DB_SUFFIX}"
 STALE_TEST_DB_SECONDS = 24 * 60 * 60
+
+
+def reduce_context(
+    _context: contextvars.Context,
+) -> tuple[Callable[[], contextvars.Context], tuple[()]]:
+    """IsolatedAsyncioTestCase keeps a Context, which --parallel must pickle to a worker."""
+    return contextvars.copy_context, ()
+
+
+ForkingPickler.register(contextvars.Context, reduce_context)
 
 
 def default_dota_lobby_settings() -> dict[str, Any]:
@@ -154,6 +166,19 @@ def init_worker(
         setup_worker_connection(connection, worker_id)
 
 
+def checkpoint_before_clone(connection: BaseDatabaseWrapper) -> None:
+    """Checkpoint the WAL (settings.py enables it) before Django clones the DB by file
+    copy, or --parallel clones miss migrations not yet checkpointed."""
+    clone_test_db = connection.creation.clone_test_db
+
+    def checkpointed_clone_test_db(*args: Any, **kwargs: Any) -> None:
+        with connection.cursor() as cursor:
+            cursor.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        clone_test_db(*args, **kwargs)
+
+    connection.creation.clone_test_db = checkpointed_clone_test_db
+
+
 class BackendParallelTestSuite(ParallelTestSuite):
     init_worker = init_worker
 
@@ -204,6 +229,9 @@ class BackendDiscoverRunner(DiscoverRunner):
     def setup_databases(self, **kwargs: Any) -> list[tuple[Any, str, bool]]:
         remove_stale_isolated_dbs()
         self._test_db_names = assign_isolated_db_names(self.keepdb)
+        for connection in connections.all(initialized_only=False):
+            if connection.vendor == "sqlite":
+                checkpoint_before_clone(connection)
         try:
             return super().setup_databases(**kwargs)
         except BaseException:
