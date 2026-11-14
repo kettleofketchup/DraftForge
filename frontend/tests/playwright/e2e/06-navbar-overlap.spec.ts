@@ -8,6 +8,7 @@ import type { Browser, BrowserContext, Page } from '@playwright/test';
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, loginAdmin, test } from '../fixtures';
+import { STUB_GITHUB_STARS } from '../fixtures/external-apis';
 
 // Screenshotted widths; the sweep also walks every 16px between them so a
 // breakpoint can't hide a collision between two sampled widths.
@@ -20,7 +21,6 @@ const SWEEP = [
     ...Array.from({ length: 113 }, (_, i) => 768 + i * 16),
   ]),
 ].sort((a, b) => a - b);
-const STAR_COUNT = 1234;
 const SHOT_DIR = process.env.NAVBAR_SHOT_DIR;
 
 type Box = { label: string; x: number; y: number; w: number; h: number };
@@ -47,9 +47,6 @@ async function openNavbar(
       (window as Window & { playwright?: boolean }).playwright = true;
     });
   }
-  await context.route('https://api.github.com/repos/**', (route) =>
-    route.fulfill({ json: { stargazers_count: STAR_COUNT } }),
-  );
   if (opts.loggedIn) await loginAdmin(context);
 
   const page = await context.newPage();
@@ -60,8 +57,8 @@ async function openNavbar(
   await expect(account).toBeVisible();
   if (opts.loggedIn)
     await expect(page.locator('[data-testid="nav-link-admin"]')).toBeAttached();
-  await expect(page.locator('[data-testid="nav-github-stars"]')).toHaveText(
-    String(STAR_COUNT),
+  await expect(page.locator('[data-testid="githubStarCount"]')).toHaveText(
+    String(STUB_GITHUB_STARS),
   );
   await expect(page.locator('[data-testid="preview-login-admin"]')).toHaveCount(
     opts.preview ? 1 : 0,

@@ -1,9 +1,8 @@
-import { API_URL, BASE_URL } from './base-url';
-import { test as base, expect } from '@playwright/test';
-import type { Browser, BrowserContext, Page } from '@playwright/test';
-import { loginAsUser, waitForHydration } from './auth';
+import type { BrowserContext, Page } from '@playwright/test';
 import type { UserInfo } from './auth';
-
+import { loginAsUser, waitForHydration } from './auth';
+import { API_URL, BASE_URL } from './base-url';
+import { test as base } from './external-apis';
 
 /**
  * HeroDraft test fixtures that support two-captain scenarios.
@@ -41,11 +40,11 @@ export interface CaptainContext {
  */
 export async function getHeroDraftByKey(
   context: BrowserContext,
-  key: string
+  key: string,
 ): Promise<HeroDraftInfo | null> {
   const response = await context.request.get(
     `${API_URL}/tests/herodraft-by-key/${key}/`,
-    { failOnStatusCode: false }
+    { failOnStatusCode: false },
   );
 
   if (!response.ok()) {
@@ -60,7 +59,7 @@ export async function getHeroDraftByKey(
  */
 export async function resetHeroDraft(
   context: BrowserContext,
-  draftId: number
+  draftId: number,
 ): Promise<void> {
   await context.request.post(`${API_URL}/tests/herodraft/${draftId}/reset/`, {
     failOnStatusCode: false,
@@ -71,11 +70,11 @@ export async function resetHeroDraft(
  * Create a new HeroDraft for testing with two captains.
  */
 export async function createTestHeroDraft(
-  context: BrowserContext
+  context: BrowserContext,
 ): Promise<HeroDraftInfo | null> {
   const response = await context.request.post(
     `${API_URL}/tests/herodraft/create/`,
-    { failOnStatusCode: false }
+    { failOnStatusCode: false },
   );
 
   if (!response.ok()) {
@@ -145,7 +144,7 @@ export const test = base.extend<{
   heroDraft: async ({ captainA }, use) => {
     const draftInfo = await getHeroDraftByKey(
       captainA.context,
-      'two_captain_test'
+      'two_captain_test',
     );
     if (!draftInfo) {
       throw new Error('Could not fetch HeroDraft test data');
@@ -171,7 +170,7 @@ export { expect } from '@playwright/test';
 export async function setupTwoCaptains(
   captainA: CaptainContext,
   captainB: CaptainContext,
-  draftInfo: HeroDraftInfo
+  draftInfo: HeroDraftInfo,
 ): Promise<void> {
   const teams = draftInfo.draft_teams;
   if (teams.length < 2) {
@@ -179,18 +178,12 @@ export async function setupTwoCaptains(
   }
 
   // Login Captain A
-  const captainAInfo = await loginAsUser(
-    captainA.context,
-    teams[0].captain.pk
-  );
+  const captainAInfo = await loginAsUser(captainA.context, teams[0].captain.pk);
   captainA.userInfo = captainAInfo.user;
   captainA.teamId = teams[0].id;
 
   // Login Captain B
-  const captainBInfo = await loginAsUser(
-    captainB.context,
-    teams[1].captain.pk
-  );
+  const captainBInfo = await loginAsUser(captainB.context, teams[1].captain.pk);
   captainB.userInfo = captainBInfo.user;
   captainB.teamId = teams[1].id;
 
@@ -214,11 +207,11 @@ export async function setupTwoCaptains(
  */
 export async function positionWindowsSideBySide(
   captainA: CaptainContext,
-  captainB: CaptainContext
+  captainB: CaptainContext,
 ): Promise<void> {
   // Note: Window positioning requires CDP access
   // This is a placeholder - actual positioning depends on display setup
   console.log(
-    'Tip: Manually arrange the two browser windows side by side for best viewing'
+    'Tip: Manually arrange the two browser windows side by side for best viewing',
   );
 }

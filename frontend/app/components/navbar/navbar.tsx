@@ -429,8 +429,8 @@ const StarBadge = ({
   if (count === null) return null;
   return (
     <span
+      data-testid="githubStarCount"
       className="inline-flex items-center gap-0.5 text-[10px] bg-base-400 text-text-primary font-semibold rounded px-1 py-0.5 leading-none"
-      data-testid="nav-github-stars"
     >
       <svg
         xmlns="http://www.w3.org/2000/svg"

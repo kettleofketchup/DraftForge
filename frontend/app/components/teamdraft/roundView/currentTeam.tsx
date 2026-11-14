@@ -2,13 +2,11 @@ import { Suspense, useEffect, useMemo, useState } from 'react';
 import { TeamTable } from '~/components/team/teamTable/teamTable';
 import type { DraftRoundType, TournamentType } from '~/index';
 import { getLogger } from '~/lib/logger';
-import { Spinner } from '../helpers/spinner';
 import { useUserStore } from '~/store/userStore';
+import { Spinner } from '../helpers/spinner';
 const log = getLogger('CurrentTeamView');
-interface CurrentTeamViewProps {
-}
-export const CurrentTeamView: React.FC<CurrentTeamViewProps> = ({
-}) => {
+interface CurrentTeamViewProps {}
+export const CurrentTeamView: React.FC<CurrentTeamViewProps> = () => {
   const curRound: DraftRoundType = useUserStore((state) => state.curDraftRound);
   const tournament: TournamentType = useUserStore((state) => state.tournament);
   const [updating, setUpdating] = useState(false);
@@ -19,9 +17,10 @@ export const CurrentTeamView: React.FC<CurrentTeamViewProps> = ({
     if (!curRound?.captain?.pk || !tournament?.teams) {
       return curRound?.team;
     }
-    return tournament.teams.find(
-      (t) => t.captain?.pk === curRound.captain?.pk
-    ) ?? curRound?.team;
+    return (
+      tournament.teams.find((t) => t.captain?.pk === curRound.captain?.pk) ??
+      curRound?.team
+    );
   }, [tournament?.teams, curRound?.captain?.pk, curRound?.team]);
 
   useEffect(() => {
@@ -41,7 +40,6 @@ export const CurrentTeamView: React.FC<CurrentTeamViewProps> = ({
     // Cleanup the timer if the component unmounts or the effect re-runs
     return () => clearTimeout(timer);
   }, [curRound?.choice, curRound?.pk]);
-
 
   return (
     <Suspense fallback={<Spinner />}>
