@@ -87,7 +87,11 @@ export const createTeamFromCaptainHook = async ({
       },
     });
     const rawData = await fetchTournament(tournament.pk);
-    setTournament(hydrateTournament(rawData as TournamentType & { _users?: Record<number, unknown> }) as TournamentType);
+    setTournament(
+      hydrateTournament(
+        rawData as TournamentType & { _users?: Record<number, unknown> },
+      ) as TournamentType,
+    );
     // If the captain is being removed, update state
     return;
   }
@@ -106,7 +110,11 @@ export const createTeamFromCaptainHook = async ({
   toast.promise(createTeamFromCaptain(data), {
     loading: `${msg} ${captain.username} as captain...`,
     success: (rawData) => {
-      setTournament(hydrateTournament(rawData as TournamentType & { _users?: Record<number, unknown> }) as TournamentType);
+      setTournament(
+        hydrateTournament(
+          rawData as TournamentType & { _users?: Record<number, unknown> },
+        ) as TournamentType,
+      );
 
       if (setIsCaptain) setIsCaptain(!isCaptain());
 

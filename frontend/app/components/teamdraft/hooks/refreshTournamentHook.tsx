@@ -35,7 +35,9 @@ export const refreshTournamentHook = async ({
     log.debug('tournament has been refreshed');
 
     const rawData = await fetchTournament(tournament.pk);
-    const data = hydrateTournament(rawData as TournamentType & { _users?: Record<number, unknown> }) as TournamentType;
+    const data = hydrateTournament(
+      rawData as TournamentType & { _users?: Record<number, unknown> },
+    ) as TournamentType;
     setTournament(data);
     if (setDraft && data.draft) setDraft(data.draft);
     if (setCurDraftRound) {

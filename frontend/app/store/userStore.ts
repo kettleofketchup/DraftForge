@@ -14,13 +14,13 @@ import {
   getTournaments,
   getTournamentsBasic,
 } from '~/components/api/api';
-import type { DraftRoundType, DraftType } from '~/components/teamdraft/types';
 import type { LeagueType } from '~/components/league/schemas';
 import type { OrganizationType } from '~/components/organization/schemas';
+import type { DraftRoundType, DraftType } from '~/components/teamdraft/types';
 import type { TeamType, TournamentType } from '~/components/tournament/types';
-import { hydrateTournament } from '~/lib/hydrateTournament';
 import { User } from '~/components/user/user';
 import type { GameType, GuildMember, GuildMembers, UserType } from '~/index';
+import { hydrateTournament } from '~/lib/hydrateTournament';
 import { getLogger } from '~/lib/logger';
 import { useUserCacheStore } from '~/store/userCacheStore';
 import { useUserProfileStore } from '~/store/userProfileStore';
@@ -136,7 +136,9 @@ export const useUserStore = create<UserState>()(
           set({
             curDraftRound:
               rounds.find((r) => r.pk === get().curDraftRound?.pk) ??
-              rounds.find((r) => r.pk === get().tournament.draft?.latest_round) ??
+              rounds.find(
+                (r) => r.pk === get().tournament.draft?.latest_round,
+              ) ??
               rounds[0],
           });
         } catch (err) {
@@ -225,10 +227,14 @@ export const useUserStore = create<UserState>()(
         const tournaments = get().tournamentsByUser(user);
         for (const tournament of tournaments) {
           let change = false;
-          tournament.users = tournament.users?.map((u) => {
-            if (u?.pk === user.pk) { change = true; return user; }
-            return u;
-          }) ?? null;
+          tournament.users =
+            tournament.users?.map((u) => {
+              if (u?.pk === user.pk) {
+                change = true;
+                return user;
+              }
+              return u;
+            }) ?? null;
           if (change) get().setTournament(tournament);
         }
       },
@@ -245,7 +251,9 @@ export const useUserStore = create<UserState>()(
       delUser: (user: UserType) => {
         if (!user || user.pk == null) return;
         useUserCacheStore.getState().remove(user.pk!);
-        set({ globalUserPks: get().globalUserPks.filter((pk) => pk !== user.pk) });
+        set({
+          globalUserPks: get().globalUserPks.filter((pk) => pk !== user.pk),
+        });
       },
 
       addTournament: (tourn: TournamentType) =>
@@ -260,7 +268,9 @@ export const useUserStore = create<UserState>()(
           const response = await fetchUsers();
           useUserCacheStore.getState().upsert(response);
           set({
-            globalUserPks: response.filter((u) => u.pk != null).map((u) => u.pk!),
+            globalUserPks: response
+              .filter((u) => u.pk != null)
+              .map((u) => u.pk!),
           });
           log.debug('Users fetched successfully:', response.length);
         } catch (error) {
@@ -349,7 +359,11 @@ export const useUserStore = create<UserState>()(
 
         try {
           const response = await fetchTournament(id);
-          set({ tournament: hydrateTournament(response as TournamentType & { _users?: Record<number, unknown> }) as TournamentType });
+          set({
+            tournament: hydrateTournament(
+              response as TournamentType & { _users?: Record<number, unknown> },
+            ) as TournamentType,
+          });
         } catch (err) {
           log.error('Failed to fetch tournament:', err);
         }
@@ -398,8 +412,10 @@ export const useUserStore = create<UserState>()(
       organization: null,
       organizationPk: null,
       organizationsLoaded: false,
-      setOrganizations: (orgs) => set({ organizations: orgs, organizationsLoaded: true }),
-      setOrganization: (org) => set({ organization: org, organizationPk: org?.pk ?? null }),
+      setOrganizations: (orgs) =>
+        set({ organizations: orgs, organizationsLoaded: true }),
+      setOrganization: (org) =>
+        set({ organization: org, organizationPk: org?.pk ?? null }),
       getOrganizations: async () => {
         // Skip if already loaded
         if (get().organizationsLoaded && get().organizations.length > 0) {

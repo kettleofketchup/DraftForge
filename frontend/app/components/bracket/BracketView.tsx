@@ -1,35 +1,34 @@
-import { useCallback, useEffect, useState, useRef, useMemo } from 'react';
-import { useNavigate, useSearchParams } from 'react-router';
 import {
-  ReactFlow,
   Background,
-  useNodesState,
-  useEdgesState,
-  useReactFlow,
-  type Node,
-  type Edge,
-  type ReactFlowInstance,
-  ReactFlowProvider,
   Panel,
+  ReactFlow,
+  ReactFlowProvider,
+  useEdgesState,
+  useNodesState,
+  useReactFlow,
+  type Edge,
+  type Node,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router';
 import './bracket-styles.css';
 
-import { useBracketStore } from '~/store/bracketStore';
-import { useBracketQuery } from '~/hooks/useBracket';
-import { useUserStore } from '~/store/userStore';
-import { useTournamentStore } from '~/store/tournamentStore';
-import { useCanEditTournament } from '~/hooks/usePermissions';
-import { useOrganization } from '~/components/organization';
-import { useElkLayout, type MatchNodeType } from './hooks/useElkLayout';
-import { MatchNode } from './nodes/MatchNode';
-import { EmptySlotNode } from './nodes/EmptySlotNode';
-import { DividerNode, type DividerNodeData } from './nodes/DividerNode';
-import { BracketEdge } from './edges/BracketEdge';
-import { BracketToolbar } from './controls/BracketToolbar';
-import { MatchStatsModal } from './modals/MatchStatsModal';
 import { HeroDraftModal } from '~/components/herodraft/HeroDraftModal';
-import type { BracketMatch, MatchNodeData, BadgeMapping } from './types';
+import { useOrganization } from '~/components/organization';
+import { useBracketQuery } from '~/hooks/useBracket';
+import { useCanEditTournament } from '~/hooks/usePermissions';
+import { useBracketStore } from '~/store/bracketStore';
+import { useTournamentStore } from '~/store/tournamentStore';
+import { useUserStore } from '~/store/userStore';
+import { BracketToolbar } from './controls/BracketToolbar';
+import { BracketEdge } from './edges/BracketEdge';
+import { useElkLayout, type MatchNodeType } from './hooks/useElkLayout';
+import { MatchStatsModal } from './modals/MatchStatsModal';
+import { DividerNode, type DividerNodeData } from './nodes/DividerNode';
+import { EmptySlotNode } from './nodes/EmptySlotNode';
+import { MatchNode } from './nodes/MatchNode';
+import type { BadgeMapping, BracketMatch, MatchNodeData } from './types';
 import { buildBadgeMapping } from './utils/badgeUtils';
 
 // Register node/edge types outside component to prevent re-renders
@@ -58,20 +57,21 @@ const ROUND_HORIZONTAL_GAP = 180; // Gap between rounds
  * Create edges only when winner is set and winning team appears in target match
  */
 function createAdvancementEdges(matches: BracketMatch[]): Edge[] {
-  const matchMap = new Map(matches.map(m => [m.id, m]));
+  const matchMap = new Map(matches.map((m) => [m.id, m]));
 
   const edges = matches
-    .filter(m => {
+    .filter((m) => {
       // Must have a next match and a winner
       if (!m.nextMatchId || !m.winner) return false;
       return true;
     })
-    .map(match => {
+    .map((match) => {
       const targetMatch = matchMap.get(match.nextMatchId!);
       if (!targetMatch) return null;
 
       // Get the winning team
-      const winningTeam = match.winner === 'radiant' ? match.radiantTeam : match.direTeam;
+      const winningTeam =
+        match.winner === 'radiant' ? match.radiantTeam : match.direTeam;
       if (!winningTeam?.pk) return null;
 
       // Check if winning team is actually in the target match
@@ -97,7 +97,10 @@ function createAdvancementEdges(matches: BracketMatch[]): Edge[] {
 /**
  * Convert matches to ReactFlow nodes
  */
-function matchesToNodes(matches: BracketMatch[], badgeMapping: BadgeMapping): MatchNodeType[] {
+function matchesToNodes(
+  matches: BracketMatch[],
+  badgeMapping: BadgeMapping,
+): MatchNodeType[] {
   return matches.map((match) => ({
     id: match.id,
     type: 'match' as const,
@@ -111,8 +114,8 @@ function matchesToNodes(matches: BracketMatch[], badgeMapping: BadgeMapping): Ma
  */
 function createStructuralEdges(matches: BracketMatch[]): Edge[] {
   return matches
-    .filter(m => m.nextMatchId)
-    .map(match => ({
+    .filter((m) => m.nextMatchId)
+    .map((match) => ({
       id: `struct-${match.id}-${match.nextMatchId}`,
       source: match.id,
       target: match.nextMatchId!,
@@ -127,14 +130,20 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
   // Fetch the full org so org-staff membership flows into useCanEditTournament —
   // tournament.league is LeagueMinimalSchema (no .organization field), so we
   // fetch the org separately via useOrganization and pass it as the second arg.
-  const { organization } = useOrganization(tournament?.organization_pk ?? undefined);
+  const { organization } = useOrganization(
+    tournament?.organization_pk ?? undefined,
+  );
   // Mirrors the backend's can_edit_tournament cascade — covers site staff,
   // org admin/staff, league admin, and league staff for the tournament's league.
   const canEdit = useCanEditTournament(tournament?.league, organization);
   const pendingDraftId = useTournamentStore((state) => state.pendingDraftId);
-  const setPendingDraftId = useTournamentStore((state) => state.setPendingDraftId);
+  const setPendingDraftId = useTournamentStore(
+    (state) => state.setPendingDraftId,
+  );
   const pendingMatchId = useTournamentStore((state) => state.pendingMatchId);
-  const setPendingMatchId = useTournamentStore((state) => state.setPendingMatchId);
+  const setPendingMatchId = useTournamentStore(
+    (state) => state.setPendingMatchId,
+  );
 
   // Use individual selectors to prevent unnecessary re-renders
   const matches = useBracketStore((state) => state.matches);
@@ -146,11 +155,13 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
 
   // Expose fitView for Playwright testing
   useEffect(() => {
-    (window as Window & { bracketFitView?: () => void }).bracketFitView = () => {
-      fitView({ padding: 0.1, duration: 200 });
-    };
+    (window as Window & { bracketFitView?: () => void }).bracketFitView =
+      () => {
+        fitView({ padding: 0.1, duration: 200 });
+      };
     return () => {
-      delete (window as Window & { bracketFitView?: () => void }).bracketFitView;
+      delete (window as Window & { bracketFitView?: () => void })
+        .bracketFitView;
     };
   }, [fitView]);
 
@@ -173,7 +184,9 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
   // Deep-linking: auto-open hero draft modal when pendingDraftId is set
   useEffect(() => {
     if (pendingDraftId && matches.length > 0) {
-      const matchWithDraft = matches.find((m) => m.herodraft_id === pendingDraftId);
+      const matchWithDraft = matches.find(
+        (m) => m.herodraft_id === pendingDraftId,
+      );
       if (matchWithDraft) {
         // Open hero draft modal directly instead of going through match modal
         setHeroDraftId(pendingDraftId);
@@ -221,9 +234,11 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
 
     const layoutBracket = async () => {
       // Separate matches by bracket type
-      const winnersMatches = matches.filter(m => m.bracketType === 'winners');
-      const losersMatches = matches.filter(m => m.bracketType === 'losers');
-      const grandFinalsMatches = matches.filter(m => m.bracketType === 'grand_finals');
+      const winnersMatches = matches.filter((m) => m.bracketType === 'winners');
+      const losersMatches = matches.filter((m) => m.bracketType === 'losers');
+      const grandFinalsMatches = matches.filter(
+        (m) => m.bracketType === 'grand_finals',
+      );
 
       // Create nodes
       const winnersNodes = matchesToNodes(winnersMatches, badgeMapping);
@@ -239,17 +254,17 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
        */
       const layoutBracketNodes = (
         nodes: MatchNodeType[],
-        matchList: BracketMatch[]
+        matchList: BracketMatch[],
       ): MatchNodeType[] => {
         if (nodes.length === 0) return nodes;
 
         // Create lookup maps
-        const nodeById = new Map(nodes.map(n => [n.id, n]));
-        const matchById = new Map(matchList.map(m => [m.id, m]));
+        const nodeById = new Map(nodes.map((n) => [n.id, n]));
+        const matchById = new Map(matchList.map((m) => [m.id, m]));
 
         // Group nodes by round
         const roundGroups = new Map<number, MatchNodeType[]>();
-        nodes.forEach(node => {
+        nodes.forEach((node) => {
           const round = (node.data as MatchNodeData).round;
           if (!roundGroups.has(round)) roundGroups.set(round, []);
           roundGroups.get(round)!.push(node);
@@ -260,7 +275,11 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
 
         // Position round 1 nodes first (they have no source)
         const round1Nodes = roundGroups.get(rounds[0]) || [];
-        round1Nodes.sort((a, b) => (a.data as MatchNodeData).position - (b.data as MatchNodeData).position);
+        round1Nodes.sort(
+          (a, b) =>
+            (a.data as MatchNodeData).position -
+            (b.data as MatchNodeData).position,
+        );
 
         round1Nodes.forEach((node, i) => {
           node.position.x = 0;
@@ -273,14 +292,18 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
           const roundNodes = roundGroups.get(round) || [];
           const xPos = i * (NODE_WIDTH + ROUND_HORIZONTAL_GAP);
 
-          roundNodes.sort((a, b) => (a.data as MatchNodeData).position - (b.data as MatchNodeData).position);
+          roundNodes.sort(
+            (a, b) =>
+              (a.data as MatchNodeData).position -
+              (b.data as MatchNodeData).position,
+          );
 
-          roundNodes.forEach(node => {
+          roundNodes.forEach((node) => {
             node.position.x = xPos;
 
             // Find source nodes that feed into this node
             const sourceNodes: MatchNodeType[] = [];
-            matchList.forEach(match => {
+            matchList.forEach((match) => {
               if (match.nextMatchId === node.id) {
                 const sourceNode = nodeById.get(match.id);
                 if (sourceNode) sourceNodes.push(sourceNode);
@@ -289,27 +312,33 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
 
             if (sourceNodes.length > 0) {
               // Center between source nodes
-              const sourceYs = sourceNodes.map(n => n.position.y + NODE_HEIGHT / 2);
-              const avgY = sourceYs.reduce((a, b) => a + b, 0) / sourceYs.length;
+              const sourceYs = sourceNodes.map(
+                (n) => n.position.y + NODE_HEIGHT / 2,
+              );
+              const avgY =
+                sourceYs.reduce((a, b) => a + b, 0) / sourceYs.length;
               node.position.y = avgY - NODE_HEIGHT / 2;
             }
           });
         }
 
         // Collision detection - resolve overlaps
-        const resolveCollisions = (nodes: MatchNodeType[], maxIterations = 10) => {
+        const resolveCollisions = (
+          nodes: MatchNodeType[],
+          maxIterations = 10,
+        ) => {
           for (let iter = 0; iter < maxIterations; iter++) {
             let hasCollision = false;
 
             // Group by round for collision detection within same column
             const byRound = new Map<number, MatchNodeType[]>();
-            nodes.forEach(n => {
+            nodes.forEach((n) => {
               const round = (n.data as MatchNodeData).round;
               if (!byRound.has(round)) byRound.set(round, []);
               byRound.get(round)!.push(n);
             });
 
-            byRound.forEach(roundNodes => {
+            byRound.forEach((roundNodes) => {
               // Sort by Y position
               roundNodes.sort((a, b) => a.position.y - b.position.y);
 
@@ -343,43 +372,62 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
       const layoutedLosers = layoutBracketNodes(losersNodes, losersMatches);
 
       // Calculate offset for losers bracket
-      const winnersMaxY = Math.max(...layoutedWinners.map(n => n.position.y + NODE_HEIGHT), 0);
+      const winnersMaxY = Math.max(
+        ...layoutedWinners.map((n) => n.position.y + NODE_HEIGHT),
+        0,
+      );
       const losersOffset = winnersMaxY + BRACKET_SECTION_GAP;
 
       // Set divider position
       setDividerY(winnersMaxY + BRACKET_SECTION_GAP / 2);
 
       // Apply offset to losers nodes
-      const offsetLosers: MatchNodeType[] = layoutedLosers.map(node => ({
+      const offsetLosers: MatchNodeType[] = layoutedLosers.map((node) => ({
         ...node,
         position: { x: node.position.x, y: node.position.y + losersOffset },
       }));
 
       // Position grand finals - in the winners section, aligned with winners final
-      const winnersMaxX = Math.max(...layoutedWinners.map(n => n.position.x), 0);
-      const losersMaxX = Math.max(...offsetLosers.map(n => n.position.x), 0);
-      const grandFinalsX = Math.max(winnersMaxX, losersMaxX) + ROUND_HORIZONTAL_GAP * 1.5; // Extra space for grand finals
+      const winnersMaxX = Math.max(
+        ...layoutedWinners.map((n) => n.position.x),
+        0,
+      );
+      const losersMaxX = Math.max(...offsetLosers.map((n) => n.position.x), 0);
+      const grandFinalsX =
+        Math.max(winnersMaxX, losersMaxX) + ROUND_HORIZONTAL_GAP * 1.5; // Extra space for grand finals
 
       // Find the winners final for vertical alignment
-      const winnersFinal = layoutedWinners.find(n => {
-        const match = winnersMatches.find(m => m.id === n.id);
+      const winnersFinal = layoutedWinners.find((n) => {
+        const match = winnersMatches.find((m) => m.id === n.id);
         return match && match.nextMatchId?.startsWith('gf-');
       });
 
       // Position grand finals aligned with winners final (in winners section, above divider)
       const grandFinalsY = winnersFinal ? winnersFinal.position.y : 0;
 
-      const grandFinalsNodes: MatchNodeType[] = grandFinalsMatches.map((match, i) => ({
-        id: match.id,
-        type: 'match' as const,
-        position: { x: grandFinalsX, y: grandFinalsY + i * (NODE_HEIGHT + 30) },
-        data: { ...match, badgeMapping } as MatchNodeData,
-      }));
+      const grandFinalsNodes: MatchNodeType[] = grandFinalsMatches.map(
+        (match, i) => ({
+          id: match.id,
+          type: 'match' as const,
+          position: {
+            x: grandFinalsX,
+            y: grandFinalsY + i * (NODE_HEIGHT + 30),
+          },
+          data: { ...match, badgeMapping } as MatchNodeData,
+        }),
+      );
 
       // Calculate bracket bounds for divider - extend far beyond visible area
-      const allMatchNodes = [...layoutedWinners, ...offsetLosers, ...grandFinalsNodes];
-      const minX = Math.min(...allMatchNodes.map(n => n.position.x), 0);
-      const maxX = Math.max(...allMatchNodes.map(n => n.position.x + NODE_WIDTH), 0);
+      const allMatchNodes = [
+        ...layoutedWinners,
+        ...offsetLosers,
+        ...grandFinalsNodes,
+      ];
+      const minX = Math.min(...allMatchNodes.map((n) => n.position.x), 0);
+      const maxX = Math.max(
+        ...allMatchNodes.map((n) => n.position.x + NODE_WIDTH),
+        0,
+      );
       const dividerWidth = 5000; // Very wide to span entire viewport
 
       // Create divider node between winners and losers (behind other nodes)
@@ -405,9 +453,13 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
       const structuralEdges = createStructuralEdges(matches);
       const advancementEdges = createAdvancementEdges(matches);
       // Advancement edges override structural edges for the same source→target pair
-      const advancementIds = new Set(advancementEdges.map(e => `${e.source}-${e.target}`));
+      const advancementIds = new Set(
+        advancementEdges.map((e) => `${e.source}-${e.target}`),
+      );
       const combinedEdges = [
-        ...structuralEdges.filter(e => !advancementIds.has(`${e.source}-${e.target}`)),
+        ...structuralEdges.filter(
+          (e) => !advancementIds.has(`${e.source}-${e.target}`),
+        ),
         ...advancementEdges,
       ];
 
@@ -425,12 +477,14 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
       // Small delay to ensure ReactFlow has rendered
       const timer = setTimeout(() => {
         // Calculate bounds of match nodes only (exclude divider)
-        const matchNodes = nodes.filter(n => n.type === 'match');
+        const matchNodes = nodes.filter((n) => n.type === 'match');
         if (matchNodes.length === 0) return;
 
-        const minX = Math.min(...matchNodes.map(n => n.position.x));
-        const minY = Math.min(...matchNodes.map(n => n.position.y));
-        const maxY = Math.max(...matchNodes.map(n => n.position.y + NODE_HEIGHT));
+        const minX = Math.min(...matchNodes.map((n) => n.position.x));
+        const minY = Math.min(...matchNodes.map((n) => n.position.y));
+        const maxY = Math.max(
+          ...matchNodes.map((n) => n.position.y + NODE_HEIGHT),
+        );
 
         // Calculate container height (700px) and content height
         const containerHeight = 700;
@@ -455,16 +509,22 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
     }
   }, [nodes, setViewport]);
 
-  const handleNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
-    setSelectedMatchId(node.id);
-    // Update URL to shareable match URL - prefer gameId (backend ID) over temporary id
-    const match = matches.find(m => m.id === node.id);
-    const urlId = match?.gameId ?? node.id;
-    // Preserve search params (especially ?tab=bracket) to prevent tab switching
-    const params = searchParams.toString();
-    const queryString = params ? `?${params}` : '';
-    navigate(`/tournament/${tournamentId}/bracket/match/${urlId}${queryString}`, { replace: true });
-  }, [navigate, tournamentId, matches, searchParams]);
+  const handleNodeClick = useCallback(
+    (_: React.MouseEvent, node: Node) => {
+      setSelectedMatchId(node.id);
+      // Update URL to shareable match URL - prefer gameId (backend ID) over temporary id
+      const match = matches.find((m) => m.id === node.id);
+      const urlId = match?.gameId ?? node.id;
+      // Preserve search params (especially ?tab=bracket) to prevent tab switching
+      const params = searchParams.toString();
+      const queryString = params ? `?${params}` : '';
+      navigate(
+        `/tournament/${tournamentId}/bracket/match/${urlId}${queryString}`,
+        { replace: true },
+      );
+    },
+    [navigate, tournamentId, matches, searchParams],
+  );
 
   if (isLoading && matches.length === 0) {
     return (
@@ -507,14 +567,19 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
             </p>
           )}
           {teams.length < 2 && (
-            <p className="text-sm">Need at least 2 teams to create a bracket.</p>
+            <p className="text-sm">
+              Need at least 2 teams to create a bracket.
+            </p>
           )}
         </div>
       )}
 
       {/* Single ReactFlow instance for entire bracket */}
       {matches.length > 0 && (
-        <div className="h-[700px] border rounded-lg overflow-hidden bg-background" data-testid="bracketContainer">
+        <div
+          className="h-[700px] border rounded-lg overflow-hidden bg-background"
+          data-testid="bracketContainer"
+        >
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -535,7 +600,10 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
             <Background gap={20} size={1} />
 
             {/* Bracket section label - Winners */}
-            <Panel position="top-left" className="bg-background/80 px-3 py-1 rounded text-sm font-medium text-foreground">
+            <Panel
+              position="top-left"
+              className="bg-background/80 px-3 py-1 rounded text-sm font-medium text-foreground"
+            >
               Winners Bracket
             </Panel>
           </ReactFlow>
@@ -552,7 +620,9 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
           // Restore URL without match - preserve search params to keep tab
           const params = searchParams.toString();
           const queryString = params ? `?${params}` : '';
-          navigate(`/tournament/${tournamentId}/bracket${queryString}`, { replace: true });
+          navigate(`/tournament/${tournamentId}/bracket${queryString}`, {
+            replace: true,
+          });
         }}
         initialDraftId={initialDraftId}
         onOpenHeroDraft={(draftId) => {
@@ -575,7 +645,9 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
             // Restore URL without draft - preserve search params to keep tab
             const params = searchParams.toString();
             const queryString = params ? `?${params}` : '';
-            navigate(`/tournament/${tournamentId}/bracket${queryString}`, { replace: true });
+            navigate(`/tournament/${tournamentId}/bracket${queryString}`, {
+              replace: true,
+            });
           }}
         />
       )}

@@ -44,7 +44,10 @@ export function createTeams(users: UserType[], teamSize: number): TeamType[] {
     for (let t = 0; t < numTeams; t++) {
       const team = teams[t];
       if ((team.members?.length ?? 0) >= teamSize) continue;
-      const sum = (team.members ?? []).reduce((a: number, u: UserType) => a + (u.mmr ?? 0), 0);
+      const sum = (team.members ?? []).reduce(
+        (a: number, u: UserType) => a + (u.mmr ?? 0),
+        0,
+      );
       if (sum < minSum) {
         minSum = sum;
         minTeamIdx = t;
@@ -57,7 +60,9 @@ export function createTeams(users: UserType[], teamSize: number): TeamType[] {
   const getAvg = (team: TeamType) => {
     const mmrs = (team.members ?? []).map((u: UserType) => u.mmr ?? 0);
 
-    return mmrs.length ? mmrs.reduce((a: number, b: number) => a + b, 0) / mmrs.length : 0;
+    return mmrs.length
+      ? mmrs.reduce((a: number, b: number) => a + b, 0) / mmrs.length
+      : 0;
   };
   let improved = true;
   const maxIterations = 100;

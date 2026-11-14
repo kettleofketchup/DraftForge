@@ -1,5 +1,4 @@
 import HomePage from '~/pages/home/home';
-import type { Route } from './+types/home';
 
 export function meta() {
   return [{ title: 'DTX' }, { name: 'description', content: 'Login' }];

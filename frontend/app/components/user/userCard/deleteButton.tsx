@@ -1,9 +1,8 @@
-import type { FormEvent } from 'react';
 import React, { useCallback, useState } from 'react';
 import { toast } from 'sonner';
 import { useShallow } from 'zustand/react/shallow';
-import { ConfirmDialog } from '~/components/ui/dialogs';
 import { TrashIconButton } from '~/components/ui/buttons';
+import { ConfirmDialog } from '~/components/ui/dialogs';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
 import { User } from '../user';

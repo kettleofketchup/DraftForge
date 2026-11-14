@@ -1,8 +1,7 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router';
-import { useUserStore } from '~/store/userStore';
-import type { Route } from './+types/home';
 import { Spinner } from '~/components/ui/spinner';
+import { useUserStore } from '~/store/userStore';
 
 export function meta() {
   return [

@@ -1,8 +1,8 @@
 import { useMemo } from 'react';
+import type { TeamType, TournamentType } from '~/components/tournament/types';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
 import type { DraftRoundType, DraftType } from '../types';
-import type { TournamentType, TeamType } from '~/components/tournament/types';
 import { deriveDraftIndex } from '../utils';
 import { DraftRoundCard } from './draftRoundCard';
 const log = getLogger('CaptainCards');
@@ -18,16 +18,20 @@ export const CaptainCards: React.FC<CaptainCardsProps> = () => {
 
   // Derive current and next draft rounds with fresh team data from tournament
   const { currentRound, nextRound } = useMemo(() => {
-    const rawCurrentRound = draftIndex >= 0 ? draft?.draft_rounds?.[draftIndex] : undefined;
-    const rawNextRound = draftIndex >= 0 ? draft?.draft_rounds?.[draftIndex + 1] : undefined;
+    const rawCurrentRound =
+      draftIndex >= 0 ? draft?.draft_rounds?.[draftIndex] : undefined;
+    const rawNextRound =
+      draftIndex >= 0 ? draft?.draft_rounds?.[draftIndex + 1] : undefined;
 
     // Enhance draft rounds with fresh team data from tournament
-    const enhanceRound = (round: DraftRoundType | undefined): DraftRoundType => {
+    const enhanceRound = (
+      round: DraftRoundType | undefined,
+    ): DraftRoundType => {
       if (!round) return {} as DraftRoundType;
       if (!tournament?.teams || !round.captain?.pk) return round;
 
       const freshTeam = tournament.teams.find(
-        (t: TeamType) => t.captain?.pk === round.captain?.pk
+        (t: TeamType) => t.captain?.pk === round.captain?.pk,
       );
       if (freshTeam) {
         return { ...round, team: freshTeam };

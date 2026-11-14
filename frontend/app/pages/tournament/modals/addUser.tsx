@@ -1,10 +1,10 @@
 import { Suspense, useState } from 'react';
 import { useNavigate } from 'react-router';
 import type { TournamentType } from '~/components/tournament/types';
+import { Alert, AlertDescription } from '~/components/ui/alert';
 import { SearchUserDropdown } from '~/components/user/searchUser';
 import type { User } from '~/components/user/user';
 import { UserCard } from '~/components/user/userCard';
-import { Alert, AlertDescription } from '~/components/ui/alert';
 export default function PlayersTab({
   tournament,
 }: {
@@ -26,7 +26,9 @@ export default function PlayersTab({
     return (
       <div className="flex justify-center items-center h-screen">
         <Alert className="w-auto">
-          <AlertDescription>No teams available for this tournament.</AlertDescription>
+          <AlertDescription>
+            No teams available for this tournament.
+          </AlertDescription>
         </Alert>
       </div>
     );
