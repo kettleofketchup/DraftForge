@@ -14,6 +14,7 @@
     "about_subtitle": "Quiénes somos",
     "admin": "Administración",
     "admin_subtitle": "Gestionar sitio",
+    "changelog": "Registro de cambios",
     "changelog_empty": "Aún no hay versiones",
     "changelog_load_error": "No se pudieron cargar las notas de la versión.",
     "docs": "Documentación",

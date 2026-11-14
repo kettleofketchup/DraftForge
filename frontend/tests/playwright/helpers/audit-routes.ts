@@ -12,7 +12,7 @@ export type AuditRoute = { name: string; path: string };
 
 // Tests are generated before the routes resolve, so the count is fixed up front.
 // resolveAuditRoutes throws if it drifts.
-export const AUDIT_ROUTE_COUNT = 12;
+export const AUDIT_ROUTE_COUNT = 13;
 
 export async function resolveAuditRoutes(browser: Browser): Promise<AuditRoute[]> {
   const ctx = await browser.newContext({ ignoreHTTPSErrors: true });
@@ -42,6 +42,7 @@ export async function resolveAuditRoutes(browser: Browser): Promise<AuditRoute[]
       { name: '/tournament/:pk/bracket', path: `/tournament/${tournament.pk}/bracket` },
       { name: '/events/:eventId/discord', path: `/events/${events.pk}/discord` },
       { name: '/event-series/:repeaterId', path: `/event-series/${series.id}` },
+      { name: '/changelog', path: '/changelog' },
     ];
     if (routes.length !== AUDIT_ROUTE_COUNT) {
       throw new Error(`AUDIT_ROUTE_COUNT is ${AUDIT_ROUTE_COUNT} but ${routes.length} routes resolved`);

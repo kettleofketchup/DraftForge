@@ -14,6 +14,7 @@
     "about_subtitle": "Who we are",
     "admin": "Admin",
     "admin_subtitle": "Manage site",
+    "changelog": "Changelog",
     "changelog_empty": "No releases yet",
     "changelog_load_error": "Couldn't load the release notes.",
     "docs": "Docs",
