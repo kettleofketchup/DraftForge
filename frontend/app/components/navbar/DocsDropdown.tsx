@@ -149,7 +149,7 @@ export function DocsDropdown(): React.JSX.Element {
         >
           {t('nav.whats_new')}
         </h2>
-        <ScrollArea className="flex-1 min-h-0 max-h-72 [&_[data-slot=scroll-area-viewport]>div]:!block">
+        <ScrollArea className="flex-1 min-h-0 max-h-72 flex flex-col [&>[data-slot=scroll-area-viewport]]:min-h-0 [&_[data-slot=scroll-area-viewport]>div]:!block">
           <div className="px-4 pb-3">
             <LazyChangelogPreview
               data-testid="nav-changelog-preview"
