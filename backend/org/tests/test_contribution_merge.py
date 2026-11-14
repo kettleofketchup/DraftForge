@@ -352,7 +352,6 @@ class _EventStaffMergeCases(_LedgerFixture if TYPE_CHECKING else object):
         )
 
     def test_merge_src_host_dst_helper_same_event(self) -> None:
-        """Plan C5 test_claim_merge_target_host_claimer_helper_same_event."""
         self._complete(self.event_a)
         self.event_a.host = self.src
         self.event_a.save(update_fields=["host"])
