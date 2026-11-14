@@ -245,10 +245,13 @@ The detail never includes feature notes, `enabled_by` or `enabled_at`.
 
 Guide: [Organization Paid Features](../features/organization-paid-features.md).
 
-**Denials.** Every endpoint below returns `403` with a `code`:
-`{"code": "feature_locked", "detail": ...}` when the feature is locked (checked first,
-even for anonymous callers) and `{"code": "not_permitted", "detail": ...}` when the role
-check fails. Validation errors are `400`. Objects named by pk in the URL or body are
+**Denials.** Feature and role denials return `403` with a `code`:
+`{"code": "feature_locked", "detail": ...}` when the feature is locked and
+`{"code": "not_permitted", "detail": ...}` when the role check fails. Anonymous callers
+get the usual uncoded authentication error on the feature-switch and promoter endpoints,
+and on org-admin contributions endpoints when the feature is unlocked. Only the
+contributions and promotion endpoints (which allow anonymous access) check
+`feature_locked` before authentication. Validation errors are `400`. Objects named by pk in the URL or body are
 looked up within the URL's organization; a pk from another org is `404` (or `400` for a
 body field).
 

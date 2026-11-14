@@ -54,11 +54,11 @@ in the `useIs*` hooks), **except** that staff roles do not cascade
 upward into admin abilities — a league admin is _not_ an org admin and
 an org staffer is _not_ an org admin.
 
-`promoter` is not part of that chain. It is an org-scoped side role: it
-sits above org member, and below org staff for Promotion only. League
-admins and league staff do not inherit it; the backend
-`has_org_promoter_access` (with Promotion switched on) accepts site admins and the org's owner,
-admins, staff and promoters, nobody else. No `useIs*` hook implements
+`promoter` is not part of that chain. It is an org-scoped side role
+that only grants Promotion access: above org member, below org staff.
+League admins and league staff do not inherit it; the backend
+`has_org_promoter_access` (with Promotion switched on) accepts site
+admins and the org's owner, admins, staff and promoters, nobody else. No `useIs*` hook implements
 it: the frontend reads `can_use_promotion` from the org detail through
 `useOrgFeatureAccess`.
 

@@ -59,8 +59,8 @@ nothing.
 ## Promotion
 
 The **Promotion** tab on the organization page lists upcoming events
-(`upcoming` or `signups_open`). Each event page also gets a **Promote** button for
-anyone with promoter access.
+(`upcoming` or `signups_open`). Upcoming and signups-open event pages also get a
+**Promote** button for anyone with promoter access.
 
 ### Message templates
 
