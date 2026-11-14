@@ -24,7 +24,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Output to demo-results/site_snapshots/ (in mounted volume)
-// Invoke task will copy to docs/assets/site_snapshots/
+// `just demo::snapshots` copies them to docs/assets/site_snapshots/
 const SNAPSHOT_OUTPUT_DIR = 'demo-results/site_snapshots';
 
 test.describe('Site Snapshots', () => {
@@ -68,7 +68,6 @@ test.describe('Site Snapshots', () => {
       (window as Window & { playwright?: boolean }).playwright = true;
     });
 
-    // Login as admin
     await loginAdmin(context);
 
     const page = await context.newPage();
