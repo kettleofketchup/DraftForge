@@ -54,6 +54,8 @@ export const LeagueMinimalSchema = z.object({
   name: z.string(),
   organization_name: z.string().nullable(),
   organization: LeagueOrganizationSchema.nullable().optional(),
+  organization_id: z.number().nullable().optional(),
+  organization_logo: z.string().nullable().optional(),
 });
 
 export const SourceEventSchema = z.object({
@@ -88,6 +90,7 @@ export const TournamentSchema = z.object({
   steam_league_id: z.number().nullable().optional(),
   // User count from lightweight list endpoint (instead of full users array)
   user_count: z.number().optional(),
+  signups_open: z.boolean().optional(),
   // Organization PK from the tournament's league
   organization_pk: z.number().nullable().optional(),
   // League PK
@@ -106,6 +109,13 @@ export const TournamentSchema = z.object({
   lobby_steam_league_id: z.number().nullable().optional(),
   captains_draft_time: z.number().optional(),
   custom_game_name: z.string().optional(),
+});
+
+export const PaginatedTournamentsSchema = z.object({
+  count: z.number(),
+  next: z.string().nullable(),
+  previous: z.string().nullable(),
+  results: z.array(TournamentSchema),
 });
 
 // Schema for creating a new tournament

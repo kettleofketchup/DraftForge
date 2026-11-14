@@ -79,6 +79,100 @@ export async function resetTournamentByKey(
 }
 
 /**
+ * Matches whole tournament cards only. The bare `tournament-card-` prefix also
+ * matches inner testids such as `tournament-card-state` and `-date`.
+ */
+export const CARD_SELECTOR =
+  '[data-testid^="tournament-card-"]:has([data-testid^="tournament-view-"])';
+
+type ListTab = 'upcoming' | 'archived';
+
+// Longer than the page's 300 ms search debounce, so an empty state seen before
+// the debounced query fires is never mistaken for the result.
+const SEARCH_SETTLE_MS = 450;
+
+async function searchTab(
+  page: Page,
+  tab: ListTab,
+  name: string,
+  timeout: number,
+): Promise<Locator | null> {
+  const panel = page.getByTestId(`tournaments-panel-${tab}`);
+  const card = panel.locator(CARD_SELECTOR).filter({ hasText: name }).first();
+  const empty = panel.getByTestId(`tournaments-empty-${tab}`);
+  const result: { card: Locator | null } = { card: null };
+
+  await expect(async () => {
+    await expect(panel).toHaveAttribute('data-fetching', 'false', { timeout: 1000 });
+    if (await card.isVisible()) {
+      await expect(card).toContainText(name, { timeout: 1000 });
+      result.card = card;
+      return;
+    }
+    if (!(await empty.isVisible())) {
+      throw new Error(`/tournaments ${tab}: neither "${name}" nor the empty state is shown yet`);
+    }
+    await page.waitForTimeout(SEARCH_SETTLE_MS);
+    await expect(panel).toHaveAttribute('data-fetching', 'false', { timeout: 1000 });
+    await expect(empty).toBeVisible({ timeout: 1000 });
+    result.card = null;
+  }).toPass({ timeout });
+
+  return result.card;
+}
+
+/**
+ * Widen `/tournaments` to every organization. Logged-in users start on
+ * "My organizations", which hides tournaments of organizations they are not in.
+ */
+export async function showAllOrganizations(page: Page, timeout = 30_000): Promise<void> {
+  const trigger = page.getByTestId('tournaments-filter-organization');
+  await expect(trigger).toBeVisible({ timeout });
+  if (!(await trigger.textContent())?.includes('My organizations')) return;
+  await trigger.click();
+  await page.getByRole('option', { name: 'All organizations', exact: true }).click();
+  await expect(trigger).toContainText('All organizations');
+}
+
+/**
+ * Find a tournament card on `/tournaments` by searching for its name across
+ * all organizations, first on Upcoming and then, only if Upcoming is empty,
+ * on Archived.
+ */
+export async function findTournamentCard(
+  page: Page,
+  name: string,
+  opts: { timeout?: number } = {},
+): Promise<Locator> {
+  const timeout = opts.timeout ?? 30_000;
+
+  await showAllOrganizations(page, timeout);
+
+  const upcomingTab = page.getByTestId('tournaments-tab-upcoming');
+  if ((await upcomingTab.getAttribute('aria-selected')) !== 'true') {
+    await upcomingTab.click();
+    await expect(upcomingTab).toHaveAttribute('aria-selected', 'true');
+  }
+
+  const search = page.getByTestId('tournaments-search');
+  await search.clear({ timeout });
+  await search.fill(name);
+  await expect(search).toHaveValue(name);
+
+  const upcoming = await searchTab(page, 'upcoming', name, timeout);
+  if (upcoming) return upcoming;
+
+  const archivedTab = page.getByTestId('tournaments-tab-archived');
+  await archivedTab.click();
+  await expect(archivedTab).toHaveAttribute('aria-selected', 'true');
+
+  const archived = await searchTab(page, 'archived', name, timeout);
+  if (archived) return archived;
+
+  throw new Error(`Tournament card "${name}" is on neither the Upcoming nor the Archived tab`);
+}
+
+/**
  * Page Object for Tournament pages.
  *
  * Encapsulates all interactions with tournament UI including:

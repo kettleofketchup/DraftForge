@@ -14,21 +14,24 @@ import {
   getTournaments,
   getTournamentsBasic,
 } from '~/components/api/api';
-import type { DraftRoundType, DraftType } from '~/components/teamdraft/types';
 import type { LeagueType } from '~/components/league/schemas';
 import type { OrganizationType } from '~/components/organization/schemas';
+import type { DraftRoundType, DraftType } from '~/components/teamdraft/types';
 import type { TeamType, TournamentType } from '~/components/tournament/types';
-import { hydrateTournament } from '~/lib/hydrateTournament';
 import { User } from '~/components/user/user';
 import type { GameType, GuildMember, GuildMembers, UserType } from '~/index';
+import { hydrateTournament } from '~/lib/hydrateTournament';
 import { getLogger } from '~/lib/logger';
 import { useUserCacheStore } from '~/store/userCacheStore';
 import { useUserProfileStore } from '~/store/userProfileStore';
 
 const log = getLogger('userStore');
 
+export type CurrentUserStatus = 'unknown' | 'loading' | 'resolved';
+
 interface UserState {
   currentUser: UserType;
+  currentUserStatus: CurrentUserStatus;
   selectedUser: UserType;
   hasHydrated: boolean;
   setHasHydrated: (hydrated: boolean) => void;
@@ -133,7 +136,9 @@ export const useUserStore = create<UserState>()(
           set({
             curDraftRound:
               rounds.find((r) => r.pk === get().curDraftRound?.pk) ??
-              rounds.find((r) => r.pk === get().tournament.draft?.latest_round) ??
+              rounds.find(
+                (r) => r.pk === get().tournament.draft?.latest_round,
+              ) ??
               rounds[0],
           });
         } catch (err) {
@@ -160,6 +165,7 @@ export const useUserStore = create<UserState>()(
       setCurDraftRound: (round: DraftRoundType) =>
         set({ curDraftRound: round }),
       currentUser: new User({} as UserType),
+      currentUserStatus: 'unknown',
       userQuery: '',
       addUserQuery: '',
       setAddUserQuery: (query: string) => set({ addUserQuery: query }),
@@ -221,10 +227,14 @@ export const useUserStore = create<UserState>()(
         const tournaments = get().tournamentsByUser(user);
         for (const tournament of tournaments) {
           let change = false;
-          tournament.users = tournament.users?.map((u) => {
-            if (u?.pk === user.pk) { change = true; return user; }
-            return u;
-          }) ?? null;
+          tournament.users =
+            tournament.users?.map((u) => {
+              if (u?.pk === user.pk) {
+                change = true;
+                return user;
+              }
+              return u;
+            }) ?? null;
           if (change) get().setTournament(tournament);
         }
       },
@@ -241,7 +251,9 @@ export const useUserStore = create<UserState>()(
       delUser: (user: UserType) => {
         if (!user || user.pk == null) return;
         useUserCacheStore.getState().remove(user.pk!);
-        set({ globalUserPks: get().globalUserPks.filter((pk) => pk !== user.pk) });
+        set({
+          globalUserPks: get().globalUserPks.filter((pk) => pk !== user.pk),
+        });
       },
 
       addTournament: (tourn: TournamentType) =>
@@ -256,7 +268,9 @@ export const useUserStore = create<UserState>()(
           const response = await fetchUsers();
           useUserCacheStore.getState().upsert(response);
           set({
-            globalUserPks: response.filter((u) => u.pk != null).map((u) => u.pk!),
+            globalUserPks: response
+              .filter((u) => u.pk != null)
+              .map((u) => u.pk!),
           });
           log.debug('Users fetched successfully:', response.length);
         } catch (error) {
@@ -265,13 +279,21 @@ export const useUserStore = create<UserState>()(
       },
 
       getCurrentUser: async () => {
+        set({ currentUserStatus: 'loading' });
         try {
           const response = await fetchCurrentUser();
-          set({ currentUser: response });
+          set({
+            currentUser:
+              response && typeof response === 'object'
+                ? response
+                : ({} as UserType),
+          });
           log.debug('User fetched successfully:', response);
         } catch (error) {
           log.debug('No User logged in:', error);
           set({ currentUser: {} as UserType });
+        } finally {
+          set({ currentUserStatus: 'resolved' });
         }
       },
 
@@ -296,7 +318,7 @@ export const useUserStore = create<UserState>()(
         });
       },
       tournamentsByUser: (user) => {
-        var tourns = get().tournaments;
+        let tourns = get().tournaments;
         if (tourns.length === 0) {
           if (get().tournament) tourns.push(get().tournament);
         }
@@ -330,14 +352,18 @@ export const useUserStore = create<UserState>()(
       setTournamentPK: (pk: number) => set({ tournamentPK: pk }),
       tournamentPK: null,
       getCurrentTournament: async () => {
-        let id = get().tournamentPK;
+        const id = get().tournamentPK;
         if (id === null || id === undefined) {
           return;
         }
 
         try {
           const response = await fetchTournament(id);
-          set({ tournament: hydrateTournament(response as TournamentType & { _users?: Record<number, unknown> }) as TournamentType });
+          set({
+            tournament: hydrateTournament(
+              response as TournamentType & { _users?: Record<number, unknown> },
+            ) as TournamentType,
+          });
         } catch (err) {
           log.error('Failed to fetch tournament:', err);
         }
@@ -386,8 +412,10 @@ export const useUserStore = create<UserState>()(
       organization: null,
       organizationPk: null,
       organizationsLoaded: false,
-      setOrganizations: (orgs) => set({ organizations: orgs, organizationsLoaded: true }),
-      setOrganization: (org) => set({ organization: org, organizationPk: org?.pk ?? null }),
+      setOrganizations: (orgs) =>
+        set({ organizations: orgs, organizationsLoaded: true }),
+      setOrganization: (org) =>
+        set({ organization: org, organizationPk: org?.pk ?? null }),
       getOrganizations: async () => {
         // Skip if already loaded
         if (get().organizationsLoaded && get().organizations.length > 0) {

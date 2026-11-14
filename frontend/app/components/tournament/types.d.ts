@@ -3,7 +3,12 @@ import { TeamDraftSchema } from '../teamdraft/schemas';
 import { GameSchema } from '../game/types';
 import { UserSchema } from '../user/user';
 import { STATE_CHOICES, TOURNAMENT_TYPE } from './constants';
-import { TeamSchema, TournamentSchema } from './schemas';
+import {
+  LeagueMinimalSchema,
+  PaginatedTournamentsSchema,
+  TeamSchema,
+  TournamentSchema,
+} from './schemas';
 
 // Re-export types from other modules for convenience
 export type { GameType } from '../game/types';
@@ -22,4 +27,7 @@ export declare interface TournamentClassType extends TournamentType {
 }
 
 export type TournamentsType = TournamentType[];
+export type LeagueMinimal = z.infer<typeof LeagueMinimalSchema>;
+export type PaginatedTournaments = z.infer<typeof PaginatedTournamentsSchema>;
+export type TournamentBucket = 'upcoming' | 'archived';
 export type TeamsType = TeamType[];

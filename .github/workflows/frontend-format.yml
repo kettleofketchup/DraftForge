@@ -1,0 +1,43 @@
+name: Frontend format
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/frontend-format.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  prettier:
+    name: prettier (changed frontend files)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm --prefix frontend ci --ignore-scripts --no-audit --no-fund
+
+      # Only files this PR adds or modifies, so untouched legacy files don't fail it.
+      - name: Check formatting
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          mapfile -t changed < <(git diff --name-only --diff-filter=d "$BASE_SHA"...HEAD -- frontend/)
+          frontend/scripts/prettier-check-files.sh "${changed[@]}"

@@ -63,9 +63,20 @@ buildx service image target dockerfile context *flags:
     if [[ "$release" == true ]]; then
         args+=(--tag "$image:$version")
     fi
-    args+=(--tag "$image:$hash" --cache-from "type=registry,ref=$image:buildcache")
+    args+=(--tag "$image:$hash")
+    # podman's buildx shim rejects BuildKit's type=registry cache syntax.
+    registry_cache=true
+    if docker --version 2>/dev/null | grep -qi podman; then
+        registry_cache=false
+    fi
+    if [[ "$registry_cache" == true ]]; then
+        args+=(--cache-from "type=registry,ref=$image:buildcache")
+    fi
     if [[ "$push" == true ]]; then
-        args+=(--cache-to "type=registry,ref=$image:buildcache,mode=max" --push)
+        if [[ "$registry_cache" == true ]]; then
+            args+=(--cache-to "type=registry,ref=$image:buildcache,mode=max")
+        fi
+        args+=(--push)
     else
         args+=(--load)
     fi

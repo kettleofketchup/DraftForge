@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { I18nextProvider } from 'react-i18next';
+import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { toast } from 'sonner';
 import { updateTournament } from '~/components/api/api';
@@ -46,7 +47,9 @@ function Wrapper({ children }: { children: ReactNode }) {
     <I18nextProvider i18n={createI18nInstance('en')}>
       <QueryClientProvider client={qc}>
         <TooltipProvider>
-          <Dialog>{children}</Dialog>
+          <MemoryRouter>
+            <Dialog>{children}</Dialog>
+          </MemoryRouter>
         </TooltipProvider>
       </QueryClientProvider>
     </I18nextProvider>

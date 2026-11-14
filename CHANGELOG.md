@@ -14,6 +14,12 @@ Releases made before this file was added are not listed here; see the git tags a
 
 <!-- Do not edit. Unreleased changes live in changelog.d/; `just version::set` assembles them here. -->
 
+## [0.12.1] - 2026-11-13
+
+### Fixed
+
+- Pressing Enter in the "type the league name" box of the Delete League dialog now deletes the league. It used to submit the Edit League form behind it, closing both dialogs without deleting anything.
+
 ## [0.12.0] - 2026-11-13
 
 ### Security

@@ -19,7 +19,12 @@ build *flags:
         fi
     done
     {{just}} docker::buildx backend backend runtime backend/Dockerfile . "$@"
-    {{just}} docker::buildx backend backend-dev runtime-dev backend/Dockerfile . ${dev_flags[@]+"${dev_flags[@]}"}
+    {{just}} docker::backend::build-dev ${dev_flags[@]+"${dev_flags[@]}"}
+
+# Build the dev/test backend image (runtime-dev, includes the poetry dev group); --push
+[group('docker::backend')]
+build-dev *flags:
+    {{just}} docker::buildx backend backend-dev runtime-dev backend/Dockerfile . "$@"
 
 # Build and push backend images
 [group('docker::backend')]

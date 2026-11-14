@@ -44,7 +44,7 @@ export const BrandSelectTrigger = React.forwardRef<
       'data-[placeholder]:text-muted-foreground',
       'disabled:cursor-not-allowed disabled:opacity-50',
       '[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*="size-"])]:size-4 [&_svg:not([class*="text-"])]:text-violet-300',
-      '*:data-[slot=select-value]:line-clamp-1',
+      '*:data-[slot=select-value]:min-w-0 *:data-[slot=select-value]:truncate',
       className,
     )}
     {...props}

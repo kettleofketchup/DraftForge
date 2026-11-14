@@ -138,14 +138,38 @@ class EventAPITests(EventTestCase):
         # Base event (signups_open) + the one created above = 2
         self.assertEqual(len(r.data), 2)
 
+    def test_malformed_date_filters_return_400(self) -> None:
+        for param in ("scheduled_before", "scheduled_after", "signups_due_before"):
+            for value in ("garbage", "2026-13-45T00:00:00Z"):
+                with self.subTest(param=param, value=value):
+                    r = self.client.get("/api/events/", {param: value})
+                    self.assertEqual(r.status_code, status.HTTP_400_BAD_REQUEST)
+                    self.assertIn(param, r.json())
+
+    def test_date_filters_accept_iso_datetimes(self) -> None:
+        soon = self._create_event(
+            name="Soon", scheduled_at=tz.now() + timedelta(days=2)
+        )
+        cutoff = (tz.now() + timedelta(days=3)).isoformat()
+        r = self.client.get("/api/events/", {"scheduled_before": cutoff})
+        self.assertEqual(r.status_code, status.HTTP_200_OK)
+        self.assertIn(soon.pk, [e["id"] for e in r.json()])
+        r = self.client.get("/api/events/", {"scheduled_after": cutoff})
+        self.assertEqual(r.status_code, status.HTTP_200_OK)
+        self.assertNotIn(soon.pk, [e["id"] for e in r.json()])
+
 
 class ReopenSignupsViewTest(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.staff = CustomUser.objects.create_user(username="reopen_staff", password="x")
+        cls.staff = CustomUser.objects.create_user(
+            username="reopen_staff", password="x"
+        )
         cls.staff.positions = PositionsModel.objects.create()
         cls.staff.save()
-        cls.unrelated = CustomUser.objects.create_user(username="reopen_unrelated", password="x")
+        cls.unrelated = CustomUser.objects.create_user(
+            username="reopen_unrelated", password="x"
+        )
         cls.unrelated.positions = PositionsModel.objects.create()
         cls.unrelated.save()
         cls.org = Organization.objects.create(name="Reopen Org", owner=cls.staff)
@@ -187,14 +211,20 @@ class ReopenSignupsViewTest(TestCase):
 class LeagueStaffEventActionsTest(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.owner = CustomUser.objects.create_user(username="league_owner", password="x")
+        cls.owner = CustomUser.objects.create_user(
+            username="league_owner", password="x"
+        )
         cls.owner.positions = PositionsModel.objects.create()
         cls.owner.save()
-        cls.league_staff_user = CustomUser.objects.create_user(username="league_staff_v", password="x")
+        cls.league_staff_user = CustomUser.objects.create_user(
+            username="league_staff_v", password="x"
+        )
         cls.league_staff_user.positions = PositionsModel.objects.create()
         cls.league_staff_user.save()
         cls.org = Organization.objects.create(name="LS Org", owner=cls.owner)
-        cls.league = League.objects.create(name="LS League", organization=cls.org, steam_league_id=77777)
+        cls.league = League.objects.create(
+            name="LS League", organization=cls.org, steam_league_id=77777
+        )
         cls.league.staff.add(cls.league_staff_user)
         cls.event = Event.objects.create(
             organization=cls.org,
@@ -231,8 +261,8 @@ class LeagueStaffEventActionsTest(TestCase):
 
     def test_league_staff_can_act_on_event_signups(self):
         """Verify the EventSignup-level action permission widening (Task 4 step 4)."""
-        from events.models import EventSignup
         from events.constants import SignupStatus
+        from events.models import EventSignup
 
         # Create a signup to act on
         player = CustomUser.objects.create_user(username="ls_target", password="x")
@@ -448,7 +478,9 @@ class EventPatchTournamentLeagueCacheTest(TransactionTestCase):
         # Stale entries from prior tests in the module could pollute the assertion.
         flush_run_cache()
 
-        self.admin = CustomUser.objects.create_user(username="eptlc_admin", password="x")
+        self.admin = CustomUser.objects.create_user(
+            username="eptlc_admin", password="x"
+        )
         self.admin.positions = PositionsModel.objects.create()
         self.admin.save()
         self.org = Organization.objects.create(name="EPTLC Org", owner=self.admin)

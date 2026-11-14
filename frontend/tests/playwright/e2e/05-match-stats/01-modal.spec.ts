@@ -9,6 +9,7 @@
 
 import { API_URL } from '../../fixtures/base-url';
 import { test, expect, visitAndWaitForHydration } from '../../fixtures';
+import { findTournamentCard } from '../../helpers/tournament';
 
 
 test.describe('Match Stats Modal - Direct API Tests', () => {
@@ -114,11 +115,8 @@ test.describe('Match Stats Modal - UI Integration', () => {
   test('should load tournaments page', async ({ page }) => {
     await visitAndWaitForHydration(page, '/tournaments');
 
-    await expect(page.locator('body')).toBeVisible();
-    // Check that the page has tournament content - wait for loading to complete
-    await expect(
-      page.getByText('Completed Bracket Test').first()
-    ).toBeVisible({ timeout: 10000 });
+    const card = await findTournamentCard(page, 'Completed Bracket Test');
+    await expect(card).toBeVisible();
   });
 
   test('should navigate to tournament detail page', async ({ page }) => {
