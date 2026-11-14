@@ -56,7 +56,8 @@ function normalizeParams(params: TournamentListQuery): NormalizedListKeyParams {
       : undefined,
     openSignups: params.openSignups || undefined,
     league: params.league,
-    search: params.search === undefined ? undefined : normalizeSearch(params.search),
+    search:
+      params.search === undefined ? undefined : normalizeSearch(params.search),
     day: cutoffDayKey(new Date()),
   };
 }
@@ -75,7 +76,9 @@ function sameScopePlaceholder<T>(key: NormalizedListKeyParams) {
     previous: T | undefined,
     previousQuery: { queryKey: readonly unknown[] } | undefined,
   ): T | undefined => {
-    const previousKey = previousQuery?.queryKey[3] as NormalizedListKeyParams | undefined;
+    const previousKey = previousQuery?.queryKey[3] as
+      | NormalizedListKeyParams
+      | undefined;
     if (previousKey === undefined) return undefined;
     return scopeKind(previousKey) === scopeKind(key) ? previous : undefined;
   };
@@ -137,12 +140,15 @@ export function useArchivedTournaments(
     initialPageParam: null as string | null,
     getNextPageParam: (last) => nextCursor(last.next),
     enabled: opts.enabled,
-    placeholderData: sameScopePlaceholder<InfiniteData<PaginatedTournaments, string | null>>(
-      key,
-    ),
+    placeholderData:
+      sameScopePlaceholder<InfiniteData<PaginatedTournaments, string | null>>(
+        key,
+      ),
     staleTime: STALE_TIME_MS,
     refetchOnWindowFocus: false,
   });
-  const tournaments = dedupeByPk(query.data?.pages.flatMap((p) => p.results) ?? []);
+  const tournaments = dedupeByPk(
+    query.data?.pages.flatMap((p) => p.results) ?? [],
+  );
   return { ...query, tournaments };
 }

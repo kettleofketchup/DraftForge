@@ -4,18 +4,17 @@
  * API functions for tournament-related operations.
  */
 
-import type {
-  TournamentsType,
-  TournamentType,
-  UserType,
-} from '~/index';
+import { isAxiosError } from 'axios';
 import type { DraftOptionsPatch } from '~/components/teamdraft/schemas';
 import type { DiscordTournamentLogEntry } from '~/components/tournament/schemas';
-import type { PaginatedTournaments, TournamentBucket } from '~/components/tournament/types';
-import type { AddMemberPayload, AddUserResponse } from './types';
-import { isAxiosError } from 'axios';
+import type {
+  PaginatedTournaments,
+  TournamentBucket,
+} from '~/components/tournament/types';
+import type { TournamentsType, TournamentType } from '~/index';
 import { getLogger } from '~/lib/logger';
 import axios from './axios';
+import type { AddMemberPayload } from './types';
 
 const log = getLogger('api');
 
@@ -35,7 +34,9 @@ export interface TournamentListFilters {
   search?: string;
 }
 
-function tournamentListParams(filters?: TournamentListFilters): URLSearchParams {
+function tournamentListParams(
+  filters?: TournamentListFilters,
+): URLSearchParams {
   const params = new URLSearchParams();
   if (filters?.bucket !== undefined) params.append('bucket', filters.bucket);
   if (Number.isFinite(filters?.organizationId)) {
@@ -50,10 +51,14 @@ function tournamentListParams(filters?: TournamentListFilters): URLSearchParams 
   return params;
 }
 
-export async function getTournaments(filters?: TournamentListFilters): Promise<TournamentsType> {
+export async function getTournaments(
+  filters?: TournamentListFilters,
+): Promise<TournamentsType> {
   const params = tournamentListParams(filters).toString();
   const queryString = params ? `?${params}` : '';
-  const response = await axios.get<TournamentsType>(`/tournaments-list/${queryString}`);
+  const response = await axios.get<TournamentsType>(
+    `/tournaments-list/${queryString}`,
+  );
   return response.data;
 }
 
@@ -64,17 +69,25 @@ export type TournamentPagePosition =
 
 // An archive that shrank between loads 404s past its new last page: end of list.
 export async function getTournamentsPage(
-  filters: TournamentListFilters & TournamentPagePosition & { pageSize?: number },
+  filters: TournamentListFilters &
+    TournamentPagePosition & { pageSize?: number },
 ): Promise<PaginatedTournaments> {
   const params = tournamentListParams(filters);
   if (filters.cursor !== undefined) params.append('cursor', filters.cursor);
   else params.append('page', String(filters.page));
-  if (filters.pageSize !== undefined) params.append('page_size', String(filters.pageSize));
+  if (filters.pageSize !== undefined)
+    params.append('page_size', String(filters.pageSize));
   try {
-    const response = await axios.get<PaginatedTournaments>(`/tournaments-list/?${params.toString()}`);
+    const response = await axios.get<PaginatedTournaments>(
+      `/tournaments-list/?${params.toString()}`,
+    );
     return response.data;
   } catch (e) {
-    if (isAxiosError(e) && e.response?.status === 404 && (filters.page ?? 1) > 1) {
+    if (
+      isAxiosError(e) &&
+      e.response?.status === 404 &&
+      (filters.page ?? 1) > 1
+    ) {
       return { count: 0, next: null, previous: null, results: [] };
     }
     throw e;
@@ -124,10 +137,10 @@ export async function addTournamentMember(
   tournamentId: number,
   payload: AddMemberPayload,
 ): Promise<TournamentType> {
-  const response = await axios.post<{ status: string; tournament: TournamentType }>(
-    `/tournaments/${tournamentId}/members/`,
-    payload,
-  );
+  const response = await axios.post<{
+    status: string;
+    tournament: TournamentType;
+  }>(`/tournaments/${tournamentId}/members/`, payload);
   return response.data.tournament;
 }
 

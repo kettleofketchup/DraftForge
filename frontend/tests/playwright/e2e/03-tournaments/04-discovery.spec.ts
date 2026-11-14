@@ -10,8 +10,6 @@
 
 import type { BrowserContext, Locator, Page, Request } from '@playwright/test';
 
-import { API_URL } from '../../fixtures/base-url';
-import { getCsrfToken } from '../../fixtures/events';
 import {
   expect,
   loginAdmin,
@@ -19,6 +17,8 @@ import {
   postWithCsrf,
   test,
 } from '../../fixtures';
+import { API_URL } from '../../fixtures/base-url';
+import { getCsrfToken } from '../../fixtures/events';
 import {
   CARD_SELECTOR,
   findTournamentCard,
@@ -57,7 +57,11 @@ function attachErrorCapture(page: Page): string[] {
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
   page.on('console', (m) => {
     if (m.type() !== 'error') return;
-    if (/Failed to load resource: the server responded with a status of 4\d\d/.test(m.text())) {
+    if (
+      /Failed to load resource: the server responded with a status of 4\d\d/.test(
+        m.text(),
+      )
+    ) {
       return;
     }
     errors.push(`console: ${m.text()}`);
@@ -77,16 +81,21 @@ function cardNamed(scope: Page | Locator, name: string): Locator {
   return scope.locator(CARD_SELECTOR).filter({ hasText: name });
 }
 
-async function waitForSettled(page: Page, tab: 'upcoming' | 'archived'): Promise<void> {
+async function waitForSettled(
+  page: Page,
+  tab: 'upcoming' | 'archived',
+): Promise<void> {
   const p = panel(page, tab);
   await expect(p).toBeVisible({ timeout: 15000 });
   await expect(p).toHaveAttribute('data-fetching', 'false', { timeout: 15000 });
 }
 
 async function waitForFilterRow(page: Page): Promise<void> {
-  await expect(page.getByTestId('tournaments-filter-organization')).toBeVisible({
-    timeout: 15000,
-  });
+  await expect(page.getByTestId('tournaments-filter-organization')).toBeVisible(
+    {
+      timeout: 15000,
+    },
+  );
 }
 
 async function cardNamesIn(scope: Locator): Promise<string[]> {
@@ -97,7 +106,10 @@ function indexOfName(texts: string[], name: string): number {
   return texts.findIndex((t) => t.includes(name));
 }
 
-async function deleteTournamentByPk(context: BrowserContext, pk: number): Promise<void> {
+async function deleteTournamentByPk(
+  context: BrowserContext,
+  pk: number,
+): Promise<void> {
   const csrf = await getCsrfToken(context);
   await context.request.delete(`${API_URL}/tournaments/${pk}/`, {
     headers: { 'X-CSRFToken': csrf },
@@ -105,7 +117,10 @@ async function deleteTournamentByPk(context: BrowserContext, pk: number): Promis
   });
 }
 
-async function findPksByName(context: BrowserContext, name: string): Promise<number[]> {
+async function findPksByName(
+  context: BrowserContext,
+  name: string,
+): Promise<number[]> {
   const pks: number[] = [];
   for (const bucket of ['upcoming', 'archived']) {
     const res = await context.request.get(
@@ -121,7 +136,10 @@ async function findPksByName(context: BrowserContext, name: string): Promise<num
   return pks;
 }
 
-async function cleanupByName(context: BrowserContext, name: string): Promise<void> {
+async function cleanupByName(
+  context: BrowserContext,
+  name: string,
+): Promise<void> {
   for (const pk of await findPksByName(context, name)) {
     await deleteTournamentByPk(context, pk);
   }
@@ -129,11 +147,15 @@ async function cleanupByName(context: BrowserContext, name: string): Promise<voi
 
 test.describe('Tournament discovery (@cicd)', () => {
   test.describe('request isolation', () => {
-    test('@cicd default tab never requests the archive (logged out)', async ({ page }) => {
+    test('@cicd default tab never requests the archive (logged out)', async ({
+      page,
+    }) => {
       const urls = recordListRequests(page);
       await page.goto('/tournaments');
       await waitForSettled(page, 'upcoming');
-      await expect(cardNamed(page, HOME_SOON).first()).toBeVisible({ timeout: 15000 });
+      await expect(cardNamed(page, HOME_SOON).first()).toBeVisible({
+        timeout: 15000,
+      });
 
       expect(urls.length).toBeGreaterThan(0);
       expect(urls.filter((u) => bucketOf(u) === null)).toEqual([]);
@@ -147,7 +169,9 @@ test.describe('Tournament discovery (@cicd)', () => {
       await loginAsUser(context, DISCOVERY_MEMBER_PK);
       const urls = recordListRequests(page);
       await page.goto('/tournaments');
-      await expect(cardNamed(page, HOME_SOON).first()).toBeVisible({ timeout: 15000 });
+      await expect(cardNamed(page, HOME_SOON).first()).toBeVisible({
+        timeout: 15000,
+      });
       await waitForSettled(page, 'upcoming');
 
       expect(urls.length).toBeGreaterThan(0);
@@ -167,7 +191,9 @@ test.describe('Tournament discovery (@cicd)', () => {
       const urls = recordListRequests(page);
       await page.goto('/tournaments?tab=archived');
       await waitForSettled(page, 'archived');
-      await expect(page.locator(CARD_SELECTOR).first()).toBeVisible({ timeout: 15000 });
+      await expect(page.locator(CARD_SELECTOR).first()).toBeVisible({
+        timeout: 15000,
+      });
 
       expect(urls.length).toBeGreaterThan(0);
       expect(urls.filter((u) => bucketOf(u) === null)).toEqual([]);
@@ -182,7 +208,9 @@ test.describe('Tournament discovery (@cicd)', () => {
       const urls = recordListRequests(page);
       await page.goto('/tournaments?tab=archived');
       await waitForSettled(page, 'archived');
-      await expect(page.locator(CARD_SELECTOR).first()).toBeVisible({ timeout: 15000 });
+      await expect(page.locator(CARD_SELECTOR).first()).toBeVisible({
+        timeout: 15000,
+      });
 
       expect(urls.length).toBeGreaterThan(0);
       expect(urls.filter((u) => bucketOf(u) === null)).toEqual([]);
@@ -191,14 +219,21 @@ test.describe('Tournament discovery (@cicd)', () => {
   });
 
   test.describe('hydration', () => {
-    for (const path of ['/tournaments', `/tournaments?organization=${HOME_ORG}&league=${HOME_LEAGUE}`]) {
-      test(`@cicd hard load of ${path} has no hydration mismatch`, async ({ page }) => {
+    for (const path of [
+      '/tournaments',
+      `/tournaments?organization=${HOME_ORG}&league=${HOME_LEAGUE}`,
+    ]) {
+      test(`@cicd hard load of ${path} has no hydration mismatch`, async ({
+        page,
+      }) => {
         const errors = attachErrorCapture(page);
         await page.goto(path);
         await waitForFilterRow(page);
         await waitForSettled(page, 'upcoming');
 
-        expect(errors.filter((e) => /hydration|did not match/i.test(e))).toEqual([]);
+        expect(
+          errors.filter((e) => /hydration|did not match/i.test(e)),
+        ).toEqual([]);
       });
     }
   });
@@ -230,7 +265,9 @@ test.describe('Tournament discovery (@cicd)', () => {
       }, CARD_SELECTOR);
 
       await page.goto('/tournaments?organization=all');
-      await expect(page.getByTestId('tournaments-tier-yours')).toBeVisible({ timeout: 15000 });
+      await expect(page.getByTestId('tournaments-tier-yours')).toBeVisible({
+        timeout: 15000,
+      });
       await waitForSettled(page, 'upcoming');
 
       const flatSeen = await page.evaluate(
@@ -247,8 +284,12 @@ test.describe('Tournament discovery (@cicd)', () => {
 
       const firstYours = yours.locator(CARD_SELECTOR).first();
       await expect(firstYours).toContainText(HOME_LIVE);
-      await expect(firstYours.getByTestId('tournament-live-badge')).toBeVisible();
-      await expect(firstYours.getByTestId('tournament-card-state')).toHaveText('Live');
+      await expect(
+        firstYours.getByTestId('tournament-live-badge'),
+      ).toBeVisible();
+      await expect(firstYours.getByTestId('tournament-card-state')).toHaveText(
+        'Live',
+      );
 
       const names = await cardNamesIn(yours);
       const live = indexOfName(names, HOME_LIVE);
@@ -270,7 +311,9 @@ test.describe('Tournament discovery (@cicd)', () => {
       await page.goto(`/tournaments?organization=${HOME_ORG}`);
       await waitForSettled(page, 'upcoming');
       const upcoming = panel(page, 'upcoming');
-      await expect(cardNamed(upcoming, HOME_SOON)).toHaveCount(1, { timeout: 15000 });
+      await expect(cardNamed(upcoming, HOME_SOON)).toHaveCount(1, {
+        timeout: 15000,
+      });
       await expect(page.locator('[data-tier]')).toHaveCount(0);
       await expect(page.getByTestId('tournaments-tier-yours')).toHaveCount(0);
       await expect(cardNamed(upcoming, AWAY_CUP)).toHaveCount(0);
@@ -279,10 +322,12 @@ test.describe('Tournament discovery (@cicd)', () => {
       await expect(page).toHaveURL(new RegExp(`organization=${HOME_ORG}`));
       await waitForSettled(page, 'archived');
       const archived = panel(page, 'archived');
-      await expect(cardNamed(archived, HOME_FINISHED)).toHaveCount(1, { timeout: 15000 });
-      await expect(page.getByTestId('tournaments-filter-organization')).toContainText(
-        'Discovery Home',
-      );
+      await expect(cardNamed(archived, HOME_FINISHED)).toHaveCount(1, {
+        timeout: 15000,
+      });
+      await expect(
+        page.getByTestId('tournaments-filter-organization'),
+      ).toContainText('Discovery Home');
 
       await page.getByTestId('tournaments-tab-upcoming').click();
       await expect(page).toHaveURL(new RegExp(`organization=${HOME_ORG}`));
@@ -291,12 +336,20 @@ test.describe('Tournament discovery (@cicd)', () => {
       await expect(cardNamed(panel(page, 'upcoming'), AWAY_CUP)).toHaveCount(0);
     });
 
-    test('@cicd a search with no match shows only the empty state', async ({ page }) => {
+    test('@cicd a search with no match shows only the empty state', async ({
+      page,
+    }) => {
       await page.goto('/tournaments?organization=all');
-      await expect(page.getByTestId('tournaments-tier-yours')).toBeVisible({ timeout: 15000 });
+      await expect(page.getByTestId('tournaments-tier-yours')).toBeVisible({
+        timeout: 15000,
+      });
 
-      await page.getByTestId('tournaments-search').fill('zzq no such tournament xyz');
-      await expect(page.getByTestId('tournaments-empty-upcoming')).toBeVisible({ timeout: 15000 });
+      await page
+        .getByTestId('tournaments-search')
+        .fill('zzq no such tournament xyz');
+      await expect(page.getByTestId('tournaments-empty-upcoming')).toBeVisible({
+        timeout: 15000,
+      });
       await waitForSettled(page, 'upcoming');
       await expect(page.getByTestId('tournaments-tier-yours')).toHaveCount(0);
       await expect(page.getByTestId('tournaments-tier-others')).toHaveCount(0);
@@ -316,24 +369,30 @@ test.describe('Tournament discovery (@cicd)', () => {
       await waitForSettled(page, 'upcoming');
       const upcoming = panel(page, 'upcoming');
 
-      await expect(page.getByTestId('tournaments-filter-organization')).toContainText(
-        'My organizations',
-      );
+      await expect(
+        page.getByTestId('tournaments-filter-organization'),
+      ).toContainText('My organizations');
       expect(new URL(page.url()).searchParams.has('organization')).toBe(false);
       await expect(page.locator('[data-tier]')).toHaveCount(0);
       await expect(page.getByTestId('tournaments-filter-clear')).toHaveCount(0);
 
       for (const name of [HOME_LIVE, HOME_SOON, HOME_LATER, OPEN_CUP]) {
-        await expect(cardNamed(upcoming, name)).toHaveCount(1, { timeout: 15000 });
+        await expect(cardNamed(upcoming, name)).toHaveCount(1, {
+          timeout: 15000,
+        });
       }
       await expect(cardNamed(upcoming, AWAY_CUP)).toHaveCount(0);
 
       // Other specs add open-signup tournaments in parallel, so only the seeded
       // cards are asserted, never the panel's badge count.
       const badge = 'tournament-signups-open-badge';
-      await expect(cardNamed(upcoming, OPEN_CUP).getByTestId(badge)).toHaveText('Signups open');
+      await expect(cardNamed(upcoming, OPEN_CUP).getByTestId(badge)).toHaveText(
+        'Signups open',
+      );
       for (const name of [HOME_LIVE, HOME_SOON, HOME_LATER]) {
-        await expect(cardNamed(upcoming, name).getByTestId(badge)).toHaveCount(0);
+        await expect(cardNamed(upcoming, name).getByTestId(badge)).toHaveCount(
+          0,
+        );
       }
     });
 
@@ -347,19 +406,28 @@ test.describe('Tournament discovery (@cicd)', () => {
       await expect(listbox).toBeVisible();
 
       const options = await listbox.getByRole('option').allInnerTexts();
-      expect(options.slice(0, 2)).toEqual(['My organizations', 'All organizations']);
+      expect(options.slice(0, 2)).toEqual([
+        'My organizations',
+        'All organizations',
+      ]);
 
       const groups = listbox.getByRole('group');
       await expect(groups).toHaveCount(2);
       await expect(groups.nth(0)).toContainText('Your organizations');
       await expect(groups.nth(0).getByRole('option')).toHaveCount(1);
-      await expect(groups.nth(0).getByRole('option')).toContainText(HOME_ORG_NAME);
+      await expect(groups.nth(0).getByRole('option')).toContainText(
+        HOME_ORG_NAME,
+      );
       await expect(groups.nth(1)).toContainText('Other organizations');
       await expect(
-        groups.nth(1).getByRole('option', { name: 'Discovery Away Org', exact: true }),
+        groups
+          .nth(1)
+          .getByRole('option', { name: 'Discovery Away Org', exact: true }),
       ).toHaveCount(1);
       await expect(
-        groups.nth(1).getByRole('option', { name: 'Discovery Open Org', exact: true }),
+        groups
+          .nth(1)
+          .getByRole('option', { name: 'Discovery Open Org', exact: true }),
       ).toHaveCount(1);
       await page.keyboard.press('Escape');
     });
@@ -372,18 +440,22 @@ test.describe('Tournament discovery (@cicd)', () => {
       await showAllOrganizations(page);
 
       await expect(page).toHaveURL(/organization=all/);
-      await expect(page.getByTestId('tournaments-tier-yours')).toBeVisible({ timeout: 15000 });
+      await expect(page.getByTestId('tournaments-tier-yours')).toBeVisible({
+        timeout: 15000,
+      });
       await waitForSettled(page, 'upcoming');
       const others = page.locator('[data-tier="others"]');
       await expect(cardNamed(others, AWAY_CUP)).toHaveCount(1);
       await expect(cardNamed(others, OPEN_CUP)).toHaveCount(1);
-      await expect(page.getByTestId('tournament-signups-open-badge')).toHaveCount(0);
+      await expect(
+        page.getByTestId('tournament-signups-open-badge'),
+      ).toHaveCount(0);
 
       await page.getByTestId('tournaments-filter-clear').click();
       await expect(page).not.toHaveURL(/organization=/);
-      await expect(page.getByTestId('tournaments-filter-organization')).toContainText(
-        'My organizations',
-      );
+      await expect(
+        page.getByTestId('tournaments-filter-organization'),
+      ).toContainText('My organizations');
       await waitForSettled(page, 'upcoming');
       await expect(page.locator('[data-tier]')).toHaveCount(0);
     });
@@ -394,18 +466,23 @@ test.describe('Tournament discovery (@cicd)', () => {
       await page.goto(`/tournaments?organization=${AWAY_ORG}`);
       await waitForSettled(page, 'upcoming');
       const upcoming = panel(page, 'upcoming');
-      await expect(cardNamed(upcoming, AWAY_CUP)).toHaveCount(1, { timeout: 15000 });
+      await expect(cardNamed(upcoming, AWAY_CUP)).toHaveCount(1, {
+        timeout: 15000,
+      });
       await expect(cardNamed(upcoming, HOME_SOON)).toHaveCount(0);
       await expect(page.locator('[data-tier]')).toHaveCount(0);
 
       await page.goto('/tournaments?organization=mine');
       await waitForSettled(page, 'upcoming');
-      await expect(page.getByTestId('tournaments-filter-organization')).toContainText(
-        'My organizations',
+      await expect(
+        page.getByTestId('tournaments-filter-organization'),
+      ).toContainText('My organizations');
+      await expect(cardNamed(panel(page, 'upcoming'), OPEN_CUP)).toHaveCount(
+        1,
+        {
+          timeout: 15000,
+        },
       );
-      await expect(cardNamed(panel(page, 'upcoming'), OPEN_CUP)).toHaveCount(1, {
-        timeout: 15000,
-      });
     });
 
     test('@cicd archived shows only member organizations', async ({ page }) => {
@@ -413,7 +490,9 @@ test.describe('Tournament discovery (@cicd)', () => {
       await page.goto('/tournaments?tab=archived');
       await waitForSettled(page, 'archived');
       const archived = panel(page, 'archived');
-      await expect(cardNamed(archived, HOME_FINISHED)).toHaveCount(1, { timeout: 15000 });
+      await expect(cardNamed(archived, HOME_FINISHED)).toHaveCount(1, {
+        timeout: 15000,
+      });
 
       const cards = archived.locator(CARD_SELECTOR);
       const total = await cards.count();
@@ -437,11 +516,17 @@ test.describe('Tournament discovery (@cicd)', () => {
     await expect(trigger).toContainText('All organizations');
     await trigger.click();
     const listbox = page.getByRole('listbox');
-    await expect(listbox.getByRole('option', { name: 'All organizations' })).toBeVisible();
-    await expect(listbox.getByRole('option', { name: 'My organizations' })).toHaveCount(0);
+    await expect(
+      listbox.getByRole('option', { name: 'All organizations' }),
+    ).toBeVisible();
+    await expect(
+      listbox.getByRole('option', { name: 'My organizations' }),
+    ).toHaveCount(0);
     await expect(listbox.getByRole('group')).toHaveCount(0);
     await page.keyboard.press('Escape');
-    await expect(page.getByTestId('tournament-signups-open-badge')).toHaveCount(0);
+    await expect(page.getByTestId('tournament-signups-open-badge')).toHaveCount(
+      0,
+    );
   });
 
   test('@cicd archived tab lists past and stale tournaments of an organization', async ({
@@ -451,17 +536,23 @@ test.describe('Tournament discovery (@cicd)', () => {
     await waitForSettled(page, 'archived');
     const archived = panel(page, 'archived');
 
-    await expect(cardNamed(archived, HOME_FINISHED)).toHaveCount(1, { timeout: 15000 });
+    await expect(cardNamed(archived, HOME_FINISHED)).toHaveCount(1, {
+      timeout: 15000,
+    });
     const stale = cardNamed(archived, HOME_STALE);
     await expect(stale).toHaveCount(1);
-    await expect(stale.getByTestId('tournament-card-state')).toHaveText('Past (not closed)');
+    await expect(stale.getByTestId('tournament-card-state')).toHaveText(
+      'Past (not closed)',
+    );
     await expect(cardNamed(archived, HOME_LIVE)).toHaveCount(0);
   });
 
   test('@cicd logged out shows no tier headings', async ({ page }) => {
     await page.goto('/tournaments');
     await waitForSettled(page, 'upcoming');
-    await expect(panel(page, 'upcoming').locator(CARD_SELECTOR).first()).toBeVisible({
+    await expect(
+      panel(page, 'upcoming').locator(CARD_SELECTOR).first(),
+    ).toBeVisible({
       timeout: 15000,
     });
     await expect(page.getByTestId('tournaments-tier-yours')).toHaveCount(0);
@@ -480,19 +571,27 @@ test.describe('Tournament discovery (@cicd)', () => {
     await expect(cardNamed(upcoming, HOME_SOON)).toHaveCount(0);
   });
 
-  test('@cicd an invalid organization param renders the unfiltered list', async ({ page }) => {
+  test('@cicd an invalid organization param renders the unfiltered list', async ({
+    page,
+  }) => {
     const urls = recordListRequests(page);
     await page.goto('/tournaments?organization=abc');
     await waitForSettled(page, 'upcoming');
 
     const upcoming = panel(page, 'upcoming');
-    await expect(cardNamed(upcoming, HOME_SOON)).toHaveCount(1, { timeout: 15000 });
+    await expect(cardNamed(upcoming, HOME_SOON)).toHaveCount(1, {
+      timeout: 15000,
+    });
     await expect(cardNamed(upcoming, AWAY_CUP)).toHaveCount(1);
     await expect(page.getByTestId('tournaments-error-upcoming')).toHaveCount(0);
-    expect(urls.filter((u) => new URL(u).searchParams.has('organization'))).toEqual([]);
+    expect(
+      urls.filter((u) => new URL(u).searchParams.has('organization')),
+    ).toEqual([]);
   });
 
-  test('@cicd an unknown tab param renders the Upcoming tab', async ({ page }) => {
+  test('@cicd an unknown tab param renders the Upcoming tab', async ({
+    page,
+  }) => {
     await page.goto('/tournaments?tab=bogus');
     await expect(page.getByTestId('tournaments-tab-upcoming')).toHaveAttribute(
       'aria-selected',
@@ -509,8 +608,12 @@ test.describe('Tournament discovery (@cicd)', () => {
     await page.goto('/tournaments');
     await waitForFilterRow(page);
 
-    await expect(page.getByRole('textbox', { name: 'Search tournaments' })).toBeVisible();
-    await expect(page.getByRole('combobox', { name: /organization/i })).toBeVisible();
+    await expect(
+      page.getByRole('textbox', { name: 'Search tournaments' }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole('combobox', { name: /organization/i }),
+    ).toBeVisible();
     await expect(page.getByRole('combobox', { name: /league/i })).toBeVisible();
   });
 
@@ -530,7 +633,10 @@ test.describe('Tournament discovery (@cicd)', () => {
       const response = await route.fetch({
         url: `${url.origin}${LIST_PATH}?bucket=archived&page=1&page_size=3`,
       });
-      const body = (await response.json()) as { count: number; results: Tournament[] };
+      const body = (await response.json()) as {
+        count: number;
+        results: Tournament[];
+      };
       const first = body.results;
       if (pageNo === '1') {
         await route.fulfill({
@@ -582,26 +688,39 @@ test.describe('Tournament discovery (@cicd)', () => {
     expect(second!.searchParams.get('bucket')).toBe('archived');
     expect(second!.searchParams.get('cursor')).toBe(LOAD_MORE_CURSOR);
     expect(second!.searchParams.has('page')).toBe(false);
-    expect(pageRequests.filter((u) => u.searchParams.has('page')).map((u) => u.searchParams.get('page'))).toEqual(['1']);
+    expect(
+      pageRequests
+        .filter((u) => u.searchParams.has('page'))
+        .map((u) => u.searchParams.get('page')),
+    ).toEqual(['1']);
     expect(pageRequests.every((u) => u.hostname !== 'other-host')).toBe(true);
   });
 
   test('@cicd archived cursor pages cover the archive once, newest first', async ({
     context,
   }) => {
-    const all = await context.request.get(`${API_URL}/tournaments-list/?bucket=archived`);
+    const all = await context.request.get(
+      `${API_URL}/tournaments-list/?bucket=archived`,
+    );
     expect(all.ok()).toBe(true);
     const expected = ((await all.json()) as Tournament[]).map((t) => t.pk);
     expect(expected.length).toBeGreaterThan(2);
 
     const seen: Tournament[] = [];
-    let url: string | null = `${API_URL}/tournaments-list/?bucket=archived&page=1&page_size=2`;
+    let url: string | null =
+      `${API_URL}/tournaments-list/?bucket=archived&page=1&page_size=2`;
     while (url !== null) {
       const res = await context.request.get(url);
       expect(res.ok(), url).toBe(true);
-      const body = (await res.json()) as { next: string | null; results: Tournament[] };
+      const body = (await res.json()) as {
+        next: string | null;
+        results: Tournament[];
+      };
       seen.push(...body.results);
-      const cursor = body.next === null ? null : new URL(body.next).searchParams.get('cursor');
+      const cursor =
+        body.next === null
+          ? null
+          : new URL(body.next).searchParams.get('cursor');
       if (body.next !== null) expect(cursor, body.next).not.toBeNull();
       url =
         cursor === null
@@ -613,10 +732,12 @@ test.describe('Tournament discovery (@cicd)', () => {
     expect(pks).toEqual(expect.arrayContaining(expected));
     for (let i = 1; i < seen.length; i++) {
       const [a, b] = [seen[i - 1], seen[i]];
-      const order = Date.parse(String(a.date_played)) - Date.parse(String(b.date_played));
-      expect(order > 0 || (order === 0 && Number(a.pk) > Number(b.pk)), `${a.pk} before ${b.pk}`).toBe(
-        true,
-      );
+      const order =
+        Date.parse(String(a.date_played)) - Date.parse(String(b.date_played));
+      expect(
+        order > 0 || (order === 0 && Number(a.pk) > Number(b.pk)),
+        `${a.pk} before ${b.pk}`,
+      ).toBe(true);
     }
   });
 
@@ -651,13 +772,18 @@ test.describe('Tournament discovery (@cicd)', () => {
         });
 
         const card = await findTournamentCard(page, name);
-        await expect(card).toHaveAttribute('data-testid', `tournament-card-${pk}`);
+        await expect(card).toHaveAttribute(
+          'data-testid',
+          `tournament-card-${pk}`,
+        );
 
         await card.getByTestId(`tournament-delete-${pk}`).click();
         await page.getByRole('button', { name: 'Confirm Delete' }).click();
 
         await expect(cardNamed(page, name)).toHaveCount(0, { timeout: 15000 });
-        await expect(page.getByTestId('tournaments-empty-upcoming')).toBeVisible();
+        await expect(
+          page.getByTestId('tournaments-empty-upcoming'),
+        ).toBeVisible();
         const noReload = await page.evaluate(
           () => (window as Window & { __noReload?: boolean }).__noReload,
         );
@@ -706,12 +832,18 @@ test.describe('Tournament discovery (@cicd)', () => {
     });
   });
 
-  test('@cicd no horizontal overflow at 375 px with long filter values', async ({ page }) => {
+  test('@cicd no horizontal overflow at 375 px with long filter values', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 375, height: 812 });
-    await page.goto(`/tournaments?organization=${HOME_ORG}&league=${HOME_LEAGUE}`);
+    await page.goto(
+      `/tournaments?organization=${HOME_ORG}&league=${HOME_LEAGUE}`,
+    );
     await waitForFilterRow(page);
     await waitForSettled(page, 'upcoming');
-    await expect(page.getByTestId('tournaments-filter-league')).toContainText('Discovery Home');
+    await expect(page.getByTestId('tournaments-filter-league')).toContainText(
+      'Discovery Home',
+    );
     await expect(cardNamed(panel(page, 'upcoming'), HOME_SOON)).toHaveCount(1, {
       timeout: 15000,
     });
