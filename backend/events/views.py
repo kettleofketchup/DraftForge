@@ -1,8 +1,10 @@
+from datetime import datetime
 from typing import Any
 
 from cacheops import cached_as
 from django.contrib.auth.models import AnonymousUser
-from django.db import transaction
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import models, transaction
 from django.db.models import (
     BooleanField,
     Count,
@@ -15,11 +17,15 @@ from django.db.models import (
     Value,
 )
 from django.db.models.functions import Abs, Coalesce, Now
+from django.http import QueryDict
 from django.utils import timezone
-from django.utils.dateparse import parse_datetime
 from rest_framework import permissions, serializers, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import NotAuthenticated, PermissionDenied
+from rest_framework.exceptions import (
+    NotAuthenticated,
+    PermissionDenied,
+    ValidationError,
+)
 from rest_framework.request import Request
 from rest_framework.response import Response
 
@@ -535,6 +541,16 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
 _CONCURRENTLY_WRITTEN_EVENT_FIELDS = ["state", "contributions_awarded_at", "host"]
 
 
+def _parse_datetime_param(params: QueryDict, name: str) -> datetime | None:
+    raw = params.get(name)
+    if not raw:
+        return None
+    try:
+        return models.DateTimeField().to_python(raw)
+    except DjangoValidationError:
+        raise ValidationError({name: f"Invalid ISO 8601 datetime: {raw!r}"}) from None
+
+
 class EventViewSet(viewsets.ModelViewSet):
     serializer_class = EventSerializer
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
@@ -580,28 +596,20 @@ class EventViewSet(viewsets.ModelViewSet):
             qs = qs.filter(event_repeater_id=repeater_id)
 
         # Date range filters (ISO format)
-        scheduled_before = params.get("scheduled_before")
+        scheduled_before = _parse_datetime_param(params, "scheduled_before")
         if scheduled_before:
             qs = qs.filter(scheduled_at__lt=scheduled_before)
-        stale_before = params.get("stale_before")
+        stale_before = _parse_datetime_param(params, "stale_before")
         if stale_before:
-            try:
-                stale_cutoff = parse_datetime(stale_before)
-            except ValueError:
-                stale_cutoff = None
-            if stale_cutoff is None:
-                raise serializers.ValidationError(
-                    {"stale_before": "Must be an ISO 8601 datetime."}
-                )
             qs = qs.annotate(_end=Coalesce("ends_at", "scheduled_at")).filter(
-                _end__lt=stale_cutoff
+                _end__lt=stale_before
             )
-        scheduled_after = params.get("scheduled_after")
+        scheduled_after = _parse_datetime_param(params, "scheduled_after")
         if scheduled_after:
             qs = qs.filter(scheduled_at__gte=scheduled_after)
 
         # Filter by signups_open_at (for open_scheduled_signups task)
-        signups_due_before = params.get("signups_due_before")
+        signups_due_before = _parse_datetime_param(params, "signups_due_before")
         if signups_due_before:
             qs = qs.filter(
                 signups_open_at__isnull=False, signups_open_at__lte=signups_due_before
@@ -828,7 +836,6 @@ class EventViewSet(viewsets.ModelViewSet):
         Body: {"intent": "rsvp" | "tentative", "profile": {...}}
         Replaces the older /rsvp/ and /tentative/ actions (deleted in Task 29).
         """
-        from django.core.exceptions import ValidationError as DjangoValidationError
         from django.db import transaction
         from pydantic import ValidationError as PydanticValidationError
 
