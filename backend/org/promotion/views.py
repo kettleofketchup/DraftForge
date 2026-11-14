@@ -12,7 +12,7 @@ from app.models import CustomUser, Organization
 from app.permissions_org import has_org_staff_access
 from events.models import Event
 from org.feature_errors import not_permitted, require_org_staff, require_promoter
-from org.features import FeatureKey
+from org.features import FeatureKey, org_has_feature
 from org.models import ContributionEntry, PromoSend, PromoTemplate
 from org.promotion.recipients import CandidateRow, candidates, clamp_pool_n
 from org.promotion.render import (
@@ -256,7 +256,7 @@ def promotion_sends(request: Request, org_id: int, event_id: int) -> Response:
         .filter(promo_send=send)
         .values_list("points", flat=True)
         .first()
-        if send.earns_points
+        if send.earns_points and org_has_feature(org, FeatureKey.CONTRIBUTIONS)
         else None
     )
     return Response(send_data(send, points), status=status.HTTP_201_CREATED)

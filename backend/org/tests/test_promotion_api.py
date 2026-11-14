@@ -406,7 +406,7 @@ class PromotionRenderAndSendTest(PromotionApiBase):
         self.assertEqual(first.status_code, 201, first.content)
         first_body = first.json()
         self.assertTrue(first_body["earns_points"])
-        self.assertEqual(first_body["points_awarded"], 1)
+        self.assertIsNone(first_body["points_awarded"])
         self.assertEqual(
             set(first_body), {"id", "earns_points", "points_awarded", "sent_at"}
         )
@@ -429,6 +429,23 @@ class PromotionRenderAndSendTest(PromotionApiBase):
         self.assertEqual(
             ContributionEntry.objects.nocache().filter(event=self.event).count(), 1
         )
+
+    def test_send_reports_points_only_with_contributions_unlocked(self) -> None:
+        set_org_feature(self.org, FeatureKey.CONTRIBUTIONS, enabled=True, actor=None)
+        payload = {
+            "template_id": self.template.pk,
+            "recipient_id": self.recipient.pk,
+            "text": "Hi Recipient",
+        }
+        first = self.request("promoter", "post", self.sends_url(), payload)
+        self.assertEqual(first.status_code, 201, first.content)
+        self.assertTrue(first.json()["earns_points"])
+        self.assertEqual(first.json()["points_awarded"], 1)
+
+        second = self.request(self.promoter_b, "post", self.sends_url(), payload)
+        self.assertEqual(second.status_code, 201, second.content)
+        self.assertFalse(second.json()["earns_points"])
+        self.assertIsNone(second.json()["points_awarded"])
 
     def test_send_without_template(self) -> None:
         response = self.request(
