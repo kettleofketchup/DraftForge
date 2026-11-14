@@ -9,8 +9,8 @@ import type { UserType } from '~/components/user/types';
 import { UserAvatar } from '~/components/user/UserAvatar';
 import { useUserStore } from '~/store/userStore';
 
-import { getLogger } from '~/lib/logger';
 import { Input } from '~/components/ui/input';
+import { getLogger } from '~/lib/logger';
 const log = getLogger('searchUser');
 
 interface Props {
@@ -64,7 +64,7 @@ export const SearchUserDropdown: React.FC<Props> = ({
   };
 
   return (
-    <div className="justify-self-top content-self-center align-middle w-full ">
+    <div className="align-middle w-full">
       {users && (
         <Combobox value={query} onChange={handleSearchUserSelect}>
           <ComboboxInput

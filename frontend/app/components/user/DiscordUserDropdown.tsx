@@ -5,13 +5,13 @@ import {
   ComboboxOptions,
 } from '@headlessui/react';
 import React, { useCallback, useEffect, useState } from 'react';
+import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
 import { UserAvatar } from '~/components/user/UserAvatar';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '../../store/userStore';
 import { get_dtx_members } from '../api/api';
 import type { GuildMember, GuildMembers, UsersType } from '../user/types';
-import { Input } from '~/components/ui/input';
 
 const log = getLogger('DiscordUserDropdown');
 interface Props {
@@ -102,10 +102,10 @@ const DiscordUserDropdown: React.FC<Props> = ({
         return <></>;
       }
       return (
-        <div className="flex justify-left ">
+        <div className="flex">
           <Label
             htmlFor={`global-nick-${user.user.id}`}
-            className="justify-left text-xs text-gray-500 m-0 pl-1 w-10"
+            className="text-xs text-gray-500 m-0 pl-1 w-10"
           >
             Nick:
           </Label>
@@ -119,10 +119,10 @@ const DiscordUserDropdown: React.FC<Props> = ({
         return <></>;
       }
       return (
-        <div className=" justify-left flex">
+        <div className="flex">
           <Label
             htmlFor={`global-username-${user.user.id}`}
-            className=" justify-left text-xs text-gray-500 m-0 pl-1 w-20"
+            className="text-xs text-gray-500 m-0 pl-1 w-20"
           >
             Username:
           </Label>
@@ -137,10 +137,10 @@ const DiscordUserDropdown: React.FC<Props> = ({
       }
 
       return (
-        <div className="flex  justify-left ">
+        <div className="flex">
           <Label
             htmlFor={`global-name-${user.user.id}`}
-            className="justify-left text-xs text-gray-500 m-0 pl-1 w-20"
+            className="text-xs text-gray-500 m-0 pl-1 w-20"
           >
             Global:
           </Label>
@@ -176,12 +176,8 @@ const DiscordUserDropdown: React.FC<Props> = ({
               {userAddedBadge()}
             </div>
 
-            <div className={`rounded-lg flex justify-left `}>
-              {getNickname()}
-            </div>
-            <div className={`rounded-lg flex justify-left `}>
-              {getUsername()}
-            </div>
+            <div className={`rounded-lg flex`}>{getNickname()}</div>
+            <div className={`rounded-lg flex`}>{getUsername()}</div>
           </div>
 
           {/* TODO add a quickadd button*/}
@@ -200,7 +196,12 @@ const DiscordUserDropdown: React.FC<Props> = ({
   };
   return (
     <div className="w-full max-w-md">
-      <Combobox value={discordUser} onChange={(u) => { if (u) onSelect(u); }}>
+      <Combobox
+        value={discordUser}
+        onChange={(u) => {
+          if (u) onSelect(u);
+        }}
+      >
         <ComboboxInput
           as={Input}
           placeholder="Search DTX members..."

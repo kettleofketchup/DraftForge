@@ -7,14 +7,14 @@ const log = getLogger('GameCard');
 import { motion } from 'framer-motion';
 import { BarChart3 } from 'lucide-react';
 import { useNavigate } from 'react-router';
+import { DotaMatchStatsModal } from '~/components/bracket/modals';
 import { refreshTournamentHook } from '~/components/teamdraft/hooks/refreshTournamentHook';
+import { Input } from '~/components/ui/input';
 import { useUserStore } from '~/store/userStore';
 import { Button } from '../../ui/button';
 import { EditButton, SubmitButton } from '../../ui/buttons';
 import { updateGameHook } from '../hooks/updateGameHook';
 import { GameRemoveButton } from './deleteButton';
-import { DotaMatchStatsModal } from '~/components/bracket/modals';
-import { Input } from '~/components/ui/input';
 interface Props {
   game: GameType;
   edit?: boolean;
@@ -77,7 +77,7 @@ export const GameCard: React.FC<Props> = ({
   const GameHeader = () => {
     if (editMode) return null;
     return (
-      <div className="flex flex-col w-40em items-top ">
+      <div className="flex flex-col">
         <h2 className="w-full text-xl font-semibold leading-snug">Game</h2>
       </div>
     );
@@ -163,7 +163,7 @@ export const GameCard: React.FC<Props> = ({
 
   const headerButtons = () => {
     return (
-      <div className="flex self-start flex flex-col w-full align-top  items-end justify-end gap-2 lg:flex-row lg:justify-end lg:items-top ">
+      <div className="flex self-start flex flex-col w-full align-top items-end justify-end gap-2 lg:flex-row lg:justify-end">
         {editBtn()}
         {game.gameid && (
           <Button
@@ -197,7 +197,7 @@ export const GameCard: React.FC<Props> = ({
             active:bg-base-200
             transition-all duration-300 ease-in-out"
       >
-        <div className="flex flex-row items-center align-start gap-2">
+        <div className="flex flex-row items-center gap-2">
           {GameHeader()}
           {headerButtons()}
         </div>

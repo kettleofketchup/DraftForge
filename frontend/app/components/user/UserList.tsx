@@ -10,14 +10,17 @@ import { memo, useEffect, useMemo, useState } from 'react';
 import { Input } from '~/components/ui/input';
 import type { UserClassType, UserType } from '~/components/user/types';
 import { UserCard } from '~/components/user/userCard';
-import { VirtualizedUserGrid, type ColumnBreakpoints } from './VirtualizedUserGrid';
 import { useDebouncedValue } from '~/hooks/useDebouncedValue';
+import {
+  VirtualizedUserGrid,
+  type ColumnBreakpoints,
+} from './VirtualizedUserGrid';
 
 /** Hook for progressive/batched rendering of items */
 export const useProgressiveRender = <T,>(
   items: T[],
   batchSize = 12,
-  delay = 50
+  delay = 50,
 ) => {
   const [visibleCount, setVisibleCount] = useState(batchSize);
 
@@ -110,13 +113,13 @@ const UserCardWrapper = memo(
         leagueId={leagueId}
       />
     );
-  }
+  },
 );
 
 /** Grid of skeleton cards for initial loading */
 export const UserGridSkeleton = ({ count = 12 }: { count?: number }) => (
   <div
-    className="grid grid-flow-row-dense grid-auto-rows
+    className="grid grid-flow-row-dense
     align-middle content-center justify-center
     grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4
     mb-0 mt-0 p-0 w-full gap-6 md:gap-8 lg:gap-10"
@@ -128,7 +131,11 @@ export const UserGridSkeleton = ({ count = 12 }: { count?: number }) => (
 );
 
 /** Empty state when no users found */
-export const EmptyUsers = ({ message = 'No members found' }: { message?: string }) => (
+export const EmptyUsers = ({
+  message = 'No members found',
+}: {
+  message?: string;
+}) => (
   <div className="flex flex-col items-center justify-center py-16 text-base-content/60">
     <Users className="w-16 h-16 mb-4 opacity-50" />
     <h3 className="text-xl font-semibold mb-2">{message}</h3>
@@ -193,7 +200,7 @@ export function UserList({
     return users.filter(
       (person) =>
         person.username?.toLowerCase().includes(q) ||
-        person.nickname?.toLowerCase().includes(q)
+        person.nickname?.toLowerCase().includes(q),
     );
   }, [users, debouncedQuery]);
 

@@ -2,8 +2,11 @@ import { UsersRound } from 'lucide-react';
 import React, { useState } from 'react';
 import { TeamCard } from '~/components/team/teamCard';
 import type { TeamType } from '~/components/tournament/types';
-import { Button } from '~/components/ui/button';
-import { CancelButton, PrimaryButton, SecondaryButton } from '~/components/ui/buttons';
+import {
+  CancelButton,
+  PrimaryButton,
+  SecondaryButton,
+} from '~/components/ui/buttons';
 import {
   Tooltip,
   TooltipContent,
@@ -40,7 +43,7 @@ interface TeamsViewProps {
 
 const TeamsView: React.FC<TeamsViewProps> = ({ teams }) => (
   <div
-    className="flex grid grid-flow-row-dense grid-auto-rows
+    className="flex grid grid-flow-row-dense
         align-middle content-center justify-center
          grid-cols-1 lg:grid-cols-2 2xl:grid-cols-2
          mb-0 mt-0 p-0 bg-base-500 w-full"
@@ -138,9 +141,7 @@ export const RandomizeTeamsModal: React.FC<Props> = ({
             setDialogOpen={setOpen}
           />
           <DialogClose asChild>
-            <CancelButton data-testid="closeTeamsModalBtn">
-              Close
-            </CancelButton>
+            <CancelButton data-testid="closeTeamsModalBtn">Close</CancelButton>
           </DialogClose>
         </DialogFooter>
       </DialogContent>
