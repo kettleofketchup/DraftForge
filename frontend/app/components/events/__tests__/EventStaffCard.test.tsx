@@ -20,25 +20,42 @@ vi.mock('~/features/contributions/api', () => ({
   ]),
 }));
 
-vi.mock('~/components/user/AddUserModal', () => ({
-  AddUserModal: ({
-    open,
-    onAdd,
-  }: {
-    open: boolean;
-    onAdd: (payload: { user_id: number }) => Promise<unknown>;
-  }) =>
-    open ? (
-      <div>
-        <button type="button" data-testid="stub-pick-2" onClick={() => void onAdd({ user_id: 2 })}>
-          pick 2
-        </button>
-        <button type="button" data-testid="stub-pick-9" onClick={() => void onAdd({ user_id: 9 })}>
-          pick 9
-        </button>
-      </div>
-    ) : null,
-}));
+vi.mock('~/components/user/AddUserModal', async () => {
+  const { useState } = await import('react');
+  return {
+    AddUserModal: ({
+      open,
+      onAdd,
+      isAdded,
+    }: {
+      open: boolean;
+      onAdd: (payload: { user_id: number }) => Promise<unknown>;
+      isAdded: (user: { pk: number }) => boolean;
+    }) => {
+      const [added, setAdded] = useState<Set<number>>(new Set());
+      if (!open) return null;
+      const pick = async (pk: number): Promise<void> => {
+        await onAdd({ user_id: pk });
+        setAdded((prev) => new Set(prev).add(pk));
+      };
+      return (
+        <div>
+          {[2, 9].map((pk) => (
+            <button
+              key={pk}
+              type="button"
+              data-testid={`stub-pick-${pk}`}
+              disabled={added.has(pk) || isAdded({ pk })}
+              onClick={() => void pick(pk)}
+            >
+              pick {pk}
+            </button>
+          ))}
+        </div>
+      );
+    },
+  };
+});
 
 vi.mock('sonner', () => ({
   toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() },
@@ -108,6 +125,43 @@ describe('EventStaffCard', () => {
     fireEvent.click(screen.getByTestId('event-staff-save-btn'));
     await waitFor(() =>
       expect(mutateAsync).toHaveBeenCalledWith({ host_id: 4, helper_ids: [3, 9] }),
+    );
+  });
+
+  it('lets the same user be picked again after the picked host is removed', async () => {
+    render(<EventStaffCard event={event} canEdit showPoints={false} />, { wrapper });
+
+    fireEvent.click(screen.getByTestId('event-host-edit-btn'));
+    fireEvent.click(await screen.findByTestId('stub-pick-2'));
+    await waitFor(() => expect(screen.queryByTestId('stub-pick-2')).toBeNull());
+    fireEvent.click(screen.getByTestId('event-host-remove-btn'));
+
+    fireEvent.click(screen.getByTestId('event-host-edit-btn'));
+    const again = (await screen.findByTestId('stub-pick-2')) as HTMLButtonElement;
+    expect(again.disabled).toBe(false);
+    fireEvent.click(again);
+
+    fireEvent.click(await screen.findByTestId('event-staff-save-btn'));
+    await waitFor(() =>
+      expect(mutateAsync).toHaveBeenCalledWith({ host_id: 2, helper_ids: [3] }),
+    );
+  });
+
+  it('lets a just-picked host be moved to helper', async () => {
+    render(<EventStaffCard event={event} canEdit showPoints={false} />, { wrapper });
+
+    fireEvent.click(screen.getByTestId('event-host-edit-btn'));
+    fireEvent.click(await screen.findByTestId('stub-pick-9'));
+    await waitFor(() => expect(screen.queryByTestId('stub-pick-9')).toBeNull());
+
+    fireEvent.click(screen.getByTestId('event-helper-add-btn'));
+    const helperPick = (await screen.findByTestId('stub-pick-9')) as HTMLButtonElement;
+    expect(helperPick.disabled).toBe(false);
+    fireEvent.click(helperPick);
+
+    fireEvent.click(await screen.findByTestId('event-staff-save-btn'));
+    await waitFor(() =>
+      expect(mutateAsync).toHaveBeenCalledWith({ host_id: null, helper_ids: [2, 3, 9] }),
     );
   });
 

@@ -119,11 +119,17 @@ export function EventStaffCard({
   const [pending, setPending] = useState<StaffState>(server);
   const [baseKey, setBaseKey] = useState(serverKey);
   const [picker, setPicker] = useState<PickerMode | null>(null);
+  const [pickerSession, setPickerSession] = useState(0);
 
   if (baseKey !== serverKey) {
     setBaseKey(serverKey);
     setPending(server);
   }
+
+  const openPicker = (mode: PickerMode): void => {
+    setPickerSession((n) => n + 1);
+    setPicker(mode);
+  };
 
   const dirty = staffKey(pending) !== serverKey;
   const hostPoints = showPoints && pointValues ? pointValues.event_host : null;
@@ -192,7 +198,7 @@ export function EventStaffCard({
             <SecondaryButton
               type="button"
               size="sm"
-              onClick={() => setPicker('host')}
+              onClick={() => openPicker('host')}
               data-testid="event-host-edit-btn"
             >
               <Crown className="h-4 w-4 mr-1.5" />
@@ -201,7 +207,7 @@ export function EventStaffCard({
             <SecondaryButton
               type="button"
               size="sm"
-              onClick={() => setPicker('helper')}
+              onClick={() => openPicker('helper')}
               data-testid="event-helper-add-btn"
             >
               <UserPlus className="h-4 w-4 mr-1.5" />
@@ -264,6 +270,7 @@ export function EventStaffCard({
       </CardContent>
       {canEdit && (
         <AddUserModal
+          key={pickerSession}
           open={picker !== null}
           onOpenChange={(open) => {
             if (!open) setPicker(null);
