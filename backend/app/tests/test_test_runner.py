@@ -4,25 +4,32 @@ The image has /app/__init__.py and /app/backend/__init__.py, so unittest walks
 the top-level directory up to / and imports `app.backend...`, which fails.
 """
 
+import contextvars
 import os
+import pickle
+import sqlite3
+import sys
 import tempfile
 import time
 import unittest
 from collections.abc import Iterator
+from multiprocessing.reduction import ForkingPickler
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
 from django.conf import settings
 from django.db.backends.sqlite3.creation import DatabaseCreation
+from django.db.utils import ConnectionHandler
 from django.test import SimpleTestCase
-from django.test.runner import DiscoverRunner
+from django.test.runner import DiscoverRunner, RemoteTestResult
 from django.test.utils import get_runner
 
 from backend.test_runner import (
     KEEPDB_TEST_DB_NAME,
     STALE_TEST_DB_SECONDS,
     BackendDiscoverRunner,
+    checkpoint_before_clone,
     init_worker,
     isolated_db_name,
     remove_isolated_db_files,
@@ -232,3 +239,61 @@ class SpawnWorkerConnectionTests(SimpleTestCase):
         self.assertIs(
             BackendDiscoverRunner.parallel_test_suite.init_worker, init_worker
         )
+
+
+class ParallelPicklingTests(SimpleTestCase):
+    """--parallel pickles test cases to workers and their failures back."""
+
+    def test_worker_result_pickles_a_failure_traceback(self) -> None:
+        result = RemoteTestResult()
+        try:
+            self.fail("boom")
+        except AssertionError:
+            result.addFailure(self, sys.exc_info())
+        events = pickle.loads(pickle.dumps(result.events))
+        self.assertEqual(events[0][0], "addFailure")
+
+    def test_async_test_cases_can_be_sent_to_a_worker(self) -> None:
+        class AsyncCase(unittest.IsolatedAsyncioTestCase):
+            async def test_it(self) -> None:
+                pass
+
+        case = AsyncCase("test_it")
+        sent = pickle.loads(ForkingPickler.dumps(case._asyncioTestContext))
+        self.assertIsInstance(sent, contextvars.Context)
+
+
+class WalCloneTests(SimpleTestCase):
+    """Django clones a file test DB for --parallel by copying only the main file."""
+
+    databases = {"default"}
+
+    def test_clone_includes_writes_still_in_the_wal(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            source = str(Path(tmp) / "source.sqlite3")
+            handler = ConnectionHandler(
+                {
+                    "default": {
+                        "ENGINE": "django.db.backends.sqlite3",
+                        "NAME": source,
+                        "OPTIONS": {"init_command": "PRAGMA journal_mode=WAL;"},
+                    }
+                }
+            )
+            connection = handler["default"]
+            try:
+                with connection.cursor() as cursor:
+                    cursor.execute("CREATE TABLE migrated (id INTEGER)")
+                checkpoint_before_clone(connection)
+                connection.creation.clone_test_db(suffix="1", verbosity=0)
+            finally:
+                connection.close()
+
+            clone = sqlite3.connect(str(Path(tmp) / "source_1.sqlite3"))
+            try:
+                tables = clone.execute(
+                    "SELECT name FROM sqlite_master WHERE type = 'table'"
+                ).fetchall()
+            finally:
+                clone.close()
+            self.assertIn(("migrated",), tables)

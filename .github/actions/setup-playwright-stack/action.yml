@@ -89,6 +89,20 @@ runs:
           just docker::frontend::build-dev
         fi
 
+    - name: Rebuild backend-dev image if pulled :latest is stale
+      shell: bash
+      env:
+        IMAGE_PREFIX: ${{ inputs.image-prefix }}
+      run: |
+        BACKEND_HASH=$(just docker::hash backend)
+        BACKEND_IMAGE="${IMAGE_PREFIX}/backend-dev:${BACKEND_HASH}"
+        if docker image inspect "$BACKEND_IMAGE" >/dev/null 2>&1; then
+          echo "backend-dev:${BACKEND_HASH:0:12} present (deps in sync)"
+        else
+          echo "backend-dev image lacks current poetry.lock hash; rebuilding"
+          just docker::backend::build-dev
+        fi
+
     - name: Get test database
       shell: bash
       run: |
