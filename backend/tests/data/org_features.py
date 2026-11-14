@@ -4,17 +4,17 @@ Used by frontend/tests/playwright/e2e/19-org-features/.
 populate_org_features_data creates it and reset_org_features_data puts it
 back between specs (tests.populate.org_features).
 
-- 30 "Features Test Org": both features unlocked, public member list.
-- 31 "Locked Features Org": both features locked.
-- 32 "Private Features Org": both features unlocked, `members_private`.
+- 40 "Features Test Org": both features unlocked, public member list.
+- 41 "Locked Features Org": both features locked.
+- 42 "Private Features Org": both features unlocked, `members_private`.
 
 Users (pk 7300-7399):
 
-- 7300 owner of orgs 30 and 32, 7301 admin of orgs 30 and 32,
-  7302 staff of org 30, 7303 promoter of org 30, 7304 member of org 30,
-  7305 outsider (no org), 7306 owner/admin of org 31,
-  7307 member of org 32.
-- 7310-7319 Discord-linked players of the past tournaments 260-263 in org 30.
+- 7300 owner of orgs 40 and 42, 7301 admin of orgs 40 and 42,
+  7302 staff of org 40, 7303 promoter of org 40, 7304 member of org 40,
+  7305 outsider (no org), 7306 owner/admin of org 41,
+  7307 member of org 42.
+- 7310-7319 Discord-linked players of the past tournaments 260-263 in org 40.
 """
 
 from typing import Final
@@ -22,19 +22,19 @@ from typing import Final
 from tests.data.models import TestLeague, TestOrganization, TestUser
 
 FEATURES_ORG: TestOrganization = TestOrganization(
-    pk=30,
+    pk=40,
     name="Features Test Org",
     description="Isolated organization for the paid features E2E tests.",
     timezone="America/New_York",
 )
 LOCKED_FEATURES_ORG: TestOrganization = TestOrganization(
-    pk=31,
+    pk=41,
     name="Locked Features Org",
     description="Paid features locked.",
     timezone="America/New_York",
 )
 PRIVATE_FEATURES_ORG: TestOrganization = TestOrganization(
-    pk=32,
+    pk=42,
     name="Private Features Org",
     description="Paid features unlocked with a private member list.",
     timezone="America/New_York",
@@ -52,19 +52,19 @@ ORG_FEATURES_PRIVATE_PKS: Final[frozenset[int]] = frozenset({PRIVATE_FEATURES_OR
 FEATURES_ORG_DISCORD_LINK: Final[str] = "https://discord.gg/features-test"
 
 FEATURES_LEAGUE: TestLeague = TestLeague(
-    pk=30,
+    pk=40,
     name="Features Test League",
     steam_league_id=17941,
     organization_names=[FEATURES_ORG.name],
 )
 LOCKED_FEATURES_LEAGUE: TestLeague = TestLeague(
-    pk=31,
+    pk=41,
     name="Locked Features League",
     steam_league_id=17942,
     organization_names=[LOCKED_FEATURES_ORG.name],
 )
 PRIVATE_FEATURES_LEAGUE: TestLeague = TestLeague(
-    pk=32,
+    pk=42,
     name="Private Features League",
     steam_league_id=17943,
     organization_names=[PRIVATE_FEATURES_ORG.name],

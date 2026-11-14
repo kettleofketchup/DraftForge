@@ -37,6 +37,8 @@ from tests.data.org_features import (
     FEATURES_ORG,
     LOCKED_FEATURES_ORG,
     ORG_FEATURES_COMPLETED_EVENT_NAME,
+    ORG_FEATURES_ORG_LEAGUES,
+    ORG_FEATURES_ORGS,
     ORG_FEATURES_PLAYERS,
     ORG_FEATURES_ROLE_USERS,
     ORG_FEATURES_TEMPLATE_NAMES,
@@ -45,6 +47,11 @@ from tests.data.org_features import (
     PRIVATE_FEATURES_ORG,
 )
 from tests.data.organizations import AUTH_MATRIX_ORG, EVENTS_ORG
+from tests.data.tournament_discovery import (
+    DISCOVERY_AWAY_ORG,
+    DISCOVERY_HOME_ORG,
+    DISCOVERY_OPEN_ORG,
+)
 from tests.data.users import AUTH_MATRIX_ORG_PROMOTER_USER, EVENT_LEAGUE_STAFF_USER
 from tests.helpers.tournament_config import TEST_TOURNAMENTS, populate_test_tournaments
 from tests.populate.auth_matrix import populate_auth_matrix_data
@@ -59,6 +66,7 @@ from tests.populate.org_features import (
 )
 from tests.populate.organizations import populate_organizations_and_leagues
 from tests.populate.shuffle_tie import populate_shuffle_tie_data
+from tests.populate.tournament_discovery import populate_tournament_discovery
 from tests.populate.users import populate_test_auth_users, populate_users
 from tests.populate.utils import delete_ledger_for_users
 from tests.test_auth import login_auth_matrix_org_promoter, reset_tournament_by_key
@@ -184,6 +192,43 @@ def _upcoming(org_pk: int = FEATURES_ORG.pk) -> Event:
     return Event.objects.nocache().get(
         organization_id=org_pk, name=ORG_FEATURES_UPCOMING_EVENT_NAME
     )
+
+
+class OrgFeaturesDiscoveryCoexistTest(TestCase):
+    """Both steps seed explicit org/league pks; neither may overwrite the other."""
+
+    def _assert_both_present(self) -> None:
+        orgs = dict(
+            Organization.objects.nocache()
+            .filter(pk__in=[*range(30, 33), *(o.pk for o in ORG_FEATURES_ORGS)])
+            .values_list("pk", "name")
+        )
+        self.assertEqual(
+            {pk: orgs.get(pk) for pk in (30, 31, 32)},
+            {
+                30: DISCOVERY_HOME_ORG.name,
+                31: DISCOVERY_AWAY_ORG.name,
+                32: DISCOVERY_OPEN_ORG.name,
+            },
+        )
+        self.assertEqual(
+            {o.pk: orgs.get(o.pk) for o in ORG_FEATURES_ORGS},
+            {o.pk: o.name for o in ORG_FEATURES_ORGS},
+        )
+        for _, league in ORG_FEATURES_ORG_LEAGUES:
+            self.assertEqual(
+                League.objects.nocache().get(pk=league.pk).name, league.name
+            )
+
+    def test_discovery_after_org_features(self) -> None:
+        populate_org_features_data(force=True)
+        populate_tournament_discovery(force=True)
+        self._assert_both_present()
+
+    def test_org_features_after_discovery(self) -> None:
+        populate_tournament_discovery(force=True)
+        populate_org_features_data(force=True)
+        self._assert_both_present()
 
 
 class OrgFeaturesPopulateTest(TestCase):

@@ -66,7 +66,7 @@ from tests.data.models import (
     TestUser,
 )
 
-# Org paid features E2E (orgs 30-32, users 7300-7319)
+# Org paid features E2E (orgs/leagues 40-42, users 7300-7319)
 from tests.data.org_features import (
     FEATURES_LEAGUE,
     FEATURES_ORG,

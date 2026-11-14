@@ -180,7 +180,7 @@ nothing else. In the auth matrix org (pk=8) both paid features stay **locked**, 
 promoter also counts as a plain member.
 
 The paid-feature gates are checked against the dedicated org-features test data
-(orgs 30-32, users 7300-7307; see
+(orgs 40-42, users 7300-7307; see
 [Organization Paid Features](../../features/organization-paid-features.md)) by the
 backend permission tests (`org/tests/test_features_api.py`, `test_promoters.py`,
 `test_contributions_api.py`, `test_promotion_api.py`,

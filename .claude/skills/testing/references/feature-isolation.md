@@ -128,7 +128,11 @@ await visitAndWait(page, '/organizations/3/');  // Fragile!
 | Users | 6000-6003 | Org Delete |
 | Users | 7200-7233 | dota_lobby (5 roles + rostered players; Steam account IDs 307000000 + offset) |
 | Org | 30-32 | Tournament discovery (home / away / open signups) |
+| Org | 40-42 | Org paid features (unlocked / locked / private members) |
 | League | 30-32 (steam=17950-17952) | Tournament discovery (home / away / open signups) |
+| League | 40-42 (steam=17941-17943) | Org paid features |
+| Users | 7300-7319 | Org paid features (8 roles + 10 Discord-linked players) |
+| Tournament | 260-263 | Org paid features (past tournaments in league 40) |
 | Users | 1100 | Tournament discovery (`discovery_member`, member of org 30 only). Exception: sits just past the 1000-1099 roles range instead of a fresh 1000-increment block |
 | Tournament | 900-906 | Tournament discovery (live, future, past and stale rows; 2099 / 2020 dates). 906 belongs to org 32 and its source event "Discovery Open Signups Event" (keyed by name, pk auto-assigned) is SIGNUPS_OPEN |
 | Org / League | by name | dota_lobby: "Lobby Test Org" / "Lobby Test League" (steam=17940, the simulator's bots administer it). Created after every fixed-pk step in `populate_all` except tournament discovery, which runs last; pks auto-assigned |
