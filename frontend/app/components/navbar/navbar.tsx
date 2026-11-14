@@ -1,11 +1,11 @@
 import { Slot } from '@radix-ui/react-slot';
 import * as React from 'react';
 import { memo } from 'react';
-import { Link } from 'react-router';
 import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router';
 import { cn } from '~/lib/utils';
-import { PreviewLoginMenu } from '../preview/PreviewLoginMenu';
 import { useUserStore } from '../../store/userStore';
+import { PreviewLoginMenu } from '../preview/PreviewLoginMenu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 import { LoginWithDiscordButton } from './login';
 import { MobileNav } from './MobileNav';
@@ -16,22 +16,39 @@ const DOCS_URL = 'https://kettleofketchup.github.io/DraftForge/';
 const BUG_REPORT_URL = `${GITHUB_REPO_URL}/issues/new?template=bug_report.md`;
 
 /**
- * NavItem layout tiers (above md/768px — below is the MobileNav drawer):
- *   - md → <1100px: icon only; subtitle in tooltip (showSubtitleTooltip).
- *   - 1100px → <2xl: icon + title inline, subtitle still tooltip-only.
- *   - 2xl+ (1536px): icon + title + inline subtitle stacked vertically.
- * Nine nav items fit horizontally below 2xl; stacking earlier overflows (#252).
+ * NavItem label tiers above md (#252). `main` labels follow the left group's
+ * @container width, i.e. whatever the right group leaves; `external` labels
+ * follow the viewport and collapse first.
  */
-interface NavItemProps
-  extends Omit<React.AnchorHTMLAttributes<HTMLAnchorElement>, 'href'> {
+const LABEL_TIERS = {
+  main: {
+    text: 'hidden @min-[700px]:flex',
+    stacked: '@min-[840px]:flex-col',
+    subtitle: 'hidden @min-[840px]:block',
+    tooltip: '@min-[840px]:hidden',
+  },
+  external: {
+    text: 'hidden min-[1600px]:flex',
+    stacked: 'min-[1920px]:flex-col',
+    subtitle: 'hidden min-[1920px]:block',
+    tooltip: 'min-[1920px]:hidden',
+  },
+} as const;
+
+type LabelTier = keyof typeof LABEL_TIERS;
+
+interface NavItemProps extends Omit<
+  React.AnchorHTMLAttributes<HTMLAnchorElement>,
+  'href'
+> {
   icon?: React.ReactNode;
   title: string;
   subtitle?: string;
   badge?: React.ReactNode;
   asChild?: boolean;
-  /** When true: hides text below 1100px, shows icons only with tooltip */
-  hideTextOnSmall?: boolean;
-  /** Show subtitle as tooltip on small screens (below xl) */
+  /** Which LABEL_TIERS breakpoints collapse the label to the icon */
+  tier: LabelTier;
+  /** Show the subtitle as a tooltip while it is not shown inline */
   showSubtitleTooltip?: boolean;
   /** Use for internal routes (uses React Router Link) */
   to?: string;
@@ -52,7 +69,7 @@ const NavItem = React.forwardRef<HTMLAnchorElement, NavItemProps>(
       subtitle,
       badge,
       asChild = false,
-      hideTextOnSmall = false,
+      tier,
       showSubtitleTooltip = false,
       to,
       href,
@@ -62,7 +79,9 @@ const NavItem = React.forwardRef<HTMLAnchorElement, NavItemProps>(
     },
     ref,
   ) => {
-    const testId = dataTestId || (to ? `nav-link-${to.replace(/^\//, '')}` : undefined);
+    const tiers = LABEL_TIERS[tier];
+    const testId =
+      dataTestId || (to ? `nav-link-${to.replace(/^\//, '')}` : undefined);
     const baseClassName = cn(
       'flex items-center gap-1 xl:gap-2 rounded-md px-1.5 xl:px-2 py-1.5 h-9',
       'text-sm font-medium',
@@ -78,18 +97,29 @@ const NavItem = React.forwardRef<HTMLAnchorElement, NavItemProps>(
         {icon && <span className="shrink-0">{icon}</span>}
         <div
           className={cn(
-            'flex min-w-0 items-center 2xl:flex-col 2xl:items-center',
-            hideTextOnSmall && 'hidden min-[1100px]:flex',
+            'items-center whitespace-nowrap',
+            tiers.text,
+            tiers.stacked,
           )}
         >
           <div className="flex items-center justify-center gap-1">
-            <span className={cn("text-xs font-bold leading-normal truncate text-center text-outline-sm text-[#646cff]", titleClassName)}>
+            <span
+              className={cn(
+                'text-xs font-bold leading-normal text-center text-outline-sm text-[#646cff]',
+                titleClassName,
+              )}
+            >
               {title}
             </span>
             {badge}
           </div>
           {subtitle && (
-            <span className="text-[10px] text-text-muted leading-normal truncate hidden 2xl:block text-center">
+            <span
+              className={cn(
+                'text-[10px] text-text-muted leading-normal text-center',
+                tiers.subtitle,
+              )}
+            >
               {subtitle}
             </span>
           )}
@@ -100,19 +130,38 @@ const NavItem = React.forwardRef<HTMLAnchorElement, NavItemProps>(
     let navContent: React.ReactElement;
     if (asChild) {
       navContent = (
-        <Slot ref={ref} className={baseClassName} data-testid={testId} {...props}>
+        <Slot
+          ref={ref}
+          className={baseClassName}
+          data-testid={testId}
+          {...props}
+        >
           {content}
         </Slot>
       );
     } else if (to) {
       navContent = (
-        <Link ref={ref} to={to} className={baseClassName} data-testid={testId} {...props}>
+        <Link
+          ref={ref}
+          to={to}
+          className={baseClassName}
+          data-testid={testId}
+          aria-label={title}
+          {...props}
+        >
           {content}
         </Link>
       );
     } else {
       navContent = (
-        <a ref={ref} href={href} className={baseClassName} data-testid={testId} {...props}>
+        <a
+          ref={ref}
+          href={href}
+          className={baseClassName}
+          data-testid={testId}
+          aria-label={title}
+          {...props}
+        >
           {content}
         </a>
       );
@@ -122,7 +171,7 @@ const NavItem = React.forwardRef<HTMLAnchorElement, NavItemProps>(
       return (
         <Tooltip>
           <TooltipTrigger asChild>{navContent}</TooltipTrigger>
-          <TooltipContent className="2xl:hidden">
+          <TooltipContent className={tiers.tooltip}>
             <p className="font-medium">{title}</p>
             <p className="text-xs opacity-80">{subtitle}</p>
           </TooltipContent>
@@ -379,7 +428,10 @@ const StarBadge = ({
   }
   if (count === null) return null;
   return (
-    <span className="inline-flex items-center gap-0.5 text-[10px] bg-base-400 text-text-primary font-semibold rounded px-1 py-0.5 leading-none">
+    <span
+      className="inline-flex items-center gap-0.5 text-[10px] bg-base-400 text-text-primary font-semibold rounded px-1 py-0.5 leading-none"
+      data-testid="nav-github-stars"
+    >
       <svg
         xmlns="http://www.w3.org/2000/svg"
         viewBox="0 0 24 24"
@@ -416,7 +468,7 @@ const ExternalLinks = ({ className }: { className?: string }) => {
         subtitle={t('nav.github_subtitle')}
         badge={<StarBadge count={stars} isLoading={isLoading} />}
         aria-label={t('aria.star_github')}
-        hideTextOnSmall
+        tier="external"
         className="[&_svg]:text-text-primary"
       />
       <NavItem
@@ -427,7 +479,7 @@ const ExternalLinks = ({ className }: { className?: string }) => {
         title={t('nav.docs')}
         subtitle={t('nav.docs_subtitle')}
         aria-label={t('aria.documentation')}
-        hideTextOnSmall
+        tier="external"
         showSubtitleTooltip
         className="[&_svg]:text-info"
       />
@@ -441,7 +493,7 @@ const ExternalLinks = ({ className }: { className?: string }) => {
         className="[&_svg]:text-destructive hover:[&_svg]:text-red-400"
         titleClassName="text-destructive hover:text-red-400"
         aria-label={t('aria.report_bug')}
-        hideTextOnSmall
+        tier="external"
       />
     </div>
   );
@@ -460,7 +512,7 @@ const NavLinks = ({ className }: { className?: string }) => {
         icon={<AboutIcon />}
         title={t('nav.about')}
         subtitle={t('nav.about_subtitle')}
-        hideTextOnSmall
+        tier="main"
         className="[&_svg]:text-info"
       />
       <NavItem
@@ -468,7 +520,7 @@ const NavLinks = ({ className }: { className?: string }) => {
         icon={<TrophyIcon />}
         title={t('nav.tournaments')}
         subtitle={t('nav.tournaments_subtitle')}
-        hideTextOnSmall
+        tier="main"
         className="[&_svg]:text-warning"
       />
       <NavItem
@@ -476,7 +528,7 @@ const NavLinks = ({ className }: { className?: string }) => {
         icon={<BuildingIcon />}
         title={t('nav.organizations')}
         subtitle={t('nav.organizations_subtitle')}
-        hideTextOnSmall
+        tier="main"
         className="[&_svg]:text-secondary"
       />
       <NavItem
@@ -484,7 +536,7 @@ const NavLinks = ({ className }: { className?: string }) => {
         icon={<LeagueIcon />}
         title={t('nav.leagues')}
         subtitle={t('nav.leagues_subtitle')}
-        hideTextOnSmall
+        tier="main"
         className="[&_svg]:text-primary"
       />
       <NavItem
@@ -492,16 +544,17 @@ const NavLinks = ({ className }: { className?: string }) => {
         icon={<CalendarIcon />}
         title={t('nav.events')}
         subtitle={t('signup_here')}
-        hideTextOnSmall
+        tier="main"
         className="[&_svg]:text-accent"
       />
       {currentUser?.is_staff && (
         <NavItem
           href="/admin/"
+          data-testid="nav-link-admin"
           icon={<AdminIcon />}
           title={t('nav.admin')}
           subtitle={t('nav.admin_subtitle')}
-          hideTextOnSmall
+          tier="main"
           className="[&_svg]:text-success"
         />
       )}
@@ -572,12 +625,14 @@ export const ResponsiveAppBar: React.FC = memo(() => {
   return (
     <header>
       <nav
-        className="sticky z-50 top-0 flex items-center w-full h-16 xl:h-18 px-4 py-2 bg-base-600 shadow-elevated border-b border-border"
+        className="sticky z-50 top-0 flex items-center md:gap-2 w-full h-16 xl:h-18 px-4 py-2 bg-base-600 shadow-elevated border-b border-border"
         role="navigation"
         aria-label={t('aria.main_nav')}
         data-testid="nav-root"
       >
-        <div className="flex grow shrink-0 basis-0 items-center justify-start w-1/2 gap-2">
+        {/* md+: the left group takes what the right group leaves and NavLinks sizes
+            its labels to that (#252). Below md the two halves stay as they were. */}
+        <div className="@container flex grow shrink-0 basis-0 items-center justify-start w-1/2 gap-2 md:w-auto md:min-w-0 md:shrink">
           <MobileNav />
           <SiteLogo />
           <NavLinks className="hidden md:flex" />
@@ -586,7 +641,7 @@ export const ResponsiveAppBar: React.FC = memo(() => {
         <div className="absolute left-1/2 -translate-x-1/2 md:hidden z-10">
           <PageNavBar />
         </div>
-        <div className="flex shrink-0 items-center justify-end w-1/2 gap-2">
+        <div className="flex shrink-0 items-center justify-end w-1/2 gap-2 md:w-auto">
           <ExternalLinks className="hidden md:flex" />
           <PreviewLoginMenu />
           <LoginWithDiscordButton />

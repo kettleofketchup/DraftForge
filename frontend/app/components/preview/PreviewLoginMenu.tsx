@@ -41,8 +41,13 @@ export function PreviewLoginMenu(): JSX.Element | null {
           variant="outline"
           data-testid={`preview-login-${role}`}
           onClick={() => loginAs(role)}
+          aria-label={`Login as ${role}`}
         >
-          Login as {role}
+          {/* Tablet widths drop the prefix so the desktop nav still fits (#252). */}
+          <span>
+            <span className="md:max-lg:hidden">Login as </span>
+            {role}
+          </span>
         </Button>
       ))}
     </div>
