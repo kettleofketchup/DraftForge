@@ -67,3 +67,19 @@ export function formatOrgDate(iso: string, tz: string | undefined): string {
     timeZone: safeTimeZone(tz),
   }).format(new Date(iso));
 }
+
+/** The org-local calendar date (YYYY-MM-DD) of `now`. */
+export function todayInZone(tz: string | undefined, now: Date = new Date()): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: safeTimeZone(tz),
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(now);
+  const get = (type: string): string => parts.find((p) => p.type === type)?.value ?? '';
+  return `${get('year')}-${get('month')}-${get('day')}`;
+}
+
+export function dateInZone(iso: string, tz: string | undefined): string {
+  return todayInZone(tz, new Date(iso));
+}
