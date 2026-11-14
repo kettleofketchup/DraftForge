@@ -11,13 +11,13 @@
  * - Bracket view
  */
 
-import { BASE_URL } from '../fixtures/base-url';
-import { test, chromium } from '@playwright/test';
-import { loginAdmin, waitForHydration, API_URL } from '../fixtures/auth';
-import { waitForDemoReady, waitForBracketReady } from '../fixtures/demo-utils';
-import * as path from 'path';
+import { chromium, test } from '@playwright/test';
 import * as fs from 'fs';
+import * as path from 'path';
 import { fileURLToPath } from 'url';
+import { API_URL, loginAdmin, waitForHydration } from '../fixtures/auth';
+import { BASE_URL } from '../fixtures/base-url';
+import { waitForBracketReady, waitForDemoReady } from '../fixtures/demo-utils';
 
 // ESM-compatible __dirname
 const __filename = fileURLToPath(import.meta.url);
@@ -37,7 +37,8 @@ test.describe('Site Snapshots', () => {
     // Use system chromium in Docker (Alpine) since Playwright's bundled chromium requires glibc
     // When running locally, let Playwright use its bundled chromium (undefined path)
     // In Alpine Docker, chromium is at /usr/lib/chromium/chromium
-    let executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined;
+    let executablePath =
+      process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined;
     if (executablePath === '/usr/bin/chromium-browser') {
       executablePath = '/usr/lib/chromium/chromium';
     }
@@ -95,9 +96,14 @@ test.describe('Site Snapshots', () => {
     await waitForHydration(page);
     await waitForDemoReady(page, { timeout: 15000 });
     await page
-      .locator('[data-testid="tournaments-panel-upcoming"][data-fetching="false"]')
+      .locator(
+        '[data-testid="tournaments-panel-upcoming"][data-fetching="false"]',
+      )
       .waitFor({ timeout: 15000 });
-    await page.locator('[data-testid="tournament-cell-org"]').first().waitFor({ timeout: 15000 });
+    await page
+      .locator('[data-testid="tournament-cell-org"]')
+      .first()
+      .waitFor({ timeout: 15000 });
     await page.waitForTimeout(500);
     await page.screenshot({
       path: path.join(outputDir, 'tournaments.png'),
@@ -105,11 +111,16 @@ test.describe('Site Snapshots', () => {
     });
 
     // Use "Real Tournament 38" (ID 17) for snapshots - has 4 teams for a good bracket view
-    const tournamentResponse = await context.request.get(`${API_URL}/tournaments/17/`, {
-      failOnStatusCode: false,
-      timeout: 30000,
-    });
-    const tournament = tournamentResponse.ok() ? await tournamentResponse.json() : null;
+    const tournamentResponse = await context.request.get(
+      `${API_URL}/tournaments/17/`,
+      {
+        failOnStatusCode: false,
+        timeout: 30000,
+      },
+    );
+    const tournament = tournamentResponse.ok()
+      ? await tournamentResponse.json()
+      : null;
 
     if (tournament) {
       // 3. Tournament detail page
@@ -139,9 +150,14 @@ test.describe('Site Snapshots', () => {
 
         // Scroll the page down to show the bracket better
         await page.evaluate(() => {
-          const bracketContainer = document.querySelector('[data-testid="bracketContainer"]');
+          const bracketContainer = document.querySelector(
+            '[data-testid="bracketContainer"]',
+          );
           if (bracketContainer) {
-            bracketContainer.scrollIntoView({ behavior: 'instant', block: 'start' });
+            bracketContainer.scrollIntoView({
+              behavior: 'instant',
+              block: 'start',
+            });
           }
         });
         await page.waitForTimeout(300);
