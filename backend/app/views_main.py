@@ -1279,6 +1279,12 @@ class LeagueView(viewsets.ModelViewSet):
                 )
         return super().create(request, *args, **kwargs)
 
+    def perform_create(self, serializer: BaseSerializer) -> None:
+        org = serializer.validated_data.get("organization")
+        if org is not None and not has_org_staff_access(self.request.user, org):
+            raise PermissionDenied("Must be organization staff to create league")
+        serializer.save()
+
     def list(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         cache_key = f"league_list:{request.get_full_path()}"
 
