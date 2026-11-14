@@ -1,0 +1,1 @@
+- The Docs item in the navbar opens a menu with the documentation link and the notes from the last two releases, plus a link to a new Changelog page (`/changelog`) that lists every release. The mobile menu shows the same.
