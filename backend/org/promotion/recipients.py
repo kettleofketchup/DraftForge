@@ -123,11 +123,9 @@ def candidates(
     )
     latest: dict[int, PromoSend] = {}
     earning: set[int] = set()
-    for send in (
-        event_sends.filter(recipient_id__in=user_pks)
-        .select_related("sender", "sender__base_profile")
-        .order_by("-sent_at", "-pk")
-    ):
+    for send in with_user_profiles(
+        event_sends.filter(recipient_id__in=user_pks), "sender"
+    ).order_by("-sent_at", "-pk"):
         latest.setdefault(send.recipient_id, send)
         if send.earns_points:
             earning.add(send.recipient_id)
