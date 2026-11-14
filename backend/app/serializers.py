@@ -419,30 +419,10 @@ class TournamentListSerializer(serializers.ModelSerializer):
 
 
 class OrganizationSerializer(serializers.ModelSerializer):
+    # Roles change only through the admin_team endpoints.
     owner = TournamentUserSerializer(read_only=True)
-    owner_id = serializers.PrimaryKeyRelatedField(
-        queryset=CustomUser.objects.all(),
-        write_only=True,
-        source="owner",
-        required=False,
-        allow_null=True,
-    )
     admins = TournamentUserSerializer(many=True, read_only=True)
     staff = TournamentUserSerializer(many=True, read_only=True)
-    admin_ids = serializers.PrimaryKeyRelatedField(
-        queryset=CustomUser.objects.all(),
-        many=True,
-        write_only=True,
-        source="admins",
-        required=False,
-    )
-    staff_ids = serializers.PrimaryKeyRelatedField(
-        queryset=CustomUser.objects.all(),
-        many=True,
-        write_only=True,
-        source="staff",
-        required=False,
-    )
     # Use annotated fields from ViewSet queryset (avoids N+1)
     league_count = serializers.IntegerField(read_only=True)
     tournament_count = serializers.IntegerField(read_only=True)
@@ -461,11 +441,8 @@ class OrganizationSerializer(serializers.ModelSerializer):
             "timezone",
             "members_private",
             "owner",
-            "owner_id",
             "admins",
             "staff",
-            "admin_ids",
-            "staff_ids",
             "default_league",
             "league_count",
             "tournament_count",
