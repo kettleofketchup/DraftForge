@@ -200,3 +200,22 @@ def can_undo(user: CustomUser | AnonymousUser, send: PromoSend) -> bool:
     ):
         return True
     return has_org_staff_access(user, send.organization)
+
+
+def demote_colliding_earning_sends(keep: CustomUser, drop: CustomUser) -> int:
+    keep_events = PromoSend.objects.filter(recipient=keep, earns_points=True).values(
+        "event_id"
+    )
+    demoted = PromoSend.objects.filter(
+        recipient=drop, earns_points=True, event_id__in=keep_events
+    ).update(earns_points=False)
+    if demoted:
+        log.info(
+            "promo_sends_demoted_for_merge",
+            system="org",
+            subsystem="promotion",
+            keep_user_id=keep.pk,
+            drop_user_id=drop.pk,
+            demoted=demoted,
+        )
+    return demoted

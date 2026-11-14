@@ -24,6 +24,7 @@ from org.contributions.services import (
     repoint_user_attribution,
 )
 from org.models import OrgUser
+from org.promotion.services import demote_colliding_earning_sends
 from telemetry.logging import get_logger
 
 logger = get_logger(__name__)
@@ -104,6 +105,7 @@ def merge_discord_accounts(keep: CustomUser, drop: CustomUser) -> CustomUser:
                 reassign_member(drop_ou, keep_ou)
                 drop_ou.delete()
         repoint_user_attribution(drop, keep)
+        demote_colliding_earning_sends(keep, drop)
 
         for rel in drop._meta.related_objects:
             accessor = rel.get_accessor_name()

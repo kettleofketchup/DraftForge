@@ -32,7 +32,8 @@ from org.contributions.services import (
     reassign_member,
     repoint_user_attribution,
 )
-from org.models import OrgUser
+from org.models import OrgUser, PromoSend
+from org.promotion.services import demote_colliding_earning_sends
 from org.serializers import ProfileClaimRequestSerializer
 from steam.models import LeaguePlayerStats, PlayerMatchStats
 from telemetry.logging import get_logger
@@ -340,6 +341,9 @@ class ClaimRequestViewSet(viewsets.ModelViewSet):
         LeagueLog.objects.filter(target_user=target_user).update(target_user=claimer)
 
         repoint_user_attribution(target_user, claimer)
+        demote_colliding_earning_sends(claimer, target_user)
+        PromoSend.objects.filter(sender=target_user).update(sender=claimer)
+        PromoSend.objects.filter(recipient=target_user).update(recipient=claimer)
 
         for org in list(target_user.promoter_organizations.all()):
             org.promoters.add(claimer)
