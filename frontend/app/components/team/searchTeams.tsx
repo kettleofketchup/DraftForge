@@ -1,8 +1,8 @@
 import { Combobox, ComboboxInput } from '@headlessui/react';
 import React from 'react';
 import type { TeamType } from '~/components/tournament/types';
-import { getLogger } from '~/lib/logger';
 import { Input } from '~/components/ui/input';
+import { getLogger } from '~/lib/logger';
 
 const log = getLogger('searchTeams');
 interface Props {
@@ -16,7 +16,7 @@ export const SearchTeamsDropdown: React.FC<Props> = ({
   setQuery,
 }) => {
   return (
-    <div className="justify-self-top content-self-center align-middle ">
+    <div className="align-middle">
       {teams && (
         <Combobox value={query}>
           <ComboboxInput

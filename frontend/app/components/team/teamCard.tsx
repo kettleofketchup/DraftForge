@@ -16,98 +16,107 @@ interface Props {
   removeToolTip?: string;
 }
 
-export const TeamCard: React.FC<Props> = memo(({
-  team,
-  edit,
-  saveFunc,
-  compact,
-  removeCallBack,
-  removeToolTip = 'Delete the user',
-}) => {
-  const [editMode, setEditMode] = useState(edit || false);
-  const currentUser: UserType = useUserStore((state) => state.currentUser);
+export const TeamCard: React.FC<Props> = memo(
+  ({
+    team,
+    edit,
+    saveFunc,
+    compact,
+    removeCallBack,
+    removeToolTip = 'Delete the user',
+  }) => {
+    const [editMode, setEditMode] = useState(edit || false);
+    const currentUser: UserType = useUserStore((state) => state.currentUser);
 
-  // Memoize average MMR calculation
-  const averageMMR = useMemo(() => {
-    if (!team.members || team.members.length === 0) return 'N/A';
-    const totalMMR = team.members.reduce((acc: number, member: UserType) => {
-      return acc + (member.mmr || 0);
-    }, 0);
-    return (totalMMR / team.members.length).toFixed(2);
-  }, [team.members]);
-  const teamHeader = () => {
-    return (
-      <>
-        {!editMode && (
-          <div className="flex-1 justify-between text-center">
-            <h2 className="text-xl font-semibold leading-snug" data-testid="team-card-name">{team.name}</h2>
+    // Memoize average MMR calculation
+    const averageMMR = useMemo(() => {
+      if (!team.members || team.members.length === 0) return 'N/A';
+      const totalMMR = team.members.reduce((acc: number, member: UserType) => {
+        return acc + (member.mmr || 0);
+      }, 0);
+      return (totalMMR / team.members.length).toFixed(2);
+    }, [team.members]);
+    const teamHeader = () => {
+      return (
+        <>
+          {!editMode && (
+            <div className="flex-1 justify-between text-center">
+              <h2
+                className="text-xl font-semibold leading-snug"
+                data-testid="team-card-name"
+              >
+                {team.name}
+              </h2>
 
-            <h3 className="text-xl font-semibold leading-snug"><span data-testid="team-avg-mmr-label">Avg MMR</span>: {averageMMR}</h3>
-          </div>
-        )}
-      </>
-    );
-  };
-  const showTeamMembers = () => {
-    if (!team.members || team.members.length === 0) return <></>;
-    return (
-      <div className="flex items-center gap-2 w-full">
-        <TeamTable team={team} />
-      </div>
-    );
-  };
+              <h3 className="text-xl font-semibold leading-snug">
+                <span data-testid="team-avg-mmr-label">Avg MMR</span>:{' '}
+                {averageMMR}
+              </h3>
+            </div>
+          )}
+        </>
+      );
+    };
+    const showTeamMembers = () => {
+      if (!team.members || team.members.length === 0) return <></>;
+      return (
+        <div className="flex items-center gap-2 w-full">
+          <TeamTable team={team} />
+        </div>
+      );
+    };
 
-  const viewMode = () => {
-    if (compact) {
+    const viewMode = () => {
+      if (compact) {
+        return <>{team.members && showTeamMembers()}</>;
+      }
       return <>{team.members && showTeamMembers()}</>;
-    }
-    return <>{team.members && showTeamMembers()}</>;
-  };
+    };
 
-  const getKeyName = () => {
-    let result = '';
-    if (team.pk) {
-      result += team.pk.toString();
-    }
-    if (team.name) {
-      result += team.name;
-    }
-    return result;
-  };
-  return (
-    <div
-      key={`teamCard:${getKeyName()} base`}
-      className="flex flex-grow flex-col items-center content-center justify-center w-full justify-between h-full bg-base-300 shadow-elevated p-8
+    const getKeyName = () => {
+      let result = '';
+      if (team.pk) {
+        result += team.pk.toString();
+      }
+      if (team.name) {
+        result += team.name;
+      }
+      return result;
+    };
+    return (
+      <div
+        key={`teamCard:${getKeyName()} base`}
+        className="flex flex-grow flex-col items-center content-center justify-center w-full justify-between h-full bg-base-300 shadow-elevated p-8
             hover:bg-base-200 shadow-hover focus:outline-2
             focus:outline-offset-2 focus:outline-primary
             active:bg-base-200
-            transition-all duration-300 ease-in-out
-            [content-visibility: auto] [contain-intrinsic-size: 400px 220px]"
-    >
-      <motion.div
-        initial={{ opacity: 0 }}
-        exit={{ opacity: 0 }}
-        whileInView={{
-          opacity: 1,
-          transition: { delay: 0.05, duration: 0.5 },
-        }}
-        whileHover={{ scale: 1.02 }}
-        whileFocus={{ scale: 1.05 }}
-        key={`usercard:${getKeyName()} basediv`}
-        className=""
+            transition-all duration-300 ease-in-out"
       >
-        <div className="flex items-center gap-2 items-center justify-center flex-grow">
-          {teamHeader()}
-          {(currentUser.is_staff || currentUser.is_superuser) &&
-            saveFunc === 'save' &&
-            !compact && <TeamEditModal team={team} />}
-        </div>
+        <motion.div
+          initial={{ opacity: 0 }}
+          exit={{ opacity: 0 }}
+          whileInView={{
+            opacity: 1,
+            transition: { delay: 0.05, duration: 0.5 },
+          }}
+          whileHover={{ scale: 1.02 }}
+          whileFocus={{ scale: 1.05 }}
+          key={`usercard:${getKeyName()} basediv`}
+          className=""
+        >
+          <div className="flex items-center gap-2 items-center justify-center flex-grow">
+            {teamHeader()}
+            {(currentUser.is_staff || currentUser.is_superuser) &&
+              saveFunc === 'save' &&
+              !compact && <TeamEditModal team={team} />}
+          </div>
 
-        <div className="flex mt-2 space-y-2 text-sm flex-grow">
-          {viewMode()}
-          <div className="flex flex-col "></div>
-        </div>
-      </motion.div>
-    </div>
-  );
-});
+          <div className="flex mt-2 space-y-2 text-sm flex-grow">
+            {viewMode()}
+            <div className="flex flex-col "></div>
+          </div>
+        </motion.div>
+      </div>
+    );
+  },
+);

@@ -18,8 +18,18 @@ tsc:
 lint:
     cd "{{frontend}}" && npm run lint
 
+# Design-system lint (@shadcn/lint) over app/, against the suppressions baseline
+[group('frontend')]
+lint-shadcn:
+    cd "{{frontend}}" && npm run lint:shadcn
+
+# Drop baseline entries for shadcn-lint violations that have been fixed
+[group('frontend')]
+lint-shadcn-prune:
+    cd "{{frontend}}" && npm run lint:shadcn:prune
+
 # Run all frontend validators (LOCAL convenience; CI parallelizes)
 [group('frontend')]
-validate: tsc lint
+validate: tsc lint lint-shadcn
     just frontend::i18n::check
     just frontend::i18n::guard
