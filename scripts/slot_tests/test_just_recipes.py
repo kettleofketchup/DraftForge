@@ -313,6 +313,26 @@ def test_playwright_runs_in_frontend_with_the_slot_url(run: Runner) -> None:
     assert npx.argv == ["playwright", "test", "--grep", "@cicd", "--project=chromium", "--no-deps", "--shard=1/4"]
 
 
+def test_org_features_cicd_runs_only_its_project(run: Runner) -> None:
+    assert run("test::pw::cicd-org-features", "--workers=1").returncode == 0
+    npx = run.calls()[-1]
+    assert npx.argv == [
+        "playwright",
+        "test",
+        "--grep",
+        "@cicd",
+        "--project=org-features-sequential",
+        "--no-deps",
+        "--workers=1",
+    ]
+
+
+@pytest.mark.parametrize("recipe", ["test::pw::headless", "test::pw::cicd"])
+def test_full_suites_include_org_features(run: Runner, recipe: str) -> None:
+    assert run(recipe).returncode == 0
+    assert "--project=org-features-sequential" in run.calls()[-1].argv
+
+
 SIM_PS = [*SLOTS, "ps", "--status", "running", "--quiet", "dota-lobby"]
 DOTA_LOBBY_PW = ["--project=dota-lobby-sequential", "--no-deps", "--workers=1"]
 

@@ -53,6 +53,7 @@ from tests.populate.league_stats import (
     populate_league_stats_showcase,
 )
 from tests.populate.org_delete import populate_org_delete
+from tests.populate.org_features import populate_org_features_data
 from tests.populate.organizations import populate_organizations_and_leagues
 from tests.populate.shuffle_tie import populate_shuffle_tie_data
 from tests.populate.steam import populate_steam_matches
@@ -102,6 +103,7 @@ def populate_all(force: bool = False) -> None:
         ("Demo Tournaments", populate_demo_tournaments),
         ("League Stats Data", populate_league_stats_data),
         ("League Stats Showcase", populate_league_stats_showcase),
+        ("Org Features Data", populate_org_features_data),
         # Dota Lobby takes auto-incremented org/league pks, so it must not
         # shift the pks the steps above expect.
         ("Dota Lobby Data", populate_dota_lobby_data),
@@ -158,6 +160,7 @@ __all__ = [
     "populate_demo_tournaments",
     "populate_league_stats_data",
     "populate_league_stats_showcase",
+    "populate_org_features_data",
     "populate_dota_lobby_data",
     "populate_tournament_discovery",
     "populate_test_tournaments",

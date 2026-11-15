@@ -78,8 +78,9 @@ the frontend gates on: `admin_organization_ids`, `staff_organization_ids`,
 | `league` | int | | Filter by league ID |
 | `bucket` | string | | `upcoming` or `archived` (see below). Any other value returns 400 |
 | `search` | string | | Trimmed. Ignored under 2 characters, cut to 64. Case-insensitive match on tournament, organization or league name |
-| `page` | int | | Page number, at least 1. Turns on pagination. Requires `bucket`, otherwise 400 |
-| `page_size` | int | 24 | Results per page, at most 100. Only applies with `page` |
+| `page` | int | | Page number, at least 1. Turns on pagination. Requires `bucket`, otherwise 400. For `archived`, use `page=1` for the first page and follow `next` |
+| `cursor` | string | | Opaque archived position, taken from a previous page's `next`. Turns on pagination. Requires `bucket=archived` and no `page`; a malformed value returns 400 |
+| `page_size` | int | 24 | Results per page, at most 100. Only applies with `page` or `cursor` |
 
 **Buckets:**
 
@@ -101,12 +102,12 @@ users with the same memberships share an entry and nothing is cached per user.
 
 **Response:**
 
-Without `page`, a bare array. With `page`, the paged envelope:
+Without `page` or `cursor`, a bare array (unchanged). With either, the paged envelope:
 
 ```json
 {
   "count": 30,
-  "next": "https://.../api/tournaments-list/?bucket=upcoming&page=2",
+  "next": "https://.../api/tournaments-list/?bucket=archived&page_size=24&cursor=MjAyNi0xMS0x...",
   "previous": null,
   "results": [
     {
@@ -130,13 +131,23 @@ Without `page`, a bare array. With `page`, the paged envelope:
 }
 ```
 
+**Archived pages use a keyset cursor.** `next` on an `archived` page drops `page` and
+carries `cursor`, which encodes the last row's `(date_played, pk)`. The next page holds the
+rows strictly after it in `date_played` descending, `pk` descending order, so a tournament
+that enters or leaves the archive between requests cannot shift later rows: none is skipped
+or repeated. Archived pages are forward-only, so `previous` is always `null`; `count` is the
+current archive size. Clients should read `cursor` out of `next` rather than build it. A
+legacy `page=N` request past the first still returns that offset page, but its `next` is a
+cursor. `upcoming` keeps page numbers.
+
 `league` is `null` for a tournament without a league; `organization_id`,
 `organization_name` and `organization_logo` are `null` when the league has no organization
 (or, for the logo, when the organization has none). `signups_open` tells whether the
 tournament's signups are open as defined above.
 
 !!! note
-    Search results are not cached. Other results are cached for 10 minutes and invalidated
+    Search results are not cached. Other results are cached for 10 minutes, keyed by every
+    parameter including `cursor` and `page_size`, and invalidated
     when any Tournament, League, Organization or Event changes, so an event state change
     shows up in `signups_open` and `open_signups=1` results on the next request.
 
@@ -314,6 +325,90 @@ without a `steam_league_id` returns an empty summary; an unknown `league_pk` ret
   "tournament_count": 5
 }
 ```
+
+The detail (and PATCH/PUT) response also carries per-viewer fields merged after the
+cached block, so a lock or role change shows on the next request. None of them is
+writable:
+
+| Field | Meaning |
+|-------|---------|
+| `features` | Unlocked feature keys, e.g. `["contributions", "promotion"]` |
+| `can_use_promotion` | Promotion unlocked and the viewer is promoter, staff, admin, owner or site admin |
+| `can_manage_promotion_templates` | Promotion unlocked and the viewer is org staff or above |
+| `can_manage_promoters` | Promotion unlocked and the viewer is org admin or above |
+| `can_view_contributions` | Contributions unlocked |
+| `can_view_contributors` | Contributions unlocked and the viewer passes `can_view_org_members` |
+| `can_manage_contributions` | Contributions unlocked and the viewer is org admin or above |
+
+The detail never includes feature notes, `enabled_by` or `enabled_at`.
+
+## Organization Locked Features
+
+Guide: [Organization Locked Features](../features/organization-locked-features.md).
+
+**Denials.** Feature and role denials return `403` with a `code`:
+`{"code": "feature_locked", "detail": ...}` when the feature is locked and
+`{"code": "not_permitted", "detail": ...}` when the role check fails. Anonymous callers
+get the usual uncoded authentication error on the feature-switch and promoter endpoints,
+and on org-admin contributions endpoints when the feature is unlocked. Only the
+contributions and promotion endpoints (which allow anonymous access) check
+`feature_locked` before authentication. Validation errors are `400`. Objects named by pk in the URL or body are
+looked up within the URL's organization; a pk from another org is `404` (or `400` for a
+body field).
+
+### Feature switches and promoters
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| GET | `/api/organizations/{id}/features/` | Every feature row: `[{feature, enabled, notes, enabled_by: {pk, username} \| null, enabled_at}]`, locked rows included | Site admin |
+| PUT | `/api/organizations/{id}/features/` | Body `{"feature": "contributions" \| "promotion", "enabled": bool, "notes"?: str}`. Logs `enable_feature`/`disable_feature`; first Promotion unlock seeds the starter template. Returns the rows. | Site admin |
+| GET | `/api/organizations/{id}/promoters/` | List promoters (user objects) | Org admin, Promotion |
+| POST | `/api/organizations/{id}/promoters/` | Body `{"user_id": int}`. Creates the `OrgUser` if missing, logs `add_promoter`. `400` if already a promoter. | Org admin, Promotion |
+| DELETE | `/api/organizations/{id}/promoters/{user_id}/` | Remove a promoter, logs `remove_promoter`. `400` if not a promoter. | Org admin, Promotion |
+
+### Contributions
+
+All under `/api/organizations/{id}/contributions/`, all gated on Contributions.
+`period` is `all` (default) or `YYYY-MM`, a calendar month in the org's timezone (UTC if
+invalid).
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| GET | `leaderboard/?period=` | `{period, total, rows_visible, rows, own_row}`. `rows` is empty unless the viewer passes `can_view_org_members`; `own_row` is the viewer's row, or `null` without entries. | Anyone |
+| GET | `members/{org_user_pk}/?period=` | `{member, totals, monthly, entries}` for one member. Entries carry `reason` only for org staff and above; never promo recipients or text. | Own row, or `can_view_org_members` |
+| GET | `point-values/` | `[{kind, points, default, is_default}]` for `promo_message`, `event_host`, `event_helper` | Org admin |
+| PUT | `point-values/{kind}/` | Body `{"points": int 0-1000 \| null, "apply_to_past"?: bool, "since"?: "YYYY-MM-DD"}`. `null` resets to the default. `apply_to_past` rescores existing entries of that kind (from `since` if given). Returns `{kind, old, new, changed}`. Logs `set_point_value` and `rescore`. | Org admin |
+| GET | `entries/?period=&kind=&member=&limit=&offset=` | Full ledger, newest first, `{count, limit, offset, results}`; `limit` 1-500, default 100 | Org admin |
+| POST | `entries/` | Manual award. Body `{"user_id", "points": 1-1000, "reason": max 500, "date": "YYYY-MM-DD", "event_id"?: int \| null}`. `201` with the entry. | Org admin |
+| PATCH | `entries/{entry_pk}/` | Edit a manual award (any of `points`, `reason`, `date`, `event_id`). `400` for non-manual entries. | Org admin |
+| DELETE | `entries/{entry_pk}/` | Delete a manual award. `204`; `400` for non-manual entries. | Org admin |
+
+### Promotion
+
+All under `/api/organizations/{id}/promotion/`, all gated on Promotion. "Promoter" means
+promoter, org staff, admin, owner or site admin.
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| GET | `placeholders/` | `[{key, description}]`, the fixed placeholder list | Promoter |
+| GET | `templates/` | `[{id, name, body, updated_at}]` | Promoter |
+| POST | `templates/` | Body `{"name", "body": max 2000}`. `201` with the template plus `warnings` (unknown placeholders, stray braces). | Org staff |
+| PATCH | `templates/{template_pk}/` | Edit a template; returns it with `warnings` | Org staff |
+| DELETE | `templates/{template_pk}/` | Delete a template. `204`. | Org staff |
+| GET | `events/` | Promotable events (`upcoming`, `signups_open`): `[{id, name, scheduled_at, ends_at, state, signups_open_at}]` | Promoter |
+| GET | `events/{event_id}/candidates/?n=&hide_signed_up=&hide_messaged=&q=` | Recipient pool from the last `n` past tournaments (default 3, clamped 1-10). `{n, rows}`; each row has the player, tournaments played, `signed_up`, `earning_send_exists` and `last_messaged` (with `can_undo`). | Promoter |
+| POST | `events/{event_id}/render/` | Body `{"template_id", "recipient_id"}`. Returns `{text, warnings, will_earn}`. | Promoter |
+| POST | `events/{event_id}/sends/` | Mark sent. Body `{"template_id"?: int \| null, "recipient_id", "text": max 4000}`. `201` with `{id, earns_points, points_awarded, sent_at}`; `points_awarded` is `null` while Contributions is locked. `400` if the event is not promotable or the recipient is outside the pool (checked at N=10), unlinked from Discord or the sender. | Promoter |
+| DELETE | `sends/{send_pk}/` | Undo a send and its ledger entry. `204`. | Its sender while still a promoter, or org staff |
+
+### Internal
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/internal/events/{id}/auto-close/` | Used by `cleanup_stale_events` (X-Internal-Token). Closes to `completed` from `roll_call`/`in_progress`, or `cancelled` from `upcoming`/`signups_open`. `200 {"closed": true, "state"}` when it closed the event, `200 {"closed": false, "state"}` when it was already terminal or lost the race, `400` for other states, `404` if missing. |
+
+Event endpoints added with these features (`complete/`, `staff/`, `stale_before`) are
+listed in [Events: API Endpoints](../features/events.md#api-endpoints).
 
 ## Leagues
 
