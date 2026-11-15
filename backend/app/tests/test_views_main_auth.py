@@ -1,7 +1,7 @@
 from unittest.mock import MagicMock, patch
 
 from django.core.cache import cache
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import NoReverseMatch, reverse
 from rest_framework.test import APIClient
 
@@ -10,8 +10,14 @@ from app.models import CustomUser
 REFRESH_URL = "/api/avatars/refresh/"
 RATE_LIMIT_KEY = "avatar_refresh_last_run"
 DELAY_TARGET = "app.tasks.avatar_refresh.refresh_avatars_batched.delay"
+LOCMEM_CACHE = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+    }
+}
 
 
+@override_settings(CACHES=LOCMEM_CACHE)
 class RefreshAllAvatarsPermissionTest(TestCase):
     def setUp(self) -> None:
         cache.delete(RATE_LIMIT_KEY)
