@@ -2,7 +2,12 @@ import { useClickAway } from '@uidotdev/usehooks';
 import { LogOutIcon, UserPenIcon } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link, useLocation, useNavigate } from 'react-router';
+import {
+  Link,
+  useLocation,
+  useNavigate,
+  useRouteLoaderData,
+} from 'react-router';
 import { DraftNotificationBadge } from '~/components/teamdraft/DraftNotificationBadge';
 import {
   DropdownMenu,
@@ -22,6 +27,7 @@ import { DestructiveButton, PrimaryButton } from '~/components/ui/buttons';
 import { DiscordIcon } from '~/components/ui/icons';
 import { Skeleton } from '~/components/ui/skeleton';
 import { getLogger } from '~/lib/logger';
+import type { SessionHint } from '~/lib/sessionHint';
 const log = getLogger('login');
 
 type AvatarProps = {
@@ -171,6 +177,8 @@ export const LoginWithDiscordButton: React.FC<props> = () => {
   const [mounted, setMounted] = useState(false);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [cachedUser, setCachedUser] = useState<UserType | null>(null);
+  const rootData = useRouteLoaderData<{ sessionHint?: SessionHint }>('root');
+  const knownAnonymous = rootData?.sessionHint === 'anonymous';
 
   // Read cached user after mount to avoid hydration mismatch
   useEffect(() => {
@@ -191,7 +199,7 @@ export const LoginWithDiscordButton: React.FC<props> = () => {
       // If we already have a user (from cache or store), just refresh in background
       if (user?.username) {
         setIsCheckingAuth(false);
-        getCurrentUser(); // Background refresh
+        getCurrentUser();
       } else {
         // No cached user - must wait for API
         const checkAuth = async () => {
@@ -202,6 +210,10 @@ export const LoginWithDiscordButton: React.FC<props> = () => {
       }
     }
   }, [hasHydrated]);
+
+  // The server saw no session cookie, so the login button is what both the
+  // server and the first client render can agree on.
+  if (!mounted && knownAnonymous) return <LoginButton />;
 
   // Before mount: static placeholder to avoid Radix hydration mismatch
   if (!mounted) {
@@ -224,8 +236,8 @@ export const LoginWithDiscordButton: React.FC<props> = () => {
     return <ProfileButton />;
   }
 
-  // No user yet - show skeleton while checking auth, then login button
-  if (!hasHydrated || isCheckingAuth) {
+  // No user yet - skeleton while checking auth (skipped when known anonymous), then login button
+  if (!knownAnonymous && (!hasHydrated || isCheckingAuth)) {
     return (
       <DropdownMenu>
         <DropdownMenuTrigger>
