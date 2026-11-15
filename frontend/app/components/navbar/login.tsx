@@ -199,7 +199,7 @@ export const LoginWithDiscordButton: React.FC<props> = () => {
       // If we already have a user (from cache or store), just refresh in background
       if (user?.username) {
         setIsCheckingAuth(false);
-        getCurrentUser(); // Background refresh
+        getCurrentUser();
       } else {
         // No cached user - must wait for API
         const checkAuth = async () => {
@@ -236,7 +236,7 @@ export const LoginWithDiscordButton: React.FC<props> = () => {
     return <ProfileButton />;
   }
 
-  // No user yet - show skeleton while checking auth, then login button
+  // No user yet - skeleton while checking auth (skipped when known anonymous), then login button
   if (!knownAnonymous && (!hasHydrated || isCheckingAuth)) {
     return (
       <DropdownMenu>
