@@ -1,6 +1,6 @@
-@import "tailwindcss";
-@import "tw-animate-css";
-@import "@fontsource-variable/inter/index.css";
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import '@fontsource-variable/inter/index.css';
 
 @custom-variant dark (&:is(.dark *));
 
@@ -11,11 +11,31 @@
 .container {
   width: 100%;
 }
-@media (min-width: 640px)  { .container { max-width: 640px; } }
-@media (min-width: 768px)  { .container { max-width: 768px; } }
-@media (min-width: 1024px) { .container { max-width: 1024px; } }
-@media (min-width: 1280px) { .container { max-width: 1280px; } }
-@media (min-width: 1536px) { .container { max-width: 1536px; } }
+@media (min-width: 640px) {
+  .container {
+    max-width: 640px;
+  }
+}
+@media (min-width: 768px) {
+  .container {
+    max-width: 768px;
+  }
+}
+@media (min-width: 1024px) {
+  .container {
+    max-width: 1024px;
+  }
+}
+@media (min-width: 1280px) {
+  .container {
+    max-width: 1280px;
+  }
+}
+@media (min-width: 1536px) {
+  .container {
+    max-width: 1536px;
+  }
+}
 
 /* Radix ScrollArea's Viewport renders an inner wrapper with
    `min-width:100%; display:table`. Inside `display:table`, child `width:100%`
@@ -24,7 +44,7 @@
    nothing inside it (including `.container`, `w-full`, etc.) can clamp back
    to viewport width. Force the inner wrapper to behave like a normal block
    so child widths resolve against the viewport, not the content. */
-[data-slot="scroll-area-viewport"] > div {
+[data-slot='scroll-area-viewport'] > div {
   display: block !important;
   max-width: 100%;
 }
@@ -32,20 +52,18 @@
   overflow: scroll !important;
 }
 
-
 .tw-size-4 {
   width: 1rem;
   height: 1rem;
 }
 :root {
-
-    body[data-scroll-locked][data-scroll-locked] {
-      overflow: auto !important;
-    }
-    body[data-scroll-locked] {
-      margin-right: 0 !important;
-    }
+  body[data-scroll-locked][data-scroll-locked] {
+    overflow: auto !important;
   }
+  body[data-scroll-locked] {
+    margin-right: 0 !important;
+  }
+}
 #root {
   width: 100%;
   max-width: 100%;
@@ -64,7 +82,9 @@
     0 10px 15px -3px rgba(0, 0, 0, 0.15),
     0 20px 25px -5px rgba(0, 0, 0, 0.1),
     inset 0 1px 0 rgba(255, 255, 255, 0.05);
-  transition: transform 0.15s ease-out, box-shadow 0.15s ease-out;
+  transition:
+    transform 0.15s ease-out,
+    box-shadow 0.15s ease-out;
 }
 
 .card-3d:hover {
@@ -84,7 +104,6 @@
     0 4px 6px -3px rgba(0, 0, 0, 0.15),
     inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
-
 
 body {
   margin: 0;
@@ -204,15 +223,26 @@ body {
   --color-text-muted: var(--text-muted);
 
   /* Brand shadows */
-  --shadow-brand-glow: 0 4px 8px -2px rgba(0, 0, 0, 0.4), 0 8px 20px -4px rgba(0, 0, 0, 0.3);
-  --shadow-error-glow: 0 0 8px color-mix(in oklch, var(--error) 50%, transparent);
-
+  --shadow-brand-glow:
+    0 4px 8px -2px rgba(0, 0, 0, 0.4), 0 8px 20px -4px rgba(0, 0, 0, 0.3);
+  --shadow-error-glow: 0 0 8px
+    color-mix(in oklch, var(--error) 50%, transparent);
 }
 
 :root {
   /* Brand surface gradients (background-image, not background-color — avoids tailwind-merge conflicts) */
-  --brand-bg: linear-gradient(to bottom right, color-mix(in oklab, var(--primary) 10%, transparent), transparent, color-mix(in oklab, var(--accent) 10%, transparent));
-  --brand-success-bg: linear-gradient(135deg, rgba(5, 150, 105, 0.28) 0%, rgba(67, 56, 202, 0.18) 60%, rgba(124, 58, 237, 0.12) 100%);
+  --brand-bg: linear-gradient(
+    to bottom right,
+    color-mix(in oklab, var(--primary) 10%, transparent),
+    transparent,
+    color-mix(in oklab, var(--accent) 10%, transparent)
+  );
+  --brand-success-bg: linear-gradient(
+    135deg,
+    rgba(5, 150, 105, 0.28) 0%,
+    rgba(67, 56, 202, 0.18) 60%,
+    rgba(124, 58, 237, 0.12) 100%
+  );
   font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;
@@ -233,30 +263,30 @@ body {
   --card-foreground: oklch(0.145 0.028 267);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0.028 267);
-  --primary: oklch(0.50 0.20 265);
+  --primary: oklch(0.5 0.2 265);
   --primary-foreground: oklch(0.985 0.002 265);
   --secondary: oklch(0.95 0.01 265);
   --secondary-foreground: oklch(28.537% 0.07299 264.975);
   --muted: oklch(0.95 0.01 265);
-  --muted-foreground: oklch(0.50 0.03 265);
+  --muted-foreground: oklch(0.5 0.03 265);
   --accent: oklch(0.95 0.015 265);
-  --accent-foreground: oklch(0.20 0.04 265);
+  --accent-foreground: oklch(0.2 0.04 265);
   --destructive: oklch(0.55 0.22 25);
-  --border: oklch(0.90 0.015 265);
-  --input: oklch(0.90 0.015 265);
-  --ring: oklch(0.50 0.20 265);
+  --border: oklch(0.9 0.015 265);
+  --input: oklch(0.9 0.015 265);
+  --ring: oklch(0.5 0.2 265);
 
   /* ===== Base/Surface scale (light mode - inverted) ===== */
   --base-50: oklch(0.98 0.005 265);
   --base-100: oklch(0.96 0.008 265);
   --base-200: oklch(0.94 0.01 265);
-  --base-300: oklch(0.90 0.015 265);
+  --base-300: oklch(0.9 0.015 265);
   --base-400: oklch(0.85 0.02 265);
   --base-500: oklch(0.75 0.03 265);
-  --base-600: oklch(0.60 0.04 265);
+  --base-600: oklch(0.6 0.04 265);
   --base-700: oklch(0.45 0.05 265);
-  --base-800: oklch(0.30 0.05 265);
-  --base-900: oklch(0.20 0.04 265);
+  --base-800: oklch(0.3 0.05 265);
+  --base-900: oklch(0.2 0.04 265);
   --base-950: oklch(0.145 0.028 267);
   --base-content: oklch(0.145 0.028 267);
 
@@ -266,28 +296,28 @@ body {
 
   /* ===== Status colors ===== */
   --warning: oklch(0.75 0.18 85);
-  --warning-foreground: oklch(0.20 0.05 85);
-  --success: oklch(0.60 0.18 155);
+  --warning-foreground: oklch(0.2 0.05 85);
+  --success: oklch(0.6 0.18 155);
   --success-foreground: oklch(0.985 0.002 265);
   --info: oklch(0.55 0.18 240);
   --info-foreground: oklch(0.985 0.002 265);
 
   /* ===== Charts ===== */
-  --chart-1: oklch(0.50 0.20 265);
+  --chart-1: oklch(0.5 0.2 265);
   --chart-2: oklch(0.55 0.18 195);
   --chart-3: oklch(0.75 0.18 85);
   --chart-4: oklch(0.55 0.22 300);
-  --chart-5: oklch(0.60 0.18 155);
+  --chart-5: oklch(0.6 0.18 155);
 
   /* ===== Sidebar ===== */
   --sidebar: oklch(0.98 0.005 265);
   --sidebar-foreground: oklch(0.145 0.028 267);
-  --sidebar-primary: oklch(0.50 0.20 265);
+  --sidebar-primary: oklch(0.5 0.2 265);
   --sidebar-primary-foreground: oklch(0.985 0.002 265);
   --sidebar-accent: oklch(0.95 0.015 265);
-  --sidebar-accent-foreground: oklch(0.20 0.04 265);
-  --sidebar-border: oklch(0.90 0.015 265);
-  --sidebar-ring: oklch(0.50 0.20 265);
+  --sidebar-accent-foreground: oklch(0.2 0.04 265);
+  --sidebar-border: oklch(0.9 0.015 265);
+  --sidebar-ring: oklch(0.5 0.2 265);
 }
 .dark {
   /* ===== ESPORTS CYBER THEME ===== */
@@ -331,7 +361,7 @@ body {
   /* ===== Base/Surface scale (slate-tinted) ===== */
   /* 100 = lightest (elevated cards), 900 = page bg */
   --base-50: oklch(0.45 0.03 260);
-  --base-100: oklch(0.40 0.035 260);
+  --base-100: oklch(0.4 0.035 260);
   --base-200: oklch(0.35 0.04 260);
   --base-300: oklch(0.32 0.042 260);
   --base-400: oklch(0.279 0.041 260);
@@ -407,8 +437,8 @@ body {
      coexists with Tailwind's bg-background (background-color).
      Cannot use Tailwind utilities because tailwind-merge treats bg-gradient-*
      and bg-* as the same group, dropping the solid background-color. */
-  [data-slot="dialog-content"],
-  [data-slot="alert-dialog-content"] {
+  [data-slot='dialog-content'],
+  [data-slot='alert-dialog-content'] {
     background-image: linear-gradient(
       to bottom right,
       color-mix(in oklch, var(--color-primary) 10%, transparent),
@@ -472,12 +502,17 @@ body {
 }
 
 .gradient-button:hover {
-  background: linear-gradient(to right, var(--primary-hover), var(--secondary-hover));
+  background: linear-gradient(
+    to right,
+    var(--primary-hover),
+    var(--secondary-hover)
+  );
 }
 
 /* Button glow gradient - purple to violet to indigo */
 .gradient-button-glow {
-  background: linear-gradient(to bottom right,
+  background: linear-gradient(
+    to bottom right,
     oklch(0.606 0.25 293),
     oklch(0.541 0.251 293),
     oklch(0.511 0.262 277)
@@ -486,7 +521,8 @@ body {
 
 /* Subtle background gradient - slate-950 to slate-900 */
 .gradient-bg-subtle {
-  background: linear-gradient(to bottom,
+  background: linear-gradient(
+    to bottom,
     oklch(0.129 0.042 265),
     oklch(0.208 0.042 266)
   );
@@ -494,7 +530,8 @@ body {
 
 /* Hero banner gradient */
 .gradient-hero {
-  background: linear-gradient(135deg,
+  background: linear-gradient(
+    135deg,
     oklch(0.541 0.251 293 / 20%),
     oklch(0.511 0.262 277 / 10%),
     transparent
@@ -676,7 +713,8 @@ body {
 /* ===== HERODRAFT ANIMATIONS ===== */
 /* Pulse + scale animation for "Your Turn" indicator */
 @keyframes pulse-scale {
-  0%, 100% {
+  0%,
+  100% {
     transform: scale(1);
     opacity: 1;
   }
@@ -692,7 +730,8 @@ body {
 
 /* Grace timer urgency: simultaneous size pulse + red ↔ yellow color cycle. */
 @keyframes pulse-grace-urgent {
-  0%, 100% {
+  0%,
+  100% {
     transform: scale(1);
     color: var(--color-red-400);
   }
@@ -710,7 +749,8 @@ body {
    than grace-urgent. Red ↔ white with a glow halo to draw the eye.
    Mobile uses a tighter scale to avoid bleeding into adjacent grid cells. */
 @keyframes pulse-reserve-critical {
-  0%, 100% {
+  0%,
+  100% {
     transform: scale(1);
     color: var(--color-red-500);
     text-shadow: 0 0 6px var(--color-red-500);
@@ -724,7 +764,8 @@ body {
 
 @media (min-width: 640px) {
   @keyframes pulse-reserve-critical {
-    0%, 100% {
+    0%,
+    100% {
       transform: scale(1);
       color: var(--color-red-500);
       text-shadow: 0 0 6px var(--color-red-500);
