@@ -5,13 +5,16 @@ Handles org admin functionality including claim request management.
 """
 
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from app.cache_utils import invalidate_after_commit
 from app.models import (
+    CustomUser,
     DraftRound,
     LeagueLog,
     LeagueMatchParticipant,
@@ -22,8 +25,15 @@ from app.models import (
     Team,
 )
 from app.permissions_org import IsOrgStaff
+from events.models import Event
 from league.models import LeagueUser
-from org.models import OrgUser
+from org.contributions.services import (
+    dedupe_event_staff,
+    reassign_member,
+    repoint_user_attribution,
+)
+from org.models import OrgUser, PromoSend
+from org.promotion.services import demote_colliding_earning_sends
 from org.serializers import ProfileClaimRequestSerializer
 from steam.models import LeaguePlayerStats, PlayerMatchStats
 from telemetry.logging import get_logger
@@ -181,7 +191,7 @@ class ClaimRequestViewSet(viewsets.ModelViewSet):
             status=status.HTTP_200_OK,
         )
 
-    def _merge_profiles(self, claimer, target_user):
+    def _merge_profiles(self, claimer: CustomUser, target_user: CustomUser) -> None:
         """
         Merge target_user's profile into claimer.
 
@@ -224,10 +234,27 @@ class ClaimRequestViewSet(viewsets.ModelViewSet):
                 if org_user.mmr > existing.mmr:
                     existing.mmr = org_user.mmr
                     existing.save()
+                reassign_member(org_user, existing)
                 org_user.delete()
             else:
                 org_user.user = claimer
                 org_user.save()
+
+        staffed = Event.objects.nocache().filter(
+            Q(host=target_user) | Q(helpers=target_user)
+        )
+        staffed_ids = set(staffed.values_list("pk", flat=True))
+        stale_events = list(Event.objects.nocache().filter(pk__in=staffed_ids))
+        Event.objects.filter(host=target_user).update(host=claimer)
+        for event in list(Event.objects.nocache().filter(helpers=target_user)):
+            event.helpers.add(claimer)
+            event.helpers.remove(target_user)
+        dedupe_event_staff(claimer)
+        if staffed_ids:
+            invalidate_after_commit(
+                *stale_events,
+                *Event.objects.nocache().filter(pk__in=staffed_ids),
+            )
 
         # LeagueUser memberships
         for league_user in LeagueUser.objects.filter(user=target_user):
@@ -281,7 +308,9 @@ class ClaimRequestViewSet(viewsets.ModelViewSet):
         LeagueMatchParticipant.objects.filter(player=target_user).update(player=claimer)
 
         # Steam match stats
-        PlayerMatchStats.objects.filter(user=target_user).invalidated_update(user=claimer)
+        PlayerMatchStats.objects.filter(user=target_user).invalidated_update(
+            user=claimer
+        )
 
         # League player stats
         for stats in LeaguePlayerStats.objects.filter(user=target_user):
@@ -310,6 +339,16 @@ class ClaimRequestViewSet(viewsets.ModelViewSet):
         OrgLog.objects.filter(target_user=target_user).update(target_user=claimer)
         LeagueLog.objects.filter(actor=target_user).update(actor=claimer)
         LeagueLog.objects.filter(target_user=target_user).update(target_user=claimer)
+
+        repoint_user_attribution(target_user, claimer)
+        demote_colliding_earning_sends(claimer, target_user)
+        PromoSend.objects.filter(sender=target_user).update(sender=claimer)
+        PromoSend.objects.filter(recipient=target_user).update(recipient=claimer)
+
+        for org in list(target_user.promoter_organizations.all()):
+            org.promoters.add(claimer)
+            org.promoters.remove(target_user)
+            invalidate_after_commit(org)
 
         # Clear steam_account_id from target before saving claimer (to avoid UNIQUE constraint)
         target_user.steam_account_id = None

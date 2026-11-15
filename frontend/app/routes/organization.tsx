@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  Award,
   Building2,
   Calendar,
   CalendarDays,
@@ -7,6 +8,7 @@ import {
   ExternalLink,
   Mail,
   MailCheck,
+  Megaphone,
   Pencil,
   Plus,
   Repeat,
@@ -69,6 +71,13 @@ import { UserList } from '~/components/user';
 import { AddUserModal } from '~/components/user/AddUserModal';
 import { CSVImportModal } from '~/components/user/CSVImportModal';
 import type { UserType } from '~/components/user/types';
+import { ContributionsTab } from '~/features/contributions';
+import {
+  LockedFeaturesPanel,
+  removeFeatureQueries,
+  useOrgFeatureAccess,
+} from '~/features/org-features';
+import { PromotionTab } from '~/features/promotion';
 import {
   useEventRepeaters,
   useEvents,
@@ -376,9 +385,12 @@ export default function OrganizationDetailPage() {
 
   const onMemberViewerChange = useCallback(() => {
     useOrgStore.getState().clearOrgUsers();
-    if (pk) useUserCacheStore.getState().dropScoped({ orgId: pk });
+    if (pk) {
+      useUserCacheStore.getState().dropScoped({ orgId: pk });
+      removeFeatureQueries(queryClient, pk);
+    }
     refetch();
-  }, [pk, refetch]);
+  }, [pk, queryClient, refetch]);
   const { canView: canViewMembers, settled: memberAccessSettled } =
     useMemberAccess(organization, onMemberViewerChange);
 
@@ -400,6 +412,28 @@ export default function OrganizationDetailPage() {
       setActiveTab('leagues');
     }
   }, [memberAccessSettled, canViewMembers, activeTab, setActiveTab]);
+
+  const featureAccess = useOrgFeatureAccess(organization ?? undefined);
+  const canViewContributions = featureAccess.canViewContributions;
+  useEffect(() => {
+    if (
+      featureAccess.settled &&
+      !canViewContributions &&
+      activeTab === 'contributions'
+    ) {
+      setActiveTab('leagues');
+    }
+  }, [featureAccess.settled, canViewContributions, activeTab, setActiveTab]);
+  const canUsePromotion = featureAccess.canUsePromotion;
+  useEffect(() => {
+    if (
+      featureAccess.settled &&
+      !canUsePromotion &&
+      activeTab === 'promotion'
+    ) {
+      setActiveTab('leagues');
+    }
+  }, [featureAccess.settled, canUsePromotion, activeTab, setActiveTab]);
 
   const isOwner = useIsOrganizationOwner(organization);
   const isOrgAdmin = useIsOrganizationAdmin(organization);
@@ -456,6 +490,12 @@ export default function OrganizationDetailPage() {
     if (canViewMembers) {
       opts.push({ value: 'users', label: `Users (${userCountDisplay})` });
     }
+    if (canViewContributions) {
+      opts.push({ value: 'contributions', label: 'Contributions' });
+    }
+    if (canUsePromotion) {
+      opts.push({ value: 'promotion', label: 'Promotion' });
+    }
     if (isOrgAdmin) {
       opts.push({ value: 'claims', label: 'Claims' });
     }
@@ -465,6 +505,8 @@ export default function OrganizationDetailPage() {
     events.length,
     userCountDisplay,
     canViewMembers,
+    canViewContributions,
+    canUsePromotion,
     isOrgAdmin,
   ]);
 
@@ -580,6 +622,21 @@ export default function OrganizationDetailPage() {
               <TabsTrigger value="users" data-testid="org-tab-users">
                 <Users className="w-4 h-4 mr-2" />
                 Users ({userCountDisplay})
+              </TabsTrigger>
+            )}
+            {canViewContributions && (
+              <TabsTrigger
+                value="contributions"
+                data-testid="org-tab-contributions"
+              >
+                <Award className="w-4 h-4 mr-2" />
+                Contributions
+              </TabsTrigger>
+            )}
+            {canUsePromotion && (
+              <TabsTrigger value="promotion" data-testid="org-tab-promotion">
+                <Megaphone className="w-4 h-4 mr-2" />
+                Promotion
               </TabsTrigger>
             )}
             {isOrgStaff && (
@@ -757,6 +814,33 @@ export default function OrganizationDetailPage() {
             </TabsContent>
           )}
 
+          {canViewContributions && pk && (
+            <TabsContent value="contributions">
+              <ContributionsTab
+                key={pk}
+                orgId={pk}
+                timeZone={organization.timezone}
+                membersPrivate={organization.members_private ?? false}
+                access={featureAccess}
+              />
+            </TabsContent>
+          )}
+
+          {canUsePromotion && pk && (
+            <TabsContent value="promotion">
+              <PromotionTab
+                key={pk}
+                orgId={pk}
+                org={{
+                  name: organization.name,
+                  discord_link: organization.discord_link,
+                }}
+                sender={currentUser}
+                access={featureAccess}
+              />
+            </TabsContent>
+          )}
+
           {/* Claims Tab (Staff+) */}
           {isOrgStaff && pk && (
             <TabsContent value="claims">
@@ -769,6 +853,8 @@ export default function OrganizationDetailPage() {
       {organization && isOwner && (
         <DeleteOrganizationDangerZone organization={organization} />
       )}
+
+      {pk && <LockedFeaturesPanel orgId={pk} />}
 
       {pk && (
         <CreateLeagueModal

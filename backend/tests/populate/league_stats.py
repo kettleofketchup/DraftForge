@@ -51,7 +51,7 @@ from tests.data.models import TestLeague, TestOrganization, TestUser
 from tests.data.organizations import SHOWCASE_ORG, STRIP_STATS_ORG
 from tests.data.users import ADMIN_USER
 
-from .utils import ensure_org_user, flush_redis_cache
+from .utils import delete_ledger_for_users, ensure_org_user, flush_redis_cache
 
 RADIANT_SLOT = 0
 DIRE_SLOT = 128
@@ -105,6 +105,7 @@ def _ensure_user(data: TestUser, force: bool) -> CustomUser:
     if existing and not force:
         return existing
     if existing:
+        delete_ledger_for_users([existing.pk])
         existing.delete()
 
     user = CustomUser(

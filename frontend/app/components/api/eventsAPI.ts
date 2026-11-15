@@ -19,7 +19,8 @@ export async function getEvents(params?: {
   if (params?.states?.length) sp.set('states', params.states.join(','));
   if (params?.search) sp.set('search', params.search);
   if (params?.ordering) sp.set('ordering', params.ordering);
-  if (params?.event_repeater) sp.set('event_repeater', String(params.event_repeater));
+  if (params?.event_repeater)
+    sp.set('event_repeater', String(params.event_repeater));
   const q = sp.toString();
   const { data } = await axios.get<EventType[]>(`/events/${q ? `?${q}` : ''}`);
   return data;
@@ -31,15 +32,23 @@ export async function getEvent(eventId: number): Promise<EventType> {
 }
 
 /** An event create/update body: the readable fields plus the write-only password. */
-export type EventWritePayload = Partial<EventType> & { dota_lobby_password?: string };
+export type EventWritePayload = Partial<EventType> & {
+  dota_lobby_password?: string;
+};
 
-export async function createEvent(payload: EventWritePayload, openSignups = false): Promise<EventType> {
+export async function createEvent(
+  payload: EventWritePayload,
+  openSignups = false,
+): Promise<EventType> {
   const params = openSignups ? '?open_signups=true' : '';
   const { data } = await axios.post<EventType>(`/events/${params}`, payload);
   return data;
 }
 
-export async function updateEvent(eventId: number, payload: EventWritePayload): Promise<EventType> {
+export async function updateEvent(
+  eventId: number,
+  payload: EventWritePayload,
+): Promise<EventType> {
   const { data } = await axios.patch<EventType>(`/events/${eventId}/`, payload);
   return data;
 }
@@ -57,27 +66,38 @@ export async function signupForEvent(
   eventId: number,
   body: SignupBody,
 ): Promise<EventSignupType> {
-  const { data } = await axios.post<EventSignupType>(`/events/${eventId}/signup/`, body);
+  const { data } = await axios.post<EventSignupType>(
+    `/events/${eventId}/signup/`,
+    body,
+  );
   return data;
 }
 
 export async function openSignups(eventId: number): Promise<EventType> {
-  const { data } = await axios.post<EventType>(`/events/${eventId}/open_signups/`);
+  const { data } = await axios.post<EventType>(
+    `/events/${eventId}/open_signups/`,
+  );
   return data;
 }
 
 export async function startRollCall(eventId: number): Promise<EventType> {
-  const { data } = await axios.post<EventType>(`/events/${eventId}/start_roll_call/`);
+  const { data } = await axios.post<EventType>(
+    `/events/${eventId}/start_roll_call/`,
+  );
   return data;
 }
 
 export async function reopenSignups(eventId: number): Promise<EventType> {
-  const { data } = await axios.post<EventType>(`/events/${eventId}/reopen_signups/`);
+  const { data } = await axios.post<EventType>(
+    `/events/${eventId}/reopen_signups/`,
+  );
   return data;
 }
 
 export async function startTournament(eventId: number): Promise<EventType> {
-  const { data } = await axios.post<EventType>(`/events/${eventId}/start_tournament/`);
+  const { data } = await axios.post<EventType>(
+    `/events/${eventId}/start_tournament/`,
+  );
   return data;
 }
 
@@ -86,17 +106,47 @@ export async function cancelEvent(eventId: number): Promise<EventType> {
   return data;
 }
 
+export async function completeEvent(eventId: number): Promise<EventType> {
+  const { data } = await axios.post<EventType>(`/events/${eventId}/complete/`);
+  return data;
+}
+
+export interface EventStaffPayload {
+  host_id: number | null;
+  helper_ids: number[];
+}
+
+export async function setEventStaff(
+  eventId: number,
+  payload: EventStaffPayload,
+): Promise<EventType> {
+  const { data } = await axios.put<EventType>(
+    `/events/${eventId}/staff/`,
+    payload,
+  );
+  return data;
+}
+
 export async function restartTournament(eventId: number): Promise<EventType> {
-  const { data } = await axios.post<EventType>(`/events/${eventId}/restart_tournament/`);
+  const { data } = await axios.post<EventType>(
+    `/events/${eventId}/restart_tournament/`,
+  );
   return data;
 }
 
-export async function getEventSignups(eventId: number): Promise<EventSignupType[]> {
-  const { data } = await axios.get<EventSignupType[]>(`/events/signups/?event=${eventId}`);
+export async function getEventSignups(
+  eventId: number,
+): Promise<EventSignupType[]> {
+  const { data } = await axios.get<EventSignupType[]>(
+    `/events/signups/?event=${eventId}`,
+  );
   return data;
 }
 
-export async function approveSignup(signupId: number, mmr?: number): Promise<EventSignupType> {
+export async function approveSignup(
+  signupId: number,
+  mmr?: number,
+): Promise<EventSignupType> {
   const { data } = await axios.post<EventSignupType>(
     `/events/signups/${signupId}/approve/`,
     mmr != null ? { mmr } : undefined,
@@ -105,32 +155,50 @@ export async function approveSignup(signupId: number, mmr?: number): Promise<Eve
 }
 
 export async function rejectSignup(signupId: number): Promise<EventSignupType> {
-  const { data } = await axios.post<EventSignupType>(`/events/signups/${signupId}/reject/`);
+  const { data } = await axios.post<EventSignupType>(
+    `/events/signups/${signupId}/reject/`,
+  );
   return data;
 }
 
-export async function confirmSignup(signupId: number): Promise<EventSignupType> {
-  const { data } = await axios.post<EventSignupType>(`/events/signups/${signupId}/confirm/`);
+export async function confirmSignup(
+  signupId: number,
+): Promise<EventSignupType> {
+  const { data } = await axios.post<EventSignupType>(
+    `/events/signups/${signupId}/confirm/`,
+  );
   return data;
 }
 
 export async function cancelSignup(signupId: number): Promise<EventSignupType> {
-  const { data } = await axios.post<EventSignupType>(`/events/signups/${signupId}/cancel_signup/`);
+  const { data } = await axios.post<EventSignupType>(
+    `/events/signups/${signupId}/cancel_signup/`,
+  );
   return data;
 }
 
-export async function unconfirmSignup(signupId: number): Promise<EventSignupType> {
-  const { data } = await axios.post<EventSignupType>(`/events/signups/${signupId}/unconfirm/`);
+export async function unconfirmSignup(
+  signupId: number,
+): Promise<EventSignupType> {
+  const { data } = await axios.post<EventSignupType>(
+    `/events/signups/${signupId}/unconfirm/`,
+  );
   return data;
 }
 
 export async function demoteSignup(signupId: number): Promise<EventSignupType> {
-  const { data } = await axios.post<EventSignupType>(`/events/signups/${signupId}/demote/`);
+  const { data } = await axios.post<EventSignupType>(
+    `/events/signups/${signupId}/demote/`,
+  );
   return data;
 }
 
-export async function reinstateSignup(signupId: number): Promise<EventSignupType> {
-  const { data } = await axios.post<EventSignupType>(`/events/signups/${signupId}/reinstate/`);
+export async function reinstateSignup(
+  signupId: number,
+): Promise<EventSignupType> {
+  const { data } = await axios.post<EventSignupType>(
+    `/events/signups/${signupId}/reinstate/`,
+  );
   return data;
 }
 
@@ -220,21 +288,36 @@ export interface EventRepeaterType {
   next_event_date: string | null;
 }
 
-export async function getEventRepeaters(params?: { organization?: number }): Promise<EventRepeaterType[]> {
+export async function getEventRepeaters(params?: {
+  organization?: number;
+}): Promise<EventRepeaterType[]> {
   const sp = new URLSearchParams();
   if (params?.organization) sp.set('organization', String(params.organization));
   const q = sp.toString();
-  const { data } = await axios.get<EventRepeaterType[]>(`/events/repeaters/${q ? `?${q}` : ''}`);
+  const { data } = await axios.get<EventRepeaterType[]>(
+    `/events/repeaters/${q ? `?${q}` : ''}`,
+  );
   return data;
 }
 
-export async function createEventRepeater(payload: Partial<EventRepeaterType>): Promise<EventRepeaterType> {
-  const { data } = await axios.post<EventRepeaterType>('/events/repeaters/', payload);
+export async function createEventRepeater(
+  payload: Partial<EventRepeaterType>,
+): Promise<EventRepeaterType> {
+  const { data } = await axios.post<EventRepeaterType>(
+    '/events/repeaters/',
+    payload,
+  );
   return data;
 }
 
-export async function updateEventRepeater(repeaterId: number, payload: Partial<EventRepeaterType>): Promise<EventRepeaterType> {
-  const { data } = await axios.patch<EventRepeaterType>(`/events/repeaters/${repeaterId}/`, payload);
+export async function updateEventRepeater(
+  repeaterId: number,
+  payload: Partial<EventRepeaterType>,
+): Promise<EventRepeaterType> {
+  const { data } = await axios.patch<EventRepeaterType>(
+    `/events/repeaters/${repeaterId}/`,
+    payload,
+  );
   return data;
 }
 
@@ -295,20 +378,22 @@ export interface OrgEventDefaultsType {
   min_mmr: number | null;
 }
 
-export async function getOrgEventDefaults(orgId: number): Promise<OrgEventDefaultsType> {
+export async function getOrgEventDefaults(
+  orgId: number,
+): Promise<OrgEventDefaultsType> {
   const { data } = await axios.get<OrgEventDefaultsType>(
-    `/events/defaults/?organization=${orgId}`
+    `/events/defaults/?organization=${orgId}`,
   );
   return data;
 }
 
 export async function updateOrgEventDefaults(
   defaultsId: number,
-  payload: Partial<OrgEventDefaultsType>
+  payload: Partial<OrgEventDefaultsType>,
 ): Promise<OrgEventDefaultsType> {
   const { data } = await axios.patch<OrgEventDefaultsType>(
     `/events/defaults/${defaultsId}/`,
-    payload
+    payload,
   );
   return data;
 }
@@ -342,7 +427,9 @@ export async function adminAddSignup(
 /** A one-off event body. A random lobby password mode sends no password. */
 export type SeriesOneOffPayload = Omit<
   CreateSeriesEventInput,
-  'dota_lobby_password_mode' | 'dota_lobby_password' | 'dota_lobby_password_saved'
+  | 'dota_lobby_password_mode'
+  | 'dota_lobby_password'
+  | 'dota_lobby_password_saved'
 > & {
   dota_lobby_password_mode?: 'random' | 'fixed';
   dota_lobby_password?: string;
@@ -362,7 +449,9 @@ export async function createSeriesOneOffEvent(
 export async function reactivateRepeater(
   repeaterId: number,
 ): Promise<{ detail: string; created_count: number; is_active: boolean }> {
-  const { data } = await axios.post(`/events/repeaters/${repeaterId}/reactivate/`);
+  const { data } = await axios.post(
+    `/events/repeaters/${repeaterId}/reactivate/`,
+  );
   return data;
 }
 
@@ -370,7 +459,9 @@ export async function subscribeToRepeater(repeaterId: number): Promise<void> {
   await axios.post(`/events/repeaters/${repeaterId}/subscribe/`);
 }
 
-export async function unsubscribeFromRepeater(repeaterId: number): Promise<void> {
+export async function unsubscribeFromRepeater(
+  repeaterId: number,
+): Promise<void> {
   await axios.post(`/events/repeaters/${repeaterId}/unsubscribe/`);
 }
 
@@ -383,7 +474,9 @@ export interface RepeaterSubscriber {
   created_at: string;
 }
 
-export async function getRepeaterSubscribers(repeaterId: number): Promise<RepeaterSubscriber[]> {
+export async function getRepeaterSubscribers(
+  repeaterId: number,
+): Promise<RepeaterSubscriber[]> {
   const { data } = await axios.get<RepeaterSubscriber[]>(
     `/events/repeaters/${repeaterId}/subscribers/`,
   );
@@ -401,22 +494,22 @@ export async function getEventDiscordState(eventId: number) {
 
 export async function getDiscordChannels(
   orgId: number,
-  refresh = false
+  refresh = false,
 ): Promise<DiscordChannel[]> {
   const params = refresh ? '?refresh=true' : '';
   const { data } = await axios.get<{ channels: DiscordChannel[] }>(
-    `/discord/organizations/${orgId}/channels/${params}`
+    `/discord/organizations/${orgId}/channels/${params}`,
   );
   return data.channels;
 }
 
 export async function getDiscordRoles(
   orgId: number,
-  refresh = false
+  refresh = false,
 ): Promise<DiscordRole[]> {
   const params = refresh ? '?refresh=true' : '';
   const { data } = await axios.get<{ roles: DiscordRole[] }>(
-    `/discord/organizations/${orgId}/roles/${params}`
+    `/discord/organizations/${orgId}/roles/${params}`,
   );
   return data.roles;
 }

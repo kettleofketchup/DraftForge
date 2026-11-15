@@ -1,0 +1,140 @@
+{
+  "context": {
+    "player": "Ann",
+    "promoter": "Bob",
+    "event": "Friday Inhouse",
+    "event_time": "<t:1794704400:F>",
+    "event_time_relative": "<t:1794704400:R>",
+    "event_date": "<t:1794704400:D>",
+    "signups_open": "",
+    "event_link": "https://dota.example/events/42",
+    "org": "Kettle {player} Club $& \\1",
+    "discord_link": "https://discord.gg/kettle"
+  },
+  "cases": [
+    {
+      "name": "basic",
+      "body": "Hey {player}! {promoter} here.\n\n**{event}** is on {event_time} ({event_time_relative}), {event_date}.\nSign up: {event_link}\nDiscord: {discord_link}",
+      "text": "Hey Ann! Bob here.\n\n**Friday Inhouse** is on <t:1794704400:F> (<t:1794704400:R>), <t:1794704400:D>.\nSign up: https://dota.example/events/42\nDiscord: https://discord.gg/kettle",
+      "warnings": []
+    },
+    {
+      "name": "no_placeholders",
+      "body": "Plain text, nothing to fill.",
+      "text": "Plain text, nothing to fill.",
+      "warnings": []
+    },
+    {
+      "name": "empty_body",
+      "body": "",
+      "text": "",
+      "warnings": []
+    },
+    {
+      "name": "format_spec",
+      "body": "Hi {player:>9999999}!",
+      "text": "Hi {player:>9999999}!",
+      "warnings": ["unknown placeholder {player:>9999999}"]
+    },
+    {
+      "name": "attribute",
+      "body": "Hosted by {event.organization}",
+      "text": "Hosted by {event.organization}",
+      "warnings": ["unknown placeholder {event.organization}"]
+    },
+    {
+      "name": "index_access",
+      "body": "{player[0]} {event.__class__}",
+      "text": "{player[0]} {event.__class__}",
+      "warnings": [
+        "unknown placeholder {player[0]}",
+        "unknown placeholder {event.__class__}"
+      ]
+    },
+    {
+      "name": "stray_open",
+      "body": "Hi {player",
+      "text": "Hi {player",
+      "warnings": ["unbalanced brace"]
+    },
+    {
+      "name": "stray_close",
+      "body": "Hi player} and {player}",
+      "text": "Hi player} and Ann",
+      "warnings": ["unbalanced brace"]
+    },
+    {
+      "name": "double_brace",
+      "body": "{{player}}",
+      "text": "{Ann}",
+      "warnings": ["unbalanced brace"]
+    },
+    {
+      "name": "nested",
+      "body": "{pla{player}yer}",
+      "text": "{plaAnnyer}",
+      "warnings": ["unbalanced brace"]
+    },
+    {
+      "name": "unknown",
+      "body": "Join {foo} now, {player}",
+      "text": "Join {foo} now, Ann",
+      "warnings": ["unknown placeholder {foo}"]
+    },
+    {
+      "name": "unknown_deduplicated",
+      "body": "{foo} {bar} {foo} {",
+      "text": "{foo} {bar} {foo} {",
+      "warnings": [
+        "unknown placeholder {foo}",
+        "unknown placeholder {bar}",
+        "unbalanced brace"
+      ]
+    },
+    {
+      "name": "empty_braces",
+      "body": "Hi {} {player}",
+      "text": "Hi {} Ann",
+      "warnings": ["unknown placeholder {}"]
+    },
+    {
+      "name": "case_sensitive",
+      "body": "{Player} {PLAYER}",
+      "text": "{Player} {PLAYER}",
+      "warnings": [
+        "unknown placeholder {Player}",
+        "unknown placeholder {PLAYER}"
+      ]
+    },
+    {
+      "name": "inner_whitespace",
+      "body": "{ player }",
+      "text": "{ player }",
+      "warnings": ["unknown placeholder { player }"]
+    },
+    {
+      "name": "repeat",
+      "body": "{player}, {player}! {event} {event}",
+      "text": "Ann, Ann! Friday Inhouse Friday Inhouse",
+      "warnings": []
+    },
+    {
+      "name": "adjacent",
+      "body": "{player}{promoter}{event}",
+      "text": "AnnBobFriday Inhouse",
+      "warnings": []
+    },
+    {
+      "name": "empty_signups",
+      "body": "Signups open {signups_open}.",
+      "text": "Signups open .",
+      "warnings": []
+    },
+    {
+      "name": "value_not_reexpanded",
+      "body": "From {org}",
+      "text": "From Kettle {player} Club $& \\1",
+      "warnings": []
+    }
+  ]
+}
