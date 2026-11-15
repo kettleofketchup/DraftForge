@@ -2140,7 +2140,7 @@ def refresh_user_avatar_admin(request: Request, user_id: int) -> Response:
 
 
 @api_view(["POST"])
-@permission_classes([AllowAny])
+@permission_classes([IsStaff])
 def refresh_all_avatars(request: Request) -> Response:
     """Queue an asynchronous avatar refresh.
 
@@ -2149,7 +2149,8 @@ def refresh_all_avatars(request: Request) -> Response:
     org) and updates avatars in bulk. See `app.tasks.avatar_refresh
     .refresh_avatars_batched`.
 
-    Rate-limited to once per hour.
+    Staff only, and rate-limited to once per hour. The cache key is set BEFORE dispatch so
+    concurrent calls can't double-queue the task.
     """
     cache_key = "avatar_refresh_last_run"
     last_run = cache.get(cache_key)

@@ -23,7 +23,6 @@ export async function logout(): Promise<void> {
 
 // User CRUD
 export async function fetchUsers(): Promise<UsersType> {
-  await refreshAvatars();
   const response = await axios.get<UsersType>(`/users/`);
   return response.data;
 }
@@ -86,11 +85,6 @@ export async function claimUserProfile(
 ): Promise<UserType> {
   const response = await axios.post<UserType>(`/users/${targetUserId}/claim/`);
   return response.data;
-}
-
-// Utility
-export async function refreshAvatars(): Promise<void> {
-  axios.post(`/avatars/refresh/`);
 }
 
 export interface SearchUserResult extends UserType {
