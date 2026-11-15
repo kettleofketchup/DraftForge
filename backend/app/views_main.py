@@ -1,24 +1,16 @@
 from __future__ import annotations
 
-import json
 from datetime import datetime, timedelta
 from typing import Any, ClassVar, Protocol, cast
 
 from cacheops import cached_as
-from django.contrib.auth import login
 from django.contrib.auth import logout as auth_logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import AnonymousUser
 from django.core.cache import cache
 from django.db import transaction
 from django.db.models import BooleanField, Case, Count, Q, QuerySet, Value, When
-from django.http import (
-    Http404,
-    HttpRequest,
-    HttpResponse,
-    HttpResponseBadRequest,
-    HttpResponseRedirect,
-)
+from django.http import Http404, HttpRequest, HttpResponseRedirect
 from django.shortcuts import redirect
 from django.utils import timezone
 from rest_framework import generics, status, viewsets
@@ -35,8 +27,7 @@ from rest_framework.permissions import (
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
-from social_core.backends.oauth import BaseOAuth1, BaseOAuth2
-from social_django.utils import load_strategy, psa
+from social_django.utils import load_strategy
 
 from app import tournament_buckets
 from app.cache_utils import invalidate_after_commit
@@ -234,23 +225,6 @@ def require_city(request: HttpRequest) -> dict[str, Any]:
         "partial_backend_name": partial.backend,
         "partial_token": partial_token,
     }
-
-
-@psa("social:complete")
-def ajax_auth(request: HttpRequest, backend: str) -> HttpResponse:
-    if isinstance(request.backend, BaseOAuth1):
-        token = {
-            "oauth_token": request.REQUEST.get("access_token"),
-            "oauth_token_secret": request.REQUEST.get("access_token_secret"),
-        }
-    elif isinstance(request.backend, BaseOAuth2):
-        token = request.REQUEST.get("access_token")
-    else:
-        raise HttpResponseBadRequest("Wrong backend type")
-    user = request.backend.do_auth(token, ajax=True)
-    login(request, user)
-    data = {"id": user.id, "username": user.username}
-    return HttpResponse(json.dumps(data), mimetype="application/json")
 
 
 @permission_classes((IsStaff,))
