@@ -129,9 +129,25 @@ def _continue_for(draft: Draft) -> tuple[bool, str]:
         return False, "clock_unarmed"
     if draft.state == TeamDraftState.RESUMING:
         return True, ""
-    if get_connection_count(PREFIX, draft_id) <= 0:
+    if get_connection_count(PREFIX, draft_id) <= 0 and not _pause_pending(draft):
         return False, "no_connections"
     return True, ""
+
+
+def _pause_pending(draft: Draft) -> bool:
+    """The on-clock captain has connected, so check_captain_heartbeats will pause."""
+    rnd = draft.active_round
+    if rnd is None:
+        return False
+    return (
+        Team.objects.nocache()
+        .filter(
+            tournament_id=draft.tournament_id,
+            captain_id=rnd.captain_id,
+            draft_has_connected=True,
+        )
+        .exists()
+    )
 
 
 async def broadcast_tick(draft_id: int) -> None:
