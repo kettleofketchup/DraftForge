@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any, ClassVar, Protocol, cast
 
 from cacheops import cached_as
@@ -2140,7 +2140,7 @@ def refresh_user_avatar_admin(request: Request, user_id: int) -> Response:
 
 
 @api_view(["POST"])
-@permission_classes([IsStaff])
+@permission_classes([AllowAny])
 def refresh_all_avatars(request: Request) -> Response:
     """Queue an asynchronous avatar refresh.
 
@@ -2149,21 +2149,16 @@ def refresh_all_avatars(request: Request) -> Response:
     org) and updates avatars in bulk. See `app.tasks.avatar_refresh
     .refresh_avatars_batched`.
 
-    Staff only, and rate-limited to once per hour. The cache key is set BEFORE
-    dispatch so concurrent calls can't double-queue the task.
+    Public on purpose: every users-list page view fires it, so avatars stay
+    fresh for everyone. One shared cache key caps it at one task per hour no
+    matter who calls or how often. `cache.add` is an atomic set-if-absent, so
+    concurrent callers can't both win and double-queue the task.
     """
-    cache_key = "avatar_refresh_last_run"
-    last_run = cache.get(cache_key)
-
-    if last_run and (timezone.now() - last_run < timedelta(hours=1)):
+    if not cache.add("avatar_refresh_last_run", timezone.now(), timeout=3600):
         return Response(
             {"message": "Avatar refresh can only be run once per hour."},
             status=status.HTTP_200_OK,
         )
-
-    # Set the cache key BEFORE dispatch so a second caller arriving during
-    # task execution short-circuits instead of queueing another task.
-    cache.set(cache_key, timezone.now(), timeout=3600)
 
     from app.tasks.avatar_refresh import refresh_avatars_batched
 
