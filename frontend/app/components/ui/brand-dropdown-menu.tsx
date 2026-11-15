@@ -100,6 +100,7 @@ export function BrandDropdownMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="start"
+        data-testid={testId ? `${testId}-menu` : undefined}
         className={cn(brandBg, 'border-primary/30 min-w-[200px] p-1.5 space-y-0.5')}
       >
         {menuLabel && (

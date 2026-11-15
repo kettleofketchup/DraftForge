@@ -211,7 +211,7 @@ body {
 
 :root {
   /* Brand surface gradients (background-image, not background-color — avoids tailwind-merge conflicts) */
-  --brand-bg: linear-gradient(to bottom right, hsl(var(--primary) / 0.1), transparent, hsl(var(--accent) / 0.1));
+  --brand-bg: linear-gradient(to bottom right, color-mix(in oklab, var(--primary) 10%, transparent), transparent, color-mix(in oklab, var(--accent) 10%, transparent));
   --brand-success-bg: linear-gradient(135deg, rgba(5, 150, 105, 0.28) 0%, rgba(67, 56, 202, 0.18) 60%, rgba(124, 58, 237, 0.12) 100%);
   font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
