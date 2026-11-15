@@ -26,6 +26,8 @@ SALT = "discord-draft-activity-v2"
 TOKEN_AGE = 12 * 60 * 60
 SOCKET_REVALIDATE_SECONDS = 30
 MAX_DATABASE_ID = (1 << 63) - 1
+SOCKET_PROTOCOL = "draftactivity"
+SESSION_ENDED_CODE = 4401
 
 
 def issue_activity_token(user: CustomUser, instance: DraftActivityInstance) -> str:
@@ -168,13 +170,18 @@ class ActivitySocketMiddleware:
         self, scope: Scope, receive: ASGIReceiveCallable, send: ASGISendCallable
     ) -> None:
         protocols = scope.get("subprotocols", [])
-        token = (
-            protocols[1]
-            if len(protocols) == 2 and protocols[0] == "draftactivity"
-            else ""
-        )
+        offered = bool(protocols) and protocols[0] == SOCKET_PROTOCOL
+        token = protocols[1] if offered and len(protocols) == 2 else ""
+
+        async def reject() -> None:
+            # A pre-accept close reaches the browser as a bare handshake
+            # failure; accept first so the client sees 4401 and re-authenticates.
+            if offered:
+                await send({"type": "websocket.accept", "subprotocol": SOCKET_PROTOCOL})
+            await send({"type": "websocket.close", "code": SESSION_ENDED_CODE})
+
         if not token:
-            await send({"type": "websocket.close", "code": 4401})
+            await reject()
             return
         draft_id = scope["url_route"]["kwargs"]["draft_id"]
         validate = database_sync_to_async(authenticate_token, thread_sensitive=False)
@@ -182,7 +189,7 @@ class ActivitySocketMiddleware:
             user = await validate(token, draft_id, self.kind)
             expires_at = _token_data(token)["expires"]
         except AuthenticationFailed:
-            await send({"type": "websocket.close", "code": 4401})
+            await reject()
             return
         next_validation = time.monotonic() + SOCKET_REVALIDATE_SECONDS
         validation_lock = asyncio.Lock()
@@ -219,11 +226,14 @@ class ActivitySocketMiddleware:
                     continue
 
         async def guarded_send(message: Any) -> None:
-            if message["type"] != "websocket.close":
+            if message["type"] == "websocket.accept":
+                # Browsers fail the handshake unless one offered protocol is echoed.
+                message = {**message, "subprotocol": SOCKET_PROTOCOL}
+            elif message["type"] != "websocket.close":
                 await check_session()
             await send(message)
 
         try:
             await self.app(dict(scope, user=user), guarded_receive, guarded_send)
         except _ActivitySessionEnded:
-            await send({"type": "websocket.close", "code": 4401})
+            await send({"type": "websocket.close", "code": SESSION_ENDED_CODE})

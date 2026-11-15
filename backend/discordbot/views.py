@@ -3,7 +3,7 @@
 import json
 
 from django.conf import settings
-from django.http import JsonResponse
+from django.http import HttpRequest, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 
@@ -12,7 +12,7 @@ from telemetry.logging import get_logger
 log = get_logger(__name__)
 
 
-def verify_discord_signature(request) -> bool:
+def verify_discord_signature(request: HttpRequest) -> bool:
     """Verify Discord interaction signature using Ed25519.
 
     Discord sends:
@@ -63,7 +63,7 @@ def verify_discord_signature(request) -> bool:
 
 @csrf_exempt
 @require_POST
-def discord_interactions(request):
+def discord_interactions(request: HttpRequest) -> JsonResponse:
     """Handle Discord HTTP interactions.
 
     This endpoint receives interaction webhooks from Discord when configured
@@ -136,6 +136,9 @@ def handle_application_command(data: dict) -> JsonResponse:
     )
 
 
+ACTIVITY_LAUNCH_TASK_EXPIRES_S = 14 * 60
+
+
 def handle_message_component(data: dict) -> JsonResponse:
     """Handle button/select menu interactions."""
     custom_id = data.get("data", {}).get("custom_id", "")
@@ -197,7 +200,9 @@ def handle_message_component(data: dict) -> JsonResponse:
                         draft[1],
                     ],
                     argsrepr="[redacted Discord Activity interaction]",
-                    expires=120,
+                    # Interaction tokens live 15 minutes; a busy or
+                    # restarting worker must still answer within that window.
+                    expires=ACTIVITY_LAUNCH_TASK_EXPIRES_S,
                     retry=False,
                     connection=connection,
                 )

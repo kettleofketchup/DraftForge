@@ -56,7 +56,8 @@ export interface ReconnectConfig {
 }
 
 export interface ConnectionOptions {
-  protocols?: string[];
+  /** Draft served through the Discord Activity socket; credentials are read per attempt. */
+  activity?: { kind: 'hero' | 'team'; draftId: number };
   /** Callback when connection state changes */
   onStateChange?: (state: ConnectionState) => void;
   /** Telemetry hooks for observability */

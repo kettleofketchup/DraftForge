@@ -8,8 +8,27 @@ export interface ActivityCredential {
   user?: UserType;
 }
 let session: ActivityCredential | null = null;
+let refresher: (() => Promise<void>) | null = null;
+let refreshing: Promise<boolean> | null = null;
 export function setActivityCredential(value: ActivityCredential | null) {
   session = value;
+}
+/** The Activity route re-runs the Discord handshake when a socket reports 4401. */
+export function setActivityRefresher(value: (() => Promise<void>) | null) {
+  refresher = value;
+}
+/** Concurrent sockets share one re-handshake; resolves false if it failed. */
+export function refreshActivityCredential(): Promise<boolean> {
+  if (!refresher) return Promise.resolve(false);
+  refreshing ??= refresher()
+    .then(
+      () => true,
+      () => false,
+    )
+    .finally(() => {
+      refreshing = null;
+    });
+  return refreshing;
 }
 export function getActivityUser(): UserType | undefined {
   return session?.user;

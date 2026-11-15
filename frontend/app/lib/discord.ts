@@ -33,9 +33,14 @@ export function releaseDiscordSession(): void {
   }, 0);
 }
 
-export function initializeDiscord(): Promise<DraftActivitySession> {
+export function initializeDiscord({
+  force = false,
+}: { force?: boolean } = {}): Promise<DraftActivitySession> {
   clearTimeout(resetTimer);
-  if (initializedAt && Date.now() - initializedAt > SESSION_CACHE_AGE) {
+  if (
+    (force && initializedAt) ||
+    (initializedAt && Date.now() - initializedAt > SESSION_CACHE_AGE)
+  ) {
     initialization = undefined;
     initializedAt = 0;
   }

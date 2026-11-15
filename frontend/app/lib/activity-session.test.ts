@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   activityAuthorization,
   activitySocket,
+  refreshActivityCredential,
   setActivityCredential,
+  setActivityRefresher,
 } from './activity-session';
 
 afterEach(() => setActivityCredential(null));
@@ -45,5 +47,26 @@ describe('Activity credentials', () => {
     expect(activitySocket('team', 9).url).toContain(
       '/api/discord/activity/team-draft/9/',
     );
+  });
+});
+
+describe('Activity credential refresh', () => {
+  afterEach(() => setActivityRefresher(null));
+  it('shares one handshake between sockets and reports failure', async () => {
+    let finish!: () => void;
+    const refresher = vi.fn(
+      () => new Promise<void>((resolve) => (finish = resolve)),
+    );
+    setActivityRefresher(refresher);
+    const first = refreshActivityCredential();
+    const second = refreshActivityCredential();
+    finish();
+    expect(await first).toBe(true);
+    expect(await second).toBe(true);
+    expect(refresher).toHaveBeenCalledOnce();
+    setActivityRefresher(() => Promise.reject(new Error('expired')));
+    expect(await refreshActivityCredential()).toBe(false);
+    setActivityRefresher(null);
+    expect(await refreshActivityCredential()).toBe(false);
   });
 });

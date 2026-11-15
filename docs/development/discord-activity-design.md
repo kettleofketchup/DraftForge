@@ -33,8 +33,10 @@ and draft kind/ID then authenticates existing REST
 actions and the dedicated Activity WebSocket. View-level captain/staff checks
 remain authoritative; a spectator's credential does not confer captain powers.
 Credentials stay in memory. WebSockets carry them as subprotocol offers rather
-than URLs, avoiding access-log and telemetry URL exposure. The server does not
-select or echo the credential subprotocol.
+than URLs, avoiding access-log and telemetry URL exposure. The server echoes
+only the `draftactivity` marker, never the credential: browsers fail a handshake
+that offered subprotocols and received none. Rejected credentials are accepted
+and then closed with 4401 so the client can tell them apart from network errors.
 
 Website cookies remain available for normal website traffic. Activity requests
 use explicit authentication before session authentication, avoiding dependence

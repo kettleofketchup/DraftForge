@@ -8,13 +8,15 @@ from unittest.mock import AsyncMock, patch
 import requests
 from asgiref.sync import async_to_sync
 from django.test import SimpleTestCase, TestCase, override_settings
+from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.test import APIClient
 
 from app.models import CustomUser, Draft, DraftTeam, Game, HeroDraft, Team, Tournament
+from discordbot.activity_auth import authenticate_token, issue_activity_token
 from discordbot.activity_ids import decode_draft_launch
 from discordbot.activity_launch import prepare_activity_launch
 from discordbot.activity_launch_gateway import handle_draft_launch
-from discordbot.models import DraftActivityChannel
+from discordbot.models import DraftActivityChannel, DraftActivityInstance
 
 
 @override_settings(
@@ -45,7 +47,6 @@ class ActivityLaunchTests(TestCase):
         return [
             {"channel_id": channel},
             {"id": channel, "type": 2, "guild_id": "1"},
-            {"channel_id": channel},
             {"code": "invite-code"},
         ]
 
@@ -115,14 +116,6 @@ class ActivityLaunchTests(TestCase):
         self.assertFalse(DraftActivityChannel.objects.exists())
 
     @patch("discordbot.activity_launch.discord_json")
-    def test_move_during_preparation_does_not_bind_old_channel(self, api):
-        api.side_effect = self.discord_responses()[:2] + [{"channel_id": "21"}]
-        result = prepare_activity_launch("101", "hero", self.hero.pk)
-        self.assertFalse(result["success"])
-        self.assertIn("changed", result["content"])
-        self.assertFalse(DraftActivityChannel.objects.exists())
-
-    @patch("discordbot.activity_launch.discord_json")
     def test_nonvoice_or_wrong_guild_is_rejected(self, api):
         for channel in [{"type": 0, "guild_id": "1"}, {"type": 2, "guild_id": "99"}]:
             api.side_effect = [{"channel_id": "20"}, channel]
@@ -132,20 +125,61 @@ class ActivityLaunchTests(TestCase):
         self.assertFalse(DraftActivityChannel.objects.exists())
 
     @patch("discordbot.activity_launch.discord_json")
-    def test_conflicting_binding_is_never_replaced_even_after_completion(self, api):
+    def test_binding_to_unfinished_draft_is_never_replaced(self, api):
         binding = DraftActivityChannel.objects.create(
             guild_id="1", channel_id="20", team_draft=self.team_draft
         )
-        for state in ["drafting", "completed"]:
-            self.team_draft.state = state
-            self.team_draft.save()
-            api.side_effect = self.discord_responses()[:3]
-            result = prepare_activity_launch("101", "hero", self.hero.pk)
-            self.assertFalse(result["success"])
-            self.assertIn("another draft", result["content"])
-            binding.refresh_from_db()
-            self.assertEqual(binding.team_draft_id, self.team_draft.pk)
-        self.assertEqual(api.call_count, 6)
+        self.team_draft.state = "drafting"
+        self.team_draft.save()
+        api.side_effect = self.discord_responses()[:2]
+        result = prepare_activity_launch("101", "hero", self.hero.pk)
+        self.assertFalse(result["success"])
+        self.assertIn("another draft", result["content"])
+        binding.refresh_from_db()
+        self.assertEqual(binding.team_draft_id, self.team_draft.pk)
+        self.assertEqual(api.call_count, 2)
+
+    @patch("discordbot.activity_launch.discord_json")
+    def test_next_game_rebinds_channel_and_running_instance_after_completion(self, api):
+        finished = HeroDraft.objects.create(
+            game=Game.objects.create(tournament=self.tournament), state="completed"
+        )
+        binding = DraftActivityChannel.objects.create(
+            guild_id="1", channel_id="20", draft=finished
+        )
+        running = DraftActivityInstance.objects.create(
+            instance_id="running", guild_id="1", channel_id="20", draft=finished
+        )
+        elsewhere = DraftActivityInstance.objects.create(
+            instance_id="elsewhere", guild_id="1", channel_id="21", draft=finished
+        )
+        token = issue_activity_token(self.user, running)
+        api.side_effect = self.discord_responses()
+        self.assertTrue(prepare_activity_launch("101", "hero", self.hero.pk)["success"])
+        binding.refresh_from_db()
+        running.refresh_from_db()
+        elsewhere.refresh_from_db()
+        self.assertEqual(binding.draft_id, self.hero.pk)
+        self.assertEqual(running.draft_id, self.hero.pk)
+        self.assertEqual(elsewhere.draft_id, finished.pk)
+        with self.assertRaises(AuthenticationFailed):
+            authenticate_token(token, finished.pk, "hero")
+
+    @patch("discordbot.activity_launch.discord_json")
+    def test_launch_uses_bot_rate_limited_calls_without_voice_recheck(self, api):
+        api.side_effect = self.discord_responses()
+        prepare_activity_launch("101", "hero", self.hero.pk)
+        self.assertEqual(api.call_count, 3)
+        self.assertTrue(all(call.kwargs["bot"] for call in api.call_args_list))
+
+    @patch("discordbot.activity_launch.CustomUser.objects.get")
+    @patch("discordbot.activity_launch.discord_json")
+    def test_deactivated_user_is_read_without_cache(self, api, cached_get):
+        CustomUser.objects.filter(pk=self.user.pk).update(is_active=False)
+        result = prepare_activity_launch("101", "hero", self.hero.pk)
+        self.assertFalse(result["success"])
+        cached_get.assert_not_called()
+        api.assert_not_called()
 
     @patch("discordbot.activity_launch.discord_json")
     def test_discord_failure_does_not_expose_bot_token(self, api):
@@ -187,6 +221,9 @@ class ActivityLaunchTests(TestCase):
             ["9", "private-token", "101", "hero", self.hero.pk],
         )
         self.assertIn("redacted", enqueue.call_args.kwargs["argsrepr"])
+        # Outlive a busy or restarting worker but not the 15-minute token.
+        self.assertGreaterEqual(enqueue.call_args.kwargs["expires"], 10 * 60)
+        self.assertLess(enqueue.call_args.kwargs["expires"], 15 * 60)
 
     def test_generic_channel_launcher_requires_binding(self):
         from discordbot.views import handle_message_component
@@ -299,3 +336,27 @@ class ActivityLaunchGatewayTests(SimpleTestCase):
             "https://discord.com/api/v10/webhooks/9/private-token/messages/@original",
         )
         self.assertEqual(patch_response.call_args.kwargs["timeout"], 10)
+
+
+@override_settings(DISCORD_BOT_TOKEN="secret")
+class DiscordJsonTests(SimpleTestCase):
+    @patch("discordbot.activity.requests.request")
+    @patch("discordbot.activity._rate_limited_request")
+    def test_bot_calls_share_rate_limiter_and_oauth_calls_do_not(self, limited, direct):
+        from discordbot.activity import discord_json
+
+        limited.return_value.json.return_value = {"ok": True}
+        self.assertEqual(discord_json("GET", "/channels/1", bot=True), {"ok": True})
+        self.assertEqual(
+            limited.call_args.kwargs["headers"]["Authorization"], "Bot secret"
+        )
+        discord_json("GET", "/users/@me", headers={"Authorization": "Bearer t"})
+        direct.assert_called_once()
+        limited.assert_called_once()
+
+    @patch("discordbot.activity._rate_limited_request", side_effect=RuntimeError)
+    def test_exhausted_rate_limit_is_a_request_failure(self, _limited):
+        from discordbot.activity import discord_json
+
+        with self.assertRaises(requests.RequestException):
+            discord_json("GET", "/channels/1", bot=True)

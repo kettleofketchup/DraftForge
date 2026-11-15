@@ -1,10 +1,9 @@
 # Discord Activity integration review
 
 Reviewed the original integration (`adc4509` against `eb1c43e`) and the follow-up
-notification launch workflow. Four independent agents reviewed backend security,
-frontend behavior, Discord launch semantics, and deployment/testing. The primary
-agent consolidated the findings, reviewed the resulting changes and ran the
-combined regression suites.
+notification launch workflow, covering backend security, frontend behavior,
+Discord launch semantics, and deployment/testing, then re-ran the combined
+regression suites against the fixes.
 
 ## Findings and resolutions
 
@@ -18,7 +17,11 @@ combined regression suites.
 | P2 | Malformed team-action bodies and oversized IDs could reach ORM lookup before view serializer validation. | Draft-scoped authentication validates mapping-shaped bodies and positive database-range IDs before lookup; wrong kind/draft still fails closed. |
 | P2 | A delayed cookie-based login response could overwrite the verified Discord captain identity. SDK retries could also accumulate listeners or reuse stale session data. | The shared user store protects active Activity identity, SDK retries reuse one iframe SDK, and real route unmounts clear cached credentials with StrictMode-safe handling. |
 | P2 | Embedded team draft staff controls exposed actions without scoped credentials. | Undo and read-only balance queries receive explicit draft scope. Website-only draft initialization/rebuild/settings are hidden in embedded mode; existing staff checks still govern supported mutations. |
-| P2 | A stale notification could reassign a channel and join an existing Activity still pinned to another match. | Automatic binding only creates or reuses the same draft. Conflicting bindings are rejected even after completion; finished notifications cannot reserve an unassigned channel. Organizers stop the old instance before explicit reassignment. |
+| P2 | A stale notification could reassign a channel and join an existing Activity still pinned to another match. | Automatic binding never replaces an unfinished draft, and finished notifications cannot reserve a channel. A channel whose draft is completed or abandoned is rebound by the next game's notification, and the instance running there moves with it so joiners never land in the finished draft. |
+| P1 | The Activity socket offered a credential subprotocol but the server echoed none, so browsers (including Discord's client) failed every handshake. | The server echoes the `draftactivity` marker on accept. Rejected credentials are accepted then closed with 4401 rather than failing the handshake. |
+| P2 | A rejected credential was retried unchanged until the reconnect limit. | On 4401 the client repeats the Discord handshake once, shared across sockets, and reconnects with the new credential. |
+| P2 | Deferred HTTP launches expired after 120 seconds, leaving "thinking…" unresolved when the worker was busy or restarting. | The task now lives 14 minutes, inside the 15-minute interaction token lifetime. |
+| P3 | Launch preparation read voice state twice, bypassed the bot-wide rate limiter and read the user through the query cache. | One voice-state read; bot calls go through the shared token bucket; user lookups bypass cacheops. |
 | P2 | Documented manual setup could bind a production/default database instead of the development database. The declared Discord dependency also permitted versions lacking native launch support. | Setup loads the same dev environment as migration/stack commands. The dependency now directly requires discord.py >=2.6.4; its locked implementation version is unchanged. |
 
 The review also checked that the gateway and Celery processes remain free of
@@ -56,4 +59,4 @@ Discord requires the user to open the invite; a DM cannot silently launch into a
 arbitrary voice channel. The destination reflects the verified channel when the
 invite is created. A user who subsequently moves channels should click the
 original notification again. Activity credentials expire after twelve hours;
-reopening obtains a new credential rather than automatically renewing one.
+an open Activity then repeats the Discord handshake to obtain a new one.

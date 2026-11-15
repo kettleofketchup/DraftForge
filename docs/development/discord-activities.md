@@ -79,11 +79,11 @@ never joins voice. The bot needs View Channel, Connect and Create Invite
 permissions in the destination channel. Joining another voice channel after an
 invite is generated does not retarget it; click the original notification again.
 
-An assigned channel cannot be silently taken over by another draft, including a
-completed draft's old binding. Finish/close the old Activity, then have an
-organizer explicitly reconfigure the channel for the next match. Multiple
-channels can share the same hero or team draft. An existing Activity remains
-pinned to its original draft until it is closed and a new instance is started.
+A channel assigned to an unfinished draft cannot be taken over by another
+draft. Once that draft is completed or abandoned, the next game's notification
+rebinds the channel, and an Activity still running there moves on with it: its
+sockets close with 4401, the client repeats the Discord handshake and opens the
+new draft. Multiple channels can share the same hero or team draft.
 
 The generic Components V2 **Launch Draft** message is for a configured voice
 channel's own chat; it retains the native type-12 callback. Notification DMs use
@@ -113,9 +113,10 @@ player picks, and mixed website/Activity participants. No new timer or draft
 state lives in Discord. The existing database and WebSocket broadcasts are
 shared across clients.
 
-Activity credentials expire after twelve hours; reopen the Activity to obtain
-fresh credentials. The first implementation does not automatically renew an
-open session. Delete an instance mapping to revoke its credentials; disable
+Activity credentials expire after twelve hours. When a socket is rejected with
+4401 (expiry, revocation or the channel moving to the next draft), the client
+repeats the Discord handshake once and reconnects with the new credential; if
+that fails it stops retrying and asks the user to reopen the Activity. Delete an instance mapping to revoke its credentials; disable
 `DISCORD_ACTIVITY_ENABLED` to reject new sessions and subsequent authenticated
 REST/socket handshakes. Open Activity sockets also revalidate their credentials
 periodically and close at credential expiry or after revocation is detected.

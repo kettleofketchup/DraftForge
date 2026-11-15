@@ -122,4 +122,13 @@ describe('Discord handshake', () => {
     expect(mocks.post).toHaveBeenCalledTimes(2);
     expect(mocks.construct).toHaveBeenCalledOnce();
   });
+  it('forces a fresh credential exchange for a rejected socket credential', async () => {
+    const { initializeDiscord } = await import('./discord');
+    await initializeDiscord();
+    expect(await initializeDiscord()).toBeDefined();
+    expect(mocks.post).toHaveBeenCalledOnce();
+    await initializeDiscord({ force: true });
+    expect(mocks.post).toHaveBeenCalledTimes(2);
+    expect(mocks.construct).toHaveBeenCalledOnce();
+  });
 });

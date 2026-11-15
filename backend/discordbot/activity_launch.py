@@ -23,7 +23,9 @@ from app.auth import InternalServiceAuth, IsInternalService
 from app.models import CustomUser, Draft, HeroDraft
 from app.permissions_org import can_edit_tournament
 from discordbot.activity import discord_json
-from discordbot.models import DraftActivityChannel
+from discordbot.models import DraftActivityChannel, DraftActivityInstance
+
+FINISHED_STATES = {"completed", "abandoned"}
 
 
 class LaunchInput(serializers.Serializer):
@@ -39,7 +41,7 @@ def _failure(content: str) -> dict[str, Any]:
 def _bind_channel(
     guild_id: str, channel_id: str, kind: str, draft: HeroDraft | Draft
 ) -> bool:
-    """Never replace another draft because somebody clicked a stale DM."""
+    """Reuse a channel for the next draft only once its current draft has finished."""
     defaults = {
         "guild_id": guild_id,
         "draft": draft if kind == "hero" else None,
@@ -51,7 +53,11 @@ def _bind_channel(
         binding, _ = DraftActivityChannel.objects.get_or_create(
             channel_id=channel_id, defaults=defaults
         )
-        binding = DraftActivityChannel.objects.select_for_update().get(pk=binding.pk)
+        binding = (
+            DraftActivityChannel.objects.select_for_update()
+            .select_related("draft", "team_draft")
+            .get(pk=binding.pk)
+        )
         same = (
             binding.draft_id == draft.pk
             if kind == "hero"
@@ -61,10 +67,24 @@ def _bind_channel(
             return False
         if same:
             return True
-        # A completed draft can still have a live Discord instance pinned to
-        # it. Only an operator who has stopped that instance may reconfigure
-        # the channel; a notification must never silently redirect a channel.
-        return False
+        current = binding.draft or binding.team_draft
+        if current is None or current.state not in FINISHED_STATES:
+            return False
+        binding.draft = defaults["draft"]
+        binding.team_draft = defaults["team_draft"]
+        binding.save(update_fields=["draft", "team_draft"])
+        # Discord joins the instance already running in this channel, so move
+        # it on too; tokens signed for the finished draft stop validating and
+        # open Activities re-authenticate into the new draft.
+        pinned = (
+            {"draft": current}
+            if isinstance(current, HeroDraft)
+            else {"team_draft": current}
+        )
+        DraftActivityInstance.objects.filter(
+            guild_id=guild_id, channel_id=channel_id, **pinned
+        ).update(draft=defaults["draft"], team_draft=defaults["team_draft"])
+        return True
 
 
 def prepare_activity_launch(
@@ -75,7 +95,10 @@ def prepare_activity_launch(
             "Discord Activities are disabled. Open the draft in your browser."
         )
     try:
-        user = CustomUser.objects.get(discordId=discord_user_id, is_active=True)
+        # Bypass cacheops: a stale active-user entry must not reserve channels.
+        user = CustomUser.objects.nocache().get(
+            discordId=discord_user_id, is_active=True
+        )
         if kind == "hero":
             draft = HeroDraft.objects.select_related(
                 "game__tournament__league__organization"
@@ -126,12 +149,11 @@ def prepare_activity_launch(
         or not settings.DISCORD_BOT_TOKEN
     ):
         return _failure("Discord Activities are not configured for this server yet.")
-    headers = {"Authorization": f"Bot {settings.DISCORD_BOT_TOKEN}"}
     try:
         voice = discord_json(
             "GET",
             f"/guilds/{guild_id}/voice-states/{discord_user_id}",
-            headers=headers,
+            bot=True,
             timeout=2,
         )
         channel_id = str(voice.get("channel_id") or "")
@@ -139,24 +161,10 @@ def prepare_activity_launch(
             return _failure(
                 "Join your team's voice channel in this draft's server, then click Launch / Join Activity again."
             )
-        channel = discord_json(
-            "GET", f"/channels/{channel_id}", headers=headers, timeout=2
-        )
+        channel = discord_json("GET", f"/channels/{channel_id}", bot=True, timeout=2)
         if channel.get("type") != 2 or str(channel.get("guild_id")) != guild_id:
             return _failure(
                 "Join a voice channel in this draft's server, then try again."
-            )
-        # Recheck immediately before binding/invite creation; cached gateway
-        # voice state is never sufficient to choose another channel for a user.
-        current = discord_json(
-            "GET",
-            f"/guilds/{guild_id}/voice-states/{discord_user_id}",
-            headers=headers,
-            timeout=2,
-        )
-        if str(current.get("channel_id") or "") != channel_id:
-            return _failure(
-                "Your voice channel changed. Click Launch / Join Activity again."
             )
         if not _bind_channel(guild_id, channel_id, kind, draft):
             return _failure(
@@ -165,7 +173,7 @@ def prepare_activity_launch(
         invite = discord_json(
             "POST",
             f"/channels/{channel_id}/invites",
-            headers=headers,
+            bot=True,
             timeout=2,
             json={
                 "target_type": 2,

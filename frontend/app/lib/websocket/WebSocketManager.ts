@@ -1,4 +1,3 @@
-import { activitySocket } from '~/lib/activity-session';
 /**
  * WebSocketManager - Singleton for managing WebSocket connections
  *
@@ -6,6 +5,10 @@ import { activitySocket } from '~/lib/activity-session';
  * message routing to subscribers, and send queue management.
  */
 
+import {
+  activitySocket,
+  refreshActivityCredential,
+} from '~/lib/activity-session';
 import { getLogger } from '~/lib/logger';
 import { Sentry } from '~/lib/sentry';
 import type {
@@ -17,6 +20,9 @@ import type {
 } from './types';
 
 const log = getLogger('WebSocketManager');
+const ACTIVITY_AUTH_CLOSE_CODE = 4401;
+const ACTIVITY_SESSION_ENDED =
+  'Discord session ended. Close and reopen the Activity.';
 
 // Reconnection defaults
 const DEFAULT_MAX_ATTEMPTS = 10;
@@ -50,13 +56,12 @@ class WebSocketManager {
       /^\/api\/(herodraft|draft)\/(\d+)\/$/,
     );
     if (draft) {
-      const activity = activitySocket(
-        draft[1] === 'herodraft' ? 'hero' : 'team',
-        Number(draft[2]),
-      );
+      const kind = draft[1] === 'herodraft' ? 'hero' : 'team';
+      const draftId = Number(draft[2]);
+      const activity = activitySocket(kind, draftId);
       if (activity.protocols) {
         url = activity.url;
-        options = { ...options, protocols: activity.protocols };
+        options = { ...options, activity: { kind, draftId } };
       }
     }
 
@@ -348,7 +353,19 @@ class WebSocketManager {
       `Connecting to ${url} (attempt ${conn.state.reconnectAttempts + 1})`,
     );
 
-    const ws = new WebSocket(url, conn.options.protocols);
+    let protocols: string[] | undefined;
+    if (conn.options.activity) {
+      const { kind, draftId } = conn.options.activity;
+      protocols = activitySocket(kind, draftId).protocols;
+      if (!protocols) {
+        this.updateState(conn, {
+          status: 'disconnected',
+          error: ACTIVITY_SESSION_ENDED,
+        });
+        return;
+      }
+    }
+    const ws = new WebSocket(url, protocols);
     conn.ws = ws;
 
     ws.onopen = () => {
@@ -451,6 +468,11 @@ class WebSocketManager {
         reason: event.reason,
       });
 
+      if (event.code === ACTIVITY_AUTH_CLOSE_CODE && conn.options.activity) {
+        this.reauthenticateActivity(conn, thisConnectionId);
+        return;
+      }
+
       // Attempt reconnect
       this.scheduleReconnect(conn);
     };
@@ -471,6 +493,29 @@ class WebSocketManager {
         message: 'Connection error',
       });
     };
+  }
+
+  /** Retrying a rejected Activity credential can never succeed; get a new one first. */
+  private reauthenticateActivity(
+    conn: WebSocketConnection,
+    connectionId: number,
+  ): void {
+    this.updateState(conn, {
+      status: 'reconnecting',
+      error: 'Refreshing Discord session...',
+    });
+    void refreshActivityCredential().then((refreshed) => {
+      if (conn.connectionId !== connectionId || conn.ws) return;
+      if (!refreshed) {
+        this.updateState(conn, {
+          status: 'disconnected',
+          error: ACTIVITY_SESSION_ENDED,
+        });
+        return;
+      }
+      this.updateState(conn, { reconnectAttempts: 0 });
+      this.doConnect(conn.url);
+    });
   }
 
   private scheduleReconnect(conn: WebSocketConnection): void {

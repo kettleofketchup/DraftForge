@@ -461,9 +461,40 @@ class ActivitySocketDatabaseTests(TransactionTestCase):
             f"/draft/{self.draft_pk}/",
             subprotocols=["draftactivity", self.token],
         )
-        connected, _ = await socket.connect(timeout=5)
+        connected, subprotocol = await socket.connect(timeout=5)
         self.assertTrue(connected)
+        # Browsers fail a handshake that echoes none of the offered protocols.
+        self.assertEqual(subprotocol, "draftactivity")
         self.assertEqual(await socket.receive_from(), str(self.user_pk))
+        await socket.disconnect()
+
+    async def test_rejected_credential_closes_with_4401_after_handshake(self):
+        from channels.routing import URLRouter
+        from channels.testing import WebsocketCommunicator
+        from django.urls import path
+
+        application = AsyncMock()
+        router = URLRouter(
+            [
+                path(
+                    "draft/<int:draft_id>/",
+                    ActivitySocketMiddleware(application, "hero"),
+                )
+            ]
+        )
+        socket = WebsocketCommunicator(
+            router,
+            f"/draft/{self.draft_pk}/",
+            subprotocols=["draftactivity", "forged"],
+        )
+        connected, subprotocol = await socket.connect(timeout=5)
+        self.assertTrue(connected)
+        self.assertEqual(subprotocol, "draftactivity")
+        self.assertEqual(
+            await socket.receive_output(timeout=5),
+            {"type": "websocket.close", "code": 4401},
+        )
+        application.assert_not_awaited()
         await socket.disconnect()
 
     async def _open_guarded_socket(self, token=None):

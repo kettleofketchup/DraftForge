@@ -20,6 +20,7 @@ from app.models import CustomUser
 from app.serializers import UserSerializer
 from discordbot.activity_auth import issue_activity_token
 from discordbot.models import DraftActivityChannel, DraftActivityInstance
+from discordbot.utils import DISCORD_API_BASE, _get_headers, _rate_limited_request
 
 
 class ActivityInput(serializers.Serializer):
@@ -27,9 +28,20 @@ class ActivityInput(serializers.Serializer):
     instance_id = serializers.RegexField(r"^[A-Za-z0-9_-]+$", max_length=100)
 
 
-def discord_json(method: str, path: str, **kwargs: Any) -> dict[str, Any]:
+def discord_json(
+    method: str, path: str, *, bot: bool = False, **kwargs: Any
+) -> dict[str, Any]:
+    """Bot calls share the bot-wide rate limiter; OAuth calls carry their own token."""
     kwargs.setdefault("timeout", 10)
-    response = requests.request(method, f"https://discord.com/api/v10{path}", **kwargs)
+    url = f"{DISCORD_API_BASE}{path}"
+    if bot:
+        kwargs["headers"] = {**_get_headers(), **kwargs.get("headers", {})}
+        try:
+            response = _rate_limited_request(method, url, **kwargs)
+        except RuntimeError as exc:
+            raise requests.ConnectionError("Discord rate limit") from exc
+    else:
+        response = requests.request(method, url, **kwargs)
     response.raise_for_status()
     return response.json()
 
@@ -39,7 +51,7 @@ def resolve_instance(instance_id: str, discord_user_id: str) -> DraftActivityIns
     instance = discord_json(
         "GET",
         f"/applications/{settings.SOCIAL_AUTH_DISCORD_KEY}/activity-instances/{instance_id}",
-        headers={"Authorization": f"Bot {settings.DISCORD_BOT_TOKEN}"},
+        bot=True,
     )
     if str(discord_user_id) not in {str(p) for p in instance["users"]}:
         raise AuthenticationFailed("You are not a participant in this Activity.")
@@ -94,7 +106,9 @@ def activity_session(request: Request) -> Response:
             "/users/@me",
             headers={"Authorization": f"Bearer {oauth['access_token']}"},
         )
-        user = CustomUser.objects.get(discordId=identity["id"], is_active=True)
+        user = CustomUser.objects.nocache().get(
+            discordId=identity["id"], is_active=True
+        )
         instance = resolve_instance(
             payload.validated_data["instance_id"], identity["id"]
         )

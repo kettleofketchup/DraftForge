@@ -3,7 +3,10 @@ import api from '~/components/api/axios';
 import { HeroDraftModal } from '~/components/herodraft/HeroDraftModal';
 import { DraftModal } from '~/components/teamdraft/draftModal';
 import type { TournamentType } from '~/index';
-import { setActivityCredential } from '~/lib/activity-session';
+import {
+  setActivityCredential,
+  setActivityRefresher,
+} from '~/lib/activity-session';
 import {
   initializeDiscord,
   releaseDiscordSession,
@@ -19,8 +22,8 @@ export default function DraftActivity() {
 
   useEffect(() => {
     let cancelled = false;
-    async function start() {
-      const result = await initializeDiscord();
+    async function start(force = false) {
+      const result = await initializeDiscord({ force });
       if (cancelled) return;
       setActivityCredential(result);
       useUserStore.getState().setCurrentUser(result.user);
@@ -37,6 +40,9 @@ export default function DraftActivity() {
       }
       setSession(result);
     }
+    // Sockets call this on 4401 (expiry, revocation, or the channel moving on
+    // to the next game's draft) so the Activity recovers without a relaunch.
+    setActivityRefresher(() => start(true));
     start().catch(() => {
       if (!cancelled)
         setError(
@@ -45,6 +51,7 @@ export default function DraftActivity() {
     });
     return () => {
       cancelled = true;
+      setActivityRefresher(null);
       setActivityCredential(null);
       releaseDiscordSession();
     };
@@ -63,5 +70,12 @@ export default function DraftActivity() {
       </div>
     );
   if (session.kind === 'team') return <DraftModal embedded />;
-  return <HeroDraftModal draftId={session.draft_id} open onClose={() => {}} />;
+  return (
+    <HeroDraftModal
+      key={session.draft_id}
+      draftId={session.draft_id}
+      open
+      onClose={() => {}}
+    />
+  );
 }
