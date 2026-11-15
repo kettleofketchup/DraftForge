@@ -1,2 +1,0 @@
-- Promotion and contributions now show a member's site nickname, falling back to username, like the rest of the site. This applies to the candidate list, compose panel, "Messaged by" line, leaderboard and the `{player}`/`{promoter}` placeholders, which previously preferred Discord names.
-- People who declined an event (or whose signup was rejected) no longer appear as promotion candidates for it, even with the signed-up filter turned off.

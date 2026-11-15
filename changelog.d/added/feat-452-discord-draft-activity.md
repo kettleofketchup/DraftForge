@@ -1,2 +1,0 @@
-- Add a Discord Activity entry point for existing hero and team drafts, with verified Discord identity, persistent channel bindings and shared real-time draft state.
-- Add Launch / Join Activity buttons to hero and team draft notifications, resolving the user's current voice channel and returning a short-lived Activity invite with a browser fallback.
