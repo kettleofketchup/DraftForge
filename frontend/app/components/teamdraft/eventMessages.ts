@@ -1,6 +1,10 @@
+import { DisplayName } from '~/components/user/avatar';
+import { useUserCacheStore } from '~/store/userCacheStore';
 import type {
+  CaptainAssignedPayload,
   CaptainPresencePayload,
   CaptainReadyPayload,
+  CaptainRef,
   DraftEvent,
   DraftEventType,
   DraftForceStartedPayload,
@@ -11,12 +15,31 @@ import type {
   PickSkippedPayload,
   PickSkipUnavailablePayload,
   PickTimedOutPayload,
+  PickUndonePayload,
   PlayerPickedPayload,
   RoundStartedPayload,
   TieRollPayload,
 } from '~/types/draftEvent';
 
-export function getEventMessage(event: DraftEvent): string {
+export type NameResolver = (
+  id: number | null | undefined,
+  fallback: string | null | undefined,
+) => string;
+
+export const cachedUserName: NameResolver = (id, fallback) => {
+  const user =
+    id != null ? useUserCacheStore.getState().getById(id) : undefined;
+  return user ? DisplayName(user) : (fallback ?? '?');
+};
+
+function captainName(p: CaptainRef, name: NameResolver): string {
+  return name(p.captain_id, p.captain_name);
+}
+
+export function getEventMessage(
+  event: DraftEvent,
+  name: NameResolver = cachedUserName,
+): string {
   switch (event.event_type) {
     case 'draft_started':
       return 'Draft has started!';
@@ -24,21 +47,23 @@ export function getEventMessage(event: DraftEvent): string {
       return 'Draft completed!';
     case 'player_picked': {
       const p = event.payload as PlayerPickedPayload;
-      return `${p.captain_name} picked ${p.picked_name} (Pick ${p.pick_number})`;
+      return `${name(p.captain_id, p.captain_name)} picked ${name(p.picked_id, p.picked_name)} (Pick ${p.pick_number})`;
     }
     case 'tie_roll': {
       const p = event.payload as TieRollPayload;
       const lastRound = p.roll_rounds?.[p.roll_rounds.length - 1] ?? [];
       const rolls = lastRound.map((r) => r.roll).join(' vs ');
-      return rolls ? `Tie resolved! ${p.winner_name} wins (${rolls})` : `Tie resolved! ${p.winner_name} wins`;
+      return rolls
+        ? `Tie resolved! ${p.winner_name} wins (${rolls})`
+        : `Tie resolved! ${p.winner_name} wins`;
     }
     case 'captain_assigned': {
-      const p = event.payload as { captain_name: string };
-      return `${p.captain_name} is picking next`;
+      const p = event.payload as CaptainAssignedPayload;
+      return `${name(p.captain_id, p.captain_name)} is picking next`;
     }
     case 'pick_undone': {
-      const p = event.payload as { undone_player_name: string; pick_number: number };
-      return `Pick ${p.pick_number} undone (${p.undone_player_name})`;
+      const p = event.payload as PickUndonePayload;
+      return `Pick ${p.pick_number} undone (${name(p.undone_player_id, p.undone_player_name)})`;
     }
     case 'draft_lobby_opened': {
       const p = event.payload as DraftLobbyOpenedPayload;
@@ -46,49 +71,53 @@ export function getEventMessage(event: DraftEvent): string {
       return `Lobby opened — ${p.grace_time_ms / 1000}s grace, ${p.reserve_time_ms / 1000}s reserve`;
     }
     case 'captain_ready':
-      return `${(event.payload as CaptainReadyPayload).captain_name} is ready`;
+      return `${captainName(event.payload as CaptainReadyPayload, name)} is ready`;
     case 'captain_unready':
-      return `${(event.payload as CaptainReadyPayload).captain_name} is not ready`;
+      return `${captainName(event.payload as CaptainReadyPayload, name)} is not ready`;
     case 'captain_connected':
-      return `${(event.payload as CaptainPresencePayload).captain_name} connected`;
+      return `${captainName(event.payload as CaptainPresencePayload, name)} connected`;
     case 'captain_disconnected':
-      return `${(event.payload as CaptainPresencePayload).captain_name} disconnected`;
-    case 'draft_started_by_staff':
-      return `Draft started by ${(event.payload as DraftStartedByStaffPayload).actor_name}`;
+      return `${captainName(event.payload as CaptainPresencePayload, name)} disconnected`;
+    case 'draft_started_by_staff': {
+      const p = event.payload as DraftStartedByStaffPayload;
+      return `Draft started by ${name(p.actor_id, p.actor_name)}`;
+    }
     case 'draft_force_started': {
       const p = event.payload as DraftForceStartedPayload;
-      return `Draft force-started by ${p.actor_name} (${p.not_ready.length} not ready)`;
+      return `Draft force-started by ${name(p.actor_id, p.actor_name)} (${p.not_ready.length} not ready)`;
     }
     case 'round_started': {
       const p = event.payload as RoundStartedPayload;
-      return `Pick #${p.pick_number}: ${p.captain_name} is on the clock`;
+      return `Pick #${p.pick_number}: ${captainName(p, name)} is on the clock`;
     }
     case 'draft_paused': {
       const p = event.payload as DraftPausedPayload;
       return p.reason === 'manual'
-        ? `Draft paused by ${p.paused_by_name}`
-        : `Draft paused — ${p.captain_name} disconnected`;
+        ? `Draft paused by ${name(p.paused_by_id, p.paused_by_name)}`
+        : `Draft paused — ${captainName(p, name)} disconnected`;
     }
     case 'draft_resumed':
       return 'Resuming draft…';
     case 'pick_timed_out': {
       const p = event.payload as PickTimedOutPayload;
-      return `${p.captain_name} ran out of time on pick #${p.pick_number}`;
+      return `${captainName(p, name)} ran out of time on pick #${p.pick_number}`;
     }
     case 'pick_skipped': {
       const p = event.payload as PickSkippedPayload;
-      const base = `${p.skipped_captain_name} ran out of time — ${p.next_captain_name} is up`;
+      const skipped = name(p.skipped_captain_id, p.skipped_captain_name);
+      const base = `${skipped} ran out of time — ${name(p.next_captain_id, p.next_captain_name)} is up`;
       return p.deferred_to_pick_number === null
         ? base
-        : `${base}, ${p.skipped_captain_name} picks at #${p.deferred_to_pick_number}`;
+        : `${base}, ${skipped} picks at #${p.deferred_to_pick_number}`;
     }
     case 'pick_skip_unavailable': {
       const p = event.payload as PickSkipUnavailablePayload;
-      return `${p.captain_name} ran out of time — waiting for ${p.captain_name} or staff to pick`;
+      const captain = captainName(p, name);
+      return `${captain} ran out of time — waiting for ${captain} or staff to pick`;
     }
     case 'draft_options_changed': {
       const p = event.payload as DraftOptionsChangedPayload;
-      const who = p.changed_by_name ?? 'Staff';
+      const who = name(p.changed_by_id, p.changed_by_name ?? 'Staff');
       if (!p.timer_enabled) return `${who} turned the pick clock off`;
       return `${who} turned the pick clock on — ${p.grace_time_ms / 1000}s grace, ${p.reserve_time_ms / 1000}s reserve`;
     }
@@ -144,7 +173,10 @@ export function getEventIcon(eventType: DraftEventType): string {
   }
 }
 
-export function getEventToast(event: DraftEvent): string | null {
+export function getEventToast(
+  event: DraftEvent,
+  name: NameResolver = cachedUserName,
+): string | null {
   switch (event.event_type) {
     case 'draft_started':
     case 'draft_completed':
@@ -156,9 +188,11 @@ export function getEventToast(event: DraftEvent): string | null {
     case 'draft_started_by_staff':
     case 'draft_force_started':
     case 'draft_options_changed':
-      return getEventMessage(event);
+      return getEventMessage(event, name);
     case 'captain_disconnected':
-      return (event.payload as CaptainPresencePayload).is_active_captain ? getEventMessage(event) : null;
+      return (event.payload as CaptainPresencePayload).is_active_captain
+        ? getEventMessage(event, name)
+        : null;
     default:
       return null;
   }
