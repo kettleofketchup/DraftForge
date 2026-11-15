@@ -21,6 +21,7 @@ import { TooltipProvider } from '~/components/ui/tooltip';
 import { activityEntryPath } from '~/lib/activity-entry';
 import { getLogger } from '~/lib/logger';
 import { Sentry } from '~/lib/sentry';
+import { resolveSessionHint } from '~/lib/sessionHint';
 import type { Route } from './+types/root';
 import './app.css';
 import ResponsiveAppBar from './components/navbar/navbar';
@@ -37,8 +38,15 @@ export async function loader({ request }: LoaderFunctionArgs) {
   // wiring) out of the client bundle.
   const { resolveRequestLocale } = await import('~/i18n/i18n.server');
   const { locale, setCookie } = await resolveRequestLocale(request);
-  if (!setCookie) return { locale };
-  return data({ locale }, { headers: { 'Set-Cookie': setCookie } });
+  const sessionHint = resolveSessionHint(
+    request.headers.get('Cookie'),
+    new URL(request.url).pathname,
+  );
+  if (!setCookie) return { locale, sessionHint };
+  return data(
+    { locale, sessionHint },
+    { headers: { 'Set-Cookie': setCookie } },
+  );
 }
 
 export const meta: Route.MetaFunction = () => [

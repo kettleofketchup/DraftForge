@@ -186,11 +186,19 @@ just test::run 'python manage.py test app.tests -v 2'         # one package
 just test::run 'python manage.py test app.tests.test_bracket -v 2'  # one module
 ```
 
-The `Backend tests` job in `.github/workflows/playwright.yml` runs
-`python manage.py test` with no labels. `BackendDiscoverRunner` (`backend/backend/test_runner.py`)
-anchors discovery at `backend/`, so every `test*.py` module in a package
-(a directory with `__init__.py`) under `backend/` runs, including the top-level
-`backend/tests/` package. New test modules are picked up without editing the workflow.
+`BackendDiscoverRunner` (`backend/backend/test_runner.py`) anchors discovery at
+`backend/`, so an unlabelled `python manage.py test` runs every `test*.py` module in a
+package (a directory with `__init__.py`) under `backend/`, including the top-level
+`backend/tests/` package.
+
+CI splits that run across two parallel `Backend tests (<group>)` jobs in
+`.github/workflows/playwright.yml`: `app` runs the `app` package, and `rest` runs every
+other top-level package. `just ci::backend-test-labels <group>` prints a group's labels,
+so a new app or test module is picked up without editing the workflow. A `test*.py`
+directly in `backend/` fails the recipe, because no group would run it.
+
+Vitest, the promotion fixture check and the slot guards run in the separate
+`Unit tests (Vitest, slot guards)` job, on the runner without the Docker stack.
 
 `just py::test` runs the same modules with pytest on the host (`backend/pytest.ini`,
 `backend/conftest.py`): same temp-file test DB and `DOTA_LOBBY_*` defaults as
