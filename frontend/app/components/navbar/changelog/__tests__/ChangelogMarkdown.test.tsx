@@ -90,9 +90,7 @@ describe('ChangelogMarkdown', () => {
       <ChangelogMarkdown markdown={'- one\n- two'} headingOffset={1} />,
     );
     const before = container.querySelector('li');
-    rerender(
-      <ChangelogMarkdown markdown={'- one\n- two'} headingOffset={1} />,
-    );
+    rerender(<ChangelogMarkdown markdown={'- one\n- two'} headingOffset={1} />);
     expect(container.querySelector('li')).toBe(before);
   });
 
