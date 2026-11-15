@@ -1,1 +1,0 @@
-- The organization page no longer refetches the organization every time you switch tabs, or when it moves you off a tab you cannot see.
