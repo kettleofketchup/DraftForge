@@ -150,6 +150,11 @@ def handle_message_component(data: dict) -> JsonResponse:
         discord_username=username,
     )
 
+    if custom_id == "draft_activity:launch" and getattr(
+        settings, "DISCORD_ACTIVITY_ENABLED", False
+    ):
+        return JsonResponse({"type": 12})
+
     # Acknowledge the interaction
     return JsonResponse(
         {

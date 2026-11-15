@@ -5,7 +5,11 @@
  * and Zustand store integration.
  */
 
-export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'reconnecting';
+export type ConnectionStatus =
+  | 'disconnected'
+  | 'connecting'
+  | 'connected'
+  | 'reconnecting';
 
 export interface ConnectionState {
   status: ConnectionStatus;
@@ -52,6 +56,7 @@ export interface ReconnectConfig {
 }
 
 export interface ConnectionOptions {
+  protocols?: string[];
   /** Callback when connection state changes */
   onStateChange?: (state: ConnectionState) => void;
   /** Telemetry hooks for observability */

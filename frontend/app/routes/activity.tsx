@@ -1,0 +1,62 @@
+import { useEffect, useState } from 'react';
+import api from '~/components/api/axios';
+import { HeroDraftModal } from '~/components/herodraft/HeroDraftModal';
+import { DraftModal } from '~/components/teamdraft/draftModal';
+import type { TournamentType } from '~/index';
+import { setActivityCredential } from '~/lib/activity-session';
+import { initializeDiscord, type DraftActivitySession } from '~/lib/discord';
+import { hydrateTournament } from '~/lib/hydrateTournament';
+import { useTournamentStore } from '~/store/tournamentStore';
+import { useUserStore } from '~/store/userStore';
+
+export default function DraftActivity() {
+  const [session, setSession] = useState<DraftActivitySession | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function start() {
+      const result = await initializeDiscord();
+      if (cancelled) return;
+      setActivityCredential(result);
+      useUserStore.getState().setCurrentUser(result.user);
+      if (result.kind === 'team') {
+        const { data } = await api.get(`/tournaments/${result.tournament_id}/`);
+        if (cancelled) return;
+        const tournament = hydrateTournament(data) as TournamentType;
+        if (!tournament.draft || tournament.draft.pk !== result.draft_id) {
+          throw new Error('The configured team draft is unavailable.');
+        }
+        useUserStore.getState().setTournament(tournament);
+        useUserStore.getState().setDraft(tournament.draft);
+        useTournamentStore.getState().setLive(true);
+      }
+      setSession(result);
+    }
+    start().catch(() => {
+      if (!cancelled)
+        setError(
+          'Could not connect. Check that your Discord account is linked and this voice channel has a draft configured, then reopen the Activity.',
+        );
+    });
+    return () => {
+      cancelled = true;
+      setActivityCredential(null);
+    };
+  }, []);
+
+  if (error)
+    return (
+      <div role="alert" data-testid="activity-error" className="p-6">
+        {error}
+      </div>
+    );
+  if (!session)
+    return (
+      <div role="status" data-testid="activity-connecting" className="p-6">
+        Connecting to Discord…
+      </div>
+    );
+  if (session.kind === 'team') return <DraftModal />;
+  return <HeroDraftModal draftId={session.draft_id} open onClose={() => {}} />;
+}

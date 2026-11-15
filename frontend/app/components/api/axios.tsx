@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { activityAuthorization } from '~/lib/activity-session';
 import { Sentry } from '~/lib/sentry';
 
 import {
@@ -31,6 +32,8 @@ export const api = axios.create({
 });
 
 api.interceptors.request.use((config) => {
+  const activityAuth = activityAuthorization(config.url || '');
+  if (activityAuth) config.headers.Authorization = activityAuth;
   const method = config.method?.toUpperCase();
   const needsCSRF = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method || '');
 

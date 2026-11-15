@@ -28,6 +28,7 @@ def _env_bool(key, default=False):
 # When TEST=true, sync_send_dm only sends DMs to TEST_DISCORD_USER_ID and
 # returns fake-success for everyone else (so recipient_count > 0 in tests
 # without spamming real users).
+DISCORD_ACTIVITY_ENABLED = _env_bool("DISCORD_ACTIVITY_ENABLED")
 TEST = _env_bool("TEST")
 RELEASE = _env_bool("RELEASE")
 TEST_DISCORD_USER_ID = os.environ.get("TEST_DISCORD_USER_ID", "243497113906970625")

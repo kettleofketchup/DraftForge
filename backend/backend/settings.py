@@ -43,6 +43,7 @@ DISCORD_BOT_TOKEN = os.environ.get("DISCORD_BOT_TOKEN")
 DISCORD_GUILD_ID = 734185035623825559
 DISCORD_ADMIN_CHANNEL_ID = os.environ.get("DISCORD_ADMIN_CHANNEL_ID")
 DISCORD_PUBLIC_KEY = os.environ.get("DISCORD_PUBLIC_KEY")
+DISCORD_ACTIVITY_ENABLED = env_bool("DISCORD_ACTIVITY_ENABLED")
 DFLOGO_EMOJI_ID = os.environ.get("DFLOGO_EMOJI_ID")
 SITE_URL = os.environ.get("SITE_URL", "https://localhost")
 
@@ -166,6 +167,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # Django REST Framework — internal service token accepted globally alongside session auth
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
+        "discordbot.activity_auth.ActivityAuthentication",
         "rest_framework.authentication.SessionAuthentication",
         "app.auth.InternalServiceAuth",
     ],

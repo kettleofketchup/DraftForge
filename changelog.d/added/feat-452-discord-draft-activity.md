@@ -1,0 +1,1 @@
+- Add a Discord Activity entry point for existing hero and team drafts, with verified Discord identity, persistent channel bindings and shared real-time draft state.

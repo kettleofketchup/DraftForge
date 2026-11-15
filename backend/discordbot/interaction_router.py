@@ -44,6 +44,19 @@ async def _reject_bad_custom_id(
 async def route_component_interaction(
     interaction: discord.Interaction, custom_id: str
 ) -> None:
+    if custom_id == "draft_activity:launch":
+        # The gateway process has no ORM. Channel resolution happens in Django
+        # after the SDK exchanges an OAuth code and verifies the instance.
+        from django.conf import settings
+
+        if getattr(settings, "DISCORD_ACTIVITY_ENABLED", False):
+            await interaction.response.launch_activity()
+        else:
+            await interaction.response.send_message(
+                "Discord Activities are disabled.", ephemeral=True
+            )
+        return
+
     # RSVP buttons are posted as raw dicts (discordbot/utils.py), never
     # handed to discord.py as a ui.View, so they are reconstructed here
     # from the typed custom-id on every interaction.
