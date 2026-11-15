@@ -2149,8 +2149,8 @@ def refresh_all_avatars(request: Request) -> Response:
     org) and updates avatars in bulk. See `app.tasks.avatar_refresh
     .refresh_avatars_batched`.
 
-    Staff only, and rate-limited to once per hour. The cache key is set BEFORE dispatch so
-    concurrent calls can't double-queue the task.
+    Staff only, and rate-limited to once per hour. The cache key is set BEFORE
+    dispatch so concurrent calls can't double-queue the task.
     """
     cache_key = "avatar_refresh_last_run"
     last_run = cache.get(cache_key)
