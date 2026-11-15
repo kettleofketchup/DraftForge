@@ -1,7 +1,11 @@
 from django.test import TestCase, override_settings
 
 
-@override_settings(SITE_URL="https://draftforge.gg", DFLOGO_EMOJI_ID=None)
+@override_settings(
+    SITE_URL="https://draftforge.gg",
+    DFLOGO_EMOJI_ID=None,
+    DISCORD_ACTIVITY_ENABLED=False,
+)
 class TournamentEmbedBuildersTest(TestCase):
     def test_build_draft_link_embed(self):
         from events.discord.tournament_embeds import build_draft_link_embed
@@ -78,3 +82,58 @@ class TournamentEmbedBuildersTest(TestCase):
         self.assertEqual(btn["label"], "Open in Browser")
         self.assertEqual(btn["url"], "https://draftforge.gg/herodraft/99")
         self.assertEqual(btn["style"], 5)
+
+    @override_settings(DISCORD_ACTIVITY_ENABLED=True)
+    def test_team_notification_has_scoped_launch_button_and_browser_fallback(self):
+        from events.discord.tournament_embeds import (
+            build_draft_link_components,
+            build_draft_link_embed,
+        )
+
+        buttons = build_draft_link_components(100, draft_id=42)[0]["components"]
+        self.assertEqual(buttons[0]["label"], "Open in Browser")
+        self.assertEqual(
+            buttons[1],
+            {
+                "type": 2,
+                "style": 1,
+                "label": "Launch / Join Activity",
+                "custom_id": "draft_activity:team:42",
+            },
+        )
+        description = build_draft_link_embed("Tournament", "Snake", 100)["description"]
+        self.assertIn("voice channel", description)
+        self.assertIn("Open the invite", description)
+
+    @override_settings(DISCORD_ACTIVITY_ENABLED=True)
+    def test_hero_notification_has_scoped_launch_button_and_browser_fallback(self):
+        from events.discord.tournament_embeds import (
+            build_herodraft_link_components,
+            build_herodraft_link_embed,
+        )
+
+        buttons = build_herodraft_link_components(99)[0]["components"]
+        self.assertEqual(buttons[0]["style"], 5)
+        self.assertEqual(buttons[1]["custom_id"], "draft_activity:hero:99")
+        self.assertEqual(buttons[1]["label"], "Launch / Join Activity")
+        description = build_herodraft_link_embed("Tournament", 99, "A", "B")[
+            "description"
+        ]
+        self.assertIn("voice channel", description)
+
+    @override_settings(DISCORD_ACTIVITY_ENABLED=True)
+    def test_team_notification_without_draft_id_keeps_only_browser_button(self):
+        from events.discord.tournament_embeds import build_draft_link_components
+
+        self.assertEqual(len(build_draft_link_components(100)[0]["components"]), 1)
+
+    def test_disabled_activity_keeps_original_notification_buttons(self):
+        from events.discord.tournament_embeds import (
+            build_draft_link_components,
+            build_herodraft_link_components,
+        )
+
+        self.assertEqual(
+            len(build_draft_link_components(100, draft_id=42)[0]["components"]), 1
+        )
+        self.assertEqual(len(build_herodraft_link_components(99)[0]["components"]), 1)

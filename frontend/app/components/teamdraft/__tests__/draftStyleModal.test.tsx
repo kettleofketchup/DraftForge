@@ -1,5 +1,12 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { updateDraftOptions } from '~/components/api/tournamentAPI';
 import { useUserStore } from '~/store/userStore';
@@ -29,7 +36,13 @@ const seed = (staff: boolean, o?: ReturnType<typeof options>) =>
   });
 
 const mount = () =>
-  render(<DraftStyleModal externalOpen showTrigger={false} onExternalOpenChange={() => {}} />);
+  render(
+    <DraftStyleModal
+      externalOpen
+      showTrigger={false}
+      onExternalOpenChange={() => {}}
+    />,
+  );
 
 describe('DraftStyleModal draft options', () => {
   beforeEach(() => {
@@ -56,7 +69,9 @@ describe('DraftStyleModal draft options', () => {
   it('saves a changed grace as ms', async () => {
     seed(true, options(20000, 10000));
     mount();
-    fireEvent.change(screen.getByTestId('draft-options-grace-s'), { target: { value: '25' } });
+    fireEvent.change(screen.getByTestId('draft-options-grace-s'), {
+      target: { value: '25' },
+    });
     fireEvent.click(screen.getByTestId('draft-options-save'));
     await waitFor(() =>
       expect(updateDraftOptions).toHaveBeenCalledWith(1, {
@@ -70,10 +85,14 @@ describe('DraftStyleModal draft options', () => {
   it('does not PATCH when Reserve is cleared', async () => {
     seed(true, options(20000, 10000));
     mount();
-    fireEvent.change(screen.getByTestId('draft-options-reserve-s'), { target: { value: '' } });
+    fireEvent.change(screen.getByTestId('draft-options-reserve-s'), {
+      target: { value: '' },
+    });
     fireEvent.click(screen.getByTestId('draft-options-save'));
     await waitFor(() =>
-      expect(screen.getByText(/Whole seconds only|Cannot be negative/)).toBeVisible(),
+      expect(
+        screen.getByText(/Whole seconds only|Cannot be negative/),
+      ).toBeVisible(),
     );
     expect(updateDraftOptions).not.toHaveBeenCalled();
   });
@@ -82,11 +101,34 @@ describe('DraftStyleModal draft options', () => {
     seed(true);
     mount();
     expect(screen.getByTestId('draft-options-grace-s')).toHaveValue(30);
-    act(() => useUserStore.setState({ tournament: tournament(options(45000, 15000)) }));
-    await waitFor(() => expect(screen.getByTestId('draft-options-grace-s')).toHaveValue(45));
-    fireEvent.change(screen.getByTestId('draft-options-grace-s'), { target: { value: '50' } });
-    act(() => useUserStore.setState({ tournament: tournament(options(60000, 15000)) }));
+    act(() =>
+      useUserStore.setState({ tournament: tournament(options(45000, 15000)) }),
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId('draft-options-grace-s')).toHaveValue(45),
+    );
+    fireEvent.change(screen.getByTestId('draft-options-grace-s'), {
+      target: { value: '50' },
+    });
+    act(() =>
+      useUserStore.setState({ tournament: tournament(options(60000, 15000)) }),
+    );
     expect(screen.getByTestId('draft-options-grace-s')).toHaveValue(50);
+  });
+
+  it('Activity staff can inspect stats without website-only draft settings', () => {
+    seed(true, options(20000, 10000));
+    render(
+      <DraftStyleModal
+        readOnly
+        externalOpen
+        showTrigger={false}
+        onExternalOpenChange={() => {}}
+      />,
+    );
+    expect(screen.queryByTestId('draft-options-form')).toBeNull();
+    expect(screen.queryByTestId('apply-snake-draft-button')).toBeNull();
+    expect(screen.getByText('Draft Balance Stats')).toBeVisible();
   });
 
   it('non-staff see no form', () => {

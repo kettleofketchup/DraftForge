@@ -5,7 +5,11 @@
  * and Zustand store integration.
  */
 
-export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'reconnecting';
+export type ConnectionStatus =
+  | 'disconnected'
+  | 'connecting'
+  | 'connected'
+  | 'reconnecting';
 
 export interface ConnectionState {
   status: ConnectionStatus;
@@ -52,6 +56,8 @@ export interface ReconnectConfig {
 }
 
 export interface ConnectionOptions {
+  /** Draft served through the Discord Activity socket; credentials are read per attempt. */
+  activity?: { kind: 'hero' | 'team'; draftId: number };
   /** Callback when connection state changes */
   onStateChange?: (state: ConnectionState) => void;
   /** Telemetry hooks for observability */
