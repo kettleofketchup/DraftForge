@@ -1,0 +1,1 @@
+- The team draft ready-up lobby now highlights your own captain row with a "You" badge.
