@@ -4,7 +4,6 @@ from typing import Any
 
 import requests
 from django.conf import settings
-from django.core import signing
 from django.db import transaction
 from rest_framework import serializers
 from rest_framework.decorators import (
@@ -19,7 +18,7 @@ from rest_framework.response import Response
 
 from app.models import CustomUser
 from app.serializers import UserSerializer
-from discordbot.activity_auth import SALT
+from discordbot.activity_auth import issue_activity_token
 from discordbot.models import DraftActivityChannel, DraftActivityInstance
 
 
@@ -29,9 +28,8 @@ class ActivityInput(serializers.Serializer):
 
 
 def discord_json(method: str, path: str, **kwargs: Any) -> dict[str, Any]:
-    response = requests.request(
-        method, f"https://discord.com/api/v10{path}", timeout=10, **kwargs
-    )
+    kwargs.setdefault("timeout", 10)
+    response = requests.request(method, f"https://discord.com/api/v10{path}", **kwargs)
     response.raise_for_status()
     return response.json()
 
@@ -107,9 +105,7 @@ def activity_session(request: Request) -> Response:
     except (requests.RequestException, KeyError, TypeError, ValueError):
         # Never return OAuth credentials or upstream response bodies in errors.
         raise AuthenticationFailed("Could not verify the Discord Activity.")
-    token = signing.dumps(
-        {"user": user.pk, "instance": instance.instance_id}, salt=SALT
-    ).replace(":", ".")
+    token = issue_activity_token(user, instance)
     return Response(
         {
             "token": token,

@@ -5,6 +5,10 @@ Scope includes hero drafts and team drafts, with a local server/channel pilot.
 
 ## Design decisions
 
+Discord's root URL launch preserves the SDK query parameters when routing to
+`/activity`; regular root visits keep the website homepage. The public app ID
+comes from backend runtime configuration rather than Vite build-time variables.
+
 Reuse the existing HeroDraftModal and DraftModal, draft functions, WebSocket
 consumers and timer drivers. A second drafting engine would diverge from the
 website and make permissions and reconnect behavior harder to maintain.
@@ -24,7 +28,8 @@ location, never iframe-supplied channel IDs.
 
 Discord OAuth authenticates an existing linked DraftForge account. The backend
 checks the user participates in the instance using Discord's Activity Instance
-API. A signed, twelve-hour draft credential then authenticates existing REST
+API. A signed, twelve-hour draft credential bound to the immutable instance record
+and draft kind/ID then authenticates existing REST
 actions and the dedicated Activity WebSocket. View-level captain/staff checks
 remain authoritative; a spectator's credential does not confer captain powers.
 Credentials stay in memory. WebSockets carry them as subprotocol offers rather
@@ -35,9 +40,15 @@ Website cookies remain available for normal website traffic. Activity requests
 use explicit authentication before session authentication, avoiding dependence
 on third-party cookies or CSRF cookies in Discord's iframe.
 
-The Components V2 launch message uses a real interaction button; HTTP and gateway
-handlers respond with LAUNCH_ACTIVITY. A user must launch the app. The bot does
-not move users, join voice, or auto-launch into arbitrary channels.
+The generic Components V2 message uses a real interaction button in a configured
+voice channel's chat; HTTP and gateway handlers respond with LAUNCH_ACTIVITY.
+Hero/team draft notifications carry an explicit kind/draft ID. Because a DM's
+native callback cannot choose another channel, its button resolves the user's
+current voice channel server-side and returns a short-lived embedded-app invite.
+The user accepts the invite to launch or join the app there. This flow verifies
+draft membership before creating a channel binding and rejects conflicting
+bindings, preventing stale notifications from redirecting a running match.
+The bot does not move users, join voice, or auto-launch into arbitrary channels.
 
 ## Implementation sequence
 

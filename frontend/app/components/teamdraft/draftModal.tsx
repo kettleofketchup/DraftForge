@@ -81,8 +81,10 @@ import { useTeamDraftTimerProps } from './timer/useTeamDraftTimerProps';
 import type { DraftRoundType, DraftType, TieResolution } from './types';
 import { deriveDraftIndex, resolveViewedRound } from './utils';
 const log = getLogger('DraftModal');
-type DraftModalParams = {};
-export const DraftModal: React.FC<DraftModalParams> = () => {
+type DraftModalParams = { embedded?: boolean };
+export const DraftModal: React.FC<DraftModalParams> = ({
+  embedded = false,
+}) => {
   const tournament = useUserStore((state) => state.tournament);
   const setTournament = useUserStore((state) => state.setTournament);
   const draft = useUserStore((state) => state.draft);
@@ -491,7 +493,7 @@ export const DraftModal: React.FC<DraftModalParams> = () => {
   const mainView = () => {
     // Show start draft UI when no draft exists
     if (!draft || !draft.pk) {
-      if (!isStaff()) {
+      if (embedded || !isStaff()) {
         return (
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center space-y-2">
@@ -714,9 +716,13 @@ export const DraftModal: React.FC<DraftModalParams> = () => {
                     {/* Moderation actions - always visible on left (staff only) */}
                     {isStaff() ? (
                       <div className="flex items-center gap-1 shrink-0">
-                        <DraftModerationDropdown
-                          onOpenDraftStyleModal={() => setDraftStyleOpen(true)}
-                        />
+                        {!embedded && (
+                          <DraftModerationDropdown
+                            onOpenDraftStyleModal={() =>
+                              setDraftStyleOpen(true)
+                            }
+                          />
+                        )}
                         <UndoPickButton />
                       </div>
                     ) : (
@@ -791,9 +797,11 @@ export const DraftModal: React.FC<DraftModalParams> = () => {
               <div className="hidden md:flex w-full items-center justify-between gap-4 p-3">
                 <div className="flex items-center gap-2">
                   {/* Moderation actions - only visible to staff */}
-                  <DraftModerationDropdown
-                    onOpenDraftStyleModal={() => setDraftStyleOpen(true)}
-                  />
+                  {!embedded && (
+                    <DraftModerationDropdown
+                      onOpenDraftStyleModal={() => setDraftStyleOpen(true)}
+                    />
+                  )}
                   <UndoPickButton />
                   {/* Balance stats - visible to everyone */}
                   <Tooltip>
@@ -864,6 +872,7 @@ export const DraftModal: React.FC<DraftModalParams> = () => {
 
         {/* Externally controlled Draft Style Modal */}
         <DraftStyleModal
+          readOnly={embedded}
           externalOpen={draftStyleOpen}
           onExternalOpenChange={setDraftStyleOpen}
           showTrigger={false}

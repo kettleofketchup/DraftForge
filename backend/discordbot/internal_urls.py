@@ -14,8 +14,10 @@ endpoints.
 from django.urls import URLPattern, path
 
 from . import internal_signup_views as _signup_views
+from .activity_launch import activity_launch
 
 urlpatterns: list[URLPattern] = [
+    path("activity-launch/", activity_launch, name="internal_activity_launch"),
     path(
         "signup-button/",
         _signup_views.signup_button,

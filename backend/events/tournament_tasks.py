@@ -38,7 +38,7 @@ def send_tournament_draft_links(tournament_id, draft_id):
         date_played=tournament.date_played,
         timezone=getattr(tournament, "timezone", None),
     )
-    components = build_draft_link_components(tournament_id)
+    components = build_draft_link_components(tournament_id, draft_id=draft_id)
     participants = get_tournament_participants(tournament_id)
 
     # Create the parent log row first so child DiscordMessageLog rows can FK

@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock, patch
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 
@@ -32,7 +32,7 @@ class DiscordTournamentLogTest(TestCase):
     def test_log_ordering_newest_first(self):
         from discordbot.models import DiscordTournamentLog
 
-        log1 = DiscordTournamentLog.objects.create(
+        DiscordTournamentLog.objects.create(
             tournament=self.tournament,
             notification_type="draft_link",
             message="First",
@@ -142,6 +142,35 @@ class SendDraftLinksTaskTest(TestCase):
         send_tournament_draft_links(1, 42)
         self.assertEqual(mock_dm.call_count, 2)
 
+    @override_settings(DISCORD_ACTIVITY_ENABLED=True)
+    @patch("app.internal_client.update_tournament_log")
+    @patch("app.internal_client.create_tournament_log")
+    @patch("discordbot.utils.sync_send_dm")
+    @patch("app.internal_client.get_tournament_participants")
+    @patch("app.internal_client.get_tournament_for_task")
+    def test_activity_button_uses_actual_draft_id_in_sent_dm(
+        self, mock_tournament, mock_participants, mock_dm, mock_log, mock_update
+    ):
+        from app.schemas import TournamentParticipantSchema, TournamentTaskSchema
+        from events.tournament_tasks import send_tournament_draft_links
+
+        mock_tournament.return_value = TournamentTaskSchema(
+            id=1,
+            name="Test",
+            state="in_progress",
+            discord_send_draft_link=True,
+            draft_type="snake",
+        )
+        mock_participants.return_value = [
+            TournamentParticipantSchema(user_pk=1, discord_id="111", username="p1")
+        ]
+        mock_dm.return_value = {"id": "msg123"}
+        mock_log.return_value = MagicMock(ok=True, json=lambda: {"id": 1})
+        send_tournament_draft_links(1, 42)
+        buttons = mock_dm.call_args.kwargs["components"][0]["components"]
+        self.assertEqual(buttons[1]["custom_id"], "draft_activity:team:42")
+        self.assertIn("voice channel", mock_dm.call_args.kwargs["embed"]["description"])
+
     @patch("app.internal_client.get_tournament_for_task")
     def test_skips_when_disabled(self, mock_get):
         from app.schemas import TournamentTaskSchema
@@ -214,6 +243,33 @@ class SendHeroDraftLinksTaskTest(TestCase):
             1, 99, 10, radiant_name="Alpha", dire_name="Bravo"
         )
         self.assertEqual(mock_dm.call_count, 2)
+
+    @override_settings(DISCORD_ACTIVITY_ENABLED=True)
+    @patch("app.internal_client.update_tournament_log")
+    @patch("app.internal_client.create_tournament_log")
+    @patch("discordbot.utils.sync_send_dm")
+    @patch("app.internal_client.get_match_participants")
+    @patch("app.internal_client.get_tournament_for_task")
+    def test_activity_button_is_in_hero_draft_dm(
+        self, mock_tournament, mock_participants, mock_dm, mock_log, mock_update
+    ):
+        from app.schemas import TournamentParticipantSchema, TournamentTaskSchema
+        from events.tournament_tasks import send_tournament_herodraft_links
+
+        mock_tournament.return_value = TournamentTaskSchema(
+            id=1,
+            name="Test",
+            state="in_progress",
+            discord_send_herodraft_link=True,
+        )
+        mock_participants.return_value = [
+            TournamentParticipantSchema(user_pk=1, discord_id="111", username="p1")
+        ]
+        mock_dm.return_value = {"id": "msg123"}
+        mock_log.return_value = MagicMock(ok=True, json=lambda: {"id": 1})
+        send_tournament_herodraft_links(1, 99, 10, radiant_name="A", dire_name="B")
+        buttons = mock_dm.call_args.kwargs["components"][0]["components"]
+        self.assertEqual(buttons[1]["custom_id"], "draft_activity:hero:99")
 
 
 class AutoCreateHeroDraftsTaskTest(TestCase):

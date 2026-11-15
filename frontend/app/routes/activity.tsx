@@ -4,7 +4,11 @@ import { HeroDraftModal } from '~/components/herodraft/HeroDraftModal';
 import { DraftModal } from '~/components/teamdraft/draftModal';
 import type { TournamentType } from '~/index';
 import { setActivityCredential } from '~/lib/activity-session';
-import { initializeDiscord, type DraftActivitySession } from '~/lib/discord';
+import {
+  initializeDiscord,
+  releaseDiscordSession,
+  type DraftActivitySession,
+} from '~/lib/discord';
 import { hydrateTournament } from '~/lib/hydrateTournament';
 import { useTournamentStore } from '~/store/tournamentStore';
 import { useUserStore } from '~/store/userStore';
@@ -42,6 +46,7 @@ export default function DraftActivity() {
     return () => {
       cancelled = true;
       setActivityCredential(null);
+      releaseDiscordSession();
     };
   }, []);
 
@@ -57,6 +62,6 @@ export default function DraftActivity() {
         Connecting to Discord…
       </div>
     );
-  if (session.kind === 'team') return <DraftModal />;
+  if (session.kind === 'team') return <DraftModal embedded />;
   return <HeroDraftModal draftId={session.draft_id} open onClose={() => {}} />;
 }

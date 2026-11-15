@@ -35,6 +35,12 @@ describe('Activity credentials', () => {
     expect(activityAuthorization('/tournaments/pick_player')).toBe(
       'DraftActivity secret',
     );
+    expect(activityAuthorization('/tournaments/undo-pick')).toBe(
+      'DraftActivity secret',
+    );
+    expect(activityAuthorization('/draft/get-style-mmrs')).toBe(
+      'DraftActivity secret',
+    );
     expect(activityAuthorization('/tournaments/init-draft')).toBeUndefined();
     expect(activitySocket('team', 9).url).toContain(
       '/api/discord/activity/team-draft/9/',

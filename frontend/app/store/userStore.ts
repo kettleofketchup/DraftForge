@@ -20,6 +20,7 @@ import type { DraftRoundType, DraftType } from '~/components/teamdraft/types';
 import type { TeamType, TournamentType } from '~/components/tournament/types';
 import { User } from '~/components/user/user';
 import type { GameType, GuildMember, GuildMembers, UserType } from '~/index';
+import { getActivityUser } from '~/lib/activity-session';
 import { hydrateTournament } from '~/lib/hydrateTournament';
 import { getLogger } from '~/lib/logger';
 import { useUserCacheStore } from '~/store/userCacheStore';
@@ -203,7 +204,7 @@ export const useUserStore = create<UserState>()(
       setCurrentUser: (user) => {
         log.debug('User set:', user);
 
-        set({ currentUser: user });
+        set({ currentUser: user, currentUserStatus: 'resolved' });
       },
 
       patchCurrentUser: (partial) => {
@@ -279,19 +280,27 @@ export const useUserStore = create<UserState>()(
       },
 
       getCurrentUser: async () => {
+        const activityUser = getActivityUser();
+        if (activityUser) {
+          set({ currentUser: activityUser, currentUserStatus: 'resolved' });
+          return;
+        }
         set({ currentUserStatus: 'loading' });
         try {
           const response = await fetchCurrentUser();
           set({
+            // A cookie-based auth check may have started before the Activity
+            // handshake. Never let that late response replace Discord identity.
             currentUser:
-              response && typeof response === 'object'
+              getActivityUser() ??
+              (response && typeof response === 'object'
                 ? response
-                : ({} as UserType),
+                : ({} as UserType)),
           });
           log.debug('User fetched successfully:', response);
         } catch (error) {
           log.debug('No User logged in:', error);
-          set({ currentUser: {} as UserType });
+          set({ currentUser: getActivityUser() ?? ({} as UserType) });
         } finally {
           set({ currentUserStatus: 'resolved' });
         }

@@ -1,12 +1,18 @@
+import type { UserType } from '~/index';
+
 /** Activity credentials stay in memory and are never sent to unrelated APIs. */
 export interface ActivityCredential {
   token: string;
   draft_id: number;
   kind: 'hero' | 'team';
+  user?: UserType;
 }
 let session: ActivityCredential | null = null;
 export function setActivityCredential(value: ActivityCredential | null) {
   session = value;
+}
+export function getActivityUser(): UserType | undefined {
+  return session?.user;
 }
 export function activityAuthorization(path: string): string | undefined {
   if (!session) return;
@@ -17,7 +23,12 @@ export function activityAuthorization(path: string): string | undefined {
   if (
     path.startsWith(draftPath) ||
     path === '/current_user' ||
-    (session.kind === 'team' && path === '/tournaments/pick_player')
+    (session.kind === 'team' &&
+      [
+        '/tournaments/pick_player',
+        '/tournaments/undo-pick',
+        '/draft/get-style-mmrs',
+      ].includes(path))
   ) {
     return `DraftActivity ${session.token}`;
   }
