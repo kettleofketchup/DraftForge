@@ -14,6 +14,127 @@ Releases made before this file was added are not listed here; see the git tags a
 
 <!-- Do not edit. Unreleased changes live in changelog.d/; `just version::set` assembles them here. -->
 
+## [0.13.0] - 2026-11-15
+
+### Upgrading
+
+Run the new migrations: `app` 0104, `org` 0007, 0008 and 0009, and `events` 0021.
+
+Contributions and Promotion start locked for every organization. A site admin
+unlocks them per org, either in the Django admin (Org features) or from the Locked
+features panel on the organization page.
+
+Stale events now auto-close a day after their end time (`ends_at`) when one is
+set, and a day after their start otherwise.
+
+### Security
+
+- League admins can no longer change a league's admin list, staff list or
+  organization through the league edit API. `admin_ids` and `staff_ids` are now
+  ignored on create and update, and `organization_id` is only honored on create.
+  League roles change only through the admin team endpoints (#424).
+- Creating a league now checks organization staff access against the organization
+  the league is actually created in. Before this, any logged-in user could create a
+  league under any organization by sending `organization_id`.
+- Organization admins can no longer change an organization's owner, admin list or
+  staff list through the organization edit API. The `owner_id`, `admin_ids` and
+  `staff_ids` fields are now ignored on create and update; roles and ownership change
+  only through the admin team endpoints.
+- Creating a tournament through `/api/tournaments/` checked the league named in `league`
+  but saved the one in `league_id_write`, so a league admin could create tournaments in a
+  league they don't administer. The saved league is now checked.
+- Tournament, event, series and org-default editors could set a tournament's lobby Steam
+  league ID to one owned by another league, so hosted lobbies ran under that league's ticket.
+  Using another league's ID now needs admin access to that league, and the ID must be positive.
+- The tournament Discord activity log (`/api/tournaments/<pk>/discord-logs/`) was readable by
+  anyone. It now needs tournament edit access.
+
+### Added
+
+- Frontend design-system lint with `@shadcn/lint`: new raw Tailwind palette colours
+  and classes that generate no CSS now fail a pre-commit hook and a
+  `Frontend shadcn lint` CI check. Existing violations are baselined in
+  `frontend/shadcn-lint-suppressions.json`, which can only shrink.
+- Lockable feature switches per organization: Contributions and Promotion stay locked
+  until a site admin unlocks them, and locked features are hidden from the org page.
+- A Promoter role for organizations. Org admins add and remove promoters in the
+  admin team section.
+- Contributions: a per-org points ledger with all-time and monthly leaderboards
+  (months follow the org's timezone), a per-member breakdown, admin-set point
+  values with rescoring of past entries, and manual awards.
+- Promotion dashboard: promoters pick an upcoming event, write or reuse a message
+  template with placeholders such as `{player}`, `{event_time}` and `{event_link}`
+  (rendered as Discord timestamps where relevant), preview it, and log sends to
+  past players, with undo. The first send to each player for an event earns
+  promotion points.
+- Events can have an end time, shown on the event page.
+- Org admins (owners and admins) can mark an event complete with a Complete button.
+- Org admins (owners and admins) can assign an event's host and helpers, who earn
+  contribution points when the event closes.
+- The tournaments page now opens on an Upcoming tab, with tournaments from your
+  organizations listed first and an Archived tab for past ones.
+- Tournament cards show the organization's logo and name, and live tournaments
+  carry a Live badge.
+- Search tournaments by name, organization or league.
+- Signed-in users now start on "My organizations": tournaments from their
+  organizations plus any tournament with signups open, marked with a "Signups
+  open" badge. "All organizations" and single organizations are still in the
+  Organization dropdown.
+
+### Changed
+
+- nginx now reuses its connections to the backend for `/api` and the other backend
+  routes (`/admin`, `/static`, `/login`, `/logout`, `/complete`, `/disconnect`,
+  `/discord/`), as it already did for the frontend. Before, it opened and closed a
+  backend connection for every request, leaving several hundred sockets in `TIME_WAIT`
+  during a `17-auth` run. WebSocket upgrades on `/api` (draft, herodraft and
+  tournament) are unchanged.
+- The tournament edit dialog has the Lobby & Tournament Config section (game mode incl.
+  Turbo and Captain's Mode, Steam league ID, draft time, custom game name), and these and
+  the hosted-lobby settings can be changed on every tournament, including event and series
+  tournaments and ones already in progress.
+- Org and league admins and staff can open the tournament Edit dialog. Moving a tournament
+  to another league needs admin access to both leagues; only site staff can remove a
+  tournament's league. The Create Tournament button is shown to site staff only, matching
+  the API.
+
+### Fixed
+
+- The team table shows players' full names again on screens 1536px and wider;
+  it had always shown the 12-character short form.
+- Multi-day events were auto-closed a day after they started; they now close a day
+  after they end.
+- Org staff could set an event's `state` directly with a PATCH, skipping the
+  normal transitions. `state` is now read-only on the event API.
+- Org staff could move an event to another organization by PATCHing its
+  `organization`; that is now rejected.
+- Editing an event from a browser in a different timezone than the event no
+  longer shifts its start time when the form is saved.
+- "Load more" on the Archived tab of the tournaments page no longer skips or
+  repeats a tournament when one moves into or out of the archive while you page
+  (#421).
+- The organization page no longer refetches the organization every time you switch tabs, or when it moves you off a tab you cannot see.
+- A malformed `scheduled_before`, `scheduled_after` or `signups_due_before` filter on
+  the events list now returns a 400 naming the bad parameter instead of a server error (#404).
+- On preview and test sites, the "Login as admin/staff/user" buttons no longer cover the
+  mobile menu button on narrow screens. Below tablet width they now sit at the bottom of
+  the mobile menu, and between tablet and desktop width they show only the role name so
+  they no longer overlap the page links (#417).
+- The desktop navbar no longer overlaps or crowds its links at tablet and desktop widths (#252).
+  Primary links keep their labels while there is room and collapse to icons when the account
+  area needs the space. GitHub, Docs and Report Issue show labels from 1600px.
+- Pages that read query parameters, such as `/events?organization=N`, no longer share one
+  cached server render with their unfiltered URL, which showed the wrong filter or tab and
+  caused a hydration error until the nginx SSR cache expired.
+- `just docker::all-build` (and so `just test::setup`) works under podman again: the
+  BuildKit registry cache flags, which podman rejects, are skipped when `docker` is podman.
+- Restarting the tournament of a completed or cancelled event no longer reopens it
+  silently. It now needs an organization admin, takes back the host and helper points
+  the close awarded (promo and manual points stay), and is recorded in the org log.
+  Closing the event again awards those points once more. Staff can still restart an
+  event that isn't closed (#405).
+- A tournament now moves to Past on its own once its bracket final has a winner, whether the result is set from the bracket, saved with the bracket or linked from a Steam match. Clearing the final's result moves it back to In Progress (#419).
+
 ## [0.12.1] - 2026-11-13
 
 ### Fixed
