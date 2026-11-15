@@ -18,6 +18,13 @@ from django.db import IntegrityError, transaction
 
 from app.cache_utils import invalidate_obj
 from app.models import CustomUser
+from org.contributions.services import (
+    dedupe_event_staff,
+    reassign_member,
+    repoint_user_attribution,
+)
+from org.models import OrgUser
+from org.promotion.services import demote_colliding_earning_sends
 from telemetry.logging import get_logger
 
 logger = get_logger(__name__)
@@ -89,6 +96,17 @@ def merge_discord_accounts(keep: CustomUser, drop: CustomUser) -> CustomUser:
     # (some relations moved, both accounts still alive). (select_for_update is
     # a no-op on this project's SQLite, so atomicity is what guards us here.)
     with transaction.atomic():
+        keep_org_users = {
+            ou.organization_id: ou for ou in OrgUser.objects.filter(user=keep)
+        }
+        for drop_ou in OrgUser.objects.filter(user=drop):
+            keep_ou = keep_org_users.get(drop_ou.organization_id)
+            if keep_ou is not None:
+                reassign_member(drop_ou, keep_ou)
+                drop_ou.delete()
+        repoint_user_attribution(drop, keep)
+        demote_colliding_earning_sends(keep, drop)
+
         for rel in drop._meta.related_objects:
             accessor = rel.get_accessor_name()
             field_name = rel.field.name
@@ -119,6 +137,8 @@ def merge_discord_accounts(keep: CustomUser, drop: CustomUser) -> CustomUser:
             # Reverse FK (one-to-many): repoint each row at ``keep``.
             for obj in list(manager.all()):
                 _repoint(obj, field_name)
+
+        dedupe_event_staff(keep)
 
         # Purge keep's reverse-relation caches before reading/writing through
         # them in the carryover loop. The related-objects loop above poisoned

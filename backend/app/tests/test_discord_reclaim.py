@@ -17,6 +17,8 @@ from app.models import CustomUser, Organization
 from app.pipelines import associate_by_discord_id, save_discord
 from events.constants import EventState, SignupStatus
 from events.models import Event, EventSignup
+from org.contributions.kinds import ContributionKind
+from org.models import ContributionEntry, OrgUser
 
 DISCORD_ID = "555000111222333444"
 
@@ -47,9 +49,7 @@ class AssociateByDiscordIdTest(TestCase):
     def test_returns_none_when_already_authenticated(self):
         CustomUser.objects.create(username="ph", discordId=DISCORD_ID)
         already = CustomUser.objects.create(username="me")
-        self.assertIsNone(
-            associate_by_discord_id(uid=DISCORD_ID, user=already)
-        )
+        self.assertIsNone(associate_by_discord_id(uid=DISCORD_ID, user=already))
 
     def test_returns_none_when_no_match(self):
         self.assertIsNone(associate_by_discord_id(uid="does-not-exist", user=None))
@@ -134,6 +134,33 @@ class MergeDiscordAccountsTest(TestCase):
         keep.refresh_from_db()
         self.assertEqual(keep.joke.tangoes_purchased, 3)
         self.assertEqual(Joke.objects.count(), 1)
+
+    def test_merge_with_points_in_both_accounts_keeps_total(self) -> None:
+        keep = CustomUser.objects.create(username="ph", discordId=DISCORD_ID)
+        drop = CustomUser.objects.create(username="loginrow")
+        _social(drop)
+        for user, points in ((keep, 5), (drop, 3)):
+            org_user = OrgUser.objects.create(user=user, organization=self.org)
+            ContributionEntry.objects.create(
+                org_user=org_user,
+                organization=self.org,
+                kind=ContributionKind.MANUAL,
+                points=points,
+                reason="help",
+                occurred_at=tz.now(),
+            )
+
+        merge_discord_accounts(keep=keep, drop=drop)
+
+        self.assertFalse(CustomUser.objects.filter(pk=drop.pk).exists())
+        self.assertEqual(
+            sorted(
+                ContributionEntry.objects.nocache().values_list(
+                    "org_user__user_id", "points"
+                )
+            ),
+            [(keep.pk, 3), (keep.pk, 5)],
+        )
 
     def test_find_split_accounts(self):
         keep = CustomUser.objects.create(username="ph", discordId=DISCORD_ID)
@@ -235,9 +262,7 @@ class SaveDiscordCollisionTest(TestCase):
         keep = result["user"]
         self.assertEqual(keep.pk, phantom.pk)
         # Exactly one account owns the discordId now.
-        self.assertEqual(
-            CustomUser.objects.filter(discordId=DISCORD_ID).count(), 1
-        )
+        self.assertEqual(CustomUser.objects.filter(discordId=DISCORD_ID).count(), 1)
         self.assertFalse(CustomUser.objects.filter(pk=login_row.pk).exists())
         # Kept account is login-capable (has the social link) and updated.
         self.assertTrue(

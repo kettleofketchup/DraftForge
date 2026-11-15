@@ -56,7 +56,8 @@ function normalizeParams(params: TournamentListQuery): NormalizedListKeyParams {
       : undefined,
     openSignups: params.openSignups || undefined,
     league: params.league,
-    search: params.search === undefined ? undefined : normalizeSearch(params.search),
+    search:
+      params.search === undefined ? undefined : normalizeSearch(params.search),
     day: cutoffDayKey(new Date()),
   };
 }
@@ -75,7 +76,9 @@ function sameScopePlaceholder<T>(key: NormalizedListKeyParams) {
     previous: T | undefined,
     previousQuery: { queryKey: readonly unknown[] } | undefined,
   ): T | undefined => {
-    const previousKey = previousQuery?.queryKey[3] as NormalizedListKeyParams | undefined;
+    const previousKey = previousQuery?.queryKey[3] as
+      | NormalizedListKeyParams
+      | undefined;
     if (previousKey === undefined) return undefined;
     return scopeKind(previousKey) === scopeKind(key) ? previous : undefined;
   };
@@ -103,6 +106,16 @@ export function useUpcomingTournaments(
   });
 }
 
+/** Reads only the cursor from `next`, so requests stay on this origin. */
+export function nextCursor(next: string | null): string | undefined {
+  if (next === null) return undefined;
+  try {
+    return new URL(next).searchParams.get('cursor') ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export type ArchivedTournamentsResult = UseInfiniteQueryResult<
   InfiniteData<PaginatedTournaments>
 > & { tournaments: TournamentsType };
@@ -122,16 +135,20 @@ export function useArchivedTournaments(
         openSignups: key.openSignups,
         leagueId: key.league,
         search: key.search,
-        page: pageParam,
+        ...(pageParam === null ? { page: 1 } : { cursor: pageParam }),
       }),
-    initialPageParam: 1,
-    getNextPageParam: (last, _all, lastParam) =>
-      last.next !== null ? lastParam + 1 : undefined,
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) => nextCursor(last.next),
     enabled: opts.enabled,
-    placeholderData: sameScopePlaceholder<InfiniteData<PaginatedTournaments, number>>(key),
+    placeholderData:
+      sameScopePlaceholder<InfiniteData<PaginatedTournaments, string | null>>(
+        key,
+      ),
     staleTime: STALE_TIME_MS,
     refetchOnWindowFocus: false,
   });
-  const tournaments = dedupeByPk(query.data?.pages.flatMap((p) => p.results) ?? []);
+  const tournaments = dedupeByPk(
+    query.data?.pages.flatMap((p) => p.results) ?? [],
+  );
   return { ...query, tournaments };
 }

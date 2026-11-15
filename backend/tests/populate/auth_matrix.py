@@ -16,10 +16,13 @@ Infrastructure created:
     pk=200 "Auth Matrix No Bracket"        — no bracket (Generate test)
     pk=201 "Auth Matrix Pending Bracket"   — bracket with all matches pending
     pk=202 "Auth Matrix Completed Bracket" — bracket with all matches won
-- 5 auth-matrix users (pk=1090-1094) wired into the org/league roles
+- 7 auth-matrix users (pk=1090-1096) wired into the org/league roles;
+  the promoter is in Organization.promoters while Promotion stays locked
 
 Runs last in ``populate_all`` so the auto-incremented org pk lands on 8.
 """
+
+from cacheops import invalidate_obj
 
 from app.models import League, Organization
 from tests.data.leagues import AUTH_MATRIX_LEAGUE
@@ -30,6 +33,7 @@ from tests.data.users import (
     AUTH_MATRIX_ORG_ADMIN_USER,
     AUTH_MATRIX_ORG_MEMBER_USER,
     AUTH_MATRIX_ORG_OWNER_USER,
+    AUTH_MATRIX_ORG_PROMOTER_USER,
     AUTH_MATRIX_ORG_STAFF_USER,
 )
 from tests.populate.utils import ensure_org_user
@@ -86,6 +90,9 @@ def populate_auth_matrix_data(force=False):
     org_admin = CustomUser.objects.filter(pk=AUTH_MATRIX_ORG_ADMIN_USER.pk).first()
     org_staff = CustomUser.objects.filter(pk=AUTH_MATRIX_ORG_STAFF_USER.pk).first()
     org_member = CustomUser.objects.filter(pk=AUTH_MATRIX_ORG_MEMBER_USER.pk).first()
+    org_promoter = CustomUser.objects.filter(
+        pk=AUTH_MATRIX_ORG_PROMOTER_USER.pk
+    ).first()
     league_admin = CustomUser.objects.filter(
         pk=AUTH_MATRIX_LEAGUE_ADMIN_USER.pk
     ).first()
@@ -109,6 +116,12 @@ def populate_auth_matrix_data(force=False):
     if org_member:
         ensure_org_user(org_member, org)
         print(f"  Ensured {org_member.username} OrgUser of {org.name}")
+    if org_promoter:
+        if org_promoter not in org.promoters.all():
+            org.promoters.add(org_promoter)
+            invalidate_obj(org)
+            print(f"  Added {org_promoter.username} as promoter of {org.name}")
+        ensure_org_user(org_promoter, org)
 
     if league_admin and league_admin not in league.admins.all():
         league.admins.add(league_admin)

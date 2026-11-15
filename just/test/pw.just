@@ -21,10 +21,10 @@ run *args:
     cd frontend
     exec npx playwright test "$@"
 
-# All suites except demos (chromium, herodraft, events-sequential, dota-lobby-sequential)
+# All suites except demos (chromium, herodraft, events-sequential, dota-lobby-sequential, org-features-sequential)
 [group('test::pw')]
 headless *args:
-    {{pw}} --project=chromium --project=herodraft --project=events-sequential --project=dota-lobby-sequential "$@"
+    {{pw}} --project=chromium --project=herodraft --project=events-sequential --project=dota-lobby-sequential --project=org-features-sequential "$@"
 
 [group('test::pw')]
 ui:
@@ -93,7 +93,7 @@ all *args:
 # Run only @cicd tagged tests (fast smoke tests for CI/CD)
 [group('test::pw')]
 cicd *args:
-    {{cicd}} --project=chromium --project=mobile-pixel5 --project=mobile-iphone13 --project=mobile-iphone-se --project=herodraft --project=events-sequential --project=layout --project=dota-lobby-sequential --no-deps "$@"
+    {{cicd}} --project=chromium --project=mobile-pixel5 --project=mobile-iphone13 --project=mobile-iphone-se --project=herodraft --project=events-sequential --project=layout --project=dota-lobby-sequential --project=org-features-sequential --no-deps "$@"
 
 # CI/CD per-project runners — used by the matrix shards in
 # .github/workflows/playwright.yml. Local devs typically just use `cicd`.
@@ -117,6 +117,12 @@ cicd-herodraft *args:
 [group('test::pw')]
 cicd-events *args:
     {{cicd}} --project=events-sequential --no-deps "$@"
+
+# The 19-org-features specs in order (org-features-sequential): they share
+# the seeded locked features orgs and reset them per test
+[group('test::pw')]
+cicd-org-features *args:
+    {{cicd}} --project=org-features-sequential --no-deps "$@"
 
 # The 18-dota-lobby specs in order (dota-lobby-sequential): they share one
 # simulated dota_lobby. Specs that need it skip unless `just test::dota-lobby up`

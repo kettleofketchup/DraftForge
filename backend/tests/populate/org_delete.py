@@ -15,24 +15,33 @@ Used by frontend/tests/playwright/e2e/17-org-delete/ to verify the
 permission matrix on the Danger Zone UI.
 """
 
+from django.utils import timezone
+
 from app.cache_utils import invalidate_obj
 from app.models import CustomUser, Organization, PositionsModel
-
+from org.contributions.kinds import ContributionKind
+from org.contributions.services import award_entry
+from org.models import ContributionEntry
+from tests.data.models import TestUser
 from tests.data.org_delete import (
     ORG_DELETE_ADMIN,
+    ORG_DELETE_LEDGER,
     ORG_DELETE_MEMBER,
     ORG_DELETE_ORG,
     ORG_DELETE_OWNER,
     ORG_DELETE_STAFF,
 )
-from tests.populate.utils import ensure_org_user
+from tests.populate.utils import delete_ledger_for_users, ensure_org_user
 
 
-def _get_or_create_user(user_data, force):
+def _get_or_create_user(user_data: TestUser, force: bool) -> CustomUser:
     existing = CustomUser.objects.filter(pk=user_data.pk).first()
     if existing and not force:
         return existing
     if existing:
+        delete_ledger_for_users([existing.pk])
+        # Organization.owner is PROTECT; populate_org_delete sets it again.
+        Organization.objects.filter(owner=existing).update(owner=None)
         existing.delete()
     positions = PositionsModel.objects.create()
     user = CustomUser(
@@ -49,7 +58,7 @@ def _get_or_create_user(user_data, force):
     return user
 
 
-def populate_org_delete(force=False):
+def populate_org_delete(force: bool = False) -> None:
     print("Populating org delete test data...")
 
     org, created = Organization.objects.update_or_create(
@@ -61,7 +70,9 @@ def populate_org_delete(force=False):
             "timezone": ORG_DELETE_ORG.timezone,
         },
     )
-    print(f"  {'Created' if created else 'Updated'} organization: {ORG_DELETE_ORG.name} (pk={org.pk})")
+    print(
+        f"  {'Created' if created else 'Updated'} organization: {ORG_DELETE_ORG.name} (pk={org.pk})"
+    )
 
     owner = _get_or_create_user(ORG_DELETE_OWNER, force)
     admin = _get_or_create_user(ORG_DELETE_ADMIN, force)
@@ -89,5 +100,18 @@ def populate_org_delete(force=False):
     ensure_org_user(admin, org)
     ensure_org_user(staff, org)
     ensure_org_user(member, org)
+
+    ContributionEntry.objects.nocache().filter(organization=org).delete()
+    users = {u.pk: u for u in (owner, admin, staff, member)}
+    for data, points in ORG_DELETE_LEDGER:
+        award_entry(
+            org=org,
+            user=users[data.pk],
+            kind=ContributionKind.MANUAL,
+            points=points,
+            reason="Seeded award",
+            occurred_at=timezone.now(),
+            awarded_by=owner,
+        )
 
     print(f"Org delete test data ready. Org pk={org.pk}")
