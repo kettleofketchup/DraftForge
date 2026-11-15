@@ -1,0 +1,1 @@
+- Run frontend unit tests in a separate CI job and allow cold backend test setup enough time, preventing successful test suites from being cancelled by a shared job timeout.

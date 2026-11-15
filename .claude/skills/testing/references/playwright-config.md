@@ -99,6 +99,21 @@ the slot registry), `https://localhost` when `GITHUB_ACTIONS=true`, otherwise it
 `No test-stack slot for this worktree. Run "just test::slot".` See
 [test-stack-slots.md](test-stack-slots.md).
 
+## CI Unit Test Jobs
+
+The `Playwright Tests` workflow also runs the complete Python and frontend unit
+suites as independent jobs:
+
+- **Backend tests** starts the shared Docker stack and runs every Django test,
+  followed by the promotion fixture comparison and slot guards. Its 25-minute
+  budget includes cold image/test-database setup.
+- **Frontend unit tests** installs Node.js 22 dependencies on the runner and
+  runs `npm test -- --run` with `CI=true`; it needs no Docker stack and has its
+  own 15-minute budget.
+
+This keeps frontend unit tests from being cancelled after a long backend run.
+Browser projects and their existing shard/timeout settings are unchanged.
+
 ## CI Sharding
 
 Tests sharded across 4 parallel runners. Run specific shard locally:

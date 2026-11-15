@@ -306,7 +306,8 @@ jobs:
   backend:
     name: Backend tests
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # A cold Docker/test-DB setup took 6m and the Python suite another 7m.
+    timeout-minutes: 25
     permissions:
       contents: read
       packages: read
@@ -327,13 +328,6 @@ jobs:
           docker compose --project-directory . -f docker/docker-compose.test.yaml -f docker/docker-compose.ci.override.yaml exec -T backend \
             python manage.py test -v 2
 
-      - name: Run frontend Vitest
-        env:
-          CI: 'true'
-        run: |
-          docker compose --project-directory . -f docker/docker-compose.test.yaml -f docker/docker-compose.ci.override.yaml exec -T frontend \
-            npm test -- --run
-
       - name: Check the promotion render fixture copies match
         run: cmp backend/org/tests/render_fixture.json frontend/app/features/promotion/__tests__/render_fixture.json
 
@@ -350,3 +344,30 @@ jobs:
       - name: Clean up
         if: always()
         run: docker compose --project-directory . -f docker/docker-compose.test.yaml -f docker/docker-compose.ci.override.yaml down -v || true
+
+  frontend-unit:
+    name: Frontend unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      # Unit tests use mocked API/SDK boundaries and need no Docker stack.
+      - name: Run frontend Vitest
+        env:
+          CI: 'true'
+        run: npm test -- --run
