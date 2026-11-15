@@ -326,31 +326,6 @@ class TournamentEventIntegrationTest(TestCase):
         mock_broadcast.assert_called()
 
     @patch("app.broadcast.broadcast_event")
-    def test_player_picked_names_use_display_name(self, mock_broadcast):
-        from rest_framework.test import APIRequestFactory
-
-        from app.functions.draft_picks import pick_player_for_round
-
-        self.captain.nickname = "Cap Nick"
-        self.captain.discordUsername = "cap_discord"
-        self.captain.save()
-        self.player.guildNickname = "Player Guild"
-        self.player.save()
-
-        request = APIRequestFactory().post(
-            "/api/pick/",
-            {"draft_round_pk": self.draft_round.pk, "user_pk": self.player.pk},
-            format="json",
-        )
-        request.user = self.captain
-        with self.captureOnCommitCallbacks(execute=True):
-            pick_player_for_round(request)
-
-        event = DraftEvent.objects.get(draft=self.draft, event_type="player_picked")
-        self.assertEqual(event.payload["captain_name"], "Cap Nick")
-        self.assertEqual(event.payload["picked_name"], "player")
-
-    @patch("app.broadcast.broadcast_event")
     def test_undo_last_pick_creates_pick_undone_event(self, mock_broadcast):
         """Undoing a pick creates a pick_undone event."""
         from rest_framework.test import APIRequestFactory

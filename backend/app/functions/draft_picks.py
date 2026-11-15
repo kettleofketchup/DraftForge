@@ -33,7 +33,6 @@ from app.permissions_org import can_edit_tournament
 from app.tasks.draft_tick import evaluate_client_pick_time
 from app.tasks.teamdraft_tick import start_team_tick_broadcaster_after_commit
 from telemetry.logging import get_logger
-from user.querysets import with_user_profiles
 
 log = get_logger(__name__)
 
@@ -154,9 +153,7 @@ def _record_picked_event(
     picked: CustomUser,
     actor: CustomUser,
 ) -> None:
-    captain = with_user_profiles(CustomUser.objects.all()).get(
-        pk=draft_round.captain_id
-    )
+    captain = draft_round.captain
     picked_event = DraftEvent.objects.create(
         draft=draft,
         event_type="player_picked",
@@ -164,10 +161,10 @@ def _record_picked_event(
         payload={
             "pick_number": draft_round.pick_number,
             "captain_id": captain.pk,
-            "captain_name": captain.display_name,
+            "captain_name": captain.username,
             "captain_avatar_url": captain.avatarUrl,
             "picked_id": picked.pk,
-            "picked_name": picked.display_name,
+            "picked_name": picked.username,
             "picked_avatar_url": picked.avatarUrl,
             "team_id": team.pk if team else None,
             "team_name": team.name if team else None,
@@ -287,7 +284,7 @@ def pick_player_for_round(request: Request) -> Response:
         return denied
 
     try:
-        user = with_user_profiles(CustomUser.objects.all()).get(pk=user_pk)
+        user = CustomUser.objects.get(pk=user_pk)
     except CustomUser.DoesNotExist:
         return Response({"error": "User not found"}, status=404)
 
@@ -416,11 +413,7 @@ def undo_last_pick(request: Request) -> Response:
         if last_round is None:
             return Response({"error": "No picks to undo"}, status=400)
 
-        player = (
-            with_user_profiles(CustomUser.objects.all()).get(pk=last_round.choice_id)
-            if last_round.choice_id
-            else None
-        )
+        player = last_round.choice
         team = last_round.team
 
         log.info(
@@ -460,7 +453,7 @@ def undo_last_pick(request: Request) -> Response:
             payload={
                 "pick_number": last_round.pick_number,
                 "undone_player_id": player.pk,
-                "undone_player_name": player.display_name,
+                "undone_player_name": player.username,
                 "team_id": team.pk if team else None,
                 "team_name": team.name if team else None,
             },

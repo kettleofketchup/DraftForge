@@ -27,7 +27,6 @@ from app.models import Draft, DraftOptions, DraftRound, Team, TeamDraftState
 from app.permissions_org import can_edit_tournament
 from app.tasks.teamdraft_tick import start_team_tick_broadcaster_after_commit
 from telemetry.logging import get_logger
-from user.querysets import with_user_profiles
 
 log = get_logger(__name__)
 
@@ -70,7 +69,6 @@ def teamdraft_set_ready(request: Request, draft_pk: int) -> Response:
         team = Team.objects.select_for_update().get(
             tournament=draft.tournament, captain=request.user
         )
-        team.captain = request.user
         team.draft_is_ready = ready
         team.save(update_fields=["draft_is_ready"])
         invalidate_after_commit(draft.tournament)
@@ -98,7 +96,7 @@ def teamdraft_start(request: Request, draft_pk: int) -> Response:
         return _error("forbidden", status.HTTP_403_FORBIDDEN)
 
     now = timezone.now()
-    actor = {"actor_id": request.user.pk, "actor_name": request.user.display_name}
+    actor = {"actor_id": request.user.pk, "actor_name": request.user.username}
     with atomic_sharing_draft_state():
         draft = Draft.objects.select_for_update().get(pk=draft_pk)
         options = draft.tournament.get_draft_options(fresh=True)
@@ -108,11 +106,8 @@ def teamdraft_start(request: Request, draft_pk: int) -> Response:
 
         if draft.state == TeamDraftState.PENDING and active is not None:
             teams = list(
-                with_user_profiles(
-                    Team.objects.filter(
-                        tournament=draft.tournament, captain__isnull=False
-                    ),
-                    "captain",
+                Team.objects.select_related("captain").filter(
+                    tournament=draft.tournament, captain__isnull=False
                 )
             )
             not_ready = [
@@ -120,7 +115,7 @@ def teamdraft_start(request: Request, draft_pk: int) -> Response:
                     "team_id": t.pk,
                     "team_name": t.name,
                     "captain_id": t.captain.pk,
-                    "captain_name": t.captain.display_name,
+                    "captain_name": t.captain.username,
                 }
                 for t in teams
                 if not t.draft_is_ready
@@ -187,7 +182,7 @@ def teamdraft_pause(request: Request, draft_pk: int) -> Response:
             {
                 "reason": "manual",
                 "paused_by_id": request.user.pk,
-                "paused_by_name": request.user.display_name,
+                "paused_by_name": request.user.username,
                 **team_payload(team_for_round(draft, active)),
             },
             actor=request.user,
@@ -239,7 +234,7 @@ def teamdraft_resume(request: Request, draft_pk: int) -> Response:
             "draft_resumed",
             {
                 "resumed_by_id": request.user.pk,
-                "resumed_by_name": request.user.display_name,
+                "resumed_by_name": request.user.username,
                 "resuming_until": resuming_until.isoformat(),
             },
             actor=request.user,
