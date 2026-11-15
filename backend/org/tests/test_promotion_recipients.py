@@ -6,6 +6,7 @@ from django.utils import timezone
 from app.models import CustomUser, League, Organization, Tournament
 from events.constants import EventState, SignupStatus
 from events.models import Event, EventSignup
+from events.services import decline_signup
 from org.models import PromoSend
 from org.promotion.recipients import (
     DEFAULT_POOL_N,
@@ -333,11 +334,23 @@ class CandidatesTest(_PoolFixture):
 
         rows = self._rows_by_username()
 
-        self.assertEqual(
-            set(rows), {"ann", "bob", "cancelled_player", "rejected_player"}
-        )
-        self.assertFalse(rows["cancelled_player"]["signed_up"])
-        self.assertFalse(rows["rejected_player"]["signed_up"])
+        self.assertEqual(set(rows), {"ann", "bob"})
+
+    def test_declined_hidden_even_when_signed_up_filter_off(self) -> None:
+        cancelled = self._user("cancelled_player")
+        rejected = self._user("rejected_player")
+        self._tournament([cancelled, rejected], days_ago=2, league=self.league)
+        self._signup(cancelled, SignupStatus.CANCELLED)
+        self._signup(rejected, SignupStatus.REJECTED)
+
+        rows = self._rows_by_username(hide_signed_up=False)
+
+        self.assertEqual(set(rows), {"ann", "bob"})
+
+    def test_decline_via_service_hides_candidate(self) -> None:
+        decline_signup(self.event, self.ann)
+
+        self.assertEqual(set(self._rows_by_username()), {"bob"})
 
     def test_signed_up_shown_when_filter_off(self) -> None:
         self._signup(self.ann, SignupStatus.RSVP)
@@ -362,7 +375,7 @@ class CandidatesTest(_PoolFixture):
         self.assertIsNotNone(row["last_messaged"])
         self.assertEqual(row["last_messaged"]["send_id"], newest.pk)
         self.assertEqual(row["last_messaged"]["sent_at"], newest.sent_at)
-        self.assertEqual(row["last_messaged"]["by"], "pool_sender_dc")
+        self.assertEqual(row["last_messaged"]["by"], "pool_sender")
         self.assertFalse(row["last_messaged"]["can_undo"])
 
     def test_earning_send_exists_flag(self) -> None:

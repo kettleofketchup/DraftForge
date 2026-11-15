@@ -14,11 +14,11 @@ import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
 import { Switch } from '~/components/ui/switch';
 import { UserAvatar } from '~/components/user/UserAvatar';
+import { DisplayName } from '~/components/user/avatar';
 import type { OrgFeatureAccess } from '~/features/org-features';
 import { extractApiError } from '~/lib/apiError';
 import { getLogger } from '~/lib/logger';
 import { cn } from '~/lib/utils';
-import { candidateName } from './ComposePanel';
 import {
   relativeFromIso,
   reportPromoError,
@@ -214,7 +214,7 @@ export function CandidateList({
               />
               <div className="flex min-w-0 flex-1 flex-col">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-medium">{candidateName(row)}</span>
+                  <span className="font-medium">{DisplayName(row)}</span>
                   {row.signed_up && (
                     <Badge variant="secondary">Signed up</Badge>
                   )}
