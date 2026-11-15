@@ -2,6 +2,16 @@ import { ChevronDown } from 'lucide-react';
 import { Fragment } from 'react';
 import { Button } from '~/components/ui/button';
 import {
+  brandBg,
+  brandErrorBg,
+  brandGlowLift,
+  brandGradient,
+  brandLabelOnGradient,
+  brandSecondary,
+  buttonDisabled,
+  buttonLift,
+} from '~/components/ui/buttons';
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -9,16 +19,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '~/components/ui/dropdown-menu';
-import {
-  brandBg,
-  brandGlowLift,
-  brandErrorBg,
-  brandGradient,
-  brandLabelOnGradient,
-  brandSecondary,
-  buttonLift,
-  buttonDisabled,
-} from '~/components/ui/buttons';
 import { cn } from '~/lib/utils';
 
 export interface BrandDropdownAction {
@@ -49,10 +49,13 @@ interface BrandDropdownMenuProps {
 // hover: + focus: both set — shadcn item base carries focus:bg-accent that races merge order.
 const variantStyles = {
   default: 'text-foreground hover:bg-violet-500/20 focus:bg-violet-500/20',
-  primary: 'text-primary font-medium [&_svg]:text-primary hover:bg-violet-500/20 focus:bg-violet-500/20',
+  primary:
+    'text-primary font-medium [&_svg]:text-primary hover:bg-violet-500/20 focus:bg-violet-500/20',
   edit: 'text-emerald-300 font-medium [&_svg]:text-emerald-300 hover:bg-emerald-500/20 focus:bg-emerald-500/20',
-  success: 'text-success font-medium [&_svg]:text-success hover:bg-emerald-500/20 focus:bg-emerald-500/20',
-  destructive: 'text-error font-medium [&_svg]:text-error hover:bg-red-500/20 focus:bg-red-500/20',
+  success:
+    'text-success font-medium [&_svg]:text-success hover:bg-emerald-500/20 focus:bg-emerald-500/20',
+  destructive:
+    'text-error font-medium [&_svg]:text-error hover:bg-red-500/20 focus:bg-red-500/20',
 } as const;
 
 // Reuse shared button lift recipes so trigger matches its sibling standalone button at rest.
@@ -87,11 +90,7 @@ export function BrandDropdownMenu({
         <Button
           size="sm"
           data-testid={testId}
-          className={cn(
-            'gap-1.5',
-            triggerVariants[variant],
-            className,
-          )}
+          className={cn('gap-1.5', triggerVariants[variant], className)}
         >
           {icon}
           {label}
@@ -100,7 +99,11 @@ export function BrandDropdownMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="start"
-        className={cn(brandBg, 'border-primary/30 min-w-[200px] p-1.5 space-y-0.5')}
+        data-testid={testId ? `${testId}-menu` : undefined}
+        className={cn(
+          brandBg,
+          'border-primary/30 min-w-[200px] p-1.5 space-y-0.5',
+        )}
       >
         {menuLabel && (
           <>
