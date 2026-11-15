@@ -28,6 +28,18 @@ EVENT_STATE_TRANSITIONS = {
     EventState.CANCELLED: [],
 }
 
+# Restarting a tournament may also pull a running event back to signups.
+EVENT_RESTART_TRANSITIONS = {
+    **EVENT_STATE_TRANSITIONS,
+    EventState.IN_PROGRESS: [EventState.COMPLETED, EventState.SIGNUPS_OPEN],
+}
+
+# Closed events reopen only via events.reopen.reopen_event, which revokes staff points.
+EVENT_REOPEN_TRANSITIONS = {
+    EventState.COMPLETED: [EventState.SIGNUPS_OPEN],
+    EventState.CANCELLED: [EventState.SIGNUPS_OPEN],
+}
+
 
 class SignupStatus(models.TextChoices):
     RSVP = "rsvp", "RSVP"

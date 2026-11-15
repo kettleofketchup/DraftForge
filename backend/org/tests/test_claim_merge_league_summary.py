@@ -1,9 +1,12 @@
 from unittest.mock import patch
 
 from django.test import TransactionTestCase
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from app.models import CustomUser, League, Organization, ProfileClaimRequest
+from org.contributions.kinds import ContributionKind
+from org.models import ContributionEntry, OrgUser
 from org.views import ClaimRequestViewSet
 from steam.functions.league_summary import get_league_summary
 from steam.tests.league_summary_fixtures import make_player, record_series
@@ -63,3 +66,25 @@ class ClaimMergeLeagueSummaryTests(TransactionTestCase):
         self.assertIn(str(target_pk), get_league_summary(STEAM_LEAGUE, 5)["players"])
         self.target.delete()
         self.assertNotIn(str(target_pk), get_league_summary(STEAM_LEAGUE, 5)["players"])
+
+    def test_approve_claim_keeps_points_of_both_accounts(self) -> None:
+        for user, points in ((self.target, 4), (self.claimer, 6)):
+            org_user = OrgUser.objects.create(user=user, organization=self.org)
+            ContributionEntry.objects.create(
+                org_user=org_user,
+                organization=self.org,
+                kind=ContributionKind.MANUAL,
+                points=points,
+                reason="help",
+                occurred_at=timezone.now(),
+            )
+
+        response = self.client.post(f"/api/claim-requests/{self.claim.pk}/approve/")
+        self.assertEqual(response.status_code, 200, response.content)
+
+        points = list(
+            ContributionEntry.objects.nocache()
+            .filter(organization=self.org)
+            .values_list("org_user__user_id", "points")
+        )
+        self.assertEqual(sorted(points), [(self.claimer.pk, 4), (self.claimer.pk, 6)])

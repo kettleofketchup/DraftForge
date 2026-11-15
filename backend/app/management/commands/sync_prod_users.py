@@ -5,6 +5,7 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 
 from app.models import CustomUser, PositionsModel
+from org.models import ContributionEntry, PromoSend
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +61,8 @@ class Command(BaseCommand):
             # Delete all existing users and positions
             existing_count = CustomUser.objects.count()
             self.stdout.write(f"Deleting {existing_count} existing users...")
+            ContributionEntry.objects.nocache().all().delete()
+            PromoSend.objects.all().delete()
             CustomUser.objects.all().delete()
             PositionsModel.objects.all().delete()
 

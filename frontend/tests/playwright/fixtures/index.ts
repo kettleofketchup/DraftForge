@@ -10,59 +10,60 @@
 
 // Auth utilities (functions only, not the extended test)
 export {
-  loginAsUser,
-  loginAsDiscordId,
   loginAdmin,
+  loginAsDiscordId,
+  loginAsUser,
+  loginAuthMatrixLeagueAdmin,
+  loginAuthMatrixLeagueStaff,
+  loginAuthMatrixOrgAdmin,
+  loginAuthMatrixOrgMember,
+  loginAuthMatrixOrgOwner,
+  loginAuthMatrixOrgPromoter,
+  loginAuthMatrixOrgStaff,
+  loginEventLeagueStaff,
+  loginLeagueAdmin,
+  loginLeagueStaff,
+  loginOrgAdmin,
+  loginOrgMember,
+  loginOrgStaff,
   loginStaff,
   loginUser,
   loginUserClaimer,
-  loginOrgAdmin,
-  loginOrgStaff,
-  loginOrgMember,
-  loginLeagueAdmin,
-  loginLeagueStaff,
-  loginEventLeagueStaff,
-  loginAuthMatrixOrgOwner,
-  loginAuthMatrixOrgAdmin,
-  loginAuthMatrixOrgStaff,
-  loginAuthMatrixOrgMember,
-  loginAuthMatrixLeagueAdmin,
-  loginAuthMatrixLeagueStaff,
-  waitForHydration,
   visitAndWait,
-  type UserInfo,
+  waitForHydration,
   type LoginResponse,
+  type UserInfo,
 } from './auth';
 
 // HeroDraft utilities
 export {
-  getHeroDraftByKey,
-  resetHeroDraft,
   createTestHeroDraft,
-  setupTwoCaptains,
+  getHeroDraftByKey,
   positionWindowsSideBySide,
-  type HeroDraftInfo,
+  resetHeroDraft,
+  setupTwoCaptains,
   type CaptainContext,
+  type HeroDraftInfo,
 } from './herodraft';
 
 // Team Draft utilities
 export {
+  activeRound,
+  captainsOf,
+  draftStateOf,
+  expireDraftClock,
+  fetchTimerTournament,
   killDraftWebSocket,
+  openCaptainPage,
+  openDraftModal,
+  readyUp,
   resetTeamDraft,
   resetTimerTournament,
-  fetchTimerTournament,
-  expireDraftClock,
-  staleDraftHeartbeat,
-  readyUp,
-  startDraftAsStaff,
   resumeDraftAsStaff,
   staffPick,
-  captainsOf,
-  activeRound,
-  openDraftModal,
-  openCaptainPage,
+  staleDraftHeartbeat,
+  startDraftAsStaff,
   suppressDraftHeartbeats,
-  draftStateOf,
   type TimerTournament,
 } from './teamdraft';
 
@@ -70,123 +71,123 @@ export {
 export { DraftWebSocketHelper } from '../helpers/DraftWebSocketHelper';
 
 // Re-export the extended test from auth (primary test fixture)
-export { test, expect } from './auth';
+export { expect, test } from './auth';
 
 // Role-contexts matrix fixture — re-exported under a distinct name so
 // spec files can opt in: ``import { roleMatrixTest } from '../../fixtures'``.
 export {
+  ROLE_NAMES,
   test as roleMatrixTest,
   setupRoleContexts,
-  ROLE_NAMES,
+  type RoleContexts,
   type RoleName,
   type RoleSession,
-  type RoleContexts,
 } from './role-contexts';
 
 // General utilities
 export {
+  IGNORED_CONSOLE_PATTERNS,
+  checkBasicAccessibility,
+  navigateToRoute,
+  shouldIgnoreConsoleMessage,
   visitAndWaitForHydration,
   waitForLoadingToComplete,
-  navigateToRoute,
-  checkBasicAccessibility,
-  IGNORED_CONSOLE_PATTERNS,
-  shouldIgnoreConsoleMessage,
 } from '../helpers/utils';
 
 // User card helpers
 export {
   getUserCard,
   getUserRemoveButton,
-  waitForUserCard,
   removeUser,
+  waitForUserCard,
 } from '../helpers/users';
 
 // Tournament helpers
 export {
-  type TournamentData,
   TournamentPage,
-  getTournamentByKey,
-  resetTournamentByKey,
-  navigateToTournament,
-  clickTeamsTab,
   clickStartDraft,
+  clickTeamsTab,
+  getTournamentByKey,
+  navigateToTournament,
+  resetTournamentByKey,
   waitForDraftModal,
+  type TournamentData,
 } from '../helpers/tournament';
 
 // League helpers
 export {
-  type LeagueData,
   LeaguePage,
-  navigateToLeague,
   clickLeagueTab,
-  getLeagueEditModal,
-  openLeagueEditModal,
   getFirstLeague,
+  getLeagueEditModal,
+  navigateToLeague,
+  openLeagueEditModal,
+  type LeagueData,
 } from '../helpers/league';
 
 // AddUser modal helpers
 export {
-  waitForAddUserModal,
   closeAddUserModal,
-  searchUser,
-  searchAndAddUser,
   expectUserAlreadyAdded,
+  searchAndAddUser,
+  searchUser,
+  waitForAddUserModal,
 } from '../helpers/add-user';
 
 // EditUser modal helpers
 export {
-  type EditUserField,
-  type PositionKey,
+  editUserField,
+  fillEditField,
   openEditModal,
   readEditField,
-  fillEditField,
-  saveEditModal,
-  editUserField,
-  restoreUserField,
   readPositionField,
+  restoreUserField,
+  saveEditModal,
   setPositionField,
+  type EditUserField,
+  type PositionKey,
 } from '../helpers/edit-user';
 
 // Events utilities
 export {
+  EVENTS_EVENT_NAME,
+  EVENTS_ORG_NAME,
   getEventsTestData,
-  resetEventsData,
-  triggerEventGeneration,
   loginEventAdmin,
   loginEventPlayer,
   loginEventPlayer4,
-  setApprovedMmr,
   loginEventPlayerNoProfile,
-  postWithCsrf,
   patchWithCsrf,
-  syncDiscordEvents,
-  simulateDiscordSignup,
-  verifyDiscordMessages,
+  postWithCsrf,
+  resetEventsData,
   sendTestNotification,
-  EVENTS_ORG_NAME,
-  EVENTS_EVENT_NAME,
+  setApprovedMmr,
+  simulateDiscordSignup,
+  syncDiscordEvents,
+  triggerEventGeneration,
+  verifyDiscordMessages,
   type EventInfo,
 } from './events';
 
 // dota_lobby utilities (18-dota-lobby specs, simulated dota_lobby)
 export {
-  getDotaLobbyTestData,
-  resetDotaLobbyData,
-  loginDotaLobby,
-  simulatorStatus,
-  hasSimulator,
   SIMULATOR_SKIP_REASON,
-  sim,
-  getSimLobby,
-  getLobbyRow,
-  seedLobbyRow,
-  waitForLobbyRow,
-  requestLobby,
-  openBracket,
   bracketNode,
-  openMatchModal,
   closeMatchModal,
   expectLobbyState,
+  getDotaLobbyTestData,
+  getLobbyRow,
+  getSimLobby,
+  hasSimulator,
+  loginDotaLobby,
+  openBracket,
+  openMatchModal,
+  requestLobby,
+  resetDotaLobbyData,
+  seedLobbyRow,
+  sim,
+  simulatorStatus,
+  waitForLobbyRow,
   type DotaLobbyRole,
   type DotaLobbyTestData,
   type LobbyGame,
@@ -196,3 +197,19 @@ export {
   type SimLobby,
   type SimulatorStatus,
 } from './dota-lobby';
+
+// Org locked features utilities (19-org-features specs)
+export {
+  expectNoSessionToast,
+  getOrgFeaturesData,
+  leaderboardByUser,
+  loginOrgFeatures,
+  moveEventToRollCall,
+  orgFeaturesApi,
+  resetOrgFeatures,
+  type LeaderboardRowRef,
+  type OrgFeaturesEvent,
+  type OrgFeaturesRef,
+  type OrgFeaturesRole,
+  type OrgFeaturesTestData,
+} from './org-features';
