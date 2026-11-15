@@ -306,7 +306,7 @@ jobs:
   backend:
     name: Backend tests
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     permissions:
       contents: read
       packages: read
@@ -321,6 +321,7 @@ jobs:
 
       # No labels: BackendDiscoverRunner discovers every test*.py module under backend/.
       - name: Run backend tests
+        timeout-minutes: 15
         env:
           CI: 'true'
         run: |
@@ -328,6 +329,7 @@ jobs:
             python manage.py test -v 2
 
       - name: Run frontend Vitest
+        timeout-minutes: 5
         env:
           CI: 'true'
         run: |
