@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, cast
 
 from cacheops import cached_as
 from django.contrib.auth import login
@@ -22,7 +22,7 @@ from django.shortcuts import redirect
 from django.utils import timezone
 from rest_framework import generics, status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
-from rest_framework.exceptions import PermissionDenied, ValidationError
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.generics import get_object_or_404
 from rest_framework.permissions import (
     AllowAny,
@@ -45,8 +45,11 @@ from app.tournament_buckets import (
     utc_day_start,
 )
 from app.tournament_list import (
+    ArchiveCursor,
     TournamentListPagination,
     TournamentListParams,
+    archive_after_q,
+    build_cursor_envelope,
     build_page_envelope,
     parse_tournament_list_params,
     resolve_organizations,
@@ -97,7 +100,7 @@ from .permissions_org import (
     can_view_league_members_from_payload,
     can_view_org_members,
     can_view_org_members_from_payload,
-    has_league_admin_access,
+    check_tournament_league_change,
     has_league_staff_access,
     has_org_staff_access,
 )
@@ -521,6 +524,11 @@ class TournamentView(viewsets.ModelViewSet):
         return self.partial_update(request, *args, **kwargs)
 
     def perform_update(self, serializer: TournamentSerializer) -> None:
+        check_tournament_league_change(
+            self.request.user,
+            serializer.instance,
+            serializer.validated_data.get("league", serializer.instance.league),
+        )
         opts = serializer.validated_data.pop("draft_options", None)
         with transaction.atomic():
             serializer.save()
@@ -528,7 +536,9 @@ class TournamentView(viewsets.ModelViewSet):
                 apply_draft_options(serializer.instance, opts, actor=self.request.user)
 
     def get_permissions(self) -> list[BasePermission]:
-        if self.request.method == "GET":
+        if self.action == "discord_logs":
+            self.permission_classes = [CanEditTournament]
+        elif self.request.method == "GET":
             self.permission_classes = [AllowAny]
         elif self.action in ["update", "partial_update", "destroy"]:
             # Use object-level permission check for league admin
@@ -543,7 +553,7 @@ class TournamentView(viewsets.ModelViewSet):
         detail=True,
         methods=["get"],
         url_path="discord-logs",
-        permission_classes=[IsAuthenticated],
+        permission_classes=[CanEditTournament],
     )
     def discord_logs(self, request: Request, pk: str | None = None) -> Response:
         from discordbot.models import DiscordTournamentLog
@@ -566,19 +576,9 @@ class TournamentView(viewsets.ModelViewSet):
 
     def perform_create(self, serializer: TournamentSerializer) -> None:
         """Check that user can create tournament in the specified league."""
-        league_id = self.request.data.get("league")
-        if not league_id:
-            raise ValidationError(
-                {"league": "A league is required when creating a tournament."}
-            )
-        try:
-            league = League.objects.get(pk=league_id)
-            if not has_league_admin_access(self.request.user, league):
-                raise PermissionDenied(
-                    "You do not have permission to create tournaments in this league."
-                )
-        except League.DoesNotExist:
-            raise ValidationError({"league": "League not found."})
+        check_tournament_league_change(
+            self.request.user, None, serializer.validated_data.get("league")
+        )
         opts = serializer.validated_data.pop("draft_options", None)
         with transaction.atomic():
             serializer.save()
@@ -653,7 +653,9 @@ class TeamView(viewsets.ModelViewSet):
         return Response(data)
 
     def get_permissions(self) -> list[BasePermission]:
-        if self.request.method == "GET":
+        if self.action == "discord_logs":
+            self.permission_classes = [CanEditTournament]
+        elif self.request.method == "GET":
             self.permission_classes = [AllowAny]
         elif self.action in ["update", "partial_update", "destroy"]:
             self.permission_classes = [CanEditTeam]
@@ -734,7 +736,9 @@ class DraftView(viewsets.ModelViewSet):
         return self.partial_update(request, *args, **kwargs)
 
     def get_permissions(self) -> list[BasePermission]:
-        if self.request.method == "GET":
+        if self.action == "discord_logs":
+            self.permission_classes = [CanEditTournament]
+        elif self.request.method == "GET":
             self.permission_classes = [AllowAny]
         elif self.action in ["update", "partial_update", "destroy"]:
             self.permission_classes = [CanEditDraft]
@@ -805,7 +809,9 @@ class DraftRoundView(viewsets.ModelViewSet):
         return self.partial_update(request, *args, **kwargs)
 
     def get_permissions(self) -> list[BasePermission]:
-        if self.request.method == "GET":
+        if self.action == "discord_logs":
+            self.permission_classes = [CanEditTournament]
+        elif self.request.method == "GET":
             self.permission_classes = [AllowAny]
         elif self.action in ["update", "partial_update", "destroy"]:
             self.permission_classes = [CanEditDraftRound]
@@ -984,7 +990,9 @@ class GameView(viewsets.ModelViewSet):
         return self.partial_update(request, *args, **kwargs)
 
     def get_permissions(self) -> list[BasePermission]:
-        if self.request.method == "GET":
+        if self.action == "discord_logs":
+            self.permission_classes = [CanEditTournament]
+        elif self.request.method == "GET":
             self.permission_classes = [AllowAny]
         elif self.action in ["update", "partial_update", "destroy"]:
             # Use object-level permission check for league staff
@@ -1071,7 +1079,8 @@ class TournamentListView(viewsets.ReadOnlyModelViewSet):
     Filters: organization, organizations (ids or ``mine``), open_signups,
     league, bucket (upcoming|archived), search. ``open_signups=1`` adds tournaments
     whose source event takes user signups to the organization scope.
-    Paginates only when ``page`` is present (requires ``bucket``).
+    Paginates only when ``page`` or ``cursor`` is present (requires ``bucket``).
+    Archived pages link onward with a keyset ``cursor`` on (date_played, pk).
     """
 
     serializer_class = TournamentListSerializer
@@ -1140,17 +1149,38 @@ class TournamentListView(viewsets.ReadOnlyModelViewSet):
 
     def list(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         params = self._params
+        archived = params.bucket == "archived"
 
         def compute() -> Any:
             # cacheops' own queryset cache ignores select_related tables, so it
             # would serve stale org/league fields; cached_as below owns caching.
             queryset = self.filter_queryset(self.get_queryset()).nocache()
-            if params.page is None:
+            if not params.paginated:
                 return list(self.get_serializer(queryset, many=True).data)
-            page = self.paginator.paginate_queryset(queryset, request, view=self)
+            if params.cursor is None:
+                rows = list(
+                    self.paginator.paginate_queryset(queryset, request, view=self)
+                )
+                count = self.paginator.page.paginator.count
+                has_next = self.paginator.page.has_next()
+            else:
+                count = queryset.count()
+                rows = list(
+                    queryset.filter(archive_after_q(params.cursor))[
+                        : params.page_size + 1
+                    ]
+                )
+                has_next = len(rows) > params.page_size
+                rows = rows[: params.page_size]
+            next_cursor = (
+                ArchiveCursor(rows[-1].date_played, rows[-1].pk).token
+                if archived and has_next and rows
+                else None
+            )
             return {
-                "count": self.paginator.page.paginator.count,
-                "results": list(self.get_serializer(page, many=True).data),
+                "count": count,
+                "next_cursor": next_cursor,
+                "results": list(self.get_serializer(rows, many=True).data),
             }
 
         if params.search is not None:
@@ -1165,13 +1195,22 @@ class TournamentListView(viewsets.ReadOnlyModelViewSet):
                 timeout=60 * 10,
             )(compute)()
 
-        if params.page is None:
+        if not params.paginated:
             return Response(data)
+        if archived:
+            return Response(
+                build_cursor_envelope(
+                    request,
+                    count=data["count"],
+                    next_cursor=data["next_cursor"],
+                    results=data["results"],
+                )
+            )
         return Response(
             build_page_envelope(
                 request,
                 count=data["count"],
-                page=params.page,
+                page=cast(int, params.page),
                 page_size=params.page_size,
                 results=data["results"],
             )

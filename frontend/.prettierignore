@@ -12,3 +12,6 @@ app/i18n/locales/
 
 # Byte-identical copy of the root CHANGELOG.md; scripts/changelog.py check compares them.
 app/data/CHANGELOG.md
+
+# Written by eslint --suppress-all / --prune-suppressions.
+shadcn-lint-suppressions.json

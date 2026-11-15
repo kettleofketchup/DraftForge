@@ -649,7 +649,7 @@ class TournamentLobbyFieldsTests(LobbyViewTestCase):
         self.assertEqual(resp.data["game_mode"], GameMode.CAPTAINS_MODE)
         self.assertIn("lobby_steam_league_id", resp.data)
 
-    def test_staff_can_change_lobby_settings_but_not_game_mode(self):
+    def test_staff_can_change_lobby_settings_and_game_mode(self):
         resp = self.as_user(self.staff).patch(
             f"/api/tournaments/{self.tournament.pk}/",
             {
@@ -667,7 +667,7 @@ class TournamentLobbyFieldsTests(LobbyViewTestCase):
         self.assertEqual(self.tournament.dota_lobby_launch, "auto")
         self.assertEqual(self.tournament.dota_lobby_region, "europe")
         self.assertTrue(self.tournament.discord_send_lobby_info)
-        self.assertEqual(self.tournament.game_mode, GameMode.CAPTAINS_MODE)
+        self.assertEqual(self.tournament.game_mode, GameMode.TURBO)
 
     def test_invalid_mode_rejected(self):
         resp = self.as_user(self.staff).patch(

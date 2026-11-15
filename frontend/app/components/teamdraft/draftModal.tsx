@@ -1,9 +1,23 @@
-import { BarChart3, ChevronUp, ClipboardPen, EyeIcon, History, Users } from 'lucide-react';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  BarChart3,
+  ChevronUp,
+  ClipboardPen,
+  EyeIcon,
+  History,
+  Users,
+} from 'lucide-react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
+import { toast } from 'sonner';
+import type { TournamentType } from '~/components/tournament/types';
 import { Button } from '~/components/ui/button';
 import { PrimaryButton, SecondaryButton } from '~/components/ui/buttons';
-import { brandErrorBg } from '~/components/ui/buttons/styles';
 import {
   Collapsible,
   CollapsibleContent,
@@ -17,6 +31,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '~/components/ui/dialog';
+import { Label } from '~/components/ui/label';
 import {
   Select,
   SelectContent,
@@ -24,17 +39,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from '~/components/ui/select';
-import { Label } from '~/components/ui/label';
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from '~/components/ui/tooltip';
-import { cn } from '~/lib/utils';
-import { getLogger } from '~/lib/logger';
-import { useTournamentStore } from '~/store/tournamentStore';
-import { toast } from 'sonner';
 import { DisplayName } from '~/components/user/avatar';
+import { getLogger } from '~/lib/logger';
+import { cn } from '~/lib/utils';
+import {
+  draftWsSelectors,
+  useDraftWebSocketStore,
+} from '~/store/draftWebSocketStore';
+import { useTournamentStore } from '~/store/tournamentStore';
 import { useUserStore } from '~/store/userStore';
 import { TEAMS_BUTTONS_WIDTH } from '../constants';
 import { DIALOG_CSS_FULLSCREEN } from '../reusable/modal';
@@ -46,26 +63,23 @@ import { NextRoundButton } from './buttons/nextButton';
 import { PrevRoundButton } from './buttons/prevButton';
 import { ShareDraftButton } from './buttons/shareDraftButton';
 import { UndoPickButton } from './buttons/undoPickButton';
+import { CompletedTeamDraftView } from './CompletedTeamDraftView';
 import { DraftBalanceDisplay } from './draftBalanceDisplay';
 import { DraftLobby } from './DraftLobby';
 import { DraftRoundView } from './draftRoundView';
+import { initDraftHook } from './hooks/initDraftHook';
 import { refreshDraftHook } from './hooks/refreshDraftHook';
 import { refreshTournamentHook } from './hooks/refreshTournamentHook';
 import { useAutoRefreshDraft } from './hooks/useAutoRefreshDraft';
 import { useDraftLive } from './hooks/useDraftLive';
-import { useDraftWebSocketStore, draftWsSelectors } from '~/store/draftWebSocketStore';
-import { LiveAutoButtons, DraftRoundIndicator } from './liveView';
-import { CompletedTeamDraftView } from './CompletedTeamDraftView';
-import { initDraftHook } from './hooks/initDraftHook';
 import { isCaptainOf } from './isCaptainOf';
+import { DraftRoundIndicator, LiveAutoButtons } from './liveView';
 import { TieRollPopup, tieRollKey } from './TieRollPopup';
 import { LiveDraftClockBar } from './timer/DraftClockBar';
 import { LiveDraftPauseOverlay } from './timer/DraftPauseOverlay';
 import { useTeamDraftTimerProps } from './timer/useTeamDraftTimerProps';
+import type { DraftRoundType, DraftType, TieResolution } from './types';
 import { deriveDraftIndex, resolveViewedRound } from './utils';
-import type { DraftRoundType, DraftType } from './types';
-import type { TieResolution } from './types';
-import type { TournamentType } from '~/components/tournament/types';
 const log = getLogger('DraftModal');
 type DraftModalParams = {};
 export const DraftModal: React.FC<DraftModalParams> = () => {
@@ -89,9 +103,13 @@ export const DraftModal: React.FC<DraftModalParams> = () => {
   const [draftStyleOpen, setDraftStyleOpen] = useState(false);
   const [footerDrawerOpen, setFooterDrawerOpen] = useState(false);
   const [showFullDraft, setShowFullDraft] = useState(false);
-  const [selectedStyle, setSelectedStyle] = useState<'snake' | 'normal' | 'shuffle'>('snake');
+  const [selectedStyle, setSelectedStyle] = useState<
+    'snake' | 'normal' | 'shuffle'
+  >('snake');
   const [isStarting, setIsStarting] = useState(false);
-  const [tieResolution, setTieResolution] = useState<TieResolution | null>(null);
+  const [tieResolution, setTieResolution] = useState<TieResolution | null>(
+    null,
+  );
   const lastTieKeyRef = useRef<string | null>(null);
   const isStaff = useUserStore((state) => state.isStaff);
   const currentUser = useUserStore((state) => state.currentUser);
@@ -121,18 +139,21 @@ export const DraftModal: React.FC<DraftModalParams> = () => {
 
   // Sync URL with modal open/close state
   // Note: Don't call setLive here - TournamentDetailPage handles live state based on URL
-  const handleOpenChange = useCallback((isOpen: boolean) => {
-    setOpen(isOpen);
-    if (pk) {
-      if (isOpen) {
-        // Add /draft to URL when opening - TournamentDetailPage will set live=true
-        navigate(`/tournament/${pk}/teams/draft`, { replace: true });
-      } else {
-        // Remove /draft from URL when closing - TournamentDetailPage will set live=false
-        navigate(`/tournament/${pk}/teams`, { replace: true });
+  const handleOpenChange = useCallback(
+    (isOpen: boolean) => {
+      setOpen(isOpen);
+      if (pk) {
+        if (isOpen) {
+          // Add /draft to URL when opening - TournamentDetailPage will set live=true
+          navigate(`/tournament/${pk}/teams/draft`, { replace: true });
+        } else {
+          // Remove /draft from URL when closing - TournamentDetailPage will set live=false
+          navigate(`/tournament/${pk}/teams`, { replace: true });
+        }
       }
-    }
-  }, [pk, navigate]);
+    },
+    [pk, navigate],
+  );
 
   // Auto-open modal when ?draft=open is in URL (from share URL)
   useEffect(() => {
@@ -221,11 +242,15 @@ export const DraftModal: React.FC<DraftModalParams> = () => {
       }
 
       const force = useDraftWebSocketStore.getState().forceJumpToRoundPk;
-      const result = resolveViewedRound(draftState.draft_rounds ?? [], curDraftRoundRef.current, {
-        autoAdvance: autoAdvanceRef.current,
-        latestRoundPk: draftState.latest_round,
-        forceJumpToRoundPk: force,
-      });
+      const result = resolveViewedRound(
+        draftState.draft_rounds ?? [],
+        curDraftRoundRef.current,
+        {
+          autoAdvance: autoAdvanceRef.current,
+          latestRoundPk: draftState.latest_round,
+          forceJumpToRoundPk: force,
+        },
+      );
       if (result.round) setCurDraftRound(result.round);
       if (result.moved) {
         toast.info(
@@ -272,7 +297,9 @@ export const DraftModal: React.FC<DraftModalParams> = () => {
   const wsDraftState = useDraftWebSocketStore((s) => s.draftState);
   const hasNewEvent = useDraftWebSocketStore((s) => s.hasNewEvent);
   const clearNewEventFlag = useDraftWebSocketStore((s) => s.clearNewEventFlag);
-  const pendingTieResolution = useDraftWebSocketStore((s) => s.pendingTieResolution);
+  const pendingTieResolution = useDraftWebSocketStore(
+    (s) => s.pendingTieResolution,
+  );
   const wsConnect = useDraftWebSocketStore((s) => s.connect);
   const wsDisconnect = useDraftWebSocketStore((s) => s.disconnect);
   const startHeartbeat = useDraftWebSocketStore((s) => s.startHeartbeat);
@@ -424,7 +451,7 @@ export const DraftModal: React.FC<DraftModalParams> = () => {
       // This avoids the initial → auto-advance double render
       if (autoAdvance && draftData.latest_round) {
         const latestRound = draftData.draft_rounds.find(
-          (r: DraftRoundType) => r.pk === draftData.latest_round
+          (r: DraftRoundType) => r.pk === draftData.latest_round,
         );
         if (latestRound) {
           setCurDraftRound(latestRound);
@@ -450,12 +477,16 @@ export const DraftModal: React.FC<DraftModalParams> = () => {
     }
   }, [open]);
 
-  const wsDraftCompleted = useDraftWebSocketStore(draftWsSelectors.isDraftCompleted);
+  const wsDraftCompleted = useDraftWebSocketStore(
+    draftWsSelectors.isDraftCompleted,
+  );
   const hasWsDraftState = useDraftWebSocketStore((s) => s.draftState !== null);
   const localDraftCompleted =
     (draft?.draft_rounds?.length ?? 0) > 0 &&
     draft?.draft_rounds?.every((r) => r.choice != null) === true;
-  const isDraftCompleted = hasWsDraftState ? wsDraftCompleted : localDraftCompleted;
+  const isDraftCompleted = hasWsDraftState
+    ? wsDraftCompleted
+    : localDraftCompleted;
 
   const mainView = () => {
     // Show start draft UI when no draft exists
@@ -611,7 +642,9 @@ export const DraftModal: React.FC<DraftModalParams> = () => {
         <TooltipTrigger asChild>
           <DialogTrigger asChild>
             <PrimaryButton
-              className={cn(`flex-1 sm:flex-none sm:w-[${TEAMS_BUTTONS_WIDTH}]`)}
+              className={cn(
+                `flex-1 sm:flex-none sm:w-[${TEAMS_BUTTONS_WIDTH}]`,
+              )}
               data-testid={testId}
             >
               {buttonIcon}
@@ -629,7 +662,7 @@ export const DraftModal: React.FC<DraftModalParams> = () => {
 
   const choiceButtons = () => {
     return (
-      <div className="w-full flex  gap-4 align-center justify-center ">
+      <div className="w-full flex gap-4 justify-center">
         <PrevRoundButton goToPrevRound={prevRound} />
         <LatestRoundButton goToLatestRound={goToLatestRound} />
         <NextRoundButton goToNextRound={nextRound} />
@@ -664,142 +697,155 @@ export const DraftModal: React.FC<DraftModalParams> = () => {
           {/* Main content area; the pause overlay covers only this, leaving the footer usable */}
           <div className="relative flex-1 min-h-0 flex flex-col">
             <LiveDraftPauseOverlay {...timer.pauseOverlayProps} />
-            <div className="flex-1 overflow-auto p-2 md:p-4">
-              {mainView()}
-            </div>
+            <div className="flex-1 overflow-auto p-2 md:p-4">{mainView()}</div>
           </div>
 
           {/* Footer - fixed at bottom, hidden when no draft */}
           {draft?.pk && (
-          <div className="shrink-0 border-t border-gray-800 bg-gray-900/95 backdrop-blur">
-            {/* Mobile Footer Drawer */}
-            <div className="md:hidden">
-              <Collapsible open={footerDrawerOpen} onOpenChange={setFooterDrawerOpen}>
-                {/* Top row: Moderation (always visible) + Navigation + Actions toggle */}
-                <div className="flex items-center justify-between p-2 gap-2">
-                  {/* Moderation actions - always visible on left (staff only) */}
-                  {isStaff() ? (
-                    <div className="flex items-center gap-1 shrink-0">
-                      <DraftModerationDropdown onOpenDraftStyleModal={() => setDraftStyleOpen(true)} />
-                      <UndoPickButton />
-                    </div>
-                  ) : (
-                    /* Spacer for non-staff */
-                    <div className="w-0" />
-                  )}
-                  {/* Navigation buttons in center */}
-                  <div className="flex-1 flex justify-center">
-                    {choiceButtons()}
-                  </div>
-                  {/* Actions dropdown toggle on right */}
-                  <CollapsibleTrigger asChild>
-                    <Button variant="outline" size="sm" className="shrink-0">
-                      <ChevronUp className={cn(
-                        "h-4 w-4 transition-transform",
-                        footerDrawerOpen && "rotate-180"
-                      )} />
-                      <span className="ml-1">More</span>
-                    </Button>
-                  </CollapsibleTrigger>
-                </div>
-                {/* Expandable actions drawer - non-moderation actions only */}
-                <CollapsibleContent className="border-t border-gray-800 bg-gray-800/50 p-4">
-                  <div className="flex flex-wrap gap-2 justify-center">
-                    {/* Toggle between completed view and full draft when draft is complete */}
-                    {isDraftCompleted && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setShowFullDraft(!showFullDraft)}
-                      >
-                        {showFullDraft ? (
-                          <>
-                            <Users className="h-4 w-4 mr-2" />
-                            View Teams
-                          </>
-                        ) : (
-                          <>
-                            <History className="h-4 w-4 mr-2" />
-                            View Full Draft
-                          </>
-                        )}
-                      </Button>
+            <div className="shrink-0 border-t border-gray-800 bg-gray-900/95 backdrop-blur">
+              {/* Mobile Footer Drawer */}
+              <div className="md:hidden">
+                <Collapsible
+                  open={footerDrawerOpen}
+                  onOpenChange={setFooterDrawerOpen}
+                >
+                  {/* Top row: Moderation (always visible) + Navigation + Actions toggle */}
+                  <div className="flex items-center justify-between p-2 gap-2">
+                    {/* Moderation actions - always visible on left (staff only) */}
+                    {isStaff() ? (
+                      <div className="flex items-center gap-1 shrink-0">
+                        <DraftModerationDropdown
+                          onOpenDraftStyleModal={() => setDraftStyleOpen(true)}
+                        />
+                        <UndoPickButton />
+                      </div>
+                    ) : (
+                      /* Spacer for non-staff */
+                      <div className="w-0" />
                     )}
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <SecondaryButton onClick={() => setDraftStyleOpen(true)}>
-                          <BarChart3 className="h-4 w-4 mr-2" />
-                          Stats
-                        </SecondaryButton>
-                      </TooltipTrigger>
-                      <TooltipContent>View Draft Balance Stats</TooltipContent>
-                    </Tooltip>
-                    <DraftHistoryButton
-                      events={draftEvents}
-                      hasNewEvent={hasNewEvent}
-                      onViewed={clearNewEventFlag}
-                    />
-                    <ShareDraftButton />
+                    {/* Navigation buttons in center */}
+                    <div className="flex-1 flex justify-center">
+                      {choiceButtons()}
+                    </div>
+                    {/* Actions dropdown toggle on right */}
+                    <CollapsibleTrigger asChild>
+                      <Button variant="outline" size="sm" className="shrink-0">
+                        <ChevronUp
+                          className={cn(
+                            'h-4 w-4 transition-transform',
+                            footerDrawerOpen && 'rotate-180',
+                          )}
+                        />
+                        <span className="ml-1">More</span>
+                      </Button>
+                    </CollapsibleTrigger>
                   </div>
-                </CollapsibleContent>
-              </Collapsible>
-            </div>
-
-            {/* Desktop Footer */}
-            <div className="hidden md:flex w-full items-center justify-between gap-4 p-3">
-              <div className="flex items-center gap-2">
-                {/* Moderation actions - only visible to staff */}
-                <DraftModerationDropdown onOpenDraftStyleModal={() => setDraftStyleOpen(true)} />
-                <UndoPickButton />
-                {/* Balance stats - visible to everyone */}
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <SecondaryButton onClick={() => setDraftStyleOpen(true)}>
-                      <BarChart3 className="h-4 w-4 mr-2" />
-                      Stats
-                    </SecondaryButton>
-                  </TooltipTrigger>
-                  <TooltipContent>View Draft Balance Stats</TooltipContent>
-                </Tooltip>
+                  {/* Expandable actions drawer - non-moderation actions only */}
+                  <CollapsibleContent className="border-t border-gray-800 bg-gray-800/50 p-4">
+                    <div className="flex flex-wrap gap-2 justify-center">
+                      {/* Toggle between completed view and full draft when draft is complete */}
+                      {isDraftCompleted && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setShowFullDraft(!showFullDraft)}
+                        >
+                          {showFullDraft ? (
+                            <>
+                              <Users className="h-4 w-4 mr-2" />
+                              View Teams
+                            </>
+                          ) : (
+                            <>
+                              <History className="h-4 w-4 mr-2" />
+                              View Full Draft
+                            </>
+                          )}
+                        </Button>
+                      )}
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <SecondaryButton
+                            onClick={() => setDraftStyleOpen(true)}
+                          >
+                            <BarChart3 className="h-4 w-4 mr-2" />
+                            Stats
+                          </SecondaryButton>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          View Draft Balance Stats
+                        </TooltipContent>
+                      </Tooltip>
+                      <DraftHistoryButton
+                        events={draftEvents}
+                        hasNewEvent={hasNewEvent}
+                        onViewed={clearNewEventFlag}
+                      />
+                      <ShareDraftButton />
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
               </div>
-              {choiceButtons()}
-              <div className="flex items-center gap-2">
-                {/* Toggle between completed view and full draft when draft is complete */}
-                {isDraftCompleted && (
+
+              {/* Desktop Footer */}
+              <div className="hidden md:flex w-full items-center justify-between gap-4 p-3">
+                <div className="flex items-center gap-2">
+                  {/* Moderation actions - only visible to staff */}
+                  <DraftModerationDropdown
+                    onOpenDraftStyleModal={() => setDraftStyleOpen(true)}
+                  />
+                  <UndoPickButton />
+                  {/* Balance stats - visible to everyone */}
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setShowFullDraft(!showFullDraft)}
-                      >
-                        {showFullDraft ? (
-                          <>
-                            <Users className="h-4 w-4 mr-2" />
-                            View Teams
-                          </>
-                        ) : (
-                          <>
-                            <History className="h-4 w-4 mr-2" />
-                            View Full Draft
-                          </>
-                        )}
-                      </Button>
+                      <SecondaryButton onClick={() => setDraftStyleOpen(true)}>
+                        <BarChart3 className="h-4 w-4 mr-2" />
+                        Stats
+                      </SecondaryButton>
                     </TooltipTrigger>
-                    <TooltipContent>
-                      {showFullDraft ? 'View team summary cards' : 'View full draft history'}
-                    </TooltipContent>
+                    <TooltipContent>View Draft Balance Stats</TooltipContent>
                   </Tooltip>
-                )}
-                <DraftHistoryButton
-                  events={draftEvents}
-                  hasNewEvent={hasNewEvent}
-                  onViewed={clearNewEventFlag}
-                />
-                <ShareDraftButton />
+                </div>
+                {choiceButtons()}
+                <div className="flex items-center gap-2">
+                  {/* Toggle between completed view and full draft when draft is complete */}
+                  {isDraftCompleted && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setShowFullDraft(!showFullDraft)}
+                        >
+                          {showFullDraft ? (
+                            <>
+                              <Users className="h-4 w-4 mr-2" />
+                              View Teams
+                            </>
+                          ) : (
+                            <>
+                              <History className="h-4 w-4 mr-2" />
+                              View Full Draft
+                            </>
+                          )}
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {showFullDraft
+                          ? 'View team summary cards'
+                          : 'View full draft history'}
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
+                  <DraftHistoryButton
+                    events={draftEvents}
+                    hasNewEvent={hasNewEvent}
+                    onViewed={clearNewEventFlag}
+                  />
+                  <ShareDraftButton />
+                </div>
               </div>
             </div>
-          </div>
           )}
         </div>
 
@@ -807,7 +853,10 @@ export const DraftModal: React.FC<DraftModalParams> = () => {
           <TieRollPopup
             key={tieRollKey(tieResolution)}
             tie={tieResolution}
-            teams={(tournament?.teams ?? []).map((t) => ({ id: t.pk ?? -1, captain: t.captain ?? null }))}
+            teams={(tournament?.teams ?? []).map((t) => ({
+              id: t.pk ?? -1,
+              captain: t.captain ?? null,
+            }))}
             clockHeld={timer.clockBarProps.timerEnabled}
             onDone={dismissTie}
           />

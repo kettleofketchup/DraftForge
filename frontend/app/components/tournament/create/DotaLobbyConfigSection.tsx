@@ -29,8 +29,8 @@ interface Props<T extends FieldValues & DotaLobbyFields> {
   /** Also render the "send lobby info" DM toggle (event and series forms,
    *  which have no tournament Discord tab). */
   includeLobbyInfo?: boolean;
-  /** The tournament's event, when it has one: the settings come from it and
-   *  are shown read-only. */
+  /** The tournament's event, when it has one: shown as a note on where the
+   *  settings started. */
   sourceEvent?: { id: number; name: string } | null;
 }
 
@@ -46,24 +46,30 @@ const LAUNCH_OPTIONS = [
 ] as const;
 
 /** Settings for dota_lobby-hosted in-game lobbies (tournament, event, series). */
-export function DotaLobbyConfigSection<T extends FieldValues & DotaLobbyFields>({
+export function DotaLobbyConfigSection<
+  T extends FieldValues & DotaLobbyFields,
+>({
   control: parentControl,
   includeLobbyInfo = false,
   sourceEvent = null,
 }: Props<T>) {
   const control = parentControl as unknown as Control<DotaLobbyFields>;
-  const disabled = sourceEvent != null;
   return (
     <div className="space-y-3 mt-4" data-testid="config-dota-lobby-section">
       <h3 className="text-sm font-semibold">Dota Lobbies</h3>
       <div className="rounded-md border border-border p-3 space-y-3">
         {sourceEvent && (
-          <p className="text-sm text-muted-foreground" data-testid="config-dota-lobby-from-event">
-            These settings and the lobby password come from the event{' '}
+          <p
+            className="text-sm text-muted-foreground"
+            data-testid="config-dota-lobby-from-event"
+          >
+            These settings started from the event{' '}
             <Link to={`/events/${sourceEvent.id}`} className="underline">
               {sourceEvent.name}
             </Link>
-            . Edit them in the event settings.
+            . Changes here apply only to this tournament; editing the event
+            before the tournament starts overwrites them. The lobby password
+            still comes from the event.
           </p>
         )}
         <FormField
@@ -72,7 +78,7 @@ export function DotaLobbyConfigSection<T extends FieldValues & DotaLobbyFields>(
           render={({ field }) => (
             <FormItem>
               <FormLabel>Hosted lobbies</FormLabel>
-              <Select onValueChange={field.onChange} value={field.value} disabled={disabled}>
+              <Select onValueChange={field.onChange} value={field.value}>
                 <FormControl>
                   <SelectTrigger data-testid="config-dota-lobby-mode">
                     <SelectValue />
@@ -91,8 +97,9 @@ export function DotaLobbyConfigSection<T extends FieldValues & DotaLobbyFields>(
                 </SelectContent>
               </Select>
               <FormDescription>
-                A lobby bot creates each match&apos;s in-game lobby and invites the players.
-                Needs a Normal, Captain&apos;s Mode or Turbo game mode.
+                A lobby bot creates each match&apos;s in-game lobby and invites
+                the players. Needs a Normal, Captain&apos;s Mode or Turbo game
+                mode.
               </FormDescription>
             </FormItem>
           )}
@@ -103,7 +110,7 @@ export function DotaLobbyConfigSection<T extends FieldValues & DotaLobbyFields>(
           render={({ field }) => (
             <FormItem>
               <FormLabel>Match start</FormLabel>
-              <Select onValueChange={field.onChange} value={field.value} disabled={disabled}>
+              <Select onValueChange={field.onChange} value={field.value}>
                 <FormControl>
                   <SelectTrigger data-testid="config-dota-lobby-launch">
                     <SelectValue />
@@ -134,13 +141,12 @@ export function DotaLobbyConfigSection<T extends FieldValues & DotaLobbyFields>(
                 <Input
                   placeholder="Service default"
                   data-testid="config-dota-lobby-region"
-                  disabled={disabled}
                   {...field}
                 />
               </FormControl>
               <FormDescription>
-                A region name the lobby service knows, such as us_east. Leave empty for its
-                default.
+                A region name the lobby service knows, such as us_east. Leave
+                empty for its default.
               </FormDescription>
               <FormMessage />
             </FormItem>
@@ -158,7 +164,6 @@ export function DotaLobbyConfigSection<T extends FieldValues & DotaLobbyFields>(
                     data-testid="config-dota-lobby-send-info"
                     checked={field.value}
                     onChange={field.onChange}
-                    disabled={disabled}
                     className="h-4 w-4 rounded border-border accent-primary"
                   />
                 </FormControl>
@@ -167,8 +172,8 @@ export function DotaLobbyConfigSection<T extends FieldValues & DotaLobbyFields>(
                     Send lobby info
                   </FormLabel>
                   <FormDescription>
-                    DM players the in-game lobby name, password and side when their lobby is
-                    created
+                    DM players the in-game lobby name, password and side when
+                    their lobby is created
                   </FormDescription>
                 </div>
               </FormItem>

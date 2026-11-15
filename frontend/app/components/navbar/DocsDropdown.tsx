@@ -107,7 +107,7 @@ export function DocsDropdown(): React.JSX.Element {
           title={t('nav.docs')}
           aria-label={t('aria.docs_menu')}
           indicator={<ChevronDown className="size-3" />}
-          hideTextOnSmall
+          tier="external"
           className="[&_svg]:text-info"
         />
       </PopoverTrigger>

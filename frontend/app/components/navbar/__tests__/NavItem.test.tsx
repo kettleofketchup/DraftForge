@@ -24,6 +24,7 @@ describe('NavItem', () => {
         as="button"
         ref={ref}
         title="Docs"
+        tier="external"
         aria-label="Documentation"
         data-testid="nav-docs-trigger"
         aria-expanded={false}
@@ -55,8 +56,13 @@ describe('NavItem', () => {
   it('styles the button form like the link form', () => {
     renderInShell(
       <>
-        <NavItem as="button" title="Docs" data-testid="b" />
-        <NavItem href="https://x.test" title="X" data-testid="a" />
+        <NavItem as="button" title="Docs" tier="external" data-testid="b" />
+        <NavItem
+          href="https://x.test"
+          title="X"
+          tier="external"
+          data-testid="a"
+        />
       </>,
     );
     const button = screen.getByTestId('b');
@@ -65,7 +71,54 @@ describe('NavItem', () => {
   });
 
   it('still renders a router link for to=', () => {
-    renderInShell(<NavItem to="/about" title="About" />);
+    renderInShell(<NavItem to="/about" title="About" tier="main" />);
     expect(screen.getByTestId('nav-link-about').tagName).toBe('A');
+  });
+
+  it('names icon-only items by their title unless aria-label is given', () => {
+    renderInShell(
+      <>
+        <NavItem to="/about" title="About" tier="main" />
+        <NavItem as="button" title="Docs" tier="external" data-testid="b" />
+        <NavItem
+          href="https://x.test"
+          title="X"
+          aria-label="Star X"
+          tier="external"
+          data-testid="a"
+        />
+      </>,
+    );
+    expect(
+      screen.getByTestId('nav-link-about').getAttribute('aria-label'),
+    ).toBe('About');
+    expect(screen.getByTestId('b').getAttribute('aria-label')).toBe('Docs');
+    expect(screen.getByTestId('a').getAttribute('aria-label')).toBe('Star X');
+  });
+
+  it('collapses labels on the container for main and the viewport for external', () => {
+    renderInShell(
+      <>
+        <NavItem to="/about" title="About" subtitle="Learn more" tier="main" />
+        <NavItem
+          as="button"
+          title="Docs"
+          subtitle="Read the docs"
+          tier="external"
+          data-testid="b"
+        />
+      </>,
+    );
+    const mainLabel = screen.getByText('About').parentElement!.parentElement!;
+    expect(mainLabel.className).toContain('@min-[700px]:flex');
+    expect(screen.getByText('Learn more').className).toContain(
+      '@min-[840px]:block',
+    );
+    const externalLabel =
+      screen.getByText('Docs').parentElement!.parentElement!;
+    expect(externalLabel.className).toContain('min-[1600px]:flex');
+    expect(screen.getByText('Read the docs').className).toContain(
+      'min-[1920px]:block',
+    );
   });
 });

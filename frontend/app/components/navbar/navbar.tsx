@@ -281,7 +281,7 @@ const ExternalLinks = ({ className }: { className?: string }) => {
         subtitle={t('nav.github_subtitle')}
         badge={<StarBadge count={stars} isLoading={isLoading} />}
         aria-label={t('aria.star_github')}
-        hideTextOnSmall
+        tier="external"
         className="[&_svg]:text-text-primary"
       />
       <DocsDropdown />
@@ -295,7 +295,7 @@ const ExternalLinks = ({ className }: { className?: string }) => {
         className="[&_svg]:text-destructive hover:[&_svg]:text-red-400"
         titleClassName="text-destructive hover:text-red-400"
         aria-label={t('aria.report_bug')}
-        hideTextOnSmall
+        tier="external"
       />
     </div>
   );
@@ -314,7 +314,7 @@ const NavLinks = ({ className }: { className?: string }) => {
         icon={<AboutIcon />}
         title={t('nav.about')}
         subtitle={t('nav.about_subtitle')}
-        hideTextOnSmall
+        tier="main"
         className="[&_svg]:text-info"
       />
       <NavItem
@@ -322,7 +322,7 @@ const NavLinks = ({ className }: { className?: string }) => {
         icon={<TrophyIcon />}
         title={t('nav.tournaments')}
         subtitle={t('nav.tournaments_subtitle')}
-        hideTextOnSmall
+        tier="main"
         className="[&_svg]:text-warning"
       />
       <NavItem
@@ -330,7 +330,7 @@ const NavLinks = ({ className }: { className?: string }) => {
         icon={<BuildingIcon />}
         title={t('nav.organizations')}
         subtitle={t('nav.organizations_subtitle')}
-        hideTextOnSmall
+        tier="main"
         className="[&_svg]:text-secondary"
       />
       <NavItem
@@ -338,7 +338,7 @@ const NavLinks = ({ className }: { className?: string }) => {
         icon={<LeagueIcon />}
         title={t('nav.leagues')}
         subtitle={t('nav.leagues_subtitle')}
-        hideTextOnSmall
+        tier="main"
         className="[&_svg]:text-primary"
       />
       <NavItem
@@ -346,16 +346,17 @@ const NavLinks = ({ className }: { className?: string }) => {
         icon={<CalendarIcon />}
         title={t('nav.events')}
         subtitle={t('signup_here')}
-        hideTextOnSmall
+        tier="main"
         className="[&_svg]:text-accent"
       />
       {currentUser?.is_staff && (
         <NavItem
           href="/admin/"
+          data-testid="nav-link-admin"
           icon={<AdminIcon />}
           title={t('nav.admin')}
           subtitle={t('nav.admin_subtitle')}
-          hideTextOnSmall
+          tier="main"
           className="[&_svg]:text-success"
         />
       )}
@@ -426,12 +427,14 @@ export const ResponsiveAppBar: React.FC = memo(() => {
   return (
     <header>
       <nav
-        className="sticky z-50 top-0 flex items-center w-full h-16 xl:h-18 px-4 py-2 bg-base-600 shadow-elevated border-b border-border"
+        className="sticky z-50 top-0 flex items-center md:gap-2 w-full h-16 xl:h-18 px-4 py-2 bg-base-600 shadow-elevated border-b border-border"
         role="navigation"
         aria-label={t('aria.main_nav')}
         data-testid="nav-root"
       >
-        <div className="flex grow shrink-0 basis-0 items-center justify-start w-1/2 gap-2">
+        {/* md+: the left group takes what the right group leaves and NavLinks sizes
+            its labels to that (#252). Below md the two halves stay as they were. */}
+        <div className="@container flex grow shrink-0 basis-0 items-center justify-start w-1/2 gap-2 md:w-auto md:min-w-0 md:shrink">
           <MobileNav />
           <SiteLogo />
           <NavLinks className="hidden md:flex" />
@@ -440,7 +443,7 @@ export const ResponsiveAppBar: React.FC = memo(() => {
         <div className="absolute left-1/2 -translate-x-1/2 md:hidden z-10">
           <PageNavBar />
         </div>
-        <div className="flex shrink-0 items-center justify-end w-1/2 gap-2">
+        <div className="flex shrink-0 items-center justify-end w-1/2 gap-2 md:w-auto">
           <ExternalLinks className="hidden md:flex" />
           <PreviewLoginMenu />
           <LoginWithDiscordButton />

@@ -4,12 +4,27 @@ import { cn } from '~/lib/utils';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 
 /**
- * NavItem layout tiers (above md/768px — below is the MobileNav drawer):
- *   - md → <1100px: icon only; subtitle in tooltip (showSubtitleTooltip).
- *   - 1100px → <2xl: icon + title inline, subtitle still tooltip-only.
- *   - 2xl+ (1536px): icon + title + inline subtitle stacked vertically.
- * Nine nav items fit horizontally below 2xl; stacking earlier overflows (#252).
+ * NavItem label tiers above md (#252). `main` labels follow the left group's
+ * @container width, i.e. whatever the right group leaves; `external` labels
+ * follow the viewport and collapse first.
  */
+export const LABEL_TIERS = {
+  main: {
+    text: 'hidden @min-[700px]:flex',
+    stacked: '@min-[840px]:flex-col',
+    subtitle: 'hidden @min-[840px]:block',
+    tooltip: '@min-[840px]:hidden',
+  },
+  external: {
+    text: 'hidden min-[1600px]:flex',
+    stacked: 'min-[1920px]:flex-col',
+    subtitle: 'hidden min-[1920px]:block',
+    tooltip: 'min-[1920px]:hidden',
+  },
+} as const;
+
+export type LabelTier = keyof typeof LABEL_TIERS;
+
 type NavItemBaseProps = {
   icon?: React.ReactNode;
   title: string;
@@ -17,9 +32,9 @@ type NavItemBaseProps = {
   badge?: React.ReactNode;
   /** Shown after the text at every width, e.g. a dropdown chevron */
   indicator?: React.ReactNode;
-  /** When true: hides text below 1100px, shows icons only with tooltip */
-  hideTextOnSmall?: boolean;
-  /** Show subtitle as tooltip on small screens (below xl) */
+  /** Which LABEL_TIERS breakpoints collapse the label to the icon */
+  tier: LabelTier;
+  /** Show the subtitle as a tooltip while it is not shown inline */
   showSubtitleTooltip?: boolean;
   /** Custom class for title text (overrides default color) */
   titleClassName?: string;
@@ -49,11 +64,12 @@ export const NavItem = React.forwardRef<HTMLElement, NavItemProps>(
       subtitle,
       badge,
       indicator,
-      hideTextOnSmall = false,
+      tier,
       showSubtitleTooltip = false,
       titleClassName,
       'data-testid': dataTestId,
     } = props;
+    const tiers = LABEL_TIERS[tier];
     const to = props.as === 'button' ? undefined : props.to;
     const testId =
       dataTestId || (to ? `nav-link-${to.replace(/^\//, '')}` : undefined);
@@ -72,14 +88,15 @@ export const NavItem = React.forwardRef<HTMLElement, NavItemProps>(
         {icon && <span className="shrink-0">{icon}</span>}
         <div
           className={cn(
-            'flex min-w-0 items-center 2xl:flex-col 2xl:items-center',
-            hideTextOnSmall && 'hidden min-[1100px]:flex',
+            'items-center whitespace-nowrap',
+            tiers.text,
+            tiers.stacked,
           )}
         >
           <div className="flex items-center justify-center gap-1">
             <span
               className={cn(
-                'text-xs font-bold leading-normal truncate text-center text-outline-sm text-[#646cff]',
+                'text-xs font-bold leading-normal text-center text-outline-sm text-[#646cff]',
                 titleClassName,
               )}
             >
@@ -88,7 +105,12 @@ export const NavItem = React.forwardRef<HTMLElement, NavItemProps>(
             {badge}
           </div>
           {subtitle && (
-            <span className="text-[10px] text-text-muted leading-normal truncate hidden 2xl:block text-center">
+            <span
+              className={cn(
+                'text-[10px] text-text-muted leading-normal text-center',
+                tiers.subtitle,
+              )}
+            >
               {subtitle}
             </span>
           )}
@@ -107,7 +129,7 @@ export const NavItem = React.forwardRef<HTMLElement, NavItemProps>(
         subtitle: _subtitle,
         badge: _badge,
         indicator: _indicator,
-        hideTextOnSmall: _hideTextOnSmall,
+        tier: _tier,
         showSubtitleTooltip: _showSubtitleTooltip,
         titleClassName: _titleClassName,
         'data-testid': _dataTestId,
@@ -120,6 +142,7 @@ export const NavItem = React.forwardRef<HTMLElement, NavItemProps>(
           type="button"
           className={baseClassName}
           data-testid={testId}
+          aria-label={title}
           {...buttonRest}
         >
           {content}
@@ -134,7 +157,7 @@ export const NavItem = React.forwardRef<HTMLElement, NavItemProps>(
         subtitle: _subtitle,
         badge: _badge,
         indicator: _indicator,
-        hideTextOnSmall: _hideTextOnSmall,
+        tier: _tier,
         showSubtitleTooltip: _showSubtitleTooltip,
         titleClassName: _titleClassName,
         'data-testid': _dataTestId,
@@ -148,6 +171,7 @@ export const NavItem = React.forwardRef<HTMLElement, NavItemProps>(
           to={to}
           className={baseClassName}
           data-testid={testId}
+          aria-label={title}
           {...anchorRest}
         >
           {content}
@@ -158,6 +182,7 @@ export const NavItem = React.forwardRef<HTMLElement, NavItemProps>(
           href={href}
           className={baseClassName}
           data-testid={testId}
+          aria-label={title}
           {...anchorRest}
         >
           {content}
@@ -169,7 +194,7 @@ export const NavItem = React.forwardRef<HTMLElement, NavItemProps>(
       return (
         <Tooltip>
           <TooltipTrigger asChild>{navContent}</TooltipTrigger>
-          <TooltipContent className="2xl:hidden">
+          <TooltipContent className={tiers.tooltip}>
             <p className="font-medium">{title}</p>
             <p className="text-xs opacity-80">{subtitle}</p>
           </TooltipContent>

@@ -15,6 +15,8 @@
  *   generateBracket                       ✓         ✓         ✓        ✓        ✓        ✗         ✓           ✓          ✗
  *   setMatchWinner (radiant)              ✓         ✓         ✓        ✓        ✓        ✗         ✓           ✓          ✗
  *   linkSteamMatch                        ✓         ✓         ✗        ✗        ✗        ✗         ✗           ✗          ✗
+ *   editTournament (detail page)          ✓         ✓         ✓        ✓        ✓        ✗         ✓           ✓          ✗
+ *   deleteTournament (detail page)        ✓         ✓         ✗        ✗        ✗        ✗         ✗           ✗          ✗
  *
  * Two known divergences:
  *
@@ -32,8 +34,13 @@
  * Both are documented in ``docs/dev/auth/roles.md``.
  */
 
-import { roleMatrixTest as test, expect, ROLE_NAMES, type RoleName } from '../../fixtures';
 import type { Page } from '@playwright/test';
+import {
+  expect,
+  ROLE_NAMES,
+  roleMatrixTest as test,
+  type RoleName,
+} from '../../fixtures';
 
 // Isolated org used by every non-site role in the matrix. Created by
 // populate_auth_matrix_data; keeps the gate contract independent of
@@ -97,8 +104,8 @@ const EDIT_USER_ORG_EXPECTATIONS: Expectations = {
 const EDIT_USER_TOURNAMENT_EXPECTATIONS: Expectations = {
   siteAdmin: true,
   siteStaff: true,
-  orgOwner: false,   // owner cascade hits same store-state gap as orgAdmin
-  orgAdmin: false,   // org-admin cascade doesn't trigger (no embedded org)
+  orgOwner: false, // owner cascade hits same store-state gap as orgAdmin
+  orgAdmin: false, // org-admin cascade doesn't trigger (no embedded org)
   orgStaff: false,
   orgMember: false,
   leagueAdmin: true,
@@ -112,7 +119,7 @@ const EDIT_USER_TOURNAMENT_EXPECTATIONS: Expectations = {
 const GENERATE_BRACKET_EXPECTATIONS: Expectations = {
   siteAdmin: true,
   siteStaff: true,
-  orgOwner: true,    // owner cascade via useIsOrganizationAdmin → staff
+  orgOwner: true, // owner cascade via useIsOrganizationAdmin → staff
   orgAdmin: true,
   orgStaff: true,
   orgMember: false,
@@ -142,7 +149,34 @@ const SET_WINNER_EXPECTATIONS: Expectations = {
 const LINK_STEAM_MATCH_EXPECTATIONS: Expectations = {
   siteAdmin: true,
   siteStaff: true,
-  orgOwner: false,   // gate is site-only; owner doesn't cascade here
+  orgOwner: false, // gate is site-only; owner doesn't cascade here
+  orgAdmin: false,
+  orgStaff: false,
+  orgMember: false,
+  leagueAdmin: false,
+  leagueStaff: false,
+  anonymous: false,
+};
+
+// Edit Tournament → ``canEditTournament`` mirrors backend ``can_edit_tournament``:
+// league admins/staff, or admins/staff of the league's own org.
+const EDIT_TOURNAMENT_EXPECTATIONS: Expectations = {
+  siteAdmin: true,
+  siteStaff: true,
+  orgOwner: true,
+  orgAdmin: true,
+  orgStaff: true,
+  orgMember: false,
+  leagueAdmin: true,
+  leagueStaff: true,
+  anonymous: false,
+};
+
+// Delete Tournament stays site staff only.
+const DELETE_TOURNAMENT_EXPECTATIONS: Expectations = {
+  siteAdmin: true,
+  siteStaff: true,
+  orgOwner: false,
   orgAdmin: false,
   orgStaff: false,
   orgMember: false,
@@ -164,7 +198,9 @@ async function assertGate(
 
   const btn = page.locator(`[data-testid="${testid}"]`).first();
   if (expectVisible) {
-    await expect(btn, `${role} should see ${testid}`).toBeVisible({ timeout: 15000 });
+    await expect(btn, `${role} should see ${testid}`).toBeVisible({
+      timeout: 15000,
+    });
   } else {
     await expect(btn, `${role} should NOT see ${testid}`).not.toBeVisible({
       timeout: 5000,
@@ -194,14 +230,19 @@ async function assertModalGate(
   // the test will surface that as a failure, which is the right
   // signal.
   const matchNode = page.locator('[data-testid="bracket-match-node"]').first();
-  await expect(matchNode, `${role} should see at least one bracket-match-node`).toBeVisible({
+  await expect(
+    matchNode,
+    `${role} should see at least one bracket-match-node`,
+  ).toBeVisible({
     timeout: 15000,
   });
   await matchNode.click();
 
   const btn = page.locator(`[data-testid="${testid}"]`).first();
   if (expectVisible) {
-    await expect(btn, `${role} should see ${testid}`).toBeVisible({ timeout: 15000 });
+    await expect(btn, `${role} should see ${testid}`).toBeVisible({
+      timeout: 15000,
+    });
   } else {
     await expect(btn, `${role} should NOT see ${testid}`).not.toBeVisible({
       timeout: 5000,
@@ -217,7 +258,13 @@ async function assertGateAcrossRoles(
 ): Promise<void> {
   await Promise.all(
     ROLE_NAMES.map((role) =>
-      assertGate(role, roleContexts[role].page, url, testid, expectations[role]),
+      assertGate(
+        role,
+        roleContexts[role].page,
+        url,
+        testid,
+        expectations[role],
+      ),
     ),
   );
 }
@@ -230,7 +277,13 @@ async function assertModalGateAcrossRoles(
 ): Promise<void> {
   await Promise.all(
     ROLE_NAMES.map((role) =>
-      assertModalGate(role, roleContexts[role].page, url, testid, expectations[role]),
+      assertModalGate(
+        role,
+        roleContexts[role].page,
+        url,
+        testid,
+        expectations[role],
+      ),
     ),
   );
 }
@@ -245,7 +298,9 @@ test.describe('Edit + Bracket permission matrix (8 roles in parallel)', () => {
     );
   });
 
-  test('Edit User button visibility (org members tab)', async ({ roleContexts }) => {
+  test('Edit User button visibility (org members tab)', async ({
+    roleContexts,
+  }) => {
     await assertGateAcrossRoles(
       roleContexts,
       `/organizations/${AUTH_MATRIX_ORG_PK}?tab=users`,
@@ -254,7 +309,9 @@ test.describe('Edit + Bracket permission matrix (8 roles in parallel)', () => {
     );
   });
 
-  test('Edit User button visibility (tournament players tab)', async ({ roleContexts }) => {
+  test('Edit User button visibility (tournament players tab)', async ({
+    roleContexts,
+  }) => {
     await assertGateAcrossRoles(
       roleContexts,
       `/tournament/${TOURNAMENT_NO_BRACKET_PK}/players`,
@@ -272,7 +329,9 @@ test.describe('Edit + Bracket permission matrix (8 roles in parallel)', () => {
     );
   });
 
-  test('Set Match Winner button visibility (radiant)', async ({ roleContexts }) => {
+  test('Set Match Winner button visibility (radiant)', async ({
+    roleContexts,
+  }) => {
     // Anonymous can't open the modal in a meaningful way (the bracket
     // is read-only for them and the match node still renders), so the
     // "see no button" branch fires after the modal opens with the
@@ -291,6 +350,28 @@ test.describe('Edit + Bracket permission matrix (8 roles in parallel)', () => {
       `/tournament/${TOURNAMENT_COMPLETED_BRACKET_PK}/bracket`,
       'link-steam-match-btn',
       LINK_STEAM_MATCH_EXPECTATIONS,
+    );
+  });
+
+  test('Edit Tournament button visibility (detail page)', async ({
+    roleContexts,
+  }) => {
+    await assertGateAcrossRoles(
+      roleContexts,
+      `/tournament/${TOURNAMENT_NO_BRACKET_PK}`,
+      'tournament-edit-btn',
+      EDIT_TOURNAMENT_EXPECTATIONS,
+    );
+  });
+
+  test('Delete Tournament button visibility (detail page)', async ({
+    roleContexts,
+  }) => {
+    await assertGateAcrossRoles(
+      roleContexts,
+      `/tournament/${TOURNAMENT_NO_BRACKET_PK}`,
+      'tournament-delete-btn',
+      DELETE_TOURNAMENT_EXPECTATIONS,
     );
   });
 });

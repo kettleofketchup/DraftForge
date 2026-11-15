@@ -35,9 +35,8 @@ jobs:
         run: npm --prefix frontend ci --ignore-scripts --no-audit --no-fund
 
       # Only files this PR adds or modifies, so untouched legacy files don't fail it.
+      # HEAD is the merge into main's current tip; base.sha goes stale as main advances.
       - name: Check formatting
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
-          mapfile -t changed < <(git diff --name-only --diff-filter=d "$BASE_SHA"...HEAD -- frontend/)
+          mapfile -t changed < <(git diff --name-only --diff-filter=d HEAD^1 HEAD -- frontend/)
           frontend/scripts/prettier-check-files.sh "${changed[@]}"

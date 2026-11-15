@@ -6,8 +6,8 @@ const { get } = vi.hoisted(() => ({ get: vi.fn() }));
 vi.mock('~/components/api/axios', () => ({ default: { get } }));
 
 import * as barrel from '~/components/api/api';
-import { getTournaments, getTournamentsPage } from '../tournamentAPI';
 import { PaginatedTournamentsSchema } from '~/components/tournament/schemas';
+import { getTournaments, getTournamentsPage } from '../tournamentAPI';
 
 function requestedUrl(): string {
   return get.mock.calls[0][0] as string;
@@ -37,7 +37,11 @@ describe('getTournaments', () => {
   });
 
   it('sends bucket, organization and search, and omits an unset league', async () => {
-    await getTournaments({ bucket: 'upcoming', organizationId: 30, search: 'ab' });
+    await getTournaments({
+      bucket: 'upcoming',
+      organizationId: 30,
+      search: 'ab',
+    });
     const params = requestedParams();
     expect(requestedUrl().startsWith('/tournaments-list/?')).toBe(true);
     expect(params.get('bucket')).toBe('upcoming');
@@ -65,7 +69,11 @@ describe('getTournaments', () => {
   });
 
   it('omits organizations and open_signups when false', async () => {
-    await getTournaments({ bucket: 'archived', mine: false, openSignups: false });
+    await getTournaments({
+      bucket: 'archived',
+      mine: false,
+      openSignups: false,
+    });
     const params = requestedParams();
     expect(params.has('organizations')).toBe(false);
     expect(params.has('open_signups')).toBe(false);
@@ -83,6 +91,26 @@ describe('getTournamentsPage', () => {
     expect(params.has('page_size')).toBe(false);
   });
 
+  it('sends the cursor instead of a page number', async () => {
+    get.mockResolvedValue({ data: emptyPage });
+    await getTournamentsPage({
+      bucket: 'archived',
+      cursor: 'abc_-1',
+      pageSize: 5,
+    });
+    const params = requestedParams();
+    expect(params.get('cursor')).toBe('abc_-1');
+    expect(params.has('page')).toBe(false);
+    expect(params.get('page_size')).toBe('5');
+  });
+
+  it('rejects a 404 on a cursor page', async () => {
+    get.mockRejectedValue(axiosErrorWithStatus(404));
+    await expect(
+      getTournamentsPage({ bucket: 'archived', cursor: 'abc' }),
+    ).rejects.toBeInstanceOf(AxiosError);
+  });
+
   it('sends page_size when given', async () => {
     get.mockResolvedValue({ data: emptyPage });
     await getTournamentsPage({ bucket: 'archived', page: 1, pageSize: 50 });
@@ -91,23 +119,31 @@ describe('getTournamentsPage', () => {
 
   it('treats a 404 past the first page as the end of the list', async () => {
     get.mockRejectedValue(axiosErrorWithStatus(404));
-    await expect(getTournamentsPage({ bucket: 'archived', page: 2 })).resolves.toEqual(emptyPage);
+    await expect(
+      getTournamentsPage({ bucket: 'archived', page: 2 }),
+    ).resolves.toEqual(emptyPage);
   });
 
   it('rejects a 404 on the first page', async () => {
     get.mockRejectedValue(axiosErrorWithStatus(404));
-    await expect(getTournamentsPage({ bucket: 'archived', page: 1 })).rejects.toBeInstanceOf(AxiosError);
+    await expect(
+      getTournamentsPage({ bucket: 'archived', page: 1 }),
+    ).rejects.toBeInstanceOf(AxiosError);
   });
 
   it('rejects a 500 past the first page', async () => {
     get.mockRejectedValue(axiosErrorWithStatus(500));
-    await expect(getTournamentsPage({ bucket: 'archived', page: 2 })).rejects.toBeInstanceOf(AxiosError);
+    await expect(
+      getTournamentsPage({ bucket: 'archived', page: 2 }),
+    ).rejects.toBeInstanceOf(AxiosError);
   });
 
   it('rethrows a 404-shaped object that is not an axios error', async () => {
     const notAxios = { response: { status: 404 } };
     get.mockRejectedValue(notAxios);
-    await expect(getTournamentsPage({ bucket: 'archived', page: 2 })).rejects.toBe(notAxios);
+    await expect(
+      getTournamentsPage({ bucket: 'archived', page: 2 }),
+    ).rejects.toBe(notAxios);
   });
 });
 
@@ -134,7 +170,10 @@ describe('PaginatedTournamentsSchema', () => {
         },
       ],
     });
-    expect(parsed.results[0].league).toMatchObject({ organization_id: null, organization_logo: null });
+    expect(parsed.results[0].league).toMatchObject({
+      organization_id: null,
+      organization_logo: null,
+    });
   });
 });
 
