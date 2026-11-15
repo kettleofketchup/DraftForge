@@ -1,4 +1,6 @@
+from functools import cache
 from typing import Any
+from zoneinfo import available_timezones
 
 import nh3
 from django.db import transaction
@@ -36,6 +38,11 @@ from .models import (
 )
 
 log = get_logger(__name__)
+
+
+@cache
+def _known_timezones() -> frozenset[str]:
+    return frozenset(available_timezones())
 
 
 class UserPkField(serializers.RelatedField):
@@ -486,6 +493,15 @@ class OrganizationSerializer(serializers.ModelSerializer):
         """Sanitize markdown to prevent XSS."""
         if value:
             return nh3.clean(value)
+        return value
+
+    def validate_timezone(self, value: str) -> str:
+        if self.instance is not None and value == getattr(
+            self.instance, "timezone", None
+        ):
+            return value
+        if value not in _known_timezones():
+            raise serializers.ValidationError(f"Unknown timezone {value!r}.")
         return value
 
 
@@ -1582,7 +1598,7 @@ class BracketGameSerializer(serializers.ModelSerializer):
             return obj.herodraft.id
         return None
 
-    def get_lobby_state(self, obj):
+    def get_lobby_state(self, obj: Game) -> str | None:
         """State of the game's latest dota_lobby lobby, or None. No password.
 
         get_bracket prefetches the lobbies into `latest_lobbies`; other

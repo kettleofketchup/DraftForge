@@ -8,6 +8,7 @@ from structlog.contextvars import bind_contextvars, clear_contextvars
 
 from app.internal_client import (
     _api_get,
+    auto_close_event,
     check_message_log_exists,
     claim_discord_message_log,
     clear_event_signup_state,
@@ -224,79 +225,63 @@ def generate_upcoming_events():
 
 
 @shared_task
-def cleanup_stale_events():
-    """Auto-close events whose scheduled_at + 1 day has passed. Runs hourly.
+def cleanup_stale_events() -> str:
+    """Auto-close events a day after they end (ends_at, else scheduled_at). Runs hourly.
 
     - upcoming / signups_open → cancelled (event never started)
     - roll_call / in_progress → completed (event ran but wasn't formally closed)
-
-    State transitions go through internal HTTP API (no direct DB writes).
     """
     cutoff = (datetime.now(tz.utc) - timedelta(days=1)).isoformat()
+    counts = {"closed": 0, "skipped": 0, "failed": 0}
+    for states in ("upcoming,signups_open", "roll_call,in_progress"):
+        events = get_events_list(
+            states=states, scheduled_before=cutoff, stale_before=cutoff
+        )
+        for event in events:
+            try:
+                result = auto_close_event(event["id"])
+            except Exception as e:
+                counts["failed"] += 1
+                log.exception(
+                    "event_auto_close_error",
+                    system="events",
+                    subsystem="tasks",
+                    event_id=event["id"],
+                    error=str(e),
+                )
+                continue
+            if result is None:
+                counts["failed"] += 1
+                log.warning(
+                    "event_auto_close_failed",
+                    system="events",
+                    subsystem="tasks",
+                    event_id=event["id"],
+                )
+                continue
+            if result.get("closed"):
+                counts["closed"] += 1
+                log.info(
+                    "event_auto_closed",
+                    system="events",
+                    subsystem="tasks",
+                    event_id=event["id"],
+                    state=result.get("state"),
+                )
+            else:
+                counts["skipped"] += 1
+                log.info(
+                    "event_auto_close_skipped",
+                    system="events",
+                    subsystem="tasks",
+                    event_id=event["id"],
+                    state=result.get("state"),
+                )
 
-    # Never-started events → cancelled
-    never_started = get_events_list(
-        states="upcoming,signups_open", scheduled_before=cutoff
+    return (
+        f"Auto-closed {counts['closed']}, skipped {counts['skipped']}, "
+        f"failed {counts['failed']}"
     )
-    cancelled_count = 0
-    for event in never_started:
-        try:
-            resp = transition_event_state(event["id"], "cancelled")
-            if resp and resp.ok:
-                cancelled_count += 1
-                logger.info(
-                    "event_auto_cancelled",
-                    system="events",
-                    subsystem="tasks",
-                    event_id=event["id"],
-                )
-            else:
-                logger.warning(
-                    "event_auto_cancel_failed",
-                    system="events",
-                    subsystem="tasks",
-                    event_id=event["id"],
-                )
-        except Exception as e:
-            logger.exception(
-                "event_auto_cancel_error",
-                system="events",
-                subsystem="tasks",
-                event_id=event["id"],
-                error=str(e),
-            )
-
-    # Started but not closed → completed
-    started = get_events_list(states="roll_call,in_progress", scheduled_before=cutoff)
-    completed_count = 0
-    for event in started:
-        try:
-            resp = transition_event_state(event["id"], "completed")
-            if resp and resp.ok:
-                completed_count += 1
-                logger.info(
-                    "event_auto_completed",
-                    system="events",
-                    subsystem="tasks",
-                    event_id=event["id"],
-                )
-            else:
-                logger.warning(
-                    "event_auto_complete_failed",
-                    system="events",
-                    subsystem="tasks",
-                    event_id=event["id"],
-                )
-        except Exception as e:
-            logger.exception(
-                "event_auto_complete_error",
-                system="events",
-                subsystem="tasks",
-                event_id=event["id"],
-                error=str(e),
-            )
-
-    return f"Cleaned up {cancelled_count} cancelled, {completed_count} completed"
 
 
 @shared_task
@@ -927,7 +912,9 @@ def _create_discord_scheduled_event_impl(event_id):
         "name": title,
         "description": description[:1000],
         "scheduled_start_time": event.scheduled_at.isoformat(),
-        "scheduled_end_time": (event.scheduled_at + timedelta(hours=3)).isoformat(),
+        "scheduled_end_time": (
+            event.ends_at or event.scheduled_at + timedelta(hours=3)
+        ).isoformat(),
         "privacy_level": 2,
         "entity_type": 3,
         "entity_metadata": {"location": "DraftForge"},

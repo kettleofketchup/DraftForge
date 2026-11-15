@@ -520,6 +520,16 @@ export function loginAuthMatrixOrgMember(
   );
 }
 
+export function loginAuthMatrixOrgPromoter(
+  context: BrowserContext,
+): Promise<void> {
+  return _postAuthMatrixLogin(
+    context,
+    'login-auth-matrix-org-promoter',
+    'loginAuthMatrixOrgPromoter',
+  );
+}
+
 export function loginAuthMatrixLeagueAdmin(
   context: BrowserContext,
 ): Promise<void> {

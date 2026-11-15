@@ -15,10 +15,14 @@ from rest_framework.decorators import (
     authentication_classes,
     permission_classes,
 )
+from rest_framework.request import Request
 from rest_framework.response import Response
 
 from app.auth import InternalServiceAuth, IsInternalService
 from app.cache_utils import invalidate_after_commit
+from events.completion import close_event
+from events.constants import EventState
+from events.models import Event
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
@@ -808,17 +812,52 @@ def update_scheduled_event(request, pk):
 @api_view(["POST"])
 @authentication_classes(_auth)
 @permission_classes(_perm)
-def transition_event_state(request, pk):
+def transition_event_state(request: Request, pk: int) -> Response:
     """Transition event to a new state."""
-    from events.models import Event
-
-    event = Event.objects.get(pk=pk)
+    event = Event.objects.nocache().get(pk=pk)
     new_state = request.data.get("state")
     if not new_state:
         return Response({"error": "state required"}, status=status.HTTP_400_BAD_REQUEST)
-    event.transition_state(new_state)
-    invalidate_after_commit(event)
+    try:
+        event.transition_state(new_state)
+    except ValueError as e:
+        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
     return Response({"id": event.pk, "state": event.state})
+
+
+_AUTO_CLOSE_TARGETS: dict[str, EventState] = {
+    EventState.UPCOMING: EventState.CANCELLED,
+    EventState.SIGNUPS_OPEN: EventState.CANCELLED,
+    EventState.ROLL_CALL: EventState.COMPLETED,
+    EventState.IN_PROGRESS: EventState.COMPLETED,
+}
+_AUTO_CLOSE_TERMINAL: frozenset[str] = frozenset(
+    {EventState.COMPLETED, EventState.CANCELLED}
+)
+
+
+@api_view(["POST"])
+@authentication_classes(_auth)
+@permission_classes(_perm)
+def auto_close_event(request: Request, pk: int) -> Response:
+    event = Event.objects.nocache().select_related("organization").filter(pk=pk).first()
+    if event is None:
+        return Response({"error": "Event not found"}, status=status.HTTP_404_NOT_FOUND)
+    if event.state in _AUTO_CLOSE_TERMINAL:
+        return Response({"closed": False, "state": event.state})
+    target = _AUTO_CLOSE_TARGETS.get(event.state)
+    if target is None:
+        return Response(
+            {"error": f"Cannot auto-close an event in state {event.state!r}"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    result = close_event(
+        event,
+        new_state=target,
+        source="auto",
+        expected_from=[s for s, t in _AUTO_CLOSE_TARGETS.items() if t == target],
+    )
+    return Response({"closed": result.closed, "state": result.state})
 
 
 # ---------------------------------------------------------------------------
@@ -1106,11 +1145,13 @@ def get_active_repeaters(request):
     )
     data = []
     for r in repeaters:
-        data.append({
-            "pk": r.pk,
-            "name": r.name,
-            "organization_id": r.organization_id,
-        })
+        data.append(
+            {
+                "pk": r.pk,
+                "name": r.name,
+                "organization_id": r.organization_id,
+            }
+        )
     return Response(data)
 
 
@@ -1219,10 +1260,12 @@ def sweep_stale_discord_leases(request):
     failed_threshold = now - timedelta(hours=failed_hours)
 
     pending_swept, _ = DiscordMessageLog.objects.filter(
-        success__isnull=True, claimed_at__lt=pending_threshold,
+        success__isnull=True,
+        claimed_at__lt=pending_threshold,
     ).delete()
     failed_swept, _ = DiscordMessageLog.objects.filter(
-        success=False, claimed_at__lt=failed_threshold,
+        success=False,
+        claimed_at__lt=failed_threshold,
     ).delete()
 
     total = pending_swept + failed_swept
@@ -1237,8 +1280,10 @@ def sweep_stale_discord_leases(request):
             pending_threshold_minutes=pending_minutes,
             failed_threshold_hours=failed_hours,
         )
-    return Response({
-        "pending_swept": pending_swept,
-        "failed_swept": failed_swept,
-        "total": total,
-    })
+    return Response(
+        {
+            "pending_swept": pending_swept,
+            "failed_swept": failed_swept,
+            "total": total,
+        }
+    )

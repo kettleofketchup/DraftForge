@@ -1,7 +1,22 @@
-import { CheckCircle2, Clock, Pencil, ShieldAlert, Trash2, Undo2, Users, XCircle } from 'lucide-react';
+import {
+  CheckCheck,
+  CheckCircle2,
+  Clock,
+  Pencil,
+  ShieldAlert,
+  Trash2,
+  Undo2,
+  Users,
+  XCircle,
+} from 'lucide-react';
 import { useState } from 'react';
 
-import { ConfirmDialog } from '~/components/ui/dialogs/ConfirmDialog';
+import type { EventType } from '~/components/events/schemas';
+import { EventState } from '~/components/events/schemas';
+import {
+  BrandDropdownMenu,
+  type BrandDropdownAction,
+} from '~/components/ui/brand-dropdown-menu';
 import {
   DestructiveButton,
   EditButton,
@@ -9,14 +24,17 @@ import {
   SecondaryButton,
   WarningButton,
 } from '~/components/ui/buttons';
-import { BrandDropdownMenu, type BrandDropdownAction } from '~/components/ui/brand-dropdown-menu';
-import { EventState } from '~/components/events/schemas';
-import type { EventType } from '~/components/events/schemas';
+import { ConfirmDialog } from '~/components/ui/dialogs/ConfirmDialog';
 import type { useEventActionMutation } from '~/hooks/useEvent';
 
 type EventActions = Pick<
   ReturnType<typeof useEventActionMutation>,
-  'openSignups' | 'startRollCall' | 'reopenSignups' | 'cancelEvent' | 'deleteEvent'
+  | 'openSignups'
+  | 'startRollCall'
+  | 'reopenSignups'
+  | 'cancelEvent'
+  | 'deleteEvent'
+  | 'completeEvent'
 >;
 
 interface EventAdminActionsProps {
@@ -27,6 +45,9 @@ interface EventAdminActionsProps {
   onReopenSignupsClick: () => void;
   onOpenRollCallClick: () => void;
   onDeleteConfirmed: () => void;
+  canComplete: boolean;
+  showCompletePointsNote?: boolean;
+  onCompleteConfirmed: () => void | Promise<void>;
 }
 
 export function EventAdminActions({
@@ -37,9 +58,15 @@ export function EventAdminActions({
   onReopenSignupsClick,
   onOpenRollCallClick,
   onDeleteConfirmed,
+  canComplete,
+  showCompletePointsNote = false,
+  onCompleteConfirmed,
 }: EventAdminActionsProps) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const isCancellable = event.state !== EventState.COMPLETED && event.state !== EventState.CANCELLED;
+  const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
+  const isCancellable =
+    event.state !== EventState.COMPLETED &&
+    event.state !== EventState.CANCELLED;
 
   // Mobile dropdown actions — NO data-testid here (would collide with desktop).
   // Tests reach mobile actions via the parent `event-admin-actions-mobile`.
@@ -94,6 +121,17 @@ export function EventAdminActions({
       label: 'Open Roll Call',
       onClick: onOpenRollCallClick,
       variant: 'primary',
+    });
+  }
+
+  if (canComplete) {
+    dropdownActions.push({
+      key: 'complete',
+      icon: <CheckCheck className="h-4 w-4 mr-1.5" />,
+      label: 'Complete',
+      onClick: () => setShowCompleteConfirm(true),
+      variant: 'success',
+      disabled: actions.completeEvent.isPending,
     });
   }
 
@@ -172,10 +210,27 @@ export function EventAdminActions({
               <Undo2 className="h-4 w-4 mr-1.5" />
               Reopen Signups
             </WarningButton>
-            <PrimaryButton size="sm" onClick={onOpenRollCallClick} data-testid="event-start-tournament-btn">
+            <PrimaryButton
+              size="sm"
+              onClick={onOpenRollCallClick}
+              data-testid="event-start-tournament-btn"
+            >
               Open Roll Call
             </PrimaryButton>
           </>
+        )}
+
+        {canComplete && (
+          <SecondaryButton
+            color="emerald"
+            size="sm"
+            onClick={() => setShowCompleteConfirm(true)}
+            disabled={actions.completeEvent.isPending}
+            data-testid="event-complete-btn"
+          >
+            <CheckCheck className="h-4 w-4 mr-1.5" />
+            Complete
+          </SecondaryButton>
         )}
 
         {isCancellable && (
@@ -221,6 +276,21 @@ export function EventAdminActions({
         confirmLabel="Delete Event"
         variant="destructive"
         onConfirm={onDeleteConfirmed}
+      />
+
+      <ConfirmDialog
+        open={showCompleteConfirm}
+        onOpenChange={setShowCompleteConfirm}
+        title="Complete Event"
+        description={
+          showCompletePointsNote
+            ? `Mark "${event.name}" as completed? Host and helper points are awarded when it completes.`
+            : `Mark "${event.name}" as completed?`
+        }
+        confirmLabel="Complete Event"
+        isLoading={actions.completeEvent.isPending}
+        onConfirm={onCompleteConfirmed}
+        confirmTestId="event-complete-dialog-confirm"
       />
     </>
   );

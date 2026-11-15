@@ -120,7 +120,7 @@ just test::pw::spec <pattern>   # Spec files whose path matches, --no-deps
 just test::pw::grep '<title>'   # Tests whose title matches, --no-deps
 just test::pw::navigation | tournament | draft | bracket | league | herodraft | all
 just test::pw::cicd             # @cicd tests across every project
-just test::pw::cicd-chromium --shard=1/4   # CI shard runners (also cicd-mobile, cicd-herodraft, cicd-events)
+just test::pw::cicd-chromium --shard=1/4   # CI shard runners (also cicd-mobile, cicd-herodraft, cicd-events, cicd-dota-lobby, cicd-org-features)
 ```
 
 ### Environment Management

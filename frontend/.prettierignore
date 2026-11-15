@@ -13,5 +13,8 @@ app/i18n/locales/
 # Byte-identical copy of the root CHANGELOG.md; scripts/changelog.py check compares them.
 app/data/CHANGELOG.md
 
+# Compared byte-for-byte against backend/org/tests/render_fixture.json in CI.
+app/features/promotion/__tests__/render_fixture.json
+
 # Written by eslint --suppress-all / --prune-suppressions.
 shadcn-lint-suppressions.json
