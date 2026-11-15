@@ -35,6 +35,11 @@ messages.
 - 65 frontend tests cover root bootstrap, SDK lifecycle/runtime config,
   credential scope, delayed identity responses, embedded team controls and both
   existing draft clock/heartbeat implementations.
+- The first full CI run executed 2,933 backend tests and exposed one additional
+  cache-enabled deactivation failure. Activity authorization now bypasses the
+  user query cache, and the regression explicitly warms a cached active-user
+  lookup before bulk deactivation. The targeted backend suite also runs against
+  a dedicated Redis instance with caching enabled to cover that condition.
 - React Router/TypeScript checking, relevant ESLint and Ruff checks, changed-file
   formatting, migration drift, dependency lock consistency, changelog fragments
   and whitespace checks are part of the final consolidation.

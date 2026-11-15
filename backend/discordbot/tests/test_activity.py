@@ -524,6 +524,11 @@ class ActivitySocketDatabaseTests(TransactionTestCase):
     async def test_open_socket_closes_after_account_deactivation(self):
         from channels.db import database_sync_to_async
 
+        # Warm the cacheable lookup used elsewhere before a bulk deactivation.
+        # Cacheops does not invalidate ordinary QuerySet.update() calls.
+        await database_sync_to_async(CustomUser.objects.get)(
+            pk=self.user_pk, is_active=True
+        )
         with patch("discordbot.activity_auth.SOCKET_REVALIDATE_SECONDS", 0.03):
             socket = await self._open_guarded_socket()
             await database_sync_to_async(

@@ -68,7 +68,9 @@ def token_identity(token: str) -> tuple[CustomUser, DraftActivityInstance]:
             raise AuthenticationFailed(
                 "Activity destination changed. Reopen the Activity."
             )
-        user = CustomUser.objects.get(pk=data["user"], is_active=True)
+        # Authorization must observe deactivation immediately, even when an
+        # administrative bulk update leaves a cached active-user query behind.
+        user = CustomUser.objects.nocache().get(pk=data["user"], is_active=True)
         return user, instance
     except (
         KeyError,
