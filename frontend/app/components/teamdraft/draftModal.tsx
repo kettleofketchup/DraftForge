@@ -143,6 +143,9 @@ export const DraftModal: React.FC<DraftModalParams> = ({
   // Note: Don't call setLive here - TournamentDetailPage handles live state based on URL
   const handleOpenChange = useCallback(
     (isOpen: boolean) => {
+      // The Activity iframe must stay on /activity: leaving it drops the
+      // Activity credential and lands on website routes that need a cookie login.
+      if (embedded) return;
       setOpen(isOpen);
       if (pk) {
         if (isOpen) {
@@ -154,7 +157,7 @@ export const DraftModal: React.FC<DraftModalParams> = ({
         }
       }
     },
-    [pk, navigate],
+    [embedded, pk, navigate],
   );
 
   // Auto-open modal when ?draft=open is in URL (from share URL)
@@ -679,6 +682,7 @@ export const DraftModal: React.FC<DraftModalParams> = ({
         className={cn(DIALOG_CSS_FULLSCREEN)}
         closeButtonVariant="destructive"
         closeButtonTestId="close-draft-modal"
+        showCloseButton={!embedded}
       >
         {/* Visually hidden but accessible title */}
         <DialogHeader className="sr-only">

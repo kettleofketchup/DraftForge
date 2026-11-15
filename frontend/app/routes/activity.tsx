@@ -75,6 +75,7 @@ export default function DraftActivity() {
       key={session.draft_id}
       draftId={session.draft_id}
       open
+      embedded
       onClose={() => {}}
     />
   );
