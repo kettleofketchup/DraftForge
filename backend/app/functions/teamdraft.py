@@ -17,6 +17,7 @@ from app.models import (
     Tournament,
 )
 from telemetry.logging import get_logger
+from user.querysets import with_user_profiles
 
 log = get_logger(__name__)
 
@@ -81,8 +82,9 @@ def emit_event(
 
 
 def team_for_round(draft: Draft, round: DraftRound) -> Team | None:
-    return Team.objects.filter(
-        tournament=draft.tournament, captain_id=round.captain_id
+    return with_user_profiles(
+        Team.objects.filter(tournament=draft.tournament, captain_id=round.captain_id),
+        "captain",
     ).first()
 
 

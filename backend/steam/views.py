@@ -145,7 +145,7 @@ class LeagueStatsView(APIView):
         if isinstance(league_id, Response):
             return league_id
         try:
-            stats = LeaguePlayerStats.objects.select_related("user__base_profile").get(
+            stats = with_user_profiles(LeaguePlayerStats.objects.all(), "user").get(
                 user_id=user_id,
                 league_id=league_id,
             )
@@ -168,7 +168,7 @@ class MyLeagueStatsView(APIView):
 
     def get(self, request):
         try:
-            stats = LeaguePlayerStats.objects.select_related("user__base_profile").get(
+            stats = with_user_profiles(LeaguePlayerStats.objects.all(), "user").get(
                 user=request.user,
                 league_id=LEAGUE_ID,
             )

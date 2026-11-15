@@ -33,6 +33,7 @@ from app.permissions_org import can_edit_tournament
 from app.tasks.draft_tick import evaluate_client_pick_time
 from app.tasks.teamdraft_tick import start_team_tick_broadcaster_after_commit
 from telemetry.logging import get_logger
+from user.querysets import with_user_profiles
 
 log = get_logger(__name__)
 
@@ -153,7 +154,9 @@ def _record_picked_event(
     picked: CustomUser,
     actor: CustomUser,
 ) -> None:
-    captain = draft_round.captain
+    captain = with_user_profiles(CustomUser.objects.all()).get(
+        pk=draft_round.captain_id
+    )
     picked_event = DraftEvent.objects.create(
         draft=draft,
         event_type="player_picked",
@@ -284,7 +287,7 @@ def pick_player_for_round(request: Request) -> Response:
         return denied
 
     try:
-        user = CustomUser.objects.get(pk=user_pk)
+        user = with_user_profiles(CustomUser.objects.all()).get(pk=user_pk)
     except CustomUser.DoesNotExist:
         return Response({"error": "User not found"}, status=404)
 
@@ -413,7 +416,11 @@ def undo_last_pick(request: Request) -> Response:
         if last_round is None:
             return Response({"error": "No picks to undo"}, status=400)
 
-        player = last_round.choice
+        player = (
+            with_user_profiles(CustomUser.objects.all()).get(pk=last_round.choice_id)
+            if last_round.choice_id
+            else None
+        )
         team = last_round.team
 
         log.info(

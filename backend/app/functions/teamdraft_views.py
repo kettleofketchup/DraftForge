@@ -27,6 +27,7 @@ from app.models import Draft, DraftOptions, DraftRound, Team, TeamDraftState
 from app.permissions_org import can_edit_tournament
 from app.tasks.teamdraft_tick import start_team_tick_broadcaster_after_commit
 from telemetry.logging import get_logger
+from user.querysets import with_user_profiles
 
 log = get_logger(__name__)
 
@@ -69,6 +70,7 @@ def teamdraft_set_ready(request: Request, draft_pk: int) -> Response:
         team = Team.objects.select_for_update().get(
             tournament=draft.tournament, captain=request.user
         )
+        team.captain = request.user
         team.draft_is_ready = ready
         team.save(update_fields=["draft_is_ready"])
         invalidate_after_commit(draft.tournament)
@@ -106,8 +108,11 @@ def teamdraft_start(request: Request, draft_pk: int) -> Response:
 
         if draft.state == TeamDraftState.PENDING and active is not None:
             teams = list(
-                Team.objects.select_related("captain").filter(
-                    tournament=draft.tournament, captain__isnull=False
+                with_user_profiles(
+                    Team.objects.filter(
+                        tournament=draft.tournament, captain__isnull=False
+                    ),
+                    "captain",
                 )
             )
             not_ready = [

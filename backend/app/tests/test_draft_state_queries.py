@@ -68,8 +68,9 @@ MMRS_8: list[int] = [1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000]
 DRAFT_STATE_QUERIES: int = 17
 # Ready = the post-commit broadcast + the tournament response (with its
 # league/source_event/games/captains/draft lookups) + the view's own captain
-# check, row locks, update and event insert. Same for 4 and 8 teams.
-READY_ENDPOINT_QUERIES: int = 43
+# check, row locks, update and event insert. Same for 4 and 8 teams. The
+# captain_ready payload reuses request.user as the captain.
+READY_ENDPOINT_QUERIES: int = 42
 # Pick, outermost transaction (TransactionTestCase, cacheops off): 26 for
 # auth, locks, the pick, timing, next-round activation and two event inserts
 # (+BEGIN/COMMIT), 17 for the one shared broadcast state behind both events,
