@@ -16,6 +16,7 @@ import { LogIn } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '~/components/ui/button';
 import { FastTooltip } from '~/components/ui/tooltip';
+import { DisplayName } from '~/components/user/avatar';
 import type { UserClassType } from '~/components/user/types';
 import { useShowTestFeatures } from '~/hooks/useShowTestFeatures';
 import { loginAsDiscordId } from '~/lib/test-utils';
@@ -49,7 +50,7 @@ export function LoginAsUserButton({ user }: Props) {
     }
   };
 
-  const name = user.username || user.nickname;
+  const name = DisplayName(user);
   return (
     <FastTooltip content={`Login as ${name} (Test Only)`}>
       <Button

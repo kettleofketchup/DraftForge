@@ -1,6 +1,7 @@
 export interface LeagueStats {
   user_id: number;
   username: string;
+  nickname?: string | null;
   avatar: string | null;
   base_mmr: number | null;
   league_mmr: number | null;
@@ -21,6 +22,7 @@ export interface LeagueStats {
 export interface LeaderboardEntry {
   user_id: number;
   username: string;
+  nickname?: string | null;
   avatar: string | null;
   base_mmr: number | null;
   league_mmr: number | null;
@@ -42,5 +44,5 @@ export interface LeaderboardResponse {
   results: LeaderboardEntry[];
 }
 
-export type SortField = "win_rate" | "games_played" | "avg_kda";
-export type SortOrder = "asc" | "desc";
+export type SortField = 'win_rate' | 'games_played' | 'avg_kda';
+export type SortOrder = 'asc' | 'desc';

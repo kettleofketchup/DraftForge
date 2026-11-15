@@ -45,7 +45,7 @@ def team_payload(team: Team | None, role: str = "") -> dict:
         }
     return {
         f"{p}captain_id": captain.pk,
-        f"{p}captain_name": captain.username,
+        f"{p}captain_name": captain.display_name,
         f"{p}captain_avatar_url": captain.avatarUrl,
         f"{p}team_id": team.pk,
         f"{p}team_name": team.name,
@@ -297,7 +297,7 @@ def apply_draft_options(
                     "grace_time_ms": opts.grace_time_ms,
                     "reserve_time_ms": opts.reserve_time_ms,
                     "changed_by_id": actor.pk if actor else None,
-                    "changed_by_name": actor.username if actor else None,
+                    "changed_by_name": actor.display_name if actor else None,
                     "from_state": from_state,
                     "to_state": draft.state,
                 },

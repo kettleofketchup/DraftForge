@@ -170,6 +170,7 @@ export interface ProfileClaimRequest {
   id: number;
   claimer: number;
   claimer_username: string;
+  claimer_nickname: string | null;
   claimer_discord_id: string | null;
   claimer_avatar: string | null;
   target_user: number;
@@ -181,6 +182,7 @@ export interface ProfileClaimRequest {
   status: 'pending' | 'approved' | 'rejected';
   reviewed_by: number | null;
   reviewed_by_username: string | null;
+  reviewed_by_nickname: string | null;
   rejection_reason: string;
   created_at: string;
   reviewed_at: string | null;

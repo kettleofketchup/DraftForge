@@ -1,9 +1,14 @@
 import { memo } from 'react';
 import { RecentForm } from '~/components/league-stats/RecentForm';
-import { PlayerPopoverTrigger as PlayerPopover } from '~/components/player/PlayerPopoverTrigger';
 import { MIN_STREAK, StreakBadge } from '~/components/league-stats/StreakBadge';
+import { PlayerPopoverTrigger as PlayerPopover } from '~/components/player/PlayerPopoverTrigger';
 import { Badge } from '~/components/ui/badge';
-import { formatWinRate, toneChipClass, winRateTone } from '~/features/league-stats/format';
+import { DisplayName } from '~/components/user/avatar';
+import {
+  formatWinRate,
+  toneChipClass,
+  winRateTone,
+} from '~/features/league-stats/format';
 import { usePlayerLeagueSummary } from '~/features/league-stats/queries';
 import type { PlayerLeagueSummary } from '~/features/league-stats/schemas';
 import { cn } from '~/lib/utils';
@@ -28,7 +33,9 @@ function accessibleLabel(
     parts.push(`last ${recent.length}: ${recent.join(' ')}, oldest to newest`);
   }
   if (summary.streak && summary.streak.count >= MIN_STREAK) {
-    parts.push(`${summary.streak.result === 'W' ? 'win' : 'loss'} streak ${summary.streak.count}`);
+    parts.push(
+      `${summary.streak.result === 'W' ? 'win' : 'loss'} streak ${summary.streak.count}`,
+    );
   }
   return parts.join(', ');
 }
@@ -55,7 +62,7 @@ export const UserStripLeagueStats = memo(
 
     const { population, minGames } = data;
     const tone = winRateTone(summary.win_rate);
-    const playerName = player.nickname || player.username || 'Unknown';
+    const playerName = DisplayName(player);
     const label = `League stats for ${playerName}: ${accessibleLabel(summary, population, minGames)}. Opens the player panel`;
 
     return (
@@ -79,10 +86,19 @@ export const UserStripLeagueStats = memo(
             >
               {summary.rank != null ? `#${summary.rank}` : ''}
             </span>
-            <span aria-hidden className="whitespace-pre">{' · '}</span>
+            <span aria-hidden className="whitespace-pre">
+              {' · '}
+            </span>
             <span className="inline-block min-w-[4ch] text-right">{`${summary.games}g`}</span>
-            <span aria-hidden className="whitespace-pre">{' · '}</span>
-            <span className={cn('inline-block min-w-[4ch] text-right', toneChipClass[tone])}>
+            <span aria-hidden className="whitespace-pre">
+              {' · '}
+            </span>
+            <span
+              className={cn(
+                'inline-block min-w-[4ch] text-right',
+                toneChipClass[tone],
+              )}
+            >
               {formatWinRate(summary.win_rate)}
             </span>
           </Badge>

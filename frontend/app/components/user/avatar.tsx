@@ -11,6 +11,11 @@ type DisplayNameable = {
   nickname?: string | null;
 };
 
+type DiscordMemberLike = {
+  nick?: string | null;
+  user: { username: string; global_name?: string | null };
+};
+
 /**
  * Get the display name for a user.
  * Priority: nickname > username
@@ -18,7 +23,13 @@ type DisplayNameable = {
  * @param maxLength - Optional max length to truncate to (adds … if truncated)
  */
 export const DisplayName = (
-  user: UserType | GuildMember | UserClassType | DisplayNameable | undefined,
+  user:
+    | UserType
+    | GuildMember
+    | UserClassType
+    | DisplayNameable
+    | DiscordMemberLike
+    | undefined,
   maxLength?: number,
 ): string => {
   if (!user) {

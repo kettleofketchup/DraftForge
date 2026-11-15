@@ -4,6 +4,7 @@ import type { ProfileClaimRequest } from '~/components/api/api';
 import { Avatar, AvatarFallback, AvatarImage } from '~/components/ui/avatar';
 import { Badge } from '~/components/ui/badge';
 import { ConfirmButton, DestructiveButton } from '~/components/ui/buttons';
+import { DisplayName } from '~/components/user/avatar';
 
 type ClaimStatus = 'pending' | 'approved' | 'rejected';
 
@@ -50,12 +51,19 @@ const formatDate = (dateStr: string) => {
   });
 };
 
+export const claimerDisplayName = (claim: ProfileClaimRequest): string =>
+  DisplayName({
+    username: claim.claimer_username,
+    nickname: claim.claimer_nickname,
+  });
+
 export const ClaimCard: React.FC<ClaimCardProps> = ({
   claim,
   index,
   onApprove,
   onReject,
 }) => {
+  const claimerName = claimerDisplayName(claim);
   return (
     <motion.div
       key={claim.id}
@@ -73,15 +81,17 @@ export const ClaimCard: React.FC<ClaimCardProps> = ({
           <div className="flex items-center gap-3 flex-1">
             <Avatar className="h-10 w-10 ring-2 ring-primary">
               {claim.claimer_avatar && (
-                <AvatarImage src={claim.claimer_avatar} alt={claim.claimer_username} />
+                <AvatarImage src={claim.claimer_avatar} alt={claimerName} />
               )}
               <AvatarFallback>
-                {claim.claimer_username.charAt(0).toUpperCase()}
+                {claimerName.charAt(0).toUpperCase()}
               </AvatarFallback>
             </Avatar>
             <div>
-              <div className="font-medium">{claim.claimer_username}</div>
-              <div className="text-sm text-muted-foreground">wants to claim</div>
+              <div className="font-medium">{claimerName}</div>
+              <div className="text-sm text-muted-foreground">
+                wants to claim
+              </div>
             </div>
           </div>
 
@@ -136,7 +146,12 @@ export const ClaimCard: React.FC<ClaimCardProps> = ({
           <div>Created: {formatDate(claim.created_at)}</div>
           {claim.reviewed_at && (
             <div>
-              Reviewed by {claim.reviewed_by_username} on {formatDate(claim.reviewed_at)}
+              Reviewed by{' '}
+              {DisplayName({
+                username: claim.reviewed_by_username,
+                nickname: claim.reviewed_by_nickname,
+              })}{' '}
+              on {formatDate(claim.reviewed_at)}
             </div>
           )}
           {claim.rejection_reason && (

@@ -1,5 +1,6 @@
 import { useNavigate, useParams } from 'react-router';
 import { getEvent } from '~/components/api/api';
+import { DisplayName } from '~/components/user/avatar';
 import { generateMeta } from '~/lib/seo';
 import type { EventSSR } from '~/lib/ssr-types';
 import type { Route } from './+types/event';
@@ -1220,7 +1221,7 @@ function SignupsTab({
                         depth={false}
                         onClick={() => {
                           const name = user
-                            ? user.nickname || user.username
+                            ? DisplayName(user)
                             : `User #${signup.user}`;
                           setRemoveSignup({ signup, name });
                         }}
@@ -1317,10 +1318,10 @@ function SignupsTab({
         }}
         onApprove={(signupId, mmr) => {
           const previousMmr = approvalSignup?.org_user_mmr ?? null;
-          const playerName =
-            approvalSignup?.user_data?.username ??
-            approvalSignup?.username ??
-            `User #${approvalSignup?.user ?? signupId}`;
+          const playerName = approvalSignup?.user_data
+            ? DisplayName(approvalSignup.user_data)
+            : (approvalSignup?.username ??
+              `User #${approvalSignup?.user ?? signupId}`);
           signupActions.approve.mutate(
             { id: signupId, mmr },
             {
@@ -1348,10 +1349,10 @@ function SignupsTab({
         isApproving={signupActions.approve.isPending}
         isRejecting={signupActions.reject.isPending}
         onReject={(signupId) => {
-          const playerName =
-            approvalSignup?.user_data?.username ??
-            approvalSignup?.username ??
-            `User #${approvalSignup?.user ?? signupId}`;
+          const playerName = approvalSignup?.user_data
+            ? DisplayName(approvalSignup.user_data)
+            : (approvalSignup?.username ??
+              `User #${approvalSignup?.user ?? signupId}`);
           signupActions.reject.mutate(signupId, {
             onSuccess: () => {
               setApprovalSignup(null);

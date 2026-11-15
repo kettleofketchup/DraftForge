@@ -1,12 +1,13 @@
-import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Play } from 'lucide-react';
+import { useState } from 'react';
 import { toast } from 'sonner';
+import api from '~/components/api/axios';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import { ConfirmDialog } from '~/components/ui/dialogs';
+import { DisplayName } from '~/components/user/avatar';
 import { UserAvatar } from '~/components/user/UserAvatar';
-import api from '~/components/api/axios';
 import { useUserStore } from '~/store/userStore';
 
 interface FiredByUser {
@@ -32,7 +33,8 @@ interface TaskEntry {
 function useEventTaskSchedule(eventId: number | null) {
   return useQuery<TaskEntry[]>({
     queryKey: ['event-task-schedule', eventId],
-    queryFn: () => api.get(`/events/${eventId}/task-schedule/`).then((r) => r.data),
+    queryFn: () =>
+      api.get(`/events/${eventId}/task-schedule/`).then((r) => r.data),
     enabled: !!eventId,
   });
 }
@@ -77,7 +79,11 @@ interface TaskScheduleSectionProps {
   eventTimezone?: string;
 }
 
-export function TaskScheduleSection({ eventId, isAdmin, eventTimezone }: TaskScheduleSectionProps) {
+export function TaskScheduleSection({
+  eventId,
+  isAdmin,
+  eventTimezone,
+}: TaskScheduleSectionProps) {
   const { data: tasks, isLoading } = useEventTaskSchedule(eventId);
   const queryClient = useQueryClient();
   const currentUser = useUserStore((state) => state.currentUser);
@@ -90,7 +96,9 @@ export function TaskScheduleSection({ eventId, isAdmin, eventTimezone }: TaskSch
       api.post(`/events/${eventId}/task-schedule/${taskName}/fire/`),
     onSuccess: (_data, taskName) => {
       toast.success(`Task "${taskName}" fired`);
-      queryClient.invalidateQueries({ queryKey: ['event-task-schedule', eventId] });
+      queryClient.invalidateQueries({
+        queryKey: ['event-task-schedule', eventId],
+      });
       queryClient.invalidateQueries({ queryKey: ['event-discord', eventId] });
     },
     onError: (err: any, taskName) => {
@@ -107,7 +115,8 @@ export function TaskScheduleSection({ eventId, isAdmin, eventTimezone }: TaskSch
   // this becomes a "Repost" action that clears dedup and pushes a fresh post.
   // Other tasks keep their one-shot semantics, so the wording stays "Fire".
   const isRepost = (task: TaskEntry) =>
-    task.status === 'fired' && (task.task === 'signup_post' || task.task === 'announcement');
+    task.status === 'fired' &&
+    (task.task === 'signup_post' || task.task === 'announcement');
 
   if (isLoading) {
     return (
@@ -127,11 +136,18 @@ export function TaskScheduleSection({ eventId, isAdmin, eventTimezone }: TaskSch
 
   // Sort: fired first, then ready/pending, disabled last
   const sorted = [...tasks].sort((a, b) => {
-    const order = { fired: 0, ready: 1, pending: 2, misconfigured: 3, disabled: 4 };
+    const order = {
+      fired: 0,
+      ready: 1,
+      pending: 2,
+      misconfigured: 3,
+      disabled: 4,
+    };
     const aOrder = order[a.status] ?? 5;
     const bOrder = order[b.status] ?? 5;
     if (aOrder !== bOrder) return aOrder - bOrder;
-    if (a.fires_at && b.fires_at) return new Date(a.fires_at).getTime() - new Date(b.fires_at).getTime();
+    if (a.fires_at && b.fires_at)
+      return new Date(a.fires_at).getTime() - new Date(b.fires_at).getTime();
     return 0;
   });
 
@@ -160,14 +176,18 @@ export function TaskScheduleSection({ eventId, isAdmin, eventTimezone }: TaskSch
             >
               {/* Status emoji */}
               <td className="py-2.5 pl-1 text-center">
-                <span title={task.status}>{STATUS_EMOJI[task.status] || '❓'}</span>
+                <span title={task.status}>
+                  {STATUS_EMOJI[task.status] || '❓'}
+                </span>
               </td>
 
               {/* Task name + description */}
               <td className="py-2.5">
                 <div className="font-medium text-foreground">{task.label}</div>
                 {task.description && (
-                  <div className="text-xs text-muted-foreground mt-0.5">{task.description}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">
+                    {task.description}
+                  </div>
                 )}
               </td>
 
@@ -175,11 +195,16 @@ export function TaskScheduleSection({ eventId, isAdmin, eventTimezone }: TaskSch
               <td className="py-2.5 hidden sm:table-cell">
                 {task.fires_at ? (
                   <div>
-                    <div className="text-foreground">{formatRelativeTime(task.fires_at)}</div>
+                    <div className="text-foreground">
+                      {formatRelativeTime(task.fires_at)}
+                    </div>
                     <div className="text-[10px] text-muted-foreground">
                       {new Date(task.fires_at).toLocaleString(undefined, {
                         timeZone: eventTimezone || undefined,
-                        month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+                        month: 'short',
+                        day: 'numeric',
+                        hour: 'numeric',
+                        minute: '2-digit',
                         timeZoneName: 'short',
                       })}
                     </div>
@@ -191,14 +216,18 @@ export function TaskScheduleSection({ eventId, isAdmin, eventTimezone }: TaskSch
                 ) : task.status === 'disabled' ? (
                   <span className="text-muted-foreground">—</span>
                 ) : (
-                  <span className="text-muted-foreground text-xs">On trigger</span>
+                  <span className="text-muted-foreground text-xs">
+                    On trigger
+                  </span>
                 )}
               </td>
 
               {/* Check interval */}
               <td className="py-2.5 hidden md:table-cell">
                 {task.check_interval ? (
-                  <span className="text-xs text-muted-foreground">{task.check_interval}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {task.check_interval}
+                  </span>
                 ) : (
                   <span className="text-muted-foreground">—</span>
                 )}
@@ -225,7 +254,7 @@ export function TaskScheduleSection({ eventId, isAdmin, eventTimezone }: TaskSch
                       size="xs"
                     />
                     <span className="text-xs text-foreground truncate max-w-[100px]">
-                      {task.fired_by.nickname || task.fired_by.username}
+                      {DisplayName(task.fired_by)}
                     </span>
                   </div>
                 ) : task.status === 'fired' ? (
@@ -243,7 +272,11 @@ export function TaskScheduleSection({ eventId, isAdmin, eventTimezone }: TaskSch
                       className="h-7 w-7 p-0"
                       onClick={() => setConfirmTask(task)}
                       disabled={fireMutation.isPending}
-                      title={isRepost(task) ? `Repost ${task.label}` : `Fire ${task.label} now`}
+                      title={
+                        isRepost(task)
+                          ? `Repost ${task.label}`
+                          : `Fire ${task.label} now`
+                      }
                       data-testid={`fire-task-${task.task}`}
                     >
                       <Play className="h-3.5 w-3.5" />
@@ -259,13 +292,19 @@ export function TaskScheduleSection({ eventId, isAdmin, eventTimezone }: TaskSch
       <ConfirmDialog
         open={!!confirmTask}
         onOpenChange={(open) => !open && setConfirmTask(null)}
-        title={confirmTask && isRepost(confirmTask)
-          ? `Repost ${confirmTask.label}?`
-          : `Fire ${confirmTask?.label}?`}
-        description={confirmTask && isRepost(confirmTask)
-          ? `This will clear the existing post tracking and create a fresh "${confirmTask.label}" in Discord. Use this if the original message was deleted or you want to push an updated version.`
-          : `This will immediately execute "${confirmTask?.label}" for this event. This action cannot be undone.`}
-        confirmLabel={confirmTask && isRepost(confirmTask) ? 'Repost' : 'Fire Now'}
+        title={
+          confirmTask && isRepost(confirmTask)
+            ? `Repost ${confirmTask.label}?`
+            : `Fire ${confirmTask?.label}?`
+        }
+        description={
+          confirmTask && isRepost(confirmTask)
+            ? `This will clear the existing post tracking and create a fresh "${confirmTask.label}" in Discord. Use this if the original message was deleted or you want to push an updated version.`
+            : `This will immediately execute "${confirmTask?.label}" for this event. This action cannot be undone.`
+        }
+        confirmLabel={
+          confirmTask && isRepost(confirmTask) ? 'Repost' : 'Fire Now'
+        }
         variant="default"
         onConfirm={() => {
           if (confirmTask) {

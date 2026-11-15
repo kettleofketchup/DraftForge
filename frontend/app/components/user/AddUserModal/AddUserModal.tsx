@@ -1,23 +1,24 @@
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Search } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { toast } from 'sonner';
+import type { AddMemberPayload } from '~/components/api/api';
+import {
+  refreshDiscordMembers,
+  searchDiscordMembers,
+  searchUsers,
+} from '~/components/api/api';
 import { FormDialog } from '~/components/ui/dialogs/FormDialog';
 import { Input } from '~/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
-import { Search } from 'lucide-react';
-import { cn } from '~/lib/utils';
-import {
-  searchUsers,
-  searchDiscordMembers,
-  refreshDiscordMembers,
-} from '~/components/api/api';
-import type { AddMemberPayload } from '~/components/api/api';
-import { toast } from 'sonner';
+import { DisplayName } from '~/components/user/avatar';
+import type { UserType } from '~/components/user/types';
 import { useDebouncedValue } from '~/hooks/useDebouncedValue';
 import { useListKeyboardNav } from '~/hooks/useListKeyboardNav';
-import { SiteUserResults } from './SiteUserResults';
+import { cn } from '~/lib/utils';
 import { DiscordMemberResults } from './DiscordMemberResults';
+import { SiteUserResults } from './SiteUserResults';
 import type { AddUserModalProps } from './types';
-import type { UserType } from '~/components/user/types';
 
 const DEBOUNCE_MS = 300;
 const MIN_QUERY_LENGTH = 3;
@@ -37,18 +38,29 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
   const [refreshing, setRefreshing] = useState(false);
 
   // Reset manual query when input changes
-  useEffect(() => { setManualQuery(''); }, [query]);
+  useEffect(() => {
+    setManualQuery('');
+  }, [query]);
 
   // Debounced auto-search for 3+ chars, or manual search on Enter for shorter queries
-  const searchTerm = debouncedQuery.length >= MIN_QUERY_LENGTH ? debouncedQuery : manualQuery;
+  const searchTerm =
+    debouncedQuery.length >= MIN_QUERY_LENGTH ? debouncedQuery : manualQuery;
   const [addedUsers, setAddedUsers] = useState<Set<number>>(new Set());
-  const [addedDiscordIds, setAddedDiscordIds] = useState<Set<string>>(new Set());
+  const [addedDiscordIds, setAddedDiscordIds] = useState<Set<string>>(
+    new Set(),
+  );
   const queryClient = useQueryClient();
 
   // Site user search via react-query (automatic race condition handling)
   const siteQuery = useQuery({
-    queryKey: ['userSearch', searchTerm, entityContext.orgId, entityContext.leagueId],
-    queryFn: () => searchUsers(searchTerm, entityContext.orgId, entityContext.leagueId),
+    queryKey: [
+      'userSearch',
+      searchTerm,
+      entityContext.orgId,
+      entityContext.leagueId,
+    ],
+    queryFn: () =>
+      searchUsers(searchTerm, entityContext.orgId, entityContext.leagueId),
     enabled: open && searchTerm.length >= 1,
   });
 
@@ -56,7 +68,11 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
   const discordQuery = useQuery({
     queryKey: ['discordSearch', searchTerm, entityContext.orgId],
     queryFn: () => searchDiscordMembers(entityContext.orgId!, searchTerm),
-    enabled: open && searchTerm.length >= 1 && hasDiscordServer && !!entityContext.orgId,
+    enabled:
+      open &&
+      searchTerm.length >= 1 &&
+      hasDiscordServer &&
+      !!entityContext.orgId,
   });
 
   const siteResults = siteQuery.data ?? [];
@@ -82,7 +98,7 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
       }
       onOpenChange(nextOpen);
     },
-    [onOpenChange]
+    [onOpenChange],
   );
 
   const handleRefresh = useCallback(async () => {
@@ -95,8 +111,8 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
       queryClient.invalidateQueries({ queryKey: ['discordSearch'] });
     } catch (err: unknown) {
       const message =
-        (err as { response?: { data?: { error?: string } } })?.response?.data?.error
-        || 'Failed to refresh Discord members';
+        (err as { response?: { data?: { error?: string } } })?.response?.data
+          ?.error || 'Failed to refresh Discord members';
       toast.error(message);
     } finally {
       setRefreshing(false);
@@ -117,7 +133,7 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
         queryClient.invalidateQueries({ queryKey: ['userSearch'] });
       }
     },
-    [onAdd, queryClient]
+    [onAdd, queryClient],
   );
 
   const checkIsAdded = useCallback(
@@ -125,7 +141,7 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
       if (user.pk && addedUsers.has(user.pk)) return true;
       return isAdded(user);
     },
-    [isAdded, addedUsers]
+    [isAdded, addedUsers],
   );
 
   const checkIsDiscordUserAdded = useCallback(
@@ -134,31 +150,36 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
       // Check if the Discord user has a linked site account that's already added
       const member = discordResults.find((m) => m.user.id === discordId);
       if (member?.has_site_account && member.site_user_pk) {
-        return addedUsers.has(member.site_user_pk) || isAdded({ pk: member.site_user_pk } as UserType);
+        return (
+          addedUsers.has(member.site_user_pk) ||
+          isAdded({ pk: member.site_user_pk } as UserType)
+        );
       }
       return false;
     },
-    [addedDiscordIds, addedUsers, discordResults, isAdded]
+    [addedDiscordIds, addedUsers, discordResults, isAdded],
   );
 
   // Sort results: non-added users first
   const sortedSiteResults = useMemo(
-    () => [...siteResults].sort((a, b) => {
-      const aAdded = a.pk ? checkIsAdded(a) : false;
-      const bAdded = b.pk ? checkIsAdded(b) : false;
-      if (aAdded === bAdded) return 0;
-      return aAdded ? 1 : -1;
-    }),
+    () =>
+      [...siteResults].sort((a, b) => {
+        const aAdded = a.pk ? checkIsAdded(a) : false;
+        const bAdded = b.pk ? checkIsAdded(b) : false;
+        if (aAdded === bAdded) return 0;
+        return aAdded ? 1 : -1;
+      }),
     [siteResults, checkIsAdded],
   );
 
   const sortedDiscordResults = useMemo(
-    () => [...discordResults].sort((a, b) => {
-      const aAdded = checkIsDiscordUserAdded(a.user.id);
-      const bAdded = checkIsDiscordUserAdded(b.user.id);
-      if (aAdded === bAdded) return 0;
-      return aAdded ? 1 : -1;
-    }),
+    () =>
+      [...discordResults].sort((a, b) => {
+        const aAdded = checkIsDiscordUserAdded(a.user.id);
+        const bAdded = checkIsDiscordUserAdded(b.user.id);
+        if (aAdded === bAdded) return 0;
+        return aAdded ? 1 : -1;
+      }),
     [discordResults, checkIsDiscordUserAdded],
   );
 
@@ -170,9 +191,11 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
         if (!result?.pk || checkIsAdded(result)) return;
         try {
           await handleAdd({ user_id: result.pk });
-          toast.success(`Added ${result.nickname || result.username}`);
+          toast.success(`Added ${DisplayName(result)}`);
         } catch (err) {
-          toast.error(err instanceof Error ? err.message : 'Failed to add user');
+          toast.error(
+            err instanceof Error ? err.message : 'Failed to add user',
+          );
         }
       } else {
         const member = sortedDiscordResults[index];
@@ -182,13 +205,21 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
           : { discord_id: member.user.id };
         try {
           await handleAdd(payload);
-          toast.success(`Added ${member.nick || member.user.global_name || member.user.username}`);
+          toast.success(`Added ${DisplayName(member)}`);
         } catch (err) {
-          toast.error(err instanceof Error ? err.message : 'Failed to add user');
+          toast.error(
+            err instanceof Error ? err.message : 'Failed to add user',
+          );
         }
       }
     },
-    [sortedSiteResults, sortedDiscordResults, checkIsAdded, checkIsDiscordUserAdded, handleAdd],
+    [
+      sortedSiteResults,
+      sortedDiscordResults,
+      checkIsAdded,
+      checkIsDiscordUserAdded,
+      handleAdd,
+    ],
   );
 
   const {
@@ -207,7 +238,12 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
   // Wrap keydown: Enter with short query triggers search, otherwise defer to nav
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
-      if (e.key === 'Enter' && query.length >= 1 && query.length < MIN_QUERY_LENGTH && highlightedIndex < 0) {
+      if (
+        e.key === 'Enter' &&
+        query.length >= 1 &&
+        query.length < MIN_QUERY_LENGTH &&
+        highlightedIndex < 0
+      ) {
         e.preventDefault();
         setManualQuery(query);
         return;
@@ -242,8 +278,10 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
         {/* Loading bar */}
         {siteQuery.isFetching && (
           <div className="absolute bottom-0 left-0 right-0 h-0.5 overflow-hidden rounded-b">
-            <div className="h-full w-1/3 bg-primary animate-[loading_1s_ease-in-out_infinite]"
-                 style={{ animation: 'loading 1s ease-in-out infinite' }} />
+            <div
+              className="h-full w-1/3 bg-primary animate-[loading_1s_ease-in-out_infinite]"
+              style={{ animation: 'loading 1s ease-in-out infinite' }}
+            />
             <style>{`
               @keyframes loading {
                 0% { transform: translateX(-100%); }
@@ -252,20 +290,24 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
             `}</style>
           </div>
         )}
-        {query.length > 0 && query.length < MIN_QUERY_LENGTH && !manualQuery && (
-          <p className="mt-1 text-xs text-muted-foreground">
-            Press Enter to search, or type {MIN_QUERY_LENGTH}+ characters
-          </p>
-        )}
+        {query.length > 0 &&
+          query.length < MIN_QUERY_LENGTH &&
+          !manualQuery && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              Press Enter to search, or type {MIN_QUERY_LENGTH}+ characters
+            </p>
+          )}
       </div>
 
       {/* Desktop: two columns */}
       <div className="hidden lg:grid lg:grid-cols-2 lg:gap-4">
         <div>
-          <h3 className={cn(
-            "mb-2 text-sm font-medium",
-            activeColumn === 'site' ? 'text-primary' : 'text-foreground',
-          )}>
+          <h3
+            className={cn(
+              'mb-2 text-sm font-medium',
+              activeColumn === 'site' ? 'text-primary' : 'text-foreground',
+            )}
+          >
             Site Users
           </h3>
           <SiteUserResults
@@ -278,10 +320,12 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
           />
         </div>
         <div>
-          <h3 className={cn(
-            "mb-2 text-sm font-medium",
-            activeColumn === 'discord' ? 'text-primary' : 'text-foreground',
-          )}>
+          <h3
+            className={cn(
+              'mb-2 text-sm font-medium',
+              activeColumn === 'discord' ? 'text-primary' : 'text-foreground',
+            )}
+          >
             Discord Members
           </h3>
           <DiscordMemberResults
@@ -294,7 +338,9 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
             onRefresh={handleRefresh}
             refreshing={refreshing}
             hasDiscordServer={hasDiscordServer}
-            highlightedIndex={activeColumn === 'discord' ? highlightedIndex : -1}
+            highlightedIndex={
+              activeColumn === 'discord' ? highlightedIndex : -1
+            }
           />
         </div>
       </div>
@@ -335,7 +381,9 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
               onRefresh={handleRefresh}
               refreshing={refreshing}
               hasDiscordServer={hasDiscordServer}
-              highlightedIndex={activeColumn === 'discord' ? highlightedIndex : -1}
+              highlightedIndex={
+                activeColumn === 'discord' ? highlightedIndex : -1
+              }
             />
           </TabsContent>
         </Tabs>

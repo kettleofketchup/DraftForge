@@ -125,10 +125,6 @@ def _upstream_error(exc: DotaLobbyError, *, game_pk: int, action: str) -> Respon
     return response
 
 
-def _display_name(user: CustomUser) -> str:
-    return user.nickname or user.username or f"User {user.pk}"
-
-
 def _load_game(game_pk: int) -> Game:
     return get_object_or_404(
         Game.objects.select_related("tournament__league", "radiant_team", "dire_team"),
@@ -184,7 +180,7 @@ def _players(game: Game, game_lobby: GameLobby | None) -> list[dict[str, Any]]:
             rows.append(
                 {
                     "user_id": user.pk,
-                    "name": _display_name(user),
+                    "name": user.display_name,
                     "side": side,
                     "team_id": team.pk,
                     "captain": user.pk == team.captain_id,
@@ -265,7 +261,7 @@ def serialize_lobby(
 
 def _missing_players(user_ids: list[int]) -> list[dict[str, Any]]:
     users = CustomUser.objects.filter(pk__in=user_ids).order_by("pk")
-    return [{"id": u.pk, "name": _display_name(u)} for u in users]
+    return [{"id": u.pk, "name": u.display_name} for u in users]
 
 
 def _eligibility_body(eligibility: services.Eligibility) -> dict[str, Any]:

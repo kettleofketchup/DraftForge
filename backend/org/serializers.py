@@ -85,6 +85,9 @@ class ProfileClaimRequestSerializer(serializers.ModelSerializer):
     """Serializer for profile claim requests."""
 
     claimer_username = serializers.CharField(source="claimer.username", read_only=True)
+    claimer_nickname = serializers.CharField(
+        source="claimer.nickname", read_only=True, allow_null=True
+    )
     claimer_discord_id = serializers.CharField(
         source="claimer.discordId", read_only=True
     )
@@ -105,6 +108,9 @@ class ProfileClaimRequestSerializer(serializers.ModelSerializer):
     reviewed_by_username = serializers.CharField(
         source="reviewed_by.username", read_only=True, allow_null=True
     )
+    reviewed_by_nickname = serializers.CharField(
+        source="reviewed_by.nickname", read_only=True, allow_null=True
+    )
 
     class Meta:
         model = ProfileClaimRequest
@@ -112,6 +118,7 @@ class ProfileClaimRequestSerializer(serializers.ModelSerializer):
             "id",
             "claimer",
             "claimer_username",
+            "claimer_nickname",
             "claimer_discord_id",
             "claimer_avatar",
             "target_user",
@@ -123,6 +130,7 @@ class ProfileClaimRequestSerializer(serializers.ModelSerializer):
             "status",
             "reviewed_by",
             "reviewed_by_username",
+            "reviewed_by_nickname",
             "rejection_reason",
             "created_at",
             "reviewed_at",

@@ -8,7 +8,13 @@ export const OrgFeatureRowSchema = z.object({
   feature: FeatureKeySchema,
   enabled: z.boolean(),
   notes: z.string(),
-  enabled_by: z.object({ pk: z.number(), username: z.string() }).nullable(),
+  enabled_by: z
+    .object({
+      pk: z.number(),
+      username: z.string(),
+      nickname: z.string().nullable().optional(),
+    })
+    .nullable(),
   enabled_at: z.string().nullable(),
 });
 export type OrgFeatureRow = z.infer<typeof OrgFeatureRowSchema>;

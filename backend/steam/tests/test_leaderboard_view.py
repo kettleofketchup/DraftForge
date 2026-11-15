@@ -39,6 +39,16 @@ class LeaderboardViewTests(TestCase):
         request = Request(RequestFactory().get(URL, params))
         return tuple(LeaderboardView(request=request).get_queryset().query.order_by)
 
+    def test_rows_carry_nickname(self) -> None:
+        nicked = self._row(0.9)
+        nicked.nickname = "LB Nick"
+        self._row(0.5)
+
+        rows = self._results()
+
+        self.assertEqual(rows[0]["nickname"], "LB Nick")
+        self.assertIsNone(rows[1]["nickname"])
+
     def test_default_request_200_sorted_by_win_rate(self) -> None:
         for rate in (0.4, 0.8, 0.6):
             self._row(rate)

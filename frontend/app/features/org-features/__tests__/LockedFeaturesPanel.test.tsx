@@ -35,7 +35,7 @@ const rows: OrgFeatureRow[] = [
     feature: 'promotion',
     enabled: true,
     notes: 'Paid via invoice 42',
-    enabled_by: { pk: 1, username: 'admin' },
+    enabled_by: { pk: 1, username: 'admin', nickname: 'Admin Nick' },
     enabled_at: '2026-11-01T12:00:00Z',
   },
 ];
@@ -106,6 +106,7 @@ describe('LockedFeaturesPanel', () => {
       screen.getByTestId('locked-feature-switch-contributions'),
     ).toHaveAttribute('aria-checked', 'false');
     expect(getOrgFeatures).toHaveBeenCalledWith(7);
+    expect(screen.getByText(/Last unlocked by Admin Nick/)).toBeInTheDocument();
   });
 
   it('saves a row and invalidates the org and features queries', async () => {

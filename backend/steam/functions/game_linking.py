@@ -463,10 +463,10 @@ def auto_assign_matches_by_time(tournament_id, preview=True, min_overlap=4):
 
         if game.radiant_team and game.radiant_team.captain:
             radiant_captain_id = game.radiant_team.captain.steamid
-            radiant_captain_name = game.radiant_team.captain.username
+            radiant_captain_name = game.radiant_team.captain.display_name
         if game.dire_team and game.dire_team.captain:
             dire_captain_id = game.dire_team.captain.steamid
-            dire_captain_name = game.dire_team.captain.username
+            dire_captain_name = game.dire_team.captain.display_name
 
         # Get the actual game number for each captain (how many games they've played so far)
         radiant_game_num = (

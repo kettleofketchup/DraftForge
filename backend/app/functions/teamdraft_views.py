@@ -96,7 +96,7 @@ def teamdraft_start(request: Request, draft_pk: int) -> Response:
         return _error("forbidden", status.HTTP_403_FORBIDDEN)
 
     now = timezone.now()
-    actor = {"actor_id": request.user.pk, "actor_name": request.user.username}
+    actor = {"actor_id": request.user.pk, "actor_name": request.user.display_name}
     with atomic_sharing_draft_state():
         draft = Draft.objects.select_for_update().get(pk=draft_pk)
         options = draft.tournament.get_draft_options(fresh=True)
@@ -115,7 +115,7 @@ def teamdraft_start(request: Request, draft_pk: int) -> Response:
                     "team_id": t.pk,
                     "team_name": t.name,
                     "captain_id": t.captain.pk,
-                    "captain_name": t.captain.username,
+                    "captain_name": t.captain.display_name,
                 }
                 for t in teams
                 if not t.draft_is_ready
@@ -182,7 +182,7 @@ def teamdraft_pause(request: Request, draft_pk: int) -> Response:
             {
                 "reason": "manual",
                 "paused_by_id": request.user.pk,
-                "paused_by_name": request.user.username,
+                "paused_by_name": request.user.display_name,
                 **team_payload(team_for_round(draft, active)),
             },
             actor=request.user,
@@ -234,7 +234,7 @@ def teamdraft_resume(request: Request, draft_pk: int) -> Response:
             "draft_resumed",
             {
                 "resumed_by_id": request.user.pk,
-                "resumed_by_name": request.user.username,
+                "resumed_by_name": request.user.display_name,
                 "resuming_until": resuming_until.isoformat(),
             },
             actor=request.user,

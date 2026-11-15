@@ -1,5 +1,6 @@
 import type { FormEvent } from 'react';
 import React, { useEffect, useState } from 'react';
+import { DisplayName } from '~/components/user/avatar';
 import type { GameType } from '~/index';
 import { getLogger } from '~/lib/logger';
 const log = getLogger('GameCard');
@@ -133,13 +134,17 @@ export const GameCard: React.FC<Props> = ({
         {game.radiant_team && (
           <div>
             <span className="font-semibold">Radiant:</span>{' '}
-            {game.radiant_team?.captain?.username}'s Team
+            {game.radiant_team.captain
+              ? `${DisplayName(game.radiant_team.captain)}'s Team`
+              : game.radiant_team.name}
           </div>
         )}
         {game.dire_team && (
           <div>
             <span className="font-semibold">Dire:</span>{' '}
-            {game.dire_team?.captain?.username}'s Team
+            {game.dire_team.captain
+              ? `${DisplayName(game.dire_team.captain)}'s Team`
+              : game.dire_team.name}
           </div>
         )}
       </>

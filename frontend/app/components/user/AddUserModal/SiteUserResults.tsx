@@ -1,20 +1,40 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { toast } from 'sonner';
+import type { SearchUserResult } from '~/components/api/api';
 import { Badge } from '~/components/ui/badge';
 import { ConfirmButton } from '~/components/ui/buttons';
 import { ScrollArea } from '~/components/ui/scroll-area';
+import { DisplayName } from '~/components/user/avatar';
 import { UserStrip } from '~/components/user/UserStrip';
 import { cn } from '~/lib/utils';
-import { toast } from 'sonner';
-import type { SearchUserResult } from '~/components/api/api';
 import type { SiteUserResultsProps } from './types';
 
 function MembershipBadge({ result }: { result: SearchUserResult }) {
   if (!result.membership) return null;
 
-  const config: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline'; className: string }> = {
-    league: { label: 'League Member', variant: 'outline', className: 'border-info text-info' },
-    org: { label: 'Org Member', variant: 'outline', className: 'border-success text-success' },
-    other_org: { label: `Other: ${result.membership_label}`, variant: 'outline', className: 'border-warning text-warning' },
+  const config: Record<
+    string,
+    {
+      label: string;
+      variant: 'default' | 'secondary' | 'outline';
+      className: string;
+    }
+  > = {
+    league: {
+      label: 'League Member',
+      variant: 'outline',
+      className: 'border-info text-info',
+    },
+    org: {
+      label: 'Org Member',
+      variant: 'outline',
+      className: 'border-success text-success',
+    },
+    other_org: {
+      label: `Other: ${result.membership_label}`,
+      variant: 'outline',
+      className: 'border-warning text-warning',
+    },
   };
 
   const { label, variant, className } = config[result.membership] ?? {
@@ -57,16 +77,14 @@ export const SiteUserResults: React.FC<SiteUserResultsProps> = ({
       setAddingPk(user.pk);
       try {
         await onAdd({ user_id: user.pk });
-        toast.success(`Added ${user.nickname || user.username}`);
+        toast.success(`Added ${DisplayName(user)}`);
       } catch (err) {
-        toast.error(
-          err instanceof Error ? err.message : 'Failed to add user'
-        );
+        toast.error(err instanceof Error ? err.message : 'Failed to add user');
       } finally {
         setAddingPk(null);
       }
     },
-    [onAdd]
+    [onAdd],
   );
 
   if (loading) {
@@ -103,10 +121,13 @@ export const SiteUserResults: React.FC<SiteUserResultsProps> = ({
           return (
             <div
               key={result.pk}
-              ref={(el) => { itemRefs.current[index] = el; }}
+              ref={(el) => {
+                itemRefs.current[index] = el;
+              }}
               className={cn(
                 'rounded-lg',
-                highlighted && 'ring-2 ring-primary ring-offset-1 ring-offset-background',
+                highlighted &&
+                  'ring-2 ring-primary ring-offset-1 ring-offset-background',
               )}
             >
               <UserStrip
@@ -114,7 +135,11 @@ export const SiteUserResults: React.FC<SiteUserResultsProps> = ({
                 data-testid={`site-user-result-${result.username}`}
                 compact
                 showPositions={false}
-                contextSlot={showMembership ? <MembershipBadge result={result} /> : undefined}
+                contextSlot={
+                  showMembership ? (
+                    <MembershipBadge result={result} />
+                  ) : undefined
+                }
                 actionSlot={
                   added ? (
                     <span className="text-xs text-muted-foreground">

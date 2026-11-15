@@ -33,7 +33,7 @@ def _feature_rows(org: Organization) -> list[dict[str, Any]]:
         row.feature: row
         for row in OrgFeature.objects.nocache()
         .filter(organization=org)
-        .select_related("enabled_by")
+        .select_related("enabled_by__base_profile")
     }
     result: list[dict[str, Any]] = []
     for key in sorted(FeatureKey.values):
@@ -45,7 +45,11 @@ def _feature_rows(org: Organization) -> list[dict[str, Any]]:
                 "enabled": row.enabled if row else False,
                 "notes": row.notes if row else "",
                 "enabled_by": (
-                    {"pk": enabled_by.pk, "username": enabled_by.username}
+                    {
+                        "pk": enabled_by.pk,
+                        "username": enabled_by.username,
+                        "nickname": enabled_by.nickname,
+                    }
                     if enabled_by
                     else None
                 ),

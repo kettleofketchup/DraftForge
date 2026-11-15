@@ -189,6 +189,10 @@ class CustomUser(AbstractUser):
         invalidate_after_commit(bp)
 
     @property
+    def display_name(self) -> str:
+        return self.nickname or self.username or f"User {self.pk}"
+
+    @property
     def avatar(self) -> str | None:
         bp = getattr(self, "base_profile", None)
         if bp is None:

@@ -191,7 +191,7 @@ def reassign_round_captain(
     payload: dict = {
         "pick_number": round.pick_number,
         "captain_id": captain.pk,
-        "captain_name": captain.username,
+        "captain_name": captain.display_name,
         "captain_avatar_url": captain.avatarUrl,
         "team_id": next_team.pk,
         "team_name": next_team.name,
@@ -213,7 +213,7 @@ def reassign_round_captain(
                 "tied_teams": tie_data["tied_teams"],
                 "roll_rounds": tie_data["roll_rounds"],
                 "winner_id": tie_data["winner_id"],
-                "winner_name": captain.username,
+                "winner_name": captain.display_name,
                 "hold_ms": tie_data["hold_ms"],
             },
         )

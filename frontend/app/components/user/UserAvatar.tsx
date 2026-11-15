@@ -1,23 +1,27 @@
 import { memo, useMemo } from 'react';
 import { SimpleAvatar } from '~/components/ui/simple-avatar';
+import { DisplayName } from '~/components/user/avatar';
 import { cn } from '~/lib/utils';
-import type { UserType, UserClassType, GuildMember } from './types';
+import type { GuildMember, UserClassType, UserType } from './types';
 
 /**
  * Flexible user data type that accepts full UserType, GuildMember, or partial data
  * from various sources (e.g., captain objects from serializers, herodraft data)
  */
-type UserLike = UserType | GuildMember | {
-  pk?: number;
-  // Username can be null for Steam-only signups (CustomUser.username is
-  // null=True at the model level). DisplayName already falls back to
-  // nickname / '?'.
-  username?: string | null;
-  nickname?: string | null;
-  avatar?: string | null;
-  avatarUrl?: string | null;
-  discordId?: string | null;
-};
+type UserLike =
+  | UserType
+  | GuildMember
+  | {
+      pk?: number;
+      // Username can be null for Steam-only signups (CustomUser.username is
+      // null=True at the model level). DisplayName already falls back to
+      // nickname / '?'.
+      username?: string | null;
+      nickname?: string | null;
+      avatar?: string | null;
+      avatarUrl?: string | null;
+      discordId?: string | null;
+    };
 
 export type UserAvatarSize = 'tiny' | 'xs' | 'sm' | 'md' | 'lg' | 'xl';
 export type UserAvatarBorder = 'none' | 'primary' | 'muted' | 'captain';
@@ -45,12 +49,12 @@ interface UserAvatarProps {
 
 // Size mappings
 const sizeClasses: Record<UserAvatarSize, string> = {
-  tiny: 'h-4 w-4',      // 16px - position coverage, inline
-  xs: 'h-5 w-5',        // 20px - compact lists, event logs
-  sm: 'h-6 w-6',        // 24px - table rows, search results
-  md: 'h-8 w-8',        // 32px - default
-  lg: 'h-10 w-10',      // 40px - modals, profile headers
-  xl: 'h-12 w-12',      // 48px - user cards, prominent
+  tiny: 'h-4 w-4', // 16px - position coverage, inline
+  xs: 'h-5 w-5', // 20px - compact lists, event logs
+  sm: 'h-6 w-6', // 24px - table rows, search results
+  md: 'h-8 w-8', // 32px - default
+  lg: 'h-10 w-10', // 40px - modals, profile headers
+  xl: 'h-12 w-12', // 48px - user cards, prominent
 };
 
 // Fallback text sizes for each avatar size
@@ -104,14 +108,12 @@ export const AvatarUrl = (
     // user is GuildMember
     return user.user.avatar
       ? `${discordCdn}/${user.user.id}/${user.user.avatar}`
-      : `${genUrl}&name=${encodeURIComponent(
-          user.nick || user.user.global_name || user.user.username,
-        )}`;
+      : `${genUrl}&name=${encodeURIComponent(DisplayName(user))}`;
   }
 
   // Generate fallback URL from username/nickname
   const fallback = `${genUrl}&length=2&name=${encodeURIComponent(
-    user.nickname || user.username || '?',
+    DisplayName(user),
   )}`;
 
   // Helper to check if URL is a Discord default/embed avatar (not a custom one)
@@ -138,25 +140,10 @@ export const AvatarUrl = (
 };
 
 /**
- * Get display name from user-like object
- */
-function getDisplayName(user: UserLike | undefined): string {
-  if (!user) return '?';
-  if (typeof user !== 'object') return '?';
-
-  if ('user' in user) {
-    // GuildMember
-    return user.nick || user.user.global_name || user.user.username;
-  }
-
-  return user.nickname || user.username || '?';
-}
-
-/**
  * Get initials for fallback display
  */
 function getInitials(user: UserLike | undefined): string {
-  const name = getDisplayName(user);
+  const name = DisplayName(user);
   if (name === '?') return '?';
 
   // Return first character uppercase
@@ -168,7 +155,7 @@ function getInitials(user: UserLike | undefined): string {
  */
 function arePropsEqual(
   prevProps: UserAvatarProps,
-  nextProps: UserAvatarProps
+  nextProps: UserAvatarProps,
 ): boolean {
   // Compare primitive props directly
   if (
@@ -192,7 +179,8 @@ function arePropsEqual(
   if (!prevUser || !nextUser) return prevUser === nextUser;
 
   // Guard against raw PKs
-  if (typeof prevUser !== 'object' || typeof nextUser !== 'object') return false;
+  if (typeof prevUser !== 'object' || typeof nextUser !== 'object')
+    return false;
 
   // For GuildMember
   if ('user' in prevUser && 'user' in nextUser) {
@@ -249,36 +237,44 @@ export const UserAvatar = memo(function UserAvatar({
   // Memoize the image URL - only recompute when avatar-relevant fields change
   const imageUrl = useMemo(
     () => src || (user ? AvatarUrl(user as UserType) : undefined),
-    [src, guildUserId, guildUserAvatar, userPk, userAvatar, userAvatarUrl, userDiscordId]
+    [
+      src,
+      guildUserId,
+      guildUserAvatar,
+      userPk,
+      userAvatar,
+      userAvatarUrl,
+      userDiscordId,
+    ],
   );
 
   // Memoize display name for alt and initials
   const displayName = useMemo(
-    () => (user ? getDisplayName(user) : '?'),
-    [guildNick, guildUsername, userNickname, userUsername]
+    () => (user ? DisplayName(user) : '?'),
+    [guildNick, guildUsername, userNickname, userUsername],
   );
 
   // Memoize alt text
   const altText = useMemo(
     () => alt || (user ? displayName : 'User avatar'),
-    [alt, user, displayName]
+    [alt, user, displayName],
   );
 
   // Memoize initials
   const initials = useMemo(
     () => (displayName === '?' ? '?' : displayName.charAt(0).toUpperCase()),
-    [displayName]
+    [displayName],
   );
 
   // Memoize combined className to avoid cn() on every render
   const avatarClassName = useMemo(
     () => cn(sizeClasses[size], borderClasses[border], className),
-    [size, border, className]
+    [size, border, className],
   );
 
   const fallbackClassName = useMemo(
     () => cn(fallbackTextSizes[size], 'font-medium'),
-    [size]
+    [size],
   );
 
   return (
@@ -297,7 +293,7 @@ export const UserAvatar = memo(function UserAvatar({
           className={cn(
             'absolute bottom-0 right-0 rounded-full border-2 border-background',
             onlineIndicatorSizes[size],
-            online ? 'bg-green-500' : 'bg-gray-400'
+            online ? 'bg-green-500' : 'bg-gray-400',
           )}
           aria-label={online ? 'Online' : 'Offline'}
         />

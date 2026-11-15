@@ -38,6 +38,7 @@ class OrgFeaturesApiTest(TestCase):
             self.assertIsNone(row["enabled_at"])
 
     def test_get_shows_existing_row(self) -> None:
+        self.site_admin.nickname = "Admin Nick"
         set_org_feature(
             self.org,
             FeatureKey.PROMOTION,
@@ -54,7 +55,11 @@ class OrgFeaturesApiTest(TestCase):
         self.assertEqual(promo["notes"], "paid via PayPal")
         self.assertEqual(
             promo["enabled_by"],
-            {"pk": self.site_admin.pk, "username": self.site_admin.username},
+            {
+                "pk": self.site_admin.pk,
+                "username": self.site_admin.username,
+                "nickname": "Admin Nick",
+            },
         )
         self.assertIsNotNone(promo["enabled_at"])
         self.assertIs(rows["contributions"]["enabled"], False)

@@ -47,7 +47,7 @@ class MatchRetrieveView(RetrieveAPIView):
     Returns match data with nested player stats.
     """
 
-    queryset = Match.objects.prefetch_related("players__user")
+    queryset = Match.objects.prefetch_related("players__user__base_profile")
     serializer_class = MatchDetailSerializer
     permission_classes = [AllowAny]
     lookup_field = "match_id"
@@ -145,7 +145,7 @@ class LeagueStatsView(APIView):
         if isinstance(league_id, Response):
             return league_id
         try:
-            stats = LeaguePlayerStats.objects.select_related("user").get(
+            stats = LeaguePlayerStats.objects.select_related("user__base_profile").get(
                 user_id=user_id,
                 league_id=league_id,
             )
@@ -168,7 +168,7 @@ class MyLeagueStatsView(APIView):
 
     def get(self, request):
         try:
-            stats = LeaguePlayerStats.objects.select_related("user").get(
+            stats = LeaguePlayerStats.objects.select_related("user__base_profile").get(
                 user=request.user,
                 league_id=LEAGUE_ID,
             )

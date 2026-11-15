@@ -5,7 +5,7 @@ Handles org admin functionality including claim request management.
 """
 
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Q, QuerySet
 from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -41,6 +41,17 @@ from telemetry.logging import get_logger
 log = get_logger(__name__)
 
 
+def _with_claim_users(
+    qs: QuerySet[ProfileClaimRequest],
+) -> QuerySet[ProfileClaimRequest]:
+    return qs.select_related(
+        "claimer__base_profile",
+        "reviewed_by__base_profile",
+        "target_user__base_profile",
+        "organization",
+    ).nocache()
+
+
 class ClaimRequestViewSet(viewsets.ModelViewSet):
     """
     ViewSet for managing profile claim requests.
@@ -57,13 +68,15 @@ class ClaimRequestViewSet(viewsets.ModelViewSet):
 
         # Site admins can see all
         if user.is_superuser:
-            return ProfileClaimRequest.objects.all()
+            return _with_claim_users(ProfileClaimRequest.objects.all())
 
         # Org admins + staff see requests for their organizations
         admin_org_ids = set(user.admin_organizations.values_list("pk", flat=True))
         staff_org_ids = set(user.staff_organizations.values_list("pk", flat=True))
         org_ids = admin_org_ids | staff_org_ids
-        return ProfileClaimRequest.objects.filter(organization_id__in=org_ids)
+        return _with_claim_users(
+            ProfileClaimRequest.objects.filter(organization_id__in=org_ids)
+        )
 
     def list(self, request, *args, **kwargs):
         """List claim requests, optionally filtered by status."""

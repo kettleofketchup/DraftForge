@@ -103,7 +103,7 @@ def get_match_suggestions_for_game(game: Game, search: str | None = None) -> lis
             else:
                 return []
 
-    matches = list(matches_query.prefetch_related("players__user")[:50])
+    matches = list(matches_query.prefetch_related("players__user__base_profile")[:50])
 
     # Pre-compute team steam IDs and captain IDs (avoids N+1 queries in the loop)
     radiant_steam_ids = get_team_steam_ids(game.radiant_team)
@@ -180,6 +180,7 @@ def _get_captain_match_info(match: Match, captain) -> dict | None:
     return {
         "steam_id": captain.steamid,
         "username": captain.username,
+        "nickname": captain.nickname,
         "avatar": captain.avatarUrl if hasattr(captain, "avatarUrl") else None,
         "hero_id": stats.hero_id,
     }
@@ -218,6 +219,7 @@ def _get_matched_players(
                     "steam_id": stat.steam_id,
                     "user_id": user.pk if user else None,
                     "username": user.username if user else None,
+                    "nickname": user.nickname if user else None,
                     "avatar": user.avatar if user else None,
                     "hero_id": stat.hero_id,
                     "player_slot": stat.player_slot,

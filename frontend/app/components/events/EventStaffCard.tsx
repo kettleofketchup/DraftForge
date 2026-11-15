@@ -13,6 +13,7 @@ import { PrimaryButton, SecondaryButton } from '~/components/ui/buttons';
 import { Card, CardContent, CardHeader } from '~/components/ui/card';
 import { AddUserModal } from '~/components/user/AddUserModal';
 import { UserAvatar } from '~/components/user/UserAvatar';
+import { DisplayName } from '~/components/user/avatar';
 import type { UserType } from '~/components/user/types';
 import { usePointValues } from '~/features/contributions';
 import type { OrgFeatureAccess } from '~/features/org-features';
@@ -47,10 +48,6 @@ function staffKey(state: StaffState): string {
     state.host?.pk ?? null,
     state.helpers.map((h) => h.pk).sort((a, b) => a - b),
   ]);
-}
-
-function displayName(user: EventStaffUser): string {
-  return user.nickname || user.username;
 }
 
 function findSearchedUser(
@@ -116,7 +113,7 @@ function StaffRow({
       <UserAvatar user={user} size="sm" />
       <div className="flex min-w-0 flex-1 flex-col">
         <span className="truncate text-sm font-semibold text-foreground">
-          {displayName(user)}
+          {DisplayName(user)}
         </span>
         <span className="text-xs text-muted-foreground">{role}</span>
       </div>
@@ -129,7 +126,7 @@ function StaffRow({
           size="sm"
           color="red"
           onClick={onRemove}
-          aria-label={`Remove ${displayName(user)}`}
+          aria-label={`Remove ${DisplayName(user)}`}
           data-testid={removeTestId}
         >
           <X className="h-4 w-4" />

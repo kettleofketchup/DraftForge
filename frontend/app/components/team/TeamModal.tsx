@@ -1,12 +1,9 @@
-import { useMemo } from 'react';
 import { Trophy, Users } from 'lucide-react';
-import { InfoDialog } from '~/components/ui/dialogs';
-import { RolePositions } from '~/components/user/positions';
+import { useMemo } from 'react';
+import { PlayerPopover } from '~/components/player';
 import { TeamPositionCoverageRow } from '~/components/teamdraft/TeamPositionCoverage';
 import type { TeamType } from '~/components/tournament/types';
-import type { UserType } from '~/components/user/types';
-import { PlayerPopover } from '~/components/player';
-import { UserAvatar } from '~/components/user/UserAvatar';
+import { InfoDialog } from '~/components/ui/dialogs';
 import {
   Table,
   TableBody,
@@ -15,6 +12,10 @@ import {
   TableHeader,
   TableRow,
 } from '~/components/ui/table';
+import { DisplayName } from '~/components/user/avatar';
+import { RolePositions } from '~/components/user/positions';
+import type { UserType } from '~/components/user/types';
+import { UserAvatar } from '~/components/user/UserAvatar';
 
 interface TeamModalProps {
   team: TeamType;
@@ -29,14 +30,14 @@ export const TeamModal: React.FC<TeamModalProps> = ({
   open,
   onOpenChange,
 }) => {
-  const teamName = team.name || `${captain.nickname || captain.username}'s Team`;
+  const teamName = team.name || `${DisplayName(captain)}'s Team`;
   const hasMembers = team.members && team.members.length > 0;
 
   const avgMMR = useMemo(() => {
     if (!team.members || team.members.length === 0) return 0;
     const total = team.members.reduce(
       (sum: number, m: UserType) => sum + (m.mmr || 0),
-      0
+      0,
     );
     return Math.round(total / team.members.length);
   }, [team.members]);
@@ -45,7 +46,7 @@ export const TeamModal: React.FC<TeamModalProps> = ({
     if (!team.members || team.members.length === 0) return 0;
     return team.members.reduce(
       (sum: number, m: UserType) => sum + (m.mmr || 0),
-      0
+      0,
     );
   }, [team.members]);
 
@@ -97,7 +98,7 @@ export const TeamModal: React.FC<TeamModalProps> = ({
         <UserAvatar user={captain} size="xl" border="primary" />
         <div className="flex-1">
           <div className="font-semibold">
-            {captain.nickname || captain.username}
+            {DisplayName(captain)}
             <span className="ml-2 text-xs text-primary">(Captain)</span>
           </div>
           <div className="text-sm text-muted-foreground">
@@ -128,9 +129,13 @@ export const TeamModal: React.FC<TeamModalProps> = ({
                   <TableCell>
                     <PlayerPopover player={member}>
                       <div className="flex items-center gap-3 cursor-pointer hover:text-primary transition-colors">
-                        <UserAvatar user={member} size="md" className="hover:ring-2 hover:ring-primary transition-all" />
+                        <UserAvatar
+                          user={member}
+                          size="md"
+                          className="hover:ring-2 hover:ring-primary transition-all"
+                        />
                         <span className="font-medium">
-                          {member.nickname || member.username}
+                          {DisplayName(member)}
                         </span>
                         {member.pk === captain.pk && (
                           <span className="text-xs text-primary">(C)</span>

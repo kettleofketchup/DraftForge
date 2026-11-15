@@ -10,10 +10,11 @@ import {
   SelectValue,
 } from '~/components/ui/brand-select';
 import { Label } from '~/components/ui/label';
+import { Spinner } from '~/components/ui/spinner';
+import { DisplayName } from '~/components/user/avatar';
 import type { UserType } from '~/index';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
-import { Spinner } from '~/components/ui/spinner';
 const log = getLogger('updateCaptainButton');
 
 export const DraftOrderButton: React.FC<{
@@ -58,7 +59,7 @@ export const DraftOrderButton: React.FC<{
       team: team.name,
     });
     toast.promise(updateTeam(team.pk!, newTeam), {
-      loading: ` Updating Draft order for ${user.username}`,
+      loading: ` Updating Draft order for ${DisplayName(user)}`,
 
       success: (data) => {
         getCurrentTournament();
@@ -82,7 +83,10 @@ export const DraftOrderButton: React.FC<{
   };
   if (compact) {
     return (
-      <div className="flex flex-col items-stretch gap-0.5 w-9" data-testid={`draft-order-${user.pk}`}>
+      <div
+        className="flex flex-col items-stretch gap-0.5 w-9"
+        data-testid={`draft-order-${user.pk}`}
+      >
         <Label
           htmlFor={id}
           className="text-[9px] uppercase tracking-wider text-muted-foreground leading-none justify-center font-normal"
@@ -94,7 +98,7 @@ export const DraftOrderButton: React.FC<{
             id={id}
             size="sm"
             className="w-9 px-1 py-0 text-xs justify-center [&>svg]:size-3"
-            aria-label={`Draft order for ${user.username ?? ''}`.trim()}
+            aria-label={`Draft order for ${DisplayName(user)}`}
             data-testid={`draft-order-trigger-${user.pk}`}
           >
             <SelectValue placeholder={draft_order} />
@@ -102,7 +106,9 @@ export const DraftOrderButton: React.FC<{
           <BrandSelectContent>
             {Array.from({ length: getRange() }, (_, i) => (
               <Fragment key={i + 1}>
-                {i > 0 && <SelectSeparator className="!my-0 bg-violet-400/30" />}
+                {i > 0 && (
+                  <SelectSeparator className="!my-0 bg-violet-400/30" />
+                )}
                 <BrandSelectItem value={String(i + 1)}>{i + 1}</BrandSelectItem>
               </Fragment>
             ))}
@@ -133,7 +139,9 @@ export const DraftOrderButton: React.FC<{
           <BrandSelectContent>
             {Array.from({ length: getRange() }, (_, i) => (
               <Fragment key={i + 1}>
-                {i > 0 && <SelectSeparator className="!my-0 bg-violet-400/30" />}
+                {i > 0 && (
+                  <SelectSeparator className="!my-0 bg-violet-400/30" />
+                )}
                 <BrandSelectItem value={String(i + 1)}>{i + 1}</BrandSelectItem>
               </Fragment>
             ))}

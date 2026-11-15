@@ -8,12 +8,16 @@ class PlayerMatchStatsSerializer(serializers.ModelSerializer):
     username = serializers.CharField(
         source="user.username", read_only=True, default=None
     )
+    nickname = serializers.CharField(
+        source="user.nickname", read_only=True, default=None
+    )
 
     class Meta:
         model = PlayerMatchStats
         fields = [
             "steam_id",
             "username",
+            "nickname",
             "player_slot",
             "hero_id",
             "kills",
@@ -230,6 +234,9 @@ def _get_league_mmr(obj):
 
 class LeaguePlayerStatsSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source="user.username", read_only=True)
+    nickname = serializers.CharField(
+        source="user.nickname", read_only=True, allow_null=True
+    )
     avatar = serializers.CharField(source="user.avatar", read_only=True)
     base_mmr = serializers.SerializerMethodField()
     league_mmr = serializers.SerializerMethodField()
@@ -240,6 +247,7 @@ class LeaguePlayerStatsSerializer(serializers.ModelSerializer):
         fields = [
             "user_id",
             "username",
+            "nickname",
             "avatar",
             "base_mmr",
             "league_mmr",
@@ -266,6 +274,9 @@ class LeaguePlayerStatsSerializer(serializers.ModelSerializer):
 
 class LeaderboardSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source="user.username", read_only=True)
+    nickname = serializers.CharField(
+        source="user.nickname", read_only=True, allow_null=True
+    )
     avatar = serializers.CharField(source="user.avatar", read_only=True)
     base_mmr = serializers.SerializerMethodField()
     league_mmr = serializers.SerializerMethodField()
@@ -277,6 +288,7 @@ class LeaderboardSerializer(serializers.ModelSerializer):
         fields = [
             "user_id",
             "username",
+            "nickname",
             "avatar",
             "base_mmr",
             "league_mmr",

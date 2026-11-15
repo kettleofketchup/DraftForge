@@ -161,10 +161,10 @@ def _record_picked_event(
         payload={
             "pick_number": draft_round.pick_number,
             "captain_id": captain.pk,
-            "captain_name": captain.username,
+            "captain_name": captain.display_name,
             "captain_avatar_url": captain.avatarUrl,
             "picked_id": picked.pk,
-            "picked_name": picked.username,
+            "picked_name": picked.display_name,
             "picked_avatar_url": picked.avatarUrl,
             "team_id": team.pk if team else None,
             "team_name": team.name if team else None,
@@ -453,7 +453,7 @@ def undo_last_pick(request: Request) -> Response:
             payload={
                 "pick_number": last_round.pick_number,
                 "undone_player_id": player.pk,
-                "undone_player_name": player.username,
+                "undone_player_name": player.display_name,
                 "team_id": team.pk if team else None,
                 "team_name": team.name if team else None,
             },

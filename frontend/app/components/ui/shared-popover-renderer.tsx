@@ -1,22 +1,29 @@
-import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import { createPortal } from 'react-dom';
-import { useSharedPopover } from './shared-popover-context';
 import { PlayerLeagueSummary } from '~/components/player/PlayerLeagueSummary';
-import { RolePositions } from '~/components/user/positions';
-import type { UserType } from '~/components/user/types';
-import { UserAvatar } from '~/components/user/UserAvatar';
 import { PlayerModal } from '~/components/player/PlayerModal';
 import { TeamModal } from '~/components/team/TeamModal';
 import { TeamPopoverContent } from '~/components/team/TeamPopoverContent';
+import { DisplayName } from '~/components/user/avatar';
+import { RolePositions } from '~/components/user/positions';
+import type { UserType } from '~/components/user/types';
+import { UserAvatar } from '~/components/user/UserAvatar';
 import { useLeagueStore } from '~/store/leagueStore';
 import { useOrgStore } from '~/store/orgStore';
+import { useSharedPopover } from './shared-popover-context';
 
 // Player popover content
 const PlayerPopoverContent: React.FC<{
   player: UserType;
   statsLeagueId?: number | null;
 }> = ({ player, statsLeagueId }) => {
-  const playerName = player.nickname || player.username || 'Unknown';
+  const playerName = DisplayName(player);
 
   return (
     <div className="flex flex-col gap-3 w-full overflow-hidden">
@@ -24,7 +31,9 @@ const PlayerPopoverContent: React.FC<{
       <div className="flex items-center gap-4 min-w-0">
         <UserAvatar user={player} size="xl" className="shrink-0" />
         <div className="min-w-0 flex-1 overflow-hidden">
-          <p className="font-semibold text-foreground text-lg truncate">{playerName}</p>
+          <p className="font-semibold text-foreground text-lg truncate">
+            {playerName}
+          </p>
           {player.mmr && (
             <p className="text-sm text-foreground/70">
               MMR: {player.mmr.toLocaleString()}
@@ -39,7 +48,11 @@ const PlayerPopoverContent: React.FC<{
         </div>
       </div>
       {statsLeagueId != null && player.pk != null && (
-        <PlayerLeagueSummary leaguePk={statsLeagueId} userId={player.pk} compact />
+        <PlayerLeagueSummary
+          leaguePk={statsLeagueId}
+          userId={player.pk}
+          compact
+        />
       )}
       <p className="text-xs text-foreground/60 text-center">
         Click for full profile
@@ -90,7 +103,9 @@ export const SharedPopoverRenderer: React.FC = () => {
       }
       if (top < 8) top = 8;
 
-      setPosition((prev) => (prev.top === top && prev.left === left ? prev : { top, left }));
+      setPosition((prev) =>
+        prev.top === top && prev.left === left ? prev : { top, left },
+      );
     }
   }, [state.anchorEl, state.isOpen, state.type]);
 
@@ -124,7 +139,13 @@ export const SharedPopoverRenderer: React.FC = () => {
     } else if (state.type === 'team' && state.team) {
       openTeamModal(state.team);
     }
-  }, [state, openPlayerModal, openTeamModal, currentOrg?.pk, currentLeague?.pk]);
+  }, [
+    state,
+    openPlayerModal,
+    openTeamModal,
+    currentOrg?.pk,
+    currentLeague?.pk,
+  ]);
 
   // Don't render if not open
   if (!state.isOpen) {
