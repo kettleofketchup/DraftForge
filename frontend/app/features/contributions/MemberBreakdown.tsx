@@ -2,6 +2,7 @@ import { X } from 'lucide-react';
 import { Link } from 'react-router';
 import { SecondaryButton } from '~/components/ui/buttons';
 import { UserAvatar } from '~/components/user/UserAvatar';
+import { DisplayName } from '~/components/user/avatar';
 import type { OrgFeatureAccess } from '~/features/org-features';
 import { extractApiError } from '~/lib/apiError';
 import { useMemberBreakdown } from './queries';
@@ -90,7 +91,7 @@ export function MemberBreakdown({
               size="md"
             />
             <h3 className="text-lg font-semibold">
-              {data.member.nickname || data.member.username}
+              {DisplayName(data.member)}
             </h3>
           </div>
         ) : (

@@ -1,4 +1,5 @@
 // Mirror of backend/org/promotion/render.py; render_fixture.json pins parity.
+import { DisplayName } from '~/components/user/avatar';
 
 export const PLACEHOLDER_KEYS = [
   'player',
@@ -66,23 +67,12 @@ export interface SampleOrg {
 export interface SampleSender {
   username?: string | null;
   nickname?: string | null;
-  discordUsername?: string | null;
-  discordNickname?: string | null;
-  guildNickname?: string | null;
 }
 
 export const SAMPLE_PLAYER = 'Player';
 
 export function playerName(user: SampleSender | null | undefined): string {
-  if (!user) return '';
-  return (
-    user.guildNickname ||
-    user.discordNickname ||
-    user.discordUsername ||
-    user.nickname ||
-    user.username ||
-    ''
-  );
+  return user ? DisplayName(user) : '';
 }
 
 function discordTimestamp(iso: string, style: string): string {

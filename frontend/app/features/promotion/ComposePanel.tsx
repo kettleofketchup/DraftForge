@@ -20,6 +20,7 @@ import {
   FormMessage,
 } from '~/components/ui/form';
 import { Textarea } from '~/components/ui/textarea';
+import { DisplayName } from '~/components/user/avatar';
 import type { OrgFeatureAccess } from '~/features/org-features';
 import { extractApiError } from '~/lib/apiError';
 import { getLogger } from '~/lib/logger';
@@ -46,12 +47,6 @@ export interface ComposePanelProps {
   candidate: CandidateRow;
   templates: PromoTemplate[];
   onSent?: (send: PromoSendResult | null) => void;
-}
-
-export function candidateName(
-  row: Pick<CandidateRow, 'nickname' | 'username'>,
-): string {
-  return row.nickname || row.username;
 }
 
 export function ComposePanel({
@@ -125,7 +120,7 @@ export function ComposePanel({
         onSuccess: (result) => {
           setSent(result);
           onSent?.(result);
-          toast.success(`Marked as sent to ${candidateName(candidate)}`);
+          toast.success(`Marked as sent to ${DisplayName(candidate)}`);
         },
         onError: (err) => {
           const message = reportPromoError(log, 'promo_send_failed', err, {
@@ -175,7 +170,7 @@ export function ComposePanel({
       data-testid="promo-compose-panel"
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="font-semibold">Message {candidateName(candidate)}</h3>
+        <h3 className="font-semibold">Message {DisplayName(candidate)}</h3>
         {candidate.discordId && (
           <a
             href={`https://discord.com/users/${candidate.discordId}`}
@@ -339,7 +334,7 @@ export function ComposePanel({
           data-testid="promo-sent-banner"
         >
           <span>
-            Sent to {candidateName(candidate)}.
+            Sent to {DisplayName(candidate)}.
             {access.canViewContributions && sent.points_awarded != null && (
               <span
                 className="ml-1 text-primary"

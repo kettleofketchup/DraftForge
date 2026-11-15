@@ -18,7 +18,7 @@ class PlaceholderSpec(TypedDict):
 PLACEHOLDERS: tuple[PlaceholderSpec, ...] = (
     {
         "key": "player",
-        "description": "Recipient's server nickname, Discord name or site nickname",
+        "description": "Recipient's nickname, or username if unset",
     },
     {"key": "promoter", "description": "Your name"},
     {"key": "event", "description": "Event name"},
@@ -75,15 +75,7 @@ def render_template(body: str, context: Mapping[str, str]) -> RenderResult:
 
 
 def player_name(user: CustomUser) -> str:
-    for candidate in (
-        user.guildNickname,
-        user.discordNickname,
-        user.discordUsername,
-        user.nickname,
-    ):
-        if candidate:
-            return candidate
-    return user.username
+    return user.nickname or user.username or ""
 
 
 def build_context(

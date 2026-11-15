@@ -128,36 +128,22 @@ class PlayerNameTest(TestCase):
         user.save()
         return user
 
-    def test_guild_nickname_first(self) -> None:
+    def test_site_nickname_first(self) -> None:
         user = self._user(
             guildNickname="Guild",
             discordNickname="DiscNick",
             discordUsername="discuser",
             nickname="SiteNick",
         )
-        self.assertEqual(player_name(user), "Guild")
+        self.assertEqual(player_name(user), "SiteNick")
 
-    def test_discord_nickname_second(self) -> None:
-        user = self._user(
-            discordNickname="DiscNick", discordUsername="discuser", nickname="Site"
-        )
-        self.assertEqual(player_name(user), "DiscNick")
-
-    def test_discord_username_third(self) -> None:
-        user = self._user(discordUsername="discuser", nickname="Site")
-        self.assertEqual(player_name(user), "discuser")
-
-    def test_site_nickname_fourth(self) -> None:
-        user = self._user(nickname="Site")
-        self.assertEqual(player_name(user), "Site")
-
-    def test_username_last(self) -> None:
-        user = self._user()
+    def test_username_when_no_nickname(self) -> None:
+        user = self._user(guildNickname="Guild", discordUsername="discuser")
         self.assertEqual(player_name(user), "pn_user")
 
-    def test_blank_values_are_skipped(self) -> None:
-        user = self._user(guildNickname="", discordNickname="", discordUsername="d")
-        self.assertEqual(player_name(user), "d")
+    def test_blank_nickname_is_skipped(self) -> None:
+        user = self._user(nickname="")
+        self.assertEqual(player_name(user), "pn_user")
 
 
 @override_settings(SITE_URL="https://dota.example")
@@ -165,12 +151,12 @@ class BuildContextTest(TestCase):
     def setUp(self) -> None:
         self.admin = CustomUser.objects.create_user(username="bc_admin", password="x")
         self.sender = CustomUser.objects.create_user(username="bc_sender", password="x")
-        self.sender.discordUsername = "sender_disc"
+        self.sender.nickname = "Sender"
         self.sender.save()
         self.recipient = CustomUser.objects.create_user(
             username="bc_recipient", password="x"
         )
-        self.recipient.guildNickname = "Ann"
+        self.recipient.nickname = "Ann"
         self.recipient.save()
         self.org = Organization.objects.create(
             name="Render Org",
@@ -205,7 +191,7 @@ class BuildContextTest(TestCase):
             self._context(),
             {
                 "player": "Ann",
-                "promoter": "sender_disc",
+                "promoter": "Sender",
                 "event": "Render Event",
                 "event_time": "<t:1794704400:F>",
                 "event_time_relative": "<t:1794704400:R>",

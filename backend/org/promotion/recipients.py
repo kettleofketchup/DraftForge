@@ -15,7 +15,7 @@ MAX_POOL_N: Final[int] = 10
 DEFAULT_POOL_N: Final[int] = 3
 MIN_POOL_N: Final[int] = 1
 
-ACTIVE_SIGNUP_EXCLUDED: Final[tuple[str, ...]] = (
+DECLINED_STATUSES: Final[tuple[str, ...]] = (
     SignupStatus.REJECTED,
     SignupStatus.CANCELLED,
 )
@@ -94,14 +94,14 @@ def candidates(
     hide_messaged: bool = True,
     q: str = "",
 ) -> list[CandidateRow]:
-    active_signups = (
-        EventSignup.objects.nocache()
-        .filter(event=event)
-        .exclude(status__in=ACTIVE_SIGNUP_EXCLUDED)
-    )
+    event_signups = EventSignup.objects.nocache().filter(event=event)
+    active_signups = event_signups.exclude(status__in=DECLINED_STATUSES)
+    declined = event_signups.filter(status__in=DECLINED_STATUSES)
     event_sends = PromoSend.objects.filter(event=event, recipient__isnull=False)
 
-    qs = candidate_pool(org, event, n=n, sender=sender)
+    qs = candidate_pool(org, event, n=n, sender=sender).exclude(
+        pk__in=declined.values("user_id")
+    )
     if hide_signed_up:
         qs = qs.exclude(pk__in=active_signups.values("user_id"))
     if hide_messaged:
