@@ -1,6 +1,6 @@
-from django.db.models import Q
-
-from app.models import Game, Team
+from app.models import CustomUser, Game, Team
+from app.serializers import _tournament_organization
+from org.user_search import user_name_q
 from steam.models import Match, PlayerMatchStats, SuggestionTier
 
 
@@ -77,16 +77,10 @@ def get_match_suggestions_for_game(game: Game, search: str | None = None) -> lis
             match_id = int(search)
             matches_query = matches_query.filter(match_id__icontains=str(match_id))
         except ValueError:
-            # Search by captain name - get captain steam IDs matching the search
-            from app.models import CustomUser
-
+            org = _tournament_organization(tournament)
             matching_users = (
                 CustomUser.objects.filter(
-                    Q(username__icontains=search)
-                    | Q(nickname__icontains=search)
-                    | Q(discordUsername__icontains=search)
-                    | Q(discordNickname__icontains=search)
-                    | Q(guildNickname__icontains=search)
+                    user_name_q(search, org_id=org.pk if org else None)
                 )
                 .exclude(steamid__isnull=True)
                 .exclude(steamid=0)
@@ -161,7 +155,7 @@ def get_match_suggestions_for_game(game: Game, search: str | None = None) -> lis
     return suggestions
 
 
-def _get_captain_match_info(match: Match, captain) -> dict | None:
+def _get_captain_match_info(match: Match, captain: CustomUser | None) -> dict | None:
     """Get captain's info from match stats if they played.
 
     Reads from `match.players.all()` so the `prefetch_related("players__user")`
