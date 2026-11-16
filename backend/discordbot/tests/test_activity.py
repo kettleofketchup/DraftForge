@@ -53,6 +53,13 @@ from discordbot.activity_auth import (
 )
 from discordbot.activity_errors import ActivityAuthFailed
 from discordbot.activity_intent import peek_intent, record_intent
+from discordbot.activity_menu import (
+    external_path,
+    hero_label,
+    hero_status,
+    notice_for,
+    team_status,
+)
 from discordbot.models import DraftActivityChannel, DraftActivityInstance
 from discordbot.tests.activity_helpers import ClearIntentsMixin
 
@@ -185,11 +192,11 @@ class DraftActivityTests(ClearIntentsMixin, TestCase):
                 resolve_instance("untrusted", "101")
         self.assertFalse(DraftActivityInstance.objects.exists())
 
-    def session(self, discord, body, instance=None):
+    def session(self, discord, body, instance=None, discord_id="101"):
         discord.side_effect = [
             {"access_token": "oauth-token"},
-            {"id": "101"},
-            instance or self.instance_response(),
+            {"id": discord_id},
+            instance or self.instance_response(users=[discord_id]),
         ]
         return activity_session(self.factory.post("/", body, format="json"))
 
@@ -313,7 +320,7 @@ class DraftActivityTests(ClearIntentsMixin, TestCase):
                 "scope": "tournament",
                 "initial_kind": "hero",
                 "initial_draft_id": self.hero.pk,
-                "source": "instance_first",
+                "source": "channel_last",
                 "role": "captain",
                 "notice": False,
                 "intent_id": None,
@@ -543,6 +550,166 @@ class DraftActivityTests(ClearIntentsMixin, TestCase):
         self.assertEqual(response.data["draft_id"], self.other.pk)
         identity = authenticate_token(response.data["token"], self.other.pk, "hero")
         self.assertEqual(identity.instance.pk, reseeded.pk)
+
+    def first_session(self, discord, instance_id, discord_id="101"):
+        with capture_logs() as logs:
+            response = self.session(
+                discord,
+                {"code": "code", "instance_id": instance_id, "mode": "first"},
+                discord_id=discord_id,
+            )
+        self.assertEqual(response.status_code, 200)
+        (started,) = [e for e in logs if e["event"] == "activity_session_started"]
+        return response, started
+
+    @patch("discordbot.activity.discord_json")
+    def test_initial_view_from_launch_intent_is_peeked(self, discord):
+        self.seed_instance("i-intent")
+        intent_id = record_intent(
+            "101",
+            kind="hero",
+            draft_id=self.other.pk,
+            tournament_id=self.tournament.pk,
+            guild_id="1",
+            channel_id="2",
+        )
+        response, started = self.first_session(discord, "i-intent")
+        self.assertEqual(
+            response.data["initial_view"], {"kind": "hero", "id": self.other.pk}
+        )
+        self.assertEqual(
+            response.data["launch_intent"],
+            {"intent_id": intent_id, "kind": "hero", "id": self.other.pk},
+        )
+        self.assertIsNone(response.data["notice"])
+        self.assertEqual(response.data["draft_id"], self.hero.pk)
+        self.assertEqual(started["source"], "launch_intent")
+        self.assertEqual(started["intent_id"], intent_id)
+        self.assertEqual(peek_intent("101").intent_id, intent_id)
+
+    @patch("discordbot.activity.discord_json")
+    def test_intent_from_other_tournament_gives_notice(self, discord):
+        self.seed_instance("i-foreign-intent")
+        intent_id = record_intent(
+            "101",
+            kind="hero",
+            draft_id=self.foreign.pk,
+            tournament_id=self.other_tournament.pk,
+            guild_id="1",
+            channel_id="2",
+        )
+        response, started = self.first_session(discord, "i-foreign-intent")
+        notice = response.data["notice"]
+        self.assertEqual(notice["intent_id"], intent_id)
+        self.assertEqual(notice["kind"], "hero")
+        self.assertEqual(notice["draft_id"], self.foreign.pk)
+        self.assertEqual(notice["tournament_name"], "Other activity")
+        self.assertTrue(notice["url"].startswith(settings.SITE_URL))
+        self.assertTrue(notice["url"].endswith(f"/herodraft/{self.foreign.pk}"))
+        self.assertIsNone(response.data["launch_intent"])
+        self.assertEqual(
+            response.data["initial_view"], {"kind": "hero", "id": self.hero.pk}
+        )
+        self.assertTrue(started["notice"])
+        self.assertEqual(started["intent_id"], intent_id)
+        self.assertEqual(peek_intent("101").intent_id, intent_id)
+
+    @patch("discordbot.activity.discord_json")
+    def test_involves_me_beats_channel_last_with_two_matches(self, discord):
+        Draft.objects.filter(pk=self.team_draft.pk).update(state="completed")
+        self.binding.draft = self.other
+        self.binding.save()
+        response, started = self.first_session(discord, "i-shared-lobby")
+        self.assertEqual(
+            DraftActivityInstance.objects.get(instance_id="i-shared-lobby").draft_id,
+            self.other.pk,
+        )
+        self.assertEqual(
+            response.data["initial_view"], {"kind": "hero", "id": self.hero.pk}
+        )
+        self.assertEqual(started["source"], "involves_me")
+        self.assertEqual(started["role"], "captain")
+
+    @patch("discordbot.activity.discord_json")
+    def test_finished_match_does_not_count_as_involves_me(self, discord):
+        Draft.objects.filter(pk=self.team_draft.pk).update(state="completed")
+        HeroDraft.objects.filter(pk=self.hero.pk).update(state=HeroDraftState.COMPLETED)
+        self.seed_instance("i-finished-match")
+        self.binding.draft = self.other
+        self.binding.save()
+        response, started = self.first_session(discord, "i-finished-match")
+        self.assertEqual(
+            response.data["initial_view"], {"kind": "hero", "id": self.other.pk}
+        )
+        self.assertEqual(started["source"], "channel_last")
+
+    @patch("discordbot.activity.discord_json")
+    def test_channel_last_when_no_intent_and_not_involved(self, discord):
+        self.seed_instance("i-spectate")
+        self.binding.draft = self.other
+        self.binding.save()
+        response, started = self.first_session(discord, "i-spectate", "102")
+        self.assertEqual(
+            response.data["initial_view"], {"kind": "hero", "id": self.other.pk}
+        )
+        self.assertIsNone(response.data["notice"])
+        self.assertEqual(started["source"], "channel_last")
+        self.assertEqual(started["role"], "spectator")
+        self.assertEqual(response.data["draft_id"], self.hero.pk)
+
+    @patch("discordbot.activity.discord_json")
+    def test_channel_record_in_other_tournament_gives_notice(self, discord):
+        self.seed_instance("i-foreign-channel")
+        self.binding.draft = self.foreign
+        self.binding.save()
+        response, started = self.first_session(discord, "i-foreign-channel", "102")
+        self.assertEqual(
+            response.data["initial_view"], {"kind": "hero", "id": self.hero.pk}
+        )
+        self.assertEqual(started["source"], "instance_first")
+        notice = response.data["notice"]
+        self.assertNotIn("intent_id", notice)
+        self.assertEqual(notice["draft_id"], self.foreign.pk)
+        self.assertEqual(notice["tournament_name"], "Other activity")
+        self.assertTrue(notice["url"].endswith(f"/herodraft/{self.foreign.pk}"))
+        self.assertTrue(started["notice"])
+        self.assertIsNone(started["intent_id"])
+
+    @patch("discordbot.activity.discord_json")
+    def test_instance_first_fallback(self, discord):
+        HeroDraft.objects.filter(pk=self.foreign.pk).update(
+            state=HeroDraftState.ABANDONED
+        )
+        self.seed_instance("i-fallback")
+        self.binding.draft = self.foreign
+        self.binding.save()
+        response, started = self.first_session(discord, "i-fallback", "102")
+        self.assertEqual(
+            response.data["initial_view"], {"kind": "hero", "id": self.hero.pk}
+        )
+        self.assertIsNone(response.data["notice"])
+        self.assertEqual(started["source"], "instance_first")
+
+    def test_menu_labels_statuses_and_external_paths(self):
+        self.hero.game.bracket_type = "losers"
+        self.hero.game.round = 2
+        self.hero.game.save()
+        self.assertEqual(hero_label(self.hero), "Losers Bracket R2 · A vs TBD")
+        self.assertEqual(hero_status("choosing"), "waiting")
+        self.assertEqual(hero_status("resuming"), "drafting")
+        self.assertEqual(hero_status("abandoned"), "finished")
+        self.assertEqual(team_status("pending"), "waiting")
+        self.assertEqual(team_status("completed"), "finished")
+        self.assertEqual(external_path("hero", 5, 9), "/herodraft/5")
+        self.assertEqual(external_path("team", 40, 9), "/tournament/9/teams/draft")
+        self.assertEqual(external_path("bracket", None, 9), "/tournament/9/bracket")
+        notice = notice_for("team", self.team_draft.pk, None)
+        self.assertEqual(
+            notice["url"],
+            f"{settings.SITE_URL}/tournament/{self.tournament.pk}/teams/draft",
+        )
+        self.assertEqual(notice["tournament_name"], "Activity")
+        self.assertIsNone(notice_for("hero", 999999, None))
 
     @patch("discordbot.activity.discord_json")
     def test_unlinked_user_is_rejected(self, discord):

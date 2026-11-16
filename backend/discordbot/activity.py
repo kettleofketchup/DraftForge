@@ -19,11 +19,13 @@ from rest_framework.response import Response
 from app.models import CustomUser, Draft, HeroDraft
 from app.serializers import UserSerializer
 from discordbot.activity_auth import (
+    ActivityIdentity,
     instance_pin,
     issue_activity_token,
     session_tournament,
 )
 from discordbot.activity_intent import LaunchIntent, peek_intent
+from discordbot.activity_menu import resolve_initial_view
 from discordbot.activity_roles import draft_role
 from discordbot.activity_targets import draft_tournament_id
 from discordbot.models import DraftActivityChannel, DraftActivityInstance
@@ -190,6 +192,8 @@ def activity_session(request: Request) -> Response:
         "tournament_id": tournament_id,
     }
     initial_view: dict[str, object] | None = None
+    launch_intent: dict[str, object] | None = None
+    notice: dict[str, object] | None = None
     if mode == "refresh":
         current = payload.validated_data.get("current_view") or {}
         log.info(
@@ -199,19 +203,35 @@ def activity_session(request: Request) -> Response:
             current_id=current.get("id"),
         )
     else:
-        initial_view = {"kind": pin["kind"], "id": pin["draft"]}
+        identity = ActivityIdentity(
+            user=user,
+            instance=instance,
+            tournament_id=tournament_id,
+            pin=None if tournament_id is not None else pin,
+        )
+        resolved = resolve_initial_view(identity, discord_user_id)
+        initial_view = resolved.view
+        launch_intent = resolved.launch_intent
+        notice = resolved.notice
+        initial_kind = None if initial_view is None else initial_view["kind"]
+        initial_id = None if initial_view is None else initial_view.get("id")
+        intent_ref = launch_intent or notice or {}
         log.info(
             "activity_session_started",
             **common,
             mode=mode,
             instance_created=created,
             scope=scope,
-            initial_kind=pin["kind"],
-            initial_draft_id=pin["draft"],
-            source="instance_first",
-            role=draft_role(user, pin["kind"], pin["draft"]),
-            notice=False,
-            intent_id=None,
+            initial_kind=initial_kind,
+            initial_draft_id=initial_id,
+            source=resolved.source,
+            role=(
+                draft_role(user, initial_kind, initial_id)
+                if initial_kind in ("hero", "team") and isinstance(initial_id, int)
+                else None
+            ),
+            notice=notice is not None,
+            intent_id=intent_ref.get("intent_id"),
         )
     return Response(
         {
@@ -219,11 +239,11 @@ def activity_session(request: Request) -> Response:
             "scope": scope,
             "tournament_id": tournament_id,
             "initial_view": initial_view,
-            "launch_intent": None,
+            "launch_intent": launch_intent,
             "draft_id": pin["draft"],
             "kind": pin["kind"],
             "site_url": settings.SITE_URL,
-            "notice": None,
+            "notice": notice,
             "user": UserSerializer(user).data,
             "access_token": oauth["access_token"],
         },
