@@ -133,7 +133,7 @@ export function DraftLobby({
                 data-testid={`lobby-ready-check-${team.pk}`}
                 data-state={team.draft_is_ready ? 'ready' : 'not-ready'}
                 className={cn(
-                  'text-sm',
+                  'w-20 shrink-0 text-left text-sm',
                   team.draft_is_ready
                     ? 'text-green-400'
                     : 'text-muted-foreground',
