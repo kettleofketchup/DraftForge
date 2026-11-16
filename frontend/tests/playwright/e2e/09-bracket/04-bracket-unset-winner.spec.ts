@@ -98,6 +98,8 @@ test.describe('Bracket Unset Winner (e2e)', () => {
     const dialog = page.locator('[data-testid="matchStatsModal"]');
     await dialog.locator('[data-testid="dialog-close-button"]').click();
     await expect(dialog).toBeHidden({ timeout: 5000 });
+    // A reload before the URL drops /match/<id> deep-links the dialog open again.
+    await expect(page).not.toHaveURL(/\/bracket\/match\//);
   }
 
   async function reloadBracket(page: Page): Promise<void> {
