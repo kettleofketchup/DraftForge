@@ -4,7 +4,7 @@ The companion `test_cacheops.py` is a static grep guardrail — it cannot
 observe actual cacheops behavior because local CI may run without Redis
 (cacheops degrades gracefully via CACHEOPS_DEGRADE_ON_FAILURE=True). This
 suite skips on no-Redis but, when run inside `just test::run` against the
-container-backed test stack, warms a cached endpoint, PATCHes the nickname
+container-backed test stack, warms a cached endpoint, PATCHes the avatar
 via the new /api/users/me/profile/base/ route, and re-fetches to confirm
 the cached payload was actually evicted.
 
@@ -70,50 +70,50 @@ class CacheopsInvalidationOnBaseProfilePatchTests(TransactionTestCase):
         self.user = CustomUser.objects.create(username="liv")
         self.user.set_password("pw")
         self.user.save()
-        self.user.base_profile.nickname = "Original"
+        self.user.base_profile.avatar = "original"
         self.user.base_profile.save()
         self.client = APIClient()
         self.client.force_authenticate(user=self.user)
 
-    def _patch_nickname(self, value: str) -> None:
+    def _patch_avatar(self, value: str) -> None:
         response = self.client.patch(
             "/api/users/me/profile/base/",
-            data={"nickname": value},
+            data={"avatar": value},
             format="json",
         )
         assert response.status_code == 200, response.content
 
-    def test_user_detail_cache_evicted_on_nickname_patch(self):
+    def test_user_detail_cache_evicted_on_avatar_patch(self):
         # Warm: cached_as wraps the retrieve view; first call populates Redis.
         first = self.client.get(f"/api/users/{self.user.pk}/")
         assert first.status_code == 200
-        assert first.json().get("nickname") == "Original"
+        assert first.json().get("avatar") == "original"
 
-        self._patch_nickname("Renamed")
+        self._patch_avatar("renamed")
 
         # Re-fetch: if BaseUserProfile dep is correctly declared, the cache
-        # is gone and the new nickname comes back. If dep is missing, the
-        # cached "Original" would still come back.
+        # is gone and the new avatar comes back. If dep is missing, the
+        # cached "original" would still come back.
         second = self.client.get(f"/api/users/{self.user.pk}/")
         assert second.status_code == 200
-        assert second.json().get("nickname") == "Renamed", (
+        assert second.json().get("avatar") == "renamed", (
             "user detail cache was NOT evicted after BaseUserProfile patch — "
             "the @cached_as block on UserView.retrieve is missing a "
             "BaseUserProfile dependency"
         )
 
-    def test_user_list_cache_evicted_on_nickname_patch(self):
+    def test_user_list_cache_evicted_on_avatar_patch(self):
         first = self.client.get("/api/users/")
         assert first.status_code == 200
         rows = {row["pk"]: row for row in first.json()}
-        assert rows.get(self.user.pk, {}).get("nickname") == "Original"
+        assert rows.get(self.user.pk, {}).get("avatar") == "original"
 
-        self._patch_nickname("ListRenamed")
+        self._patch_avatar("listrenamed")
 
         second = self.client.get("/api/users/")
         assert second.status_code == 200
         rows = {row["pk"]: row for row in second.json()}
-        assert rows.get(self.user.pk, {}).get("nickname") == "ListRenamed", (
+        assert rows.get(self.user.pk, {}).get("avatar") == "listrenamed", (
             "user list cache was NOT evicted — UserView.list @cached_as "
             "block is missing a BaseUserProfile dependency"
         )
@@ -121,11 +121,9 @@ class CacheopsInvalidationOnBaseProfilePatchTests(TransactionTestCase):
     def test_avatar_patch_evicts_user_detail_cache(self):
         first = self.client.get(f"/api/users/{self.user.pk}/")
         assert first.status_code == 200
-        # Empty/null avatar baseline — Discord-hash setter has not run.
-        assert first.json().get("avatar") in (None, "")
+        assert first.json().get("avatar") == "original"
 
-        # Use the property setter directly here (admin avatar refresh path);
-        # the PATCH /me/profile/base/ endpoint only writes nickname today.
+        # Property setter directly (admin avatar refresh path).
         self.user.avatar = "abcdef0123456789abcdef0123456789"
         # The setter persists immediately and calls invalidate_after_commit.
 

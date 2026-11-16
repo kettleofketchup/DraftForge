@@ -2,6 +2,7 @@
 
 from rest_framework import serializers
 
+from app.legacy_fields import LegacyNullField
 from app.models import CustomUser, HeroDraft, League, Organization, Tournament
 from events.models import Event
 
@@ -87,20 +88,12 @@ class HeroDraftSerializerSSR(serializers.ModelSerializer):
 
 
 class UserSerializerSSR(serializers.ModelSerializer):
-    # T1.5+: nickname lives on BaseUserProfile via the OneToOne reverse
-    # accessor `base_profile`. Source explicitly so DRF doesn't fall back
-    # to the transitional @property and so n+1 detectors / select_related
-    # callers can see the dependency.
-    nickname = serializers.CharField(
-        source="base_profile.nickname",
-        read_only=True,
-        allow_null=True,
-    )
+    nickname = LegacyNullField()
     avatar_url = serializers.SerializerMethodField()
 
     class Meta:
         model = CustomUser
-        fields = ["pk", "username", "nickname", "avatar_url"]
+        fields = ["pk", "username", "nickname", "discordNickname", "avatar_url"]
 
     def get_avatar_url(self, obj):
         return obj.avatarUrl

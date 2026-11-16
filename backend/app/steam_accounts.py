@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.display_names import user_display_name
 from app.models import CustomUser
 
 
@@ -29,12 +30,14 @@ def steam_account_id_holder(
 def steam_account_id_identity(user: CustomUser) -> dict[str, Any]:
     """Identify a Friend ID holder for display.
 
-    nickname/username only — the same fields GET /api/users/ already exposes
-    to any authenticated user.
+    Global Discord name and username only — the same fields GET /api/users/
+    already exposes to any authenticated user. ``nickname`` stays as null for
+    clients that still require the key.
     """
     return {
         "pk": user.pk,
-        "nickname": user.nickname or "",
+        "nickname": None,
+        "discordNickname": user.discordNickname,
         "username": user.username,
     }
 
@@ -44,7 +47,7 @@ def steam_account_id_conflict_payload(
 ) -> dict[str, Any]:
     """Body for a 409, carrying enough for the UI to name the holder."""
     identity = steam_account_id_identity(holder)
-    label = identity["nickname"] or identity["username"]
+    label = user_display_name(holder)
     return {
         "code": "steam_account_id_taken",
         "error": (

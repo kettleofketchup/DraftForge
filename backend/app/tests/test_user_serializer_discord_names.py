@@ -42,7 +42,7 @@ class UserSerializerDiscordNamesTest(TestCase):
         serializer.save()
         fresh = CustomUser.objects.nocache().get(pk=self.user.pk)
         self.assertEqual(fresh.discordNickname, "Gwaihir")
-        self.assertEqual(fresh.nickname, "Site")
+        self.assertIsNone(fresh.base_profile.nickname)
 
     def test_update_ignores_guild_nickname(self) -> None:
         serializer = UserSerializer(

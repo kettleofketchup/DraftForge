@@ -12,6 +12,7 @@ from rest_framework.utils.serializer_helpers import ReturnList
 from rest_framework.validators import UniqueValidator
 
 from app.cache_utils import invalidate_after_commit
+from app.legacy_fields import LegacyNullField
 from app.permissions_org import check_lobby_steam_league_id, request_user
 from league.models import LeagueUser
 from org.models import OrgUser
@@ -80,17 +81,9 @@ class TournamentUserSerializer(serializers.ModelSerializer):
     positions = PositionsSerializer(many=False, read_only=True)
     # Auto-computed 32-bit Steam Account ID from 64-bit Friend ID
     steam_account_id = serializers.IntegerField(read_only=True)
-    # nickname/avatar live on BaseUserProfile (T1 epic). Use `source="nickname"`
-    # so DRF goes through the CustomUser transitional @property — the getter
-    # reads from base_profile, the setter writes to base_profile + invalidates
-    # cacheops. Critically, this keeps PATCH /users/<pk>/ working for admin
-    # user-edit flows (org / tournament pages), which would otherwise be a
-    # silent no-op if the fields were read_only=True.
-    nickname = serializers.CharField(
-        allow_null=True,
-        allow_blank=True,
-        required=False,
-    )
+    # avatar lives on BaseUserProfile; the CustomUser @property setter writes
+    # it through, so PATCH /users/<pk>/ keeps working for admin edits.
+    nickname = LegacyNullField()
     avatar = serializers.CharField(
         allow_null=True,
         allow_blank=True,
@@ -1513,16 +1506,9 @@ class UserSerializer(serializers.ModelSerializer):
     staff_organization_ids = serializers.SerializerMethodField()
     admin_league_ids = serializers.SerializerMethodField()
     staff_league_ids = serializers.SerializerMethodField()
-    # nickname/avatar live on BaseUserProfile (T1 epic). Use `source="nickname"`
-    # so DRF goes through the CustomUser transitional @property — the getter
-    # reads from base_profile, the setter writes to base_profile + invalidates
-    # cacheops. Keeps PATCH /users/<pk>/ working for admin user-edit flows
-    # (org/tournament pages) which would otherwise be a silent no-op.
-    nickname = serializers.CharField(
-        allow_null=True,
-        allow_blank=True,
-        required=False,
-    )
+    # avatar lives on BaseUserProfile; the CustomUser @property setter writes
+    # it through, so PATCH /users/<pk>/ keeps working for admin edits.
+    nickname = LegacyNullField()
     avatar = serializers.CharField(
         allow_null=True,
         allow_blank=True,

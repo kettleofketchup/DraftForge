@@ -9,7 +9,7 @@ class MeProfileViewTests(TestCase):
         self.user = CustomUser.objects.create(username="kara")
         self.user.set_password("pw")
         self.user.save()
-        self.user.base_profile.nickname = "Kara"
+        self.user.base_profile.avatar = "karahash"
         self.user.base_profile.save()
         self.client = APIClient()
 
@@ -23,7 +23,8 @@ class MeProfileViewTests(TestCase):
         assert response.status_code == 200
         body = response.json()
         assert body["pk"] == self.user.pk
-        assert body["base"]["nickname"] == "Kara"
+        assert body["base"]["avatar"] == "karahash"
+        assert body["base"]["nickname"] is None
         assert set(body["gameUser"].keys()) == {"dota", "deadlock"}
         assert body["orgProfiles"] == {}
 
@@ -31,18 +32,17 @@ class MeProfileViewTests(TestCase):
         self.client.force_authenticate(user=self.user)
         response = self.client.patch(
             "/api/users/me/profile/base/",
-            data={"nickname": "Kara Renamed"},
+            data={"avatar": "newhash"},
             format="json",
         )
         assert response.status_code == 200
         self.user.base_profile.refresh_from_db()
-        assert self.user.base_profile.nickname == "Kara Renamed"
-        assert self.user.base_profile.avatar is None
+        assert self.user.base_profile.avatar == "newhash"
 
     def test_patch_base_unauthenticated(self):
         response = self.client.patch(
             "/api/users/me/profile/base/",
-            data={"nickname": "x"},
+            data={"avatar": "x"},
             format="json",
         )
         assert response.status_code in (401, 403)

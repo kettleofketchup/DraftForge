@@ -1,5 +1,6 @@
 from rest_framework import serializers
 
+from app.legacy_fields import LegacyNullField
 from app.models import ProfileClaimRequest
 from app.serializers import PositionsSerializer
 
@@ -19,7 +20,7 @@ class OrgUserSerializer(serializers.ModelSerializer):
     )  # OrgUser's pk (for PATCH)
     pk = serializers.IntegerField(source="user.pk", read_only=True)  # User's pk
     username = serializers.CharField(source="user.username", read_only=True)
-    nickname = serializers.CharField(source="user.nickname", read_only=True)
+    nickname = LegacyNullField()
     guildNickname = serializers.CharField(
         source="guild_nickname", read_only=True, allow_null=True
     )
