@@ -144,7 +144,7 @@ to that single draft (`scope: "draft"`) and no menu.
 | --- | --- |
 | `POST /api/discord/activity/session/` | OAuth + instance check, issues the credential. Body `mode`: `first`, `refresh` (with `current_view` and the frame's `scope`; a `draft` scope stays pinned to its draft), or absent (0.14.x bundles, treated as legacy). The legacy `draft_id`/`kind` fields are always the instance's first draft. |
 | `GET /api/discord/activity/drafts/` | Menu contents: tournament, team draft, hero drafts with `status`, `involves_me` and `role`, plus any applicable `launch_intent` or `notice` and `site_url`. |
-| `POST /api/discord/activity/views/` | Fire-and-forget telemetry: `view`, `notice_seen`, `intent_declined`, `open_external`. Consumes intents by `intent_id`. Returns 204. A `view` whose `to`, or an `open_external` whose `view`, names a draft outside the credential's tournament returns 403 with `code: "activity_out_of_scope"`, logs `activity_auth_rejected` (`surface: "views"`) and leaves the intent unconsumed. A malformed body returns 400 and more than 60 requests a minute per user returns 429; both are logged only as `drf_error_response`. The client ignores every error from this endpoint. |
+| `POST /api/discord/activity/views/` | Fire-and-forget telemetry: `view`, `notice_seen`, `intent_declined`, `open_external`. Consumes intents by `intent_id`. Returns 204. A `view` whose `to`, or an `open_external` whose `view`, names a draft outside the credential's tournament (or single-draft pin) returns 403 with `code: "activity_out_of_scope"`, logs `activity_auth_rejected` (`surface: "views"`) and leaves the intent unconsumed. A malformed body returns 400 and more than 60 requests a minute per user returns 429; both are logged only as `drf_error_response`. The client ignores every error from this endpoint. |
 
 The two new endpoints accept only the Activity credential and send
 `Cache-Control: no-store`.
@@ -225,14 +225,19 @@ backend. Each open frame reconnects, gets a 4401 and refreshes once. What it
 shows next depends on its bundle:
 
 - Frames on the current bundle show "Activities are turned off."
-- Frames still on a 0.14.x bundle have no disabled screen. They keep the last
-  draft board under a "Discord session ended. Close and reopen the Activity."
-  badge; its Retry button lands on the same badge. A REST call may also
-  show the generic "Session expired" toast. Fresh launches served by 0.14.x
-  images show the generic "Could not connect" error.
+- Frames still on a 0.14.x bundle have no disabled screen and keep the last
+  draft board. Hero-draft frames show a "Discord session ended. Close and
+  reopen the Activity." badge; its Retry button lands on the same badge.
+  Team-draft frames show no badge, only the yellow disconnected dot on the
+  events button. Fresh launches served by 0.14.x images show the generic
+  "Could not connect" error.
 
-Neither bundle loops, and neither recovers by itself: after the flag is turned
-back on, every open frame has to be reopened.
+No socket loops: each frame refreshes once and stops. 0.14.x team-draft frames
+do keep polling REST with the rejected credential, every 3 to 5 s while the
+socket is down. Each poll gets a 401 and logs `activity_auth_rejected`
+(`surface: "rest"`), and the generic "Session expired" toast reappears every
+30 s, until the frame is closed. No frame recovers by itself: after the flag is
+turned back on, every open frame has to be reopened.
 
 To roll back the images, first turn the flag off, then roll back the images,
 then turn the flag back on. That way no new-bundle frame meets the old backend
