@@ -1,0 +1,1 @@
+- Follow the latest pick in the team draft Discord Activity, as the live website view does, instead of staying on the round each viewer last looked at.

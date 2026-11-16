@@ -37,6 +37,8 @@ export default function DraftActivity() {
         useUserStore.getState().setTournament(tournament);
         useUserStore.getState().setDraft(tournament.draft);
         useTournamentStore.getState().setLive(true);
+        // Like the live website view, follow the latest pick.
+        useTournamentStore.getState().setAutoAdvance(true);
       }
       setSession(result);
     }
