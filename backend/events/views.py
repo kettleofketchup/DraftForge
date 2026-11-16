@@ -1693,7 +1693,7 @@ TASK_LOG_SOURCES = {
 
 @api_view(["POST"])
 @permission_classes([permissions.IsAuthenticated])
-def fire_event_task(request, event_id, task_name):
+def fire_event_task(request: Request, event_id: int, task_name: str) -> Response:
     """Manually fire a scheduled task for an event. Requires org staff access."""
     try:
         event = Event.objects.select_related("organization").get(pk=event_id)
