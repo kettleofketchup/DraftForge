@@ -362,10 +362,7 @@ class WebSocketManager {
       const { kind, draftId } = conn.options.activity;
       protocols = activitySocket(kind, draftId).protocols;
       if (!protocols) {
-        this.updateState(conn, {
-          status: 'disconnected',
-          error: ACTIVITY_SESSION_ENDED,
-        });
+        this.endActivitySession(conn, 'no_credential');
         return;
       }
     }
@@ -477,7 +474,10 @@ class WebSocketManager {
         return;
       }
       if (event.code === ACTIVITY_SCOPE_CLOSE_CODE && conn.options.activity) {
-        log.info(`Activity socket out of scope: ${url}`);
+        log.warn('activity_socket_out_of_scope', {
+          url,
+          ...conn.options.activity,
+        });
         this.updateState(conn, {
           status: 'disconnected',
           error: ACTIVITY_OUT_OF_SCOPE,
@@ -514,10 +514,10 @@ class WebSocketManager {
   ): void {
     const token = getActivityCredential()?.token;
     if (token === undefined || token === conn.activityRefreshedToken) {
-      this.updateState(conn, {
-        status: 'disconnected',
-        error: ACTIVITY_SESSION_ENDED,
-      });
+      this.endActivitySession(
+        conn,
+        token === undefined ? 'no_credential' : 'refreshed_credential_rejected',
+      );
       return;
     }
     this.updateState(conn, {
@@ -527,15 +527,30 @@ class WebSocketManager {
     void refreshActivityCredential().then((refreshed) => {
       if (conn.connectionId !== connectionId || conn.ws) return;
       if (!refreshed) {
-        this.updateState(conn, {
-          status: 'disconnected',
-          error: ACTIVITY_SESSION_ENDED,
-        });
+        this.endActivitySession(conn, 'refresh_failed');
         return;
       }
       conn.activityRefreshedToken = getActivityCredential()?.token;
       this.updateState(conn, { reconnectAttempts: 0 });
       this.doConnect(conn.url);
+    });
+  }
+
+  private endActivitySession(
+    conn: WebSocketConnection,
+    reason:
+      | 'no_credential'
+      | 'refreshed_credential_rejected'
+      | 'refresh_failed',
+  ): void {
+    log.warn('activity_session_ended', {
+      reason,
+      url: conn.url,
+      ...conn.options.activity,
+    });
+    this.updateState(conn, {
+      status: 'disconnected',
+      error: ACTIVITY_SESSION_ENDED,
     });
   }
 
