@@ -16,7 +16,6 @@ const baseUser = {
   nickname: 'Ali',
   mmr: 5000,
   steam_account_id: 999,
-  guildNickname: 'AliGuild',
   positions: { carry: 1, mid: 2, offlane: 3, soft_support: 4, hard_support: 5 },
   is_staff: false,
   is_superuser: false,
@@ -99,7 +98,6 @@ describe('EditUserSchema', () => {
     const result = EditUserSchema.safeParse({
       nickname: 'Ali',
       steam_account_id: 999,
-      guildNickname: 'AliGuild',
       positions: { carry: 1, mid: 2, offlane: 3, soft_support: 4, hard_support: 5 },
       mmr: 5000,
     });
@@ -110,7 +108,6 @@ describe('EditUserSchema', () => {
     const result = EditUserSchema.safeParse({
       nickname: 'Ali',
       steam_account_id: '999',
-      guildNickname: null,
       positions: { carry: 0, mid: 0, offlane: 0, soft_support: 0, hard_support: 0 },
       mmr: '5000',
     });
@@ -125,7 +122,6 @@ describe('EditUserSchema', () => {
     const result = EditUserSchema.safeParse({
       nickname: 'Ali',
       steam_account_id: 0,
-      guildNickname: null,
       positions: { carry: 6, mid: 0, offlane: 0, soft_support: 0, hard_support: 0 },
     });
     expect(result.success).toBe(false);
