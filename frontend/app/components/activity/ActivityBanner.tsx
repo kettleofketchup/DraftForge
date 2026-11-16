@@ -44,7 +44,6 @@ export function activityBanner(
   if (!view || !drafts) return null;
   const all = entries(drafts);
   const viewed = all.find((e) => sameView(e.view, view));
-  if (view.kind !== 'bracket' && !viewed) return null;
   const viewedLive = !!viewed && viewed.entry.status !== 'finished';
   const viewedMine = !!viewed?.entry.involves_me;
   if (viewedLive && viewedMine) return null;

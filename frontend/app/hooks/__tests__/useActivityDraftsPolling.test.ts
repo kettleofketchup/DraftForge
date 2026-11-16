@@ -11,6 +11,11 @@ import {
 const mocks = vi.hoisted(() => ({
   fetchActivityDrafts: vi.fn(),
   postActivityView: vi.fn(),
+  guard: vi.fn(),
+}));
+
+vi.mock('~/components/activity/LeaveDraftConfirm', () => ({
+  useLeaveGuard: () => mocks.guard,
 }));
 
 vi.mock('~/lib/activity-api', () => ({
@@ -44,12 +49,13 @@ beforeEach(() => {
   vi.useFakeTimers();
   useActivityViewStore.getState().reset();
   mocks.fetchActivityDrafts.mockResolvedValue(LIST);
+  mocks.guard.mockImplementation((proceed: () => void) => proceed());
   setVisibility('visible');
 });
 
 afterEach(() => {
   vi.useRealTimers();
-  vi.clearAllMocks();
+  vi.resetAllMocks();
 });
 
 describe('useActivityDraftsPolling', () => {
@@ -163,6 +169,51 @@ describe('useActivityDraftsPolling', () => {
     });
     expect(useActivityViewStore.getState().view).toEqual({ kind: 'bracket' });
     expect(mocks.postActivityView).not.toHaveBeenCalled();
+  });
+
+  it('prompts again for an intent whose prompt a newer intent replaced', async () => {
+    useActivityViewStore.setState({ view: { kind: 'hero', id: 156 } });
+    mocks.guard.mockImplementation(() => {});
+    const intent = (intent_id: string, id: number) => ({
+      ...LIST,
+      launch_intent: { intent_id, kind: 'hero' as const, id },
+    });
+    mocks.fetchActivityDrafts.mockResolvedValue(intent('q1', 157));
+    renderHook(() => useActivityDraftsPolling(true));
+    await flush();
+    mocks.fetchActivityDrafts.mockResolvedValue(intent('q2', 158));
+    act(() => {
+      window.dispatchEvent(new Event('focus'));
+    });
+    await flush();
+    mocks.fetchActivityDrafts.mockResolvedValue(intent('q1', 157));
+    act(() => {
+      window.dispatchEvent(new Event('focus'));
+    });
+    await flush();
+    expect(mocks.guard).toHaveBeenCalledTimes(3);
+    mocks.guard.mock.calls[2][0]();
+    expect(useActivityViewStore.getState().view).toEqual({
+      kind: 'hero',
+      id: 157,
+    });
+  });
+
+  it('does not prompt twice for the same pending intent', async () => {
+    useActivityViewStore.setState({ view: { kind: 'hero', id: 156 } });
+    mocks.guard.mockImplementation(() => {});
+    mocks.fetchActivityDrafts.mockResolvedValue({
+      ...LIST,
+      launch_intent: { intent_id: 'q1', kind: 'hero', id: 157 },
+    });
+    renderHook(() => useActivityDraftsPolling(true));
+    await flush();
+    act(() => {
+      window.dispatchEvent(new Event('focus'));
+    });
+    await flush();
+    expect(mocks.fetchActivityDrafts).toHaveBeenCalledTimes(2);
+    expect(mocks.guard).toHaveBeenCalledTimes(1);
   });
 
   it('shows a polled notice but never posts notice_seen itself', async () => {

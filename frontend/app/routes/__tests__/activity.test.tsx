@@ -705,10 +705,19 @@ describe('Discord Activity route', () => {
         { action: 'intent_declined', intent_id: 'q2' },
       ]);
 
+      const second = {
+        ...draftList([
+          hero(156, { role: 'captain', status: 'drafting', involves_me: true }),
+          hero(157, { status: 'drafting' }),
+        ]),
+        launch_intent: { intent_id: 'q2', kind: 'hero', id: 157 },
+      };
+      mocks.fetchActivityDrafts.mockResolvedValue(second);
       await poll();
       await waitFor(() =>
-        expect(mocks.fetchActivityDrafts).toHaveBeenCalledTimes(2),
+        expect(useActivityViewStore.getState().drafts).toBe(second),
       );
+      await act(async () => {});
       expect(screen.queryByTestId('activity-leave-dialog')).toBeNull();
       expect(posts('intent_declined')).toHaveLength(1);
       await heroOnScreen(156);

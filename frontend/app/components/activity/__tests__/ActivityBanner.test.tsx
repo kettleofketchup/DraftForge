@@ -91,6 +91,23 @@ describe('ActivityBanner', () => {
     );
   });
 
+  it('treats a viewed draft missing from the list as finished', () => {
+    show({ kind: 'hero', id: 90 }, [
+      hero(156, LIVE_MINE as Partial<ActivityHeroDraftEntry>),
+      hero(157, LIVE_OTHER),
+    ]);
+    expect(screen.getByTestId('activity-banner')).toHaveTextContent(
+      'Game 156 is live',
+    );
+  });
+
+  it('counts live drafts while viewing a draft missing from the list', () => {
+    show({ kind: 'hero', id: 90 }, [hero(156, LIVE_OTHER)]);
+    expect(screen.getByTestId('activity-banner')).toHaveTextContent(
+      '1 draft live',
+    );
+  });
+
   it('stays hidden while I view my own live draft', () => {
     show({ kind: 'hero', id: 156 }, [
       hero(156, LIVE_MINE as Partial<ActivityHeroDraftEntry>),

@@ -15,16 +15,19 @@ export function useActivityDraftsPolling(enabled: boolean): {
   const enabledRef = useRef(enabled);
   enabledRef.current = enabled;
   const guard = useLeaveGuard();
-  const prompting = useRef(new Set<string>());
+  const prompting = useRef<string | null>(null);
 
   const applyIntent = useCallback(
     (intent: LaunchIntentRef) => {
       const id = intent.intent_id;
       const store = useActivityViewStore.getState();
-      if (store.appliedIntentIds.has(id) || prompting.current.has(id)) return;
+      if (store.appliedIntentIds.has(id) || prompting.current === id) return;
       const target: ActivityView = { kind: intent.kind, id: intent.id };
+      const settle = () => {
+        if (prompting.current === id) prompting.current = null;
+      };
       const apply = () => {
-        prompting.current.delete(id);
+        settle();
         useActivityViewStore
           .getState()
           .setView(target, 'launch_intent', { intentId: id });
@@ -33,10 +36,10 @@ export function useActivityDraftsPolling(enabled: boolean): {
         apply();
         return;
       }
-      prompting.current.add(id);
+      prompting.current = id;
       log.info('activity launch intent received', { intentId: id, target });
       guard(apply, () => {
-        prompting.current.delete(id);
+        settle();
         useActivityViewStore.getState().declineIntent(id);
       });
     },
