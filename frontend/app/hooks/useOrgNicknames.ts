@@ -23,13 +23,12 @@ export function useOrgNicknames(
   );
 }
 
-export function matchesUserQueryIn(
-  user: NameSource,
-  q: string,
+export function withOrgNickname<T extends NameSource>(
+  user: T,
   orgId: number | null | undefined,
   nicknames: OrgNicknameMap,
-): boolean {
-  if (typeof orgId !== 'number') return matchesUserQuery(user, q, null);
+): T {
+  if (typeof orgId !== 'number') return user;
   const own = user.orgNicknames;
   const nick =
     own && Object.prototype.hasOwnProperty.call(own, orgId)
@@ -37,9 +36,15 @@ export function matchesUserQueryIn(
       : typeof user.pk === 'number'
         ? (nicknames[user.pk] ?? null)
         : null;
-  return matchesUserQuery(
-    { ...user, orgNicknames: { ...own, [orgId]: nick } },
-    q,
-    orgId,
-  );
+  return { ...user, orgNicknames: { ...own, [orgId]: nick } };
+}
+
+export function matchesUserQueryIn(
+  user: NameSource,
+  q: string,
+  orgId: number | null | undefined,
+  nicknames: OrgNicknameMap,
+): boolean {
+  const scoped = typeof orgId === 'number' ? orgId : null;
+  return matchesUserQuery(withOrgNickname(user, orgId, nicknames), q, scoped);
 }
