@@ -52,6 +52,7 @@ import {
 import { useMemberAccess } from '~/hooks/useMemberAccess';
 import { usePageNav } from '~/hooks/usePageNav';
 import { useIsLeagueAdmin } from '~/hooks/usePermissions';
+import { LeagueDisplayOrg } from '~/lib/displayOrgShells';
 import { useLeagueStore } from '~/store/leagueStore';
 import { useOrgStore } from '~/store/orgStore';
 import { useUserCacheStore } from '~/store/userCacheStore';
@@ -198,75 +199,77 @@ export default function LeaguePage() {
   }
 
   return (
-    <div className="container mx-auto py-6 px-4 space-y-6">
-      <div className="flex flex-col gap-6 rounded-lg border border-border bg-base-200/50 p-4 md:p-6">
-        {breadcrumbSegments.length > 1 && (
-          <EntityBreadcrumb segments={breadcrumbSegments} />
-        )}
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row items-start sm:justify-between gap-3">
-          <div className="space-y-2 min-w-0">
-            <div className="flex items-center gap-3">
-              <Trophy className="h-7 w-7 md:h-8 md:w-8 text-primary shrink-0" />
-              <h1 className="text-xl! md:text-3xl! font-bold truncate">
-                {league.name}
-              </h1>
+    <LeagueDisplayOrg league={league}>
+      <div className="container mx-auto py-6 px-4 space-y-6">
+        <div className="flex flex-col gap-6 rounded-lg border border-border bg-base-200/50 p-4 md:p-6">
+          {breadcrumbSegments.length > 1 && (
+            <EntityBreadcrumb segments={breadcrumbSegments} />
+          )}
+          {/* Header */}
+          <div className="flex flex-col sm:flex-row items-start sm:justify-between gap-3">
+            <div className="space-y-2 min-w-0">
+              <div className="flex items-center gap-3">
+                <Trophy className="h-7 w-7 md:h-8 md:w-8 text-primary shrink-0" />
+                <h1 className="text-xl! md:text-3xl! font-bold truncate">
+                  {league.name}
+                </h1>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 text-muted-foreground">
+                {league.organization_name && (
+                  <Badge variant="outline" className="flex items-center gap-1">
+                    <Building2 className="h-3 w-3" />
+                    {league.organization_name}
+                  </Badge>
+                )}
+                {league.steam_league_id && (
+                  <Badge variant="secondary">
+                    Steam ID: {league.steam_league_id}
+                  </Badge>
+                )}
+              </div>
             </div>
-            <div className="flex flex-wrap items-center gap-2 text-muted-foreground">
-              {league.organization_name && (
-                <Badge variant="outline" className="flex items-center gap-1">
-                  <Building2 className="h-3 w-3" />
-                  {league.organization_name}
-                </Badge>
-              )}
-              {league.steam_league_id && (
-                <Badge variant="secondary">
-                  Steam ID: {league.steam_league_id}
-                </Badge>
-              )}
-            </div>
+
+            {canEdit && (
+              <PrimaryButton
+                size="sm"
+                onClick={() => setEditModalOpen(true)}
+                data-testid="edit-league-button"
+                className="shrink-0 w-full sm:w-auto"
+              >
+                <Pencil className="h-4 w-4 mr-2" />
+                Edit League
+              </PrimaryButton>
+            )}
           </div>
 
-          {canEdit && (
-            <PrimaryButton
-              size="sm"
-              onClick={() => setEditModalOpen(true)}
-              data-testid="edit-league-button"
-              className="shrink-0 w-full sm:w-auto"
-            >
-              <Pencil className="h-4 w-4 mr-2" />
-              Edit League
-            </PrimaryButton>
-          )}
+          {/* Tabs */}
+          <LeagueTabs
+            league={league}
+            tournaments={leagueTournaments}
+            activeTab={activeTab}
+            onTabChange={handleTabChange}
+            canViewMembers={canViewMembers}
+            memberAccessSettled={memberAccessSettled}
+          />
         </div>
 
-        {/* Tabs */}
-        <LeagueTabs
-          league={league}
-          tournaments={leagueTournaments}
-          activeTab={activeTab}
-          onTabChange={handleTabChange}
-          canViewMembers={canViewMembers}
-          memberAccessSettled={memberAccessSettled}
-        />
+        {/* Edit Modal */}
+        {canEdit && league && (
+          <EditLeagueModal
+            open={editModalOpen}
+            onOpenChange={setEditModalOpen}
+            league={league}
+            onSuccess={refetch}
+            onDeleted={() => {
+              const orgPk =
+                typeof league.organization === 'object'
+                  ? league.organization?.pk
+                  : null;
+              navigate(orgPk ? `/organizations/${orgPk}` : '/leagues');
+            }}
+          />
+        )}
       </div>
-
-      {/* Edit Modal */}
-      {canEdit && league && (
-        <EditLeagueModal
-          open={editModalOpen}
-          onOpenChange={setEditModalOpen}
-          league={league}
-          onSuccess={refetch}
-          onDeleted={() => {
-            const orgPk =
-              typeof league.organization === 'object'
-                ? league.organization?.pk
-                : null;
-            navigate(orgPk ? `/organizations/${orgPk}` : '/leagues');
-          }}
-        />
-      )}
-    </div>
+    </LeagueDisplayOrg>
   );
 }

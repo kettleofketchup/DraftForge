@@ -1,3 +1,5 @@
+import { useParams } from 'react-router';
+import { HeroDraftDisplayOrg } from '~/lib/displayOrgShells';
 import { generateMeta } from '~/lib/seo';
 import type { HeroDraftSSR } from '~/lib/ssr-types';
 import HeroDraftPage from '~/pages/herodraft/HeroDraftPage';
@@ -33,4 +35,12 @@ export function meta({ data }: Route.MetaArgs) {
   });
 }
 
-export default HeroDraftPage;
+export default function HeroDraftRoute() {
+  const { id } = useParams();
+  const draftId = id ? parseInt(id, 10) : NaN;
+  return (
+    <HeroDraftDisplayOrg draftId={Number.isNaN(draftId) ? null : draftId}>
+      <HeroDraftPage />
+    </HeroDraftDisplayOrg>
+  );
+}

@@ -12,6 +12,10 @@ import {
   releaseDiscordSession,
   type DraftActivitySession,
 } from '~/lib/discord';
+import {
+  CurrentTournamentDisplayOrg,
+  HeroDraftDisplayOrg,
+} from '~/lib/displayOrgShells';
 import { hydrateTournament } from '~/lib/hydrateTournament';
 import { useTournamentStore } from '~/store/tournamentStore';
 import { useUserStore } from '~/store/userStore';
@@ -69,14 +73,21 @@ export default function DraftActivity() {
         Connecting to Discord…
       </div>
     );
-  if (session.kind === 'team') return <DraftModal embedded />;
+  if (session.kind === 'team')
+    return (
+      <CurrentTournamentDisplayOrg>
+        <DraftModal embedded />
+      </CurrentTournamentDisplayOrg>
+    );
   return (
-    <HeroDraftModal
-      key={session.draft_id}
-      draftId={session.draft_id}
-      open
-      embedded
-      onClose={() => {}}
-    />
+    <HeroDraftDisplayOrg draftId={session.draft_id}>
+      <HeroDraftModal
+        key={session.draft_id}
+        draftId={session.draft_id}
+        open
+        embedded
+        onClose={() => {}}
+      />
+    </HeroDraftDisplayOrg>
   );
 }

@@ -19,6 +19,7 @@ import { PageHeader } from '~/components/ui/page-header';
 import type { UserType } from '~/components/user/types';
 import { useTournament } from '~/hooks/useTournament';
 import { useTournamentSocket } from '~/hooks/useTournamentSocket';
+import { TournamentDisplayOrg } from '~/lib/displayOrgShells';
 import { hydrateTournament } from '~/lib/hydrateTournament';
 import { useLeagueStore } from '~/store/leagueStore';
 import { useOrgStore } from '~/store/orgStore';
@@ -368,33 +369,35 @@ export const TournamentDetailPage: React.FC = () => {
   };
 
   return (
-    <div
-      className="max-w-full overflow-x-hidden px-3 py-3 sm:container sm:mx-auto sm:p-4"
-      data-testid="tournamentDetailPage"
-    >
-      {breadcrumbSegments.length > 1 && (
-        <EntityBreadcrumb segments={breadcrumbSegments} />
-      )}
-      {title()}
-      <TournamentTabs />
-      <ConfirmDialog
-        open={showDeleteTournament}
-        onOpenChange={setShowDeleteTournament}
-        title="Delete tournament?"
-        description={
-          <>
-            This will permanently delete <strong>{tournament?.name}</strong>,
-            its brackets, matches, and signups. This cannot be undone.
-          </>
-        }
-        confirmLabel="Delete tournament"
-        variant="destructive"
-        onConfirm={handleDelete}
-        contentTestId="delete-tournament-dialog"
-        confirmTestId="delete-tournament-confirm"
-        cancelTestId="delete-tournament-cancel"
-      />
-    </div>
+    <TournamentDisplayOrg tournament={tournament}>
+      <div
+        className="max-w-full overflow-x-hidden px-3 py-3 sm:container sm:mx-auto sm:p-4"
+        data-testid="tournamentDetailPage"
+      >
+        {breadcrumbSegments.length > 1 && (
+          <EntityBreadcrumb segments={breadcrumbSegments} />
+        )}
+        {title()}
+        <TournamentTabs />
+        <ConfirmDialog
+          open={showDeleteTournament}
+          onOpenChange={setShowDeleteTournament}
+          title="Delete tournament?"
+          description={
+            <>
+              This will permanently delete <strong>{tournament?.name}</strong>,
+              its brackets, matches, and signups. This cannot be undone.
+            </>
+          }
+          confirmLabel="Delete tournament"
+          variant="destructive"
+          onConfirm={handleDelete}
+          contentTestId="delete-tournament-dialog"
+          confirmTestId="delete-tournament-confirm"
+          cancelTestId="delete-tournament-cancel"
+        />
+      </div>
+    </TournamentDisplayOrg>
   );
 };
 
