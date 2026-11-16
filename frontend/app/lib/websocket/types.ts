@@ -88,4 +88,6 @@ export interface WebSocketConnection {
   intentionalClose: boolean;
   connectStartTime: number | null;
   autoDisconnectTimeout: NodeJS.Timeout | null;
+  /** Activity token in use after the last 4401 refresh; a repeat 4401 on it is terminal. */
+  activityRefreshedToken?: string;
 }
