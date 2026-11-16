@@ -126,4 +126,72 @@ describe('useActivityDraftsPolling', () => {
     window.dispatchEvent(new Event('focus'));
     expect(mocks.fetchActivityDrafts).toHaveBeenCalledTimes(1);
   });
+  it('applies a launch intent from the drafts list to this view only', async () => {
+    useActivityViewStore.setState({ view: { kind: 'bracket' } });
+    mocks.fetchActivityDrafts.mockResolvedValue({
+      ...LIST,
+      launch_intent: { intent_id: 'q1', kind: 'hero', id: 157 },
+    });
+    renderHook(() => useActivityDraftsPolling(true));
+    await flush();
+    expect(useActivityViewStore.getState().view).toEqual({
+      kind: 'hero',
+      id: 157,
+    });
+    expect(mocks.postActivityView).toHaveBeenCalledWith({
+      action: 'view',
+      from: { kind: 'bracket' },
+      to: { kind: 'hero', id: 157 },
+      trigger: 'launch_intent',
+      intent_id: 'q1',
+    });
+  });
+
+  it('ignores an intent that was already applied', async () => {
+    useActivityViewStore.setState({
+      view: { kind: 'bracket' },
+      appliedIntentIds: new Set(['q1']),
+    });
+    mocks.fetchActivityDrafts.mockResolvedValue({
+      ...LIST,
+      launch_intent: { intent_id: 'q1', kind: 'hero', id: 157 },
+    });
+    renderHook(() => useActivityDraftsPolling(true));
+    await flush();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_000);
+    });
+    expect(useActivityViewStore.getState().view).toEqual({ kind: 'bracket' });
+    expect(mocks.postActivityView).not.toHaveBeenCalled();
+  });
+
+  it('shows a polled notice but never posts notice_seen itself', async () => {
+    const notice = {
+      intent_id: 'n1',
+      kind: 'hero' as const,
+      draft_id: 301,
+      tournament_name: 'Other Cup',
+      label: 'Game 301',
+      url: 'https://site.test/herodraft/301',
+    };
+    mocks.fetchActivityDrafts.mockResolvedValue({ ...LIST, notice });
+    renderHook(() => useActivityDraftsPolling(true));
+    await flush();
+    expect(useActivityViewStore.getState().notice).toEqual(notice);
+    expect(mocks.postActivityView).not.toHaveBeenCalled();
+  });
+
+  it('keeps a session notice when a poll returns none', async () => {
+    const notice = {
+      kind: 'team' as const,
+      draft_id: 77,
+      tournament_name: 'Other Cup',
+      label: 'Team draft',
+      url: 'https://site.test/tournament/5/draft',
+    };
+    useActivityViewStore.getState().showNotice(notice);
+    renderHook(() => useActivityDraftsPolling(true));
+    await flush();
+    expect(useActivityViewStore.getState().notice).toEqual(notice);
+  });
 });

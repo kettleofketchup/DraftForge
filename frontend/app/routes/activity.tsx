@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityHeader } from '~/components/activity/ActivityHeader';
+import { ActivityBanner } from '~/components/activity/ActivityBanner';
+import {
+  ActivityHeader,
+  useActivityMenu,
+} from '~/components/activity/ActivityHeader';
+import { ActivityNotice } from '~/components/activity/ActivityNotice';
 import { useLeaveGuard } from '~/components/activity/LeaveDraftConfirm';
 import api, { setActivityErrorHandlers } from '~/components/api/axios';
 import { BracketView } from '~/components/bracket/BracketView';
@@ -163,11 +168,14 @@ export default function DraftActivity() {
       setActivityErrorHandlers(null);
       setActivityCredential(null);
       useActivityViewStore.getState().reset();
+      useActivityMenu.getState().setOpen(false);
       releaseDiscordSession();
     };
   }, []);
 
-  useActivityDraftsPolling(scope === 'tournament' && !terminal);
+  const { refetch } = useActivityDraftsPolling(
+    scope === 'tournament' && !terminal,
+  );
 
   useEffect(() => {
     if (scope !== 'tournament') return;
@@ -202,7 +210,14 @@ export default function DraftActivity() {
       </div>
     );
 
-  const header = scope === 'tournament' ? <ActivityHeader /> : undefined;
+  const header =
+    scope === 'tournament' ? (
+      <>
+        <ActivityHeader onMenuOpen={refetch} />
+        <ActivityBanner />
+        <ActivityNotice />
+      </>
+    ) : undefined;
 
   if (view.kind === 'team')
     return (

@@ -1,4 +1,6 @@
 import { Check, ChevronDown, ExternalLink } from 'lucide-react';
+import { useEffect } from 'react';
+import { create } from 'zustand';
 import { Badge } from '~/components/ui/badge';
 import { SecondaryButton } from '~/components/ui/buttons';
 import {
@@ -35,6 +37,14 @@ const STATUS_CLASS: Record<DraftStatus, string> = {
   finished: 'text-muted-foreground',
 };
 
+export const useActivityMenu = create<{
+  open: boolean;
+  setOpen: (open: boolean) => void;
+}>((set) => ({
+  open: false,
+  setOpen: (open) => set({ open }),
+}));
+
 function StatusChip({ status }: { status: DraftStatus }) {
   return (
     <Badge variant="outline" className={cn('ml-auto', STATUS_CLASS[status])}>
@@ -56,8 +66,14 @@ function viewLabel(
   );
 }
 
-export function ActivityHeader() {
+export function ActivityHeader({
+  onMenuOpen,
+}: {
+  onMenuOpen?: () => void;
+} = {}) {
   const view = useActivityViewStore((s) => s.view);
+  const menuOpen = useActivityMenu((s) => s.open);
+  const setMenuOpen = useActivityMenu((s) => s.setOpen);
   const drafts = useActivityViewStore((s) => s.drafts);
   const guard = useLeaveGuard();
   const externalUrl = view ? activityExternalUrl(view) : undefined;
@@ -75,6 +91,10 @@ export function ActivityHeader() {
     });
   };
 
+  useEffect(() => {
+    if (menuOpen) onMenuOpen?.();
+  }, [menuOpen, onMenuOpen]);
+
   const isCurrent = (target: ActivityView) => sameView(view, target);
   const teamDraft = drafts?.team_draft;
 
@@ -91,7 +111,7 @@ export function ActivityHeader() {
           {drafts.tournament.name}
         </span>
       )}
-      <DropdownMenu>
+      <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
         <DropdownMenuTrigger asChild>
           <SecondaryButton
             size="sm"

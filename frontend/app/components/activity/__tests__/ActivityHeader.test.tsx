@@ -15,7 +15,7 @@ import type {
   ActivityHeroDraftEntry,
 } from '~/lib/activity-types';
 import { useActivityViewStore } from '~/store/activityViewStore';
-import { ActivityHeader } from '../ActivityHeader';
+import { ActivityHeader, useActivityMenu } from '../ActivityHeader';
 import { useLeaveGuard } from '../LeaveDraftConfirm';
 
 const mocks = vi.hoisted(() => ({
@@ -243,6 +243,18 @@ describe('ActivityHeader', () => {
         'If you are a captain here, leaving may pause the draft.',
       ),
     ).toBeInTheDocument();
+  });
+
+  it('refetches the drafts list when the menu opens', () => {
+    useActivityViewStore.setState({
+      view: { kind: 'bracket' },
+      drafts: drafts([hero(156)]),
+    });
+    const onMenuOpen = vi.fn();
+    render(<ActivityHeader onMenuOpen={onMenuOpen} />);
+    expect(onMenuOpen).not.toHaveBeenCalled();
+    act(() => useActivityMenu.getState().setOpen(true));
+    expect(onMenuOpen).toHaveBeenCalledTimes(1);
   });
 
   it('opens the viewed draft in the browser after the guard', async () => {

@@ -626,4 +626,172 @@ describe('Discord Activity route', () => {
     render(<DraftActivity />);
     expect(await screen.findByTestId('activity-error')).toBeInTheDocument();
   });
+  describe('launch intents, banner and notice', () => {
+    const OTHER_NOTICE = {
+      intent_id: 'n1',
+      kind: 'hero',
+      draft_id: 301,
+      tournament_name: 'Other Cup',
+      label: 'Game 301',
+      url: 'https://site.test/herodraft/301',
+    } as const;
+    const CHANNEL_NOTICE = {
+      kind: 'team',
+      draft_id: 77,
+      tournament_name: 'Other Cup',
+      label: 'Team draft',
+      url: 'https://site.test/tournament/5/draft',
+    } as const;
+
+    function posts(action: string): unknown[] {
+      return mocks.postActivityView.mock.calls
+        .map((c) => c[0])
+        .filter((b) => b.action === action);
+    }
+
+    async function poll() {
+      await act(async () => {
+        window.dispatchEvent(new Event('focus'));
+        await Promise.resolve();
+      });
+    }
+
+    it('follows my own launch from the drafts list', async () => {
+      mocks.initializeDiscord.mockResolvedValue(heroSession());
+      mocks.fetchActivityDrafts.mockResolvedValue({
+        ...draftList([hero(156), hero(157)]),
+        launch_intent: { intent_id: 'q2', kind: 'hero', id: 157 },
+      });
+      render(<DraftActivity />);
+      await heroOnScreen(157);
+      expect(mocks.postActivityView).toHaveBeenCalledWith({
+        action: 'view',
+        from: { kind: 'hero', id: 156 },
+        to: { kind: 'hero', id: 157 },
+        trigger: 'launch_intent',
+        intent_id: 'q2',
+      });
+      await poll();
+      await waitFor(() =>
+        expect(mocks.fetchActivityDrafts).toHaveBeenCalledTimes(2),
+      );
+      expect(
+        postedTriggers().filter((t) => t === 'launch_intent'),
+      ).toHaveLength(1);
+    });
+
+    it('lets a captain decline a launch and does not ask again', async () => {
+      mocks.initializeDiscord.mockResolvedValue(heroSession());
+      mocks.fetchActivityDrafts.mockResolvedValue({
+        ...draftList([
+          hero(156, { role: 'captain', status: 'drafting', involves_me: true }),
+          hero(157, { status: 'drafting' }),
+        ]),
+        launch_intent: { intent_id: 'q2', kind: 'hero', id: 157 },
+      });
+      render(<DraftActivity />);
+      await heroOnScreen(156);
+      expect(
+        await screen.findByTestId('activity-leave-dialog'),
+      ).toHaveTextContent('Leaving pauses your draft for both teams.');
+      fireEvent.click(screen.getByTestId('activity-leave-stay'));
+      await waitFor(() =>
+        expect(
+          screen.queryByTestId('activity-leave-dialog'),
+        ).not.toBeInTheDocument(),
+      );
+      await heroOnScreen(156);
+      expect(posts('intent_declined')).toEqual([
+        { action: 'intent_declined', intent_id: 'q2' },
+      ]);
+
+      await poll();
+      await waitFor(() =>
+        expect(mocks.fetchActivityDrafts).toHaveBeenCalledTimes(2),
+      );
+      expect(screen.queryByTestId('activity-leave-dialog')).toBeNull();
+      expect(posts('intent_declined')).toHaveLength(1);
+      await heroOnScreen(156);
+    });
+
+    it('shows the banner for my live draft while I view a finished one', async () => {
+      mocks.initializeDiscord.mockResolvedValue(heroSession());
+      mocks.fetchActivityDrafts.mockResolvedValue(
+        draftList([
+          hero(156),
+          hero(157, { status: 'drafting', involves_me: true, role: 'player' }),
+        ]),
+      );
+      render(<DraftActivity />);
+      expect(await screen.findByTestId('activity-banner')).toHaveTextContent(
+        'Game 157 is live',
+      );
+      fireEvent.click(screen.getByTestId('activity-banner-view'));
+      await heroOnScreen(157);
+      expect(postedTriggers()).toContain('banner');
+    });
+
+    it('keeps the session channel-record notice after a poll without one', async () => {
+      mocks.initializeDiscord.mockResolvedValue(
+        heroSession({ notice: CHANNEL_NOTICE }),
+      );
+      render(<DraftActivity />);
+      await heroOnScreen(156);
+      await waitFor(() =>
+        expect(mocks.fetchActivityDrafts).toHaveBeenCalledTimes(1),
+      );
+      expect(screen.getByTestId('activity-notice')).toHaveTextContent(
+        'Team draft in Other Cup',
+      );
+      expect(posts('notice_seen')).toEqual([]);
+    });
+
+    it('acknowledges a session intent notice once', async () => {
+      mocks.initializeDiscord.mockResolvedValue(
+        heroSession({ notice: OTHER_NOTICE }),
+      );
+      render(<DraftActivity />);
+      expect(await screen.findByTestId('activity-notice')).toBeInTheDocument();
+      await poll();
+      await waitFor(() =>
+        expect(mocks.fetchActivityDrafts).toHaveBeenCalledTimes(2),
+      );
+      expect(posts('notice_seen')).toEqual([
+        { action: 'notice_seen', intent_id: 'n1' },
+      ]);
+    });
+
+    it('acknowledges a polled intent notice once across polls', async () => {
+      mocks.initializeDiscord.mockResolvedValue(heroSession());
+      mocks.fetchActivityDrafts.mockResolvedValue({
+        ...draftList([hero(156)]),
+        notice: OTHER_NOTICE,
+      });
+      render(<DraftActivity />);
+      expect(await screen.findByTestId('activity-notice')).toBeInTheDocument();
+      await poll();
+      await poll();
+      await waitFor(() =>
+        expect(mocks.fetchActivityDrafts).toHaveBeenCalledTimes(3),
+      );
+      expect(posts('notice_seen')).toHaveLength(1);
+    });
+
+    it('does not show a dismissed notice again', async () => {
+      mocks.initializeDiscord.mockResolvedValue(heroSession());
+      mocks.fetchActivityDrafts.mockResolvedValue({
+        ...draftList([hero(156)]),
+        notice: OTHER_NOTICE,
+      });
+      render(<DraftActivity />);
+      await screen.findByTestId('activity-notice');
+      fireEvent.click(screen.getByTestId('activity-notice-dismiss'));
+      expect(screen.queryByTestId('activity-notice')).toBeNull();
+      await poll();
+      await waitFor(() =>
+        expect(mocks.fetchActivityDrafts).toHaveBeenCalledTimes(2),
+      );
+      expect(screen.queryByTestId('activity-notice')).toBeNull();
+    });
+  });
 });
