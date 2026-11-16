@@ -59,8 +59,7 @@ class TaskScheduleEndpointTest(TestCase):
         tasks = resp.json()
         task_names = [t["task"] for t in tasks]
         self.assertIn("announcement", task_names)
-        # signup_reminder absorbed the former subscriber_dm task — it now drives
-        # subscriber DMs and uses has_dms for fired detection.
+        # signup_reminder drives subscriber DMs; fired detection uses has_dms.
         self.assertIn("signup_reminder", task_names)
         self.assertIn("confirm_attendance", task_names)
         self.assertIn("profile_reminder", task_names)
@@ -201,9 +200,7 @@ class FireSignupPostRepostTest(TestCase):
             discord_announcement_channel_id="ch_ann",
         )
         # Both is_staff and is_superuser bypass the org-admin cascade
-        # (see has_org_admin_access in app/permissions_org.py). We use a
-        # superuser here because the test predates that cascade widening
-        # and there's no reason to narrow it.
+        # (see has_org_admin_access in app/permissions_org.py).
         self.admin = CustomUser.objects.create_superuser(
             username="repost_admin", password="x"
         )
