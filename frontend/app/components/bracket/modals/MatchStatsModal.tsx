@@ -36,6 +36,8 @@ interface MatchStatsModalProps {
   onClose: () => void;
   initialDraftId?: number | null;
   onOpenHeroDraft?: (draftId: number) => void;
+  embedded?: boolean;
+  openableDraftIds?: ReadonlySet<number>;
 }
 
 export function MatchStatsModal({
@@ -44,6 +46,8 @@ export function MatchStatsModal({
   onClose,
   initialDraftId,
   onOpenHeroDraft,
+  embedded = false,
+  openableDraftIds,
 }: MatchStatsModalProps) {
   const navigate = useNavigate();
   const { pk } = useParams<{ pk: string }>();
@@ -80,7 +84,7 @@ export function MatchStatsModal({
   // The lobby's provisional result pre-selects (never submits) a winner.
   const { data: lobbyData } = useGameLobby(
     match?.gameId,
-    isOpen && !!currentUser,
+    isOpen && !!currentUser && !embedded,
   );
 
   if (!match) return null;
@@ -257,7 +261,8 @@ export function MatchStatsModal({
           </div>
 
           {/* Staff controls */}
-          {isLeagueStaff &&
+          {!embedded &&
+            isLeagueStaff &&
             match.status !== 'completed' &&
             match.radiantTeam &&
             match.direTeam && (
@@ -312,22 +317,40 @@ export function MatchStatsModal({
               doesn't match either current radiant_team / dire_team (e.g. a
               prior team change broke the derivation in bracketStore.ts), and
               admins need a recovery path. */}
-          {isLeagueStaff && (match.status === 'completed' || match.winner) && (
-            <div className="border-t pt-4">
-              <SecondaryButton
-                size="sm"
-                onClick={handleUnsetWinner}
-                disabled={persistMatchResult.isPending}
-                data-testid="unsetWinnerButton"
-              >
-                <RotateCcw className="size-4 mr-1" />
-                Unset Winner
-              </SecondaryButton>
-            </div>
-          )}
+          {!embedded &&
+            isLeagueStaff &&
+            (match.status === 'completed' || match.winner) && (
+              <div className="border-t pt-4">
+                <SecondaryButton
+                  size="sm"
+                  onClick={handleUnsetWinner}
+                  disabled={persistMatchResult.isPending}
+                  data-testid="unsetWinnerButton"
+                >
+                  <RotateCcw className="size-4 mr-1" />
+                  Unset Winner
+                </SecondaryButton>
+              </div>
+            )}
+
+          {embedded &&
+            match.herodraft_id != null &&
+            openableDraftIds?.has(match.herodraft_id) && (
+              <div className="border-t pt-4">
+                <PrimaryButton
+                  size="sm"
+                  onClick={() => onOpenHeroDraft?.(match.herodraft_id!)}
+                  data-testid="view-draft-btn"
+                >
+                  <Swords className="size-4 mr-1" />
+                  View Draft
+                </PrimaryButton>
+              </div>
+            )}
 
           {/* Hero Draft button - show for staff or captains */}
-          {match.radiantTeam &&
+          {!embedded &&
+            match.radiantTeam &&
             match.direTeam &&
             (() => {
               const isCaptain =
@@ -404,7 +427,9 @@ export function MatchStatsModal({
             })()}
 
           {/* dota_lobby in-game lobby (signed-in users; the API needs a login) */}
-          {match.gameId && currentUser && <LobbyPanel gameId={match.gameId} />}
+          {!embedded && match.gameId && currentUser && (
+            <LobbyPanel gameId={match.gameId} />
+          )}
 
           {/* Steam match info and Stats button */}
           {hasMatchId && (
@@ -427,7 +452,7 @@ export function MatchStatsModal({
           )}
 
           {/* Staff: Link Steam Match button */}
-          {isStaff && (
+          {isStaff && !embedded && (
             <div className="border-t pt-4">
               <SecondaryButton
                 size="sm"
@@ -448,6 +473,7 @@ export function MatchStatsModal({
           open={showStatsModal}
           onClose={() => setShowStatsModal(false)}
           matchId={match.steamMatchId ?? null}
+          embedded={embedded}
         />
 
         {/* Link Steam Match Modal */}
