@@ -1,6 +1,6 @@
 {
   "aria": {
-    "documentation": "Documentation",
+    "docs_menu": "Docs and changelog",
     "main_nav": "Main navigation",
     "open_menu": "Open menu",
     "report_bug": "Report a Bug",
@@ -14,11 +14,15 @@
     "about_subtitle": "Who we are",
     "admin": "Admin",
     "admin_subtitle": "Manage site",
+    "changelog": "Changelog",
+    "changelog_empty": "No releases yet",
+    "changelog_load_error": "Couldn't load the release notes.",
     "docs": "Docs",
     "docs_subtitle": "Secret Sauce",
     "documentation": "Documentation",
     "documentation_subtitle": "Learn how it works",
     "events": "Events",
+    "full_changelog": "Full changelog",
     "github": "GitHub",
     "github_subtitle": "Begging for Stars",
     "github_subtitle_star": "Star us!",
@@ -31,7 +35,8 @@
     "report_issue_subtitle": "Help us fix it",
     "report_issue_subtitle_improve": "Help us improve",
     "tournaments": "Tournaments",
-    "tournaments_subtitle": "Compete & win"
+    "tournaments_subtitle": "Compete & win",
+    "whats_new": "What's new"
   },
   "profile": "Profile",
   "section": {

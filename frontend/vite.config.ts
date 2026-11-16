@@ -9,11 +9,7 @@ import tsconfigPaths from 'vite-tsconfig-paths';
 // babel plugin if reintroduced.
 
 export default defineConfig({
-  plugins: [
-    tailwindcss(),
-    reactRouter(),
-    tsconfigPaths(),
-  ],
+  plugins: [tailwindcss(), reactRouter(), tsconfigPaths()],
   build: {
     rollupOptions: {
       onwarn(warning, warn) {
@@ -129,6 +125,8 @@ export default defineConfig({
       '@headlessui/react',
       // Dota data
       'dotaconstants',
+      // Changelog
+      'react-markdown',
     ],
     // Force re-optimization when starting fresh
     force: process.env.VITE_FORCE_OPTIMIZE === 'true',
