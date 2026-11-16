@@ -33,6 +33,7 @@ from discordbot.activity import activity_session, launch_message, resolve_instan
 from discordbot.activity_auth import (
     HERO_SUFFIXES,
     LEGACY_SALT,
+    PATH_NOT_ALLOWED,
     SALT,
     ActivityAuthentication,
     ActivityIdentity,
@@ -335,16 +336,24 @@ class DraftActivityTests(TestCase):
         for user in [self.user, staff]:
             DraftActivityInstance.objects.all().delete()
             token = self.credential(user=user)
-            for suffix in ["ssr", "reset", "abandon", "unknown-thing"]:
+            client = APIClient()
+            client.credentials(HTTP_AUTHORIZATION=f"DraftActivity {token}")
+            for suffix in ["ssr", "reset", "abandon"]:
                 with self.subTest(user=user.username, suffix=suffix):
-                    client = APIClient()
-                    client.credentials(HTTP_AUTHORIZATION=f"DraftActivity {token}")
                     response = client.post(f"/api/herodraft/{self.hero.pk}/{suffix}/")
                     self.assertEqual(response.status_code, 401)
                     self.assertEqual(response.data["code"], "activity_path_not_allowed")
-        for suffix in sorted(HERO_SUFFIXES):
-            _, identity = self.rest(f"/api/herodraft/{self.hero.pk}/{suffix}/", token)
-            self.assertEqual(identity.user, staff)
+                    self.assertEqual(response.data["detail"], PATH_NOT_ALLOWED)
+            with self.subTest(user=user.username, suffix="unknown-thing"):
+                path = f"/api/herodraft/{self.hero.pk}/unknown-thing/"
+                self.assertEqual(client.post(path).status_code, 404)
+                self.assert_rest_code(path, token, "activity_path_not_allowed", "post")
+            for suffix in sorted(HERO_SUFFIXES):
+                with self.subTest(user=user.username, accepted=suffix):
+                    _, identity = self.rest(
+                        f"/api/herodraft/{self.hero.pk}/{suffix}/", token
+                    )
+                    self.assertEqual(identity.user, user)
 
     def test_spectator_403_on_every_mutating_endpoint_for_other_draft(self):
         token = self.credential(user=self.spectator)
@@ -404,9 +413,7 @@ class DraftActivityTests(TestCase):
         _, identity = self.rest("/api/current_user", token)
         context = get_contextvars()
         self.assertEqual(context["user.id"], self.user.pk)
-        self.assertEqual(
-            context["activity.instance_id"], identity.instance.instance_id
-        )
+        self.assertEqual(context["activity.instance_id"], identity.instance.instance_id)
 
     def test_rejection_is_logged(self):
         token = self.credential()

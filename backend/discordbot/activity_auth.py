@@ -42,6 +42,7 @@ SESSION_ENDED_CODE = 4401
 
 ActivityKind = Literal["hero", "team"]
 OUT_OF_SCOPE = "Activity credentials are only valid for this draft."
+PATH_NOT_ALLOWED = "Activity credentials cannot use this endpoint."
 HERO_SUFFIXES: frozenset[str] = frozenset(
     {
         "set-ready",
@@ -352,7 +353,7 @@ class ActivityAuthentication(BaseAuthentication):
         if not allowed:
             raise ActivityAuthFailed(
                 "activity_out_of_scope" if scoped else "activity_path_not_allowed",
-                OUT_OF_SCOPE,
+                OUT_OF_SCOPE if scoped else PATH_NOT_ALLOWED,
                 "out_of_scope" if scoped else "path_not_allowed",
             )
         return identity
