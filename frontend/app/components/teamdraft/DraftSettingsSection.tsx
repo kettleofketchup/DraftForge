@@ -1,9 +1,17 @@
+import type { ReactNode } from 'react';
 import {
   useFormContext,
   useWatch,
   type Control,
   type FieldValues,
 } from 'react-hook-form';
+import {
+  BrandSelect,
+  BrandSelectContent,
+  BrandSelectItem,
+  BrandSelectTrigger,
+  SelectValue,
+} from '~/components/ui/brand-select';
 import {
   FormControl,
   FormDescription,
@@ -13,13 +21,6 @@ import {
   FormMessage,
 } from '~/components/ui/form';
 import { Input } from '~/components/ui/input';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '~/components/ui/select';
 import { Switch } from '~/components/ui/switch';
 import {
   DRAFT_SETTINGS_SECONDS_MIN,
@@ -63,7 +64,6 @@ export function DraftSettingsSection<
 
   const timerSwitch = (
     name: 'draft_timer_enabled' | 'hero_timer_enabled',
-    label: string,
     testId: string,
     seconds: SecondsField[],
   ) => (
@@ -71,8 +71,10 @@ export function DraftSettingsSection<
       control={control}
       name={name}
       render={({ field }) => (
-        <FormItem className="flex items-center justify-between">
-          <FormLabel>{label}</FormLabel>
+        <FormItem className="ml-auto flex items-center gap-2 space-y-0">
+          <FormLabel className="text-sm font-normal text-muted-foreground">
+            Turn timer
+          </FormLabel>
           <FormControl>
             <Switch
               checked={field.value}
@@ -95,19 +97,60 @@ export function DraftSettingsSection<
       render={({ field }) => (
         <FormItem>
           <FormLabel>{label}</FormLabel>
-          <FormControl>
-            <Input
-              type="number"
-              step="1"
-              min={DRAFT_SETTINGS_SECONDS_MIN[name]}
-              data-testid={testId}
-              name={field.name}
-              ref={field.ref}
-              onBlur={field.onBlur}
-              value={field.value as string | number}
-              onChange={(e) => field.onChange(e.target.value)}
-            />
-          </FormControl>
+          <div className="flex items-center gap-2">
+            <FormControl>
+              <Input
+                type="number"
+                step="1"
+                min={DRAFT_SETTINGS_SECONDS_MIN[name]}
+                className="w-24"
+                data-testid={testId}
+                name={field.name}
+                ref={field.ref}
+                onBlur={field.onBlur}
+                value={field.value as string | number}
+                onChange={(e) => field.onChange(e.target.value)}
+              />
+            </FormControl>
+            <span className="text-sm text-muted-foreground">s</span>
+          </div>
+          <FormMessage />
+        </FormItem>
+      )}
+    />
+  );
+
+  const select = <V extends string>(
+    name: 'draft_type' | 'draft_timeout_action',
+    label: string,
+    values: readonly V[],
+    labels: Record<V, string>,
+    testId: string,
+  ) => (
+    <FormField
+      control={control}
+      name={name}
+      render={({ field }) => (
+        <FormItem>
+          <FormLabel>{label}</FormLabel>
+          <BrandSelect onValueChange={field.onChange} value={field.value}>
+            <FormControl>
+              <BrandSelectTrigger className="w-full" data-testid={testId}>
+                <SelectValue />
+              </BrandSelectTrigger>
+            </FormControl>
+            <BrandSelectContent>
+              {values.map((v) => (
+                <BrandSelectItem
+                  key={v}
+                  value={v}
+                  data-testid={`${testId}-${v}`}
+                >
+                  {labels[v]}
+                </BrandSelectItem>
+              ))}
+            </BrandSelectContent>
+          </BrandSelect>
           <FormMessage />
         </FormItem>
       )}
@@ -115,131 +158,78 @@ export function DraftSettingsSection<
   );
 
   return (
-    <div className="space-y-3 mt-4" data-testid="draft-settings-section">
-      <h3 className="text-sm font-semibold">Draft Settings</h3>
-      <div className="rounded-md border border-border p-3 space-y-4">
-        {showDraftType && (
-          <FormField
-            control={control}
-            name="draft_type"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Team draft type</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl>
-                    <SelectTrigger
-                      className="w-full"
-                      data-testid="draft-settings-draft-type"
-                    >
-                      <SelectValue />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {DRAFT_STYLE_VALUES.map((v) => (
-                      <SelectItem
-                        key={v}
-                        value={v}
-                        data-testid={`draft-settings-draft-type-${v}`}
-                      >
-                        {DRAFT_STYLE_LABELS[v]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        )}
-
-        <div className="space-y-3" data-testid="draft-settings-team">
-          <h4 className="text-sm font-medium text-muted-foreground">
-            Team draft
-          </h4>
-          {timerSwitch(
+    <div
+      className="@container mt-4 flex flex-col gap-3"
+      data-testid="draft-settings-section"
+    >
+      <h3 className="text-sm font-semibold">Draft settings</h3>
+      <div className="grid grid-cols-1 gap-3 @2xl:grid-cols-2">
+        <SettingsCard
+          title="Team draft"
+          testId="draft-settings-team"
+          toggle={timerSwitch(
             'draft_timer_enabled',
-            'Turn timer',
             'draft-settings-team-timer-enabled',
             ['draft_grace_time_s', 'draft_reserve_time_s'],
           )}
+        >
+          {showDraftType &&
+            select(
+              'draft_type',
+              'Draft type',
+              DRAFT_STYLE_VALUES,
+              DRAFT_STYLE_LABELS,
+              'draft-settings-draft-type',
+            )}
           {teamTimerOn ? (
             <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="flex flex-wrap gap-x-6 gap-y-3">
                 {secondsInput(
                   'draft_grace_time_s',
-                  'Grace time (s)',
+                  'Grace time',
                   'draft-settings-team-grace-s',
                 )}
                 {secondsInput(
                   'draft_reserve_time_s',
-                  'Reserve time (s)',
+                  'Reserve time',
                   'draft-settings-team-reserve-s',
                 )}
               </div>
-              {showTimeoutAction && (
-                <FormField
-                  control={control}
-                  name="draft_timeout_action"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>On timeout</FormLabel>
-                      <Select
-                        onValueChange={field.onChange}
-                        value={field.value}
-                      >
-                        <FormControl>
-                          <SelectTrigger
-                            className="w-full"
-                            data-testid="draft-settings-team-timeout-action"
-                          >
-                            <SelectValue />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {TIMEOUT_ACTION_VALUES.map((v) => (
-                            <SelectItem
-                              key={v}
-                              value={v}
-                              data-testid={`draft-settings-team-timeout-action-${v}`}
-                            >
-                              {TIMEOUT_ACTION_LABELS[v]}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              )}
+              {showTimeoutAction &&
+                select(
+                  'draft_timeout_action',
+                  'On timeout',
+                  TIMEOUT_ACTION_VALUES,
+                  TIMEOUT_ACTION_LABELS,
+                  'draft-settings-team-timeout-action',
+                )}
             </>
           ) : (
             <FormDescription>
               Captains pick without a time limit
             </FormDescription>
           )}
-        </div>
+        </SettingsCard>
 
-        <div className="space-y-3" data-testid="draft-settings-hero">
-          <h4 className="text-sm font-medium text-muted-foreground">
-            Hero draft
-          </h4>
-          {timerSwitch(
+        <SettingsCard
+          title="Hero draft"
+          testId="draft-settings-hero"
+          toggle={timerSwitch(
             'hero_timer_enabled',
-            'Turn timer',
             'draft-settings-hero-timer-enabled',
             ['hero_grace_time_s', 'hero_reserve_time_s'],
           )}
+        >
           {heroTimerOn ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="flex flex-wrap gap-x-6 gap-y-3">
               {secondsInput(
                 'hero_grace_time_s',
-                'Grace time per pick (s)',
+                'Grace per pick',
                 'draft-settings-hero-grace-s',
               )}
               {secondsInput(
                 'hero_reserve_time_s',
-                'Reserve time per team (s)',
+                'Reserve per team',
                 'draft-settings-hero-reserve-s',
               )}
             </div>
@@ -248,8 +238,33 @@ export function DraftSettingsSection<
               Hero picks and bans have no time limit
             </FormDescription>
           )}
-        </div>
+        </SettingsCard>
       </div>
+    </div>
+  );
+}
+
+function SettingsCard({
+  title,
+  testId,
+  toggle,
+  children,
+}: {
+  title: string;
+  testId: string;
+  toggle: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      className="flex flex-col gap-4 rounded-md border border-border bg-base-300 p-4"
+      data-testid={testId}
+    >
+      <div className="flex items-center gap-3">
+        <h4 className="text-sm font-semibold">{title}</h4>
+        {toggle}
+      </div>
+      {children}
     </div>
   );
 }
