@@ -140,6 +140,7 @@ class CustomUser(AbstractUser):
     discordId = models.TextField(null=True, unique=True, blank=True)
     discordUsername = models.TextField(null=True, blank=True)
     discordNickname = models.TextField(null=True, blank=True)
+    # deprecated: replaced by OrgUser.guild_nickname; dropped in a later release
     guildNickname = models.TextField(null=True, blank=True)
     default_organization = models.ForeignKey(
         "Organization",
