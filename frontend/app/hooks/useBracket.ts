@@ -1,12 +1,19 @@
-import { useEffect, useRef } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AxiosError } from 'axios';
+import { useEffect, useRef } from 'react';
 import { toast } from 'sonner';
-import { loadBracket as loadBracketAPI, saveBracket as saveBracketAPI } from '~/components/api/bracketAPI';
-import { useBracketStore, mapApiMatchToMatch } from '~/store/bracketStore';
+import {
+  advanceWinner as advanceWinnerAPI,
+  loadBracket as loadBracketAPI,
+  saveBracket as saveBracketAPI,
+} from '~/components/api/bracketAPI';
+import type {
+  BracketMatchDTO,
+  BracketResponseDTO,
+} from '~/components/bracket/schemas';
 import type { BracketMatch } from '~/components/bracket/types';
-import type { BracketMatchDTO } from '~/components/bracket/schemas';
 import { getLogger } from '~/lib/logger';
+import { mapApiMatchToMatch, useBracketStore } from '~/store/bracketStore';
 
 const log = getLogger('bracket:save');
 
@@ -14,12 +21,17 @@ const log = getLogger('bracket:save');
  * Pulls a user-facing message out of a save_bracket / advance_winner
  * error response. Backend returns { error, code, details? } on 4xx.
  */
-function parseBracketError(error: unknown): { message: string; code?: string; details?: unknown } {
+function parseBracketError(error: unknown): {
+  message: string;
+  code?: string;
+  details?: unknown;
+} {
   if (error instanceof AxiosError) {
     const data = error.response?.data as
       | { error?: string; detail?: string; code?: string; details?: unknown }
       | undefined;
-    const message = data?.error || data?.detail || error.message || 'Bracket request failed';
+    const message =
+      data?.error || data?.detail || error.message || 'Bracket request failed';
     return { message, code: data?.code, details: data?.details };
   }
   if (error instanceof Error) {
@@ -70,11 +82,16 @@ export function useBracketQuery(tournamentId: number | null) {
     }
 
     // Map API matches to frontend format
-    const mappedMatches = apiMatches.map((m) => mapApiMatchToMatch(m, apiMatches));
+    const mappedMatches = apiMatches.map((m) =>
+      mapApiMatchToMatch(m, apiMatches),
+    );
 
     // Compare to avoid unnecessary rerenders (same logic as old bracketStore.loadBracket)
     const newKey = mappedMatches
-      .map((m) => `${m.id}-${m.winner}-${m.status}-${m.radiantTeam?.pk}-${m.direTeam?.pk}-${m.lobbyState}`)
+      .map(
+        (m) =>
+          `${m.id}-${m.winner}-${m.status}-${m.radiantTeam?.pk}-${m.direTeam?.pk}-${m.lobbyState}`,
+      )
       .join('|');
 
     if (newKey === previousDataRef.current) return;
@@ -85,10 +102,59 @@ export function useBracketQuery(tournamentId: number | null) {
       isDirty: false,
       isVirtual: false,
     });
-    log.debug('Bracket updated from query', { matchCount: mappedMatches.length });
+    log.debug('Bracket updated from query', {
+      matchCount: mappedMatches.length,
+    });
   }, [query.data, isDirty]);
 
   return query;
+}
+
+interface MatchResultVars {
+  gameId: number;
+  winner: 'radiant' | 'dire' | null;
+}
+
+/**
+ * Persists a single match result via advance_winner (issue #466). The caller
+ * applies the change to the store first; on success the server's bracket
+ * replaces it, on failure the last fetched bracket is restored.
+ */
+export function usePersistMatchResult(tournamentId: number | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ gameId, winner }: MatchResultVars) =>
+      advanceWinnerAPI(gameId, winner),
+    onSuccess: (_data, { gameId, winner }) => {
+      useBracketStore.setState({ isDirty: false });
+      queryClient.invalidateQueries({ queryKey: ['bracket', tournamentId] });
+      log.info('bracket_match_result_saved', { tournamentId, gameId, winner });
+    },
+    onError: (error, { gameId, winner }) => {
+      const { message, code, details } = parseBracketError(error);
+      log.error('bracket_match_result_failed', {
+        tournamentId,
+        gameId,
+        winner,
+        message,
+        code,
+        details,
+      });
+      toast.error(`Failed to save match result: ${message}`);
+      const cached = queryClient.getQueryData<BracketResponseDTO>([
+        'bracket',
+        tournamentId,
+      ]);
+      if (cached) {
+        const apiMatches = cached.matches as unknown as BracketMatchDTO[];
+        useBracketStore.setState({
+          matches: apiMatches.map((m) => mapApiMatchToMatch(m, apiMatches)),
+          isDirty: false,
+        });
+      }
+      queryClient.invalidateQueries({ queryKey: ['bracket', tournamentId] });
+    },
+  });
 }
 
 /**
@@ -97,11 +163,14 @@ export function useBracketQuery(tournamentId: number | null) {
 export function useSaveBracket(tournamentId: number) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (matches: BracketMatch[]) => saveBracketAPI(tournamentId, matches),
+    mutationFn: (matches: BracketMatch[]) =>
+      saveBracketAPI(tournamentId, matches),
     onSuccess: (data) => {
       // Update Zustand store with saved matches (they now have backend PKs)
       const apiMatches = data.matches as unknown as BracketMatchDTO[];
-      const savedMatches = apiMatches.map((m) => mapApiMatchToMatch(m, apiMatches));
+      const savedMatches = apiMatches.map((m) =>
+        mapApiMatchToMatch(m, apiMatches),
+      );
       useBracketStore.setState({
         matches: savedMatches,
         isDirty: false,
@@ -109,12 +178,20 @@ export function useSaveBracket(tournamentId: number) {
       });
       // Invalidate to ensure cache is fresh
       queryClient.invalidateQueries({ queryKey: ['bracket', tournamentId] });
-      log.info('bracket_saved', { tournamentId, matchCount: savedMatches.length });
+      log.info('bracket_saved', {
+        tournamentId,
+        matchCount: savedMatches.length,
+      });
       toast.success('Bracket saved');
     },
     onError: (error) => {
       const { message, code, details } = parseBracketError(error);
-      log.error('bracket_save_failed', { tournamentId, message, code, details });
+      log.error('bracket_save_failed', {
+        tournamentId,
+        message,
+        code,
+        details,
+      });
       toast.error(`Failed to save bracket: ${message}`);
     },
   });

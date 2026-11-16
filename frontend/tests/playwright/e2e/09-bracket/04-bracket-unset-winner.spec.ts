@@ -3,12 +3,15 @@
  *
  * Covers the full lifecycle that was missed by the original suite:
  *
- *  1. Sanity (no save): set → Unset Winner button appears.
- *  2. Persistence: set → Save → reload → bracket card shows the winner
- *     check AND modal still offers Unset Winner.
- *  3. Unset across save boundary: set → Save → reload → click Unset → Save
- *     → reload → bracket card has no winner check, modal shows Set Winner
- *     buttons again.
+ * Setting or unsetting a winner in the modal persists that match result on
+ * its own (issue #466) — no bracket-wide Save.
+ *
+ *  1. Sanity: set → Unset Winner button appears → unset.
+ *  2. Persistence: set → reload → bracket card shows the winner check, the
+ *     winner and loser sit in their next games, and the modal still offers
+ *     Unset Winner.
+ *  3. Unset: set → reload → Unset → reload → bracket card has no winner
+ *     check, downstream slots are cleared, modal shows Set Winner again.
  *  4. Stuck-state recovery (issue #235): force the prod scenario where
  *     ``status=completed`` but ``winning_team`` no longer matches either
  *     team in the slots. Unset Winner must still be visible and clicking
@@ -29,12 +32,13 @@
  * has Alpha vs Beta which we drive in every test.
  */
 
+import type { Locator, Page } from '@playwright/test';
 import {
-  test,
+  clickAndPersistMatchResult,
   expect,
+  test,
   visitAndWaitForHydration,
 } from '../../fixtures';
-import type { Page, Locator } from '@playwright/test';
 
 // Tournament pk is captured per-test from the reset response. The reset
 // endpoint DELETES + recreates the tournament so the pk changes; capturing
@@ -61,9 +65,9 @@ test.describe('Bracket Unset Winner (e2e)', () => {
     // the populated baseline (all games pending). The endpoint returns the
     // freshly-created tournament — we re-bind tournamentPk from its body
     // because the delete-and-recreate gives it a new pk.
-    const resetResp = await page.context().request.post(
-      '/api/tests/reset-tournament/bracket_unset_winner/',
-    );
+    const resetResp = await page
+      .context()
+      .request.post('/api/tests/reset-tournament/bracket_unset_winner/');
     expect(resetResp.status()).toBe(200);
     const tournament = await resetResp.json();
     tournamentPk = tournament.pk;
@@ -96,116 +100,184 @@ test.describe('Bracket Unset Winner (e2e)', () => {
     await expect(dialog).toBeHidden({ timeout: 5000 });
   }
 
-  /** Click Save and wait for the "Unsaved changes" indicator to disappear. */
-  async function clickSaveAndWait(page: Page) {
-    await page.locator('[data-testid="saveBracketButton"]').click();
-    await expect(page.locator('text=Unsaved changes')).toBeHidden({ timeout: 10000 });
+  async function reloadBracket(page: Page): Promise<void> {
+    await page.reload();
+    await expect(page.locator('[data-testid="bracketContainer"]')).toBeVisible({
+      timeout: 15000,
+    });
+    await page.waitForLoadState('networkidle');
   }
 
-  test('@cicd sanity: staff can set and unset bracket winner (in-memory)', async ({ page }) => {
+  type ApiTeam = { pk: number } | null;
+  type ApiGame = {
+    pk: number;
+    bracket_type: string;
+    round: number;
+    position: number;
+    radiant_team: ApiTeam;
+    dire_team: ApiTeam;
+    next_game: number | null;
+    next_game_slot: 'radiant' | 'dire' | null;
+    loser_next_game: number | null;
+    loser_next_game_slot: 'radiant' | 'dire' | null;
+  };
+
+  async function fetchGames(page: Page): Promise<ApiGame[]> {
+    const resp = await page
+      .context()
+      .request.get(`/api/bracket/tournaments/${tournamentPk}/`);
+    expect(resp.status()).toBe(200);
+    return (await resp.json()).matches as ApiGame[];
+  }
+
+  function slotTeam(game: ApiGame, slot: 'radiant' | 'dire' | null): ApiTeam {
+    return slot === 'radiant'
+      ? game.radiant_team
+      : slot === 'dire'
+        ? game.dire_team
+        : null;
+  }
+
+  test('@cicd sanity: staff can set and unset bracket winner from the modal', async ({
+    page,
+  }) => {
     await loadBracket(page);
 
     const dialog = await openTargetModal(page);
-    await dialog.locator('[data-testid="radiantWinsButton"]').click();
+    await clickAndPersistMatchResult(
+      page,
+      dialog.locator('[data-testid="radiantWinsButton"]'),
+    );
 
     // Unset Winner appears in the same modal session.
-    await expect(dialog.locator('[data-testid="unsetWinnerButton"]')).toBeVisible({
+    await expect(
+      dialog.locator('[data-testid="unsetWinnerButton"]'),
+    ).toBeVisible({
       timeout: 5000,
     });
 
-    await dialog.locator('[data-testid="unsetWinnerButton"]').click();
+    await clickAndPersistMatchResult(
+      page,
+      dialog.locator('[data-testid="unsetWinnerButton"]'),
+    );
 
     // Set Winner buttons return.
-    await expect(dialog.locator('[data-testid="radiantWinsButton"]')).toBeVisible({
+    await expect(
+      dialog.locator('[data-testid="radiantWinsButton"]'),
+    ).toBeVisible({
       timeout: 5000,
     });
   });
 
-  test('winner persists across Save + reload and bracket card shows the check', async ({
+  test('winner and loser advancement persist across reload without Save (issue #466)', async ({
     page,
   }) => {
     await loadBracket(page);
 
-    // Set radiant as winner.
+    // Set radiant as winner; the modal persists it, no bracket Save.
     let dialog = await openTargetModal(page);
-    await dialog.locator('[data-testid="radiantWinsButton"]').click();
+    await clickAndPersistMatchResult(
+      page,
+      dialog.locator('[data-testid="radiantWinsButton"]'),
+    );
     await closeModal(page);
 
-    // Save + reload — the boundary the original test never crossed.
-    await clickSaveAndWait(page);
-    await page.reload();
-    await loadBracket(page).catch(async () => {
-      // visitAndWaitForHydration above already ran via loadBracket; if the
-      // bracketContainer takes longer post-reload, give it the same wait
-      // semantics. Empty catch so the original loadBracket assertion fires.
-    });
-    // Belt-and-suspenders: wait for the bracket again after reload.
-    await expect(page.locator('[data-testid="bracketContainer"]')).toBeVisible({
-      timeout: 15000,
-    });
-    await page.waitForLoadState('networkidle');
+    await reloadBracket(page);
+
+    // The server placed the winner in the next game and the loser in the
+    // losers bracket.
+    const games = await fetchGames(page);
+    const source = games.find(
+      (g) => g.bracket_type === 'winners' && g.round === 1 && g.position === 0,
+    );
+    expect(source).toBeDefined();
+    const next = games.find((g) => g.pk === source!.next_game);
+    const loserNext = games.find((g) => g.pk === source!.loser_next_game);
+    expect(next).toBeDefined();
+    expect(loserNext).toBeDefined();
+    expect(slotTeam(next!, source!.next_game_slot)?.pk).toBe(
+      source!.radiant_team?.pk,
+    );
+    expect(slotTeam(loserNext!, source!.loser_next_game_slot)?.pk).toBe(
+      source!.dire_team?.pk,
+    );
 
     // Bracket card must render the green check on radiant.
     const node = page.locator(TARGET_MATCH_SELECTOR);
-    await expect(node.locator('[data-testid="bracket-winner-check-radiant"]')).toBeVisible();
-    await expect(node.locator('[data-testid="bracket-team-slot-radiant"]')).toHaveAttribute(
-      'data-team-status',
-      'winner',
-    );
-    await expect(node.locator('[data-testid="bracket-team-slot-dire"]')).toHaveAttribute(
-      'data-team-status',
-      'loser',
-    );
+    await expect(
+      node.locator('[data-testid="bracket-winner-check-radiant"]'),
+    ).toBeVisible();
+    await expect(
+      node.locator('[data-testid="bracket-team-slot-radiant"]'),
+    ).toHaveAttribute('data-team-status', 'winner');
+    await expect(
+      node.locator('[data-testid="bracket-team-slot-dire"]'),
+    ).toHaveAttribute('data-team-status', 'loser');
 
     // Modal must still let the admin reverse the decision.
     dialog = await openTargetModal(page);
-    await expect(dialog.locator('[data-testid="unsetWinnerButton"]')).toBeVisible({
+    await expect(
+      dialog.locator('[data-testid="unsetWinnerButton"]'),
+    ).toBeVisible({
       timeout: 5000,
     });
   });
 
-  test('unset clears the winner on the bracket card after Save + reload', async ({
+  test('unset clears the winner on the bracket card after reload', async ({
     page,
   }) => {
     await loadBracket(page);
 
-    // Set + Save so we have a real persisted winner to unset.
+    // Persist a real winner to unset.
     let dialog = await openTargetModal(page);
-    await dialog.locator('[data-testid="radiantWinsButton"]').click();
+    await clickAndPersistMatchResult(
+      page,
+      dialog.locator('[data-testid="radiantWinsButton"]'),
+    );
     await closeModal(page);
-    await clickSaveAndWait(page);
-    await page.reload();
-    await expect(page.locator('[data-testid="bracketContainer"]')).toBeVisible({
-      timeout: 15000,
-    });
-    await page.waitForLoadState('networkidle');
+    await reloadBracket(page);
 
-    // Unset → Save → reload.
+    // Unset → reload.
     dialog = await openTargetModal(page);
-    await dialog.locator('[data-testid="unsetWinnerButton"]').click();
+    await clickAndPersistMatchResult(
+      page,
+      dialog.locator('[data-testid="unsetWinnerButton"]'),
+    );
     await closeModal(page);
-    await clickSaveAndWait(page);
-    await page.reload();
-    await expect(page.locator('[data-testid="bracketContainer"]')).toBeVisible({
-      timeout: 15000,
-    });
-    await page.waitForLoadState('networkidle');
+    await reloadBracket(page);
+
+    // The advanced teams were pulled back out of the downstream slots.
+    const games = await fetchGames(page);
+    const source = games.find(
+      (g) => g.bracket_type === 'winners' && g.round === 1 && g.position === 0,
+    );
+    const next = games.find((g) => g.pk === source!.next_game);
+    const loserNext = games.find((g) => g.pk === source!.loser_next_game);
+    expect(slotTeam(next!, source!.next_game_slot)).toBeNull();
+    expect(slotTeam(loserNext!, source!.loser_next_game_slot)).toBeNull();
 
     // Bracket card: no winner check on either side, both slots back to pending.
     const node = page.locator(TARGET_MATCH_SELECTOR);
-    await expect(node.locator('[data-testid="bracket-winner-check-radiant"]')).toHaveCount(0);
-    await expect(node.locator('[data-testid="bracket-winner-check-dire"]')).toHaveCount(0);
-    await expect(node.locator('[data-testid="bracket-team-slot-radiant"]')).toHaveAttribute(
-      'data-team-status',
-      'pending',
-    );
+    await expect(
+      node.locator('[data-testid="bracket-winner-check-radiant"]'),
+    ).toHaveCount(0);
+    await expect(
+      node.locator('[data-testid="bracket-winner-check-dire"]'),
+    ).toHaveCount(0);
+    await expect(
+      node.locator('[data-testid="bracket-team-slot-radiant"]'),
+    ).toHaveAttribute('data-team-status', 'pending');
 
     // Modal: Set Winner buttons must be back.
     dialog = await openTargetModal(page);
-    await expect(dialog.locator('[data-testid="radiantWinsButton"]')).toBeVisible({
+    await expect(
+      dialog.locator('[data-testid="radiantWinsButton"]'),
+    ).toBeVisible({
       timeout: 5000,
     });
-    await expect(dialog.locator('[data-testid="unsetWinnerButton"]')).toBeHidden();
+    await expect(
+      dialog.locator('[data-testid="unsetWinnerButton"]'),
+    ).toBeHidden();
   });
 
   test('stuck-state recovery: status=completed with mismatched winning_team can still be unset (issue #235)', async ({
@@ -224,10 +296,11 @@ test.describe('Bracket Unset Winner (e2e)', () => {
     // in either slot, so mapApiMatchToMatch can't derive match.winner. This
     // is exactly the prod state that hid the Unset Winner button before
     // PR #236.
-    const forced = await page.context().request.post(
-      '/api/tests/bracket/force-mismatched-winning-team/',
-      { data: { game_id: matchPk } },
-    );
+    const forced = await page
+      .context()
+      .request.post('/api/tests/bracket/force-mismatched-winning-team/', {
+        data: { game_id: matchPk },
+      });
     expect(forced.status()).toBe(200);
     const forcedBody = await forced.json();
     expect(forcedBody.winning_team_id).not.toBe(forcedBody.radiant_team_id);
@@ -241,29 +314,35 @@ test.describe('Bracket Unset Winner (e2e)', () => {
 
     // Bracket card: neither team is marked as winner since the FK doesn't
     // resolve to either slot. (The defining trait of the stuck state.)
-    await expect(node.locator('[data-testid="bracket-winner-check-radiant"]')).toHaveCount(0);
-    await expect(node.locator('[data-testid="bracket-winner-check-dire"]')).toHaveCount(0);
+    await expect(
+      node.locator('[data-testid="bracket-winner-check-radiant"]'),
+    ).toHaveCount(0);
+    await expect(
+      node.locator('[data-testid="bracket-winner-check-dire"]'),
+    ).toHaveCount(0);
 
     // Modal: PR #236 surfaces Unset Winner even when winner is undefined
     // (gate is now `status === 'completed' || match.winner`). Without the
     // fix this assertion fails — the regression we want CI to catch.
     const dialog = await openTargetModal(page);
-    await expect(dialog.locator('[data-testid="unsetWinnerButton"]')).toBeVisible({
+    await expect(
+      dialog.locator('[data-testid="unsetWinnerButton"]'),
+    ).toBeVisible({
       timeout: 5000,
     });
-    await expect(dialog.locator('[data-testid="radiantWinsButton"]')).toBeHidden();
+    await expect(
+      dialog.locator('[data-testid="radiantWinsButton"]'),
+    ).toBeHidden();
 
-    // Click Unset → Save → reload. The store's recovery path resets just
-    // status (since there's no winner to clear from downstream slots), so
-    // after save the row is back to pending with Set Winner buttons.
-    await dialog.locator('[data-testid="unsetWinnerButton"]').click();
+    // Click Unset → reload. There's no derivable winner to pull out of
+    // downstream slots, so only the row resets: back to pending with Set
+    // Winner buttons.
+    await clickAndPersistMatchResult(
+      page,
+      dialog.locator('[data-testid="unsetWinnerButton"]'),
+    );
     await closeModal(page);
-    await clickSaveAndWait(page);
-    await page.reload();
-    await expect(page.locator('[data-testid="bracketContainer"]')).toBeVisible({
-      timeout: 15000,
-    });
-    await page.waitForLoadState('networkidle');
+    await reloadBracket(page);
 
     const recoveredDialog = await openTargetModal(page);
     await expect(

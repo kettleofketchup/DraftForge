@@ -5,6 +5,7 @@ from django.db.models import Max, Prefetch
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
+from rest_framework.request import Request
 from rest_framework.response import Response
 
 from app.cache_utils import invalidate_after_commit, invalidate_obj
@@ -349,10 +350,85 @@ def calculate_placement(game):
     return None
 
 
+def _unset_winner(game: Game) -> Response:
+    """Clear a game's result and pull its advanced teams back out of downstream slots."""
+    winning_team = game.winning_team
+    losing_team: Team | None = None
+    if winning_team is not None:
+        if winning_team.pk == game.radiant_team_id:
+            losing_team = game.dire_team
+        elif winning_team.pk == game.dire_team_id:
+            losing_team = game.radiant_team
+
+    to_clear: list[tuple[Game, str]] = []
+    for target, slot, team in (
+        (game.next_game, game.next_game_slot, winning_team),
+        (game.loser_next_game, game.loser_next_game_slot, losing_team),
+    ):
+        if target is None or slot not in ("radiant", "dire") or team is None:
+            continue
+        if getattr(target, f"{slot}_team_id") != team.pk:
+            continue
+        if target.status == "completed":
+            log.warning(
+                "bracket_unset_blocked_downstream_completed",
+                system="bracket",
+                subsystem="advance",
+                game_id=game.pk,
+                downstream_game_id=target.pk,
+            )
+            return Response(
+                {
+                    "error": "A later match with this team is already completed; unset it first",
+                    "code": "downstream_match_completed",
+                    "details": {"downstream_game_id": target.pk},
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+        to_clear.append((target, slot))
+
+    for target, slot in to_clear:
+        setattr(target, f"{slot}_team", None)
+        target.save()
+
+    teams_to_reset = [losing_team]
+    if game.bracket_type == "grand_finals":
+        teams_to_reset.append(winning_team)
+    reset_teams: list[Team] = []
+    for team in teams_to_reset:
+        if team is not None and team.placement is not None:
+            team.placement = None
+            team.save()
+            reset_teams.append(team)
+
+    game.winning_team = None
+    game.status = "pending"
+    game.save()
+
+    log.info(
+        "bracket_winner_unset",
+        system="bracket",
+        subsystem="advance",
+        game_id=game.pk,
+        tournament_id=game.tournament_id,
+        bracket_type=game.bracket_type,
+        cleared_downstream=[t.pk for t, _ in to_clear],
+        placements_cleared=[t.pk for t in reset_teams],
+    )
+
+    invalidate_after_commit(
+        game,
+        *(t for t, _ in to_clear),
+        *reset_teams,
+        *([game.tournament] if game.tournament else []),
+    )
+    return Response(BracketGameSerializer(game).data)
+
+
 @api_view(["POST"])
 @permission_classes([IsTournamentStaff])
 @transaction.atomic
-def advance_winner(request, game_id):
+def advance_winner(request: Request, game_id: int) -> Response:
     """Mark winner and advance to next match, setting placement if eliminated.
 
     Requires league staff access.
@@ -373,31 +449,8 @@ def advance_winner(request, game_id):
 
     winner = request.data.get("winner")
 
-    # Handle unset case
     if winner is None:
-        if game.winning_team:
-            # Find losing team to clear their placement
-            losing_team = (
-                game.dire_team
-                if game.winning_team == game.radiant_team
-                else game.radiant_team
-            )
-            if losing_team and losing_team.placement:
-                losing_team.placement = None
-                losing_team.save()
-
-        game.winning_team = None
-        game.status = "scheduled"
-        game.save()
-        log.info(
-            "bracket_winner_unset",
-            system="bracket",
-            subsystem="advance",
-            game_id=game.pk,
-            tournament_id=game.tournament_id,
-            bracket_type=game.bracket_type,
-        )
-        return Response(BracketGameSerializer(game).data)
+        return _unset_winner(game)
 
     winner_slot = winner  # 'radiant' or 'dire'
     if winner_slot not in ["radiant", "dire"]:

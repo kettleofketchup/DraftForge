@@ -1,33 +1,34 @@
+import { useQueryClient } from '@tanstack/react-query';
+import { BarChart3, Link2, Loader2, RotateCcw, Swords } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { toast } from 'sonner';
+import { LobbyPanel } from '~/components/lobby/LobbyPanel';
+import { provisionalWinnerSlot } from '~/components/lobby/provisional';
+import { useOrganization } from '~/components/organization';
+import { AdminOnlyButton } from '~/components/reusable/adminButton';
+import { Avatar, AvatarFallback, AvatarImage } from '~/components/ui/avatar';
+import { Badge } from '~/components/ui/badge';
+import { PrimaryButton, SecondaryButton } from '~/components/ui/buttons';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
 } from '~/components/ui/dialog';
 import { ConfirmDialog } from '~/components/ui/dialogs';
-import { PrimaryButton, SecondaryButton } from '~/components/ui/buttons';
-import { Badge } from '~/components/ui/badge';
-import { Avatar, AvatarFallback, AvatarImage } from '~/components/ui/avatar';
-import { BarChart3, Link2, Loader2, RotateCcw, Swords, UserLock } from 'lucide-react';
-import { useUserStore } from '~/store/userStore';
-import { useIsLeagueStaff } from '~/hooks/usePermissions';
-import { useOrganization } from '~/components/organization';
-import { AdminOnlyButton } from '~/components/reusable/adminButton';
-import { useBracketStore } from '~/store/bracketStore';
-import { useQueryClient } from '@tanstack/react-query';
-import { useCreateHeroDraft, useResetHeroDraft } from '~/hooks/useHeroDraft';
+import { DisplayName } from '~/components/user/avatar';
+import { usePersistMatchResult } from '~/hooks/useBracket';
 import { useGameLobby } from '~/hooks/useGameLobby';
-import { LobbyPanel } from '~/components/lobby/LobbyPanel';
-import { provisionalWinnerSlot } from '~/components/lobby/provisional';
+import { useCreateHeroDraft, useResetHeroDraft } from '~/hooks/useHeroDraft';
+import { useIsLeagueStaff } from '~/hooks/usePermissions';
+import { cn } from '~/lib/utils';
+import { useBracketStore } from '~/store/bracketStore';
+import { useUserStore } from '~/store/userStore';
+import type { BracketMatch } from '../types';
 import { DotaMatchStatsModal } from './DotaMatchStatsModal';
 import { LinkSteamMatchModal } from './LinkSteamMatchModal';
-import type { BracketMatch } from '../types';
-import { cn } from '~/lib/utils';
-import { DisplayName } from '~/components/user/avatar';
 
 interface MatchStatsModalProps {
   match: BracketMatch | null;
@@ -37,7 +38,13 @@ interface MatchStatsModalProps {
   onOpenHeroDraft?: (draftId: number) => void;
 }
 
-export function MatchStatsModal({ match: matchProp, isOpen, onClose, initialDraftId, onOpenHeroDraft }: MatchStatsModalProps) {
+export function MatchStatsModal({
+  match: matchProp,
+  isOpen,
+  onClose,
+  initialDraftId,
+  onOpenHeroDraft,
+}: MatchStatsModalProps) {
   const navigate = useNavigate();
   const { pk } = useParams<{ pk: string }>();
   const isStaff = useUserStore((state) => state.isStaff());
@@ -45,12 +52,14 @@ export function MatchStatsModal({ match: matchProp, isOpen, onClose, initialDraf
   const tournament = useUserStore((state) => state.tournament);
   // Fetch the full org so org-staff membership flows into useIsLeagueStaff —
   // tournament.league.organization (when serialized) is the lightweight org without staff_ids.
-  const { organization: leagueOrg } = useOrganization(tournament?.organization_pk ?? undefined);
+  const { organization: leagueOrg } = useOrganization(
+    tournament?.organization_pk ?? undefined,
+  );
   const isLeagueStaff = useIsLeagueStaff(tournament?.league, leagueOrg);
 
   // Subscribe to match directly from store for reactive updates
   const storeMatch = useBracketStore((state) =>
-    matchProp ? state.matches.find(m => m.id === matchProp.id) : null
+    matchProp ? state.matches.find((m) => m.id === matchProp.id) : null,
   );
   // Use store match if available (has latest state), otherwise fall back to prop
   const match = storeMatch ?? matchProp;
@@ -59,6 +68,7 @@ export function MatchStatsModal({ match: matchProp, isOpen, onClose, initialDraf
   const advanceWinner = useBracketStore((state) => state.advanceWinner);
   const unsetMatchWinner = useBracketStore((state) => state.unsetMatchWinner);
   const queryClient = useQueryClient();
+  const persistMatchResult = usePersistMatchResult(tournament?.pk ?? undefined);
 
   const [showStatsModal, setShowStatsModal] = useState(false);
   const [showLinkModal, setShowLinkModal] = useState(false);
@@ -68,25 +78,45 @@ export function MatchStatsModal({ match: matchProp, isOpen, onClose, initialDraf
   const resetDraftMutation = useResetHeroDraft();
 
   // The lobby's provisional result pre-selects (never submits) a winner.
-  const { data: lobbyData } = useGameLobby(match?.gameId, isOpen && !!currentUser);
+  const { data: lobbyData } = useGameLobby(
+    match?.gameId,
+    isOpen && !!currentUser,
+  );
 
   if (!match) return null;
 
   const lobbyWinnerSlot =
     match.status !== 'completed'
-      ? provisionalWinnerSlot(lobbyData?.lobby, match.radiantTeam?.pk, match.direTeam?.pk)
+      ? provisionalWinnerSlot(
+          lobbyData?.lobby,
+          match.radiantTeam?.pk,
+          match.direTeam?.pk,
+        )
       : null;
 
   const isGameComplete = match.status === 'completed';
   const hasMatchId = !!match.steamMatchId;
 
+  // A saved bracket with no other pending edits persists the result straight
+  // away; otherwise the server's teams may differ, so it rides the next Save.
+  const canPersistResult = () =>
+    !!match.gameId && !useBracketStore.getState().isDirty;
+
   const handleSetWinner = (winner: 'radiant' | 'dire') => {
+    const persist = canPersistResult();
     setMatchWinner(match.id, winner);
     advanceWinner(match.id);
+    if (persist && match.gameId) {
+      persistMatchResult.mutate({ gameId: match.gameId, winner });
+    }
   };
 
   const handleUnsetWinner = () => {
+    const persist = canPersistResult();
     unsetMatchWinner(match.id);
+    if (persist && match.gameId) {
+      persistMatchResult.mutate({ gameId: match.gameId, winner: null });
+    }
   };
 
   const handleLinkUpdated = () => {
@@ -137,10 +167,13 @@ export function MatchStatsModal({ match: matchProp, isOpen, onClose, initialDraf
 
         // Reload bracket to update herodraft_id in the match
         if (tournament?.pk) {
-          queryClient.invalidateQueries({ queryKey: ['bracket', tournament.pk] });
+          queryClient.invalidateQueries({
+            queryKey: ['bracket', tournament.pk],
+          });
         }
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
+        const message =
+          error instanceof Error ? error.message : 'Unknown error';
         toast.error(`Failed to create draft: ${message}`);
         return;
       }
@@ -169,7 +202,9 @@ export function MatchStatsModal({ match: matchProp, isOpen, onClose, initialDraf
         data-testid="matchStatsModal"
       >
         <DialogHeader className="shrink-0 pr-8">
-          <DialogTitle data-testid="match-details-header">Match Details</DialogTitle>
+          <DialogTitle data-testid="match-details-header">
+            Match Details
+          </DialogTitle>
           <DialogDescription>
             {match.bracketType === 'grand_finals'
               ? 'Grand Finals'
@@ -197,7 +232,9 @@ export function MatchStatsModal({ match: matchProp, isOpen, onClose, initialDraf
 
             {/* VS divider */}
             <div className="flex flex-col items-center gap-1 text-center shrink-0">
-              <span className="text-lg sm:text-2xl font-bold text-muted-foreground">VS</span>
+              <span className="text-lg sm:text-2xl font-bold text-muted-foreground">
+                VS
+              </span>
               {match.status === 'completed' && (
                 <Badge variant="outline" data-testid="match-status-final">
                   Final
@@ -220,45 +257,67 @@ export function MatchStatsModal({ match: matchProp, isOpen, onClose, initialDraf
           </div>
 
           {/* Staff controls */}
-          {isLeagueStaff && match.status !== 'completed' && match.radiantTeam && match.direTeam && (
-            <div className="border-t pt-4">
-              <p className="text-sm text-muted-foreground mb-2">Set Winner:</p>
-              <div className="flex gap-2">
-                <SecondaryButton
-                  className={cn('flex-1', lobbyWinnerSlot === 'radiant' && 'ring-2 ring-yellow-500')}
-                  onClick={() => handleSetWinner('radiant')}
-                  data-testid="radiantWinsButton"
-                  data-lobby-suggested={lobbyWinnerSlot === 'radiant' || undefined}
-                >
-                  {match.radiantTeam.captain ? DisplayName(match.radiantTeam.captain) : match.radiantTeam.name} Wins
-                  {lobbyWinnerSlot === 'radiant' && ' (lobby result)'}
-                </SecondaryButton>
-                <SecondaryButton
-                  className={cn('flex-1', lobbyWinnerSlot === 'dire' && 'ring-2 ring-yellow-500')}
-                  onClick={() => handleSetWinner('dire')}
-                  data-testid="direWinsButton"
-                  data-lobby-suggested={lobbyWinnerSlot === 'dire' || undefined}
-                >
-                  {match.direTeam.captain ? DisplayName(match.direTeam.captain) : match.direTeam.name} Wins
-                  {lobbyWinnerSlot === 'dire' && ' (lobby result)'}
-                </SecondaryButton>
+          {isLeagueStaff &&
+            match.status !== 'completed' &&
+            match.radiantTeam &&
+            match.direTeam && (
+              <div className="border-t pt-4">
+                <p className="text-sm text-muted-foreground mb-2">
+                  Set Winner:
+                </p>
+                <div className="flex gap-2">
+                  <SecondaryButton
+                    className={cn(
+                      'flex-1',
+                      lobbyWinnerSlot === 'radiant' && 'ring-2 ring-yellow-500',
+                    )}
+                    onClick={() => handleSetWinner('radiant')}
+                    disabled={persistMatchResult.isPending}
+                    data-testid="radiantWinsButton"
+                    data-lobby-suggested={
+                      lobbyWinnerSlot === 'radiant' || undefined
+                    }
+                  >
+                    {match.radiantTeam.captain
+                      ? DisplayName(match.radiantTeam.captain)
+                      : match.radiantTeam.name}{' '}
+                    Wins
+                    {lobbyWinnerSlot === 'radiant' && ' (lobby result)'}
+                  </SecondaryButton>
+                  <SecondaryButton
+                    className={cn(
+                      'flex-1',
+                      lobbyWinnerSlot === 'dire' && 'ring-2 ring-yellow-500',
+                    )}
+                    onClick={() => handleSetWinner('dire')}
+                    disabled={persistMatchResult.isPending}
+                    data-testid="direWinsButton"
+                    data-lobby-suggested={
+                      lobbyWinnerSlot === 'dire' || undefined
+                    }
+                  >
+                    {match.direTeam.captain
+                      ? DisplayName(match.direTeam.captain)
+                      : match.direTeam.name}{' '}
+                    Wins
+                    {lobbyWinnerSlot === 'dire' && ' (lobby result)'}
+                  </SecondaryButton>
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
           {/* Unset Winner — show whenever the row is "set", even if the
               derived winner is missing. A match can land in status=completed
               with winner=undefined when the backend's winning_team FK
               doesn't match either current radiant_team / dire_team (e.g. a
               prior team change broke the derivation in bracketStore.ts), and
-              admins need a recovery path. The unset is a pending local
-              change (isDirty=true) and only persists on Save, so showing
-              the button even mid-edit is safe. */}
+              admins need a recovery path. */}
           {isLeagueStaff && (match.status === 'completed' || match.winner) && (
             <div className="border-t pt-4">
               <SecondaryButton
                 size="sm"
                 onClick={handleUnsetWinner}
+                disabled={persistMatchResult.isPending}
                 data-testid="unsetWinnerButton"
               >
                 <RotateCcw className="size-4 mr-1" />
@@ -268,76 +327,83 @@ export function MatchStatsModal({ match: matchProp, isOpen, onClose, initialDraf
           )}
 
           {/* Hero Draft button - show for staff or captains */}
-          {match.radiantTeam && match.direTeam && (() => {
-            // Check if user is a captain of either team in this match
-            const isCaptain =
-              match.radiantTeam?.captain?.pk === currentUser?.pk ||
-              match.direTeam?.captain?.pk === currentUser?.pk;
+          {match.radiantTeam &&
+            match.direTeam &&
+            (() => {
+              // Check if user is a captain of either team in this match
+              const isCaptain =
+                match.radiantTeam?.captain?.pk === currentUser?.pk ||
+                match.direTeam?.captain?.pk === currentUser?.pk;
 
-            // User can access draft if: staff OR captain
-            const canAccessDraft = isStaff || isCaptain;
+              // User can access draft if: staff OR captain
+              const canAccessDraft = isStaff || isCaptain;
 
-            // If draft exists, anyone can view it
-            // If draft doesn't exist, only staff/captain can start it
-            const canStartOrViewDraft = match.herodraft_id || canAccessDraft;
+              // If draft exists, anyone can view it
+              // If draft doesn't exist, only staff/captain can start it
+              const canStartOrViewDraft = match.herodraft_id || canAccessDraft;
 
-            if (!canStartOrViewDraft) {
+              if (!canStartOrViewDraft) {
+                return (
+                  <div className="border-t pt-4">
+                    <AdminOnlyButton
+                      buttonTxt="Start Draft"
+                      tooltipTxt="You must be a staff member or captain to start a draft."
+                    />
+                  </div>
+                );
+              }
+
+              // Check if game exists (bracket has been saved)
+              const gameNotSaved = !match.herodraft_id && !match.gameId;
+
               return (
                 <div className="border-t pt-4">
-                  <AdminOnlyButton
-                    buttonTxt="Start Draft"
-                    tooltipTxt="You must be a staff member or captain to start a draft."
-                  />
+                  <div className="flex flex-col gap-2">
+                    <div className="flex gap-2 flex-wrap">
+                      <PrimaryButton
+                        size="sm"
+                        onClick={handleOpenDraft}
+                        disabled={createDraftMutation.isPending || gameNotSaved}
+                        title={
+                          gameNotSaved
+                            ? 'Save the bracket first to create games'
+                            : undefined
+                        }
+                        data-testid="view-draft-btn"
+                      >
+                        {createDraftMutation.isPending ? (
+                          <Loader2 className="size-4 mr-1 animate-spin" />
+                        ) : (
+                          <Swords className="size-4 mr-1" />
+                        )}
+                        {match.herodraft_id ? 'View Draft' : 'Start Draft'}
+                      </PrimaryButton>
+                      {isStaff && match.herodraft_id && (
+                        <SecondaryButton
+                          size="sm"
+                          onClick={() => setShowResetConfirm(true)}
+                          disabled={resetDraftMutation.isPending}
+                          data-testid="reset-draft-btn"
+                        >
+                          {resetDraftMutation.isPending ? (
+                            <Loader2 className="size-4 mr-1 animate-spin" />
+                          ) : (
+                            <RotateCcw className="size-4 mr-1" />
+                          )}
+                          Restart Draft
+                        </SecondaryButton>
+                      )}
+                    </div>
+                    {gameNotSaved && (
+                      <p className="text-xs text-muted-foreground">
+                        Save the bracket first to create game records before
+                        starting a draft.
+                      </p>
+                    )}
+                  </div>
                 </div>
               );
-            }
-
-            // Check if game exists (bracket has been saved)
-            const gameNotSaved = !match.herodraft_id && !match.gameId;
-
-            return (
-              <div className="border-t pt-4">
-                <div className="flex flex-col gap-2">
-                  <div className="flex gap-2 flex-wrap">
-                    <PrimaryButton
-                      size="sm"
-                      onClick={handleOpenDraft}
-                      disabled={createDraftMutation.isPending || gameNotSaved}
-                      title={gameNotSaved ? 'Save the bracket first to create games' : undefined}
-                      data-testid="view-draft-btn"
-                    >
-                      {createDraftMutation.isPending ? (
-                        <Loader2 className="size-4 mr-1 animate-spin" />
-                      ) : (
-                        <Swords className="size-4 mr-1" />
-                      )}
-                      {match.herodraft_id ? 'View Draft' : 'Start Draft'}
-                    </PrimaryButton>
-                  {isStaff && match.herodraft_id && (
-                    <SecondaryButton
-                      size="sm"
-                      onClick={() => setShowResetConfirm(true)}
-                      disabled={resetDraftMutation.isPending}
-                      data-testid="reset-draft-btn"
-                    >
-                      {resetDraftMutation.isPending ? (
-                        <Loader2 className="size-4 mr-1 animate-spin" />
-                      ) : (
-                        <RotateCcw className="size-4 mr-1" />
-                      )}
-                      Restart Draft
-                    </SecondaryButton>
-                  )}
-                  </div>
-                  {gameNotSaved && (
-                    <p className="text-xs text-muted-foreground">
-                      Save the bracket first to create game records before starting a draft.
-                    </p>
-                  )}
-                </div>
-              </div>
-            );
-          })()}
+            })()}
 
           {/* dota_lobby in-game lobby (signed-in users; the API needs a login) */}
           {match.gameId && currentUser && <LobbyPanel gameId={match.gameId} />}
@@ -441,18 +507,28 @@ function TeamCard({ team, score, isWinner, label }: TeamCardProps) {
         <AvatarFallback>{initials}</AvatarFallback>
       </Avatar>
       <p
-        className={cn('font-medium text-sm sm:text-base truncate', isWinner && 'text-green-500')}
+        className={cn(
+          'font-medium text-sm sm:text-base truncate',
+          isWinner && 'text-green-500',
+        )}
         title={displayName}
       >
         {displayName}
       </p>
       <p className="text-xs text-muted-foreground">{label}</p>
       {score !== undefined && (
-        <p className={cn('text-2xl font-bold mt-1', isWinner && 'text-green-500')}>
+        <p
+          className={cn(
+            'text-2xl font-bold mt-1',
+            isWinner && 'text-green-500',
+          )}
+        >
           {score}
         </p>
       )}
-      {isWinner && <span className="text-xs sm:text-sm text-green-500">Winner</span>}
+      {isWinner && (
+        <span className="text-xs sm:text-sm text-green-500">Winner</span>
+      )}
     </div>
   );
 }
