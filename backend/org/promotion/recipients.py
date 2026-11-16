@@ -1,12 +1,13 @@
 from datetime import datetime
 from typing import Final, TypedDict
 
-from django.db.models import Count, Q, QuerySet
+from django.db.models import Count, OuterRef, Q, QuerySet, Subquery
 from django.utils import timezone
 
 from app.models import CustomUser, Organization, Tournament
 from events.constants import EventState, SignupStatus
 from events.models import Event, EventSignup
+from org.models import OrgUser
 from org.models_promotion import PromoSend
 from org.promotion.render import player_name
 from user.querysets import with_user_profiles
@@ -33,6 +34,8 @@ class CandidateRow(TypedDict):
     username: str
     nickname: str | None
     discordUsername: str | None
+    discordNickname: str | None
+    guildNickname: str | None
     discordId: str | None
     avatarUrl: str | None
     recent_count: int
@@ -79,7 +82,14 @@ def candidate_pool(
         )
         .exclude(discordId="")
         .exclude(pk=sender.pk)
-        .annotate(recent_count=Count("tournaments", distinct=True))
+        .annotate(
+            recent_count=Count("tournaments", distinct=True),
+            org_guild_nickname=Subquery(
+                OrgUser.objects.filter(user=OuterRef("pk"), organization=org).values(
+                    "guild_nickname"
+                )[:1]
+            ),
+        )
     )
     return with_user_profiles(qs)
 
@@ -147,6 +157,8 @@ def candidates(
                 "username": user.username,
                 "nickname": user.nickname,
                 "discordUsername": user.discordUsername,
+                "discordNickname": user.discordNickname,
+                "guildNickname": user.org_guild_nickname,
                 "discordId": user.discordId,
                 "avatarUrl": user.avatarUrl,
                 "recent_count": user.recent_count,

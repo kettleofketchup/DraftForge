@@ -1180,7 +1180,10 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
         # base_profile (T1 epic). Without user__base_profile this is N+1
         # cold-cache on busy events.
         qs = with_user_profiles(
-            EventSignup.objects.select_related("event", "event_team"), "user"
+            EventSignup.objects.select_related(
+                "event__tournament__league__organization", "event_team"
+            ),
+            "user",
         )
         event_id = self.request.query_params.get("event")
         if event_id:

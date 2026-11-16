@@ -14,6 +14,12 @@ class LeagueUserSerializer(serializers.ModelSerializer):
     pk = serializers.IntegerField(source="user.pk", read_only=True)  # User's pk
     username = serializers.CharField(source="user.username", read_only=True)
     nickname = serializers.CharField(source="user.nickname", read_only=True)
+    guildNickname = serializers.CharField(
+        source="org_user.guild_nickname", read_only=True, allow_null=True
+    )
+    discordNickname = serializers.CharField(
+        source="user.discordNickname", read_only=True, allow_null=True
+    )
     avatar = serializers.CharField(source="user.avatar", read_only=True)
     discordId = serializers.CharField(source="user.discordId", read_only=True)
     positions = PositionsSerializer(source="user.positions", read_only=True)
@@ -30,6 +36,8 @@ class LeagueUserSerializer(serializers.ModelSerializer):
             "pk",
             "username",
             "nickname",
+            "guildNickname",
+            "discordNickname",
             "avatar",
             "discordId",
             "positions",
