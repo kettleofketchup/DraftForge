@@ -5,6 +5,7 @@ from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
 from app.models import CustomUser, Organization
+from org.activity import guild_sync_lock
 from org.models import OrgUser
 
 LOCMEM_CACHE = {
@@ -240,3 +241,164 @@ class RefreshDiscordMembersTest(TestCase):
             format="json",
         )
         self.assertEqual(resp.status_code, 502)
+
+
+@override_settings(CACHES=LOCMEM_CACHE)
+class RefreshDiscordMembersNameSyncTest(TestCase):
+    def setUp(self) -> None:
+        self.client = APIClient()
+        cache.clear()
+        self.guild = "999888777"
+        self.org = Organization.objects.create(
+            name="Test Org", discord_server_id=self.guild
+        )
+        self.sibling = Organization.objects.create(
+            name="Sibling Org", discord_server_id=self.guild
+        )
+        self.other = Organization.objects.create(
+            name="Other Guild Org", discord_server_id="555"
+        )
+        self.staff = CustomUser.objects.create_user(
+            username="staffuser", password="test123"
+        )
+        OrgUser.objects.create(user=self.staff, organization=self.org)
+        self.org.staff.add(self.staff)
+        self.client.force_authenticate(user=self.staff)
+
+    def _refresh(self):
+        return self.client.post(
+            "/api/discord/refresh-discord-members/",
+            {"org_id": self.org.pk},
+            format="json",
+        )
+
+    @patch("discordbot.services.users.apply_guild_member_names")
+    @patch("discordbot.services.users.get_discord_members_data")
+    def test_refresh_forces_refetch_and_applies_to_every_guild_org(
+        self, mock_fetch, mock_apply
+    ) -> None:
+        mock_fetch.return_value = MOCK_DISCORD_MEMBERS
+        cache.set(f"discord_members_{self.guild}", [{"old": "data"}], timeout=3600)
+
+        resp = self._refresh()
+
+        self.assertEqual(resp.status_code, 200)
+        mock_fetch.assert_called_once_with(guild_id=self.guild, force=True)
+        mock_apply.assert_called_once()
+        args, kwargs = mock_apply.call_args
+        self.assertEqual(args[0], self.guild)
+        self.assertEqual(sorted(args[1]), sorted([self.org.pk, self.sibling.pk]))
+        self.assertEqual([m.discord_id for m in args[2]], ["111", "222", "333"])
+        self.assertTrue(kwargs["complete"])
+        self.assertIsInstance(kwargs["fetched_at"], float)
+        self.assertIsNone(cache.get(f"discord_name_sync_guild_{self.guild}"))
+
+    @patch("discordbot.services.users.get_discord_members_data")
+    def test_refresh_writes_server_nicknames_and_global_names(self, mock_fetch) -> None:
+        mock_fetch.return_value = MOCK_DISCORD_MEMBERS
+        john = CustomUser.objects.create_user(
+            username="john", password="x", discordId="111"
+        )
+        sibling_member = OrgUser.objects.create(user=john, organization=self.sibling)
+
+        resp = self._refresh()
+
+        self.assertEqual(resp.status_code, 200)
+        sibling_member.refresh_from_db()
+        self.assertEqual(sibling_member.guild_nickname, "JohnnyD")
+        self.assertEqual(
+            CustomUser.objects.nocache().get(pk=john.pk).discordNickname, "John D"
+        )
+
+    @patch("discordbot.services.users.apply_guild_member_names")
+    @patch("discordbot.services.users.get_discord_members_data")
+    def test_refresh_with_guild_lock_held_repaves_search_cache_but_skips_apply(
+        self, mock_fetch, mock_apply
+    ) -> None:
+        mock_fetch.return_value = MOCK_DISCORD_MEMBERS
+        self.assertTrue(guild_sync_lock(self.guild))
+
+        resp = self._refresh()
+
+        self.assertEqual(resp.status_code, 200)
+        mock_fetch.assert_called_once_with(guild_id=self.guild, force=True)
+        self.assertEqual(len(cache.get(f"discord_members_search_{self.guild}")), 3)
+        mock_apply.assert_not_called()
+        self.assertIsNotNone(cache.get(f"discord_name_sync_guild_{self.guild}"))
+
+    @patch("discordbot.services.users.apply_guild_member_names")
+    @patch("discordbot.services.users.get_discord_members_data")
+    def test_refresh_fetch_failure_releases_lock(self, mock_fetch, mock_apply) -> None:
+        mock_fetch.side_effect = Exception("Discord API error")
+
+        resp = self._refresh()
+
+        self.assertEqual(resp.status_code, 502)
+        mock_apply.assert_not_called()
+        self.assertIsNone(cache.get(f"discord_name_sync_guild_{self.guild}"))
+
+    @patch("discordbot.services.users.touch_org_activity")
+    @patch("discordbot.services.users.get_discord_members_data")
+    def test_refresh_touches_requesting_org(self, mock_fetch, mock_touch) -> None:
+        mock_fetch.return_value = []
+
+        self._refresh()
+
+        mock_touch.assert_called_once()
+        args, kwargs = mock_touch.call_args
+        self.assertEqual(args[1], self.org.pk)
+        self.assertEqual(kwargs["guild_id"], self.guild)
+
+
+@override_settings(CACHES=LOCMEM_CACHE)
+class DiscordMemberActivityTouchTest(TestCase):
+    def setUp(self) -> None:
+        self.client = APIClient()
+        cache.clear()
+        self.org = Organization.objects.create(
+            name="Test Org", discord_server_id="999888777"
+        )
+        self.staff = CustomUser.objects.create_user(
+            username="staffuser", password="test123"
+        )
+        OrgUser.objects.create(user=self.staff, organization=self.org)
+        self.org.staff.add(self.staff)
+        self.client.force_authenticate(user=self.staff)
+
+    def _assert_touched(self, mock_touch) -> None:
+        mock_touch.assert_called_once()
+        args, kwargs = mock_touch.call_args
+        self.assertEqual(args[1], self.org.pk)
+        self.assertEqual(kwargs["guild_id"], "999888777")
+
+    @patch("discordbot.services.users.touch_org_activity")
+    @patch("discordbot.services.users.get_discord_members_data")
+    def test_search_touches_org_activity(self, mock_fetch, mock_touch) -> None:
+        mock_fetch.return_value = MOCK_DISCORD_MEMBERS
+        resp = self.client.get(
+            "/api/discord/search-discord-members/",
+            {"q": "john", "org_id": self.org.pk},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self._assert_touched(mock_touch)
+
+    @patch("discordbot.services.users.touch_org_activity")
+    @patch("discordbot.services.users.get_discord_members_data")
+    def test_get_org_members_touches_org_activity(self, mock_fetch, mock_touch) -> None:
+        mock_fetch.return_value = MOCK_DISCORD_MEMBERS
+        resp = self.client.get(
+            f"/api/discord/organizations/{self.org.pk}/discord-members/"
+        )
+        self.assertEqual(resp.status_code, 200)
+        self._assert_touched(mock_touch)
+
+    @patch("discordbot.services.users.touch_org_activity")
+    def test_search_non_staff_does_not_touch(self, mock_touch) -> None:
+        regular = CustomUser.objects.create_user(username="regular", password="x")
+        self.client.force_authenticate(user=regular)
+        resp = self.client.get(
+            "/api/discord/search-discord-members/",
+            {"q": "john", "org_id": self.org.pk},
+        )
+        self.assertEqual(resp.status_code, 403)
+        mock_touch.assert_not_called()
