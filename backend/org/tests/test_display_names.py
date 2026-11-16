@@ -8,9 +8,7 @@ from org.models import OrgUser
 class GuildNicknamesTest(TestCase):
     def setUp(self) -> None:
         self.org = Organization.objects.create(name="Display Names Org")
-        self.u1 = CustomUser.objects.create(
-            username="dn_u1", discordNickname="Gwaihir"
-        )
+        self.u1 = CustomUser.objects.create(username="dn_u1", discordNickname="Gwaihir")
         self.u2 = CustomUser.objects.create(username="dn_u2")
         self.outsider = CustomUser.objects.create(username="dn_outsider")
         OrgUser.objects.create(

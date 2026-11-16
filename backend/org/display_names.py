@@ -5,7 +5,9 @@ from app.models import CustomUser, Organization
 from org.models import OrgUser
 
 
-def guild_nicknames(org_id: int | None, user_ids: Iterable[int]) -> dict[int, str | None]:
+def guild_nicknames(
+    org_id: int | None, user_ids: Iterable[int]
+) -> dict[int, str | None]:
     ids = list(user_ids)
     if org_id is None or not ids:
         return {}
