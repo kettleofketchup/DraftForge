@@ -1,3 +1,5 @@
+export type ActivityScope = 'tournament' | 'draft';
+
 export type ActivityDraftKind = 'hero' | 'team';
 
 export type ActivityView =

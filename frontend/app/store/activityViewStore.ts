@@ -90,6 +90,7 @@ export const useActivityViewStore = create<ActivityViewState>((set, get) => ({
   setView: (next, trigger, extra) => {
     const from = get().view;
     const intentId = extra?.intentId;
+    if (trigger !== 'scope_lost' && get().scopeLost) set({ scopeLost: false });
     const unchanged = sameView(from, next);
     if (unchanged && !intentId) return;
 

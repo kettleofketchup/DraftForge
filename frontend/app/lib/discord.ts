@@ -3,6 +3,7 @@ import api from '~/components/api/axios';
 import type { UserType } from '~/index';
 import type {
   ActivityNotice,
+  ActivityScope,
   ActivityView,
   LaunchIntentRef,
 } from '~/lib/activity-types';
@@ -56,9 +57,11 @@ export function releaseDiscordSession(): void {
 export function initializeDiscord({
   force = false,
   currentView,
+  scope,
 }: {
   force?: boolean;
   currentView?: ActivityView;
+  scope?: ActivityScope;
 } = {}): Promise<DraftActivitySession> {
   clearTimeout(resetTimer);
   if (
@@ -70,7 +73,11 @@ export function initializeDiscord({
   }
   initialization ??= connect(
     force
-      ? { mode: 'refresh', ...(currentView && { current_view: currentView }) }
+      ? {
+          mode: 'refresh',
+          ...(currentView && { current_view: currentView }),
+          ...(scope && { scope }),
+        }
       : { mode: 'first' },
   ).catch((error: unknown) => {
     initialization = undefined;
@@ -81,7 +88,7 @@ export function initializeDiscord({
 
 type SessionMode =
   | { mode: 'first' }
-  | { mode: 'refresh'; current_view?: ActivityView };
+  | { mode: 'refresh'; current_view?: ActivityView; scope?: ActivityScope };
 
 async function connect(mode: SessionMode): Promise<DraftActivitySession> {
   if (!new URLSearchParams(window.location.search).has('frame_id')) {

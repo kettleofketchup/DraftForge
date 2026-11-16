@@ -295,6 +295,11 @@ class DraftActivityTests(ClearIntentsMixin, TestCase):
         self.assertEqual(len(started), 1)
         self.assertEqual(started[0]["mode"], "legacy")
         self.assertFalse(started[0]["instance_created"])
+        self.assertEqual(started[0]["initial_kind"], "hero")
+        self.assertEqual(started[0]["initial_draft_id"], self.hero.pk)
+        self.assertEqual(started[0]["source"], "legacy")
+        self.assertIsNone(started[0]["intent_id"])
+        self.assertIsNotNone(peek_intent("101"))
 
     @patch("discordbot.activity.discord_json")
     def test_session_started_log_fields(self, discord):
@@ -471,6 +476,35 @@ class DraftActivityTests(ClearIntentsMixin, TestCase):
         self.assertEqual(refreshed["tournament_id"], self.tournament.pk)
 
     @patch("discordbot.activity.discord_json")
+    def test_draft_scope_refresh_keeps_pin_after_tournament_launch(self, discord):
+        loose = HeroDraft.objects.create(game=Game.objects.create())
+        self.binding.draft = loose
+        self.binding.save()
+        first = self.session(
+            discord, {"code": "code", "instance_id": "i-pinned", "mode": "first"}
+        )
+        self.assertEqual(first.data["scope"], "draft")
+        self.binding.draft = self.other
+        self.binding.save()
+        response = self.session(
+            discord,
+            {
+                "code": "code",
+                "instance_id": "i-pinned",
+                "mode": "refresh",
+                "scope": "draft",
+                "current_view": {"kind": "hero", "id": loose.pk},
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["scope"], "draft")
+        self.assertIsNone(response.data["tournament_id"])
+        self.assertEqual(response.data["draft_id"], loose.pk)
+        identity = authenticate_token(response.data["token"], loose.pk, "hero")
+        self.assertEqual(identity.scope, "draft")
+        self.assertEqual(identity.pin, {"kind": "hero", "draft": loose.pk})
+
+    @patch("discordbot.activity.discord_json")
     def test_refresh_with_bracket_view_has_no_id(self, discord):
         with capture_logs() as logs:
             response = self.session(
@@ -495,6 +529,7 @@ class DraftActivityTests(ClearIntentsMixin, TestCase):
             {"mode": "refresh", "current_view": {"kind": "hero", "id": 0}},
             {"mode": "refresh", "current_view": {"kind": "hero", "id": "x"}},
             {"mode": "refresh", "current_view": "hero"},
+            {"mode": "refresh", "scope": "league"},
         ]:
             with self.subTest(extra=extra):
                 response = activity_session(

@@ -120,6 +120,22 @@ describe('Discord handshake', () => {
       current_view: { kind: 'hero', id: 3 },
     });
   });
+  it('sends the held scope on a forced handshake', async () => {
+    const { initializeDiscord } = await import('./discord');
+    await initializeDiscord();
+    await initializeDiscord({
+      force: true,
+      currentView: { kind: 'hero', id: 3 },
+      scope: 'draft',
+    });
+    expect(mocks.post).toHaveBeenLastCalledWith('/discord/activity/session/', {
+      code: 'oauth-code',
+      instance_id: 'verified-instance',
+      mode: 'refresh',
+      current_view: { kind: 'hero', id: 3 },
+      scope: 'draft',
+    });
+  });
   it('retries a rejected exchange without leaking another SDK message listener', async () => {
     mocks.post.mockRejectedValueOnce(new Error('rejected'));
     const { initializeDiscord } = await import('./discord');

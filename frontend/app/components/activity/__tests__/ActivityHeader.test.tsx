@@ -229,6 +229,18 @@ describe('ActivityHeader', () => {
     expect(screen.queryByTestId('activity-leave-confirm')).toBeNull();
   });
 
+  it('lets a viewer leave a draft missing from the arrived drafts list', () => {
+    useActivityViewStore.setState({
+      view: { kind: 'hero', id: 150 },
+      drafts: drafts([hero(156)]),
+    });
+    render(<ActivityHeader />);
+
+    fireEvent.click(screen.getByTestId('activity-menu-bracket'));
+    expect(setView).toHaveBeenCalledWith({ kind: 'bracket' }, 'menu');
+    expect(screen.queryByTestId('activity-leave-confirm')).toBeNull();
+  });
+
   it('asks before leaving a draft while the drafts list has not arrived', () => {
     useActivityViewStore.setState({
       view: { kind: 'hero', id: 156 },

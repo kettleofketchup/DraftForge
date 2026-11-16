@@ -180,6 +180,22 @@ describe('activityViewStore', () => {
     });
   });
 
+  it('clears scopeLost when the user picks another view', () => {
+    const store = useActivityViewStore.getState();
+    store.setView({ kind: 'hero', id: 156 }, 'initial');
+    store.markScopeLost();
+    store.setView({ kind: 'hero', id: 157 }, 'menu');
+    expect(useActivityViewStore.getState().scopeLost).toBe(false);
+  });
+
+  it('clears scopeLost when the user picks the bracket it is already on', () => {
+    const store = useActivityViewStore.getState();
+    store.setView({ kind: 'hero', id: 156 }, 'initial');
+    store.markScopeLost();
+    store.setView({ kind: 'bracket' }, 'menu');
+    expect(useActivityViewStore.getState().scopeLost).toBe(false);
+  });
+
   it('declineIntent records the intent and posts intent_declined', () => {
     useActivityViewStore.getState().declineIntent('q1');
     expect(useActivityViewStore.getState().appliedIntentIds.has('q1')).toBe(

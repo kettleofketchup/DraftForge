@@ -102,9 +102,11 @@ def instance_tournament(instance: DraftActivityInstance) -> int | None:
     return draft_tournament_id(instance.draft or instance.team_draft)
 
 
-def session_tournament(instance: DraftActivityInstance) -> int | None:
+def session_tournament(
+    instance: DraftActivityInstance, *, channel_fallback: bool = True
+) -> int | None:
     tournament_id = instance_tournament(instance)
-    if tournament_id is not None:
+    if tournament_id is not None or not channel_fallback:
         return tournament_id
     channel = (
         DraftActivityChannel.objects.nocache()
@@ -123,8 +125,10 @@ def instance_pin(instance: DraftActivityInstance) -> Pin:
     return {"kind": "team", "draft": instance.team_draft_id}
 
 
-def issue_activity_token(user: CustomUser, instance: DraftActivityInstance) -> str:
-    tournament_id = session_tournament(instance)
+def issue_activity_token(
+    user: CustomUser, instance: DraftActivityInstance, *, channel_fallback: bool = True
+) -> str:
+    tournament_id = session_tournament(instance, channel_fallback=channel_fallback)
     return signing.dumps(
         {
             "user": user.pk,

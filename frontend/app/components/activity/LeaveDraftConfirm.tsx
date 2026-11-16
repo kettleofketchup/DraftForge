@@ -43,8 +43,9 @@ export function leaveWarning(
   drafts: ActivityDraftList | null,
 ): string | null {
   if (!view || view.kind === 'bracket') return null;
-  const entry = drafts ? viewedEntry(view, drafts) : undefined;
-  if (!entry) return LEAVE_UNKNOWN;
+  if (!drafts) return LEAVE_UNKNOWN;
+  const entry = viewedEntry(view, drafts);
+  if (!entry) return null;
   if (entry.role !== 'captain' || entry.status === 'finished') return null;
   if (
     view.kind === 'hero' &&

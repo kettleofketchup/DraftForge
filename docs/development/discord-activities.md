@@ -142,7 +142,7 @@ to that single draft (`scope: "draft"`) and no menu.
 
 | Endpoint | Purpose |
 | --- | --- |
-| `POST /api/discord/activity/session/` | OAuth + instance check, issues the credential. Body `mode`: `first`, `refresh` (with `current_view`), or absent (0.14.x bundles, treated as legacy). The legacy `draft_id`/`kind` fields are always the instance's first draft. |
+| `POST /api/discord/activity/session/` | OAuth + instance check, issues the credential. Body `mode`: `first`, `refresh` (with `current_view` and the frame's `scope`; a `draft` scope stays pinned to its draft), or absent (0.14.x bundles, treated as legacy). The legacy `draft_id`/`kind` fields are always the instance's first draft. |
 | `GET /api/discord/activity/drafts/` | Menu contents: tournament, team draft, hero drafts with `status`, `involves_me` and `role`, plus any applicable `launch_intent` or `notice` and `site_url`. |
 | `POST /api/discord/activity/views/` | Fire-and-forget telemetry: `view`, `notice_seen`, `intent_declined`, `open_external`. Consumes intents by `intent_id`. Returns 204; throttled to 60 requests a minute per user. |
 
@@ -192,7 +192,7 @@ and `tournament_id`. Tokens, OAuth codes and `access_token` are never logged.
 | Event | Logged when |
 | --- | --- |
 | `activity_launch_resolved` | a notification launch resolves (see above) |
-| `activity_session_started` | a `first` or legacy handshake: `mode`, `scope`, `initial_kind`, `initial_draft_id`, `source` (`launch_intent`, `involves_me`, `channel_last`, `instance_first`), `role`, `notice`, `intent_id` |
+| `activity_session_started` | a `first` or legacy handshake: `mode`, `scope`, `initial_kind`, `initial_draft_id`, `source` (`launch_intent`, `involves_me`, `channel_last`, `instance_first`, or `legacy` for the instance's first draft that a 0.14.x bundle shows), `role`, `notice`, `intent_id` |
 | `activity_session_refreshed` | a `refresh` handshake: the client-reported `current_kind`/`current_id` |
 | `activity_view_changed` | a view switch: `from_*` (client-claimed), `to_*`, `trigger`, `role`, `intent_id`, `intent_consumed` |
 | `activity_notice_seen` | a cross-tournament notice was shown |

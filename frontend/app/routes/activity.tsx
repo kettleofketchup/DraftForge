@@ -87,6 +87,7 @@ export default function DraftActivity() {
     let cancelled = false;
     let first = true;
     let currentTournament: number | null = null;
+    let currentScope: Scope | undefined;
     const store = useActivityViewStore.getState;
 
     async function start(force: boolean) {
@@ -95,6 +96,7 @@ export default function DraftActivity() {
         result = await initializeDiscord({
           force,
           currentView: store().view ?? undefined,
+          scope: currentScope,
         });
       } catch (err) {
         if (err instanceof ActivityDisabledError && !cancelled)
@@ -117,6 +119,7 @@ export default function DraftActivity() {
         first = false;
         currentTournament = result.tournament_id;
         setTournamentId(result.tournament_id);
+        currentScope = 'draft';
         setScope('draft');
         store().setView(legacy, 'initial');
         return;
@@ -133,6 +136,7 @@ export default function DraftActivity() {
             store().markScopeLost();
           }
         }
+        currentScope = 'tournament';
         setScope('tournament');
         return;
       }
@@ -143,6 +147,7 @@ export default function DraftActivity() {
       first = false;
       currentTournament = result.tournament_id;
       setTournamentId(result.tournament_id);
+      currentScope = 'tournament';
       setScope('tournament');
       store().setView(initial, 'initial', {
         intentId: result.launch_intent?.intent_id,

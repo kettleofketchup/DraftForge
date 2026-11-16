@@ -368,6 +368,7 @@ describe('Discord Activity route', () => {
     expect(mocks.initializeDiscord).toHaveBeenLastCalledWith({
       force: true,
       currentView: { kind: 'hero', id: 157 },
+      scope: 'tournament',
     });
     expect(getActivityCredential()?.token).toBe('t2');
     await heroOnScreen(157);
@@ -583,6 +584,31 @@ describe('Discord Activity route', () => {
     );
     await heroOnScreen(156);
     expect(postedTriggers()).not.toContain('scope_lost');
+  });
+
+  it('asks a refresh to keep a draft-scope frame pinned', async () => {
+    mocks.initializeDiscord
+      .mockResolvedValueOnce(
+        heroSession({
+          scope: 'draft',
+          tournament_id: null,
+          initial_view: null,
+        }),
+      )
+      .mockResolvedValueOnce(
+        heroSession({ scope: 'draft', tournament_id: null, token: 't2' }),
+      );
+    render(<DraftActivity />);
+    await heroOnScreen(156);
+
+    await expect(refreshActivityCredential()).resolves.toBe(true);
+    expect(mocks.initializeDiscord).toHaveBeenLastCalledWith({
+      force: true,
+      currentView: { kind: 'hero', id: 156 },
+      scope: 'draft',
+    });
+    expect(getActivityCredential()?.scope).toBe('draft');
+    await heroOnScreen(156);
   });
 
   it('rejects a legacy team pin whose draft is not the tournament draft', async () => {

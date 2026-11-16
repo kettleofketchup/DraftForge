@@ -47,6 +47,7 @@ class ActivityInput(serializers.Serializer):
     instance_id = serializers.RegexField(r"^[A-Za-z0-9_-]+$", max_length=100)
     mode = serializers.ChoiceField(["first", "refresh"], required=False)
     current_view = CurrentViewInput(required=False)
+    scope = serializers.ChoiceField(["draft", "tournament"], required=False)
 
 
 def discord_json(
@@ -177,9 +178,13 @@ def activity_session(request: Request) -> Response:
     except (requests.RequestException, KeyError, TypeError, ValueError):
         # Never return OAuth credentials or upstream response bodies in errors.
         raise AuthenticationFailed("Could not verify the Discord Activity.")
-    tournament_id = session_tournament(instance)
+    # A refresh never widens a draft-scope frame to whatever the channel holds now.
+    channel_fallback = not (
+        mode == "refresh" and payload.validated_data.get("scope") == "draft"
+    )
+    tournament_id = session_tournament(instance, channel_fallback=channel_fallback)
     scope = "draft" if tournament_id is None else "tournament"
-    token = issue_activity_token(user, instance)
+    token = issue_activity_token(user, instance, channel_fallback=channel_fallback)
     pin = instance_pin(instance)
     common = {
         "system": "discord",
@@ -201,6 +206,21 @@ def activity_session(request: Request) -> Response:
             **common,
             current_kind=current.get("kind"),
             current_id=current.get("id"),
+        )
+    elif mode == "legacy":
+        # 0.14.x bundles render only the instance's first draft.
+        log.info(
+            "activity_session_started",
+            **common,
+            mode=mode,
+            instance_created=created,
+            scope=scope,
+            initial_kind=pin["kind"],
+            initial_draft_id=pin["draft"],
+            source="legacy",
+            role=draft_role(user, pin["kind"], pin["draft"]),
+            notice=False,
+            intent_id=None,
         )
     else:
         identity = ActivityIdentity(
