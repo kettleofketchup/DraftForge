@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   setActivityCredential,
   setActivityRefresher,
+  type ActivityCredential,
 } from '~/lib/activity-session';
 import { getWebSocketManager } from './WebSocketManager';
 
@@ -29,6 +30,14 @@ class FakeSocket {
   }
 }
 
+const heroCredential = (token: string): ActivityCredential => ({
+  token,
+  scope: 'draft',
+  tournament_id: null,
+  pin: { kind: 'hero', id: 7 },
+  site_url: 'https://site.test',
+});
+
 const flush = async () => {
   await vi.runAllTimersAsync();
 };
@@ -37,7 +46,7 @@ beforeEach(() => {
   vi.useFakeTimers();
   FakeSocket.instances = [];
   vi.stubGlobal('WebSocket', FakeSocket);
-  setActivityCredential({ kind: 'hero', draft_id: 7, token: 'old-token' });
+  setActivityCredential(heroCredential('old-token'));
 });
 afterEach(() => {
   getWebSocketManager().disconnectAll();
@@ -50,7 +59,7 @@ afterEach(() => {
 describe('Activity sockets', () => {
   it('re-runs the Discord handshake on 4401 and reconnects with the new token', async () => {
     const refresher = vi.fn(async () => {
-      setActivityCredential({ kind: 'hero', draft_id: 7, token: 'new-token' });
+      setActivityCredential(heroCredential('new-token'));
     });
     setActivityRefresher(refresher);
     const manager = getWebSocketManager();

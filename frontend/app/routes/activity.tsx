@@ -6,6 +6,7 @@ import type { TournamentType } from '~/index';
 import {
   setActivityCredential,
   setActivityRefresher,
+  toActivityCredential,
 } from '~/lib/activity-session';
 import {
   initializeDiscord,
@@ -25,7 +26,7 @@ export default function DraftActivity() {
     async function start(force = false) {
       const result = await initializeDiscord({ force });
       if (cancelled) return;
-      setActivityCredential(result);
+      setActivityCredential(toActivityCredential(result));
       useUserStore.getState().setCurrentUser(result.user);
       if (result.kind === 'team') {
         const { data } = await api.get(`/tournaments/${result.tournament_id}/`);
