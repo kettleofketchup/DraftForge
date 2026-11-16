@@ -2055,6 +2055,9 @@ class DraftOptions(models.Model):
         choices=TimeoutAction.choices,
         default=TimeoutAction.SKIP_TURN,
     )
+    hero_timer_enabled = models.BooleanField(default=True)
+    hero_grace_time_ms = models.IntegerField(default=30000)
+    hero_reserve_time_ms = models.IntegerField(default=90000)
 
     def __str__(self) -> str:
         return f"DraftOptions for tournament {self.tournament_id}"
@@ -2122,6 +2125,8 @@ class HeroDraft(models.Model):
     is_manual_pause = models.BooleanField(
         default=False
     )  # True if paused manually by captain/staff
+    timer_enabled = models.BooleanField(default=True)
+    grace_time_ms = models.IntegerField(default=30000)
 
     def save(self, *args: object, **kwargs: object) -> None:
         super().save(*args, **kwargs)
@@ -2129,6 +2134,20 @@ class HeroDraft(models.Model):
 
     def __str__(self) -> str:
         return f"HeroDraft for {self.game}"
+
+    def snapshot_timer_options(self, tournament: "Tournament | None") -> int:
+        """Copy the tournament's hero timer options onto this draft (unsaved).
+
+        Returns the reserve time each DraftTeam should start with.
+        """
+        if tournament is None:
+            self.timer_enabled = True
+            self.grace_time_ms = HeroDraft._meta.get_field("grace_time_ms").default
+            return DraftTeam._meta.get_field("reserve_time_remaining").default
+        options = tournament.get_draft_options(fresh=True)
+        self.timer_enabled = options.hero_timer_enabled
+        self.grace_time_ms = options.hero_grace_time_ms
+        return options.hero_reserve_time_ms
 
 
 class DraftTeam(models.Model):

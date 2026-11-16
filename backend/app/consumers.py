@@ -731,6 +731,7 @@ class HeroDraftConsumer(BaseDraftConsumer):
                 {
                     "type": "herodraft_tick",
                     "draft_state": event.get("draft_state"),
+                    "timer_enabled": event.get("timer_enabled", True),
                     "server_time": event.get("server_time"),
                     # DRAFTING anchors
                     "current_round": event.get("current_round"),

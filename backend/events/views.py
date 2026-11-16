@@ -60,11 +60,13 @@ from events.serializers import (
 from events.services import (
     approve_signup,
     cancel_signup,
+    changed_draft_option_fields,
     confirm_signup,
     create_tournament_for_event,
     demote_to_waitlist,
     ensure_discord_event,
     ensure_tournament_with_signups,
+    event_draft_option_values,
     finalize_event_tournament,
     is_registered_for_event,
     log_lobby_password_changed,
@@ -703,6 +705,7 @@ class EventViewSet(viewsets.ModelViewSet):
         from app.cache_utils import invalidate_after_commit
 
         previous_password = serializer.instance.dota_lobby_password
+        previous_draft_options = event_draft_option_values(serializer.instance)
         previous_ledger_fields = (
             serializer.instance.scheduled_at,
             serializer.instance.ends_at,
@@ -723,7 +726,9 @@ class EventViewSet(viewsets.ModelViewSet):
         invalidate_after_commit(event)
         if event.dota_lobby_password != previous_password:
             log_lobby_password_changed(event, "event_update")
-        result = sync_tournament_from_event(event)
+        result = sync_tournament_from_event(
+            event, changed_draft_option_fields(previous_draft_options, event)
+        )
         self._cascade_warning = result.get("warning")
 
         # If Discord config is set but no announcement has been sent yet, send it now.

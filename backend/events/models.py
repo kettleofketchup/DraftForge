@@ -15,6 +15,7 @@ from app.models import (
     DraftStyles,
     GameMode,
     GameType,
+    TimeoutAction,
 )
 from lobby import passwords as lobby_passwords
 
@@ -81,6 +82,17 @@ class TournamentTemplateMixin(models.Model):
         help_text="Steam league ID for Dota 2 lobby ticket",
     )
     auto_create_hero_drafts = models.BooleanField(default=False)
+    draft_timer_enabled = models.BooleanField(default=True)
+    draft_grace_time_ms = models.IntegerField(default=30000)
+    draft_reserve_time_ms = models.IntegerField(default=30000)
+    draft_timeout_action = models.CharField(
+        max_length=32,
+        choices=TimeoutAction.choices,
+        default=TimeoutAction.SKIP_TURN,
+    )
+    hero_timer_enabled = models.BooleanField(default=True)
+    hero_grace_time_ms = models.IntegerField(default=30000)
+    hero_reserve_time_ms = models.IntegerField(default=90000)
 
     class Meta:
         abstract = True
