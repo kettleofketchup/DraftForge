@@ -3,6 +3,7 @@
 import os
 from unittest import mock
 
+from asgiref.sync import iscoroutinefunction, sync_to_async
 from django.db import connection, reset_queries
 from django.http import HttpResponse
 from django.test import RequestFactory, TestCase, override_settings
@@ -129,6 +130,60 @@ class QueryStatsMiddlewareTest(TestCase):
 
         with mock.patch("telemetry.db.log") as mock_log:
             response = middleware(request)
+
+        self.assertEqual(response.status_code, 200)
+        mock_log.info.assert_not_called()
+
+
+@override_settings(DEBUG=True)
+class QueryStatsMiddlewareAsyncTest(TestCase):
+    """QueryStatsMiddleware on the async path counts queries from the sync view thread."""
+
+    def test_async_mode_follows_get_response(self):
+        async def view(request):
+            return HttpResponse("OK")
+
+        self.assertTrue(iscoroutinefunction(QueryStatsMiddleware(view)))
+        self.assertFalse(iscoroutinefunction(QueryStatsMiddleware(mock.Mock())))
+
+    async def test_counts_queries_run_in_sync_to_async(self):
+        async def view(request):
+            await sync_to_async(_run_raw_query)()
+            await sync_to_async(_run_raw_query)()
+            return HttpResponse("OK")
+
+        await sync_to_async(_run_raw_query)()
+        request = RequestFactory().get("/api/tournaments/")
+
+        with mock.patch("telemetry.db.log") as mock_log:
+            response = await QueryStatsMiddleware(view)(request)
+
+        self.assertEqual(response.status_code, 200)
+        call_args = mock_log.info.call_args
+        self.assertEqual(call_args[0][0], "db_query_stats")
+        self.assertEqual(call_args[1]["db.query_count"], 2)
+
+    async def test_logs_stats_when_view_raises(self):
+        async def view(request):
+            await sync_to_async(_run_raw_query)()
+            raise ValueError("boom")
+
+        request = RequestFactory().get("/api/tournaments/")
+        with mock.patch("telemetry.db.log") as mock_log:
+            with self.assertRaises(ValueError):
+                await QueryStatsMiddleware(view)(request)
+
+        self.assertEqual(mock_log.info.call_args[1]["db.query_count"], 1)
+
+    async def test_disabled_via_env_var(self):
+        async def view(request):
+            return HttpResponse("OK")
+
+        with mock.patch.dict(os.environ, {"DB_QUERY_STATS_ENABLED": "false"}):
+            middleware = QueryStatsMiddleware(view)
+
+        with mock.patch("telemetry.db.log") as mock_log:
+            response = await middleware(RequestFactory().get("/api/tournaments/"))
 
         self.assertEqual(response.status_code, 200)
         mock_log.info.assert_not_called()

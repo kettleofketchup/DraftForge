@@ -4,6 +4,7 @@ import uuid
 from unittest import mock
 
 import structlog
+from asgiref.sync import iscoroutinefunction
 from django.http import HttpResponse
 from django.test import RequestFactory, TestCase
 
@@ -134,3 +135,57 @@ class TelemetryMiddlewareTest(TestCase):
         )
         response = self.middleware(request)
         self.assertTrue(len(response["X-Request-ID"]) <= 64)
+
+
+async def _async_ok(request):
+    return HttpResponse("OK")
+
+
+class TelemetryMiddlewareAsyncTest(TestCase):
+    """Tests for TelemetryMiddleware on the async (ASGI) path."""
+
+    def setUp(self):
+        self.factory = RequestFactory()
+        structlog.contextvars.clear_contextvars()
+
+    def tearDown(self):
+        structlog.contextvars.clear_contextvars()
+
+    def test_async_mode_follows_get_response(self):
+        self.assertTrue(iscoroutinefunction(TelemetryMiddleware(_async_ok)))
+        self.assertFalse(iscoroutinefunction(TelemetryMiddleware(mock.Mock())))
+
+    async def test_binds_context_and_sets_request_id(self):
+        request = self.factory.get("/api/tournaments/5/", HTTP_X_REQUEST_ID="abc-123")
+        request.user = mock.Mock(is_authenticated=True, pk=42)
+        bound_context = {}
+
+        async def capture_response(req):
+            bound_context.update(structlog.contextvars.get_contextvars())
+            return HttpResponse("OK")
+
+        with mock.patch("telemetry.middleware.log") as mock_log:
+            response = await TelemetryMiddleware(capture_response)(request)
+
+        self.assertEqual(response["X-Request-ID"], "abc-123")
+        self.assertEqual(bound_context["request.id"], "abc-123")
+        self.assertEqual(bound_context["tournament.id"], 5)
+        self.assertEqual(bound_context["user.id"], 42)
+        self.assertNotIn("tournament.id", structlog.contextvars.get_contextvars())
+        mock_log.info.assert_called_once()
+        self.assertEqual(mock_log.info.call_args[0][0], "request_completed")
+        self.assertEqual(mock_log.info.call_args[1]["http.status_code"], 200)
+
+    async def test_logs_request_failed_and_reraises(self):
+        async def boom(req):
+            raise ValueError("boom")
+
+        request = self.factory.get("/api/tournaments/")
+        with mock.patch("telemetry.middleware.log") as mock_log:
+            with self.assertRaises(ValueError):
+                await TelemetryMiddleware(boom)(request)
+
+        mock_log.error.assert_called_once()
+        self.assertEqual(mock_log.error.call_args[0][0], "request_failed")
+        self.assertEqual(mock_log.error.call_args[1]["error"], "boom")
+        self.assertEqual(structlog.contextvars.get_contextvars(), {})

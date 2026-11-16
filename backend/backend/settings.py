@@ -174,9 +174,11 @@ REST_FRAMEWORK = {
     "EXCEPTION_HANDLER": "app.exception_handler.exception_handler",
 }
 
+# Every entry must be async capable: one sync-only middleware makes each ASGI request
+# hop sync_to_async -> async_to_sync (app.tests.test_middleware_async_chain enforces it).
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
-    "whitenoise.middleware.WhiteNoiseMiddleware",
+    "app.middleware.AsyncWhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -187,7 +189,7 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "corsheaders.middleware.CorsMiddleware",
-    "social_django.middleware.SocialAuthExceptionMiddleware",
+    "app.middleware.AsyncSocialAuthExceptionMiddleware",
 ]
 
 ROOT_URLCONF = "backend.urls"
