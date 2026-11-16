@@ -64,7 +64,14 @@ from tests.populate.org_features import (
     populate_org_features_data,
     reset_org_features_data,
 )
-from tests.populate.organizations import populate_organizations_and_leagues
+from tests.populate.constants import (
+    NAME_SYNC_GLOBAL_ONLY_USERNAME,
+    NAME_SYNC_USERNAME,
+)
+from tests.populate.organizations import (
+    populate_discord_name_sync_users,
+    populate_organizations_and_leagues,
+)
 from tests.populate.shuffle_tie import populate_shuffle_tie_data
 from tests.populate.tournament_discovery import populate_tournament_discovery
 from tests.populate.users import populate_test_auth_users, populate_users
@@ -103,6 +110,54 @@ class EventLeagueStaffIsolationTest(TestCase):
         assert user in league.staff.all(), "Should be staff of league 7"
         assert user not in org.staff.all(), "MUST NOT be staff of org 7"
         assert user not in org.admins.all(), "MUST NOT be admin of org 7"
+
+
+class DiscordNameSyncPopulateTest(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.dtx_org, _ = populate_organizations_and_leagues(force=True)
+        populate_discord_name_sync_users(force=True)
+
+    def _assert_seeded(self) -> None:
+        dragon = CustomUser.objects.nocache().get(username=NAME_SYNC_USERNAME)
+        self.assertEqual(dragon.nickname, "DragonSite")
+        self.assertEqual(dragon.discordNickname, "GwaihirTheWindlord")
+        dragon_membership = OrgUser.objects.nocache().get(
+            user=dragon, organization=self.dtx_org
+        )
+        self.assertEqual(dragon_membership.guild_nickname, "DragonClaw")
+
+        global_only = CustomUser.objects.nocache().get(
+            username=NAME_SYNC_GLOBAL_ONLY_USERNAME
+        )
+        self.assertIsNone(global_only.nickname)
+        self.assertEqual(global_only.discordNickname, "WindlordGlobal")
+        global_membership = OrgUser.objects.nocache().get(
+            user=global_only, organization=self.dtx_org
+        )
+        self.assertIsNone(global_membership.guild_nickname)
+
+        for user in (dragon, global_only):
+            self.assertEqual(
+                list(
+                    OrgUser.objects.nocache()
+                    .filter(user=user)
+                    .values_list("organization_id", flat=True)
+                ),
+                [self.dtx_org.pk],
+            )
+
+    def test_seeds_users_with_distinct_discord_and_server_names(self) -> None:
+        self._assert_seeded()
+
+    def test_second_call_is_idempotent(self) -> None:
+        users_before = CustomUser.objects.nocache().count()
+        org_users_before = OrgUser.objects.nocache().count()
+        populate_discord_name_sync_users(force=False)
+        populate_discord_name_sync_users(force=True)
+        self.assertEqual(CustomUser.objects.nocache().count(), users_before)
+        self.assertEqual(OrgUser.objects.nocache().count(), org_users_before)
+        self._assert_seeded()
 
 
 class PopulateBuiltDraftsAreUntimedTest(TestCase):
