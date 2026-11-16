@@ -6,6 +6,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from app.cache_utils import invalidate_obj
+from app.display_names import user_display_name
 from app.draft_state import tournament_state_queryset
 from app.models import CustomUser, Draft, Team, Tournament
 from app.permissions_org import can_edit_tournament
@@ -13,7 +14,9 @@ from app.serializers import (
     DraftSerializerMMRs,
     TournamentSerializer,
     _build_users_dict,
+    _tournament_organization,
 )
+from org.display_names import guild_nicknames, org_nicknames_public
 from telemetry.logging import get_logger
 from user.models import BaseUserProfile, DotaUserProfile
 
@@ -97,7 +100,11 @@ def create_team_from_captain(request: Request) -> Response:
             status=201,
         )
 
-    display_name = user.nickname or user.username
+    org = _tournament_organization(tournament, fresh=True)
+    org_id = org.pk if org and org_nicknames_public(org.pk) else None
+    display_name = user_display_name(
+        user, guild_nickname=guild_nicknames(org_id, [user.pk]).get(user.pk)
+    )
     team = Team.objects.create(
         tournament=tournament,
         name=f"{display_name}'s Team",

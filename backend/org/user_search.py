@@ -4,8 +4,8 @@ from org.models import OrgUser
 
 
 def user_name_q(term: str, *, org_id: int | None = None, prefix: str = "") -> Q:
-    """Match a user's username, site nickname, Discord username and global name,
-    plus the server nickname in ``org_id`` when given.
+    """Match a user's username, Discord username and global name, plus the
+    server nickname in ``org_id`` when given.
 
     ``org_id`` must already be a validated int. ``prefix`` searches through a
     relation (e.g. ``"user__"``). SQLite folds case for ASCII only, so
@@ -13,7 +13,6 @@ def user_name_q(term: str, *, org_id: int | None = None, prefix: str = "") -> Q:
     """
     q = (
         Q(**{f"{prefix}username__icontains": term})
-        | Q(**{f"{prefix}base_profile__nickname__icontains": term})
         | Q(**{f"{prefix}discordUsername__icontains": term})
         | Q(**{f"{prefix}discordNickname__icontains": term})
     )

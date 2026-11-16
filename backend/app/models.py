@@ -12,6 +12,7 @@ from django.db.utils import IntegrityError
 from django.utils import timezone
 
 from app.cache_utils import invalidate_obj
+from app.display_names import first_name
 from discordbot.services.member_names import normalise_name
 from telemetry.logging import get_logger
 
@@ -2649,4 +2650,6 @@ class ProfileClaimRequest(models.Model):
         ]
 
     def __str__(self) -> str:
-        return f"{self.claimer.username} -> {self.target_user.nickname or self.target_user.steamid} ({self.status})"
+        target = self.target_user
+        name = first_name(target.discordNickname, target.username) or target.steamid
+        return f"{self.claimer.username} -> {name} ({self.status})"

@@ -9,7 +9,6 @@ class LeagueUserAdmin(admin.ModelAdmin):
     list_filter = ["league"]
     search_fields = [
         "user__username",
-        "user__base_profile__nickname",
         "user__discordNickname",
         "org_user__guild_nickname",
     ]

@@ -4,6 +4,7 @@ from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 
 from app.models import CustomUser, League, Organization, Tournament
+from app.tests.raw_site_nickname import set_raw_site_nickname
 from events.constants import EventState, SignupStatus
 from events.models import Event, EventSignup
 from events.services import decline_signup
@@ -453,16 +454,16 @@ class CandidatesTest(_PoolFixture):
         self.assertEqual(set(self._rows_by_username(q="AN")), {"ann"})
         self.assertEqual(set(self._rows_by_username(q="bob_dc")), {"bob"})
 
-    def test_name_search_profile_and_guild_nicknames(self) -> None:
+    def test_name_search_guild_nickname_not_site_nickname(self) -> None:
         nick = self._user("nick_user")
-        nick.nickname = "Zephyrion"
+        set_raw_site_nickname(nick.pk, "Zephyrion")
         guild = self._user("guild_user")
         OrgUser.objects.create(
             user=guild, organization=self.org, guild_nickname="Quillfeather"
         )
         self._tournament([nick, guild], days_ago=2, league=self.league)
 
-        self.assertEqual(set(self._rows_by_username(q="zephyr")), {"nick_user"})
+        self.assertEqual(set(self._rows_by_username(q="zephyr")), set())
         self.assertEqual(set(self._rows_by_username(q="quillfeather")), {"guild_user"})
 
     def test_name_search_ignores_other_orgs_guild_nickname(self) -> None:

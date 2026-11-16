@@ -1,6 +1,7 @@
 from django.test import TestCase
 
 from app.models import CustomUser, Organization
+from app.tests.raw_site_nickname import set_raw_site_nickname
 from org.models import OrgUser
 from org.user_search import user_name_q
 
@@ -12,10 +13,10 @@ class UserNameQTest(TestCase):
         self.dragon = CustomUser.objects.create_user(
             username="dc_account",
             password="x",
-            nickname="SiteDragon",
             discordUsername="dragon_dc_handle",
             discordNickname="GwaihirTheWindlord",
         )
+        set_raw_site_nickname(self.dragon.pk, "SiteDragon")
         self.other = CustomUser.objects.create_user(username="bystander", password="x")
         OrgUser.objects.create(
             user=self.dragon, organization=self.org_a, guild_nickname="DragonClaw"
@@ -34,8 +35,8 @@ class UserNameQTest(TestCase):
     def test_matches_username(self) -> None:
         self.assertEqual(self._pks("DC_ACC"), [self.dragon.pk])
 
-    def test_matches_site_nickname(self) -> None:
-        self.assertEqual(self._pks("sitedrag"), [self.dragon.pk])
+    def test_ignores_site_nickname(self) -> None:
+        self.assertEqual(self._pks("sitedrag"), [])
 
     def test_matches_discord_username(self) -> None:
         self.assertEqual(self._pks("DC_HANDLE"), [self.dragon.pk])

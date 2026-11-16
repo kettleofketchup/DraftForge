@@ -36,15 +36,18 @@ from rest_framework.response import Response
 from rest_framework.throttling import UserRateThrottle
 from rest_framework.views import APIView
 
+from app.display_names import user_display_name
 from app.models import CustomUser, DotaLobbyMode, Game, Team, Tournament
 from app.permissions_org import (
     IsTournamentStaff,
     can_edit_tournament,
     has_org_staff_access,
 )
+from app.serializers import _tournament_organization
 from lobby import broadcast, events, services, states
 from lobby.client import DotaLobbyClient, DotaLobbyError
 from lobby.models import GameLobby
+from org.display_names import guild_nicknames
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
@@ -125,8 +128,9 @@ def _upstream_error(exc: DotaLobbyError, *, game_pk: int, action: str) -> Respon
     return response
 
 
-def _display_name(user: CustomUser) -> str:
-    return user.nickname or user.username or f"User {user.pk}"
+def _org_id(game: Game) -> int | None:
+    org = _tournament_organization(game.tournament)
+    return org.pk if org else None
 
 
 def _load_game(game_pk: int) -> Game:
@@ -176,15 +180,22 @@ def is_rostered(user: CustomUser, game: Game, game_lobby: GameLobby | None) -> b
 def _players(game: Game, game_lobby: GameLobby | None) -> list[dict[str, Any]]:
     """Rostered players with their dota_lobby invite and seat status."""
     status_by_account = (game_lobby.players or {}) if game_lobby else {}
+    rosters = [
+        (side, team, services.team_roster(team))
+        for side, team in _lobby_teams(game, game_lobby)
+    ]
+    nicks = guild_nicknames(
+        _org_id(game), {user.pk for _, _, users in rosters for user in users}
+    )
     rows: list[dict[str, Any]] = []
-    for side, team in _lobby_teams(game, game_lobby):
-        for user in services.team_roster(team):
+    for side, team, users in rosters:
+        for user in users:
             account_id = user.steam_account_id
             entry = status_by_account.get(str(account_id), {}) if account_id else {}
             rows.append(
                 {
                     "user_id": user.pk,
-                    "name": _display_name(user),
+                    "name": user_display_name(user, guild_nickname=nicks.get(user.pk)),
                     "side": side,
                     "team_id": team.pk,
                     "captain": user.pk == team.captain_id,
@@ -263,15 +274,19 @@ def serialize_lobby(
     return data
 
 
-def _missing_players(user_ids: list[int]) -> list[dict[str, Any]]:
-    users = CustomUser.objects.filter(pk__in=user_ids).order_by("pk")
-    return [{"id": u.pk, "name": _display_name(u)} for u in users]
+def _missing_players(game: Game, user_ids: list[int]) -> list[dict[str, Any]]:
+    users = list(CustomUser.objects.filter(pk__in=user_ids).order_by("pk"))
+    nicks = guild_nicknames(_org_id(game), [u.pk for u in users])
+    return [
+        {"id": u.pk, "name": user_display_name(u, guild_nickname=nicks.get(u.pk))}
+        for u in users
+    ]
 
 
-def _eligibility_body(eligibility: services.Eligibility) -> dict[str, Any]:
+def _eligibility_body(game: Game, eligibility: services.Eligibility) -> dict[str, Any]:
     details = dict(eligibility.details)
     if eligibility.code == "missing_steam_ids":
-        details["players"] = _missing_players(list(details.get("user_ids") or []))
+        details["players"] = _missing_players(game, list(details.get("user_ids") or []))
     return {"ok": eligibility.ok, "code": eligibility.code or None, "details": details}
 
 
@@ -321,7 +336,7 @@ def lobby_response(request: Request, game: Game) -> dict[str, Any]:
         eligibility = services.lobby_eligibility(
             game, trigger=GameLobby.Trigger.MANUAL, allow_missing=False
         )
-        body["eligibility"] = _eligibility_body(eligibility)
+        body["eligibility"] = _eligibility_body(game, eligibility)
         if game_lobby is None or game_lobby.ended:
             body["players"] = _players(game, None)
     return body
@@ -418,7 +433,7 @@ class GameLobbyView(APIView):
                     "This game cannot get a lobby now",
                     eligibility.code,
                     400,
-                    eligibility=_eligibility_body(eligibility),
+                    eligibility=_eligibility_body(game, eligibility),
                 )
                 # Roll back a replace: the old lobby stays as it was.
                 transaction.set_rollback(True)

@@ -7,6 +7,7 @@ from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
 from app.models import CustomUser, League, Organization
+from app.tests.raw_site_nickname import set_raw_site_nickname
 from league.models import LeagueUser
 from org.models import OrgUser
 
@@ -39,7 +40,7 @@ class SearchUsersTest(TestCase):
 
         # User in the league (implies org membership)
         self.league_user = CustomUser.objects.create_user(
-            username="leagueuser", password="test", nickname="LeagueJohn"
+            username="leagueuser", password="test", discordNickname="LeagueJohn"
         )
         org_user = OrgUser.objects.create(user=self.league_user, organization=self.org)
         LeagueUser.objects.create(
@@ -48,20 +49,20 @@ class SearchUsersTest(TestCase):
 
         # User in org only
         self.org_only_user = CustomUser.objects.create_user(
-            username="orgonlyuser", password="test", nickname="OrgJohn"
+            username="orgonlyuser", password="test", discordNickname="OrgJohn"
         )
         OrgUser.objects.create(user=self.org_only_user, organization=self.org)
 
         # User in a different org
         self.other_org = Organization.objects.create(name="Other Org")
         self.other_org_user = CustomUser.objects.create_user(
-            username="otherorguser", password="test", nickname="OtherJohn"
+            username="otherorguser", password="test", discordNickname="OtherJohn"
         )
         OrgUser.objects.create(user=self.other_org_user, organization=self.other_org)
 
         # Global user (no org)
         self.global_user = CustomUser.objects.create_user(
-            username="globaluser", password="test", nickname="GlobalJohn"
+            username="globaluser", password="test", discordNickname="GlobalJohn"
         )
 
         # User with steam ID. CustomUser.save() syncs steamid <-> steam_account_id
@@ -161,7 +162,7 @@ class SearchUsersTest(TestCase):
     def test_max_20_results(self):
         for i in range(25):
             CustomUser.objects.create_user(
-                username=f"bulkuser{i}", password="test", nickname=f"Bulk{i}"
+                username=f"bulkuser{i}", password="test", discordNickname=f"Bulk{i}"
             )
         resp = self.client.get("/api/users/search/", {"q": "bulk"})
         self.assertEqual(resp.status_code, 200)
@@ -205,6 +206,12 @@ class SearchUsersTest(TestCase):
         resp = self.client.get("/api/users/search/", {"q": "windlord"})
         self.assertEqual(resp.status_code, 200)
         self.assertEqual([u["pk"] for u in resp.data], [self.global_user.pk])
+
+    def test_site_nickname_is_not_searched(self):
+        set_raw_site_nickname(self.global_user.pk, "SiteOnlyName")
+        resp = self.client.get("/api/users/search/", {"q": "siteonly"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data, [])
 
     def test_non_numeric_org_id_falls_back_to_global(self):
         resp = self.client.get(

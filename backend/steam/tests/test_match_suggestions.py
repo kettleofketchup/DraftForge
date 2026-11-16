@@ -3,6 +3,7 @@ from datetime import date
 from django.test import TestCase
 
 from app.models import CustomUser, Game, League, Organization, Team, Tournament
+from app.tests.raw_site_nickname import set_raw_site_nickname
 from org.models import OrgUser
 from steam.models import Match, PlayerMatchStats, SuggestionTier
 from steam.services.match_suggestions import (
@@ -385,7 +386,7 @@ class GetMatchSuggestionsFallbackTest(TestCase):
         )
 
     def test_name_search_matches_captain_names(self):
-        self.radiant_captain.nickname = "DragonSite"
+        set_raw_site_nickname(self.radiant_captain.pk, "DragonSite")
         self.radiant_captain.discordNickname = "Windlord"
         self.radiant_captain.save()
         with_rcap = self._create_match(match_id=1, league_id=19571)
@@ -393,12 +394,16 @@ class GetMatchSuggestionsFallbackTest(TestCase):
         without = self._create_match(match_id=2, league_id=19571)
         self._player_stats(without, 76561198000000099, 0)
 
-        for term in ("drag", "windlord", "rcap"):
+        for term in ("windlord", "rcap"):
             with self.subTest(term=term):
                 suggestions = get_match_suggestions_for_game(self.game, search=term)
                 self.assertEqual([s["match_id"] for s in suggestions], [1])
 
-        self.assertEqual(get_match_suggestions_for_game(self.game, search="nobody"), [])
+        for term in ("nobody", "dragonsite"):
+            with self.subTest(term=term):
+                self.assertEqual(
+                    get_match_suggestions_for_game(self.game, search=term), []
+                )
 
     def test_name_search_matches_tournament_org_guild_nickname(self):
         org = Organization.objects.create(name="Suggest Org")

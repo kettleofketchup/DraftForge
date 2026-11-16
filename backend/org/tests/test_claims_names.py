@@ -57,6 +57,21 @@ class ClaimNamesTest(TestCase):
         self.assertIsNone(data["target_discordNickname"])
         self.assertIsNone(data["target_nickname"])
 
+    def test_str_uses_discord_names_never_site_nickname(self) -> None:
+        self.claim.refresh_from_db()
+        self.assertEqual(
+            str(self.claim), "cn_claimer -> steam_76561198000300001 (pending)"
+        )
+        self.target.discordNickname = "Gwaihir"
+        self.target.save()
+        self.claim.refresh_from_db()
+        self.assertEqual(str(self.claim), "cn_claimer -> Gwaihir (pending)")
+        self.target.discordNickname = None
+        self.target.username = None
+        self.target.save()
+        self.claim.refresh_from_db()
+        self.assertEqual(str(self.claim), "cn_claimer -> 76561198000300001 (pending)")
+
 
 class ClaimMergeNicknameTest(TestCase):
     def test_merge_does_not_carry_site_nickname(self) -> None:

@@ -17,7 +17,6 @@ class OrgUserAdmin(admin.ModelAdmin):
     list_filter = ["organization"]
     search_fields = [
         "user__username",
-        "user__base_profile__nickname",
         "user__discordNickname",
         "guild_nickname",
     ]

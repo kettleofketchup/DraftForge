@@ -1,7 +1,7 @@
 from datetime import timedelta
 
 from django.db import connection, reset_queries
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -9,6 +9,7 @@ from rest_framework.test import APIClient
 from app.models import CustomUser, Organization
 from events.constants import SignupStatus
 from events.models import Event, EventSignup, EventTeam
+from events.schemas import EventSignupSchema
 from events.services import create_tournament_for_event
 from org.models import OrgUser
 from tests.cache import flush_run_cache
@@ -167,6 +168,24 @@ class SignupAndCaptainNameTest(TestCase):
             self.assertEqual(names[self.dragon.pk], "Gwaihir")
             self.assertEqual(names[self.plain.pk], "scn_plain")
             self.assertEqual(names[self.steam.pk], f"User {self.steam.pk}")
+
+    @override_settings(INTERNAL_SERVICE_TOKEN="snf-internal-token")
+    def test_internal_service_sees_server_nickname_for_bot_embeds(self) -> None:
+        client = APIClient()
+        client.credentials(HTTP_X_INTERNAL_TOKEN="snf-internal-token")
+        response = client.get(f"/api/events/signups/?event={self.event.pk}")
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        rows = body["results"] if isinstance(body, dict) else body
+        by_user = {row["user"]: row for row in rows}
+        self.assertEqual(by_user[self.dragon.pk]["username"], "DragonClaw")
+        names = {
+            row["user"]: EventSignupSchema.model_validate(row).display_name
+            for row in rows
+        }
+        self.assertEqual(names[self.dragon.pk], "DragonClaw")
+        self.assertEqual(names[self.plain.pk], "scn_plain")
+        self.assertEqual(names[self.steam.pk], f"User {self.steam.pk}")
 
     def test_team_list_query_count_does_not_grow_with_teams(self) -> None:
         small = Event.objects.create(
