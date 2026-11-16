@@ -1,6 +1,7 @@
 """Test that CustomUser.createFromDiscordData seeds nickname from guild nick → global_name → username."""
 
 from django.test import TestCase
+
 from app.models import CustomUser, PositionsModel
 
 
@@ -10,7 +11,9 @@ class CreateFromDiscordDataNicknameTest(TestCase):
     def setUp(self):
         self.positions = PositionsModel.objects.create()
 
-    def _build_member(self, *, nick=None, global_name=None, username="alice", user_id="123"):
+    def _build_member(
+        self, *, nick=None, global_name=None, username="alice", user_id="123"
+    ):
         return {
             "nick": nick,
             "user": {
@@ -24,7 +27,9 @@ class CreateFromDiscordDataNicknameTest(TestCase):
     def test_uses_guild_nick_when_present(self):
         user = CustomUser(positions=self.positions)
         user.createFromDiscordData(
-            self._build_member(nick="GuildNick", global_name="GlobalName", username="alice")
+            self._build_member(
+                nick="GuildNick", global_name="GlobalName", username="alice"
+            )
         )
         self.assertEqual(user.nickname, "GuildNick")
 
@@ -49,3 +54,27 @@ class CreateFromDiscordDataNicknameTest(TestCase):
             self._build_member(nick="", global_name="", username="alice")
         )
         self.assertEqual(user.nickname, "alice")
+
+    def test_sets_discord_nickname_from_global_name(self):
+        user = CustomUser(positions=self.positions)
+        user.createFromDiscordData(
+            self._build_member(
+                nick="DragonClaw", global_name="Gwaihir", username="alice"
+            )
+        )
+        self.assertEqual(user.discordNickname, "Gwaihir")
+        self.assertEqual(user.nickname, "DragonClaw")
+
+    def test_discord_nickname_none_without_global_name(self):
+        user = CustomUser(positions=self.positions)
+        user.createFromDiscordData(
+            self._build_member(nick="DragonClaw", global_name=None, username="alice")
+        )
+        self.assertIsNone(user.discordNickname)
+
+    def test_discord_nickname_none_for_whitespace_global_name(self):
+        user = CustomUser(positions=self.positions)
+        user.createFromDiscordData(
+            self._build_member(nick=None, global_name="   ", username="alice")
+        )
+        self.assertIsNone(user.discordNickname)

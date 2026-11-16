@@ -183,6 +183,7 @@ class AddOrgMemberTest(TestCase):
         )
         self.assertEqual(new_user.discordUsername, "discorduser")
         self.assertEqual(new_user.nickname, "DiscordNick")
+        self.assertEqual(new_user.discordNickname, "Discord User")
 
     @override_settings(CACHES=LOCMEM_CACHE)
     def test_discord_id_not_in_cache_returns_404(self):

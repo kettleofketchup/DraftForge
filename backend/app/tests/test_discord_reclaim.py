@@ -203,6 +203,15 @@ class GetOrgUserPhantomGuardTest(TestCase):
             associate_by_discord_id(uid=DISCORD_ID, user=None), {"user": user}
         )
 
+    def test_phantom_leaves_synced_names_unset(self) -> None:
+        from events.discord.handlers import _get_org_user
+
+        org_user, user = _get_org_user(self.event, DISCORD_ID, discord_username="ghost")
+        user.refresh_from_db()
+        org_user.refresh_from_db()
+        self.assertIsNone(user.discordNickname)
+        self.assertIsNone(org_user.guild_nickname)
+
     def test_repeat_click_reuses_same_account(self):
         """Clicking again resolves the same row — never a duplicate discordId."""
         from events.discord.handlers import _get_org_user
