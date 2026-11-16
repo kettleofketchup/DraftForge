@@ -19,11 +19,15 @@ from django.core import signing
 from rest_framework.authentication import BaseAuthentication, get_authorization_header
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.request import Request
+from structlog.contextvars import bind_contextvars
 
 from app.models import CustomUser, Draft, DraftRound, HeroDraft
 from discordbot.activity_errors import ActivityAuthFailed
 from discordbot.activity_targets import draft_tournament_id
 from discordbot.models import DraftActivityChannel, DraftActivityInstance
+from telemetry.logging import get_logger
+
+log = get_logger(__name__)
 
 SALT = "discord-draft-activity-v3"
 # 0.14.x frames carry v2 draft tokens; remove after 0.15.
@@ -38,6 +42,32 @@ SESSION_ENDED_CODE = 4401
 
 ActivityKind = Literal["hero", "team"]
 OUT_OF_SCOPE = "Activity credentials are only valid for this draft."
+HERO_SUFFIXES: frozenset[str] = frozenset(
+    {
+        "set-ready",
+        "trigger-roll",
+        "submit-choice",
+        "submit-pick",
+        "list-events",
+        "list-available-heroes",
+        "pause",
+        "resume",
+    }
+)
+IDENTITY_ONLY_PATHS: frozenset[str] = frozenset(
+    {
+        "/api/current_user",
+        "/api/discord/activity/drafts/",
+        "/api/discord/activity/views/",
+    }
+)
+TEAM_DRAFT_SCOPED_PATHS: frozenset[str] = frozenset(
+    {
+        "/api/tournaments/pick_player",
+        "/api/tournaments/undo-pick",
+        "/api/draft/get-style-mmrs",
+    }
+)
 
 
 class Pin(TypedDict):
@@ -248,6 +278,31 @@ class ActivityAuthentication(BaseAuthentication):
     def authenticate(
         self, request: Request
     ) -> tuple[CustomUser, ActivityIdentity] | None:
+        try:
+            identity = self._identity(request)
+        except ActivityAuthFailed as exc:
+            log.warning(
+                "activity_auth_rejected",
+                system="discord",
+                subsystem="activity",
+                surface="rest",
+                reason=exc.reason,
+                code=exc.activity_code,
+                path=request.path,
+            )
+            raise
+        if identity is None:
+            return None
+        bind_contextvars(
+            **{
+                "user.id": identity.user.pk,
+                "activity.instance_id": identity.instance.instance_id,
+            }
+        )
+        # Existing view-level captain/staff checks remain authoritative.
+        return identity.user, identity
+
+    def _identity(self, request: Request) -> ActivityIdentity | None:
         header = get_authorization_header(request).split()
         if not header or header[0].lower() != b"draftactivity":
             return None
@@ -267,11 +322,11 @@ class ActivityAuthentication(BaseAuthentication):
             )
         identity = token_identity(token)
         path = request.path
-        allowed = path == "/api/current_user"
+        allowed = path in IDENTITY_ONLY_PATHS
         scoped = False
-        hero = re.fullmatch(r"/api/herodraft/(\d+)/(?:[a-z-]+/)?", path)
+        hero = re.fullmatch(r"/api/herodraft/(\d+)/(?:([a-z-]+)/)?", path)
         team = re.fullmatch(r"/api/draft/(\d+)/(?:ready|start|pause|resume)/", path)
-        if hero:
+        if hero and (hero[2] is None or hero[2] in HERO_SUFFIXES):
             scoped = True
             draft_pk = _positive_id(hero[1])
             allowed = draft_pk is not None and scope_allows(identity, "hero", draft_pk)
@@ -279,11 +334,7 @@ class ActivityAuthentication(BaseAuthentication):
             scoped = True
             draft_pk = _positive_id(team[1])
             allowed = draft_pk is not None and scope_allows(identity, "team", draft_pk)
-        elif path in {
-            "/api/tournaments/pick_player",
-            "/api/tournaments/undo-pick",
-            "/api/draft/get-style-mmrs",
-        }:
+        elif path in TEAM_DRAFT_SCOPED_PATHS:
             scoped = True
             data = request.data
             if isinstance(data, Mapping):
@@ -304,8 +355,7 @@ class ActivityAuthentication(BaseAuthentication):
                 OUT_OF_SCOPE,
                 "out_of_scope" if scoped else "path_not_allowed",
             )
-        # Existing view-level captain/staff checks remain authoritative.
-        return identity.user, identity
+        return identity
 
 
 class _ActivitySessionEnded(Exception):

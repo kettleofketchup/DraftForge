@@ -15,6 +15,8 @@ from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.parsers import JSONParser
 from rest_framework.request import Request
 from rest_framework.test import APIClient, APIRequestFactory
+from structlog.contextvars import clear_contextvars, get_contextvars
+from structlog.testing import capture_logs
 
 from app.models import (
     CustomUser,
@@ -23,11 +25,13 @@ from app.models import (
     DraftTeam,
     Game,
     HeroDraft,
+    HeroDraftState,
     Team,
     Tournament,
 )
 from discordbot.activity import activity_session, launch_message, resolve_instance
 from discordbot.activity_auth import (
+    HERO_SUFFIXES,
     LEGACY_SALT,
     SALT,
     ActivityAuthentication,
@@ -323,6 +327,116 @@ class DraftActivityTests(TestCase):
         self.assertEqual(response.data["error"], "You are not a captain in this draft")
         self.assertNotIn("code", response.data)
         self.assertNotIn("WWW-Authenticate", response)
+
+    def test_hero_suffix_allowlist_is_explicit(self):
+        staff = CustomUser.objects.create_user(
+            username="activity-staff", discordId="103", is_staff=True
+        )
+        for user in [self.user, staff]:
+            DraftActivityInstance.objects.all().delete()
+            token = self.credential(user=user)
+            for suffix in ["ssr", "reset", "abandon", "unknown-thing"]:
+                with self.subTest(user=user.username, suffix=suffix):
+                    client = APIClient()
+                    client.credentials(HTTP_AUTHORIZATION=f"DraftActivity {token}")
+                    response = client.post(f"/api/herodraft/{self.hero.pk}/{suffix}/")
+                    self.assertEqual(response.status_code, 401)
+                    self.assertEqual(response.data["code"], "activity_path_not_allowed")
+        for suffix in sorted(HERO_SUFFIXES):
+            _, identity = self.rest(f"/api/herodraft/{self.hero.pk}/{suffix}/", token)
+            self.assertEqual(identity.user, staff)
+
+    def test_spectator_403_on_every_mutating_endpoint_for_other_draft(self):
+        token = self.credential(user=self.spectator)
+        DraftTeam.objects.create(draft=self.other, tournament_team=self.team)
+        round_ = DraftRound.objects.create(
+            draft=self.team_draft, captain=self.user, pick_number=1
+        )
+        hero_states = {
+            "set-ready": HeroDraftState.WAITING_FOR_CAPTAINS,
+            "trigger-roll": HeroDraftState.ROLLING,
+            "submit-choice": HeroDraftState.CHOOSING,
+            "submit-pick": HeroDraftState.DRAFTING,
+            "pause": HeroDraftState.DRAFTING,
+            "resume": HeroDraftState.PAUSED,
+        }
+        requests = [
+            (f"/api/herodraft/{self.other.pk}/{suffix}/", {}, state)
+            for suffix, state in hero_states.items()
+        ]
+        requests += [
+            (f"/api/draft/{self.team_draft.pk}/{action}/", {}, None)
+            for action in ["ready", "start", "pause", "resume"]
+        ]
+        requests += [
+            (
+                "/api/tournaments/pick_player",
+                {"draft_round_pk": round_.pk, "user_pk": self.spectator.pk},
+                None,
+            ),
+            ("/api/tournaments/undo-pick", {"draft_pk": self.team_draft.pk}, None),
+        ]
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f"DraftActivity {token}")
+        for path, body, state in requests:
+            if state is not None:
+                HeroDraft.objects.filter(pk=self.other.pk).update(state=state)
+            with self.subTest(path=path):
+                response = client.post(path, body, format="json")
+                self.assertEqual(response.status_code, 403)
+
+    def test_new_activity_endpoints_need_identity_only(self):
+        token = self.credential(user=self.spectator)
+        for path, method in [
+            ("/api/current_user", "get"),
+            ("/api/discord/activity/drafts/", "get"),
+            ("/api/discord/activity/views/", "post"),
+        ]:
+            with self.subTest(path=path):
+                user, identity = self.rest(path, token, method, {})
+                self.assertEqual(user, self.spectator)
+                self.assertEqual(identity.tournament_id, self.tournament.pk)
+
+    def test_success_binds_user_into_request_log_context(self):
+        clear_contextvars()
+        self.addCleanup(clear_contextvars)
+        token = self.credential()
+        _, identity = self.rest("/api/current_user", token)
+        context = get_contextvars()
+        self.assertEqual(context["user.id"], self.user.pk)
+        self.assertEqual(
+            context["activity.instance_id"], identity.instance.instance_id
+        )
+
+    def test_rejection_is_logged(self):
+        token = self.credential()
+        path = f"/api/herodraft/{self.hero.pk}/reset/"
+        with capture_logs() as logs:
+            self.assert_rest_code(path, token, "activity_path_not_allowed", "post")
+            self.assert_rest_code(
+                f"/api/herodraft/{self.foreign.pk}/",
+                token,
+                "activity_out_of_scope",
+            )
+            self.assert_rest_code(
+                "/api/current_user", token + "x", "activity_session_ended"
+            )
+        rejected = [e for e in logs if e["event"] == "activity_auth_rejected"]
+        self.assertEqual(
+            [(e["code"], e["reason"]) for e in rejected],
+            [
+                ("activity_path_not_allowed", "path_not_allowed"),
+                ("activity_out_of_scope", "out_of_scope"),
+                ("activity_session_ended", "bad_signature"),
+            ],
+        )
+        self.assertEqual(rejected[0]["path"], path)
+        for event in rejected:
+            self.assertEqual(event["log_level"], "warning")
+            self.assertEqual(event["surface"], "rest")
+            self.assertEqual(event["system"], "discord")
+            self.assertEqual(event["subsystem"], "activity")
+            self.assertNotIn(token, str(event))
 
     def test_activity_failures_are_coded_401(self):
         token = self.credential()
