@@ -9,11 +9,7 @@ import {
 } from 'lucide-react';
 import { useCallback, useRef, useState } from 'react';
 
-import type {
-  CSVImportResponse,
-  CSVImportRow,
-  MMRTarget,
-} from '~/components/api/api';
+import type { CSVImportResponse, MMRTarget } from '~/components/api/api';
 import { importCSVToOrg, importCSVToTournament } from '~/components/api/api';
 import { Button } from '~/components/ui/button';
 import {
@@ -41,6 +37,7 @@ import type { UserType } from '~/components/user/types';
 import { UserStrip } from '~/components/user/UserStrip';
 
 import { parseCSV, validateRows } from './csvParser';
+import { buildExampleCSV, buildResolveRow, toImportRow } from './csvTemplate';
 import type {
   CSVImportModalProps,
   CSVRow,
@@ -135,16 +132,7 @@ export function CSVImportModal({
         .filter((r) => r.status !== 'error')
         .map((r, filteredIndex) => {
           rowMap.set(filteredIndex + 1, r.raw); // backend uses 1-indexed rows
-          return {
-            steam_friend_id: r.raw.steam_friend_id?.trim() || undefined,
-            discord_id: r.raw.discord_id?.trim() || undefined,
-            discord_username: r.raw.discord_username?.trim() || undefined,
-            name: r.raw.name?.trim() || undefined,
-            mmr: r.raw.mmr?.trim() ? Number(r.raw.mmr.trim()) : null,
-            team_name: r.raw.team_name?.trim() || undefined,
-            team_captain: Boolean(r.raw.team_captain?.trim()),
-            positions: r.raw.positions?.trim() || undefined,
-          };
+          return toImportRow(r.raw);
         });
       sentRowMapRef.current = rowMap;
 
@@ -182,30 +170,10 @@ export function CSVImportModal({
     async (rowNumber: number, selectedUser: UserType) => {
       setResolvingRows((prev) => new Set(prev).add(rowNumber));
       try {
-        // Build a single-row import using only the selected user's identifier
-        const originalRaw = sentRowMapRef.current.get(rowNumber);
-        const row: CSVImportRow = {};
-        if (selectedUser.steam_account_id) {
-          row.steam_friend_id = String(selectedUser.steam_account_id);
-        } else if (selectedUser.discordId) {
-          row.discord_id = selectedUser.discordId;
-        }
-        // Include mmr from the original CSV row
-        if (originalRaw?.mmr?.trim()) {
-          row.mmr = Number(originalRaw.mmr.trim());
-        }
-        if (originalRaw?.name?.trim()) {
-          row.name = originalRaw.name.trim();
-        }
-        if (originalRaw?.team_name?.trim()) {
-          row.team_name = originalRaw.team_name.trim();
-        }
-        if (originalRaw?.team_captain?.trim()) {
-          row.team_captain = true;
-        }
-        if (originalRaw?.positions?.trim()) {
-          row.positions = originalRaw.positions.trim();
-        }
+        const row = buildResolveRow(
+          selectedUser,
+          sentRowMapRef.current.get(rowNumber),
+        );
 
         const options = {
           update_mmr: updateMmr,
@@ -261,43 +229,7 @@ export function CSVImportModal({
   );
 
   const downloadExampleCSV = useCallback(() => {
-    const isTournament = Boolean(entityContext.tournamentId);
-    const comment =
-      '# A steam_friend_id, discord_id, or discord_username is required. name, mmr, positions, team_name, team_captain are optional.';
-    const headers = [
-      'steam_friend_id',
-      'discord_id',
-      'discord_username',
-      'name',
-      'mmr',
-      'positions',
-    ];
-    if (isTournament) headers.push('team_name', 'team_captain');
-
-    const rows = isTournament
-      ? [
-          [
-            '76561198012345678',
-            '',
-            'player1',
-            'Alice',
-            '5000',
-            '1:3:2',
-            'Team A',
-            'true',
-          ],
-          ['', '123456789012345678', '', 'Bob', '4500', '4:5', 'Team B', ''],
-        ]
-      : [
-          ['76561198012345678', '', 'player1', 'Alice', '5000', '1:3:2'],
-          ['', '123456789012345678', '', 'Bob', '4500', '4:5'],
-        ];
-
-    const csv = [
-      comment,
-      headers.join(','),
-      ...rows.map((r) => r.join(',')),
-    ].join('\n');
+    const csv = buildExampleCSV(Boolean(entityContext.tournamentId));
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -354,7 +286,7 @@ export function CSVImportModal({
               </p>
               <p className="text-xs text-muted-foreground mt-2">
                 All columns are optional: steam_friend_id, discord_id,
-                discord_username, name, mmr, positions
+                discord_username, mmr, positions
                 {entityContext.tournamentId && ', team_name, team_captain'}
               </p>
             </div>
@@ -394,7 +326,7 @@ export function CSVImportModal({
                   <tr>
                     <th className="px-3 py-2 text-left w-8">#</th>
                     <th className="px-3 py-2 text-left">Status</th>
-                    <th className="px-3 py-2 text-left">Name</th>
+                    <th className="px-3 py-2 text-left">Name (ignored)</th>
                     <th className="px-3 py-2 text-left">Steam ID</th>
                     <th className="px-3 py-2 text-left">Discord</th>
                     <th className="px-3 py-2 text-left">MMR</th>

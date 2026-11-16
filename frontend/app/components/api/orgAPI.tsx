@@ -287,7 +287,6 @@ export interface CSVImportRow {
   steam_friend_id?: string;
   discord_id?: string;
   discord_username?: string;
-  name?: string;
   mmr?: number | null;
   team_name?: string;
   team_captain?: boolean;
