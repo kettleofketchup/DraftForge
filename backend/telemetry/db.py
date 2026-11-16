@@ -3,8 +3,10 @@
 import logging
 import os
 import re
-from typing import Callable
+from collections.abc import Awaitable, Callable
+from typing import Any
 
+from asgiref.sync import iscoroutinefunction, markcoroutinefunction, sync_to_async
 from django.db import connection, reset_queries
 from django.http import HttpRequest, HttpResponse
 
@@ -42,10 +44,24 @@ class QueryStatsMiddleware:
 
     Note: Queries served from cacheops (Redis) don't appear in connection.queries,
     so this middleware measures actual SQLite load, not cached data.
+
+    Sync and async capable. Django DB connections are thread-local, so on the
+    async path the setup and the stats read run via thread-sensitive
+    sync_to_async: that is the same per-request thread that runs sync views.
     """
 
-    def __init__(self, get_response: Callable[[HttpRequest], HttpResponse]):
+    sync_capable = True
+    async_capable = True
+
+    def __init__(
+        self,
+        get_response: Callable[[HttpRequest], HttpResponse]
+        | Callable[[HttpRequest], Awaitable[HttpResponse]],
+    ) -> None:
         self.get_response = get_response
+        self.is_async = iscoroutinefunction(get_response)
+        if self.is_async:
+            markcoroutinefunction(self)
         self.enabled = env_bool("DB_QUERY_STATS_ENABLED", True)
         try:
             self.slow_threshold_ms = float(
@@ -54,10 +70,36 @@ class QueryStatsMiddleware:
         except (ValueError, TypeError):
             self.slow_threshold_ms = 50.0
 
-    def __call__(self, request: HttpRequest) -> HttpResponse:
+    def __call__(self, request: HttpRequest) -> Any:
+        if self.is_async:
+            return self.__acall__(request)
         if not self.enabled:
             return self.get_response(request)
 
+        force_debug = self._begin()
+        try:
+            response = self.get_response(request)
+        finally:
+            self._finish(request, force_debug)
+
+        return response
+
+    async def __acall__(self, request: HttpRequest) -> HttpResponse:
+        if not self.enabled:
+            return await self.get_response(request)
+
+        force_debug = await sync_to_async(self._begin, thread_sensitive=True)()
+        try:
+            response = await self.get_response(request)
+        finally:
+            await sync_to_async(self._finish, thread_sensitive=True)(
+                request, force_debug
+            )
+
+        return response
+
+    @staticmethod
+    def _begin() -> bool:
         # Enable query logging for this request (works even with DEBUG=False)
         force_debug = not connection.force_debug_cursor
         if force_debug:
@@ -65,20 +107,17 @@ class QueryStatsMiddleware:
 
         # Reset query log for accurate per-request counts
         reset_queries()
+        return force_debug
 
+    def _finish(self, request: HttpRequest, force_debug: bool) -> None:
         try:
-            response = self.get_response(request)
-        finally:
-            try:
-                self._log_query_stats(request)
-            except Exception:
-                logging.getLogger("telemetry.db").debug(
-                    "Failed to log query stats", exc_info=True
-                )
-            if force_debug:
-                connection.force_debug_cursor = False
-
-        return response
+            self._log_query_stats(request)
+        except Exception:
+            logging.getLogger("telemetry.db").debug(
+                "Failed to log query stats", exc_info=True
+            )
+        if force_debug:
+            connection.force_debug_cursor = False
 
     def _log_query_stats(self, request: HttpRequest) -> None:
         """Log query count, total time, and any slow queries."""

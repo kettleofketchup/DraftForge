@@ -3,6 +3,7 @@
 from datetime import date
 
 from django.test import TestCase
+from rest_framework.response import Response
 from rest_framework.test import APIClient
 
 from app.models import CustomUser, Game, Team, Tournament
@@ -588,8 +589,8 @@ class UnsetWinnerTest(TestCase):
 
         # Winner should be cleared
         self.assertIsNone(game.winning_team)
-        # Status should be reset to scheduled
-        self.assertEqual(game.status, "scheduled")
+        # Status must be a valid Game.status choice ("scheduled" is not one)
+        self.assertEqual(game.status, "pending")
         # Loser's placement should be cleared
         self.assertIsNone(self.team2.placement)
 
@@ -603,7 +604,7 @@ class UnsetWinnerTest(TestCase):
             position=0,
             radiant_team=self.team1,
             dire_team=self.team2,
-            status="scheduled",
+            status="pending",
         )
 
         # Call advance_winner with None
@@ -621,4 +622,148 @@ class UnsetWinnerTest(TestCase):
 
         # Winner should remain None
         self.assertIsNone(game.winning_team)
-        self.assertEqual(game.status, "scheduled")
+        self.assertEqual(game.status, "pending")
+
+
+class AdvanceWinnerPersistenceTest(TestCase):
+    """Issue #466: a winner set from the match modal persists both paths."""
+
+    def setUp(self) -> None:
+        self.admin = CustomUser.objects.create_superuser(
+            username="admin",
+            password="admin123",
+            email="admin@test.com",
+        )
+        self.tournament = Tournament.objects.create(
+            name="Test Tournament",
+            date_played=date.today(),
+        )
+        self.teams: list[Team] = []
+        for i in range(3):
+            captain = CustomUser.objects.create_user(
+                username=f"cap{i}", password="test"
+            )
+            self.teams.append(
+                Team.objects.create(
+                    name=f"Team {i + 1}", captain=captain, tournament=self.tournament
+                )
+            )
+        self.winners_r2 = Game.objects.create(
+            tournament=self.tournament, bracket_type="winners", round=2, position=0
+        )
+        self.losers_r2 = Game.objects.create(
+            tournament=self.tournament,
+            bracket_type="losers",
+            round=2,
+            position=0,
+            radiant_team=self.teams[2],
+        )
+        self.winners_r1 = Game.objects.create(
+            tournament=self.tournament,
+            bracket_type="winners",
+            round=1,
+            position=0,
+            radiant_team=self.teams[0],
+            dire_team=self.teams[1],
+            next_game=self.winners_r2,
+            next_game_slot="radiant",
+            loser_next_game=self.losers_r2,
+            loser_next_game_slot="dire",
+            elimination_type="double",
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.admin)
+
+    def _advance(self, game: Game, winner: str | None) -> Response:
+        return self.client.post(
+            f"/api/bracket/games/{game.pk}/advance-winner/",
+            {"winner": winner},
+            format="json",
+        )
+
+    def _bracket_by_pk(self) -> dict[int, dict]:
+        response = self.client.get(f"/api/bracket/tournaments/{self.tournament.pk}/")
+        self.assertEqual(response.status_code, 200)
+        return {m["pk"]: m for m in response.data["matches"]}
+
+    def test_winner_and_loser_advancement_survive_reload(self) -> None:
+        response = self._advance(self.winners_r1, "radiant")
+        self.assertEqual(response.status_code, 200)
+
+        matches = self._bracket_by_pk()
+        source = matches[self.winners_r1.pk]
+        self.assertEqual(source["status"], "completed")
+        self.assertEqual(source["winning_team"]["pk"], self.teams[0].pk)
+        self.assertEqual(
+            matches[self.winners_r2.pk]["radiant_team"]["pk"], self.teams[0].pk
+        )
+        loser_game = matches[self.losers_r2.pk]
+        self.assertEqual(loser_game["dire_team"]["pk"], self.teams[1].pk)
+        self.assertEqual(loser_game["radiant_team"]["pk"], self.teams[2].pk)
+
+    def test_unset_clears_downstream_slots_and_resets_to_pending(self) -> None:
+        self._advance(self.winners_r1, "radiant")
+
+        response = self._advance(self.winners_r1, None)
+        self.assertEqual(response.status_code, 200)
+
+        matches = self._bracket_by_pk()
+        source = matches[self.winners_r1.pk]
+        self.assertEqual(source["status"], "pending")
+        self.assertIsNone(source["winning_team"])
+        self.assertIsNone(matches[self.winners_r2.pk]["radiant_team"])
+        self.assertIsNone(matches[self.losers_r2.pk]["dire_team"])
+        self.assertEqual(
+            matches[self.losers_r2.pk]["radiant_team"]["pk"], self.teams[2].pk
+        )
+
+    def test_unset_keeps_downstream_slot_holding_another_team(self) -> None:
+        self._advance(self.winners_r1, "radiant")
+        self.winners_r2.refresh_from_db()
+        self.winners_r2.radiant_team = self.teams[2]
+        self.winners_r2.save()
+
+        self._advance(self.winners_r1, None)
+
+        self.winners_r2.refresh_from_db()
+        self.assertEqual(self.winners_r2.radiant_team_id, self.teams[2].pk)
+
+    def test_unset_rejected_when_downstream_match_completed(self) -> None:
+        self._advance(self.winners_r1, "radiant")
+        self._advance(self.losers_r2, "dire")
+
+        response = self._advance(self.winners_r1, None)
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.data["code"], "downstream_match_completed")
+        self.winners_r1.refresh_from_db()
+        self.assertEqual(self.winners_r1.winning_team_id, self.teams[0].pk)
+
+    def test_changing_winner_replaces_both_advanced_teams(self) -> None:
+        self._advance(self.winners_r1, "radiant")
+        self._advance(self.winners_r1, None)
+
+        self._advance(self.winners_r1, "dire")
+
+        self.winners_r2.refresh_from_db()
+        self.losers_r2.refresh_from_db()
+        self.assertEqual(self.winners_r2.radiant_team_id, self.teams[1].pk)
+        self.assertEqual(self.losers_r2.dire_team_id, self.teams[0].pk)
+
+    def test_unset_grand_finals_clears_both_placements(self) -> None:
+        grand_finals = Game.objects.create(
+            tournament=self.tournament,
+            bracket_type="grand_finals",
+            round=1,
+            position=0,
+            radiant_team=self.teams[0],
+            dire_team=self.teams[1],
+        )
+        self._advance(grand_finals, "radiant")
+
+        self._advance(grand_finals, None)
+
+        self.teams[0].refresh_from_db()
+        self.teams[1].refresh_from_db()
+        self.assertIsNone(self.teams[0].placement)
+        self.assertIsNone(self.teams[1].placement)
