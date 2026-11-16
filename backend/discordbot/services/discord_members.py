@@ -29,13 +29,15 @@ log = get_logger(__name__)
 #
 # The cache is per process backend: Daphne uses the Redis default cache,
 # celery workers (config.settings_celery, no CACHES) use process-local
-# LocMem, so the two never share entries.
+# LocMem, so the two never share entries. Callers:
 #   1. Admin member search / add-to-tournament (Daphne) — admins searching
 #      a Discord member who joined recently force a refresh via the
 #      `refresh_discord_members` endpoint (5-min cooldown).
 #   2. Daily avatar refresh — the `refresh_avatars_batched` Celery task
 #      fetches through this helper in the worker; its LocMem entry only
 #      saves repeat fetches within that worker process.
+#   3. Discord name sync — the worker task always refetches and never
+#      writes the cache.
 DISCORD_MEMBER_CACHE_TTL_S = 60 * 60  # 1 hour
 
 # Per-request bound for Discord REST calls. Without one, a request whose TCP
