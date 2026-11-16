@@ -1,14 +1,17 @@
-import { useMemo } from "react";
-import { PlayerPopover } from "~/components/player";
-import { cn } from "~/lib/utils";
-import { brandBg } from "~/components/ui/buttons/styles";
-import type { HeroDraft, HeroDraftTick } from "~/components/herodraft/types";
-import type { UserType } from "~/components/user/types.d";
-import { DisplayName } from "~/components/user/avatar";
-import { UserAvatar } from "~/components/user/UserAvatar";
-import { useHeroDraftStore, heroDraftSelectors } from "~/store/heroDraftStore";
-import { useUserStore } from "~/store/userStore";
-import { useDraftCountdown } from "~/components/herodraft/useDraftCountdown";
+import { useMemo } from 'react';
+import type { HeroDraft, HeroDraftTick } from '~/components/herodraft/types';
+import {
+  isTimerEnabled,
+  useDraftCountdown,
+} from '~/components/herodraft/useDraftCountdown';
+import { PlayerPopover } from '~/components/player';
+import { brandBg } from '~/components/ui/buttons/styles';
+import { DisplayName } from '~/components/user/avatar';
+import type { UserType } from '~/components/user/types.d';
+import { UserAvatar } from '~/components/user/UserAvatar';
+import { cn } from '~/lib/utils';
+import { heroDraftSelectors, useHeroDraftStore } from '~/store/heroDraftStore';
+import { useUserStore } from '~/store/userStore';
 
 interface DraftTopBarProps {
   draft: HeroDraft;
@@ -23,7 +26,7 @@ function formatTime(ms: number): string {
   const totalSeconds = Math.max(0, Math.round(ms / 1000));
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
-  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 }
 
 // Animation thresholds (ms). Grace pulses red↔yellow when low; the active
@@ -57,7 +60,7 @@ export function DraftTopBar({ draft, tick }: DraftTopBarProps) {
   // Get current user and isMyTurn from stores
   const { currentUser } = useUserStore();
   const isMyTurn = useHeroDraftStore((state) =>
-    heroDraftSelectors.isMyTurn(state, currentUser?.pk)
+    heroDraftSelectors.isMyTurn(state, currentUser?.pk),
   );
 
   // Order teams: first pick on left (teamA), second pick on right (teamB)
@@ -73,13 +76,16 @@ export function DraftTopBar({ draft, tick }: DraftTopBarProps) {
   // Derive active team from tick first, then fall back to state
   // This prevents race conditions where state updates but tick hasn't arrived yet
   const currentRoundIndex = draft.current_round;
-  const currentRound = currentRoundIndex !== null ? draft.rounds[currentRoundIndex] : null;
+  const currentRound =
+    currentRoundIndex !== null ? draft.rounds[currentRoundIndex] : null;
 
   // Only show picking indicator during drafting state
-  const activeTeamId = draft.state === "drafting"
-    ? (tick?.active_team_id ?? currentRound?.draft_team ?? null)
-    : null;
+  const activeTeamId =
+    draft.state === 'drafting'
+      ? (tick?.active_team_id ?? currentRound?.draft_team ?? null)
+      : null;
 
+  const timerEnabled = isTimerEnabled(draft, tick);
   const countdown = useDraftCountdown();
   const graceRemaining = countdown.graceRemainingMs;
 
@@ -102,23 +108,25 @@ export function DraftTopBar({ draft, tick }: DraftTopBarProps) {
   // pulsing in unison when both happen to start a round under 30s, and
   // avoids a brief flash after `hero_selected` nulls active_team_id.
   const teamAIsCritical =
+    timerEnabled &&
     graceRemaining === 0 &&
     teamAReserve < RESERVE_CRITICAL_MS &&
     tick?.active_team_id != null &&
     teamA?.id === tick.active_team_id;
   const teamBIsCritical =
+    timerEnabled &&
     graceRemaining === 0 &&
     teamBReserve < RESERVE_CRITICAL_MS &&
     tick?.active_team_id != null &&
     teamB?.id === tick.active_team_id;
 
   // Get current action type from round data
-  const currentAction = currentRound?.action_type ?? "pick";
+  const currentAction = currentRound?.action_type ?? 'pick';
 
   // Memoize progress counts to avoid filtering on every tick update
   const teamAProgress = useMemo(() => {
     const completed = draft.rounds.filter(
-      (r) => r.draft_team === teamA?.id && r.state === "completed"
+      (r) => r.draft_team === teamA?.id && r.state === 'completed',
     ).length;
     const total = draft.rounds.filter((r) => r.draft_team === teamA?.id).length;
     return { completed, total };
@@ -126,7 +134,7 @@ export function DraftTopBar({ draft, tick }: DraftTopBarProps) {
 
   const teamBProgress = useMemo(() => {
     const completed = draft.rounds.filter(
-      (r) => r.draft_team === teamB?.id && r.state === "completed"
+      (r) => r.draft_team === teamB?.id && r.state === 'completed',
     ).length;
     const total = draft.rounds.filter((r) => r.draft_team === teamB?.id).length;
     return { completed, total };
@@ -145,9 +153,16 @@ export function DraftTopBar({ draft, tick }: DraftTopBarProps) {
 
   // Helper to render a player avatar with name underneath
   const renderPlayer = (
-    player: { pk: number; username: string | null; nickname: string | null; avatar: string | null; avatarUrl?: string | null; discordId?: string | null },
+    player: {
+      pk: number;
+      username: string | null;
+      nickname: string | null;
+      avatar: string | null;
+      avatarUrl?: string | null;
+      discordId?: string | null;
+    },
     isCaptain: boolean,
-    testIdPrefix: string
+    testIdPrefix: string,
   ) => (
     <PlayerPopover key={`player-${player.pk}`} player={captainToUser(player)}>
       <button
@@ -157,18 +172,20 @@ export function DraftTopBar({ draft, tick }: DraftTopBarProps) {
         <UserAvatar
           user={captainToUser(player)}
           size="sm"
-          border={isCaptain ? "captain" : "none"}
+          border={isCaptain ? 'captain' : 'none'}
           className={cn(
             isCaptain
-              ? "w-6 h-6 sm:w-8 sm:h-8 md:w-10 md:h-10"
-              : "w-5 h-5 sm:w-6 sm:h-6 md:w-8 md:h-8 opacity-80 hover:opacity-100"
+              ? 'w-6 h-6 sm:w-8 sm:h-8 md:w-10 md:h-10'
+              : 'w-5 h-5 sm:w-6 sm:h-6 md:w-8 md:h-8 opacity-80 hover:opacity-100',
           )}
           data-testid={`${testIdPrefix}-avatar`}
         />
         <span
           className={cn(
-            "text-[10px] sm:text-xs truncate max-w-[40px] sm:max-w-[56px] mt-0.5 sm:mt-1 hidden sm:block",
-            isCaptain ? "font-semibold text-yellow-400" : "text-muted-foreground"
+            'text-[10px] sm:text-xs truncate max-w-[40px] sm:max-w-[56px] mt-0.5 sm:mt-1 hidden sm:block',
+            isCaptain
+              ? 'font-semibold text-yellow-400'
+              : 'text-muted-foreground',
           )}
           data-testid={`${testIdPrefix}-name`}
         >
@@ -180,160 +197,230 @@ export function DraftTopBar({ draft, tick }: DraftTopBarProps) {
 
   // Determine background color based on turn and action
   const getTopBarBackground = () => {
-    if (!isMyTurn || draft.state !== "drafting") {
-      return "bg-background";
+    if (!isMyTurn || draft.state !== 'drafting') {
+      return 'bg-background';
     }
-    return currentAction === "ban" ? "bg-red-900/90" : "bg-green-900/90";
+    return currentAction === 'ban' ? 'bg-red-900/90' : 'bg-green-900/90';
   };
 
   return (
     <div
-      className={cn(getTopBarBackground(), brandBg, "border-b border-gray-800 shrink-0 transition-colors duration-300")}
+      className={cn(
+        getTopBarBackground(),
+        brandBg,
+        'border-b border-gray-800 shrink-0 transition-colors duration-300',
+      )}
       data-testid="herodraft-topbar"
     >
       {/* Row 1: Teams - grid matches Row 2 so VS aligns over grace timer */}
-      <div className="grid grid-cols-3 sm:grid-cols-5 items-center p-1 sm:p-2" data-testid="herodraft-teams-row">
+      <div
+        className="grid grid-cols-3 sm:grid-cols-5 items-center p-1 sm:p-2"
+        data-testid="herodraft-teams-row"
+      >
         {/* Team A: Captain on left, members flowing right */}
-        <div className="flex items-center gap-0.5 sm:gap-1" data-testid="herodraft-team-a">
+        <div
+          className="flex items-center gap-0.5 sm:gap-1"
+          data-testid="herodraft-team-a"
+        >
           {/* Captain - hidden below md */}
           <div className="hidden md:block">
-            {teamA?.captain && renderPlayer(teamA.captain, true, "herodraft-team-a-captain")}
+            {teamA?.captain &&
+              renderPlayer(teamA.captain, true, 'herodraft-team-a-captain')}
           </div>
           {/* Team members - hidden on small screens */}
           <div className="hidden lg:flex items-center gap-0.5 sm:gap-1">
-            {teamAMembers.map((member, idx) => renderPlayer(member, false, `herodraft-team-a-member-${idx}`))}
+            {teamAMembers.map((member, idx) =>
+              renderPlayer(member, false, `herodraft-team-a-member-${idx}`),
+            )}
           </div>
         </div>
 
         {/* Progress A - hidden on mobile, visible sm+ */}
         <div className="hidden sm:block">
-          {(draft.state === "drafting" || draft.state === "completed") && (
-            <div className="text-center text-[10px] sm:text-xs text-muted-foreground" data-testid="herodraft-team-a-progress">
+          {(draft.state === 'drafting' || draft.state === 'completed') && (
+            <div
+              className="text-center text-[10px] sm:text-xs text-muted-foreground"
+              data-testid="herodraft-team-a-progress"
+            >
               {teamAProgress.completed}/{teamAProgress.total}
             </div>
           )}
         </div>
 
         {/* Center: VS or YOUR TURN indicator */}
-        <div className="text-center flex items-center justify-center gap-2" data-testid="herodraft-vs-section">
+        <div
+          className="text-center flex items-center justify-center gap-2"
+          data-testid="herodraft-vs-section"
+        >
           {/* Mobile-only progress counts inline with VS */}
-          {(draft.state === "drafting" || draft.state === "completed") && (
-            <span className="text-[10px] text-muted-foreground sm:hidden">{teamAProgress.completed}/{teamAProgress.total}</span>
+          {(draft.state === 'drafting' || draft.state === 'completed') && (
+            <span className="text-[10px] text-muted-foreground sm:hidden">
+              {teamAProgress.completed}/{teamAProgress.total}
+            </span>
           )}
-          {isMyTurn && draft.state === "drafting" ? (
+          {isMyTurn && draft.state === 'drafting' ? (
             <div
               className="flex flex-col items-center animate-pulse-scale"
               data-testid="herodraft-your-turn-indicator"
             >
-              <span className={cn(
-                "text-xs sm:text-sm font-bold tracking-wide",
-                currentAction === "ban" ? "text-red-300" : "text-green-300"
-              )}>
+              <span
+                className={cn(
+                  'text-xs sm:text-sm font-bold tracking-wide',
+                  currentAction === 'ban' ? 'text-red-300' : 'text-green-300',
+                )}
+              >
                 YOUR TURN
               </span>
-              <span className={cn(
-                "text-xl sm:text-3xl font-black tracking-wider",
-                currentAction === "ban"
-                  ? "text-red-400 drop-shadow-[0_0_10px_rgba(248,113,113,0.5)]"
-                  : "text-green-400 drop-shadow-[0_0_10px_rgba(74,222,128,0.5)]"
-              )}>
+              <span
+                className={cn(
+                  'text-xl sm:text-3xl font-black tracking-wider',
+                  currentAction === 'ban'
+                    ? 'text-red-400 drop-shadow-[0_0_10px_rgba(248,113,113,0.5)]'
+                    : 'text-green-400 drop-shadow-[0_0_10px_rgba(74,222,128,0.5)]',
+                )}
+              >
                 {currentAction.toUpperCase()}
               </span>
             </div>
           ) : (
-            <span className="text-lg sm:text-2xl font-bold text-muted-foreground">VS</span>
+            <span className="text-lg sm:text-2xl font-bold text-muted-foreground">
+              VS
+            </span>
           )}
-          {(draft.state === "drafting" || draft.state === "completed") && (
-            <span className="text-[10px] text-muted-foreground sm:hidden">{teamBProgress.completed}/{teamBProgress.total}</span>
+          {(draft.state === 'drafting' || draft.state === 'completed') && (
+            <span className="text-[10px] text-muted-foreground sm:hidden">
+              {teamBProgress.completed}/{teamBProgress.total}
+            </span>
           )}
         </div>
 
         {/* Progress B - hidden on mobile, visible sm+ */}
         <div className="hidden sm:block">
-          {(draft.state === "drafting" || draft.state === "completed") && (
-            <div className="text-center text-[10px] sm:text-xs text-muted-foreground" data-testid="herodraft-team-b-progress">
+          {(draft.state === 'drafting' || draft.state === 'completed') && (
+            <div
+              className="text-center text-[10px] sm:text-xs text-muted-foreground"
+              data-testid="herodraft-team-b-progress"
+            >
               {teamBProgress.completed}/{teamBProgress.total}
             </div>
           )}
         </div>
 
         {/* Team B: Members flowing left, Captain on right */}
-        <div className="flex items-center justify-end gap-0.5 sm:gap-1" data-testid="herodraft-team-b">
+        <div
+          className="flex items-center justify-end gap-0.5 sm:gap-1"
+          data-testid="herodraft-team-b"
+        >
           {/* Team members (reversed order so they flow toward center) - hidden below lg */}
           <div className="hidden lg:flex items-center gap-0.5 sm:gap-1">
-            {[...teamBMembers].reverse().map((member, idx) => renderPlayer(member, false, `herodraft-team-b-member-${idx}`))}
+            {[...teamBMembers]
+              .reverse()
+              .map((member, idx) =>
+                renderPlayer(member, false, `herodraft-team-b-member-${idx}`),
+              )}
           </div>
           {/* Captain - hidden below md */}
           <div className="hidden md:block">
-            {teamB?.captain && renderPlayer(teamB.captain, true, "herodraft-team-b-captain")}
+            {teamB?.captain &&
+              renderPlayer(teamB.captain, true, 'herodraft-team-b-captain')}
           </div>
         </div>
       </div>
 
       {/* Row 2: Timers */}
-      <div className="grid grid-cols-3 sm:grid-cols-5 items-center p-1 sm:p-2 border-t border-gray-800" data-testid="herodraft-timers-row">
-        {/* Team A Reserve */}
+      {timerEnabled ? (
         <div
-          className={cn(
-            "text-center font-mono text-sm sm:text-lg overflow-visible",
-            teamAReserve < RESERVE_CRITICAL_MS && "text-red-400"
-          )}
-          data-testid="herodraft-team-a-reserve"
+          className="grid grid-cols-3 sm:grid-cols-5 items-center p-1 sm:p-2 border-t border-gray-800"
+          data-testid="herodraft-timers-row"
         >
-          <span className="text-[10px] sm:text-xs text-muted-foreground block">Reserve</span>
-          <span
+          {/* Team A Reserve */}
+          <div
             className={cn(
-              "inline-block origin-center",
-              teamAIsCritical && "animate-reserve-critical"
+              'text-center font-mono text-sm sm:text-lg overflow-visible',
+              teamAReserve < RESERVE_CRITICAL_MS && 'text-red-400',
             )}
-            data-testid="herodraft-team-a-reserve-time"
+            data-testid="herodraft-team-a-reserve"
           >
-            {formatTime(teamAReserve)}
-          </span>
+            <span className="text-[10px] sm:text-xs text-muted-foreground block">
+              Reserve
+            </span>
+            <span
+              className={cn(
+                'inline-block origin-center',
+                teamAIsCritical && 'animate-reserve-critical',
+              )}
+              data-testid="herodraft-team-a-reserve-time"
+            >
+              {formatTime(teamAReserve)}
+            </span>
+          </div>
+
+          <div className="hidden sm:block" />
+
+          {/* Current pick timer */}
+          <div className="text-center" data-testid="herodraft-grace-timer">
+            <span
+              className="text-[10px] sm:text-xs text-muted-foreground block uppercase"
+              data-testid="herodraft-current-action"
+            >
+              {currentAction}
+            </span>
+            <span
+              className={cn(
+                'font-mono text-xl sm:text-2xl font-bold inline-block origin-center',
+                graceRemaining < GRACE_URGENT_MS
+                  ? 'text-red-400 animate-grace-urgent'
+                  : 'text-yellow-400',
+              )}
+              data-testid="herodraft-grace-time"
+            >
+              {formatTime(graceRemaining)}
+            </span>
+          </div>
+
+          <div className="hidden sm:block" />
+
+          {/* Team B Reserve */}
+          <div
+            className={cn(
+              'text-center font-mono text-sm sm:text-lg overflow-visible',
+              teamBReserve < RESERVE_CRITICAL_MS && 'text-red-400',
+            )}
+            data-testid="herodraft-team-b-reserve"
+          >
+            <span className="text-[10px] sm:text-xs text-muted-foreground block">
+              Reserve
+            </span>
+            <span
+              className={cn(
+                'inline-block origin-center',
+                teamBIsCritical && 'animate-reserve-critical',
+              )}
+              data-testid="herodraft-team-b-reserve-time"
+            >
+              {formatTime(teamBReserve)}
+            </span>
+          </div>
         </div>
-
-        <div className="hidden sm:block" />
-
-        {/* Current pick timer */}
-        <div className="text-center" data-testid="herodraft-grace-timer">
-          <span className="text-[10px] sm:text-xs text-muted-foreground block uppercase" data-testid="herodraft-current-action">
+      ) : (
+        <div
+          className="flex items-center justify-center gap-2 p-1 sm:p-2 border-t border-border"
+          data-testid="herodraft-timers-row"
+        >
+          <span
+            className="text-[10px] sm:text-xs text-muted-foreground uppercase"
+            data-testid="herodraft-current-action"
+          >
             {currentAction}
           </span>
           <span
-            className={cn(
-              "font-mono text-xl sm:text-2xl font-bold inline-block origin-center",
-              graceRemaining < GRACE_URGENT_MS
-                ? "text-red-400 animate-grace-urgent"
-                : "text-yellow-400"
-            )}
-            data-testid="herodraft-grace-time"
+            className="rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] sm:text-xs text-muted-foreground"
+            data-testid="herodraft-no-timer"
           >
-            {formatTime(graceRemaining)}
+            No turn timer
           </span>
         </div>
-
-        <div className="hidden sm:block" />
-
-        {/* Team B Reserve */}
-        <div
-          className={cn(
-            "text-center font-mono text-sm sm:text-lg overflow-visible",
-            teamBReserve < RESERVE_CRITICAL_MS && "text-red-400"
-          )}
-          data-testid="herodraft-team-b-reserve"
-        >
-          <span className="text-[10px] sm:text-xs text-muted-foreground block">Reserve</span>
-          <span
-            className={cn(
-              "inline-block origin-center",
-              teamBIsCritical && "animate-reserve-critical"
-            )}
-            data-testid="herodraft-team-b-reserve-time"
-          >
-            {formatTime(teamBReserve)}
-          </span>
-        </div>
-      </div>
+      )}
     </div>
   );
 }

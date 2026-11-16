@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { I18nextProvider } from 'react-i18next';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EventRepeaterType } from '~/components/api/api';
-import { I18nextProvider } from 'react-i18next';
 import { TooltipProvider } from '~/components/ui/tooltip';
 import { createI18nInstance } from '~/i18n/config';
 
@@ -30,7 +30,8 @@ class ResizeObserverStub {
   unobserve() {}
   disconnect() {}
 }
-globalThis.ResizeObserver ??= ResizeObserverStub as unknown as typeof ResizeObserver;
+globalThis.ResizeObserver ??=
+  ResizeObserverStub as unknown as typeof ResizeObserver;
 
 function Wrapper({ children }: { children: React.ReactNode }) {
   return (
@@ -124,7 +125,7 @@ describe('EditRepeaterModal Discord ping roles', () => {
   it('submits the existing role arrays unchanged instead of clearing them', async () => {
     render(
       <EditRepeaterModal repeater={repeater} open onOpenChange={() => {}} />,
-      { wrapper: Wrapper }
+      { wrapper: Wrapper },
     );
 
     fireEvent.click(screen.getByTestId('form-dialog-submit'));
@@ -137,9 +138,12 @@ describe('EditRepeaterModal Discord ping roles', () => {
   });
 
   it('sends no lobby password for a random series', async () => {
-    render(<EditRepeaterModal repeater={repeater} open onOpenChange={() => {}} />, {
-      wrapper: Wrapper,
-    });
+    render(
+      <EditRepeaterModal repeater={repeater} open onOpenChange={() => {}} />,
+      {
+        wrapper: Wrapper,
+      },
+    );
     fireEvent.click(screen.getByTestId('form-dialog-submit'));
     await waitFor(() => expect(mutateAsync).toHaveBeenCalled());
     const body = mutateAsync.mock.calls[0][0];
@@ -168,7 +172,11 @@ describe('EditRepeaterModal Discord ping roles', () => {
   });
 
   it("keeps a fixed series' password it loaded", async () => {
-    savedPassword.current = { mode: 'fixed', password: 'series-pw', can_manage: true };
+    savedPassword.current = {
+      mode: 'fixed',
+      password: 'series-pw',
+      can_manage: true,
+    };
     render(
       <EditRepeaterModal
         repeater={{ ...repeater, dota_lobby_password_mode: 'fixed' }}
@@ -178,7 +186,9 @@ describe('EditRepeaterModal Discord ping roles', () => {
       { wrapper: Wrapper },
     );
     await waitFor(() =>
-      expect(screen.getByTestId('lobby-password-input')).toHaveValue('series-pw'),
+      expect(screen.getByTestId('lobby-password-input')).toHaveValue(
+        'series-pw',
+      ),
     );
     fireEvent.click(screen.getByTestId('form-dialog-submit'));
     await waitFor(() => expect(mutateAsync).toHaveBeenCalled());
@@ -186,5 +196,48 @@ describe('EditRepeaterModal Discord ping roles', () => {
       dota_lobby_password_mode: 'fixed',
       dota_lobby_password: 'series-pw',
     });
+  });
+});
+
+describe('EditRepeaterModal draft settings', () => {
+  beforeEach(() => {
+    mutateAsync.mockClear();
+    savedPassword.current = undefined;
+  });
+
+  it('shows saved series timers and sends edits as flat ms fields', async () => {
+    render(
+      <EditRepeaterModal
+        repeater={{
+          ...repeater,
+          draft_timer_enabled: true,
+          draft_grace_time_ms: 20000,
+          draft_reserve_time_ms: 40000,
+          hero_timer_enabled: true,
+          hero_grace_time_ms: 25000,
+          hero_reserve_time_ms: 60000,
+        }}
+        open
+        onOpenChange={() => {}}
+      />,
+      { wrapper: Wrapper },
+    );
+    expect(screen.getByTestId('draft-settings-team-grace-s')).toHaveValue(20);
+    fireEvent.click(screen.getByTestId('draft-settings-team-timer-enabled'));
+    fireEvent.click(screen.getByTestId('draft-settings-hero-timer-enabled'));
+    fireEvent.click(screen.getByTestId('form-dialog-submit'));
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalled());
+    const body = mutateAsync.mock.calls[0][0];
+    expect(body).toMatchObject({
+      draft_timer_enabled: false,
+      draft_grace_time_ms: 20000,
+      draft_reserve_time_ms: 40000,
+      draft_timeout_action: 'skip_turn',
+      hero_timer_enabled: false,
+      hero_grace_time_ms: 25000,
+      hero_reserve_time_ms: 60000,
+    });
+    expect(body).not.toHaveProperty('draft_grace_time_s');
+    expect(body).not.toHaveProperty('hero_reserve_time_s');
   });
 });

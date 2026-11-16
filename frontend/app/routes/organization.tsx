@@ -79,6 +79,7 @@ import {
 } from '~/features/org-features';
 import { PromotionTab } from '~/features/promotion';
 import {
+  useEvent,
   useEventRepeaters,
   useEvents,
   useRepeaterSubscriptionMutation,
@@ -374,6 +375,8 @@ export default function OrganizationDetailPage() {
   const { data: events = [], isLoading: eventsLoading } = useEvents(
     pk ? { organization: pk } : undefined,
   );
+  // The list rows are slim; the edit form needs every event field.
+  const { data: fullEditingEvent } = useEvent(editingEvent?.id ?? null);
   const { data: repeaters = [], isLoading: repeatersLoading } =
     useEventRepeaters(pk ? { organization: pk } : undefined);
 
@@ -872,9 +875,9 @@ export default function OrganizationDetailPage() {
         />
       )}
 
-      {editingEvent && (
+      {editingEvent && fullEditingEvent?.id === editingEvent.id && (
         <EditEventModal
-          event={editingEvent}
+          event={fullEditingEvent}
           open={true}
           onOpenChange={(open) => {
             if (!open) setEditingEvent(null);

@@ -7,6 +7,13 @@ import { z } from 'zod';
 import { GAME_TYPE } from '~/components/game/constants';
 import { LeagueCombobox } from '~/components/league/LeagueCombobox';
 import { lobbyPasswordPayload } from '~/components/lobby/password';
+import { DraftSettingsSection } from '~/components/teamdraft/DraftSettingsSection';
+import {
+  draftSettingsFormToEventFields,
+  draftSettingsToFormInput,
+  eventFieldsToDraftSettingsFormInput,
+  toDraftStyle,
+} from '~/components/teamdraft/schemas';
 import { FormDialog } from '~/components/ui/dialogs';
 import {
   Form,
@@ -91,6 +98,7 @@ export function EditEventModal({
       tournament_league: null, // overridden by useEffect when event loads
       ...DISCORD_CONFIG_DEFAULTS,
       ...DOTA_LOBBY_CONFIG_DEFAULTS,
+      ...draftSettingsToFormInput(null),
     },
   });
 
@@ -106,7 +114,8 @@ export function EditEventModal({
         tournament_name: event.tournament_name,
         tournament_type: event.tournament_type,
         game_type: event.game_type,
-        draft_type: event.draft_type,
+        draft_type: toDraftStyle(event.draft_type),
+        ...eventFieldsToDraftSettingsFormInput(event),
         game_mode: event.game_mode,
         custom_game_name: event.custom_game_name,
         captains_draft_time: event.captains_draft_time,
@@ -194,10 +203,26 @@ export function EditEventModal({
         dota_lobby_password,
         dota_lobby_password_saved,
         event_ends_at,
+        draft_timer_enabled,
+        draft_grace_time_s,
+        draft_reserve_time_s,
+        draft_timeout_action,
+        hero_timer_enabled,
+        hero_grace_time_s,
+        hero_reserve_time_s,
         ...rest
       } = data;
       const payload = {
         ...rest,
+        ...draftSettingsFormToEventFields({
+          draft_timer_enabled,
+          draft_grace_time_s,
+          draft_reserve_time_s,
+          draft_timeout_action,
+          hero_timer_enabled,
+          hero_grace_time_s,
+          hero_reserve_time_s,
+        }),
         ...lobbyPasswordPayload({
           game_type: data.game_type,
           dota_lobby_password_mode,
@@ -485,67 +510,36 @@ export function EditEventModal({
               />
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="draft_type"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Draft Type</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger className="w-full">
-                          <SelectValue />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="shuffle">
-                          Shuffle — MMR point buy draft
-                        </SelectItem>
-                        <SelectItem value="snake">
-                          Snake Draft — Captains pick in snake order
-                        </SelectItem>
-                        <SelectItem value="normal">
-                          Manual — Manually assign players
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="tournament_type"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Bracket Type</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger className="w-full">
-                          <SelectValue />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="double_elimination">
-                          Double Elimination
-                        </SelectItem>
-                        <SelectItem value="single_elimination">
-                          Single Elimination
-                        </SelectItem>
-                        <SelectItem value="swiss">Swiss Bracket</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormDescription>
-                      Double elimination works best with teams that are a power
-                      of 2 (2, 4, 8, 16)
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
+            <FormField
+              control={form.control}
+              name="tournament_type"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Bracket Type</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="double_elimination">
+                        Double Elimination
+                      </SelectItem>
+                      <SelectItem value="single_elimination">
+                        Single Elimination
+                      </SelectItem>
+                      <SelectItem value="swiss">Swiss Bracket</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormDescription>
+                    Double elimination works best with teams that are a power of
+                    2 (2, 4, 8, 16)
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
             <LobbyConfigSection control={form.control} watch={form.watch} />
             <DotaLobbyEventSettings
@@ -559,6 +553,7 @@ export function EditEventModal({
               onRegenerate={onRegenerate}
               regenerating={regenerate.isPending}
             />
+            <DraftSettingsSection control={form.control} />
           </TabsContent>
 
           <TabsContent value="approval" className="space-y-4">

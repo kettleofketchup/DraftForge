@@ -5,7 +5,11 @@ import { UserSchema } from '../user';
 import { GameSchema } from '../game/schemas';
 import { LeagueOrganizationSchema } from '../league/schemas';
 import { TeamSchema } from '../team';
-import { DraftOptionsSchema, DraftSchema } from '../teamdraft/schemas';
+import {
+  DraftOptionsSchema,
+  DraftSchema,
+  DraftSettingsFormSchema,
+} from '../teamdraft/schemas';
 
 // Tournament type values (keys from TOURNAMENT_TYPE enum)
 export const TOURNAMENT_TYPE_VALUES = [
@@ -150,6 +154,7 @@ export const CreateTournamentSchema = z
     captains_draft_time: z.number().int().default(10),
     custom_game_name: z.string().max(255).default(''),
   })
+  .extend(DraftSettingsFormSchema.shape)
   .superRefine((data, ctx) => {
     // Draft time is only shown and sent in Captain's Mode.
     if (data.game_mode === 'captains_mode' && data.captains_draft_time < 1) {

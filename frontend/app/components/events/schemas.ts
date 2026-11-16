@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { refineLobbyPassword } from '~/components/lobby/password';
+import { DraftSettingsFormSchema } from '~/components/teamdraft/schemas';
 
 export const EventState = {
   UPCOMING: 'upcoming',
@@ -114,6 +115,13 @@ export const eventSchema = z
     dota_lobby_region: z.string().default(''),
     discord_send_lobby_info: z.boolean().default(false),
     dota_lobby_password_mode: z.enum(['random', 'fixed']).default('random'),
+    draft_timer_enabled: z.boolean().optional(),
+    draft_grace_time_ms: z.number().int().optional(),
+    draft_reserve_time_ms: z.number().int().optional(),
+    draft_timeout_action: z.string().optional(),
+    hero_timer_enabled: z.boolean().optional(),
+    hero_grace_time_ms: z.number().int().optional(),
+    hero_reserve_time_ms: z.number().int().optional(),
     user_can_manage: z.boolean().default(false),
     ends_at: z.string().nullable().default(null),
     host: eventStaffUserSchema.nullable().default(null),
@@ -567,6 +575,7 @@ export const editEventFormSchema = z
   })
   .merge(discordConfigSchema)
   .merge(dotaLobbyConfigSchema)
+  .merge(DraftSettingsFormSchema)
   .superRefine((values, ctx) => {
     refineLobbyPassword(values, ctx);
     refineEventEnd(values, ctx);

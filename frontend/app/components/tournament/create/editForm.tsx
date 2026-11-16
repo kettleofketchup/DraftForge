@@ -8,9 +8,15 @@ import { useLocation } from 'react-router';
 import { toast } from 'sonner';
 
 import { createTournament, updateTournament } from '~/components/api/api';
+import type { TournamentWritePayload } from '~/components/api/tournamentAPI';
 import { LobbyConfigSection } from '~/components/events/LobbyConfigSection';
 import type { LeagueType } from '~/components/league/schemas';
 import { SCROLLAREA_CSS } from '~/components/reusable/modal';
+import { DraftSettingsSection } from '~/components/teamdraft/DraftSettingsSection';
+import {
+  draftSettingsFormToPatch,
+  draftSettingsToFormInput,
+} from '~/components/teamdraft/schemas';
 import { Button } from '~/components/ui/button';
 import { CancelButton, SubmitButton } from '~/components/ui/buttons';
 import { Calendar } from '~/components/ui/calendar';
@@ -53,7 +59,7 @@ import {
   type CreateTournamentInput,
   type TournamentTypeValue,
 } from '../schemas';
-import type { TournamentClassType, TournamentType } from '../types';
+import type { TournamentClassType } from '../types';
 import { DiscordTournamentConfigSection } from './DiscordTournamentConfigSection';
 import { DotaLobbyConfigSection } from './DotaLobbyConfigSection';
 import { fieldErrorsFrom, tabForField, type FormTab } from './formErrors';
@@ -203,6 +209,7 @@ export const TournamentEditForm: React.FC<Props> = ({
       lobby_steam_league_id: tourn?.lobby_steam_league_id ?? null,
       captains_draft_time: tourn?.captains_draft_time ?? 10,
       custom_game_name: tourn?.custom_game_name ?? '',
+      ...draftSettingsToFormInput(tourn?.draft_options),
     },
   });
 
@@ -243,7 +250,7 @@ export const TournamentEditForm: React.FC<Props> = ({
     setIsSubmitting(true);
 
     try {
-      const payload: Partial<TournamentType> & {
+      const payload: TournamentWritePayload & {
         timezone?: string;
         league_id_write?: number | null;
       } = {
@@ -265,6 +272,7 @@ export const TournamentEditForm: React.FC<Props> = ({
         dota_lobby_launch: data.dota_lobby_launch,
         dota_lobby_region: data.dota_lobby_region.trim(),
         discord_send_lobby_info: data.discord_send_lobby_info,
+        draft_options: draftSettingsFormToPatch(data),
       };
 
       if (isEditing) {
@@ -579,6 +587,11 @@ export const TournamentEditForm: React.FC<Props> = ({
             <TabsContent value="config" className="mt-4">
               <LobbyConfigSection control={form.control} watch={form.watch} />
               <TournamentConfigSection control={form.control} />
+              <DraftSettingsSection
+                control={form.control}
+                showDraftType={false}
+                showTimeoutAction={false}
+              />
               <DotaLobbyConfigSection
                 control={form.control}
                 sourceEvent={sourceEvent}
