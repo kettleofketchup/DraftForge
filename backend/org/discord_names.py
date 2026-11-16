@@ -8,9 +8,10 @@ from cacheops import invalidate_obj as cacheops_invalidate_obj
 from django.core.cache import cache
 from django.db import transaction
 
-from app.cache_utils import invalidate_model
+from app.cache_utils import invalidate_after_commit, invalidate_model
 from app.models import CustomUser, Organization
 from discordbot.services.member_names import MemberNames, normalise_name
+from org.activity import enqueue_org_name_sync
 from org.models import OrgUser
 from telemetry.logging import get_logger
 
@@ -225,3 +226,29 @@ def apply_guild_member_names(
         **result.as_dict(),
     )
     return result
+
+
+def reset_org_guild_nicknames(org: Organization, *, enqueue: bool) -> int:
+    org_users = list(
+        OrgUser.objects.filter(organization=org)
+        .exclude(guild_nickname=None)
+        .select_related("user")
+        .nocache()
+    )
+    with transaction.atomic():
+        if org_users:
+            OrgUser.objects.filter(pk__in=[ou.pk for ou in org_users]).update(
+                guild_nickname=None
+            )
+            invalidate_after_commit(*org_users, *{ou.user for ou in org_users})
+        if enqueue:
+            enqueue_org_name_sync(org.pk)
+    log.info(
+        "name_sync_org_guild_reset",
+        system="discord",
+        subsystem="name_sync",
+        org_id=org.pk,
+        cleared=len(org_users),
+        enqueued=enqueue,
+    )
+    return len(org_users)

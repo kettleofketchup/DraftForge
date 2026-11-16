@@ -14,9 +14,12 @@ This module reconciles the two rows: it keeps the account that already owns the
 it, moving the social-auth link and any other related data across.
 """
 
+from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError, transaction
+from django.db.models import Model
+from social_django.models import UserSocialAuth
 
-from app.cache_utils import invalidate_obj
+from app.cache_utils import invalidate_after_commit, invalidate_obj
 from app.models import CustomUser
 from org.contributions.services import (
     dedupe_event_staff,
@@ -40,7 +43,6 @@ _CARRYOVER_PROPERTY_FIELDS = ("avatar",)  # persisted by property setter
 _CARRYOVER_COLUMN_FIELDS = (
     "discordUsername",
     "discordNickname",
-    "guildNickname",
 )
 
 
@@ -55,9 +57,7 @@ def merge_discord_accounts(keep: CustomUser, drop: CustomUser) -> CustomUser:
     if keep.pk == drop.pk:
         return keep
 
-    from django.core.exceptions import ObjectDoesNotExist
-
-    def _repoint(obj, field_name):
+    def _repoint(obj: Model, field_name: str) -> None:
         """Move one related row to ``keep``; drop it if ``keep`` already has it.
 
         IMPORTANT: ``setattr(obj, field_name, keep)`` triggers Django's
@@ -102,6 +102,10 @@ def merge_discord_accounts(keep: CustomUser, drop: CustomUser) -> CustomUser:
         for drop_ou in OrgUser.objects.filter(user=drop):
             keep_ou = keep_org_users.get(drop_ou.organization_id)
             if keep_ou is not None:
+                if not keep_ou.guild_nickname and drop_ou.guild_nickname:
+                    keep_ou.guild_nickname = drop_ou.guild_nickname
+                    keep_ou.save(update_fields=["guild_nickname"])
+                    invalidate_after_commit(keep)
                 reassign_member(drop_ou, keep_ou)
                 drop_ou.delete()
         repoint_user_attribution(drop, keep)
@@ -182,7 +186,7 @@ def merge_discord_accounts(keep: CustomUser, drop: CustomUser) -> CustomUser:
     return keep
 
 
-def find_split_discord_accounts():
+def find_split_discord_accounts() -> list[tuple[CustomUser, CustomUser]]:
     """Find Discord IDs split across two accounts by the phantom bug.
 
     Returns a list of ``(keep, drop)`` pairs where:
@@ -190,8 +194,6 @@ def find_split_discord_accounts():
       - ``drop`` owns the Discord ``social_auth`` for that ``uid`` but is a
         different row (the duplicate a failed login created).
     """
-    from social_django.models import UserSocialAuth
-
     socials = list(
         UserSocialAuth.objects.filter(provider="discord").select_related("user")
     )
