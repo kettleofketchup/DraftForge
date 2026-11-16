@@ -115,6 +115,30 @@ backend:
 - **Dev Image**: `backend-dev:latest` - Debug mode enabled
 - **Prod Image**: `backend:latest` - Production optimized
 
+#### Debugging a Hung Backend
+
+If daphne stops answering (requests time out, WebSockets drop, container still
+up), dump every thread's Python stack before restarting it. `backend/asgi.py`
+registers `faulthandler` on `SIGUSR1`; the dump goes to stderr, so it lands in
+the container log, and the process keeps running.
+
+```bash
+ssh dota.kettle.sh docker kill -s USR1 df-backend-1
+ssh dota.kettle.sh docker logs --tail 500 df-backend-1
+```
+
+Each thread prints as `Thread 0x... (most recent call first):` followed by its
+frames. Look for the event-loop thread (daphne/twisted/asyncio frames) blocked on
+a lock or `join`, and for request threads parked in `async_to_sync`. In a test
+stack the container is named after the slot's compose project (`df-sN-backend-1`).
+
+Only the daphne process (`backend.asgi`) installs the handler; Celery keeps its
+own `SIGUSR1` traceback dump.
+
+Requests that daphne cancels (client disconnect, then `application_close_timeout`)
+log a `request_cancelled` warning with `http.method`, `http.route` and
+`duration_ms` instead of `request_completed`.
+
 ### Redis Service
 
 ```yaml

@@ -1,0 +1,2 @@
+- Backend: `docker kill -s USR1 <backend container>` dumps every thread's Python stack to the container log without restarting daphne, so a hung backend can be diagnosed in place (see Docker Architecture, "Debugging a Hung Backend").
+- Backend: requests cancelled by daphne (client disconnect, close timeout) now log a `request_cancelled` warning with method, route and duration; previously they logged nothing.

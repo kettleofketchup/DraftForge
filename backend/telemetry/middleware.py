@@ -1,11 +1,10 @@
 """Django middleware for telemetry context binding."""
 
+import asyncio
 import re
 import time
 import uuid
 from typing import Callable
-
-_REQUEST_ID_RE = re.compile(r"^[a-zA-Z0-9\-]{1,64}$")
 
 import structlog
 from django.http import HttpRequest, HttpResponse
@@ -14,6 +13,8 @@ from telemetry.labels import extract_labels
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
+
+_REQUEST_ID_RE = re.compile(r"^[a-zA-Z0-9\-]{1,64}$")
 
 
 class TelemetryMiddleware:
@@ -29,7 +30,7 @@ class TelemetryMiddleware:
     - Log request completion with timing
     """
 
-    def __init__(self, get_response: Callable[[HttpRequest], HttpResponse]):
+    def __init__(self, get_response: Callable[[HttpRequest], HttpResponse]) -> None:
         self.get_response = get_response
 
     def __call__(self, request: HttpRequest) -> HttpResponse:
@@ -85,6 +86,21 @@ class TelemetryMiddleware:
             response["X-Request-ID"] = request_id
 
             return response
+
+        except asyncio.CancelledError:
+            # BaseException: daphne killed the request (client gone, timeout)
+            duration_ms = (time.perf_counter() - start_time) * 1000
+            log.warning(
+                "request_cancelled",
+                system="http",
+                subsystem="request",
+                **{
+                    "http.method": request.method,
+                    "http.route": request.path,
+                    "duration_ms": round(duration_ms, 2),
+                },
+            )
+            raise
 
         except Exception as e:
             # Log error

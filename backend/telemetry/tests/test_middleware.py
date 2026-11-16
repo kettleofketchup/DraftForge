@@ -1,5 +1,6 @@
 """Tests for telemetry middleware."""
 
+import asyncio
 import uuid
 from unittest import mock
 
@@ -134,3 +135,26 @@ class TelemetryMiddlewareTest(TestCase):
         )
         response = self.middleware(request)
         self.assertTrue(len(response["X-Request-ID"]) <= 64)
+
+    def test_logs_request_cancelled_and_reraises(self) -> None:
+        """CancelledError is a BaseException; it must still be logged."""
+        request = self.factory.get("/api/bracket/tournaments/105/")
+        middleware = TelemetryMiddleware(
+            mock.Mock(side_effect=asyncio.CancelledError())
+        )
+
+        with mock.patch("telemetry.middleware.log") as log:
+            with self.assertRaises(asyncio.CancelledError):
+                middleware(request)
+
+        log.error.assert_not_called()
+        log.info.assert_not_called()
+        log.warning.assert_called_once()
+        args, kwargs = log.warning.call_args
+        self.assertEqual(args, ("request_cancelled",))
+        self.assertEqual(kwargs["system"], "http")
+        self.assertEqual(kwargs["subsystem"], "request")
+        self.assertEqual(kwargs["http.method"], "GET")
+        self.assertEqual(kwargs["http.route"], "/api/bracket/tournaments/105/")
+        self.assertIsInstance(kwargs["duration_ms"], float)
+        self.assertNotIn("tournament.id", structlog.contextvars.get_contextvars())
