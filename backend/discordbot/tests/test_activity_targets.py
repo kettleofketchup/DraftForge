@@ -28,7 +28,7 @@ class ActivityTargetsTests(TestCase):
         self.assertEqual(draft_tournament_id(self.team_draft), self.tournament.pk)
         loose = HeroDraft.objects.create(game=Game.objects.create(tournament=None))
         self.assertIsNone(draft_tournament_id(loose))
-        self.assertIsNone(draft_tournament_id(Draft.objects.create(tournament=None)))
+        self.assertIsNone(draft_tournament_id(Draft(tournament=None)))
 
     def test_draft_site_url(self) -> None:
         self.assertEqual(

@@ -15,7 +15,7 @@ from structlog.testing import capture_logs
 from app.models import CustomUser, Draft, DraftTeam, Game, HeroDraft, Team, Tournament
 from discordbot.activity_auth import authenticate_token, issue_activity_token
 from discordbot.activity_ids import decode_draft_launch
-from discordbot.activity_launch import prepare_activity_launch
+from discordbot.activity_launch import BindResult, prepare_activity_launch
 from discordbot.activity_launch_gateway import handle_draft_launch
 from discordbot.models import DraftActivityChannel, DraftActivityInstance
 
@@ -234,6 +234,18 @@ class ActivityLaunchTests(TestCase):
         binding.refresh_from_db()
         self.assertEqual(binding.draft_id, busy.pk)
         self.assertIsNone(binding.team_draft_id)
+        self.assertEqual(self.invite_calls(api), [])
+
+    @patch(
+        "discordbot.activity_launch._bind_channel",
+        return_value=BindResult("channel_busy", None),
+    )
+    @patch("discordbot.activity_launch.discord_json")
+    def test_channel_busy_without_previous_never_creates_invite(self, api, _bind):
+        api.side_effect = self.fake_discord()
+        result = prepare_activity_launch("101", "hero", self.hero.pk)
+        self.assertFalse(result["success"])
+        self.assertIn("<#20>", result["content"])
         self.assertEqual(self.invite_calls(api), [])
 
     @patch("discordbot.activity_launch.discord_json")

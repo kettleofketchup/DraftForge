@@ -208,10 +208,11 @@ def _prepare_activity_launch(
         bind = _bind_channel(guild_id, channel_id, kind, draft)
         if bind.previous is not None:
             details["previous_channel_draft"] = _draft_label(bind.previous)
-        if bind.outcome == "channel_busy" and bind.previous is not None:
-            details["busy_draft_id"] = bind.previous.pk
-            details["busy_tournament_id"] = draft_tournament_id(bind.previous)
-            other = _tournament_name(bind.previous) or "another event"
+        if bind.outcome == "channel_busy":
+            busy = bind.previous
+            details["busy_draft_id"] = busy.pk if busy else None
+            details["busy_tournament_id"] = draft_tournament_id(busy) if busy else None
+            other = (_tournament_name(busy) if busy else None) or "another event"
             return _failure(
                 f"<#{channel_id}> is showing a live draft from {other}, another tournament. "
                 f"Join a different voice channel and click Launch / Join Activity again, or open your draft in the browser: {draft_site_url(kind, draft)}"

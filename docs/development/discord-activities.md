@@ -79,19 +79,17 @@ never joins voice. The bot needs View Channel, Connect and Create Invite
 permissions in the destination channel. Joining another voice channel after an
 invite is generated does not retarget it; click the original notification again.
 
-A channel assigned to an unfinished draft cannot be taken over by another
-draft. Once that draft is completed or abandoned, the next game's notification
-rebinds the channel, but only after everyone has left the Activity running
-there: DraftForge asks Discord whether that instance still has participants and,
-if it does, tells the clicker to move to their team's voice channel instead.
-This stops one click in a shared channel (for example the team draft lobby)
-from pulling every viewer into a single match. Multiple channels can share the
-same hero or team draft.
+A launch only records which draft the channel was last launched for; it never
+moves an Activity that is already running there. A channel showing an
+unfinished draft from another tournament (or from no tournament) is refused
+with `channel_busy` and the clicker is told to join a different voice channel
+or open the draft in the browser. Multiple channels can share the same hero or
+team draft.
 
 Every notification launch logs `activity_launch_resolved`
 (`system=discord`, `subsystem=activity`) with the user, draft, resolved voice
-channel, outcome (`invite_created`, `no_voice`, `conflict`, `in_use`, ...) and
-whether a channel was rebound from a previous draft.
+channel, outcome (`invite_created`, `no_voice`, `conflict`, `channel_busy`, ...)
+and the draft the channel previously held (`previous_channel_draft`).
 
 The generic Components V2 **Launch Draft** message is for a configured voice
 channel's own chat; it retains the native type-12 callback. Notification DMs use
