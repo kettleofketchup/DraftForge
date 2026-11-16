@@ -1,5 +1,8 @@
 import { DisplayName } from '~/components/user/avatar';
-import { draftWsSelectors, useDraftWebSocketStore } from '~/store/draftWebSocketStore';
+import {
+  draftWsSelectors,
+  useDraftWebSocketStore,
+} from '~/store/draftWebSocketStore';
 import { useUserStore } from '~/store/userStore';
 
 export const TurnIndicator: React.FC = () => {
@@ -8,11 +11,15 @@ export const TurnIndicator: React.FC = () => {
   const activeRoundPk = useDraftWebSocketStore(draftWsSelectors.activeRoundPk);
   const timerEnabled = useDraftWebSocketStore(draftWsSelectors.timerEnabled);
 
-  const captainName = curDraftRound?.captain ? DisplayName(curDraftRound.captain) : 'Unknown';
+  const captainName = curDraftRound?.captain
+    ? DisplayName(curDraftRound.captain)
+    : 'Unknown';
   const pickNumber = curDraftRound?.pick_number || 0;
   const isActiveRound = !timerEnabled || curDraftRound?.pk === activeRoundPk;
   const isMyTurn =
-    currentUser?.pk != null && currentUser.pk === curDraftRound?.captain?.pk && isActiveRound;
+    currentUser?.pk != null &&
+    currentUser.pk === curDraftRound?.captain?.pk &&
+    isActiveRound;
 
   if (curDraftRound?.choice) {
     return (
@@ -24,12 +31,17 @@ export const TurnIndicator: React.FC = () => {
     );
   }
 
-  const deferred = timerEnabled && !isActiveRound && (curDraftRound?.skip_count ?? 0) > 0;
+  const deferred =
+    timerEnabled && !isActiveRound && (curDraftRound?.skip_count ?? 0) > 0;
   if (deferred) {
     return (
-      <div data-testid="turn-indicator-deferred" className="p-4 rounded-lg text-center bg-base-200">
+      <div
+        data-testid="turn-indicator-deferred"
+        className="p-4 rounded-lg text-center bg-base-200"
+      >
         <span className="text-base-content">
-          Pick #{pickNumber} — deferred, {captainName} picks after #{pickNumber - 1}
+          Pick #{pickNumber} — deferred, {captainName} picks after #
+          {pickNumber - 1}
         </span>
       </div>
     );
@@ -46,7 +58,8 @@ export const TurnIndicator: React.FC = () => {
         </span>
       ) : (
         <span className="text-base-content">
-          Waiting for <strong>{captainName}</strong> to pick (Pick #{pickNumber})
+          Waiting for <strong>{captainName}</strong> to pick (Pick #{pickNumber}
+          )
         </span>
       )}
     </div>

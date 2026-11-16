@@ -1,25 +1,31 @@
-import { useEffect, useState } from 'react';
-import { useParams, useSearchParams, useNavigate } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
-import { Trophy, Users, Gamepad2, Award } from 'lucide-react';
+import { Award, Gamepad2, Trophy, Users } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useNavigate, useParams, useSearchParams } from 'react-router';
 
 import { fetchUser } from '~/components/api/api';
-import { Tabs, TabsContent, TabsList, TabsTrigger, useUrlTabs } from '~/components/ui/tabs';
-import { DotabuffButton, EditIconButton } from '~/components/ui/buttons';
 import { Badge } from '~/components/ui/badge';
+import { DotabuffButton, EditIconButton } from '~/components/ui/buttons';
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card';
 import { ScrollArea, ScrollBar } from '~/components/ui/scroll-area';
 import { Skeleton } from '~/components/ui/skeleton';
-import type { UserClassType, UserType } from '~/components/user/types';
-import { User } from '~/components/user/user';
-import { useUserStore } from '~/store/userStore';
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+  useUrlTabs,
+} from '~/components/ui/tabs';
 import { UserAvatar } from '~/components/user/UserAvatar';
 import { DisplayName } from '~/components/user/avatar';
 import { RolePositions } from '~/components/user/positions';
+import type { UserClassType, UserType } from '~/components/user/types';
+import { User } from '~/components/user/user';
 import UserEditModal from '~/components/user/userCard/editModal';
-import { EditProfileModal } from './EditProfileModal';
 import { getLogger } from '~/lib/logger';
+import { useUserStore } from '~/store/userStore';
+import { EditProfileModal } from './EditProfileModal';
 
 const log = getLogger('UserProfilePage');
 
@@ -45,7 +51,12 @@ export function UserProfilePage() {
   const userId = pk ? parseInt(pk, 10) : null;
   const isOwnProfile = currentUser?.pk === userId;
 
-  const { data: user, isLoading, error, refetch } = useQuery({
+  const {
+    data: user,
+    isLoading,
+    error,
+    refetch,
+  } = useQuery({
     queryKey: ['user', userId],
     queryFn: () => fetchUser(userId!),
     enabled: !!userId,
@@ -87,10 +98,14 @@ export function UserProfilePage() {
                 {(user.is_staff || user.is_superuser) && (
                   <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
                     {user.is_superuser && (
-                      <Badge className="bg-red-600 text-white text-xs">Admin</Badge>
+                      <Badge className="bg-red-600 text-white text-xs">
+                        Admin
+                      </Badge>
                     )}
                     {user.is_staff && !user.is_superuser && (
-                      <Badge className="bg-blue-600 text-white text-xs">Staff</Badge>
+                      <Badge className="bg-blue-600 text-white text-xs">
+                        Staff
+                      </Badge>
                     )}
                   </div>
                 )}
@@ -131,7 +146,10 @@ export function UserProfilePage() {
                 {/* Quick Stats */}
                 {user.steam_account_id && (
                   <div className="flex flex-wrap justify-center sm:justify-start gap-4 mt-4">
-                    <DotabuffButton steamAccountId={user.steam_account_id} responsive={false} />
+                    <DotabuffButton
+                      steamAccountId={user.steam_account_id}
+                      responsive={false}
+                    />
                   </div>
                 )}
               </div>
@@ -226,7 +244,9 @@ function OverviewTab({ user }: { user: UserType }) {
           {user.steam_account_id && (
             <div className="flex justify-between gap-2">
               <span className="text-muted-foreground shrink-0">Friend ID</span>
-              <span className="font-medium font-mono text-sm">{user.steam_account_id}</span>
+              <span className="font-medium font-mono text-sm">
+                {user.steam_account_id}
+              </span>
             </div>
           )}
         </CardContent>

@@ -107,7 +107,10 @@ export const UserEventStrip = memo(
             {dotaProfile.rank_medal}
           </Badge>,
         );
-      } else if (dotaProfile.rank_status === 'never' && dotaProfile.battle_cup_tier) {
+      } else if (
+        dotaProfile.rank_status === 'never' &&
+        dotaProfile.battle_cup_tier
+      ) {
         parts.push(
           <Badge
             key="tier"
@@ -184,7 +187,12 @@ export const UserEventStrip = memo(
           </PlayerPopover>
           {userWithPositions && (
             <div className="mt-0.5">
-              <RolePositions user={userWithPositions} compact disableTooltips unranked />
+              <RolePositions
+                user={userWithPositions}
+                compact
+                disableTooltips
+                unranked
+              />
             </div>
           )}
         </div>
