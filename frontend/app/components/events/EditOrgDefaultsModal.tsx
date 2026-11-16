@@ -1,11 +1,18 @@
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useQuery } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
-import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { z } from 'zod';
 import { getOrgEventDefaults } from '~/components/api/api';
-import { useUpdateOrgDefaultsMutation } from '~/hooks/useEvent';
+import { GAME_TYPE } from '~/components/game/constants';
+import { DraftSettingsSection } from '~/components/teamdraft/DraftSettingsSection';
+import {
+  DraftSettingsFormSchema,
+  draftSettingsFormToEventFields,
+  draftSettingsToFormInput,
+  eventFieldsToDraftSettingsFormInput,
+} from '~/components/teamdraft/schemas';
 import { FormDialog } from '~/components/ui/dialogs';
 import {
   Form,
@@ -25,25 +32,33 @@ import {
   SelectValue,
 } from '~/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
+import { useUpdateOrgDefaultsMutation } from '~/hooks/useEvent';
 import { DiscordConfigSection, DiscordIcon } from './DiscordConfigSection';
-import { discordConfigSchema, DISCORD_CONFIG_DEFAULTS, GameMode, COMMON_TIMEZONES } from './schemas';
-import { GAME_TYPE } from '~/components/game/constants';
+import {
+  COMMON_TIMEZONES,
+  DISCORD_CONFIG_DEFAULTS,
+  discordConfigSchema,
+  GameMode,
+} from './schemas';
 
-const orgDefaultsSchema = z.object({
-  // Tournament defaults
-  tournament_name: z.string(),
-  tournament_type: z.string(),
-  game_type: z.number(),
-  draft_type: z.string(),
-  people_per_team: z.number().int().min(1),
-  number_of_teams: z.number().int().min(2).nullable(),
-  // EventConfig
-  timezone: z.string(),
-  game_mode: z.string(),
-  max_players: z.number().int().min(1).nullable(),
-  auto_approve: z.boolean(),
-  auto_confirm: z.boolean(),
-}).merge(discordConfigSchema);
+const orgDefaultsSchema = z
+  .object({
+    // Tournament defaults
+    tournament_name: z.string(),
+    tournament_type: z.string(),
+    game_type: z.number(),
+    draft_type: z.string(),
+    people_per_team: z.number().int().min(1),
+    number_of_teams: z.number().int().min(2).nullable(),
+    // EventConfig
+    timezone: z.string(),
+    game_mode: z.string(),
+    max_players: z.number().int().min(1).nullable(),
+    auto_approve: z.boolean(),
+    auto_confirm: z.boolean(),
+  })
+  .merge(discordConfigSchema)
+  .merge(DraftSettingsFormSchema);
 
 type OrgDefaultsInput = z.infer<typeof orgDefaultsSchema>;
 
@@ -69,7 +84,11 @@ export function EditOrgDefaultsModal({
   // 3-generic useForm to align TFieldValues=z.input and TTransformedValues=z.output
   // — zodResolver returns Resolver<z.input<S>, _, z.output<S>> under zod 4.
   // See https://github.com/react-hook-form/resolvers/issues/792.
-  const form = useForm<z.input<typeof orgDefaultsSchema>, unknown, OrgDefaultsInput>({
+  const form = useForm<
+    z.input<typeof orgDefaultsSchema>,
+    unknown,
+    OrgDefaultsInput
+  >({
     resolver: zodResolver(orgDefaultsSchema),
     defaultValues: {
       tournament_name: '',
@@ -84,6 +103,7 @@ export function EditOrgDefaultsModal({
       auto_approve: false,
       auto_confirm: false,
       ...DISCORD_CONFIG_DEFAULTS,
+      ...draftSettingsToFormInput(null),
     },
   });
 
@@ -109,17 +129,22 @@ export function EditOrgDefaultsModal({
         discord_signup_reminder: defaults.discord_signup_reminder,
         discord_signup_reminder_hours: defaults.discord_signup_reminder_hours,
         discord_confirm_attendance: defaults.discord_confirm_attendance,
-        discord_confirm_attendance_hours: defaults.discord_confirm_attendance_hours,
+        discord_confirm_attendance_hours:
+          defaults.discord_confirm_attendance_hours,
         discord_profile_reminder: defaults.discord_profile_reminder,
         discord_profile_reminder_hours: defaults.discord_profile_reminder_hours,
         discord_mark_interested: defaults.discord_mark_interested,
         discord_post_signups: defaults.discord_post_signups,
-        discord_post_signups_channel_id: defaults.discord_post_signups_channel_id,
+        discord_post_signups_channel_id:
+          defaults.discord_post_signups_channel_id,
         discord_announcement: defaults.discord_announcement,
-        discord_announcement_channel_id: defaults.discord_announcement_channel_id,
+        discord_announcement_channel_id:
+          defaults.discord_announcement_channel_id,
         discord_announcement_hours: defaults.discord_announcement_hours,
-        discord_require_rank_screenshot: defaults.discord_require_rank_screenshot ?? false,
-        discord_require_battlecup_screenshot: defaults.discord_require_battlecup_screenshot ?? false,
+        discord_require_rank_screenshot:
+          defaults.discord_require_rank_screenshot ?? false,
+        discord_require_battlecup_screenshot:
+          defaults.discord_require_battlecup_screenshot ?? false,
         min_mmr: defaults.min_mmr ?? null,
         allow_active_mmr: defaults.allow_active_mmr ?? true,
         allow_previous_rank: defaults.allow_previous_rank ?? true,
@@ -128,14 +153,37 @@ export function EditOrgDefaultsModal({
         require_steam_id: defaults.require_steam_id ?? false,
         require_mmr_verified: defaults.require_mmr_verified ?? false,
         require_profile_complete: defaults.require_profile_complete ?? false,
+        ...eventFieldsToDraftSettingsFormInput(defaults),
       });
     }
   }, [defaults, open]);
 
   async function onSubmit(data: OrgDefaultsInput) {
     if (!defaults) return;
+    const {
+      draft_timer_enabled,
+      draft_grace_time_s,
+      draft_reserve_time_s,
+      draft_timeout_action,
+      hero_timer_enabled,
+      hero_grace_time_s,
+      hero_reserve_time_s,
+      ...rest
+    } = data;
+    const payload = {
+      ...rest,
+      ...draftSettingsFormToEventFields({
+        draft_timer_enabled,
+        draft_grace_time_s,
+        draft_reserve_time_s,
+        draft_timeout_action,
+        hero_timer_enabled,
+        hero_grace_time_s,
+        hero_reserve_time_s,
+      }),
+    };
     try {
-      await mutation.mutateAsync({ id: defaults.id, data });
+      await mutation.mutateAsync({ id: defaults.id, data: payload });
       toast.success('Event defaults updated');
       onOpenChange(false);
     } catch {
@@ -172,10 +220,14 @@ export function EditOrgDefaultsModal({
                 <FormItem>
                   <FormLabel>Default Tournament Name</FormLabel>
                   <FormControl>
-                    <Input placeholder="Leave blank to use event name" {...field} />
+                    <Input
+                      placeholder="Leave blank to use event name"
+                      {...field}
+                    />
                   </FormControl>
                   <FormDescription>
-                    Pre-filled when creating new events. Can be overridden per event.
+                    Pre-filled when creating new events. Can be overridden per
+                    event.
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -196,7 +248,9 @@ export function EditOrgDefaultsModal({
                     </FormControl>
                     <SelectContent>
                       {COMMON_TIMEZONES.map((tz) => (
-                        <SelectItem key={tz} value={tz}>{tz.replace(/_/g, ' ')}</SelectItem>
+                        <SelectItem key={tz} value={tz}>
+                          {tz.replace(/_/g, ' ')}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -219,11 +273,17 @@ export function EditOrgDefaultsModal({
                       onValueChange={(val) => {
                         const gameType = parseInt(val, 10);
                         field.onChange(gameType);
-                        form.setValue('people_per_team', gameType === GAME_TYPE.DEADLOCK ? 6 : 5);
+                        form.setValue(
+                          'people_per_team',
+                          gameType === GAME_TYPE.DEADLOCK ? 6 : 5,
+                        );
                         // Reset Dota-only fields when switching to non-Dota
                         const currentMode = form.getValues('game_mode');
                         if (gameType !== GAME_TYPE.DOTA2) {
-                          if (currentMode === GameMode.CAPTAINS_MODE || currentMode === GameMode.TURBO) {
+                          if (
+                            currentMode === GameMode.CAPTAINS_MODE ||
+                            currentMode === GameMode.TURBO
+                          ) {
                             form.setValue('game_mode', GameMode.NORMAL);
                           }
                         }
@@ -256,7 +316,9 @@ export function EditOrgDefaultsModal({
                         type="number"
                         min={1}
                         {...field}
-                        onChange={(e) => field.onChange(parseInt(e.target.value, 10) || 1)}
+                        onChange={(e) =>
+                          field.onChange(parseInt(e.target.value, 10) || 1)
+                        }
                       />
                     </FormControl>
                     <FormMessage />
@@ -279,7 +341,9 @@ export function EditOrgDefaultsModal({
                           value={field.value ?? ''}
                           onChange={(e) => {
                             const v = parseInt(e.target.value, 10);
-                            field.onChange(Number.isNaN(v) ? null : Math.max(2, v));
+                            field.onChange(
+                              Number.isNaN(v) ? null : Math.max(2, v),
+                            );
                           }}
                           placeholder="No limit"
                         />
@@ -288,7 +352,9 @@ export function EditOrgDefaultsModal({
                         <input
                           type="checkbox"
                           checked={field.value === null}
-                          onChange={(e) => field.onChange(e.target.checked ? null : 2)}
+                          onChange={(e) =>
+                            field.onChange(e.target.checked ? null : 2)
+                          }
                           className="h-3.5 w-3.5 rounded border-border accent-primary"
                         />
                         Unlimited
@@ -314,9 +380,15 @@ export function EditOrgDefaultsModal({
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="shuffle">Shuffle — MMR point buy draft</SelectItem>
-                        <SelectItem value="snake">Snake Draft — Captains pick in snake order</SelectItem>
-                        <SelectItem value="normal">Manual — Manually assign players</SelectItem>
+                        <SelectItem value="shuffle">
+                          Shuffle — MMR point buy draft
+                        </SelectItem>
+                        <SelectItem value="snake">
+                          Snake Draft — Captains pick in snake order
+                        </SelectItem>
+                        <SelectItem value="normal">
+                          Manual — Manually assign players
+                        </SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage />
@@ -337,13 +409,18 @@ export function EditOrgDefaultsModal({
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="double_elimination">Double Elimination</SelectItem>
-                        <SelectItem value="single_elimination">Single Elimination</SelectItem>
+                        <SelectItem value="double_elimination">
+                          Double Elimination
+                        </SelectItem>
+                        <SelectItem value="single_elimination">
+                          Single Elimination
+                        </SelectItem>
                         <SelectItem value="swiss">Swiss Bracket</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormDescription>
-                      Double elimination works best with teams that are a power of 2 (2, 4, 8, 16)
+                      Double elimination works best with teams that are a power
+                      of 2 (2, 4, 8, 16)
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -365,7 +442,9 @@ export function EditOrgDefaultsModal({
                     </FormControl>
                     <SelectContent>
                       <SelectItem value="normal">Normal</SelectItem>
-                      <SelectItem value="captains_mode">Captain's Mode</SelectItem>
+                      <SelectItem value="captains_mode">
+                        Captain's Mode
+                      </SelectItem>
                       <SelectItem value="turbo">Turbo</SelectItem>
                       <SelectItem value="custom">Custom</SelectItem>
                     </SelectContent>
@@ -389,7 +468,9 @@ export function EditOrgDefaultsModal({
                         value={field.value ?? ''}
                         onChange={(e) => {
                           const v = parseInt(e.target.value, 10);
-                          field.onChange(Number.isNaN(v) ? null : Math.max(1, v));
+                          field.onChange(
+                            Number.isNaN(v) ? null : Math.max(1, v),
+                          );
                         }}
                         placeholder="No limit"
                       />
@@ -413,7 +494,9 @@ export function EditOrgDefaultsModal({
                           className="h-4 w-4 rounded border-border accent-primary"
                         />
                       </FormControl>
-                      <FormLabel className="text-sm cursor-pointer">Auto-approve signups</FormLabel>
+                      <FormLabel className="text-sm cursor-pointer">
+                        Auto-approve signups
+                      </FormLabel>
                     </FormItem>
                   )}
                 />
@@ -430,12 +513,18 @@ export function EditOrgDefaultsModal({
                           className="h-4 w-4 rounded border-border accent-primary"
                         />
                       </FormControl>
-                      <FormLabel className="text-sm cursor-pointer">Auto-confirm signups</FormLabel>
+                      <FormLabel className="text-sm cursor-pointer">
+                        Auto-confirm signups
+                      </FormLabel>
                     </FormItem>
                   )}
                 />
               </div>
             </div>
+            <DraftSettingsSection
+              control={form.control}
+              showDraftType={false}
+            />
           </TabsContent>
 
           <TabsContent value="discord" className="space-y-4">

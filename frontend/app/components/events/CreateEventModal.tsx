@@ -16,6 +16,13 @@ import {
   lobbyPasswordPayload,
   refineLobbyPassword,
 } from '~/components/lobby/password';
+import { DraftSettingsSection } from '~/components/teamdraft/DraftSettingsSection';
+import {
+  DraftSettingsFormSchema,
+  draftSettingsFormToEventFields,
+  draftSettingsToFormInput,
+  eventFieldsToDraftSettingsFormInput,
+} from '~/components/teamdraft/schemas';
 import { FormDialog } from '~/components/ui/dialogs';
 import {
   Form,
@@ -51,16 +58,16 @@ import {
   GameMode,
   localToUTC,
   refineEventEnd,
-  type CreateEventInput,
 } from './schemas';
 
 // Refined here, not on the shared schema, because createSeriesEventInputSchema .omit()s from it.
-const createEventFormSchema = createEventInputSchema.superRefine(
-  (values, ctx) => {
+const createEventFormSchema = createEventInputSchema
+  .merge(DraftSettingsFormSchema)
+  .superRefine((values, ctx) => {
     refineLobbyPassword(values, ctx);
     if (!values.is_recurring) refineEventEnd(values, ctx);
-  },
-);
+  });
+type CreateEventFormOutput = z.output<typeof createEventFormSchema>;
 
 interface CreateEventModalProps {
   open: boolean;
@@ -100,7 +107,7 @@ export function CreateEventModal({
   const form = useForm<
     z.input<typeof createEventFormSchema>,
     unknown,
-    CreateEventInput
+    CreateEventFormOutput
   >({
     resolver: zodResolver(createEventFormSchema),
     defaultValues: {
@@ -128,6 +135,7 @@ export function CreateEventModal({
       is_recurring: false,
       frequency: Frequency.WEEKLY,
       generate_days_ahead: 7,
+      ...draftSettingsToFormInput(null),
     },
   });
 
@@ -197,6 +205,7 @@ export function CreateEventModal({
         // Org defaults have no lobby settings: new events start with lobbies
         // off and a random password.
         ...DOTA_LOBBY_CONFIG_DEFAULTS,
+        ...eventFieldsToDraftSettingsFormInput(orgDefaults),
       });
       setDefaultsApplied(true);
     }
@@ -208,7 +217,7 @@ export function CreateEventModal({
 
   const isRecurring = form.watch('is_recurring');
 
-  async function onSubmit(data: CreateEventInput) {
+  async function onSubmit(data: CreateEventFormOutput) {
     if (isSubmitting) return;
     setIsSubmitting(true);
     try {
@@ -228,10 +237,26 @@ export function CreateEventModal({
         dota_lobby_password_mode,
         dota_lobby_password,
         dota_lobby_password_saved: _saved,
+        draft_timer_enabled,
+        draft_grace_time_s,
+        draft_reserve_time_s,
+        draft_timeout_action,
+        hero_timer_enabled,
+        hero_grace_time_s,
+        hero_reserve_time_s,
         ...rest
       } = data;
       const shared = {
         ...rest,
+        ...draftSettingsFormToEventFields({
+          draft_timer_enabled,
+          draft_grace_time_s,
+          draft_reserve_time_s,
+          draft_timeout_action,
+          hero_timer_enabled,
+          hero_grace_time_s,
+          hero_reserve_time_s,
+        }),
         ...lobbyPasswordPayload({
           game_type: data.game_type,
           dota_lobby_password_mode,
@@ -607,6 +632,11 @@ export function CreateEventModal({
                   )}
                 />
               </div>
+
+              <DraftSettingsSection
+                control={form.control}
+                showDraftType={false}
+              />
 
               <LobbyConfigSection control={form.control} watch={form.watch} />
               <DotaLobbyEventSettings
