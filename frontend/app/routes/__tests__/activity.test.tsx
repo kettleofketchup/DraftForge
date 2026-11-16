@@ -22,6 +22,7 @@ import { ACTIVITY_OUT_OF_SCOPE } from '~/lib/websocket/WebSocketManager';
 import { useActivityViewStore } from '~/store/activityViewStore';
 import { useHeroDraftStore } from '~/store/heroDraftStore';
 import { useTournamentStore } from '~/store/tournamentStore';
+import { useUserStore } from '~/store/userStore';
 
 const mocks = vi.hoisted(() => {
   class ActivityDisabledError extends Error {
@@ -349,6 +350,24 @@ describe('Discord Activity route', () => {
     );
     expect(screen.queryByTestId('hero-draft')).not.toBeInTheDocument();
     expect(mocks.initializeDiscord).toHaveBeenCalledTimes(1);
+  });
+
+  it('loads a team draft that started after launching on a hero draft', async () => {
+    mocks.get.mockResolvedValue({ data: { pk: 12, draft: null } });
+    mocks.initializeDiscord.mockResolvedValue(heroSession());
+    render(<DraftActivity />);
+    await heroOnScreen(156);
+    expect(useUserStore.getState().tournament.draft).toBeNull();
+
+    mocks.get.mockResolvedValue({
+      data: { pk: 12, draft: { pk: 9, draft_rounds: [] } },
+    });
+    act(() =>
+      useActivityViewStore.getState().setView({ kind: 'team', id: 9 }, 'menu'),
+    );
+    await screen.findByTestId('team-draft');
+    await waitFor(() => expect(useUserStore.getState().draft?.pk).toBe(9));
+    expect(useUserStore.getState().tournament.draft?.pk).toBe(9);
   });
 
   it('refreshes with mode refresh and keeps the current view', async () => {

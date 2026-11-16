@@ -7,7 +7,13 @@ import { useDraftWebSocketStore } from '../draftWebSocketStore';
 import { useTournamentStore } from '../tournamentStore';
 import { useUserStore } from '../userStore';
 
-const mocks = vi.hoisted(() => ({ postActivityView: vi.fn() }));
+const mocks = vi.hoisted(() => ({ postActivityView: vi.fn(), get: vi.fn() }));
+vi.mock('~/components/api/axios', () => ({
+  default: { get: mocks.get },
+}));
+vi.mock('~/lib/hydrateTournament', () => ({
+  hydrateTournament: (data: unknown) => data,
+}));
 vi.mock('~/lib/activity-api', () => ({
   fetchActivityDrafts: vi.fn(),
   postActivityView: mocks.postActivityView,
@@ -92,6 +98,19 @@ describe('activityViewStore', () => {
     expect(useTournamentStore.getState().live).toBe(true);
     expect(useTournamentStore.getState().autoAdvance).toBe(true);
     expect(useUserStore.getState().draft).toBe(teamDraft);
+  });
+
+  it('fetches the team draft when it started after the Activity loaded', async () => {
+    useUserStore.setState({
+      tournament: { pk: 9, draft: null } as unknown as TournamentType,
+      tournamentPK: 9,
+      draft: null,
+    });
+    mocks.get.mockResolvedValue({ data: { pk: 9, draft: teamDraft } });
+    const store = useActivityViewStore.getState();
+    store.setView({ kind: 'hero', id: 156 }, 'initial');
+    store.setView({ kind: 'team', id: 40 }, 'menu');
+    await vi.waitFor(() => expect(useUserStore.getState().draft?.pk).toBe(40));
   });
 
   it('does not tear down team stores when moving between hero drafts', () => {
