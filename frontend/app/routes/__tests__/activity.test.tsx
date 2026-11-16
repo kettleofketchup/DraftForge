@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { refreshActivityCredential } from '~/lib/activity-session';
 import { useTournamentStore } from '~/store/tournamentStore';
 
 const mocks = vi.hoisted(() => ({
@@ -46,5 +47,22 @@ describe('Discord Activity route', () => {
     await screen.findByTestId('team-draft');
     expect(useTournamentStore.getState().live).toBe(true);
     expect(useTournamentStore.getState().autoAdvance).toBe(true);
+  });
+  it('keeps the refresh throttle across re-handshakes', async () => {
+    mocks.initializeDiscord.mockResolvedValue({
+      token: 't',
+      kind: 'team',
+      draft_id: 9,
+      tournament_id: 5,
+      user: { pk: 1 },
+    });
+    render(<DraftActivity />);
+    await screen.findByTestId('team-draft');
+    await expect(refreshActivityCredential()).resolves.toBe(true);
+    await waitFor(() =>
+      expect(mocks.initializeDiscord).toHaveBeenCalledTimes(2),
+    );
+    await expect(refreshActivityCredential()).resolves.toBe(false);
+    expect(mocks.initializeDiscord).toHaveBeenCalledTimes(2);
   });
 });

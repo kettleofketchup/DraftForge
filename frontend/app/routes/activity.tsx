@@ -46,6 +46,7 @@ export default function DraftActivity() {
     }
     // Sockets call this on 4401 (expiry, revocation, or the channel moving on
     // to the next game's draft) so the Activity recovers without a relaunch.
+    // Register once per mount: re-registering resets the refresh throttle.
     setActivityRefresher(() => start(true));
     start().catch(() => {
       if (!cancelled)

@@ -166,7 +166,11 @@ describe('Session to credential', () => {
     const credential = toActivityCredential(base);
     expect(credential.scope).toBe('draft');
     expect(credential.pin).toEqual({ kind: 'team', id: 40 });
-    expect(credential.site_url).toBe(window.location.origin);
+    expect(credential.site_url).toBeNull();
+    setActivityCredential(credential);
+    expect(activityExternalUrl({ kind: 'team', id: 40 })).toBeUndefined();
+    expect(activityExternalUrl({ kind: 'hero', id: 7 })).toBeUndefined();
+    setActivityCredential(null);
   });
   it('pins the draft-scope fallback to the legacy draft', () => {
     expect(

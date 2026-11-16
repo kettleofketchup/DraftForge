@@ -8,7 +8,7 @@ export interface ActivityCredential {
   scope: 'tournament' | 'draft';
   tournament_id: number | null;
   pin: ActivityView | null;
-  site_url: string;
+  site_url: string | null;
   user?: UserType;
 }
 
@@ -55,7 +55,7 @@ export function toActivityCredential(
     scope,
     tournament_id: value.tournament_id ?? null,
     pin: scope === 'draft' ? { kind: value.kind, id: value.draft_id } : null,
-    site_url: value.site_url ?? window.location.origin,
+    site_url: value.site_url ?? null,
     user: value.user,
   };
 }
@@ -143,7 +143,7 @@ export function activitySocket(kind: ActivityDraftKind, id: number) {
 }
 /** Mirrors external_path in backend/discordbot/activity_menu.py. */
 export function activityExternalUrl(view: ActivityView): string | undefined {
-  if (!session) return;
+  if (!session?.site_url) return;
   if (view.kind === 'hero') return `${session.site_url}/herodraft/${view.id}`;
   const tournament = session.tournament_id;
   if (tournament === null) return;
