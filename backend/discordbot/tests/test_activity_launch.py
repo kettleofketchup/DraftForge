@@ -7,8 +7,8 @@ from unittest.mock import AsyncMock, patch
 
 import requests
 from asgiref.sync import async_to_sync
+from django.conf import settings
 from django.test import SimpleTestCase, TestCase, override_settings
-from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.test import APIClient
 from structlog.testing import capture_logs
 
@@ -44,18 +44,12 @@ class ActivityLaunchTests(TestCase):
         DraftTeam.objects.create(draft=self.hero, tournament_team=self.team)
         self.team_draft = Draft.objects.create(tournament=self.tournament)
 
-    def fake_discord(self, channel="20", live_instances=None):
-        """Answer by path so call order and extra liveness checks don't matter."""
-        live = live_instances or {}
+    def fake_discord(self, channel="20"):
+        """Answer by path so call order doesn't matter."""
 
         def call(method, path, **kwargs):
             if "/voice-states/" in path:
                 return {"channel_id": channel}
-            if "/activity-instances/" in path:
-                instance_id = path.rsplit("/", 1)[1]
-                if instance_id in live:
-                    return {"users": live[instance_id]}
-                raise requests.HTTPError(response=SimpleNamespace(status_code=404))
             if path.endswith("/invites"):
                 return {"code": "invite-code"}
             if path.startswith("/channels/"):
@@ -145,72 +139,115 @@ class ActivityLaunchTests(TestCase):
             )
         self.assertFalse(DraftActivityChannel.objects.exists())
 
-    @patch("discordbot.activity_launch.discord_json")
-    def test_binding_to_unfinished_draft_is_never_replaced(self, api):
-        binding = DraftActivityChannel.objects.create(
-            guild_id="1", channel_id="20", team_draft=self.team_draft
+    def invite_calls(self, api):
+        return [c for c in api.call_args_list if c.args[1].endswith("/invites")]
+
+    def other_tournament_hero(self, tournament):
+        return HeroDraft.objects.create(
+            game=Game.objects.create(tournament=tournament), state="drafting"
         )
-        self.team_draft.state = "drafting"
-        self.team_draft.save()
-        api.side_effect = self.discord_responses()[:2]
-        result = prepare_activity_launch("101", "hero", self.hero.pk)
-        self.assertFalse(result["success"])
-        self.assertIn("another draft", result["content"])
-        binding.refresh_from_db()
-        self.assertEqual(binding.team_draft_id, self.team_draft.pk)
-        self.assertEqual(api.call_count, 2)
 
     @patch("discordbot.activity_launch.discord_json")
-    def test_next_game_rebinds_channel_and_running_instance_after_completion(self, api):
+    def test_binding_replaced_when_previous_draft_finished(self, api):
         finished = HeroDraft.objects.create(
             game=Game.objects.create(tournament=self.tournament), state="completed"
         )
         binding = DraftActivityChannel.objects.create(
             guild_id="1", channel_id="20", draft=finished
         )
-        running = DraftActivityInstance.objects.create(
-            instance_id="running", guild_id="1", channel_id="20", draft=finished
+        api.side_effect = self.fake_discord()
+        with capture_logs() as logs:
+            self.assertTrue(
+                prepare_activity_launch("101", "hero", self.hero.pk)["success"]
+            )
+        binding.refresh_from_db()
+        self.assertEqual(binding.draft_id, self.hero.pk)
+        entry = next(e for e in logs if e["event"] == "activity_launch_resolved")
+        self.assertEqual(entry["outcome"], "invite_created")
+        self.assertEqual(entry["previous_channel_draft"], f"hero:{finished.pk}")
+
+    @patch("discordbot.activity_launch.discord_json")
+    def test_binding_replaced_for_same_tournament_unfinished_draft(self, api):
+        self.team_draft.state = "drafting"
+        self.team_draft.save()
+        binding = DraftActivityChannel.objects.create(
+            guild_id="1", channel_id="20", team_draft=self.team_draft
         )
-        elsewhere = DraftActivityInstance.objects.create(
-            instance_id="elsewhere", guild_id="1", channel_id="21", draft=finished
-        )
-        token = issue_activity_token(self.user, running)
-        # Discord answers 404 once everyone has left the finished draft's Activity.
         api.side_effect = self.fake_discord()
         self.assertTrue(prepare_activity_launch("101", "hero", self.hero.pk)["success"])
         binding.refresh_from_db()
-        running.refresh_from_db()
-        elsewhere.refresh_from_db()
         self.assertEqual(binding.draft_id, self.hero.pk)
-        self.assertEqual(running.draft_id, self.hero.pk)
-        self.assertEqual(elsewhere.draft_id, finished.pk)
-        with self.assertRaises(AuthenticationFailed):
-            authenticate_token(token, finished.pk, "hero")
+        self.assertIsNone(binding.team_draft_id)
+        self.assertEqual(len(self.invite_calls(api)), 1)
 
     @patch("discordbot.activity_launch.discord_json")
-    def test_finished_draft_activity_still_in_use_is_not_moved(self, api):
-        finished = self.team_draft
-        finished.state = "completed"
-        finished.save()
+    def test_launch_does_not_touch_existing_instances(self, api):
+        finished = HeroDraft.objects.create(
+            game=Game.objects.create(tournament=self.tournament), state="completed"
+        )
+        DraftActivityChannel.objects.create(
+            guild_id="1", channel_id="20", draft=finished
+        )
+        instance = DraftActivityInstance.objects.create(
+            instance_id="running", guild_id="1", channel_id="20", draft=finished
+        )
+        token = issue_activity_token(self.user, instance)
+        api.side_effect = self.fake_discord()
+        self.assertTrue(prepare_activity_launch("101", "hero", self.hero.pk)["success"])
+        instance.refresh_from_db()
+        self.assertEqual(instance.draft_id, finished.pk)
+        authenticate_token(token, finished.pk, "hero")
+
+    @patch("discordbot.activity_launch.discord_json")
+    def test_channel_busy_for_other_tournament_unfinished_draft(self, api):
+        other = Tournament.objects.create(name="Other Cup", date_played=date.today())
+        busy = self.other_tournament_hero(other)
         binding = DraftActivityChannel.objects.create(
-            guild_id="1", channel_id="20", team_draft=finished
+            guild_id="1", channel_id="20", draft=busy
         )
-        watching = DraftActivityInstance.objects.create(
-            instance_id="watching", guild_id="1", channel_id="20", team_draft=finished
-        )
-        api.side_effect = self.fake_discord(live_instances={"watching": ["555"]})
+        api.side_effect = self.fake_discord()
         result = prepare_activity_launch("101", "hero", self.hero.pk)
         self.assertFalse(result["success"])
-        self.assertIn("still running", result["content"])
         self.assertIn("<#20>", result["content"])
-        binding.refresh_from_db()
-        watching.refresh_from_db()
-        self.assertEqual(binding.team_draft_id, finished.pk)
-        self.assertIsNone(binding.draft_id)
-        self.assertEqual(watching.team_draft_id, finished.pk)
-        self.assertFalse(
-            any(c.args[1].endswith("/invites") for c in api.call_args_list)
+        self.assertIn("Other Cup, another tournament", result["content"])
+        self.assertIn(
+            f"{settings.SITE_URL}/herodraft/{self.hero.pk}", result["content"]
         )
+        binding.refresh_from_db()
+        self.assertEqual(binding.draft_id, busy.pk)
+        self.assertEqual(self.invite_calls(api), [])
+
+    @patch("discordbot.activity_launch.discord_json")
+    def test_channel_busy_for_tournamentless_configured_draft(self, api):
+        busy = self.other_tournament_hero(None)
+        binding = DraftActivityChannel.objects.create(
+            guild_id="1", channel_id="20", draft=busy
+        )
+        api.side_effect = self.fake_discord()
+        result = prepare_activity_launch("101", "team", self.team_draft.pk)
+        self.assertFalse(result["success"])
+        self.assertIn("another event, another tournament", result["content"])
+        self.assertIn(
+            f"{settings.SITE_URL}/tournament/{self.tournament.pk}/teams/draft",
+            result["content"],
+        )
+        binding.refresh_from_db()
+        self.assertEqual(binding.draft_id, busy.pk)
+        self.assertIsNone(binding.team_draft_id)
+        self.assertEqual(self.invite_calls(api), [])
+
+    @patch("discordbot.activity_launch.discord_json")
+    def test_guild_conflict_kept(self, api):
+        binding = DraftActivityChannel.objects.create(
+            guild_id="2", channel_id="20", draft=self.hero
+        )
+        api.side_effect = self.fake_discord()
+        result = prepare_activity_launch("101", "team", self.team_draft.pk)
+        self.assertFalse(result["success"])
+        self.assertIn("already assigned", result["content"])
+        binding.refresh_from_db()
+        self.assertEqual((binding.guild_id, binding.draft_id), ("2", self.hero.pk))
+        self.assertEqual(self.invite_calls(api), [])
 
     @patch("discordbot.activity_launch.discord_json")
     def test_each_launch_logs_the_resolved_channel_and_outcome(self, api):
@@ -226,22 +263,25 @@ class ActivityLaunchTests(TestCase):
         self.assertEqual(entry["voice_channel_id"], "20")
         self.assertEqual(entry["discord_user_id"], "101")
         self.assertEqual((entry["kind"], entry["draft_id"]), ("hero", self.hero.pk))
-        self.assertFalse(entry["rebound"])
+        self.assertIsNone(entry["previous_channel_draft"])
+        self.assertEqual(entry["tournament_id"], self.tournament.pk)
+        self.assertFalse(entry["intent_recorded"])
+        self.assertNotIn("rebound", entry)
+        self.assertNotIn("previous_draft", entry)
 
     @patch("discordbot.activity_launch.discord_json")
-    def test_rebind_is_logged(self, api):
-        finished = HeroDraft.objects.create(
-            game=Game.objects.create(tournament=self.tournament), state="completed"
-        )
-        DraftActivityChannel.objects.create(
-            guild_id="1", channel_id="20", draft=finished
-        )
+    def test_channel_busy_is_logged(self, api):
+        other = Tournament.objects.create(name="Other Cup", date_played=date.today())
+        busy = self.other_tournament_hero(other)
+        DraftActivityChannel.objects.create(guild_id="1", channel_id="20", draft=busy)
         api.side_effect = self.fake_discord()
         with capture_logs() as logs:
             prepare_activity_launch("101", "hero", self.hero.pk)
         entry = next(e for e in logs if e["event"] == "activity_launch_resolved")
-        self.assertTrue(entry["rebound"])
-        self.assertEqual(entry["previous_draft"], f"hero:{finished.pk}")
+        self.assertEqual(entry["outcome"], "channel_busy")
+        self.assertEqual(entry["busy_draft_id"], busy.pk)
+        self.assertEqual(entry["busy_tournament_id"], other.pk)
+        self.assertEqual(entry["previous_channel_draft"], f"hero:{busy.pk}")
 
     @patch("discordbot.activity_launch.discord_json")
     def test_reply_names_destination_and_how_to_recover_after_moving(self, api):

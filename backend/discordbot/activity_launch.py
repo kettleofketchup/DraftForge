@@ -4,7 +4,7 @@ Only Django calls this module. Gateway/Celery callers use the internal API so
 Django remains the sole owner of bindings and draft permissions.
 """
 
-from typing import Any
+from typing import Any, Literal, NamedTuple
 
 import requests
 from django.conf import settings
@@ -23,7 +23,8 @@ from app.auth import InternalServiceAuth, IsInternalService
 from app.models import CustomUser, Draft, HeroDraft
 from app.permissions_org import can_edit_tournament
 from discordbot.activity import discord_json
-from discordbot.models import DraftActivityChannel, DraftActivityInstance
+from discordbot.activity_targets import draft_site_url, draft_tournament_id
+from discordbot.models import DraftActivityChannel
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
@@ -45,61 +46,20 @@ def _draft_label(draft: HeroDraft | Draft) -> str:
     return f"{'hero' if isinstance(draft, HeroDraft) else 'team'}:{draft.pk}"
 
 
-def _pinned_to(draft: HeroDraft | Draft) -> dict[str, HeroDraft | Draft]:
-    return {"draft": draft} if isinstance(draft, HeroDraft) else {"team_draft": draft}
-
-
-def _instance_in_use(application_id: str, instance_id: str) -> bool:
-    """Discord returns 404 once everyone has left an Activity instance."""
-    try:
-        data = discord_json(
-            "GET",
-            f"/applications/{application_id}/activity-instances/{instance_id}",
-            bot=True,
-            timeout=2,
-        )
-    except requests.HTTPError as exc:
-        if exc.response is not None and exc.response.status_code == 404:
-            return False
-        raise
-    return bool(data.get("users"))
+class BindResult(NamedTuple):
+    outcome: Literal["bound", "replaced", "conflict", "channel_busy"]
+    previous: HeroDraft | Draft | None
 
 
 def _bind_channel(
-    guild_id: str,
-    channel_id: str,
-    kind: str,
-    draft: HeroDraft | Draft,
-    application_id: str,
-) -> tuple[str, str | None]:
-    """Return (outcome, previous draft label); outcome is bound, rebound, conflict or in_use.
-
-    A channel moves to the next draft only once its current draft has finished
-    and nobody is still in the Activity running there; otherwise one click
-    would drag every viewer in the channel into another match.
-    """
+    guild_id: str, channel_id: str, kind: str, draft: HeroDraft | Draft
+) -> BindResult:
+    """Upsert the binding unless it holds an unfinished draft of another (or no) tournament."""
     defaults = {
         "guild_id": guild_id,
         "draft": draft if kind == "hero" else None,
         "team_draft": draft if kind == "team" else None,
     }
-    existing = (
-        DraftActivityChannel.objects.select_related("draft", "team_draft")
-        .filter(channel_id=channel_id, guild_id=guild_id)
-        .first()
-    )
-    if existing is not None:
-        current = existing.draft or existing.team_draft
-        if (
-            current is not None
-            and _draft_label(current) != _draft_label(draft)
-            and current.state in FINISHED_STATES
-        ):
-            running = DraftActivityInstance.objects.filter(
-                guild_id=guild_id, channel_id=channel_id, **_pinned_to(current)
-            ).values_list("instance_id", flat=True)
-            if any(_instance_in_use(application_id, i) for i in running):
-                return "in_use", _draft_label(current)
     with transaction.atomic():
         # Nested get_or_create handles a concurrent first binding through its
         # unique channel_id constraint. Lock the row before considering reuse.
@@ -108,25 +68,31 @@ def _bind_channel(
         )
         binding = (
             DraftActivityChannel.objects.select_for_update()
-            .select_related("draft", "team_draft")
+            .select_related("draft__game__tournament", "team_draft__tournament")
             .get(pk=binding.pk)
         )
         if binding.guild_id != guild_id:
-            return "conflict", None
+            return BindResult("conflict", None)
         current = binding.draft or binding.team_draft
         if current is not None and _draft_label(current) == _draft_label(draft):
-            return "bound", None
-        if current is None or current.state not in FINISHED_STATES:
-            return "conflict", None
+            return BindResult("bound", None)
+        if current is not None and current.state not in FINISHED_STATES:
+            current_tournament = draft_tournament_id(current)
+            if current_tournament is None or current_tournament != draft_tournament_id(
+                draft
+            ):
+                return BindResult("channel_busy", current)
         binding.draft = defaults["draft"]
         binding.team_draft = defaults["team_draft"]
         binding.save(update_fields=["draft", "team_draft"])
-        # Instances that ended are moved too, so a later relaunch in this
-        # channel resolves to the new draft rather than the finished one.
-        DraftActivityInstance.objects.filter(
-            guild_id=guild_id, channel_id=channel_id, **_pinned_to(current)
-        ).update(draft=defaults["draft"], team_draft=defaults["team_draft"])
-        return "rebound", _draft_label(current)
+        return BindResult("replaced", current)
+
+
+def _tournament_name(draft: HeroDraft | Draft) -> str | None:
+    tournament = (
+        draft.game.tournament if isinstance(draft, HeroDraft) else draft.tournament
+    )
+    return tournament.name if tournament else None
 
 
 def prepare_activity_launch(
@@ -135,8 +101,9 @@ def prepare_activity_launch(
     details: dict[str, Any] = {
         "guild_id": None,
         "voice_channel_id": None,
-        "rebound": False,
-        "previous_draft": None,
+        "previous_channel_draft": None,
+        "intent_recorded": False,
+        "tournament_id": None,
     }
     result, outcome = _prepare_activity_launch(discord_user_id, kind, draft_id, details)
     log.info(
@@ -210,6 +177,7 @@ def _prepare_activity_launch(
         else getattr(settings, "DISCORD_GUILD_ID", "")
     )
     details["guild_id"] = guild_id
+    details["tournament_id"] = tournament.pk
     application_id = str(getattr(settings, "SOCIAL_AUTH_DISCORD_KEY", "") or "")
     if (
         not guild_id.isdigit()
@@ -237,20 +205,21 @@ def _prepare_activity_launch(
             return _failure(
                 "Join a voice channel in this draft's server, then try again."
             ), "wrong_channel"
-        bind, previous = _bind_channel(
-            guild_id, channel_id, kind, draft, application_id
-        )
-        details["previous_draft"] = previous
-        if bind == "in_use":
+        bind = _bind_channel(guild_id, channel_id, kind, draft)
+        if bind.previous is not None:
+            details["previous_channel_draft"] = _draft_label(bind.previous)
+        if bind.outcome == "channel_busy" and bind.previous is not None:
+            details["busy_draft_id"] = bind.previous.pk
+            details["busy_tournament_id"] = draft_tournament_id(bind.previous)
+            other = _tournament_name(bind.previous) or "another event"
             return _failure(
-                f"<#{channel_id}> is still running another draft's Activity. "
-                "Move to your team's voice channel, then click Launch / Join Activity again."
-            ), "in_use"
-        if bind == "conflict":
+                f"<#{channel_id}> is showing a live draft from {other}, another tournament. "
+                f"Join a different voice channel and click Launch / Join Activity again, or open your draft in the browser: {draft_site_url(kind, draft)}"
+            ), "channel_busy"
+        if bind.outcome == "conflict":
             return _failure(
                 "Your voice channel is already assigned to another draft. Join your team's draft channel or ask an organizer to update it."
             ), "conflict"
-        details["rebound"] = bind == "rebound"
         invite = discord_json(
             "POST",
             f"/channels/{channel_id}/invites",
