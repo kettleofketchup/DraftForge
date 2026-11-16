@@ -70,6 +70,11 @@ class TelemetryConsumerMixin:
         }
         if user_id is not None:
             context["user.id"] = user_id
+        activity: dict[str, Any] | None = self.scope.get("activity")
+        if activity:
+            context["activity.instance_id"] = activity.get("instance_id")
+            context["activity.kind"] = activity.get("kind")
+            context["activity.role"] = activity.get("role")
 
         # Bind context to structlog
         structlog.contextvars.bind_contextvars(**context)
