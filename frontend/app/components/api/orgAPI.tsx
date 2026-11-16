@@ -173,7 +173,9 @@ export interface ProfileClaimRequest {
   claimer_discord_id: string | null;
   claimer_avatar: string | null;
   target_user: number;
-  target_nickname: string | null;
+  target_nickname?: string | null;
+  target_username?: string | null;
+  target_discordNickname?: string | null;
   target_steamid: number | null;
   target_mmr: number | null;
   organization: number;

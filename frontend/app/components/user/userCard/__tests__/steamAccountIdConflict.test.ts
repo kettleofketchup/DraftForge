@@ -1,12 +1,16 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import {
-  shouldLookupSteamAccountId,
   describeSteamAccountIdConflict,
+  shouldLookupSteamAccountId,
   steamAccountIdConflictFromError,
 } from '../steamAccountIdConflict';
 
-const holder = { pk: 275, nickname: 'George Potter', username: 'geo.potter' };
+const holder = {
+  pk: 275,
+  discordNickname: 'George Potter',
+  username: 'geo.potter',
+};
 
 describe('shouldLookupSteamAccountId', () => {
   it('looks up a newly entered id', () => {
@@ -31,15 +35,31 @@ describe('shouldLookupSteamAccountId', () => {
 });
 
 describe('describeSteamAccountIdConflict', () => {
-  it('names the holder by nickname and discord username', () => {
+  it('names the holder by Discord name and username', () => {
     expect(describeSteamAccountIdConflict(holder, 314)).toBe(
       'Already used by George Potter (@geo.potter). Saving will fail until it is freed from that account.',
     );
   });
 
-  it('falls back to the discord username when there is no nickname', () => {
+  it('falls back to the username when there is no Discord name', () => {
     expect(
-      describeSteamAccountIdConflict({ ...holder, nickname: '' }, 314),
+      describeSteamAccountIdConflict({ ...holder, discordNickname: null }, 314),
+    ).toBe(
+      'Already used by @geo.potter. Saving will fail until it is freed from that account.',
+    );
+  });
+
+  it('ignores a legacy nickname key', () => {
+    expect(
+      describeSteamAccountIdConflict(
+        {
+          pk: 275,
+          nickname: null,
+          discordNickname: null,
+          username: 'geo.potter',
+        },
+        314,
+      ),
     ).toBe(
       'Already used by @geo.potter. Saving will fail until it is freed from that account.',
     );
@@ -58,7 +78,8 @@ describe('steamAccountIdConflictFromError', () => {
   it('extracts the message from a 409 conflict body', () => {
     const body = {
       code: 'steam_account_id_taken',
-      error: 'Friend ID 765353730 is already assigned to George Potter (@geo.potter).',
+      error:
+        'Friend ID 765353730 is already assigned to George Potter (@geo.potter).',
       conflict: holder,
     };
     expect(steamAccountIdConflictFromError(body)).toBe(
@@ -67,7 +88,9 @@ describe('steamAccountIdConflictFromError', () => {
   });
 
   it('ignores unrelated error bodies', () => {
-    expect(steamAccountIdConflictFromError({ error: 'No valid fields to update' })).toBeNull();
+    expect(
+      steamAccountIdConflictFromError({ error: 'No valid fields to update' }),
+    ).toBeNull();
   });
 
   it('ignores a missing body', () => {
@@ -75,7 +98,11 @@ describe('steamAccountIdConflictFromError', () => {
   });
 
   it('reads the global endpoint validation shape', () => {
-    const body = { steam_account_id: ['This Friend ID is already assigned to another account.'] };
+    const body = {
+      steam_account_id: [
+        'This Friend ID is already assigned to another account.',
+      ],
+    };
     expect(steamAccountIdConflictFromError(body)).toBe(
       'This Friend ID is already assigned to another account.',
     );
