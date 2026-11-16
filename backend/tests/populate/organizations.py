@@ -2,14 +2,38 @@
 Organization and League population for test database.
 """
 
+from typing import Any, Final
+
+from app.models import CustomUser, League, Organization
+from org.models import OrgUser
+
 from .constants import (
     DTX_LEAGUE_NAME,
     DTX_ORG_NAME,
     DTX_STEAM_LEAGUE_ID,
+    NAME_SYNC_GLOBAL_ONLY_USERNAME,
+    NAME_SYNC_USERNAME,
     TEST_LEAGUE_NAME,
     TEST_ORG_NAME,
     TEST_STEAM_LEAGUE_ID,
 )
+
+NAME_SYNC_USERS: Final[list[dict[str, Any]]] = [
+    {
+        "discord_id": "610000000000000001",
+        "username": NAME_SYNC_USERNAME,
+        "nickname": "DragonSite",
+        "global_name": "GwaihirTheWindlord",
+        "guild_nickname": "DragonClaw",
+    },
+    {
+        "discord_id": "610000000000000002",
+        "username": NAME_SYNC_GLOBAL_ONLY_USERNAME,
+        "nickname": None,
+        "global_name": "WindlordGlobal",
+        "guild_nickname": None,
+    },
+]
 
 
 def populate_organizations_and_leagues(force=False):
@@ -24,8 +48,6 @@ def populate_organizations_and_leagues(force=False):
     Args:
         force (bool): If True, recreate organizations even if they exist.
     """
-    from app.models import League, Organization
-
     print("Populating organizations and leagues...")
 
     # Check if DTX org already exists (by name)
@@ -126,3 +148,33 @@ def populate_organizations_and_leagues(force=False):
         f"DTX: {dtx_org.pk}/{dtx_league.pk}, Test: {test_org.pk}/{test_league.pk}"
     )
     return dtx_org, test_org
+
+
+def populate_discord_name_sync_users(force: bool = False) -> None:
+    """DTX-only users whose site nickname, Discord global name and server nickname differ."""
+    dtx_org = Organization.objects.get(name=DTX_ORG_NAME)
+    for spec in NAME_SYNC_USERS:
+        user = CustomUser.objects.filter(discordId=spec["discord_id"]).first()
+        if user is None:
+            user = CustomUser().createFromDiscordData(
+                {
+                    "user": {
+                        "id": spec["discord_id"],
+                        "username": spec["username"],
+                        "avatar": None,
+                        "global_name": spec["global_name"],
+                    },
+                    "nick": spec["guild_nickname"],
+                }
+            )
+            user.save()
+        if user.nickname != spec["nickname"]:
+            user.nickname = spec["nickname"]
+        if user.discordNickname != spec["global_name"]:
+            user.discordNickname = spec["global_name"]
+            user.save(update_fields=["discordNickname"])
+        org_user, _ = OrgUser.objects.get_or_create(
+            user=user, organization=dtx_org, defaults={"mmr": 0}
+        )
+        org_user.guild_nickname = spec["guild_nickname"]
+        org_user.save(update_fields=["guild_nickname"])

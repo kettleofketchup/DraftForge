@@ -127,3 +127,6 @@ MOCK_USERNAMES = [
     "abaddon_shield",
     "lich_chain",
 ]
+
+NAME_SYNC_USERNAME: Final[str] = "name_sync_dragonclaw"
+NAME_SYNC_GLOBAL_ONLY_USERNAME: Final[str] = "name_sync_globalonly"
