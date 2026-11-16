@@ -43,6 +43,10 @@ _beat_schedule = {
         "task": "lobby.tasks.reconcile_dota_lobbies",
         "schedule": 60.0,
     },
+    "sweep-auto-herodrafts": {
+        "task": "events.tournament_tasks.sweep_auto_herodrafts",
+        "schedule": 10.0,
+    },
     "refresh-discord-avatars": {
         "task": "app.tasks.avatar_refresh.refresh_discord_avatars",
         "schedule": 300.0,

@@ -427,13 +427,13 @@ from app.views.internal import (
     get_discord_event_state,
     get_due_scheduled_events,
     get_event_for_task,
-    get_games_without_herodraft,
     get_match_participants,
     get_or_create_discord_event,
     get_repeater_subscribers,
     get_sync_discord_state,
     get_tournament_for_task,
     get_tournament_participants,
+    list_auto_herodraft_games,
     list_users_for_avatar_check,
     search_message_logs,
     sweep_stale_discord_leases,
@@ -495,16 +495,16 @@ urlpatterns += [
     path("api/internal/events/<int:event_id>/full/", get_event_for_task),
     # Tournament endpoints
     path(
+        "api/internal/tournaments/auto-herodraft-games/",
+        list_auto_herodraft_games,
+    ),
+    path(
         "api/internal/tournaments/<int:tournament_id>/full/",
         get_tournament_for_task,
     ),
     path(
         "api/internal/tournaments/<int:tournament_id>/participants/",
         get_tournament_participants,
-    ),
-    path(
-        "api/internal/tournaments/<int:tournament_id>/games-without-herodraft/",
-        get_games_without_herodraft,
     ),
     path(
         "api/internal/games/<int:game_id>/participants/",

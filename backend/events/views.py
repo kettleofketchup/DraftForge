@@ -990,13 +990,6 @@ class EventViewSet(viewsets.ModelViewSet):
                 ensure_tournament_with_signups(event)
                 event.transition_state(EventState.IN_PROGRESS)
                 finalize_event_tournament(event)
-            # Start auto-create herodrafts polling if enabled
-            if event.tournament and event.tournament.auto_create_hero_drafts:
-                from events.discord.tournament_dispatch import (
-                    start_auto_create_herodrafts,
-                )
-
-                start_auto_create_herodrafts(event.tournament)
             qs = with_event_staff(_annotate_event_qs(Event.objects.filter(pk=event.pk)))
             data = EventSerializer(qs.first()).data
             _attach_user_can_manage(data, request.user)
