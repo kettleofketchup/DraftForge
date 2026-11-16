@@ -13,6 +13,7 @@ from channels.db import database_sync_to_async
 from channels.routing import URLRouter
 from channels.security.websocket import AllowedHostsOriginValidator
 from channels.testing import WebsocketCommunicator
+from django.conf import settings
 from django.core import signing
 from django.core.management import call_command
 from django.db import IntegrityError, transaction
@@ -51,13 +52,15 @@ from discordbot.activity_auth import (
     token_identity,
 )
 from discordbot.activity_errors import ActivityAuthFailed
+from discordbot.activity_intent import peek_intent, record_intent
 from discordbot.models import DraftActivityChannel, DraftActivityInstance
 from discordbot.tests.activity_helpers import ClearIntentsMixin
 
 
 @override_settings(DISCORD_ACTIVITY_ENABLED=True)
-class DraftActivityTests(TestCase):
+class DraftActivityTests(ClearIntentsMixin, TestCase):
     def setUp(self):
+        super().setUp()
         self.user = CustomUser.objects.create_user(
             username="activity-captain", discordId="101"
         )
@@ -153,18 +156,22 @@ class DraftActivityTests(TestCase):
                 channel_id=channel, defaults={"guild_id": "1", "draft": draft}
             )
             discord.return_value = self.instance_response(channel)
-            self.assertEqual(resolve_instance(f"i-{channel}", "101").draft_id, draft.pk)
+            instance, created = resolve_instance(f"i-{channel}", "101")
+            self.assertTrue(created)
+            self.assertEqual(instance.draft_id, draft.pk)
         self.assertEqual(DraftActivityInstance.objects.count(), 4)
 
     @patch("discordbot.activity.discord_json")
     def test_reconnect_pins_original_match_after_channel_reassignment(self, discord):
         discord.return_value = self.instance_response()
-        initial = resolve_instance("i-persist", "101")
+        initial, _ = resolve_instance("i-persist", "101")
         self.binding.draft = self.other
         self.binding.save()
-        self.assertEqual(resolve_instance("i-persist", "101").pk, initial.pk)
-        self.assertEqual(resolve_instance("i-persist", "101").draft_id, self.hero.pk)
-        self.assertEqual(resolve_instance("i-new", "101").draft_id, self.other.pk)
+        again, created = resolve_instance("i-persist", "101")
+        self.assertFalse(created)
+        self.assertEqual(again.pk, initial.pk)
+        self.assertEqual(again.draft_id, self.hero.pk)
+        self.assertEqual(resolve_instance("i-new", "101")[0].draft_id, self.other.pk)
 
     @patch("discordbot.activity.discord_json")
     def test_instance_participation_and_channel_are_verified(self, discord):
@@ -178,40 +185,364 @@ class DraftActivityTests(TestCase):
                 resolve_instance("untrusted", "101")
         self.assertFalse(DraftActivityInstance.objects.exists())
 
-    @patch("discordbot.activity.discord_json")
-    def test_oauth_session_uses_verified_identity_and_scoped_token(self, discord):
+    def session(self, discord, body, instance=None):
         discord.side_effect = [
             {"access_token": "oauth-token"},
             {"id": "101"},
-            self.instance_response(),
+            instance or self.instance_response(),
         ]
-        response = activity_session(
-            self.factory.post("/", {"code": "code", "instance_id": "i-session"})
+        return activity_session(self.factory.post("/", body, format="json"))
+
+    def seed_instance(self, instance_id="i-existing", draft=None):
+        return DraftActivityInstance.objects.create(
+            instance_id=instance_id,
+            guild_id="1",
+            channel_id="2",
+            draft=draft or self.hero,
+        )
+
+    @patch("discordbot.activity.discord_json")
+    def test_oauth_session_uses_verified_identity_and_scoped_token(self, discord):
+        response = self.session(
+            discord, {"code": "code", "instance_id": "i-session", "mode": "first"}
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["draft_id"], self.hero.pk)
         self.assertEqual(response.data["kind"], "hero")
         self.assertEqual(
-            authenticate_token(response.data["token"], self.hero.pk, "hero").user,
+            response.data["initial_view"], {"kind": "hero", "id": self.hero.pk}
+        )
+        self.assertIsNone(response.data["launch_intent"])
+        self.assertIsNone(response.data["notice"])
+        self.assertEqual(response.data["access_token"], "oauth-token")
+        self.assertEqual(response.data["user"]["pk"], self.user.pk)
+        self.assertEqual(
+            authenticate_token(response.data["token"], self.other.pk, "hero").user,
             self.user,
         )
         self.assertEqual(response["Cache-Control"], "no-store")
+
+    @patch("discordbot.activity.discord_json")
+    def test_hero_session_returns_tournament_and_scope(self, discord):
+        response = self.session(
+            discord, {"code": "code", "instance_id": "i-hero", "mode": "first"}
+        )
+        self.assertEqual(response.data["tournament_id"], self.tournament.pk)
+        self.assertEqual(response.data["scope"], "tournament")
+        self.assertEqual(response.data["site_url"], settings.SITE_URL)
+
+    @patch("discordbot.activity.discord_json")
+    def test_tournamentless_session_is_draft_scoped(self, discord):
+        loose = HeroDraft.objects.create(game=Game.objects.create())
+        self.binding.draft = loose
+        self.binding.save()
+        response = self.session(
+            discord, {"code": "code", "instance_id": "i-loose", "mode": "first"}
+        )
+        self.assertEqual(response.data["scope"], "draft")
+        self.assertIsNone(response.data["tournament_id"])
+        self.assertEqual(
+            response.data["initial_view"], {"kind": "hero", "id": loose.pk}
+        )
 
     @patch("discordbot.activity.discord_json")
     def test_team_session_resolves_tournament(self, discord):
         self.binding.draft = None
         self.binding.team_draft = self.team_draft
         self.binding.save()
-        discord.side_effect = [
-            {"access_token": "oauth-token"},
-            {"id": "101"},
-            self.instance_response(),
-        ]
-        response = activity_session(
-            self.factory.post("/", {"code": "code", "instance_id": "i-team"})
+        response = self.session(
+            discord, {"code": "code", "instance_id": "i-team", "mode": "first"}
         )
         self.assertEqual(response.data["kind"], "team")
+        self.assertEqual(response.data["draft_id"], self.team_draft.pk)
         self.assertEqual(response.data["tournament_id"], self.tournament.pk)
+        self.assertEqual(response.data["scope"], "tournament")
+        self.assertEqual(
+            response.data["initial_view"], {"kind": "team", "id": self.team_draft.pk}
+        )
+
+    @patch("discordbot.activity.discord_json")
+    def test_legacy_handshake_after_newer_launch_returns_instance_first_draft(
+        self, discord
+    ):
+        self.seed_instance("i-legacy")
+        self.binding.draft = self.other
+        self.binding.save()
+        record_intent(
+            "101",
+            kind="hero",
+            draft_id=self.other.pk,
+            tournament_id=self.tournament.pk,
+            guild_id="1",
+            channel_id="2",
+        )
+        with capture_logs() as logs:
+            response = self.session(
+                discord, {"code": "code", "instance_id": "i-legacy"}
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["draft_id"], self.hero.pk)
+        self.assertEqual(response.data["kind"], "hero")
+        self.assertEqual(DraftActivityInstance.objects.count(), 1)
+        started = [e for e in logs if e["event"] == "activity_session_started"]
+        self.assertEqual(len(started), 1)
+        self.assertEqual(started[0]["mode"], "legacy")
+        self.assertFalse(started[0]["instance_created"])
+
+    @patch("discordbot.activity.discord_json")
+    def test_session_started_log_fields(self, discord):
+        with capture_logs() as logs:
+            self.session(
+                discord, {"code": "code", "instance_id": "i-logged", "mode": "first"}
+            )
+        (event,) = [e for e in logs if e["event"] == "activity_session_started"]
+        instance = DraftActivityInstance.objects.get(instance_id="i-logged")
+        self.assertEqual(
+            {k: event[k] for k in event if k not in ("log_level", "event")},
+            {
+                "system": "discord",
+                "subsystem": "activity",
+                "user_id": self.user.pk,
+                "discord_user_id": "101",
+                "instance_id": instance.instance_id,
+                "guild_id": "1",
+                "channel_id": "2",
+                "tournament_id": self.tournament.pk,
+                "mode": "first",
+                "instance_created": True,
+                "scope": "tournament",
+                "initial_kind": "hero",
+                "initial_draft_id": self.hero.pk,
+                "source": "instance_first",
+                "role": "captain",
+                "notice": False,
+                "intent_id": None,
+            },
+        )
+
+    @patch("discordbot.activity.discord_json")
+    def test_new_instance_seeded_from_matching_intent(self, discord):
+        intent_id = record_intent(
+            "101",
+            kind="hero",
+            draft_id=self.other.pk,
+            tournament_id=self.tournament.pk,
+            guild_id="1",
+            channel_id="2",
+        )
+        self.assertIsNotNone(intent_id)
+        response = self.session(
+            discord, {"code": "code", "instance_id": "i-seeded", "mode": "first"}
+        )
+        instance = DraftActivityInstance.objects.get(instance_id="i-seeded")
+        self.assertEqual(instance.draft_id, self.other.pk)
+        self.assertEqual(response.data["draft_id"], self.other.pk)
+        self.assertEqual(peek_intent("101").intent_id, intent_id)
+
+    @patch("discordbot.activity.discord_json")
+    def test_new_instance_seeded_from_team_intent(self, discord):
+        record_intent(
+            "101",
+            kind="team",
+            draft_id=self.team_draft.pk,
+            tournament_id=self.tournament.pk,
+            guild_id="1",
+            channel_id="2",
+        )
+        response = self.session(
+            discord, {"code": "code", "instance_id": "i-team-seed", "mode": "first"}
+        )
+        instance = DraftActivityInstance.objects.get(instance_id="i-team-seed")
+        self.assertIsNone(instance.draft_id)
+        self.assertEqual(instance.team_draft_id, self.team_draft.pk)
+        self.assertEqual(response.data["kind"], "team")
+
+    @patch("discordbot.activity.discord_json")
+    def test_new_instance_ignores_intent_from_other_tournament(self, discord):
+        for instance_id, draft, channel in [
+            ("i-foreign", self.foreign, "2"),
+            ("i-elsewhere", self.other, "9"),
+        ]:
+            with self.subTest(instance_id=instance_id):
+                record_intent(
+                    "101",
+                    kind="hero",
+                    draft_id=draft.pk,
+                    tournament_id=draft.game.tournament_id,
+                    guild_id="1",
+                    channel_id=channel,
+                )
+                self.session(
+                    discord,
+                    {"code": "code", "instance_id": instance_id, "mode": "first"},
+                )
+                instance = DraftActivityInstance.objects.get(instance_id=instance_id)
+                self.assertEqual(instance.draft_id, self.hero.pk)
+
+    @patch("discordbot.activity.discord_json")
+    def test_new_instance_seeded_from_intent_without_channel_record(self, discord):
+        self.binding.delete()
+        record_intent(
+            "101",
+            kind="hero",
+            draft_id=self.other.pk,
+            tournament_id=self.tournament.pk,
+            guild_id="1",
+            channel_id="2",
+        )
+        response = self.session(
+            discord, {"code": "code", "instance_id": "i-unbound", "mode": "first"}
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["draft_id"], self.other.pk)
+
+    @patch("discordbot.activity.discord_json")
+    def test_intent_for_deleted_draft_falls_back_to_channel_record(self, discord):
+        gone = HeroDraft.objects.create(
+            game=Game.objects.create(tournament=self.tournament)
+        )
+        record_intent(
+            "101",
+            kind="hero",
+            draft_id=gone.pk,
+            tournament_id=self.tournament.pk,
+            guild_id="1",
+            channel_id="2",
+        )
+        gone.delete()
+        response = self.session(
+            discord, {"code": "code", "instance_id": "i-gone", "mode": "first"}
+        )
+        self.assertEqual(response.data["draft_id"], self.hero.pk)
+
+    @patch("discordbot.activity.discord_json")
+    def test_no_channel_record_and_no_intent_is_rejected(self, discord):
+        self.binding.delete()
+        response = self.session(
+            discord, {"code": "code", "instance_id": "i-none", "mode": "first"}
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(
+            response.data["detail"], "This voice channel has no draft configured."
+        )
+        self.assertNotIn("code", response.data)
+
+    @patch("discordbot.activity.discord_json")
+    def test_refresh_mode_skips_intent_and_logs_refreshed(self, discord):
+        self.seed_instance("i-refresh")
+        intent_id = record_intent(
+            "101",
+            kind="hero",
+            draft_id=self.other.pk,
+            tournament_id=self.tournament.pk,
+            guild_id="1",
+            channel_id="2",
+        )
+        with capture_logs() as logs:
+            response = self.session(
+                discord,
+                {
+                    "code": "code",
+                    "instance_id": "i-refresh",
+                    "mode": "refresh",
+                    "current_view": {"kind": "hero", "id": self.other.pk},
+                },
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.data["initial_view"])
+        self.assertIsNone(response.data["launch_intent"])
+        self.assertIsNone(response.data["notice"])
+        self.assertEqual(response.data["draft_id"], self.hero.pk)
+        self.assertEqual(peek_intent("101").intent_id, intent_id)
+        events = [e["event"] for e in logs]
+        self.assertNotIn("activity_session_started", events)
+        (refreshed,) = [e for e in logs if e["event"] == "activity_session_refreshed"]
+        self.assertEqual(refreshed["current_kind"], "hero")
+        self.assertEqual(refreshed["current_id"], self.other.pk)
+        self.assertEqual(refreshed["user_id"], self.user.pk)
+        self.assertEqual(refreshed["instance_id"], "i-refresh")
+        self.assertEqual(refreshed["tournament_id"], self.tournament.pk)
+
+    @patch("discordbot.activity.discord_json")
+    def test_refresh_with_bracket_view_has_no_id(self, discord):
+        with capture_logs() as logs:
+            response = self.session(
+                discord,
+                {
+                    "code": "code",
+                    "instance_id": "i-bracket",
+                    "mode": "refresh",
+                    "current_view": {"kind": "bracket"},
+                },
+            )
+        self.assertEqual(response.status_code, 200)
+        (refreshed,) = [e for e in logs if e["event"] == "activity_session_refreshed"]
+        self.assertEqual(refreshed["current_kind"], "bracket")
+        self.assertIsNone(refreshed["current_id"])
+
+    @patch("discordbot.activity.discord_json")
+    def test_malformed_mode_or_current_view_is_rejected(self, discord):
+        for extra in [
+            {"mode": "switch"},
+            {"mode": "refresh", "current_view": {"kind": "lobby"}},
+            {"mode": "refresh", "current_view": {"kind": "hero", "id": 0}},
+            {"mode": "refresh", "current_view": {"kind": "hero", "id": "x"}},
+            {"mode": "refresh", "current_view": "hero"},
+        ]:
+            with self.subTest(extra=extra):
+                response = activity_session(
+                    self.factory.post(
+                        "/",
+                        {"code": "code", "instance_id": "i", **extra},
+                        format="json",
+                    )
+                )
+                self.assertEqual(response.status_code, 400)
+        discord.assert_not_called()
+
+    @patch("discordbot.activity.discord_json")
+    def test_session_never_logs_secrets(self, discord):
+        with capture_logs() as logs:
+            response = self.session(
+                discord,
+                {
+                    "code": "secret-oauth-code",
+                    "instance_id": "i-quiet",
+                    "mode": "first",
+                },
+            )
+        token = response.data["token"]
+        self.assertTrue(logs)
+        for entry in logs:
+            for value in entry.values():
+                for secret in (token, "secret-oauth-code", "oauth-token"):
+                    self.assertNotIn(secret, str(value))
+
+    @patch("discordbot.activity.discord_json")
+    def test_anchor_deleted_reseeds_new_instance(self, discord):
+        anchor = self.seed_instance("i-anchor")
+        self.binding.draft = self.other
+        self.binding.save()
+        self.hero.delete()
+        self.assertFalse(DraftActivityInstance.objects.filter(pk=anchor.pk).exists())
+        response = self.session(
+            discord,
+            {
+                "code": "code",
+                "instance_id": "i-anchor",
+                "mode": "refresh",
+                "current_view": {"kind": "hero", "id": self.other.pk},
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        reseeded = DraftActivityInstance.objects.get(instance_id="i-anchor")
+        self.assertNotEqual(reseeded.pk, anchor.pk)
+        self.assertEqual(reseeded.draft_id, self.other.pk)
+        self.assertEqual(response.data["scope"], "tournament")
+        self.assertEqual(response.data["tournament_id"], self.tournament.pk)
+        self.assertEqual(response.data["draft_id"], self.other.pk)
+        identity = authenticate_token(response.data["token"], self.other.pk, "hero")
+        self.assertEqual(identity.instance.pk, reseeded.pk)
 
     @patch("discordbot.activity.discord_json")
     def test_unlinked_user_is_rejected(self, discord):
@@ -607,7 +938,7 @@ class DraftActivityTests(TestCase):
         self.binding.draft = self.other
         self.binding.save()
         discord.return_value = self.instance_response()
-        recreated = resolve_instance("instance-hero", "101")
+        recreated, _ = resolve_instance("instance-hero", "101")
         self.assertNotEqual(recreated.pk, original_pk)
         self.assertEqual(recreated.draft_id, self.other.pk)
         for draft in [self.hero, self.other]:

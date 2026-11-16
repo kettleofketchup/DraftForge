@@ -1,6 +1,6 @@
 """Discord Activity identity verification and narrowly scoped draft credentials."""
 
-from typing import Any
+from typing import Any, Literal
 
 import requests
 from django.conf import settings
@@ -16,16 +16,35 @@ from rest_framework.permissions import AllowAny
 from rest_framework.request import Request
 from rest_framework.response import Response
 
-from app.models import CustomUser
+from app.models import CustomUser, Draft, HeroDraft
 from app.serializers import UserSerializer
-from discordbot.activity_auth import issue_activity_token
+from discordbot.activity_auth import (
+    instance_pin,
+    issue_activity_token,
+    session_tournament,
+)
+from discordbot.activity_intent import LaunchIntent, peek_intent
+from discordbot.activity_roles import draft_role
+from discordbot.activity_targets import draft_tournament_id
 from discordbot.models import DraftActivityChannel, DraftActivityInstance
 from discordbot.utils import DISCORD_API_BASE, _get_headers, _rate_limited_request
+from telemetry.logging import get_logger
+
+log = get_logger(__name__)
+
+SessionMode = Literal["first", "refresh", "legacy"]
+
+
+class CurrentViewInput(serializers.Serializer):
+    kind = serializers.ChoiceField(["team", "hero", "bracket"])
+    id = serializers.IntegerField(min_value=1, required=False)
 
 
 class ActivityInput(serializers.Serializer):
     code = serializers.CharField(max_length=2048)
     instance_id = serializers.RegexField(r"^[A-Za-z0-9_-]+$", max_length=100)
+    mode = serializers.ChoiceField(["first", "refresh"], required=False)
+    current_view = CurrentViewInput(required=False)
 
 
 def discord_json(
@@ -46,7 +65,33 @@ def discord_json(
     return response.json()
 
 
-def resolve_instance(instance_id: str, discord_user_id: str) -> DraftActivityInstance:
+def _intent_draft(intent: LaunchIntent) -> HeroDraft | Draft | None:
+    if intent.kind == "hero":
+        return (
+            HeroDraft.objects.nocache()
+            .select_related("game")
+            .filter(pk=intent.draft_id)
+            .first()
+        )
+    return Draft.objects.nocache().filter(pk=intent.draft_id).first()
+
+
+def _seed_draft(
+    binding: DraftActivityChannel | None, intent: LaunchIntent | None
+) -> HeroDraft | Draft | None:
+    channel_draft = None if binding is None else binding.draft or binding.team_draft
+    target = None if intent is None else _intent_draft(intent)
+    if target is not None and (
+        channel_draft is None
+        or draft_tournament_id(target) == draft_tournament_id(channel_draft)
+    ):
+        return target
+    return channel_draft
+
+
+def resolve_instance(
+    instance_id: str, discord_user_id: str
+) -> tuple[DraftActivityInstance, bool]:
     """Trust Discord's instance metadata, never channel IDs supplied by the iframe."""
     instance = discord_json(
         "GET",
@@ -59,27 +104,36 @@ def resolve_instance(instance_id: str, discord_user_id: str) -> DraftActivityIns
     if location.get("kind") != "gc":
         raise AuthenticationFailed("Join a configured server voice channel.")
     guild_id, channel_id = str(location["guild_id"]), str(location["channel_id"])
+    existing = (
+        DraftActivityInstance.objects.nocache().filter(instance_id=instance_id).first()
+    )
+    if existing:
+        if (existing.guild_id, existing.channel_id) != (guild_id, channel_id):
+            raise AuthenticationFailed("Activity location changed.")
+        return existing, False
+    intent = peek_intent(str(discord_user_id))
+    if intent is not None and not intent.applies_to(guild_id, channel_id):
+        intent = None
     with transaction.atomic():
-        existing = DraftActivityInstance.objects.filter(instance_id=instance_id).first()
-        if existing:
-            if (existing.guild_id, existing.channel_id) != (guild_id, channel_id):
-                raise AuthenticationFailed("Activity location changed.")
-            return existing
-        binding = DraftActivityChannel.objects.filter(
-            guild_id=guild_id, channel_id=channel_id
-        ).first()
-        if not binding:
+        binding = (
+            DraftActivityChannel.objects.nocache()
+            .select_related("draft__game", "team_draft")
+            .filter(guild_id=guild_id, channel_id=channel_id)
+            .first()
+        )
+        seed = _seed_draft(binding, intent)
+        if seed is None:
             raise AuthenticationFailed("This voice channel has no draft configured.")
-        instance, _ = DraftActivityInstance.objects.get_or_create(
+        is_hero = isinstance(seed, HeroDraft)
+        return DraftActivityInstance.objects.get_or_create(
             instance_id=instance_id,
             defaults={
                 "guild_id": guild_id,
                 "channel_id": channel_id,
-                "draft": binding.draft,
-                "team_draft": binding.team_draft,
+                "draft": seed if is_hero else None,
+                "team_draft": None if is_hero else seed,
             },
         )
-        return instance
 
 
 @api_view(["POST"])
@@ -90,6 +144,7 @@ def activity_session(request: Request) -> Response:
         return Response({"error": "Discord Activities are disabled."}, status=404)
     payload = ActivityInput(data=request.data)
     payload.is_valid(raise_exception=True)
+    mode: SessionMode = payload.validated_data.get("mode", "legacy")
     try:
         oauth = discord_json(
             "POST",
@@ -106,11 +161,12 @@ def activity_session(request: Request) -> Response:
             "/users/@me",
             headers={"Authorization": f"Bearer {oauth['access_token']}"},
         )
+        discord_user_id = str(identity["id"])
         user = CustomUser.objects.nocache().get(
-            discordId=identity["id"], is_active=True
+            discordId=discord_user_id, is_active=True
         )
-        instance = resolve_instance(
-            payload.validated_data["instance_id"], identity["id"]
+        instance, created = resolve_instance(
+            payload.validated_data["instance_id"], discord_user_id
         )
     except CustomUser.DoesNotExist:
         raise AuthenticationFailed(
@@ -119,15 +175,55 @@ def activity_session(request: Request) -> Response:
     except (requests.RequestException, KeyError, TypeError, ValueError):
         # Never return OAuth credentials or upstream response bodies in errors.
         raise AuthenticationFailed("Could not verify the Discord Activity.")
+    tournament_id = session_tournament(instance)
+    scope = "draft" if tournament_id is None else "tournament"
     token = issue_activity_token(user, instance)
+    pin = instance_pin(instance)
+    common = {
+        "system": "discord",
+        "subsystem": "activity",
+        "user_id": user.pk,
+        "discord_user_id": discord_user_id,
+        "instance_id": instance.instance_id,
+        "guild_id": instance.guild_id,
+        "channel_id": instance.channel_id,
+        "tournament_id": tournament_id,
+    }
+    initial_view: dict[str, object] | None = None
+    if mode == "refresh":
+        current = payload.validated_data.get("current_view") or {}
+        log.info(
+            "activity_session_refreshed",
+            **common,
+            current_kind=current.get("kind"),
+            current_id=current.get("id"),
+        )
+    else:
+        initial_view = {"kind": pin["kind"], "id": pin["draft"]}
+        log.info(
+            "activity_session_started",
+            **common,
+            mode=mode,
+            instance_created=created,
+            scope=scope,
+            initial_kind=pin["kind"],
+            initial_draft_id=pin["draft"],
+            source="instance_first",
+            role=draft_role(user, pin["kind"], pin["draft"]),
+            notice=False,
+            intent_id=None,
+        )
     return Response(
         {
             "token": token,
-            "draft_id": instance.draft_id or instance.team_draft_id,
-            "kind": "hero" if instance.draft_id else "team",
-            "tournament_id": instance.team_draft.tournament_id
-            if instance.team_draft_id
-            else None,
+            "scope": scope,
+            "tournament_id": tournament_id,
+            "initial_view": initial_view,
+            "launch_intent": None,
+            "draft_id": pin["draft"],
+            "kind": pin["kind"],
+            "site_url": settings.SITE_URL,
+            "notice": None,
             "user": UserSerializer(user).data,
             "access_token": oauth["access_token"],
         },
