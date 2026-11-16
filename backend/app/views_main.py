@@ -68,9 +68,9 @@ from org.promotion.services import release_earning_sends
 from org.serializers import OrgUserSerializer
 from telemetry.logging import get_logger
 
-# BaseUserProfile owns nickname/avatar; DotaUserProfile owns
+# BaseUserProfile owns avatar; DotaUserProfile owns
 # positions/dota-mmr. Every @cached_as site below that ships
-# nickname/avatar/positions MUST list both as dependencies, otherwise PATCH
+# avatar/positions MUST list both as dependencies, otherwise PATCH
 # /api/users/me/profile/base/ or /game/dota/ won't invalidate the cached
 # response. See backend/user/tests/test_cacheops.py for the grep guardrail.
 from user.models import BaseUserProfile, DotaUserProfile
@@ -220,7 +220,7 @@ class UserView(viewsets.ModelViewSet):
     # Prefetch the M2M reverse relations that UserSerializer exposes as
     # role-membership lists. Without these the four SerializerMethodFields
     # on the list endpoint fire 4·N extra queries on a cold cacheops key.
-    # base_profile is required because nickname/avatar resolve via the
+    # base_profile is required because avatar resolves via the
     # @property on CustomUser, which reads self.base_profile.*.
     queryset = (
         with_user_profiles(CustomUser.objects.all(), dota=True)
@@ -252,7 +252,7 @@ class UserView(viewsets.ModelViewSet):
             BaseUserProfile,
             DotaUserProfile,
             # No keep_fresh: it defeats predictable eviction after a profile
-            # edit, so nickname/avatar/positions edits would serve stale until
+            # edit, so avatar/positions edits would serve stale until
             # TTL. Strict eviction is correct for user payloads.
             extra=cache_key,
             timeout=60 * 60,
@@ -273,7 +273,7 @@ class UserView(viewsets.ModelViewSet):
             CustomUser.objects.filter(pk=pk),
             BaseUserProfile,
             DotaUserProfile,
-            # No keep_fresh: its deferred eviction served a stale nickname/avatar
+            # No keep_fresh: its deferred eviction served a stale avatar
             # after a profile edit. This is the `/api/users/<pk>/` payload the
             # profile header reads — strict eviction makes edits reflect without
             # a manual refresh.
@@ -639,7 +639,7 @@ class TeamView(viewsets.ModelViewSet):
             Game,
             Draft,
             DraftRound,
-            # No keep_fresh: team detail ships member nickname/avatar/positions;
+            # No keep_fresh: team detail ships member avatar/positions;
             # keep_fresh would serve stale members after a profile edit, same as
             # the user list/detail blocks above.
             extra=cache_key,

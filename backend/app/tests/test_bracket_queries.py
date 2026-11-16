@@ -81,7 +81,8 @@ def build_bracket(
             for p in range(TEAM_SIZE + 2)
         ]
         for i, user in enumerate(roster):
-            user.nickname = f"{prefix} nick {t}.{i}"
+            user.discordNickname = f"{prefix} nick {t}.{i}"
+            user.save(update_fields=["discordNickname"])
         members, dropin, left = roster[:TEAM_SIZE], roster[TEAM_SIZE], roster[-1]
         team = Team.objects.create(
             name=f"{prefix} Team {t}",

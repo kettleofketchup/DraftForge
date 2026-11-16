@@ -142,8 +142,6 @@ class CustomUser(AbstractUser):
     discordId = models.TextField(null=True, unique=True, blank=True)
     discordUsername = models.TextField(null=True, blank=True)
     discordNickname = models.TextField(null=True, blank=True)
-    # deprecated: replaced by OrgUser.guild_nickname; dropped in a later release
-    guildNickname = models.TextField(null=True, blank=True)
     default_organization = models.ForeignKey(
         "Organization",
         on_delete=models.SET_NULL,
@@ -155,41 +153,6 @@ class CustomUser(AbstractUser):
     # Steam ID conversion constant
     # steamid (64-bit) = steam_account_id (32-bit) + STEAM_ID_64_BASE
     STEAM_ID_64_BASE = 76561197960265728
-
-    @property
-    def nickname(self) -> str | None:
-        """Transitional proxy — reads nickname from base_profile.
-
-        Removed in a follow-up cleanup ticket once all writers migrate to
-        PATCH /api/users/me/profile/base/.
-        """
-        bp = getattr(self, "base_profile", None)
-        if bp is None:
-            # Pre-pk: return the value buffered by the setter so set-then-read
-            # before save() works (matches the old column's behavior).
-            return getattr(self, "_pending_nickname", None)
-        return bp.nickname
-
-    @nickname.setter
-    def nickname(self, value: str | None) -> None:
-        """Transitional setter — writes through to base_profile.nickname.
-
-        Persists immediately so populate fixtures and incidental writers
-        behave as if the field were still on CustomUser. Invalidates the
-        base_profile cacheops row on commit.
-        """
-        # Use a local import to avoid the circular at module load.
-        from app.cache_utils import invalidate_after_commit
-
-        bp = getattr(self, "base_profile", None)
-        if bp is None:
-            # User hasn't been saved yet (no pk) — buffer the value and apply
-            # in save() after auto-create.
-            self._pending_nickname = value
-            return
-        bp.nickname = value
-        bp.save(update_fields=["nickname"])
-        invalidate_after_commit(bp)
 
     @property
     def avatar(self) -> str | None:
@@ -420,7 +383,7 @@ class CustomUser(AbstractUser):
     def save(self, *args: object, **kwargs: object) -> None:
         """Keep steam ids in sync, auto-create BaseUserProfile (which in turn
         auto-creates the game profiles + default positions), invalidate
-        cacheops, and flush pending nickname/avatar/positions/mmr values
+        cacheops, and flush pending avatar/positions/mmr values
         buffered by the transitional property setters before the user had a pk.
 
         This single save() merges what used to be two separately-defined
@@ -447,28 +410,18 @@ class CustomUser(AbstractUser):
 
         bp, _ = BaseUserProfile.objects.get_or_create(user=self)
 
-        # 5. Flush pending nickname/avatar values buffered by the property
-        #    setters before the user had a pk (and therefore a base_profile).
-        #    Hold the `del` until bp.save() succeeds so a retry after a
-        #    transient DB error still has the buffered value to flush.
-        pending_nickname = getattr(self, "_pending_nickname", None)
+        # 5. Flush the avatar buffered by the property setter before the user
+        #    had a pk (and therefore a base_profile). Hold the `del` until
+        #    bp.save() succeeds so a retry after a transient DB error still
+        #    has the buffered value to flush.
         pending_avatar = getattr(self, "_pending_avatar", None)
-        fields_to_update = []
-        if pending_nickname is not None:
-            bp.nickname = pending_nickname
-            fields_to_update.append("nickname")
         if pending_avatar is not None:
-            bp.avatar = pending_avatar
-            fields_to_update.append("avatar")
-        if fields_to_update:
             from app.cache_utils import invalidate_after_commit
 
-            bp.save(update_fields=fields_to_update)
+            bp.avatar = pending_avatar
+            bp.save(update_fields=["avatar"])
             invalidate_after_commit(bp)
-            if pending_nickname is not None:
-                del self._pending_nickname
-            if pending_avatar is not None:
-                del self._pending_avatar
+            del self._pending_avatar
 
         # 6. Flush pending positions/mmr buffered by the shims pre-pk.
         dp = bp.dota_user_profile
@@ -518,7 +471,6 @@ class CustomUser(AbstractUser):
     class Meta:
         indexes = [
             models.Index(fields=["discordNickname"]),
-            models.Index(fields=["guildNickname"]),
             models.Index(fields=["discordUsername"]),
         ]
 
