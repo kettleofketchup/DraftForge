@@ -31,7 +31,6 @@ class TelemetryMiddlewareTest(TestCase):
 
         response = self.middleware(request)
 
-        # Response should have X-Request-ID header
         self.assertIn("X-Request-ID", response)
         # Should be a valid UUID
         uuid.UUID(response["X-Request-ID"])
@@ -52,11 +51,9 @@ class TelemetryMiddlewareTest(TestCase):
         """Middleware binds context to structlog."""
         request = self.factory.get("/api/tournaments/5/")
 
-        # Track what context was bound
         bound_context = {}
 
         def capture_response(req):
-            # Capture context during request
             ctx = structlog.contextvars.get_contextvars()
             bound_context.update(ctx)
             return HttpResponse("OK")
@@ -64,7 +61,6 @@ class TelemetryMiddlewareTest(TestCase):
         middleware = TelemetryMiddleware(capture_response)
         middleware(request)
 
-        # Verify context was bound
         self.assertIn("request.id", bound_context)
         self.assertEqual(bound_context["labels"], ["tournament"])
         self.assertEqual(bound_context["tournament.id"], 5)
@@ -75,7 +71,6 @@ class TelemetryMiddlewareTest(TestCase):
 
         self.middleware(request)
 
-        # Context should be cleared
         ctx = structlog.contextvars.get_contextvars()
         self.assertNotIn("tournament.id", ctx)
 
@@ -114,7 +109,6 @@ class TelemetryMiddlewareTest(TestCase):
         middleware = TelemetryMiddleware(capture_response)
         middleware(request)
 
-        # user.id should not be present for anonymous users
         self.assertNotIn("user.id", bound_context)
 
     def test_rejects_invalid_request_id(self):

@@ -14,7 +14,6 @@ if TYPE_CHECKING:
 # Use stdlib logging for bootstrap messages
 _log = logging.getLogger("telemetry.tracing")
 
-# Track initialization state
 _tracing_initialized = False
 _log_export_initialized = False
 _log_provider = None
