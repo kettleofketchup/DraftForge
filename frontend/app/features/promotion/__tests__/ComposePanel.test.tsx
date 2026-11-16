@@ -45,7 +45,6 @@ const event: PromoEvent = {
 const candidate: CandidateRow = {
   user_pk: 42,
   username: 'ana',
-  nickname: null,
   discordUsername: 'ana_dc',
   discordId: '1234',
   avatarUrl: null,

@@ -26,7 +26,6 @@ export interface UserEntry {
   steam_account_id?: number | null;
   discordId?: string | null;
   discordNickname?: string | null;
-  nickname?: string | null;
   is_staff?: boolean;
   is_superuser?: boolean;
   active_drafts?: ActiveDraftType[];

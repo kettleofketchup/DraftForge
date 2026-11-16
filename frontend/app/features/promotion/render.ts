@@ -70,7 +70,6 @@ export interface SampleSender {
   username?: string | null;
   discordNickname?: string | null;
   guildNickname?: string | null;
-  nickname?: string | null;
 }
 
 export const SAMPLE_PLAYER = 'Player';

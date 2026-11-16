@@ -17,7 +17,7 @@ function freshUser(overrides: Partial<UserType> = {}): UserType {
   return {
     pk: 1,
     username: 'liv',
-    nickname: 'Liv',
+    discordNickname: 'Liv',
     avatar: null,
     discordId: '123',
     is_staff: false,
@@ -33,8 +33,12 @@ describe('userStore.patchCurrentUser', () => {
 
   it('merges the partial into currentUser', () => {
     useUserStore.getState().setCurrentUser(freshUser());
-    useUserStore.getState().patchCurrentUser({ nickname: 'Liv-Renamed' });
-    expect(useUserStore.getState().currentUser.nickname).toBe('Liv-Renamed');
+    useUserStore
+      .getState()
+      .patchCurrentUser({ discordNickname: 'Liv-Renamed' });
+    expect(useUserStore.getState().currentUser.discordNickname).toBe(
+      'Liv-Renamed',
+    );
     // unrelated fields preserved
     expect(useUserStore.getState().currentUser.username).toBe('liv');
     expect(useUserStore.getState().currentUser.pk).toBe(1);
@@ -43,18 +47,18 @@ describe('userStore.patchCurrentUser', () => {
   it('is a no-op when currentUser has no pk', () => {
     // After clearUser, currentUser = {} as UserType — no pk.
     const before = useUserStore.getState().currentUser;
-    useUserStore.getState().patchCurrentUser({ nickname: 'X' });
+    useUserStore.getState().patchCurrentUser({ discordNickname: 'X' });
     expect(useUserStore.getState().currentUser).toBe(before);
   });
 
   it('applies multiple keys atomically', () => {
     useUserStore.getState().setCurrentUser(freshUser());
     useUserStore.getState().patchCurrentUser({
-      nickname: 'New',
+      discordNickname: 'New',
       avatar: 'abcdef',
     });
     const cu = useUserStore.getState().currentUser;
-    expect(cu.nickname).toBe('New');
+    expect(cu.discordNickname).toBe('New');
     expect(cu.avatar).toBe('abcdef');
   });
 
@@ -62,15 +66,15 @@ describe('userStore.patchCurrentUser', () => {
     useUserStore.getState().setCurrentUser(freshUser());
     const beforeUsers = useUserStore.getState().globalUserPks;
     const beforeTournaments = useUserStore.getState().tournaments;
-    useUserStore.getState().patchCurrentUser({ nickname: 'X' });
+    useUserStore.getState().patchCurrentUser({ discordNickname: 'X' });
     expect(useUserStore.getState().globalUserPks).toBe(beforeUsers);
     expect(useUserStore.getState().tournaments).toBe(beforeTournaments);
   });
 
-  it('accepts null nickname (clearing the field)', () => {
-    useUserStore.getState().setCurrentUser(freshUser({ nickname: 'X' }));
-    useUserStore.getState().patchCurrentUser({ nickname: null });
-    expect(useUserStore.getState().currentUser.nickname).toBeNull();
+  it('accepts a null discordNickname (clearing the field)', () => {
+    useUserStore.getState().setCurrentUser(freshUser({ discordNickname: 'X' }));
+    useUserStore.getState().patchCurrentUser({ discordNickname: null });
+    expect(useUserStore.getState().currentUser.discordNickname).toBeNull();
   });
 });
 

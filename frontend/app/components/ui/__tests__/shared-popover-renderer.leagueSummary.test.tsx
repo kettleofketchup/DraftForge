@@ -4,7 +4,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { UserType } from '~/components/user/types';
 import { SharedPopoverRenderer } from '../shared-popover-renderer';
 
-const player = { pk: 42, username: 'alice', nickname: 'Alice' } as UserType;
+const player = {
+  pk: 42,
+  username: 'alice',
+  discordNickname: 'Alice',
+} as UserType;
 const anchorEl = document.createElement('span');
 document.body.appendChild(anchorEl);
 

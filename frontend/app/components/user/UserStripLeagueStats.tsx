@@ -3,6 +3,7 @@ import { RecentForm } from '~/components/league-stats/RecentForm';
 import { MIN_STREAK, StreakBadge } from '~/components/league-stats/StreakBadge';
 import { PlayerPopoverTrigger as PlayerPopover } from '~/components/player/PlayerPopoverTrigger';
 import { Badge } from '~/components/ui/badge';
+import { DisplayName } from '~/components/user/avatar';
 import {
   formatWinRate,
   toneChipClass,
@@ -61,7 +62,7 @@ export const UserStripLeagueStats = memo(
 
     const { population, minGames } = data;
     const tone = winRateTone(summary.win_rate);
-    const playerName = player.nickname || player.username || 'Unknown';
+    const playerName = DisplayName(player);
     const label = `League stats for ${playerName}: ${accessibleLabel(summary, population, minGames)}. Opens the player panel`;
 
     return (

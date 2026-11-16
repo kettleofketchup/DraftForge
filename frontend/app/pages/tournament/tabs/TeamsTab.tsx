@@ -25,8 +25,10 @@ export const TeamsTab: React.FC = memo(() => {
         // Check if any user in the team matches the query
         const userMatches = team.members?.some((user: UserType) => {
           const usernameMatch = user.username?.toLowerCase().includes(q);
-          const nicknameMatch = user.nickname?.toLowerCase().includes(q);
-          return usernameMatch || nicknameMatch;
+          const discordNameMatch = user.discordNickname
+            ?.toLowerCase()
+            .includes(q);
+          return usernameMatch || discordNameMatch;
         });
 
         // Check if team name matches

@@ -23,7 +23,7 @@ describe('User.setFromGuildMember', () => {
     const user = new User({} as never);
     user.setFromGuildMember(member);
     expect(user.discordNickname).toBe('GwaihirTheWindlord');
-    expect(user.nickname).toBeUndefined();
+    expect('nickname' in user).toBe(false);
     expect(user.username).toBe('dragonclaw_user');
     expect(user.discordId).toBe('123456789012345678');
   });

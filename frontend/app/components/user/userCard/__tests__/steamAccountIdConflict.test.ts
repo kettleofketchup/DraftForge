@@ -57,7 +57,7 @@ describe('describeSteamAccountIdConflict', () => {
           nickname: null,
           discordNickname: null,
           username: 'geo.potter',
-        },
+        } as never,
         314,
       ),
     ).toBe(

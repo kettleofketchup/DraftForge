@@ -14,9 +14,9 @@ type UserLike =
       pk?: number;
       // Username can be null for Steam-only signups (CustomUser.username is
       // null=True at the model level). DisplayName already falls back to
-      // nickname / '?'.
+      // discordNickname / '?'.
       username?: string | null;
-      nickname?: string | null;
+      discordNickname?: string | null;
       avatar?: string | null;
       avatarUrl?: string | null;
       discordId?: string | null;
@@ -112,9 +112,9 @@ export const AvatarUrl = (
         )}`;
   }
 
-  // Generate fallback URL from username/nickname
+  // Generate fallback URL from Discord name/username
   const fallback = `${genUrl}&length=2&name=${encodeURIComponent(
-    user.nickname || user.username || '?',
+    user.discordNickname || user.username || '?',
   )}`;
 
   // Helper to check if URL is a Discord default/embed avatar (not a custom one)
@@ -152,7 +152,7 @@ function getDisplayName(user: UserLike | undefined): string {
     return user.nick || user.user.global_name || user.user.username;
   }
 
-  return user.nickname || user.username || '?';
+  return user.discordNickname || user.username || '?';
 }
 
 /**
@@ -215,7 +215,7 @@ function arePropsEqual(
       prevUser.avatarUrl === nextUser.avatarUrl &&
       prevUser.discordId === nextUser.discordId &&
       prevUser.username === nextUser.username &&
-      prevUser.nickname === nextUser.nickname
+      prevUser.discordNickname === nextUser.discordNickname
     );
   }
 
@@ -247,7 +247,7 @@ export const UserAvatar = memo(function UserAvatar({
   const userAvatar = !isGuildMember ? user?.avatar : undefined;
   const userAvatarUrl = !isGuildMember ? user?.avatarUrl : undefined;
   const userDiscordId = !isGuildMember ? user?.discordId : undefined;
-  const userNickname = !isGuildMember ? user?.nickname : undefined;
+  const userNickname = !isGuildMember ? user?.discordNickname : undefined;
   const userUsername = !isGuildMember ? user?.username : undefined;
 
   // Memoize the image URL - only recompute when avatar-relevant fields change

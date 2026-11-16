@@ -67,9 +67,24 @@ vi.mock('sonner', () => ({
 
 import { EventStaffCard, EventStaffSection } from '../EventStaffCard';
 
-const alice = { pk: 2, username: 'alice', nickname: null, avatarUrl: null };
-const bob = { pk: 3, username: 'bob', nickname: 'Bobby', avatarUrl: null };
-const carol = { pk: 4, username: 'carol', nickname: null, avatarUrl: null };
+const alice = {
+  pk: 2,
+  username: 'alice',
+  discordNickname: null,
+  avatarUrl: null,
+};
+const bob = {
+  pk: 3,
+  username: 'bob',
+  discordNickname: 'Bobby',
+  avatarUrl: null,
+};
+const carol = {
+  pk: 4,
+  username: 'carol',
+  discordNickname: null,
+  avatarUrl: null,
+};
 
 const event = {
   id: 11,

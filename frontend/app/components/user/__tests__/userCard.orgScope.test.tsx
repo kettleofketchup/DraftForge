@@ -53,7 +53,7 @@ const ORG_PK = 5;
 const tournamentUser = {
   pk: 42,
   username: 'signup',
-  nickname: 'Signup',
+  discordNickname: 'Signup',
   mmr: 4200,
   orgUserPk: 77,
 } as UserClassType;
@@ -123,7 +123,7 @@ describe('UserCard with a stale store org (finding 3)', () => {
   const staleEntry = {
     pk: 43,
     username: 'stale',
-    nickname: 'Stale',
+    discordNickname: 'Stale',
     orgData: { [STALE_ORG_PK]: { id: 88, mmr: 3000, _fetchedAt: 0 } },
     orgNicknames: {},
     leagueData: {},
@@ -264,7 +264,7 @@ describe('UserCard edit for cache entries (finding 4)', () => {
     const entry = seed({
       pk: 50,
       username: 'org',
-      nickname: 'Org',
+      discordNickname: 'Org',
       orgData: { [ORG_PK]: { id: 60, mmr: 3000, _fetchedAt: 0 } },
       orgNicknames: {},
       leagueData: {},
@@ -297,7 +297,7 @@ describe('UserCard edit for cache entries (finding 4)', () => {
     const entry = seed({
       pk: 51,
       username: 'lg',
-      nickname: 'Lg',
+      discordNickname: 'Lg',
       orgData: { [ORG_PK]: { id: 61, mmr: 2000, _fetchedAt: 0 } },
       orgNicknames: {},
       leagueData: {},
@@ -326,7 +326,7 @@ describe('UserCard edit for cache entries (finding 4)', () => {
     const entry = seed({
       pk: 52,
       username: 'lonly',
-      nickname: 'Lonly',
+      discordNickname: 'Lonly',
       orgData: {},
       orgNicknames: {},
       leagueData: { [LEAGUE_PK]: { id: 41, mmr: 1200, _fetchedAt: 0 } },
@@ -359,7 +359,7 @@ describe('UserCard edit for cache entries (finding 4)', () => {
     const entry = seed({
       pk: 53,
       username: 'other',
-      nickname: 'Other',
+      discordNickname: 'Other',
       orgData: {},
       orgNicknames: {},
       leagueData: { 4: { id: 44, mmr: 1500, _fetchedAt: 0 } },
@@ -385,7 +385,7 @@ describe('UserCard edit user carries the scope-gating link', () => {
       source: {
         pk: 70,
         username: 'flat',
-        nickname: 'Flat',
+        discordNickname: 'Flat',
         orgUserPk: 170,
       } as UserClassType,
       store: 'org',
@@ -395,7 +395,7 @@ describe('UserCard edit user carries the scope-gating link', () => {
       source: {
         pk: 71,
         username: 'org',
-        nickname: 'Org',
+        discordNickname: 'Org',
         orgData: { 8: { id: 171, mmr: 1000, _fetchedAt: 0 } },
         orgNicknames: {},
         leagueData: {},
@@ -408,7 +408,7 @@ describe('UserCard edit user carries the scope-gating link', () => {
       source: {
         pk: 72,
         username: 'lg',
-        nickname: 'Lg',
+        discordNickname: 'Lg',
         orgData: {},
         orgNicknames: {},
         leagueData: { 8: { id: 172, mmr: 1000, _fetchedAt: 0 } },
@@ -467,7 +467,7 @@ describe('UserCard edit user carries the scope-gating link', () => {
     const user = seed({
       pk: 73,
       username: 'none',
-      nickname: 'None',
+      discordNickname: 'None',
       orgData: {},
       orgNicknames: {},
       leagueData: {},
@@ -503,7 +503,7 @@ describe('UserCard edit gate follows a same-pk org refresh (MA-5)', () => {
     const entry = seed({
       pk: 80,
       username: 'staffed',
-      nickname: 'Staffed',
+      discordNickname: 'Staffed',
       orgData: { [ORG_PK]: { id: 180, mmr: 1000, _fetchedAt: 0 } },
       orgNicknames: {},
       leagueData: {},

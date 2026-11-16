@@ -29,7 +29,7 @@ vi.mock('~/features/league-stats/queries', () => ({
 const user = {
   pk: 42,
   username: 'alice',
-  nickname: 'Alice',
+  discordNickname: 'Alice',
   mmr: 4200,
 } as UserType;
 

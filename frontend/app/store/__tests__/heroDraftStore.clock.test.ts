@@ -47,7 +47,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-const captain = { pk: 1, username: 'c', nickname: null, avatar: null };
+const captain = { pk: 1, username: 'c', discordNickname: null, avatar: null };
 const team = (id: number) => ({
   id,
   tournament_team: 30 + id,

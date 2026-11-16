@@ -41,7 +41,6 @@ export interface HeroDraftSSR {
 export interface UserSSR {
   pk: number;
   username: string;
-  nickname?: string | null;
   discordNickname?: string | null;
   avatar_url: string | null;
 }

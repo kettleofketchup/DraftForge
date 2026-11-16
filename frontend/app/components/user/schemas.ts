@@ -39,7 +39,6 @@ export const UserSchema = z.object({
   avatarUrl: z.string().url().optional(),
   is_staff: z.boolean().optional(),
   is_superuser: z.boolean().optional(),
-  nickname: z.string().min(2).max(100).nullable().optional(),
   mmr: z.number().min(0).nullable().optional(),
   league_mmr: z.number().min(0).nullable().optional(), // MMR snapshot from LeagueUser
   steam_account_id: z.number().min(0).nullable().optional(), // 32-bit Friend ID (Dotabuff)

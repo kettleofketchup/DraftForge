@@ -15,7 +15,6 @@ export class User implements UserClassType {
   avatarUrl!: string;
   is_staff!: boolean;
   is_superuser!: boolean;
-  nickname?: string | null;
   mmr?: number;
   position?: string;
   steam_account_id?: number;

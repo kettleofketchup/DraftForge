@@ -49,7 +49,7 @@ export function LoginAsUserButton({ user }: Props) {
     }
   };
 
-  const name = user.username || user.nickname;
+  const name = user.username || user.discordNickname;
   return (
     <FastTooltip content={`Login as ${name} (Test Only)`}>
       <Button

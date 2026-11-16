@@ -3,7 +3,6 @@ import { z } from 'zod';
 // Single-value user-global fields. T1 ships these; future tickets do not
 // add to base (game/org-scoped data lives in other layers).
 export const BaseProfileSchema = z.object({
-  nickname: z.string().nullable().optional(),
   avatar: z.string().nullable().optional(),
 });
 

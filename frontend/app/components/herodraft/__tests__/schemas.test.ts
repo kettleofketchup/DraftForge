@@ -169,6 +169,7 @@ describe('Discord name keys on herodraft captains', () => {
     expect(draft.draft_teams[0].members[0]).toMatchObject({
       guildNickname: 'DragonClaw',
     });
+    expect('nickname' in draft.draft_teams[0].captain!).toBe(false);
   });
 
   it('accepts a captain without nickname or either Discord name key', () => {

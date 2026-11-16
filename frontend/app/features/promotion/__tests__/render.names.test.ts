@@ -33,7 +33,9 @@ describe('playerName', () => {
   });
 
   it('ignores a stale site nickname', () => {
-    expect(playerName({ username: 'u', nickname: 'Site' }, 7)).toBe('u');
+    expect(playerName({ username: 'u', nickname: 'Site' } as never, 7)).toBe(
+      'u',
+    );
   });
 
   it("reads the sender's cached server nickname by pk", () => {

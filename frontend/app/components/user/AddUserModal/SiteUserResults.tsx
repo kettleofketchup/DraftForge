@@ -5,6 +5,7 @@ import { Badge } from '~/components/ui/badge';
 import { ConfirmButton } from '~/components/ui/buttons';
 import { ScrollArea } from '~/components/ui/scroll-area';
 import { UserStrip } from '~/components/user/UserStrip';
+import { DisplayName } from '~/components/user/avatar';
 import { cn } from '~/lib/utils';
 import type { SiteUserResultsProps } from './types';
 
@@ -76,7 +77,7 @@ export const SiteUserResults: React.FC<SiteUserResultsProps> = ({
       setAddingPk(user.pk);
       try {
         await onAdd({ user_id: user.pk });
-        toast.success(`Added ${user.nickname || user.username}`);
+        toast.success(`Added ${DisplayName(user)}`);
       } catch (err) {
         toast.error(err instanceof Error ? err.message : 'Failed to add user');
       } finally {

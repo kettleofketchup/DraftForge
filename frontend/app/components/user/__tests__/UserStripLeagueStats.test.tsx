@@ -18,7 +18,11 @@ vi.mock('~/components/ui/shared-popover-context', () => ({
 }));
 
 function player(pk: number): UserType {
-  return { pk, username: `user${pk}`, nickname: `User ${pk}` } as UserType;
+  return {
+    pk,
+    username: `user${pk}`,
+    discordNickname: `User ${pk}`,
+  } as UserType;
 }
 
 class ResizeObserverStub {

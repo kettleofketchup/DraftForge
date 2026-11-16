@@ -10,8 +10,7 @@ function row(guildNickname: string | null): LeaderboardRow {
     org_user_pk: 30,
     user_pk: 3,
     username: 'u',
-    nickname: null,
-    discordNickname: 'G',
+    discordNickname: 'Gwaihir',
     guildNickname,
     avatarUrl: null,
     points: 10,
@@ -45,17 +44,19 @@ beforeEach(() => useUserCacheStore.getState().reset());
 
 describe('Leaderboard names', () => {
   it("shows the member's server nickname for the org", () => {
-    renderBoard(row('S'), 7);
+    renderBoard(row('DragonClaw'), 7);
     const tableRow = screen.getByTestId('contributions-row-30');
-    expect(tableRow.textContent).toContain('S');
-    expect(tableRow.textContent).not.toContain('G');
-    expect(tableRow.getAttribute('aria-label')).toBe("View S's contributions");
+    expect(tableRow.textContent).toContain('DragonClaw');
+    expect(tableRow.textContent).not.toContain('Gwaihir');
+    expect(tableRow.getAttribute('aria-label')).toBe(
+      "View DragonClaw's contributions",
+    );
   });
 
   it('falls back to the global Discord name without a server nickname', () => {
     renderBoard(row(null), 7);
     expect(screen.getByTestId('contributions-row-30').textContent).toContain(
-      'G',
+      'Gwaihir',
     );
   });
 
@@ -67,7 +68,7 @@ describe('Leaderboard names', () => {
       });
     renderBoard(row(null), 7);
     const text = screen.getByTestId('contributions-row-30').textContent;
-    expect(text).toContain('G');
+    expect(text).toContain('Gwaihir');
     expect(text).not.toContain('Other');
   });
 });

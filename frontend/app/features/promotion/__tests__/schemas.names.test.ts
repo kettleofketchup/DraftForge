@@ -28,6 +28,7 @@ describe('CandidateRowSchema names', () => {
     const parsed = CandidateRowSchema.parse(row);
     expect(parsed.discordNickname).toBe('GwaihirTheWindlord');
     expect(parsed.guildNickname).toBe('DragonClaw');
+    expect('nickname' in parsed).toBe(false);
   });
 
   it('parses a payload without the new keys', () => {

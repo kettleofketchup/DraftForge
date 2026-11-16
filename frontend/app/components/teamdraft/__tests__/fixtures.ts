@@ -4,7 +4,11 @@ import type { DraftTick } from '../schemas';
 export const T0 = Date.parse('2026-11-08T12:00:00.000Z');
 
 export function user(pk: number): UserType {
-  return { pk, username: `user${pk}`, nickname: `User ${pk}` } as UserType;
+  return {
+    pk,
+    username: `user${pk}`,
+    discordNickname: `User ${pk}`,
+  } as UserType;
 }
 
 export const tick = (o: Partial<DraftTick> = {}): DraftTick => ({

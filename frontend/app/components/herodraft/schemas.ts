@@ -5,7 +5,6 @@ export const DraftTeamCaptainSchema = z.object({
   pk: z.number(), // Backend uses 'pk' not 'id'
   // Steam-only signups have no username; DisplayName falls back to the Discord names.
   username: z.string().nullable(),
-  nickname: z.string().nullable().optional(),
   discordNickname: z.string().nullable().optional(),
   guildNickname: z.string().nullable().optional(),
   avatar: z.string().nullable(),

@@ -45,7 +45,9 @@ export const AddPlayerDropdown: React.FC<Props> = ({
           (person) =>
             !addedUsers?.some((added) => added?.pk === person?.pk) &&
             (person?.username?.toLowerCase().includes(query.toLowerCase()) ||
-              person?.nickname?.toLowerCase().includes(query.toLowerCase())),
+              person?.discordNickname
+                ?.toLowerCase()
+                .includes(query.toLowerCase())),
         );
 
   const handleSearchUserSelect = async (userName: UserType | string | null) => {
@@ -59,7 +61,7 @@ export const AddPlayerDropdown: React.FC<Props> = ({
     if (typeof userName === 'object') {
       log.debug(userName);
 
-      userName = userName.username || userName.nickname || '';
+      userName = userName.username || userName.discordNickname || '';
     }
     if (!userName || userName === undefined || userName === '') {
       log.debug('No user selected, resetting searched person');
@@ -72,7 +74,7 @@ export const AddPlayerDropdown: React.FC<Props> = ({
       (user) =>
         user &&
         (user?.username?.toLowerCase() === userName?.toLowerCase() ||
-          user?.nickname?.toLowerCase() === userName?.toLowerCase()),
+          user?.discordNickname?.toLowerCase() === userName?.toLowerCase()),
     );
 
     if (user === undefined) {
@@ -118,9 +120,9 @@ export const AddPlayerDropdown: React.FC<Props> = ({
                     <UserAvatar user={user} size="md" />
                     <span>
                       {user?.username}{' '}
-                      {user?.nickname && (
+                      {user?.discordNickname && (
                         <span className="text-sm text-gray-500">
-                          ({user?.nickname})
+                          ({user?.discordNickname})
                         </span>
                       )}
                     </span>

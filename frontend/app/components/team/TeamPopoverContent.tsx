@@ -11,6 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from '~/components/ui/table';
+import { DisplayName } from '~/components/user/avatar';
 import { RolePositions } from '~/components/user/positions';
 import type { UserType } from '~/components/user/types';
 import { UserAvatar } from '~/components/user/UserAvatar';
@@ -43,9 +44,7 @@ const TeamMemberRow = memo(
             size="md"
             className="hover:ring-2 hover:ring-primary transition-all"
           />
-          <span className="font-medium">
-            {member.nickname || member.username}
-          </span>
+          <span className="font-medium">{DisplayName(member)}</span>
           {isCaptain && <span className="text-xs text-primary">(C)</span>}
         </div>
       </TableCell>
@@ -75,8 +74,7 @@ export const TeamPopoverContent: React.FC<TeamPopoverContentProps> = ({
 }) => {
   const captain = team.captain;
   const teamName =
-    team.name ||
-    `${captain?.nickname || captain?.username || 'Unknown'}'s Team`;
+    team.name || `${captain ? DisplayName(captain) : 'Unknown'}'s Team`;
   const hasMembers = team.members && team.members.length > 0;
 
   const avgMMR = useMemo(() => {

@@ -7,7 +7,11 @@ import {
   useSharedPopover,
 } from '../shared-popover-context';
 
-const player = { pk: 42, username: 'alice', nickname: 'Alice' } as UserType;
+const player = {
+  pk: 42,
+  username: 'alice',
+  discordNickname: 'Alice',
+} as UserType;
 const latest: { value: ReturnType<typeof useSharedPopover> | null } = {
   value: null,
 };

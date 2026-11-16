@@ -177,3 +177,16 @@ describe('userCacheStore orgNicknames', () => {
     expect('guildNickname' in CoreUserSchema.shape).toBe(false);
   });
 });
+
+describe('userCacheStore site nickname', () => {
+  beforeEach(() => {
+    useUserCacheStore.getState().reset();
+  });
+
+  it('does not keep a stale nickname key from a payload', () => {
+    useUserCacheStore
+      .getState()
+      .upsert([{ pk: 1, username: 'u', nickname: 'Site' } as never]);
+    expect('nickname' in useUserCacheStore.getState().getById(1)!).toBe(false);
+  });
+});

@@ -105,6 +105,7 @@ describe('eventStaffUserSchema names', () => {
     const parsed = eventStaffUserSchema.parse(staff);
     expect(parsed.discordNickname).toBe('GwaihirTheWindlord');
     expect(parsed.guildNickname).toBe('DragonClaw');
+    expect('nickname' in parsed).toBe(false);
   });
 
   it('parses a payload without the new keys', () => {
@@ -125,6 +126,7 @@ describe('eventSignupSchema user_data names', () => {
     const parsed = eventSignupSchema.parse(signup);
     expect(parsed.user_data?.discordNickname).toBe('GwaihirTheWindlord');
     expect(parsed.user_data?.guildNickname).toBe('DragonClaw');
+    expect('nickname' in parsed.user_data!).toBe(false);
   });
 
   it('parses user_data without the new keys', () => {
@@ -146,6 +148,7 @@ describe('discordEventLogSchema names', () => {
     const parsed = discordEventLogSchema.parse(log);
     expect(parsed.discordNickname).toBe('GwaihirTheWindlord');
     expect(parsed.guildNickname).toBe('DragonClaw');
+    expect('nickname' in parsed).toBe(false);
   });
 
   it('parses a payload without the new keys', () => {
@@ -166,6 +169,7 @@ describe('discordEventDMSchema names', () => {
     const parsed = discordEventDMSchema.parse(dm);
     expect(parsed.discordNickname).toBe('GwaihirTheWindlord');
     expect(parsed.guildNickname).toBe('DragonClaw');
+    expect('nickname' in parsed).toBe(false);
   });
 
   it('parses a payload without the new keys', () => {

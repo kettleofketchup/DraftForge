@@ -200,7 +200,7 @@ export function UserList({
     return users.filter(
       (person) =>
         person.username?.toLowerCase().includes(q) ||
-        person.nickname?.toLowerCase().includes(q),
+        person.discordNickname?.toLowerCase().includes(q),
     );
   }, [users, debouncedQuery]);
 

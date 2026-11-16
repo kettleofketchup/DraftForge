@@ -268,7 +268,7 @@ export const AvailablePlayersSection = memo(() => {
       players = players.filter(
         (user) =>
           (user.username || '').toLowerCase().includes(query) ||
-          (user.nickname || '').toLowerCase().includes(query),
+          (user.discordNickname || '').toLowerCase().includes(query),
       );
     }
 

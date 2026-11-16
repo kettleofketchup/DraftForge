@@ -11,6 +11,7 @@ import {
 import { FormDialog } from '~/components/ui/dialogs/FormDialog';
 import { Input } from '~/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
+import { DisplayName } from '~/components/user/avatar';
 import type { UserType } from '~/components/user/types';
 import { useDebouncedValue } from '~/hooks/useDebouncedValue';
 import { useListKeyboardNav } from '~/hooks/useListKeyboardNav';
@@ -193,7 +194,9 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
         if (!result?.pk || checkIsAdded(result)) return;
         try {
           await handleAdd({ user_id: result.pk });
-          toast.success(`Added ${result.nickname || result.username}`);
+          toast.success(
+            `Added ${DisplayName(result, undefined, entityContext.orgId)}`,
+          );
         } catch (err) {
           toast.error(
             err instanceof Error ? err.message : 'Failed to add user',
@@ -272,7 +275,7 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
       <div className="relative mb-4">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
-          placeholder="Search by username, nickname, or Steam ID..."
+          placeholder="Search by username, Discord name, or Steam ID..."
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={handleKeyDown}

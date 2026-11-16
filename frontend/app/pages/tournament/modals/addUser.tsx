@@ -19,7 +19,7 @@ export default function PlayersTab({
           const q = query.toLowerCase();
           return (
             person.username?.toLowerCase().includes(q) ||
-            person.nickname?.toLowerCase().includes(q)
+            person.discordNickname?.toLowerCase().includes(q)
           );
         });
   if (!tournament || !tournament.users || tournament.users.length === 0) {

@@ -11,8 +11,8 @@ const GAMES_THROWN = 2; // Always 2/10 - it's a joke
 const TANGOES_REQUIRED = 46326;
 
 // The joke target - everyone has to throw bucketoffish's games
-const BUCKETOFFISH: { nickname: string; username?: string } = {
-  nickname: 'bucketoffish',
+const BUCKETOFFISH: { discordNickname: string; username?: string } = {
+  discordNickname: 'bucketoffish',
 };
 
 interface PlayerUnderConstructionProps {
@@ -25,7 +25,7 @@ export const PlayerUnderConstruction: React.FC<PlayerUnderConstructionProps> =
     const isLoggedIn = !!currentUser?.pk;
     const { tangoes, buyTango, isBuying, isLoading } = useTangoes(isLoggedIn);
 
-    const targetName = BUCKETOFFISH.nickname || BUCKETOFFISH.username;
+    const targetName = BUCKETOFFISH.discordNickname || BUCKETOFFISH.username;
 
     const gamesProgress = useMemo(
       () => (GAMES_THROWN / GAMES_TO_THROW) * 100,

@@ -24,7 +24,11 @@ vi.mock('~/components/team/TeamPopoverContent', () => ({
   TeamPopoverContent: () => null,
 }));
 
-const player = { pk: 42, username: 'alice', nickname: 'Alice' } as UserType;
+const player = {
+  pk: 42,
+  username: 'alice',
+  discordNickname: 'Alice',
+} as UserType;
 
 function renderHoverCard() {
   render(

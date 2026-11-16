@@ -10,6 +10,7 @@ import { PlayerLeagueSummary } from '~/components/player/PlayerLeagueSummary';
 import { PlayerModal } from '~/components/player/PlayerModal';
 import { TeamModal } from '~/components/team/TeamModal';
 import { TeamPopoverContent } from '~/components/team/TeamPopoverContent';
+import { DisplayName } from '~/components/user/avatar';
 import { RolePositions } from '~/components/user/positions';
 import type { UserType } from '~/components/user/types';
 import { UserAvatar } from '~/components/user/UserAvatar';
@@ -22,7 +23,7 @@ const PlayerPopoverContent: React.FC<{
   player: UserType;
   statsLeagueId?: number | null;
 }> = ({ player, statsLeagueId }) => {
-  const playerName = player.nickname || player.username || 'Unknown';
+  const playerName = DisplayName(player);
 
   return (
     <div className="flex flex-col gap-3 w-full overflow-hidden">

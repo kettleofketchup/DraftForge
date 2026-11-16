@@ -29,7 +29,11 @@ class ResizeObserverStub {
 globalThis.ResizeObserver ??=
   ResizeObserverStub as unknown as typeof ResizeObserver;
 
-const player = { pk: 42, username: 'alice', nickname: 'Alice' } as UserType;
+const player = {
+  pk: 42,
+  username: 'alice',
+  discordNickname: 'Alice',
+} as UserType;
 
 const summaries = {
   league_pk: 10,

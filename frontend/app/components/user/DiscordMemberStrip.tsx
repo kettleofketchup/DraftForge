@@ -39,7 +39,7 @@ export const DiscordMemberStrip = React.memo(function DiscordMemberStrip({
       {/* Avatar */}
       <UserAvatar
         user={{
-          nickname: displayName,
+          discordNickname: displayName,
           username: member.user.username,
           avatar: member.user.avatar,
           discordId: member.user.id,

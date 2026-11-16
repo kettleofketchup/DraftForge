@@ -8,7 +8,6 @@
 
 export interface SteamAccountIdHolder {
   pk: number;
-  nickname?: string | null;
   discordNickname?: string | null;
   username: string;
 }

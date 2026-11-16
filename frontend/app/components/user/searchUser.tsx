@@ -35,7 +35,7 @@ export const SearchUserDropdown: React.FC<Props> = ({
           const q = query.toLowerCase();
           return (
             person.username?.toLowerCase().includes(q) ||
-            person.nickname?.toLowerCase().includes(q)
+            person.discordNickname?.toLowerCase().includes(q)
           );
         });
 
@@ -46,7 +46,7 @@ export const SearchUserDropdown: React.FC<Props> = ({
     let searchName: string;
     if (typeof userName === 'object') {
       log.debug(userName);
-      searchName = userName?.username || userName?.nickname || '';
+      searchName = userName?.username || userName?.discordNickname || '';
     } else {
       searchName = userName;
     }
@@ -59,7 +59,7 @@ export const SearchUserDropdown: React.FC<Props> = ({
       (user) =>
         user &&
         (user.username?.toLowerCase() === searchName?.toLowerCase() ||
-          user.nickname?.toLowerCase() === searchName?.toLowerCase()),
+          user.discordNickname?.toLowerCase() === searchName?.toLowerCase()),
     );
   };
 
@@ -92,7 +92,10 @@ export const SearchUserDropdown: React.FC<Props> = ({
                   <div className="flex items-center gap-2">
                     <UserAvatar user={user} size="md" />
                     <span>Username: {user.username}</span>
-                    Nick: {user.nickname && <span>{user.nickname}</span>}
+                    Nick:{' '}
+                    {user.discordNickname && (
+                      <span>{user.discordNickname}</span>
+                    )}
                   </div>
                 </ComboboxOption>
               ))

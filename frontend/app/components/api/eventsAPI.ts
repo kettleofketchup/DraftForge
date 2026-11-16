@@ -468,7 +468,6 @@ export async function unsubscribeFromRepeater(
 export interface RepeaterSubscriber {
   id: number;
   username: string;
-  nickname?: string | null;
   discordNickname?: string | null;
   discordId: string | null;
   avatar: string | null;

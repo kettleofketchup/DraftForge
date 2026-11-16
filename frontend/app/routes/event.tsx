@@ -112,6 +112,7 @@ import {
 import type { DotaProfileData } from '~/components/user';
 import { UserEventStrip } from '~/components/user';
 import { AddUserModal } from '~/components/user/AddUserModal';
+import { DisplayName } from '~/components/user/avatar';
 import type { UserType } from '~/components/user/types';
 import {
   removeFeatureQueries,
@@ -1220,7 +1221,7 @@ function SignupsTab({
                         depth={false}
                         onClick={() => {
                           const name = user
-                            ? user.nickname || user.username
+                            ? DisplayName(user, undefined, orgId)
                             : `User #${signup.user}`;
                           setRemoveSignup({ signup, name });
                         }}

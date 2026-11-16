@@ -10,6 +10,7 @@ import {
   TableRow,
 } from '~/components/ui/table';
 import { PositionEnum } from '~/components/user';
+import { DisplayName } from '~/components/user/avatar';
 import { RolePositions } from '~/components/user/positions';
 import type { UserType } from '~/components/user/types';
 import { UserAvatar } from '~/components/user/UserAvatar';
@@ -79,7 +80,7 @@ export const CaptainTable: React.FC = () => {
                         size="md"
                         className="hover:ring-2 hover:ring-primary transition-all"
                       />
-                      <span>{user.nickname || user.username}</span>
+                      <span>{DisplayName(user)}</span>
                     </div>
                   </PlayerPopover>
                 </TableCell>

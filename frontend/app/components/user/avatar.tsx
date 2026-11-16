@@ -7,8 +7,6 @@ type DisplayNameable = {
   username?: string | null;
   discordNickname?: string | null;
   orgNicknames?: Record<number, string | null>;
-  // Ignored; removed with the site nickname in P2-T20.
-  nickname?: string | null;
 };
 
 /**

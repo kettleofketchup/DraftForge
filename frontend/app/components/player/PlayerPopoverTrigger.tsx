@@ -1,5 +1,6 @@
 import React, { useCallback, useRef } from 'react';
 import { useSharedPopoverActions } from '~/components/ui/shared-popover-context';
+import { DisplayName } from '~/components/user/avatar';
 import type { UserType } from '~/components/user/types';
 import { cn } from '~/lib/utils';
 import { useLeagueStore } from '~/store/leagueStore';
@@ -30,7 +31,7 @@ export const PlayerPopoverTrigger: React.FC<PlayerPopoverTriggerProps> = ({
   const currentOrg = useOrgStore((s) => s.currentOrg);
   const currentLeague = useLeagueStore((s) => s.currentLeague);
   const triggerRef = useRef<HTMLSpanElement>(null);
-  const playerName = player.nickname || player.username || 'Unknown';
+  const playerName = DisplayName(player);
 
   const handleMouseEnter = useCallback(() => {
     if (triggerRef.current) {
