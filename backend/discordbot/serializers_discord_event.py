@@ -3,7 +3,7 @@ from rest_framework import serializers
 from app.display_names import first_name
 from app.legacy_fields import LegacyNullField
 from app.models import CustomUser
-from org.display_names import org_nicknames_public
+from org.display_names import guild_nicknames, org_nicknames_public
 from user.querysets import with_user_profiles
 
 from .models import (
@@ -80,6 +80,7 @@ class DiscordEventLogSerializer(serializers.ModelSerializer):
     # once per response in DiscordEventDetailSerializer.to_representation.
     nickname = LegacyNullField()
     discordNickname = serializers.SerializerMethodField()
+    guildNickname = serializers.SerializerMethodField()
     username = serializers.SerializerMethodField()
     avatar = serializers.SerializerMethodField()
 
@@ -90,6 +91,15 @@ class DiscordEventLogSerializer(serializers.ModelSerializer):
     def get_discordNickname(self, obj: DiscordEventLog) -> str | None:
         user = self._resolved_user(obj)
         return user.discordNickname if user else None
+
+    def get_guildNickname(self, obj: DiscordEventLog) -> str | None:
+        user = self._resolved_user(obj)
+        if user is None:
+            return None
+        nick_map: dict[int, str | None] = self.context.get(
+            "discord_guild_nickname_map", {}
+        )
+        return nick_map.get(user.pk)
 
     def get_username(self, obj: DiscordEventLog) -> str | None:
         user = self._resolved_user(obj)
@@ -111,6 +121,7 @@ class DiscordEventLogSerializer(serializers.ModelSerializer):
             "discord_username",
             "nickname",
             "discordNickname",
+            "guildNickname",
             "username",
             "avatar",
             "message_id",
@@ -183,9 +194,14 @@ class DiscordEventDetailSerializer(serializers.ModelSerializer):
                 CustomUser.objects.filter(discordId__in=discord_ids)
             )
             user_map = {user.discordId: user for user in users}
+        org_id = instance.event.organization_id
+        nicknames_public = org_nicknames_public(org_id)
         self.context["discord_user_map"] = user_map
-        self.context["guild_nicknames_public"] = org_nicknames_public(
-            instance.event.organization_id
+        self.context["guild_nicknames_public"] = nicknames_public
+        self.context["discord_guild_nickname_map"] = (
+            guild_nicknames(org_id, (user.pk for user in user_map.values()))
+            if nicknames_public
+            else {}
         )
         return super().to_representation(instance)
 

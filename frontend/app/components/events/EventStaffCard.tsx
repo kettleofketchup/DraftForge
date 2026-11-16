@@ -20,7 +20,7 @@ import { useDisplayOrgId } from '~/hooks/useDisplayOrgId';
 import { useEventActionMutation } from '~/hooks/useEvent';
 import { extractApiError } from '~/lib/apiError';
 import { getLogger } from '~/lib/logger';
-import { orgRowDisplayName } from '~/lib/userDisplayName';
+import { displayNameById, orgRowDisplayName } from '~/lib/userDisplayName';
 
 const log = getLogger('EventStaffCard');
 
@@ -52,7 +52,9 @@ function staffKey(state: StaffState): string {
 }
 
 function displayName(user: EventStaffUser, orgId: number | null): string {
-  return orgRowDisplayName(user, orgId);
+  const fromRow = orgRowDisplayName(user, orgId);
+  if (user.guildNickname !== undefined) return fromRow;
+  return displayNameById(user.pk, fromRow, orgId);
 }
 
 function findSearchedUser(

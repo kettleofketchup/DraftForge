@@ -372,6 +372,35 @@ describe('EventStaffCard drafts', () => {
       ),
     );
   });
+  it('names an otherwise unknown pick from the user cache', async () => {
+    useUserCacheStore.getState().upsert(
+      {
+        pk: 9,
+        username: 'nine',
+        discordNickname: 'NineGlobal',
+        guildNickname: 'NineServer',
+      } as never,
+      { orgId: 1 },
+    );
+    render(
+      <DisplayOrgProvider orgId={1}>
+        <EventStaffCard event={event} canEdit showPoints={false} />
+      </DisplayOrgProvider>,
+      { wrapper },
+    );
+
+    fireEvent.click(screen.getByTestId('event-helper-add-btn'));
+    fireEvent.click(await screen.findByTestId('stub-pick-9'));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('event-staff-card').textContent).toContain(
+        'NineServer',
+      ),
+    );
+    expect(screen.getByTestId('event-staff-card').textContent).not.toContain(
+      'User #9',
+    );
+  });
 });
 
 describe('EventStaffCard names', () => {
