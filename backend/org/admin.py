@@ -17,6 +17,7 @@ class OrgUserAdmin(admin.ModelAdmin):
     list_filter = ["organization"]
     search_fields = ["user__username", "user__nickname"]
     raw_id_fields = ["user", "organization"]
+    readonly_fields = ["guild_nickname"]
 
 
 @admin.register(OrgFeature)

@@ -12,7 +12,6 @@ from rest_framework.request import Request
 from app.auth import InternalServiceAuth, InternalServiceUser
 from app.models import Organization
 from app.tasks.discord_name_sync import sync_org_discord_names
-from config.celery import app as celery_app
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
@@ -105,6 +104,7 @@ def release_guild_sync_lock(guild_id: str) -> None:
 
 def _publish_org_name_sync(org_id: int) -> None:
     try:
+        celery_app = sync_org_discord_names.app
         transport = dict(celery_app.conf.broker_transport_options or {})
         transport.update(
             socket_connect_timeout=_BROKER_TIMEOUT_S, socket_timeout=_BROKER_TIMEOUT_S

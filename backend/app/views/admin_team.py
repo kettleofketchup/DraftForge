@@ -4,12 +4,15 @@ from django.core.cache import cache
 from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
+from django.utils import timezone as tz
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.request import Request
 from rest_framework.response import Response
 
 from app.cache_utils import invalidate_after_commit, invalidate_obj
+from app.functions.tournament import _serialize_tournament
 from app.models import (
     CustomUser,
     League,
@@ -21,6 +24,7 @@ from app.models import (
 )
 from app.permissions_org import (
     has_league_admin_access,
+    has_league_staff_access,
     has_org_admin_access,
     has_org_staff_access,
     is_org_owner,
@@ -30,8 +34,10 @@ from app.steam_accounts import (
     steam_account_id_conflict_payload,
     steam_account_id_holder,
 )
+from discordbot.services.member_names import normalise_name
 from league.models import LeagueUser
 from org.models import OrgUser
+from org.serializers import OrgUserSerializer
 from user.querysets import with_user_profiles
 
 # =============================================================================
@@ -41,7 +47,7 @@ from user.querysets import with_user_profiles
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
-def search_users(request):
+def search_users(request: Request) -> Response:
     """
     Search users by username, nickname, Discord names, or Steam ID.
 
@@ -161,7 +167,7 @@ def search_users(request):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
-def add_org_admin(request, org_id):
+def add_org_admin(request: Request, org_id: int) -> Response:
     """Add an admin to an organization. Requires owner or admin access."""
     try:
         org = Organization.objects.get(pk=org_id)
@@ -216,7 +222,7 @@ def add_org_admin(request, org_id):
 
 @api_view(["DELETE"])
 @permission_classes([IsAuthenticated])
-def remove_org_admin(request, org_id, user_id):
+def remove_org_admin(request: Request, org_id: int, user_id: int) -> Response:
     """Remove an admin from an organization. Requires owner access."""
     try:
         org = Organization.objects.get(pk=org_id)
@@ -257,7 +263,7 @@ def remove_org_admin(request, org_id, user_id):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
-def add_org_staff(request, org_id):
+def add_org_staff(request: Request, org_id: int) -> Response:
     """Add staff to an organization. Requires owner or admin access."""
     try:
         org = Organization.objects.get(pk=org_id)
@@ -305,7 +311,7 @@ def add_org_staff(request, org_id):
 
 @api_view(["DELETE"])
 @permission_classes([IsAuthenticated])
-def remove_org_staff(request, org_id, user_id):
+def remove_org_staff(request: Request, org_id: int, user_id: int) -> Response:
     """Remove staff from an organization. Requires owner or admin access."""
     try:
         org = Organization.objects.get(pk=org_id)
@@ -345,7 +351,7 @@ def remove_org_staff(request, org_id, user_id):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
-def transfer_org_ownership(request, org_id):
+def transfer_org_ownership(request: Request, org_id: int) -> Response:
     """Transfer organization ownership. Requires owner or superuser access."""
     try:
         org = Organization.objects.get(pk=org_id)
@@ -426,7 +432,7 @@ def transfer_org_ownership(request, org_id):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
-def add_league_admin(request, league_id):
+def add_league_admin(request: Request, league_id: int) -> Response:
     """Add an admin to a league. Requires org admin access."""
     try:
         league = League.objects.select_related("organization").get(pk=league_id)
@@ -478,7 +484,7 @@ def add_league_admin(request, league_id):
 
 @api_view(["DELETE"])
 @permission_classes([IsAuthenticated])
-def remove_league_admin(request, league_id, user_id):
+def remove_league_admin(request: Request, league_id: int, user_id: int) -> Response:
     """Remove an admin from a league. Requires org admin access."""
     try:
         league = League.objects.select_related("organization").get(pk=league_id)
@@ -523,7 +529,7 @@ def remove_league_admin(request, league_id, user_id):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
-def add_league_staff(request, league_id):
+def add_league_staff(request: Request, league_id: int) -> Response:
     """Add staff to a league. Requires org admin or league admin access."""
     try:
         league = League.objects.select_related("organization").get(pk=league_id)
@@ -570,7 +576,7 @@ def add_league_staff(request, league_id):
 
 @api_view(["DELETE"])
 @permission_classes([IsAuthenticated])
-def remove_league_staff(request, league_id, user_id):
+def remove_league_staff(request: Request, league_id: int, user_id: int) -> Response:
     """Remove staff from a league. Requires org admin or league admin access."""
     try:
         league = League.objects.select_related("organization").get(pk=league_id)
@@ -613,38 +619,60 @@ def remove_league_staff(request, league_id, user_id):
 # =============================================================================
 
 
-def _resolve_user(data, org=None):
-    """
-    Resolve a user from user_id or discord_id. Returns User or error Response.
+def _find_member(members: list[dict], discord_id: str) -> dict | None:
+    for m in members:
+        if m.get("user", {}).get("id") == discord_id:
+            return m
+    return None
 
-    When discord_id is provided, the backend looks up the Discord member data
-    from its own Red22is cache (trust boundary -- never trust client-supplied data).
+
+def _cached_guild_member(
+    org: Organization | None, discord_id: str | None
+) -> dict | None:
+    if not org or not org.discord_server_id or not discord_id:
+        return None
+    members = cache.get(f"discord_members_search_{org.discord_server_id}") or []
+    return _find_member(members, discord_id)
+
+
+def _member_nick(member: dict | None) -> str | None:
+    if member is None:
+        return None
+    return normalise_name(member.get("nick"))
+
+
+def _resolve_user(
+    data: dict, org: Organization | None = None
+) -> tuple[CustomUser, dict | None] | Response:
+    """
+    Resolve a user from user_id or discord_id, plus their cached guild member.
+
+    Discord member data comes from the backend's own cache, never the client.
+    No Discord fetch is made; a cold cache yields ``None`` for the member.
     """
     user_id = data.get("user_id")
     discord_id = data.get("discord_id")
 
     if user_id:
         try:
-            return CustomUser.objects.get(pk=user_id)
+            user = CustomUser.objects.get(pk=user_id)
         except CustomUser.DoesNotExist:
             return Response(
                 {"error": "User not found"}, status=status.HTTP_404_NOT_FOUND
             )
+        return user, _cached_guild_member(org, user.discordId)
     elif discord_id:
-        # Check if user already exists with this Discord ID
         existing = CustomUser.objects.filter(discordId=discord_id).first()
         if existing:
-            return existing
+            return existing, _cached_guild_member(org, discord_id)
 
-        # Look up Discord data from our own cache (not client-supplied)
         if not org or not org.discord_server_id:
             return Response(
                 {"error": "Cannot resolve Discord user without org Discord server"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        cache_key = f"discord_members_search_{org.discord_server_id}"
-        members = cache.get(cache_key)
+        members = cache.get(f"discord_members_search_{org.discord_server_id}")
         if not members:
             return Response(
                 {
@@ -654,25 +682,18 @@ def _resolve_user(data, org=None):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        # Find the member in the cached list
-        discord_member = None
-        for m in members:
-            if m.get("user", {}).get("id") == discord_id:
-                discord_member = m
-                break
-
+        discord_member = _find_member(members, discord_id)
         if not discord_member:
             return Response(
                 {"error": "Discord member not found in cache"},
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        # Auto-create from cached Discord data
         positions = PositionsModel.objects.create()
         user = CustomUser(positions=positions)
         user.createFromDiscordData(discord_member)
         user.save()
-        return user
+        return user, discord_member
     else:
         return Response(
             {"error": "user_id or discord_id is required"},
@@ -682,7 +703,7 @@ def _resolve_user(data, org=None):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
-def add_org_member(request, org_id):
+def add_org_member(request: Request, org_id: int) -> Response:
     """Add a member to an organization. Creates OrgUser record."""
     org = get_object_or_404(Organization, pk=org_id)
 
@@ -692,12 +713,17 @@ def add_org_member(request, org_id):
             status=status.HTTP_403_FORBIDDEN,
         )
 
-    user = _resolve_user(request.data, org=org)
-    if isinstance(user, Response):
-        return user  # Error response
+    result = _resolve_user(request.data, org=org)
+    if isinstance(result, Response):
+        return result
+    user, member = result
 
     try:
-        OrgUser.objects.create(user=user, organization=org)
+        with transaction.atomic():
+            OrgUser.objects.create(
+                user=user, organization=org, guild_nickname=_member_nick(member)
+            )
+            invalidate_after_commit(user)
     except IntegrityError:
         return Response(
             {"error": "User is already a member of this organization"},
@@ -715,7 +741,7 @@ def add_org_member(request, org_id):
 
 @api_view(["PATCH"])
 @permission_classes([IsAuthenticated])
-def update_org_user(request, org_id, org_user_id):
+def update_org_user(request: Request, org_id: int, org_user_id: int) -> Response:
     """Update an OrgUser and/or its underlying CustomUser.
 
     OrgUser fields (e.g. mmr) are updated directly.
@@ -748,8 +774,6 @@ def update_org_user(request, org_id, org_user_id):
     # up wherever org_user_mmr is read (event signups, etc.). approve_signup
     # already does this; mirror it here.
     if "mmr" in request.data:
-        from django.utils import timezone as tz
-
         org_user.has_active_dota_mmr = True
         org_user.dota_mmr_last_verified = tz.now()
         for f in ("has_active_dota_mmr", "dota_mmr_last_verified"):
@@ -757,7 +781,7 @@ def update_org_user(request, org_id, org_user_id):
                 org_updated.append(f)
 
     # --- Base CustomUser fields ---
-    USER_FIELDS = {"nickname", "steam_account_id", "guildNickname"}
+    USER_FIELDS = {"nickname", "steam_account_id"}
     user = org_user.user
     user_updated = False
     for field in USER_FIELDS:
@@ -814,14 +838,12 @@ def update_org_user(request, org_id, org_user_id):
             *(lu.league for lu in league_users),
         )
 
-    from org.serializers import OrgUserSerializer
-
     return Response(OrgUserSerializer(org_user).data)
 
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
-def add_league_member(request, league_id):
+def add_league_member(request: Request, league_id: int) -> Response:
     """Add a member to a league. Creates LeagueUser (and OrgUser if needed)."""
     league = get_object_or_404(
         League.objects.select_related("organization"), pk=league_id
@@ -833,16 +855,22 @@ def add_league_member(request, league_id):
             status=status.HTTP_403_FORBIDDEN,
         )
 
-    user = _resolve_user(request.data, org=league.organization)
-    if isinstance(user, Response):
-        return user
+    result = _resolve_user(request.data, org=league.organization)
+    if isinstance(result, Response):
+        return result
+    user, member = result
 
     try:
         with transaction.atomic():
             org_user, _ = OrgUser.objects.get_or_create(
                 user=user, organization=league.organization
             )
+            nick = _member_nick(member)
+            if org_user.guild_nickname is None and nick is not None:
+                org_user.guild_nickname = nick
+                org_user.save(update_fields=["guild_nickname"])
             LeagueUser.objects.create(user=user, org_user=org_user, league=league)
+            invalidate_after_commit(user)
     except IntegrityError:
         return Response(
             {"error": "User is already a member of this league"},
@@ -860,7 +888,7 @@ def add_league_member(request, league_id):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
-def add_tournament_member(request, tournament_id):
+def add_tournament_member(request: Request, tournament_id: int) -> Response:
     """Add a member to a tournament's users M2M."""
     tournament = get_object_or_404(
         Tournament.objects.select_related("league__organization"), pk=tournament_id
@@ -869,8 +897,6 @@ def add_tournament_member(request, tournament_id):
     # Check access via league staff (includes org staff + league-specific staff)
     has_access = False
     if tournament.league:
-        from app.permissions_org import has_league_staff_access
-
         has_access = has_league_staff_access(request.user, tournament.league)
     if not has_access and not request.user.is_superuser:
         return Response(
@@ -879,9 +905,10 @@ def add_tournament_member(request, tournament_id):
         )
 
     org = tournament.league.organization if tournament.league else None
-    user = _resolve_user(request.data, org=org)
-    if isinstance(user, Response):
-        return user
+    result = _resolve_user(request.data, org=org)
+    if isinstance(result, Response):
+        return result
+    user, _ = result
 
     if tournament.users.filter(pk=user.pk).exists():
         return Response(
@@ -898,8 +925,6 @@ def add_tournament_member(request, tournament_id):
 
     # Refresh to include the newly added user in serialization
     tournament.refresh_from_db()
-    from app.functions.tournament import _serialize_tournament
-
     return Response(
         {"status": "added", "tournament": _serialize_tournament(tournament)}
     )

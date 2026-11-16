@@ -16,6 +16,8 @@ from .models import CustomUser, HeroDraft, HeroDraftEvent
 
 class CustomUserAdmin(admin.ModelAdmin):
     list_display = ["username", "steamid", "is_superuser", "is_staff"]
+    readonly_fields = ["discordNickname"]
+    exclude = ["guildNickname"]
 
     def get_deleted_objects(
         self, objs: Sequence[CustomUser] | QuerySet[CustomUser], request: HttpRequest
