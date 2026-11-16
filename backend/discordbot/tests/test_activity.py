@@ -254,6 +254,7 @@ class DraftActivityTests(ClearIntentsMixin, TestCase):
 
     @patch("discordbot.activity.discord_json")
     def test_team_session_resolves_tournament(self, discord):
+        HeroDraft.objects.filter(pk=self.hero.pk).update(state=HeroDraftState.COMPLETED)
         self.binding.draft = None
         self.binding.team_draft = self.team_draft
         self.binding.save()
@@ -325,7 +326,7 @@ class DraftActivityTests(ClearIntentsMixin, TestCase):
                 "scope": "tournament",
                 "initial_kind": "hero",
                 "initial_draft_id": self.hero.pk,
-                "source": "channel_last",
+                "source": "involves_me",
                 "role": "captain",
                 "notice": False,
                 "intent_id": None,
@@ -664,6 +665,22 @@ class DraftActivityTests(ClearIntentsMixin, TestCase):
         )
         self.assertEqual(started["source"], "involves_me")
         self.assertEqual(started["role"], "captain")
+
+    @patch("discordbot.activity.discord_json")
+    def test_involves_me_prefers_my_hero_draft_over_unfinished_team_draft(
+        self, discord
+    ):
+        for state in ("pending", "drafting"):
+            with self.subTest(state=state):
+                Draft.objects.filter(pk=self.team_draft.pk).update(state=state)
+                self.binding.draft = self.other
+                self.binding.save()
+                response, started = self.first_session(discord, f"i-stale-{state}")
+                self.assertEqual(
+                    response.data["initial_view"],
+                    {"kind": "hero", "id": self.hero.pk},
+                )
+                self.assertEqual(started["source"], "involves_me")
 
     @patch("discordbot.activity.discord_json")
     def test_finished_match_does_not_count_as_involves_me(self, discord):

@@ -220,9 +220,11 @@ def resolve_initial_view(
             )
         notice = notice_for(intent.kind, intent.draft_id, intent.intent_id)
     involved = live_drafts_involving(identity)
-    if len(involved) == 1:
+    heroes = [ref for ref in involved if ref["kind"] == "hero"]
+    preferred = heroes if len(heroes) == 1 else involved
+    if len(preferred) == 1:
         return InitialView(
-            view=involved[0], source="involves_me", launch_intent=None, notice=notice
+            view=preferred[0], source="involves_me", launch_intent=None, notice=notice
         )
     channel = _channel_draft(identity)
     if channel is not None:
