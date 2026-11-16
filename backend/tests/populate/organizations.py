@@ -59,9 +59,7 @@ def populate_organizations_and_leagues(force=False):
     test_league = League.objects.filter(steam_league_id=TEST_STEAM_LEAGUE_ID).first()
 
     if dtx_org and dtx_league and test_org and test_league and not force:
-        print(
-            "Organizations and leagues already exist. " "Use force=True to recreate."
-        )
+        print("Organizations and leagues already exist. Use force=True to recreate.")
         return dtx_org, test_org
 
     # Create or update DTX Organization
