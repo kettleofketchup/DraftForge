@@ -186,7 +186,9 @@ function BracketFlowInner({
   const [nodes, setNodes, onNodesChange] = useNodesState<MatchNodeType>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [dividerY, setDividerY] = useState<number>(0);
-  const layoutCompleteRef = useRef(false);
+  const nodesRef = useRef<MatchNodeType[]>([]);
+  nodesRef.current = nodes;
+  const [layoutKey, setLayoutKey] = useState<string | null>(null);
 
   // Selected match for stats modal
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
@@ -261,6 +263,7 @@ function BracketFlowInner({
     if (matches.length === 0) {
       setNodes([]);
       setEdges([]);
+      setLayoutKey(null);
       return;
     }
 
@@ -497,7 +500,12 @@ function BracketFlowInner({
 
       setNodes(allNodes as MatchNodeType[]);
       setEdges(combinedEdges);
-      layoutCompleteRef.current = true;
+      setLayoutKey(
+        allNodes
+          .map((n) => n.id)
+          .sort()
+          .join('|'),
+      );
     };
 
     layoutBracket();
@@ -505,7 +513,7 @@ function BracketFlowInner({
 
   // Left-align viewport after layout is complete
   useEffect(() => {
-    if (nodes.length > 0 && layoutCompleteRef.current) {
+    if (layoutKey) {
       // Small delay to ensure ReactFlow has rendered
       const timer = setTimeout(() => {
         if (embedded) {
@@ -513,7 +521,7 @@ function BracketFlowInner({
           return;
         }
         // Calculate bounds of match nodes only (exclude divider)
-        const matchNodes = nodes.filter((n) => n.type === 'match');
+        const matchNodes = nodesRef.current.filter((n) => n.type === 'match');
         if (matchNodes.length === 0) return;
 
         const minX = Math.min(...matchNodes.map((n) => n.position.x));
@@ -543,7 +551,7 @@ function BracketFlowInner({
 
       return () => clearTimeout(timer);
     }
-  }, [nodes, setViewport, fitView, embedded]);
+  }, [layoutKey, setViewport, fitView, embedded]);
 
   const handleNodeClick = useCallback(
     (_: React.MouseEvent, node: Node) => {
