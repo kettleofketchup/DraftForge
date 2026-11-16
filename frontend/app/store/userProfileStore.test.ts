@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 import { useUserProfileStore } from './userProfileStore';
 import type { UserProfileEntry } from './userProfileTypes';
@@ -24,7 +24,9 @@ describe('userProfileStore', () => {
 
   it('upserts a profile entry', () => {
     useUserProfileStore.getState().upsert(entry(1, 'Alice'));
-    expect(useUserProfileStore.getState().entities[1]?.base.nickname).toBe('Alice');
+    expect(useUserProfileStore.getState().entities[1]?.base.nickname).toBe(
+      'Alice',
+    );
   });
 
   it('selectBase returns the base profile', () => {
@@ -37,9 +39,23 @@ describe('userProfileStore', () => {
     const e = entry(3, 'Carol');
     useUserProfileStore.getState().upsert(e);
     const first = useUserProfileStore.getState().entities[3];
-    useUserProfileStore.getState().upsert({ ...e });   // same content
+    useUserProfileStore.getState().upsert({ ...e }); // same content
     const second = useUserProfileStore.getState().entities[3];
-    expect(second).toBe(first);   // referential equality preserved
+    expect(second).toBe(first); // referential equality preserved
+  });
+
+  it('base equality compares the avatar only', () => {
+    const e = entry(5, 'Old');
+    useUserProfileStore.getState().upsert(e);
+    const first = useUserProfileStore.getState().entities[5];
+    useUserProfileStore
+      .getState()
+      .upsert({ ...e, base: { nickname: 'New', avatar: null } });
+    expect(useUserProfileStore.getState().entities[5]).toBe(first);
+    useUserProfileStore
+      .getState()
+      .upsert({ ...e, base: { nickname: 'Old', avatar: 'h' } });
+    expect(useUserProfileStore.getState().entities[5]?.base.avatar).toBe('h');
   });
 
   it('reset clears all entries', () => {

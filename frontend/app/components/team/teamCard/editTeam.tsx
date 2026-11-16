@@ -120,7 +120,6 @@ export const TeamEditForm: React.FC<Props> = ({ user, form, setForm }) => {
   return (
     <>
       {/* {inputView('username', 'Username: ')} */}
-      {inputView('nickname', 'Nickname: ')}
       {inputView('mmr', 'MMR: ', 'number')}
       {inputView('position', 'Position: ')}
       {inputView('steam_account_id', 'Friend ID: ', 'number')}

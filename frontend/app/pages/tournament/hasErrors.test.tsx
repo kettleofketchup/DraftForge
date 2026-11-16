@@ -271,8 +271,8 @@ describe('hasErrors edit user carries the scope-gating link (finding 4)', () => 
       const link = resolveOrgUserLink(source, CTX);
       expect(user.orgUserPk).toBe(link);
       updateOrgUser.mockResolvedValue({ pk: 10, username: 'incomplete' });
-      await dispatchPatch(user as UserClassType, scope, { nickname: 'x' });
-      expect(updateOrgUser).toHaveBeenCalledWith(8, link, { nickname: 'x' });
+      await dispatchPatch(user as UserClassType, scope, { mmr: 1234 });
+      expect(updateOrgUser).toHaveBeenCalledWith(8, link, { mmr: 1234 });
     },
   );
 });

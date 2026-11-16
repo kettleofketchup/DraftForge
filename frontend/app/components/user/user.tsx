@@ -94,8 +94,6 @@ export class User implements UserClassType {
       throw new Error('Guild member is missing user info.');
     }
 
-    this.nickname = member.nick ?? member.user.global_name ?? null;
-
     this.discordId = member.user.id;
     this.username = member.user.username;
     this.avatar = member.user.avatar ?? undefined;

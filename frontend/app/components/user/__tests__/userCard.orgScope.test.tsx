@@ -95,25 +95,20 @@ describe('UserCard org-scoped edit for tournament players', () => {
   });
 
   it('reopens with the saved values after an org-scoped save', async () => {
-    updateOrgUser.mockResolvedValue({ ...tournamentUser, nickname: 'Renamed' });
+    updateOrgUser.mockResolvedValue({ ...tournamentUser, mmr: 4300 });
     renderCard(ORG_PK);
     fireEvent.click(screen.getByTestId('edit-user-btn'));
-    fireEvent.change(screen.getByTestId('edit-user-nickname'), {
-      target: { value: 'Renamed' },
+    fireEvent.change(screen.getByTestId('edit-user-mmr'), {
+      target: { value: '4300' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
     await waitFor(() =>
-      expect(screen.queryByTestId('edit-user-nickname')).toBeNull(),
+      expect(screen.queryByTestId('edit-user-mmr')).toBeNull(),
     );
-    expect(updateOrgUser).toHaveBeenCalledWith(ORG_PK, 77, {
-      nickname: 'Renamed',
-    });
+    expect(updateOrgUser).toHaveBeenCalledWith(ORG_PK, 77, { mmr: 4300 });
 
     fireEvent.click(screen.getByTestId('edit-user-btn'));
-    expect(screen.getByTestId('edit-user-nickname')).toHaveProperty(
-      'value',
-      'Renamed',
-    );
+    expect(screen.getByTestId('edit-user-mmr')).toHaveProperty('value', '4300');
   });
 
   it('hides the MMR field without org context', () => {
@@ -193,7 +188,8 @@ describe('UserCard with a stale store org (finding 3)', () => {
       viewer(true);
       renderStale(orgId);
       fireEvent.click(screen.getByTestId('edit-user-btn'));
-      expect(screen.getByTestId('edit-user-nickname')).toBeTruthy();
+      expect(screen.getByTestId('edit-user-steam_account_id')).toBeTruthy();
+      expect(screen.queryByTestId('edit-user-nickname')).toBeNull();
       expect(screen.queryByTestId('edit-user-mmr')).toBeNull();
     },
   );
@@ -230,10 +226,10 @@ function setLeague(pk: number, orgPk: number) {
   });
 }
 
-async function saveNickname(nickname: string) {
+async function saveMmr(mmr: string) {
   fireEvent.click(screen.getByTestId('edit-user-btn'));
-  fireEvent.change(screen.getByTestId('edit-user-nickname'), {
-    target: { value: nickname },
+  fireEvent.change(screen.getByTestId('edit-user-mmr'), {
+    target: { value: mmr },
   });
   fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
   await waitFor(() =>
@@ -310,21 +306,19 @@ describe('UserCard edit for cache entries (finding 4)', () => {
     updateOrgUser.mockResolvedValue({
       pk: 51,
       username: 'lg',
-      nickname: 'New Nick',
+      mmr: 2100,
     });
     renderEntryCard(entry, ORG_PK, LEAGUE_PK);
     fireEvent.click(screen.getByTestId('edit-user-btn'));
     expect(screen.getByLabelText(/Org MMR/)).toBe(
       screen.getByTestId('edit-user-mmr'),
     );
-    fireEvent.change(screen.getByTestId('edit-user-nickname'), {
-      target: { value: 'New Nick' },
+    fireEvent.change(screen.getByTestId('edit-user-mmr'), {
+      target: { value: '2100' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
     await waitFor(() => expect(updateOrgUser).toHaveBeenCalled());
-    expect(updateOrgUser).toHaveBeenCalledWith(ORG_PK, 61, {
-      nickname: 'New Nick',
-    });
+    expect(updateOrgUser).toHaveBeenCalledWith(ORG_PK, 61, { mmr: 2100 });
   });
 
   it('a leagueData-only link opens league scope, does not prefill MMR, and saves', async () => {
@@ -341,13 +335,13 @@ describe('UserCard edit for cache entries (finding 4)', () => {
     updateOrgUser.mockResolvedValue({
       pk: 52,
       username: 'lonly',
-      nickname: 'New Nick',
+      mmr: 1300,
     });
     renderEntryCard(entry, ORG_PK, LEAGUE_PK);
     fireEvent.click(screen.getByTestId('edit-user-btn'));
     expect(screen.getByTestId('edit-user-mmr')).toHaveProperty('value', '');
-    fireEvent.change(screen.getByTestId('edit-user-nickname'), {
-      target: { value: 'New Nick' },
+    fireEvent.change(screen.getByTestId('edit-user-mmr'), {
+      target: { value: '1300' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
     await waitFor(() =>
@@ -357,9 +351,7 @@ describe('UserCard edit for cache entries (finding 4)', () => {
       ).toBeGreaterThan(0),
     );
     expect(toast.error).not.toHaveBeenCalled();
-    expect(updateOrgUser).toHaveBeenCalledWith(ORG_PK, 41, {
-      nickname: 'New Nick',
-    });
+    expect(updateOrgUser).toHaveBeenCalledWith(ORG_PK, 41, { mmr: 1300 });
   });
 
   it('a leagueData link for a different league falls back to global scope', () => {
@@ -375,7 +367,7 @@ describe('UserCard edit for cache entries (finding 4)', () => {
     });
     renderEntryCard(entry, undefined, LEAGUE_PK);
     fireEvent.click(screen.getByTestId('edit-user-btn'));
-    expect(screen.getByTestId('edit-user-nickname')).toBeTruthy();
+    expect(screen.getByTestId('edit-user-steam_account_id')).toBeTruthy();
     expect(screen.queryByTestId('edit-user-mmr')).toBeNull();
   });
 });
@@ -457,15 +449,15 @@ describe('UserCard edit user carries the scope-gating link', () => {
       updateOrgUser.mockResolvedValue({
         pk: source.pk,
         username: 'u',
-        nickname: 'x',
+        mmr: 1234,
       });
       renderEntryCard(user, CTX.organizationId, CTX.leagueId);
-      await saveNickname('xx');
+      await saveMmr('1234');
       expect(toast.error).not.toHaveBeenCalled();
       expect(updateOrgUser).toHaveBeenCalledWith(
         8,
         resolveOrgUserLink(source as UserEntry, CTX),
-        { nickname: 'xx' },
+        { mmr: 1234 },
       );
     },
   );

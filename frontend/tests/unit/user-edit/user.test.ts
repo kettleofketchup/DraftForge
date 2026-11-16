@@ -19,11 +19,11 @@ describe('User.setFromGuildMember', () => {
     expect(user.guildNickname).toBeUndefined();
   });
 
-  it('sets discordNickname from global_name and seeds nickname', () => {
+  it('sets discordNickname from global_name and leaves nickname unset', () => {
     const user = new User({} as never);
     user.setFromGuildMember(member);
     expect(user.discordNickname).toBe('GwaihirTheWindlord');
-    expect(user.nickname).toBe('DragonClaw');
+    expect(user.nickname).toBeUndefined();
     expect(user.username).toBe('dragonclaw_user');
     expect(user.discordId).toBe('123456789012345678');
   });
