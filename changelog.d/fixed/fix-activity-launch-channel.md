@@ -1,1 +1,1 @@
-- Keep a Discord Activity that people are still using from being moved to another draft when someone launches the next game from the same voice channel, name the destination channel in the launch reply, and follow the latest pick in the team draft Activity.
+- Launching a draft from Discord no longer moves anyone else's Activity: everyone in an Activity can switch between the tournament's team draft, live and recently finished hero drafts and the bracket, or open the page in their browser, and the team draft Activity follows the latest pick.
