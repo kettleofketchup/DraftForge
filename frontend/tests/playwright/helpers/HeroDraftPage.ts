@@ -205,9 +205,7 @@ export class HeroDraftPage {
   /**
    * Fetch draft state directly from API for debugging.
    */
-  async fetchDraftStateFromAPI(
-    draftId: number,
-  ): Promise<{
+  async fetchDraftStateFromAPI(draftId: number): Promise<{
     state: string;
     teams: Array<{ is_ready: boolean; team_name: string }>;
   } | null> {
