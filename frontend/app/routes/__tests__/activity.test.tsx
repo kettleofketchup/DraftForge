@@ -549,6 +549,78 @@ describe('Discord Activity route', () => {
     expect(mocks.fetchActivityDrafts).not.toHaveBeenCalled();
   });
 
+  it('upgrades a legacy first handshake to tournament scope in place', async () => {
+    mocks.initializeDiscord
+      .mockResolvedValueOnce(legacySession())
+      .mockResolvedValueOnce(heroSession({ token: 't2', initial_view: null }));
+    render(<DraftActivity />);
+    await heroOnScreen(156);
+    expect(mocks.fetchActivityDrafts).not.toHaveBeenCalled();
+
+    await expect(refreshActivityCredential()).resolves.toBe(true);
+    await waitFor(() =>
+      expect(mocks.fetchActivityDrafts).toHaveBeenCalledTimes(1),
+    );
+    await heroOnScreen(156);
+    expect(screen.getByTestId('activity-header')).toBeInTheDocument();
+    expect(screen.queryByTestId('bracket')).not.toBeInTheDocument();
+    expect(
+      screen.queryByText('This draft is no longer part of the tournament.'),
+    ).not.toBeInTheDocument();
+    expect(postedTriggers()).not.toContain('scope_lost');
+  });
+
+  it('upgrades a legacy session without a tournament without losing scope', async () => {
+    mocks.initializeDiscord
+      .mockResolvedValueOnce(legacySession({ tournament_id: null }))
+      .mockResolvedValueOnce(heroSession({ token: 't2', initial_view: null }));
+    render(<DraftActivity />);
+    await heroOnScreen(156);
+
+    await expect(refreshActivityCredential()).resolves.toBe(true);
+    await waitFor(() =>
+      expect(mocks.fetchActivityDrafts).toHaveBeenCalledTimes(1),
+    );
+    await heroOnScreen(156);
+    expect(postedTriggers()).not.toContain('scope_lost');
+  });
+
+  it('rejects a legacy team pin whose draft is not the tournament draft', async () => {
+    mocks.initializeDiscord.mockResolvedValue(
+      legacySession({ kind: 'team', draft_id: 8 }),
+    );
+    render(<DraftActivity />);
+    expect(await screen.findByTestId('activity-error')).toBeInTheDocument();
+    expect(screen.queryByTestId('team-draft')).not.toBeInTheDocument();
+  });
+
+  it('rejects a legacy team pin when the tournament has no draft', async () => {
+    mocks.get.mockResolvedValue({ data: { pk: 12, draft: null } });
+    mocks.initializeDiscord.mockResolvedValue(
+      legacySession({ kind: 'team', draft_id: 9 }),
+    );
+    render(<DraftActivity />);
+    expect(await screen.findByTestId('activity-error')).toBeInTheDocument();
+    expect(screen.queryByTestId('team-draft')).not.toBeInTheDocument();
+  });
+
+  it('rejects a legacy team pin without a tournament', async () => {
+    mocks.initializeDiscord.mockResolvedValue(
+      legacySession({ kind: 'team', draft_id: 9, tournament_id: null }),
+    );
+    render(<DraftActivity />);
+    expect(await screen.findByTestId('activity-error')).toBeInTheDocument();
+    expect(mocks.get).not.toHaveBeenCalled();
+  });
+
+  it('opens a legacy hero pin when the tournament fails to load', async () => {
+    mocks.get.mockRejectedValue(new Error('500'));
+    mocks.initializeDiscord.mockResolvedValue(legacySession());
+    render(<DraftActivity />);
+    await heroOnScreen(156);
+    expect(screen.queryByTestId('activity-error')).not.toBeInTheDocument();
+  });
+
   it('shows the connect error when the handshake fails', async () => {
     mocks.initializeDiscord.mockRejectedValue(new Error('nope'));
     render(<DraftActivity />);

@@ -46,6 +46,25 @@ async function loadTournament(id: number): Promise<TournamentType> {
   return tournament;
 }
 
+async function loadInitialTournament(
+  id: number | null,
+  initial: ActivityView,
+): Promise<void> {
+  const unavailable = new Error('The configured team draft is unavailable.');
+  if (id === null) {
+    if (initial.kind === 'team') throw unavailable;
+    return;
+  }
+  try {
+    const tournament = await loadTournament(id);
+    if (initial.kind === 'team' && tournament.draft?.pk !== initial.id)
+      throw unavailable;
+  } catch (err) {
+    if (initial.kind === 'team') throw err;
+    log.warn('activity_tournament_load_failed', { error: err });
+  }
+}
+
 export default function DraftActivity() {
   const [scope, setScope] = useState<Scope | null>(null);
   const [tournamentId, setTournamentId] = useState<number | null>(null);
@@ -84,12 +103,15 @@ export default function DraftActivity() {
       useUserStore.getState().setCurrentUser(result.user);
 
       if (credential.scope === 'draft') {
-        if (first && result.tournament_id !== null) {
-          await loadTournament(result.tournament_id);
+        if (first) {
+          await loadInitialTournament(result.tournament_id, legacy);
           if (cancelled) return;
+        } else {
+          log.warn('activity_scope_downgraded', { pin: legacy });
         }
-        if (!first) log.warn('activity_scope_downgraded', { pin: legacy });
         first = false;
+        currentTournament = result.tournament_id;
+        setTournamentId(result.tournament_id);
         setScope('draft');
         store().setView(legacy, 'initial');
         return;
@@ -98,31 +120,21 @@ export default function DraftActivity() {
       if (!first) {
         const next = result.tournament_id;
         if (next !== null && next !== currentTournament) {
-          log.warn('activity_tournament_changed', {
-            from: currentTournament,
-            to: next,
-          });
+          const from = currentTournament;
           currentTournament = next;
           setTournamentId(next);
-          store().markScopeLost();
+          if (from !== null) {
+            log.warn('activity_tournament_changed', { from, to: next });
+            store().markScopeLost();
+          }
         }
         setScope('tournament');
         return;
       }
 
       const initial = result.initial_view ?? legacy;
-      if (result.tournament_id !== null) {
-        try {
-          const tournament = await loadTournament(result.tournament_id);
-          if (initial.kind === 'team' && tournament.draft?.pk !== initial.id) {
-            throw new Error('The configured team draft is unavailable.');
-          }
-        } catch (err) {
-          if (initial.kind === 'team') throw err;
-          log.warn('activity_tournament_load_failed', { error: err });
-        }
-        if (cancelled) return;
-      }
+      await loadInitialTournament(result.tournament_id, initial);
+      if (cancelled) return;
       first = false;
       currentTournament = result.tournament_id;
       setTournamentId(result.tournament_id);
