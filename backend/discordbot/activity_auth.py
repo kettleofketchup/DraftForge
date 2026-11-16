@@ -1,10 +1,11 @@
-"""Draft-scoped authentication shared by REST and Activity WebSockets."""
+"""Tournament-scoped authentication shared by REST and Activity WebSockets."""
 
 import asyncio
 import re
 import time
 from collections.abc import Mapping
-from typing import Any, Literal
+from dataclasses import dataclass
+from typing import Any, Literal, TypedDict
 
 from asgiref.typing import (
     ASGI3Application,
@@ -19,11 +20,14 @@ from rest_framework.authentication import BaseAuthentication, get_authorization_
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.request import Request
 
-from app.models import CustomUser, DraftRound
+from app.models import CustomUser, Draft, DraftRound, HeroDraft
 from discordbot.activity_errors import ActivityAuthFailed
-from discordbot.models import DraftActivityInstance
+from discordbot.activity_targets import draft_tournament_id
+from discordbot.models import DraftActivityChannel, DraftActivityInstance
 
-SALT = "discord-draft-activity-v2"
+SALT = "discord-draft-activity-v3"
+# 0.14.x frames carry v2 draft tokens; remove after 0.15.
+LEGACY_SALT = "discord-draft-activity-v2"
 TOKEN_AGE = 12 * 60 * 60
 SOCKET_REVALIDATE_SECONDS = 30
 MAX_DATABASE_ID = (1 << 63) - 1
@@ -32,26 +36,124 @@ SOCKET_PROTOCOL = "draftactivity"
 SESSION_ENDED_CODE = 4401
 
 
+ActivityKind = Literal["hero", "team"]
+OUT_OF_SCOPE = "Activity credentials are only valid for this draft."
+
+
+class Pin(TypedDict):
+    kind: ActivityKind
+    draft: int
+
+
+@dataclass(frozen=True)
+class ActivityIdentity:
+    user: CustomUser
+    instance: DraftActivityInstance
+    tournament_id: int | None
+    pin: Pin | None
+
+    @property
+    def scope(self) -> Literal["tournament", "draft"]:
+        return "draft" if self.tournament_id is None else "tournament"
+
+
+def load_instance(pk: int, instance_id: str) -> DraftActivityInstance:
+    return (
+        DraftActivityInstance.objects.nocache()
+        .select_related("draft__game", "team_draft")
+        .get(pk=pk, instance_id=instance_id)
+    )
+
+
+def instance_tournament(instance: DraftActivityInstance) -> int | None:
+    return draft_tournament_id(instance.draft or instance.team_draft)
+
+
+def session_tournament(instance: DraftActivityInstance) -> int | None:
+    tournament_id = instance_tournament(instance)
+    if tournament_id is not None:
+        return tournament_id
+    channel = (
+        DraftActivityChannel.objects.nocache()
+        .select_related("draft__game", "team_draft")
+        .filter(guild_id=instance.guild_id, channel_id=instance.channel_id)
+        .first()
+    )
+    if channel is None:
+        return None
+    return draft_tournament_id(channel.draft or channel.team_draft)
+
+
+def instance_pin(instance: DraftActivityInstance) -> Pin:
+    if instance.draft_id:
+        return {"kind": "hero", "draft": instance.draft_id}
+    return {"kind": "team", "draft": instance.team_draft_id}
+
+
 def issue_activity_token(user: CustomUser, instance: DraftActivityInstance) -> str:
-    """Sign the immutable binding identity and destination, not a reusable instance ID."""
+    tournament_id = session_tournament(instance)
     return signing.dumps(
         {
             "user": user.pk,
             "binding": instance.pk,
             "instance": instance.instance_id,
-            "kind": "hero" if instance.draft_id else "team",
-            "draft": instance.draft_id or instance.team_draft_id,
+            "tournament": tournament_id,
+            "pin": None if tournament_id is not None else instance_pin(instance),
             "expires": time.time() + TOKEN_AGE,
         },
         salt=SALT,
     ).replace(":", ".")
 
 
+def _is_id(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value > 0
+
+
+def _pin(kind: object, draft: object) -> Pin:
+    if not isinstance(draft, int) or not _is_id(draft):
+        raise ValueError("invalid Activity pin")
+    if kind == "hero":
+        return {"kind": "hero", "draft": draft}
+    if kind == "team":
+        return {"kind": "team", "draft": draft}
+    raise ValueError("invalid Activity pin")
+
+
+def _load(token: str, salt: str) -> dict[str, Any]:
+    data = signing.loads(token.replace(".", ":"), salt=salt, max_age=TOKEN_AGE)
+    if data["expires"] <= time.time():
+        raise signing.SignatureExpired("Activity credential expired")
+    return data
+
+
 def _token_data(token: str) -> dict[str, Any]:
+    """Return a v3-shaped payload; a v2 payload gains ``legacy`` and a pin."""
     try:
-        data = signing.loads(token.replace(".", ":"), salt=SALT, max_age=TOKEN_AGE)
-        if data["expires"] <= time.time():
-            raise signing.SignatureExpired("Activity credential expired")
+        try:
+            data = _load(token, SALT)
+        except signing.SignatureExpired:
+            raise
+        except signing.BadSignature:
+            data = _load(token, LEGACY_SALT)
+            data = {
+                "user": data["user"],
+                "binding": data["binding"],
+                "instance": data["instance"],
+                "tournament": None,
+                "pin": _pin(data["kind"], data["draft"]),
+                "expires": data["expires"],
+                "legacy": True,
+            }
+        tournament, pin = data["tournament"], data["pin"]
+        if tournament is None:
+            data["pin"] = _pin(pin["kind"], pin["draft"])
+        elif not _is_id(tournament) or pin is not None:
+            raise ValueError("invalid Activity scope")
+        for key in ("user", "binding"):
+            if not _is_id(data[key]):
+                raise ValueError("invalid Activity identity")
+        if not isinstance(data["instance"], str):
+            raise ValueError("invalid Activity instance")
         return data
     except signing.SignatureExpired:
         raise ActivityAuthFailed("activity_session_ended", SESSION_EXPIRED, "expired")
@@ -61,55 +163,72 @@ def _token_data(token: str) -> dict[str, Any]:
         )
 
 
-def token_identity(token: str) -> tuple[CustomUser, DraftActivityInstance]:
+def token_identity(token: str) -> ActivityIdentity:
     if not getattr(settings, "DISCORD_ACTIVITY_ENABLED", False):
         raise ActivityAuthFailed(
             "activity_disabled", "Discord Activities are disabled.", "disabled"
         )
     data = _token_data(token)
     try:
-        instance = DraftActivityInstance.objects.select_related("team_draft").get(
-            pk=data["binding"], instance_id=data["instance"]
-        )
-        kind = "hero" if instance.draft_id else "team"
-        if data["kind"] != kind or data["draft"] != (
-            instance.draft_id or instance.team_draft_id
-        ):
-            raise ActivityAuthFailed(
-                "activity_session_ended",
-                "Activity destination changed. Reopen the Activity.",
-                "v2_mismatch",
-            )
-        # Authorization must observe deactivation immediately, even when an
-        # administrative bulk update leaves a cached active-user query behind.
-        user = CustomUser.objects.nocache().get(pk=data["user"], is_active=True)
-        return user, instance
-    except (KeyError, TypeError, ValueError):
-        raise ActivityAuthFailed(
-            "activity_session_ended", SESSION_EXPIRED, "bad_signature"
-        )
+        instance = load_instance(data["binding"], data["instance"])
     except DraftActivityInstance.DoesNotExist:
         raise ActivityAuthFailed(
             "activity_session_ended", SESSION_EXPIRED, "instance_missing"
         )
+    pin: Pin | None = data["pin"]
+    if pin is not None and pin != instance_pin(instance):
+        raise ActivityAuthFailed(
+            "activity_session_ended",
+            "Activity destination changed. Reopen the Activity.",
+            "v2_mismatch" if data.get("legacy") else "pin_mismatch",
+        )
+    try:
+        user = CustomUser.objects.nocache().get(pk=data["user"], is_active=True)
     except CustomUser.DoesNotExist:
         raise ActivityAuthFailed(
             "activity_session_ended", SESSION_EXPIRED, "inactive_user"
         )
+    return ActivityIdentity(
+        user=user, instance=instance, tournament_id=data["tournament"], pin=pin
+    )
+
+
+def scope_allows(identity: ActivityIdentity, kind: ActivityKind, draft_id: int) -> bool:
+    tournament_id = identity.tournament_id
+    if tournament_id is None:
+        return identity.pin == {"kind": kind, "draft": draft_id}
+    if kind == "hero":
+        return (
+            HeroDraft.objects.nocache()
+            .filter(pk=draft_id, game__tournament_id=tournament_id)
+            .exists()
+        )
+    return (
+        Draft.objects.nocache()
+        .filter(pk=draft_id, tournament_id=tournament_id)
+        .exists()
+    )
+
+
+def _round_allowed(identity: ActivityIdentity, round_pk: int) -> bool:
+    rounds = DraftRound.objects.nocache().filter(pk=round_pk)
+    if identity.tournament_id is not None:
+        return rounds.filter(draft__tournament_id=identity.tournament_id).exists()
+    pin = identity.pin
+    return (
+        pin is not None
+        and pin["kind"] == "team"
+        and rounds.filter(draft_id=pin["draft"]).exists()
+    )
 
 
 def authenticate_token(
-    token: str, draft_id: int, kind: Literal["hero", "team"]
-) -> CustomUser:
-    user, instance = token_identity(token)
-    expected = instance.draft_id if kind == "hero" else instance.team_draft_id
-    if expected != draft_id:
-        raise ActivityAuthFailed(
-            "activity_out_of_scope",
-            "Activity credentials belong to a different draft.",
-            "out_of_scope",
-        )
-    return user
+    token: str, draft_id: int, kind: ActivityKind
+) -> ActivityIdentity:
+    identity = token_identity(token)
+    if not scope_allows(identity, kind, draft_id):
+        raise ActivityAuthFailed("activity_out_of_scope", OUT_OF_SCOPE, "out_of_scope")
+    return identity
 
 
 def _positive_id(value: object) -> int | None:
@@ -126,7 +245,9 @@ def _positive_id(value: object) -> int | None:
 
 
 class ActivityAuthentication(BaseAuthentication):
-    def authenticate(self, request: Request) -> tuple[CustomUser, None] | None:
+    def authenticate(
+        self, request: Request
+    ) -> tuple[CustomUser, ActivityIdentity] | None:
         header = get_authorization_header(request).split()
         if not header or header[0].lower() != b"draftactivity":
             return None
@@ -144,7 +265,7 @@ class ActivityAuthentication(BaseAuthentication):
                 "Invalid Activity credential.",
                 "bad_signature",
             )
-        user, instance = token_identity(token)
+        identity = token_identity(token)
         path = request.path
         allowed = path == "/api/current_user"
         scoped = False
@@ -153,12 +274,12 @@ class ActivityAuthentication(BaseAuthentication):
         if hero:
             scoped = True
             draft_pk = _positive_id(hero[1])
-            allowed = draft_pk is not None and instance.draft_id == draft_pk
+            allowed = draft_pk is not None and scope_allows(identity, "hero", draft_pk)
         elif team:
             scoped = True
             draft_pk = _positive_id(team[1])
-            allowed = draft_pk is not None and instance.team_draft_id == draft_pk
-        elif instance.team_draft_id and path in {
+            allowed = draft_pk is not None and scope_allows(identity, "team", draft_pk)
+        elif path in {
             "/api/tournaments/pick_player",
             "/api/tournaments/undo-pick",
             "/api/draft/get-style-mmrs",
@@ -168,23 +289,23 @@ class ActivityAuthentication(BaseAuthentication):
             if isinstance(data, Mapping):
                 if path == "/api/tournaments/pick_player":
                     round_pk = _positive_id(data.get("draft_round_pk"))
-                    allowed = (
-                        round_pk is not None
-                        and DraftRound.objects.filter(
-                            pk=round_pk, draft_id=instance.team_draft_id
-                        ).exists()
+                    allowed = round_pk is not None and _round_allowed(
+                        identity, round_pk
                     )
                 else:
                     key = "draft_pk" if path == "/api/tournaments/undo-pick" else "pk"
-                    allowed = instance.team_draft_id == _positive_id(data.get(key))
+                    draft_pk = _positive_id(data.get(key))
+                    allowed = draft_pk is not None and scope_allows(
+                        identity, "team", draft_pk
+                    )
         if not allowed:
             raise ActivityAuthFailed(
                 "activity_out_of_scope" if scoped else "activity_path_not_allowed",
-                "Activity credentials are only valid for this draft.",
+                OUT_OF_SCOPE,
                 "out_of_scope" if scoped else "path_not_allowed",
             )
         # Existing view-level captain/staff checks remain authoritative.
-        return user, None
+        return identity.user, identity
 
 
 class _ActivitySessionEnded(Exception):
@@ -218,7 +339,7 @@ class ActivitySocketMiddleware:
         draft_id = scope["url_route"]["kwargs"]["draft_id"]
         validate = database_sync_to_async(authenticate_token, thread_sensitive=False)
         try:
-            user = await validate(token, draft_id, self.kind)
+            user = (await validate(token, draft_id, self.kind)).user
             expires_at = _token_data(token)["expires"]
         except AuthenticationFailed:
             await reject()

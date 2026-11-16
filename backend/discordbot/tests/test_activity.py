@@ -1,15 +1,19 @@
 """Activity identity, persistent match resolution and draft isolation."""
 
+import time
 from datetime import date
 from io import StringIO
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from asgiref.sync import async_to_sync
+from django.core import signing
 from django.core.management import call_command
 from django.db import IntegrityError, transaction
 from django.test import TestCase, TransactionTestCase, override_settings
 from rest_framework.exceptions import AuthenticationFailed
+from rest_framework.parsers import JSONParser
+from rest_framework.request import Request
 from rest_framework.test import APIClient, APIRequestFactory
 
 from app.models import (
@@ -24,10 +28,15 @@ from app.models import (
 )
 from discordbot.activity import activity_session, launch_message, resolve_instance
 from discordbot.activity_auth import (
+    LEGACY_SALT,
+    SALT,
     ActivityAuthentication,
+    ActivityIdentity,
     ActivitySocketMiddleware,
     authenticate_token,
     issue_activity_token,
+    scope_allows,
+    token_identity,
 )
 from discordbot.activity_errors import ActivityAuthFailed
 from discordbot.models import DraftActivityChannel, DraftActivityInstance
@@ -56,6 +65,12 @@ class DraftActivityTests(TestCase):
             game=Game.objects.create(tournament=self.tournament)
         )
         self.team_draft = Draft.objects.create(tournament=self.tournament)
+        self.other_tournament = Tournament.objects.create(
+            name="Other activity", date_played=date.today()
+        )
+        self.foreign = HeroDraft.objects.create(
+            game=Game.objects.create(tournament=self.other_tournament)
+        )
         self.binding = DraftActivityChannel.objects.create(
             guild_id="1", channel_id="2", draft=self.hero
         )
@@ -80,6 +95,38 @@ class DraftActivityTests(TestCase):
             team_draft=self.team_draft if kind == "team" else None,
         )
         return issue_activity_token(user or self.user, instance)
+
+    def legacy_token(self, kind="hero", draft=None):
+        instance = DraftActivityInstance.objects.create(
+            instance_id=f"legacy-{kind}",
+            guild_id="1",
+            channel_id="2",
+            draft=self.hero if kind == "hero" else None,
+            team_draft=self.team_draft if kind == "team" else None,
+        )
+        payload = {
+            "user": self.user.pk,
+            "binding": instance.pk,
+            "instance": instance.instance_id,
+            "kind": kind,
+            "draft": draft or instance.draft_id or instance.team_draft_id,
+            "expires": time.time() + 60,
+        }
+        return signing.dumps(payload, salt=LEGACY_SALT).replace(":", ".")
+
+    def rest(self, path, token, method="get", data=None):
+        request = getattr(self.factory, method)(
+            path, data, format="json", HTTP_AUTHORIZATION=f"DraftActivity {token}"
+        )
+        return ActivityAuthentication().authenticate(
+            Request(request, parsers=[JSONParser()])
+        )
+
+    def assert_rest_code(self, path, token, code, method="get", data=None):
+        with self.assertRaises(ActivityAuthFailed) as caught:
+            self.rest(path, token, method, data)
+        self.assertEqual(caught.exception.activity_code, code)
+        return caught.exception
 
     @patch("discordbot.activity.discord_json")
     def test_two_matches_four_channels_resolve_independently(self, discord):
@@ -132,7 +179,8 @@ class DraftActivityTests(TestCase):
         self.assertEqual(response.data["draft_id"], self.hero.pk)
         self.assertEqual(response.data["kind"], "hero")
         self.assertEqual(
-            authenticate_token(response.data["token"], self.hero.pk, "hero"), self.user
+            authenticate_token(response.data["token"], self.hero.pk, "hero").user,
+            self.user,
         )
         self.assertEqual(response["Cache-Control"], "no-store")
 
@@ -161,18 +209,16 @@ class DraftActivityTests(TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertNotIn("secret", str(response.data))
 
-    def test_token_rejects_wrong_draft_kind_tampering_expiry_and_inactive_users(self):
+    def test_token_rejects_tampering_expiry_and_inactive_users(self):
         token = self.credential()
-        for draft_id, kind in [(self.other.pk, "hero"), (self.hero.pk, "team")]:
-            with self.assertRaises(ActivityAuthFailed) as caught:
-                authenticate_token(token, draft_id, kind)
-            self.assertEqual(caught.exception.activity_code, "activity_out_of_scope")
         with self.assertRaises(ActivityAuthFailed) as caught:
             authenticate_token(token + "x", self.hero.pk, "hero")
+        self.assertEqual(caught.exception.activity_code, "activity_session_ended")
         self.assertEqual(caught.exception.reason, "bad_signature")
         with patch("django.core.signing.time.time", return_value=9999999999):
             with self.assertRaises(ActivityAuthFailed) as caught:
                 authenticate_token(token, self.hero.pk, "hero")
+        self.assertEqual(caught.exception.activity_code, "activity_session_ended")
         self.assertEqual(caught.exception.reason, "expired")
         self.user.is_active = False
         self.user.save()
@@ -181,32 +227,76 @@ class DraftActivityTests(TestCase):
         self.assertEqual(caught.exception.activity_code, "activity_session_ended")
         self.assertEqual(caught.exception.reason, "inactive_user")
 
-    def test_rest_scope_blocks_other_drafts_and_account_mutations(self):
-        token = self.credential()
-        auth = ActivityAuthentication()
-        for path, code in [
-            (f"/api/herodraft/{self.other.pk}/ready/", "activity_out_of_scope"),
-            ("/api/users/1/", "activity_path_not_allowed"),
-            ("/api/tournaments/init-draft", "activity_path_not_allowed"),
-        ]:
-            with self.assertRaises(ActivityAuthFailed) as caught:
-                auth.authenticate(
-                    self.factory.post(path, HTTP_AUTHORIZATION=f"DraftActivity {token}")
-                )
-            self.assertEqual(caught.exception.activity_code, code)
-        request = self.factory.get(
-            f"/api/herodraft/{self.hero.pk}/",
-            HTTP_AUTHORIZATION=f"DraftActivity {token}",
+    def test_v2_token_authenticates_as_draft_scope_pin(self):
+        token = self.legacy_token()
+        user, identity = self.rest(f"/api/herodraft/{self.hero.pk}/", token)
+        self.assertEqual(user, self.user)
+        self.assertIsInstance(identity, ActivityIdentity)
+        self.assertIsNone(identity.tournament_id)
+        self.assertEqual(identity.pin, {"kind": "hero", "draft": self.hero.pk})
+        self.assertEqual(identity.scope, "draft")
+        self.assert_rest_code(
+            f"/api/herodraft/{self.other.pk}/", token, "activity_out_of_scope"
         )
-        self.assertEqual(auth.authenticate(request)[0], self.user)
-        self.assertIsNone(auth.authenticate(self.factory.get("/api/current_user")))
+
+    def test_v2_token_for_other_destination_ends_session(self):
+        token = self.legacy_token(draft=self.other.pk)
+        with self.assertRaises(ActivityAuthFailed) as caught:
+            token_identity(token)
+        self.assertEqual(caught.exception.activity_code, "activity_session_ended")
+        self.assertEqual(caught.exception.reason, "v2_mismatch")
+
+    def test_new_tokens_are_tournament_scoped_v3(self):
+        token = self.credential()
+        data = signing.loads(token.replace(".", ":"), salt=SALT)
+        self.assertEqual(SALT, "discord-draft-activity-v3")
+        self.assertEqual(data["tournament"], self.tournament.pk)
+        self.assertIsNone(data["pin"])
+        self.assertNotIn("kind", data)
+        self.assertNotIn("draft", data)
+
+    def test_tournament_scope_allows_other_drafts_of_same_tournament(self):
+        token = self.credential()
+        user, identity = self.rest(f"/api/herodraft/{self.other.pk}/", token)
+        self.assertEqual(user, self.user)
+        self.assertIsInstance(identity, ActivityIdentity)
+        self.assertEqual(identity.tournament_id, self.tournament.pk)
+        self.assertIsNone(identity.pin)
+        self.assertEqual(identity.scope, "tournament")
+        user, identity = self.rest(
+            f"/api/draft/{self.team_draft.pk}/ready/", token, "post"
+        )
+        self.assertEqual(identity.tournament_id, self.tournament.pk)
+        self.assert_rest_code(
+            f"/api/herodraft/{self.foreign.pk}/", token, "activity_out_of_scope"
+        )
+        for path in ["/api/users/1/", "/api/tournaments/init-draft"]:
+            self.assert_rest_code(path, token, "activity_path_not_allowed", "post")
+        self.assertIsNone(
+            ActivityAuthentication().authenticate(self.factory.get("/api/current_user"))
+        )
+
+    def test_spectator_gets_403_on_other_draft_in_same_tournament(self):
+        token = self.credential(user=self.spectator)
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f"DraftActivity {token}")
+        response = client.post(f"/api/herodraft/{self.other.pk}/set-ready/")
+        self.assertEqual(response.status_code, 403)
+        self.assertNotIn("code", response.data)
 
     def test_team_scope_checks_pick_round_belongs_to_bound_draft(self):
-        token = self.credential("team")
-        other_tournament = Tournament.objects.create(
-            name="Other activity", date_played=date.today()
+        token = self.credential()
+        own_round = DraftRound.objects.create(
+            draft=self.team_draft, captain=self.user, pick_number=1
         )
-        other_draft = Draft.objects.create(tournament=other_tournament)
+        user, _ = self.rest(
+            "/api/tournaments/pick_player",
+            token,
+            "post",
+            {"draft_round_pk": own_round.pk, "user_pk": self.spectator.pk},
+        )
+        self.assertEqual(user, self.user)
+        other_draft = Draft.objects.create(tournament=self.other_tournament)
         round_ = DraftRound.objects.create(
             draft=other_draft, captain=self.user, pick_number=1
         )
@@ -322,7 +412,17 @@ class DraftActivityTests(TestCase):
     def test_socket_passes_verified_user_to_existing_consumer(self):
         user = self.user
         app, send = AsyncMock(), AsyncMock()
-        resolver = AsyncMock(return_value=user)
+        instance = DraftActivityInstance.objects.create(
+            instance_id="socket", guild_id="1", channel_id="2", draft=self.hero
+        )
+        resolver = AsyncMock(
+            return_value=ActivityIdentity(
+                user=user,
+                instance=instance,
+                tournament_id=self.tournament.pk,
+                pin=None,
+            )
+        )
         scope = {
             "subprotocols": ["draftactivity", "signed-token"],
             "url_route": {"kwargs": {"draft_id": self.hero.pk}},
@@ -371,16 +471,117 @@ class DraftActivityTests(TestCase):
             with self.assertRaises(AuthenticationFailed):
                 authenticate_token(token, draft.pk, "hero")
         fresh = issue_activity_token(self.user, recreated)
-        self.assertEqual(authenticate_token(fresh, self.other.pk, "hero"), self.user)
+        self.assertEqual(
+            authenticate_token(fresh, self.other.pk, "hero").user, self.user
+        )
 
-    def test_mutating_instance_destination_invalidates_existing_tokens(self):
+    def test_channel_launch_never_invalidates_tokens(self):
         token = self.credential()
-        DraftActivityInstance.objects.filter(instance_id="instance-hero").update(
-            draft=self.other
+        self.binding.draft = self.foreign
+        self.binding.save()
+        identity = authenticate_token(token, self.hero.pk, "hero")
+        self.assertEqual(identity.tournament_id, self.tournament.pk)
+        authenticate_token(token, self.other.pk, "hero")
+
+    def test_anchor_moved_out_of_tournament_keeps_token_valid(self):
+        token = self.credential()
+        Game.objects.filter(pk=self.hero.game_id).update(tournament=None)
+        identity = authenticate_token(token, self.other.pk, "hero")
+        self.assertEqual(identity.tournament_id, self.tournament.pk)
+        with self.assertRaises(ActivityAuthFailed) as caught:
+            authenticate_token(token, self.hero.pk, "hero")
+        self.assertEqual(caught.exception.activity_code, "activity_out_of_scope")
+
+    def test_tournament_from_channel_record_when_anchor_has_none(self):
+        loose = HeroDraft.objects.create(game=Game.objects.create())
+        instance = DraftActivityInstance.objects.create(
+            instance_id="loose", guild_id="1", channel_id="2", draft=loose
+        )
+        token = issue_activity_token(self.user, instance)
+        data = signing.loads(token.replace(".", ":"), salt=SALT)
+        self.assertEqual(data["tournament"], self.tournament.pk)
+        self.assertIsNone(data["pin"])
+        identity = authenticate_token(token, self.other.pk, "hero")
+        self.assertEqual(identity.scope, "tournament")
+
+    def test_tournamentless_instance_pins_one_draft(self):
+        loose = HeroDraft.objects.create(game=Game.objects.create())
+        instance = DraftActivityInstance.objects.create(
+            instance_id="loose", guild_id="1", channel_id="99", draft=loose
+        )
+        token = issue_activity_token(self.user, instance)
+        data = signing.loads(token.replace(".", ":"), salt=SALT)
+        self.assertIsNone(data["tournament"])
+        self.assertEqual(data["pin"], {"kind": "hero", "draft": loose.pk})
+        identity = authenticate_token(token, loose.pk, "hero")
+        self.assertEqual(identity.pin, {"kind": "hero", "draft": loose.pk})
+        self.assertEqual(identity.scope, "draft")
+        for draft_id, kind in [(self.hero.pk, "hero"), (loose.pk, "team")]:
+            with self.assertRaises(ActivityAuthFailed) as caught:
+                authenticate_token(token, draft_id, kind)
+            self.assertEqual(caught.exception.activity_code, "activity_out_of_scope")
+
+    def test_forged_pin_on_v3_token_ends_session(self):
+        loose = HeroDraft.objects.create(game=Game.objects.create())
+        instance = DraftActivityInstance.objects.create(
+            instance_id="loose", guild_id="1", channel_id="99", draft=loose
+        )
+        data = signing.loads(
+            issue_activity_token(self.user, instance).replace(".", ":"), salt=SALT
+        )
+        data["pin"] = {"kind": "hero", "draft": self.other.pk}
+        token = signing.dumps(data, salt=SALT).replace(":", ".")
+        with self.assertRaises(ActivityAuthFailed) as caught:
+            token_identity(token)
+        self.assertEqual(caught.exception.reason, "pin_mismatch")
+        for broken in [
+            {**data, "pin": None},
+            {**data, "pin": {"kind": "hero"}},
+            {**data, "tournament": True, "pin": None},
+        ]:
+            token = signing.dumps(broken, salt=SALT).replace(":", ".")
+            with self.assertRaises(ActivityAuthFailed) as caught:
+                token_identity(token)
+            self.assertEqual(caught.exception.activity_code, "activity_session_ended")
+
+    def test_scope_reads_bypass_cacheops(self):
+        token = self.credential()
+        identity = authenticate_token(token, self.other.pk, "hero")
+        Game.objects.filter(pk=self.other.game_id).update(
+            tournament=self.other_tournament
         )
         with self.assertRaises(ActivityAuthFailed) as caught:
             authenticate_token(token, self.other.pk, "hero")
-        self.assertEqual(caught.exception.activity_code, "activity_session_ended")
+        self.assertEqual(caught.exception.activity_code, "activity_out_of_scope")
+        for model, kind, draft_id in [
+            (HeroDraft, "hero", self.hero.pk),
+            (Draft, "team", self.team_draft.pk),
+        ]:
+            with patch.object(
+                model.objects, "nocache", wraps=model.objects.nocache
+            ) as nocache:
+                self.assertTrue(scope_allows(identity, kind, draft_id))
+            nocache.assert_called_once_with()
+        with patch.object(
+            DraftActivityInstance.objects,
+            "nocache",
+            wraps=DraftActivityInstance.objects.nocache,
+        ) as nocache:
+            token_identity(token)
+        nocache.assert_called_once_with()
+        own_round = DraftRound.objects.create(
+            draft=self.team_draft, captain=self.user, pick_number=1
+        )
+        with patch.object(
+            DraftRound.objects, "nocache", wraps=DraftRound.objects.nocache
+        ) as nocache:
+            self.rest(
+                "/api/tournaments/pick_player",
+                token,
+                "post",
+                {"draft_round_pk": own_round.pk, "user_pk": self.spectator.pk},
+            )
+        nocache.assert_called_once_with()
 
     def test_malformed_team_pick_data_is_rejected_without_server_errors(self):
         token = self.credential("team")
@@ -408,44 +609,29 @@ class DraftActivityTests(TestCase):
         for path in [
             f"/api/herodraft/{self.hero.pk:030d}/set-ready/",
             f"/api/herodraft/{2**63}/set-ready/",
+            f"/api/draft/{self.team_draft.pk:030d}/ready/",
         ]:
-            with self.assertRaises(AuthenticationFailed):
+            with self.assertRaises(ActivityAuthFailed) as caught:
                 auth.authenticate(
                     self.factory.post(path, HTTP_AUTHORIZATION=f"DraftActivity {token}")
                 )
+            self.assertEqual(caught.exception.activity_code, "activity_out_of_scope")
 
-    def test_team_undo_and_style_scope_match_the_assigned_draft(self):
-        from rest_framework.parsers import JSONParser
-        from rest_framework.request import Request
-
-        token = self.credential("team")
-        auth = ActivityAuthentication()
-        for path, key in [
-            ("/api/tournaments/undo-pick", "draft_pk"),
-            ("/api/draft/get-style-mmrs", "pk"),
-        ]:
-            request = Request(
-                self.factory.post(
-                    path,
-                    {key: self.team_draft.pk},
-                    format="json",
-                    HTTP_AUTHORIZATION=f"DraftActivity {token}",
-                ),
-                parsers=[JSONParser()],
-            )
-            self.assertEqual(auth.authenticate(request)[0], self.user)
-            for value in [self.team_draft.pk + 1000, 2**63, None, [], True]:
-                request = Request(
-                    self.factory.post(
-                        path,
-                        {key: value},
-                        format="json",
-                        HTTP_AUTHORIZATION=f"DraftActivity {token}",
-                    ),
-                    parsers=[JSONParser()],
-                )
-                with self.assertRaises(AuthenticationFailed):
-                    auth.authenticate(request)
+    def test_team_undo_and_style_scope_match_the_tournament(self):
+        foreign_draft = Draft.objects.create(tournament=self.other_tournament)
+        for kind in ["team", "hero"]:
+            token = self.credential(kind)
+            for path, key in [
+                ("/api/tournaments/undo-pick", "draft_pk"),
+                ("/api/draft/get-style-mmrs", "pk"),
+            ]:
+                user, _ = self.rest(path, token, "post", {key: self.team_draft.pk})
+                self.assertEqual(user, self.user)
+                for value in [foreign_draft.pk, 2**63, None, [], True]:
+                    with self.subTest(kind=kind, path=path, value=value):
+                        self.assert_rest_code(
+                            path, token, "activity_out_of_scope", "post", {key: value}
+                        )
 
     def test_activity_credential_does_not_grant_undo_staff_permission(self):
         token = self.credential("team")

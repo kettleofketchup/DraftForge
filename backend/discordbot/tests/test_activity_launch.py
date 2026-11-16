@@ -199,7 +199,10 @@ class ActivityLaunchTests(ClearIntentsMixin, TestCase):
         self.assertTrue(prepare_activity_launch("101", "hero", self.hero.pk)["success"])
         instance.refresh_from_db()
         self.assertEqual(instance.draft_id, finished.pk)
-        authenticate_token(token, finished.pk, "hero")
+        identity = authenticate_token(token, finished.pk, "hero")
+        self.assertEqual(identity.user, self.user)
+        self.assertEqual(identity.instance.pk, instance.pk)
+        self.assertEqual(identity.tournament_id, self.tournament.pk)
 
     @patch("discordbot.activity_launch.discord_json")
     def test_channel_busy_for_other_tournament_unfinished_draft(self, api):
