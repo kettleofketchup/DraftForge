@@ -29,6 +29,7 @@ from discordbot.activity_auth import (
     authenticate_token,
     issue_activity_token,
 )
+from discordbot.activity_errors import ActivityAuthFailed
 from discordbot.models import DraftActivityChannel, DraftActivityInstance
 
 
@@ -163,30 +164,36 @@ class DraftActivityTests(TestCase):
     def test_token_rejects_wrong_draft_kind_tampering_expiry_and_inactive_users(self):
         token = self.credential()
         for draft_id, kind in [(self.other.pk, "hero"), (self.hero.pk, "team")]:
-            with self.assertRaises(AuthenticationFailed):
+            with self.assertRaises(ActivityAuthFailed) as caught:
                 authenticate_token(token, draft_id, kind)
-        with self.assertRaises(AuthenticationFailed):
+            self.assertEqual(caught.exception.activity_code, "activity_out_of_scope")
+        with self.assertRaises(ActivityAuthFailed) as caught:
             authenticate_token(token + "x", self.hero.pk, "hero")
+        self.assertEqual(caught.exception.reason, "bad_signature")
         with patch("django.core.signing.time.time", return_value=9999999999):
-            with self.assertRaises(AuthenticationFailed):
+            with self.assertRaises(ActivityAuthFailed) as caught:
                 authenticate_token(token, self.hero.pk, "hero")
+        self.assertEqual(caught.exception.reason, "expired")
         self.user.is_active = False
         self.user.save()
-        with self.assertRaises(AuthenticationFailed):
+        with self.assertRaises(ActivityAuthFailed) as caught:
             authenticate_token(token, self.hero.pk, "hero")
+        self.assertEqual(caught.exception.activity_code, "activity_session_ended")
+        self.assertEqual(caught.exception.reason, "inactive_user")
 
     def test_rest_scope_blocks_other_drafts_and_account_mutations(self):
         token = self.credential()
         auth = ActivityAuthentication()
-        for path in [
-            f"/api/herodraft/{self.other.pk}/ready/",
-            "/api/users/1/",
-            "/api/tournaments/init-draft",
+        for path, code in [
+            (f"/api/herodraft/{self.other.pk}/ready/", "activity_out_of_scope"),
+            ("/api/users/1/", "activity_path_not_allowed"),
+            ("/api/tournaments/init-draft", "activity_path_not_allowed"),
         ]:
-            with self.assertRaises(AuthenticationFailed):
+            with self.assertRaises(ActivityAuthFailed) as caught:
                 auth.authenticate(
                     self.factory.post(path, HTTP_AUTHORIZATION=f"DraftActivity {token}")
                 )
+            self.assertEqual(caught.exception.activity_code, code)
         request = self.factory.get(
             f"/api/herodraft/{self.hero.pk}/",
             HTTP_AUTHORIZATION=f"DraftActivity {token}",
@@ -209,7 +216,9 @@ class DraftActivityTests(TestCase):
             "/api/tournaments/pick_player",
             {"draft_round_pk": round_.pk, "user_pk": self.spectator.pk},
         )
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response["WWW-Authenticate"], "DraftActivity")
+        self.assertEqual(response.data["code"], "activity_out_of_scope")
         self.assertEqual(
             response.data["detail"],
             "Activity credentials are only valid for this draft.",
@@ -222,6 +231,35 @@ class DraftActivityTests(TestCase):
         response = client.post(f"/api/herodraft/{self.hero.pk}/set-ready/")
         self.assertEqual(response.status_code, 403)
         self.assertEqual(response.data["error"], "You are not a captain in this draft")
+        self.assertNotIn("code", response.data)
+        self.assertNotIn("WWW-Authenticate", response)
+
+    def test_activity_failures_are_coded_401(self):
+        token = self.credential()
+        cases = [
+            ("bad-token", "/api/current_user", "activity_session_ended"),
+            (token, "/api/users/", "activity_path_not_allowed"),
+        ]
+        for credential, path, code in cases:
+            with self.subTest(code=code):
+                client = APIClient()
+                client.credentials(HTTP_AUTHORIZATION=f"DraftActivity {credential}")
+                response = client.get(path)
+                self.assertEqual(response.status_code, 401)
+                self.assertEqual(response["WWW-Authenticate"], "DraftActivity")
+                self.assertEqual(response.data["code"], code)
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f"DraftActivity {token}")
+        with override_settings(DISCORD_ACTIVITY_ENABLED=False):
+            response = client.get("/api/current_user")
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response["WWW-Authenticate"], "DraftActivity")
+        self.assertEqual(response.data["code"], "activity_disabled")
+
+    def test_anonymous_website_request_still_403(self):
+        response = APIClient().post(f"/api/herodraft/{self.hero.pk}/set-ready/")
+        self.assertEqual(response.status_code, 403)
+        self.assertNotIn("WWW-Authenticate", response)
 
     def test_bind_command_switches_kind_and_prints_launch_payload(self):
         output = StringIO()
@@ -340,8 +378,9 @@ class DraftActivityTests(TestCase):
         DraftActivityInstance.objects.filter(instance_id="instance-hero").update(
             draft=self.other
         )
-        with self.assertRaises(AuthenticationFailed):
+        with self.assertRaises(ActivityAuthFailed) as caught:
             authenticate_token(token, self.other.pk, "hero")
+        self.assertEqual(caught.exception.activity_code, "activity_session_ended")
 
     def test_malformed_team_pick_data_is_rejected_without_server_errors(self):
         token = self.credential("team")
@@ -360,7 +399,8 @@ class DraftActivityTests(TestCase):
                 response = client.post(
                     "/api/tournaments/pick_player", body, format="json"
                 )
-                self.assertEqual(response.status_code, 403)
+                self.assertEqual(response.status_code, 401)
+                self.assertEqual(response.data["code"], "activity_out_of_scope")
 
     def test_oversized_and_zero_padded_paths_do_not_bypass_kind_scope(self):
         token = self.credential("team")
@@ -419,6 +459,8 @@ class DraftActivityTests(TestCase):
             response.data["error"],
             "You do not have permission to undo picks in this draft",
         )
+        self.assertNotIn("code", response.data)
+        self.assertNotIn("WWW-Authenticate", response)
 
 
 @override_settings(DISCORD_ACTIVITY_ENABLED=True)

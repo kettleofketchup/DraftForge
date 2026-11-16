@@ -20,12 +20,14 @@ from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.request import Request
 
 from app.models import CustomUser, DraftRound
+from discordbot.activity_errors import ActivityAuthFailed
 from discordbot.models import DraftActivityInstance
 
 SALT = "discord-draft-activity-v2"
 TOKEN_AGE = 12 * 60 * 60
 SOCKET_REVALIDATE_SECONDS = 30
 MAX_DATABASE_ID = (1 << 63) - 1
+SESSION_EXPIRED = "Activity session expired. Reopen the Activity."
 SOCKET_PROTOCOL = "draftactivity"
 SESSION_ENDED_CODE = 4401
 
@@ -51,13 +53,19 @@ def _token_data(token: str) -> dict[str, Any]:
         if data["expires"] <= time.time():
             raise signing.SignatureExpired("Activity credential expired")
         return data
+    except signing.SignatureExpired:
+        raise ActivityAuthFailed("activity_session_ended", SESSION_EXPIRED, "expired")
     except (signing.BadSignature, KeyError, TypeError, ValueError):
-        raise AuthenticationFailed("Activity session expired. Reopen the Activity.")
+        raise ActivityAuthFailed(
+            "activity_session_ended", SESSION_EXPIRED, "bad_signature"
+        )
 
 
 def token_identity(token: str) -> tuple[CustomUser, DraftActivityInstance]:
     if not getattr(settings, "DISCORD_ACTIVITY_ENABLED", False):
-        raise AuthenticationFailed("Discord Activities are disabled.")
+        raise ActivityAuthFailed(
+            "activity_disabled", "Discord Activities are disabled.", "disabled"
+        )
     data = _token_data(token)
     try:
         instance = DraftActivityInstance.objects.select_related("team_draft").get(
@@ -67,21 +75,27 @@ def token_identity(token: str) -> tuple[CustomUser, DraftActivityInstance]:
         if data["kind"] != kind or data["draft"] != (
             instance.draft_id or instance.team_draft_id
         ):
-            raise AuthenticationFailed(
-                "Activity destination changed. Reopen the Activity."
+            raise ActivityAuthFailed(
+                "activity_session_ended",
+                "Activity destination changed. Reopen the Activity.",
+                "v2_mismatch",
             )
         # Authorization must observe deactivation immediately, even when an
         # administrative bulk update leaves a cached active-user query behind.
         user = CustomUser.objects.nocache().get(pk=data["user"], is_active=True)
         return user, instance
-    except (
-        KeyError,
-        TypeError,
-        ValueError,
-        DraftActivityInstance.DoesNotExist,
-        CustomUser.DoesNotExist,
-    ):
-        raise AuthenticationFailed("Activity session expired. Reopen the Activity.")
+    except (KeyError, TypeError, ValueError):
+        raise ActivityAuthFailed(
+            "activity_session_ended", SESSION_EXPIRED, "bad_signature"
+        )
+    except DraftActivityInstance.DoesNotExist:
+        raise ActivityAuthFailed(
+            "activity_session_ended", SESSION_EXPIRED, "instance_missing"
+        )
+    except CustomUser.DoesNotExist:
+        raise ActivityAuthFailed(
+            "activity_session_ended", SESSION_EXPIRED, "inactive_user"
+        )
 
 
 def authenticate_token(
@@ -90,7 +104,11 @@ def authenticate_token(
     user, instance = token_identity(token)
     expected = instance.draft_id if kind == "hero" else instance.team_draft_id
     if expected != draft_id:
-        raise AuthenticationFailed("Activity credentials belong to a different draft.")
+        raise ActivityAuthFailed(
+            "activity_out_of_scope",
+            "Activity credentials belong to a different draft.",
+            "out_of_scope",
+        )
     return user
 
 
@@ -113,20 +131,31 @@ class ActivityAuthentication(BaseAuthentication):
         if not header or header[0].lower() != b"draftactivity":
             return None
         if len(header) != 2:
-            raise AuthenticationFailed("Invalid Activity credential.")
+            raise ActivityAuthFailed(
+                "activity_session_ended",
+                "Invalid Activity credential.",
+                "bad_signature",
+            )
         try:
             token = header[1].decode("ascii")
         except UnicodeDecodeError:
-            raise AuthenticationFailed("Invalid Activity credential.")
+            raise ActivityAuthFailed(
+                "activity_session_ended",
+                "Invalid Activity credential.",
+                "bad_signature",
+            )
         user, instance = token_identity(token)
         path = request.path
         allowed = path == "/api/current_user"
+        scoped = False
         hero = re.fullmatch(r"/api/herodraft/(\d+)/(?:[a-z-]+/)?", path)
         team = re.fullmatch(r"/api/draft/(\d+)/(?:ready|start|pause|resume)/", path)
         if hero:
+            scoped = True
             draft_pk = _positive_id(hero[1])
             allowed = draft_pk is not None and instance.draft_id == draft_pk
         elif team:
+            scoped = True
             draft_pk = _positive_id(team[1])
             allowed = draft_pk is not None and instance.team_draft_id == draft_pk
         elif instance.team_draft_id and path in {
@@ -134,6 +163,7 @@ class ActivityAuthentication(BaseAuthentication):
             "/api/tournaments/undo-pick",
             "/api/draft/get-style-mmrs",
         }:
+            scoped = True
             data = request.data
             if isinstance(data, Mapping):
                 if path == "/api/tournaments/pick_player":
@@ -148,8 +178,10 @@ class ActivityAuthentication(BaseAuthentication):
                     key = "draft_pk" if path == "/api/tournaments/undo-pick" else "pk"
                     allowed = instance.team_draft_id == _positive_id(data.get(key))
         if not allowed:
-            raise AuthenticationFailed(
-                "Activity credentials are only valid for this draft."
+            raise ActivityAuthFailed(
+                "activity_out_of_scope" if scoped else "activity_path_not_allowed",
+                "Activity credentials are only valid for this draft.",
+                "out_of_scope" if scoped else "path_not_allowed",
             )
         # Existing view-level captain/staff checks remain authoritative.
         return user, None
