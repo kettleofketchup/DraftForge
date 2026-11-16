@@ -57,7 +57,9 @@ function CheckboxField({
             />
           </FormControl>
           <div>
-            <FormLabel className="text-sm font-medium cursor-pointer">{label}</FormLabel>
+            <FormLabel className="text-sm font-medium cursor-pointer">
+              {label}
+            </FormLabel>
             <FormDescription className="text-xs">{description}</FormDescription>
           </div>
         </FormItem>
@@ -85,7 +87,9 @@ export function ApprovalConfigSection<T extends FieldValues & ApprovalFields>({
       {/* Rank Type Restrictions */}
       <div className="space-y-4">
         <div>
-          <h4 className="text-sm font-semibold text-foreground">Allowed Rank Types</h4>
+          <h4 className="text-sm font-semibold text-foreground">
+            Allowed Rank Types
+          </h4>
           <p className="text-xs text-muted-foreground mt-1">
             Control which Dota 2 rank categories can sign up for this event.
           </p>
@@ -180,7 +184,9 @@ export function ApprovalConfigSection<T extends FieldValues & ApprovalFields>({
 
       {/* General Approval Settings */}
       <div className="space-y-4">
-        <h4 className="text-sm font-semibold text-foreground">General Requirements</h4>
+        <h4 className="text-sm font-semibold text-foreground">
+          General Requirements
+        </h4>
 
         <CheckboxField
           control={control}
