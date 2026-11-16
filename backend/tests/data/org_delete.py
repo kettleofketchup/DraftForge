@@ -17,7 +17,7 @@ ORG_DELETE_ORG: TestOrganization = TestOrganization(
 ORG_DELETE_OWNER: TestUser = TestUser(
     pk=6000,
     username="org_delete_owner",
-    nickname="Org Delete Owner",
+    discord_global_name="Org Delete Owner",
     discord_id="700000000000000001",
     steam_id_64=76561199100000001,
 )
@@ -25,7 +25,7 @@ ORG_DELETE_OWNER: TestUser = TestUser(
 ORG_DELETE_ADMIN: TestUser = TestUser(
     pk=6001,
     username="org_delete_admin",
-    nickname="Org Delete Admin",
+    discord_global_name="Org Delete Admin",
     discord_id="700000000000000002",
     steam_id_64=76561199100000002,
 )
@@ -33,7 +33,7 @@ ORG_DELETE_ADMIN: TestUser = TestUser(
 ORG_DELETE_STAFF: TestUser = TestUser(
     pk=6002,
     username="org_delete_staff",
-    nickname="Org Delete Staff",
+    discord_global_name="Org Delete Staff",
     discord_id="700000000000000003",
     steam_id_64=76561199100000003,
 )
@@ -41,7 +41,7 @@ ORG_DELETE_STAFF: TestUser = TestUser(
 ORG_DELETE_MEMBER: TestUser = TestUser(
     pk=6003,
     username="org_delete_member",
-    nickname="Org Delete Member",
+    discord_global_name="Org Delete Member",
     discord_id="700000000000000004",
     steam_id_64=76561199100000004,
 )

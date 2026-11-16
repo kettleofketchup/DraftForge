@@ -12,6 +12,7 @@ from .constants import (
     DTX_ORG_NAME,
     DTX_STEAM_LEAGUE_ID,
     NAME_SYNC_GLOBAL_ONLY_USERNAME,
+    NAME_SYNC_NO_NAME_USERNAME,
     NAME_SYNC_USERNAME,
     TEST_LEAGUE_NAME,
     TEST_ORG_NAME,
@@ -22,15 +23,19 @@ NAME_SYNC_USERS: Final[list[dict[str, Any]]] = [
     {
         "discord_id": "610000000000000001",
         "username": NAME_SYNC_USERNAME,
-        "nickname": "DragonSite",
         "global_name": "GwaihirTheWindlord",
         "guild_nickname": "DragonClaw",
     },
     {
         "discord_id": "610000000000000002",
         "username": NAME_SYNC_GLOBAL_ONLY_USERNAME,
-        "nickname": None,
         "global_name": "WindlordGlobal",
+        "guild_nickname": None,
+    },
+    {
+        "discord_id": "610000000000000003",
+        "username": NAME_SYNC_NO_NAME_USERNAME,
+        "global_name": None,
         "guild_nickname": None,
     },
 ]
@@ -149,7 +154,7 @@ def populate_organizations_and_leagues(force=False):
 
 
 def populate_discord_name_sync_users(force: bool = False) -> None:
-    """DTX-only users whose site nickname, Discord global name and server nickname differ."""
+    """DTX-only users whose Discord global name and server nickname differ, or are absent."""
     dtx_org = Organization.objects.get(name=DTX_ORG_NAME)
     for spec in NAME_SYNC_USERS:
         user = CustomUser.objects.filter(discordId=spec["discord_id"]).first()
@@ -166,8 +171,6 @@ def populate_discord_name_sync_users(force: bool = False) -> None:
                 }
             )
             user.save()
-        if user.nickname != spec["nickname"]:
-            user.nickname = spec["nickname"]
         if user.discordNickname != spec["global_name"]:
             user.discordNickname = spec["global_name"]
             user.save(update_fields=["discordNickname"])

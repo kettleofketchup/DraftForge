@@ -47,7 +47,7 @@ def _get_or_create_user(user_data: TestUser, force: bool) -> CustomUser:
     user = CustomUser(
         pk=user_data.pk,
         username=user_data.username,
-        nickname=user_data.nickname,
+        discordNickname=user_data.discord_global_name,
         discordId=user_data.discord_id,
         steamid=user_data.get_steam_id_64(),
         positions=positions,

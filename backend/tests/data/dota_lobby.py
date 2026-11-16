@@ -63,11 +63,11 @@ LOBBY_TOURNAMENT_NAMES = (
 LOBBY_STEAM_ACCOUNT_BASE = 307_000_000
 
 
-def _user(pk: int, username: str, nickname: str) -> TestUser:
+def _user(pk: int, username: str, discord_global_name: str) -> TestUser:
     return TestUser(
         pk=pk,
         username=username,
-        nickname=nickname,
+        discord_global_name=discord_global_name,
         discord_id=str(710_000_000_000_000_000 + pk),
         steam_id=LOBBY_STEAM_ACCOUNT_BASE + (pk - 7200),
     )

@@ -6,9 +6,12 @@ broken, would silently invalidate Playwright auth fixtures and event-staff
 permission specs.
 """
 
+import json
 from datetime import timedelta
+from pathlib import Path
 
 from django.contrib.sessions.backends.db import SessionStore
+from django.db import connection
 from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIRequestFactory
@@ -52,17 +55,28 @@ from tests.data.tournament_discovery import (
     DISCOVERY_HOME_ORG,
     DISCOVERY_OPEN_ORG,
 )
-from tests.data.users import AUTH_MATRIX_ORG_PROMOTER_USER, EVENT_LEAGUE_STAFF_USER
+from tests.data.users import (
+    AUTH_MATRIX_ORG_PROMOTER_USER,
+    CLAIMABLE_USER,
+    EVENT_LEAGUE_STAFF_USER,
+    EVENT_PLAYER_1,
+    ORG_ADMIN_USER,
+)
 from tests.helpers.tournament_config import TEST_TOURNAMENTS, populate_test_tournaments
 from tests.populate.auth_matrix import populate_auth_matrix_data
 from tests.populate.constants import (
     NAME_SYNC_GLOBAL_ONLY_USERNAME,
+    NAME_SYNC_NO_NAME_USERNAME,
     NAME_SYNC_USERNAME,
 )
+from tests.populate.csv_import import populate_csv_import_data
 from tests.populate.demo import (
     populate_demo_shuffle_draft_tournament,
     populate_demo_snake_draft_tournament,
 )
+from tests.populate.dota_lobby import populate_dota_lobby_data
+from tests.populate.events import populate_events_data
+from tests.populate.league_stats import populate_league_stats_data
 from tests.populate.org_delete import populate_org_delete
 from tests.populate.org_features import (
     populate_org_features_data,
@@ -74,8 +88,9 @@ from tests.populate.organizations import (
 )
 from tests.populate.shuffle_tie import populate_shuffle_tie_data
 from tests.populate.tournament_discovery import populate_tournament_discovery
+from tests.populate.user_edit import populate_user_edit_data
 from tests.populate.users import populate_test_auth_users, populate_users
-from tests.populate.utils import delete_ledger_for_users
+from tests.populate.utils import create_user, delete_ledger_for_users
 from tests.test_auth import login_auth_matrix_org_promoter, reset_tournament_by_key
 from tests.test_org_features import (
     login_org_features,
@@ -112,32 +127,43 @@ class EventLeagueStaffIsolationTest(TestCase):
         assert user not in org.admins.all(), "MUST NOT be admin of org 7"
 
 
+DISCORD_USERS_JSON = Path(__file__).parent / "data" / "discord_users.json"
+VORPAL_DISCORD_ID = "284829273590857728"
+
+
+def raw_site_nicknames_set() -> int:
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT COUNT(*) FROM user_baseuserprofile WHERE nickname IS NOT NULL"
+        )
+        return cursor.fetchone()[0]
+
+
 class DiscordNameSyncPopulateTest(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         cls.dtx_org, _ = populate_organizations_and_leagues(force=True)
         populate_discord_name_sync_users(force=True)
 
+    def _membership(self, user: CustomUser) -> OrgUser:
+        return OrgUser.objects.nocache().get(user=user, organization=self.dtx_org)
+
     def _assert_seeded(self) -> None:
         dragon = CustomUser.objects.nocache().get(username=NAME_SYNC_USERNAME)
-        self.assertEqual(dragon.nickname, "DragonSite")
         self.assertEqual(dragon.discordNickname, "GwaihirTheWindlord")
-        dragon_membership = OrgUser.objects.nocache().get(
-            user=dragon, organization=self.dtx_org
-        )
-        self.assertEqual(dragon_membership.guild_nickname, "DragonClaw")
+        self.assertEqual(self._membership(dragon).guild_nickname, "DragonClaw")
 
         global_only = CustomUser.objects.nocache().get(
             username=NAME_SYNC_GLOBAL_ONLY_USERNAME
         )
-        self.assertIsNone(global_only.nickname)
         self.assertEqual(global_only.discordNickname, "WindlordGlobal")
-        global_membership = OrgUser.objects.nocache().get(
-            user=global_only, organization=self.dtx_org
-        )
-        self.assertIsNone(global_membership.guild_nickname)
+        self.assertIsNone(self._membership(global_only).guild_nickname)
 
-        for user in (dragon, global_only):
+        no_name = CustomUser.objects.nocache().get(username=NAME_SYNC_NO_NAME_USERNAME)
+        self.assertIsNone(no_name.discordNickname)
+        self.assertIsNone(self._membership(no_name).guild_nickname)
+
+        for user in (dragon, global_only, no_name):
             self.assertEqual(
                 list(
                     OrgUser.objects.nocache()
@@ -146,6 +172,7 @@ class DiscordNameSyncPopulateTest(TestCase):
                 ),
                 [self.dtx_org.pk],
             )
+        self.assertEqual(raw_site_nicknames_set(), 0)
 
     def test_seeds_users_with_distinct_discord_and_server_names(self) -> None:
         self._assert_seeded()
@@ -158,6 +185,74 @@ class DiscordNameSyncPopulateTest(TestCase):
         self.assertEqual(CustomUser.objects.nocache().count(), users_before)
         self.assertEqual(OrgUser.objects.nocache().count(), org_users_before)
         self._assert_seeded()
+
+
+class DiscordFixtureServerNicknameTest(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.dtx_org, _ = populate_organizations_and_leagues(force=True)
+        with DISCORD_USERS_JSON.open(encoding="utf-8") as f:
+            cls.vorpal = json.load(f)[VORPAL_DISCORD_ID]
+
+    def _guild_nickname(self) -> str | None:
+        return (
+            OrgUser.objects.nocache()
+            .get(user__discordId=VORPAL_DISCORD_ID, organization=self.dtx_org)
+            .guild_nickname
+        )
+
+    def test_member_nick_becomes_dtx_server_nickname(self) -> None:
+        user = create_user(self.vorpal, organization=self.dtx_org)
+        self.assertEqual(self._guild_nickname(), "Vorpal")
+        self.assertEqual(
+            CustomUser.objects.nocache().get(pk=user.pk).discordNickname, "Dankus"
+        )
+        self.assertEqual(raw_site_nicknames_set(), 0)
+
+    def test_existing_user_gets_changed_nick(self) -> None:
+        create_user(self.vorpal, organization=self.dtx_org)
+        create_user({**self.vorpal, "nick": "Vorpal2"}, organization=self.dtx_org)
+        self.assertEqual(self._guild_nickname(), "Vorpal2")
+
+    def test_blank_nick_is_stored_as_none(self) -> None:
+        create_user({**self.vorpal, "nick": "   "}, organization=self.dtx_org)
+        self.assertIsNone(self._guild_nickname())
+
+
+class PopulatedUsersCarryDiscordNamesTest(TestCase):
+    @classmethod
+    @override_settings(DISCORD_BOT_TOKEN=None, DEBUG=True)
+    def setUpTestData(cls) -> None:
+        populate_organizations_and_leagues(force=True)
+        populate_org_delete(force=True)
+        populate_users(force=True)
+        populate_test_auth_users(force=True)
+        populate_csv_import_data(force=True)
+        populate_user_edit_data(force=True)
+        populate_shuffle_tie_data(force=True)
+        populate_events_data(force=True)
+        populate_league_stats_data(force=True)
+        populate_org_features_data(force=True)
+        populate_dota_lobby_data(force=True)
+        populate_tournament_discovery(force=True)
+        populate_discord_name_sync_users(force=True)
+
+    def test_no_populated_user_has_a_site_nickname(self) -> None:
+        self.assertEqual(raw_site_nicknames_set(), 0)
+
+    def test_fixture_global_name_lands_on_discord_nickname(self) -> None:
+        for data in (ORG_ADMIN_USER, EVENT_PLAYER_1, ORG_FEATURES_PLAYERS[0]):
+            self.assertIsNotNone(data.discord_global_name)
+            self.assertEqual(
+                CustomUser.objects.nocache().get(pk=data.pk).discordNickname,
+                data.discord_global_name,
+                data.username,
+            )
+
+    def test_claimable_profile_has_no_discord_name(self) -> None:
+        claimable = CustomUser.objects.nocache().get(pk=CLAIMABLE_USER.pk)
+        self.assertIsNone(claimable.discordNickname)
+        self.assertIsNone(claimable.discordId)
 
 
 class PopulateBuiltDraftsAreUntimedTest(TestCase):

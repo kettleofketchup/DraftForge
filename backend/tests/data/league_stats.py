@@ -19,11 +19,11 @@ class StripStatsPlayer(BaseModel):
     captain: bool = False
 
 
-def _user(pk: int, username: str, nickname: str) -> TestUser:
+def _user(pk: int, username: str, discord_global_name: str) -> TestUser:
     return TestUser(
         pk=pk,
         username=username,
-        nickname=nickname,
+        discord_global_name=discord_global_name,
         discord_id=f"72000000000000{pk}",
         steam_id_64=76561199072000000 + pk,
     )

@@ -223,7 +223,7 @@ def createClaimableTestUser() -> tuple[CustomUser, bool]:
     - NO username (null) - uses steamid as unique identifier
     - NO Discord ID (cannot log in)
     - HAS Steam ID (the unique identifier for this profile)
-    - HAS nickname (for display)
+    - NO Discord name (displays by steamid until claimed)
 
     This simulates a user manually added by an org admin with just their Steam ID.
     The claim feature allows a logged-in user to merge this profile into their own.
@@ -242,7 +242,6 @@ def createClaimableTestUser() -> tuple[CustomUser, bool]:
         discordId=CLAIMABLE_USER.discord_id,  # None
         discordUsername=None,
         steamid=CLAIMABLE_USER.get_steam_id_64(),
-        nickname=CLAIMABLE_USER.nickname or "Claimable Profile",
     )
     user.set_unusable_password()
     user.save()
@@ -276,7 +275,7 @@ def createUserClaimerTestUser() -> tuple[CustomUser, bool]:
         username=USER_CLAIMER.username,
         discordId=USER_CLAIMER.discord_id,
         discordUsername=USER_CLAIMER.username,
-        nickname=USER_CLAIMER.nickname or "User Claimer",
+        discordNickname=USER_CLAIMER.discord_global_name,
         steamid=USER_CLAIMER.get_steam_id_64(),  # None
     )
     user.set_password("cypress")
@@ -306,7 +305,7 @@ def createOrgAdminTestUser() -> tuple[CustomUser, bool]:
         username=ORG_ADMIN_USER.username,
         discordId=ORG_ADMIN_USER.discord_id,
         discordUsername=ORG_ADMIN_USER.username,
-        nickname=ORG_ADMIN_USER.nickname or "Org Admin Tester",
+        discordNickname=ORG_ADMIN_USER.discord_global_name,
         steamid=ORG_ADMIN_USER.get_steam_id_64(),
     )
     user.set_password("cypress")
@@ -334,7 +333,7 @@ def createOrgMemberTestUser() -> tuple[CustomUser, bool]:
         username=ORG_MEMBER_USER.username,
         discordId=ORG_MEMBER_USER.discord_id,
         discordUsername=ORG_MEMBER_USER.username,
-        nickname=ORG_MEMBER_USER.nickname or "Org Member Tester",
+        discordNickname=ORG_MEMBER_USER.discord_global_name,
         steamid=ORG_MEMBER_USER.get_steam_id_64(),
     )
     user.set_password("cypress")
@@ -364,7 +363,7 @@ def createOrgStaffTestUser() -> tuple[CustomUser, bool]:
         username=ORG_STAFF_USER.username,
         discordId=ORG_STAFF_USER.discord_id,
         discordUsername=ORG_STAFF_USER.username,
-        nickname=ORG_STAFF_USER.nickname or "Org Staff Tester",
+        discordNickname=ORG_STAFF_USER.discord_global_name,
         steamid=ORG_STAFF_USER.get_steam_id_64(),
     )
     user.set_password("cypress")
@@ -394,7 +393,7 @@ def createLeagueAdminTestUser() -> tuple[CustomUser, bool]:
         username=LEAGUE_ADMIN_USER.username,
         discordId=LEAGUE_ADMIN_USER.discord_id,
         discordUsername=LEAGUE_ADMIN_USER.username,
-        nickname=LEAGUE_ADMIN_USER.nickname or "League Admin Tester",
+        discordNickname=LEAGUE_ADMIN_USER.discord_global_name,
         steamid=LEAGUE_ADMIN_USER.get_steam_id_64(),
     )
     user.set_password("cypress")
@@ -424,7 +423,7 @@ def createLeagueStaffTestUser() -> tuple[CustomUser, bool]:
         username=LEAGUE_STAFF_USER.username,
         discordId=LEAGUE_STAFF_USER.discord_id,
         discordUsername=LEAGUE_STAFF_USER.username,
-        nickname=LEAGUE_STAFF_USER.nickname or "League Staff Tester",
+        discordNickname=LEAGUE_STAFF_USER.discord_global_name,
         steamid=LEAGUE_STAFF_USER.get_steam_id_64(),
     )
     user.set_password("cypress")
@@ -450,7 +449,7 @@ def _create_or_get_auth_matrix_user(user_data) -> tuple[CustomUser, bool]:
         username=user_data.username,
         discordId=user_data.discord_id,
         discordUsername=user_data.username,
-        nickname=user_data.nickname or user_data.username,
+        discordNickname=user_data.discord_global_name,
         steamid=user_data.get_steam_id_64(),
     )
     user.set_password("cypress")
@@ -1060,11 +1059,10 @@ def create_claimable_user(request):
     TEST ONLY: Create a user without Discord or Steam ID that can be claimed.
 
     This endpoint is used by Playwright tests to test the "Claim Profile" feature.
-    Creates a user with only username, nickname, and MMR - no discordId or steamid.
+    Creates a user with only username and MMR - no discordId or steamid.
 
     Request body (optional):
         username: str - Username for the user (default: generated)
-        nickname: str - Nickname for the user (default: generated)
         mmr: int - MMR value (default: random 2000-6000)
 
     Returns:
@@ -1079,13 +1077,11 @@ def create_claimable_user(request):
     # Generate unique identifiers if not provided
     unique_id = str(uuid.uuid4())[:8]
     username = request.data.get("username", f"claimable_{unique_id}")
-    nickname = request.data.get("nickname", f"Claimable User {unique_id}")
     mmr = request.data.get("mmr", random.randint(2000, 6000))
 
     # Create user without Discord or Steam
     user = CustomUser.objects.create(
         username=username,
-        nickname=nickname,
         discordId=None,
         discordUsername=None,
         steamid=None,
@@ -1237,7 +1233,6 @@ def create_claim_request(request):
         organization_id: int - Organization ID for the claim request
         claimer_username: str (optional) - Username for claimer (default: generated)
         target_steamid: int (optional) - Steam ID for target profile (default: generated)
-        target_nickname: str (optional) - Nickname for target profile
 
     Returns:
         201: Created claim request data
@@ -1265,14 +1260,13 @@ def create_claim_request(request):
     target_steamid = request.data.get(
         "target_steamid", random.randint(76561198000000000, 76561198999999999)
     )
-    target_nickname = request.data.get("target_nickname", f"Target Profile {unique_id}")
 
     # Create the claimer user (has Discord, no Steam)
     # Discord IDs are snowflakes (large integers)
     test_discord_id = str(random.randint(100000000000000000, 999999999999999999))
     claimer = CustomUser.objects.create(
         username=claimer_username,
-        nickname=claimer_username,
+        discordNickname=claimer_username,
         discordId=test_discord_id,
         discordUsername=claimer_username,
         steamid=None,
@@ -1283,7 +1277,6 @@ def create_claim_request(request):
     # Create the target user (has Steam, no Discord)
     target_user = CustomUser.objects.create(
         username=None,
-        nickname=target_nickname,
         discordId=None,
         steamid=target_steamid,
     )

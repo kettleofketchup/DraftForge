@@ -34,7 +34,7 @@ org = Organization.objects.create(
 # Create repeater (so Notify Me button shows)
 positions_admin = PositionsModel.objects.create()
 admin_user = CustomUser.objects.create(
-    username="forum_admin", nickname="ForumAdmin", positions=positions_admin
+    username="forum_admin", discordNickname="ForumAdmin", positions=positions_admin
 )
 repeater = EventRepeater.objects.create(
     organization=org,
@@ -74,20 +74,20 @@ event = Event.objects.create(
 # Create some test signups so the embed shows users
 positions1 = PositionsModel.objects.create()
 player1 = CustomUser.objects.create(
-    username="player_one", nickname="PlayerOne", positions=positions1
+    username="player_one", discordNickname="PlayerOne", positions=positions1
 )
 positions2 = PositionsModel.objects.create()
 player2 = CustomUser.objects.create(
-    username="player_two", nickname="PlayerTwo", positions=positions2
+    username="player_two", discordNickname="PlayerTwo", positions=positions2
 )
 
 positions3 = PositionsModel.objects.create()
 player3 = CustomUser.objects.create(
-    username="player_three", nickname="MaybeMike", positions=positions3
+    username="player_three", discordNickname="MaybeMike", positions=positions3
 )
 positions4 = PositionsModel.objects.create()
 player4 = CustomUser.objects.create(
-    username="player_four", nickname="DeclinedDave", positions=positions4
+    username="player_four", discordNickname="DeclinedDave", positions=positions4
 )
 
 signup1 = EventSignup.objects.create(
@@ -104,16 +104,16 @@ signup4 = EventSignup.objects.create(
 )
 positions5 = PositionsModel.objects.create()
 player5 = CustomUser.objects.create(
-    username="player_five", nickname="WaitingWendy", positions=positions5
+    username="player_five", discordNickname="WaitingWendy", positions=positions5
 )
 signup5 = EventSignup.objects.create(
     event=event, user=player5, status=SignupStatus.WAITLISTED, waitlist_position=1
 )
-print(f"Signup 1: {player1.nickname} - {signup1.status}")
-print(f"Signup 2: {player2.nickname} - {signup2.status}")
-print(f"Signup 3: {player3.nickname} - {signup3.status}")
-print(f"Signup 4: {player4.nickname} - {signup4.status}")
-print(f"Signup 5: {player5.nickname} - {signup5.status}")
+print(f"Signup 1: {player1.discordNickname} - {signup1.status}")
+print(f"Signup 2: {player2.discordNickname} - {signup2.status}")
+print(f"Signup 3: {player3.discordNickname} - {signup3.status}")
+print(f"Signup 4: {player4.discordNickname} - {signup4.status}")
+print(f"Signup 5: {player5.discordNickname} - {signup5.status}")
 print()
 
 # Send the announcement

@@ -129,7 +129,7 @@ def populate_test_auth_users(force=False):
         steam_account_id = (
             user_data.get_steam_account_id()
         )  # 32-bit Friend ID (Dotabuff)
-        nickname = user_data.nickname or username
+        discord_global_name = user_data.discord_global_name
         is_staff = user_data.is_staff
         is_superuser = user_data.is_superuser
         mmr = user_data.mmr or random.randint(2000, 6000)
@@ -143,11 +143,11 @@ def populate_test_auth_users(force=False):
             user.discordId = discord_id
             user.discordUsername = username
             user.steam_account_id = steam_account_id
-            user.nickname = nickname
+            user.discordNickname = discord_global_name
             user.is_staff = is_staff
             user.is_superuser = is_superuser
             user.save()
-            print(f"  Updated: {nickname or username} (pk={pk})")
+            print(f"  Updated: {discord_global_name or username} (pk={pk})")
         else:
             # Create new user with specific PK
             user = CustomUser(
@@ -156,7 +156,7 @@ def populate_test_auth_users(force=False):
                 discordId=discord_id,
                 discordUsername=username,
                 steam_account_id=steam_account_id,
-                nickname=nickname,
+                discordNickname=discord_global_name,
                 is_staff=is_staff,
                 is_superuser=is_superuser,
             )
@@ -165,7 +165,7 @@ def populate_test_auth_users(force=False):
             else:
                 user.set_password("cypress")
             user.save()
-            print(f"  Created: {nickname or username} (pk={pk})")
+            print(f"  Created: {discord_global_name or username} (pk={pk})")
 
         # Create social auth for users with Discord ID (so they can log in)
         if discord_id and not is_claimable:

@@ -107,7 +107,7 @@ def reset_csv_import(request):
         if existing:
             # Reset to original state
             existing.username = user_data.username
-            existing.nickname = user_data.nickname
+            existing.discordNickname = user_data.discord_global_name
             existing.discordId = user_data.discord_id
             existing.steam_account_id = user_data.get_steam_account_id()
             existing.save()
@@ -116,7 +116,7 @@ def reset_csv_import(request):
             user = CustomUser(
                 pk=user_data.pk,
                 username=user_data.username,
-                nickname=user_data.nickname,
+                discordNickname=user_data.discord_global_name,
                 discordId=user_data.discord_id,
                 steam_account_id=user_data.get_steam_account_id(),
                 positions=positions,
