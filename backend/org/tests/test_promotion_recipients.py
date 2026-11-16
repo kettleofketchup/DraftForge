@@ -444,12 +444,30 @@ class CandidatesTest(_PoolFixture):
         nick = self._user("nick_user")
         nick.nickname = "Zephyrion"
         guild = self._user("guild_user")
-        guild.guildNickname = "Quillfeather"
-        guild.save()
+        OrgUser.objects.create(
+            user=guild, organization=self.org, guild_nickname="Quillfeather"
+        )
         self._tournament([nick, guild], days_ago=2, league=self.league)
 
         self.assertEqual(set(self._rows_by_username(q="zephyr")), {"nick_user"})
         self.assertEqual(set(self._rows_by_username(q="quillfeather")), {"guild_user"})
+
+    def test_name_search_ignores_other_orgs_guild_nickname(self) -> None:
+        guild = self._user("guild_elsewhere")
+        OrgUser.objects.create(
+            user=guild, organization=self.other_org, guild_nickname="Quillfeather"
+        )
+        self._tournament([guild], days_ago=2, league=self.league)
+
+        self.assertEqual(set(self._rows_by_username(q="quillfeather")), set())
+
+    def test_name_search_global_name(self) -> None:
+        user = self._user("global_user")
+        user.discordNickname = "Windlord"
+        user.save()
+        self._tournament([user], days_ago=2, league=self.league)
+
+        self.assertEqual(set(self._rows_by_username(q="windlord")), {"global_user"})
 
     def test_ordered_by_recent_count(self) -> None:
         self._tournament([self.bob], days_ago=2, league=self.league)
