@@ -56,7 +56,7 @@ export function useBracketQuery(tournamentId: number | null) {
     refetchInterval: isDirty ? false : 5_000,
   });
 
-  // Seed Zustand store from query data (replaces bracketStore.loadBracket logic)
+  // Seed Zustand store from query data
   useEffect(() => {
     if (!query.data || isDirty) return;
 

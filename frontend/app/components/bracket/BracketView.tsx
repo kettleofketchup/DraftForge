@@ -62,7 +62,7 @@ interface BracketViewProps {
 // Layout constants
 const BRACKET_SECTION_GAP = 180;
 const NODE_WIDTH = 220;
-const NODE_HEIGHT = 120; // Increased for better spacing
+const NODE_HEIGHT = 120;
 const NODE_VERTICAL_GAP = 30; // Minimum gap between nodes
 const ROUND_HORIZONTAL_GAP = 180; // Gap between rounds
 
@@ -199,7 +199,7 @@ function BracketFlowInner({
   // Track the draftId to auto-open from deep link
   const [initialDraftId, setInitialDraftId] = useState<number | null>(null);
 
-  // Hero draft modal state (lifted from MatchStatsModal to allow independent modal)
+  // Hero draft modal state, independent of the match modal
   const [heroDraftId, setHeroDraftId] = useState<number | null>(null);
   const [showHeroDraftModal, setShowHeroDraftModal] = useState(false);
 
@@ -536,7 +536,7 @@ function BracketFlowInner({
         const containerHeight = 700;
         const contentHeight = maxY - minY + NODE_HEIGHT;
 
-        // Choose zoom level - fit vertically if needed, max 1.0
+        // Fit vertically, zoom clamped to 0.4-0.9
         const verticalZoom = containerHeight / (contentHeight + 100);
         const zoom = Math.min(0.9, Math.max(0.4, verticalZoom));
 

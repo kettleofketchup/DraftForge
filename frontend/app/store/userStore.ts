@@ -47,7 +47,7 @@ interface UserState {
   setDiscordUsers: (users: GuildMembers) => void;
   /** Global user pk array (resolved via useResolvedUsers hook) */
   globalUserPks: number[];
-  /** Upsert a user into the cache (replaces old array-based setUser) */
+  /** Upsert a user into the cache */
   setUser: (user: UserType) => void;
   /** Add a user to cache + global pk array */
   addUser: (user: UserType) => void;
@@ -479,7 +479,7 @@ export const useUserStore = create<UserState>()(
       },
     }),
     {
-      name: 'dtx-storage', // key in localStorage
+      name: 'dtx-storage', // sessionStorage key
       partialize: (state) => ({
         currentUser: state.currentUser,
       }),
@@ -491,8 +491,8 @@ export const useUserStore = create<UserState>()(
         }
         state?.setHasHydrated(true);
       },
-      storage: createJSONStorage(() => sessionStorage), // (optional) by default, 'localStorage' is used
-      skipHydration: false, // (optional) if you want to skip hydration
+      storage: createJSONStorage(() => sessionStorage),
+      skipHydration: false,
     },
   ),
 );
