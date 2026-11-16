@@ -5,6 +5,7 @@ import { DraftModal } from '~/components/teamdraft/draftModal';
 import { CaptainSelectionModal } from '~/components/tournament/captains/captainSelectionModal';
 
 import type { UserType } from '~/components/user/types';
+import { matchesUserQueryIn, useOrgNicknames } from '~/hooks/useOrgNicknames';
 import type { TeamType } from '~/index';
 import { hasErrors } from '~/pages/tournament/hasErrors';
 import { useUserStore } from '~/store/userStore';
@@ -13,6 +14,15 @@ import { RandomizeTeamsModal } from './teams/randomTeamsModal';
 export const TeamsTab: React.FC = memo(() => {
   const tournament = useUserStore((state) => state.tournament);
   const [query, setQuery] = useState('');
+  const orgId = tournament?.organization_pk ?? null;
+  const memberPks = useMemo(
+    () =>
+      (tournament.teams ?? []).flatMap((team: TeamType) =>
+        (team.members ?? []).map((user: UserType) => user.pk),
+      ),
+    [tournament.teams],
+  );
+  const nicknames = useOrgNicknames(memberPks, orgId);
 
   // Memoize filtered teams to prevent recalculation on every render
   const filteredTeams = useMemo(() => {
@@ -23,13 +33,9 @@ export const TeamsTab: React.FC = memo(() => {
     return tournament.teams
       .filter((team: TeamType) => {
         // Check if any user in the team matches the query
-        const userMatches = team.members?.some((user: UserType) => {
-          const usernameMatch = user.username?.toLowerCase().includes(q);
-          const discordNameMatch = user.discordNickname
-            ?.toLowerCase()
-            .includes(q);
-          return usernameMatch || discordNameMatch;
-        });
+        const userMatches = team.members?.some((user: UserType) =>
+          matchesUserQueryIn(user, query, orgId, nicknames),
+        );
 
         // Check if team name matches
         const teamNameMatch = team.name?.toLowerCase().includes(q);
@@ -37,7 +43,7 @@ export const TeamsTab: React.FC = memo(() => {
         return userMatches || teamNameMatch;
       })
       .sort((a: TeamType, b: TeamType) => a.name.localeCompare(b.name));
-  }, [tournament.teams, query]);
+  }, [tournament.teams, query, orgId, nicknames]);
   const teamButtonsView = () => {
     return (
       <div

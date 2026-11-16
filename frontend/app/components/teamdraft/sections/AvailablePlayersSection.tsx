@@ -17,6 +17,7 @@ import {
 } from '~/features/league-stats/filters';
 import { useLeaguePlayerSummaries } from '~/features/league-stats/queries';
 import { useDisplayOrgId } from '~/hooks/useDisplayOrgId';
+import { matchesUserQueryIn, useOrgNicknames } from '~/hooks/useOrgNicknames';
 import type { UserType } from '~/index';
 import { cn } from '~/lib/utils';
 import { selectPositions } from '~/store/selectPositions';
@@ -196,6 +197,8 @@ export const AvailablePlayersSection = memo(() => {
     }),
   );
 
+  const nicknames = useOrgNicknames(remainingPks, organizationPk);
+
   // Filter states
   const [searchQuery, setSearchQuery] = useState('');
   const [positionFilter, setPositionFilter] = useState<PositionFilter>('all');
@@ -264,11 +267,8 @@ export const AvailablePlayersSection = memo(() => {
 
     // Search filter
     if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      players = players.filter(
-        (user) =>
-          (user.username || '').toLowerCase().includes(query) ||
-          (user.discordNickname || '').toLowerCase().includes(query),
+      players = players.filter((user) =>
+        matchesUserQueryIn(user, searchQuery, organizationPk, nicknames),
       );
     }
 
@@ -319,6 +319,8 @@ export const AvailablePlayersSection = memo(() => {
     currentTeam,
     teams,
     positionsByPk,
+    organizationPk,
+    nicknames,
   ]);
 
   // Split players into columns (newspaper style)

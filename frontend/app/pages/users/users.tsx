@@ -4,6 +4,7 @@ import { SearchUserDropdown } from '~/components/user/searchUser';
 import { VirtualizedUserGrid } from '~/components/user/VirtualizedUserGrid';
 import { useDebouncedValue } from '~/hooks/useDebouncedValue';
 import { useResolvedUsers } from '~/hooks/useResolvedUsers';
+import { matchesUserQuery } from '~/lib/userDisplayName';
 import { useUserStore } from '~/store/userStore';
 
 /** Skeleton loader for user cards */
@@ -86,12 +87,7 @@ export function UsersPage() {
   // Filter users with debounced query - memoized for performance
   const filteredUsers = useMemo(() => {
     if (debouncedQuery === '') return users;
-    const q = debouncedQuery.toLowerCase();
-    return users.filter(
-      (person) =>
-        person.username?.toLowerCase().includes(q) ||
-        person.discordNickname?.toLowerCase().includes(q),
-    );
+    return users.filter((person) => matchesUserQuery(person, debouncedQuery));
   }, [users, debouncedQuery]);
 
   // Fetch users after hydration
