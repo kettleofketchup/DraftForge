@@ -173,6 +173,7 @@ export {
 export {
   SIMULATOR_SKIP_REASON,
   bracketNode,
+  clickAndPersistMatchResult,
   closeMatchModal,
   expectLobbyState,
   getDotaLobbyTestData,

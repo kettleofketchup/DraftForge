@@ -36,7 +36,8 @@ export function TournamentConfigSection({ control }: Props) {
                   Auto-create hero drafts
                 </FormLabel>
                 <FormDescription>
-                  Automatically create hero drafts for matches when both teams are assigned
+                  While the tournament is In Progress, create a hero draft for
+                  each match once both teams and their captains are set
                 </FormDescription>
               </div>
             </FormItem>

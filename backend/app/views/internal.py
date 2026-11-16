@@ -8,6 +8,8 @@ defers until commit when called inside @transaction.atomic.
 Field whitelists on update endpoints prevent unintended field modifications.
 """
 
+from datetime import timedelta
+
 from django.utils import timezone as tz
 from rest_framework import status
 from rest_framework.decorators import (
@@ -316,8 +318,6 @@ def get_sync_discord_state(request):
     Returns event IDs that have: signup posts, scheduled events, recent log attempts.
     Replaces 4 separate queries in sync_discord_events task.
     """
-    from datetime import timedelta
-
     from discordbot.models import (
         DiscordEvent,
         DiscordEventLog,
@@ -960,26 +960,38 @@ def get_match_participants(request, game_id):
 @api_view(["GET"])
 @authentication_classes(_auth)
 @permission_classes(_perm)
-def get_games_without_herodraft(request, tournament_id):
-    """Get games with both teams assigned but no hero draft."""
+def list_auto_herodraft_games(request: Request) -> Response:
+    """Games the auto-create sweep should draft, across every tournament.
+
+    The tournament has auto_create_hero_drafts on and is in_progress; both
+    teams are assigned, both have a captain, and the game has no hero draft yet.
+    """
     from app.models import Game
 
-    games = Game.objects.filter(
-        tournament_id=tournament_id,
-        radiant_team__isnull=False,
-        dire_team__isnull=False,
-        herodraft__isnull=True,
-    ).select_related("radiant_team", "dire_team")
+    games = (
+        Game.objects.nocache()
+        .filter(
+            tournament__auto_create_hero_drafts=True,
+            tournament__state="in_progress",
+            radiant_team__captain__isnull=False,
+            dire_team__captain__isnull=False,
+            herodraft__isnull=True,
+        )
+        .select_related("tournament", "radiant_team", "dire_team")
+        .order_by("pk")
+    )
     return Response(
         [
             {
                 "id": g.pk,
+                "tournament_id": g.tournament_id,
+                "discord_send_herodraft_link": g.tournament.discord_send_herodraft_link,
                 "radiant_team_id": g.radiant_team_id,
                 "radiant_team_name": g.radiant_team.name,
                 "dire_team_id": g.dire_team_id,
                 "dire_team_name": g.dire_team.name,
                 "round": g.round,
-                "has_captains": bool(g.radiant_team.captain and g.dire_team.captain),
+                "has_captains": True,
             }
             for g in games
         ]
@@ -1236,7 +1248,6 @@ def sweep_stale_discord_leases(request):
 
     Returns {pending_swept, failed_swept, total}.
     """
-    from datetime import timedelta
 
     from discordbot.models import DiscordMessageLog
 

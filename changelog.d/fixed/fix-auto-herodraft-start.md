@@ -1,0 +1,1 @@
+- Auto-create hero drafts now works for any tournament set to In Progress with the setting on, not only ones started from an event. Turning it on mid-tournament, or back on after turning it off, takes effect within about 10 seconds.

@@ -10,10 +10,14 @@ Config:
 """
 
 import os
+from typing import TYPE_CHECKING
 
 import requests
 
 from telemetry.logging import get_logger
+
+if TYPE_CHECKING:
+    from app.schemas import AutoHeroDraftGameSchema
 
 logger = get_logger(__name__)
 log = get_logger("app.internal_client")
@@ -545,13 +549,13 @@ def get_match_participants(game_id):
     return []
 
 
-def get_games_without_herodraft(tournament_id):
-    """Get games needing hero drafts. Returns list of GameWithoutHeroDraft."""
-    from app.schemas import GameWithoutHeroDraftSchema
+def get_auto_herodraft_games() -> list["AutoHeroDraftGameSchema"]:
+    """Games ready for an auto-created hero draft. Returns list of AutoHeroDraftGame."""
+    from app.schemas import AutoHeroDraftGameSchema
 
-    resp = _get(f"/tournaments/{tournament_id}/games-without-herodraft/")
+    resp = _get("/tournaments/auto-herodraft-games/")
     if resp and resp.ok:
-        return [GameWithoutHeroDraftSchema.model_validate(g) for g in resp.json()]
+        return [AutoHeroDraftGameSchema.model_validate(g) for g in resp.json()]
     return []
 
 

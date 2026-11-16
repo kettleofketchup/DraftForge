@@ -43,18 +43,3 @@ def notify_herodraft_created(tournament, herodraft, game):
         subsystem="dispatch",
         tournament_id=tournament.pk,
     )
-
-
-def start_auto_create_herodrafts(tournament):
-    """Start the auto-create polling task if enabled."""
-    if not tournament.auto_create_hero_drafts:
-        return
-    from events.tournament_tasks import auto_create_herodrafts
-
-    auto_create_herodrafts.delay(tournament.pk)
-    logger.info(
-        "herodraft_auto_create_started",
-        system="events",
-        subsystem="dispatch",
-        tournament_id=tournament.pk,
-    )

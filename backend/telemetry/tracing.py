@@ -8,11 +8,12 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     import requests
+    from django.http import HttpRequest, HttpResponse
+    from opentelemetry.trace import Span
 
 # Use stdlib logging for bootstrap messages
 _log = logging.getLogger("telemetry.tracing")
 
-# Track initialization state
 _tracing_initialized = False
 _log_export_initialized = False
 _log_provider = None
@@ -206,18 +207,26 @@ def _setup_provider(resource, provider, endpoint, header_dict, sample_rate) -> N
     try:
         from opentelemetry.instrumentation.django import DjangoInstrumentor
 
-        def _request_hook(span, request):
+        from telemetry.otel_django import OTEL_MIDDLEWARE_PATH
+
+        def _request_hook(span: "Span", request: "HttpRequest") -> None:
             """Inject request ID into OTel span for correlation with structlog."""
             request_id = request.META.get("HTTP_X_REQUEST_ID", "")
             if request_id:
                 span.set_attribute("http.request.id", request_id)
 
-        def _response_hook(span, request, response):
-            """Inject user ID into OTel span (AuthenticationMiddleware has run by now)."""
-            if hasattr(request, "user") and request.user.is_authenticated:
-                span.set_attribute("enduser.id", str(request.user.pk))
+        def _response_hook(
+            span: "Span", request: "HttpRequest", response: "HttpResponse"
+        ) -> None:
+            """Inject user ID into OTel span (TelemetryMiddleware has resolved request.user)."""
+            # Only the cached user: this can run on the event loop, where a lazy DB load is not allowed.
+            user = getattr(request, "_cached_user", None)
+            if user is not None and user.is_authenticated:
+                span.set_attribute("enduser.id", str(user.pk))
 
-        DjangoInstrumentor().instrument(
+        instrumentor = DjangoInstrumentor()
+        instrumentor._opentelemetry_middleware = OTEL_MIDDLEWARE_PATH
+        instrumentor.instrument(
             request_hook=_request_hook,
             response_hook=_response_hook,
             excluded_urls="health,ready,metrics",
@@ -331,7 +340,10 @@ def init_log_export():
         from opentelemetry._logs import set_logger_provider
         from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
         from opentelemetry.sdk._logs import LoggerProvider
-        from opentelemetry.sdk._logs.export import BatchLogRecordProcessor, LogExportResult
+        from opentelemetry.sdk._logs.export import (
+            BatchLogRecordProcessor,
+            LogExportResult,
+        )
 
         # SDK 1.20.0 only accepts 200/202; Grafana Cloud returns 204.
         # Accept all 2xx until we upgrade to a version that handles this.
@@ -339,13 +351,17 @@ def init_log_export():
             def export(self, batch):
                 if self._shutdown:
                     return LogExportResult.FAILURE
-                from opentelemetry.exporter.otlp.proto.common._log_encoder import encode_logs
+                from opentelemetry.exporter.otlp.proto.common._log_encoder import (
+                    encode_logs,
+                )
 
                 serialized_data = encode_logs(batch).SerializeToString()
                 resp = self._export(serialized_data)
                 if 200 <= resp.status_code < 300:
                     return LogExportResult.SUCCESS
-                _log.warning("OTLP log export failed: %s %s", resp.status_code, resp.reason)
+                _log.warning(
+                    "OTLP log export failed: %s %s", resp.status_code, resp.reason
+                )
                 return LogExportResult.FAILURE
 
         _log_provider = LoggerProvider(resource=_build_resource())

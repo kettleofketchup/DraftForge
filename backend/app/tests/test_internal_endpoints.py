@@ -466,3 +466,69 @@ class TournamentParticipantsEndpointTest(TestCase):
         resp = self._get()
         captain_rows = [p for p in resp.json() if p["discord_id"] == "1001"]
         self.assertEqual(len(captain_rows), 1)
+
+
+@override_settings(INTERNAL_SERVICE_TOKEN=TOKEN)
+class AutoHeroDraftGamesEndpointTest(TestCase):
+    """list_auto_herodraft_games returns every game the sweep should draft."""
+
+    URL = "/api/internal/tournaments/auto-herodraft-games/"
+
+    def setUp(self) -> None:
+        from datetime import date
+
+        from app.models import CustomUser, Game, Team, Tournament
+
+        self.client = APIClient()
+        self.client.credentials(**HEADERS)
+        self.n = 0
+
+        def team(tournament: Tournament, captain: bool = True) -> Team:
+            self.n += 1
+            cap = (
+                CustomUser.objects.create_user(username=f"cap{self.n}", password="pw")
+                if captain
+                else None
+            )
+            return Team.objects.create(
+                name=f"T{self.n}", captain=cap, tournament=tournament
+            )
+
+        def tournament(**kwargs: object) -> Tournament:
+            return Tournament.objects.create(
+                name="T", date_played=date.today(), **kwargs
+            )
+
+        def game(t: Tournament, radiant: Team | None, dire: Team | None) -> Game:
+            return Game.objects.create(
+                tournament=t, radiant_team=radiant, dire_team=dire
+            )
+
+        self.on = tournament(auto_create_hero_drafts=True, state="in_progress")
+        self.ready = game(self.on, team(self.on), team(self.on))
+        self.one_team = game(self.on, team(self.on), None)
+        self.no_captain = game(self.on, team(self.on), team(self.on, captain=False))
+
+        off = tournament(auto_create_hero_drafts=False, state="in_progress")
+        self.flag_off = game(off, team(off), team(off))
+
+        future = tournament(auto_create_hero_drafts=True, state="future")
+        self.not_started = game(future, team(future), team(future))
+
+        past = tournament(auto_create_hero_drafts=True, state="past")
+        self.past = game(past, team(past), team(past))
+
+        drafted_t = tournament(auto_create_hero_drafts=True, state="in_progress")
+        self.drafted = game(drafted_t, team(drafted_t), team(drafted_t))
+        self.client.post(f"/api/internal/games/{self.drafted.pk}/create-herodraft/", {})
+
+    def test_returns_only_games_ready_for_a_draft(self) -> None:
+        resp = self.client.get(self.URL)
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual([g["id"] for g in resp.json()], [self.ready.pk])
+
+    def test_row_carries_tournament_and_link_flag(self) -> None:
+        row = self.client.get(self.URL).json()[0]
+        self.assertEqual(row["tournament_id"], self.on.pk)
+        self.assertTrue(row["discord_send_herodraft_link"])
+        self.assertTrue(row["has_captains"])
