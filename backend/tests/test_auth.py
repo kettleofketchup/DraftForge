@@ -223,7 +223,7 @@ def createClaimableTestUser() -> tuple[CustomUser, bool]:
     - NO username (null) - uses steamid as unique identifier
     - NO Discord ID (cannot log in)
     - HAS Steam ID (the unique identifier for this profile)
-    - NO Discord name (displays by steamid until claimed)
+    - NO Discord name (displays as "User <pk>" until claimed)
 
     This simulates a user manually added by an org admin with just their Steam ID.
     The claim feature allows a logged-in user to merge this profile into their own.

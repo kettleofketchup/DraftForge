@@ -3,7 +3,7 @@ import { TickEnvelopeSchema } from '~/lib/draftClock';
 
 export const DraftTeamCaptainSchema = z.object({
   pk: z.number(), // Backend uses 'pk' not 'id'
-  // Steam-only signups have no username; DisplayName falls back to the Discord names.
+  // Steam-only signups have no username; DisplayName falls back to the Discord name or `User <pk>`.
   username: z.string().nullable(),
   discordNickname: z.string().nullable().optional(),
   guildNickname: z.string().nullable().optional(),

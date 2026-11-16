@@ -13,8 +13,8 @@ type UserLike =
   | {
       pk?: number;
       // Username can be null for Steam-only signups (CustomUser.username is
-      // null=True at the model level). DisplayName already falls back to
-      // discordNickname / '?'.
+      // null=True at the model level). DisplayName falls back to
+      // discordNickname, then `User <pk>`.
       username?: string | null;
       discordNickname?: string | null;
       avatar?: string | null;
