@@ -4,12 +4,6 @@ import type {
   ActivityViewEvent,
 } from '~/lib/activity-types';
 
-declare module 'axios' {
-  interface AxiosRequestConfig {
-    skipActivityErrorHandling?: boolean;
-  }
-}
-
 export async function fetchActivityDrafts(): Promise<ActivityDraftList> {
   const { data } = await api.get<ActivityDraftList>(
     '/discord/activity/drafts/',
