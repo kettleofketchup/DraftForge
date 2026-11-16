@@ -449,6 +449,10 @@ from user.internal.avatar import (
     list_discord_guild_ids,
     list_discord_linked_users,
 )
+from user.internal.discord_names import (
+    bulk_update_member_names,
+    list_discord_name_sync_targets,
+)
 
 urlpatterns += [
     path("api/internal/discord/message-log/", create_discord_message_log),
@@ -532,6 +536,16 @@ urlpatterns += [
         "api/internal/users/avatars/bulk-update/",
         bulk_update_user_avatars,
         name="internal_bulk_update_user_avatars",
+    ),
+    path(
+        "api/internal/orgs/discord-name-sync-targets/",
+        list_discord_name_sync_targets,
+        name="internal_discord_name_sync_targets",
+    ),
+    path(
+        "api/internal/discord/member-names/bulk-update/",
+        bulk_update_member_names,
+        name="internal_discord_member_names_bulk_update",
     ),
     # Discord lease sweeper (worker → backend via internal_client)
     path(

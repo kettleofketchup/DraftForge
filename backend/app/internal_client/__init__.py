@@ -631,6 +631,64 @@ def bulk_update_user_avatars(updates):
         return 0
 
 
+# ---- Discord name sync (used by app/tasks/discord_name_sync.py) ----
+
+
+def list_discord_name_sync_targets(
+    *, scope: str = "active", org_id: int | None = None, lock: bool = True
+) -> list[dict]:
+    params: dict[str, object] = {"scope": scope}
+    if org_id is not None:
+        params["org_id"] = org_id
+    if lock:
+        params["lock"] = 1
+    resp = _get("/orgs/discord-name-sync-targets/", params=params)
+    if resp is None or not resp.ok:
+        return []
+    try:
+        return resp.json()
+    except ValueError:
+        logger.error(
+            "discord_name_sync_targets_invalid_json",
+            system="internal_client",
+            subsystem="http",
+            body_excerpt=resp.text[:200],
+        )
+        return []
+
+
+def bulk_update_member_names(
+    guild_id: str,
+    org_ids: list[int],
+    members: list[dict],
+    *,
+    complete: bool,
+    fetched_at: float | None,
+) -> dict | None:
+    resp = _post(
+        "/discord/member-names/bulk-update/",
+        {
+            "guild_id": guild_id,
+            "org_ids": org_ids,
+            "complete": complete,
+            "fetched_at": fetched_at,
+            "members": members,
+        },
+    )
+    if resp is None or not resp.ok:
+        return None
+    try:
+        return resp.json()
+    except ValueError:
+        logger.error(
+            "discord_member_names_bulk_update_invalid_json",
+            system="internal_client",
+            subsystem="http",
+            body_excerpt=resp.text[:200],
+        )
+        return None
+
+
 # ---- Discord lease sweeper (used by discordbot/tasks.py) ----
 
 
