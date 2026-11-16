@@ -138,6 +138,7 @@ export {
 export {
   editUserField,
   fillEditField,
+  nextSteamAccountId,
   openEditModal,
   readEditField,
   readPositionField,

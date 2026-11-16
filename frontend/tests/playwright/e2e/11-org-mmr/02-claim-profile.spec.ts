@@ -5,7 +5,8 @@
  * (e.g., by an org admin adding a user with just their Steam ID).
  *
  * Test users:
- * - claimable_profile (pk=1010): HAS Friend ID, NO Discord ID, NO username
+ * - claimable_profile (pk=1010): HAS Friend ID, NO Discord ID, NO username, NO
+ *   Discord name — it displays (and is searched) as "User 1010"
  * - user_claimer (pk=1011): HAS Discord ID, NO Friend ID (can claim profiles)
  *
  * Claim button logic:
@@ -20,17 +21,26 @@ interface ClaimableUser {
   username: string | null;
   steam_account_id: number | null;
   discordId: string | null;
-  nickname: string | null;
 }
 
+const CLAIMABLE_PK = 1010;
+const CLAIMABLE_LABEL = `User ${CLAIMABLE_PK}`;
+
 /** Fetch claimable user from the API by known attributes */
-async function getClaimableUser(
-  context: { request: { get: (url: string) => Promise<{ ok: () => boolean; json: () => Promise<unknown> }> } }
-): Promise<ClaimableUser | null> {
+async function getClaimableUser(context: {
+  request: {
+    get: (
+      url: string,
+    ) => Promise<{ ok: () => boolean; json: () => Promise<unknown> }>;
+  };
+}): Promise<ClaimableUser | null> {
   const response = await context.request.get(`${API_URL}/users/`);
   if (!response.ok()) return null;
   const users = (await response.json()) as ClaimableUser[];
-  return users.find(u => u.nickname === 'Claimable Profile' || u.steam_account_id === 76561198099999999) ?? null;
+  return (
+    users.find((u) => u.pk === CLAIMABLE_PK && u.steam_account_id !== null) ??
+    null
+  );
 }
 
 /** Navigate to /users and wait for user cards to fully render */
@@ -42,7 +52,10 @@ async function goToUsersPage(page: import('@playwright/test').Page) {
 }
 
 /** Search for a user by name and wait for results to settle */
-async function searchForUser(page: import('@playwright/test').Page, query: string) {
+async function searchForUser(
+  page: import('@playwright/test').Page,
+  query: string,
+) {
   const searchInput = page.getByTestId('userSearchInput');
   await searchInput.fill(query);
   // Wait for debounce (300ms) + filter + re-render to settle
@@ -64,7 +77,7 @@ test.describe('Claim Profile Feature', () => {
     expect(claimable!.discordId).toBeNull();
 
     await goToUsersPage(page);
-    await searchForUser(page, 'Claimable Profile');
+    await searchForUser(page, CLAIMABLE_LABEL);
 
     // Claim button should be visible — currentUser has discordId, target has no discordId
     const claimBtn = page.getByTestId(`claim-profile-btn-${claimable!.pk}`);
@@ -79,12 +92,16 @@ test.describe('Claim Profile Feature', () => {
     await loginAdmin();
 
     // Find any user WITH Discord ID (who isn't the admin)
-    const currentUserResp = await context.request.get(`${API_URL}/current_user`);
+    const currentUserResp = await context.request.get(
+      `${API_URL}/current_user`,
+    );
     const currentUser = (await currentUserResp.json()) as { pk: number };
 
     const usersResp = await context.request.get(`${API_URL}/users/`);
     const users = (await usersResp.json()) as ClaimableUser[];
-    const userWithDiscord = users.find(u => u.discordId !== null && u.pk !== currentUser.pk);
+    const userWithDiscord = users.find(
+      (u) => u.discordId !== null && u.pk !== currentUser.pk,
+    );
 
     if (!userWithDiscord) {
       test.skip(true, 'No other user with Discord ID found');
@@ -97,7 +114,9 @@ test.describe('Claim Profile Feature', () => {
     }
 
     // Claim button should NOT be visible — target already has Discord ID
-    const claimBtn = page.getByTestId(`claim-profile-btn-${userWithDiscord.pk}`);
+    const claimBtn = page.getByTestId(
+      `claim-profile-btn-${userWithDiscord.pk}`,
+    );
     await expect(claimBtn).not.toBeVisible({ timeout: 2000 });
   });
 
@@ -115,7 +134,7 @@ test.describe('Claim Profile Feature', () => {
     await loginUser();
 
     await goToUsersPage(page);
-    await searchForUser(page, 'Claimable');
+    await searchForUser(page, CLAIMABLE_LABEL);
 
     // Regular user with Discord ID should see claim button(s)
     const anyClaimBtn = page.locator('[data-testid^="claim-profile-btn-"]');
@@ -141,7 +160,7 @@ test.describe('Claim Profile Feature', () => {
     }
 
     await goToUsersPage(page);
-    await searchForUser(page, 'Claimable Profile');
+    await searchForUser(page, CLAIMABLE_LABEL);
 
     // Wait for claim button and click to open PlayerModal
     const claimBtn = page.getByTestId(`claim-profile-btn-${claimable.pk}`);
@@ -156,7 +175,9 @@ test.describe('Claim Profile Feature', () => {
     }
     await expect(modal).toBeVisible({ timeout: 5000 });
 
-    const claimBtnInModal = page.getByTestId(`claim-profile-modal-btn-${claimable.pk}`);
+    const claimBtnInModal = page.getByTestId(
+      `claim-profile-modal-btn-${claimable.pk}`,
+    );
     await expect(claimBtnInModal).toBeVisible({ timeout: 5000 });
   });
 });

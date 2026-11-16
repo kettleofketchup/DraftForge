@@ -25,8 +25,8 @@
  * and restored in a finally so the row survives even if assertions fail.
  */
 
-import { test, expect } from '../../fixtures';
 import type { Page } from '@playwright/test';
+import { expect, test } from '../../fixtures';
 
 // edit_user_positions — see EDIT_USER_USERS in backend/tests/data/users.py.
 const EDIT_USER_POSITIONS_PK = 2057;
@@ -49,7 +49,9 @@ async function openDotaTab(page: Page): Promise<void> {
   const openDialog = page.getByRole('dialog');
   if (await openDialog.isVisible().catch(() => false)) {
     await page.keyboard.press('Escape');
-    await expect(openDialog).toBeHidden({ timeout: 5_000 }).catch(() => {});
+    await expect(openDialog)
+      .toBeHidden({ timeout: 5_000 })
+      .catch(() => {});
   }
 
   const editTrigger = page.locator('[data-testid="edit-user-btn"]').first();
@@ -60,16 +62,21 @@ async function openDotaTab(page: Page): Promise<void> {
   await expect(dotaTab).toBeVisible({ timeout: 5_000 });
   await dotaTab.click();
 
-  await expect(page.locator('[data-testid="edit-user-dota-save"]')).toBeVisible({
-    timeout: 5_000,
-  });
+  await expect(page.locator('[data-testid="edit-user-dota-save"]')).toBeVisible(
+    {
+      timeout: 5_000,
+    },
+  );
 }
 
 /**
  * Read the rendered text of a PositionFormFields `position-choice-<role>`
  * SelectTrigger (the visible 0–5 preference label, or the placeholder).
  */
-async function readDotaPosition(page: Page, role: PositionRole): Promise<string> {
+async function readDotaPosition(
+  page: Page,
+  role: PositionRole,
+): Promise<string> {
   const trigger = page.locator(`[data-testid="position-choice-${role}"]`);
   await expect(trigger).toBeVisible({ timeout: 5_000 });
   return (await trigger.innerText()).trim();
@@ -90,13 +97,17 @@ async function setDotaPosition(
   await trigger.scrollIntoViewIfNeeded();
   await trigger.focus();
   await page.keyboard.press('Enter');
-  await expect(trigger).toHaveAttribute('data-state', 'open', { timeout: 5_000 });
+  await expect(trigger).toHaveAttribute('data-state', 'open', {
+    timeout: 5_000,
+  });
   // Options render as "1: Favorite", "5: Least Favorite", etc. (PositionChoiceEnum).
   await page
     .getByRole('option')
     .filter({ hasText: new RegExp(`^${value}: `) })
     .click();
-  await expect(trigger).toHaveAttribute('data-state', 'closed', { timeout: 5_000 });
+  await expect(trigger).toHaveAttribute('data-state', 'closed', {
+    timeout: 5_000,
+  });
 }
 
 test.describe('Edit Profile — Dota tab positions (new layered modal)', () => {
@@ -112,7 +123,7 @@ test.describe('Edit Profile — Dota tab positions (new layered modal)', () => {
 
     // /profile redirects to /user/<currentUserPk>; wait for the header.
     await expect(
-      page.locator('[data-testid="user-card-nickname"]').first(),
+      page.locator('[data-testid="user-card-display-name"]').first(),
     ).toBeVisible({ timeout: 15_000 });
 
     // Capture the ORIGINAL carry value first so we can restore it later.
@@ -192,7 +203,7 @@ test.describe('Edit Profile — Dota tab positions (new layered modal)', () => {
     await page.goto('/profile');
 
     await expect(
-      page.locator('[data-testid="user-card-nickname"]').first(),
+      page.locator('[data-testid="user-card-display-name"]').first(),
     ).toBeVisible({ timeout: 15_000 });
 
     await openDotaTab(page);

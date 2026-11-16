@@ -17,16 +17,17 @@
  *      undefined and the Profile Details row would not appear.
  */
 
-import { API_URL } from '../../fixtures/base-url';
 import {
-  test,
   expect,
-  loginAdmin as loginAdminContext,
-  visitAndWaitForHydration,
-  openEditModal,
   fillEditField,
+  loginAdmin as loginAdminContext,
+  openEditModal,
+  readEditField,
   saveEditModal,
+  test,
+  visitAndWaitForHydration,
 } from '../../fixtures';
+import { API_URL } from '../../fixtures/base-url';
 
 const USER_EDIT_ORG_NAME = 'User Edit Org';
 // Dedicated user for this spec — see USER_EDIT_USERS in
@@ -41,18 +42,26 @@ test.describe('User cache merge after org PATCH (@cicd)', () => {
     const context = await browser.newContext({ ignoreHTTPSErrors: true });
     // The org member list is restricted to members and org staff.
     await loginAdminContext(context);
-    const orgs = await (await context.request.get(`${API_URL}/organizations/`)).json();
-    const orgList = Array.isArray(orgs) ? orgs : orgs.results ?? [];
-    const editOrg = orgList.find((o: { name: string }) => o.name === USER_EDIT_ORG_NAME);
+    const orgs = await (
+      await context.request.get(`${API_URL}/organizations/`)
+    ).json();
+    const orgList = Array.isArray(orgs) ? orgs : (orgs.results ?? []);
+    const editOrg = orgList.find(
+      (o: { name: string }) => o.name === USER_EDIT_ORG_NAME,
+    );
     if (!editOrg) throw new Error(`Org "${USER_EDIT_ORG_NAME}" not found.`);
     orgPk = editOrg.pk;
-    const usersResp = await context.request.get(`${API_URL}/organizations/${orgPk}/users/`);
+    const usersResp = await context.request.get(
+      `${API_URL}/organizations/${orgPk}/users/`,
+    );
     const users = await usersResp.json();
     const target = users.find(
       (u: { username?: string }) => u.username === TARGET_USERNAME,
     );
     if (!target) {
-      throw new Error(`Target user "${TARGET_USERNAME}" not in User Edit Org. Run just db::populate::all`);
+      throw new Error(
+        `Target user "${TARGET_USERNAME}" not in User Edit Org. Run just db::populate::all`,
+      );
     }
     targetUserPk = target.pk;
     await context.close();
@@ -62,7 +71,9 @@ test.describe('User cache merge after org PATCH (@cicd)', () => {
     await loginAdmin();
   });
 
-  test('@cicd profile-page username survives an org-scoped PATCH', async ({ page }) => {
+  test('@cicd profile-page username survives an org-scoped PATCH', async ({
+    page,
+  }) => {
     // 1. Prime the cache with the FULL UserSerializer payload by visiting
     //    the profile page. The Profile Details card renders user.username
     //    in a dedicated row; that row only appears if the cached entry
@@ -81,7 +92,9 @@ test.describe('User cache merge after org PATCH (@cicd)', () => {
     const card = page.locator(`[data-testid="usercard-${TARGET_USERNAME}"]`);
     await expect(card).toBeVisible({ timeout: 10000 });
     await openEditModal(page, card);
-    await fillEditField(page, 'nickname', `MergeTest-${Date.now()}`);
+    const newMmr =
+      (await readEditField(page, 'mmr')) === '3601' ? '3602' : '3601';
+    await fillEditField(page, 'mmr', newMmr);
     await saveEditModal(page);
 
     // 3. Return to the profile page. The username must still render —
