@@ -1,11 +1,14 @@
 // @vitest-environment jsdom
-import { describe, expect, it, vi } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
-import { MemoryRouter } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
+import { MemoryRouter } from 'react-router';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { useBracketStore } from '~/store/bracketStore';
 import type { BracketMatch } from '../../types';
 import { MatchStatsModal } from '../MatchStatsModal';
+
+const persistMutate = vi.fn();
 
 // jsdom has no layout, so this checks the structure that keeps the dialog
 // inside the viewport: a height-capped flex column whose header and close
@@ -24,6 +27,7 @@ vi.mock('~/store/bracketStore', async () => {
   const { create } = await import('zustand');
   const store = create(() => ({
     matches: [],
+    isDirty: false,
     setMatchWinner: () => {},
     advanceWinner: () => {},
     unsetMatchWinner: () => {},
@@ -38,7 +42,12 @@ vi.mock('~/hooks/useHeroDraft', () => ({
   useCreateHeroDraft: () => ({ isPending: false, mutateAsync: vi.fn() }),
   useResetHeroDraft: () => ({ isPending: false, mutateAsync: vi.fn() }),
 }));
-vi.mock('~/hooks/useGameLobby', () => ({ useGameLobby: () => ({ data: undefined }) }));
+vi.mock('~/hooks/useBracket', () => ({
+  usePersistMatchResult: () => ({ isPending: false, mutate: persistMutate }),
+}));
+vi.mock('~/hooks/useGameLobby', () => ({
+  useGameLobby: () => ({ data: undefined }),
+}));
 vi.mock('~/components/lobby/LobbyPanel', () => ({
   LobbyPanel: () => <div data-testid="lobby-panel" style={{ height: 2000 }} />,
 }));
@@ -46,7 +55,11 @@ vi.mock('../DotaMatchStatsModal', () => ({ DotaMatchStatsModal: () => null }));
 vi.mock('../LinkSteamMatchModal', () => ({ LinkSteamMatchModal: () => null }));
 
 const team = (pk: number, name: string) =>
-  ({ pk, name, captain: { pk: pk * 10, username: name } }) as unknown as BracketMatch['radiantTeam'];
+  ({
+    pk,
+    name,
+    captain: { pk: pk * 10, username: name },
+  }) as unknown as BracketMatch['radiantTeam'];
 
 const match: BracketMatch = {
   id: 'w-2-0',
@@ -71,7 +84,9 @@ function Wrapper({ children }: { children: ReactNode }) {
 
 describe('MatchStatsModal layout', () => {
   it('caps the dialog at the viewport and scrolls only the body', () => {
-    render(<MatchStatsModal match={match} isOpen onClose={() => {}} />, { wrapper: Wrapper });
+    render(<MatchStatsModal match={match} isOpen onClose={() => {}} />, {
+      wrapper: Wrapper,
+    });
 
     const dialog = screen.getByTestId('matchStatsModal');
     const classes = dialog.className.split(/\s+/);
@@ -81,7 +96,11 @@ describe('MatchStatsModal layout', () => {
     expect(classes).toContain('overflow-hidden');
     expect(classes).toContain('max-h-[calc(100vh-2rem)]');
     expect(
-      classes.some((c) => c.startsWith('supports-[height:100dvh]:max-h-[calc(100dvh-2rem-env(safe-area-inset-top)')),
+      classes.some((c) =>
+        c.startsWith(
+          'supports-[height:100dvh]:max-h-[calc(100dvh-2rem-env(safe-area-inset-top)',
+        ),
+      ),
     ).toBe(true);
 
     const body = screen.getByTestId('matchStatsModal-body');
@@ -90,12 +109,78 @@ describe('MatchStatsModal layout', () => {
     expect(body.className).toMatch(/\bflex-1\b/);
 
     // Title and close stay outside the scroller, so they are always reachable.
-    expect(body).not.toContainElement(screen.getByTestId('match-details-header'));
-    expect(body).not.toContainElement(screen.getByTestId('dialog-close-button'));
+    expect(body).not.toContainElement(
+      screen.getByTestId('match-details-header'),
+    );
+    expect(body).not.toContainElement(
+      screen.getByTestId('dialog-close-button'),
+    );
     expect(dialog).toContainElement(screen.getByTestId('dialog-close-button'));
 
     // The tall lobby panel and the actions below it scroll with the body.
     expect(within(body).getByTestId('lobby-panel')).toBeInTheDocument();
-    expect(within(body).getByTestId('link-steam-match-btn')).toBeInTheDocument();
+    expect(
+      within(body).getByTestId('link-steam-match-btn'),
+    ).toBeInTheDocument();
+  });
+});
+
+describe('MatchStatsModal match result persistence (issue #466)', () => {
+  beforeEach(() => {
+    persistMutate.mockReset();
+    useBracketStore.setState({ isDirty: false });
+  });
+
+  it('persists the winner of a saved match straight away', () => {
+    render(<MatchStatsModal match={match} isOpen onClose={() => {}} />, {
+      wrapper: Wrapper,
+    });
+
+    fireEvent.click(screen.getByTestId('direWinsButton'));
+
+    expect(persistMutate).toHaveBeenCalledWith({ gameId: 42, winner: 'dire' });
+  });
+
+  it('leaves the winner for Save when the bracket has other unsaved edits', () => {
+    useBracketStore.setState({ isDirty: true });
+    render(<MatchStatsModal match={match} isOpen onClose={() => {}} />, {
+      wrapper: Wrapper,
+    });
+
+    fireEvent.click(screen.getByTestId('radiantWinsButton'));
+
+    expect(persistMutate).not.toHaveBeenCalled();
+  });
+
+  it('leaves the winner for Save when the match has no game record yet', () => {
+    render(
+      <MatchStatsModal
+        match={{ ...match, gameId: undefined }}
+        isOpen
+        onClose={() => {}}
+      />,
+      {
+        wrapper: Wrapper,
+      },
+    );
+
+    fireEvent.click(screen.getByTestId('radiantWinsButton'));
+
+    expect(persistMutate).not.toHaveBeenCalled();
+  });
+
+  it('persists an unset of a completed match', () => {
+    render(
+      <MatchStatsModal
+        match={{ ...match, status: 'completed', winner: 'radiant' }}
+        isOpen
+        onClose={() => {}}
+      />,
+      { wrapper: Wrapper },
+    );
+
+    fireEvent.click(screen.getByTestId('unsetWinnerButton'));
+
+    expect(persistMutate).toHaveBeenCalledWith({ gameId: 42, winner: null });
   });
 });
