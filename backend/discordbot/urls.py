@@ -2,7 +2,7 @@ from django.urls import path
 
 from .activity import activity_session
 from .activity_config import activity_config
-from .activity_views import activity_drafts
+from .activity_views import activity_drafts, activity_views
 from .services.channels import get_discord_channels
 from .services.roles import get_discord_roles
 from .services.users import (
@@ -20,6 +20,7 @@ urlpatterns = [
     path("activity/config/", activity_config, name="discord-activity-config"),
     path("activity/session/", activity_session, name="discord-activity-session"),
     path("activity/drafts/", activity_drafts, name="discord-activity-drafts"),
+    path("activity/views/", activity_views, name="discord-activity-views"),
     path(
         "get_discord_activity/",
         get_discord_voice_channel_activity,
