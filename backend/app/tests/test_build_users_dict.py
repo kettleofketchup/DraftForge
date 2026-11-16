@@ -13,6 +13,7 @@ ORG_ENTRY_KEYS = {
     "username",
     "nickname",
     "guildNickname",
+    "discordNickname",
     "avatar",
     "discordId",
     "positions",
@@ -86,6 +87,19 @@ class BuildUsersDictOrgTests(TransactionTestCase):
         # value parity on every shared key (byte-identical data)
         for k in ref:
             assert entry[k] == ref[k], (k, entry[k], ref[k])
+
+    def test_org_entry_carries_server_and_global_names(self) -> None:
+        from org.models import OrgUser
+
+        OrgUser.objects.filter(user=self.member, organization=self.org).update(
+            guild_nickname="DragonClaw"
+        )
+        CustomUser.objects.filter(pk=self.member.pk).update(
+            discordNickname="GwaihirTheWindlord"
+        )
+        entry = _build_users_dict(self.tournament, fresh=True)[self.member.pk]
+        assert entry["guildNickname"] == "DragonClaw"
+        assert entry["discordNickname"] == "GwaihirTheWindlord"
 
     def test_nickname_edit_reflected(self) -> None:
         _build_users_dict(self.tournament)  # warm core cache

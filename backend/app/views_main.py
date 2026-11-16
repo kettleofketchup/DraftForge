@@ -1513,7 +1513,7 @@ class LeagueView(viewsets.ModelViewSet):
         def get_data() -> Any:
             league_users = with_user_profiles(
                 LeagueUser.objects.filter(league=league), "user", dota=True
-            )
+            ).select_related("org_user")
             serializer = LeagueUserSerializer(league_users, many=True)
             return serializer.data
 

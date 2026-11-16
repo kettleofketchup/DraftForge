@@ -14,7 +14,7 @@ from django.utils import timezone
 from app.broadcast import broadcast_herodraft_state
 from app.cache_utils import invalidate_obj
 from app.consumers_base import BaseDraftConsumer, consumer_db
-from app.draft_state import build_draft_state
+from app.draft_state import build_draft_state, herodraft_state_queryset
 from app.functions.teamdraft import emit_event, team_payload
 from app.models import (
     Draft,
@@ -440,11 +440,7 @@ class HeroDraftConsumer(BaseDraftConsumer):
 
     @consumer_db
     def get_initial_state_data(self, draft_id: int) -> dict:
-        draft = HeroDraft.objects.prefetch_related(
-            "draft_teams__tournament_team__captain",
-            "draft_teams__tournament_team__members",
-            "rounds",
-        ).get(id=draft_id)
+        draft = herodraft_state_queryset().get(id=draft_id)
         return HeroDraftSerializer(draft).data
 
     @consumer_db

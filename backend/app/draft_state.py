@@ -18,6 +18,7 @@ from app.models import (
     Draft,
     DraftOptions,
     DraftRound,
+    DraftTeam,
     Game,
     HeroDraft,
     League,
@@ -25,7 +26,8 @@ from app.models import (
     Team,
     Tournament,
 )
-from app.serializers import DraftSerializerSlim, _build_users_dict
+from app.serializers import DraftSerializerSlim, build_users_dict_with_org
+from user.querysets import with_user_profiles
 
 _TEAM_USER_RELATIONS: tuple[str, ...] = ("members", "dropin_members", "left_members")
 _GAME_TEAM_RELATIONS: tuple[str, ...] = ("radiant_team", "dire_team", "winning_team")
@@ -92,6 +94,21 @@ def tournament_state_queryset(*, fresh: bool) -> QuerySet[Tournament]:
     )
 
 
+def herodraft_state_queryset() -> QuerySet[HeroDraft]:
+    """HeroDraft loader whose HeroDraftSerializer cost is fixed per draft."""
+    users = with_user_profiles(CustomUser.objects.all(), dota=True)
+    return HeroDraft.objects.select_related(
+        "game__tournament__league__organization"
+    ).prefetch_related(
+        Prefetch(
+            "draft_teams", queryset=DraftTeam.objects.select_related("tournament_team")
+        ),
+        Prefetch("draft_teams__tournament_team__captain", queryset=users),
+        Prefetch("draft_teams__tournament_team__members", queryset=users),
+        "rounds",
+    )
+
+
 def build_draft_state(draft_id: int, *, fresh: bool) -> dict | None:
     """DraftSerializerSlim payload plus the ``_users`` hydration dict (str keys).
 
@@ -116,7 +133,8 @@ def _build_draft_state(draft_id: int, *, fresh: bool) -> dict | None:
     except Draft.DoesNotExist:
         return None
     data = DraftSerializerSlim(draft, context={"fresh": fresh}).data
-    users = _build_users_dict(draft.tournament, fresh=fresh)
+    users, org = build_users_dict_with_org(draft.tournament, fresh=fresh)
+    data["organization_pk"] = org.pk if org else None
     # msgpack strict mode in the channel layer forbids int map keys
     data["_users"] = {str(k): v for k, v in users.items()}
     return data
