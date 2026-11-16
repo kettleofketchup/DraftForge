@@ -10,6 +10,7 @@ from asgiref.sync import async_to_sync
 from django.test import SimpleTestCase, TestCase, override_settings
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.test import APIClient
+from structlog.testing import capture_logs
 
 from app.models import CustomUser, Draft, DraftTeam, Game, HeroDraft, Team, Tournament
 from discordbot.activity_auth import authenticate_token, issue_activity_token
@@ -42,6 +43,26 @@ class ActivityLaunchTests(TestCase):
         )
         DraftTeam.objects.create(draft=self.hero, tournament_team=self.team)
         self.team_draft = Draft.objects.create(tournament=self.tournament)
+
+    def fake_discord(self, channel="20", live_instances=None):
+        """Answer by path so call order and extra liveness checks don't matter."""
+        live = live_instances or {}
+
+        def call(method, path, **kwargs):
+            if "/voice-states/" in path:
+                return {"channel_id": channel}
+            if "/activity-instances/" in path:
+                instance_id = path.rsplit("/", 1)[1]
+                if instance_id in live:
+                    return {"users": live[instance_id]}
+                raise requests.HTTPError(response=SimpleNamespace(status_code=404))
+            if path.endswith("/invites"):
+                return {"code": "invite-code"}
+            if path.startswith("/channels/"):
+                return {"id": channel, "type": 2, "guild_id": "1"}
+            raise AssertionError(f"unexpected Discord call {method} {path}")
+
+        return call
 
     def discord_responses(self, channel="20"):
         return [
@@ -154,7 +175,8 @@ class ActivityLaunchTests(TestCase):
             instance_id="elsewhere", guild_id="1", channel_id="21", draft=finished
         )
         token = issue_activity_token(self.user, running)
-        api.side_effect = self.discord_responses()
+        # Discord answers 404 once everyone has left the finished draft's Activity.
+        api.side_effect = self.fake_discord()
         self.assertTrue(prepare_activity_launch("101", "hero", self.hero.pk)["success"])
         binding.refresh_from_db()
         running.refresh_from_db()
@@ -164,6 +186,69 @@ class ActivityLaunchTests(TestCase):
         self.assertEqual(elsewhere.draft_id, finished.pk)
         with self.assertRaises(AuthenticationFailed):
             authenticate_token(token, finished.pk, "hero")
+
+    @patch("discordbot.activity_launch.discord_json")
+    def test_finished_draft_activity_still_in_use_is_not_moved(self, api):
+        finished = self.team_draft
+        finished.state = "completed"
+        finished.save()
+        binding = DraftActivityChannel.objects.create(
+            guild_id="1", channel_id="20", team_draft=finished
+        )
+        watching = DraftActivityInstance.objects.create(
+            instance_id="watching", guild_id="1", channel_id="20", team_draft=finished
+        )
+        api.side_effect = self.fake_discord(live_instances={"watching": ["555"]})
+        result = prepare_activity_launch("101", "hero", self.hero.pk)
+        self.assertFalse(result["success"])
+        self.assertIn("still running", result["content"])
+        self.assertIn("<#20>", result["content"])
+        binding.refresh_from_db()
+        watching.refresh_from_db()
+        self.assertEqual(binding.team_draft_id, finished.pk)
+        self.assertIsNone(binding.draft_id)
+        self.assertEqual(watching.team_draft_id, finished.pk)
+        self.assertFalse(
+            any(c.args[1].endswith("/invites") for c in api.call_args_list)
+        )
+
+    @patch("discordbot.activity_launch.discord_json")
+    def test_each_launch_logs_the_resolved_channel_and_outcome(self, api):
+        api.side_effect = self.fake_discord(channel="20")
+        with capture_logs() as logs:
+            prepare_activity_launch("101", "hero", self.hero.pk)
+        launches = [e for e in logs if e["event"] == "activity_launch_resolved"]
+        self.assertEqual(len(launches), 1)
+        entry = launches[0]
+        self.assertEqual(entry["system"], "discord")
+        self.assertEqual(entry["subsystem"], "activity")
+        self.assertEqual(entry["outcome"], "invite_created")
+        self.assertEqual(entry["voice_channel_id"], "20")
+        self.assertEqual(entry["discord_user_id"], "101")
+        self.assertEqual((entry["kind"], entry["draft_id"]), ("hero", self.hero.pk))
+        self.assertFalse(entry["rebound"])
+
+    @patch("discordbot.activity_launch.discord_json")
+    def test_rebind_is_logged(self, api):
+        finished = HeroDraft.objects.create(
+            game=Game.objects.create(tournament=self.tournament), state="completed"
+        )
+        DraftActivityChannel.objects.create(
+            guild_id="1", channel_id="20", draft=finished
+        )
+        api.side_effect = self.fake_discord()
+        with capture_logs() as logs:
+            prepare_activity_launch("101", "hero", self.hero.pk)
+        entry = next(e for e in logs if e["event"] == "activity_launch_resolved")
+        self.assertTrue(entry["rebound"])
+        self.assertEqual(entry["previous_draft"], f"hero:{finished.pk}")
+
+    @patch("discordbot.activity_launch.discord_json")
+    def test_reply_names_destination_and_how_to_recover_after_moving(self, api):
+        api.side_effect = self.fake_discord(channel="20")
+        content = prepare_activity_launch("101", "hero", self.hero.pk)["content"]
+        self.assertTrue(content.startswith("This invite opens DraftForge in <#20>"))
+        self.assertIn("no longer in <#20>", content)
 
     @patch("discordbot.activity_launch.discord_json")
     def test_launch_uses_bot_rate_limited_calls_without_voice_recheck(self, api):

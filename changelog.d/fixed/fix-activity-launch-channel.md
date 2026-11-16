@@ -1,0 +1,1 @@
+- Keep a Discord Activity that people are still using from being moved to another draft when someone launches the next game from the same voice channel, name the destination channel in the launch reply, and follow the latest pick in the team draft Activity.

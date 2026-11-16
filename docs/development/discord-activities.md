@@ -81,9 +81,17 @@ invite is generated does not retarget it; click the original notification again.
 
 A channel assigned to an unfinished draft cannot be taken over by another
 draft. Once that draft is completed or abandoned, the next game's notification
-rebinds the channel, and an Activity still running there moves on with it: its
-sockets close with 4401, the client repeats the Discord handshake and opens the
-new draft. Multiple channels can share the same hero or team draft.
+rebinds the channel, but only after everyone has left the Activity running
+there: DraftForge asks Discord whether that instance still has participants and,
+if it does, tells the clicker to move to their team's voice channel instead.
+This stops one click in a shared channel (for example the team draft lobby)
+from pulling every viewer into a single match. Multiple channels can share the
+same hero or team draft.
+
+Every notification launch logs `activity_launch_resolved`
+(`system=discord`, `subsystem=activity`) with the user, draft, resolved voice
+channel, outcome (`invite_created`, `no_voice`, `conflict`, `in_use`, ...) and
+whether a channel was rebound from a previous draft.
 
 The generic Components V2 **Launch Draft** message is for a configured voice
 channel's own chat; it retains the native type-12 callback. Notification DMs use
@@ -114,7 +122,7 @@ state lives in Discord. The existing database and WebSocket broadcasts are
 shared across clients.
 
 Activity credentials expire after twelve hours. When a socket is rejected with
-4401 (expiry, revocation or the channel moving to the next draft), the client
+4401 (expiry, revocation or the channel moving to a new draft), the client
 repeats the Discord handshake once and reconnects with the new credential; if
 that fails it stops retrying and asks the user to reopen the Activity. Delete an instance mapping to revoke its credentials; disable
 `DISCORD_ACTIVITY_ENABLED` to reject new sessions and subsequent authenticated
