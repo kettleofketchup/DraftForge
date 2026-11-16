@@ -222,8 +222,8 @@ function TemplateEditor({
   const body = useWatch({ control: form.control, name: 'body' }) ?? '';
 
   const context = useMemo(
-    () => sampleContext(sampleEvent, org, sender),
-    [sampleEvent, org, sender],
+    () => sampleContext(sampleEvent, { ...org, pk: orgId }, sender),
+    [sampleEvent, org, orgId, sender],
   );
   const sample = useMemo(() => renderTemplate(body, context), [body, context]);
   const preview = useMemo(

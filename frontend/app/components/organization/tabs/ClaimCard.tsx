@@ -98,7 +98,9 @@ export const ClaimCard: React.FC<ClaimCardProps> = ({
           {/* Target profile info */}
           <div className="flex-1">
             <div className="font-medium">
-              {claim.target_nickname || `Steam ID: ${claim.target_steamid}`}
+              {claim.target_discordNickname ||
+                claim.target_username ||
+                `Steam ID: ${claim.target_steamid}`}
             </div>
             <div className="text-sm text-muted-foreground">
               {claim.target_mmr ? `${claim.target_mmr} MMR` : 'No MMR'}

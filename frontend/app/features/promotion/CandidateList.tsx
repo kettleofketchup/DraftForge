@@ -14,10 +14,10 @@ import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
 import { Switch } from '~/components/ui/switch';
 import { UserAvatar } from '~/components/user/UserAvatar';
-import { DisplayName } from '~/components/user/avatar';
 import type { OrgFeatureAccess } from '~/features/org-features';
 import { extractApiError } from '~/lib/apiError';
 import { getLogger } from '~/lib/logger';
+import { orgRowDisplayName } from '~/lib/userDisplayName';
 import { cn } from '~/lib/utils';
 import {
   relativeFromIso,
@@ -206,7 +206,7 @@ export function CandidateList({
                 user={{
                   pk: row.user_pk,
                   username: row.username,
-                  nickname: row.nickname,
+                  discordNickname: row.discordNickname,
                   avatarUrl: row.avatarUrl,
                   discordId: row.discordId,
                 }}
@@ -214,7 +214,9 @@ export function CandidateList({
               />
               <div className="flex min-w-0 flex-1 flex-col">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-medium">{DisplayName(row)}</span>
+                  <span className="font-medium">
+                    {orgRowDisplayName(row, orgId)}
+                  </span>
                   {row.signed_up && (
                     <Badge variant="secondary">Signed up</Badge>
                   )}

@@ -83,6 +83,36 @@ afterEach(() => {
 });
 
 describe('PromotionDashboard', () => {
+  it("lists candidates by the org's server nickname", async () => {
+    vi.mocked(getPromoEvents).mockResolvedValue([eventA]);
+    vi.mocked(getPromoTemplates).mockResolvedValue([]);
+    vi.mocked(getCandidates).mockResolvedValue({
+      n: 3,
+      rows: [
+        {
+          ...candidate,
+          discordNickname: 'AnaGlobal',
+          guildNickname: 'AnaServer',
+        },
+      ],
+    });
+    const qc = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <I18nextProvider i18n={createI18nInstance('en')}>
+        <QueryClientProvider client={qc}>
+          <MemoryRouter initialEntries={['/?tab=promotion&event=9']}>
+            <PromotionDashboard orgId={1} access={access} />
+          </MemoryRouter>
+        </QueryClientProvider>
+      </I18nextProvider>,
+    );
+    const row = await screen.findByTestId('promo-candidate-42');
+    expect(row.textContent).toContain('AnaServer');
+    expect(row.textContent).not.toContain('AnaGlobal');
+  });
+
   it('drops the chosen player when the selected event leaves the events list', async () => {
     vi.mocked(getPromoEvents).mockResolvedValue([eventA, eventB]);
     vi.mocked(getPromoTemplates).mockResolvedValue([]);

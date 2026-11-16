@@ -96,6 +96,7 @@ export function ContributionsTab({
         <div className="grid gap-4 lg:grid-cols-2">
           <Leaderboard
             data={data}
+            orgId={orgId}
             viewerPk={access.viewerPk}
             membersPrivate={membersPrivate}
             onSelectMember={(pk) => {

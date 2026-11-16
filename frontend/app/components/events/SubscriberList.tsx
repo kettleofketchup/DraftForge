@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { getRepeaterSubscribers } from '~/components/api/api';
 import { Badge } from '~/components/ui/badge';
 import { UserAvatar } from '~/components/user/UserAvatar';
+import { DisplayName } from '~/components/user/avatar';
 
 interface SubscriberListProps {
   repeaterId: number;
@@ -51,7 +52,7 @@ export function SubscriberList({ repeaterId }: SubscriberListProps) {
             >
               <UserAvatar
                 user={{
-                  nickname: sub.nickname,
+                  discordNickname: sub.discordNickname,
                   username: sub.username,
                   discordId: sub.discordId,
                   avatar: sub.avatar,
@@ -59,7 +60,7 @@ export function SubscriberList({ repeaterId }: SubscriberListProps) {
                 size="sm"
               />
               <span className="text-sm text-foreground truncate">
-                {sub.nickname || sub.username}
+                {DisplayName(sub)}
               </span>
             </div>
           ))}

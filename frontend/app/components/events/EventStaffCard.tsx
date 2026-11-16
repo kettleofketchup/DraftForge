@@ -16,9 +16,11 @@ import { UserAvatar } from '~/components/user/UserAvatar';
 import type { UserType } from '~/components/user/types';
 import { usePointValues } from '~/features/contributions';
 import type { OrgFeatureAccess } from '~/features/org-features';
+import { useDisplayOrgId } from '~/hooks/useDisplayOrgId';
 import { useEventActionMutation } from '~/hooks/useEvent';
 import { extractApiError } from '~/lib/apiError';
 import { getLogger } from '~/lib/logger';
+import { orgRowDisplayName } from '~/lib/userDisplayName';
 
 const log = getLogger('EventStaffCard');
 
@@ -49,8 +51,8 @@ function staffKey(state: StaffState): string {
   ]);
 }
 
-function displayName(user: EventStaffUser): string {
-  return user.nickname || user.username;
+function displayName(user: EventStaffUser, orgId: number | null): string {
+  return orgRowDisplayName(user, orgId);
 }
 
 function findSearchedUser(
@@ -65,7 +67,8 @@ function findSearchedUser(
       return {
         pk,
         username: match.username ?? `User #${pk}`,
-        nickname: match.nickname ?? null,
+        discordNickname: match.discordNickname ?? null,
+        guildNickname: match.guildNickname ?? null,
         avatarUrl: match.avatarUrl ?? null,
       };
     }
@@ -78,7 +81,8 @@ function findSearchedUser(
       return {
         pk,
         username: member.user.username,
-        nickname: member.nick || member.user.global_name || null,
+        discordNickname: member.user.global_name ?? null,
+        guildNickname: member.nick ?? null,
         avatarUrl: member.user.avatar
           ? `https://cdn.discordapp.com/avatars/${member.user.id}/${member.user.avatar}`
           : null,
@@ -111,12 +115,13 @@ function StaffRow({
   onRemove?: () => void;
   removeTestId?: string;
 }) {
+  const orgId = useDisplayOrgId();
   return (
     <div className="flex items-center gap-2 py-1.5">
       <UserAvatar user={user} size="sm" />
       <div className="flex min-w-0 flex-1 flex-col">
         <span className="truncate text-sm font-semibold text-foreground">
-          {displayName(user)}
+          {displayName(user, orgId)}
         </span>
         <span className="text-xs text-muted-foreground">{role}</span>
       </div>
@@ -129,7 +134,7 @@ function StaffRow({
           size="sm"
           color="red"
           onClick={onRemove}
-          aria-label={`Remove ${displayName(user)}`}
+          aria-label={`Remove ${displayName(user, orgId)}`}
           data-testid={removeTestId}
         >
           <X className="h-4 w-4" />
@@ -192,7 +197,6 @@ export function EventStaffCard({
       findSearchedUser(queryClient, pk) ?? {
         pk,
         username: `User #${pk}`,
-        nickname: null,
         avatarUrl: null,
       }
     );
@@ -222,7 +226,7 @@ export function EventStaffCard({
     return {
       pk: user.pk,
       username: user.username,
-      nickname: user.nickname,
+      discordNickname: user.discordNickname,
     } as UserType;
   };
 

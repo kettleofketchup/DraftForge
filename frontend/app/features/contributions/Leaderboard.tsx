@@ -8,12 +8,13 @@ import {
   TableRow,
 } from '~/components/ui/table';
 import { UserAvatar } from '~/components/user/UserAvatar';
-import { DisplayName } from '~/components/user/avatar';
+import { orgRowDisplayName } from '~/lib/userDisplayName';
 import { cn } from '~/lib/utils';
 import type { LeaderboardResponse, LeaderboardRow } from './schemas';
 
 export interface LeaderboardProps {
   data: LeaderboardResponse;
+  orgId: number;
   viewerPk: number | null;
   membersPrivate: boolean;
   onSelectMember: (orgUserPk: number) => void;
@@ -57,6 +58,7 @@ function HiddenRowsNote({
 
 export function Leaderboard({
   data,
+  orgId,
   viewerPk,
   membersPrivate,
   onSelectMember,
@@ -117,6 +119,7 @@ export function Leaderboard({
           <TableBody>
             {rows.map((row, index) => {
               const own = isOwn(row);
+              const name = orgRowDisplayName(row, orgId);
               return (
                 <TableRow
                   key={row.org_user_pk}
@@ -128,7 +131,7 @@ export function Leaderboard({
                   data-own={own ? 'true' : 'false'}
                   aria-current={own ? 'true' : undefined}
                   role="button"
-                  aria-label={`View ${DisplayName(row)}'s contributions`}
+                  aria-label={`View ${name}'s contributions`}
                   tabIndex={0}
                   onClick={() => onSelectMember(row.org_user_pk)}
                   onKeyDown={(e) => {
@@ -149,12 +152,12 @@ export function Leaderboard({
                         user={{
                           pk: row.user_pk,
                           username: row.username,
-                          nickname: row.nickname,
+                          discordNickname: row.discordNickname,
                           avatarUrl: row.avatarUrl,
                         }}
                         size="sm"
                       />
-                      <span className="font-medium">{DisplayName(row)}</span>
+                      <span className="font-medium">{name}</span>
                       {own && (
                         <span className="text-xs text-primary">(you)</span>
                       )}

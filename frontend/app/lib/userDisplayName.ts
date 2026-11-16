@@ -132,3 +132,11 @@ export function orgRowNameSource(
     orgNicknames: hasOrg(orgId) ? { [orgId]: row.guildNickname ?? null } : {},
   };
 }
+
+export function orgRowDisplayName(
+  row: OrgNameRow,
+  orgId: number | null,
+  maxLength?: number,
+): string {
+  return resolveDisplayName(orgRowNameSource(row, orgId), { orgId, maxLength });
+}

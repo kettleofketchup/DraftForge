@@ -5,6 +5,8 @@ import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getPointValues } from '~/features/contributions/api';
 import type { OrgFeatureAccess } from '~/features/org-features';
+import { DisplayOrgProvider } from '~/lib/displayOrgContext';
+import { useUserCacheStore } from '~/store/userCacheStore';
 import type { EventType } from '../schemas';
 
 const mutateAsync = vi.hoisted(() => vi.fn());
@@ -98,6 +100,7 @@ function wrapper({ children }: { children: ReactNode }) {
 }
 
 beforeEach(() => {
+  useUserCacheStore.getState().reset();
   mutateAsync.mockReset();
   mutateAsync.mockResolvedValue(event);
   vi.mocked(getPointValues).mockClear();
@@ -330,6 +333,97 @@ describe('EventStaffCard drafts', () => {
     expect(screen.getByTestId('event-staff-card').textContent).not.toContain(
       'User #9',
     );
+  });
+
+  it('shows the server nickname of a Discord-picked member in the org context', async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    client.setQueryData(
+      ['discordSearch', 'dee', 1],
+      [
+        {
+          nick: 'DeeServer',
+          user: {
+            id: '555',
+            username: 'dee_discord',
+            global_name: 'Dee',
+            avatar: null,
+          },
+          has_site_account: true,
+          site_user_pk: 9,
+        },
+      ],
+    );
+    render(
+      <QueryClientProvider client={client}>
+        <DisplayOrgProvider orgId={1}>
+          <EventStaffCard event={event} canEdit showPoints={false} />
+        </DisplayOrgProvider>
+      </QueryClientProvider>,
+    );
+
+    fireEvent.click(screen.getByTestId('event-helper-add-btn'));
+    fireEvent.click(await screen.findByTestId('stub-pick-9'));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('event-staff-card').textContent).toContain(
+        'DeeServer',
+      ),
+    );
+  });
+});
+
+describe('EventStaffCard names', () => {
+  const host = {
+    pk: 4,
+    username: 'carol',
+    nickname: null,
+    discordNickname: 'CarolGlobal',
+    guildNickname: 'CarolServer',
+    avatarUrl: null,
+  };
+  const named = { ...event, host, helpers: [] } as unknown as EventType;
+
+  it('shows the host server nickname inside the org display context', () => {
+    render(
+      <DisplayOrgProvider orgId={1}>
+        <EventStaffCard event={named} canEdit={false} showPoints={false} />
+      </DisplayOrgProvider>,
+      { wrapper },
+    );
+    expect(screen.getByTestId('event-staff-card').textContent).toContain(
+      'CarolServer',
+    );
+  });
+
+  it('shows the global Discord name outside an org context', () => {
+    render(
+      <EventStaffCard event={named} canEdit={false} showPoints={false} />,
+      {
+        wrapper,
+      },
+    );
+    const text = screen.getByTestId('event-staff-card').textContent;
+    expect(text).toContain('CarolGlobal');
+    expect(text).not.toContain('CarolServer');
+  });
+
+  it('ignores a stale site nickname', () => {
+    const stale = {
+      ...event,
+      host: { pk: 4, username: 'carol', nickname: 'Site', avatarUrl: null },
+      helpers: [],
+    } as unknown as EventType;
+    render(
+      <EventStaffCard event={stale} canEdit={false} showPoints={false} />,
+      {
+        wrapper,
+      },
+    );
+    const text = screen.getByTestId('event-staff-card').textContent;
+    expect(text).toContain('carol');
+    expect(text).not.toContain('Site');
   });
 });
 

@@ -53,7 +53,8 @@ vi.mock('~/hooks/useOrgUsers', () => ({
     {
       pk: 4,
       username: 'bob',
-      nickname: 'Bobby',
+      discordNickname: 'Bobby',
+      orgNicknames: { 7: 'BobServer', 8: 'BobElsewhere' },
       orgData: {},
       leagueData: {},
       _fetchedAt: 0,
@@ -97,6 +98,8 @@ const member = {
   user_pk: 3,
   username: 'alice',
   nickname: null,
+  discordNickname: 'AliceGlobal',
+  guildNickname: 'AliceServer',
   avatarUrl: null,
 };
 
@@ -307,6 +310,37 @@ describe('contributions admin section', () => {
         event_id: null,
       }),
     );
+  });
+
+  it('names members by their server nickname for the org', async () => {
+    renderTab(admin);
+    expect((await screen.findByTestId('ledger-row-31')).textContent).toContain(
+      'AliceServer',
+    );
+    const trigger = await screen.findByTestId('manual-award-member');
+    fireEvent.keyDown(trigger, { key: 'Enter' });
+    const bob = await screen.findByTestId('manual-award-member-4');
+    expect(bob.textContent).toBe('BobServer');
+    fireEvent.keyDown(bob, { key: 'Escape' });
+  });
+
+  it('names the member in the edit form', async () => {
+    renderTab(admin);
+    fireEvent.click(await screen.findByTestId('ledger-edit-31'));
+    expect(
+      (await screen.findByTestId('manual-award-edit-form')).textContent,
+    ).toContain('AliceServer');
+    fireEvent.keyDown(document.activeElement ?? document.body, {
+      key: 'Escape',
+    });
+  });
+
+  it('names the member in the delete confirmation', async () => {
+    renderTab(admin);
+    fireEvent.click(await screen.findByTestId('ledger-delete-31'));
+    expect(
+      await screen.findByText('5 points for AliceServer will be removed.'),
+    ).toBeTruthy();
   });
 
   it('deletes a manual award after confirmation', async () => {

@@ -25,6 +25,7 @@ import { UserAvatar } from '~/components/user/UserAvatar';
 import type { OrgFeatureAccess } from '~/features/org-features';
 import { extractApiError } from '~/lib/apiError';
 import { getLogger } from '~/lib/logger';
+import { orgRowDisplayName } from '~/lib/userDisplayName';
 import { useDeleteManualAward, useLedgerEntries } from '../queries';
 import {
   ALL_TIME,
@@ -191,13 +192,13 @@ export function LedgerTable({
                     user={{
                       pk: entry.member.user_pk,
                       username: entry.member.username,
-                      nickname: entry.member.nickname,
+                      discordNickname: entry.member.discordNickname,
                       avatarUrl: entry.member.avatarUrl,
                     }}
                     size="sm"
                   />
                   <span className="min-w-0 truncate">
-                    {entry.member.nickname || entry.member.username}
+                    {orgRowDisplayName(entry.member, orgId)}
                     <span className="text-muted-foreground">
                       {' '}
                       · {KIND_LABELS[entry.kind]}
@@ -327,7 +328,7 @@ export function LedgerTable({
         title="Delete this award?"
         description={
           deleting
-            ? `${deleting.points} points for ${deleting.member.nickname || deleting.member.username} will be removed.`
+            ? `${deleting.points} points for ${orgRowDisplayName(deleting.member, orgId)} will be removed.`
             : ''
         }
         confirmLabel="Delete"

@@ -22,6 +22,7 @@ import { Textarea } from '~/components/ui/textarea';
 import type { OrgFeatureAccess } from '~/features/org-features';
 import { extractApiError } from '~/lib/apiError';
 import { getLogger } from '~/lib/logger';
+import { orgRowDisplayName, resolveDisplayName } from '~/lib/userDisplayName';
 import { useCreateManualAward, useUpdateManualAward } from '../queries';
 import {
   MANUAL_MAX_POINTS,
@@ -39,7 +40,8 @@ const NO_EVENT = 'none';
 export interface AwardMember {
   pk: number;
   username: string;
-  nickname?: string | null;
+  discordNickname?: string | null;
+  orgNicknames?: Record<number, string | null>;
 }
 
 export interface AwardEvent {
@@ -58,8 +60,8 @@ export interface ManualAwardFormProps {
   onDone?: () => void;
 }
 
-function memberName(member: AwardMember): string {
-  return member.nickname || member.username;
+function memberName(member: AwardMember, orgId: number): string {
+  return resolveDisplayName(member, { orgId });
 }
 
 function numberOrNaN(value: string): number {
@@ -146,7 +148,7 @@ export function ManualAwardForm({
           <p className="text-sm">
             Member:{' '}
             <span className="font-medium">
-              {entry.member.nickname || entry.member.username}
+              {orgRowDisplayName(entry.member, orgId)}
             </span>
           </p>
         ) : (
@@ -176,7 +178,7 @@ export function ManualAwardForm({
                         value={String(m.pk)}
                         data-testid={`manual-award-member-${m.pk}`}
                       >
-                        {memberName(m)}
+                        {memberName(m, orgId)}
                       </BrandSelectItem>
                     ))}
                   </BrandSelectContent>

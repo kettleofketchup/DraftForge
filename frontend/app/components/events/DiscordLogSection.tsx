@@ -10,7 +10,12 @@ import { ScrollArea } from '~/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { UserStrip } from '~/components/user';
 import { UserAvatar } from '~/components/user/UserAvatar';
-import { DisplayName } from '~/components/user/avatar';
+import { useDisplayOrgId } from '~/hooks/useDisplayOrgId';
+import {
+  type OrgNameRow,
+  orgRowDisplayName,
+  orgRowNameSource,
+} from '~/lib/userDisplayName';
 import { DiscordLogDetailModal } from './DiscordLogDetailModal';
 import { TaskScheduleSection } from './TaskScheduleSection';
 
@@ -29,6 +34,11 @@ const CATEGORY_COLORS: Record<number, string> = {
   [LogCategory.NOTIFICATION]:
     'bg-amber-500/20 text-amber-300 border-amber-500/30',
 };
+
+function rowName(row: OrgNameRow, orgId: number | null): string {
+  if (!row.username && !row.discordNickname && !row.guildNickname) return '';
+  return orgRowDisplayName(row, orgId);
+}
 
 const CATEGORY_BORDER: Record<number, string> = {
   [LogCategory.SYSTEM]: 'border-blue-500',
@@ -51,6 +61,7 @@ export function DiscordLogSection({
   const [selectedLog, setSelectedLog] = useState<
     DiscordEventState['logs'][number] | null
   >(null);
+  const orgId = useDisplayOrgId();
 
   // Merge DMs into activity log as synthetic NOTIFICATION entries
   // (must be before early returns to keep hook order stable)
@@ -62,10 +73,11 @@ export function DiscordLogSection({
         category: LogCategory.NOTIFICATION,
         category_display: 'Notification',
         action: `DM: ${dm.dm_type_display}`,
-        target_type: dm.nickname || dm.username || '',
+        target_type: rowName(dm, orgId),
         discord_user_id: dm.discord_user_id || '',
-        discord_username: dm.nickname || dm.username || '',
-        nickname: dm.nickname,
+        discord_username: rowName(dm, orgId),
+        discordNickname: dm.discordNickname,
+        guildNickname: dm.guildNickname,
         username: dm.username,
         avatar: dm.avatar,
         message_id: dm.message_id || null,
@@ -83,7 +95,7 @@ export function DiscordLogSection({
       (a, b) =>
         new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
     );
-  }, [discordState?.logs, discordState?.dms]);
+  }, [discordState?.logs, discordState?.dms, orgId]);
 
   if (isLoading) {
     return (
@@ -245,8 +257,8 @@ export function DiscordLogSection({
                   {log.discord_username &&
                     (() => {
                       const logUser = {
-                        nickname: log.nickname ?? log.discord_username,
                         username: log.username,
+                        discordNickname: log.discordNickname,
                         avatar: log.avatar,
                         discordId: log.discord_user_id,
                       };
@@ -254,7 +266,7 @@ export function DiscordLogSection({
                         <div className="flex items-center gap-1.5 mt-0.5">
                           <UserAvatar user={logUser} size="tiny" />
                           <span className="text-muted-foreground text-xs">
-                            {DisplayName(logUser)}
+                            {rowName(log, orgId) || log.discord_username}
                           </span>
                         </div>
                       );
@@ -280,10 +292,12 @@ export function DiscordLogSection({
               <UserStrip
                 key={dm.id}
                 user={{
-                  nickname: dm.nickname,
+                  ...orgRowNameSource(dm, orgId),
+                  pk: undefined,
                   username: dm.username,
                   discordId: dm.discord_user_id,
                 }}
+                organizationId={orgId ?? undefined}
                 compact
                 showPositions={false}
                 showMmr={false}
@@ -327,13 +341,14 @@ export function DiscordLogSection({
                       setSelectedLog({
                         id: dm.id,
                         action: `DM: ${dm.dm_type_display}`,
-                        target_type: dm.nickname || dm.username || '',
+                        target_type: rowName(dm, orgId),
                         success: dm.delivered,
                         message_id: dm.message_id || null,
                         status_code: null,
                         discord_user_id: dm.discord_user_id || '',
-                        discord_username: dm.nickname || dm.username || '',
-                        nickname: dm.nickname,
+                        discord_username: rowName(dm, orgId),
+                        discordNickname: dm.discordNickname,
+                        guildNickname: dm.guildNickname,
                         username: dm.username,
                         avatar: dm.avatar,
                         error_message:

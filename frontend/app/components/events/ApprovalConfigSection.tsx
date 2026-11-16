@@ -206,7 +206,7 @@ export function ApprovalConfigSection<T extends FieldValues & ApprovalFields>({
           control={control}
           name="require_profile_complete"
           label="Require complete profile"
-          description="Player must have nickname, Steam ID, and Discord linked"
+          description="Player must have Steam ID and Discord linked"
         />
       </div>
     </div>

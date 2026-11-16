@@ -6,6 +6,7 @@ import {
   displayNameById,
   isDiscordMember,
   matchesUserQuery,
+  orgRowDisplayName,
   orgRowNameSource,
   resolveDisplayName,
   truncateName,
@@ -257,5 +258,20 @@ describe('userNameCandidates / matchesUserQuery', () => {
     expect(
       matchesUserQuery({ pk: 1, username: 'dc_handle' }, 'dragon', 7),
     ).toBe(true);
+  });
+});
+
+describe('orgRowDisplayName', () => {
+  const row = {
+    user_pk: 3,
+    username: 'u',
+    discordNickname: 'G',
+    guildNickname: 'Server',
+  };
+
+  it('resolves an org row for its org and truncates', () => {
+    expect(orgRowDisplayName(row, 7)).toBe('Server');
+    expect(orgRowDisplayName(row, null)).toBe('G');
+    expect(orgRowDisplayName(row, 7, 3)).toBe('Ser…');
   });
 });

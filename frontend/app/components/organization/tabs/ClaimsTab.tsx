@@ -192,7 +192,7 @@ export const ClaimsTab: React.FC<Props> = ({ organizationId }) => {
         open={!!approvingClaim}
         onOpenChange={(open) => !open && setApprovingClaim(null)}
         title="Approve Claim Request"
-        description={`${approvingClaim?.claimer_username} will receive the profile data from ${approvingClaim?.target_nickname || `Steam ID ${approvingClaim?.target_steamid}`}. This action will merge the profiles and cannot be undone.`}
+        description={`${approvingClaim?.claimer_username} will receive the profile data from ${approvingClaim?.target_discordNickname || approvingClaim?.target_username || `Steam ID ${approvingClaim?.target_steamid}`}. This action will merge the profiles and cannot be undone.`}
         confirmLabel="Approve"
         variant="default"
         isLoading={isApproving}
@@ -210,7 +210,8 @@ export const ClaimsTab: React.FC<Props> = ({ organizationId }) => {
             Reject the claim request from{' '}
             <strong>{rejectingClaim?.claimer_username}</strong> for{' '}
             <strong>
-              {rejectingClaim?.target_nickname ||
+              {rejectingClaim?.target_discordNickname ||
+                rejectingClaim?.target_username ||
                 `Steam ID ${rejectingClaim?.target_steamid}`}
             </strong>
             .

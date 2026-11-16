@@ -7,12 +7,14 @@ import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import { ConfirmDialog } from '~/components/ui/dialogs';
 import { UserAvatar } from '~/components/user/UserAvatar';
+import { DisplayName } from '~/components/user/avatar';
+import { useDisplayOrgId } from '~/hooks/useDisplayOrgId';
 import { useUserStore } from '~/store/userStore';
 
 interface FiredByUser {
   pk: number;
   username: string;
-  nickname: string | null;
+  discordNickname: string | null;
   discordId: string | null;
   avatar: string | null;
 }
@@ -84,6 +86,7 @@ export function TaskScheduleSection({
   eventTimezone,
 }: TaskScheduleSectionProps) {
   const { data: tasks, isLoading } = useEventTaskSchedule(eventId);
+  const orgId = useDisplayOrgId();
   const queryClient = useQueryClient();
   const currentUser = useUserStore((state) => state.currentUser);
   const [confirmTask, setConfirmTask] = useState<TaskEntry | null>(null);
@@ -245,7 +248,7 @@ export function TaskScheduleSection({
                   <div className="flex items-center gap-1.5">
                     <UserAvatar
                       user={{
-                        nickname: task.fired_by.nickname,
+                        discordNickname: task.fired_by.discordNickname,
                         username: task.fired_by.username,
                         discordId: task.fired_by.discordId,
                         avatar: task.fired_by.avatar,
@@ -253,7 +256,7 @@ export function TaskScheduleSection({
                       size="xs"
                     />
                     <span className="text-xs text-foreground truncate max-w-[100px]">
-                      {task.fired_by.nickname || task.fired_by.username}
+                      {DisplayName(task.fired_by, undefined, orgId)}
                     </span>
                   </div>
                 ) : task.status === 'fired' ? (

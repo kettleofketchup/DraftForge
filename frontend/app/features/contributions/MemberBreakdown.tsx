@@ -2,9 +2,9 @@ import { X } from 'lucide-react';
 import { Link } from 'react-router';
 import { SecondaryButton } from '~/components/ui/buttons';
 import { UserAvatar } from '~/components/user/UserAvatar';
-import { DisplayName } from '~/components/user/avatar';
 import type { OrgFeatureAccess } from '~/features/org-features';
 import { extractApiError } from '~/lib/apiError';
+import { orgRowDisplayName } from '~/lib/userDisplayName';
 import { useMemberBreakdown } from './queries';
 import { KIND_LABELS, type MonthPoints } from './schemas';
 import { formatOrgDate, monthLabel, shortMonthLabel } from './timezone';
@@ -85,13 +85,13 @@ export function MemberBreakdown({
               user={{
                 pk: data.member.user_pk,
                 username: data.member.username,
-                nickname: data.member.nickname,
+                discordNickname: data.member.discordNickname,
                 avatarUrl: data.member.avatarUrl,
               }}
               size="md"
             />
             <h3 className="text-lg font-semibold">
-              {DisplayName(data.member)}
+              {orgRowDisplayName(data.member, orgId)}
             </h3>
           </div>
         ) : (
