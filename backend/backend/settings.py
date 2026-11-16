@@ -174,9 +174,11 @@ REST_FRAMEWORK = {
     "EXCEPTION_HANDLER": "app.exception_handler.exception_handler",
 }
 
+# Every entry must be async capable: one sync-only middleware makes each ASGI request
+# hop sync_to_async -> async_to_sync (app.tests.test_middleware_async_chain enforces it).
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
-    "whitenoise.middleware.WhiteNoiseMiddleware",
+    "app.middleware.AsyncWhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -187,7 +189,7 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "corsheaders.middleware.CorsMiddleware",
-    "social_django.middleware.SocialAuthExceptionMiddleware",
+    "app.middleware.AsyncSocialAuthExceptionMiddleware",
 ]
 
 ROOT_URLCONF = "backend.urls"
@@ -369,13 +371,13 @@ CACHEOPS = {
     "app.tournament": {"ops": "all", "timeout": 60 * 60},
     "app.team": {"ops": "all", "timeout": 60 * 60},
     "app.customuser": {"ops": "all", "timeout": 60 * 60},
-    # BaseUserProfile owns nickname/avatar (T1 epic). Every @cached_as
+    # BaseUserProfile owns nickname/avatar. Every @cached_as
     # site that ships nickname/avatar must list BaseUserProfile so PATCH
     # /api/users/me/profile/base/ invalidates the cached payload — see
     # backend/user/tests/test_cacheops.py for the grep guardrail.
     "user.baseuserprofile": {"ops": "all", "timeout": 60 * 60},
     # DotaUserProfile owns positions + dota-mmr verification; DeadlockUserProfile
-    # owns rank (T2 epic). @cached_as sites shipping positions must list
+    # owns rank. @cached_as sites shipping positions must list
     # DotaUserProfile so PATCH /api/users/me/profile/game/dota/ invalidates the
     # cached payload — see backend/user/tests/test_cacheops.py grep guardrail.
     "user.dotauserprofile": {"ops": "all", "timeout": 60 * 60},
