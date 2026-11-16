@@ -29,7 +29,7 @@ from org.models import OrgUser
 TEAM_SIZE = 5
 _user_ids = itertools.count(100_000)
 # tournament, league, org, games, lobbies, herodrafts, 3 roster tables,
-# org users, league users. Was 317 for the 8-team bracket below.
+# org users, league users
 BRACKET_QUERIES = 11
 # insert missing org users, then reread them with their league users
 ORG_USER_CREATE_QUERIES = 3
@@ -200,8 +200,7 @@ class BracketQueryTests(TestCase):
 
     def test_query_count_without_org(self) -> None:
         fx = build_bracket("plain", with_org=False)
-        # no league or org lookup; the source-event lookup and one user query
-        # replace the org user and league user reads
+        # source event and users replace league, org, org users and league users
         self.assertEqual(self.get_bracket(fx.tournament)[1], BRACKET_QUERIES - 2)
 
     def test_query_count_does_not_grow_with_teams(self) -> None:
