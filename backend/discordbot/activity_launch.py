@@ -23,6 +23,7 @@ from app.auth import InternalServiceAuth, IsInternalService
 from app.models import CustomUser, Draft, HeroDraft
 from app.permissions_org import can_edit_tournament
 from discordbot.activity import discord_json
+from discordbot.activity_intent import record_intent
 from discordbot.activity_targets import draft_site_url, draft_tournament_id
 from discordbot.models import DraftActivityChannel
 from telemetry.logging import get_logger
@@ -136,6 +137,7 @@ def _prepare_activity_launch(
                 "game__tournament__league__organization"
             ).get(pk=draft_id)
             tournament = draft.game.tournament
+            details["tournament_id"] = draft_tournament_id(draft)
             participant = draft.draft_teams.filter(
                 Q(tournament_team__captain=user) | Q(tournament_team__members=user)
             ).exists()
@@ -144,6 +146,7 @@ def _prepare_activity_launch(
                 "tournament__league__organization"
             ).get(pk=draft_id)
             tournament = draft.tournament
+            details["tournament_id"] = draft_tournament_id(draft)
             participant = bool(
                 tournament
                 and (
@@ -177,7 +180,6 @@ def _prepare_activity_launch(
         else getattr(settings, "DISCORD_GUILD_ID", "")
     )
     details["guild_id"] = guild_id
-    details["tournament_id"] = tournament.pk
     application_id = str(getattr(settings, "SOCIAL_AUTH_DISCORD_KEY", "") or "")
     if (
         not guild_id.isdigit()
@@ -241,6 +243,15 @@ def _prepare_activity_launch(
             or not all(c.isascii() and (c.isalnum() or c in "-_") for c in code)
         ):
             raise ValueError("Invalid Discord invite")
+        intent_id = record_intent(
+            discord_user_id,
+            kind=kind,
+            draft_id=draft.pk,
+            tournament_id=details["tournament_id"],
+            guild_id=guild_id,
+            channel_id=channel_id,
+        )
+        details["intent_recorded"] = intent_id is not None
     except requests.HTTPError as exc:
         if exc.response is not None and exc.response.status_code == 404:
             return _failure(

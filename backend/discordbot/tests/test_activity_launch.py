@@ -15,9 +15,11 @@ from structlog.testing import capture_logs
 from app.models import CustomUser, Draft, DraftTeam, Game, HeroDraft, Team, Tournament
 from discordbot.activity_auth import authenticate_token, issue_activity_token
 from discordbot.activity_ids import decode_draft_launch
+from discordbot.activity_intent import peek_intent
 from discordbot.activity_launch import BindResult, prepare_activity_launch
 from discordbot.activity_launch_gateway import handle_draft_launch
 from discordbot.models import DraftActivityChannel, DraftActivityInstance
+from discordbot.tests.activity_helpers import ClearIntentsMixin
 
 
 @override_settings(
@@ -26,8 +28,9 @@ from discordbot.models import DraftActivityChannel, DraftActivityInstance
     SOCIAL_AUTH_DISCORD_KEY="9",
     DISCORD_BOT_TOKEN="secret",
 )
-class ActivityLaunchTests(TestCase):
+class ActivityLaunchTests(ClearIntentsMixin, TestCase):
     def setUp(self):
+        super().setUp()
         self.user = CustomUser.objects.create_user(
             username="launch-captain", discordId="101"
         )
@@ -277,9 +280,73 @@ class ActivityLaunchTests(TestCase):
         self.assertEqual((entry["kind"], entry["draft_id"]), ("hero", self.hero.pk))
         self.assertIsNone(entry["previous_channel_draft"])
         self.assertEqual(entry["tournament_id"], self.tournament.pk)
-        self.assertFalse(entry["intent_recorded"])
+        self.assertTrue(entry["intent_recorded"])
         self.assertNotIn("rebound", entry)
         self.assertNotIn("previous_draft", entry)
+
+    @patch("discordbot.activity_launch.discord_json")
+    def test_successful_launch_records_intent_for_launcher(self, api):
+        api.side_effect = self.fake_discord()
+        with capture_logs() as logs:
+            self.assertTrue(
+                prepare_activity_launch("101", "hero", self.hero.pk)["success"]
+            )
+        intent = peek_intent("101")
+        self.assertIsNotNone(intent)
+        assert intent is not None
+        self.assertEqual((intent.kind, intent.draft_id), ("hero", self.hero.pk))
+        self.assertEqual(intent.tournament_id, self.tournament.pk)
+        self.assertEqual((intent.guild_id, intent.channel_id), ("1", "20"))
+        entry = next(e for e in logs if e["event"] == "activity_launch_resolved")
+        self.assertTrue(entry["intent_recorded"])
+
+    @patch("discordbot.activity_launch.discord_json")
+    def test_failed_or_busy_launch_records_no_intent(self, api):
+        other = Tournament.objects.create(name="Other Cup", date_played=date.today())
+        for outcome in ("no_voice", "wrong_channel", "channel_busy", "error"):
+            DraftActivityChannel.objects.all().delete()
+            if outcome == "no_voice":
+                api.side_effect = None
+                api.return_value = {"channel_id": None}
+            elif outcome == "wrong_channel":
+                api.side_effect = [
+                    {"channel_id": "20"},
+                    {"id": "20", "type": 0, "guild_id": "1"},
+                ]
+            elif outcome == "channel_busy":
+                DraftActivityChannel.objects.create(
+                    guild_id="1",
+                    channel_id="20",
+                    draft=self.other_tournament_hero(other),
+                )
+                api.side_effect = self.fake_discord()
+            else:
+                api.side_effect = [
+                    {"channel_id": "20"},
+                    {"id": "20", "type": 2, "guild_id": "1"},
+                    {"code": "bad code!"},
+                ]
+            with self.subTest(outcome=outcome), capture_logs() as logs:
+                self.assertFalse(
+                    prepare_activity_launch("101", "hero", self.hero.pk)["success"]
+                )
+                entry = next(
+                    e for e in logs if e["event"] == "activity_launch_resolved"
+                )
+                self.assertEqual(entry["outcome"], outcome)
+                self.assertFalse(entry["intent_recorded"])
+                self.assertIsNone(peek_intent("101"))
+
+    @patch("discordbot.activity_launch.record_intent", return_value=None)
+    @patch("discordbot.activity_launch.discord_json")
+    def test_redis_failure_still_creates_invite(self, api, _record):
+        api.side_effect = self.fake_discord()
+        with capture_logs() as logs:
+            result = prepare_activity_launch("101", "hero", self.hero.pk)
+        self.assertTrue(result["success"])
+        entry = next(e for e in logs if e["event"] == "activity_launch_resolved")
+        self.assertEqual(entry["outcome"], "invite_created")
+        self.assertFalse(entry["intent_recorded"])
 
     @patch("discordbot.activity_launch.discord_json")
     def test_channel_busy_is_logged(self, api):
