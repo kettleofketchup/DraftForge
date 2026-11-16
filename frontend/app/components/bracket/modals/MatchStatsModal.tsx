@@ -330,12 +330,10 @@ export function MatchStatsModal({
           {match.radiantTeam &&
             match.direTeam &&
             (() => {
-              // Check if user is a captain of either team in this match
               const isCaptain =
                 match.radiantTeam?.captain?.pk === currentUser?.pk ||
                 match.direTeam?.captain?.pk === currentUser?.pk;
 
-              // User can access draft if: staff OR captain
               const canAccessDraft = isStaff || isCaptain;
 
               // If draft exists, anyone can view it

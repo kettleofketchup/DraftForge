@@ -237,7 +237,6 @@ test.describe('Bracket Unset Winner (e2e)', () => {
     await closeModal(page);
     await reloadBracket(page);
 
-    // Unset → reload.
     dialog = await openTargetModal(page);
     await clickAndPersistMatchResult(
       page,
