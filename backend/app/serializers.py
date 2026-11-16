@@ -1,3 +1,5 @@
+from collections.abc import Collection
+from dataclasses import dataclass
 from functools import cache
 from typing import Any
 from zoneinfo import available_timezones
@@ -177,6 +179,89 @@ def _serialize_user_with_mmr(
     return results[0] if results else TournamentUserSerializer(user).data
 
 
+TEAM_USER_INDEX = "team_user_index"
+TEAM_ROSTER_FIELDS: tuple[str, ...] = ("members", "dropin_members", "left_members")
+
+
+@dataclass(frozen=True)
+class TeamUserIndex:
+    """Users of many teams, serialized once, for TeamSerializerForTournament.
+
+    Pass it in serializer context under TEAM_USER_INDEX. Entries match the
+    per-team _serialize_users_with_mmr output; rosters are sorted by user pk,
+    the order that path returns.
+    """
+
+    users: dict[int, dict[str, Any]]
+    rosters: dict[int, dict[str, list[int]]]
+
+
+def build_team_user_index(
+    tournament: Tournament, teams: Collection[Team]
+) -> TeamUserIndex:
+    """Bulk version of _serialize_users_with_mmr for every user on `teams`."""
+    # local: org.serializers imports app.serializers
+    from org.serializers import OrgUserSerializer
+
+    team_ids = {team.pk for team in teams}
+    rosters: dict[int, dict[str, list[int]]] = {
+        pk: {field: [] for field in TEAM_ROSTER_FIELDS} for pk in team_ids
+    }
+    user_pks: set[int] = set()
+    for team in teams:
+        user_pks.update(pk for pk in (team.captain_id, team.deputy_captain_id) if pk)
+    for field in TEAM_ROSTER_FIELDS:
+        m2m = Team._meta.get_field(field)
+        team_col = f"{m2m.m2m_field_name()}_id"
+        user_col = f"{m2m.m2m_reverse_field_name()}_id"
+        rows = (
+            m2m.remote_field.through.objects.filter(**{f"{team_col}__in": team_ids})
+            .order_by(team_col, user_col)
+            .values_list(team_col, user_col)
+        )
+        for team_id, user_id in rows:
+            rosters[team_id][field].append(user_id)
+            user_pks.add(user_id)
+
+    if not user_pks:
+        return TeamUserIndex({}, rosters)
+    org = _tournament_organization(tournament)
+    if not org:
+        users_qs = with_user_profiles(
+            CustomUser.objects.filter(pk__in=user_pks), dota=True
+        ).order_by("pk")
+        serialized = TournamentUserSerializer(users_qs, many=True).data
+        return TeamUserIndex({row["pk"]: row for row in serialized}, rosters)
+
+    league_id = tournament.league_id
+    org_users_qs = (
+        with_user_profiles(
+            OrgUser.objects.filter(organization=org, user_id__in=user_pks),
+            "user",
+            dota=True,
+        )
+        .prefetch_related(
+            Prefetch(
+                "league_memberships",
+                queryset=LeagueUser.objects.filter(league_id=league_id),
+            )
+        )
+        .order_by("user_id")
+    )
+    org_users = list(org_users_qs)
+    missing = user_pks - {ou.user_id for ou in org_users}
+    if missing:
+        OrgUser.objects.bulk_create(
+            [OrgUser(user_id=pk, organization=org) for pk in sorted(missing)],
+            ignore_conflicts=True,
+        )
+        org_users = list(org_users_qs.all())
+    serialized = OrgUserSerializer(
+        org_users, many=True, context={"league_id": league_id}
+    ).data
+    return TeamUserIndex({row["pk"]: row for row in serialized}, rosters)
+
+
 def _collect_tournament_user_pks(tournament: Tournament) -> set[int]:
     """Collect all unique user PKs from a tournament and its teams.
 
@@ -325,20 +410,44 @@ class TeamSerializerForTournament(serializers.ModelSerializer):
     deputy_captain = serializers.SerializerMethodField()
     draft_order = serializers.IntegerField()
 
-    def get_members(self, team: Team) -> ReturnList:
-        return _serialize_users_with_mmr(team.members.all(), team.tournament)
+    def _index(self, team: Team) -> TeamUserIndex | None:
+        index: TeamUserIndex | None = self.context.get(TEAM_USER_INDEX)
+        return index if index is not None and team.pk in index.rosters else None
 
-    def get_dropin_members(self, team: Team) -> ReturnList:
-        return _serialize_users_with_mmr(team.dropin_members.all(), team.tournament)
+    def _roster(self, team: Team, field: str) -> list[dict[str, Any]]:
+        index = self._index(team)
+        if index is None:
+            return _serialize_users_with_mmr(
+                getattr(team, field).all(), team.tournament
+            )
+        # users without an OrgUser are left out, as in _serialize_users_with_mmr
+        return [
+            index.users[pk] for pk in index.rosters[team.pk][field] if pk in index.users
+        ]
 
-    def get_left_members(self, team: Team) -> ReturnList:
-        return _serialize_users_with_mmr(team.left_members.all(), team.tournament)
+    def _user(self, team: Team, field: str) -> dict | None:
+        index = self._index(team)
+        user_id = getattr(team, f"{field}_id")
+        if user_id is None:
+            return None
+        if index is not None and user_id in index.users:
+            return index.users[user_id]
+        return _serialize_user_with_mmr(getattr(team, field), team.tournament)
+
+    def get_members(self, team: Team) -> list[dict[str, Any]]:
+        return self._roster(team, "members")
+
+    def get_dropin_members(self, team: Team) -> list[dict[str, Any]]:
+        return self._roster(team, "dropin_members")
+
+    def get_left_members(self, team: Team) -> list[dict[str, Any]]:
+        return self._roster(team, "left_members")
 
     def get_captain(self, team: Team) -> dict | None:
-        return _serialize_user_with_mmr(team.captain, team.tournament)
+        return self._user(team, "captain")
 
     def get_deputy_captain(self, team: Team) -> dict | None:
-        return _serialize_user_with_mmr(team.deputy_captain, team.tournament)
+        return self._user(team, "deputy_captain")
 
     class Meta:
         model = Team
