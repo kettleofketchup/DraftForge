@@ -22,10 +22,21 @@ class ResizeObserverStub {
   unobserve() {}
   disconnect() {}
 }
-globalThis.ResizeObserver ??= ResizeObserverStub as unknown as typeof ResizeObserver;
+globalThis.ResizeObserver ??=
+  ResizeObserverStub as unknown as typeof ResizeObserver;
 
-const captain: UserType = { pk: 41, username: 'alice', nickname: 'Alice', mmr: 5000 } as UserType;
-const member: UserType = { pk: 42, username: 'bob', nickname: 'Bob', mmr: 4200 } as UserType;
+const captain: UserType = {
+  pk: 41,
+  username: 'alice',
+  discordNickname: 'Alice',
+  mmr: 5000,
+} as UserType;
+const member: UserType = {
+  pk: 42,
+  username: 'bob',
+  discordNickname: 'Bob',
+  mmr: 4200,
+} as UserType;
 
 const team = {
   pk: 1,
@@ -73,7 +84,9 @@ function stubFetch() {
 }
 
 function wrap(node: ReactNode) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
   return render(
     <QueryClientProvider client={client}>
       <TooltipProvider>{node}</TooltipProvider>
@@ -82,7 +95,9 @@ function wrap(node: ReactNode) {
 }
 
 function memberRow(): HTMLElement {
-  const row = screen.getAllByText('Bob')[0].closest('[class*="base-700"], [class*="slate-700"]');
+  const row = screen
+    .getAllByText('Bob')[0]
+    .closest('[class*="base-700"], [class*="slate-700"]');
   if (!row) throw new Error('member row not found');
   return row as HTMLElement;
 }
@@ -94,14 +109,28 @@ afterEach(() => {
 describe('CompletedTeamDraftView league stats', () => {
   it('threads leaguePk down to the member UserStrip', async () => {
     const fetchSpy = stubFetch();
-    wrap(<CompletedTeamDraftView teams={[team]} organizationId={1} leaguePk={10} />);
+    wrap(
+      <CompletedTeamDraftView
+        teams={[team]}
+        organizationId={1}
+        leaguePk={10}
+      />,
+    );
     expect(await screen.findAllByTestId('strip-league-stats')).toHaveLength(1);
-    expect(String(fetchSpy.mock.calls[0][0])).toContain('/api/steam/leagues/10/player-summaries/');
+    expect(String(fetchSpy.mock.calls[0][0])).toContain(
+      '/api/steam/leagues/10/player-summaries/',
+    );
   });
 
   it('renders no column and makes no request when leaguePk is null', async () => {
     const fetchSpy = stubFetch();
-    wrap(<CompletedTeamDraftView teams={[team]} organizationId={1} leaguePk={null} />);
+    wrap(
+      <CompletedTeamDraftView
+        teams={[team]}
+        organizationId={1}
+        leaguePk={null}
+      />,
+    );
     await waitFor(() => expect(screen.getAllByText('Bob')[0]).toBeTruthy());
     expect(screen.queryByTestId('strip-league-stats')).toBeNull();
     expect(fetchSpy).not.toHaveBeenCalled();
@@ -109,7 +138,13 @@ describe('CompletedTeamDraftView league stats', () => {
 
   it('member row uses base tokens, not slate', () => {
     stubFetch();
-    wrap(<CompletedTeamDraftView teams={[team]} organizationId={1} leaguePk={null} />);
+    wrap(
+      <CompletedTeamDraftView
+        teams={[team]}
+        organizationId={1}
+        leaguePk={null}
+      />,
+    );
     const cls = memberRow().className;
     expect(cls).toContain('bg-base-700/30');
     expect(cls).not.toContain('slate');
