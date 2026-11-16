@@ -71,10 +71,7 @@ export interface ConnectionOptions {
 export type MessageHandler = (message: unknown) => void;
 export type Unsubscribe = () => void;
 
-/**
- * Internal connection tracking structure.
- * Not exported - used only by WebSocketManager.
- */
+/** Connection tracking structure, used only by WebSocketManager. */
 export interface WebSocketConnection {
   url: string;
   ws: WebSocket | null;
@@ -88,4 +85,6 @@ export interface WebSocketConnection {
   intentionalClose: boolean;
   connectStartTime: number | null;
   autoDisconnectTimeout: NodeJS.Timeout | null;
+  /** Activity token in use after the last 4401 refresh; a repeat 4401 on it is terminal. */
+  activityRefreshedToken?: string;
 }

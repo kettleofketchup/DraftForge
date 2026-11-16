@@ -73,3 +73,35 @@ class TelemetryConsumerMixinTest(TestCase):
 
         ctx = structlog.contextvars.get_contextvars()
         self.assertNotIn("ws.conn_id", ctx)
+
+    def test_connect_binds_activity_fields(self) -> None:
+        consumer = MockConsumer()
+        consumer.scope["path"] = "/api/discord/activity/draft/5/"
+        consumer.scope["activity"] = {
+            "instance_id": "i-1",
+            "tournament_id": 3,
+            "kind": "hero",
+            "draft_id": 5,
+            "role": "captain",
+        }
+
+        async def run_test() -> dict[str, object]:
+            await consumer.telemetry_connect()
+            return structlog.contextvars.get_contextvars()
+
+        ctx = asyncio.run(run_test())
+        self.assertEqual(ctx.get("activity.instance_id"), "i-1")
+        self.assertEqual(ctx.get("activity.kind"), "hero")
+        self.assertEqual(ctx.get("activity.role"), "captain")
+        self.assertEqual(ctx.get("herodraft.id"), 5)
+        self.assertNotIn("draft.id", ctx)
+
+    def test_connect_without_activity_binds_no_activity_fields(self) -> None:
+        consumer = MockConsumer()
+
+        async def run_test() -> dict[str, object]:
+            await consumer.telemetry_connect()
+            return structlog.contextvars.get_contextvars()
+
+        ctx = asyncio.run(run_test())
+        self.assertNotIn("activity.role", ctx)

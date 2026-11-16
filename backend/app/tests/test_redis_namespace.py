@@ -30,6 +30,7 @@ from app.tasks.herodraft_tick import (
 )
 from app.tests.test_consumers_base import ConcreteDraftConsumer
 from config.celery import app as celery_app
+from discordbot.activity_intent import intent_key
 from discordbot.utils import _acquire_rate_limit_token, rate_limit_key
 from tests.cache import flush_run_cache
 
@@ -341,3 +342,14 @@ class DiscordRateLimitKeyTests(SimpleTestCase):
             client.eval.return_value = 1
             _acquire_rate_limit_token()
         self.assertEqual(client.eval.call_args.args[2], "ns:discord:rate_limit:global")
+
+
+class ActivityIntentKeyTests(SimpleTestCase):
+    @override_settings(REDIS_KEY_NAMESPACE="")
+    def test_production_key_unchanged(self) -> None:
+        self.assertEqual(intent_key("1"), "activity:launch_intent:1")
+
+    def test_activity_intent_key_is_namespaced(self) -> None:
+        self.assertEqual(intent_key("1"), namespaced_key("activity:launch_intent:1"))
+        self.assertNotEqual(intent_key("1"), "activity:launch_intent:1")
+        self.assertTrue(intent_key("1").startswith(settings.REDIS_KEY_NAMESPACE))
