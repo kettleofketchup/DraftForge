@@ -21,19 +21,15 @@ from django.core.cache import cache
 #   `discord_members_<guild_id>` — full member list per guild, paginated
 #   from Discord and cached for DISCORD_MEMBER_CACHE_TTL_S (1 hour).
 #
-# Two consumer patterns share this single cache:
-#   1. Admin member search / add-to-tournament — admins searching a
-#      Discord member who joined recently force a refresh via the
-#      `refresh_discord_members` endpoint (5-min cooldown). That repaves
-#      the cache, so subsequent searches AND the daily avatar refresh
-#      (item 2) see the new member without their own Discord call.
+# The cache is per process backend: Daphne uses the Redis default cache,
+# celery workers (config.settings_celery, no CACHES) use process-local
+# LocMem, so the two never share entries.
+#   1. Admin member search / add-to-tournament (Daphne) — admins searching
+#      a Discord member who joined recently force a refresh via the
+#      `refresh_discord_members` endpoint (5-min cooldown).
 #   2. Daily avatar refresh — the `refresh_avatars_batched` Celery task
-#      reads this cache to update the User.avatar column for any
-#      Discord-linked user. Daily cadence is enough; admin-triggered
-#      refreshes (item 1) cover the "user joined since yesterday" gap.
-#
-# The TTL is long because the daily avatar task needs the cache to still
-# hold data between admin-triggered fills.
+#      fetches through this helper in the worker; its LocMem entry only
+#      saves repeat fetches within that worker process.
 DISCORD_MEMBER_CACHE_TTL_S = 60 * 60  # 1 hour
 
 # Per-request bound for Discord REST calls. Without one, a request whose TCP

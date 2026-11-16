@@ -10,6 +10,7 @@ import requests
 from celery import shared_task
 
 from app.internal_client import get_users_for_avatar_check, update_user_avatar
+from config.discord_api import DISCORD_API_BASE_URL
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
@@ -34,7 +35,7 @@ def _fetch_discord_avatar(discord_id):
     token = os.environ.get("DISCORD_BOT_TOKEN", "")
     if not token:
         return None
-    api_base = os.environ.get("DISCORD_API_BASE_URL", "https://discord.com/api/v10")
+    api_base = os.environ.get("DISCORD_API_BASE_URL", DISCORD_API_BASE_URL)
     try:
         resp = requests.get(
             f"{api_base}/users/{discord_id}",
@@ -180,14 +181,12 @@ def refresh_avatars_batched():
       1. Skip users that have no `discordId` (most "Failed to fetch" log
          lines were coming from non-Discord-linked test users).
       2. Group orgs by `discord_server_id`, then for each guild call
-         `discordbot.services.users.get_discord_members_data(guild_id)`.
+         `discordbot.services.discord_members.get_discord_members_data(guild_id)`.
          That helper paginates `GET /guilds/{id}/members?limit=1000` until
-         exhausted AND caches the full member list per guild under the
-         Redis key `discord_members_{guild_id}` (15s TTL). Reusing it
-         means:
-           - cache hit when search-members or refresh-members has run in
-             the last 15 seconds → avatar refresh becomes free in that
-             window (no Discord call at all).
+         exhausted and caches the member list per guild under
+         `discord_members_{guild_id}` (1h TTL). The worker's cache is
+         process-local LocMem, so it does not see fills made by Daphne's
+         search-members / refresh-members endpoints. Reusing it means:
            - single source of truth for pagination + rate-limit handling.
            - any future improvements to the helper (e.g. retry on 429)
              benefit avatar refresh automatically.
