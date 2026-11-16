@@ -468,10 +468,20 @@ class ActivitySocketMiddleware:
         next_validation = started + SOCKET_REVALIDATE_SECONDS
         validation_lock = asyncio.Lock()
         last_close_code: int | None = None
+        expiry_logged = False
 
         async def check_session() -> None:
-            nonlocal next_validation, role
+            nonlocal next_validation, role, expiry_logged
             if time.time() >= expires_at:
+                if not expiry_logged:
+                    expiry_logged = True
+                    self._log_rejected(
+                        ActivityAuthFailed(
+                            "activity_session_ended", SESSION_EXPIRED, "expired"
+                        ),
+                        draft_id,
+                        identity,
+                    )
                 raise _ActivitySessionEnded(SESSION_ENDED_CODE, "expired")
             if time.monotonic() < next_validation:
                 return

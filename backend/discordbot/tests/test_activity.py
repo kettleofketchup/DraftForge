@@ -1601,6 +1601,11 @@ class ActivitySocketDatabaseTests(ClearIntentsMixin, TransactionTestCase):
             await socket.disconnect()
         closed = [e for e in logs if e["event"] == "activity_socket_closed"]
         self.assertEqual([e["reason"] for e in closed], ["expired"])
+        rejected = [e for e in logs if e["event"] == "activity_auth_rejected"]
+        self.assertEqual(
+            [(e["reason"], e["code"], e["surface"]) for e in rejected],
+            [("expired", "activity_session_ended", "socket")],
+        )
 
     async def test_client_disconnect_is_logged(self):
         with capture_logs() as logs:
