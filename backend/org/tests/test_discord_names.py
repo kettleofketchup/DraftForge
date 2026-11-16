@@ -318,6 +318,9 @@ class ApplyGuildMemberNamesCacheopsTests(TransactionTestCase):
         )
         self.assertIsNone(self._org_users_nick())
         self.assertIsNone(self._tournament_nick())
+        self.assertIsNone(self._tournament_nick())
+        with self.assertNumQueries(0):
+            self.assertIsNone(self._tournament_nick())
 
         apply_guild_member_names("111", [self.org.pk], [_dragon()], complete=True)
 

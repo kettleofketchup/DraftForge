@@ -108,7 +108,7 @@ def apply_guild_member_names(
         return _ZERO
 
     record_snapshot = complete and fetched_at is not None
-    if record_snapshot:
+    if complete and fetched_at is not None:
         last_applied = cache.get(applied_snapshot_key(guild_id))
         if last_applied is not None and fetched_at < last_applied:
             log.warning(
