@@ -55,6 +55,7 @@ interface BracketViewProps {
   embedded?: boolean;
   onOpenHeroDraft?: (id: number) => void;
   openableDraftIds?: ReadonlySet<number>;
+  onMatchOpen?: () => void;
   header?: ReactNode;
 }
 
@@ -140,6 +141,7 @@ function BracketFlowInner({
   embedded = false,
   onOpenHeroDraft,
   openableDraftIds,
+  onMatchOpen,
   header,
 }: BracketViewProps) {
   const navigate = useNavigate();
@@ -556,6 +558,7 @@ function BracketFlowInner({
   const handleNodeClick = useCallback(
     (_: React.MouseEvent, node: Node) => {
       setSelectedMatchId(node.id);
+      onMatchOpen?.();
       if (embedded) return;
       // Update URL to shareable match URL - prefer gameId (backend ID) over temporary id
       const match = matches.find((m) => m.id === node.id);
@@ -568,7 +571,7 @@ function BracketFlowInner({
         { replace: true },
       );
     },
-    [navigate, tournamentId, matches, searchParams, embedded],
+    [navigate, tournamentId, matches, searchParams, embedded, onMatchOpen],
   );
 
   if (isLoading && matches.length === 0) {

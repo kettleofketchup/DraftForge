@@ -181,6 +181,25 @@ describe('BracketView embedded in the Activity', () => {
     );
   });
 
+  it('reports a match opening so the openable drafts can refresh', async () => {
+    const onMatchOpen = vi.fn();
+    render(
+      <BracketView
+        tournamentId={7}
+        embedded
+        openableDraftIds={new Set()}
+        onOpenHeroDraft={vi.fn()}
+        onMatchOpen={onMatchOpen}
+      />,
+      { wrapper: Wrapper },
+    );
+
+    expect(onMatchOpen).not.toHaveBeenCalled();
+    fireEvent.click(await screen.findByTestId('node-w-1-0'));
+    expect(screen.getByTestId('matchStatsModal')).toBeInTheDocument();
+    await waitFor(() => expect(onMatchOpen).toHaveBeenCalledTimes(1));
+  });
+
   it('shows no open-draft button when the draft is not openable', async () => {
     render(
       <BracketView
