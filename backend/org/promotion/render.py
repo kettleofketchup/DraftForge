@@ -5,9 +5,11 @@ from typing import TypedDict
 
 from django.conf import settings
 
+from app.display_names import user_display_name
 from app.models import CustomUser, Organization
 from common.discord_format import discord_timestamp
 from events.models import Event
+from org.display_names import guild_nicknames
 
 
 class PlaceholderSpec(TypedDict):
@@ -18,7 +20,7 @@ class PlaceholderSpec(TypedDict):
 PLACEHOLDERS: tuple[PlaceholderSpec, ...] = (
     {
         "key": "player",
-        "description": "Recipient's nickname, or username if unset",
+        "description": "Recipient's server nickname, Discord name, or username",
     },
     {"key": "promoter", "description": "Your name"},
     {"key": "event", "description": "Event name"},
@@ -74,8 +76,8 @@ def render_template(body: str, context: Mapping[str, str]) -> RenderResult:
     return RenderResult(text=text, warnings=_scan_warnings(body))
 
 
-def player_name(user: CustomUser) -> str:
-    return user.nickname or user.username or ""
+def player_name(user: CustomUser, guild_nickname: str | None = None) -> str:
+    return user_display_name(user, guild_nickname=guild_nickname)
 
 
 def build_context(
@@ -88,9 +90,10 @@ def build_context(
     signups_open = (
         discord_timestamp(event.signups_open_at, "R") if event.signups_open_at else ""
     )
+    nicks = guild_nicknames(org.pk, [recipient.pk, sender.pk])
     return {
-        "player": player_name(recipient),
-        "promoter": player_name(sender),
+        "player": player_name(recipient, nicks.get(recipient.pk)),
+        "promoter": player_name(sender, nicks.get(sender.pk)),
         "event": event.name,
         "event_time": discord_timestamp(event.scheduled_at, "F"),
         "event_time_relative": discord_timestamp(event.scheduled_at, "R"),

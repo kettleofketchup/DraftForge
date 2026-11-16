@@ -54,9 +54,11 @@ class PromotionApiBase(TestCase):
             set_org_feature(org, FeatureKey.PROMOTION, enabled=True, actor=None)
 
         self.recipient = self._user("papi_recipient")
-        self.recipient.nickname = "Recipient Nick"
+        self.recipient.discordNickname = "Recipient Global"
         self.recipient.save()
-        OrgUser.objects.create(user=self.recipient, organization=self.org)
+        OrgUser.objects.create(
+            user=self.recipient, organization=self.org, guild_nickname="Recipient Nick"
+        )
         self.league = League.objects.create(
             name="Promotion API League", organization=self.org, steam_league_id=88401
         )

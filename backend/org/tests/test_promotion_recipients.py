@@ -308,6 +308,7 @@ class CandidatesTest(_PoolFixture):
             },
         )
         self.assertEqual(row["user_pk"], self.ann.pk)
+        self.assertIsNone(row["nickname"])
         self.assertEqual(row["discordUsername"], "ann_dc")
         self.assertEqual(row["discordId"], self.ann.discordId)
         self.assertEqual(row["avatarUrl"], self.ann.avatarUrl)
@@ -397,6 +398,18 @@ class CandidatesTest(_PoolFixture):
         self.assertEqual(row["last_messaged"]["sent_at"], newest.sent_at)
         self.assertEqual(row["last_messaged"]["by"], "pool_sender")
         self.assertFalse(row["last_messaged"]["can_undo"])
+
+    def test_last_messaged_by_uses_senders_server_nickname(self) -> None:
+        OrgUser.objects.update_or_create(
+            user=self.sender,
+            organization=self.org,
+            defaults={"guild_nickname": "SenderDTX"},
+        )
+        self._send(self.ann, sent_at_offset=0)
+
+        row = self._rows_by_username(hide_messaged=False)["ann"]
+
+        self.assertEqual(row["last_messaged"]["by"], "SenderDTX")
 
     def test_earning_send_exists_flag(self) -> None:
         self._send(self.ann, sent_at_offset=0)

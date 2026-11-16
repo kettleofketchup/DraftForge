@@ -7,6 +7,7 @@ from django.utils import timezone
 from app.models import CustomUser, Organization, Tournament
 from events.constants import EventState, SignupStatus
 from events.models import Event, EventSignup
+from org.display_names import guild_nicknames
 from org.models import OrgUser
 from org.models_promotion import PromoSend
 from org.promotion.render import player_name
@@ -33,7 +34,7 @@ class LastMessaged(TypedDict):
 class CandidateRow(TypedDict):
     user_pk: int
     username: str
-    nickname: str | None
+    nickname: None
     discordUsername: str | None
     discordNickname: str | None
     guildNickname: str | None
@@ -135,6 +136,9 @@ def candidates(
         if send.earns_points:
             earning.add(send.recipient_id)
 
+    sender_nicks = guild_nicknames(
+        org.pk, {s.sender_id for s in latest.values() if s.sender_id is not None}
+    )
     rows: list[CandidateRow] = []
     for user in users:
         send = latest.get(user.pk)
@@ -142,7 +146,11 @@ def candidates(
         if send is not None:
             last_messaged = {
                 "send_id": send.pk,
-                "by": player_name(send.sender) if send.sender else None,
+                "by": (
+                    player_name(send.sender, sender_nicks.get(send.sender_id))
+                    if send.sender
+                    else None
+                ),
                 "sent_at": send.sent_at,
                 "can_undo": False,
             }
@@ -150,7 +158,7 @@ def candidates(
             {
                 "user_pk": user.pk,
                 "username": user.username,
-                "nickname": user.nickname,
+                "nickname": None,
                 "discordUsername": user.discordUsername,
                 "discordNickname": user.discordNickname,
                 "guildNickname": user.org_guild_nickname,
