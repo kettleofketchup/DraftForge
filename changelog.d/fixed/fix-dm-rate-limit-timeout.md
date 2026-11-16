@@ -1,0 +1,1 @@
+- A Discord rate-limit wait that runs out no longer stops a batch of tournament draft or hero draft DMs: that player is listed as failed, the rest still get the link, and the notification log is completed.
