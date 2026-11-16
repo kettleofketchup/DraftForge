@@ -12,13 +12,14 @@ import {
 } from '~/components/ui/buttons';
 import { InfoDialog } from '~/components/ui/dialogs';
 import { useSharedPopover } from '~/components/ui/shared-popover-context';
-import { UserAvatar } from '~/components/user/UserAvatar';
-import { DisplayName } from '~/components/user/avatar';
 import { RolePositions } from '~/components/user/positions';
 import type { UserType } from '~/components/user/types';
 import { User } from '~/components/user/user';
+import { UserAvatar } from '~/components/user/UserAvatar';
 import UserEditModal from '~/components/user/userCard/editModal';
 import type { EditUserScope } from '~/components/user/userCard/editUserSchema';
+import { useDisplayName } from '~/hooks/useDisplayName';
+import { useDisplayOrgId } from '~/hooks/useDisplayOrgId';
 import { getLogger } from '~/lib/logger';
 import { useLeagueStore } from '~/store/leagueStore';
 import { useOrgStore } from '~/store/orgStore';
@@ -154,7 +155,11 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
 
   // Use full data if available, otherwise fall back to partial player data
   const displayPlayer = fullUserData || player;
-  const playerName = DisplayName(displayPlayer);
+  const routeOrgId = useDisplayOrgId();
+  const playerName = useDisplayName(
+    displayPlayer,
+    organizationId ?? routeOrgId,
+  );
 
   const handleViewFullProfile = () => {
     if (displayPlayer.pk) {
@@ -243,10 +248,10 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
               {displayPlayer.username}
             </div>
           )}
-          {displayPlayer.nickname && (
+          {displayPlayer.discordNickname && (
             <div>
-              <span className="font-semibold">Nickname:</span>{' '}
-              {displayPlayer.nickname}
+              <span className="font-semibold">Discord name:</span>{' '}
+              {displayPlayer.discordNickname}
             </div>
           )}
           {displayPlayer.mmr && (

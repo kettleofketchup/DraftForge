@@ -6,6 +6,7 @@ import {
 } from '~/components/ui/buttons';
 import { DisplayName } from '~/components/user/avatar';
 import { UserAvatar } from '~/components/user/UserAvatar';
+import { useDisplayOrgId } from '~/hooks/useDisplayOrgId';
 import type { UserType } from '~/index';
 import { formatDuration } from '~/lib/dota/utils';
 import { cn } from '~/lib/utils';
@@ -83,6 +84,7 @@ export function DraftClockBar({
   onPause,
   onStartClock,
 }: DraftClockBarProps) {
+  const displayOrgId = useDisplayOrgId();
   if (!timerEnabled) return null;
 
   const armed = countdown.kind === 'armed' ? countdown : null;
@@ -146,7 +148,7 @@ export function DraftClockBar({
               >
                 <UserAvatar user={activeCaptain} size="sm" border="captain" />
                 <span className="truncate font-semibold">
-                  {DisplayName(activeCaptain)}
+                  {DisplayName(activeCaptain, undefined, displayOrgId)}
                 </span>
               </div>
             )}
@@ -184,8 +186,10 @@ export function DraftClockBar({
                 className="text-sm font-semibold text-red-300"
               >
                 Clock expired — waiting for{' '}
-                {activeCaptain ? DisplayName(activeCaptain) : 'captain'} or
-                staff to pick
+                {activeCaptain
+                  ? DisplayName(activeCaptain, undefined, displayOrgId)
+                  : 'captain'}{' '}
+                or staff to pick
               </span>
             ) : (
               <div className="flex items-stretch rounded-lg bg-black/30">

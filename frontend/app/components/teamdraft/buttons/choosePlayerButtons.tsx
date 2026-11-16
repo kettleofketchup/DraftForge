@@ -6,6 +6,7 @@ import { Button } from '~/components/ui/button';
 import { PrimaryButton } from '~/components/ui/buttons';
 import { ConfirmDialog } from '~/components/ui/dialogs';
 import { DisplayName } from '~/components/user/avatar';
+import { useDisplayOrgId } from '~/hooks/useDisplayOrgId';
 import type { UserType } from '~/index';
 import { getLogger } from '~/lib/logger';
 import {
@@ -20,6 +21,7 @@ const log = getLogger('pickPlayerButton');
 export const ChoosePlayerButton: React.FC<{
   user: UserType;
 }> = ({ user }) => {
+  const displayOrgId = useDisplayOrgId();
   const tournament = useUserStore((state) => state.tournament);
   const currentUser = useUserStore((state) => state.currentUser);
 
@@ -75,7 +77,7 @@ export const ChoosePlayerButton: React.FC<{
     });
 
     log.debug('updateDraftRound', {
-      user: DisplayName(user),
+      user: DisplayName(user, undefined, displayOrgId),
       draft_round: curDraftRound.pk,
       draft: draft,
     });
@@ -149,8 +151,8 @@ export const ChoosePlayerButton: React.FC<{
       <ConfirmDialog
         open={showConfirm}
         onOpenChange={setShowConfirm}
-        title={`Choose player ${DisplayName(user)}`}
-        description={`This will add ${DisplayName(user)} to your team.`}
+        title={`Choose player ${DisplayName(user, undefined, displayOrgId)}`}
+        description={`This will add ${DisplayName(user, undefined, displayOrgId)} to your team.`}
         confirmLabel="Confirm Pick"
         variant="default"
         onConfirm={handleChange}

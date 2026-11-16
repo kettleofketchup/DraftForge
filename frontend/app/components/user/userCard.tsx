@@ -14,10 +14,11 @@ import {
 } from '~/components/ui/card';
 import { Item, ItemContent, ItemTitle } from '~/components/ui/item';
 import { useSharedPopoverActions } from '~/components/ui/shared-popover-context';
-import { DisplayName } from '~/components/user/avatar';
 import type { UserClassType, UserType } from '~/components/user/types';
 import { User } from '~/components/user/user';
 import { UserAvatar } from '~/components/user/UserAvatar';
+import { useDisplayName } from '~/hooks/useDisplayName';
+import { useDisplayOrgId } from '~/hooks/useDisplayOrgId';
 import { usePlayerPositions } from '~/hooks/usePlayerPositions';
 import { getLogger } from '~/lib/logger';
 import { PlayerRemoveButton } from '~/pages/tournament/tabs/players/playerRemoveButton';
@@ -78,6 +79,8 @@ export const UserCard: React.FC<Props> = memo(
     // gameType-aware positions over the list-populated entity adapter; fall back
     // to the passed user.positions off-Dota / pre-cache so display is unchanged.
     const positions = usePlayerPositions(user.pk ?? -1) ?? user.positions;
+    const routeOrgId = useDisplayOrgId();
+    const displayName = useDisplayName(user, organizationId ?? routeOrgId);
     const currentOrg = useOrgStore((state) => state.currentOrg);
     const currentLeague = useLeagueStore((state) => state.currentLeague);
     // Actions-only subscription: openPlayerModal is referentially stable, and
@@ -287,9 +290,17 @@ export const UserCard: React.FC<Props> = memo(
         >
           {/* Header: 2-col layout with name/badges left, actions right */}
           <CardHeader className="p-0 gap-0.5">
-            <CardTitle className="text-base truncate">
-              {DisplayName(user)}
+            <CardTitle
+              className="text-base truncate"
+              data-testid="usercard-display-name"
+            >
+              {displayName}
             </CardTitle>
+            {user.username && user.username !== displayName && (
+              <CardDescription className="text-xs truncate">
+                @{user.username}
+              </CardDescription>
+            )}
             {!compact && (user.is_staff || user.is_superuser) && (
               <CardDescription className="flex gap-1">
                 {user.is_staff && (
@@ -394,20 +405,6 @@ export const UserCard: React.FC<Props> = memo(
                     Username
                   </ItemTitle>
                   <span className="text-sm truncate">{user.username}</span>
-                </ItemContent>
-              </Item>
-            )}
-            {user.nickname && user.nickname !== user.username && (
-              <Item
-                size="sm"
-                variant="muted"
-                className="!p-1 flex-1 min-w-0 basis-[calc(50%-0.125rem)]"
-              >
-                <ItemContent className="!gap-0 min-w-0">
-                  <ItemTitle className="!text-xs text-muted-foreground">
-                    Nickname
-                  </ItemTitle>
-                  <span className="text-sm truncate">{user.nickname}</span>
                 </ItemContent>
               </Item>
             )}

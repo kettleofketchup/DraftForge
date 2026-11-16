@@ -1,6 +1,7 @@
 import { Zap } from 'lucide-react';
 import { memo, useMemo } from 'react';
 import { Card, CardContent } from '~/components/ui/card';
+import { useDisplayOrgId } from '~/hooks/useDisplayOrgId';
 import { DisplayName, type TeamType, type UserType } from '~/index';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
@@ -27,6 +28,7 @@ const selectCurrentUserPk = (state: ReturnType<typeof useUserStore.getState>) =>
   state.currentUser?.pk;
 
 export const DoublePickThreshold: React.FC = memo(() => {
+  const displayOrgId = useDisplayOrgId();
   // Use granular selectors - component only re-renders when these specific values change
   const draftStyle = useUserStore(selectDraftStyle);
   const latestRoundPk = useUserStore(selectLatestRoundPk);
@@ -135,7 +137,7 @@ export const DoublePickThreshold: React.FC = memo(() => {
               </span>{' '}
               to pick again (
               {threshold.team.captain
-                ? DisplayName(threshold.team.captain)
+                ? DisplayName(threshold.team.captain, undefined, displayOrgId)
                 : threshold.team.name}
               )
             </span>

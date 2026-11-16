@@ -16,6 +16,7 @@ import {
   matchesLeagueFilter,
 } from '~/features/league-stats/filters';
 import { useLeaguePlayerSummaries } from '~/features/league-stats/queries';
+import { useDisplayOrgId } from '~/hooks/useDisplayOrgId';
 import type { UserType } from '~/index';
 import { cn } from '~/lib/utils';
 import { selectPositions } from '~/store/selectPositions';
@@ -166,6 +167,7 @@ const AvailablePlayerStrip = memo(
 AvailablePlayerStrip.displayName = 'AvailablePlayerStrip';
 
 export const AvailablePlayersSection = memo(() => {
+  const displayOrgId = useDisplayOrgId();
   const usersRemaining = useUserStore(selectUsersRemaining);
   const draftStyle = useUserStore(selectDraftStyle);
   const teams = useUserStore(selectTeams);
@@ -371,7 +373,7 @@ export const AvailablePlayersSection = memo(() => {
       <div className="flex-1 min-h-[180px] md:min-h-[250px] flex flex-col">
         <Card className="h-full flex items-center justify-center">
           <p className="text-lg font-semibold text-green-400">
-            Picked: {DisplayName(curDraftRoundChoice)}
+            Picked: {DisplayName(curDraftRoundChoice, undefined, displayOrgId)}
           </p>
         </Card>
       </div>

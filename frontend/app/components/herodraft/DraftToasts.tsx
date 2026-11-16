@@ -1,20 +1,29 @@
 // frontend/app/components/herodraft/DraftToasts.tsx
-import { DisplayName } from '~/components/user/avatar';
 import { UserAvatar } from '~/components/user/UserAvatar';
+import { displayNameById, resolveDisplayName } from '~/lib/userDisplayName';
 
 interface CaptainInfo {
   pk: number;
   username: string | null;
-  nickname?: string | null;
+  discordNickname?: string | null;
   avatar: string | null;
   avatarUrl?: string | null;
   discordId?: string | null;
+}
+
+function captainDisplayName(
+  captain: CaptainInfo | null | undefined,
+  orgId: number | null,
+): string {
+  if (!captain) return 'Unknown';
+  return displayNameById(captain.pk, resolveDisplayName(captain), orgId);
 }
 
 interface CaptainToastProps {
   captain: CaptainInfo | null | undefined;
   message: string;
   messageClassName?: string;
+  orgId: number | null;
 }
 
 /**
@@ -25,8 +34,9 @@ export function CaptainToast({
   captain,
   message,
   messageClassName,
+  orgId,
 }: CaptainToastProps) {
-  const captainName = captain ? DisplayName(captain) : 'Unknown';
+  const captainName = captainDisplayName(captain, orgId);
 
   return (
     <div className="flex items-center gap-2">
@@ -42,6 +52,7 @@ interface HeroActionToastProps {
   action: 'picked' | 'banned';
   heroName: string;
   heroIconUrl?: string;
+  orgId: number | null;
 }
 
 /**
@@ -53,8 +64,9 @@ export function HeroActionToast({
   action,
   heroName,
   heroIconUrl,
+  orgId,
 }: HeroActionToastProps) {
-  const captainName = captain ? DisplayName(captain) : 'Unknown';
+  const captainName = captainDisplayName(captain, orgId);
   const isBan = action === 'banned';
 
   return (

@@ -1,6 +1,7 @@
 import { memo, useMemo } from 'react';
 import { TeamTable } from '~/components/team/teamTable/teamTable';
 import { DisplayName } from '~/components/user/avatar';
+import { useDisplayOrgId } from '~/hooks/useDisplayOrgId';
 import { useUserStore } from '~/store/userStore';
 import { TeamPositionCoverageRow } from '../TeamPositionCoverage';
 
@@ -18,6 +19,7 @@ const selectOrganizationPk = (
 ) => state.tournament?.organization_pk;
 
 export const CurrentTeamSection = memo(() => {
+  const displayOrgId = useDisplayOrgId();
   const teams = useUserStore(selectTeams);
   const curDraftRoundCaptainPk = useUserStore(selectCurDraftRoundCaptainPk);
   const curDraftRoundCaptain = useUserStore(selectCurDraftRoundCaptain);
@@ -29,7 +31,7 @@ export const CurrentTeamSection = memo(() => {
   }, [teams, curDraftRoundCaptainPk]);
 
   const teamName = curDraftRoundCaptain
-    ? `${DisplayName(curDraftRoundCaptain)}'s Team`
+    ? `${DisplayName(curDraftRoundCaptain, undefined, displayOrgId)}'s Team`
     : 'Current Team';
 
   return (

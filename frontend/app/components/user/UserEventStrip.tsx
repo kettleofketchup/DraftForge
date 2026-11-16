@@ -6,9 +6,11 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '~/components/ui/tooltip';
-import { DisplayName } from '~/components/user/avatar';
 import { RolePositions } from '~/components/user/positions';
 import { UserAvatar } from '~/components/user/UserAvatar';
+import { useDisplayName } from '~/hooks/useDisplayName';
+import { useDisplayOrgId } from '~/hooks/useDisplayOrgId';
+import { truncateName } from '~/lib/userDisplayName';
 import { cn } from '~/lib/utils';
 import type { UserType } from './types';
 
@@ -77,13 +79,8 @@ export const UserEventStrip = memo(
     className,
     'data-testid': testId,
   }: UserEventStripProps) => {
-    const { fullName, displayedName } = useMemo(
-      () => ({
-        fullName: DisplayName(user),
-        displayedName: DisplayName(user, 20),
-      }),
-      [user?.username, user?.nickname],
-    );
+    const fullName = useDisplayName(user, useDisplayOrgId());
+    const displayedName = truncateName(fullName, 20);
 
     // Build a fake user object with positions for RolePositions component
     const userWithPositions = useMemo(() => {

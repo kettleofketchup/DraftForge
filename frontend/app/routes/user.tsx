@@ -27,7 +27,7 @@ export function meta({ data }: Route.MetaArgs) {
   const user = data?.user;
 
   if (user) {
-    const displayName = user.nickname || user.username || 'Player';
+    const displayName = user.discordNickname || user.username || 'Player';
     return generateMeta({
       title: displayName,
       description: `${displayName} — Dota 2 player profile on DraftForge`,

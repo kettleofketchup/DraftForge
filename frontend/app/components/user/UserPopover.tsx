@@ -3,15 +3,16 @@ import {
   HoverCardContent,
   HoverCardTrigger,
 } from '~/components/ui/hover-card';
-import { DisplayName } from '~/components/user/avatar';
 import { useUserLeagueStats } from '~/features/leaderboard/queries';
+import { useDisplayName } from '~/hooks/useDisplayName';
+import { useDisplayOrgId } from '~/hooks/useDisplayOrgId';
 import { LeagueStatsCard } from './LeagueStatsCard';
 import { UserAvatar } from './UserAvatar';
 
 interface UserPopoverProps {
   userId: number;
   username: string;
-  nickname?: string | null;
+  discordNickname?: string | null;
   avatar?: string | null;
   /** Discord ID for proper avatar URL construction */
   discordId?: string | null;
@@ -21,13 +22,16 @@ interface UserPopoverProps {
 export function UserPopover({
   userId,
   username,
-  nickname,
+  discordNickname,
   avatar,
   discordId,
   children,
 }: UserPopoverProps) {
   const { data: stats, isLoading } = useUserLeagueStats(userId);
-  const displayName = DisplayName({ nickname, username });
+  const displayName = useDisplayName(
+    { pk: userId, username, discordNickname },
+    useDisplayOrgId(),
+  );
 
   return (
     <HoverCard>
@@ -42,7 +46,7 @@ export function UserPopover({
         <div className="space-y-3">
           <div className="flex items-center gap-3">
             <UserAvatar
-              user={{ nickname, username, avatar, discordId }}
+              user={{ discordNickname, username, avatar, discordId }}
               size="lg"
             />
             <div className="font-semibold text-white">{displayName}</div>

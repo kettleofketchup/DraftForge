@@ -18,11 +18,11 @@ import {
   useUrlTabs,
 } from '~/components/ui/tabs';
 import { UserAvatar } from '~/components/user/UserAvatar';
-import { DisplayName } from '~/components/user/avatar';
 import { RolePositions } from '~/components/user/positions';
 import type { UserClassType, UserType } from '~/components/user/types';
 import { User } from '~/components/user/user';
 import UserEditModal from '~/components/user/userCard/editModal';
+import { useDisplayName } from '~/hooks/useDisplayName';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
 import { EditProfileModal } from './EditProfileModal';
@@ -61,6 +61,7 @@ export function UserProfilePage() {
     queryFn: () => fetchUser(userId!),
     enabled: !!userId,
   });
+  const displayName = useDisplayName(user, null);
 
   if (isLoading) {
     return <ProfileSkeleton />;
@@ -115,10 +116,10 @@ export function UserProfilePage() {
               <div className="flex-1 text-center sm:text-left min-w-0">
                 <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-2">
                   <h1
-                    data-testid="user-card-nickname"
+                    data-testid="user-card-display-name"
                     className="text-xl sm:text-3xl font-bold break-words min-w-0"
                   >
-                    {DisplayName(user)}
+                    {displayName}
                   </h1>
                   {isOwnProfile && (
                     <EditIconButton
@@ -139,7 +140,7 @@ export function UserProfilePage() {
                   )}
                 </div>
 
-                {user.nickname && user.nickname !== user.username && (
+                {user.username && user.username !== displayName && (
                   <p className="text-muted-foreground mb-2">@{user.username}</p>
                 )}
 
@@ -235,10 +236,14 @@ function OverviewTab({ user }: { user: UserType }) {
             <span className="text-muted-foreground shrink-0">Username</span>
             <span className="font-medium truncate">{user.username}</span>
           </div>
-          {user.nickname && (
+          {user.discordNickname && (
             <div className="flex justify-between gap-2">
-              <span className="text-muted-foreground shrink-0">Nickname</span>
-              <span className="font-medium truncate">{user.nickname}</span>
+              <span className="text-muted-foreground shrink-0">
+                Discord name
+              </span>
+              <span className="font-medium truncate">
+                {user.discordNickname}
+              </span>
             </div>
           )}
           {user.steam_account_id && (

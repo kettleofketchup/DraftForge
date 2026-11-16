@@ -11,6 +11,7 @@ import {
 import { useEffect, useRef, useState } from 'react';
 import { DisplayName } from '~/components/user/avatar';
 import { UserAvatar } from '~/components/user/UserAvatar';
+import { useDisplayOrgId } from '~/hooks/useDisplayOrgId';
 import type { UserType } from '~/index';
 import { cn } from '~/lib/utils';
 import type { TieResolution } from './types';
@@ -89,6 +90,7 @@ export function TieRollPopup({
   clockHeld,
   now = perfNow,
 }: TieRollPopupProps) {
+  const displayOrgId = useDisplayOrgId();
   const rounds = tie.roll_rounds.length;
   const timeline = tieRollTimeline(rounds, tie.hold_ms ?? DEFAULT_TIE_HOLD_MS);
   const nowRef = useRef(now);
@@ -114,7 +116,7 @@ export function TieRollPopup({
   const labelOf = (teamId: number) => {
     const captain = captainOf(teamId);
     return captain
-      ? DisplayName(captain)
+      ? DisplayName(captain, undefined, displayOrgId)
       : (tie.tied_teams.find((t) => t.id === teamId)?.name ?? 'Team');
   };
   const winnerLabel = labelOf(tie.winner_id);

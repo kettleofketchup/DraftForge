@@ -9,6 +9,7 @@ import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
 import { UserAvatar } from '~/components/user/UserAvatar';
 import { getLogger } from '~/lib/logger';
+import { matchesUserQuery } from '~/lib/userDisplayName';
 import { useUserStore } from '../../store/userStore';
 import { get_dtx_members } from '../api/api';
 import type { GuildMember, GuildMembers, UsersType } from '../user/types';
@@ -62,22 +63,9 @@ const DiscordUserDropdown: React.FC<Props> = ({
   const filteredUsers =
     query === ''
       ? discordUsers
-      : discordUsers.filter((person: GuildMember) => {
-          if (!query) return false;
-
-          const username = person.user.username
-            .toLowerCase()
-            .includes(query?.toLowerCase());
-
-          const nickname = (person as any).user?.nick
-            ?.toLowerCase()
-            .includes(query?.toLowerCase());
-
-          const global_name = person?.user?.global_name
-            ?.toLowerCase()
-            .includes(query?.toLowerCase());
-          return username || nickname || global_name;
-        });
+      : discordUsers.filter(
+          (person: GuildMember) => !!query && matchesUserQuery(person, query),
+        );
 
   // Remove users that have a discordId in discrimUsers
   const filteredWithoutDiscrim: GuildMember[] = discrimUsers

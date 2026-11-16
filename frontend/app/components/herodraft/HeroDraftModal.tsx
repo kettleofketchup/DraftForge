@@ -53,9 +53,11 @@ function WaitingForCaptain({
   rollWinnerTeam,
   teams,
   testId,
+  orgId,
 }: {
   rollWinnerTeam: HeroDraft['roll_winner'] | null;
   teams: HeroDraft['draft_teams'];
+  orgId: number | null;
   testId: string;
 }) {
   const winnerStillChoosing =
@@ -71,7 +73,9 @@ function WaitingForCaptain({
       <p>
         Waiting for{' '}
         <strong>
-          {choosingCaptain ? DisplayName(choosingCaptain) : 'captain'}
+          {choosingCaptain
+            ? DisplayName(choosingCaptain, undefined, orgId)
+            : 'captain'}
         </strong>{' '}
         to choose...
       </p>
@@ -98,6 +102,7 @@ export function HeroDraftModal({
 
   // WebSocket store - unified state and connection management
   const draft = useHeroDraftStore((state) => state.draft);
+  const draftOrgId = draft?.organization_pk ?? null;
   const tick = useHeroDraftStore((state) => state.tick);
   const lastEvent = useHeroDraftStore((state) => state.lastEvent);
   const setSelectedHeroId = useHeroDraftStore(
@@ -159,12 +164,15 @@ export function HeroDraftModal({
 
     const draftTeam = lastEvent.draft_team;
     const captain = draftTeam?.captain;
+    const toastOrgId =
+      useHeroDraftStore.getState().draft?.organization_pk ?? null;
 
     switch (lastEvent.event_type) {
       case 'captain_ready':
         toast(
           <CaptainToast
             captain={captain}
+            orgId={toastOrgId}
             message="is ready"
             messageClassName="text-blue-400 font-semibold"
           />,
@@ -181,6 +189,7 @@ export function HeroDraftModal({
         toast(
           <CaptainToast
             captain={captain}
+            orgId={toastOrgId}
             message={isReconnect ? 'reconnected' : 'joined'}
             messageClassName="text-green-500 font-semibold"
           />,
@@ -191,6 +200,7 @@ export function HeroDraftModal({
         toast(
           <CaptainToast
             captain={captain}
+            orgId={toastOrgId}
             message="disconnected"
             messageClassName="text-red-500 font-semibold"
           />,
@@ -216,6 +226,7 @@ export function HeroDraftModal({
         toast(
           <CaptainToast
             captain={captain}
+            orgId={toastOrgId}
             message="won the coin flip!"
             messageClassName="text-yellow-400 font-semibold"
           />,
@@ -231,6 +242,7 @@ export function HeroDraftModal({
         toast(
           <HeroActionToast
             captain={captain}
+            orgId={toastOrgId}
             action={action}
             heroName={heroName}
             heroIconUrl={heroIconUrl}
@@ -567,7 +579,7 @@ export function HeroDraftModal({
                             data-testid={`herodraft-captain-name-${team.id}`}
                           >
                             {team.captain
-                              ? DisplayName(team.captain)
+                              ? DisplayName(team.captain, undefined, draftOrgId)
                               : 'Unknown'}
                           </p>
                           <p
@@ -635,7 +647,11 @@ export function HeroDraftModal({
                       data-testid="herodraft-flip-winner"
                     >
                       {rollWinnerTeam?.captain
-                        ? DisplayName(rollWinnerTeam.captain)
+                        ? DisplayName(
+                            rollWinnerTeam.captain,
+                            undefined,
+                            draftOrgId,
+                          )
                         : 'Unknown'}{' '}
                       won the flip!
                     </h2>
@@ -716,7 +732,11 @@ export function HeroDraftModal({
                       <p data-testid="herodraft-waiting-for-winner">
                         Waiting for{' '}
                         {rollWinnerTeam?.captain
-                          ? DisplayName(rollWinnerTeam.captain)
+                          ? DisplayName(
+                              rollWinnerTeam.captain,
+                              undefined,
+                              draftOrgId,
+                            )
                           : 'winner'}{' '}
                         to choose...
                       </p>
@@ -792,6 +812,7 @@ export function HeroDraftModal({
                       <WaitingForCaptain
                         rollWinnerTeam={rollWinnerTeam}
                         teams={draft.draft_teams}
+                        orgId={draftOrgId}
                         testId={
                           isOnTeam
                             ? 'herodraft-team-spectating'
@@ -1033,7 +1054,11 @@ export function HeroDraftModal({
                                       const names = disconnected
                                         .map((t) =>
                                           t.captain
-                                            ? DisplayName(t.captain)
+                                            ? DisplayName(
+                                                t.captain,
+                                                undefined,
+                                                draftOrgId,
+                                              )
                                             : 'captain',
                                         )
                                         .join(' & ');

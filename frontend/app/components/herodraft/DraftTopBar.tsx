@@ -38,7 +38,7 @@ const RESERVE_CRITICAL_MS = 30_000;
 function captainToUser(captain: {
   pk: number;
   username: string | null;
-  nickname?: string | null;
+  discordNickname?: string | null;
   avatar: string | null;
   avatarUrl?: string | null;
   discordId?: string | null;
@@ -46,7 +46,7 @@ function captainToUser(captain: {
   return {
     pk: captain.pk,
     username: captain.username,
-    nickname: captain.nickname,
+    discordNickname: captain.discordNickname,
     avatar: captain.avatar,
     avatarUrl: captain.avatarUrl ?? undefined,
     discordId: captain.discordId ?? undefined,
@@ -150,7 +150,7 @@ export function DraftTopBar({ draft, tick }: DraftTopBarProps) {
     player: {
       pk: number;
       username: string | null;
-      nickname?: string | null;
+      discordNickname?: string | null;
       avatar: string | null;
       avatarUrl?: string | null;
       discordId?: string | null;
@@ -183,7 +183,11 @@ export function DraftTopBar({ draft, tick }: DraftTopBarProps) {
           )}
           data-testid={`${testIdPrefix}-name`}
         >
-          {DisplayName(captainToUser(player))}
+          {DisplayName(
+            captainToUser(player),
+            undefined,
+            draft.organization_pk ?? null,
+          )}
         </span>
       </button>
     </PlayerPopover>

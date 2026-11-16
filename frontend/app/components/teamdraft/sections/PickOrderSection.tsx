@@ -4,6 +4,7 @@ import type { TeamType } from '~/components/tournament/types';
 import { Badge } from '~/components/ui/badge';
 import { DisplayName } from '~/components/user/avatar';
 import { UserAvatar } from '~/components/user/UserAvatar';
+import { useDisplayOrgId } from '~/hooks/useDisplayOrgId';
 import type { UserType } from '~/index';
 import { cn } from '~/lib/utils';
 import { useUserStore } from '~/store/userStore';
@@ -63,6 +64,7 @@ const isTeamMaxed = (team: TeamType): boolean => {
 };
 
 export const PickOrderSection = memo(() => {
+  const displayOrgId = useDisplayOrgId();
   const teams = useUserStore(selectTeams);
   const draftStyle = useUserStore(selectDraftStyle);
   const draftRounds = useUserStore(selectDraftRounds);
@@ -213,7 +215,7 @@ export const PickOrderSection = memo(() => {
                 <div className="flex flex-row md:flex-col items-center md:items-center gap-1 md:gap-0">
                   <span className="text-[10px] md:text-[10px] font-medium truncate max-w-[60px] md:max-w-[65px] md:mt-0.5 md:text-center">
                     {pick.team.captain
-                      ? DisplayName(pick.team.captain)
+                      ? DisplayName(pick.team.captain, undefined, displayOrgId)
                       : 'No Captain'}
                   </span>
                   <span className="text-xs md:text-sm font-medium text-muted-foreground">
@@ -294,7 +296,7 @@ export const PickOrderSection = memo(() => {
               <div className="flex flex-row md:flex-col items-center md:items-center gap-1 md:gap-0">
                 <span className="text-[10px] md:text-[10px] font-medium truncate max-w-[60px] md:max-w-[65px] md:mt-0.5 md:text-center">
                   {captain.team.captain
-                    ? DisplayName(captain.team.captain)
+                    ? DisplayName(captain.team.captain, undefined, displayOrgId)
                     : 'No Captain'}
                 </span>
                 <span className="text-xs md:text-sm font-medium text-muted-foreground">

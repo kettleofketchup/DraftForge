@@ -3,6 +3,7 @@ import { TeamPopover } from '~/components/team';
 import { Badge } from '~/components/ui/badge';
 import { Card } from '~/components/ui/card';
 import { UserAvatar } from '~/components/user/UserAvatar';
+import { useDisplayOrgId } from '~/hooks/useDisplayOrgId';
 import { DisplayName, type TeamType, type UserType } from '~/index';
 import { cn } from '~/lib/utils';
 import { useUserStore } from '~/store/userStore';
@@ -20,6 +21,7 @@ interface TeamPickStatus {
 }
 
 export const ShufflePickOrder: React.FC = () => {
+  const displayOrgId = useDisplayOrgId();
   const tournament = useUserStore((state) => state.tournament);
   const draft = useUserStore((state) => state.draft);
   const curDraftRound = useUserStore((state) => state.curDraftRound);
@@ -118,7 +120,9 @@ export const ShufflePickOrder: React.FC = () => {
             <span>
               {captainsWithMissingMmr
                 .map((s) =>
-                  s.team.captain ? DisplayName(s.team.captain) : 'Unknown',
+                  s.team.captain
+                    ? DisplayName(s.team.captain, undefined, displayOrgId)
+                    : 'Unknown',
                 )
                 .join(', ')}
               {captainsWithMissingMmr.length === 1 ? ' has' : ' have'} no MMR
@@ -155,7 +159,11 @@ export const ShufflePickOrder: React.FC = () => {
                       {/* Captain name */}
                       <span className="font-medium text-sm truncate text-center hover:text-primary transition-colors">
                         {status.team.captain
-                          ? DisplayName(status.team.captain)
+                          ? DisplayName(
+                              status.team.captain,
+                              undefined,
+                              displayOrgId,
+                            )
                           : 'Unknown'}
                       </span>
                     </>

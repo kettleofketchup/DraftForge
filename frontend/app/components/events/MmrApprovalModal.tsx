@@ -32,11 +32,12 @@ import {
   FormMessage,
 } from '~/components/ui/form';
 import { Input } from '~/components/ui/input';
+import type { UserType } from '~/components/user/types';
 import { UserAvatar } from '~/components/user/UserAvatar';
 import { UserStrip } from '~/components/user/UserStrip';
-import { DisplayName } from '~/components/user/avatar';
-import type { UserType } from '~/components/user/types';
+import { useDisplayOrgId } from '~/hooks/useDisplayOrgId';
 import { useGameType } from '~/hooks/useGameType';
+import { orgRowNameSource, resolveDisplayName } from '~/lib/userDisplayName';
 import { cn } from '~/lib/utils';
 
 const LARGE_CHANGE_THRESHOLD = 0.2;
@@ -104,12 +105,15 @@ export function MmrApprovalModal({
       : 0;
   const isLargeChange = hasDelta && deltaPct >= LARGE_CHANGE_THRESHOLD;
 
+  const routeOrgId = useDisplayOrgId();
+  const orgId = signup?.organization ?? routeOrgId;
+
   if (!signup) return null;
 
   const profile = signup.dota_profile;
   const user = signup.user_data;
   const playerName = user
-    ? DisplayName(user)
+    ? resolveDisplayName(orgRowNameSource(user, orgId), { orgId })
     : (signup.username ?? `User #${signup.user}`);
 
   const screenshotUrl =
@@ -190,6 +194,7 @@ export function MmrApprovalModal({
       {stripUser ? (
         <UserStrip
           user={stripUser}
+          organizationId={orgId ?? undefined}
           showBorder={false}
           className={brandDialogPanel}
           data-testid="mmr-confirm-user-strip"

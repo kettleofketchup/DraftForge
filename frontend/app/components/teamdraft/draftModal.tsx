@@ -45,6 +45,7 @@ import {
   TooltipTrigger,
 } from '~/components/ui/tooltip';
 import { DisplayName } from '~/components/user/avatar';
+import { useDisplayOrgId } from '~/hooks/useDisplayOrgId';
 import { getLogger } from '~/lib/logger';
 import { cn } from '~/lib/utils';
 import {
@@ -85,6 +86,7 @@ type DraftModalParams = { embedded?: boolean };
 export const DraftModal: React.FC<DraftModalParams> = ({
   embedded = false,
 }) => {
+  const displayOrgId = useDisplayOrgId();
   const tournament = useUserStore((state) => state.tournament);
   const setTournament = useUserStore((state) => state.setTournament);
   const draft = useUserStore((state) => state.draft);
@@ -259,7 +261,7 @@ export const DraftModal: React.FC<DraftModalParams> = ({
       if (result.round) setCurDraftRound(result.round);
       if (result.moved) {
         toast.info(
-          `${result.moved.captain ? DisplayName(result.moved.captain) : 'Captain'}'s pick moved to #${result.moved.pickNumber}`,
+          `${result.moved.captain ? DisplayName(result.moved.captain, undefined, displayOrgId) : 'Captain'}'s pick moved to #${result.moved.pickNumber}`,
         );
       }
       if (force != null) useDraftWebSocketStore.getState().clearForceJump();

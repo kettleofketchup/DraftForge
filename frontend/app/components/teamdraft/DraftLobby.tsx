@@ -6,6 +6,7 @@ import { PrimaryButton, SecondaryButton } from '~/components/ui/buttons';
 import { ConfirmDialog } from '~/components/ui/dialogs';
 import { DisplayName } from '~/components/user/avatar';
 import { UserAvatar } from '~/components/user/UserAvatar';
+import { useDisplayOrgId } from '~/hooks/useDisplayOrgId';
 import type { TournamentType } from '~/index';
 import { hydrateTournament } from '~/lib/hydrateTournament';
 import { cn } from '~/lib/utils';
@@ -29,6 +30,7 @@ export function DraftLobby({
   onReadyToggle,
   onStart,
 }: DraftLobbyProps) {
+  const displayOrgId = useDisplayOrgId();
   const setTournament = useUserStore((s) => s.setTournament);
   const setDraft = useUserStore((s) => s.setDraft);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -107,7 +109,9 @@ export function DraftLobby({
               {team.captain && <UserAvatar user={team.captain} size="sm" />}
               <span className="flex min-w-0 flex-1 items-center gap-2">
                 <span className="truncate">
-                  {team.captain ? DisplayName(team.captain) : team.name}
+                  {team.captain
+                    ? DisplayName(team.captain, undefined, displayOrgId)
+                    : team.name}
                 </span>
                 {isMe && (
                   <Badge
@@ -204,7 +208,9 @@ export function DraftLobby({
                 className="list-disc pl-5"
               >
                 {notReady.map((t) => (
-                  <li key={t.pk}>{DisplayName(t.captain!)}</li>
+                  <li key={t.pk}>
+                    {DisplayName(t.captain!, undefined, displayOrgId)}
+                  </li>
                 ))}
               </ul>
             }

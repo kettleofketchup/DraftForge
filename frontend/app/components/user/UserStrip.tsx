@@ -6,9 +6,11 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '~/components/ui/tooltip';
-import { DisplayName } from '~/components/user/avatar';
 import { UserAvatar } from '~/components/user/UserAvatar';
+import { useDisplayName } from '~/hooks/useDisplayName';
+import { useDisplayOrgId } from '~/hooks/useDisplayOrgId';
 import { usePlayerPositions } from '~/hooks/usePlayerPositions';
+import { truncateName } from '~/lib/userDisplayName';
 import { cn } from '~/lib/utils';
 import { isUserEntry, type UserEntry } from '~/store/userCacheTypes';
 import { RolePositions } from './positions';
@@ -57,8 +59,8 @@ export interface UserStripProps {
   showMmr?: boolean;
 
   /**
-   * Cap the displayed nickname/username at N characters. When set, overrides
-   * the default mobile-15 / desktop-20 caps from `DisplayName` and also
+   * Cap the displayed name at N characters. When set, overrides
+   * the default mobile-15 / desktop-20 caps and also
    * relaxes the span's min-width so the strip can collapse into tighter
    * action columns (e.g. captain selection on iPhone-SE).
    */
@@ -118,15 +120,10 @@ export const UserStrip = memo(
     className,
     'data-testid': testId,
   }: UserStripProps) => {
-    // Memoize display names to avoid recalculating
-    const { fullName, displayedName, displayedNameMobile } = useMemo(
-      () => ({
-        fullName: DisplayName(user),
-        displayedName: DisplayName(user, nameMaxLength ?? 20),
-        displayedNameMobile: DisplayName(user, nameMaxLength ?? 15),
-      }),
-      [user?.username, user?.nickname, nameMaxLength],
-    );
+    const routeOrgId = useDisplayOrgId();
+    const fullName = useDisplayName(user, organizationId ?? routeOrgId);
+    const displayedName = truncateName(fullName, nameMaxLength ?? 20);
+    const displayedNameMobile = truncateName(fullName, nameMaxLength ?? 15);
 
     // Memoize MMR values to prevent badge re-renders
     const orgMmr = isUserEntry(user)

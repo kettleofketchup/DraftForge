@@ -10,6 +10,7 @@ import {
   CardTitle,
 } from '~/components/ui/card';
 import { UserAvatar } from '~/components/user/UserAvatar';
+import { useDisplayOrgId } from '~/hooks/useDisplayOrgId';
 import type { DraftRoundType } from '~/index';
 import { DisplayName } from '~/index';
 
@@ -52,6 +53,7 @@ const draftRoundCardPropsAreEqual = (
 
 export const DraftRoundCard = memo(
   ({ draftRound, maxRounds, isCur }: DraftRoundCardProps) => {
+    const displayOrgId = useDisplayOrgId();
     const bgColor = isCur ? 'bg-green-900' : 'bg-gray-800';
 
     return (
@@ -66,7 +68,7 @@ export const DraftRoundCard = memo(
             <CardTitle className="flex justify-center">
               {isCur ? 'Current Captain: ' : 'Next Captain: '}
               {draftRound?.captain
-                ? DisplayName(draftRound.captain)
+                ? DisplayName(draftRound.captain, undefined, displayOrgId)
                 : 'No captain selected'}
             </CardTitle>
           </CardHeader>

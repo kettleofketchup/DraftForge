@@ -2,6 +2,7 @@ import { Play } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { PrimaryButton, SecondaryButton } from '~/components/ui/buttons';
 import { DisplayName } from '~/components/user/avatar';
+import { useDisplayOrgId } from '~/hooks/useDisplayOrgId';
 import type { UserType } from '~/index';
 import type { TeamDraftState } from '../schemas';
 import { useLiveTeamDraftCountdown } from './useTeamDraftCountdown';
@@ -51,6 +52,7 @@ export function DraftPauseOverlay({
   onResume,
   onPickForCaptain,
 }: DraftPauseOverlayProps) {
+  const displayOrgId = useDisplayOrgId();
   const [minimized, setMinimized] = useState(false);
 
   useEffect(() => {
@@ -74,7 +76,9 @@ export function DraftPauseOverlay({
   }
   if (draftStatus !== 'paused') return null;
 
-  const captainName = activeCaptain ? DisplayName(activeCaptain) : 'captain';
+  const captainName = activeCaptain
+    ? DisplayName(activeCaptain, undefined, displayOrgId)
+    : 'captain';
   const message = isManualPause
     ? 'Paused by captain or staff'
     : isActiveCaptainDisconnected

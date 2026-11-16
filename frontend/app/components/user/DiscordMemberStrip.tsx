@@ -2,7 +2,7 @@ import React, { useCallback } from 'react';
 import type { DiscordSearchResult } from '~/components/api/api';
 import { ConfirmButton } from '~/components/ui/buttons';
 import { UserAvatar } from '~/components/user/UserAvatar';
-import { DisplayName } from '~/components/user/avatar';
+import { resolveDisplayName } from '~/lib/userDisplayName';
 import { cn } from '~/lib/utils';
 
 interface DiscordMemberStripProps {
@@ -21,12 +21,9 @@ export const DiscordMemberStrip = React.memo(function DiscordMemberStrip({
   disabledLabel,
   adding,
 }: DiscordMemberStripProps) {
-  const displayName = DisplayName({
-    nickname: member.nick,
-    username: member.user.global_name || member.user.username,
-  });
+  const displayName = resolveDisplayName(member);
   const subtitle =
-    member.nick || member.user.global_name ? member.user.username : undefined;
+    displayName !== member.user.username ? member.user.username : undefined;
 
   const handleClick = useCallback(() => onAdd(member), [onAdd, member]);
 
@@ -42,7 +39,7 @@ export const DiscordMemberStrip = React.memo(function DiscordMemberStrip({
       {/* Avatar */}
       <UserAvatar
         user={{
-          nickname: member.nick ?? member.user.global_name,
+          nickname: displayName,
           username: member.user.username,
           avatar: member.user.avatar,
           discordId: member.user.id,

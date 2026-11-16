@@ -1,4 +1,5 @@
 import { DisplayName } from '~/components/user/avatar';
+import { useDisplayOrgId } from '~/hooks/useDisplayOrgId';
 import {
   draftWsSelectors,
   useDraftWebSocketStore,
@@ -6,13 +7,14 @@ import {
 import { useUserStore } from '~/store/userStore';
 
 export const TurnIndicator: React.FC = () => {
+  const displayOrgId = useDisplayOrgId();
   const currentUser = useUserStore((state) => state.currentUser);
   const curDraftRound = useUserStore((state) => state.curDraftRound);
   const activeRoundPk = useDraftWebSocketStore(draftWsSelectors.activeRoundPk);
   const timerEnabled = useDraftWebSocketStore(draftWsSelectors.timerEnabled);
 
   const captainName = curDraftRound?.captain
-    ? DisplayName(curDraftRound.captain)
+    ? DisplayName(curDraftRound.captain, undefined, displayOrgId)
     : 'Unknown';
   const pickNumber = curDraftRound?.pick_number || 0;
   const isActiveRound = !timerEnabled || curDraftRound?.pk === activeRoundPk;

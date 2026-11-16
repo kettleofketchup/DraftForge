@@ -10,6 +10,7 @@ import { UserStrip } from '~/components/user';
 import { DisplayName } from '~/components/user/avatar';
 import type { UserType } from '~/components/user/types';
 import { UserAvatar } from '~/components/user/UserAvatar';
+import { useDisplayOrgId } from '~/hooks/useDisplayOrgId';
 import { formatDuration } from '~/lib/dota/utils';
 import { cn } from '~/lib/utils';
 import { TeamPositionCoverageRow } from './TeamPositionCoverage';
@@ -113,9 +114,13 @@ function TeamCard({
   leaguePk,
   rounds,
 }: TeamCardProps) {
+  const displayOrgId = useDisplayOrgId();
+  const nameOrgId = organizationId ?? displayOrgId;
   const { openTeamModal } = useSharedPopoverActions();
   const captain = team.captain;
-  const displayName = captain ? DisplayName(captain) : team.name;
+  const displayName = captain
+    ? DisplayName(captain, undefined, nameOrgId)
+    : team.name;
 
   // Calculate average MMR
   const averageMMR = useMemo(() => {
