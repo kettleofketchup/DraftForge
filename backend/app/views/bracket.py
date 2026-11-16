@@ -5,15 +5,18 @@ from django.db.models import Max, Prefetch
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
+from rest_framework.request import Request
 from rest_framework.response import Response
 
 from app.cache_utils import invalidate_after_commit, invalidate_obj
-from app.models import Game, Team, Tournament
+from app.models import Game, HeroDraft, Team, Tournament
 from app.permissions_org import IsTournamentStaff
 from app.serializers import (
+    TEAM_USER_INDEX,
     BracketGameSerializer,
     BracketGenerateSerializer,
     BracketSaveSerializer,
+    build_team_user_index,
 )
 from lobby.models import GameLobby
 from telemetry.logging import get_logger
@@ -23,7 +26,7 @@ log = get_logger(__name__)
 
 @api_view(["GET"])
 @permission_classes([AllowAny])
-def get_bracket(request, tournament_id):
+def get_bracket(request: Request, tournament_id: int) -> Response:
     """Get bracket structure for a tournament."""
     try:
         tournament = Tournament.objects.get(pk=tournament_id)
@@ -49,12 +52,23 @@ def get_bracket(request, tournament_id):
                 "lobbies",
                 queryset=GameLobby.objects.only("id", "game_id", "state", "created_at"),
                 to_attr="latest_lobbies",
-            )
+            ),
+            Prefetch("herodraft", queryset=HeroDraft.objects.only("id", "game_id")),
         )
         .order_by("bracket_type", "round", "position")
     )
 
-    serializer = BracketGameSerializer(games, many=True)
+    teams = [
+        team
+        for game in games
+        for team in (game.radiant_team, game.dire_team, game.winning_team)
+        if team is not None
+    ]
+    serializer = BracketGameSerializer(
+        games,
+        many=True,
+        context={TEAM_USER_INDEX: build_team_user_index(tournament, teams)},
+    )
     log.debug(
         "bracket_loaded",
         system="bracket",
