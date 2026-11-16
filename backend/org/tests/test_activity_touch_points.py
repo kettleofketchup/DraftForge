@@ -94,13 +94,16 @@ class ActivityTouchPointsTest(TestCase):
         self.client.force_authenticate(self.user)
         for url, org_id in self._urls():
             with self.subTest(url=url):
-                with mock.patch(
-                    "app.views_main.touch_org_activity",
-                    wraps=activity.touch_org_activity,
-                ) as main_spy, mock.patch(
-                    "events.views.touch_org_activity",
-                    wraps=activity.touch_org_activity,
-                ) as events_spy:
+                with (
+                    mock.patch(
+                        "app.views_main.touch_org_activity",
+                        wraps=activity.touch_org_activity,
+                    ) as main_spy,
+                    mock.patch(
+                        "events.views.touch_org_activity",
+                        wraps=activity.touch_org_activity,
+                    ) as events_spy,
+                ):
                     self.client.get(url)
                     self.client.get(url)
                 calls = main_spy.call_args_list + events_spy.call_args_list

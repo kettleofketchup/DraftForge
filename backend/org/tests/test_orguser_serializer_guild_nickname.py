@@ -16,7 +16,9 @@ class OrgUserSerializerGuildNicknameTest(TestCase):
         org_user = OrgUser.objects.create(
             user=self.user, organization=self.org, guild_nickname="DragonClaw"
         )
-        self.assertEqual(OrgUserSerializer(org_user).data["guildNickname"], "DragonClaw")
+        self.assertEqual(
+            OrgUserSerializer(org_user).data["guildNickname"], "DragonClaw"
+        )
 
     def test_ignores_user_guild_nickname(self) -> None:
         org_user = OrgUser.objects.create(user=self.user, organization=self.org)

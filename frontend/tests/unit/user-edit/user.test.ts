@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { GuildMember } from '~/index';
 import { User } from '~/components/user/user';
+import type { GuildMember } from '~/index';
 
 const member = {
   nick: 'DragonClaw',

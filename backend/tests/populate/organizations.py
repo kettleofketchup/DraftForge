@@ -60,7 +60,7 @@ def populate_organizations_and_leagues(force=False):
 
     if dtx_org and dtx_league and test_org and test_league and not force:
         print(
-            f"Organizations and leagues already exist. " "Use force=True to recreate."
+            "Organizations and leagues already exist. " "Use force=True to recreate."
         )
         return dtx_org, test_org
 
