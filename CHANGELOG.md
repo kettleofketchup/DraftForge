@@ -14,6 +14,15 @@ Releases made before this file was added are not listed here; see the git tags a
 
 <!-- Do not edit. Unreleased changes live in changelog.d/; `just version::set` assembles them here. -->
 
+## [0.14.1] - 2026-11-15
+
+### Fixed
+
+- Fixed the backend freezing until restarted when a slow request was cancelled
+  (client disconnect, then daphne's application close timeout): asgiref 3.11 joined
+  the request's still-running thread on the event loop, deadlocking every HTTP and
+  WebSocket connection. asgiref is now pinned to >=3.13.0, which joins off the loop.
+
 ## [0.14.0] - 2026-11-15
 
 ### Upgrading
