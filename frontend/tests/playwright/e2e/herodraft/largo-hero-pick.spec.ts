@@ -1,14 +1,13 @@
-import { API_URL, BASE_URL } from '../../fixtures/base-url';
-import { test, expect, chromium } from '@playwright/test';
+import { chromium, expect, test } from '@playwright/test';
 import { loginAsDiscordId, waitForHydration } from '../../fixtures/auth';
+import { API_URL, BASE_URL } from '../../fixtures/base-url';
 import { HeroDraftPage } from '../../helpers/HeroDraftPage';
-
 
 /**
  * Quick test to verify Largo (hero ID 155) can be picked in Captain's Mode.
  * This was a regression where ALL_HERO_IDS was hardcoded to 1-138.
  */
-test.describe('Largo Hero Pick', () => {
+test.describe('@cicd Largo Hero Pick', () => {
   test('should be able to pick Largo (ID 155) in draft', async () => {
     // Set longer timeout for this test
     test.setTimeout(120000);
@@ -31,7 +30,7 @@ test.describe('Largo Hero Pick', () => {
       // Get test draft info
       const response = await contextA.request.get(
         `${API_URL}/tests/herodraft-by-key/two_captain_test/`,
-        { failOnStatusCode: false, timeout: 10000 }
+        { failOnStatusCode: false, timeout: 10000 },
       );
 
       if (!response.ok()) {
@@ -49,7 +48,7 @@ test.describe('Largo Hero Pick', () => {
       // Reset draft to waiting state
       await contextA.request.post(
         `${API_URL}/tests/herodraft/${draftPk}/reset/`,
-        { failOnStatusCode: false }
+        { failOnStatusCode: false },
       );
 
       // Login both captains
@@ -65,8 +64,7 @@ test.describe('Largo Hero Pick', () => {
       await Promise.all([waitForHydration(pageA), waitForHydration(pageB)]);
 
       // Click Start Draft
-      const startBtn = (page: any) =>
-        page.getByTestId('view-draft-btn');
+      const startBtn = (page: any) => page.getByTestId('view-draft-btn');
       await Promise.all([startBtn(pageA).click(), startBtn(pageB).click()]);
 
       const draftPageA = new HeroDraftPage(pageA);
@@ -93,7 +91,10 @@ test.describe('Largo Hero Pick', () => {
       ]);
 
       // Flip coin
-      await draftPageA.flipCoinButton.waitFor({ state: 'visible', timeout: 15000 });
+      await draftPageA.flipCoinButton.waitFor({
+        state: 'visible',
+        timeout: 15000,
+      });
       await draftPageA.clickFlipCoin();
       console.log('   Coin flipped');
 
@@ -104,17 +105,23 @@ test.describe('Largo Hero Pick', () => {
       ]);
 
       // Winner chooses first pick
-      const winnerChoices = pageA.locator('[data-testid="herodraft-winner-choices"]');
+      const winnerChoices = pageA.locator(
+        '[data-testid="herodraft-winner-choices"]',
+      );
       const isAWinner = await winnerChoices.isVisible().catch(() => false);
 
       if (isAWinner) {
         await draftPageA.selectWinnerChoice('first_pick');
-        const loserChoices = pageB.locator('[data-testid="herodraft-loser-choices"]');
+        const loserChoices = pageB.locator(
+          '[data-testid="herodraft-loser-choices"]',
+        );
         await loserChoices.waitFor({ state: 'visible', timeout: 10000 });
         await draftPageB.selectLoserChoice('radiant');
       } else {
         await draftPageB.selectWinnerChoice('first_pick');
-        const loserChoices = pageA.locator('[data-testid="herodraft-loser-choices"]');
+        const loserChoices = pageA.locator(
+          '[data-testid="herodraft-loser-choices"]',
+        );
         await loserChoices.waitFor({ state: 'visible', timeout: 10000 });
         await draftPageA.selectLoserChoice('radiant');
       }
@@ -139,7 +146,9 @@ test.describe('Largo Hero Pick', () => {
       console.log('   Attempting to pick Largo (ID 155)...');
 
       // First verify Largo button exists and is available
-      const largoButton = currentPicker.page.locator('[data-testid="herodraft-hero-155"]');
+      const largoButton = currentPicker.page.locator(
+        '[data-testid="herodraft-hero-155"]',
+      );
       await expect(largoButton).toBeVisible({ timeout: 5000 });
       const isAvailable = await largoButton.getAttribute('data-hero-available');
       expect(isAvailable).toBe('true');
@@ -153,8 +162,9 @@ test.describe('Largo Hero Pick', () => {
       await expect(largoButton).toHaveAttribute('data-hero-available', 'false');
       console.log('   Largo correctly marked as unavailable after pick');
 
-      console.log('\n   TEST PASSED: Largo (ID 155) can be picked in Captain\'s Mode!');
-
+      console.log(
+        "\n   TEST PASSED: Largo (ID 155) can be picked in Captain's Mode!",
+      );
     } finally {
       await browser.close();
     }

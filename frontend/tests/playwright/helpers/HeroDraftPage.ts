@@ -1,6 +1,6 @@
-import { API_URL } from '../fixtures/base-url';
+import type { Locator, Page } from '@playwright/test';
 import { expect } from '@playwright/test';
-import type { Page, Locator } from '@playwright/test';
+import { API_URL } from '../fixtures/base-url';
 
 /**
  * Page Object for the HeroDraft (Captain's Mode) interface.
@@ -54,32 +54,32 @@ export class HeroDraftPage {
     this.waitingPhase = page.locator('[data-testid="herodraft-waiting-phase"]');
     this.rollingPhase = page.locator('[data-testid="herodraft-rolling-phase"]');
     this.choosingPhase = page.locator(
-      '[data-testid="herodraft-choosing-phase"]'
+      '[data-testid="herodraft-choosing-phase"]',
     );
     this.mainArea = page.locator('[data-testid="herodraft-main-area"]');
     this.pausedOverlay = page.locator(
-      '[data-testid="herodraft-paused-overlay"]'
+      '[data-testid="herodraft-paused-overlay"]',
     );
 
     // Buttons
     this.readyButton = page.locator('[data-testid="herodraft-ready-button"]');
     this.flipCoinButton = page.locator(
-      '[data-testid="herodraft-flip-coin-button"]'
+      '[data-testid="herodraft-flip-coin-button"]',
     );
     this.confirmSubmit = page.locator(
-      '[data-testid="herodraft-confirm-submit"]'
+      '[data-testid="herodraft-confirm-submit"]',
     );
     this.confirmCancel = page.locator(
-      '[data-testid="herodraft-confirm-cancel"]'
+      '[data-testid="herodraft-confirm-cancel"]',
     );
 
     // Timers
     this.graceTime = page.locator('[data-testid="herodraft-grace-time"]');
     this.teamAReserveTime = page.locator(
-      '[data-testid="herodraft-team-a-reserve-time"]'
+      '[data-testid="herodraft-team-a-reserve-time"]',
     );
     this.teamBReserveTime = page.locator(
-      '[data-testid="herodraft-team-b-reserve-time"]'
+      '[data-testid="herodraft-team-b-reserve-time"]',
     );
 
     // Hero search
@@ -109,16 +109,27 @@ export class HeroDraftPage {
       await expect(this.waitingPhase).toBeVisible({ timeout: 10000 });
     } catch (e) {
       // Debug: check what phase we're actually in
-      const phases = ['waiting', 'rolling', 'choosing', 'drafting', 'completed', 'abandoned'];
+      const phases = [
+        'waiting',
+        'rolling',
+        'choosing',
+        'drafting',
+        'completed',
+        'abandoned',
+      ];
       for (const phase of phases) {
-        const locator = this.page.locator(`[data-testid="herodraft-${phase}-phase"]`);
+        const locator = this.page.locator(
+          `[data-testid="herodraft-${phase}-phase"]`,
+        );
         if (await locator.isVisible().catch(() => false)) {
           throw new Error(`Expected waiting phase but found: ${phase}-phase`);
         }
       }
       // Check if modal is even visible
       const modalVisible = await this.modal.isVisible().catch(() => false);
-      throw new Error(`Waiting phase not found. Modal visible: ${modalVisible}. Original error: ${e}`);
+      throw new Error(
+        `Waiting phase not found. Modal visible: ${modalVisible}. Original error: ${e}`,
+      );
     }
   }
 
@@ -133,7 +144,7 @@ export class HeroDraftPage {
   async assertDraftingPhase(): Promise<void> {
     await expect(this.mainArea).toBeVisible();
     await expect(
-      this.page.locator('[data-testid="herodraft-hero-grid-container"]')
+      this.page.locator('[data-testid="herodraft-hero-grid-container"]'),
     ).toBeVisible();
   }
 
@@ -143,7 +154,7 @@ export class HeroDraftPage {
 
   async assertConnected(): Promise<void> {
     await expect(
-      this.page.locator('[data-testid="herodraft-reconnecting"]')
+      this.page.locator('[data-testid="herodraft-reconnecting"]'),
     ).not.toBeVisible();
   }
 
@@ -152,7 +163,12 @@ export class HeroDraftPage {
    * Waits for the reconnecting indicator to disappear.
    */
   async waitForConnection(timeout = 10000): Promise<void> {
-    // Wait for reconnecting indicator to disappear (means we're connected)
+    // The container renders only once the socket's initial_state has arrived;
+    // before that the reconnecting indicator is absent, so "hidden" alone
+    // would pass before any WebSocket has opened.
+    await this.page
+      .getByTestId('herodraft-container')
+      .waitFor({ state: 'visible', timeout });
     await this.page
       .locator('[data-testid="herodraft-reconnecting"]')
       .waitFor({ state: 'hidden', timeout });
@@ -162,9 +178,19 @@ export class HeroDraftPage {
    * Get current draft state from the page for debugging.
    */
   async getCurrentState(): Promise<string | null> {
-    const phases = ['waiting', 'rolling', 'choosing', 'drafting', 'completed', 'abandoned', 'paused'];
+    const phases = [
+      'waiting',
+      'rolling',
+      'choosing',
+      'drafting',
+      'completed',
+      'abandoned',
+      'paused',
+    ];
     for (const phase of phases) {
-      const locator = this.page.locator(`[data-testid="herodraft-${phase}-phase"]`);
+      const locator = this.page.locator(
+        `[data-testid="herodraft-${phase}-phase"]`,
+      );
       if (await locator.isVisible().catch(() => false)) {
         return phase;
       }
@@ -179,19 +205,33 @@ export class HeroDraftPage {
   /**
    * Fetch draft state directly from API for debugging.
    */
-  async fetchDraftStateFromAPI(draftId: number): Promise<{ state: string; teams: Array<{ is_ready: boolean; team_name: string }> } | null> {
+  async fetchDraftStateFromAPI(
+    draftId: number,
+  ): Promise<{
+    state: string;
+    teams: Array<{ is_ready: boolean; team_name: string }>;
+  } | null> {
     try {
-      const response = await this.page.request.get(`${API_URL}/herodraft/${draftId}/`, {
-        failOnStatusCode: false,
-      });
+      const response = await this.page.request.get(
+        `${API_URL}/herodraft/${draftId}/`,
+        {
+          failOnStatusCode: false,
+        },
+      );
       if (response.ok()) {
         const data = await response.json();
         return {
           state: data.state,
-          teams: data.draft_teams?.map((t: { is_ready: boolean; tournament_team: { name: string } }) => ({
-            is_ready: t.is_ready,
-            team_name: t.tournament_team?.name || 'unknown',
-          })) || [],
+          teams:
+            data.draft_teams?.map(
+              (t: {
+                is_ready: boolean;
+                tournament_team: { name: string };
+              }) => ({
+                is_ready: t.is_ready,
+                team_name: t.tournament_team?.name || 'unknown',
+              }),
+            ) || [],
         };
       }
     } catch (e) {
@@ -215,13 +255,13 @@ export class HeroDraftPage {
 
   async assertCaptainReady(teamId: number): Promise<void> {
     await expect(
-      this.page.locator(`[data-testid="herodraft-ready-status-${teamId}"]`)
+      this.page.locator(`[data-testid="herodraft-ready-status-${teamId}"]`),
     ).toContainText('Ready');
   }
 
   async assertCaptainNotReady(teamId: number): Promise<void> {
     await expect(
-      this.page.locator(`[data-testid="herodraft-ready-status-${teamId}"]`)
+      this.page.locator(`[data-testid="herodraft-ready-status-${teamId}"]`),
     ).toContainText('Not Ready');
   }
 
@@ -238,7 +278,7 @@ export class HeroDraftPage {
   // ============================================================================
 
   async selectWinnerChoice(
-    choice: 'first_pick' | 'second_pick' | 'radiant' | 'dire'
+    choice: 'first_pick' | 'second_pick' | 'radiant' | 'dire',
   ): Promise<void> {
     console.log(`[selectWinnerChoice] Selecting ${choice}...`);
     const testIdMap = {
@@ -247,16 +287,22 @@ export class HeroDraftPage {
       radiant: 'herodraft-choice-radiant',
       dire: 'herodraft-choice-dire',
     };
-    const choiceButton = this.page.locator(`[data-testid="${testIdMap[choice]}"]`);
+    const choiceButton = this.page.locator(
+      `[data-testid="${testIdMap[choice]}"]`,
+    );
     await choiceButton.waitFor({ state: 'visible', timeout: 10000 });
     await choiceButton.click();
 
     // Wait for confirm dialog to appear
-    const confirmDialog = this.page.locator('[data-testid="herodraft-confirm-choice-dialog"]');
+    const confirmDialog = this.page.locator(
+      '[data-testid="herodraft-confirm-choice-dialog"]',
+    );
     await confirmDialog.waitFor({ state: 'visible', timeout: 5000 });
 
     // Click confirm button
-    const confirmButton = this.page.locator('[data-testid="herodraft-confirm-choice-submit"]');
+    const confirmButton = this.page.locator(
+      '[data-testid="herodraft-confirm-choice-submit"]',
+    );
     await confirmButton.waitFor({ state: 'visible', timeout: 3000 });
     await confirmButton.click();
 
@@ -266,7 +312,7 @@ export class HeroDraftPage {
   }
 
   async selectLoserChoice(
-    choice: 'first_pick' | 'second_pick' | 'radiant' | 'dire'
+    choice: 'first_pick' | 'second_pick' | 'radiant' | 'dire',
   ): Promise<void> {
     console.log(`[selectLoserChoice] Selecting ${choice}...`);
     const testIdMap = {
@@ -277,19 +323,27 @@ export class HeroDraftPage {
     };
 
     // First wait for loser choices container to appear (depends on WebSocket update)
-    const loserChoicesContainer = this.page.locator('[data-testid="herodraft-loser-choices"]');
+    const loserChoicesContainer = this.page.locator(
+      '[data-testid="herodraft-loser-choices"]',
+    );
     await loserChoicesContainer.waitFor({ state: 'visible', timeout: 15000 });
 
-    const choiceButton = this.page.locator(`[data-testid="${testIdMap[choice]}"]`);
+    const choiceButton = this.page.locator(
+      `[data-testid="${testIdMap[choice]}"]`,
+    );
     await choiceButton.waitFor({ state: 'visible', timeout: 5000 });
     await choiceButton.click();
 
     // Wait for confirm dialog to appear
-    const confirmDialog = this.page.locator('[data-testid="herodraft-confirm-choice-dialog"]');
+    const confirmDialog = this.page.locator(
+      '[data-testid="herodraft-confirm-choice-dialog"]',
+    );
     await confirmDialog.waitFor({ state: 'visible', timeout: 5000 });
 
     // Click confirm button
-    const confirmButton = this.page.locator('[data-testid="herodraft-confirm-choice-submit"]');
+    const confirmButton = this.page.locator(
+      '[data-testid="herodraft-confirm-choice-submit"]',
+    );
     await confirmButton.waitFor({ state: 'visible', timeout: 3000 });
     await confirmButton.click();
 
@@ -300,7 +354,7 @@ export class HeroDraftPage {
 
   async assertFlipWinner(): Promise<void> {
     await expect(
-      this.page.locator('[data-testid="herodraft-flip-winner"]')
+      this.page.locator('[data-testid="herodraft-flip-winner"]'),
     ).toContainText('won the flip');
   }
 
@@ -309,7 +363,9 @@ export class HeroDraftPage {
   // ============================================================================
 
   async clickHero(heroId: number): Promise<void> {
-    const heroButton = this.page.locator(`[data-testid="herodraft-hero-${heroId}"]`);
+    const heroButton = this.page.locator(
+      `[data-testid="herodraft-hero-${heroId}"]`,
+    );
     console.log(`[clickHero] Clicking hero ${heroId}...`);
 
     // Wait for button to be visible and not disabled
@@ -348,32 +404,32 @@ export class HeroDraftPage {
 
   async assertHeroAvailable(heroId: number): Promise<void> {
     await expect(
-      this.page.locator(`[data-testid="herodraft-hero-${heroId}"]`)
+      this.page.locator(`[data-testid="herodraft-hero-${heroId}"]`),
     ).toHaveAttribute('data-hero-available', 'true');
   }
 
   async assertHeroUnavailable(heroId: number): Promise<void> {
     await expect(
-      this.page.locator(`[data-testid="herodraft-hero-${heroId}"]`)
+      this.page.locator(`[data-testid="herodraft-hero-${heroId}"]`),
     ).toHaveAttribute('data-hero-available', 'false');
   }
 
   async assertHeroSelected(heroId: number): Promise<void> {
     await expect(
-      this.page.locator(`[data-testid="herodraft-hero-${heroId}"]`)
+      this.page.locator(`[data-testid="herodraft-hero-${heroId}"]`),
     ).toHaveAttribute('data-hero-selected', 'true');
   }
 
   async assertConfirmDialogVisible(): Promise<void> {
     await expect(
-      this.page.locator('[data-testid="herodraft-confirm-dialog"]')
+      this.page.locator('[data-testid="herodraft-confirm-dialog"]'),
     ).toBeVisible();
   }
 
   async assertConfirmDialogAction(action: 'pick' | 'ban'): Promise<void> {
     const expectedText = action === 'ban' ? 'Ban' : 'Pick';
     await expect(
-      this.page.locator('[data-testid="herodraft-confirm-title"]')
+      this.page.locator('[data-testid="herodraft-confirm-title"]'),
     ).toContainText(expectedText);
   }
 
@@ -391,19 +447,19 @@ export class HeroDraftPage {
 
   async assertRoundActive(roundNumber: number): Promise<void> {
     await expect(
-      this.page.locator(`[data-testid="herodraft-round-${roundNumber}"]`)
+      this.page.locator(`[data-testid="herodraft-round-${roundNumber}"]`),
     ).toHaveAttribute('data-round-active', 'true');
   }
 
   async assertRoundCompleted(roundNumber: number): Promise<void> {
     await expect(
-      this.page.locator(`[data-testid="herodraft-round-${roundNumber}"]`)
+      this.page.locator(`[data-testid="herodraft-round-${roundNumber}"]`),
     ).toHaveAttribute('data-round-state', 'completed');
   }
 
   async assertRoundHeroId(roundNumber: number, heroId: number): Promise<void> {
     await expect(
-      this.page.locator(`[data-testid="herodraft-round-${roundNumber}-hero"]`)
+      this.page.locator(`[data-testid="herodraft-round-${roundNumber}-hero"]`),
     ).toHaveAttribute('data-hero-id', String(heroId));
   }
 
@@ -451,7 +507,9 @@ export class HeroDraftPage {
    * Returns true if the "PICKING" indicator is visible for Team A.
    */
   async isTeamAPicking(): Promise<boolean> {
-    const locator = this.page.locator('[data-testid="herodraft-team-a-picking"]');
+    const locator = this.page.locator(
+      '[data-testid="herodraft-team-a-picking"]',
+    );
     const isVisible = await locator.isVisible().catch(() => false);
     const count = await locator.count().catch(() => 0);
     if (!isVisible) {
@@ -465,7 +523,9 @@ export class HeroDraftPage {
    * Returns true if the "PICKING" indicator is visible for Team B.
    */
   async isTeamBPicking(): Promise<boolean> {
-    const locator = this.page.locator('[data-testid="herodraft-team-b-picking"]');
+    const locator = this.page.locator(
+      '[data-testid="herodraft-team-b-picking"]',
+    );
     const isVisible = await locator.isVisible().catch(() => false);
     const count = await locator.count().catch(() => 0);
     if (!isVisible) {
@@ -481,16 +541,16 @@ export class HeroDraftPage {
   async assertDraftCompleted(): Promise<void> {
     // All rounds should be completed
     await expect(
-      this.page.locator('[data-round-state="pending"]')
+      this.page.locator('[data-round-state="pending"]'),
     ).not.toBeVisible();
     await expect(
-      this.page.locator('[data-round-active="true"]')
+      this.page.locator('[data-round-active="true"]'),
     ).not.toBeVisible();
   }
 
   async assertAllHeroesDisabled(): Promise<void> {
     const heroButtons = this.page.locator(
-      '[data-testid="herodraft-hero-grid"] button'
+      '[data-testid="herodraft-hero-grid"] button',
     );
     const count = await heroButtons.count();
     for (let i = 0; i < Math.min(count, 5); i++) {
@@ -509,7 +569,7 @@ export class HeroDraftPage {
 
   async waitForPhaseTransition(
     targetPhase: 'waiting' | 'rolling' | 'choosing' | 'drafting' | 'completed',
-    timeout = 10000
+    timeout = 10000,
   ): Promise<void> {
     const phaseLocators = {
       waiting: this.waitingPhase,
@@ -532,7 +592,9 @@ export class HeroDraftPage {
   async waitForMyTurn(timeout = 10000): Promise<void> {
     console.log(`[waitForMyTurn] Waiting for turn...`);
     // Wait for any hero button to have data-hero-disabled="false"
-    const enabledHero = this.page.locator('[data-hero-disabled="false"][data-hero-available="true"]').first();
+    const enabledHero = this.page
+      .locator('[data-hero-disabled="false"][data-hero-available="true"]')
+      .first();
     await enabledHero.waitFor({ state: 'visible', timeout });
     console.log(`[waitForMyTurn] Turn detected!`);
   }
@@ -542,7 +604,9 @@ export class HeroDraftPage {
    */
   async isMyTurn(): Promise<boolean> {
     // Check if any hero has data-hero-disabled="false" and data-hero-available="true"
-    const enabledHero = this.page.locator('[data-hero-disabled="false"][data-hero-available="true"]').first();
+    const enabledHero = this.page
+      .locator('[data-hero-disabled="false"][data-hero-available="true"]')
+      .first();
     return enabledHero.isVisible().catch(() => false);
   }
 
@@ -550,11 +614,18 @@ export class HeroDraftPage {
    * Pick an available hero by ID, with confirmation.
    * Waits for the user's turn before attempting to pick.
    */
-  async pickHero(heroId: number, options?: { waitForTurn?: boolean }): Promise<void> {
+  async pickHero(
+    heroId: number,
+    options?: { waitForTurn?: boolean },
+  ): Promise<void> {
     const waitForTurn = options?.waitForTurn ?? true;
-    console.log(`[pickHero] Attempting to pick hero ${heroId} (waitForTurn=${waitForTurn})...`);
+    console.log(
+      `[pickHero] Attempting to pick hero ${heroId} (waitForTurn=${waitForTurn})...`,
+    );
 
-    const heroButton = this.page.locator(`[data-testid="herodraft-hero-${heroId}"]`);
+    const heroButton = this.page.locator(
+      `[data-testid="herodraft-hero-${heroId}"]`,
+    );
 
     // Wait for hero button to exist
     await heroButton.waitFor({ state: 'visible', timeout: 5000 });
@@ -562,13 +633,16 @@ export class HeroDraftPage {
     // Check if hero is available
     const isAvailable = await heroButton.getAttribute('data-hero-available');
     if (isAvailable !== 'true') {
-      throw new Error(`Hero ${heroId} is not available (already picked/banned)`);
+      throw new Error(
+        `Hero ${heroId} is not available (already picked/banned)`,
+      );
     }
 
     // Optionally wait for it to be user's turn
     if (waitForTurn) {
       // Check if heroes are currently disabled (not user's turn)
-      const isHeroDisabled = await heroButton.getAttribute('data-hero-disabled');
+      const isHeroDisabled =
+        await heroButton.getAttribute('data-hero-disabled');
       if (isHeroDisabled === 'true') {
         console.log(`[pickHero] Waiting for turn (hero disabled)...`);
         await this.waitForMyTurn();
@@ -578,7 +652,9 @@ export class HeroDraftPage {
     // Double-check hero is still available after waiting
     const stillAvailable = await heroButton.getAttribute('data-hero-available');
     if (stillAvailable !== 'true') {
-      throw new Error(`Hero ${heroId} became unavailable while waiting for turn`);
+      throw new Error(
+        `Hero ${heroId} became unavailable while waiting for turn`,
+      );
     }
 
     // Click the hero
@@ -588,12 +664,16 @@ export class HeroDraftPage {
 
     // Wait for confirm dialog to appear
     console.log(`[pickHero] Waiting for confirm dialog...`);
-    const confirmDialog = this.page.locator('[data-testid="herodraft-confirm-dialog"]');
+    const confirmDialog = this.page.locator(
+      '[data-testid="herodraft-confirm-dialog"]',
+    );
     await confirmDialog.waitFor({ state: 'visible', timeout: 5000 });
 
     // Click confirm button
     console.log(`[pickHero] Clicking confirm button...`);
-    const confirmButton = this.page.locator('[data-testid="herodraft-confirm-submit"]');
+    const confirmButton = this.page.locator(
+      '[data-testid="herodraft-confirm-submit"]',
+    );
     await confirmButton.waitFor({ state: 'visible', timeout: 3000 });
     await confirmButton.click();
 
@@ -610,9 +690,13 @@ export class HeroDraftPage {
    * Pick the first available hero.
    * Waits for the user's turn before attempting to pick.
    */
-  async pickFirstAvailableHero(options?: { waitForTurn?: boolean }): Promise<number> {
+  async pickFirstAvailableHero(options?: {
+    waitForTurn?: boolean;
+  }): Promise<number> {
     const waitForTurn = options?.waitForTurn ?? true;
-    console.log(`[pickFirstAvailableHero] Finding first available hero (waitForTurn=${waitForTurn})...`);
+    console.log(
+      `[pickFirstAvailableHero] Finding first available hero (waitForTurn=${waitForTurn})...`,
+    );
 
     // Optionally wait for turn
     if (waitForTurn) {
@@ -639,11 +723,15 @@ export class HeroDraftPage {
     await availableHero.click();
 
     // Wait for confirm dialog
-    const confirmDialog = this.page.locator('[data-testid="herodraft-confirm-dialog"]');
+    const confirmDialog = this.page.locator(
+      '[data-testid="herodraft-confirm-dialog"]',
+    );
     await confirmDialog.waitFor({ state: 'visible', timeout: 5000 });
 
     // Click confirm
-    const confirmButton = this.page.locator('[data-testid="herodraft-confirm-submit"]');
+    const confirmButton = this.page.locator(
+      '[data-testid="herodraft-confirm-submit"]',
+    );
     await confirmButton.waitFor({ state: 'visible', timeout: 3000 });
     await confirmButton.click();
 
@@ -662,7 +750,10 @@ export class HeroDraftPage {
    * This is an alias for pickHero since the same UI is used for both picks and bans.
    * The action type (pick vs ban) is determined by the current round type.
    */
-  async banHero(heroId: number, options?: { waitForTurn?: boolean }): Promise<void> {
+  async banHero(
+    heroId: number,
+    options?: { waitForTurn?: boolean },
+  ): Promise<void> {
     console.log(`[banHero] Banning hero ${heroId}...`);
     await this.pickHero(heroId, options);
   }
@@ -671,7 +762,9 @@ export class HeroDraftPage {
    * Ban the first available hero.
    * This is an alias for pickFirstAvailableHero since the same UI is used for both.
    */
-  async banFirstAvailableHero(options?: { waitForTurn?: boolean }): Promise<number> {
+  async banFirstAvailableHero(options?: {
+    waitForTurn?: boolean;
+  }): Promise<number> {
     console.log(`[banFirstAvailableHero] Banning first available hero...`);
     return this.pickFirstAvailableHero(options);
   }
@@ -695,7 +788,10 @@ export class HeroDraftPage {
   /**
    * Wait for the draft to reach a specific phase.
    */
-  async waitForDraftPhase(phase: 'waiting' | 'rolling' | 'choosing' | 'drafting' | 'completed', timeout = 30000): Promise<void> {
+  async waitForDraftPhase(
+    phase: 'waiting' | 'rolling' | 'choosing' | 'drafting' | 'completed',
+    timeout = 30000,
+  ): Promise<void> {
     console.log(`[waitForDraftPhase] Waiting for ${phase} phase...`);
     await this.waitForPhaseTransition(phase, timeout);
     console.log(`[waitForDraftPhase] Reached ${phase} phase!`);

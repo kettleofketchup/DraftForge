@@ -9,13 +9,12 @@
  * Driven by /api/tests/herodraft/<pk>/warp/ to skip the 25-90s of real-time
  * waiting needed to reach each threshold organically.
  */
-import { API_URL, BASE_URL } from '../../fixtures/base-url';
-import { test, expect, chromium, type Page } from '@playwright/test';
+import { chromium, expect, test, type Page } from '@playwright/test';
 import { loginAsDiscordId, waitForHydration } from '../../fixtures/auth';
+import { API_URL, BASE_URL } from '../../fixtures/base-url';
 import { HeroDraftPage } from '../../helpers/HeroDraftPage';
 
-
-test.describe('HeroDraft Timer Urgency Animations', () => {
+test.describe('@cicd HeroDraft Timer Urgency Animations', () => {
   test('grace<10s pulses grace-urgent; grace=0 + reserve<30s pulses reserve-critical', async () => {
     test.setTimeout(180000);
 
@@ -80,7 +79,10 @@ test.describe('HeroDraft Timer Urgency Animations', () => {
         draftPageB.waitForPhaseTransition('rolling', 15000),
       ]);
 
-      await draftPageA.flipCoinButton.waitFor({ state: 'visible', timeout: 15000 });
+      await draftPageA.flipCoinButton.waitFor({
+        state: 'visible',
+        timeout: 15000,
+      });
       await draftPageA.clickFlipCoin();
 
       await Promise.all([
@@ -88,16 +90,22 @@ test.describe('HeroDraft Timer Urgency Animations', () => {
         draftPageB.waitForPhaseTransition('choosing', 15000),
       ]);
 
-      const winnerChoices = pageA.locator('[data-testid="herodraft-winner-choices"]');
+      const winnerChoices = pageA.locator(
+        '[data-testid="herodraft-winner-choices"]',
+      );
       const isAWinner = await winnerChoices.isVisible().catch(() => false);
       if (isAWinner) {
         await draftPageA.selectWinnerChoice('first_pick');
-        const loserChoices = pageB.locator('[data-testid="herodraft-loser-choices"]');
+        const loserChoices = pageB.locator(
+          '[data-testid="herodraft-loser-choices"]',
+        );
         await loserChoices.waitFor({ state: 'visible', timeout: 10000 });
         await draftPageB.selectLoserChoice('radiant');
       } else {
         await draftPageB.selectWinnerChoice('first_pick');
-        const loserChoices = pageA.locator('[data-testid="herodraft-loser-choices"]');
+        const loserChoices = pageA.locator(
+          '[data-testid="herodraft-loser-choices"]',
+        );
         await loserChoices.waitFor({ state: 'visible', timeout: 10000 });
         await draftPageA.selectLoserChoice('radiant');
       }
@@ -153,8 +161,12 @@ test.describe('HeroDraft Timer Urgency Animations', () => {
       // The active team's reserve span carries the critical class. Find
       // whichever side (A or B) is the active picker — the topbar
       // applies the class only there.
-      const reserveASpan = pageA.locator('[data-testid="herodraft-team-a-reserve-time"]');
-      const reserveBSpan = pageA.locator('[data-testid="herodraft-team-b-reserve-time"]');
+      const reserveASpan = pageA.locator(
+        '[data-testid="herodraft-team-a-reserve-time"]',
+      );
+      const reserveBSpan = pageA.locator(
+        '[data-testid="herodraft-team-b-reserve-time"]',
+      );
 
       await expect
         .poll(
