@@ -121,7 +121,6 @@ export const TeamEditForm: React.FC<Props> = ({ user, form, setForm }) => {
       {inputView('position', 'Position: ')}
       {inputView('steam_account_id', 'Friend ID: ', 'number')}
       {/* {inputView('discordId', 'Discord ID: ', 'number')} */}
-      {inputView('guildNickname', 'Discord Guild Nickname: ')}
       <div className="flex flex-row items-start gap-4">
         <DialogClose asChild>
           <PrimaryButton
