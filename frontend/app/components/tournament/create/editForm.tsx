@@ -584,7 +584,7 @@ export const TournamentEditForm: React.FC<Props> = ({
               />
             </TabsContent>
 
-            <TabsContent value="config" className="mt-4">
+            <TabsContent value="config" className="mt-4 flex flex-col gap-4">
               <LobbyConfigSection control={form.control} watch={form.watch} />
               <TournamentConfigSection control={form.control} />
               <DraftSettingsSection

@@ -55,7 +55,7 @@ export function DotaLobbyConfigSection<
 }: Props<T>) {
   const control = parentControl as unknown as Control<DotaLobbyFields>;
   return (
-    <div className="space-y-3 mt-4" data-testid="config-dota-lobby-section">
+    <div className="space-y-3" data-testid="config-dota-lobby-section">
       <h3 className="text-sm font-semibold">Dota Lobbies</h3>
       <div className="rounded-md border border-border p-3 space-y-3">
         {sourceEvent && (
