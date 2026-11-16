@@ -224,9 +224,8 @@ export function MatchStatsModal({
               doesn't eat 1/3 of the iPhone-SE-width modal and squeeze the
               team names into overlap. */}
           <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] gap-2 items-center py-3 sm:gap-4 sm:py-4">
-            {/* Team 1 (stored as "radiant" but the side label is misleading
-                — captains pick sides at draft time, so "Radiant"/"Dire" was
-                rotating per match. Use neutral Team 1 / Team 2 labels.) */}
+            {/* Stored as "radiant", but captains pick sides at draft time, so
+                the labels stay neutral. */}
             <TeamCard
               team={match.radiantTeam}
               score={match.radiantScore}

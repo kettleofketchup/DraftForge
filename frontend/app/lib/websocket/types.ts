@@ -71,10 +71,7 @@ export interface ConnectionOptions {
 export type MessageHandler = (message: unknown) => void;
 export type Unsubscribe = () => void;
 
-/**
- * Internal connection tracking structure.
- * Not exported - used only by WebSocketManager.
- */
+/** Connection tracking structure, used only by WebSocketManager. */
 export interface WebSocketConnection {
   url: string;
   ws: WebSocket | null;
