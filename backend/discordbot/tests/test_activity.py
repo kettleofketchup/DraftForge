@@ -1,5 +1,7 @@
 """Activity identity, persistent match resolution and draft isolation."""
 
+import asyncio
+import json
 import time
 from datetime import date
 from io import StringIO
@@ -7,10 +9,15 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from asgiref.sync import async_to_sync
+from channels.db import database_sync_to_async
+from channels.routing import URLRouter
+from channels.security.websocket import AllowedHostsOriginValidator
+from channels.testing import WebsocketCommunicator
 from django.core import signing
 from django.core.management import call_command
 from django.db import IntegrityError, transaction
 from django.test import TestCase, TransactionTestCase, override_settings
+from django.urls import path as url_path
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.parsers import JSONParser
 from rest_framework.request import Request
@@ -45,6 +52,7 @@ from discordbot.activity_auth import (
 )
 from discordbot.activity_errors import ActivityAuthFailed
 from discordbot.models import DraftActivityChannel, DraftActivityInstance
+from discordbot.tests.activity_helpers import ClearIntentsMixin
 
 
 @override_settings(DISCORD_ACTIVITY_ENABLED=True)
@@ -537,11 +545,14 @@ class DraftActivityTests(TestCase):
             instance_id="socket", guild_id="1", channel_id="2", draft=self.hero
         )
         resolver = AsyncMock(
-            return_value=ActivityIdentity(
-                user=user,
-                instance=instance,
-                tournament_id=self.tournament.pk,
-                pin=None,
+            return_value=(
+                ActivityIdentity(
+                    user=user,
+                    instance=instance,
+                    tournament_id=self.tournament.pk,
+                    pin=None,
+                ),
+                "captain",
             )
         )
         scope = {
@@ -562,7 +573,18 @@ class DraftActivityTests(TestCase):
             )
         resolver.assert_awaited_once_with("signed-token", self.hero.pk, "hero")
         self.assertEqual(app.await_args.args[0]["user"], user)
+        self.assertEqual(
+            app.await_args.args[0]["activity"],
+            {
+                "instance_id": "socket",
+                "tournament_id": self.tournament.pk,
+                "kind": "hero",
+                "draft_id": self.hero.pk,
+                "role": "captain",
+            },
+        )
         self.assertNotIn("user", scope)
+        self.assertNotIn("activity", scope)
 
     def test_http_launch_responds_with_type_twelve(self):
         from discordbot.views import handle_message_component
@@ -771,42 +793,53 @@ class DraftActivityTests(TestCase):
 
 
 @override_settings(DISCORD_ACTIVITY_ENABLED=True)
-class ActivitySocketDatabaseTests(TransactionTestCase):
+class ActivitySocketDatabaseTests(ClearIntentsMixin, TransactionTestCase):
     """Exercise the real async credential lookup on a committed database."""
 
+    intent_user_ids = ("303",)
+
     def setUp(self):
+        super().setUp()
         user = CustomUser.objects.create_user(
             username="socket-captain", discordId="303"
         )
         self.user_pk = user.pk
-        draft = HeroDraft.objects.create(game=Game.objects.create())
+        tournament = Tournament.objects.create(
+            name="Socket activity", date_played=date.today()
+        )
+        self.tournament_pk = tournament.pk
+        self.anchor_game_pk = Game.objects.create(tournament=tournament).pk
+        draft = HeroDraft.objects.create(game_id=self.anchor_game_pk)
         self.draft_pk = draft.pk
+        team = Team.objects.create(name="S", tournament=tournament, captain=user)
+        DraftTeam.objects.create(draft=draft, tournament_team=team)
+        self.second_game_pk = Game.objects.create(tournament=tournament).pk
+        self.second_pk = HeroDraft.objects.create(game_id=self.second_game_pk).pk
+        DraftActivityChannel.objects.create(guild_id="1", channel_id="2", draft=draft)
         instance = DraftActivityInstance.objects.create(
             instance_id="socket-instance", guild_id="1", channel_id="2", draft=draft
         )
         self.token = issue_activity_token(user, instance)
 
-    async def test_valid_socket_uses_real_database_identity(self):
-        from channels.routing import URLRouter
-        from channels.testing import WebsocketCommunicator
-        from django.urls import path
+    def _router(self, application):
+        return URLRouter(
+            [
+                url_path(
+                    "draft/<int:draft_id>/",
+                    ActivitySocketMiddleware(application, "hero"),
+                )
+            ]
+        )
 
+    async def test_valid_socket_uses_real_database_identity(self):
         async def application(scope, receive, send):
             await receive()
             await send({"type": "websocket.accept"})
             await send({"type": "websocket.send", "text": str(scope["user"].pk)})
             await receive()
 
-        router = URLRouter(
-            [
-                path(
-                    "draft/<int:draft_id>/",
-                    ActivitySocketMiddleware(application, "hero"),
-                )
-            ]
-        )
         socket = WebsocketCommunicator(
-            router,
+            self._router(application),
             f"/draft/{self.draft_pk}/",
             subprotocols=["draftactivity", self.token],
         )
@@ -818,21 +851,9 @@ class ActivitySocketDatabaseTests(TransactionTestCase):
         await socket.disconnect()
 
     async def test_rejected_credential_closes_with_4401_after_handshake(self):
-        from channels.routing import URLRouter
-        from channels.testing import WebsocketCommunicator
-        from django.urls import path
-
         application = AsyncMock()
-        router = URLRouter(
-            [
-                path(
-                    "draft/<int:draft_id>/",
-                    ActivitySocketMiddleware(application, "hero"),
-                )
-            ]
-        )
         socket = WebsocketCommunicator(
-            router,
+            self._router(application),
             f"/draft/{self.draft_pk}/",
             subprotocols=["draftactivity", "forged"],
         )
@@ -846,13 +867,36 @@ class ActivitySocketDatabaseTests(TransactionTestCase):
         application.assert_not_awaited()
         await socket.disconnect()
 
-    async def _open_guarded_socket(self, token=None):
-        import asyncio
+    async def test_out_of_scope_connect_closes_4403_and_is_logged(self):
+        foreign = await database_sync_to_async(HeroDraft.objects.create)(
+            game=await database_sync_to_async(Game.objects.create)()
+        )
+        application = AsyncMock()
+        socket = WebsocketCommunicator(
+            self._router(application),
+            f"/draft/{foreign.pk}/",
+            subprotocols=["draftactivity", self.token],
+        )
+        with capture_logs() as logs:
+            self.assertTrue((await socket.connect(timeout=5))[0])
+            self.assertEqual(
+                await socket.receive_output(timeout=5),
+                {"type": "websocket.close", "code": 4403},
+            )
+        application.assert_not_awaited()
+        await socket.disconnect()
+        rejected = [e for e in logs if e["event"] == "activity_auth_rejected"]
+        self.assertEqual(len(rejected), 1)
+        self.assertEqual(rejected[0]["surface"], "socket")
+        self.assertEqual(rejected[0]["kind"], "hero")
+        self.assertEqual(rejected[0]["draft_id"], foreign.pk)
+        self.assertEqual(rejected[0]["reason"], "out_of_scope")
+        self.assertEqual(rejected[0]["code"], "activity_out_of_scope")
+        self.assertEqual(rejected[0]["system"], "discord")
+        self.assertEqual(rejected[0]["subsystem"], "activity")
+        self.assertNotIn(self.token, str(rejected[0]))
 
-        from channels.routing import URLRouter
-        from channels.testing import WebsocketCommunicator
-        from django.urls import path
-
+    async def _open_guarded_socket(self, token=None, draft_pk=None):
         self.consumer_cleaned_up = asyncio.Event()
 
         async def application(scope, receive, send):
@@ -867,26 +911,87 @@ class ActivitySocketDatabaseTests(TransactionTestCase):
             finally:
                 self.consumer_cleaned_up.set()
 
-        router = URLRouter(
-            [
-                path(
-                    "draft/<int:draft_id>/",
-                    ActivitySocketMiddleware(application, "hero"),
-                )
-            ]
-        )
         socket = WebsocketCommunicator(
-            router,
-            f"/draft/{self.draft_pk}/",
+            self._router(application),
+            f"/draft/{draft_pk or self.draft_pk}/",
             subprotocols=["draftactivity", token or self.token],
         )
         connected, _ = await socket.connect(timeout=5)
         self.assertTrue(connected)
         return socket
 
-    async def test_open_socket_closes_after_mapping_revocation(self):
-        from channels.db import database_sync_to_async
+    async def _assert_round_trip_after_revalidation(self, socket):
+        await asyncio.sleep(0.1)
+        await socket.send_to(text_data="ping")
+        self.assertEqual(await socket.receive_from(timeout=5), "heartbeat")
+        await asyncio.sleep(0.1)
+        await socket.send_to(text_data="ping")
+        self.assertEqual(await socket.receive_from(timeout=5), "heartbeat")
 
+    async def test_same_token_connects_to_second_draft_in_tournament(self):
+        socket = await self._open_guarded_socket(draft_pk=self.second_pk)
+        await socket.send_to(text_data="ping")
+        self.assertEqual(await socket.receive_from(timeout=5), "heartbeat")
+        await socket.disconnect()
+
+    async def test_revalidation_survives_channel_rebind(self):
+        with patch("discordbot.activity_auth.SOCKET_REVALIDATE_SECONDS", 0.03):
+            socket = await self._open_guarded_socket()
+            await database_sync_to_async(
+                DraftActivityChannel.objects.filter(guild_id="1", channel_id="2").update
+            )(draft_id=self.second_pk)
+            await self._assert_round_trip_after_revalidation(socket)
+            await socket.disconnect()
+
+    async def test_draft_removed_from_tournament_closes_4403(self):
+        with (
+            patch("discordbot.activity_auth.SOCKET_REVALIDATE_SECONDS", 0.03),
+            capture_logs() as logs,
+        ):
+            socket = await self._open_guarded_socket(draft_pk=self.second_pk)
+            await database_sync_to_async(
+                Game.objects.filter(pk=self.second_game_pk).update
+            )(tournament=None)
+            self.assertEqual(
+                await socket.receive_output(timeout=5),
+                {"type": "websocket.close", "code": 4403},
+            )
+            await self.consumer_cleaned_up.wait()
+            await socket.disconnect()
+        closed = [e for e in logs if e["event"] == "activity_socket_closed"]
+        self.assertEqual(len(closed), 1)
+        self.assertEqual(closed[0]["reason"], "out_of_scope")
+        self.assertEqual(closed[0]["close_code"], 4403)
+        self.assertEqual(closed[0]["draft_id"], self.second_pk)
+        self.assertEqual(closed[0]["role"], "spectator")
+        self.assertEqual(closed[0]["user_id"], self.user_pk)
+        self.assertEqual(closed[0]["instance_id"], "socket-instance")
+        self.assertEqual(closed[0]["tournament_id"], self.tournament_pk)
+        self.assertIsInstance(closed[0]["duration_s"], float)
+
+    async def test_anchor_removed_from_tournament_keeps_other_sockets_open(self):
+        with patch("discordbot.activity_auth.SOCKET_REVALIDATE_SECONDS", 0.03):
+            socket = await self._open_guarded_socket(draft_pk=self.second_pk)
+            await database_sync_to_async(
+                Game.objects.filter(pk=self.anchor_game_pk).update
+            )(tournament=None)
+            await self._assert_round_trip_after_revalidation(socket)
+            await socket.disconnect()
+
+    async def test_anchor_deleted_closes_4401(self):
+        with patch("discordbot.activity_auth.SOCKET_REVALIDATE_SECONDS", 0.03):
+            socket = await self._open_guarded_socket(draft_pk=self.second_pk)
+            await database_sync_to_async(
+                HeroDraft.objects.filter(pk=self.draft_pk).delete
+            )()
+            self.assertEqual(
+                await socket.receive_output(timeout=5),
+                {"type": "websocket.close", "code": 4401},
+            )
+            await self.consumer_cleaned_up.wait()
+            await socket.disconnect()
+
+    async def test_open_socket_closes_after_mapping_revocation(self):
         with patch("discordbot.activity_auth.SOCKET_REVALIDATE_SECONDS", 0.03):
             socket = await self._open_guarded_socket()
             await database_sync_to_async(
@@ -902,14 +1007,15 @@ class ActivitySocketDatabaseTests(TransactionTestCase):
             await socket.disconnect()
 
     async def test_open_socket_closes_after_account_deactivation(self):
-        from channels.db import database_sync_to_async
-
         # Warm the cacheable lookup used elsewhere before a bulk deactivation.
         # Cacheops does not invalidate ordinary QuerySet.update() calls.
         await database_sync_to_async(CustomUser.objects.get)(
             pk=self.user_pk, is_active=True
         )
-        with patch("discordbot.activity_auth.SOCKET_REVALIDATE_SECONDS", 0.03):
+        with (
+            patch("discordbot.activity_auth.SOCKET_REVALIDATE_SECONDS", 0.03),
+            capture_logs() as logs,
+        ):
             socket = await self._open_guarded_socket()
             await database_sync_to_async(
                 CustomUser.objects.filter(pk=self.user_pk).update
@@ -920,9 +1026,14 @@ class ActivitySocketDatabaseTests(TransactionTestCase):
             )
             await self.consumer_cleaned_up.wait()
             await socket.disconnect()
+        closed = [e for e in logs if e["event"] == "activity_socket_closed"]
+        self.assertEqual([e["reason"] for e in closed], ["revoked"])
 
-    async def test_open_socket_closes_when_activity_feature_is_disabled(self):
-        with patch("discordbot.activity_auth.SOCKET_REVALIDATE_SECONDS", 0.03):
+    async def test_disabled_flag_closes_4401(self):
+        with (
+            patch("discordbot.activity_auth.SOCKET_REVALIDATE_SECONDS", 0.03),
+            capture_logs() as logs,
+        ):
             socket = await self._open_guarded_socket()
             with self.settings(DISCORD_ACTIVITY_ENABLED=False):
                 self.assertEqual(
@@ -931,18 +1042,23 @@ class ActivitySocketDatabaseTests(TransactionTestCase):
                 )
             await self.consumer_cleaned_up.wait()
             await socket.disconnect()
+        rejected = [e for e in logs if e["event"] == "activity_auth_rejected"]
+        self.assertEqual([e["reason"] for e in rejected], ["disabled"])
+        self.assertEqual(rejected[0]["code"], "activity_disabled")
+        self.assertEqual(rejected[0]["surface"], "socket")
+        closed = [e for e in logs if e["event"] == "activity_socket_closed"]
+        self.assertEqual(
+            [(e["reason"], e["close_code"]) for e in closed], [("disabled", 4401)]
+        )
 
     async def test_open_socket_expires_before_periodic_revalidation(self):
-        import time
-
-        from django.core import signing
-
-        from discordbot.activity_auth import SALT
-
         data = signing.loads(self.token.replace(".", ":"), salt=SALT)
         data["expires"] = time.time() + 0.1
         token = signing.dumps(data, salt=SALT).replace(":", ".")
-        with patch("discordbot.activity_auth.SOCKET_REVALIDATE_SECONDS", 30):
+        with (
+            patch("discordbot.activity_auth.SOCKET_REVALIDATE_SECONDS", 30),
+            capture_logs() as logs,
+        ):
             socket = await self._open_guarded_socket(token)
             self.assertEqual(
                 await socket.receive_output(timeout=5),
@@ -950,30 +1066,65 @@ class ActivitySocketDatabaseTests(TransactionTestCase):
             )
             await self.consumer_cleaned_up.wait()
             await socket.disconnect()
+        closed = [e for e in logs if e["event"] == "activity_socket_closed"]
+        self.assertEqual([e["reason"] for e in closed], ["expired"])
+
+    async def test_client_disconnect_is_logged(self):
+        with capture_logs() as logs:
+            socket = await self._open_guarded_socket()
+            await socket.disconnect(code=1000)
+            await self.consumer_cleaned_up.wait()
+            await asyncio.sleep(0.05)
+        closed = [e for e in logs if e["event"] == "activity_socket_closed"]
+        self.assertEqual(len(closed), 1)
+        self.assertEqual(closed[0]["reason"], "client")
+        self.assertEqual(closed[0]["close_code"], 1000)
+        self.assertEqual(closed[0]["role"], "captain")
+        self.assertEqual(closed[0]["kind"], "hero")
+        self.assertEqual(closed[0]["system"], "discord")
+        self.assertEqual(closed[0]["subsystem"], "activity")
+
+    async def test_scope_activity_is_set(self):
+        async def application(scope, receive, send):
+            await receive()
+            await send({"type": "websocket.accept"})
+            await send(
+                {"type": "websocket.send", "text": json.dumps(scope["activity"])}
+            )
+            await receive()
+
+        expected = {
+            self.draft_pk: "captain",
+            self.second_pk: "spectator",
+        }
+        for draft_pk, role in expected.items():
+            socket = WebsocketCommunicator(
+                self._router(application),
+                f"/draft/{draft_pk}/",
+                subprotocols=["draftactivity", self.token],
+            )
+            self.assertTrue((await socket.connect(timeout=5))[0])
+            self.assertEqual(
+                json.loads(await socket.receive_from()),
+                {
+                    "instance_id": "socket-instance",
+                    "tournament_id": self.tournament_pk,
+                    "kind": "hero",
+                    "draft_id": draft_pk,
+                    "role": role,
+                },
+            )
+            await socket.disconnect()
 
     @override_settings(ALLOWED_HOSTS=["123.discordsays.com"])
     async def test_discord_proxy_origin_is_allowed_and_foreign_origin_is_denied(self):
-        from channels.routing import URLRouter
-        from channels.security.websocket import AllowedHostsOriginValidator
-        from channels.testing import WebsocketCommunicator
-        from django.urls import path
-
         async def application(scope, receive, send):
             await receive()
             await send({"type": "websocket.accept"})
             await send({"type": "websocket.send", "text": str(scope["user"].pk)})
             await receive()
 
-        router = AllowedHostsOriginValidator(
-            URLRouter(
-                [
-                    path(
-                        "draft/<int:draft_id>/",
-                        ActivitySocketMiddleware(application, "hero"),
-                    ),
-                ]
-            )
-        )
+        router = AllowedHostsOriginValidator(self._router(application))
         good = WebsocketCommunicator(
             router,
             f"/draft/{self.draft_pk}/",

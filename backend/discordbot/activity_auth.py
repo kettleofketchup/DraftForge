@@ -17,12 +17,12 @@ from channels.db import database_sync_to_async
 from django.conf import settings
 from django.core import signing
 from rest_framework.authentication import BaseAuthentication, get_authorization_header
-from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.request import Request
 from structlog.contextvars import bind_contextvars
 
 from app.models import CustomUser, Draft, DraftRound, HeroDraft
 from discordbot.activity_errors import ActivityAuthFailed
+from discordbot.activity_roles import Role, draft_role
 from discordbot.activity_targets import draft_tournament_id
 from discordbot.models import DraftActivityChannel, DraftActivityInstance
 from telemetry.logging import get_logger
@@ -38,9 +38,11 @@ MAX_DATABASE_ID = (1 << 63) - 1
 SESSION_EXPIRED = "Activity session expired. Reopen the Activity."
 SOCKET_PROTOCOL = "draftactivity"
 SESSION_ENDED_CODE = 4401
+SCOPE_CLOSE_CODE = 4403
 
 
 ActivityKind = Literal["hero", "team"]
+SocketCloseReason = Literal["expired", "revoked", "out_of_scope", "disabled", "client"]
 OUT_OF_SCOPE = "Activity credentials are only valid for this draft."
 PATH_NOT_ALLOWED = "Activity credentials cannot use this endpoint."
 HERO_SUFFIXES: frozenset[str] = frozenset(
@@ -359,16 +361,72 @@ class ActivityAuthentication(BaseAuthentication):
         return identity
 
 
+class SocketActivity(TypedDict):
+    instance_id: str
+    tournament_id: int | None
+    kind: ActivityKind
+    draft_id: int
+    role: Role
+
+
+def _validate_socket(
+    token: str, draft_id: int, kind: ActivityKind
+) -> tuple[ActivityIdentity, Role]:
+    identity = authenticate_token(token, draft_id, kind)
+    return identity, draft_role(identity.user, kind, draft_id)
+
+
+def _close_code(exc: ActivityAuthFailed) -> int:
+    if exc.activity_code == "activity_out_of_scope":
+        return SCOPE_CLOSE_CODE
+    return SESSION_ENDED_CODE
+
+
+def _close_reason(exc: ActivityAuthFailed) -> SocketCloseReason:
+    if exc.activity_code == "activity_out_of_scope":
+        return "out_of_scope"
+    if exc.activity_code == "activity_disabled":
+        return "disabled"
+    if exc.reason == "expired":
+        return "expired"
+    return "revoked"
+
+
 class _ActivitySessionEnded(Exception):
     """Unwind the existing consumer so its presence/disconnect cleanup still runs."""
+
+    def __init__(self, close_code: int, reason: SocketCloseReason) -> None:
+        super().__init__(reason)
+        self.close_code = close_code
+        self.reason: SocketCloseReason = reason
 
 
 class ActivitySocketMiddleware:
     """Authenticate sockets, expire them, and periodically enforce revocation."""
 
-    def __init__(self, app: ASGI3Application, kind: Literal["hero", "team"]) -> None:
+    def __init__(self, app: ASGI3Application, kind: ActivityKind) -> None:
         self.app = app
-        self.kind = kind
+        self.kind: ActivityKind = kind
+
+    def _log_rejected(
+        self,
+        exc: ActivityAuthFailed,
+        draft_id: int,
+        identity: ActivityIdentity | None = None,
+    ) -> None:
+        log.warning(
+            "activity_auth_rejected",
+            system="discord",
+            subsystem="activity",
+            surface="socket",
+            kind=self.kind,
+            draft_id=draft_id,
+            reason=exc.reason,
+            code=exc.activity_code,
+            user_id=identity.user.pk if identity else None,
+            instance_id=identity.instance.instance_id if identity else None,
+            tournament_id=identity.tournament_id if identity else None,
+        )
 
     async def __call__(
         self, scope: Scope, receive: ASGIReceiveCallable, send: ASGISendCallable
@@ -376,44 +434,55 @@ class ActivitySocketMiddleware:
         protocols = scope.get("subprotocols", [])
         offered = bool(protocols) and protocols[0] == SOCKET_PROTOCOL
         token = protocols[1] if offered and len(protocols) == 2 else ""
+        draft_id: int = scope["url_route"]["kwargs"]["draft_id"]
 
-        async def reject() -> None:
+        async def reject(code: int) -> None:
             # A pre-accept close reaches the browser as a bare handshake
-            # failure; accept first so the client sees 4401 and re-authenticates.
+            # failure; accept first so the client sees the close code.
             if offered:
                 await send({"type": "websocket.accept", "subprotocol": SOCKET_PROTOCOL})
-            await send({"type": "websocket.close", "code": SESSION_ENDED_CODE})
+            await send({"type": "websocket.close", "code": code})
 
         if not token:
-            await reject()
+            self._log_rejected(
+                ActivityAuthFailed(
+                    "activity_session_ended", SESSION_EXPIRED, "bad_signature"
+                ),
+                draft_id,
+            )
+            await reject(SESSION_ENDED_CODE)
             return
-        draft_id = scope["url_route"]["kwargs"]["draft_id"]
-        validate = database_sync_to_async(authenticate_token, thread_sensitive=False)
+        validate = database_sync_to_async(_validate_socket, thread_sensitive=False)
         try:
-            user = (await validate(token, draft_id, self.kind)).user
+            identity, role = await validate(token, draft_id, self.kind)
             expires_at = _token_data(token)["expires"]
-        except AuthenticationFailed:
-            await reject()
+        except ActivityAuthFailed as exc:
+            self._log_rejected(exc, draft_id)
+            await reject(_close_code(exc))
             return
-        next_validation = time.monotonic() + SOCKET_REVALIDATE_SECONDS
+        started = time.monotonic()
+        next_validation = started + SOCKET_REVALIDATE_SECONDS
         validation_lock = asyncio.Lock()
+        last_close_code: int | None = None
 
         async def check_session() -> None:
-            nonlocal next_validation
+            nonlocal next_validation, role
             if time.time() >= expires_at:
-                raise _ActivitySessionEnded
+                raise _ActivitySessionEnded(SESSION_ENDED_CODE, "expired")
             if time.monotonic() < next_validation:
                 return
             async with validation_lock:
                 if time.monotonic() < next_validation:
                     return
                 try:
-                    await validate(token, draft_id, self.kind)
-                except AuthenticationFailed:
-                    raise _ActivitySessionEnded
+                    _, role = await validate(token, draft_id, self.kind)
+                except ActivityAuthFailed as exc:
+                    self._log_rejected(exc, draft_id, identity)
+                    raise _ActivitySessionEnded(_close_code(exc), _close_reason(exc))
                 next_validation = time.monotonic() + SOCKET_REVALIDATE_SECONDS
 
         async def guarded_receive() -> Any:
+            nonlocal last_close_code
             while True:
                 await check_session()
                 timeout = min(
@@ -423,21 +492,57 @@ class ActivitySocketMiddleware:
                     continue
                 try:
                     message = await asyncio.wait_for(receive(), timeout=timeout)
-                    await check_session()
-                    return message
                 except TimeoutError:
                     # Revalidate even if the client is idle or has stopped heartbeats.
                     continue
+                if message["type"] == "websocket.disconnect":
+                    last_close_code = message.get("code")
+                    return message
+                await check_session()
+                return message
 
         async def guarded_send(message: Any) -> None:
+            nonlocal last_close_code
             if message["type"] == "websocket.accept":
                 # Browsers fail the handshake unless one offered protocol is echoed.
                 message = {**message, "subprotocol": SOCKET_PROTOCOL}
-            elif message["type"] != "websocket.close":
+            elif message["type"] == "websocket.close":
+                last_close_code = message.get("code", 1000)
+            else:
                 await check_session()
             await send(message)
 
+        def log_closed(close_code: int | None, reason: SocketCloseReason) -> None:
+            log.info(
+                "activity_socket_closed",
+                system="discord",
+                subsystem="activity",
+                kind=self.kind,
+                draft_id=draft_id,
+                role=role,
+                close_code=close_code,
+                reason=reason,
+                duration_s=round(time.monotonic() - started, 3),
+                user_id=identity.user.pk,
+                instance_id=identity.instance.instance_id,
+                tournament_id=identity.tournament_id,
+            )
+
+        activity: SocketActivity = {
+            "instance_id": identity.instance.instance_id,
+            "tournament_id": identity.tournament_id,
+            "kind": self.kind,
+            "draft_id": draft_id,
+            "role": role,
+        }
         try:
-            await self.app(dict(scope, user=user), guarded_receive, guarded_send)
-        except _ActivitySessionEnded:
-            await send({"type": "websocket.close", "code": SESSION_ENDED_CODE})
+            await self.app(
+                dict(scope, user=identity.user, activity=activity),
+                guarded_receive,
+                guarded_send,
+            )
+        except _ActivitySessionEnded as ended:
+            log_closed(ended.close_code, ended.reason)
+            await send({"type": "websocket.close", "code": ended.close_code})
+            return
+        log_closed(last_close_code, "client")
