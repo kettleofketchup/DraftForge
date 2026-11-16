@@ -30,7 +30,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from app.cache_utils import invalidate_after_commit, invalidate_obj
-from app.models import CustomUser, Organization, OrgLog
+from app.models import CustomUser, Game, HeroDraft, Organization, OrgLog
 from app.permissions_org import (
     has_event_staff_access,
     has_org_admin_access,
@@ -1788,8 +1788,6 @@ def fire_event_task(request, event_id, task_name):
             return Response(
                 {"error": "No tournament linked"}, status=status.HTTP_400_BAD_REQUEST
             )
-        from app.models import Game, HeroDraft
-
         game = Game.objects.filter(tournament=event.tournament).order_by("-pk").first()
         if not game:
             return Response(
@@ -1805,6 +1803,7 @@ def fire_event_task(request, event_id, task_name):
             args=[
                 event.tournament_id,
                 herodraft.pk,
+                game.pk,
                 game.radiant_team.name if game.radiant_team else "Radiant",
                 game.dire_team.name if game.dire_team else "Dire",
             ],
