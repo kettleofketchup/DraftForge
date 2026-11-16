@@ -27,17 +27,15 @@ class TelemetryMiddleware:
     - Extract labels from URL path
     - Bind all context to structlog for request duration
     - Add X-Request-ID to response headers
-    - Log request completion with timing
+    - Log request completion, failure or cancellation with timing
     """
 
     def __init__(self, get_response: Callable[[HttpRequest], HttpResponse]) -> None:
         self.get_response = get_response
 
     def __call__(self, request: HttpRequest) -> HttpResponse:
-        # Start timing
         start_time = time.perf_counter()
 
-        # Get or generate request ID
         client_id = request.headers.get("X-Request-ID", "")
         request_id = (
             client_id
@@ -45,15 +43,12 @@ class TelemetryMiddleware:
             else str(uuid.uuid4())
         )
 
-        # Extract user ID if authenticated
         user_id = None
         if hasattr(request, "user") and request.user.is_authenticated:
             user_id = request.user.pk
 
-        # Extract labels from URL
         labels = extract_labels(request.path)
 
-        # Build context dict
         context: dict = {
             "request.id": request_id,
             **labels,
@@ -61,17 +56,13 @@ class TelemetryMiddleware:
         if user_id is not None:
             context["user.id"] = user_id
 
-        # Bind context to structlog
         structlog.contextvars.bind_contextvars(**context)
 
         try:
-            # Process request
             response = self.get_response(request)
 
-            # Calculate duration
             duration_ms = (time.perf_counter() - start_time) * 1000
 
-            # Log request completion
             log.info(
                 "request_completed",
                 **{
@@ -82,7 +73,6 @@ class TelemetryMiddleware:
                 },
             )
 
-            # Add request ID to response
             response["X-Request-ID"] = request_id
 
             return response
@@ -103,7 +93,6 @@ class TelemetryMiddleware:
             raise
 
         except Exception as e:
-            # Log error
             duration_ms = (time.perf_counter() - start_time) * 1000
             log.error(
                 "request_failed",
@@ -118,5 +107,4 @@ class TelemetryMiddleware:
             raise
 
         finally:
-            # Always clear context
             structlog.contextvars.clear_contextvars()
