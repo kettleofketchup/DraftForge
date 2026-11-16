@@ -16,7 +16,7 @@ import { patchWithCsrf } from '../../fixtures/events';
 import { HeroDraftPage } from '../../helpers/HeroDraftPage';
 
 test.describe('HeroDraft without a turn timer', () => {
-  test('shows no countdowns and never auto-picks', async () => {
+  test('@cicd shows no countdowns and never auto-picks', async () => {
     test.setTimeout(180000);
 
     const browser = await chromium.launch({
