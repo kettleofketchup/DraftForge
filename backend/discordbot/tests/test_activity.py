@@ -1622,6 +1622,38 @@ class ActivitySocketDatabaseTests(ClearIntentsMixin, TransactionTestCase):
         self.assertEqual(closed[0]["system"], "discord")
         self.assertEqual(closed[0]["subsystem"], "activity")
 
+    async def test_consumer_crash_is_logged_and_reraised(self):
+        async def application(scope, receive, send):
+            await receive()
+            await send({"type": "websocket.accept"})
+            raise RuntimeError("consumer exploded")
+
+        socket = WebsocketCommunicator(
+            self._router(application),
+            f"/draft/{self.draft_pk}/",
+            subprotocols=["draftactivity", self.token],
+        )
+        with capture_logs() as logs:
+            self.assertTrue((await socket.connect(timeout=5))[0])
+            with self.assertRaises(RuntimeError):
+                await socket.receive_output(timeout=5)
+        closed = [e for e in logs if e["event"] == "activity_socket_closed"]
+        self.assertEqual(len(closed), 1)
+        self.assertEqual(closed[0]["reason"], "error")
+        self.assertEqual(closed[0]["close_code"], 1011)
+        self.assertEqual(closed[0]["error_type"], "RuntimeError")
+        self.assertEqual(closed[0]["user_id"], self.user_pk)
+        self.assertEqual(closed[0]["instance_id"], "socket-instance")
+
+    async def test_consumer_cancel_is_logged_and_reraised(self):
+        socket = await self._open_guarded_socket()
+        with capture_logs() as logs:
+            socket.future.cancel()
+            with self.assertRaises(asyncio.CancelledError):
+                await socket.future
+        closed = [e for e in logs if e["event"] == "activity_socket_closed"]
+        self.assertEqual([e["reason"] for e in closed], ["cancelled"])
+
     async def test_scope_activity_is_set(self):
         async def application(scope, receive, send):
             await receive()
