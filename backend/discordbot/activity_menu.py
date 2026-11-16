@@ -1,15 +1,23 @@
 """Activity menu helpers: draft statuses, labels, notices and each user's first view."""
 
 from dataclasses import dataclass
+from datetime import timedelta
 from typing import Literal
 
 from django.conf import settings
 from django.db.models import Prefetch, Q
+from django.utils import timezone
 
-from app.models import Draft, DraftTeam, HeroDraft, Team
-from discordbot.activity_auth import ActivityIdentity, instance_pin, scope_allows
+from app.models import CustomUser, Draft, DraftTeam, HeroDraft, Team, Tournament
+from app.permissions_org import can_edit_tournament
+from discordbot.activity_auth import (
+    ActivityIdentity,
+    Pin,
+    instance_pin,
+    scope_allows,
+)
 from discordbot.activity_intent import peek_intent
-from discordbot.activity_roles import draft_role, involves_user
+from discordbot.activity_roles import Role, draft_role, involves_user
 from discordbot.activity_targets import draft_tournament_id
 from discordbot.models import DraftActivityChannel
 
@@ -23,6 +31,7 @@ InitialSource = Literal[
 
 FINISHED_HERO = {"completed", "abandoned"}
 FINISHED_TEAM = {"completed"}
+RECENT_WINDOW = timedelta(hours=3)
 
 _HERO_STATUS: dict[str, Status] = {
     "waiting_for_captains": "waiting",
@@ -238,3 +247,142 @@ def resolve_initial_view(
         launch_intent=None,
         notice=notice,
     )
+
+
+def _role_from(captain: bool, member: bool, staff: bool) -> Role:
+    if captain:
+        return "captain"
+    if member:
+        return "player"
+    return "staff" if staff else "spectator"
+
+
+def _hero_entry(draft: HeroDraft, role: Role) -> dict[str, object]:
+    return {
+        "id": draft.pk,
+        "game_id": draft.game_id,
+        "label": hero_label(draft),
+        "state": draft.state,
+        "status": hero_status(draft.state),
+        "involves_me": involves_user(role),
+        "role": role,
+        "updated_at": draft.updated_at,
+    }
+
+
+def _team_entry(draft: Draft, role: Role) -> dict[str, object]:
+    return {
+        "id": draft.pk,
+        "state": draft.state,
+        "status": team_status(draft.state),
+        "involves_me": involves_user(role),
+        "role": role,
+    }
+
+
+def _hero_order(draft: HeroDraft) -> tuple[int, float, int, int]:
+    if draft.state in FINISHED_HERO:
+        return (1, -draft.updated_at.timestamp(), 0, draft.pk)
+    return (0, 0.0, draft.game.round, draft.pk)
+
+
+def _pinned_listing(
+    user: CustomUser, pin: Pin
+) -> tuple[dict[str, object] | None, list[dict[str, object]]]:
+    role = draft_role(user, pin["kind"], pin["draft"])
+    if pin["kind"] == "team":
+        team = Draft.objects.nocache().filter(pk=pin["draft"]).first()
+        return (None if team is None else _team_entry(team, role)), []
+    hero = (
+        HeroDraft.objects.nocache()
+        .select_related("game")
+        .prefetch_related(_draft_teams_prefetch())
+        .filter(pk=pin["draft"])
+        .first()
+    )
+    return None, ([] if hero is None else [_hero_entry(hero, role)])
+
+
+def _tournament_listing(
+    user: CustomUser, tournament_id: int
+) -> tuple[dict[str, object] | None, dict[str, object] | None, list[dict[str, object]]]:
+    tournament = (
+        Tournament.objects.nocache()
+        .select_related("league")
+        .filter(pk=tournament_id)
+        .first()
+    )
+    heroes = list(
+        HeroDraft.objects.nocache()
+        .filter(game__tournament_id=tournament_id)
+        .exclude(
+            state__in=FINISHED_HERO,
+            updated_at__lt=timezone.now() - RECENT_WINDOW,
+        )
+        .select_related("game")
+        .prefetch_related(_draft_teams_prefetch())
+    )
+    team_draft = Draft.objects.nocache().filter(tournament_id=tournament_id).first()
+    hero_team_ids = {
+        dt.tournament_team_id for hero in heroes for dt in hero.draft_teams.all()
+    }
+    # Same precedence as draft_role, batched so the poll does not scale per draft.
+    mine = list(
+        Team.objects.nocache()
+        .filter(Q(pk__in=hero_team_ids) | Q(tournament_id=tournament_id))
+        .filter(Q(captain=user) | Q(members=user))
+        .values_list("pk", "tournament_id", "captain_id")
+        .distinct()
+    )
+    captain_of = {pk for pk, _, captain_id in mine if captain_id == user.pk}
+    member_of = {pk for pk, _, _ in mine} - captain_of
+    in_tournament = {pk for pk, t_id, _ in mine if t_id == tournament_id}
+    staff = tournament is not None and can_edit_tournament(user, tournament)
+
+    def hero_role(hero: HeroDraft) -> Role:
+        ids = {dt.tournament_team_id for dt in hero.draft_teams.all()}
+        return _role_from(bool(ids & captain_of), bool(ids & member_of), staff)
+
+    heroes.sort(key=_hero_order)
+    team_entry = None
+    if team_draft is not None:
+        team_entry = _team_entry(
+            team_draft,
+            _role_from(
+                bool(in_tournament & captain_of),
+                bool(in_tournament & member_of),
+                staff,
+            ),
+        )
+    summary = (
+        None if tournament is None else {"id": tournament.pk, "name": tournament.name}
+    )
+    return summary, team_entry, [_hero_entry(h, hero_role(h)) for h in heroes]
+
+
+def list_drafts(identity: ActivityIdentity, discord_user_id: str) -> dict[str, object]:
+    user = identity.user
+    tournament: dict[str, object] | None = None
+    team: dict[str, object] | None = None
+    heroes: list[dict[str, object]] = []
+    if identity.tournament_id is not None:
+        tournament, team, heroes = _tournament_listing(user, identity.tournament_id)
+    elif identity.pin is not None:
+        team, heroes = _pinned_listing(user, identity.pin)
+    launch_intent: dict[str, object] | None = None
+    notice: dict[str, object] | None = None
+    instance = identity.instance
+    intent = peek_intent(discord_user_id) if discord_user_id else None
+    if intent is not None and intent.applies_to(instance.guild_id, instance.channel_id):
+        if scope_allows(identity, intent.kind, intent.draft_id):
+            launch_intent = intent.ref()
+        else:
+            notice = notice_for(intent.kind, intent.draft_id, intent.intent_id)
+    return {
+        "tournament": tournament,
+        "team_draft": team,
+        "hero_drafts": heroes,
+        "launch_intent": launch_intent,
+        "notice": notice,
+        "site_url": settings.SITE_URL,
+    }
