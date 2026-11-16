@@ -200,7 +200,7 @@ export const PositionSchema = z.object({
 export const UserSchema = z.object({
   positions: PositionSchema.optional(),
   username: z.string().min(2).max(100),
-  nickname: z.string().min(2).max(100).nullable().optional(),
+  discordNickname: z.string().nullable().optional(),
   mmr: z.number().min(0).nullable().optional(),
   steamid: z.number().min(0).nullable().optional(),
   discordId: z.string().min(2).max(100).nullable().optional(),

@@ -136,7 +136,7 @@ const Schema = z.object({
 
 ```typescript
 const Schema = z.object({
-  nickname: z.string().nullable().optional(),
+  discordNickname: z.string().nullable().optional(),
   mmr: z.number().min(0).nullable().optional(),
 });
 ```

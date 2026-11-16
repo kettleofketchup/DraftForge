@@ -24,12 +24,12 @@ These users are specifically for testing the claim/merge profile feature.
 | Fixture | Username | Has Discord | Has Steam ID | Purpose |
 |---------|----------|-------------|--------------|---------|
 | `loginUserClaimer` | `user_claimer` | Yes | **No** | User who can claim profiles (logs in via Discord). |
-| *(test data)* | *(null)* | **No** | **Yes** | Manually-added profile (nickname: "Claimable Profile") that can be claimed. |
+| *(test data)* | *(null)* | **No** | **Yes** | Manually-added profile (Steam ID and MMR only, no name) that can be claimed. |
 
 **How claim testing works:**
 
 1. Org admin manually adds a player with just their Steam ID (no Discord account)
-   - Has: `steamid`, `nickname`, `mmr`
+   - Has: `steamid`, `mmr`
    - Does NOT have: `username` (null), `discordId` (null)
    - Cannot log in - this is just a profile placeholder
 

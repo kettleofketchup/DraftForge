@@ -51,11 +51,11 @@ Extended Django user with gaming integrations:
 - `discordId` - Discord user ID
 - `steamId` - Steam user ID
 - `avatar` - Profile avatar URL
-- `nickname` - Display nickname
-- `discordNickname` - Discord display name
-- `guildNickname` - Server-specific nickname
+- `discordNickname` - Discord global display name, synced from Discord
 - `mmr` - Base MMR from Steam profile
 - `league_mmr` - Calculated league MMR (base + performance adjustment)
+
+The per-org Discord server nickname lives on `OrgUser.guild_nickname`. Human-facing names go through `app/display_names.py` (`user_display_name`: server nickname → `discordNickname` → `username` → `User <pk>`) and `org/display_names.py` (`guild_nicknames`, `org_display_name`).
 
 ### Tournament
 Tournament management:

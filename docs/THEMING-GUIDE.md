@@ -432,7 +432,7 @@ import { UserAvatar } from '~/components/user/UserAvatar';
 // From partial data — pass the avatar hash for the REAL avatar.
 // Omitting `avatar` falls back to a generated ui-avatars.com image,
 // which makes the same user look different across the app.
-<UserAvatar user={{ nickname: "Player", username: "player1", avatar: "abc123hash", discordId: "123" }} size="sm" />
+<UserAvatar user={{ discordNickname: "Player", username: "player1", avatar: "abc123hash", discordId: "123" }} size="sm" />
 
 // With online indicator
 <UserAvatar user={user} size="lg" showOnline online />
@@ -450,20 +450,35 @@ import { UserAvatar } from '~/components/user/UserAvatar';
 
 **DO NOT** use `<img>` with `AvatarUrl()` directly — use `<UserAvatar>` which wraps `AvatarUrl` with proper loading states, fallback initials, and memoization.
 
-**Pass the full identity, not a partial object.** `AvatarUrl` only builds the Discord CDN URL when it has `discordId` **and** the `avatar` hash (or a full `avatarUrl`); otherwise it falls back to a generated `ui-avatars.com` image. A `<UserAvatar user={{ nickname }} />` therefore renders a *different* avatar than the same user shown elsewhere. When the data comes from a serializer, expose `nickname` / `username` / `avatar` on the payload so the component can render the canonical avatar. (Real regression: the Discord activity log showed generated avatars because the log serializer didn't expose the avatar hash.)
+**Pass the full identity, not a partial object.** `AvatarUrl` only builds the Discord CDN URL when it has `discordId` **and** the `avatar` hash (or a full `avatarUrl`); otherwise it falls back to a generated `ui-avatars.com` image. A `<UserAvatar user={{ username }} />` therefore renders a *different* avatar than the same user shown elsewhere. When the data comes from a serializer, expose `discordNickname` / `username` / `avatar` on the payload so the component can render the canonical avatar. (Real regression: the Discord activity log showed generated avatars because the log serializer didn't expose the avatar hash.)
 
 ### Display Names
 
-**ALWAYS render a user's name via `DisplayName()`** from `~/components/user/avatar` — never a raw `username` / `nickname` / `discord_username` string. It applies the canonical priority (`nickname` → `username`) with an optional length cap, so the same person reads the same everywhere.
+**ALWAYS render a user's name through the shared resolver** (`~/lib/userDisplayName`) — never a raw `username` / `discordNickname` / `guildNickname` / `discord_username` string. Names come from Discord; there is no site nickname. The chain depends on context:
+
+| Context | Chain |
+|---|---|
+| Org page (org, league, tournament, event, series, draft of that org) | server nickname in that org → Discord display name → username → `User <pk>` |
+| No org (profile, `/users`, `/events` list, navbar) | Discord display name → username → `User <pk>` |
+
+Blank values are skipped. Server nicknames live in the user cache store (`UserEntry.orgNicknames[orgId]`); the resolver reads them from the object or from the store by `pk`.
 
 ```tsx
 import { DisplayName } from '~/components/user/avatar';
+import { useDisplayName } from '~/hooks/useDisplayName';
+import { useDisplayOrgId } from '~/hooks/useDisplayOrgId';
 
-<span>{DisplayName(user)}</span>        // nickname → username → '?'
-<span>{DisplayName(user, 20)}</span>    // truncates with … past 20 chars
+// Reactive (preferred in components): re-renders when a synced name arrives
+const name = useDisplayName(user, useDisplayOrgId(), { maxLength: 20 });
+
+// Non-reactive helper: org context only when orgId is passed
+<span>{DisplayName(user)}</span>             // global chain
+<span>{DisplayName(user, 20, orgId)}</span>  // org chain, truncated with … past 20 chars
 ```
 
-**DO NOT** render `{user.username}` / `{log.discord_username}` directly — it bypasses the nickname preference and drifts from the rest of the UI.
+`useDisplayName` takes `orgId` as a required argument (`number | null`); pass `useDisplayOrgId()` for the route's org, never `orgStore.currentOrg`. Pure code uses `resolveDisplayName(user, { orgId, maxLength })`; code holding only an id uses `displayNameById(pk, fallback, orgId)`.
+
+**DO NOT** render `{user.username}` / `{log.discord_username}` directly, or hand-roll `guildNickname || discordNickname || username` — it skips the context chain and drifts from the rest of the UI.
 
 ---
 

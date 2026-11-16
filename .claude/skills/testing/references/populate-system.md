@@ -8,7 +8,7 @@ Pydantic models defining test entity schemas:
 
 | Model | Key Fields |
 |-------|-----------|
-| `TestUser` | pk, username, nickname, discord_id, steam_id, steam_id_64, mmr, is_staff, is_superuser, org_id, league_id, positions |
+| `TestUser` | pk, username, discord_global_name, discord_id, steam_id, steam_id_64, mmr, is_staff, is_superuser, org_id, league_id, positions |
 | `TestPositions` | carry, mid, offlane, soft_support, hard_support (all int, default 3) |
 | `TestOrganization` | pk, name, description, logo, rules_template, timezone, default_league_id, discord_server_id |
 | `TestLeague` | pk, name, steam_league_id, description, rules, prize_pool, timezone, organization_names |

@@ -51,7 +51,7 @@ from app.cache_utils import invalidate_after_commit
 
 # Inside a transaction — invalidation deferred until commit
 with transaction.atomic():
-    user.nickname = "New"
+    user.discordNickname = "New"
     user.save()
     org_user.mmr = 5000
     org_user.save()
@@ -173,7 +173,7 @@ never evicted when that table is written:
 
 ```python
 # BROKEN: cached under conj:app_customuser only. A BaseUserProfile write
-# (PATCH /api/users/me/profile/base/) never evicts it, so the nickname stays
+# (PATCH /api/users/me/profile/base/) never evicts it, so the avatar stays
 # stale for the full TTL.
 CustomUser.objects.select_related("base_profile").filter(pk=pk)
 ```

@@ -33,8 +33,8 @@ rg -n 'AvatarUrl\s*\(' "$SCOPE" --glob '!**/UserAvatar*'
 # <UserAvatar> fed an inline partial object — manually check each for a missing `avatar` hash
 rg -nP '<UserAvatar[^>]*user=\{\{(?![^}]*avatar)' "$SCOPE"
 
-# Raw username/nickname rendered in JSX instead of DisplayName() — manual review per hit
-rg -n '\{[a-zA-Z_.]*\.(username|nickname|discord_username)\}' "$SCOPE" --glob '!**/UserAvatar*' --glob '!**/avatar.tsx'
+# Raw name field rendered in JSX instead of the display-name resolver — manual review per hit
+rg -n '\{[a-zA-Z_.]*\.(username|discordNickname|guildNickname|discord_username)\}' "$SCOPE" --glob '!**/UserAvatar*' --glob '!**/avatar.tsx'
 ```
 
 ## Breadcrumbs

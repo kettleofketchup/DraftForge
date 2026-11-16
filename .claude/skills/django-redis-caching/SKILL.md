@@ -48,7 +48,7 @@ def list(self, request, *args, **kwargs):
 from app.cache_utils import invalidate_after_commit
 
 with transaction.atomic():
-    user.nickname = "New"
+    user.discordNickname = "New"
     user.save()
     invalidate_after_commit(tournament, org_user, org_user.organization)
 ```

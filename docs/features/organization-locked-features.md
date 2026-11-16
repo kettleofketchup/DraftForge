@@ -72,7 +72,7 @@ Templates use these placeholders, and only these:
 
 | Placeholder | Fills with |
 |---|---|
-| `{player}` | The recipient's server nickname, then Discord display name, then Discord username, then site nickname |
+| `{player}` | The recipient's server nickname, then Discord display name, then username |
 | `{promoter}` | The sender's name |
 | `{event}` | Event name |
 | `{event_time}` | `<t:UNIX:F>`, full start date and time |
