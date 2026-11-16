@@ -48,11 +48,11 @@ def steam_account_id_conflict_payload(
     """Body for a 409, carrying enough for the UI to name the holder."""
     identity = steam_account_id_identity(holder)
     label = user_display_name(holder)
+    username = identity["username"]
+    if username and username != label:
+        label = f"{label} (@{username})"
     return {
         "code": "steam_account_id_taken",
-        "error": (
-            f"Friend ID {steam_account_id} is already assigned to "
-            f"{label} (@{identity['username']})."
-        ),
+        "error": f"Friend ID {steam_account_id} is already assigned to {label}.",
         "conflict": identity,
     }

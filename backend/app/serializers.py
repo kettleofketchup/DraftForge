@@ -81,9 +81,9 @@ class TournamentUserSerializer(serializers.ModelSerializer):
     positions = PositionsSerializer(many=False, read_only=True)
     # Auto-computed 32-bit Steam Account ID from 64-bit Friend ID
     steam_account_id = serializers.IntegerField(read_only=True)
+    nickname = LegacyNullField()
     # avatar lives on BaseUserProfile; the CustomUser @property setter writes
     # it through, so PATCH /users/<pk>/ keeps working for admin edits.
-    nickname = LegacyNullField()
     avatar = serializers.CharField(
         allow_null=True,
         allow_blank=True,
@@ -1506,9 +1506,9 @@ class UserSerializer(serializers.ModelSerializer):
     staff_organization_ids = serializers.SerializerMethodField()
     admin_league_ids = serializers.SerializerMethodField()
     staff_league_ids = serializers.SerializerMethodField()
+    nickname = LegacyNullField()
     # avatar lives on BaseUserProfile; the CustomUser @property setter writes
     # it through, so PATCH /users/<pk>/ keeps working for admin edits.
-    nickname = LegacyNullField()
     avatar = serializers.CharField(
         allow_null=True,
         allow_blank=True,

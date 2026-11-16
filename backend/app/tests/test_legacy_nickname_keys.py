@@ -98,12 +98,21 @@ class LegacyNicknameKeyTests(TestCase):
         body = steam_account_id_conflict_payload(STEAM_ID, self.user)
         self.assert_legacy_null(body["conflict"])
         self.assertEqual(body["conflict"]["discordNickname"], "Gwaihir")
-        self.assertIn("Gwaihir (@dc)", body["error"])
+        self.assertEqual(
+            body["error"], f"Friend ID {STEAM_ID} is already assigned to Gwaihir (@dc)."
+        )
 
     def test_steam_conflict_label_steam_only_user(self) -> None:
         steam_only = CustomUser.objects.create(username=None)
         body = steam_account_id_conflict_payload(1, steam_only)
-        self.assertIn(f"User {steam_only.pk}", body["error"])
+        self.assertEqual(
+            body["error"], f"Friend ID 1 is already assigned to User {steam_only.pk}."
+        )
+
+    def test_steam_conflict_label_omits_redundant_username(self) -> None:
+        plain = CustomUser.objects.create(username="plainuser")
+        body = steam_account_id_conflict_payload(2, plain)
+        self.assertEqual(body["error"], "Friend ID 2 is already assigned to plainuser.")
 
     def test_steam_lookup_holder(self) -> None:
         client = APIClient()
