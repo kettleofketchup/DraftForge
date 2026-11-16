@@ -17,14 +17,17 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "backend.settings")
 # is populated before importing code that may import ORM models.
 django_asgi_app = get_asgi_application()
 
-# Initialize telemetry for WebSocket workers
-# Safe to call multiple times - subsequent calls are no-ops
-from telemetry.config import init_telemetry
+# Safe to call more than once; later calls are no-ops
+from telemetry.config import init_telemetry  # noqa: E402
+from telemetry.diagnostics import install_thread_dump_handler  # noqa: E402
 
 init_telemetry()
 
+# `docker kill -s USR1 <backend>` dumps all thread stacks to the container log
+install_thread_dump_handler()
+
 # Import routing after Django and telemetry are initialized
-from app.routing import websocket_urlpatterns
+from app.routing import websocket_urlpatterns  # noqa: E402
 
 application = ProtocolTypeRouter(
     {

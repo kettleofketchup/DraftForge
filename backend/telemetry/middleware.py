@@ -1,5 +1,6 @@
 """Django middleware for telemetry context binding."""
 
+import asyncio
 import re
 import time
 import uuid
@@ -34,7 +35,7 @@ class TelemetryMiddleware:
     - Extract labels from URL path
     - Bind all context to structlog for request duration
     - Add X-Request-ID to response headers
-    - Log request completion with timing
+    - Log request completion, failure or cancellation with timing
 
     Sync and async capable so an ASGI request chain needs no async_to_sync hop.
     """
@@ -61,6 +62,9 @@ class TelemetryMiddleware:
         try:
             response = self.get_response(request)
             return self._complete(request, response, request_id, start_time)
+        except asyncio.CancelledError:
+            self._log_cancelled(request, start_time)
+            raise
         except Exception as e:
             self._log_failed(request, e, start_time)
             raise
@@ -78,6 +82,9 @@ class TelemetryMiddleware:
         try:
             response = await self.get_response(request)
             return self._complete(request, response, request_id, start_time)
+        except asyncio.CancelledError:
+            self._log_cancelled(request, start_time)
+            raise
         except Exception as e:
             self._log_failed(request, e, start_time)
             raise
@@ -120,6 +127,21 @@ class TelemetryMiddleware:
         )
         response["X-Request-ID"] = request_id
         return response
+
+    @staticmethod
+    def _log_cancelled(request: HttpRequest, start_time: float) -> None:
+        # BaseException: daphne killed the request (client gone, timeout)
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        log.warning(
+            "request_cancelled",
+            system="http",
+            subsystem="request",
+            **{
+                "http.method": request.method,
+                "http.route": request.path,
+                "duration_ms": round(duration_ms, 2),
+            },
+        )
 
     @staticmethod
     def _log_failed(request: HttpRequest, error: Exception, start_time: float) -> None:
