@@ -259,6 +259,14 @@ describe('userNameCandidates / matchesUserQuery', () => {
       matchesUserQuery({ pk: 1, username: 'dc_handle' }, 'dragon', 7),
     ).toBe(true);
   });
+
+  it('matches a nameless profile by its User <pk> label', () => {
+    const nameless = { pk: 1010, username: null, discordNickname: null };
+    expect(userNameCandidates(nameless)).toEqual(['User 1010']);
+    expect(matchesUserQuery(nameless, 'user 1010')).toBe(true);
+    expect(userNameCandidates({ pk: 4, username: 'named' })).toEqual(['named']);
+    expect(userNameCandidates({ username: null })).toEqual([]);
+  });
 });
 
 describe('orgRowDisplayName', () => {

@@ -97,15 +97,18 @@ export function userNameCandidates(
   user: NameSource | DiscordMemberLike,
   orgId?: number | null,
 ): string[] {
-  const names = isDiscordMember(user)
-    ? memberNames(user)
-    : [
-        hasOrg(orgId) ? orgNickname(user, orgId) : undefined,
-        user.discordNickname,
-        user.discordUsername,
-        user.username,
-      ];
-  return names.filter(present);
+  if (isDiscordMember(user)) return memberNames(user).filter(present);
+  const shown = [
+    hasOrg(orgId) ? orgNickname(user, orgId) : undefined,
+    user.discordNickname,
+    user.username,
+  ];
+  const names = [shown[0], shown[1], user.discordUsername, shown[2]].filter(
+    present,
+  );
+  if (!shown.some(present) && typeof user.pk === 'number')
+    names.push(fallbackName(user.pk));
+  return names;
 }
 
 export function matchesUserQuery(
