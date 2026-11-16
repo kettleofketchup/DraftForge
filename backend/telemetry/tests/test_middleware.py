@@ -1,9 +1,11 @@
 """Tests for telemetry middleware."""
 
+import asyncio
 import uuid
 from unittest import mock
 
 import structlog
+from asgiref.sync import iscoroutinefunction
 from django.http import HttpResponse
 from django.test import RequestFactory, TestCase
 
@@ -30,7 +32,6 @@ class TelemetryMiddlewareTest(TestCase):
 
         response = self.middleware(request)
 
-        # Response should have X-Request-ID header
         self.assertIn("X-Request-ID", response)
         # Should be a valid UUID
         uuid.UUID(response["X-Request-ID"])
@@ -51,11 +52,9 @@ class TelemetryMiddlewareTest(TestCase):
         """Middleware binds context to structlog."""
         request = self.factory.get("/api/tournaments/5/")
 
-        # Track what context was bound
         bound_context = {}
 
         def capture_response(req):
-            # Capture context during request
             ctx = structlog.contextvars.get_contextvars()
             bound_context.update(ctx)
             return HttpResponse("OK")
@@ -63,7 +62,6 @@ class TelemetryMiddlewareTest(TestCase):
         middleware = TelemetryMiddleware(capture_response)
         middleware(request)
 
-        # Verify context was bound
         self.assertIn("request.id", bound_context)
         self.assertEqual(bound_context["labels"], ["tournament"])
         self.assertEqual(bound_context["tournament.id"], 5)
@@ -74,7 +72,6 @@ class TelemetryMiddlewareTest(TestCase):
 
         self.middleware(request)
 
-        # Context should be cleared
         ctx = structlog.contextvars.get_contextvars()
         self.assertNotIn("tournament.id", ctx)
 
@@ -113,7 +110,6 @@ class TelemetryMiddlewareTest(TestCase):
         middleware = TelemetryMiddleware(capture_response)
         middleware(request)
 
-        # user.id should not be present for anonymous users
         self.assertNotIn("user.id", bound_context)
 
     def test_rejects_invalid_request_id(self):
@@ -134,3 +130,101 @@ class TelemetryMiddlewareTest(TestCase):
         )
         response = self.middleware(request)
         self.assertTrue(len(response["X-Request-ID"]) <= 64)
+
+    def test_logs_request_cancelled_and_reraises(self) -> None:
+        """CancelledError is a BaseException; it must still be logged."""
+        request = self.factory.get("/api/bracket/tournaments/105/")
+        middleware = TelemetryMiddleware(
+            mock.Mock(side_effect=asyncio.CancelledError())
+        )
+
+        with mock.patch("telemetry.middleware.log") as log:
+            with self.assertRaises(asyncio.CancelledError):
+                middleware(request)
+
+        log.error.assert_not_called()
+        log.info.assert_not_called()
+        log.warning.assert_called_once()
+        args, kwargs = log.warning.call_args
+        self.assertEqual(args, ("request_cancelled",))
+        self.assertEqual(kwargs["system"], "http")
+        self.assertEqual(kwargs["subsystem"], "request")
+        self.assertEqual(kwargs["http.method"], "GET")
+        self.assertEqual(kwargs["http.route"], "/api/bracket/tournaments/105/")
+        self.assertIsInstance(kwargs["duration_ms"], float)
+        self.assertNotIn("tournament.id", structlog.contextvars.get_contextvars())
+
+
+async def _async_ok(request):
+    return HttpResponse("OK")
+
+
+class TelemetryMiddlewareAsyncTest(TestCase):
+    """Tests for TelemetryMiddleware on the async (ASGI) path."""
+
+    def setUp(self):
+        self.factory = RequestFactory()
+        structlog.contextvars.clear_contextvars()
+
+    def tearDown(self):
+        structlog.contextvars.clear_contextvars()
+
+    def test_async_mode_follows_get_response(self):
+        self.assertTrue(iscoroutinefunction(TelemetryMiddleware(_async_ok)))
+        self.assertFalse(iscoroutinefunction(TelemetryMiddleware(mock.Mock())))
+
+    async def test_binds_context_and_sets_request_id(self):
+        request = self.factory.get("/api/tournaments/5/", HTTP_X_REQUEST_ID="abc-123")
+        request.user = mock.Mock(is_authenticated=True, pk=42)
+        bound_context = {}
+
+        async def capture_response(req):
+            bound_context.update(structlog.contextvars.get_contextvars())
+            return HttpResponse("OK")
+
+        with mock.patch("telemetry.middleware.log") as mock_log:
+            response = await TelemetryMiddleware(capture_response)(request)
+
+        self.assertEqual(response["X-Request-ID"], "abc-123")
+        self.assertEqual(bound_context["request.id"], "abc-123")
+        self.assertEqual(bound_context["tournament.id"], 5)
+        self.assertEqual(bound_context["user.id"], 42)
+        self.assertNotIn("tournament.id", structlog.contextvars.get_contextvars())
+        mock_log.info.assert_called_once()
+        self.assertEqual(mock_log.info.call_args[0][0], "request_completed")
+        self.assertEqual(mock_log.info.call_args[1]["http.status_code"], 200)
+
+    async def test_logs_request_failed_and_reraises(self):
+        async def boom(req):
+            raise ValueError("boom")
+
+        request = self.factory.get("/api/tournaments/")
+        with mock.patch("telemetry.middleware.log") as mock_log:
+            with self.assertRaises(ValueError):
+                await TelemetryMiddleware(boom)(request)
+
+        mock_log.error.assert_called_once()
+        self.assertEqual(mock_log.error.call_args[0][0], "request_failed")
+        self.assertEqual(mock_log.error.call_args[1]["error"], "boom")
+        self.assertEqual(structlog.contextvars.get_contextvars(), {})
+
+    async def test_logs_request_cancelled_and_reraises(self) -> None:
+        async def cancelled(req: object) -> HttpResponse:
+            raise asyncio.CancelledError()
+
+        request = self.factory.get("/api/bracket/tournaments/105/")
+        with mock.patch("telemetry.middleware.log") as log:
+            with self.assertRaises(asyncio.CancelledError):
+                await TelemetryMiddleware(cancelled)(request)
+
+        log.error.assert_not_called()
+        log.info.assert_not_called()
+        log.warning.assert_called_once()
+        args, kwargs = log.warning.call_args
+        self.assertEqual(args, ("request_cancelled",))
+        self.assertEqual(kwargs["system"], "http")
+        self.assertEqual(kwargs["subsystem"], "request")
+        self.assertEqual(kwargs["http.method"], "GET")
+        self.assertEqual(kwargs["http.route"], "/api/bracket/tournaments/105/")
+        self.assertIsInstance(kwargs["duration_ms"], float)
+        self.assertNotIn("tournament.id", structlog.contextvars.get_contextvars())

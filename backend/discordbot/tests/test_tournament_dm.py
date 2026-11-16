@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock, patch
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 
@@ -32,7 +32,7 @@ class DiscordTournamentLogTest(TestCase):
     def test_log_ordering_newest_first(self):
         from discordbot.models import DiscordTournamentLog
 
-        log1 = DiscordTournamentLog.objects.create(
+        DiscordTournamentLog.objects.create(
             tournament=self.tournament,
             notification_type="draft_link",
             message="First",
@@ -142,6 +142,35 @@ class SendDraftLinksTaskTest(TestCase):
         send_tournament_draft_links(1, 42)
         self.assertEqual(mock_dm.call_count, 2)
 
+    @override_settings(DISCORD_ACTIVITY_ENABLED=True)
+    @patch("app.internal_client.update_tournament_log")
+    @patch("app.internal_client.create_tournament_log")
+    @patch("discordbot.utils.sync_send_dm")
+    @patch("app.internal_client.get_tournament_participants")
+    @patch("app.internal_client.get_tournament_for_task")
+    def test_activity_button_uses_actual_draft_id_in_sent_dm(
+        self, mock_tournament, mock_participants, mock_dm, mock_log, mock_update
+    ):
+        from app.schemas import TournamentParticipantSchema, TournamentTaskSchema
+        from events.tournament_tasks import send_tournament_draft_links
+
+        mock_tournament.return_value = TournamentTaskSchema(
+            id=1,
+            name="Test",
+            state="in_progress",
+            discord_send_draft_link=True,
+            draft_type="snake",
+        )
+        mock_participants.return_value = [
+            TournamentParticipantSchema(user_pk=1, discord_id="111", username="p1")
+        ]
+        mock_dm.return_value = {"id": "msg123"}
+        mock_log.return_value = MagicMock(ok=True, json=lambda: {"id": 1})
+        send_tournament_draft_links(1, 42)
+        buttons = mock_dm.call_args.kwargs["components"][0]["components"]
+        self.assertEqual(buttons[1]["custom_id"], "draft_activity:team:42")
+        self.assertIn("voice channel", mock_dm.call_args.kwargs["embed"]["description"])
+
     @patch("app.internal_client.get_tournament_for_task")
     def test_skips_when_disabled(self, mock_get):
         from app.schemas import TournamentTaskSchema
@@ -215,100 +244,107 @@ class SendHeroDraftLinksTaskTest(TestCase):
         )
         self.assertEqual(mock_dm.call_count, 2)
 
-
-class AutoCreateHeroDraftsTaskTest(TestCase):
-    @patch("events.tournament_tasks.auto_create_herodrafts.apply_async")
-    @patch("app.internal_client.create_herodraft_for_game")
-    @patch("app.internal_client.get_games_without_herodraft")
+    @override_settings(DISCORD_ACTIVITY_ENABLED=True)
+    @patch("app.internal_client.update_tournament_log")
+    @patch("app.internal_client.create_tournament_log")
+    @patch("discordbot.utils.sync_send_dm")
+    @patch("app.internal_client.get_match_participants")
     @patch("app.internal_client.get_tournament_for_task")
-    def test_creates_herodrafts(
-        self, mock_tourn, mock_games, mock_create, mock_resched
+    def test_activity_button_is_in_hero_draft_dm(
+        self, mock_tournament, mock_participants, mock_dm, mock_log, mock_update
     ):
-        from app.schemas import GameWithoutHeroDraftSchema, TournamentTaskSchema
+        from app.schemas import TournamentParticipantSchema, TournamentTaskSchema
+        from events.tournament_tasks import send_tournament_herodraft_links
 
-        mock_tourn.return_value = TournamentTaskSchema(
+        mock_tournament.return_value = TournamentTaskSchema(
             id=1,
             name="Test",
             state="in_progress",
-            auto_create_hero_drafts=True,
+            discord_send_herodraft_link=True,
         )
-        mock_games.return_value = [
-            GameWithoutHeroDraftSchema(
-                id=10,
-                radiant_team_id=1,
-                dire_team_id=2,
-                radiant_team_name="A",
-                dire_team_name="B",
-                has_captains=True,
-            ),
+        mock_participants.return_value = [
+            TournamentParticipantSchema(user_pk=1, discord_id="111", username="p1")
         ]
+        mock_dm.return_value = {"id": "msg123"}
+        mock_log.return_value = MagicMock(ok=True, json=lambda: {"id": 1})
+        send_tournament_herodraft_links(1, 99, 10, radiant_name="A", dire_name="B")
+        buttons = mock_dm.call_args.kwargs["components"][0]["components"]
+        self.assertEqual(buttons[1]["custom_id"], "draft_activity:hero:99")
+
+
+class SweepAutoHeroDraftsTaskTest(TestCase):
+    @staticmethod
+    def _game(game_id: int, tournament_id: int = 1, send_link: bool = True):
+        from app.schemas import AutoHeroDraftGameSchema
+
+        return AutoHeroDraftGameSchema(
+            id=game_id,
+            tournament_id=tournament_id,
+            discord_send_herodraft_link=send_link,
+            radiant_team_id=1,
+            dire_team_id=2,
+            radiant_team_name="A",
+            dire_team_name="B",
+            has_captains=True,
+        )
+
+    @patch("events.tournament_tasks.send_tournament_herodraft_links.delay")
+    @patch("app.internal_client.create_herodraft_for_game")
+    @patch("app.internal_client.get_auto_herodraft_games")
+    def test_creates_drafts_and_sends_links(
+        self, mock_games, mock_create, mock_links
+    ) -> None:
+        mock_games.return_value = [self._game(10, 1), self._game(20, 2, False)]
+        mock_create.side_effect = [
+            MagicMock(ok=True, json=lambda: {"id": 99, "created": True}),
+            MagicMock(ok=True, json=lambda: {"id": 98, "created": True}),
+        ]
+
+        from events.tournament_tasks import sweep_auto_herodrafts
+
+        sweep_auto_herodrafts()
+        self.assertEqual([c.args for c in mock_create.call_args_list], [(10,), (20,)])
+        mock_links.assert_called_once_with(1, 99, 10, radiant_name="A", dire_name="B")
+
+    @patch("events.tournament_tasks.send_tournament_herodraft_links.delay")
+    @patch("app.internal_client.create_herodraft_for_game")
+    @patch("app.internal_client.get_auto_herodraft_games")
+    def test_existing_draft_sends_no_link(
+        self, mock_games, mock_create, mock_links
+    ) -> None:
+        mock_games.return_value = [self._game(10)]
         mock_create.return_value = MagicMock(
-            ok=True, json=lambda: {"id": 99, "created": True}
+            ok=True, json=lambda: {"id": 99, "created": False}
         )
 
-        from events.tournament_tasks import auto_create_herodrafts
+        from events.tournament_tasks import sweep_auto_herodrafts
 
-        auto_create_herodrafts(1)
-        mock_create.assert_called_once_with(10)
-        mock_resched.assert_called_once()
+        sweep_auto_herodrafts()
+        mock_links.assert_not_called()
 
-    @patch("events.tournament_tasks.auto_create_herodrafts.apply_async")
-    @patch("app.internal_client.get_tournament_for_task")
-    def test_stops_when_completed(self, mock_tourn, mock_resched):
-        from app.schemas import TournamentTaskSchema
-
-        mock_tourn.return_value = TournamentTaskSchema(
-            id=1,
-            name="Test",
-            state="past",
-            auto_create_hero_drafts=True,
-        )
-        from events.tournament_tasks import auto_create_herodrafts
-
-        auto_create_herodrafts(1)
-        mock_resched.assert_not_called()
-
-    @patch("events.tournament_tasks.auto_create_herodrafts.apply_async")
-    @patch("app.internal_client.get_tournament_for_task")
-    def test_stops_when_disabled(self, mock_tourn, mock_resched):
-        from app.schemas import TournamentTaskSchema
-
-        mock_tourn.return_value = TournamentTaskSchema(
-            id=1,
-            name="Test",
-            state="in_progress",
-            auto_create_hero_drafts=False,
-        )
-        from events.tournament_tasks import auto_create_herodrafts
-
-        auto_create_herodrafts(1)
-        mock_resched.assert_not_called()
-
-    @patch("events.tournament_tasks.auto_create_herodrafts.apply_async")
-    @patch("app.internal_client.get_games_without_herodraft")
-    @patch("app.internal_client.get_tournament_for_task")
-    def test_skips_games_without_captains(self, mock_tourn, mock_games, mock_resched):
-        from app.schemas import GameWithoutHeroDraftSchema, TournamentTaskSchema
-
-        mock_tourn.return_value = TournamentTaskSchema(
-            id=1,
-            name="Test",
-            state="in_progress",
-            auto_create_hero_drafts=True,
-        )
-        mock_games.return_value = [
-            GameWithoutHeroDraftSchema(
-                id=10,
-                radiant_team_id=1,
-                dire_team_id=2,
-                has_captains=False,
-            ),
+    @patch("events.tournament_tasks.send_tournament_herodraft_links.delay")
+    @patch("app.internal_client.create_herodraft_for_game")
+    @patch("app.internal_client.get_auto_herodraft_games")
+    def test_failed_create_continues_with_next_game(
+        self, mock_games, mock_create, mock_links
+    ) -> None:
+        mock_games.return_value = [self._game(10), self._game(20)]
+        mock_create.side_effect = [
+            None,
+            MagicMock(ok=True, json=lambda: {"id": 98, "created": True}),
         ]
-        from events.tournament_tasks import auto_create_herodrafts
 
-        auto_create_herodrafts(1)
-        # Should not have tried to create herodraft (no captains)
-        mock_resched.assert_called_once()  # Still reschedules
+        from events.tournament_tasks import sweep_auto_herodrafts
+
+        sweep_auto_herodrafts()
+        self.assertEqual(mock_create.call_count, 2)
+        mock_links.assert_called_once()
+
+    def test_sweep_is_on_the_beat_schedule(self) -> None:
+        from config.celery import app
+
+        tasks = {e["task"] for e in app.conf.beat_schedule.values()}
+        self.assertIn("events.tournament_tasks.sweep_auto_herodrafts", tasks)
 
 
 # ---------------------------------------------------------------------------

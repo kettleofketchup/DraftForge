@@ -17,13 +17,24 @@
  * Never hardcode PKs: read them from getDotaLobbyTestData / resetDotaLobbyData.
  */
 
-import { expect, type APIResponse, type BrowserContext, type Locator, type Page } from '@playwright/test';
+import {
+  expect,
+  type APIResponse,
+  type BrowserContext,
+  type Locator,
+  type Page,
+} from '@playwright/test';
 
 import { visitAndWaitForHydration } from '../helpers/utils';
 import { API_URL } from './base-url';
 import { isCsrfCookie } from './cookies';
 
-export type DotaLobbyRole = 'staff' | 'rostered' | 'registered' | 'unregistered' | 'league-staff';
+export type DotaLobbyRole =
+  | 'staff'
+  | 'rostered'
+  | 'registered'
+  | 'unregistered'
+  | 'league-staff';
 
 export interface LobbyGame {
   pk: number;
@@ -83,7 +94,12 @@ export interface SimLobby {
   password: string;
   league_id: number;
   match_id: string | null;
-  members: { account_id: number; team: string; slot: number | null; host: boolean }[];
+  members: {
+    account_id: number;
+    team: string;
+    slot: number | null;
+    host: boolean;
+  }[];
   pending_invites: number[];
   chat: { account_id: number; text: string; delivered: boolean }[];
 }
@@ -92,25 +108,40 @@ const SIM = `${API_URL}/tests/dota-lobby-sim`;
 
 async function json<T>(resp: APIResponse, what: string): Promise<T> {
   if (!resp.ok()) {
-    throw new Error(`${what} failed: ${resp.status()} ${(await resp.text()).slice(0, 300)}`);
+    throw new Error(
+      `${what} failed: ${resp.status()} ${(await resp.text()).slice(0, 300)}`,
+    );
   }
   return (await resp.json()) as T;
 }
 
-export async function getDotaLobbyTestData(context: BrowserContext): Promise<DotaLobbyTestData> {
-  return json(await context.request.get(`${API_URL}/tests/dota-lobby/data/`), 'dota-lobby data');
+export async function getDotaLobbyTestData(
+  context: BrowserContext,
+): Promise<DotaLobbyTestData> {
+  return json(
+    await context.request.get(`${API_URL}/tests/dota-lobby/data/`),
+    'dota-lobby data',
+  );
 }
 
 /**
  * Close the lobbies earlier specs left open, end their rows, set the games
  * back to pending and restore the passwords. Returns the fresh lookup.
  */
-export async function resetDotaLobbyData(context: BrowserContext): Promise<DotaLobbyTestData> {
-  return json(await context.request.post(`${API_URL}/tests/dota-lobby/reset/`), 'dota-lobby reset');
+export async function resetDotaLobbyData(
+  context: BrowserContext,
+): Promise<DotaLobbyTestData> {
+  return json(
+    await context.request.post(`${API_URL}/tests/dota-lobby/reset/`),
+    'dota-lobby reset',
+  );
 }
 
 /** Log in as a dota_lobby test user (the context's cookies hold the session). */
-export async function loginDotaLobby(context: BrowserContext, role: DotaLobbyRole): Promise<void> {
+export async function loginDotaLobby(
+  context: BrowserContext,
+  role: DotaLobbyRole,
+): Promise<void> {
   await json(
     await context.request.post(`${API_URL}/tests/login-dota-lobby/${role}/`),
     `login-dota-lobby ${role}`,
@@ -126,14 +157,25 @@ export interface SimulatorStatus {
   code?: string;
 }
 
-export async function simulatorStatus(context: BrowserContext): Promise<SimulatorStatus> {
-  const resp = await context.request.get(`${API_URL}/tests/dota-lobby/simulator/`);
+export async function simulatorStatus(
+  context: BrowserContext,
+): Promise<SimulatorStatus> {
+  const resp = await context.request.get(
+    `${API_URL}/tests/dota-lobby/simulator/`,
+  );
   if (resp.ok()) {
-    return { ...((await resp.json()) as Omit<SimulatorStatus, 'reachable'>), reachable: true };
+    return {
+      ...((await resp.json()) as Omit<SimulatorStatus, 'reachable'>),
+      reachable: true,
+    };
   }
   // 503: DOTA_LOBBY_URL is not set, or nothing answers there.
   const body = (await resp.json().catch(() => ({}))) as { code?: string };
-  return { available: false, reachable: false, code: body.code ?? String(resp.status()) };
+  return {
+    available: false,
+    reachable: false,
+    code: body.code ?? String(resp.status()),
+  };
 }
 
 export const SIMULATOR_SKIP_REASON =
@@ -164,12 +206,18 @@ export async function hasSimulator(context: BrowserContext): Promise<boolean> {
   const required = process.env.DOTA_LOBBY_SIMULATOR_REQUIRED === '1';
   const deadline = Date.now() + SIMULATOR_WAIT_MS;
   let status = await simulatorStatus(context);
-  while (!status.available && (status.reachable || required) && Date.now() < deadline) {
+  while (
+    !status.available &&
+    (status.reachable || required) &&
+    Date.now() < deadline
+  ) {
     await new Promise((resolve) => setTimeout(resolve, 1_000));
     status = await simulatorStatus(context);
   }
   if (!status.available && required) {
-    throw new Error(`${SIMULATOR_SKIP_REASON} (status: ${JSON.stringify(status)})`);
+    throw new Error(
+      `${SIMULATOR_SKIP_REASON} (status: ${JSON.stringify(status)})`,
+    );
   }
   simulatorSeen = status.available;
   return status.available;
@@ -177,21 +225,40 @@ export async function hasSimulator(context: BrowserContext): Promise<boolean> {
 
 /** Request helpers for the simulator's control API (/v1/sim/<path>). */
 export const sim = {
-  get: (context: BrowserContext, path: string) => context.request.get(`${SIM}/${path}`),
-  post: (context: BrowserContext, path: string, data?: Record<string, unknown>) =>
-    context.request.post(`${SIM}/${path}`, { data: data ?? {} }),
-  patch: (context: BrowserContext, path: string, data: Record<string, unknown>) =>
-    context.request.patch(`${SIM}/${path}`, { data }),
-  delete: (context: BrowserContext, path: string) => context.request.delete(`${SIM}/${path}`),
+  get: (context: BrowserContext, path: string) =>
+    context.request.get(`${SIM}/${path}`),
+  post: (
+    context: BrowserContext,
+    path: string,
+    data?: Record<string, unknown>,
+  ) => context.request.post(`${SIM}/${path}`, { data: data ?? {} }),
+  patch: (
+    context: BrowserContext,
+    path: string,
+    data: Record<string, unknown>,
+  ) => context.request.patch(`${SIM}/${path}`, { data }),
+  delete: (context: BrowserContext, path: string) =>
+    context.request.delete(`${SIM}/${path}`),
 };
 
-export async function getSimLobby(context: BrowserContext, lobbyId: string): Promise<SimLobby> {
-  return json(await sim.get(context, `lobbies/${lobbyId}`), `sim lobby ${lobbyId}`);
+export async function getSimLobby(
+  context: BrowserContext,
+  lobbyId: string,
+): Promise<SimLobby> {
+  return json(
+    await sim.get(context, `lobbies/${lobbyId}`),
+    `sim lobby ${lobbyId}`,
+  );
 }
 
-export async function getLobbyRow(context: BrowserContext, gamePk: number): Promise<LobbyRow | null> {
+export async function getLobbyRow(
+  context: BrowserContext,
+  gamePk: number,
+): Promise<LobbyRow | null> {
   const body = await json<{ lobby: LobbyRow | null }>(
-    await context.request.get(`${API_URL}/tests/dota-lobby/games/${gamePk}/lobby/`),
+    await context.request.get(
+      `${API_URL}/tests/dota-lobby/games/${gamePk}/lobby/`,
+    ),
     `lobby row for game ${gamePk}`,
   );
   return body.lobby;
@@ -203,9 +270,14 @@ export async function getLobbyRow(context: BrowserContext, gamePk: number): Prom
  * what DraftForge shows of a lobby where the simulator does not run. Never
  * with the simulator running: its reconcile would end the row.
  */
-export async function seedLobbyRow(context: BrowserContext, gamePk: number): Promise<LobbyRow> {
+export async function seedLobbyRow(
+  context: BrowserContext,
+  gamePk: number,
+): Promise<LobbyRow> {
   const body = await json<{ lobby: LobbyRow }>(
-    await context.request.post(`${API_URL}/tests/dota-lobby/games/${gamePk}/lobby/seed/`),
+    await context.request.post(
+      `${API_URL}/tests/dota-lobby/games/${gamePk}/lobby/seed/`,
+    ),
     `seed lobby for game ${gamePk}`,
   );
   return body.lobby;
@@ -219,8 +291,12 @@ export async function seedLobbyRow(context: BrowserContext, gamePk: number): Pro
 export async function waitForLobbyRow(
   context: BrowserContext,
   gamePk: number,
-  ready: (row: LobbyRow) => boolean = (row) => !!row.lobby_id && !!row.gc_lobby_id,
-  { previousId, timeout = 30_000 }: { previousId?: number; timeout?: number } = {},
+  ready: (row: LobbyRow) => boolean = (row) =>
+    !!row.lobby_id && !!row.gc_lobby_id,
+  {
+    previousId,
+    timeout = 30_000,
+  }: { previousId?: number; timeout?: number } = {},
 ): Promise<LobbyRow> {
   let latest: LobbyRow | null = null;
   await expect
@@ -251,17 +327,27 @@ export async function requestLobby(
 }
 
 /** The bracket page of a tournament, loaded. */
-export async function openBracket(page: Page, tournamentPk: number): Promise<void> {
+export async function openBracket(
+  page: Page,
+  tournamentPk: number,
+): Promise<void> {
   await visitAndWaitForHydration(page, `/tournament/${tournamentPk}/games`);
-  await expect(page.locator('[data-testid="bracketContainer"]')).toBeVisible({ timeout: 20_000 });
+  await expect(page.locator('[data-testid="bracketContainer"]')).toBeVisible({
+    timeout: 20_000,
+  });
 }
 
 export function bracketNode(page: Page, gamePk: number): Locator {
-  return page.locator(`[data-testid="bracket-match-node"][data-game-pk="${gamePk}"]`);
+  return page.locator(
+    `[data-testid="bracket-match-node"][data-game-pk="${gamePk}"]`,
+  );
 }
 
 /** Open the Match Details dialog of a game from the bracket. */
-export async function openMatchModal(page: Page, gamePk: number): Promise<Locator> {
+export async function openMatchModal(
+  page: Page,
+  gamePk: number,
+): Promise<Locator> {
   const node = bracketNode(page, gamePk);
   await expect(node).toBeVisible({ timeout: 15_000 });
   await node.click({ force: true });
@@ -274,6 +360,29 @@ export async function closeMatchModal(page: Page): Promise<void> {
   const dialog = page.locator('[data-testid="matchStatsModal"]');
   await dialog.locator('[data-testid="dialog-close-button"]').click();
   await expect(dialog).toBeHidden({ timeout: 5_000 });
+  // A reload before the URL drops /match/<id> deep-links the dialog open again.
+  await expect(page).not.toHaveURL(/\/bracket\/match\//);
+}
+
+/**
+ * Click a winner / Unset Winner button on a saved bracket and wait for the
+ * match result to persist (issue #466: no bracket-wide Save involved).
+ */
+export async function clickAndPersistMatchResult(
+  page: Page,
+  button: Locator,
+): Promise<void> {
+  const persisted = page.waitForResponse(
+    (r) =>
+      r.request().method() === 'POST' && r.url().includes('/advance-winner/'),
+    { timeout: 15_000 },
+  );
+  await button.click();
+  const response = await persisted;
+  expect(response.status(), await response.text()).toBe(200);
+  await expect(
+    page.locator('[data-testid="bracket-unsaved-changes"]'),
+  ).toBeHidden();
 }
 
 /** The lobby state badge in the dialog reaches one of `states`. */
@@ -285,9 +394,13 @@ export async function expectLobbyState(
   const wanted = Array.isArray(states) ? states : [states];
   const badge = dialog.locator('[data-testid="lobby-state-badge"]');
   await expect
-    .poll(async () => (await badge.count()) && (await badge.getAttribute('data-lobby-state')), {
-      timeout,
-      intervals: [250, 500, 1000],
-    })
+    .poll(
+      async () =>
+        (await badge.count()) && (await badge.getAttribute('data-lobby-state')),
+      {
+        timeout,
+        intervals: [250, 500, 1000],
+      },
+    )
     .toEqual(expect.stringMatching(new RegExp(`^(${wanted.join('|')})$`)));
 }

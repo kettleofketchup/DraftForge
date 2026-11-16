@@ -48,6 +48,10 @@ _beat_schedule = {
         "task": "lobby.tasks.reconcile_dota_lobbies",
         "schedule": 60.0,
     },
+    "sweep-auto-herodrafts": {
+        "task": "events.tournament_tasks.sweep_auto_herodrafts",
+        "schedule": 10.0,
+    },
     "sweep-stale-discord-leases": {
         "task": "discordbot.tasks.sweep_stale_discord_leases",
         "schedule": 60.0,  # 60s cadence: keeps worker-crash recovery <1.5 min

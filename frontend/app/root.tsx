@@ -10,6 +10,7 @@ import {
   Scripts,
   ScrollRestoration,
   useLoaderData,
+  useLocation,
 } from 'react-router';
 import { useChangeLanguage } from 'remix-i18next/react';
 import { ScrollArea } from '~/components/ui/scroll-area';
@@ -17,8 +18,10 @@ import { SharedPopoverProvider } from '~/components/ui/shared-popover-context';
 import { SharedPopoverRenderer } from '~/components/ui/shared-popover-renderer';
 import { Toaster } from '~/components/ui/sonner';
 import { TooltipProvider } from '~/components/ui/tooltip';
+import { activityEntryPath } from '~/lib/activity-entry';
 import { getLogger } from '~/lib/logger';
 import { Sentry } from '~/lib/sentry';
+import { resolveSessionHint } from '~/lib/sessionHint';
 import type { Route } from './+types/root';
 import './app.css';
 import ResponsiveAppBar from './components/navbar/navbar';
@@ -35,8 +38,15 @@ export async function loader({ request }: LoaderFunctionArgs) {
   // wiring) out of the client bundle.
   const { resolveRequestLocale } = await import('~/i18n/i18n.server');
   const { locale, setCookie } = await resolveRequestLocale(request);
-  if (!setCookie) return { locale };
-  return data({ locale }, { headers: { 'Set-Cookie': setCookie } });
+  const sessionHint = resolveSessionHint(
+    request.headers.get('Cookie'),
+    new URL(request.url).pathname,
+  );
+  if (!setCookie) return { locale, sessionHint };
+  return data(
+    { locale, sessionHint },
+    { headers: { 'Set-Cookie': setCookie } },
+  );
 }
 
 export const meta: Route.MetaFunction = () => [
@@ -92,6 +102,9 @@ export const queryClient = new QueryClient({
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const loaderData = useLoaderData<typeof loader>();
+  const { pathname, search } = useLocation();
+  const isActivity =
+    pathname === '/activity' || activityEntryPath(pathname, search) !== null;
   const locale = loaderData?.locale ?? 'en';
   useChangeLanguage(locale);
 
@@ -108,14 +121,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <TooltipProvider delayDuration={300}>
             <SharedPopoverProvider>
               <div className="flex flex-col w-screen h-screen justify-between">
-                <ResponsiveAppBar />
-                <ActiveDraftBanner />
+                {!isActivity && <ResponsiveAppBar />}
+                {!isActivity && <ActiveDraftBanner />}
                 <ScrollArea id="outlet_root" className="flex-grow h-0">
                   {children}
                 </ScrollArea>
               </div>
               <Toaster richColors closeButton position="top-center" />
-              <FloatingDraftIndicator />
+              {!isActivity && <FloatingDraftIndicator />}
               <SharedPopoverRenderer />
             </SharedPopoverProvider>
           </TooltipProvider>

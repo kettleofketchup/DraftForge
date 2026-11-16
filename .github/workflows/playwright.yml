@@ -304,12 +304,16 @@ jobs:
         run: docker compose --project-directory . -f docker/docker-compose.test.yaml -f docker/docker-compose.ci.override.yaml down -v || true
 
   backend:
-    name: Backend tests
+    name: Backend tests (${{ matrix.group }})
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     permissions:
       contents: read
       packages: read
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [app, rest]
     steps:
       - uses: actions/checkout@v4
 
@@ -319,28 +323,15 @@ jobs:
           github-actor: ${{ github.actor }}
           image-prefix: ${{ env.IMAGE_PREFIX }}
 
-      # No labels: BackendDiscoverRunner discovers every test*.py module under backend/.
-      - name: Run backend tests
+      - name: Run backend tests (${{ matrix.group }})
         env:
           CI: 'true'
         run: |
+          labels="$(just ci::backend-test-labels ${{ matrix.group }})"
+          echo "Labels: $labels"
+          # shellcheck disable=SC2086 # one label per word
           docker compose --project-directory . -f docker/docker-compose.test.yaml -f docker/docker-compose.ci.override.yaml exec -T backend \
-            python manage.py test -v 2
-
-      - name: Run frontend Vitest
-        env:
-          CI: 'true'
-        run: |
-          docker compose --project-directory . -f docker/docker-compose.test.yaml -f docker/docker-compose.ci.override.yaml exec -T frontend \
-            npm test -- --run
-
-      - name: Check the promotion render fixture copies match
-        run: cmp backend/org/tests/render_fixture.json frontend/app/features/promotion/__tests__/render_fixture.json
-
-      - name: Run slot guards on the runner
-        run: |
-          npm --prefix frontend exec -- vitest run --root frontend tests/unit/playwright-literal-guard.test.ts
-          just test::slots-unit
+            python manage.py test -v 2 $labels
 
       - name: Dump container logs on failure
         if: failure()
@@ -350,3 +341,40 @@ jobs:
       - name: Clean up
         if: always()
         run: docker compose --project-directory . -f docker/docker-compose.test.yaml -f docker/docker-compose.ci.override.yaml down -v || true
+
+  unit:
+    name: Unit tests (Vitest, slot guards)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-toolchain
+        with:
+          registry-token: ${{ secrets.GITHUB_TOKEN }}
+          github-actor: ${{ github.actor }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Run frontend Vitest
+        env:
+          CI: 'true'
+        run: npm --prefix frontend test -- --run
+
+      - name: Check the promotion render fixture copies match
+        run: cmp backend/org/tests/render_fixture.json frontend/app/features/promotion/__tests__/render_fixture.json
+
+      - name: Run slot guards
+        run: just test::slots-unit

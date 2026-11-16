@@ -38,7 +38,7 @@ def send_tournament_draft_links(tournament_id, draft_id):
         date_played=tournament.date_played,
         timezone=getattr(tournament, "timezone", None),
     )
-    components = build_draft_link_components(tournament_id)
+    components = build_draft_link_components(tournament_id, draft_id=draft_id)
     participants = get_tournament_participants(tournament_id)
 
     # Create the parent log row first so child DiscordMessageLog rows can FK
@@ -178,82 +178,56 @@ def send_tournament_herodraft_links(
 
 
 @shared_task
-def auto_create_herodrafts(tournament_id):
-    """Poll for matches needing hero drafts. Self-reschedules every 10s.
-
-    Reads via internal API. Creates hero drafts via internal API
-    (Django endpoint handles select_for_update atomicity).
-    """
+def sweep_auto_herodrafts() -> str:
+    """Create hero drafts for every game that is ready, in every tournament
+    with auto_create_hero_drafts on. Runs on the beat schedule."""
     from app.internal_client import (
         create_herodraft_for_game,
-        get_games_without_herodraft,
-        get_tournament_for_task,
+        get_auto_herodraft_games,
     )
 
-    tournament = get_tournament_for_task(tournament_id)
-    if not tournament:
-        return f"Tournament {tournament_id} not found"
-
-    if tournament.state == "past":
-        logger.info(
-            "tournament_auto_create_stopped",
-            system="events",
-            subsystem="tasks",
-            tournament_id=tournament_id,
-            reason="tournament_completed",
-        )
-        return "Tournament completed"
-
-    if not tournament.auto_create_hero_drafts:
-        logger.info(
-            "tournament_auto_create_skipped",
-            system="events",
-            subsystem="tasks",
-            tournament_id=tournament_id,
-            reason="config_disabled",
-        )
-        return "Config disabled"
-
-    games = get_games_without_herodraft(tournament_id)
     created_count = 0
-
-    for game in games:
-        if not game.has_captains:
-            continue
-
+    for game in get_auto_herodraft_games():
         resp = create_herodraft_for_game(game.id)
         if not resp or not resp.ok:
             logger.error(
                 "herodraft_create_failed",
                 system="events",
                 subsystem="tasks",
-                tournament_id=tournament_id,
+                tournament_id=game.tournament_id,
                 game_id=game.id,
             )
             continue
 
         result = resp.json()
-        if result.get("created"):
-            created_count += 1
-            herodraft_pk = result["id"]
-
-            if tournament.discord_send_herodraft_link:
-                send_tournament_herodraft_links.delay(
-                    tournament_id,
-                    herodraft_pk,
-                    game.id,
-                    radiant_name=game.radiant_team_name,
-                    dire_name=game.dire_team_name,
-                )
-
-    if created_count > 0:
+        if not result.get("created"):
+            continue
+        created_count += 1
         logger.info(
-            "herodrafts_auto_created",
+            "herodraft_auto_created",
             system="events",
             subsystem="tasks",
-            tournament_id=tournament_id,
-            count=created_count,
+            tournament_id=game.tournament_id,
+            game_id=game.id,
+            herodraft_id=result["id"],
         )
+        if game.discord_send_herodraft_link:
+            send_tournament_herodraft_links.delay(
+                game.tournament_id,
+                result["id"],
+                game.id,
+                radiant_name=game.radiant_team_name,
+                dire_name=game.dire_team_name,
+            )
 
-    auto_create_herodrafts.apply_async(args=[tournament_id], countdown=10)
     return f"Created {created_count} hero drafts"
+
+
+@shared_task
+def auto_create_herodrafts(tournament_id: int) -> str:
+    """Retired per-tournament polling loop; sweep_auto_herodrafts replaced it.
+
+    Kept registered so loop messages still queued from before the deploy are
+    consumed instead of erroring as unregistered.
+    """
+    return "Replaced by sweep_auto_herodrafts"

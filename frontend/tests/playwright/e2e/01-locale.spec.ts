@@ -25,7 +25,7 @@ function attachErrorCapture(page: Page): string[] {
   return errors;
 }
 
-test.describe('navbar i18n — anonymous', () => {
+test.describe('navbar i18n — anonymous @cicd', () => {
   test('?lang=es renders Spanish login + correct <html lang>', async ({
     page,
   }) => {
@@ -146,7 +146,9 @@ test.describe('navbar i18n — anonymous', () => {
     await ctx.close();
   });
 
-  test('prerendered / ships English HTML then swaps to Spanish (documented trade-off)', async ({
+  // Prerendered HTML is shared by every visitor, so it cannot carry auth UI;
+  // the navbar paints the login button only after mount.
+  test('prerendered / keeps the auth slot neutral in HTML, then shows Spanish login', async ({
     browser,
   }) => {
     const ctx = await browser.newContext({ locale: 'es-ES' });
@@ -154,14 +156,14 @@ test.describe('navbar i18n — anonymous', () => {
     const errors = attachErrorCapture(page);
     const response = await page.goto('/');
     const html = (await response?.text()) ?? '';
-    expect(html).toContain(EN_LOGIN);
+    expect(html).not.toContain('data-testid="navbarLoginButton"');
     await expect(page.locator(LOGIN_BUTTON)).toHaveText(ES_LOGIN);
     expect(errors).toEqual([]);
     await ctx.close();
   });
 });
 
-test.describe('navbar i18n — authenticated', () => {
+test.describe('navbar i18n — authenticated @cicd', () => {
   test('logged-in es-ES context shows Cerrar sesión and Perfil', async ({
     browser,
   }) => {
@@ -169,7 +171,12 @@ test.describe('navbar i18n — authenticated', () => {
     await loginUser(ctx);
     const page = await ctx.newPage();
     const errors = attachErrorCapture(page);
-    await page.goto('/tournaments');
+    const response = await page.goto('/tournaments');
+    const html = (await response?.text()) ?? '';
+    expect(
+      html,
+      'session cookie present: SSR must not bake the login button',
+    ).not.toContain('data-testid="navbarLoginButton"');
     // Open the user dropdown using the existing user-avatar testid scoped to navbar.
     await page.locator(USER_AVATAR).first().click();
     await expect(page.locator(LOGOUT_BUTTON)).toBeVisible();
@@ -177,5 +184,31 @@ test.describe('navbar i18n — authenticated', () => {
     await expect(page.locator(PROFILE_BUTTON)).toHaveText('Perfil');
     expect(errors).toEqual([]);
     await ctx.close();
+  });
+
+  // nginx caches SSR HTML; an anonymous copy must never reach a session.
+  test('SSR cache never serves the anonymous login button to a signed-in visitor', async ({
+    browser,
+  }) => {
+    const url = `/tournaments?ssr-cache-probe=${Date.now()}`;
+    const anon = await browser.newContext({ locale: 'es-ES' });
+    await anon.addCookies([{ name: 'df-locale', value: 'es', url: BASE_URL }]);
+    const anonPage = await anon.newPage();
+    const anonHtml = (await (await anonPage.goto(url))?.text()) ?? '';
+    expect(anonHtml).toContain('data-testid="navbarLoginButton"');
+    await anon.close();
+
+    const authed = await browser.newContext({ locale: 'es-ES' });
+    await authed.addCookies([
+      { name: 'df-locale', value: 'es', url: BASE_URL },
+    ]);
+    await loginUser(authed);
+    const page = await authed.newPage();
+    const errors = attachErrorCapture(page);
+    const html = (await (await page.goto(url))?.text()) ?? '';
+    expect(html).not.toContain('data-testid="navbarLoginButton"');
+    await expect(page.locator(USER_AVATAR).first()).toBeVisible();
+    expect(errors).toEqual([]);
+    await authed.close();
   });
 });

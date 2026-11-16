@@ -29,6 +29,7 @@
     "lint:shadcn:prune": "eslint -c eslint.shadcn.config.js app --suppressions-location shadcn-lint-suppressions.json --prune-suppressions"
   },
   "dependencies": {
+    "@discord/embedded-app-sdk": "^2.5.0",
     "@fontsource-variable/inter": "^5.2.8",
     "@headlessui/react": "^2.2.7",
     "@hookform/resolvers": "^5.2.2",

@@ -14,6 +14,45 @@ Releases made before this file was added are not listed here; see the git tags a
 
 <!-- Do not edit. Unreleased changes live in changelog.d/; `just version::set` assembles them here. -->
 
+## [0.14.1] - 2026-11-15
+
+### Fixed
+
+- Fixed the backend freezing until restarted when a slow request was cancelled
+  (client disconnect, then daphne's application close timeout): asgiref 3.11 joined
+  the request's still-running thread on the event loop, deadlocking every HTTP and
+  WebSocket connection. asgiref is now pinned to >=3.13.0, which joins off the loop.
+
+## [0.14.0] - 2026-11-15
+
+### Upgrading
+
+Apply the new discordbot migration before enabling Activities. Configure the
+Discord Developer Portal URL mappings and backend/worker/bot
+`DISCORD_ACTIVITY_ENABLED=true`, then bind test voice channels with
+`configure_draft_activity`. Activities are disabled by default. See
+[local setup](docs/development/discord-activities.md) for the pilot checklist.
+
+The frontend reads the public application ID from the backend at runtime. The
+bot needs voice-channel Connect and Create Invite permissions for notification
+launches; signed HTTP launches also need the Celery worker running.
+
+### Added
+
+- Add a Discord Activity entry point for existing hero and team drafts, with verified Discord identity, persistent channel bindings and shared real-time draft state.
+- Add Launch / Join Activity buttons to hero and team draft notifications, resolving the user's current voice channel and returning a short-lived Activity invite with a browser fallback.
+
+### Fixed
+
+- Dialogs, dropdown menus, toasts and the hero draft panels show their subtle violet brand tint
+  again; the brand surface gradient had been silently dropped by the browser.
+- Signed-out visitors now get the localized "Login with Discord" button in the
+  server-rendered page instead of a placeholder that swapped in after load. nginx
+  now caches signed-in and signed-out HTML separately, so neither copy reaches
+  the other.
+- Promotion and contributions now show a member's site nickname, falling back to username, like the rest of the site. This applies to the candidate list, compose panel, "Messaged by" line, leaderboard and the `{player}`/`{promoter}` placeholders, which previously preferred Discord names.
+- People who declined an event (or whose signup was rejected) no longer appear as promotion candidates for it, even with the signed-up filter turned off.
+
 ## [0.13.0] - 2026-11-15
 
 ### Upgrading

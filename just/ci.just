@@ -88,3 +88,30 @@ changelog-check:
         echo "::warning::This PR adds no changelog.d/ fragment. Fine for chore/CI/test work; anything a user or operator would notice needs one."
     fi
     exit "$fail"
+
+# Test labels for one `Backend tests` CI group: `app`, or `rest` (every other top-level
+# package under backend/). Together they cover what an unlabelled `manage.py test` discovers.
+[group('ci')]
+backend-test-labels group:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    group={{quote(group)}}
+    cd {{quote(root)}}/backend
+    shopt -s nullglob
+    stray=(test*.py)
+    if [ "${#stray[@]}" -gt 0 ]; then
+        echo "::error::backend/${stray[0]} is outside a package; no backend-test-labels group runs it." >&2
+        exit 1
+    fi
+    case "$group" in
+        app) echo app ;;
+        rest)
+            labels=()
+            for init in */__init__.py; do
+                pkg="${init%/__init__.py}"
+                [ "$pkg" = app ] || labels+=("$pkg")
+            done
+            echo "${labels[*]}"
+            ;;
+        *) echo "unknown group: $group (app or rest)" >&2; exit 2 ;;
+    esac

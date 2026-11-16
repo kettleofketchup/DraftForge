@@ -8,6 +8,7 @@ import {
   TableRow,
 } from '~/components/ui/table';
 import { UserAvatar } from '~/components/user/UserAvatar';
+import { DisplayName } from '~/components/user/avatar';
 import { cn } from '~/lib/utils';
 import type { LeaderboardResponse, LeaderboardRow } from './schemas';
 
@@ -16,10 +17,6 @@ export interface LeaderboardProps {
   viewerPk: number | null;
   membersPrivate: boolean;
   onSelectMember: (orgUserPk: number) => void;
-}
-
-function displayName(row: LeaderboardRow): string {
-  return row.nickname || row.username;
 }
 
 function HiddenRowsNote({
@@ -131,7 +128,7 @@ export function Leaderboard({
                   data-own={own ? 'true' : 'false'}
                   aria-current={own ? 'true' : undefined}
                   role="button"
-                  aria-label={`View ${displayName(row)}'s contributions`}
+                  aria-label={`View ${DisplayName(row)}'s contributions`}
                   tabIndex={0}
                   onClick={() => onSelectMember(row.org_user_pk)}
                   onKeyDown={(e) => {
@@ -157,7 +154,7 @@ export function Leaderboard({
                         }}
                         size="sm"
                       />
-                      <span className="font-medium">{displayName(row)}</span>
+                      <span className="font-medium">{DisplayName(row)}</span>
                       {own && (
                         <span className="text-xs text-primary">(you)</span>
                       )}

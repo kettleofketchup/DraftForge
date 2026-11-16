@@ -118,9 +118,7 @@ def sweep_stale_discord_leases():
     """
     from app.internal_client import sweep_discord_leases
 
-    result = sweep_discord_leases(
-        pending_threshold_minutes=5, failed_threshold_hours=1
-    )
+    result = sweep_discord_leases(pending_threshold_minutes=5, failed_threshold_hours=1)
     pending_swept = result.get("pending_swept", 0)
     failed_swept = result.get("failed_swept", 0)
     total = pending_swept + failed_swept
@@ -134,3 +132,43 @@ def sweep_stale_discord_leases():
             total=total,
         )
     return total
+
+
+@shared_task
+def complete_activity_launch(
+    application_id: str,
+    interaction_token: str,
+    discord_user_id: str,
+    kind: str,
+    draft_id: int,
+) -> None:
+    """Finish an authenticated Discord interaction without touching the ORM."""
+    import requests
+
+    from discordbot.activity_launch_gateway import prepare_launch_payload
+
+    # Only signed HTTP interactions enqueue this task. Values are still
+    # constrained before using them in a URL; tokens must never enter logs.
+    if (
+        not application_id.isdigit()
+        or not interaction_token
+        or "/" in interaction_token
+    ):
+        return
+    payload = prepare_launch_payload(discord_user_id, kind, draft_id)
+    try:
+        response = requests.patch(
+            f"https://discord.com/api/v10/webhooks/{application_id}/{interaction_token}/messages/@original",
+            json={
+                "content": payload["content"],
+                "components": payload["components"],
+                "allowed_mentions": {"parse": []},
+            },
+            timeout=10,
+        )
+        response.raise_for_status()
+    except requests.RequestException:
+        # Request exceptions include the URL (and interaction credential).
+        log.warning(
+            "activity_launch_followup_failed", system="discord", subsystem="activity"
+        )

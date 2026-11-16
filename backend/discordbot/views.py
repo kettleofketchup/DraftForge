@@ -3,7 +3,7 @@
 import json
 
 from django.conf import settings
-from django.http import JsonResponse
+from django.http import HttpRequest, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 
@@ -12,7 +12,7 @@ from telemetry.logging import get_logger
 log = get_logger(__name__)
 
 
-def verify_discord_signature(request) -> bool:
+def verify_discord_signature(request: HttpRequest) -> bool:
     """Verify Discord interaction signature using Ed25519.
 
     Discord sends:
@@ -63,7 +63,7 @@ def verify_discord_signature(request) -> bool:
 
 @csrf_exempt
 @require_POST
-def discord_interactions(request):
+def discord_interactions(request: HttpRequest) -> JsonResponse:
     """Handle Discord HTTP interactions.
 
     This endpoint receives interaction webhooks from Discord when configured
@@ -136,6 +136,9 @@ def handle_application_command(data: dict) -> JsonResponse:
     )
 
 
+ACTIVITY_LAUNCH_TASK_EXPIRES_S = 14 * 60
+
+
 def handle_message_component(data: dict) -> JsonResponse:
     """Handle button/select menu interactions."""
     custom_id = data.get("data", {}).get("custom_id", "")
@@ -149,6 +152,90 @@ def handle_message_component(data: dict) -> JsonResponse:
         custom_id=custom_id,
         discord_username=username,
     )
+
+    if custom_id.startswith("draft_activity:") and custom_id != "draft_activity:launch":
+        from discordbot.activity_ids import decode_draft_launch
+        from discordbot.tasks import complete_activity_launch
+
+        draft = decode_draft_launch(custom_id)
+        if draft is None:
+            return JsonResponse(
+                {
+                    "type": 4,
+                    "data": {
+                        "flags": 64,
+                        "content": "This draft notification is out of date.",
+                    },
+                }
+            )
+        if not getattr(settings, "DISCORD_ACTIVITY_ENABLED", False):
+            return JsonResponse(
+                {
+                    "type": 4,
+                    "data": {
+                        "flags": 64,
+                        "content": "Discord Activities are disabled. Open the draft in your browser.",
+                    },
+                }
+            )
+        # Defer immediately: REST voice lookup and invite creation can exceed
+        # Discord's three-second deadline. Never log the interaction token.
+        from kombu.exceptions import KombuError
+
+        try:
+            # A disconnected broker must not consume Discord's three-second
+            # acknowledgement window. Limit both Redis connect and I/O waits.
+            app = complete_activity_launch.app
+            transport = dict(app.conf.broker_transport_options or {})
+            transport.update(socket_connect_timeout=0.5, socket_timeout=0.5)
+            with app.connection_for_write(
+                connect_timeout=0.5, transport_options=transport
+            ) as connection:
+                complete_activity_launch.apply_async(
+                    args=[
+                        str(data.get("application_id", "")),
+                        str(data.get("token", "")),
+                        str(user.get("id", "")),
+                        draft[0],
+                        draft[1],
+                    ],
+                    argsrepr="[redacted Discord Activity interaction]",
+                    # Interaction tokens live 15 minutes; a busy or
+                    # restarting worker must still answer within that window.
+                    expires=ACTIVITY_LAUNCH_TASK_EXPIRES_S,
+                    retry=False,
+                    connection=connection,
+                )
+        except (KombuError, OSError):
+            return JsonResponse(
+                {
+                    "type": 4,
+                    "data": {
+                        "flags": 64,
+                        "content": "Could not prepare the Activity. Please try again shortly.",
+                    },
+                }
+            )
+        return JsonResponse({"type": 5, "data": {"flags": 64}})
+
+    if custom_id == "draft_activity:launch" and getattr(
+        settings, "DISCORD_ACTIVITY_ENABLED", False
+    ):
+        from discordbot.models import DraftActivityChannel
+
+        if DraftActivityChannel.objects.filter(
+            guild_id=data.get("guild_id", ""), channel_id=data.get("channel_id", "")
+        ).exists():
+            return JsonResponse({"type": 12})
+        return JsonResponse(
+            {
+                "type": 4,
+                "data": {
+                    "flags": 64,
+                    "content": "Launch this button from its configured server voice channel, or use your draft notification.",
+                },
+            }
+        )
 
     # Acknowledge the interaction
     return JsonResponse(

@@ -1,5 +1,7 @@
 from django.urls import path
 
+from .activity import activity_session
+from .activity_config import activity_config
 from .services.channels import get_discord_channels
 from .services.roles import get_discord_roles
 from .services.users import (
@@ -14,6 +16,8 @@ from .services.users import (
 from .views import discord_interactions
 
 urlpatterns = [
+    path("activity/config/", activity_config, name="discord-activity-config"),
+    path("activity/session/", activity_session, name="discord-activity-session"),
     path(
         "get_discord_activity/",
         get_discord_voice_channel_activity,
