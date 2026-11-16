@@ -84,6 +84,7 @@ from lobby.passwords import PasswordMode
 from org.activity import touch_org_activity
 from org.contributions.services import should_sync_staff, sync_event_staff_entries
 from org.feature_errors import not_permitted
+from org.models import OrgUser
 from telemetry.logging import get_logger
 from user.models import BaseUserProfile
 from user.querysets import with_user_profiles
@@ -387,9 +388,9 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
     def subscribers(self, request, pk=None):
         """List all subscribers for this repeater."""
         repeater = self.get_object()
-        # RepeaterSubscriptionSerializer reads user.nickname + user.avatar,
-        # which go through the @property on CustomUser → base_profile (T1
-        # epic). Without this prefetch the list view is N+1 cold-cache.
+        # RepeaterSubscriptionSerializer reads user.avatar through the
+        # CustomUser @property → base_profile; without this prefetch the list
+        # view is N+1 cold-cache.
         subs = with_user_profiles(
             RepeaterSubscription.objects.filter(event_repeater=repeater), "user"
         )
@@ -665,6 +666,8 @@ class EventViewSet(viewsets.ModelViewSet):
             EventSignup,
             CustomUser,
             BaseUserProfile,
+            OrgUser,
+            Organization,
             keep_fresh=True,
             extra=cache_key,
             timeout=60 * 60,
@@ -1141,6 +1144,9 @@ class EventViewSet(viewsets.ModelViewSet):
             DiscordEventLog,
             DiscordEventDM,
             DiscordMessageLog,
+            CustomUser,
+            OrgUser,
+            Organization,
             extra=f"discord_state:{pk}",
             timeout=60,
         )
@@ -1177,9 +1183,8 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [permissions.AllowAny]
 
     def get_queryset(self):
-        # EventSignupSerializer ships user.nickname (as `username`) +
-        # user.avatar — both resolve through the CustomUser @property to
-        # base_profile (T1 epic). Without user__base_profile this is N+1
+        # EventSignupSerializer ships user.avatar through the CustomUser
+        # @property to base_profile; without user__base_profile this is N+1
         # cold-cache on busy events.
         qs = with_user_profiles(
             EventSignup.objects.select_related(
@@ -1473,7 +1478,8 @@ def get_event_task_schedule(request, event_id):
                 fired_by_data = {
                     "pk": row.fired_by.pk,
                     "username": row.fired_by.username,
-                    "nickname": row.fired_by.nickname,
+                    "nickname": None,
+                    "discordNickname": row.fired_by.discordNickname,
                     "discordId": row.fired_by.discordId,
                     "avatar": row.fired_by.avatar,
                 }

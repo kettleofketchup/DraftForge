@@ -23,7 +23,6 @@ from org.contributions.kinds import ContributionKind
 from org.contributions.services import award_entry
 from org.feature_keys import FeatureKey
 from org.features import set_org_feature
-from user.models import BaseUserProfile
 from user.tests.test_cacheops_integration import _redis_reachable
 
 
@@ -281,6 +280,7 @@ class EventDetailCacheDepsTest(SimpleTestCase):
         source = inspect.getsource(EventViewSet.retrieve)
         self.assertIn("CustomUser,", source)
         self.assertIn("BaseUserProfile,", source)
+        self.assertIn("OrgUser,", source)
 
 
 class EventStaffCacheTest(TransactionTestCase):
@@ -296,7 +296,7 @@ class EventStaffCacheTest(TransactionTestCase):
             self.skipTest("Cacheops Redis not reachable")
         owner = CustomUser.objects.create_user(username="staffcache_owner")
         self.helper = CustomUser.objects.create_user(username="staffcache_helper")
-        self.helper.nickname = "HelperNick"
+        self.helper.discordNickname = "HelperNick"
         self.helper.save()
         org = Organization.objects.create(name="Staff Cache Org", owner=owner)
         self.event = Event.objects.create(
@@ -319,34 +319,41 @@ class EventStaffCacheTest(TransactionTestCase):
         second = self.client.get(self.url).json()
         self.assertEqual([h["pk"] for h in second["helpers"]], [self.helper.pk])
         self.assertEqual(
-            set(second["helpers"][0]), {"pk", "username", "nickname", "avatarUrl"}
+            set(second["helpers"][0]),
+            {
+                "pk",
+                "username",
+                "nickname",
+                "discordNickname",
+                "guildNickname",
+                "avatarUrl",
+            },
         )
+        self.assertIsNone(second["helpers"][0]["nickname"])
 
     def test_host_nickname_change_after_cached_get_shows(self) -> None:
         Event.objects.filter(pk=self.event.pk).update(host=self.helper)
         invalidate_obj(self.event)
         first = self.client.get(self.url).json()
-        self.assertEqual(first["host"]["nickname"], "HelperNick")
+        self.assertEqual(first["host"]["discordNickname"], "HelperNick")
 
-        profile = BaseUserProfile.objects.get(user=self.helper)
-        profile.nickname = "RenamedHost"
-        profile.save()
+        self.helper.discordNickname = "RenamedHost"
+        self.helper.save()
 
         second = self.client.get(self.url).json()
-        self.assertEqual(second["host"]["nickname"], "RenamedHost")
+        self.assertEqual(second["host"]["discordNickname"], "RenamedHost")
 
     def test_helper_nickname_change_after_cached_get_shows(self) -> None:
         self.event.helpers.add(self.helper)
         invalidate_obj(self.event)
         first = self.client.get(self.url).json()
-        self.assertEqual(first["helpers"][0]["nickname"], "HelperNick")
+        self.assertEqual(first["helpers"][0]["discordNickname"], "HelperNick")
 
-        profile = BaseUserProfile.objects.get(user=self.helper)
-        profile.nickname = "RenamedHelper"
-        profile.save()
+        self.helper.discordNickname = "RenamedHelper"
+        self.helper.save()
 
         second = self.client.get(self.url).json()
-        self.assertEqual(second["helpers"][0]["nickname"], "RenamedHelper")
+        self.assertEqual(second["helpers"][0]["discordNickname"], "RenamedHelper")
 
     def test_anonymous_payload_has_no_points(self) -> None:
         org = self.event.organization

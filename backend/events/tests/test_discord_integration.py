@@ -330,7 +330,7 @@ class RealEventAnnouncementTaskTest(TestCase):
         positions = PositionsModel.objects.create()
         user = CustomUser.objects.create(
             username="discord_test_admin",
-            nickname="TestAdmin",
+            discordNickname="TestAdmin",
             positions=positions,
         )
         event = Event.objects.create(
@@ -415,7 +415,7 @@ class MultiUserReactionTest(TestCase):
         positions = PositionsModel.objects.create()
         user = CustomUser.objects.create(
             username="multiuser_test_admin",
-            nickname="MultiTestAdmin",
+            discordNickname="MultiTestAdmin",
             positions=positions,
         )
         event = Event.objects.create(
