@@ -62,6 +62,10 @@ _beat_schedule = {
         "task": "app.tasks.avatar_refresh.refresh_avatars_batched",
         "schedule": crontab(hour=4, minute=15),
     },
+    "sync-active-org-discord-names": {
+        "task": "app.tasks.discord_name_sync.sync_active_org_discord_names",
+        "schedule": 1800.0,
+    },
 }
 
 _event_tasks = {

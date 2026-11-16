@@ -7,5 +7,8 @@ from app.tasks.avatar_refresh import (
     refresh_single_user_avatar,
 )
 from app.tasks.discord_name_sync import (
+    sync_active_org_discord_names as sync_active_org_discord_names,
+)
+from app.tasks.discord_name_sync import (
     sync_org_discord_names as sync_org_discord_names,
 )
