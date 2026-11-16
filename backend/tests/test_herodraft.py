@@ -8,7 +8,6 @@ from datetime import timedelta
 
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
-from django.views.decorators.csrf import csrf_exempt
 from rest_framework import status
 from rest_framework.decorators import (
     api_view,
@@ -167,6 +166,9 @@ def reset_herodraft(request, draft_pk):
     # Reset draft state
     draft.state = "waiting_for_captains"
     draft.roll_winner = None
+    reserve = draft.snapshot_timer_options(
+        draft.game.tournament if draft.game else None
+    )
     draft.save()
 
     # Reset draft teams
@@ -175,7 +177,7 @@ def reset_herodraft(request, draft_pk):
         draft_team.is_connected = False
         draft_team.is_first_pick = None
         draft_team.is_radiant = None
-        draft_team.reserve_time_remaining = 90000  # 90 seconds default
+        draft_team.reserve_time_remaining = reserve
         draft_team.save()
 
     # Clear Redis captain channel/heartbeat keys to prevent stale kick triggers
