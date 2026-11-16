@@ -21,10 +21,7 @@ IntentOp = Literal["record", "peek", "consume"]
 
 _CONSUME = redis_client.register_script(
     """
-local raw = redis.call('GET', KEYS[1])
-if not raw then return 0 end
-local ok, data = pcall(cjson.decode, raw)
-if not ok or type(data) ~= 'table' or data['intent_id'] ~= ARGV[1] then return 0 end
+if redis.call('GET', KEYS[1]) ~= ARGV[1] then return 0 end
 redis.call('DEL', KEYS[1])
 return 1
 """
@@ -124,8 +121,15 @@ def peek_intent(discord_user_id: str) -> LaunchIntent | None:
 
 
 def consume_intent(discord_user_id: str, intent_id: str) -> bool:
+    key = intent_key(discord_user_id)
     try:
-        result = _CONSUME(keys=[intent_key(discord_user_id)], args=[intent_id])
+        raw = redis_client.get(key)
+        if raw is None:
+            return False
+        intent = _decode(cast(bytes, raw))
+        if intent is None or intent.intent_id != intent_id:
+            return False
+        result = _CONSUME(keys=[key], args=[raw])
     except RedisError as exc:
         _redis_failed("consume", exc)
         return False

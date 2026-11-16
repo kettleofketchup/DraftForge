@@ -79,6 +79,17 @@ class LaunchIntentTests(ClearIntentsMixin, TestCase):
         self.assertIsNone(peek_intent("777"))
         self.assertFalse(consume_intent("777", new))
 
+    def test_consume_keeps_intent_replaced_after_read(self) -> None:
+        old = _record(draft_id=5)
+        assert old is not None
+        stale = redis_client.get(intent_key("777"))
+        new = _record(draft_id=6)
+        with mock.patch.object(redis_client, "get", return_value=stale):
+            self.assertFalse(consume_intent("777", old))
+        intent = peek_intent("777")
+        assert intent is not None
+        self.assertEqual(intent.intent_id, new)
+
     def test_malformed_payload_peeks_as_none(self) -> None:
         redis_client.set(intent_key("777"), "not json", ex=60)
         self.assertIsNone(peek_intent("777"))
