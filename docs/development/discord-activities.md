@@ -144,7 +144,7 @@ to that single draft (`scope: "draft"`) and no menu.
 | --- | --- |
 | `POST /api/discord/activity/session/` | OAuth + instance check, issues the credential. Body `mode`: `first`, `refresh` (with `current_view` and the frame's `scope`; a `draft` scope stays pinned to its draft), or absent (0.14.x bundles, treated as legacy). The legacy `draft_id`/`kind` fields are always the instance's first draft. |
 | `GET /api/discord/activity/drafts/` | Menu contents: tournament, team draft, hero drafts with `status`, `involves_me` and `role`, plus any applicable `launch_intent` or `notice` and `site_url`. |
-| `POST /api/discord/activity/views/` | Fire-and-forget telemetry: `view`, `notice_seen`, `intent_declined`, `open_external`. Consumes intents by `intent_id`. Returns 204; throttled to 60 requests a minute per user. |
+| `POST /api/discord/activity/views/` | Fire-and-forget telemetry: `view`, `notice_seen`, `intent_declined`, `open_external`. Consumes intents by `intent_id`. Returns 204. A `view` whose `to`, or an `open_external` whose `view`, names a draft outside the credential's tournament returns 403 with `code: "activity_out_of_scope"`, logs `activity_auth_rejected` (`surface: "views"`) and leaves the intent unconsumed. A malformed body returns 400 and more than 60 requests a minute per user returns 429; both are logged only as `drf_error_response`. The client ignores every error from this endpoint. |
 
 The two new endpoints accept only the Activity credential and send
 `Cache-Control: no-store`.
@@ -159,7 +159,9 @@ with `.nocache()` so a game removed from the tournament loses access at once.
 
 Activity credential failures answer REST with 401, `WWW-Authenticate:
 DraftActivity` and a `code` beside `detail`. Anonymous website requests are
-unchanged (403).
+unchanged (403). The views endpoint is the exception: an out-of-scope target
+there returns 403 with `code: "activity_out_of_scope"`, because the credential
+itself is still valid.
 
 | `code` | Cause | Socket close | Client |
 | --- | --- | --- | --- |
@@ -198,7 +200,7 @@ and `tournament_id`. Tokens, OAuth codes and `access_token` are never logged.
 | `activity_notice_seen` | a cross-tournament notice was shown |
 | `activity_intent_declined` | a captain pressed Stay instead of following their launch; the intent is consumed so later polls do not ask again |
 | `activity_open_external` | **Open in browser**, with the server-derived `path` |
-| `activity_auth_rejected` | a credential failure: `surface`, `reason`, `code` |
+| `activity_auth_rejected` | a credential failure: `surface` (`rest`, `socket` or `views`), `reason`, `code`; `views` rejections add `kind` and `draft_id` |
 | `activity_socket_closed` | an Activity socket closes: `close_code`, `reason`, `role`, `duration_s` |
 | `activity_intent_redis_failed` | a Redis error while recording, peeking or consuming an intent |
 
@@ -218,9 +220,19 @@ Nothing breaks during an event, but prefer deploying between events.
 
 ## Rolling back
 
-To turn Activities off, set `DISCORD_ACTIVITY_ENABLED` off. Every open frame,
-old or new bundle, gets one 4401, refreshes once and shows "Activities are
-turned off." without looping.
+To turn Activities off, set `DISCORD_ACTIVITY_ENABLED` off and restart the
+backend. Each open frame reconnects, gets a 4401 and refreshes once. What it
+shows next depends on its bundle:
+
+- Frames on the current bundle show "Activities are turned off."
+- Frames still on a 0.14.x bundle have no disabled screen. They keep the last
+  draft board under a "Discord session ended. Close and reopen the Activity."
+  badge; its Retry button lands on the same badge. A REST call may also
+  show the generic "Session expired" toast. Fresh launches served by 0.14.x
+  images show the generic "Could not connect" error.
+
+Neither bundle loops, and neither recovers by itself: after the flag is turned
+back on, every open frame has to be reopened.
 
 To roll back the images, first turn the flag off, then roll back the images,
 then turn the flag back on. That way no new-bundle frame meets the old backend

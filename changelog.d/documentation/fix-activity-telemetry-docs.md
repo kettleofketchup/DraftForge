@@ -1,0 +1,1 @@
+- Discord Activities docs: rolling back with `DISCORD_ACTIVITY_ENABLED` off now says what 0.14.x frames show (a "Discord session ended" badge, not "Activities are turned off") and that every frame must be reopened afterwards; the views endpoint lists its 403 `activity_out_of_scope`, 400 and 429 answers, and `activity_auth_rejected` lists its `rest`, `socket` and `views` surfaces.
