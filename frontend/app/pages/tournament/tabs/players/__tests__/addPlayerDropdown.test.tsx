@@ -9,6 +9,14 @@ import { AddPlayerDropdown } from '../addPlayerDropdown';
 vi.mock('~/components/api/api');
 vi.mock('~/components/user/UserAvatar', () => ({ UserAvatar: () => null }));
 
+class ResizeObserverStub {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+globalThis.ResizeObserver ??=
+  ResizeObserverStub as unknown as typeof ResizeObserver;
+
 const dragon = {
   pk: 1,
   username: 'dc_handle',
