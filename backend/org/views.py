@@ -204,8 +204,6 @@ class ClaimRequestViewSet(viewsets.ModelViewSet):
         claimer.steam_account_id = target_user.steam_account_id
 
         # Copy other fields from target if claimer doesn't have them
-        if target_user.nickname and not claimer.nickname:
-            claimer.nickname = target_user.nickname
         if target_user.avatar and not claimer.avatar:
             claimer.avatar = target_user.avatar
 

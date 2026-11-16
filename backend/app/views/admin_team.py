@@ -51,7 +51,7 @@ from user.querysets import with_user_profiles
 @permission_classes([IsAuthenticated])
 def search_users(request: Request) -> Response:
     """
-    Search users by username, nickname, Discord names, or Steam ID.
+    Search users by username, Discord names, or Steam ID.
 
     Query params:
     - q: Search query (min 3 characters)
@@ -740,7 +740,7 @@ def update_org_user(request: Request, org_id: int, org_user_id: int) -> Response
     """Update an OrgUser and/or its underlying CustomUser.
 
     OrgUser fields (e.g. mmr) are updated directly.
-    Base user fields (nickname, steam_account_id, etc.) are forwarded
+    Base user fields (steam_account_id, positions) are forwarded
     to the CustomUser model so edits from the org page work end-to-end.
     """
     org = get_object_or_404(Organization, pk=org_id)
@@ -776,7 +776,7 @@ def update_org_user(request: Request, org_id: int, org_user_id: int) -> Response
                 org_updated.append(f)
 
     # --- Base CustomUser fields ---
-    USER_FIELDS = {"nickname", "steam_account_id"}
+    USER_FIELDS = {"steam_account_id"}
     user = org_user.user
     user_updated = False
     for field in USER_FIELDS:

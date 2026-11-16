@@ -2,7 +2,9 @@ from django.db import connection
 from django.test import TestCase
 
 from app.models import CustomUser, Organization, ProfileClaimRequest
+from app.tests.raw_site_nickname import raw_site_nickname, set_raw_site_nickname
 from org.serializers import ProfileClaimRequestSerializer
+from org.views import ClaimRequestViewSet
 
 
 class ClaimNamesTest(TestCase):
@@ -54,3 +56,20 @@ class ClaimNamesTest(TestCase):
         self.assertIsNone(data["target_username"])
         self.assertIsNone(data["target_discordNickname"])
         self.assertIsNone(data["target_nickname"])
+
+
+class ClaimMergeNicknameTest(TestCase):
+    def test_merge_does_not_carry_site_nickname(self) -> None:
+        claimer = CustomUser.objects.create_user(username="cm_claimer", password="x")
+        target = CustomUser.objects.create_user(
+            username="steam_76561198000300002", password="x"
+        )
+        target.steamid = 76561198000300002
+        target.save()
+        set_raw_site_nickname(target.pk, "Site")
+
+        ClaimRequestViewSet()._merge_profiles(
+            claimer, CustomUser.objects.nocache().get(pk=target.pk)
+        )
+
+        self.assertIsNone(raw_site_nickname(claimer.pk))

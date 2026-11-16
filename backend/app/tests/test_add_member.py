@@ -16,6 +16,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from app.models import CustomUser, League, LeagueLog, Organization, OrgLog, Tournament
+from app.tests.raw_site_nickname import raw_site_nickname
 from league.models import LeagueUser
 from org.models import OrgUser
 
@@ -183,7 +184,11 @@ class AddOrgMemberTest(TestCase):
             OrgUser.objects.filter(user=new_user, organization=self.org).exists()
         )
         self.assertEqual(new_user.discordUsername, "discorduser")
-        self.assertEqual(new_user.nickname, "DiscordNick")
+        self.assertIsNone(raw_site_nickname(new_user.pk))
+        self.assertEqual(
+            OrgUser.objects.get(user=new_user, organization=self.org).guild_nickname,
+            "DiscordNick",
+        )
         self.assertEqual(new_user.discordNickname, "Discord User")
 
     @override_settings(CACHES=LOCMEM_CACHE)

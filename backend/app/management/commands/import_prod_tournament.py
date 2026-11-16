@@ -154,7 +154,6 @@ class Command(BaseCommand):
             steamid=user_data.get("steamid"),
             mmr=user_data.get("mmr"),
             avatar=user_data.get("avatar"),
-            nickname=user_data.get("nickname"),
             positions=positions,
         )
 

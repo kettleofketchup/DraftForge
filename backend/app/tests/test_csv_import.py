@@ -1,9 +1,10 @@
 """Tests for CSV import endpoints."""
 
-from django.test import TestCase, override_settings
+from django.test import TestCase
 from rest_framework.test import APIClient
 
 from app.models import CustomUser, Organization, PositionsModel
+from app.tests.raw_site_nickname import raw_site_nickname
 from org.models import OrgUser
 
 
@@ -244,20 +245,19 @@ class OrgCSVImportTest(TestCase):
         org_user = OrgUser.objects.get(user=user, organization=self.org)
         self.assertEqual(org_user.mmr, 2500)
 
-    def test_import_name_sets_nickname_on_new_stub(self):
-        """CSV row with name sets nickname on newly created stub user."""
+    def test_import_ignores_name_on_new_stub(self) -> None:
         resp = self.client.post(
             self.url,
-            {"rows": [{"steam_friend_id": "76561198099999999", "name": "PlayerOne"}]},
+            {"rows": [{"steam_friend_id": "76561198099999999", "name": "Shadow"}]},
             format="json",
         )
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.data["summary"]["created"], 1)
         user = CustomUser.objects.get(steamid=76561198099999999)
-        self.assertEqual(user.nickname, "PlayerOne")
+        self.assertEqual(user.username, "steam_76561198099999999")
+        self.assertIsNone(raw_site_nickname(user.pk))
 
-    def test_import_name_sets_nickname_on_existing_user_without_nickname(self):
-        """CSV row with name sets nickname on existing user if nickname is empty."""
+    def test_import_ignores_name_on_existing_user(self) -> None:
         pos = PositionsModel.objects.create()
         user = CustomUser.objects.create_user(
             username="nonickname",
@@ -265,12 +265,42 @@ class OrgCSVImportTest(TestCase):
             positions=pos,
             steamid=76561198011111111,
         )
-        self.assertFalse(user.nickname)  # no nickname set
         resp = self.client.post(
             self.url,
             {"rows": [{"steam_friend_id": "76561198011111111", "name": "GivenName"}]},
             format="json",
         )
         self.assertEqual(resp.status_code, 200)
-        user.refresh_from_db()
-        self.assertEqual(user.nickname, "GivenName")
+        self.assertEqual(resp.data["summary"]["added"], 1)
+        self.assertIsNone(raw_site_nickname(user.pk))
+
+    def test_conflict_message_uses_discord_name(self) -> None:
+        CustomUser.objects.create_user(
+            username="dc",
+            password="pass",
+            positions=PositionsModel.objects.create(),
+            steamid=76561198033333333,
+            discordNickname="Gwaihir",
+        )
+        CustomUser.objects.create_user(
+            username="other",
+            password="pass",
+            positions=PositionsModel.objects.create(),
+            discordId="222222222222222222",
+        )
+        resp = self.client.post(
+            self.url,
+            {
+                "rows": [
+                    {
+                        "steam_friend_id": "76561198033333333",
+                        "discord_id": "222222222222222222",
+                    }
+                ]
+            },
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        reason = resp.data["results"][0]["reason"]
+        self.assertIn("Gwaihir (Steam)", reason)
+        self.assertIn("other (Discord)", reason)

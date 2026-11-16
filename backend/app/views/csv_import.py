@@ -8,6 +8,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from app.cache_utils import invalidate_obj
+from app.display_names import user_display_name
 from app.models import (
     CustomUser,
     Organization,
@@ -149,10 +150,8 @@ def _resolve_user_for_csv_row(row):
 
     # Conflict: both identifiers resolve to different users
     if steam_user and discord_user and steam_user.pk != discord_user.pk:
-        steam_name = steam_user.nickname or steam_user.username or f"#{steam_user.pk}"
-        discord_name = (
-            discord_user.nickname or discord_user.username or f"#{discord_user.pk}"
-        )
+        steam_name = user_display_name(steam_user)
+        discord_name = user_display_name(discord_user)
         return (
             None,
             False,
@@ -164,7 +163,7 @@ def _resolve_user_for_csv_row(row):
         user = steam_user
         # Conflict: user's discord doesn't match provided discord
         if discord_id and user.discordId and user.discordId != discord_id:
-            name = user.nickname or user.username or f"#{user.pk}"
+            name = user_display_name(user)
             return (
                 None,
                 False,
@@ -175,7 +174,7 @@ def _resolve_user_for_csv_row(row):
         user = discord_user
         # Conflict: user's steam doesn't match provided steam
         if steam_id and user.steamid and user.steamid != steam_id:
-            name = user.nickname or user.username or f"#{user.pk}"
+            name = user_display_name(user)
             return (
                 None,
                 False,
@@ -202,12 +201,6 @@ def _resolve_user_for_csv_row(row):
                     user.discordUsername = discord_username
                     if not user.username:
                         user.username = f"discord_{discord_username}"
-                # Set nickname from 'name' column if provided
-                name = row.get("name")
-                if name:
-                    name = str(name).strip()
-                    if name:
-                        user.nickname = name
                 user.save()
                 created = True
         except IntegrityError:
@@ -302,15 +295,6 @@ def import_csv_org(request, org_id):
             results.append({"row": i + 1, "status": "error", "reason": pos_err})
             summary["errors"] += 1
             continue
-
-        # Set nickname from CSV 'name' column if user has no nickname.
-        # T1.5+: nickname is a property over base_profile.nickname; the
-        # setter already persists via bp.save(update_fields=["nickname"]).
-        # An explicit CustomUser.save(update_fields=["nickname"]) would now
-        # crash because `nickname` is not a model field.
-        csv_name = (row.get("name") or "").strip()
-        if csv_name and not user.nickname:
-            user.nickname = csv_name
 
         # Update positions if user has all defaults (zeros)
         _update_positions_if_empty(user, positions_dict)
@@ -488,15 +472,6 @@ def import_csv_tournament(request, tournament_id):
             results.append({"row": i + 1, "status": "error", "reason": pos_err})
             summary["errors"] += 1
             continue
-
-        # Set nickname from CSV 'name' column if user has no nickname.
-        # T1.5+: nickname is a property over base_profile.nickname; the
-        # setter already persists via bp.save(update_fields=["nickname"]).
-        # An explicit CustomUser.save(update_fields=["nickname"]) would now
-        # crash because `nickname` is not a model field.
-        csv_name = (row.get("name") or "").strip()
-        if csv_name and not user.nickname:
-            user.nickname = csv_name
 
         # Update positions if user has all defaults (zeros)
         _update_positions_if_empty(user, positions_dict)

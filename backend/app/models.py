@@ -291,12 +291,6 @@ class CustomUser(AbstractUser):
         self.avatar = data["user"]["avatar"]
         self.discordUsername = data["user"]["username"]
         self.discordNickname = normalise_name(data["user"].get("global_name"))
-        # Use server nick first, then global_name, then username (always present)
-        self.nickname = (
-            data.get("nick")
-            or data["user"].get("global_name")
-            or data["user"]["username"]
-        )
         return self
 
     def check_and_update_avatar(self) -> bool:
