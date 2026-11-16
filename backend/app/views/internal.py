@@ -8,6 +8,8 @@ defers until commit when called inside @transaction.atomic.
 Field whitelists on update endpoints prevent unintended field modifications.
 """
 
+from datetime import timedelta
+
 from django.utils import timezone as tz
 from rest_framework import status
 from rest_framework.decorators import (
@@ -316,8 +318,6 @@ def get_sync_discord_state(request):
     Returns event IDs that have: signup posts, scheduled events, recent log attempts.
     Replaces 4 separate queries in sync_discord_events task.
     """
-    from datetime import timedelta
-
     from discordbot.models import (
         DiscordEvent,
         DiscordEventLog,
@@ -963,8 +963,8 @@ def get_match_participants(request, game_id):
 def list_auto_herodraft_games(request: Request) -> Response:
     """Games the auto-create sweep should draft, across every tournament.
 
-    The tournament has auto_create_hero_drafts on and is not past; both teams
-    are assigned, both have a captain, and the game has no hero draft yet.
+    The tournament has auto_create_hero_drafts on and is in_progress; both
+    teams are assigned, both have a captain, and the game has no hero draft yet.
     """
     from app.models import Game
 
@@ -972,11 +972,11 @@ def list_auto_herodraft_games(request: Request) -> Response:
         Game.objects.nocache()
         .filter(
             tournament__auto_create_hero_drafts=True,
+            tournament__state="in_progress",
             radiant_team__captain__isnull=False,
             dire_team__captain__isnull=False,
             herodraft__isnull=True,
         )
-        .exclude(tournament__state="past")
         .select_related("tournament", "radiant_team", "dire_team")
         .order_by("pk")
     )
@@ -1248,7 +1248,6 @@ def sweep_stale_discord_leases(request):
 
     Returns {pending_swept, failed_swept, total}.
     """
-    from datetime import timedelta
 
     from discordbot.models import DiscordMessageLog
 

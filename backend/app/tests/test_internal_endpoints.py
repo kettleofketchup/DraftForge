@@ -504,13 +504,16 @@ class AutoHeroDraftGamesEndpointTest(TestCase):
                 tournament=t, radiant_team=radiant, dire_team=dire
             )
 
-        self.on = tournament(auto_create_hero_drafts=True, state="future")
+        self.on = tournament(auto_create_hero_drafts=True, state="in_progress")
         self.ready = game(self.on, team(self.on), team(self.on))
         self.one_team = game(self.on, team(self.on), None)
         self.no_captain = game(self.on, team(self.on), team(self.on, captain=False))
 
         off = tournament(auto_create_hero_drafts=False, state="in_progress")
         self.flag_off = game(off, team(off), team(off))
+
+        future = tournament(auto_create_hero_drafts=True, state="future")
+        self.not_started = game(future, team(future), team(future))
 
         past = tournament(auto_create_hero_drafts=True, state="past")
         self.past = game(past, team(past), team(past))
