@@ -1,7 +1,6 @@
 import { ChevronDown } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
-import type { UserClassType, UserType } from '~/components/user';
 import { GAME_TYPE } from '~/components/game/constants';
 import { brandErrorBg, brandErrorCard } from '~/components/ui/buttons';
 import {
@@ -9,6 +8,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '~/components/ui/collapsible';
+import type { UserClassType, UserType } from '~/components/user';
 import UserEditModal from '~/components/user/userCard/editModal';
 import {
   resolveEditScope,
@@ -19,9 +19,9 @@ import { getLogger } from '~/lib/logger';
 import { cn } from '~/lib/utils';
 import { useLeagueStore } from '~/store/leagueStore';
 import { useOrgStore } from '~/store/orgStore';
-import type { PositionsType, UserEntry } from '~/store/userCacheTypes';
-import { useUserCacheStore } from '~/store/userCacheStore';
 import { selectPositions } from '~/store/selectPositions';
+import { useUserCacheStore } from '~/store/userCacheStore';
+import type { PositionsType, UserEntry } from '~/store/userCacheTypes';
 import { useUserStore } from '~/store/userStore';
 import { tournamentEditContext } from './tournamentEditContext';
 const log = getLogger('hasErrors');
@@ -33,7 +33,11 @@ interface UserIssue {
 }
 
 /** Convert a UserEntry to a UserType-like object with org-scoped fields flattened. */
-function toUserType(entry: UserEntry, orgId?: number, leagueId?: number): UserClassType {
+function toUserType(
+  entry: UserEntry,
+  orgId?: number,
+  leagueId?: number,
+): UserClassType {
   return {
     ...entry,
     orgUserPk: resolveOrgUserLink(entry, { organizationId: orgId, leagueId }),
@@ -59,7 +63,10 @@ export const hasErrors = () => {
   // SSR-safe default closed; md+ viewports auto-expand on mount to avoid hydration mismatch.
   const [open, setOpen] = useState(false);
   useEffect(() => {
-    if (typeof window !== 'undefined' && window.matchMedia('(min-width: 768px)').matches) {
+    if (
+      typeof window !== 'undefined' &&
+      window.matchMedia('(min-width: 768px)').matches
+    ) {
       setOpen(true);
     }
   }, []);
@@ -93,7 +100,8 @@ export const hasErrors = () => {
     const issues: UserIssue[] = [];
 
     for (const userRef of tournament.users) {
-      const pk = typeof userRef === 'number' ? userRef : (userRef as UserType)?.pk;
+      const pk =
+        typeof userRef === 'number' ? userRef : (userRef as UserType)?.pk;
       if (!pk) continue;
 
       const cached = entities[pk];
@@ -127,7 +135,15 @@ export const hasErrors = () => {
 
     log.debug('Users with issues:', issues.length, issues);
     return issues;
-  }, [tournament?.users, entities, orgId, leagueId, currentOrg, league, positionsByPk]);
+  }, [
+    tournament?.users,
+    entities,
+    orgId,
+    leagueId,
+    currentOrg,
+    league,
+    positionsByPk,
+  ]);
 
   if (usersWithIssues.length === 0) return null;
 
@@ -146,7 +162,9 @@ export const hasErrors = () => {
         data-testid="incomplete-profiles-toggle"
         aria-label={open ? `Hide ${label}` : `Show ${label}`}
       >
-        <span className="text-lg" aria-hidden>⚠️</span>
+        <span className="text-lg" aria-hidden>
+          ⚠️
+        </span>
         <span className="truncate text-center">{label}</span>
         <ChevronDown
           className={cn(
@@ -163,7 +181,10 @@ export const hasErrors = () => {
         <div className="grid grid-cols-1 min-[420px]:grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 p-3 sm:p-4 pt-0 sm:pt-0">
           {usersWithIssues.map(({ user, scope, issues }) => (
             <div
-              className={cn('flex flex-col p-3 rounded-lg h-full', brandErrorCard)}
+              className={cn(
+                'flex flex-col p-3 rounded-lg h-full',
+                brandErrorCard,
+              )}
               key={user.pk}
             >
               <div className="text-white text-center underline underline-offset-2 font-bold mb-2 break-words">

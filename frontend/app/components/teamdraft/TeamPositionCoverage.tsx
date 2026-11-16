@@ -1,29 +1,29 @@
 // frontend/app/components/teamdraft/TeamPositionCoverage.tsx
 import { memo, useCallback, useMemo, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
+import { GAME_TYPE } from '~/components/game/constants';
+import { PlayerPopover } from '~/components/player';
+import type { TeamType } from '~/components/tournament/types';
+import { InfoDialog } from '~/components/ui/dialogs';
 import {
   HoverCard,
   HoverCardContent,
   HoverCardTrigger,
 } from '~/components/ui/hover-card';
-import { InfoDialog } from '~/components/ui/dialogs';
 import {
   positionIcons,
   positionKeys,
   type PositionKey,
 } from '~/components/user/positions/positionEdit';
+import type { UserType } from '~/components/user/types';
 import { UserAvatar } from '~/components/user/UserAvatar';
-import { PlayerPopover } from '~/components/player';
-import { GAME_TYPE } from '~/components/game/constants';
 import { cn } from '~/lib/utils';
 import { selectPositions } from '~/store/selectPositions';
 import { useUserCacheStore } from '~/store/userCacheStore';
 import type { PositionsType } from '~/store/userCacheTypes';
-import type { TeamType } from '~/components/tournament/types';
-import type { UserType } from '~/components/user/types';
 
+export { positionIcons, positionKeys };
 export type { PositionKey };
-export { positionKeys, positionIcons };
 
 export interface PlayerWithRank {
   user: UserType;
@@ -70,16 +70,50 @@ export const computeTeamPositionCoverage = (
     member.positions;
 
   const result: Record<PositionKey, PositionCoverage> = {
-    carry: { bestRank: 6, players: [], playersWithRanks: [], conflicts: [], possibleMMR: 0 },
-    mid: { bestRank: 6, players: [], playersWithRanks: [], conflicts: [], possibleMMR: 0 },
-    offlane: { bestRank: 6, players: [], playersWithRanks: [], conflicts: [], possibleMMR: 0 },
-    soft_support: { bestRank: 6, players: [], playersWithRanks: [], conflicts: [], possibleMMR: 0 },
-    hard_support: { bestRank: 6, players: [], playersWithRanks: [], conflicts: [], possibleMMR: 0 },
+    carry: {
+      bestRank: 6,
+      players: [],
+      playersWithRanks: [],
+      conflicts: [],
+      possibleMMR: 0,
+    },
+    mid: {
+      bestRank: 6,
+      players: [],
+      playersWithRanks: [],
+      conflicts: [],
+      possibleMMR: 0,
+    },
+    offlane: {
+      bestRank: 6,
+      players: [],
+      playersWithRanks: [],
+      conflicts: [],
+      possibleMMR: 0,
+    },
+    soft_support: {
+      bestRank: 6,
+      players: [],
+      playersWithRanks: [],
+      conflicts: [],
+      possibleMMR: 0,
+    },
+    hard_support: {
+      bestRank: 6,
+      players: [],
+      playersWithRanks: [],
+      conflicts: [],
+      possibleMMR: 0,
+    },
   };
 
   // Build position -> players mapping with ranks
   const positionPlayers: Record<PositionKey, PlayerWithRank[]> = {
-    carry: [], mid: [], offlane: [], soft_support: [], hard_support: [],
+    carry: [],
+    mid: [],
+    offlane: [],
+    soft_support: [],
+    hard_support: [],
   };
 
   for (const pos of positionKeys) {
@@ -96,9 +130,13 @@ export const computeTeamPositionCoverage = (
 
     // Calculate average MMR for players who can play this position
     const playersForPos = positionPlayers[pos];
-    const possibleMMR = playersForPos.length > 0
-      ? Math.round(playersForPos.reduce((sum, p) => sum + (p.user.mmr || 0), 0) / playersForPos.length)
-      : 0;
+    const possibleMMR =
+      playersForPos.length > 0
+        ? Math.round(
+            playersForPos.reduce((sum, p) => sum + (p.user.mmr || 0), 0) /
+              playersForPos.length,
+          )
+        : 0;
 
     result[pos] = {
       bestRank: playersForPos.length > 0 ? playersForPos[0].rank : 6,
@@ -112,7 +150,7 @@ export const computeTeamPositionCoverage = (
   // Greedy assignment to check which positions can be uniquely filled
   // Sort by fewest options first (most constrained positions get assigned first)
   const sortedPositions = [...positionKeys].sort(
-    (a, b) => positionPlayers[a].length - positionPlayers[b].length
+    (a, b) => positionPlayers[a].length - positionPlayers[b].length,
   );
 
   const assignedPlayers = new Set<number>();
@@ -123,7 +161,7 @@ export const computeTeamPositionCoverage = (
 
   for (const pos of sortedPositions) {
     const availablePlayers = positionPlayers[pos].filter(
-      (p) => !assignedPlayers.has(p.user.pk!)
+      (p) => !assignedPlayers.has(p.user.pk!),
     );
     if (availablePlayers.length > 0) {
       const assignedPlayer = availablePlayers[0];
@@ -136,7 +174,11 @@ export const computeTeamPositionCoverage = (
 
   // Count favorites for tooltip info
   const favoriteCount: Record<PositionKey, number> = {
-    carry: 0, mid: 0, offlane: 0, soft_support: 0, hard_support: 0,
+    carry: 0,
+    mid: 0,
+    offlane: 0,
+    soft_support: 0,
+    hard_support: 0,
   };
   for (const member of members) {
     const userPositions = positionsFor(member);
@@ -154,7 +196,9 @@ export const computeTeamPositionCoverage = (
     const playersForPos = positionPlayers[pos];
     if (playersForPos.length === 0) continue;
 
-    const topPlayerPks = new Set(playersForPos.slice(0, 2).map(p => p.user.pk));
+    const topPlayerPks = new Set(
+      playersForPos.slice(0, 2).map((p) => p.user.pk),
+    );
 
     for (const otherPos of positionKeys) {
       if (otherPos === pos) continue;
@@ -162,10 +206,17 @@ export const computeTeamPositionCoverage = (
       if (otherPlayers.length === 0) continue;
 
       // Check if top players overlap significantly
-      const otherTopPks = new Set(otherPlayers.slice(0, 2).map(p => p.user.pk));
-      const overlap = [...topPlayerPks].filter(pk => otherTopPks.has(pk));
+      const otherTopPks = new Set(
+        otherPlayers.slice(0, 2).map((p) => p.user.pk),
+      );
+      const overlap = [...topPlayerPks].filter((pk) => otherTopPks.has(pk));
 
-      if (overlap.length >= 2 || (overlap.length === 1 && topPlayerPks.size <= 2 && otherTopPks.size <= 2)) {
+      if (
+        overlap.length >= 2 ||
+        (overlap.length === 1 &&
+          topPlayerPks.size <= 2 &&
+          otherTopPks.size <= 2)
+      ) {
         const existing = contestedPositions.get(pos) || [];
         if (!existing.includes(otherPos)) {
           contestedPositions.set(pos, [...existing, otherPos]);
@@ -189,8 +240,8 @@ export const computeTeamPositionCoverage = (
       // Check for favorite conflicts (multiple people want this as #1)
       if (favoriteCount[pos] > 1) {
         const favoritePlayers = playersForPos
-          .filter(p => p.rank === 1)
-          .map(p => p.user.nickname || p.user.username);
+          .filter((p) => p.rank === 1)
+          .map((p) => p.user.nickname || p.user.username);
         messages.push(`${favoritePlayers.join(' & ')} both want this`);
       }
 
@@ -203,21 +254,26 @@ export const computeTeamPositionCoverage = (
 
           for (const otherPos of contestedWith) {
             const otherPlayers = positionPlayers[otherPos];
-            if (otherPlayers.some(p => p.user.pk === player.user.pk)) {
+            if (otherPlayers.some((p) => p.user.pk === player.user.pk)) {
               playerContestedPositions.push(positionLabels[otherPos]);
             }
           }
 
           if (playerContestedPositions.length > 0) {
-            messages.push(`${playerName} contesting ${playerContestedPositions.join(' & ')}`);
+            messages.push(
+              `${playerName} contesting ${playerContestedPositions.join(' & ')}`,
+            );
           }
         }
 
         // Show who was selected as best suitability
         const assignedPlayerPk = positionAssignments.get(pos);
-        const assignedPlayer = playersForPos.find(p => p.user.pk === assignedPlayerPk);
+        const assignedPlayer = playersForPos.find(
+          (p) => p.user.pk === assignedPlayerPk,
+        );
         if (assignedPlayer) {
-          const playerName = assignedPlayer.user.nickname || assignedPlayer.user.username;
+          const playerName =
+            assignedPlayer.user.nickname || assignedPlayer.user.username;
           if (assignedPlayer.rank === 1) {
             messages.push(`${playerName} guessed - unique & favorite`);
           } else {
@@ -235,12 +291,17 @@ export const computeTeamPositionCoverage = (
           for (const otherPos of positionKeys) {
             if (otherPos === pos) continue;
             const otherPlayers = positionPlayers[otherPos];
-            if (otherPlayers.length > 0 && otherPlayers[0].user.pk === user.pk) {
+            if (
+              otherPlayers.length > 0 &&
+              otherPlayers[0].user.pk === user.pk
+            ) {
               otherPositionsNeeded.push(positionLabels[otherPos]);
             }
           }
           if (otherPositionsNeeded.length > 0) {
-            playerConflicts.push(`${user.nickname || user.username} needed for ${otherPositionsNeeded.join(', ')}`);
+            playerConflicts.push(
+              `${user.nickname || user.username} needed for ${otherPositionsNeeded.join(', ')}`,
+            );
           }
         }
         if (playerConflicts.length > 0) {
@@ -258,10 +319,13 @@ export const computeTeamPositionCoverage = (
       // If no issues, no contests, and has unique assignment, show positive message
       if (messages.length === 0 && hasUniqueAssignment && !isContested) {
         const assignedPlayerPk = positionAssignments.get(pos);
-        const assignedPlayer = playersForPos.find(p => p.user.pk === assignedPlayerPk);
+        const assignedPlayer = playersForPos.find(
+          (p) => p.user.pk === assignedPlayerPk,
+        );
 
         if (assignedPlayer) {
-          const playerName = assignedPlayer.user.nickname || assignedPlayer.user.username;
+          const playerName =
+            assignedPlayer.user.nickname || assignedPlayer.user.username;
           if (assignedPlayer.rank === 1) {
             messages.push(`${playerName} - unique & favorite`);
           } else {
@@ -275,8 +339,11 @@ export const computeTeamPositionCoverage = (
         const bestPlayer = playersForPos[0];
         const bestPlayerAssignedTo = playerAssignments.get(bestPlayer.user.pk!);
         if (bestPlayerAssignedTo && bestPlayerAssignedTo !== pos) {
-          const playerName = bestPlayer.user.nickname || bestPlayer.user.username;
-          messages.push(`${playerName} guessed for ${positionLabels[bestPlayerAssignedTo]}`);
+          const playerName =
+            bestPlayer.user.nickname || bestPlayer.user.username;
+          messages.push(
+            `${playerName} guessed for ${positionLabels[bestPlayerAssignedTo]}`,
+          );
         }
       }
     }
@@ -303,157 +370,200 @@ export const computeTeamPositionCoverage = (
     return false;
   };
 
-  const coveredPositions = positionKeys.filter((pos) => result[pos].bestRank < 6);
-  const uniquePossible = coveredPositions.every((pos) => assignedPositions.has(pos) && !positionHasWarning(pos));
+  const coveredPositions = positionKeys.filter(
+    (pos) => result[pos].bestRank < 6,
+  );
+  const uniquePossible = coveredPositions.every(
+    (pos) => assignedPositions.has(pos) && !positionHasWarning(pos),
+  );
 
-  return { positions: result, uniquePossible, favoriteCount, positionHasWarning, assignedPositions, positionAssignments };
+  return {
+    positions: result,
+    uniquePossible,
+    favoriteCount,
+    positionHasWarning,
+    assignedPositions,
+    positionAssignments,
+  };
 };
 
 // Single position card component (no tooltip - tooltip info shown in HoverCard table)
-export const PositionCoverageCard = memo(({
-  pos,
-  idx,
-  coverage,
-  hasWarning,
-  hasUniqueAssignment,
-}: {
-  pos: PositionKey;
-  idx: number;
-  coverage: PositionCoverage;
-  hasWarning: boolean;
-  hasUniqueAssignment: boolean;
-  favoriteCount: number;
-}) => {
-  const { bestRank, players } = coverage;
-  const IconComponent = positionIcons[pos];
+export const PositionCoverageCard = memo(
+  ({
+    pos,
+    idx,
+    coverage,
+    hasWarning,
+    hasUniqueAssignment,
+  }: {
+    pos: PositionKey;
+    idx: number;
+    coverage: PositionCoverage;
+    hasWarning: boolean;
+    hasUniqueAssignment: boolean;
+    favoriteCount: number;
+  }) => {
+    const { bestRank, players } = coverage;
+    const IconComponent = positionIcons[pos];
 
-  // Color based on coverage quality - only green/orange/red
-  let colorClass: string;
-  let badgeColorClass: string;
-  if (bestRank >= 5) {
-    colorClass = 'bg-red-900/60 border-red-500/70';
-    badgeColorClass = 'bg-red-600 text-white';
-  } else if (hasWarning || !hasUniqueAssignment || bestRank >= 3) {
-    colorClass = 'bg-orange-900/50 border-orange-500/60';
-    badgeColorClass = 'bg-orange-600 text-white';
-  } else {
-    colorClass = 'bg-green-900/50 border-green-500/50';
-    badgeColorClass = 'bg-green-600 text-white';
-  }
+    // Color based on coverage quality - only green/orange/red
+    let colorClass: string;
+    let badgeColorClass: string;
+    if (bestRank >= 5) {
+      colorClass = 'bg-red-900/60 border-red-500/70';
+      badgeColorClass = 'bg-red-600 text-white';
+    } else if (hasWarning || !hasUniqueAssignment || bestRank >= 3) {
+      colorClass = 'bg-orange-900/50 border-orange-500/60';
+      badgeColorClass = 'bg-orange-600 text-white';
+    } else {
+      colorClass = 'bg-green-900/50 border-green-500/50';
+      badgeColorClass = 'bg-green-600 text-white';
+    }
 
-  return (
-    <div className={cn('relative flex flex-col items-center p-1.5 rounded-lg border min-w-[44px]', colorClass)}>
-      {bestRank <= 5 && (
-        <span className={cn(
-          'absolute -top-1.5 -left-1.5 h-4 w-4 rounded-full text-[10px] font-bold flex items-center justify-center z-10',
-          badgeColorClass
-        )}>
-          {bestRank}
-        </span>
-      )}
-      <IconComponent className="w-5 h-5" />
-      <div className="flex -space-x-1 mt-1">
-        {players.length > 0 ? (
-          players.slice(0, 3).map((player) => (
-            <UserAvatar
-              key={player.pk}
-              user={player}
-              size="tiny"
-              border="muted"
-            />
-          ))
-        ) : (
-          <div className="h-4 w-4 rounded-full bg-muted/50 flex items-center justify-center">
-            <span className="text-[7px] text-muted-foreground">—</span>
-          </div>
+    return (
+      <div
+        className={cn(
+          'relative flex flex-col items-center p-1.5 rounded-lg border min-w-[44px]',
+          colorClass,
         )}
+      >
+        {bestRank <= 5 && (
+          <span
+            className={cn(
+              'absolute -top-1.5 -left-1.5 h-4 w-4 rounded-full text-[10px] font-bold flex items-center justify-center z-10',
+              badgeColorClass,
+            )}
+          >
+            {bestRank}
+          </span>
+        )}
+        <IconComponent className="w-5 h-5" />
+        <div className="flex -space-x-1 mt-1">
+          {players.length > 0 ? (
+            players
+              .slice(0, 3)
+              .map((player) => (
+                <UserAvatar
+                  key={player.pk}
+                  user={player}
+                  size="tiny"
+                  border="muted"
+                />
+              ))
+          ) : (
+            <div className="h-4 w-4 rounded-full bg-muted/50 flex items-center justify-center">
+              <span className="text-[7px] text-muted-foreground">—</span>
+            </div>
+          )}
+        </div>
       </div>
-    </div>
-  );
-});
+    );
+  },
+);
 PositionCoverageCard.displayName = 'PositionCoverageCard';
 
 // Single Player Card - shows avatar with name above and MMR below
-const PlayerCard = memo(({ player, isBest }: { player: PlayerWithRank; isBest?: boolean }) => {
-  const { user, rank } = player;
-  const displayName = user.nickname || user.username || '?';
+const PlayerCard = memo(
+  ({ player, isBest }: { player: PlayerWithRank; isBest?: boolean }) => {
+    const { user, rank } = player;
+    const displayName = user.nickname || user.username || '?';
 
-  return (
-    <div className={cn(
-      "flex flex-col items-center gap-0.5 min-w-[3.5rem]",
-      isBest ? "opacity-100" : "opacity-60"
-    )}>
-      {/* Name badge above */}
-      <span className={cn(
-        "text-[9px] font-medium px-1.5 py-0.5 rounded truncate max-w-full text-center",
-        isBest ? "text-white bg-slate-600/80" : "text-slate-300 bg-slate-700/60"
-      )}>
-        {displayName.length > 6 ? `${displayName.slice(0, 5)}…` : displayName}
-      </span>
-      {/* Avatar with rank badge - wrapped in PlayerPopover for hover */}
-      <PlayerPopover player={user}>
-        <div className="relative">
-          <UserAvatar user={user} size="sm" border={isBest ? "primary" : "muted"} />
-          <span className={cn(
-            "absolute -top-1 -right-1 h-4 w-4 rounded-full text-[9px] font-bold flex items-center justify-center",
-            isBest ? "bg-primary text-primary-foreground" : "bg-slate-600 text-slate-200"
-          )}>
-            {rank}
-          </span>
-        </div>
-      </PlayerPopover>
-      {/* MMR badge below */}
-      <span className="text-[9px] font-medium text-slate-300 bg-slate-700/80 px-1.5 py-0.5 rounded">
-        {user.mmr?.toLocaleString() || '—'}
-      </span>
-    </div>
-  );
-});
+    return (
+      <div
+        className={cn(
+          'flex flex-col items-center gap-0.5 min-w-[3.5rem]',
+          isBest ? 'opacity-100' : 'opacity-60',
+        )}
+      >
+        {/* Name badge above */}
+        <span
+          className={cn(
+            'text-[9px] font-medium px-1.5 py-0.5 rounded truncate max-w-full text-center',
+            isBest
+              ? 'text-white bg-slate-600/80'
+              : 'text-slate-300 bg-slate-700/60',
+          )}
+        >
+          {displayName.length > 6 ? `${displayName.slice(0, 5)}…` : displayName}
+        </span>
+        {/* Avatar with rank badge - wrapped in PlayerPopover for hover */}
+        <PlayerPopover player={user}>
+          <div className="relative">
+            <UserAvatar
+              user={user}
+              size="sm"
+              border={isBest ? 'primary' : 'muted'}
+            />
+            <span
+              className={cn(
+                'absolute -top-1 -right-1 h-4 w-4 rounded-full text-[9px] font-bold flex items-center justify-center',
+                isBest
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-slate-600 text-slate-200',
+              )}
+            >
+              {rank}
+            </span>
+          </div>
+        </PlayerPopover>
+        {/* MMR badge below */}
+        <span className="text-[9px] font-medium text-slate-300 bg-slate-700/80 px-1.5 py-0.5 rounded">
+          {user.mmr?.toLocaleString() || '—'}
+        </span>
+      </div>
+    );
+  },
+);
 PlayerCard.displayName = 'PlayerCard';
 
 // Best Players Row - shows assigned player first, then others by rank
-const BestPlayersRow = memo(({
-  players,
-  assignedPlayerPk,
-  maxDisplay = 3
-}: {
-  players: PlayerWithRank[];
-  assignedPlayerPk?: number;
-  maxDisplay?: number;
-}) => {
-  if (players.length === 0) {
+const BestPlayersRow = memo(
+  ({
+    players,
+    assignedPlayerPk,
+    maxDisplay = 3,
+  }: {
+    players: PlayerWithRank[];
+    assignedPlayerPk?: number;
+    maxDisplay?: number;
+  }) => {
+    if (players.length === 0) {
+      return (
+        <div className="flex items-center justify-center min-w-[3.5rem] h-16">
+          <span className="text-[9px] text-muted-foreground">—</span>
+        </div>
+      );
+    }
+
+    // Sort: assigned player first, then by rank
+    const sortedPlayers = useMemo(() => {
+      return [...players].sort((a, b) => {
+        // Assigned player always comes first
+        if (a.user.pk === assignedPlayerPk) return -1;
+        if (b.user.pk === assignedPlayerPk) return 1;
+        // Then sort by rank (lower rank = higher priority)
+        return a.rank - b.rank;
+      });
+    }, [players, assignedPlayerPk]);
+
+    const displayPlayers = sortedPlayers.slice(0, maxDisplay);
+
     return (
-      <div className="flex items-center justify-center min-w-[3.5rem] h-16">
-        <span className="text-[9px] text-muted-foreground">—</span>
+      <div className="flex items-end gap-1">
+        {displayPlayers.map((player, idx) => (
+          <PlayerCard
+            key={player.user.pk}
+            player={player}
+            isBest={
+              player.user.pk === assignedPlayerPk ||
+              (idx === 0 && !assignedPlayerPk)
+            }
+          />
+        ))}
       </div>
     );
-  }
-
-  // Sort: assigned player first, then by rank
-  const sortedPlayers = useMemo(() => {
-    return [...players].sort((a, b) => {
-      // Assigned player always comes first
-      if (a.user.pk === assignedPlayerPk) return -1;
-      if (b.user.pk === assignedPlayerPk) return 1;
-      // Then sort by rank (lower rank = higher priority)
-      return a.rank - b.rank;
-    });
-  }, [players, assignedPlayerPk]);
-
-  const displayPlayers = sortedPlayers.slice(0, maxDisplay);
-
-  return (
-    <div className="flex items-end gap-1">
-      {displayPlayers.map((player, idx) => (
-        <PlayerCard
-          key={player.user.pk}
-          player={player}
-          isBest={player.user.pk === assignedPlayerPk || (idx === 0 && !assignedPlayerPk)}
-        />
-      ))}
-    </div>
-  );
-});
+  },
+);
 BestPlayersRow.displayName = 'BestPlayersRow';
 
 // Position Conflict Table - shows all positions with conflicts
@@ -461,92 +571,110 @@ interface PositionConflictTableProps {
   teamPositionCoverage: TeamPositionCoverageResult;
 }
 
-const PositionConflictTable = memo(({ teamPositionCoverage }: PositionConflictTableProps) => {
-  const { positions, positionHasWarning, assignedPositions, positionAssignments } = teamPositionCoverage;
+const PositionConflictTable = memo(
+  ({ teamPositionCoverage }: PositionConflictTableProps) => {
+    const {
+      positions,
+      positionHasWarning,
+      assignedPositions,
+      positionAssignments,
+    } = teamPositionCoverage;
 
-  return (
-    <div className="space-y-1">
-      {/* Header Row - hidden on very small screens, shown on sm+ */}
-      <div className="hidden sm:flex items-center gap-2 px-2 pb-1 border-b border-border/50 text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
-        <div className="w-6 shrink-0">Pos</div>
-        <div className="w-4 shrink-0">#</div>
-        <div className="flex-1">Status</div>
-        <div className="min-w-[120px] text-center">Best Options</div>
-      </div>
+    return (
+      <div className="space-y-1">
+        {/* Header Row - hidden on very small screens, shown on sm+ */}
+        <div className="hidden sm:flex items-center gap-2 px-2 pb-1 border-b border-border/50 text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+          <div className="w-6 shrink-0">Pos</div>
+          <div className="w-4 shrink-0">#</div>
+          <div className="flex-1">Status</div>
+          <div className="min-w-[120px] text-center">Best Options</div>
+        </div>
 
-      <div className="space-y-1.5 sm:space-y-1">
-        {positionKeys.map((pos, idx) => {
-          const coverage = positions[pos];
-          const IconComponent = positionIcons[pos];
-          const hasWarning = positionHasWarning(pos);
-          const hasUniqueAssignment = assignedPositions.has(pos);
-          const noCoverage = coverage.bestRank >= 6;
+        <div className="space-y-1.5 sm:space-y-1">
+          {positionKeys.map((pos, idx) => {
+            const coverage = positions[pos];
+            const IconComponent = positionIcons[pos];
+            const hasWarning = positionHasWarning(pos);
+            const hasUniqueAssignment = assignedPositions.has(pos);
+            const noCoverage = coverage.bestRank >= 6;
 
-          // Determine row color
-          let rowColorClass = 'bg-green-900/30 border-green-500/30';
-          if (noCoverage) {
-            rowColorClass = 'bg-red-900/30 border-red-500/30';
-          } else if (hasWarning || !hasUniqueAssignment || coverage.bestRank >= 3) {
-            rowColorClass = 'bg-orange-900/30 border-orange-500/30';
-          }
+            // Determine row color
+            let rowColorClass = 'bg-green-900/30 border-green-500/30';
+            if (noCoverage) {
+              rowColorClass = 'bg-red-900/30 border-red-500/30';
+            } else if (
+              hasWarning ||
+              !hasUniqueAssignment ||
+              coverage.bestRank >= 3
+            ) {
+              rowColorClass = 'bg-orange-900/30 border-orange-500/30';
+            }
 
-          return (
-            <div
-              key={pos}
-              className={cn(
-                'flex flex-col sm:flex-row sm:items-center gap-2 p-2 rounded-md border',
-                rowColorClass
-              )}
-            >
-              {/* Position Icon + Number */}
-              <div className="flex items-center gap-2">
-                <div className="flex items-center justify-center w-6 shrink-0">
-                  <IconComponent className="w-4 h-4" />
-                </div>
-                <span className="text-xs font-bold w-4 shrink-0">{idx + 1}</span>
-              </div>
-
-              {/* Status */}
-              <div className="flex-1 min-w-0">
-                {noCoverage ? (
-                  <span className="text-xs text-red-400">No coverage</span>
-                ) : coverage.conflicts.length > 0 ? (
-                  <div className="flex flex-col gap-0.5">
-                    {coverage.conflicts.map((message, i) => {
-                      const isPositive = (message.includes('unique') && !message.includes('No unique')) || message.includes('guessed');
-                      return (
-                        <span
-                          key={i}
-                          className={cn(
-                            'text-xs',
-                            isPositive ? 'text-green-400' : 'text-orange-400'
-                          )}
-                        >
-                          {message}
-                        </span>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <span className="text-xs text-green-400">Good coverage</span>
+            return (
+              <div
+                key={pos}
+                className={cn(
+                  'flex flex-col sm:flex-row sm:items-center gap-2 p-2 rounded-md border',
+                  rowColorClass,
                 )}
-              </div>
+              >
+                {/* Position Icon + Number */}
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center justify-center w-6 shrink-0">
+                    <IconComponent className="w-4 h-4" />
+                  </div>
+                  <span className="text-xs font-bold w-4 shrink-0">
+                    {idx + 1}
+                  </span>
+                </div>
 
-              {/* Best players with fallbacks */}
-              <div className="shrink-0">
-                <BestPlayersRow
-                  players={coverage.playersWithRanks}
-                  assignedPlayerPk={positionAssignments.get(pos)}
-                  maxDisplay={3}
-                />
+                {/* Status */}
+                <div className="flex-1 min-w-0">
+                  {noCoverage ? (
+                    <span className="text-xs text-red-400">No coverage</span>
+                  ) : coverage.conflicts.length > 0 ? (
+                    <div className="flex flex-col gap-0.5">
+                      {coverage.conflicts.map((message, i) => {
+                        const isPositive =
+                          (message.includes('unique') &&
+                            !message.includes('No unique')) ||
+                          message.includes('guessed');
+                        return (
+                          <span
+                            key={i}
+                            className={cn(
+                              'text-xs',
+                              isPositive ? 'text-green-400' : 'text-orange-400',
+                            )}
+                          >
+                            {message}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <span className="text-xs text-green-400">
+                      Good coverage
+                    </span>
+                  )}
+                </div>
+
+                {/* Best players with fallbacks */}
+                <div className="shrink-0">
+                  <BestPlayersRow
+                    players={coverage.playersWithRanks}
+                    assignedPlayerPk={positionAssignments.get(pos)}
+                    maxDisplay={3}
+                  />
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
-    </div>
-  );
-});
+    );
+  },
+);
 PositionConflictTable.displayName = 'PositionConflictTable';
 
 // Team Position Coverage Row - renders all 5 position cards with hover for conflict table
@@ -559,108 +687,126 @@ interface TeamPositionCoverageRowProps {
   showFullTable?: boolean;
 }
 
-export const TeamPositionCoverageRow = memo(({ team, className, teamName, showFullTable = false }: TeamPositionCoverageRowProps) => {
-  const [modalOpen, setModalOpen] = useState(false);
+export const TeamPositionCoverageRow = memo(
+  ({
+    team,
+    className,
+    teamName,
+    showFullTable = false,
+  }: TeamPositionCoverageRowProps) => {
+    const [modalOpen, setModalOpen] = useState(false);
 
-  // Subscribe ONCE to a pk→positions record (Rules of Hooks: cannot call the
-  // hook per-member inside the pure compute fn). Explicit GAME_TYPE.DOTA2 because
-  // the teamdraft routes never set currentGameType — coverage is inherently Dota,
-  // so gating on the ambient (null) gameType would make positions vanish here.
-  // A flat record (not a Map) so useShallow can compare values by Object.is —
-  // selectPositions returns the stored reference, so this stays stable until a
-  // member's positions actually change.
-  const memberPks: number[] = (team?.members ?? [])
-    .map((m: UserType) => m.pk)
-    .filter((pk: number | null | undefined): pk is number => pk != null);
-  const positionsRecord = useUserCacheStore(
-    useShallow((s) => {
-      const rec: Record<number, PositionsType | undefined> = {};
-      for (const pk of memberPks) {
-        rec[pk] = selectPositions(s, pk, GAME_TYPE.DOTA2);
-      }
-      return rec;
-    }),
-  );
-
-  const teamPositionCoverage = useMemo(() => {
-    const positionsByPk = new Map<number, PositionsType | undefined>(
-      Object.entries(positionsRecord).map(([pk, p]) => [Number(pk), p]),
+    // Subscribe ONCE to a pk→positions record (Rules of Hooks: cannot call the
+    // hook per-member inside the pure compute fn). Explicit GAME_TYPE.DOTA2 because
+    // the teamdraft routes never set currentGameType — coverage is inherently Dota,
+    // so gating on the ambient (null) gameType would make positions vanish here.
+    // A flat record (not a Map) so useShallow can compare values by Object.is —
+    // selectPositions returns the stored reference, so this stays stable until a
+    // member's positions actually change.
+    const memberPks: number[] = (team?.members ?? [])
+      .map((m: UserType) => m.pk)
+      .filter((pk: number | null | undefined): pk is number => pk != null);
+    const positionsRecord = useUserCacheStore(
+      useShallow((s) => {
+        const rec: Record<number, PositionsType | undefined> = {};
+        for (const pk of memberPks) {
+          rec[pk] = selectPositions(s, pk, GAME_TYPE.DOTA2);
+        }
+        return rec;
+      }),
     );
-    return computeTeamPositionCoverage(team, positionsByPk);
-  }, [team, positionsRecord]);
 
-  const handleClick = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    setModalOpen(true);
-  }, []);
+    const teamPositionCoverage = useMemo(() => {
+      const positionsByPk = new Map<number, PositionsType | undefined>(
+        Object.entries(positionsRecord).map(([pk, p]) => [Number(pk), p]),
+      );
+      return computeTeamPositionCoverage(team, positionsByPk);
+    }, [team, positionsRecord]);
 
-  const displayName = teamName || team?.name || (team?.captain ? `${team.captain.nickname || team.captain.username}'s Team` : 'Team');
+    const handleClick = useCallback((e: React.MouseEvent) => {
+      e.stopPropagation();
+      setModalOpen(true);
+    }, []);
 
-  // If showFullTable is true, render the table directly without hover/modal
-  if (showFullTable) {
+    const displayName =
+      teamName ||
+      team?.name ||
+      (team?.captain
+        ? `${team.captain.nickname || team.captain.username}'s Team`
+        : 'Team');
+
+    // If showFullTable is true, render the table directly without hover/modal
+    if (showFullTable) {
+      return (
+        <div className={className}>
+          <PositionConflictTable teamPositionCoverage={teamPositionCoverage} />
+        </div>
+      );
+    }
+
     return (
-      <div className={className}>
-        <PositionConflictTable teamPositionCoverage={teamPositionCoverage} />
-      </div>
-    );
-  }
+      <>
+        <HoverCard openDelay={200} closeDelay={100}>
+          <HoverCardTrigger asChild>
+            <div
+              className={cn(
+                'flex flex-wrap justify-center items-center gap-1.5 overflow-visible cursor-pointer',
+                className,
+              )}
+              onClick={handleClick}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  setModalOpen(true);
+                }
+              }}
+            >
+              {positionKeys.map((pos, idx) => {
+                const coverage = teamPositionCoverage.positions[pos];
+                const { favoriteCount, positionHasWarning, assignedPositions } =
+                  teamPositionCoverage;
+                const hasWarning = positionHasWarning(pos);
+                const hasUniqueAssignment = assignedPositions.has(pos);
 
-  return (
-    <>
-      <HoverCard openDelay={200} closeDelay={100}>
-        <HoverCardTrigger asChild>
-          <div
-            className={cn('flex flex-wrap justify-center items-center gap-1.5 overflow-visible cursor-pointer', className)}
-            onClick={handleClick}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                setModalOpen(true);
-              }
-            }}
+                return (
+                  <PositionCoverageCard
+                    key={pos}
+                    pos={pos}
+                    idx={idx}
+                    coverage={coverage}
+                    hasWarning={hasWarning}
+                    hasUniqueAssignment={hasUniqueAssignment}
+                    favoriteCount={favoriteCount[pos]}
+                  />
+                );
+              })}
+            </div>
+          </HoverCardTrigger>
+          <HoverCardContent
+            className="w-[400px] p-3 hidden md:block"
+            side="bottom"
+            align="center"
           >
-            {positionKeys.map((pos, idx) => {
-              const coverage = teamPositionCoverage.positions[pos];
-              const { favoriteCount, positionHasWarning, assignedPositions } = teamPositionCoverage;
-              const hasWarning = positionHasWarning(pos);
-              const hasUniqueAssignment = assignedPositions.has(pos);
+            <PositionConflictTable
+              teamPositionCoverage={teamPositionCoverage}
+            />
+          </HoverCardContent>
+        </HoverCard>
 
-              return (
-                <PositionCoverageCard
-                  key={pos}
-                  pos={pos}
-                  idx={idx}
-                  coverage={coverage}
-                  hasWarning={hasWarning}
-                  hasUniqueAssignment={hasUniqueAssignment}
-                  favoriteCount={favoriteCount[pos]}
-                />
-              );
-            })}
-          </div>
-        </HoverCardTrigger>
-        <HoverCardContent
-          className="w-[400px] p-3 hidden md:block"
-          side="bottom"
-          align="center"
+        {/* Modal for mobile/click interaction */}
+        <InfoDialog
+          open={modalOpen}
+          onOpenChange={setModalOpen}
+          title={`${displayName} - Position Coverage`}
+          size="lg"
+          showClose
         >
           <PositionConflictTable teamPositionCoverage={teamPositionCoverage} />
-        </HoverCardContent>
-      </HoverCard>
-
-      {/* Modal for mobile/click interaction */}
-      <InfoDialog
-        open={modalOpen}
-        onOpenChange={setModalOpen}
-        title={`${displayName} - Position Coverage`}
-        size="lg"
-        showClose
-      >
-        <PositionConflictTable teamPositionCoverage={teamPositionCoverage} />
-      </InfoDialog>
-    </>
-  );
-});
+        </InfoDialog>
+      </>
+    );
+  },
+);
 TeamPositionCoverageRow.displayName = 'TeamPositionCoverageRow';
