@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
   DraftTeamCaptainSchema,
   DraftTeamSchema,
@@ -110,5 +110,80 @@ describe('HeroDraftSchema', () => {
       username: 123 as unknown as string,
     };
     expect(() => DraftTeamCaptainSchema.parse(team)).toThrow();
+  });
+});
+
+describe('Discord name keys on herodraft captains', () => {
+  const team = (captain: Record<string, unknown>) => ({
+    id: 1,
+    tournament_team: 35,
+    captain,
+    team_name: 'Team 1',
+    members: [captain],
+    is_first_pick: null,
+    is_radiant: null,
+    reserve_time_remaining: 90000,
+    is_ready: false,
+    is_connected: false,
+  });
+  const initial = (
+    captain: Record<string, unknown>,
+    extra: Record<string, unknown> = {},
+  ) => ({
+    type: 'initial_state' as const,
+    draft_state: {
+      id: 2,
+      game: 99,
+      tournament_id: 8,
+      state: 'waiting_for_captains' as const,
+      roll_winner: null,
+      draft_teams: [team(captain)],
+      rounds: [],
+      current_round: null,
+      created_at: '2026-05-19T00:00:00Z',
+      updated_at: '2026-05-19T00:00:00Z',
+      ...extra,
+    },
+  });
+
+  it('keeps discordNickname, guildNickname and organization_pk from the current backend shape', () => {
+    const captain = {
+      pk: 1,
+      username: 'dc_handle',
+      nickname: null,
+      discordNickname: 'GwaihirTheWindlord',
+      guildNickname: 'DragonClaw',
+      avatar: null,
+    };
+    const parsed = HeroDraftWebSocketMessageSchema.safeParse(
+      initial(captain, { organization_pk: 7 }),
+    );
+    expect(parsed.success).toBe(true);
+    if (!parsed.success || parsed.data.type !== 'initial_state') return;
+    const draft = parsed.data.draft_state;
+    expect(draft.organization_pk).toBe(7);
+    expect(draft.draft_teams[0].captain).toMatchObject({
+      discordNickname: 'GwaihirTheWindlord',
+      guildNickname: 'DragonClaw',
+    });
+    expect(draft.draft_teams[0].members[0]).toMatchObject({
+      guildNickname: 'DragonClaw',
+    });
+  });
+
+  it('accepts a captain without nickname or either Discord name key', () => {
+    const parsed = HeroDraftWebSocketMessageSchema.safeParse(
+      initial({ pk: 1, username: 'u', avatar: null }),
+    );
+    expect(parsed.success).toBe(true);
+  });
+
+  it('accepts a null organization_pk', () => {
+    expect(
+      HeroDraftSchema.safeParse({
+        ...initial(captainStub).draft_state,
+        organization_pk: null,
+      }).success,
+    ).toBe(true);
   });
 });

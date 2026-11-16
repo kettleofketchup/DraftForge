@@ -1,26 +1,29 @@
-import type { DraftOptions, TeamDraftState } from "~/components/teamdraft/schemas";
+import type {
+  DraftOptions,
+  TeamDraftState,
+} from '~/components/teamdraft/schemas';
 
 export type DraftEventType =
-  | "draft_started"
-  | "draft_completed"
-  | "captain_assigned"
-  | "player_picked"
-  | "tie_roll"
-  | "pick_undone"
-  | "draft_lobby_opened"
-  | "captain_ready"
-  | "captain_unready"
-  | "captain_connected"
-  | "captain_disconnected"
-  | "draft_started_by_staff"
-  | "draft_force_started"
-  | "round_started"
-  | "draft_paused"
-  | "draft_resumed"
-  | "pick_timed_out"
-  | "pick_skipped"
-  | "pick_skip_unavailable"
-  | "draft_options_changed";
+  | 'draft_started'
+  | 'draft_completed'
+  | 'captain_assigned'
+  | 'player_picked'
+  | 'tie_roll'
+  | 'pick_undone'
+  | 'draft_lobby_opened'
+  | 'captain_ready'
+  | 'captain_unready'
+  | 'captain_connected'
+  | 'captain_disconnected'
+  | 'draft_started_by_staff'
+  | 'draft_force_started'
+  | 'round_started'
+  | 'draft_paused'
+  | 'draft_resumed'
+  | 'pick_timed_out'
+  | 'pick_skipped'
+  | 'pick_skip_unavailable'
+  | 'draft_options_changed';
 
 export interface DraftEvent {
   pk: number;
@@ -73,7 +76,7 @@ export interface CaptainAssignedPayload {
   captain_avatar_url?: string | null;
   team_id: number;
   was_tie: boolean;
-  reason?: "timeout_skip";
+  reason?: 'timeout_skip';
 }
 
 export interface PlayerPickedPayload {
@@ -158,7 +161,7 @@ export interface RoundStartedPayload extends CaptainRef {
 }
 
 export interface DraftPausedPayload extends CaptainRef {
-  reason: "manual" | "captain_disconnected";
+  reason: 'manual' | 'captain_disconnected';
   paused_by_id: number | null;
   paused_by_name: string | null;
   pick_number: number | null;
@@ -236,6 +239,7 @@ export interface WebSocketDraftState {
   }>;
   latest_round: number | null;
   draft_style: string;
+  organization_pk?: number | null;
   /** Deduplicated user map from slim serializer (consumed during hydration). */
   _users?: Record<number, Record<string, unknown>>;
   tournament?: {
@@ -248,7 +252,7 @@ export interface WebSocketDraftState {
 }
 
 export interface DraftTickMessage {
-  type: "draft_tick";
+  type: 'draft_tick';
   draft_state: string;
   server_time: string;
   resuming_until: string | null;
@@ -270,15 +274,19 @@ export interface DraftTickMessage {
 
 export type WebSocketMessage =
   | {
-      type: "initial_state";
+      type: 'initial_state';
       draft_state: WebSocketDraftState | null;
       /** Keys are captain pks as strings. */
       captain_fresh?: Record<string, boolean>;
       /** Server clock when the snapshot was sent; anchors the countdown before the first tick. */
       server_time?: string;
     }
-  | { type: "initial_events"; events: DraftEvent[] }
-  | { type: "draft_event"; event: DraftEvent; draft_state?: WebSocketDraftState }
-  | { type: "captain_heartbeat"; captain_id: number; fresh: boolean }
-  | { type: "ping" }
+  | { type: 'initial_events'; events: DraftEvent[] }
+  | {
+      type: 'draft_event';
+      event: DraftEvent;
+      draft_state?: WebSocketDraftState;
+    }
+  | { type: 'captain_heartbeat'; captain_id: number; fresh: boolean }
+  | { type: 'ping' }
   | DraftTickMessage;
