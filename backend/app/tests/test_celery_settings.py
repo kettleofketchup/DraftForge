@@ -68,3 +68,49 @@ class CelerySettingsBootTest(SimpleTestCase):
         self.assertEqual(base_url, settings.DISCORD_API_BASE_URL)
         self.assertFalse(has_guild_id)
         self.assertEqual(settings.DISCORD_API_BASE_URL, "https://discord.com/api/v10")
+
+
+class SharedSettingsParityTest(SimpleTestCase):
+    """Web and worker must agree on the signup-post lock config and key scope."""
+
+    ENV: dict[str, str] = {
+        "REDIS_KEY_SCOPE": "df-s3:",
+        "SIGNUP_POST_DEBOUNCE_SECONDS": "4",
+        "SIGNUP_POST_LOCK_SECONDS": "60",
+        "DISABLE_CACHE": "false",
+    }
+
+    def _read(self, module: str) -> list[str]:
+        env = {
+            k: v
+            for k, v in os.environ.items()
+            if k not in ("SIGNUP_POST_DISABLED", "RUNNING_TESTS")
+        }
+        env.update(self.ENV, DJANGO_SETTINGS_MODULE=module)
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                "from django.conf import settings as s; "
+                "print(repr(s.SIGNUP_POST)); print(repr(s.REDIS_KEY_SCOPE))",
+            ],
+            cwd=BACKEND_DIR,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr[-3000:])
+        return result.stdout.strip().splitlines()[-2:]
+
+    def test_signup_post_and_scope_parity(self) -> None:
+        web = self._read("backend.settings")
+        worker = self._read("config.settings_celery")
+        self.assertEqual(web, worker)
+        self.assertEqual(
+            web,
+            [
+                "SignupPostConfig(debounce_seconds=4, lock_seconds=60, disabled=False)",
+                "'df-s3:'",
+            ],
+        )

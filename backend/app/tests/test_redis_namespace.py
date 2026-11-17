@@ -131,6 +131,19 @@ class NamespacedKeyTests(SimpleTestCase):
     def test_key_prefixed_with_namespace(self) -> None:
         self.assertEqual(namespaced_key("herodraft:1:x"), "test-1-ab:herodraft:1:x")
 
+    @override_settings(REDIS_KEY_SCOPE="df-s3:", REDIS_KEY_NAMESPACE="test-1-ab:")
+    def test_scope_prefixes_namespace(self) -> None:
+        self.assertEqual(
+            namespaced_key("herodraft:1:x"), "df-s3:test-1-ab:herodraft:1:x"
+        )
+
+    @override_settings(REDIS_KEY_SCOPE="df-s3:", REDIS_KEY_NAMESPACE="")
+    def test_scope_alone_prefixes_key(self) -> None:
+        self.assertEqual(namespaced_key("herodraft:1:x"), "df-s3:herodraft:1:x")
+
+    def test_scope_defaults_to_empty(self) -> None:
+        self.assertEqual(settings.REDIS_KEY_SCOPE, "")
+
     @override_settings(REDIS_KEY_NAMESPACE="")
     def test_tick_keys_keep_production_format(self) -> None:
         self.assertEqual(conn_count_key(5), "herodraft:live_connections:5")

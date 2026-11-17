@@ -18,12 +18,11 @@ from collections.abc import Coroutine
 from datetime import datetime
 from typing import Any, NamedTuple, Protocol, runtime_checkable
 
-import redis
 from asgiref.sync import ThreadSensitiveContext, sync_to_async
 from channels.db import database_sync_to_async
-from django.conf import settings
 from opentelemetry import trace
 
+from app.redis_client import get_redis_client
 from app.redis_keys import namespaced_key
 from telemetry.logging import get_logger
 
@@ -43,19 +42,6 @@ HEARTBEAT_STALE_SECONDS: int = 9
 HEARTBEAT_TTL: int = 30
 CAPTAIN_CHANNEL_TTL: int = 300
 CLIENT_PICK_TIME_MAX_AGE_S: float = 2.0
-
-_redis_client: redis.Redis | None = None
-
-
-def get_redis_client() -> redis.Redis:
-    """Get or create Redis client singleton."""
-    global _redis_client
-    if _redis_client is None:
-        redis_host = getattr(settings, "REDIS_HOST", "localhost")
-        _redis_client = redis.Redis(
-            host=redis_host, port=6379, db=2, decode_responses=True
-        )
-    return _redis_client
 
 
 def heartbeat_key(prefix: str, draft_id: int, user_id: int) -> str:

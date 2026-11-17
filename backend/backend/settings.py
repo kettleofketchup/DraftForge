@@ -30,6 +30,7 @@ from config.discord_api import DISCORD_API_BASE_URL  # noqa: F401
 from config.dota_lobby import DotaLobbyConfig
 from config.installed_apps import MODEL_APPS
 from config.leagues import app_config
+from config.signup_post import SignupPostConfig
 from telemetry.config import init_telemetry
 
 # Show cacheops Redis connection warning only once (not on every import)
@@ -328,6 +329,11 @@ def is_docker(root: Path = Path("/")) -> bool:
 
 IN_DOCKER = is_docker()
 REDIS_HOST = os.environ.get("REDIS_HOST") or ("redis" if IN_DOCKER else "localhost")
+# Prefix for raw Redis keys (app.redis_keys) when deployments share one Redis.
+REDIS_KEY_SCOPE: str = os.environ.get("REDIS_KEY_SCOPE", "")
+# Discord signup-post debounce and lock (config/signup_post.py), shared with
+# config/settings_celery.py. Off under the test runner unless a test opts in.
+SIGNUP_POST = SignupPostConfig.from_env(disabled_default=RUNNING_TESTS)
 
 # Cacheops/Redis cache configuration
 if not env_bool("DISABLE_CACHE"):
