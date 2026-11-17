@@ -1,7 +1,8 @@
 import { ChevronRight } from 'lucide-react';
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import {
   useFormContext,
+  useFormState,
   useWatch,
   type Control,
   type FieldPath,
@@ -40,12 +41,14 @@ import {
   LOW_COMPLETION_ACTION_LABELS,
   POST_CULL_FILL_MODES,
   POST_CULL_FILL_MODE_LABELS,
+  READY_CHECK_CONFIG_DEFAULTS,
   READY_CHECK_PRESET_ON,
   READY_CHECK_SCOPES,
   READY_CHECK_SCOPE_LABELS,
   ROLL_CALL_MODES,
   ROLL_CALL_MODE_LABELS,
   readyCheckConfigSchema,
+  refineReadyCheck,
   type ReadyCheckFields,
 } from './schemas';
 
@@ -74,11 +77,33 @@ const SETTINGS_INPUTS: NumberField[] = [
   'ready_check_chase_minutes',
   'ready_check_min_completion_pct',
 ];
+const TIMING_INPUTS: NumberField[] = [
+  'ready_check_open_minutes',
+  'ready_check_escalation_minutes',
+  'ready_check_close_minutes',
+  'ready_check_chase_minutes',
+];
+const SETTINGS_FIELDS: (keyof ReadyCheckFields)[] = [
+  ...SETTINGS_INPUTS,
+  'roll_call_mode',
+  'ready_check_scope',
+  'ready_check_low_completion_action',
+  'ready_check_notify_on_signup',
+  'ready_check_drop_notice',
+];
 const VOICE_INPUTS: (keyof ReadyCheckFields)[] = [
   'event_voice_channel_id',
   'start_cull_minutes_after',
 ];
-const CHASE_DEFAULT = 30;
+const VOICE_FIELDS: (keyof ReadyCheckFields)[] = [
+  ...VOICE_INPUTS,
+  'voice_presence_confirms',
+  'start_cull_enabled',
+  'post_cull_fill_mode',
+];
+const refinedSchema = readyCheckConfigSchema.superRefine((values, ctx) =>
+  refineReadyCheck(values, ctx),
+);
 
 interface Props<T extends FieldValues & ReadyCheckFields> {
   control: Control<T>;
@@ -99,12 +124,23 @@ export function ReadyCheckConfigSection<
   const setValue =
     parentSetValue as unknown as UseFormSetValue<ReadyCheckFields>;
   const { getValues, resetField } = useFormContext<ReadyCheckFields>();
+  const { errors } = useFormState({ control });
+  const hasError = (names: (keyof ReadyCheckFields)[]) =>
+    names.some((name) => errors[name]);
+  const settingsError = hasError(SETTINGS_FIELDS);
+  const voiceError = hasError(VOICE_FIELDS);
   const rollCallOn = useWatch({ control, name: 'roll_call_enabled' });
   const chase = useWatch({ control, name: 'ready_check_chase_minutes' });
   const pct = useWatch({ control, name: 'ready_check_min_completion_pct' });
   const cullOn = useWatch({ control, name: 'start_cull_enabled' });
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [voiceOpen, setVoiceOpen] = useState(false);
+  useEffect(() => {
+    if (settingsError) setSettingsOpen(true);
+  }, [settingsError]);
+  useEffect(() => {
+    if (voiceError) setVoiceOpen(true);
+  }, [voiceError]);
 
   // Hidden inputs can't be fixed, so drop invalid edits when they collapse.
   const resetInvalid = (names: (keyof ReadyCheckFields)[]) => {
@@ -119,6 +155,16 @@ export function ReadyCheckConfigSection<
     value: PathValue<ReadyCheckFields, K>,
   ) => setValue(name, value, { shouldDirty: true });
 
+  const resetCrossFieldTimings = () => {
+    const result = refinedSchema.safeParse(getValues());
+    const broken =
+      !result.success &&
+      result.error.issues.some((issue) =>
+        (TIMING_INPUTS as PropertyKey[]).includes(issue.path[0]),
+      );
+    if (broken) TIMING_INPUTS.forEach((name) => resetField(name));
+  };
+
   const onToggle = (on: boolean) => {
     if (on) {
       setDirty('roll_call_enabled', READY_CHECK_PRESET_ON.roll_call_enabled);
@@ -127,6 +173,7 @@ export function ReadyCheckConfigSection<
     } else {
       setDirty('roll_call_enabled', false);
       resetInvalid(SETTINGS_INPUTS);
+      resetCrossFieldTimings();
     }
   };
 
@@ -161,6 +208,7 @@ export function ReadyCheckConfigSection<
               {label}
             </FormLabel>
             {description && <FormDescription>{description}</FormDescription>}
+            <FormMessage />
           </div>
         </FormItem>
       )}
@@ -294,7 +342,7 @@ export function ReadyCheckConfigSection<
       </div>
 
       {block(
-        !!rollCallOn && settingsOpen,
+        (!!rollCallOn && settingsOpen) || settingsError,
         (open) => {
           setSettingsOpen(open);
           if (!open) resetInvalid(SETTINGS_INPUTS);
@@ -351,7 +399,9 @@ export function ReadyCheckConfigSection<
                   onCheckedChange={(off) =>
                     setDirty(
                       'ready_check_chase_minutes',
-                      off ? null : CHASE_DEFAULT,
+                      off
+                        ? null
+                        : READY_CHECK_CONFIG_DEFAULTS.ready_check_chase_minutes,
                     )
                   }
                 />
@@ -390,11 +440,11 @@ export function ReadyCheckConfigSection<
             'Tell dropped members they were dropped',
           )}
         </>,
-        !rollCallOn,
+        !rollCallOn && !settingsError,
       )}
 
       {block(
-        voiceOpen,
+        voiceOpen || voiceError,
         (open) => {
           setVoiceOpen(open);
           if (!open) resetInvalid(VOICE_INPUTS);
