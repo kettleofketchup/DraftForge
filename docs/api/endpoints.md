@@ -93,10 +93,11 @@ the frontend gates on: `admin_organization_ids`, `staff_organization_ids`,
 **Open signups:** a tournament's signups are open when one of its source events
 (`Event.tournament`) is in state `signups_open` with `allow_user_signups` on. That is
 the self-serve admission rule in `events/admission.py`, the same one the signup
-endpoint, `process_rsvp` and `create_tentative_signup` apply; `signups_open_at` and
+endpoint, `process_rsvp`, `create_tentative_signup` and a member's own
+`signups/<id>/reinstate/` apply; `signups_open_at` and
 `signup_deadline_hours` do not change it. With `allow_user_signups` off, members get a
 400 ("Self sign-ups are disabled for this event; ask an organizer to add you.") while
-staff can still add them through `admin-signup`. The `/tournaments` page's
+staff can still add or reinstate them through `admin-signup` and `reinstate`. The `/tournaments` page's
 "My organizations" view sends `organizations=mine&open_signups=1` on Upcoming and only
 `organizations=mine` on Archived. The cache key holds the expanded organization IDs, so
 users with the same memberships share an entry and nothing is cached per user.

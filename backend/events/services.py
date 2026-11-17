@@ -14,7 +14,7 @@ from django.utils import timezone
 from app.cache_utils import invalidate_after_commit, invalidate_obj
 from app.functions.teamdraft import apply_draft_options
 from app.models import CustomUser, Organization, PositionsModel, Team, Tournament
-from events.admission import ensure_self_serve
+from events.admission import NOT_ACCEPTING_MESSAGE, ensure_self_serve
 from events.capacity import has_free_seat, lock_event, seat_holding_statuses
 from events.constants import (
     EVENT_REOPEN_TRANSITIONS,
@@ -506,7 +506,7 @@ def staff_add_signup(
 ) -> EventSignup:
     """Staff-path signup. Allowed during SIGNUPS_OPEN or ROLL_CALL."""
     if event.state not in (EventState.SIGNUPS_OPEN, EventState.ROLL_CALL):
-        raise ValueError("Event is not accepting signups.")
+        raise ValueError(NOT_ACCEPTING_MESSAGE)
     # Admin-added users join the organization so per-org data (MMR, history)
     # has somewhere to live before they're approved.
     if event.organization_id:
@@ -735,7 +735,7 @@ def reinstate_signup(signup: EventSignup) -> EventSignup:
     if signup.status != SignupStatus.CANCELLED:
         raise ValueError("Only cancelled signups can be reinstated.")
     if event.state != "signups_open":
-        raise ValueError("Event is not accepting signups.")
+        raise ValueError(NOT_ACCEPTING_MESSAGE)
     locked = lock_event(event)
     _sync_signup_steam_account(locked, signup.user)
     unmet = unmet_codes(locked, signup.user)

@@ -1298,13 +1298,17 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
 
     @action(detail=True, methods=["post"])
     def reinstate(self, request: Request, pk: str | None = None) -> Response:
-        """Reinstate a cancelled signup (user can reinstate their own)."""
+        """Reinstate a cancelled signup.
+
+        Staff may always reinstate; the owner only when self-serve is open.
+        """
         signup = self.get_object()
-        if signup.user != request.user and not has_event_staff_access(
-            request.user, signup.event
-        ):
+        is_staff = has_event_staff_access(request.user, signup.event)
+        if signup.user != request.user and not is_staff:
             return Response(status=status.HTTP_403_FORBIDDEN)
         try:
+            if not is_staff:
+                ensure_self_serve(signup.event, request.user)
             return Response(
                 EventSignupSerializer(
                     reinstate_signup(signup), context={"request": request}

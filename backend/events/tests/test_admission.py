@@ -5,7 +5,7 @@ from django.utils import timezone as tz
 from rest_framework.test import APIClient
 
 from app.models import Tournament
-from events.admission import SELF_SERVE_DISABLED_MESSAGE
+from events.admission import NOT_ACCEPTING_MESSAGE, SELF_SERVE_DISABLED_MESSAGE
 from events.constants import EventState, RepeatFrequency, SignupStatus
 from events.models import Event, EventRepeater, EventSignup
 from events.services import (
@@ -46,6 +46,48 @@ class SelfServeAdmissionTests(EventTestCase):
     def test_decline_allowed(self) -> None:
         signup = decline_signup(self.closed, self.player)
         self.assertEqual(signup.status, SignupStatus.CANCELLED)
+
+    def _reinstate(self, signup: EventSignup, user: object) -> object:
+        self.client.force_authenticate(user=user)
+        return self.client.post(f"/api/events/signups/{signup.pk}/reinstate/")
+
+    def test_owner_reinstate_refused_when_self_serve_off(self) -> None:
+        signup = decline_signup(self.closed, self.player)
+
+        resp = self._reinstate(signup, self.player)
+        self.assertEqual(resp.status_code, 400, resp.content)
+        self.assertEqual(resp.json()["error"], SELF_SERVE_DISABLED_MESSAGE)
+        signup.refresh_from_db()
+        self.assertEqual(signup.status, SignupStatus.CANCELLED)
+
+        resp = self._reinstate(signup, self.admin)
+        self.assertEqual(resp.status_code, 200, resp.content)
+        signup.refresh_from_db()
+        self.assertNotEqual(signup.status, SignupStatus.CANCELLED)
+
+    def test_owner_reinstate_refused_during_roll_call(self) -> None:
+        event = self.make_event(state=EventState.ROLL_CALL)
+        signup = EventSignup.objects.create(
+            event=event, user=self.player, status=SignupStatus.REJECTED
+        )
+        resp = self._reinstate(signup, self.player)
+        self.assertEqual(resp.status_code, 400, resp.content)
+        self.assertEqual(resp.json()["error"], NOT_ACCEPTING_MESSAGE)
+        signup.refresh_from_db()
+        self.assertEqual(signup.status, SignupStatus.REJECTED)
+
+        resp = self._reinstate(signup, self.admin)
+        self.assertEqual(resp.status_code, 200, resp.content)
+        signup.refresh_from_db()
+        self.assertEqual(signup.status, SignupStatus.APPROVED)
+
+    def test_owner_reinstate_allowed_when_self_serve_on(self) -> None:
+        event = self.make_event()
+        signup = decline_signup(event, self.player)
+        resp = self._reinstate(signup, self.player)
+        self.assertEqual(resp.status_code, 200, resp.content)
+        signup.refresh_from_db()
+        self.assertNotEqual(signup.status, SignupStatus.CANCELLED)
 
     def test_staff_add_allowed(self) -> None:
         signup = staff_add_signup(self.closed, self.player)
@@ -105,7 +147,7 @@ class SelfServeAdmissionTests(EventTestCase):
         with self.assertRaisesMessage(ValueError, SELF_SERVE_DISABLED_MESSAGE):
             process_rsvp(event, self.player)
 
-    def test_org_defaults_flag_propagates(self) -> None:
+    def test_api_created_event_with_flag_off_refuses_self_serve(self) -> None:
         self.client.force_authenticate(user=self.admin)
         defaults = self.client.get(
             "/api/events/defaults/", {"organization": self.org.pk}
