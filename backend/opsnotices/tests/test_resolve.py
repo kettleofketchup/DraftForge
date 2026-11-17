@@ -129,10 +129,12 @@ class ResolveTests(ResolveTestBase):
         notice = self._emit()
         with self.captureOnCommitCallbacks(execute=True):
             first = resolve_notice_by_id(notice, reason="first", closed_by=self.admin)
+        assert first is not None
         closed_at = first.closed_at
         with capture_logs() as logs:
             with self.captureOnCommitCallbacks(execute=True) as callbacks:
                 second = resolve_notice_by_id(notice, reason="second", closed_by=None)
+        assert second is not None
         self.assertEqual(second.pk, notice.pk)
         self.assertEqual(second.close_note, "first")
         self.assertEqual(second.closed_by, self.admin)
@@ -147,8 +149,18 @@ class ResolveTests(ResolveTestBase):
         resolve_notice_by_id(notice, reason="first", closed_by=self.admin)
         with self.captureOnCommitCallbacks(execute=True) as callbacks:
             result = resolve_notice_by_id(stale, reason="second", closed_by=None)
+        assert result is not None
         self.assertEqual(result.close_note, "first")
         self.assertEqual(result.state, OpsNotice.State.RESOLVED)
+        self.assertEqual(callbacks, [])
+
+    def test_resolve_by_id_deleted_row_returns_none(self) -> None:
+        notice = self._emit()
+        stale = OpsNotice.objects.get(pk=notice.pk)
+        OpsNotice.objects.filter(pk=notice.pk).delete()
+        with self.captureOnCommitCallbacks(execute=True) as callbacks:
+            result = resolve_notice_by_id(stale, reason="gone", closed_by=None)
+        self.assertIsNone(result)
         self.assertEqual(callbacks, [])
 
     def test_close_note_required_and_max_200(self) -> None:
@@ -166,6 +178,7 @@ class ResolveTests(ResolveTestBase):
         result = resolve_notice_by_id(
             notice, reason="x" * CLOSE_NOTE_MAX, closed_by=None
         )
+        assert result is not None
         self.assertEqual(len(result.close_note), 200)
 
     def test_resolve_celery_guard(self) -> None:

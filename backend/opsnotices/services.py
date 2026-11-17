@@ -291,20 +291,28 @@ class _HandOff:
 
     def __call__(self) -> None:
         self.fired = True
-        occurrences = (
-            OpsNotice.objects.filter(pk=self.notice_id)
-            .values_list("occurrences", flat=True)
-            .first()
-        )
-        if occurrences is None:
-            return
-        responses = notice_emitted.send_robust(
-            sender=OpsNotice,
-            notice_id=self.notice_id,
-            created=self.created,
-            occurrences=occurrences,
-        )
-        _log_receiver_failures(self.notice_id, responses)
+        try:
+            occurrences = (
+                OpsNotice.objects.filter(pk=self.notice_id)
+                .values_list("occurrences", flat=True)
+                .first()
+            )
+            if occurrences is None:
+                return
+            responses = notice_emitted.send_robust(
+                sender=OpsNotice,
+                notice_id=self.notice_id,
+                created=self.created,
+                occurrences=occurrences,
+            )
+            _log_receiver_failures(self.notice_id, responses)
+        except Exception:
+            log.exception(
+                "ops_notice_handoff_failed",
+                system="opsnotices",
+                subsystem="emit",
+                notice_id=self.notice_id,
+            )
 
 
 def _hand_off(notice: OpsNotice, created: bool) -> None:
@@ -415,7 +423,9 @@ def _send_resolved(notice_id: int) -> None:
     _log_receiver_failures(notice_id, responses)
 
 
-def _close(notice: OpsNotice, reason: str, closed_by: CustomUser | None) -> OpsNotice:
+def _close(
+    notice: OpsNotice, reason: str, closed_by: CustomUser | None
+) -> OpsNotice | None:
     with transaction.atomic():
         updated = OpsNotice.objects.filter(pk=notice.pk, closed_at__isnull=True).update(
             state=OpsNotice.State.RESOLVED,
@@ -423,7 +433,10 @@ def _close(notice: OpsNotice, reason: str, closed_by: CustomUser | None) -> OpsN
             close_note=reason,
             closed_by=closed_by,
         )
-        notice.refresh_from_db()
+        try:
+            notice.refresh_from_db()
+        except OpsNotice.DoesNotExist:
+            return None
         if not updated:
             return notice
         notice_id = notice.pk
@@ -469,7 +482,7 @@ def resolve_notice(
 
 def resolve_notice_by_id(
     notice: OpsNotice, *, reason: str, closed_by: CustomUser | None
-) -> OpsNotice:
+) -> OpsNotice | None:
     _require_database("resolve_notice_by_id", "resolve_ops_notice")
     _check_close_note(reason)
     if notice.closed_at is not None:

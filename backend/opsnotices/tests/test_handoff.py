@@ -1,7 +1,8 @@
 import uuid
 from typing import Any
+from unittest import mock
 
-from django.db import connection, transaction
+from django.db import DatabaseError, connection, transaction
 from structlog.testing import capture_logs
 
 from events.tests.base import EventTestCase
@@ -164,3 +165,21 @@ class HandOffTests(HandOffTestBase):
                 assert notice is not None
                 notice.delete()
         self.assertEqual(self.calls, [])
+
+    def test_handoff_db_failure_contained_and_later_callbacks_run(self) -> None:
+        notice = self._emit()
+        assert notice is not None
+        later: list[bool] = []
+        with capture_logs() as logs:
+            with mock.patch.object(
+                OpsNotice.objects, "filter", side_effect=DatabaseError("locked")
+            ):
+                with self.captureOnCommitCallbacks(execute=True):
+                    transaction.on_commit(_HandOff(notice.pk, True))
+                    transaction.on_commit(lambda: later.append(True))
+        self.assertEqual(later, [True])
+        self.assertEqual(self.calls, [])
+        failed = [e for e in logs if e["event"] == "ops_notice_handoff_failed"]
+        self.assertEqual(len(failed), 1)
+        self.assertEqual(failed[0]["system"], "opsnotices")
+        self.assertEqual(failed[0]["notice_id"], notice.pk)
