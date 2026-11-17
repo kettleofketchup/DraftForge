@@ -51,13 +51,15 @@ Existing signups got a single `backfilled` entry when the ledger was added. It m
 
 ## After deploying
 
-Signups created by the old containers while migrations ran have no place in line and sort last. Once the release stack is recreated, run the backfill once:
+Signups created by the old containers while migrations ran have no place in line and sort last. Once the release stack is recreated, run the backfill once in its backend container:
 
 ```bash
-just dev::run 'python manage.py backfill_signup_line'
+docker exec <backend-container> python manage.py backfill_signup_line
 ```
 
 It gives those signups a place in line and adds their `backfilled` entries. It is safe to run again.
+
+Use `docker exec` rather than `just dev::run`, which starts a container on the dev stack, or `just db::manage`, which disables the cache so the command's flush of cached signup lists does nothing.
 
 ## Coming later
 
