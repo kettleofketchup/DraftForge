@@ -342,6 +342,24 @@ writable:
 
 The detail never includes feature notes, `enabled_by` or `enabled_at`.
 
+## Organization Settings
+
+Guide: [Organization Settings](../features/organization-settings.md).
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| GET | `/api/organizations/{id}/settings/` | `{organization, staff_override_policy, staff_override_warning_codes, available_warning_codes: [{code, label}], updated_at}`. Creates the row with defaults on first read. | Org admin |
+| PATCH | `/api/organizations/{id}/settings/` | Partial body with `staff_override_policy` (`silent` \| `confirm` \| `block`) and/or `staff_override_warning_codes` (list of codes; duplicates removed, stored in canonical order, empty list allowed). Logs an `OrgLog` `update` entry when something changed. Returns the row. | Org admin |
+
+"Org admin" means org admin, org owner or site admin. Other callers get `403` with
+`{"code": "not_permitted", "detail": ...}` and anonymous callers the usual uncoded
+authentication error; a denied request never creates the row. An unknown organization is
+`404`. An unknown policy, a non-list or non-string code entry, or an unknown code is
+`400`, for example
+`{"staff_override_warning_codes": ["Unknown warning code(s): x, y"]}`. Read-only and
+unknown body keys are ignored. Stored codes that are no longer defined are left out of
+responses.
+
 ## Organization Locked Features
 
 Guide: [Organization Locked Features](../features/organization-locked-features.md).
