@@ -22,6 +22,7 @@ import { ACTIVITY_OUT_OF_SCOPE } from '~/lib/websocket/WebSocketManager';
 import { useActivityViewStore } from '~/store/activityViewStore';
 import { useHeroDraftStore } from '~/store/heroDraftStore';
 import { useTournamentStore } from '~/store/tournamentStore';
+import { useUserStore } from '~/store/userStore';
 
 const mocks = vi.hoisted(() => {
   class ActivityDisabledError extends Error {
@@ -82,11 +83,13 @@ vi.mock('~/components/bracket/BracketView', () => ({
     header,
     openableDraftIds,
     onOpenHeroDraft,
+    onMatchOpen,
   }: {
     tournamentId: number;
     header?: ReactNode;
     openableDraftIds?: ReadonlySet<number>;
     onOpenHeroDraft?: (id: number) => void;
+    onMatchOpen?: () => void;
   }) => (
     <div
       data-testid="bracket"
@@ -94,6 +97,9 @@ vi.mock('~/components/bracket/BracketView', () => ({
       data-openable={[...(openableDraftIds ?? [])].sort().join(',')}
     >
       {header}
+      <span role="button" onClick={() => onMatchOpen?.()}>
+        open match
+      </span>
       <span role="link" onClick={() => onOpenHeroDraft?.(156)}>
         open 156
       </span>
@@ -351,6 +357,24 @@ describe('Discord Activity route', () => {
     expect(mocks.initializeDiscord).toHaveBeenCalledTimes(1);
   });
 
+  it('loads a team draft that started after launching on a hero draft', async () => {
+    mocks.get.mockResolvedValue({ data: { pk: 12, draft: null } });
+    mocks.initializeDiscord.mockResolvedValue(heroSession());
+    render(<DraftActivity />);
+    await heroOnScreen(156);
+    expect(useUserStore.getState().tournament.draft).toBeNull();
+
+    mocks.get.mockResolvedValue({
+      data: { pk: 12, draft: { pk: 9, draft_rounds: [] } },
+    });
+    act(() =>
+      useActivityViewStore.getState().setView({ kind: 'team', id: 9 }, 'menu'),
+    );
+    await screen.findByTestId('team-draft');
+    await waitFor(() => expect(useUserStore.getState().draft?.pk).toBe(9));
+    expect(useUserStore.getState().tournament.draft?.pk).toBe(9);
+  });
+
   it('refreshes with mode refresh and keeps the current view', async () => {
     mocks.initializeDiscord
       .mockResolvedValueOnce(heroSession())
@@ -539,6 +563,26 @@ describe('Discord Activity route', () => {
       to: { kind: 'hero', id: 156 },
       trigger: 'bracket_match',
     });
+  });
+
+  it('refetches the drafts list when a bracket match opens', async () => {
+    mocks.initializeDiscord.mockResolvedValue(
+      heroSession({ initial_view: { kind: 'bracket' } }),
+    );
+    render(<DraftActivity />);
+    const bracket = await screen.findByTestId('bracket');
+    await waitFor(() =>
+      expect(bracket).toHaveAttribute('data-openable', '156,157'),
+    );
+    mocks.fetchActivityDrafts.mockResolvedValue(
+      draftList([hero(156), hero(157), hero(158)]),
+    );
+
+    fireEvent.click(screen.getByText('open match'));
+
+    await waitFor(() =>
+      expect(bracket).toHaveAttribute('data-openable', '156,157,158'),
+    );
   });
 
   it('renders a draft-scope session without the header or drafts list', async () => {

@@ -28,7 +28,6 @@ export const ACTIVITY_SESSION_ENDED =
 export const ACTIVITY_OUT_OF_SCOPE =
   'This draft is no longer part of the tournament.';
 
-// Reconnection defaults
 const DEFAULT_MAX_ATTEMPTS = 10;
 const DEFAULT_BASE_DELAY_MS = 1000;
 const DEFAULT_MAX_DELAY_MS = 30000;
@@ -39,10 +38,8 @@ const CONNECT_DEBOUNCE_MS = 50;
 // Auto-disconnect delay: prevents StrictMode unmount/remount from tearing down connections
 const AUTO_DISCONNECT_DELAY_MS = 100;
 
-// Stale connection check interval
 const STALE_CHECK_INTERVAL_MS = 1000;
 
-// Send queue limits
 const MAX_QUEUE_SIZE = 100;
 
 class WebSocketManager {
@@ -92,7 +89,6 @@ class WebSocketManager {
           this.staleEnabledCount++;
           this.startStaleChecks();
         }
-        // Update options
         existing.options = { ...existing.options, ...options };
         // Sync current state to new onStateChange callback (StrictMode remount)
         if (options.onStateChange) {
@@ -127,7 +123,6 @@ class WebSocketManager {
       }
     }
 
-    // Create new connection entry
     const connectionId = ++this.globalConnectionId;
     const connection: WebSocketConnection = {
       url,
@@ -165,9 +160,6 @@ class WebSocketManager {
     return url;
   }
 
-  /**
-   * Disconnect from a WebSocket.
-   */
   disconnect(connectionId: string, reason = 'Disconnect requested'): void {
     const conn = this.connections.get(connectionId);
     if (!conn) {
@@ -178,7 +170,6 @@ class WebSocketManager {
     log.debug(`Disconnecting from ${connectionId}: ${reason}`);
     conn.intentionalClose = true;
 
-    // Clear pending timeouts
     if (conn.connectTimeout) {
       clearTimeout(conn.connectTimeout);
       conn.connectTimeout = null;
@@ -192,26 +183,22 @@ class WebSocketManager {
       conn.autoDisconnectTimeout = null;
     }
 
-    // Close WebSocket
     if (conn.ws) {
       conn.ws.close(1000, reason);
       conn.ws = null;
     }
 
-    // Update state
     this.updateState(conn, {
       status: 'disconnected',
       error: null,
       reconnectAttempts: 0,
     });
 
-    // Emit telemetry
     conn.options.telemetry?.onDisconnected?.(conn.url, {
       type: 'intentional',
       reason,
     });
 
-    // Update stale check tracking
     if (conn.options.staleTimeoutMs) {
       this.staleEnabledCount--;
       if (this.staleEnabledCount <= 0) {
@@ -220,7 +207,6 @@ class WebSocketManager {
       }
     }
 
-    // Remove connection entry
     this.connections.delete(connectionId);
   }
 
@@ -284,10 +270,7 @@ class WebSocketManager {
     };
   }
 
-  /**
-   * Send a message through the WebSocket.
-   * Returns false if the queue is full.
-   */
+  /** Queues while not connected, evicting the oldest; false once the queue is full. */
   send(connectionId: string, message: unknown): boolean {
     const conn = this.connections.get(connectionId);
     if (!conn) {
@@ -299,12 +282,10 @@ class WebSocketManager {
       conn.state.status === 'connected' &&
       conn.ws?.readyState === WebSocket.OPEN
     ) {
-      // Send immediately
       conn.ws.send(JSON.stringify(message));
       return true;
     }
 
-    // Queue for later
     if (conn.sendQueue.length >= MAX_QUEUE_SIZE) {
       log.warn(`Send queue full for ${connectionId}, dropping oldest message`);
       conn.sendQueue.shift();
@@ -313,9 +294,6 @@ class WebSocketManager {
     return conn.sendQueue.length < MAX_QUEUE_SIZE;
   }
 
-  /**
-   * Get the current connection state.
-   */
   getState(connectionId: string): ConnectionState | null {
     return this.connections.get(connectionId)?.state ?? null;
   }
@@ -343,14 +321,12 @@ class WebSocketManager {
     conn.connectStartTime = Date.now();
     conn.intentionalClose = false;
 
-    // Update state
     const isReconnect = conn.state.reconnectAttempts > 0;
     this.updateState(conn, {
       status: isReconnect ? 'reconnecting' : 'connecting',
       error: null,
     });
 
-    // Emit telemetry
     conn.options.telemetry?.onConnecting?.(url, conn.state.reconnectAttempts);
 
     log.debug(
@@ -362,10 +338,7 @@ class WebSocketManager {
       const { kind, draftId } = conn.options.activity;
       protocols = activitySocket(kind, draftId).protocols;
       if (!protocols) {
-        this.updateState(conn, {
-          status: 'disconnected',
-          error: ACTIVITY_SESSION_ENDED,
-        });
+        this.endActivitySession(conn, 'no_credential');
         return;
       }
     }
@@ -373,7 +346,6 @@ class WebSocketManager {
     conn.ws = ws;
 
     ws.onopen = () => {
-      // Ignore stale connections
       if (conn.connectionId !== thisConnectionId) {
         log.debug('Ignoring stale WebSocket open');
         ws.close(1000, 'Stale connection');
@@ -393,21 +365,17 @@ class WebSocketManager {
         lastMessageAt: Date.now(),
       });
 
-      // Emit telemetry
       conn.options.telemetry?.onConnected?.(url, durationMs);
 
-      // Flush send queue
       this.flushQueue(conn);
     };
 
     ws.onmessage = (event) => {
-      // Ignore stale connections
       if (conn.connectionId !== thisConnectionId) {
         log.debug('Ignoring stale WebSocket message');
         return;
       }
 
-      // Check connection is still valid
       if (conn.ws !== ws || ws.readyState !== WebSocket.OPEN) {
         return;
       }
@@ -426,7 +394,6 @@ class WebSocketManager {
       // onStateChange callback on every message (would trigger re-renders)
       conn.state.lastMessageAt = Date.now();
 
-      // Emit telemetry
       const msgType =
         typeof message === 'object' && message !== null && 'type' in message
           ? String((message as { type: unknown }).type)
@@ -437,7 +404,6 @@ class WebSocketManager {
         event.data.length,
       );
 
-      // Route to subscribers
       for (const sub of conn.subscribers) {
         try {
           sub.handler(message);
@@ -448,7 +414,6 @@ class WebSocketManager {
     };
 
     ws.onclose = (event) => {
-      // Ignore stale connections
       if (conn.connectionId !== thisConnectionId) {
         log.debug('Ignoring stale WebSocket close');
         return;
@@ -465,7 +430,6 @@ class WebSocketManager {
         return;
       }
 
-      // Emit telemetry
       conn.options.telemetry?.onDisconnected?.(url, {
         type: 'server_closed',
         code: event.code,
@@ -477,7 +441,10 @@ class WebSocketManager {
         return;
       }
       if (event.code === ACTIVITY_SCOPE_CLOSE_CODE && conn.options.activity) {
-        log.info(`Activity socket out of scope: ${url}`);
+        log.warn('activity_socket_out_of_scope', {
+          url,
+          ...conn.options.activity,
+        });
         this.updateState(conn, {
           status: 'disconnected',
           error: ACTIVITY_OUT_OF_SCOPE,
@@ -485,12 +452,10 @@ class WebSocketManager {
         return;
       }
 
-      // Attempt reconnect
       this.scheduleReconnect(conn);
     };
 
     ws.onerror = (event) => {
-      // Ignore stale connections
       if (conn.connectionId !== thisConnectionId) {
         log.debug('Ignoring stale WebSocket error');
         return;
@@ -499,7 +464,6 @@ class WebSocketManager {
       log.error('WebSocket error:', event);
       this.updateState(conn, { error: 'Connection error' });
 
-      // Emit telemetry
       conn.options.telemetry?.onDisconnected?.(url, {
         type: 'error',
         message: 'Connection error',
@@ -514,10 +478,10 @@ class WebSocketManager {
   ): void {
     const token = getActivityCredential()?.token;
     if (token === undefined || token === conn.activityRefreshedToken) {
-      this.updateState(conn, {
-        status: 'disconnected',
-        error: ACTIVITY_SESSION_ENDED,
-      });
+      this.endActivitySession(
+        conn,
+        token === undefined ? 'no_credential' : 'refreshed_credential_rejected',
+      );
       return;
     }
     this.updateState(conn, {
@@ -527,15 +491,30 @@ class WebSocketManager {
     void refreshActivityCredential().then((refreshed) => {
       if (conn.connectionId !== connectionId || conn.ws) return;
       if (!refreshed) {
-        this.updateState(conn, {
-          status: 'disconnected',
-          error: ACTIVITY_SESSION_ENDED,
-        });
+        this.endActivitySession(conn, 'refresh_failed');
         return;
       }
       conn.activityRefreshedToken = getActivityCredential()?.token;
       this.updateState(conn, { reconnectAttempts: 0 });
       this.doConnect(conn.url);
+    });
+  }
+
+  private endActivitySession(
+    conn: WebSocketConnection,
+    reason:
+      | 'no_credential'
+      | 'refreshed_credential_rejected'
+      | 'refresh_failed',
+  ): void {
+    log.warn('activity_session_ended', {
+      reason,
+      url: conn.url,
+      ...conn.options.activity,
+    });
+    this.updateState(conn, {
+      status: 'disconnected',
+      error: ACTIVITY_SESSION_ENDED,
     });
   }
 
@@ -578,7 +557,6 @@ class WebSocketManager {
       reconnectAttempts: attempts,
     });
 
-    // Emit telemetry
     conn.options.telemetry?.onReconnecting?.(conn.url, attempts, delay);
 
     conn.reconnectTimeout = setTimeout(() => {

@@ -22,7 +22,15 @@ export default defineConfig({
     },
   },
   server: {
-    allowedHosts: ['localhost', 'dota.kettle.sh', 'nginx'],
+    allowedHosts: [
+      'localhost',
+      'dota.kettle.sh',
+      'nginx',
+      ...(process.env.VITE_EXTRA_ALLOWED_HOSTS ?? '')
+        .split(',')
+        .map((h) => h.trim())
+        .filter(Boolean),
+    ],
     // Don't watch Playwright artifact directories — they churn during
     // test runs (HTML reports, traces, screenshots, videos) and Vite's
     // file watcher fires HMR page-reloads on every write, invalidating
