@@ -2,6 +2,8 @@ import type {
   CreateSeriesEventInput,
   EventSignupType,
   EventType,
+  ReadyCheckFields,
+  RollCallMode,
 } from '~/components/events/schemas';
 import axios from './axios';
 
@@ -204,7 +206,12 @@ export async function reinstateSignup(
 
 // --- EventRepeater ---
 
-export interface EventRepeaterType {
+type ReadyCheckSettings = Omit<
+  ReadyCheckFields,
+  'roll_call_enabled' | 'roll_call_mode' | 'auto_confirm'
+>;
+
+export interface EventRepeaterType extends ReadyCheckSettings {
   id: number;
   organization: number;
   organization_name: string;
@@ -244,7 +251,7 @@ export interface EventRepeaterType {
   require_steam_id: boolean;
   require_profile_complete: boolean;
   roll_call_enabled: boolean;
-  roll_call_mode: string;
+  roll_call_mode: RollCallMode;
   allow_active_mmr: boolean;
   allow_previous_rank: boolean;
   allow_battlecup_rating: boolean;
@@ -330,7 +337,7 @@ export async function updateEventRepeater(
 
 // --- OrgEventDefaults ---
 
-export interface OrgEventDefaultsType {
+export interface OrgEventDefaultsType extends ReadyCheckSettings {
   id: number;
   organization: number;
   tournament_name: string;
@@ -364,7 +371,7 @@ export interface OrgEventDefaultsType {
   require_steam_id: boolean;
   require_profile_complete: boolean;
   roll_call_enabled: boolean;
-  roll_call_mode: string;
+  roll_call_mode: RollCallMode;
   allow_active_mmr: boolean;
   allow_previous_rank: boolean;
   allow_battlecup_rating: boolean;

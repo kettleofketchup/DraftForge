@@ -1,19 +1,21 @@
 import {
   CalendarDays,
   Gamepad2,
+  ListChecks,
   ShieldCheck,
   Trophy,
   type LucideIcon,
 } from 'lucide-react';
 import { DraftSettingsFormSchema } from '~/components/teamdraft/schemas';
 import { DiscordIcon } from '../DiscordConfigSection';
-import { dotaLobbyConfigSchema } from '../schemas';
+import { dotaLobbyConfigSchema, readyCheckConfigSchema } from '../schemas';
 
 export type EventFormTabValue =
   | 'event'
   | 'tournament'
   | 'lobby'
   | 'approval'
+  | 'ready'
   | 'discord';
 
 export const EVENT_TAB_META: Record<
@@ -24,6 +26,7 @@ export const EVENT_TAB_META: Record<
   tournament: { label: 'Tournament', icon: Trophy },
   lobby: { label: 'Lobby', icon: Gamepad2 },
   approval: { label: 'Approval', icon: ShieldCheck },
+  ready: { label: 'Ready check', icon: ListChecks },
   discord: { label: 'Discord', icon: DiscordIcon },
 };
 
@@ -58,11 +61,16 @@ const APPROVAL_FIELDS = new Set<string>([
   'require_profile_complete',
 ]);
 
+export const READY_CHECK_FIELDS = new Set<string>(
+  Object.keys(readyCheckConfigSchema.shape),
+);
+
 /** The event-form tab that renders `field`. */
 export function eventTabForField(field: string): EventFormTabValue {
   if (TOURNAMENT_FIELDS.has(field)) return 'tournament';
   if (LOBBY_FIELDS.has(field)) return 'lobby';
   if (APPROVAL_FIELDS.has(field)) return 'approval';
+  if (READY_CHECK_FIELDS.has(field)) return 'ready';
   if (field.startsWith('discord_')) return 'discord';
   return 'event';
 }
