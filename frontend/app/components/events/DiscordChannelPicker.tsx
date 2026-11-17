@@ -42,7 +42,7 @@ export function DiscordChannelPicker({
         setLoading(false);
       }
     },
-    [organizationId]
+    [organizationId],
   );
 
   useEffect(() => {
@@ -56,15 +56,19 @@ export function DiscordChannelPicker({
         onValueChange={onChange}
         disabled={disabled || loading}
       >
-        <SelectTrigger className="w-full" data-testid={testId}>
-          <SelectValue placeholder={loading ? 'Loading...' : 'Select channel'} />
+        <SelectTrigger className="w-full min-w-0" data-testid={testId}>
+          <SelectValue
+            placeholder={loading ? 'Loading...' : 'Select channel'}
+          />
         </SelectTrigger>
         <SelectContent>
           {error && (
             <div className="px-2 py-1.5 text-sm text-error">{error}</div>
           )}
           {channels.length === 0 && !error && !loading && (
-            <div className="px-2 py-1.5 text-sm text-muted-foreground">No text channels found</div>
+            <div className="px-2 py-1.5 text-sm text-muted-foreground">
+              No text channels found
+            </div>
           )}
           {channels.map((ch) => (
             <SelectItem key={ch.id} value={ch.id}>
@@ -72,7 +76,9 @@ export function DiscordChannelPicker({
                 <span className="text-muted-foreground">#</span>
                 {ch.name}
                 {ch.type_label !== 'text' && (
-                  <span className="text-xs text-muted-foreground">({ch.type_label})</span>
+                  <span className="text-xs text-muted-foreground">
+                    ({ch.type_label})
+                  </span>
                 )}
               </span>
             </SelectItem>

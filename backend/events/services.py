@@ -1,6 +1,7 @@
 import calendar
 import datetime
 import re
+from collections.abc import Collection
 from datetime import timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -8,6 +9,7 @@ from zoneinfo import ZoneInfo
 from django.db import models, transaction
 
 from app.cache_utils import invalidate_after_commit, invalidate_obj
+from app.functions.teamdraft import apply_draft_options
 from app.models import CustomUser, Team, Tournament
 from events.constants import (
     EVENT_REOPEN_TRANSITIONS,
@@ -848,6 +850,36 @@ DISCORD_TOURNAMENT_CONFIG_FIELDS = [
     "discord_send_herodraft_link",
 ]
 
+EVENT_DRAFT_OPTIONS_FIELDS: dict[str, str] = {
+    "draft_timer_enabled": "timer_enabled",
+    "draft_grace_time_ms": "grace_time_ms",
+    "draft_reserve_time_ms": "reserve_time_ms",
+    "draft_timeout_action": "timeout_action",
+    "hero_timer_enabled": "hero_timer_enabled",
+    "hero_grace_time_ms": "hero_grace_time_ms",
+    "hero_reserve_time_ms": "hero_reserve_time_ms",
+}
+
+
+def event_draft_option_values(event: Event | EventRepeater) -> dict[str, Any]:
+    return {field: getattr(event, field) for field in EVENT_DRAFT_OPTIONS_FIELDS}
+
+
+def changed_draft_option_fields(
+    before: dict[str, Any], event: Event | EventRepeater
+) -> frozenset[str]:
+    after = event_draft_option_values(event)
+    return frozenset(f for f, v in after.items() if before.get(f) != v)
+
+
+def apply_event_draft_options(
+    event: Event, tournament: Tournament, fields: Collection[str] | None = None
+) -> None:
+    names = EVENT_DRAFT_OPTIONS_FIELDS if fields is None else fields
+    data = {EVENT_DRAFT_OPTIONS_FIELDS[f]: getattr(event, f) for f in names}
+    if data:
+        apply_draft_options(tournament, data)
+
 
 @transaction.atomic
 def create_tournament_for_event(event):
@@ -876,6 +908,7 @@ def create_tournament_for_event(event):
         dota_lobby_password=event.dota_lobby_password,
         state="future",
     )
+    apply_event_draft_options(event, tournament)
     event.tournament = tournament
     event.save(update_fields=["tournament", "updated_at"])
     invalidate_after_commit(event)
@@ -930,8 +963,14 @@ def finalize_event_tournament(event):
         invalidate_obj(event.tournament)
 
 
-def sync_tournament_from_event(event):
+def sync_tournament_from_event(
+    event: Event, changed_draft_fields: Collection[str] = ()
+) -> dict[str, Any]:
     """Cascade event config changes to linked Tournament.
+
+    Only the draft option fields in ``changed_draft_fields`` reach the
+    tournament's DraftOptions, so options edited on the tournament survive
+    unrelated event saves.
 
     Returns dict with 'synced' (bool) and 'warning' (str or None).
     """
@@ -952,6 +991,7 @@ def sync_tournament_from_event(event):
         for field in LOBBY_CONFIG_FIELDS + DISCORD_TOURNAMENT_CONFIG_FIELDS:
             setattr(event.tournament, field, getattr(event, field))
         event.tournament.save()
+        apply_event_draft_options(event, event.tournament, changed_draft_fields)
         invalidate_obj(event.tournament)
         return {"synced": True, "warning": None}
     elif state == "in_progress":
@@ -1527,6 +1567,7 @@ def sync_future_events(repeater, *, realign_schedule=False):
     for event in future_events:
         previous_password = event.dota_lobby_password
         previous_mode = event.dota_lobby_password_mode
+        previous_draft_options = event_draft_option_values(event)
         for field_name in shared_fields:
             setattr(event, field_name, getattr(repeater, field_name))
         _copy_mixin_fields(repeater, event, TOURNAMENT_TEMPLATE_FIELDS)
@@ -1540,7 +1581,9 @@ def sync_future_events(repeater, *, realign_schedule=False):
         event.save(update_fields=update_fields + ["tournament_date", "updated_at"])
         if event.dota_lobby_password != previous_password:
             log_lobby_password_changed(event, "series_cascade")
-        sync_tournament_from_event(event)
+        sync_tournament_from_event(
+            event, changed_draft_option_fields(previous_draft_options, event)
+        )
 
     # Single batched invalidation post-commit
     if future_events:

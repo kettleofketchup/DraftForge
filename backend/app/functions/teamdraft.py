@@ -31,6 +31,10 @@ _TIMER_OFF_STATES: frozenset[str] = frozenset(
     }
 )
 
+_TEAM_DRAFT_OPTION_KEYS: frozenset[str] = frozenset(
+    {"timer_enabled", "grace_time_ms", "reserve_time_ms", "timeout_action"}
+)
+
 
 def team_payload(team: Team | None, role: str = "") -> dict:
     p = f"{role}_" if role else ""
@@ -236,7 +240,11 @@ def apply_draft_options(
         draft = Draft.objects.select_for_update().filter(tournament=tournament).first()
         opts = tournament.get_draft_options(fresh=True)
         was_enabled = opts.timer_enabled
-        changed = any(getattr(opts, key) != value for key, value in data.items())
+        changed = any(
+            getattr(opts, key) != value
+            for key, value in data.items()
+            if key in _TEAM_DRAFT_OPTION_KEYS
+        )
         for key, value in data.items():
             setattr(opts, key, value)
         opts.save()

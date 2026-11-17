@@ -17,6 +17,7 @@ import {
   TooltipTrigger,
 } from '~/components/ui/tooltip';
 import { canCreateTournament } from '~/lib/tournamentPermissions';
+import { cn } from '~/lib/utils';
 import { useUserStore } from '~/store/userStore';
 import type { TournamentClassType } from '../types';
 import { TournamentEditForm } from './editForm';
@@ -52,7 +53,7 @@ export const TournamentCreateModal: React.FC<Props> = () => {
       </TooltipProvider>
 
       <DialogContent
-        className={DIALOG_CSS}
+        className={cn(DIALOG_CSS, 'flex h-[100svh] flex-col overflow-hidden')}
         data-testid="tournament-create-modal"
       >
         <DialogHeader>

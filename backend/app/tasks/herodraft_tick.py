@@ -145,6 +145,7 @@ async def broadcast_tick(draft_id: int) -> None:
             return {
                 "type": "herodraft.tick",
                 "draft_state": draft.state,
+                "timer_enabled": draft.timer_enabled,
                 "server_time": now.isoformat(),
                 "resuming_until": (
                     draft.resuming_until.isoformat() if draft.resuming_until else None
@@ -213,6 +214,7 @@ async def broadcast_tick(draft_id: int) -> None:
         return {
             "type": "herodraft.tick",
             "draft_state": draft.state,
+            "timer_enabled": draft.timer_enabled,
             # Clock anchor for client-side rAF countdown
             "server_time": now.isoformat(),
             # Round anchors — client computes elapsed/grace/reserve locally
@@ -269,7 +271,7 @@ async def check_timeout(draft_id: int) -> HeroDraftRound | None:
             except HeroDraft.DoesNotExist:
                 return None
 
-            if draft.state != HeroDraftState.DRAFTING:
+            if draft.state != HeroDraftState.DRAFTING or not draft.timer_enabled:
                 return None
 
             current_round = (

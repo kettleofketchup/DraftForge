@@ -324,6 +324,7 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
               team_b_id: message.team_b_id,
               team_b_reserve_ms: message.team_b_reserve_ms,
               resuming_until: message.resuming_until,
+              timer_enabled: message.timer_enabled,
             },
           });
           break;

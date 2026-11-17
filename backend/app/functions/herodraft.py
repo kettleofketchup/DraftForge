@@ -9,6 +9,7 @@ from opentelemetry import trace
 
 from app.models import (
     DraftTeam,
+    Game,
     HeroDraft,
     HeroDraftEvent,
     HeroDraftRound,
@@ -61,6 +62,18 @@ CAPTAINS_MODE_SEQUENCE = {
 }
 
 
+def new_herodraft_for_game(game: Game) -> HeroDraft:
+    """Create a HeroDraft and its two DraftTeams, snapshotting timer options."""
+    draft = HeroDraft(game=game, state=HeroDraftState.WAITING_FOR_CAPTAINS)
+    reserve = draft.snapshot_timer_options(game.tournament)
+    draft.save()
+    for team in (game.radiant_team, game.dire_team):
+        DraftTeam.objects.create(
+            draft=draft, tournament_team=team, reserve_time_remaining=reserve
+        )
+    return draft
+
+
 def build_draft_rounds(
     draft: HeroDraft, first_team: DraftTeam, second_team: DraftTeam
 ) -> None:
@@ -83,6 +96,7 @@ def build_draft_rounds(
                 round_number=round_number,
                 action_type=action_type,
                 state="planned",
+                grace_time_ms=draft.grace_time_ms,
             )
         )
 
@@ -264,7 +278,7 @@ def submit_pick(
         # Floor reserve consumption to whole seconds so sub-second
         # over-grace (typically network jitter) doesn't nibble reserve.
         over_grace_ms = max(0, elapsed_ms - current_round.grace_time_ms)
-        reserve_used = (over_grace_ms // 1000) * 1000
+        reserve_used = (over_grace_ms // 1000) * 1000 if draft.timer_enabled else 0
 
         reserve_before = team.reserve_time_remaining
 

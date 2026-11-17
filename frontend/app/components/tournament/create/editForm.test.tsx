@@ -185,6 +185,68 @@ describe('TournamentEditForm', () => {
     expect(payload.captains_draft_time).toBe(25);
   });
 
+  it('sends draft settings as nested draft_options in ms', async () => {
+    setUser(siteStaff);
+    vi.mocked(updateTournament).mockResolvedValue({} as never);
+    render(
+      <TournamentEditForm
+        tourn={tournament({
+          draft: { draft_style: 'snake' },
+          draft_options: {
+            timer_enabled: false,
+            grace_time_ms: 20000,
+            reserve_time_ms: 10000,
+            timeout_action: 'skip_turn',
+            hero_timer_enabled: true,
+            hero_grace_time_ms: 25000,
+            hero_reserve_time_ms: 60000,
+          },
+        })}
+        canEdit
+      />,
+      { wrapper: Wrapper },
+    );
+
+    submit();
+    await waitFor(() => expect(updateTournament).toHaveBeenCalled());
+    const payload = vi.mocked(updateTournament).mock.calls[0][1] as Record<
+      string,
+      unknown
+    >;
+    expect(payload).not.toHaveProperty('draft_type');
+    expect(payload.draft_options).toEqual({
+      timer_enabled: false,
+      grace_time_ms: 20000,
+      reserve_time_ms: 10000,
+      hero_timer_enabled: true,
+      hero_grace_time_ms: 25000,
+      hero_reserve_time_ms: 60000,
+    });
+  });
+
+  it('defaults draft settings for a tournament without draft_options', async () => {
+    setUser(siteStaff);
+    vi.mocked(updateTournament).mockResolvedValue({} as never);
+    render(<TournamentEditForm tourn={tournament()} canEdit />, {
+      wrapper: Wrapper,
+    });
+
+    submit();
+    await waitFor(() => expect(updateTournament).toHaveBeenCalled());
+    const payload = vi.mocked(updateTournament).mock.calls[0][1] as Record<
+      string,
+      unknown
+    >;
+    expect(payload.draft_options).toMatchObject({
+      timer_enabled: true,
+      grace_time_ms: 30000,
+      reserve_time_ms: 30000,
+      hero_timer_enabled: true,
+      hero_grace_time_ms: 30000,
+      hero_reserve_time_ms: 90000,
+    });
+  });
+
   it('shows a server error on a visible field in another tab', async () => {
     setUser(siteStaff);
     vi.mocked(updateTournament).mockRejectedValue({
