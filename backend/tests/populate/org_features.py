@@ -42,6 +42,7 @@ from tests.data.org_features import (
     ORG_FEATURES_ORGS,
     ORG_FEATURES_PRIVATE_PKS,
     ORG_FEATURES_ROLE_USERS,
+    ORG_FEATURES_SERVER_NICKNAMES,
     ORG_FEATURES_TEMPLATES,
     ORG_FEATURES_TOURNAMENTS,
     ORG_FEATURES_UNLOCKED_PKS,
@@ -174,7 +175,11 @@ def _reset_roles(orgs: dict[int, Organization], users: dict[int, CustomUser]) ->
             user_id__in=member_pks
         ).delete()
         for pk in member_pks:
-            ensure_org_user(users[pk], org)
+            ensure_org_user(
+                users[pk],
+                org,
+                guild_nickname=ORG_FEATURES_SERVER_NICKNAMES.get((org_pk, pk)),
+            )
 
 
 def _reset_switches(orgs: dict[int, Organization]) -> None:
