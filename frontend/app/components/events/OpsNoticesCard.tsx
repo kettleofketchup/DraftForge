@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { formatDistanceToNow } from 'date-fns';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { Link } from 'react-router';
+import { toast } from 'sonner';
 import {
   fetchEventOpsNotices,
   resolveEventOpsNotice,
@@ -24,6 +25,31 @@ const SEVERITY_VARIANT: Record<
   info: 'outline',
 };
 
+const RESOLVE_ERROR_MESSAGES: Record<string, string> = {
+  task_resolve_unsupported: 'task notices close on their own',
+};
+
+interface HttpErrorShape {
+  message?: string;
+  response?: { status?: number; data?: { code?: string; detail?: string } };
+}
+
+function reportResolveError(err: unknown): void {
+  const e = err as HttpErrorShape;
+  if (e?.response?.status === 404) {
+    toast.warning('Notice was already resolved');
+    return;
+  }
+  const data = e?.response?.data;
+  const msg =
+    (data?.code && RESOLVE_ERROR_MESSAGES[data.code]) ||
+    data?.detail ||
+    data?.code ||
+    e?.message ||
+    'unknown error';
+  toast.error(`Couldn't resolve notice: ${msg}`);
+}
+
 export interface OpsNoticesCardProps {
   eventId: number;
   noticeHref?: (n: OpsNotice) => string;
@@ -43,17 +69,25 @@ export function OpsNoticesCard({ eventId, noticeHref }: OpsNoticesCardProps) {
   });
   const resolve = useMutation({
     mutationFn: (noticeId: number) => resolveEventOpsNotice(eventId, noticeId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey }),
-    onError: (err, noticeId) =>
-      log.error('Failed to resolve operations notice', { noticeId, err }),
+    onSettled: () => queryClient.invalidateQueries({ queryKey }),
+    onError: (err, noticeId) => {
+      log.error('Failed to resolve operations notice', { noticeId, err });
+      reportResolveError(err);
+    },
   });
 
+  const loggedFailure = useRef(false);
   useEffect(() => {
-    if (error)
-      log.error('Failed to load operations notices', { eventId, error });
+    if (!error) {
+      loggedFailure.current = false;
+      return;
+    }
+    if (loggedFailure.current) return;
+    loggedFailure.current = true;
+    log.error('Failed to load operations notices', { eventId, error });
   }, [error, eventId]);
 
-  if (error) {
+  if (error && !data) {
     return (
       <p className="mb-4 text-sm text-muted-foreground">
         Couldn&apos;t load operations notices
@@ -68,6 +102,11 @@ export function OpsNoticesCard({ eventId, noticeHref }: OpsNoticesCardProps) {
         <CardTitle>Operations notices ({data.length} open)</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
+        {error && (
+          <p className="text-sm text-muted-foreground">
+            Couldn&apos;t refresh operations notices
+          </p>
+        )}
         {data.map((notice) => (
           <div
             key={notice.id}

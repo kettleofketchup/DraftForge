@@ -12,13 +12,15 @@ import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { OpsNotice } from '~/components/api/opsNoticesAPI';
 
-const { fetchEventOpsNotices, resolveEventOpsNotice, logger } = vi.hoisted(
-  () => ({
+const { fetchEventOpsNotices, resolveEventOpsNotice, logger, toast } =
+  vi.hoisted(() => ({
     fetchEventOpsNotices: vi.fn(),
     resolveEventOpsNotice: vi.fn(),
     logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() },
-  }),
-);
+    toast: { error: vi.fn(), warning: vi.fn(), success: vi.fn() },
+  }));
+
+vi.mock('sonner', () => ({ toast }));
 
 vi.mock('~/components/api/opsNoticesAPI', () => ({
   fetchEventOpsNotices,
@@ -62,8 +64,17 @@ const task = makeNotice({
   summary: 'Check in the late players',
 });
 
+const QUERY_KEY = ['event-ops-notices', 11, 'open'];
+
+function httpError(status: number, data: unknown): Error {
+  return Object.assign(new Error(`Request failed with status ${status}`), {
+    response: { status, data },
+  });
+}
+
 function renderCard(noticeHref?: (n: OpsNotice) => string): {
   container: HTMLElement;
+  client: QueryClient;
 } {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -73,15 +84,19 @@ function renderCard(noticeHref?: (n: OpsNotice) => string): {
       <QueryClientProvider client={client}>{children}</QueryClientProvider>
     </MemoryRouter>
   );
-  return render(<OpsNoticesCard eventId={11} noticeHref={noticeHref} />, {
-    wrapper,
-  });
+  const result = render(
+    <OpsNoticesCard eventId={11} noticeHref={noticeHref} />,
+    { wrapper },
+  );
+  return { container: result.container, client };
 }
 
 beforeEach(() => {
   fetchEventOpsNotices.mockReset();
   resolveEventOpsNotice.mockReset();
   logger.error.mockReset();
+  toast.error.mockReset();
+  toast.warning.mockReset();
 });
 
 afterEach(() => {
@@ -92,9 +107,11 @@ afterEach(() => {
 describe('OpsNoticesCard', () => {
   it('renders nothing when there are no open notices', async () => {
     fetchEventOpsNotices.mockResolvedValue([]);
-    const { container } = renderCard();
-    await waitFor(() => expect(fetchEventOpsNotices).toHaveBeenCalled());
-    await waitFor(() => expect(container).toBeEmptyDOMElement());
+    const { container, client } = renderCard();
+    await waitFor(() =>
+      expect(client.getQueryState(QUERY_KEY)?.status).toBe('success'),
+    );
+    expect(container).toBeEmptyDOMElement();
   });
 
   it('renders nothing while loading', () => {
@@ -166,12 +183,60 @@ describe('OpsNoticesCard', () => {
     );
   });
 
-  it('logs a resolve failure', async () => {
+  it('logs a resolve failure and shows an error toast', async () => {
     fetchEventOpsNotices.mockResolvedValue([urgent]);
     resolveEventOpsNotice.mockRejectedValue(new Error('boom'));
     renderCard();
     fireEvent.click(await screen.findByTestId('ops-notice-resolve-1'));
     await waitFor(() => expect(logger.error).toHaveBeenCalled());
+    expect(toast.error).toHaveBeenCalledWith("Couldn't resolve notice: boom");
+  });
+
+  it('warns and refetches when the notice is already gone', async () => {
+    fetchEventOpsNotices.mockResolvedValueOnce([urgent]).mockResolvedValue([]);
+    resolveEventOpsNotice.mockRejectedValue(
+      httpError(404, { detail: 'Not found.' }),
+    );
+    renderCard();
+    fireEvent.click(await screen.findByTestId('ops-notice-resolve-1'));
+    await waitFor(() =>
+      expect(toast.warning).toHaveBeenCalledWith('Notice was already resolved'),
+    );
+    await waitFor(() => expect(fetchEventOpsNotices).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(screen.queryByTestId('ops-notices-card')).toBeNull(),
+    );
+  });
+
+  it('explains a task resolve rejection and refetches', async () => {
+    fetchEventOpsNotices.mockResolvedValue([urgent]);
+    resolveEventOpsNotice.mockRejectedValue(
+      httpError(400, { code: 'task_resolve_unsupported' }),
+    );
+    renderCard();
+    fireEvent.click(await screen.findByTestId('ops-notice-resolve-1'));
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith(
+        "Couldn't resolve notice: task notices close on their own",
+      ),
+    );
+    await waitFor(() => expect(fetchEventOpsNotices).toHaveBeenCalledTimes(2));
+  });
+
+  it('keeps loaded rows when a background refetch fails', async () => {
+    fetchEventOpsNotices
+      .mockResolvedValueOnce([urgent])
+      .mockRejectedValue(new Error('boom'));
+    const { client } = renderCard();
+    await screen.findByTestId('ops-notice-row-1');
+    await client.refetchQueries({ queryKey: QUERY_KEY });
+    await waitFor(() =>
+      expect(client.getQueryState(QUERY_KEY)?.status).toBe('error'),
+    );
+    expect(screen.getByTestId('ops-notice-row-1')).toBeInTheDocument();
+    expect(
+      await screen.findByText("Couldn't refresh operations notices"),
+    ).toBeInTheDocument();
   });
 
   it('shows an error line on fetch failure', async () => {
@@ -181,6 +246,20 @@ describe('OpsNoticesCard', () => {
       await screen.findByText("Couldn't load operations notices"),
     ).toBeInTheDocument();
     expect(logger.error).toHaveBeenCalled();
+  });
+
+  it('logs a fetch failure once per failure streak', async () => {
+    fetchEventOpsNotices.mockImplementation(() =>
+      Promise.reject(new Error('boom')),
+    );
+    const { client } = renderCard();
+    await screen.findByText("Couldn't load operations notices");
+    await client.refetchQueries({ queryKey: QUERY_KEY });
+    await waitFor(() => expect(fetchEventOpsNotices).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(client.getQueryState(QUERY_KEY)?.fetchStatus).toBe('idle'),
+    );
+    expect(logger.error).toHaveBeenCalledTimes(1);
   });
 
   it('refetches every 15 seconds', async () => {
