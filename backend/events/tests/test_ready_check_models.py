@@ -1,9 +1,12 @@
 from datetime import time, timedelta
 
+from django.contrib.admin.sites import site as admin_site
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
+from django.test import RequestFactory
 from django.utils import timezone as tz
 
+from app.models import CustomUser
 from events.constants import RepeatFrequency, SignupStatus
 from events.models import (
     Event,
@@ -53,7 +56,7 @@ class ReadyCheckModelTests(EventTestCase):
             scheduled_at=tz.now() + timedelta(days=1),
         )
 
-    def _signup(self, event: Event, user=None) -> EventSignup:
+    def _signup(self, event: Event, user: CustomUser | None = None) -> EventSignup:
         return EventSignup.objects.create(
             event=event, user=user or self.user, status=SignupStatus.APPROVED
         )
@@ -68,11 +71,11 @@ class ReadyCheckModelTests(EventTestCase):
             starts_at=tz.now().date() + timedelta(days=30),
             created_by=self.admin,
         )
-        rows = {
-            "event": self._event(),
-            "series": repeater,
-            "defaults": OrgEventDefaults(organization=self.org),
-        }
+        defaults = OrgEventDefaults.objects.create(organization=self.org)
+        event = self._event()
+        for row in (repeater, defaults, event):
+            row.refresh_from_db()
+        rows = {"event": event, "series": repeater, "defaults": defaults}
         for label, row in rows.items():
             for field, expected in EXPECTED_DEFAULTS.items():
                 with self.subTest(target=label, field=field):
@@ -150,6 +153,24 @@ class ReadyCheckModelTests(EventTestCase):
 
         ReadyCheckEntry.for_signup(rc, signup).full_clean()
 
+    def test_clean_without_ready_check_raises_validation_error(self) -> None:
+        signup = self._signup(self._event())
+        entry = ReadyCheckEntry(signup=signup, user=self.user)
+        with self.assertRaises(ValidationError) as ctx:
+            entry.full_clean()
+        self.assertIn("ready_check", ctx.exception.message_dict)
+
+    def test_admin_add_disabled(self) -> None:
+        request = RequestFactory().get("/")
+        request.user = CustomUser.objects.create_superuser(
+            username="rc_superuser", password="x"
+        )
+        for model in (ReadyCheck, ReadyCheckEntry, EventVoicePresence):
+            with self.subTest(model=model.__name__):
+                self.assertFalse(
+                    admin_site._registry[model].has_add_permission(request)
+                )
+
     def test_signup_delete_keeps_entry(self) -> None:
         event = self._event()
         rc = ReadyCheck.objects.create(event=event)
@@ -165,7 +186,8 @@ class ReadyCheckModelTests(EventTestCase):
 
     def test_presence_unique_and_cascade(self) -> None:
         event = self._event()
-        EventVoicePresence.objects.create(event=event, user=self.user)
+        event_pk = event.pk
+        presence = EventVoicePresence.objects.create(event=event, user=self.user)
         with self.assertRaises(IntegrityError), transaction.atomic():
             EventVoicePresence.objects.create(event=event, user=self.user)
 
@@ -176,4 +198,5 @@ class ReadyCheckModelTests(EventTestCase):
 
         self.assertFalse(ReadyCheck.objects.filter(pk=rc.pk).exists())
         self.assertFalse(ReadyCheckEntry.objects.filter(ready_check_id=rc.pk).exists())
-        self.assertFalse(EventVoicePresence.objects.filter(event_id=event.pk).exists())
+        self.assertFalse(EventVoicePresence.objects.filter(pk=presence.pk).exists())
+        self.assertFalse(EventVoicePresence.objects.filter(event_id=event_pk).exists())

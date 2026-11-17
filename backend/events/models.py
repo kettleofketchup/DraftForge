@@ -794,7 +794,7 @@ class ReadyCheckEntry(models.Model):
 
     def clean(self) -> None:
         super().clean()
-        if self.signup_id is None:
+        if self.signup_id is None or self.ready_check_id is None:
             return
         if self.signup.user_id != self.user_id:
             raise ValidationError({"user": "Must match the signup's user."})

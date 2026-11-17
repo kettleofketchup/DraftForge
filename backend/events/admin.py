@@ -50,6 +50,9 @@ class _ReadOnlyFieldsAdmin(admin.ModelAdmin):
     ) -> list[str]:
         return [field.name for field in self.model._meta.fields]
 
+    def has_add_permission(self, request: HttpRequest) -> bool:
+        return False
+
 
 @admin.register(ReadyCheck)
 class ReadyCheckAdmin(_ReadOnlyFieldsAdmin):
