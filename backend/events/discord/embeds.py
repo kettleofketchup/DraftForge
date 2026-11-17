@@ -28,6 +28,10 @@ class _Listed(Protocol):
     status: str
 
 
+class _SeatListed(_Listed, Protocol):
+    holds_seat: bool
+
+
 SITE_URL = getattr(settings, "SITE_URL", "") or "https://localhost"
 
 # Colors
@@ -47,14 +51,17 @@ def _event_url(event: "EmbedEvent") -> str:
     return f"{SITE_URL}/events/{event.pk}" if SITE_URL else ""
 
 
-INACTIVE_STATUSES = {"cancelled", "rejected", "waitlisted", "tentative"}
 DECLINED_STATUSES = {"cancelled", "rejected"}
 CONFIRMED_STATUSES = {"confirmed", "approved"}
 
 
+def _seated(signups: Sequence[_SeatListed]) -> list[_SeatListed]:
+    return [s for s in signups if s.holds_seat]
+
+
 def _signup_counts(event: "EmbedEvent") -> tuple[int, int]:
     signups = get_event_signups(event.pk)
-    active = [s for s in signups if s.status not in INACTIVE_STATUSES]
+    active = _seated(signups)
     confirmed = [s for s in signups if s.status == "confirmed"]
     return len(active), len(confirmed)
 
@@ -203,7 +210,7 @@ def build_announcement_embeds(event: "EmbedEvent") -> list[dict[str, Any]]:
     # Embed 2: Participants (fetched via public API)
     all_signups = get_event_signups(event.pk)
 
-    active = [s for s in all_signups if s.status not in INACTIVE_STATUSES]
+    active = _seated(all_signups)
     count = len(active)
     max_display = str(event.max_players) if event.max_players else "\u221e"
 
@@ -315,7 +322,7 @@ def build_announcement_v2(event: "EmbedEvent") -> dict[str, Any]:
     all_signups = get_event_signups(event.pk)
 
     # Signed Up
-    active = [s for s in all_signups if s.status not in INACTIVE_STATUSES]
+    active = _seated(all_signups)
     count = len(active)
     max_display = str(event.max_players) if event.max_players else "\u221e"
 

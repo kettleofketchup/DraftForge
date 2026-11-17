@@ -1,12 +1,15 @@
 from datetime import timedelta
 
-from django.test import TransactionTestCase
+from django.test import TransactionTestCase, override_settings
 from django.utils import timezone as tz
+from rest_framework.request import Request
+from rest_framework.test import APIRequestFactory
 
 from app.models import CustomUser, Organization
 from events.capacity import count_seats, has_free_seat
 from events.constants import EventState, SignupStatus
 from events.models import Event, EventSignup
+from events.serializers import EventSignupSerializer
 from events.services import (
     _promote_from_waitlist,
     cancel_signup,
@@ -14,6 +17,7 @@ from events.services import (
     process_rsvp,
 )
 from events.tests.base import EventTestCase
+from events.views import EventSignupViewSet, _annotate_event_qs
 
 
 class SeatCapacityTests(EventTestCase):
@@ -102,6 +106,40 @@ class SeatCapacityTests(EventTestCase):
                 event=event, user=self.make_user(), status=status
             )
         self.assertEqual(count_seats(event), 4)
+
+
+class SeatCountSurfacesTests(EventTestCase):
+    def _one_signup_per_status(self) -> Event:
+        event = self.make_event()
+        for status in SignupStatus.values:
+            EventSignup.objects.create(
+                event=event, user=self.make_user(), status=status
+            )
+        return event
+
+    def test_counts_agree_for_every_status(self) -> None:
+        event = self._one_signup_per_status()
+
+        annotated = _annotate_event_qs(Event.objects.filter(pk=event.pk)).get()
+        rows = self.client.get("/api/events/signups/", {"event": event.pk}).json()
+
+        self.assertEqual(annotated.signup_count, count_seats(event))
+        self.assertEqual(sum(r["holds_seat"] for r in rows), count_seats(event))
+
+    @override_settings(CACHEOPS_ENABLED=False)
+    def test_signup_list_holds_seat_no_extra_queries(self) -> None:
+        event = self._one_signup_per_status()
+        view = EventSignupViewSet()
+        view.request = Request(
+            APIRequestFactory().get("/api/events/signups/", {"event": event.pk})
+        )
+        signups = list(view.get_queryset())
+        serializer = EventSignupSerializer()
+
+        with self.assertNumQueries(0):
+            flags = [serializer.get_holds_seat(s) for s in signups]
+
+        self.assertEqual(sum(flags), count_seats(event))
 
 
 class PromoteRequiresAtomicTests(TransactionTestCase):

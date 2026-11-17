@@ -1,8 +1,16 @@
 """Issue #194 — show up to 40 users, splitting fields on >1024-char overflow."""
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
+
+from events.discord.embeds import (
+    _signup_counts,
+    build_announcement_embeds,
+    build_announcement_v2,
+)
+from events.schemas import EventSignupSchema
+from events.tests.base import EventTestCase
 
 
 def _mock_signup(name, status="confirmed"):
@@ -68,3 +76,47 @@ class UserListSplitTest(TestCase):
         fields = build_user_list_fields([], name="Signed Up", inline=True)
         self.assertEqual(len(fields), 1)
         self.assertEqual(fields[0]["value"], "*None yet*")
+
+
+class SignedUpFollowsHoldsSeatTest(EventTestCase):
+    def _row(self, pk: int, status: str, holds_seat: bool) -> EventSignupSchema:
+        return EventSignupSchema.model_validate(
+            {
+                "id": pk,
+                "event": 1,
+                "user": pk,
+                "username": f"player{pk}",
+                "status": status,
+                "holds_seat": holds_seat,
+            }
+        )
+
+    def _rows(self) -> list[EventSignupSchema]:
+        return [
+            self._row(1, "confirmed", True),
+            self._row(2, "rsvp", True),
+            self._row(3, "tentative", False),
+            self._row(4, "waitlisted", False),
+            self._row(5, "rsvp", False),
+        ]
+
+    def test_signup_counts_use_holds_seat(self) -> None:
+        with patch(
+            "events.discord.embeds.get_event_signups", return_value=self._rows()
+        ):
+            active, confirmed = _signup_counts(self.event)
+        self.assertEqual((active, confirmed), (2, 1))
+
+    def test_signed_up_lists_exclude_seatless_rows(self) -> None:
+        event = self.make_event(max_players=10)
+        with patch(
+            "events.discord.embeds.get_event_signups", return_value=self._rows()
+        ):
+            embeds = build_announcement_embeds(event)
+            v2_fields = build_announcement_v2(event)["embeds"][1]["fields"]
+
+        for fields in (embeds[1]["fields"], v2_fields):
+            signed_up = next(f for f in fields if "Signed Up" in f["name"])
+            self.assertIn("(2/10)", signed_up["name"])
+            for name in ("player3", "player4", "player5"):
+                self.assertNotIn(name, signed_up["value"])

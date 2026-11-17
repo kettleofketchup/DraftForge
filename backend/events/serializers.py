@@ -14,6 +14,7 @@ from app.permissions_org import (
 )
 from app.serializers import TournamentUserSerializer, _serialize_users_with_mmr
 from app.user_cache import serialize_users_core
+from events.capacity import seat_holding_statuses
 from events.mmr_suggestions import suggest_mmr
 from events.models import (
     Event,
@@ -628,6 +629,7 @@ class EventSignupSerializer(serializers.ModelSerializer):
     suggested_mmr = serializers.SerializerMethodField()
     suggested_mmr_range = serializers.SerializerMethodField()
     suggested_mmr_range_source = serializers.SerializerMethodField()
+    holds_seat = serializers.SerializerMethodField()
 
     class Meta:
         model = EventSignup
@@ -649,6 +651,7 @@ class EventSignupSerializer(serializers.ModelSerializer):
             "signup_type",
             "status",
             "waitlist_position",
+            "holds_seat",
             "created_at",
             "updated_at",
         ]
@@ -739,6 +742,9 @@ class EventSignupSerializer(serializers.ModelSerializer):
             for key in ("guildNickname", "mmr", "league_mmr"):
                 data.pop(key, None)
         return data
+
+    def get_holds_seat(self, signup: EventSignup) -> bool:
+        return signup.status in seat_holding_statuses(signup.event)
 
     def get_dota_profile(self, obj: EventSignup) -> dict[str, Any] | None:
         """Return DotaProfile data if the user has one for this event's org."""

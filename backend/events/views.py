@@ -41,7 +41,7 @@ from app.permissions_org import (
     has_org_staff_access,
 )
 from events.completion import close_event
-from events.constants import EventState, SignupStatus
+from events.constants import SEAT_HOLDING_STATUSES, EventState, SignupStatus
 from events.models import (
     Event,
     EventRepeater,
@@ -108,13 +108,7 @@ def _annotate_event_qs(qs: QuerySet[Event]) -> QuerySet[Event]:
     """Add signup_count and confirmed_count annotations."""
     return qs.annotate(
         signup_count=Count(
-            "signups",
-            filter=~Q(
-                signups__status__in=[
-                    SignupStatus.CANCELLED,
-                    SignupStatus.REJECTED,
-                ]
-            ),
+            "signups", filter=Q(signups__status__in=SEAT_HOLDING_STATUSES)
         ),
         confirmed_count=Count(
             "signups",
