@@ -8,7 +8,9 @@ defers until commit when called inside @transaction.atomic.
 Field whitelists on update endpoints prevent unintended field modifications.
 """
 
+from collections.abc import Mapping
 from datetime import timedelta
+from typing import Any
 
 from django.utils import timezone as tz
 from rest_framework import status
@@ -34,7 +36,7 @@ _auth = [InternalServiceAuth]
 _perm = [IsInternalService]
 
 
-def _validate_required(data, fields):
+def _validate_required(data: Mapping[str, Any], fields: list[str]) -> Response | None:
     """Return error Response if required fields are missing, else None."""
     missing = [f for f in fields if f not in data]
     if missing:
@@ -53,7 +55,7 @@ def _validate_required(data, fields):
 @api_view(["POST"])
 @authentication_classes(_auth)
 @permission_classes(_perm)
-def create_discord_message_log(request):
+def create_discord_message_log(request: Request) -> Response:
     """Create a DiscordMessageLog entry.
 
     For reminder-type sources, checks idempotency: if a successful log
@@ -110,7 +112,7 @@ def create_discord_message_log(request):
 @api_view(["POST"])
 @authentication_classes(_auth)
 @permission_classes(_perm)
-def claim_discord_message_log(request):
+def claim_discord_message_log(request: Request) -> Response:
     """Acquire a pre-send lease for a (source, source_id) Discord message.
 
     Worker passes channel_id + embed_data so the row is fully populated at
@@ -154,7 +156,7 @@ def claim_discord_message_log(request):
 @api_view(["POST"])
 @authentication_classes(_auth)
 @permission_classes(_perm)
-def finalize_discord_message_log(request, log_id):
+def finalize_discord_message_log(request: Request, log_id: int) -> Response:
     """Update the lease row to its final state after the Discord HTTP send.
 
     Returns 200 on update or 410 Gone if the row was already swept by
@@ -183,7 +185,7 @@ def finalize_discord_message_log(request, log_id):
 @api_view(["GET"])
 @authentication_classes(_auth)
 @permission_classes(_perm)
-def check_message_log_exists(request):
+def check_message_log_exists(request: Request) -> Response:
     """Check if a non-failed DiscordMessageLog row exists (for celery idempotency).
 
     Matches the partial unique condition: NULL pending or True succeeded
@@ -213,7 +215,7 @@ def check_message_log_exists(request):
 @api_view(["GET"])
 @authentication_classes(_auth)
 @permission_classes(_perm)
-def search_message_logs(request):
+def search_message_logs(request: Request) -> Response:
     """Search DiscordMessageLog entries with filters.
 
     Query params: source, source_id, success, source__in (comma-separated),
@@ -260,7 +262,7 @@ def search_message_logs(request):
 @api_view(["GET"])
 @authentication_classes(_auth)
 @permission_classes(_perm)
-def get_discord_event_state(request, event_id):
+def get_discord_event_state(request: Request, event_id: int) -> Response:
     """Get DiscordEvent + related records for an event (celery reads)."""
     from discordbot.models import (
         DiscordEvent,
@@ -313,7 +315,7 @@ def get_discord_event_state(request, event_id):
 @api_view(["GET"])
 @authentication_classes(_auth)
 @permission_classes(_perm)
-def get_sync_discord_state(request):
+def get_sync_discord_state(request: Request) -> Response:
     """Bulk state for sync_discord_events — all active events' Discord status.
 
     Returns event IDs that have: signup posts, scheduled events, recent log attempts.
@@ -400,7 +402,7 @@ def get_sync_discord_state(request):
 @api_view(["GET"])
 @authentication_classes(_auth)
 @permission_classes(_perm)
-def get_repeater_subscribers(request, repeater_id):
+def get_repeater_subscribers(request: Request, repeater_id: int) -> Response:
     """Get subscribers for a repeater with Discord IDs and org membership."""
     from events.models import RepeaterSubscription
     from org.models import OrgUser
@@ -430,7 +432,7 @@ def get_repeater_subscribers(request, repeater_id):
 @api_view(["GET"])
 @authentication_classes(_auth)
 @permission_classes(_perm)
-def get_due_scheduled_events(request):
+def get_due_scheduled_events(request: Request) -> Response:
     """Get ScheduledEvents that are due for posting."""
     from discordbot.models import ScheduledEvent
 
@@ -464,7 +466,7 @@ def get_due_scheduled_events(request):
 @api_view(["GET"])
 @authentication_classes(_auth)
 @permission_classes(_perm)
-def get_event_for_task(request, event_id):
+def get_event_for_task(request: Request, event_id: int) -> Response:
     """Get full event data + org Discord config needed by celery tasks."""
     from events.models import Event
 
@@ -493,7 +495,7 @@ def get_event_for_task(request, event_id):
 @api_view(["POST"])
 @authentication_classes(_auth)
 @permission_classes(_perm)
-def create_discord_event_log(request):
+def create_discord_event_log(request: Request) -> Response:
     """Create a DiscordEventLog audit entry."""
     from discordbot.models import DiscordEvent, DiscordEventLog
 
@@ -526,7 +528,7 @@ def create_discord_event_log(request):
 @api_view(["POST"])
 @authentication_classes(_auth)
 @permission_classes(_perm)
-def create_tournament_log(request):
+def create_tournament_log(request: Request) -> Response:
     """Create DiscordTournamentLog entry."""
     from discordbot.models import DiscordTournamentLog
 
@@ -554,7 +556,7 @@ TOURNAMENT_LOG_UPDATE_FIELDS = {"recipient_count", "message", "success"}
 @api_view(["PATCH"])
 @authentication_classes(_auth)
 @permission_classes(_perm)
-def update_tournament_log(request, pk):
+def update_tournament_log(request: Request, pk: int) -> Response:
     """Update DiscordTournamentLog entry (recipient_count, message, success)."""
     from discordbot.models import DiscordTournamentLog
 
@@ -580,7 +582,7 @@ DISCORD_EVENT_UPDATE_FIELDS = {
 @api_view(["POST"])
 @authentication_classes(_auth)
 @permission_classes(_perm)
-def get_or_create_discord_event(request):
+def get_or_create_discord_event(request: Request) -> Response:
     """Get or create a DiscordEvent for an event."""
     from discordbot.models import DiscordEvent
 
@@ -602,7 +604,7 @@ def get_or_create_discord_event(request):
 @api_view(["PATCH"])
 @authentication_classes(_auth)
 @permission_classes(_perm)
-def update_discord_event(request, pk):
+def update_discord_event(request: Request, pk: int) -> Response:
     """Update DiscordEvent fields (whitelisted only)."""
     from discordbot.models import DiscordEvent
 
@@ -634,7 +636,7 @@ SIGNUP_MSG_UPDATE_FIELDS = {
 @api_view(["POST"])
 @authentication_classes(_auth)
 @permission_classes(_perm)
-def clear_event_signup_state(request):
+def clear_event_signup_state(request: Request) -> Response:
     """Reset the signup-post dedup state so the next sync (or manual re-fire)
     recreates the post.
 
@@ -670,7 +672,7 @@ def clear_event_signup_state(request):
 @api_view(["POST"])
 @authentication_classes(_auth)
 @permission_classes(_perm)
-def create_or_update_signup_message(request):
+def create_or_update_signup_message(request: Request) -> Response:
     """Create/update DiscordEventMsgSignup (whitelisted fields only)."""
     from discordbot.models import ChannelType, DiscordEventMsgSignup
 
@@ -712,7 +714,7 @@ ANNOUNCEMENT_UPDATE_FIELDS = {
 @api_view(["POST"])
 @authentication_classes(_auth)
 @permission_classes(_perm)
-def create_or_update_announcement(request):
+def create_or_update_announcement(request: Request) -> Response:
     """Create/update DiscordEventMsgAnnouncement (whitelisted fields only)."""
     from discordbot.models import ChannelType, DiscordEventMsgAnnouncement
 
@@ -747,7 +749,7 @@ def create_or_update_announcement(request):
 @api_view(["POST"])
 @authentication_classes(_auth)
 @permission_classes(_perm)
-def create_event_dm(request):
+def create_event_dm(request: Request) -> Response:
     """Create DiscordEventDM record (crash-safe: create before send)."""
     from discordbot.models import DiscordEventDM
 
@@ -771,7 +773,7 @@ DM_UPDATE_FIELDS = {"message_id", "sent_at", "delivered"}
 @api_view(["PATCH"])
 @authentication_classes(_auth)
 @permission_classes(_perm)
-def update_event_dm(request, pk):
+def update_event_dm(request: Request, pk: int) -> Response:
     """Update DiscordEventDM delivery status (whitelisted fields only)."""
     from discordbot.models import DiscordEventDM
 
@@ -793,7 +795,7 @@ SCHEDULED_EVENT_UPDATE_FIELDS = {"discord_message_id", "next_post_at"}
 @api_view(["PATCH"])
 @authentication_classes(_auth)
 @permission_classes(_perm)
-def update_scheduled_event(request, pk):
+def update_scheduled_event(request: Request, pk: int) -> Response:
     """Update ScheduledEvent fields (whitelisted only)."""
     from discordbot.models import ScheduledEvent
 
@@ -869,7 +871,7 @@ def auto_close_event(request: Request, pk: int) -> Response:
 @api_view(["GET"])
 @authentication_classes(_auth)
 @permission_classes(_perm)
-def get_tournament_for_task(request, tournament_id):
+def get_tournament_for_task(request: Request, tournament_id: int) -> Response:
     """Get tournament config data for Celery tasks."""
     from app.models import Tournament
 
@@ -895,7 +897,7 @@ def get_tournament_for_task(request, tournament_id):
 @api_view(["GET"])
 @authentication_classes(_auth)
 @permission_classes(_perm)
-def get_tournament_participants(request, tournament_id):
+def get_tournament_participants(request: Request, tournament_id: int) -> Response:
     """Get tournament participants with Discord IDs (for DM sending).
 
     Returns the full tournament membership pool (``Tournament.users``) —
@@ -929,7 +931,7 @@ def get_tournament_participants(request, tournament_id):
 @api_view(["GET"])
 @authentication_classes(_auth)
 @permission_classes(_perm)
-def get_match_participants(request, game_id):
+def get_match_participants(request: Request, game_id: int) -> Response:
     """Get players from both teams in a match (for hero draft DMs)."""
     from app.models import CustomUser, Game
 
@@ -1007,7 +1009,7 @@ def list_auto_herodraft_games(request: Request) -> Response:
 @api_view(["POST"])
 @authentication_classes(_auth)
 @permission_classes(_perm)
-def create_herodraft_for_game(request, game_id):
+def create_herodraft_for_game(request: Request, game_id: int) -> Response:
     """Atomically create a HeroDraft for a game (select_for_update guard).
 
     Returns existing herodraft if one already exists (idempotent).
@@ -1051,7 +1053,7 @@ def create_herodraft_for_game(request, game_id):
 @api_view(["GET"])
 @authentication_classes(_auth)
 @permission_classes(_perm)
-def list_users_for_avatar_check(request):
+def list_users_for_avatar_check(request: Request) -> Response:
     """Return users with Discord IDs for avatar validation.
 
     Query params:
@@ -1098,7 +1100,7 @@ def list_users_for_avatar_check(request):
 @api_view(["PATCH"])
 @authentication_classes(_auth)
 @permission_classes(_perm)
-def update_user_avatar(request, pk):
+def update_user_avatar(request: Request, pk: int) -> Response:
     """Update a user's avatar hash.
 
     Body: {"avatar": "new_avatar_hash"} or {"avatar": null} to clear.
@@ -1145,7 +1147,7 @@ def update_user_avatar(request, pk):
 @api_view(["GET"])
 @authentication_classes(_auth)
 @permission_classes(_perm)
-def get_active_repeaters(request):
+def get_active_repeaters(request: Request) -> Response:
     """List active repeaters for event generation task."""
     from events.models import EventRepeater
 
@@ -1167,7 +1169,7 @@ def get_active_repeaters(request):
 @api_view(["POST"])
 @authentication_classes(_auth)
 @permission_classes(_perm)
-def generate_repeater_events(request, repeater_id):
+def generate_repeater_events(request: Request, repeater_id: int) -> Response:
     """Generate upcoming events for a specific repeater."""
     from events.models import EventRepeater
     from events.services import generate_events_for_repeater
@@ -1204,7 +1206,9 @@ def generate_repeater_events(request, repeater_id):
 # ---------------------------------------------------------------------------
 
 
-def _parse_nonneg_int(value, field_name, default):
+def _parse_nonneg_int(
+    value: Any, field_name: str, default: int
+) -> tuple[int | None, Response | None]:
     """Parse a non-negative integer threshold field.
 
     Returns (parsed, error_response). Refuses negatives explicitly —
@@ -1231,7 +1235,7 @@ def _parse_nonneg_int(value, field_name, default):
 @api_view(["POST"])
 @authentication_classes(_auth)
 @permission_classes(_perm)
-def sweep_stale_discord_leases(request):
+def sweep_stale_discord_leases(request: Request) -> Response:
     """Reap stuck DiscordMessageLog rows.
 
     Body (all optional, must be non-negative):
