@@ -6,11 +6,11 @@ from django.contrib import admin
 from django.forms import ModelForm
 from django.http import HttpRequest
 
-from app.cache_utils import invalidate_after_commit
 from app.models import CustomUser
 from org.features import FeatureKey, set_org_feature
 from org.settings_service import (
     EDITABLE_FIELDS,
+    get_org_settings,
     normalize_warning_codes,
     update_org_settings,
 )
@@ -106,16 +106,14 @@ class OrgSettingsAdmin(admin.ModelAdmin):
     def save_model(
         self, request: HttpRequest, obj: OrgSettings, form: ModelForm, change: bool
     ) -> None:
-        if change:
-            update_org_settings(
-                obj.organization,
-                actor=cast(CustomUser, request.user),
-                changes={field: getattr(obj, field) for field in EDITABLE_FIELDS},
-            )
-            obj.refresh_from_db()
-            return
-        obj.save()
-        invalidate_after_commit(obj)
+        row = get_org_settings(obj.organization)
+        update_org_settings(
+            obj.organization,
+            actor=cast(CustomUser, request.user),
+            changes={field: getattr(obj, field) for field in EDITABLE_FIELDS},
+        )
+        obj.pk = row.pk
+        obj.refresh_from_db()
 
     def has_delete_permission(
         self, request: HttpRequest, obj: OrgSettings | None = None

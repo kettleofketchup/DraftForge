@@ -1,3 +1,4 @@
+import json
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -246,6 +247,23 @@ class OrgSettingsServiceTest(TestCase):
         self.assertNotIn(
             "org_settings_updated", [c.args[0] for c in log.info.call_args_list]
         )
+
+    def test_update_rejects_unknown_policy(self) -> None:
+        row = get_org_settings(self.org)
+        for bad in ("loud", "", None, 1):
+            with self.subTest(policy=bad), self.assertRaises(ValueError):
+                update_org_settings(
+                    self.org,
+                    actor=self.actor,
+                    changes={
+                        "staff_override_policy": bad,
+                        "staff_override_warning_codes": ["over_capacity"],
+                    },
+                )
+        after = OrgSettings.objects.nocache().get(pk=row.pk)
+        self.assertEqual(after.staff_override_policy, "silent")
+        self.assertEqual(after.staff_override_warning_codes, list(ALL_CODES))
+        self.assertFalse(OrgLog.objects.filter(organization=self.org).exists())
 
     def test_update_ignores_non_editable_keys(self) -> None:
         row = get_org_settings(self.org)
@@ -657,7 +675,35 @@ class OrgSettingsAdminTest(TestCase):
         self.assertEqual(
             row.staff_override_warning_codes, ["gate_outside", "over_capacity"]
         )
-        invalidate.assert_called_once_with(row)
+        invalidate.assert_called_with(row)
+        log = OrgLog.objects.get(organization=self.org, action="update")
+        self.assertEqual(log.actor, self.superuser)
+        self.assertEqual(
+            log.details,
+            {
+                "area": "settings",
+                "changed_fields": [
+                    "staff_override_policy",
+                    "staff_override_warning_codes",
+                ],
+            },
+        )
+
+    def test_admin_add_defaults_writes_no_audit(self) -> None:
+        response = self.client.post(
+            ADMIN_ADD_URL,
+            {
+                "organization": self.org.pk,
+                "staff_override_policy": "silent",
+                "staff_override_warning_codes": json.dumps(list(ALL_CODES)),
+                "_save": "Save",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(
+            OrgSettings.objects.nocache().filter(organization=self.org).exists()
+        )
+        self.assertFalse(OrgLog.objects.filter(organization=self.org).exists())
 
     def test_admin_rejects_bad_codes_json(self) -> None:
         row = get_org_settings(self.org)

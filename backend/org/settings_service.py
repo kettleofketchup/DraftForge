@@ -6,6 +6,7 @@ from app.cache_utils import invalidate_after_commit
 from app.models import CustomUser, Organization, OrgLog
 from org import settings_constants
 from org.models import OrgSettings
+from org.settings_constants import StaffOverridePolicy
 from telemetry.logging import get_logger
 
 __all__ = [
@@ -13,6 +14,7 @@ __all__ = [
     "get_org_settings",
     "normalize_warning_codes",
     "update_org_settings",
+    "validate_policy",
 ]
 
 log = get_logger(__name__)
@@ -36,6 +38,12 @@ def normalize_warning_codes(codes: object) -> list[str]:
         raise ValueError(f"Unknown warning code(s): {', '.join(unknown)}")
     wanted = set(codes)
     return [c for c in all_codes if c in wanted]
+
+
+def validate_policy(policy: object) -> str:
+    if not isinstance(policy, str) or policy not in StaffOverridePolicy.values:
+        raise ValueError(f"Unknown staff override policy: {policy!r}")
+    return policy
 
 
 def _cached_row(org_id: int) -> OrgSettings | None:
@@ -73,14 +81,16 @@ def update_org_settings(
 ) -> OrgSettings:
     with transaction.atomic():
         existing = get_org_settings(org)
-        row = OrgSettings.objects.nocache().get(pk=existing.pk)
+        row = OrgSettings.objects.nocache().select_for_update().get(pk=existing.pk)
 
         updates: dict[str, object] = {}
         for field in EDITABLE_FIELDS:
             if field not in changes:
                 continue
             value = changes[field]
-            if field == "staff_override_warning_codes":
+            if field == "staff_override_policy":
+                value = validate_policy(value)
+            elif field == "staff_override_warning_codes":
                 value = normalize_warning_codes(value)
             updates[field] = value
 
