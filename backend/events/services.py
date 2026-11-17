@@ -9,6 +9,7 @@ from zoneinfo import ZoneInfo
 from django.contrib.auth.models import AnonymousUser
 from django.core.exceptions import ValidationError
 from django.db import models, transaction
+from django.utils import timezone
 
 from app.cache_utils import invalidate_after_commit, invalidate_obj
 from app.functions.teamdraft import apply_draft_options
@@ -17,6 +18,7 @@ from events.capacity import has_free_seat, lock_event, seat_holding_statuses
 from events.constants import (
     EVENT_REOPEN_TRANSITIONS,
     EVENT_RESTART_TRANSITIONS,
+    UNMET_TRACKED_STATUSES,
     EventState,
     RepeatFrequency,
     SignupStatus,
@@ -121,6 +123,37 @@ def check_requirements(event: Event, user: CustomUser) -> bool:
     return not unmet_requirements(event, user)
 
 
+def _unmet_codes(event: Event, user: CustomUser) -> list[str]:
+    return [code.value for code in unmet_requirements(event, user)]
+
+
+def refresh_unmet_requirements(org_user: OrgUser) -> int:
+    """Recompute stored ``unmet_requirements`` on the user's open signups in
+    the org after a profile change; the status is not re-decided. Returns the
+    number of rows changed."""
+    signups = (
+        EventSignup.objects.nocache()
+        .filter(
+            user_id=org_user.user_id,
+            event__organization_id=org_user.organization_id,
+            status__in=UNMET_TRACKED_STATUSES,
+        )
+        .select_related("event", "user")
+    )
+    changed: list[EventSignup] = []
+    for signup in signups:
+        codes = _unmet_codes(signup.event, signup.user)
+        if codes == signup.unmet_requirements:
+            continue
+        signup.unmet_requirements = codes
+        signup.save(update_fields=["unmet_requirements"])
+        changed.append(signup)
+    if changed:
+        events = {signup.event_id: signup.event for signup in changed}
+        invalidate_after_commit(*changed, *events.values())
+    return len(changed)
+
+
 def resolve_or_create_org_user(
     user: CustomUser, organization: Organization
 ) -> "OrgUser":
@@ -183,6 +216,7 @@ def _create_signup(
 
     signup_type = SignupType.TEAM if event_team else SignupType.USER
     _sync_signup_steam_account(event, user)
+    unmet = _unmet_codes(event, user)
 
     if not has_free_seat(lock_event(event)):
         max_pos = (
@@ -198,6 +232,7 @@ def _create_signup(
             signup_type=signup_type,
             status=SignupStatus.WAITLISTED,
             waitlist_position=max_pos + 1,
+            unmet_requirements=unmet,
         )
         invalidate_after_commit(event)
         log.info(
@@ -212,7 +247,7 @@ def _create_signup(
 
     status = SignupStatus.RSVP
     if event.auto_approve:
-        if check_requirements(event, user):
+        if not unmet:
             status = SignupStatus.APPROVED
             if event.auto_confirm:
                 status = SignupStatus.CONFIRMED
@@ -225,6 +260,7 @@ def _create_signup(
         event_team=event_team,
         signup_type=signup_type,
         status=status,
+        unmet_requirements=unmet,
     )
     if status == SignupStatus.CONFIRMED:
         add_user_to_tournament(event, user)
@@ -473,6 +509,7 @@ def apply_signup_input(
 
     profile.save()
     invalidate_after_commit(profile, org_user, event)
+    refresh_unmet_requirements(org_user)
     log.info(
         "signup_input_applied",
         system="events",
@@ -507,8 +544,6 @@ APPROVABLE_STATUSES = [
 @transaction.atomic
 def approve_signup(signup: EventSignup, mmr_override: int | None = None) -> EventSignup:
     """Approve a signup, optionally setting the user's MMR."""
-    from django.utils import timezone as tz
-
     if signup.status not in APPROVABLE_STATUSES:
         raise ValueError(f"Cannot approve signup in '{signup.status}' status.")
 
@@ -519,7 +554,7 @@ def approve_signup(signup: EventSignup, mmr_override: int | None = None) -> Even
         org_user = resolve_or_create_org_user(signup.user, signup.event.organization)
         org_user.mmr = mmr_override
         org_user.has_active_dota_mmr = True
-        org_user.dota_mmr_last_verified = tz.now()
+        org_user.dota_mmr_last_verified = timezone.now()
         org_user.save(
             update_fields=["mmr", "has_active_dota_mmr", "dota_mmr_last_verified"]
         )
@@ -527,7 +562,15 @@ def approve_signup(signup: EventSignup, mmr_override: int | None = None) -> Even
 
     signup.status = SignupStatus.APPROVED
     signup.waitlist_position = None
-    signup.save(update_fields=["status", "waitlist_position", "updated_at"])
+    signup.unmet_requirements = []
+    signup.save(
+        update_fields=[
+            "status",
+            "waitlist_position",
+            "unmet_requirements",
+            "updated_at",
+        ]
+    )
     # If no roll call, approved means ready for tournament
     if not signup.event.roll_call_enabled:
         add_user_to_tournament(signup.event, signup.user)
@@ -620,7 +663,9 @@ def _promote_from_waitlist(event: Event) -> list[EventSignup]:
             break
         next_waitlisted.waitlist_position = None
         _sync_signup_steam_account(locked, next_waitlisted.user)
-        if locked.auto_approve and check_requirements(locked, next_waitlisted.user):
+        unmet = _unmet_codes(locked, next_waitlisted.user)
+        next_waitlisted.unmet_requirements = unmet
+        if locked.auto_approve and not unmet:
             next_waitlisted.status = SignupStatus.APPROVED
             if locked.auto_confirm:
                 next_waitlisted.status = SignupStatus.CONFIRMED
@@ -632,7 +677,12 @@ def _promote_from_waitlist(event: Event) -> list[EventSignup]:
         else:
             next_waitlisted.status = SignupStatus.RSVP
         next_waitlisted.save(
-            update_fields=["status", "waitlist_position", "updated_at"]
+            update_fields=[
+                "status",
+                "waitlist_position",
+                "unmet_requirements",
+                "updated_at",
+            ]
         )
         invalidate_after_commit(next_waitlisted)
         promoted.append(next_waitlisted)
@@ -717,7 +767,15 @@ def reinstate_signup(signup: EventSignup) -> EventSignup:
     else:
         signup.status = SignupStatus.RSVP
         signup.waitlist_position = None
-    signup.save(update_fields=["status", "waitlist_position", "updated_at"])
+    signup.unmet_requirements = _unmet_codes(event, signup.user)
+    signup.save(
+        update_fields=[
+            "status",
+            "waitlist_position",
+            "unmet_requirements",
+            "updated_at",
+        ]
+    )
     invalidate_after_commit(signup, event)
     transaction.on_commit(lambda: notify_signup_changed(event))
     return signup

@@ -29,6 +29,7 @@ from events.schemas import (
     DotaModalConfig,
     SignupInputPatch,
     dota_require_screenshot,
+    signed_up_text,
 )
 from org.models_profiles import PlayerDotaProfile
 from telemetry.logging import get_logger
@@ -367,7 +368,8 @@ class DotaHandler:
             return {
                 "success": True,
                 "signed_up": True,
-                "message": f"Screenshot saved! You're signed up. Status: **{result['status']}**",
+                "message": "Screenshot saved! "
+                + signed_up_text(result["status"], result.get("unmet_labels")),
             }
         except ValueError as e:
             log.warning(

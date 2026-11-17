@@ -7,6 +7,7 @@ registering a ``GameRequirements`` implementation there.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from enum import StrEnum
 from typing import Protocol
 
@@ -54,6 +55,11 @@ UNMET_LABELS: dict[Unmet, str] = {
 }
 
 _PROFILE_ATTRS = ("dota_profile", "deadlock_profile")
+
+
+def unmet_labels(codes: Iterable[str]) -> list[str]:
+    """Labels for stored codes; an unknown code is shown as-is."""
+    return [UNMET_LABELS[Unmet(code)] if code in Unmet else code for code in codes]
 
 
 def steam_friend_id_from_profiles(org_user: OrgUser | None) -> str:

@@ -1,9 +1,12 @@
 from itertools import product
+from unittest.mock import MagicMock, patch
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.test import override_settings
+from rest_framework.test import APIClient
 
-from app.models import CustomUser, GameType
+from app.models import CustomUser, GameType, Organization
+from events.constants import SignupStatus
 from events.discord.providers.dota import _check_dota_profile_complete
 from events.eligibility import (
     REQUIREMENT_CHECKS,
@@ -14,9 +17,17 @@ from events.eligibility import (
     unmet_requirements,
     validate_friend_id,
 )
-from events.models import Event
+from events.models import Event, EventSignup
 from events.schemas import DotaModalConfig, SignupInputPatch, dota_require_screenshot
-from events.services import apply_signup_input
+from events.serializers import EventSignupSerializer
+from events.services import (
+    apply_signup_input,
+    approve_signup,
+    cancel_signup,
+    process_rsvp,
+    refresh_unmet_requirements,
+    reinstate_signup,
+)
 from events.tests.base import EventTestCase
 from org.models import OrgUser
 from org.models_profiles import PlayerDeadlockProfile, PlayerDotaProfile
@@ -399,3 +410,191 @@ class ValidateFriendIdTests(EventTestCase):
         PlayerDotaProfile.objects.create(org_user=ou, unverified_friend_id="676767")
         PlayerDeadlockProfile.objects.create(org_user=ou, unverified_friend_id="676767")
         self.assertEqual(validate_friend_id("676767", ou), "676767")
+
+
+@patch("events.services.notify_signup_changed")
+class UnmetRequirementsPersistenceTests(EventTestCase):
+    def _org_user(self, user: CustomUser) -> OrgUser:
+        return OrgUser.objects.get(user=user, organization=self.org)
+
+    def _declared(self, user: CustomUser, rank_status: str, **fields: object) -> None:
+        profile, _ = PlayerDotaProfile.objects.get_or_create(
+            org_user=self._org_user(user)
+        )
+        profile.declare_rank(rank_status)
+        for name, value in fields.items():
+            setattr(profile, name, value)
+        profile.save()
+
+    def _screenshot_event(self, **overrides: object) -> Event:
+        fields: dict[str, object] = {
+            "auto_approve": False,
+            "discord_require_rank_screenshot": True,
+        }
+        fields.update(overrides)
+        return self.make_event(**fields)
+
+    def test_manual_approval_signup_stores_codes(self, _notify: MagicMock) -> None:
+        ev = self._screenshot_event()
+        u = self.make_user()
+        self._declared(u, "active", mmr=4000)
+        s = process_rsvp(ev, u)
+        self.assertEqual(s.status, SignupStatus.RSVP)
+        s.refresh_from_db()
+        self.assertEqual(s.unmet_requirements, [Unmet.RANK_SCREENSHOT_MISSING.value])
+
+    def test_auto_approve_signup_stores_codes(self, _notify: MagicMock) -> None:
+        ev = self.make_event(min_mmr=3000)
+        s = process_rsvp(ev, self.make_user())
+        self.assertEqual(s.status, SignupStatus.PENDING_APPROVAL)
+        s.refresh_from_db()
+        self.assertEqual(s.unmet_requirements, [Unmet.DOTA_RANK_UNDECLARED.value])
+
+    def test_eligible_signup_stores_no_codes(self, _notify: MagicMock) -> None:
+        s = process_rsvp(self.make_event(), self.make_user())
+        s.refresh_from_db()
+        self.assertEqual(s.unmet_requirements, [])
+
+    def test_waitlisted_signup_stores_codes(self, _notify: MagicMock) -> None:
+        ev = self.make_event(min_mmr=3000, max_players=1)
+        EventSignup.objects.create(
+            event=ev, user=self.make_user(), status=SignupStatus.APPROVED
+        )
+        s = process_rsvp(ev, self.make_user())
+        self.assertEqual(s.status, SignupStatus.WAITLISTED)
+        s.refresh_from_db()
+        self.assertEqual(s.unmet_requirements, [Unmet.DOTA_RANK_UNDECLARED.value])
+
+    def test_uploading_screenshot_clears_code(self, _notify: MagicMock) -> None:
+        ev = self._screenshot_event()
+        u = self.make_user()
+        self._declared(u, "active", mmr=4000)
+        s = process_rsvp(ev, u)
+        EventSignup.objects.get(pk=s.pk).unmet_requirements  # warm the cache
+        with self.captureOnCommitCallbacks(execute=True):
+            apply_signup_input(
+                org_user=self._org_user(u),
+                event=ev,
+                patch=SignupInputPatch(
+                    rank_screenshot="https://cdn.discordapp.com/x.png"
+                ),
+            )
+        s.refresh_from_db()
+        self.assertEqual(s.unmet_requirements, [])
+        self.assertEqual(s.status, SignupStatus.RSVP)
+        self.assertEqual(EventSignup.objects.get(pk=s.pk).unmet_requirements, [])
+
+    def test_refresh_skips_terminal_and_other_org_signups(
+        self, _notify: MagicMock
+    ) -> None:
+        u = self.make_user()
+        gated = self.make_event(min_mmr=3000)
+        other_org = Organization.objects.create(name="Other Unmet Org")
+        other_event = self.make_event(organization=other_org, min_mmr=3000)
+        confirmed = EventSignup.objects.create(
+            event=gated, user=u, status=SignupStatus.CONFIRMED
+        )
+        elsewhere = EventSignup.objects.create(
+            event=other_event, user=u, status=SignupStatus.RSVP
+        )
+        changed = refresh_unmet_requirements(self._org_user(u))
+        self.assertEqual(changed, 0)
+        confirmed.refresh_from_db()
+        elsewhere.refresh_from_db()
+        self.assertEqual(confirmed.unmet_requirements, [])
+        self.assertEqual(elsewhere.unmet_requirements, [])
+
+    def test_refresh_returns_rows_changed(self, _notify: MagicMock) -> None:
+        u = self.make_user()
+        gated = self.make_event(min_mmr=3000)
+        pending = EventSignup.objects.create(
+            event=gated, user=u, status=SignupStatus.PENDING_APPROVAL
+        )
+        ou = self._org_user(u)
+        self.assertEqual(refresh_unmet_requirements(ou), 1)
+        self.assertEqual(refresh_unmet_requirements(ou), 0)
+        pending.refresh_from_db()
+        self.assertEqual(pending.unmet_requirements, [Unmet.DOTA_RANK_UNDECLARED.value])
+
+    def test_profile_endpoint_refreshes_codes(self, _notify: MagicMock) -> None:
+        ev = self._screenshot_event()
+        u = self.make_user()
+        self._declared(u, "active", mmr=4000)
+        s = process_rsvp(ev, u)
+        api = APIClient()
+        api.force_authenticate(self.admin)
+        resp = api.patch(
+            f"/api/organizations/{self.org.pk}/users/{u.pk}/dota-profile/update/",
+            {"rank_screenshot": "https://cdn.discordapp.com/x.png"},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 200, resp.content)
+        s.refresh_from_db()
+        self.assertEqual(s.unmet_requirements, [])
+
+    def test_approve_clears(self, _notify: MagicMock) -> None:
+        ev = self._screenshot_event()
+        u = self.make_user()
+        self._declared(u, "active", mmr=4000)
+        s = process_rsvp(ev, u)
+        approve_signup(s)
+        s.refresh_from_db()
+        self.assertEqual(s.status, SignupStatus.APPROVED)
+        self.assertEqual(s.unmet_requirements, [])
+
+    def test_reinstate_stores_codes(self, _notify: MagicMock) -> None:
+        ev = self.make_event(min_mmr=3000)
+        u = self.make_user()
+        s = EventSignup.objects.create(event=ev, user=u, status=SignupStatus.CANCELLED)
+        reinstate_signup(s)
+        s.refresh_from_db()
+        self.assertEqual(s.unmet_requirements, [Unmet.DOTA_RANK_UNDECLARED.value])
+
+    def test_promoted_profileless_user_pending_with_reasons(
+        self, _notify: MagicMock
+    ) -> None:
+        ev = self.make_event(min_mmr=3000, max_players=1)
+        seated = EventSignup.objects.create(
+            event=ev, user=self.make_user(), status=SignupStatus.APPROVED
+        )
+        row = EventSignup.objects.create(
+            event=ev,
+            user=self.make_user(),
+            status=SignupStatus.WAITLISTED,
+            waitlist_position=1,
+        )
+        cancel_signup(seated)
+        row.refresh_from_db()
+        self.assertEqual(row.status, SignupStatus.PENDING_APPROVAL)
+        self.assertEqual(row.unmet_requirements, [Unmet.DOTA_RANK_UNDECLARED.value])
+
+
+@patch("events.services.notify_signup_changed")
+class UnmetRequirementsVisibilityTests(EventTestCase):
+    def test_serializer_hides_codes_from_other_members(
+        self, _notify: MagicMock
+    ) -> None:
+        ev = self.make_event(min_mmr=3000)
+        owner = self.make_user()
+        process_rsvp(ev, owner)
+        other = self.make_user()
+        api = APIClient()
+        expected = {
+            other: [],
+            owner: [Unmet.DOTA_RANK_UNDECLARED.value],
+            self.admin: [Unmet.DOTA_RANK_UNDECLARED.value],
+        }
+        for viewer, codes in expected.items():
+            with self.subTest(viewer=viewer.username):
+                api.force_authenticate(viewer)
+                resp = api.get(f"/api/events/signups/?event={ev.pk}")
+                self.assertEqual(resp.status_code, 200, resp.content)
+                body = resp.json()
+                rows = body["results"] if isinstance(body, dict) else body
+                (row,) = [r for r in rows if r["user"] == owner.pk]
+                self.assertEqual(row["unmet_requirements"], codes)
+
+    def test_serializer_without_request_hides_codes(self, _notify: MagicMock) -> None:
+        ev = self.make_event(min_mmr=3000)
+        s = process_rsvp(ev, self.make_user())
+        self.assertEqual(EventSignupSerializer(s).data["unmet_requirements"], [])

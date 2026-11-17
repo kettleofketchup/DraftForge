@@ -163,6 +163,7 @@ class EventSignupSchema(BaseModel):
     status: str = "rsvp"
     waitlist_position: Optional[int] = None
     holds_seat: bool | None = None
+    unmet_requirements: list[str] = Field(default_factory=list)
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 
@@ -375,6 +376,7 @@ class SignupActionResponse(BaseModel):
     # already_declined | already_tentative | positions_saved |
     # position_set
     status: str | None = None  # SignupStatus value when action == "signed_up"
+    unmet_labels: list[str] | None = None  # set when status is pending_approval
     message: str | None = None  # human-readable for error / already_declined / etc.
 
     # signup_modal_submit / signup_button: needs_modal payload
@@ -427,3 +429,11 @@ def _rebuild_forward_refs() -> None:
 
 
 _rebuild_forward_refs()
+
+
+def signed_up_text(status: str, unmet_labels: list[str] | None) -> str:
+    """Discord reply after a signup; lists why it is held for approval."""
+    text = f"You're signed up! Status: **{status}**"
+    if unmet_labels:
+        text += "\nPending approval: " + ", ".join(unmet_labels)
+    return text

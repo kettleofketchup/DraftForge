@@ -10,6 +10,7 @@ from app.models import CustomUser, League, Organization
 from app.permissions_org import (
     can_view_org_members,
     check_lobby_steam_league_id,
+    has_event_staff_access,
     request_user,
 )
 from app.serializers import TournamentUserSerializer, _serialize_users_with_mmr
@@ -630,6 +631,7 @@ class EventSignupSerializer(serializers.ModelSerializer):
     suggested_mmr_range = serializers.SerializerMethodField()
     suggested_mmr_range_source = serializers.SerializerMethodField()
     holds_seat = serializers.SerializerMethodField()
+    unmet_requirements = serializers.SerializerMethodField()
 
     class Meta:
         model = EventSignup
@@ -652,6 +654,7 @@ class EventSignupSerializer(serializers.ModelSerializer):
             "status",
             "waitlist_position",
             "holds_seat",
+            "unmet_requirements",
             "created_at",
             "updated_at",
         ]
@@ -745,6 +748,22 @@ class EventSignupSerializer(serializers.ModelSerializer):
 
     def get_holds_seat(self, signup: EventSignup) -> bool:
         return signup.status in seat_holding_statuses(signup.event)
+
+    def get_unmet_requirements(self, signup: EventSignup) -> list[str]:
+        """Visible to the signup owner and event staff only."""
+        request = self.context.get("request")
+        if request is None:
+            return []
+        user = request.user
+        if not user.is_authenticated:
+            return []
+        if user.pk != signup.user_id:
+            cache: dict[int, bool] = self.context.setdefault("_event_staff", {})
+            if signup.event_id not in cache:
+                cache[signup.event_id] = has_event_staff_access(user, signup.event)
+            if not cache[signup.event_id]:
+                return []
+        return list(signup.unmet_requirements or [])
 
     def get_dota_profile(self, obj: EventSignup) -> dict[str, Any] | None:
         """Return DotaProfile data if the user has one for this event's org."""

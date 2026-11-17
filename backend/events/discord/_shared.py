@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING
 
 from discordbot.models import DiscordEventLog
 from events.constants import SignupStatus
-from events.eligibility import steam_friend_id_from_profiles
+from events.eligibility import steam_friend_id_from_profiles, unmet_labels
 from events.models import Event, EventSignup
 from telemetry.logging import get_logger
 
@@ -196,7 +196,7 @@ def _existing_active_signup(event: Event, user: CustomUser) -> EventSignup | Non
     )
 
 
-def _direct_signup(event: Event, user: CustomUser) -> dict[str, str]:
+def _direct_signup(event: Event, user: CustomUser) -> dict[str, object]:
     """process_rsvp happy path: persist + log signup_persisted, return dict.
 
     Raises ValueError on rejection so callers can attach endpoint-specific
@@ -213,4 +213,7 @@ def _direct_signup(event: Event, user: CustomUser) -> dict[str, str]:
         signup_id=signup.pk,
         signup_status=signup.status,
     )
-    return {"action": "signed_up", "status": signup.status}
+    result: dict[str, object] = {"action": "signed_up", "status": signup.status}
+    if signup.status == SignupStatus.PENDING_APPROVAL:
+        result["unmet_labels"] = unmet_labels(signup.unmet_requirements)
+    return result

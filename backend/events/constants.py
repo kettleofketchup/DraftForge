@@ -61,6 +61,15 @@ SEAT_HOLDING_STATUSES: frozenset[str] = frozenset(
     }
 )
 
+# Signups whose stored unmet_requirements follow profile changes.
+UNMET_TRACKED_STATUSES: frozenset[str] = frozenset(
+    {
+        SignupStatus.RSVP,
+        SignupStatus.PENDING_APPROVAL,
+        SignupStatus.WAITLISTED,
+    }
+)
+
 
 class SignupType(models.TextChoices):
     USER = "user", "User"

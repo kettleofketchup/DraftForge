@@ -278,10 +278,10 @@ class SignupSteamSyncOrderingTest(EventTestCase):
     def _skips(self, logs: list[dict[str, object]]) -> list[dict[str, object]]:
         return [e for e in logs if e["event"] == "signup_steam_writethrough_skipped"]
 
-    def _recording_check(self, seen: list[int | None]) -> Callable[..., bool]:
-        def record(event: Event, user: CustomUser) -> bool:
+    def _recording_check(self, seen: list[int | None]) -> Callable[..., list]:
+        def record(event: Event, user: CustomUser) -> list:
             seen.append(user.steam_account_id)
-            return True
+            return []
 
         return record
 
@@ -303,7 +303,7 @@ class SignupSteamSyncOrderingTest(EventTestCase):
         user = self._user_with_friend_id("525252")
         seen: list[int | None] = []
         with patch(
-            "events.services.check_requirements",
+            "events.services.unmet_requirements",
             side_effect=self._recording_check(seen),
         ):
             process_rsvp(ev, user)
@@ -321,7 +321,7 @@ class SignupSteamSyncOrderingTest(EventTestCase):
         )
         seen: list[int | None] = []
         with patch(
-            "events.services.check_requirements",
+            "events.services.unmet_requirements",
             side_effect=self._recording_check(seen),
         ):
             cancel_signup(holder)

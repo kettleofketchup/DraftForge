@@ -12,6 +12,7 @@ from app.cache_utils import invalidate_obj
 from app.models import Organization
 from app.permissions_org import has_org_staff_access
 from events.eligibility import validate_friend_id
+from events.services import refresh_unmet_requirements
 from org.models import OrgUser
 from org.models_profiles import PlayerDotaProfile
 
@@ -84,6 +85,7 @@ def _apply_dota_profile_patch(
     profile.save()
     invalidate_obj(profile)
     invalidate_obj(org_user)
+    refresh_unmet_requirements(org_user)
     return profile
 
 
@@ -213,4 +215,5 @@ def delete_user_dota_profile(request: Request, org_id: int, user_pk: int) -> Res
     deleted, _ = PlayerDotaProfile.objects.filter(org_user=org_user).delete()
     if deleted:
         invalidate_obj(org_user)
+        refresh_unmet_requirements(org_user)
     return Response(status=status.HTTP_204_NO_CONTENT)

@@ -323,3 +323,11 @@ class SignupEndpointSteamGateTests(EventTestCase):
         resp = self._post(ev, {})
         self.assertEqual(resp.status_code, 201, resp.content)
         self.assertIn(resp.json()["status"], ("approved", "confirmed"))
+
+    def test_empty_profile_on_gated_event(self) -> None:
+        ev = self.make_event(min_mmr=3000)
+        self.api.force_authenticate(self.make_user())
+        resp = self._post(ev, {})
+        self.assertEqual(resp.status_code, 201, resp.content)
+        self.assertEqual(resp.json()["status"], "pending_approval")
+        self.assertEqual(resp.json()["unmet_requirements"], ["dota_rank_undeclared"])
