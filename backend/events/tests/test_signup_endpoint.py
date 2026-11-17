@@ -6,6 +6,7 @@ from rest_framework.test import APIClient
 
 from app.models import CustomUser, GameType, Organization
 from events.models import Event, EventState
+from events.tests.base import EventTestCase
 
 
 class SignupEndpointAuthTests(TestCase):
@@ -295,3 +296,30 @@ class SignupEndpointRollbackTests(TransactionTestCase):
         self.assertEqual(resp.status_code, 400)
         # Only one signup exists.
         self.assertEqual(EventSignup.objects.filter(event=event, user=user).count(), 1)
+
+
+class SignupEndpointSteamGateTests(EventTestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.api = APIClient()
+
+    def _post(self, event: Event, profile: dict[str, object]) -> object:
+        return self.api.post(
+            f"/api/events/{event.pk}/signup/",
+            {"intent": "rsvp", "profile": profile},
+            format="json",
+        )
+
+    def test_friend_id_in_request_satisfies_require_steam_id(self) -> None:
+        ev = self.make_event(require_steam_id=True)
+        self.api.force_authenticate(self.make_user())
+        resp = self._post(ev, {"unverified_friend_id": "98765"})
+        self.assertEqual(resp.status_code, 201, resp.content)
+        self.assertIn(resp.json()["status"], ("approved", "confirmed"))
+
+    def test_steamid_user_empty_patch_approved(self) -> None:
+        ev = self.make_event(require_steam_id=True)
+        self.api.force_authenticate(self.make_user(steamid=76561197960365432))
+        resp = self._post(ev, {})
+        self.assertEqual(resp.status_code, 201, resp.content)
+        self.assertIn(resp.json()["status"], ("approved", "confirmed"))

@@ -16,11 +16,14 @@ approve_signup(mmr_override=...).
 from django.db import transaction
 from django.test import TestCase
 from django.utils import timezone as tz
+from structlog.testing import capture_logs
 
 from app.models import CustomUser, Organization, PositionsModel
+from events.eligibility import sync_steam_account_from_profiles
 from events.models import Event, EventSignup
+from events.tests.base import EventTestCase
 from org.models import OrgUser
-from org.models_profiles import PlayerDotaProfile
+from org.models_profiles import PlayerDeadlockProfile, PlayerDotaProfile
 
 
 class SignupWritethroughTest(TestCase):
@@ -212,3 +215,84 @@ class SignupWritethroughInvariantsTest(SignupWritethroughTest):
             EventSignup.objects.filter(event=self.event).count(),
             initial_signup_count,
         )
+
+
+class SyncSteamAccountFromProfilesTest(EventTestCase):
+    def _user_with_friend_id(self, fid: str) -> CustomUser:
+        user = self.make_user()
+        org_user = OrgUser.objects.get(user=user, organization=self.org)
+        PlayerDotaProfile.objects.update_or_create(
+            org_user=org_user, defaults={"unverified_friend_id": fid}
+        )
+        return CustomUser.objects.get(pk=user.pk)
+
+    def _skips(self, logs: list[dict[str, object]]) -> list[dict[str, object]]:
+        return [e for e in logs if e["event"] == "signup_steam_writethrough_skipped"]
+
+    def test_writes_friend_id_and_reports_it(self) -> None:
+        user = self._user_with_friend_id("424242")
+        self.assertTrue(sync_steam_account_from_profiles(user, self.org))
+        user.refresh_from_db()
+        self.assertEqual(user.steam_account_id, 424242)
+
+    def test_reads_deadlock_profile_when_dota_has_none(self) -> None:
+        user = self.make_user()
+        org_user = OrgUser.objects.get(user=user, organization=self.org)
+        PlayerDeadlockProfile.objects.update_or_create(
+            org_user=org_user, defaults={"unverified_friend_id": "434343"}
+        )
+        user = CustomUser.objects.get(pk=user.pk)
+        self.assertTrue(sync_steam_account_from_profiles(user, self.org))
+        user.refresh_from_db()
+        self.assertEqual(user.steam_account_id, 434343)
+
+    def test_race_conflict_logs_and_leaves_user_unchanged(self) -> None:
+        user = self._user_with_friend_id("111111")
+        other = self.make_user()
+        other.steam_account_id = 111111
+        other.save()
+        with transaction.atomic():
+            with capture_logs() as logs:
+                wrote = sync_steam_account_from_profiles(user, self.org, event_id=77)
+            self.assertEqual(EventSignup.objects.filter(user=user).count(), 0)
+        self.assertFalse(wrote)
+        skips = self._skips(logs)
+        self.assertEqual(len(skips), 1)
+        self.assertEqual(skips[0]["reason"], "conflict")
+        self.assertEqual(skips[0]["conflicting_user_id"], other.pk)
+        self.assertEqual(skips[0]["user_id"], user.pk)
+        self.assertEqual(skips[0]["event_id"], 77)
+        self.assertEqual(skips[0]["log_level"], "warning")
+        self.assertIsNone(user.steam_account_id)
+        self.assertIsNone(user.steamid)
+        user.refresh_from_db()
+        self.assertIsNone(user.steam_account_id)
+
+    def test_out_of_range_friend_id_skips(self) -> None:
+        user = self._user_with_friend_id("9" * 20)
+        with capture_logs() as logs:
+            self.assertFalse(sync_steam_account_from_profiles(user, self.org))
+        self.assertEqual(self._skips(logs)[0]["reason"], "out_of_range")
+        user.refresh_from_db()
+        self.assertIsNone(user.steam_account_id)
+
+    def test_non_numeric_friend_id_skips(self) -> None:
+        user = self._user_with_friend_id("abc")
+        with capture_logs() as logs:
+            self.assertFalse(sync_steam_account_from_profiles(user, self.org))
+        self.assertEqual(self._skips(logs)[0]["reason"], "non_numeric")
+
+    def test_existing_account_id_is_kept(self) -> None:
+        user = self._user_with_friend_id("454545")
+        user.steam_account_id = 99999
+        user.save()
+        self.assertFalse(sync_steam_account_from_profiles(user, self.org))
+        user.refresh_from_db()
+        self.assertEqual(user.steam_account_id, 99999)
+
+    def test_event_without_org_skips(self) -> None:
+        user = self._user_with_friend_id("464646")
+        with self.assertNumQueries(0):
+            self.assertFalse(sync_steam_account_from_profiles(user, None))
+        user.refresh_from_db()
+        self.assertIsNone(user.steam_account_id)

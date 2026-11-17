@@ -28,7 +28,11 @@ from events.discord import (
     notify_new_event,
     notify_signup_changed,
 )
-from events.eligibility import unmet_requirements, validate_friend_id
+from events.eligibility import (
+    sync_steam_account_from_profiles,
+    unmet_requirements,
+    validate_friend_id,
+)
 from events.models import (
     DiscordEventConfigMixin,
     DiscordTournamentConfigMixin,
@@ -43,13 +47,13 @@ from events.models import (
 from events.reopen import ReopenNotPermitted, reopen_event
 from events.schemas import DotaModalConfig
 from lobby.passwords import PasswordMode, generate_password
+from org.models import OrgUser
 from org.models_profiles import PlayerDotaProfile
 from telemetry.logging import get_logger
 
 if TYPE_CHECKING:
     from discordbot.models import DiscordEvent
     from events.schemas import SignupInputPatch
-    from org.models import OrgUser
 
 logger = get_logger(__name__)
 log = get_logger(__name__)
@@ -128,8 +132,6 @@ def resolve_or_create_org_user(
       - staff_add_signup()
       - approve_signup()
     """
-    from org.models import OrgUser
-
     org_user, _ = OrgUser.objects.get_or_create(user=user, organization=organization)
     return org_user
 
@@ -180,6 +182,7 @@ def _create_signup(
             raise ValueError("User has already signed up for this event.")
 
     signup_type = SignupType.TEAM if event_team else SignupType.USER
+    sync_steam_account_from_profiles(user, event.organization, event_id=event.pk)
 
     if not has_free_seat(lock_event(event)):
         max_pos = (
@@ -596,53 +599,23 @@ def cancel_signup(signup: EventSignup) -> EventSignup:
 
 @transaction.atomic
 def apply_signup_writethrough(signup: EventSignup) -> EventSignup:
-    """Mirror signup-submitted PlayerDotaProfile fields to the User-level fields.
+    """Mirror the profile friend ID onto ``User.steam_account_id``
+    (first-write-wins, see ``sync_steam_account_from_profiles``).
 
-    Issue #196a — steam_account_id is first-write-wins on User.steam_account_id
-    (sourced from PlayerDotaProfile.unverified_friend_id — a CharField of digits on
-    PlayerProfileMixin). Positions are NOT mirrored (apply_signup_input owns them)
-    and MMR is NOT touched here (it routes through approve_signup).
-    Cache invalidation is deferred to commit so the 'incomplete profile' panel
-    reflects the writethrough on the next render rather than after the cacheops
-    1-hour TTL.
+    Positions are NOT mirrored (apply_signup_input owns them) and MMR is NOT
+    touched here (it routes through approve_signup). Cache invalidation is
+    deferred to commit so the 'incomplete profile' panel reflects the
+    writethrough on the next render rather than after the cacheops TTL.
     """
-    from app.models import PositionsModel
-    from org.models import OrgUser
-    from org.models_profiles import PlayerDotaProfile
-
     user = signup.user
     org = signup.event.organization
     if org is None:
         return signup
-
-    try:
-        org_user = OrgUser.objects.get(user=user, organization=org)
-    except OrgUser.DoesNotExist:
+    org_user = OrgUser.objects.filter(user=user, organization=org).first()
+    if org_user is None:
         return signup
 
-    try:
-        profile = PlayerDotaProfile.objects.get(org_user=org_user)
-    except PlayerDotaProfile.DoesNotExist:
-        return signup
-
-    # Positions are not mirrored from pos_N here: apply_signup_input already
-    # writes the user's priorities to CustomUser.positions, and copying the
-    # binary pos_N flags would flatten them.
-    user_positions = user.positions
-    if user_positions is None:
-        user_positions = PositionsModel.objects.create()
-        user.positions = user_positions
-
-    # steam_account_id: first-write-wins on User.steam_account_id (unique=True).
-    # Source: profile.unverified_friend_id (CharField of digits; empty string = none).
-    profile_friend_id = profile.unverified_friend_id
-    if profile_friend_id and not user.steam_account_id:
-        try:
-            user.steam_account_id = int(profile_friend_id)
-            user.save(update_fields=["steam_account_id", "steamid"])
-        except (ValueError, Exception):
-            # Non-numeric or integrity conflict; skip silently.
-            pass
+    sync_steam_account_from_profiles(user, org, event_id=signup.event_id)
 
     tournament = signup.event.tournament
     objs_to_invalidate = [user, org_user]
@@ -666,6 +639,9 @@ def _promote_from_waitlist(event: Event) -> list[EventSignup]:
         if next_waitlisted is None:
             break
         next_waitlisted.waitlist_position = None
+        sync_steam_account_from_profiles(
+            next_waitlisted.user, locked.organization, event_id=locked.pk
+        )
         if locked.auto_approve and check_requirements(locked, next_waitlisted.user):
             next_waitlisted.status = SignupStatus.APPROVED
             if locked.auto_confirm:

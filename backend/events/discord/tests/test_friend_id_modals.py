@@ -1,9 +1,10 @@
 from unittest.mock import patch
 
 from app.models import CustomUser, GameType
+from events.discord._shared import _direct_signup
 from events.discord.providers.deadlock import DeadlockHandler
 from events.discord.providers.dota import DotaHandler
-from events.models import EventSignup
+from events.models import EventSignup, SignupStatus
 from events.tests.base import EventTestCase
 from org.models import OrgUser
 from org.models_profiles import PlayerDeadlockProfile, PlayerDotaProfile
@@ -101,3 +102,18 @@ class FriendIdModalLoggingTests(EventTestCase):
 
     def test_dota_logs_rejection(self) -> None:
         self._assert_logged("dota", DotaHandler(), self.make_event())
+
+
+class DotaModalDirectSignupTests(EventTestCase):
+    def test_fresh_friend_id_then_direct_signup_is_approved(self) -> None:
+        ev = self.make_event(require_steam_id=True)
+        u = self.make_user()
+        ou = OrgUser.objects.get(user=u, organization=self.org)
+        result = DotaHandler().apply_modal_submit(
+            ev, ou, u, {"unverified_friend_id": "626262"}
+        )
+        self.assertEqual(result["action"], "needs_rank_status")
+        reply = _direct_signup(ev, u)
+        self.assertEqual(reply["status"], SignupStatus.APPROVED)
+        u.refresh_from_db()
+        self.assertEqual(u.steam_account_id, 626262)
