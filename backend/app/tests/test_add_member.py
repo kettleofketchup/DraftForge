@@ -16,7 +16,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from app.models import CustomUser, League, LeagueLog, Organization, OrgLog, Tournament
-from app.tests.raw_site_nickname import raw_guild_nickname, raw_site_nickname
+from app.tests.raw_site_nickname import raw_site_nickname
 from league.models import LeagueUser
 from org.models import OrgUser
 
@@ -712,4 +712,3 @@ class UpdateOrgUserGuildNicknameTest(TestCase):
         self.assertEqual(resp.status_code, 400)
         self.org_user.refresh_from_db()
         self.assertEqual(self.org_user.guild_nickname, "Synced")
-        self.assertIsNone(raw_guild_nickname(self.user.pk))

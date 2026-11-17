@@ -7,7 +7,7 @@ from rest_framework.test import APIClient
 
 from app.models import CustomUser
 from app.serializers import UserSerializer
-from app.tests.raw_site_nickname import raw_guild_nickname, raw_site_nickname
+from app.tests.raw_site_nickname import raw_site_nickname
 
 BACKEND_DIR = Path(settings.BASE_DIR)
 
@@ -51,7 +51,7 @@ class UserSerializerDiscordNamesTest(TestCase):
         )
         self.assertTrue(serializer.is_valid(), serializer.errors)
         serializer.save()
-        self.assertIsNone(raw_guild_nickname(self.user.pk))
+        self.assertNotIn("guildNickname", UserSerializer(self.user).data)
 
     def test_register_view_stores_client_global_name(self) -> None:
         staff = CustomUser.objects.create_user(

@@ -44,19 +44,17 @@ class ModelStateTest(TestCase):
         names = {index.name for index in CustomUser._meta.indexes}
         self.assertNotIn("app_customu_guildNi_602cf5_idx", names)
 
-    def test_columns_and_index_still_exist(self) -> None:
-        self.assertIn("guildNickname", _columns("app_customuser"))
-        self.assertIn("app_customu_guildNi_602cf5_idx", _indexes("app_customuser"))
+    def test_guild_nickname_column_and_index_dropped(self) -> None:
+        self.assertNotIn("guildNickname", _columns("app_customuser"))
+        self.assertNotIn("app_customu_guildNi_602cf5_idx", _indexes("app_customuser"))
+
+    def test_site_nickname_column_still_exists(self) -> None:
         self.assertIn("nickname", _columns("user_baseuserprofile"))
 
-    def test_inserts_leave_retired_columns_null(self) -> None:
+    def test_inserts_leave_site_nickname_column_null(self) -> None:
         user = CustomUser.objects.create(username="state_only_insert")
         self.assertTrue(BaseUserProfile.objects.filter(user=user).exists())
         with connection.cursor() as cursor:
-            cursor.execute(
-                'SELECT "guildNickname" FROM app_customuser WHERE id = %s', [user.pk]
-            )
-            self.assertIsNone(cursor.fetchone()[0])
             cursor.execute(
                 "SELECT nickname FROM user_baseuserprofile WHERE user_id = %s",
                 [user.pk],
