@@ -12,6 +12,7 @@ from django.conf import settings
 
 from app.constants import LOGO_URL
 from app.internal_client import get_event_signups
+from events.constants import SEAT_HOLDING_STATUSES
 from telemetry.logging import get_logger
 
 if TYPE_CHECKING:
@@ -29,7 +30,7 @@ class _Listed(Protocol):
 
 
 class _SeatListed(_Listed, Protocol):
-    holds_seat: bool
+    holds_seat: bool | None
 
 
 SITE_URL = getattr(settings, "SITE_URL", "") or "https://localhost"
@@ -55,8 +56,14 @@ DECLINED_STATUSES = {"cancelled", "rejected"}
 CONFIRMED_STATUSES = {"confirmed", "approved"}
 
 
+def _holds_seat(signup: _SeatListed) -> bool:
+    if signup.holds_seat is not None:
+        return signup.holds_seat
+    return signup.status in SEAT_HOLDING_STATUSES
+
+
 def _seated(signups: Sequence[_SeatListed]) -> list[_SeatListed]:
-    return [s for s in signups if s.holds_seat]
+    return [s for s in signups if _holds_seat(s)]
 
 
 def _signup_counts(event: "EmbedEvent") -> tuple[int, int]:

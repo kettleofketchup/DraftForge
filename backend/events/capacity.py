@@ -1,6 +1,7 @@
 from django.db import connection
+from django.db.models import Count, Q, QuerySet
 
-from events.constants import SEAT_HOLDING_STATUSES
+from events.constants import SEAT_HOLDING_STATUSES, SignupStatus
 from events.models import Event, EventSignup
 
 
@@ -13,6 +14,19 @@ def count_seats(event: Event) -> int:
         EventSignup.objects.nocache()
         .filter(event=event, status__in=seat_holding_statuses(event))
         .count()
+    )
+
+
+def with_signup_counts(qs: QuerySet[Event]) -> QuerySet[Event]:
+    # One SQL filter for every row: when seat_holding_statuses becomes per-event,
+    # this must follow it (SeatCountSurfacesTests guards parity with count_seats).
+    return qs.annotate(
+        signup_count=Count(
+            "signups", filter=Q(signups__status__in=SEAT_HOLDING_STATUSES)
+        ),
+        confirmed_count=Count(
+            "signups", filter=Q(signups__status=SignupStatus.CONFIRMED)
+        ),
     )
 
 

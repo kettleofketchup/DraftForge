@@ -1,4 +1,5 @@
 from datetime import timedelta
+from unittest.mock import MagicMock, patch
 
 from django.test import TransactionTestCase, override_settings
 from django.utils import timezone as tz
@@ -6,9 +7,10 @@ from rest_framework.request import Request
 from rest_framework.test import APIRequestFactory
 
 from app.models import CustomUser, Organization
-from events.capacity import count_seats, has_free_seat
+from events.capacity import count_seats, has_free_seat, with_signup_counts
 from events.constants import EventState, SignupStatus
 from events.models import Event, EventSignup
+from events.schemas import EventTaskSchema
 from events.serializers import EventSignupSerializer
 from events.services import (
     _promote_from_waitlist,
@@ -16,8 +18,11 @@ from events.services import (
     create_tentative_signup,
     process_rsvp,
 )
+from events.tasks import _sync_discord_event_signups_impl
 from events.tests.base import EventTestCase
-from events.views import EventSignupViewSet, _annotate_event_qs
+from events.views import EventSignupViewSet
+
+INTERNAL_TOKEN = "test-internal-token"
 
 
 class SeatCapacityTests(EventTestCase):
@@ -120,11 +125,57 @@ class SeatCountSurfacesTests(EventTestCase):
     def test_counts_agree_for_every_status(self) -> None:
         event = self._one_signup_per_status()
 
-        annotated = _annotate_event_qs(Event.objects.filter(pk=event.pk)).get()
+        annotated = with_signup_counts(Event.objects.filter(pk=event.pk)).get()
         rows = self.client.get("/api/events/signups/", {"event": event.pk}).json()
 
         self.assertEqual(annotated.signup_count, count_seats(event))
         self.assertEqual(sum(r["holds_seat"] for r in rows), count_seats(event))
+
+    def _internal_full(self, event_id: int) -> dict:
+        return self.client.get(
+            f"/api/internal/events/{event_id}/full/",
+            HTTP_X_INTERNAL_TOKEN=INTERNAL_TOKEN,
+        ).json()
+
+    @override_settings(INTERNAL_SERVICE_TOKEN=INTERNAL_TOKEN)
+    def test_internal_full_event_carries_seat_counts(self) -> None:
+        event = self._one_signup_per_status()
+
+        data = self._internal_full(event.pk)
+
+        self.assertEqual(data["signup_count"], count_seats(event))
+        self.assertEqual(
+            data["confirmed_count"],
+            event.signups.filter(status=SignupStatus.CONFIRMED).count(),
+        )
+
+    @override_settings(INTERNAL_SERVICE_TOKEN=INTERNAL_TOKEN)
+    def test_discord_scheduled_event_description_uses_seat_count(self) -> None:
+        event = self._one_signup_per_status()
+        Event.objects.filter(pk=event.pk).update(
+            discord_sync_signups=True, max_players=10
+        )
+        response = MagicMock(status_code=200)
+        response.json.return_value = {}
+
+        with (
+            patch(
+                "events.tasks.get_event_for_task",
+                side_effect=lambda pk: EventTaskSchema.model_validate(
+                    self._internal_full(pk)
+                ),
+            ),
+            patch(
+                "events.tasks.get_first_message_log",
+                return_value=MagicMock(discord_message_id="555"),
+            ),
+            patch("events.tasks.create_message_log"),
+            patch("events.tasks.req.patch", return_value=response) as patch_call,
+        ):
+            _sync_discord_event_signups_impl(event.pk)
+
+        description = patch_call.call_args.kwargs["json"]["description"]
+        self.assertIn(f"Signups: {count_seats(event)}/10", description)
 
     @override_settings(CACHEOPS_ENABLED=False)
     def test_signup_list_holds_seat_no_extra_queries(self) -> None:

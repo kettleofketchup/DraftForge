@@ -162,7 +162,7 @@ class EventSignupSchema(BaseModel):
     signup_type: str = "user"
     status: str = "rsvp"
     waitlist_position: Optional[int] = None
-    holds_seat: bool = False
+    holds_seat: bool | None = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 

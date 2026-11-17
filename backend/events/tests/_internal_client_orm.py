@@ -37,14 +37,15 @@ def _get_event_signups_orm(event_id):
 
 def _get_event_for_task_orm(pk):
     """Read full event data directly from the ORM and return EventTaskSchema."""
+    from events.capacity import with_signup_counts
     from events.models import Event
     from events.schemas import EventTaskSchema
     from events.serializers import EventSerializer
 
     try:
-        event = Event.objects.select_related("organization", "event_repeater").get(
-            pk=pk
-        )
+        event = with_signup_counts(
+            Event.objects.select_related("organization", "event_repeater").filter(pk=pk)
+        ).get()
     except Event.DoesNotExist:
         return None
     data = EventSerializer(event).data

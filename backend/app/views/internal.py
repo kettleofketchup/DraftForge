@@ -25,9 +25,11 @@ from rest_framework.response import Response
 from app.auth import InternalServiceAuth, IsInternalService
 from app.cache_utils import invalidate_after_commit
 from app.functions.herodraft import new_herodraft_for_game
+from events.capacity import with_signup_counts
 from events.completion import close_event
 from events.constants import EventState
 from events.models import Event
+from events.serializers import EventSerializer
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
@@ -468,16 +470,14 @@ def get_due_scheduled_events(request: Request) -> Response:
 @permission_classes(_perm)
 def get_event_for_task(request: Request, event_id: int) -> Response:
     """Get full event data + org Discord config needed by celery tasks."""
-    from events.models import Event
-
     try:
-        event = Event.objects.select_related("organization", "event_repeater").get(
-            pk=event_id
-        )
+        event = with_signup_counts(
+            Event.objects.select_related("organization", "event_repeater").filter(
+                pk=event_id
+            )
+        ).get()
     except Event.DoesNotExist:
         return Response({"error": "Event not found"}, status=status.HTTP_404_NOT_FOUND)
-
-    from events.serializers import EventSerializer
 
     data = EventSerializer(event).data
     data["organization_id"] = event.organization_id

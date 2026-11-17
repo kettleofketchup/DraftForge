@@ -79,17 +79,17 @@ class UserListSplitTest(TestCase):
 
 
 class SignedUpFollowsHoldsSeatTest(EventTestCase):
-    def _row(self, pk: int, status: str, holds_seat: bool) -> EventSignupSchema:
-        return EventSignupSchema.model_validate(
-            {
-                "id": pk,
-                "event": 1,
-                "user": pk,
-                "username": f"player{pk}",
-                "status": status,
-                "holds_seat": holds_seat,
-            }
-        )
+    def _row(self, pk: int, status: str, holds_seat: bool | None) -> EventSignupSchema:
+        data = {
+            "id": pk,
+            "event": 1,
+            "user": pk,
+            "username": f"player{pk}",
+            "status": status,
+        }
+        if holds_seat is not None:
+            data["holds_seat"] = holds_seat
+        return EventSignupSchema.model_validate(data)
 
     def _rows(self) -> list[EventSignupSchema]:
         return [
@@ -120,3 +120,14 @@ class SignedUpFollowsHoldsSeatTest(EventTestCase):
             self.assertIn("(2/10)", signed_up["name"])
             for name in ("player3", "player4", "player5"):
                 self.assertNotIn(name, signed_up["value"])
+
+    def test_missing_holds_seat_falls_back_to_status(self) -> None:
+        rows = [
+            self._row(1, "confirmed", None),
+            self._row(2, "rsvp", None),
+            self._row(3, "tentative", None),
+            self._row(4, "waitlisted", None),
+        ]
+        with patch("events.discord.embeds.get_event_signups", return_value=rows):
+            active, confirmed = _signup_counts(self.event)
+        self.assertEqual((active, confirmed), (2, 1))

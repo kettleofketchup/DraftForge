@@ -40,8 +40,9 @@ from app.permissions_org import (
     has_org_admin_access,
     has_org_staff_access,
 )
+from events.capacity import with_signup_counts
 from events.completion import close_event
-from events.constants import SEAT_HOLDING_STATUSES, EventState, SignupStatus
+from events.constants import EventState
 from events.models import (
     Event,
     EventRepeater,
@@ -104,19 +105,6 @@ class IsOrgStaff(permissions.BasePermission):
         return org and has_org_staff_access(request.user, org)
 
 
-def _annotate_event_qs(qs: QuerySet[Event]) -> QuerySet[Event]:
-    """Add signup_count and confirmed_count annotations."""
-    return qs.annotate(
-        signup_count=Count(
-            "signups", filter=Q(signups__status__in=SEAT_HOLDING_STATUSES)
-        ),
-        confirmed_count=Count(
-            "signups",
-            filter=Q(signups__status=SignupStatus.CONFIRMED),
-        ),
-    )
-
-
 def with_event_staff(qs: QuerySet[Event]) -> QuerySet[Event]:
     return (
         qs.select_related("host__base_profile")
@@ -161,7 +149,7 @@ def _attach_user_can_manage(
 
 
 def _event_payload(event_pk: int, user: CustomUser) -> dict[str, Any]:
-    qs = with_event_staff(_annotate_event_qs(Event.objects.filter(pk=event_pk)))
+    qs = with_event_staff(with_signup_counts(Event.objects.filter(pk=event_pk)))
     data = EventSerializer(qs.first()).data
     _attach_user_can_manage(data, user)
     return data
@@ -562,7 +550,7 @@ class EventViewSet(viewsets.ModelViewSet):
         return EventSerializer
 
     def get_queryset(self) -> QuerySet[Event]:
-        qs = _annotate_event_qs(
+        qs = with_signup_counts(
             Event.objects.select_related(
                 "organization", "tournament_league", "created_by", "tournament"
             )
@@ -932,7 +920,7 @@ class EventViewSet(viewsets.ModelViewSet):
             return Response(status=status.HTTP_403_FORBIDDEN)
         try:
             event.transition_state(EventState.SIGNUPS_OPEN)
-            qs = with_event_staff(_annotate_event_qs(Event.objects.filter(pk=event.pk)))
+            qs = with_event_staff(with_signup_counts(Event.objects.filter(pk=event.pk)))
             data = EventSerializer(qs.first()).data
             _attach_user_can_manage(data, request.user)
             return Response(data)
@@ -946,7 +934,7 @@ class EventViewSet(viewsets.ModelViewSet):
             return Response(status=status.HTTP_403_FORBIDDEN)
         try:
             event.transition_state(EventState.ROLL_CALL)
-            qs = with_event_staff(_annotate_event_qs(Event.objects.filter(pk=event.pk)))
+            qs = with_event_staff(with_signup_counts(Event.objects.filter(pk=event.pk)))
             data = EventSerializer(qs.first()).data
             _attach_user_can_manage(data, request.user)
             return Response(data)
@@ -969,7 +957,7 @@ class EventViewSet(viewsets.ModelViewSet):
             with transaction.atomic():
                 event.transition_state(EventState.SIGNUPS_OPEN)
                 invalidate_after_commit(event)
-            qs = with_event_staff(_annotate_event_qs(Event.objects.filter(pk=event.pk)))
+            qs = with_event_staff(with_signup_counts(Event.objects.filter(pk=event.pk)))
             data = EventSerializer(qs.first()).data
             _attach_user_can_manage(data, request.user)
             return Response(data)
@@ -995,7 +983,7 @@ class EventViewSet(viewsets.ModelViewSet):
                 ensure_tournament_with_signups(event)
                 event.transition_state(EventState.IN_PROGRESS)
                 finalize_event_tournament(event)
-            qs = with_event_staff(_annotate_event_qs(Event.objects.filter(pk=event.pk)))
+            qs = with_event_staff(with_signup_counts(Event.objects.filter(pk=event.pk)))
             data = EventSerializer(qs.first()).data
             _attach_user_can_manage(data, request.user)
             return Response(data)
@@ -1042,7 +1030,7 @@ class EventViewSet(viewsets.ModelViewSet):
                         event_id=event.pk,
                         guild_id=discord_event.guild_id,
                     )
-            qs = with_event_staff(_annotate_event_qs(Event.objects.filter(pk=event.pk)))
+            qs = with_event_staff(with_signup_counts(Event.objects.filter(pk=event.pk)))
             data = EventSerializer(qs.first()).data
             _attach_user_can_manage(data, request.user)
             return Response(data)
@@ -1165,7 +1153,7 @@ class EventViewSet(viewsets.ModelViewSet):
                 can_reopen=has_org_admin_access(request.user, event.organization),
             )
             event.refresh_from_db()
-            qs = with_event_staff(_annotate_event_qs(Event.objects.filter(pk=event.pk)))
+            qs = with_event_staff(with_signup_counts(Event.objects.filter(pk=event.pk)))
             data = EventSerializer(qs.first()).data
             _attach_user_can_manage(data, request.user)
             return Response(data)
