@@ -9,6 +9,8 @@ from pathlib import Path
 from django.conf import settings
 from django.test import SimpleTestCase
 
+from config.redis_host import resolve_redis_host
+
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 
 
@@ -80,19 +82,24 @@ class SharedSettingsParityTest(SimpleTestCase):
         "DISABLE_CACHE": "false",
     }
 
-    def _read(self, module: str) -> list[str]:
+    def _read(
+        self, module: str, redis_host: str | None = "redis.internal"
+    ) -> list[str]:
         env = {
             k: v
             for k, v in os.environ.items()
-            if k not in ("SIGNUP_POST_DISABLED", "RUNNING_TESTS")
+            if k not in ("SIGNUP_POST_DISABLED", "RUNNING_TESTS", "REDIS_HOST")
         }
         env.update(self.ENV, DJANGO_SETTINGS_MODULE=module)
+        if redis_host is not None:
+            env["REDIS_HOST"] = redis_host
         result = subprocess.run(
             [
                 sys.executable,
                 "-c",
                 "from django.conf import settings as s; "
-                "print(repr(s.SIGNUP_POST)); print(repr(s.REDIS_KEY_SCOPE))",
+                "print(repr(s.SIGNUP_POST)); print(repr(s.REDIS_KEY_SCOPE)); "
+                "print(repr(s.REDIS_HOST))",
             ],
             cwd=BACKEND_DIR,
             env=env,
@@ -101,7 +108,7 @@ class SharedSettingsParityTest(SimpleTestCase):
             timeout=120,
         )
         self.assertEqual(result.returncode, 0, result.stderr[-3000:])
-        return result.stdout.strip().splitlines()[-2:]
+        return result.stdout.strip().splitlines()[-3:]
 
     def test_signup_post_and_scope_parity(self) -> None:
         web = self._read("backend.settings")
@@ -112,5 +119,27 @@ class SharedSettingsParityTest(SimpleTestCase):
             [
                 "SignupPostConfig(debounce_seconds=4, lock_seconds=60, disabled=False)",
                 "'df-s3:'",
+                "'redis.internal'",
             ],
         )
+
+    def test_redis_host_fallback_parity(self) -> None:
+        for redis_host in (None, ""):
+            with self.subTest(redis_host=redis_host):
+                web = self._read("backend.settings", redis_host)
+                worker = self._read("config.settings_celery", redis_host)
+                self.assertEqual(web[-1], worker[-1])
+                self.assertNotEqual(web[-1], "''")
+
+
+class ResolveRedisHostTest(SimpleTestCase):
+    def test_explicit_host_wins(self) -> None:
+        env = {"REDIS_HOST": "redis.internal"}
+        self.assertEqual(resolve_redis_host(env, in_docker=False), "redis.internal")
+        self.assertEqual(resolve_redis_host(env, in_docker=True), "redis.internal")
+
+    def test_unset_or_empty_falls_back_by_runtime(self) -> None:
+        for env in ({}, {"REDIS_HOST": ""}, {"REDIS_HOST": "  "}):
+            with self.subTest(env=env):
+                self.assertEqual(resolve_redis_host(env, in_docker=True), "redis")
+                self.assertEqual(resolve_redis_host(env, in_docker=False), "localhost")

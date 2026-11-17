@@ -18,6 +18,12 @@ from telemetry.logging import get_logger
 log = get_logger(__name__)
 
 FAIL_OPEN = "fail-open"
+# Compare-and-delete in one round trip, so an expired lock retaken by another
+# run is never deleted by the previous holder.
+_RELEASE_LUA = (
+    "if redis.call('get', KEYS[1]) == ARGV[1] then "
+    "return redis.call('del', KEYS[1]) else return 0 end"
+)
 _TAGS = ["events", "signup"]
 
 
@@ -91,10 +97,8 @@ def release_lock(event_id: int, token: str) -> None:
     """Delete the lock only while it still holds ``token``."""
     if token == FAIL_OPEN or _config().disabled:
         return
-    key = lock_key(event_id)
     try:
-        client = get_redis_client()
-        if client.get(key) == token:
-            client.delete(key)
+        release = get_redis_client().register_script(_RELEASE_LUA)
+        release(keys=[lock_key(event_id)], args=[token])
     except redis.RedisError as exc:
         _unavailable(event_id, "release_lock", "celery", exc)

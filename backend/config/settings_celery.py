@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 from config.discord_api import DISCORD_API_BASE_URL  # noqa: F401
 from config.dota_lobby import DotaLobbyConfig
 from config.installed_apps import MODEL_APPS
+from config.redis_host import resolve_redis_host
 from config.signup_post import SignupPostConfig
 
 load_dotenv()
@@ -48,9 +49,9 @@ INSTALLED_APPS = [
 DATABASES = {}
 
 # Celery configuration
-REDIS_HOST = os.environ.get("REDIS_HOST", "redis")
-# Same values as backend.settings: raw Redis key scope and the signup-post
-# debounce and lock (config/signup_post.py).
+# Same values as backend.settings: Redis host (config/redis_host.py), raw
+# Redis key scope and the signup-post debounce and lock (config/signup_post.py).
+REDIS_HOST = resolve_redis_host()
 REDIS_KEY_SCOPE = os.environ.get("REDIS_KEY_SCOPE", "")
 SIGNUP_POST = SignupPostConfig.from_env()
 CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", f"redis://{REDIS_HOST}:6379/1")

@@ -122,6 +122,7 @@ class RunningTestsSettingsTests(SimpleTestCase):
         self.assertNotIn("KEY_PREFIX", mod.CACHES["default"])
 
 
+@override_settings(REDIS_KEY_SCOPE="")
 class NamespacedKeyTests(SimpleTestCase):
     @override_settings(REDIS_KEY_NAMESPACE="")
     def test_key_unchanged_without_namespace(self) -> None:
@@ -142,7 +143,15 @@ class NamespacedKeyTests(SimpleTestCase):
         self.assertEqual(namespaced_key("herodraft:1:x"), "df-s3:herodraft:1:x")
 
     def test_scope_defaults_to_empty(self) -> None:
-        self.assertEqual(settings.REDIS_KEY_SCOPE, "")
+        with mock.patch.dict(os.environ):
+            os.environ.pop("REDIS_KEY_SCOPE", None)
+            mod = _reload(["manage.py", "runserver"])
+        self.assertEqual(mod.REDIS_KEY_SCOPE, "")
+
+    def test_scope_read_from_env(self) -> None:
+        with mock.patch.dict(os.environ, {"REDIS_KEY_SCOPE": "df-s3:"}):
+            mod = _reload(["manage.py", "runserver"])
+        self.assertEqual(mod.REDIS_KEY_SCOPE, "df-s3:")
 
     @override_settings(REDIS_KEY_NAMESPACE="")
     def test_tick_keys_keep_production_format(self) -> None:
@@ -178,6 +187,7 @@ class NamespacedKeyTests(SimpleTestCase):
         self.assertEqual(consumer._heartbeat_key(3, 4), captain_heartbeat_key(3, 4))
 
 
+@override_settings(REDIS_KEY_SCOPE="")
 class DraftTickKeyNamespaceTests(SimpleTestCase):
     PREFIXES: tuple[str, ...] = ("herodraft", "teamdraft")
 
@@ -340,6 +350,7 @@ class CeleryEagerUnderTestsTests(SimpleTestCase):
         self.assertIs(celery_app.conf.task_eager_propagates, True)
 
 
+@override_settings(REDIS_KEY_SCOPE="")
 class DiscordRateLimitKeyTests(SimpleTestCase):
     @override_settings(REDIS_KEY_NAMESPACE="")
     def test_production_key_unchanged(self) -> None:
@@ -357,6 +368,7 @@ class DiscordRateLimitKeyTests(SimpleTestCase):
         self.assertEqual(client.eval.call_args.args[2], "ns:discord:rate_limit:global")
 
 
+@override_settings(REDIS_KEY_SCOPE="")
 class ActivityIntentKeyTests(SimpleTestCase):
     @override_settings(REDIS_KEY_NAMESPACE="")
     def test_production_key_unchanged(self) -> None:

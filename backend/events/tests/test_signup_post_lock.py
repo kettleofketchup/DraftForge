@@ -1,14 +1,17 @@
+from collections.abc import Callable
+
 import redis
 from django.core.exceptions import ImproperlyConfigured
 from django.test import SimpleTestCase, override_settings
 from structlog.testing import capture_logs
 
-from app.redis_client import set_client_for_tests
+from app.redis_client import get_redis_client, set_client_for_tests
 from app.redis_keys import namespaced_key
 from config.signup_post import SignupPostConfig
 from events import signup_post_lock as lock
 
 ENABLED = SignupPostConfig(disabled=False)
+DISABLED = SignupPostConfig(disabled=True)
 
 
 class FakeRedis:
@@ -34,6 +37,36 @@ class FakeRedis:
             if self.data.pop(key, None) is not None:
                 removed += 1
         return removed
+
+    def register_script(self, script: str) -> Callable[..., int]:
+        """Stand-in for the compare-and-delete Lua script, run atomically."""
+        assert "redis.call('del'" in script, script
+
+        def run(keys: list[str], args: list[str]) -> int:
+            if self.data.get(keys[0]) == args[0]:
+                return self.delete(keys[0])
+            return 0
+
+        return run
+
+
+class RacingRedis(FakeRedis):
+    """A plain GET of the lock returns the old token, then the lock expires and
+    another run takes it before the caller can act on the answer."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.deleted: list[str] = []
+
+    def delete(self, *keys: str) -> int:
+        self.deleted.extend(self.data[k] for k in keys if k in self.data)
+        return super().delete(*keys)
+
+    def get(self, key: str) -> str | None:
+        value = super().get(key)
+        if key == lock.lock_key(5):
+            self.data[key] = "other-run"
+        return value
 
 
 class BrokenRedis:
@@ -85,6 +118,14 @@ class SignupPostLockTests(SimpleTestCase):
         self.assertEqual(self.redis.get(lock.lock_key(5)), token)
         self.assertIsNone(lock.acquire_lock(5))
 
+    def test_release_does_not_delete_a_lock_taken_after_expiry(self) -> None:
+        racing = RacingRedis()
+        set_client_for_tests(racing)
+        token = lock.acquire_lock(5)
+        assert token is not None
+        lock.release_lock(5, token)
+        self.assertNotIn("other-run", racing.deleted)
+
     def test_redis_error_fails_open_and_logs(self) -> None:
         set_client_for_tests(BrokenRedis())
         with capture_logs() as logs:
@@ -108,6 +149,25 @@ class SignupPostLockTests(SimpleTestCase):
         self.assertEqual(logs, [])
 
 
+@override_settings(SIGNUP_POST=ENABLED)
+class SignupPostLockRealRedisTests(SimpleTestCase):
+    """The release script runs on the test Redis, under this run's namespace."""
+
+    def setUp(self) -> None:
+        set_client_for_tests(None)
+        self.addCleanup(get_redis_client().delete, lock.lock_key(987654))
+
+    def test_release_script_deletes_only_own_token(self) -> None:
+        client = get_redis_client()
+        token = lock.acquire_lock(987654)
+        assert token is not None
+        lock.release_lock(987654, "someone-else")
+        self.assertEqual(client.get(lock.lock_key(987654)), token)
+        lock.release_lock(987654, token)
+        self.assertIsNone(client.get(lock.lock_key(987654)))
+
+
+@override_settings(SIGNUP_POST=DISABLED)
 class SignupPostLockDisabledTests(SimpleTestCase):
     def setUp(self) -> None:
         self.redis = FakeRedis()
