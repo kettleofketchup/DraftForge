@@ -509,10 +509,14 @@ export async function getEventDiscordState(eventId: number) {
 export async function getDiscordChannels(
   orgId: number,
   refresh = false,
+  kind: 'text' | 'voice' = 'text',
 ): Promise<DiscordChannel[]> {
-  const params = refresh ? '?refresh=true' : '';
+  const params = new URLSearchParams();
+  if (refresh) params.set('refresh', 'true');
+  if (kind === 'voice') params.set('kind', kind);
+  const query = params.toString();
   const { data } = await axios.get<{ channels: DiscordChannel[] }>(
-    `/discord/organizations/${orgId}/channels/${params}`,
+    `/discord/organizations/${orgId}/channels/${query ? `?${query}` : ''}`,
   );
   return data.channels;
 }
