@@ -61,7 +61,7 @@ interface UserState {
   teams: TeamType[];
   tournament: TournamentType;
   draft: DraftType;
-  setDraft: (draft: DraftType) => void;
+  setDraft: (draft: DraftType | null) => void;
   tournaments: TournamentType[];
   curDraftRound: DraftRoundType;
   setCurDraftRound: (round: DraftRoundType) => void;
@@ -146,7 +146,7 @@ export const useUserStore = create<UserState>()(
           log.error('Failed to fetch draft:', err);
         }
       },
-      setDraft: (draft: DraftType) => set({ draft }),
+      setDraft: (draft: DraftType | null) => set({ draft: draft as DraftType }),
       tournaments: [] as TournamentType[],
       game: {} as GameType,
       games: [] as GameType[],
@@ -154,7 +154,7 @@ export const useUserStore = create<UserState>()(
       team: {} as TeamType,
 
       updateCurrentDraft: async () => {
-        if (!get().draft.pk) {
+        if (!get().draft?.pk) {
           console.debug('Current draft does not have a primary key (pk).');
           return;
         }

@@ -79,7 +79,9 @@ test.describe('navbar i18n — anonymous @cicd', () => {
     await expect(page.locator('html')).toHaveAttribute('lang', 'es');
     // Aria-label regression check.
     await expect(
-      page.locator('[aria-label="Documentación"]').first(),
+      page
+        .locator('[aria-label="Documentación y registro de cambios"]')
+        .first(),
     ).toBeVisible();
     expect(errors).toEqual([]);
     await ctx.close();

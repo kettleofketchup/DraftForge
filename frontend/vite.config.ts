@@ -9,11 +9,7 @@ import tsconfigPaths from 'vite-tsconfig-paths';
 // babel plugin if reintroduced.
 
 export default defineConfig({
-  plugins: [
-    tailwindcss(),
-    reactRouter(),
-    tsconfigPaths(),
-  ],
+  plugins: [tailwindcss(), reactRouter(), tsconfigPaths()],
   build: {
     rollupOptions: {
       onwarn(warning, warn) {
@@ -26,7 +22,15 @@ export default defineConfig({
     },
   },
   server: {
-    allowedHosts: ['localhost', 'dota.kettle.sh', 'nginx'],
+    allowedHosts: [
+      'localhost',
+      'dota.kettle.sh',
+      'nginx',
+      ...(process.env.VITE_EXTRA_ALLOWED_HOSTS ?? '')
+        .split(',')
+        .map((h) => h.trim())
+        .filter(Boolean),
+    ],
     // Don't watch Playwright artifact directories — they churn during
     // test runs (HTML reports, traces, screenshots, videos) and Vite's
     // file watcher fires HMR page-reloads on every write, invalidating
@@ -129,6 +133,8 @@ export default defineConfig({
       '@headlessui/react',
       // Dota data
       'dotaconstants',
+      // Changelog
+      'react-markdown',
     ],
     // Force re-optimization when starting fresh
     force: process.env.VITE_FORCE_OPTIMIZE === 'true',

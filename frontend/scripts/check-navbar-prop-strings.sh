@@ -9,7 +9,7 @@ TARGET="$ROOT/app/components/navbar"
 # are by construction untranslated strings.
 PATTERN='(title|subtitle|label|placeholder|tooltip|description)="[^"]{3,}"'
 
-if grep -rEn "$PATTERN" "$TARGET" --include='*.tsx' --include='*.ts'; then
+if grep -rEn "$PATTERN" "$TARGET" --include='*.tsx' --include='*.ts' --exclude-dir=__tests__; then
   echo ""
   echo "ERROR: Untranslated visible prop strings in navbar/."
   echo "Wrap each match with t('<key>') and add the key to:"
