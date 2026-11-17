@@ -200,6 +200,7 @@ export const eventSignupSchema = z.object({
   signup_type: z.string(),
   status: z.string(),
   holds_seat: z.boolean().optional(),
+  unmet_requirements: z.array(z.string()).optional(),
   waitlist_position: z.number().nullable(),
   created_at: z.string(),
   updated_at: z.string(),

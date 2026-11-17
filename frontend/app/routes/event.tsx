@@ -87,6 +87,11 @@ import { canCompleteEvent } from '~/components/events/eventCompletion';
 import type { EventSignupType, EventType } from '~/components/events/schemas';
 import { EventState } from '~/components/events/schemas';
 import { partitionSignups } from '~/components/events/signupPartition';
+import {
+  describeUnmet,
+  signupHoldReason,
+  signupSuccessMessage,
+} from '~/components/events/unmetRequirements';
 import type { GameTypeValue } from '~/components/game/constants';
 import { EventLobbyPassword } from '~/components/lobby/EventLobbyPassword';
 import { useOrganization } from '~/components/organization';
@@ -235,19 +240,21 @@ export default function EventPage() {
   const trySignup = useCallback(
     async (intent: 'rsvp' | 'tentative') => {
       if (!event) return;
-      const gap = evaluateSignupGap(event, profile);
-      const successMsg =
-        intent === 'rsvp' ? 'Signed up!' : 'Marked as tentative!';
+      const steamGate = { steamAccountId: currentUser?.steam_account_id };
+      const gap = evaluateSignupGap(event, profile, steamGate);
       const errorMsg =
         intent === 'rsvp' ? 'Failed to sign up' : 'Failed to mark tentative';
       if (gap === 'complete') {
         try {
-          await signupMutation.mutateAsync({ intent, profile: {} });
-          toast.success(successMsg);
+          const created = await signupMutation.mutateAsync({
+            intent,
+            profile: {},
+          });
+          toast.success(signupSuccessMessage(intent, created?.status));
         } catch (err) {
           const refreshed = await profileQuery.refetch();
           const newGap = event
-            ? evaluateSignupGap(event, refreshed.data)
+            ? evaluateSignupGap(event, refreshed.data, steamGate)
             : 'complete';
           if (newGap !== 'complete') {
             setSignupModal({ open: true, intent });
@@ -259,7 +266,13 @@ export default function EventPage() {
         setSignupModal({ open: true, intent });
       }
     },
-    [event, profile, profileQuery, signupMutation],
+    [
+      event,
+      profile,
+      profileQuery,
+      signupMutation,
+      currentUser?.steam_account_id,
+    ],
   );
 
   // Repeater subscription state
@@ -618,6 +631,16 @@ export default function EventPage() {
                     </SecondaryButton>
                   </>
                 )}
+              {currentUser && mySignup?.status === 'pending_approval' && (
+                <span
+                  className="text-sm text-muted-foreground"
+                  data-testid="event-my-signup-pending"
+                >
+                  {mySignup.unmet_requirements?.length
+                    ? `Pending approval: ${describeUnmet(mySignup.unmet_requirements)}`
+                    : 'Pending approval'}
+                </span>
+              )}
               {/* Signed up (active) — show status + cancel */}
               {currentUser &&
                 event.state === EventState.SIGNUPS_OPEN &&
@@ -723,6 +746,7 @@ export default function EventPage() {
           <TabsContent value="signups">
             <SignupsTab
               signups={activeSignups}
+              autoApprove={event.auto_approve}
               isAdmin={isAdmin}
               signupActions={signupActions}
               gameType={event.game_type}
@@ -839,6 +863,7 @@ export default function EventPage() {
           event={event}
           intent={signupModal.intent}
           profile={profile}
+          steamAccountId={currentUser?.steam_account_id}
           open={signupModal.open}
           onOpenChange={(open) => setSignupModal((s) => ({ ...s, open }))}
         />
@@ -961,8 +986,10 @@ function SignupsTab({
   orgId,
   hasDiscordServer,
   state,
+  autoApprove = true,
 }: {
   signups: EventSignupType[];
+  autoApprove?: boolean;
   isAdmin: boolean;
   signupActions: ReturnType<typeof useSignupActionMutations>;
   gameType: number;
@@ -1225,12 +1252,23 @@ function SignupsTab({
             </div>
           ) : undefined;
 
+          const holdReason = isAdmin
+            ? signupHoldReason(signup, autoApprove)
+            : null;
           const statusSlot = (
             <div className="flex items-center gap-2">
               <span className="text-xs font-mono text-muted-foreground">
                 #{position}
               </span>
               <EventStateBadge state={signup.status} />
+              {holdReason && (
+                <span
+                  className="text-xs text-muted-foreground"
+                  data-testid={`signup-hold-reason-${signup.id}`}
+                >
+                  At last check: {holdReason}
+                </span>
+              )}
             </div>
           );
 

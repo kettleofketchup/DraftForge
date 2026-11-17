@@ -2,7 +2,11 @@ import { z } from 'zod';
 import { GAME_TYPE } from '~/components/game/constants';
 import type { DotaProfileData } from '~/components/user';
 import { type EventType } from '../schemas';
-import { isRankSectionComplete } from './evaluateSignupGap';
+import {
+  hasFriendId,
+  isRankSectionComplete,
+  type SteamGateOptions,
+} from './evaluateSignupGap';
 
 const SCREENSHOT_URL_RE = /^https?:\/\/.+\.(png|jpe?g|webp)(\?.*)?$/i;
 
@@ -26,11 +30,16 @@ type UserPositions =
   | null
   | undefined;
 
+export type SignupSchemaOptions = SteamGateOptions & {
+  userPositions?: UserPositions;
+};
+
 export function buildSignupPatchSchema(
   event: EventType,
   profile: DotaProfileData | null | undefined,
-  userPositions?: UserPositions,
+  opts: SignupSchemaOptions = {},
 ) {
+  const { userPositions } = opts;
   const fields: Record<string, z.ZodType> = {};
 
   const friendId = z
@@ -38,7 +47,7 @@ export function buildSignupPatchSchema(
     .trim()
     .max(20)
     .regex(/^[0-9]*$/, 'Friend ID must be digits only');
-  if (event.require_steam_id && !profile?.unverified_friend_id) {
+  if (event.require_steam_id && !hasFriendId(profile, opts)) {
     fields.unverified_friend_id = friendId.min(1);
   } else {
     fields.unverified_friend_id = friendId.optional();

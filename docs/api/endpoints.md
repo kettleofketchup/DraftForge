@@ -410,6 +410,33 @@ promoter, org staff, admin, owner or site admin.
 Event endpoints added with these features (`complete/`, `staff/`, `stale_before`) are
 listed in [Events: API Endpoints](../features/events.md#api-endpoints).
 
+### Signup requirements
+
+`POST /api/events/{id}/signup/` (body `{"intent": "rsvp" | "tentative", "profile": {...}}`)
+checks the event's requirements when it decides the signup status. On an
+auto-approve event a player who misses one is held as `pending_approval`; on a
+manual-approval event every signup waits for staff anyway. Either way the signup
+records what was missing at that check in `unmet_requirements`, a list of codes.
+The signup response and `GET /api/events/signups/?event={id}` return the codes to
+the player who owns the signup and to event staff; everyone else gets `[]`. The
+codes are refreshed when the player updates their profile, and cleared when staff
+approve the signup.
+
+| Code | Meaning |
+|------|---------|
+| `steam_id_missing` | "Require Friend ID" is on and neither a game profile friend ID nor a linked Steam account is known |
+| `mmr_unverified` | The event requires verified MMR and the player's MMR is not verified |
+| `profile_incomplete` | The event requires a complete profile and the player's is not |
+| `dota_rank_undeclared` | The event has Dota rank gates and the player never declared a rank |
+| `rank_type_disallowed` | The declared rank type (active, previous, Battle Cup) is not accepted by the event |
+| `rank_screenshot_missing` | The event requires a rank screenshot for an active rank and none is on file |
+| `battlecup_screenshot_missing` | The event requires a Battle Cup screenshot and none is on file |
+| `below_min_mmr` | The player declared an active rank whose MMR is missing or below the event's minimum |
+
+New games add codes through the backend eligibility registry
+(`events/eligibility.py`); the frontend labels live in
+`frontend/app/components/events/unmetRequirements.ts` and show unknown codes as-is.
+
 ## Leagues
 
 | Method | Endpoint | Description | Auth |

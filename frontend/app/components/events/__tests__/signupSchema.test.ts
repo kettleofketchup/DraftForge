@@ -162,11 +162,9 @@ describe('buildSignupPatchSchema', () => {
       soft_support: 0,
       hard_support: 0,
     };
-    const schema = buildSignupPatchSchema(
-      baseEvent as never,
-      emptyProfile,
+    const schema = buildSignupPatchSchema(baseEvent as never, emptyProfile, {
       userPositions,
-    );
+    });
     const result = schema.safeParse({
       unverified_friend_id: '12345',
       rank_status: 'active',
@@ -208,5 +206,16 @@ describe('buildSignupPatchSchema', () => {
       unverified_friend_id: '   ',
     });
     expect(result.success).toBe(false);
+  });
+
+  it('does not require friend id when steam_account_id is set', () => {
+    const schema = buildSignupPatchSchema(baseEvent as never, emptyProfile, {
+      steamAccountId: 12345,
+    });
+    const parsed = schema.safeParse({});
+    const paths = parsed.success
+      ? []
+      : parsed.error.issues.map((i) => i.path.join('.'));
+    expect(paths).not.toContain('unverified_friend_id');
   });
 });
