@@ -1,6 +1,8 @@
 from datetime import timedelta
+from io import StringIO
 from unittest.mock import MagicMock, patch
 
+from django.core.management import call_command
 from django.test import TransactionTestCase, override_settings
 from django.utils import timezone as tz
 from rest_framework.request import Request
@@ -209,3 +211,62 @@ class PromoteRequiresAtomicTests(TransactionTestCase):
     def test_promote_requires_atomic(self) -> None:
         with self.assertRaises(AssertionError):
             _promote_from_waitlist(self.event)
+
+
+NOTIFY_PATH = (
+    "events.management.commands.rebalance_event_waitlists.notify_signup_changed"
+)
+
+
+class RebalanceCommandTests(EventTestCase):
+    def setUp(self) -> None:
+        self.phantom = self.make_event(max_players=2)
+        for _ in range(2):
+            EventSignup.objects.create(
+                event=self.phantom, user=self.make_user(), status=SignupStatus.TENTATIVE
+            )
+        self.waitlisted = EventSignup.objects.create(
+            event=self.phantom,
+            user=self.make_user(),
+            status=SignupStatus.WAITLISTED,
+            waitlist_position=1,
+        )
+        self.empty_waitlist = self.make_event(max_players=5)
+
+    def _run(self, *args: str) -> str:
+        out = StringIO()
+        with self.captureOnCommitCallbacks(execute=True):
+            call_command("rebalance_event_waitlists", *args, stdout=out)
+        return out.getvalue()
+
+    def _notified_pks(self, notify: MagicMock) -> list[int]:
+        return [c.args[0].pk for c in notify.call_args_list]
+
+    def test_dry_run_changes_nothing(self) -> None:
+        with patch(NOTIFY_PATH) as notify:
+            output = self._run("--dry-run")
+
+        self.waitlisted.refresh_from_db()
+        self.assertEqual(self.waitlisted.status, SignupStatus.WAITLISTED)
+        self.assertEqual(self.waitlisted.waitlist_position, 1)
+        self.assertIn(self.phantom.name, output)
+        self.assertIn("would promote 1", output)
+        notify.assert_not_called()
+
+    def test_promotes_and_notifies_once(self) -> None:
+        with patch(NOTIFY_PATH) as notify:
+            self._run()
+
+        self.waitlisted.refresh_from_db()
+        self.assertEqual(self.waitlisted.status, SignupStatus.APPROVED)
+        self.assertIsNone(self.waitlisted.waitlist_position)
+        self.assertEqual(self._notified_pks(notify), [self.phantom.pk])
+
+    def test_idempotent(self) -> None:
+        with patch(NOTIFY_PATH) as notify:
+            self._run()
+            notify.reset_mock()
+            self._run()
+
+        notify.assert_not_called()
+        self.assertEqual(count_seats(self.phantom), 1)
