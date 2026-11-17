@@ -18,13 +18,11 @@ log = get_logger(__name__)
 # This allows a user to update only for certain fields
 class ProfileUserSerializer(serializers.ModelSerializer):
     positions = PositionsSerializer(many=False, read_only=True)
-    nickname = serializers.CharField(required=False, allow_blank=True, max_length=100)
     steam_account_id = serializers.IntegerField(required=False, allow_null=True)
 
     class Meta:
         model = CustomUser
         fields = (
-            "nickname",
             "positions",
             "steam_account_id",
         )
@@ -32,7 +30,6 @@ class ProfileUserSerializer(serializers.ModelSerializer):
 
 class ProfileUpdateSerializer(serializers.Serializer):
     positions = PositionsSerializer(many=False, required=False)
-    nickname = serializers.CharField(required=False, allow_blank=True, max_length=100)
     steam_account_id = serializers.IntegerField(required=False, allow_null=True)
 
 
@@ -50,7 +47,6 @@ def profile_update(request):
     if serializer.is_valid():
         positions = serializer.validated_data.get("positions", None)
         steam_account_id = serializer.validated_data.get("steam_account_id", None)
-        nickname = serializer.validated_data.get("nickname", None)
 
     else:
         return Response(serializer.errors, status=400)
@@ -92,8 +88,6 @@ def profile_update(request):
                     status=409,
                 )
             user.steam_account_id = steam_account_id
-    if nickname is not None:
-        user.nickname = nickname
     log.debug(
         "profile_update_fields",
         system="user",
@@ -101,7 +95,6 @@ def profile_update(request):
         user_id=user.pk,
         has_positions=positions is not None,
         has_steam_account_id=steam_account_id is not None,
-        has_nickname=nickname is not None,
     )
     with transaction.atomic():
         posObj.save()

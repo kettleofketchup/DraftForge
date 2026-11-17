@@ -2,7 +2,9 @@ from datetime import date
 
 from django.test import TestCase
 
-from app.models import CustomUser, Game, League, Team, Tournament
+from app.models import CustomUser, Game, League, Organization, Team, Tournament
+from app.tests.raw_site_nickname import set_raw_site_nickname
+from org.models import OrgUser
 from steam.models import Match, PlayerMatchStats, SuggestionTier
 from steam.services.match_suggestions import (
     calculate_suggestion_tier,
@@ -335,14 +337,20 @@ class GetMatchSuggestionsFallbackTest(TestCase):
                     steam_id=76561198000000100 + slot,
                     player_slot=slot,
                     hero_id=1,
-                    kills=0, deaths=0, assists=0,
-                    gold_per_min=0, xp_per_min=0,
-                    last_hits=0, denies=0,
-                    hero_damage=0, tower_damage=0, hero_healing=0,
+                    kills=0,
+                    deaths=0,
+                    assists=0,
+                    gold_per_min=0,
+                    xp_per_min=0,
+                    last_hits=0,
+                    denies=0,
+                    hero_damage=0,
+                    tower_damage=0,
+                    hero_healing=0,
                 )
 
         # Bypass cacheops so we measure DB hits, not Redis hits.
-        from django.db import connection, reset_queries
+        from django.db import connection
         from django.test.utils import CaptureQueriesContext
 
         with CaptureQueriesContext(connection) as ctx:
@@ -357,4 +365,68 @@ class GetMatchSuggestionsFallbackTest(TestCase):
             len(ctx.captured_queries),
             20,
             f"Too many queries ({len(ctx.captured_queries)}); prefetch likely bypassed.",
+        )
+
+    def _player_stats(self, match: Match, steam_id: int, slot: int) -> None:
+        PlayerMatchStats.objects.create(
+            match=match,
+            steam_id=steam_id,
+            player_slot=slot,
+            hero_id=1,
+            kills=0,
+            deaths=0,
+            assists=0,
+            gold_per_min=0,
+            xp_per_min=0,
+            last_hits=0,
+            denies=0,
+            hero_damage=0,
+            tower_damage=0,
+            hero_healing=0,
+        )
+
+    def test_name_search_matches_captain_names(self):
+        set_raw_site_nickname(self.radiant_captain.pk, "DragonSite")
+        self.radiant_captain.discordNickname = "Windlord"
+        self.radiant_captain.save()
+        with_rcap = self._create_match(match_id=1, league_id=19571)
+        self._player_stats(with_rcap, self.radiant_captain.steamid, 0)
+        without = self._create_match(match_id=2, league_id=19571)
+        self._player_stats(without, 76561198000000099, 0)
+
+        for term in ("windlord", "rcap"):
+            with self.subTest(term=term):
+                suggestions = get_match_suggestions_for_game(self.game, search=term)
+                self.assertEqual([s["match_id"] for s in suggestions], [1])
+
+        for term in ("nobody", "dragonsite"):
+            with self.subTest(term=term):
+                self.assertEqual(
+                    get_match_suggestions_for_game(self.game, search=term), []
+                )
+
+    def test_name_search_matches_tournament_org_guild_nickname(self):
+        org = Organization.objects.create(name="Suggest Org")
+        other_org = Organization.objects.create(name="Other Suggest Org")
+        self.league.organization = org
+        self.league.save()
+        OrgUser.objects.create(
+            user=self.radiant_captain, organization=org, guild_nickname="ClawNick"
+        )
+        OrgUser.objects.create(
+            user=self.dire_captain, organization=other_org, guild_nickname="BeakNick"
+        )
+        match = self._create_match(match_id=1, league_id=19571)
+        self._player_stats(match, self.radiant_captain.steamid, 0)
+        self._player_stats(match, self.dire_captain.steamid, 128)
+
+        self.assertEqual(
+            [
+                s["match_id"]
+                for s in get_match_suggestions_for_game(self.game, search="clawnick")
+            ],
+            [1],
+        )
+        self.assertEqual(
+            get_match_suggestions_for_game(self.game, search="beaknick"), []
         )

@@ -43,6 +43,10 @@ _beat_schedule = {
         "task": "lobby.tasks.reconcile_dota_lobbies",
         "schedule": 60.0,
     },
+    "sweep-auto-herodrafts": {
+        "task": "events.tournament_tasks.sweep_auto_herodrafts",
+        "schedule": 10.0,
+    },
     "refresh-discord-avatars": {
         "task": "app.tasks.avatar_refresh.refresh_discord_avatars",
         "schedule": 300.0,
@@ -52,12 +56,15 @@ _beat_schedule = {
         "task": "app.tasks.avatar_refresh.refresh_all_discord_data",
         "schedule": crontab(hour=4, minute=0),
     },
-    # Daily batched avatar refresh — see celery.py for the full rationale.
-    # Reads the shared `discord_members_<guild_id>` cache (1 hr TTL) and
-    # bulk-updates User.avatar.
+    # Daily batched avatar refresh — see celery.py. Fetches guild members
+    # in the worker (process-local LocMem cache) and bulk-updates User.avatar.
     "refresh-avatars-batched-daily": {
         "task": "app.tasks.avatar_refresh.refresh_avatars_batched",
         "schedule": crontab(hour=4, minute=15),
+    },
+    "sync-active-org-discord-names": {
+        "task": "app.tasks.discord_name_sync.sync_active_org_discord_names",
+        "schedule": 1800.0,
     },
 }
 

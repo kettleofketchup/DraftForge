@@ -68,7 +68,7 @@ DISCOVERY_OPEN_EVENT_NAME = "Discovery Open Signups Event"
 DISCOVERY_MEMBER: TestUser = TestUser(
     pk=1100,
     username="discovery_member",
-    nickname="Discovery Member",
+    discord_global_name="Discovery Member",
     discord_id="710000000000001100",
     steam_id_64=76561199110001100,
 )

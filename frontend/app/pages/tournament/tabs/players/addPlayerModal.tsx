@@ -112,6 +112,7 @@ export const AddPlayerModal: React.FC<Props> = ({
                 addPlayerCallback={addPlayerCallback}
                 removePlayerCallback={removePlayerCallback}
                 addedUsers={addedUsers}
+                orgId={orgId ?? null}
                 placeholder={
                   orgId
                     ? 'Search organization members...'

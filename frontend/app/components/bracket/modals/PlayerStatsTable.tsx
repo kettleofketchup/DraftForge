@@ -8,6 +8,7 @@ import {
   TableRow,
 } from '~/components/ui/table';
 import { DisplayName } from '~/components/user/avatar';
+import { useDisplayOrgId } from '~/hooks/useDisplayOrgId';
 import { getHeroIcon, getHeroName } from '~/lib/dota';
 import type { PlayerMatchStats } from '~/lib/dota/schemas';
 import { formatNumber } from '~/lib/dota/utils';
@@ -32,6 +33,7 @@ export function PlayerStatsTable({
   isWinner,
   teamTotals,
 }: PlayerStatsTableProps) {
+  const orgId = useDisplayOrgId();
   const totals =
     teamTotals ??
     players.reduce(
@@ -118,7 +120,9 @@ export function PlayerStatsTable({
                 />
               </TableCell>
               <TableCell className="font-medium">
-                {player.username ? DisplayName(player) : 'Unknown'}
+                {player.username
+                  ? DisplayName(player, undefined, orgId)
+                  : 'Unknown'}
               </TableCell>
               <TableCell className="text-center text-green-400">
                 {player.kills}

@@ -1,6 +1,7 @@
 import type { FormEvent } from 'react';
 import React, { useEffect, useState } from 'react';
 import { DisplayName } from '~/components/user/avatar';
+import { useDisplayOrgId } from '~/hooks/useDisplayOrgId';
 import type { GameType } from '~/index';
 import { getLogger } from '~/lib/logger';
 const log = getLogger('GameCard');
@@ -30,6 +31,7 @@ export const GameCard: React.FC<Props> = ({
   onEditModeChange,
 }) => {
   const navigate = useNavigate();
+  const orgId = useDisplayOrgId();
   const [editMode, setEditMode] = useState(edit || false);
   const [form, setForm] = useState<GameType>(game ?? ({} as GameType));
   const [isSaving, setIsSaving] = useState(false);
@@ -135,7 +137,7 @@ export const GameCard: React.FC<Props> = ({
           <div>
             <span className="font-semibold">Radiant:</span>{' '}
             {game.radiant_team.captain
-              ? `${DisplayName(game.radiant_team.captain)}'s Team`
+              ? `${DisplayName(game.radiant_team.captain, undefined, orgId)}'s Team`
               : game.radiant_team.name}
           </div>
         )}
@@ -143,7 +145,7 @@ export const GameCard: React.FC<Props> = ({
           <div>
             <span className="font-semibold">Dire:</span>{' '}
             {game.dire_team.captain
-              ? `${DisplayName(game.dire_team.captain)}'s Team`
+              ? `${DisplayName(game.dire_team.captain, undefined, orgId)}'s Team`
               : game.dire_team.name}
           </div>
         )}

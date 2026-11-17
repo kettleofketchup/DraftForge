@@ -32,6 +32,7 @@ class OrgUser(models.Model):
         db_index=True,
     )
     mmr = models.IntegerField(default=0)
+    guild_nickname = models.TextField(null=True, blank=True)
     joined_at = models.DateTimeField(auto_now_add=True)
 
     # MMR verification (moved from CustomUser)

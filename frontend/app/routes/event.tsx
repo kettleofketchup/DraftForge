@@ -1221,7 +1221,7 @@ function SignupsTab({
                         depth={false}
                         onClick={() => {
                           const name = user
-                            ? DisplayName(user)
+                            ? DisplayName(user, undefined, orgId)
                             : `User #${signup.user}`;
                           setRemoveSignup({ signup, name });
                         }}
@@ -1319,7 +1319,7 @@ function SignupsTab({
         onApprove={(signupId, mmr) => {
           const previousMmr = approvalSignup?.org_user_mmr ?? null;
           const playerName = approvalSignup?.user_data
-            ? DisplayName(approvalSignup.user_data)
+            ? DisplayName(approvalSignup.user_data, undefined, orgId)
             : (approvalSignup?.username ??
               `User #${approvalSignup?.user ?? signupId}`);
           signupActions.approve.mutate(
@@ -1350,7 +1350,7 @@ function SignupsTab({
         isRejecting={signupActions.reject.isPending}
         onReject={(signupId) => {
           const playerName = approvalSignup?.user_data
-            ? DisplayName(approvalSignup.user_data)
+            ? DisplayName(approvalSignup.user_data, undefined, orgId)
             : (approvalSignup?.username ??
               `User #${approvalSignup?.user ?? signupId}`);
           signupActions.reject.mutate(signupId, {

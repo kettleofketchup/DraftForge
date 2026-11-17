@@ -15,8 +15,13 @@ from .models import OrgFeature, OrgUser
 class OrgUserAdmin(admin.ModelAdmin):
     list_display = ["user", "organization", "mmr", "joined_at"]
     list_filter = ["organization"]
-    search_fields = ["user__username", "user__nickname"]
+    search_fields = [
+        "user__username",
+        "user__discordNickname",
+        "guild_nickname",
+    ]
     raw_id_fields = ["user", "organization"]
+    readonly_fields = ["guild_nickname"]
 
 
 @admin.register(OrgFeature)

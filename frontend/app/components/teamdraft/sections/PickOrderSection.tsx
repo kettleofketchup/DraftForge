@@ -1,12 +1,13 @@
 import { memo, useMemo } from 'react';
-import { Badge } from '~/components/ui/badge';
 import { TeamPopover } from '~/components/team';
-import { cn } from '~/lib/utils';
-import { useUserStore } from '~/store/userStore';
+import type { TeamType } from '~/components/tournament/types';
+import { Badge } from '~/components/ui/badge';
 import { DisplayName } from '~/components/user/avatar';
 import { UserAvatar } from '~/components/user/UserAvatar';
-import type { TeamType } from '~/components/tournament/types';
+import { useDisplayOrgId } from '~/hooks/useDisplayOrgId';
 import type { UserType } from '~/index';
+import { cn } from '~/lib/utils';
+import { useUserStore } from '~/store/userStore';
 import { LivePickOrderReserve } from '../timer/PickOrderReserve';
 import type { DraftRoundType } from '../types';
 
@@ -14,11 +15,18 @@ const MAX_TEAM_SIZE = 5;
 const MAX_UPCOMING_PICKS = 8;
 
 // Granular selectors
-const selectTeams = (state: ReturnType<typeof useUserStore.getState>) => state.tournament?.teams;
-const selectDraftStyle = (state: ReturnType<typeof useUserStore.getState>) => state.draft?.draft_style;
-const selectDraftRounds = (state: ReturnType<typeof useUserStore.getState>) => state.draft?.draft_rounds;
-const selectCurDraftRoundPk = (state: ReturnType<typeof useUserStore.getState>) => state.curDraftRound?.pk;
-const selectCurDraftRoundCaptainPk = (state: ReturnType<typeof useUserStore.getState>) => state.curDraftRound?.captain?.pk;
+const selectTeams = (state: ReturnType<typeof useUserStore.getState>) =>
+  state.tournament?.teams;
+const selectDraftStyle = (state: ReturnType<typeof useUserStore.getState>) =>
+  state.draft?.draft_style;
+const selectDraftRounds = (state: ReturnType<typeof useUserStore.getState>) =>
+  state.draft?.draft_rounds;
+const selectCurDraftRoundPk = (
+  state: ReturnType<typeof useUserStore.getState>,
+) => state.curDraftRound?.pk;
+const selectCurDraftRoundCaptainPk = (
+  state: ReturnType<typeof useUserStore.getState>,
+) => state.curDraftRound?.captain?.pk;
 
 interface PickOrderCaptain {
   team: TeamType;
@@ -56,6 +64,7 @@ const isTeamMaxed = (team: TeamType): boolean => {
 };
 
 export const PickOrderSection = memo(() => {
+  const displayOrgId = useDisplayOrgId();
   const teams = useUserStore(selectTeams);
   const draftStyle = useUserStore(selectDraftStyle);
   const draftRounds = useUserStore(selectDraftRounds);
@@ -75,7 +84,9 @@ export const PickOrderSection = memo(() => {
   const upcomingPicks = useMemo((): UpcomingPick[] => {
     if (draftStyle === 'shuffle' || !draftRounds?.length) return [];
 
-    const currentRoundIndex = draftRounds.findIndex((r) => r.pk === curDraftRoundPk);
+    const currentRoundIndex = draftRounds.findIndex(
+      (r) => r.pk === curDraftRoundPk,
+    );
     if (currentRoundIndex === -1) return [];
 
     // Limit to min of captain count or MAX_UPCOMING_PICKS
@@ -84,7 +95,11 @@ export const PickOrderSection = memo(() => {
 
     // Get upcoming rounds (including current) that haven't been picked yet
     const upcoming: UpcomingPick[] = [];
-    for (let i = currentRoundIndex; i < draftRounds.length && upcoming.length < maxPicks; i++) {
+    for (
+      let i = currentRoundIndex;
+      i < draftRounds.length && upcoming.length < maxPicks;
+      i++
+    ) {
       const round = draftRounds[i];
       // Skip rounds that already have a choice (already picked)
       if (round.choice) continue;
@@ -168,7 +183,7 @@ export const PickOrderSection = memo(() => {
                   'md:min-w-[70px]',
                   pick.isCurrent
                     ? 'bg-green-950/40 border-2 border-green-500'
-                    : 'bg-muted/30 border border-muted hover:bg-muted/50'
+                    : 'bg-muted/30 border border-muted hover:bg-muted/50',
                 )}
                 data-testid={`upcoming-pick-${idx}`}
                 data-pick-number={pick.pickNumber}
@@ -178,7 +193,7 @@ export const PickOrderSection = memo(() => {
                   variant={pick.isCurrent ? 'default' : 'secondary'}
                   className={cn(
                     'text-[9px] md:text-[10px] px-1 md:mb-0.5',
-                    pick.isCurrent && 'bg-green-600'
+                    pick.isCurrent && 'bg-green-600',
                   )}
                 >
                   {pick.isCurrent ? 'NOW' : `#${pick.pickNumber}`}
@@ -190,7 +205,7 @@ export const PickOrderSection = memo(() => {
                     size="lg"
                     className={cn(
                       'w-8 h-8 md:w-10 md:h-10 shrink-0',
-                      pick.isCurrent && 'ring-2 ring-green-500'
+                      pick.isCurrent && 'ring-2 ring-green-500',
                     )}
                   />
                 ) : (
@@ -199,13 +214,19 @@ export const PickOrderSection = memo(() => {
 
                 <div className="flex flex-row md:flex-col items-center md:items-center gap-1 md:gap-0">
                   <span className="text-[10px] md:text-[10px] font-medium truncate max-w-[60px] md:max-w-[65px] md:mt-0.5 md:text-center">
-                    {pick.team.captain ? DisplayName(pick.team.captain) : 'No Captain'}
+                    {pick.team.captain
+                      ? DisplayName(pick.team.captain, undefined, displayOrgId)
+                      : 'No Captain'}
                   </span>
                   <span className="text-xs md:text-sm font-medium text-muted-foreground">
-                    {getTeamMmr(pick.team).toLocaleString()} · {(pick.team.members?.length || 1) - 1}/4
+                    {getTeamMmr(pick.team).toLocaleString()} ·{' '}
+                    {(pick.team.members?.length || 1) - 1}/4
                   </span>
                   {pick.team.captain && pick.team.pk != null && (
-                    <LivePickOrderReserve teamPk={pick.team.pk} isCurrent={pick.isCurrent} />
+                    <LivePickOrderReserve
+                      teamPk={pick.team.pk}
+                      isCurrent={pick.isCurrent}
+                    />
                   )}
                 </div>
               </div>
@@ -234,19 +255,29 @@ export const PickOrderSection = memo(() => {
                   ? 'bg-muted/20 border border-muted/50 opacity-50 grayscale'
                   : captain.isCurrent
                     ? 'bg-green-950/40 border-2 border-green-500'
-                    : 'bg-muted/30 border border-muted hover:bg-muted/50'
+                    : 'bg-muted/30 border border-muted hover:bg-muted/50',
               )}
               data-testid={`pick-order-captain-${idx}`}
             >
               <Badge
-                variant={captain.isMaxed ? 'outline' : captain.isCurrent ? 'default' : 'secondary'}
+                variant={
+                  captain.isMaxed
+                    ? 'outline'
+                    : captain.isCurrent
+                      ? 'default'
+                      : 'secondary'
+                }
                 className={cn(
                   'text-[9px] md:text-[10px] px-1 md:mb-0.5',
                   captain.isCurrent && 'bg-green-600',
-                  captain.isMaxed && 'bg-muted/50 text-muted-foreground'
+                  captain.isMaxed && 'bg-muted/50 text-muted-foreground',
                 )}
               >
-                {captain.isMaxed ? 'DONE' : captain.isCurrent ? 'NOW' : getOrdinal(captain.pickOrder)}
+                {captain.isMaxed
+                  ? 'DONE'
+                  : captain.isCurrent
+                    ? 'NOW'
+                    : getOrdinal(captain.pickOrder)}
               </Badge>
 
               {captain.team.captain ? (
@@ -255,7 +286,7 @@ export const PickOrderSection = memo(() => {
                   size="lg"
                   className={cn(
                     'w-8 h-8 md:w-10 md:h-10 shrink-0',
-                    captain.isCurrent && 'ring-2 ring-green-500'
+                    captain.isCurrent && 'ring-2 ring-green-500',
                   )}
                 />
               ) : (
@@ -264,14 +295,22 @@ export const PickOrderSection = memo(() => {
 
               <div className="flex flex-row md:flex-col items-center md:items-center gap-1 md:gap-0">
                 <span className="text-[10px] md:text-[10px] font-medium truncate max-w-[60px] md:max-w-[65px] md:mt-0.5 md:text-center">
-                  {captain.team.captain ? DisplayName(captain.team.captain) : 'No Captain'}
+                  {captain.team.captain
+                    ? DisplayName(captain.team.captain, undefined, displayOrgId)
+                    : 'No Captain'}
                 </span>
                 <span className="text-xs md:text-sm font-medium text-muted-foreground">
-                  {captain.totalMmr.toLocaleString()} · {(captain.team.members?.length || 1) - 1}/4
+                  {captain.totalMmr.toLocaleString()} ·{' '}
+                  {(captain.team.members?.length || 1) - 1}/4
                 </span>
-                {captain.team.captain && captain.team.pk != null && !captain.isMaxed && (
-                  <LivePickOrderReserve teamPk={captain.team.pk} isCurrent={captain.isCurrent} />
-                )}
+                {captain.team.captain &&
+                  captain.team.pk != null &&
+                  !captain.isMaxed && (
+                    <LivePickOrderReserve
+                      teamPk={captain.team.pk}
+                      isCurrent={captain.isCurrent}
+                    />
+                  )}
               </div>
             </div>
           </TeamPopover>

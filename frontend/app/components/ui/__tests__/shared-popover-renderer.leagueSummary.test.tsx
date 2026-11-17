@@ -4,11 +4,17 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { UserType } from '~/components/user/types';
 import { SharedPopoverRenderer } from '../shared-popover-renderer';
 
-const player = { pk: 42, username: 'alice', nickname: 'Alice' } as UserType;
+const player = {
+  pk: 42,
+  username: 'alice',
+  discordNickname: 'Alice',
+} as UserType;
 const anchorEl = document.createElement('span');
 document.body.appendChild(anchorEl);
 
-const popover = vi.hoisted(() => ({ context: undefined as { statsLeagueId?: number | null } | undefined }));
+const popover = vi.hoisted(() => ({
+  context: undefined as { statsLeagueId?: number | null } | undefined,
+}));
 
 vi.mock('../shared-popover-context', () => ({
   useSharedPopover: () => ({
@@ -33,15 +39,24 @@ vi.mock('../shared-popover-context', () => ({
 }));
 
 vi.mock('~/components/player/PlayerLeagueSummary', () => ({
-  PlayerLeagueSummary: (props: { leaguePk: number; userId: number; compact?: boolean }) => (
-    <div data-testid="hover-league-summary" data-props={JSON.stringify(props)} />
+  PlayerLeagueSummary: (props: {
+    leaguePk: number;
+    userId: number;
+    compact?: boolean;
+  }) => (
+    <div
+      data-testid="hover-league-summary"
+      data-props={JSON.stringify(props)}
+    />
   ),
 }));
 vi.mock('~/components/user/positions', () => ({ RolePositions: () => null }));
 vi.mock('~/components/user/UserAvatar', () => ({ UserAvatar: () => null }));
 vi.mock('~/components/player/PlayerModal', () => ({ PlayerModal: () => null }));
 vi.mock('~/components/team/TeamModal', () => ({ TeamModal: () => null }));
-vi.mock('~/components/team/TeamPopoverContent', () => ({ TeamPopoverContent: () => null }));
+vi.mock('~/components/team/TeamPopoverContent', () => ({
+  TeamPopoverContent: () => null,
+}));
 
 afterEach(() => {
   popover.context = undefined;

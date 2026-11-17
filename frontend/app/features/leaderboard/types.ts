@@ -1,7 +1,7 @@
 export interface LeagueStats {
   user_id: number;
   username: string;
-  nickname?: string | null;
+  discordNickname?: string | null;
   avatar: string | null;
   base_mmr: number | null;
   league_mmr: number | null;
@@ -22,7 +22,7 @@ export interface LeagueStats {
 export interface LeaderboardEntry {
   user_id: number;
   username: string;
-  nickname?: string | null;
+  discordNickname?: string | null;
   avatar: string | null;
   base_mmr: number | null;
   league_mmr: number | null;

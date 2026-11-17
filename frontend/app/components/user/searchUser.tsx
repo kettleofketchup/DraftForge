@@ -4,10 +4,15 @@ import {
   ComboboxOption,
   ComboboxOptions,
 } from '@headlessui/react';
-import React from 'react';
+import React, { useMemo } from 'react';
 import type { UserType } from '~/components/user/types';
 import { UserAvatar } from '~/components/user/UserAvatar';
-import { useUserStore } from '~/store/userStore';
+import {
+  matchesUserQueryIn,
+  useOrgNicknames,
+  withOrgNickname,
+} from '~/hooks/useOrgNicknames';
+import { resolveDisplayName } from '~/lib/userDisplayName';
 
 import { Input } from '~/components/ui/input';
 import { getLogger } from '~/lib/logger';
@@ -18,6 +23,8 @@ interface Props {
   query: string;
   setQuery: React.Dispatch<React.SetStateAction<string>>;
   defaultValue?: string;
+  orgId?: number | null;
+  onSelect?: (user: UserType) => void;
 }
 
 export const SearchUserDropdown: React.FC<Props> = ({
@@ -25,77 +32,75 @@ export const SearchUserDropdown: React.FC<Props> = ({
   query,
   setQuery,
   defaultValue = 'Search for users',
+  orgId = null,
+  onSelect,
 }) => {
-  const user: UserType = useUserStore((state) => state.currentUser);
+  const nicknames = useOrgNicknames(
+    useMemo(() => users.map((u) => u.pk), [users]),
+    orgId,
+  );
 
-  const filteredUsers =
-    query === ''
-      ? users
-      : users.filter((person) => {
-          const q = query.toLowerCase();
-          return (
-            person.username?.toLowerCase().includes(q) ||
-            person.nickname?.toLowerCase().includes(q)
-          );
-        });
+  const filteredUsers = useMemo(
+    () =>
+      query === ''
+        ? users
+        : users.filter((person) =>
+            matchesUserQueryIn(person, query, orgId, nicknames),
+          ),
+    [users, query, orgId, nicknames],
+  );
 
-  const handleSearchUserSelect = (userName: UserType | string | null) => {
-    if (userName === null) {
-      return;
-    }
-    let searchName: string;
-    if (typeof userName === 'object') {
-      log.debug(userName);
-      searchName = userName?.username || userName?.nickname || '';
-    } else {
-      searchName = userName;
-    }
-    if (searchName === undefined || searchName === '') {
-      return;
-    }
-    log.debug(`Selected user: ${searchName}`, searchName);
-
-    const user: UserType | undefined = users.find(
-      (user) =>
-        user &&
-        (user.username?.toLowerCase() === searchName?.toLowerCase() ||
-          user.nickname?.toLowerCase() === searchName?.toLowerCase()),
-    );
+  const handleSearchUserSelect = (pk: number | null) => {
+    if (pk === null) return;
+    const selected = users.find((u) => u.pk === pk);
+    if (!selected) return;
+    log.debug('Selected user', { pk });
+    onSelect?.(selected);
   };
 
   return (
     <div className="align-middle w-full">
       {users && (
-        <Combobox value={query} onChange={handleSearchUserSelect}>
+        <Combobox<number | null> value={null} onChange={handleSearchUserSelect}>
           <ComboboxInput
             id="search-user-combobox"
             as={Input}
             data-testid="userSearchInput"
             placeholder={defaultValue}
+            displayValue={() => query}
             onChange={(event) => setQuery(event.target.value)}
-            onClick={(event) => log.debug(event.target)}
           />
           <ComboboxOptions className="border bg-gray-900 shadow-lg rounded-lg max-h-60 overflow-y-auto mt-2">
             {filteredUsers &&
             filteredUsers.length > 0 &&
             filteredUsers.length < 20 ? (
-              filteredUsers.map((user) => (
-                <ComboboxOption
-                  key={user.pk}
-                  value={user.username}
-                  className={({ active }) =>
-                    `cursor-pointer select-none p-2 ${
-                      active ? 'bg-purple-900 text-primary-content' : ''
-                    }`
-                  }
-                >
-                  <div className="flex items-center gap-2">
-                    <UserAvatar user={user} size="md" />
-                    <span>Username: {user.username}</span>
-                    Nick: {user.nickname && <span>{user.nickname}</span>}
-                  </div>
-                </ComboboxOption>
-              ))
+              filteredUsers.map((user) => {
+                const name = resolveDisplayName(
+                  withOrgNickname(user, orgId, nicknames),
+                  { orgId },
+                );
+                return (
+                  <ComboboxOption
+                    key={user.pk}
+                    value={user.pk ?? null}
+                    className={({ active }) =>
+                      `cursor-pointer select-none p-2 ${
+                        active ? 'bg-purple-900 text-primary-content' : ''
+                      }`
+                    }
+                  >
+                    <div className="flex items-center gap-2">
+                      <UserAvatar user={user} size="md" />
+                      <span>{name}</span>
+                      {user.username && user.username !== name && (
+                        <span className="text-sm text-muted-foreground">
+                          @{user.username}
+                        </span>
+                      )}
+                    </div>
+                  </ComboboxOption>
+                );
+              })
             ) : (
               <div className="p-2 text-sm text-gray-500">
                 No users or too many users found

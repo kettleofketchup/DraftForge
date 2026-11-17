@@ -1,5 +1,6 @@
 from rest_framework import serializers
 
+from app.legacy_fields import LegacyNullField
 from app.models import ProfileClaimRequest
 from app.serializers import PositionsSerializer
 
@@ -19,8 +20,13 @@ class OrgUserSerializer(serializers.ModelSerializer):
     )  # OrgUser's pk (for PATCH)
     pk = serializers.IntegerField(source="user.pk", read_only=True)  # User's pk
     username = serializers.CharField(source="user.username", read_only=True)
-    nickname = serializers.CharField(source="user.nickname", read_only=True)
-    guildNickname = serializers.CharField(source="user.guildNickname", read_only=True, allow_null=True)
+    nickname = LegacyNullField()
+    guildNickname = serializers.CharField(
+        source="guild_nickname", read_only=True, allow_null=True
+    )
+    discordNickname = serializers.CharField(
+        source="user.discordNickname", read_only=True, allow_null=True
+    )
     avatar = serializers.CharField(source="user.avatar", read_only=True)
     discordId = serializers.CharField(source="user.discordId", read_only=True)
     positions = PositionsSerializer(source="user.positions", read_only=True)
@@ -31,7 +37,7 @@ class OrgUserSerializer(serializers.ModelSerializer):
     mmr = serializers.IntegerField(read_only=True)  # From OrgUser.mmr
     league_mmr = serializers.SerializerMethodField()
 
-    def get_league_mmr(self, org_user):
+    def get_league_mmr(self, org_user: OrgUser) -> int | None:
         """Get MMR from LeagueUser if league_id is in context.
 
         Uses prefetched league_users if available to avoid N+1 queries.
@@ -71,6 +77,7 @@ class OrgUserSerializer(serializers.ModelSerializer):
             "username",
             "nickname",
             "guildNickname",
+            "discordNickname",
             "avatar",
             "discordId",
             "positions",
@@ -85,16 +92,23 @@ class ProfileClaimRequestSerializer(serializers.ModelSerializer):
     """Serializer for profile claim requests."""
 
     claimer_username = serializers.CharField(source="claimer.username", read_only=True)
-    claimer_nickname = serializers.CharField(
-        source="claimer.nickname", read_only=True, allow_null=True
+    claimer_discordNickname = serializers.CharField(
+        source="claimer.discordNickname", read_only=True, allow_null=True
+    )
+    claimer_guildNickname = serializers.CharField(
+        source="claimer_guild_nickname", read_only=True, allow_null=True, default=None
     )
     claimer_discord_id = serializers.CharField(
         source="claimer.discordId", read_only=True
     )
     claimer_avatar = serializers.CharField(source="claimer.avatarUrl", read_only=True)
 
-    target_nickname = serializers.CharField(
-        source="target_user.nickname", read_only=True
+    target_nickname = LegacyNullField()
+    target_username = serializers.CharField(
+        source="target_user.username", read_only=True, allow_null=True
+    )
+    target_discordNickname = serializers.CharField(
+        source="target_user.discordNickname", read_only=True, allow_null=True
     )
     target_steamid = serializers.IntegerField(
         source="target_user.steamid", read_only=True
@@ -108,8 +122,14 @@ class ProfileClaimRequestSerializer(serializers.ModelSerializer):
     reviewed_by_username = serializers.CharField(
         source="reviewed_by.username", read_only=True, allow_null=True
     )
-    reviewed_by_nickname = serializers.CharField(
-        source="reviewed_by.nickname", read_only=True, allow_null=True
+    reviewed_by_discordNickname = serializers.CharField(
+        source="reviewed_by.discordNickname", read_only=True, allow_null=True
+    )
+    reviewed_by_guildNickname = serializers.CharField(
+        source="reviewed_by_guild_nickname",
+        read_only=True,
+        allow_null=True,
+        default=None,
     )
 
     class Meta:
@@ -118,11 +138,14 @@ class ProfileClaimRequestSerializer(serializers.ModelSerializer):
             "id",
             "claimer",
             "claimer_username",
-            "claimer_nickname",
+            "claimer_discordNickname",
+            "claimer_guildNickname",
             "claimer_discord_id",
             "claimer_avatar",
             "target_user",
             "target_nickname",
+            "target_username",
+            "target_discordNickname",
             "target_steamid",
             "target_mmr",
             "organization",
@@ -130,7 +153,8 @@ class ProfileClaimRequestSerializer(serializers.ModelSerializer):
             "status",
             "reviewed_by",
             "reviewed_by_username",
-            "reviewed_by_nickname",
+            "reviewed_by_discordNickname",
+            "reviewed_by_guildNickname",
             "rejection_reason",
             "created_at",
             "reviewed_at",
@@ -147,7 +171,7 @@ class ProfileClaimRequestSerializer(serializers.ModelSerializer):
             "reviewed_at",
         )
 
-    def get_target_mmr(self, obj):
+    def get_target_mmr(self, obj: ProfileClaimRequest) -> int:
         from org.models import OrgUser
 
         try:

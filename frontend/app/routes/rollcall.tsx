@@ -109,7 +109,7 @@ export default function RollCallPage() {
       signupActions.reinstate.mutate(signup.id, {
         onSuccess: () =>
           toast.success(
-            `Restored ${signup.user_data ? DisplayName(signup.user_data) : (signup.username ?? `User #${signup.user}`)}`,
+            `Restored ${signup.user_data ? DisplayName(signup.user_data, undefined, signup.organization) : (signup.username ?? `User #${signup.user}`)}`,
           ),
         onError: () => toast.error('Failed to restore signup'),
       });

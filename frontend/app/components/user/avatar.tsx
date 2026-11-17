@@ -1,26 +1,21 @@
 import type { GuildMember, UserClassType, UserType } from '~/index';
+import {
+  type DiscordMemberLike,
+  type NameSource,
+  resolveDisplayName,
+} from '~/lib/userDisplayName';
 
-/**
- * Generic type for any object with username/nickname fields.
- * Accepts full UserType, simple captain objects from serializers, etc.
- * Username can be optional to handle partial data from various sources.
- */
 type DisplayNameable = {
+  pk?: number | null;
   // Username may be null for Steam-only signups (model field is null=True).
   username?: string | null;
-  nickname?: string | null;
-};
-
-type DiscordMemberLike = {
-  nick?: string | null;
-  user: { username: string; global_name?: string | null };
+  discordNickname?: string | null;
+  orgNicknames?: Record<number, string | null>;
 };
 
 /**
- * Get the display name for a user.
- * Priority: nickname > username
- * @param user - The user object
- * @param maxLength - Optional max length to truncate to (adds … if truncated)
+ * Display name via resolveDisplayName: org server nickname (when orgId is
+ * given) > global Discord name > username.
  */
 export const DisplayName = (
   user:
@@ -31,32 +26,15 @@ export const DisplayName = (
     | DiscordMemberLike
     | undefined,
   maxLength?: number,
+  orgId?: number | null,
 ): string => {
-  if (!user) {
+  if (!user || typeof user !== 'object') {
     return '?';
   }
-
-  // Guard against raw PKs (numbers) from unhydrated data
-  if (typeof user !== 'object') {
-    return '?';
-  }
-
-  let name: string;
-
-  if ('user' in user) {
-    // user is GuildMember - prefer nick, then global_name, then username
-    name = user.nick || user.user.global_name || user.user.username;
-  } else {
-    // Standard user - prefer nickname, then username, fallback to '?'
-    name = user.nickname || user.username || '?';
-  }
-
-  // Truncate if maxLength specified and name exceeds it
-  if (maxLength && name.length > maxLength) {
-    return `${name.substring(0, maxLength)}…`;
-  }
-
-  return name;
+  return resolveDisplayName(user as NameSource | GuildMember, {
+    maxLength,
+    orgId: orgId ?? null,
+  });
 };
 
 // Re-export AvatarUrl from UserAvatar for backwards compatibility

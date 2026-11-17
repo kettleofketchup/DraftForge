@@ -2,6 +2,7 @@ import React, { useCallback, useRef } from 'react';
 import { useSharedPopoverActions } from '~/components/ui/shared-popover-context';
 import { DisplayName } from '~/components/user/avatar';
 import type { UserType } from '~/components/user/types';
+import { useDisplayOrgId } from '~/hooks/useDisplayOrgId';
 import { cn } from '~/lib/utils';
 import { useLeagueStore } from '~/store/leagueStore';
 import { useOrgStore } from '~/store/orgStore';
@@ -30,8 +31,9 @@ export const PlayerPopoverTrigger: React.FC<PlayerPopoverTriggerProps> = ({
   } = useSharedPopoverActions();
   const currentOrg = useOrgStore((s) => s.currentOrg);
   const currentLeague = useLeagueStore((s) => s.currentLeague);
+  const orgId = useDisplayOrgId();
   const triggerRef = useRef<HTMLSpanElement>(null);
-  const playerName = DisplayName(player);
+  const playerName = DisplayName(player, undefined, orgId);
 
   const handleMouseEnter = useCallback(() => {
     if (triggerRef.current) {

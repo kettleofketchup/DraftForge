@@ -9,9 +9,10 @@ import {
   CardHeader,
   CardTitle,
 } from '~/components/ui/card';
+import { UserAvatar } from '~/components/user/UserAvatar';
+import { useDisplayOrgId } from '~/hooks/useDisplayOrgId';
 import type { DraftRoundType } from '~/index';
 import { DisplayName } from '~/index';
-import { UserAvatar } from '~/components/user/UserAvatar';
 
 // Stable animation objects to prevent re-renders
 const inViewAnimation = {
@@ -30,21 +31,29 @@ interface DraftRoundCardProps {
 // Custom comparison for memo - check key properties that affect display
 const draftRoundCardPropsAreEqual = (
   prevProps: DraftRoundCardProps,
-  nextProps: DraftRoundCardProps
+  nextProps: DraftRoundCardProps,
 ): boolean => {
   if (prevProps.isCur !== nextProps.isCur) return false;
   if (prevProps.maxRounds !== nextProps.maxRounds) return false;
   if (prevProps.draftRound?.pk !== nextProps.draftRound?.pk) return false;
-  if (prevProps.draftRound?.pick_number !== nextProps.draftRound?.pick_number) return false;
-  if (prevProps.draftRound?.captain?.pk !== nextProps.draftRound?.captain?.pk) return false;
-  if (prevProps.draftRound?.choice?.pk !== nextProps.draftRound?.choice?.pk) return false;
+  if (prevProps.draftRound?.pick_number !== nextProps.draftRound?.pick_number)
+    return false;
+  if (prevProps.draftRound?.captain?.pk !== nextProps.draftRound?.captain?.pk)
+    return false;
+  if (prevProps.draftRound?.choice?.pk !== nextProps.draftRound?.choice?.pk)
+    return false;
   // Also check team members count for team display
-  if (prevProps.draftRound?.team?.members?.length !== nextProps.draftRound?.team?.members?.length) return false;
+  if (
+    prevProps.draftRound?.team?.members?.length !==
+    nextProps.draftRound?.team?.members?.length
+  )
+    return false;
   return true;
 };
 
 export const DraftRoundCard = memo(
   ({ draftRound, maxRounds, isCur }: DraftRoundCardProps) => {
+    const displayOrgId = useDisplayOrgId();
     const bgColor = isCur ? 'bg-green-900' : 'bg-gray-800';
 
     return (
@@ -58,7 +67,9 @@ export const DraftRoundCard = memo(
           <CardHeader>
             <CardTitle className="flex justify-center">
               {isCur ? 'Current Captain: ' : 'Next Captain: '}
-              {draftRound?.captain ? DisplayName(draftRound.captain) : 'No captain selected'}
+              {draftRound?.captain
+                ? DisplayName(draftRound.captain, undefined, displayOrgId)
+                : 'No captain selected'}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -80,5 +91,5 @@ export const DraftRoundCard = memo(
       </motion.div>
     );
   },
-  draftRoundCardPropsAreEqual
+  draftRoundCardPropsAreEqual,
 );

@@ -5,6 +5,7 @@ from typing import TypedDict
 from django.db.models import Count, Q, QuerySet, Sum
 from django.utils import timezone
 
+from app.display_names import first_name
 from app.models import Organization
 from org.contributions.periods import Period, month_period, resolve_org_tz
 from org.models import ContributionEntry, OrgUser
@@ -15,7 +16,9 @@ class LeaderboardRow(TypedDict):
     org_user_pk: int
     user_pk: int
     username: str
-    nickname: str | None
+    nickname: None
+    discordNickname: str | None
+    guildNickname: str | None
     avatarUrl: str | None
     points: int
     entries: int
@@ -66,13 +69,16 @@ def leaderboard(
     ).in_bulk()
     rows: list[LeaderboardRow] = []
     for s in sums:
-        user = org_users[s["org_user"]].user
+        org_user = org_users[s["org_user"]]
+        user = org_user.user
         rows.append(
             LeaderboardRow(
                 org_user_pk=s["org_user"],
                 user_pk=user.pk,
                 username=user.username,
-                nickname=user.nickname,
+                nickname=None,
+                discordNickname=first_name(user.discordNickname),
+                guildNickname=first_name(org_user.guild_nickname),
                 avatarUrl=user.avatarUrl,
                 points=s["total"],
                 entries=s["entries"],

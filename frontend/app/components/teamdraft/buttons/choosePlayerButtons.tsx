@@ -1,14 +1,18 @@
 import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router';
-import { ConfirmDialog } from '~/components/ui/dialogs';
+import { buildDiscordLoginUrl } from '~/components/navbar/login';
+import { AdminOnlyButton } from '~/components/reusable/adminButton';
 import { Button } from '~/components/ui/button';
 import { PrimaryButton } from '~/components/ui/buttons';
-import { AdminOnlyButton } from '~/components/reusable/adminButton';
-import { buildDiscordLoginUrl } from '~/components/navbar/login';
-import type { UserType } from '~/index';
+import { ConfirmDialog } from '~/components/ui/dialogs';
 import { DisplayName } from '~/components/user/avatar';
+import { useDisplayOrgId } from '~/hooks/useDisplayOrgId';
+import type { UserType } from '~/index';
 import { getLogger } from '~/lib/logger';
-import { draftWsSelectors, useDraftWebSocketStore } from '~/store/draftWebSocketStore';
+import {
+  draftWsSelectors,
+  useDraftWebSocketStore,
+} from '~/store/draftWebSocketStore';
 import { useUserStore } from '~/store/userStore';
 import { choosePlayerHook } from '../hooks/choosePlayerHook';
 import { isCaptainOf } from '../isCaptainOf';
@@ -17,6 +21,7 @@ const log = getLogger('pickPlayerButton');
 export const ChoosePlayerButton: React.FC<{
   user: UserType;
 }> = ({ user }) => {
+  const displayOrgId = useDisplayOrgId();
   const tournament = useUserStore((state) => state.tournament);
   const currentUser = useUserStore((state) => state.currentUser);
 
@@ -48,7 +53,8 @@ export const ChoosePlayerButton: React.FC<{
     currentUser.pk === curDraftRound.captain.pk;
   const canPick =
     isStaff() ||
-    (isCaptainForRound && (!timerEnabled || curDraftRound.pk === activeRoundPk));
+    (isCaptainForRound &&
+      (!timerEnabled || curDraftRound.pk === activeRoundPk));
   const pickAlreadyMade = !!curDraftRound?.choice;
 
   useEffect(() => {}, [tournament.draft, tournament.teams]);
@@ -71,7 +77,7 @@ export const ChoosePlayerButton: React.FC<{
     });
 
     log.debug('updateDraftRound', {
-      user: DisplayName(user),
+      user: DisplayName(user, undefined, displayOrgId),
       draft_round: curDraftRound.pk,
       draft: draft,
     });
@@ -145,8 +151,8 @@ export const ChoosePlayerButton: React.FC<{
       <ConfirmDialog
         open={showConfirm}
         onOpenChange={setShowConfirm}
-        title={`Choose player ${DisplayName(user)}`}
-        description={`This will add ${DisplayName(user)} to your team.`}
+        title={`Choose player ${DisplayName(user, undefined, displayOrgId)}`}
+        description={`This will add ${DisplayName(user, undefined, displayOrgId)} to your team.`}
         confirmLabel="Confirm Pick"
         variant="default"
         onConfirm={handleChange}

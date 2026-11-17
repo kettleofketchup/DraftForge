@@ -2,7 +2,6 @@ import { TriangleAlert } from 'lucide-react';
 import React from 'react';
 import type { UseFormReturn } from 'react-hook-form';
 import { lookupSteamAccountIdHolder } from '~/components/api/userAPI';
-import { getLogger } from '~/lib/logger';
 import {
   FormControl,
   FormField,
@@ -25,6 +24,7 @@ import {
   positionKeys,
   type PositionKey,
 } from '~/components/user/positions/positionEdit';
+import { getLogger } from '~/lib/logger';
 import type { EditUserInput } from './editUserSchema';
 import {
   describeSteamAccountIdConflict,
@@ -208,45 +208,6 @@ function PositionSelect({
   );
 }
 
-function StringField({
-  form,
-  fieldKey,
-  label,
-  hotkey,
-}: {
-  form: UseFormReturn<EditUserInput>;
-  fieldKey: 'nickname';
-  label: string;
-  /** Optional keycap hint surfaced inline with the label (visual only — the
-   * focus-handler lives in the parent modal). */
-  hotkey?: string;
-}) {
-  return (
-    <FormField
-      control={form.control}
-      name={fieldKey}
-      render={({ field }) => (
-        <FormItem>
-          <FormLabel hotkey={hotkey}>{label}</FormLabel>
-          <FormControl>
-            <Input
-              ref={field.ref}
-              name={field.name}
-              onBlur={field.onBlur}
-              value={field.value ?? ''}
-              onChange={(e) =>
-                field.onChange(e.target.value === '' ? null : e.target.value)
-              }
-              data-testid={`edit-user-${fieldKey}`}
-            />
-          </FormControl>
-          <FormMessage />
-        </FormItem>
-      )}
-    />
-  );
-}
-
 function NumberField({
   form,
   fieldKey,
@@ -303,7 +264,6 @@ export const UserEditForm: React.FC<Props> = ({
   // No outer <ScrollArea> — FormDialog already wraps its children in one.
   return (
     <div className="flex flex-col w-full gap-4">
-      <StringField form={form} fieldKey="nickname" label="Nickname" hotkey="N" />
       {showMmr && (
         <NumberField form={form} fieldKey="mmr" label={mmrLabel} hotkey="R" />
       )}

@@ -7,6 +7,7 @@ import os
 
 from dotenv import load_dotenv
 
+from config.discord_api import DISCORD_API_BASE_URL, DISCORD_GUILD_ID  # noqa: F401
 from config.dota_lobby import DotaLobbyConfig
 from config.installed_apps import MODEL_APPS
 
@@ -28,6 +29,7 @@ def _env_bool(key, default=False):
 # When TEST=true, sync_send_dm only sends DMs to TEST_DISCORD_USER_ID and
 # returns fake-success for everyone else (so recipient_count > 0 in tests
 # without spamming real users).
+DISCORD_ACTIVITY_ENABLED = _env_bool("DISCORD_ACTIVITY_ENABLED")
 TEST = _env_bool("TEST")
 RELEASE = _env_bool("RELEASE")
 TEST_DISCORD_USER_ID = os.environ.get("TEST_DISCORD_USER_ID", "243497113906970625")
@@ -47,7 +49,9 @@ DATABASES = {}
 # Celery configuration
 REDIS_HOST = os.environ.get("REDIS_HOST", "redis")
 CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", f"redis://{REDIS_HOST}:6379/1")
-CELERY_RESULT_BACKEND = os.environ.get("CELERY_RESULT_BACKEND", f"redis://{REDIS_HOST}:6379/1")
+CELERY_RESULT_BACKEND = os.environ.get(
+    "CELERY_RESULT_BACKEND", f"redis://{REDIS_HOST}:6379/1"
+)
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"

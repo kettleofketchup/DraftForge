@@ -7,6 +7,7 @@ import { updateTournament } from '~/components/api/api';
 import type { TournamentType } from '~/components/tournament/types';
 import { TrashIconButton } from '~/components/ui/buttons';
 import { DisplayName } from '~/components/user/avatar';
+import { useDisplayOrgId } from '~/hooks/useDisplayOrgId';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
 
@@ -25,6 +26,7 @@ export const PlayerRemoveButton: React.FC<PropsRemoveButton> = ({
 }) => {
   const tournament = useUserStore(useShallow((state) => state.tournament));
   const queryClient = useQueryClient();
+  const orgId = useDisplayOrgId();
 
   const removeUser = useCallback(
     async (e: FormEvent) => {
@@ -62,15 +64,16 @@ export const PlayerRemoveButton: React.FC<PropsRemoveButton> = ({
       toast.promise(
         updateTournament(tournament.pk, { user_ids: updatedUserIds ?? [] }),
         {
-          loading: `Removing ${DisplayName(user)}...`,
-          success: () => `${DisplayName(user)} has been removed`,
+          loading: `Removing ${DisplayName(user, undefined, orgId)}...`,
+          success: () =>
+            `${DisplayName(user, undefined, orgId)} has been removed`,
           error: (err: unknown) => {
             log.error('Failed to remove user', err);
             // Revert optimistic update on failure
             queryClient.invalidateQueries({
               queryKey: ['tournament', tournament.pk],
             });
-            return `Failed to remove ${DisplayName(user)}`;
+            return `Failed to remove ${DisplayName(user, undefined, orgId)}`;
           },
         },
       );

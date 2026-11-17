@@ -8,11 +8,15 @@ Uses distinct role-based test users to verify the permission matrix:
 - regular:       authenticated user with no roles
 """
 
+from unittest import mock
+
+from django.core.cache import cache
 from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 
 from app.models import CustomUser, League, LeagueLog, Organization, OrgLog, Tournament
+from app.tests.raw_site_nickname import raw_guild_nickname, raw_site_nickname
 from league.models import LeagueUser
 from org.models import OrgUser
 
@@ -154,8 +158,6 @@ class AddOrgMemberTest(TestCase):
     @override_settings(CACHES=LOCMEM_CACHE)
     def test_discord_auto_create(self):
         """Backend looks up Discord data from its own cache, not client payload."""
-        from django.core.cache import cache
-
         self.org.discord_server_id = "999888777"
         self.org.save()
         cache.set(
@@ -182,12 +184,15 @@ class AddOrgMemberTest(TestCase):
             OrgUser.objects.filter(user=new_user, organization=self.org).exists()
         )
         self.assertEqual(new_user.discordUsername, "discorduser")
-        self.assertEqual(new_user.nickname, "DiscordNick")
+        self.assertIsNone(raw_site_nickname(new_user.pk))
+        self.assertEqual(
+            OrgUser.objects.get(user=new_user, organization=self.org).guild_nickname,
+            "DiscordNick",
+        )
+        self.assertEqual(new_user.discordNickname, "Discord User")
 
     @override_settings(CACHES=LOCMEM_CACHE)
     def test_discord_id_not_in_cache_returns_404(self):
-        from django.core.cache import cache
-
         cache.clear()
         self.org.discord_server_id = "999888777"
         self.org.save()
@@ -468,3 +473,243 @@ class AddTournamentMemberTest(TestCase):
         self.tournament.users.add(self.target_user)
         resp = self._post(self.orgadmin)
         self.assertEqual(resp.status_code, 400)
+
+
+NICK_CACHE = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "test_add_member_guild_nick",
+    }
+}
+GUILD = "999888777"
+DISCORD_ID = "424242"
+
+
+def _member(discord_id: str = DISCORD_ID, nick: str | None = "DragonClaw") -> dict:
+    return {
+        "user": {
+            "id": discord_id,
+            "username": "dragonclaw_dc",
+            "global_name": "GwaihirTheWindlord",
+            "avatar": None,
+        },
+        "nick": nick,
+    }
+
+
+@override_settings(CACHES=NICK_CACHE)
+class AddMemberGuildNicknameTest(TestCase):
+    def setUp(self) -> None:
+        cache.clear()
+        self.client = APIClient()
+        self.admin = CustomUser.objects.create_user(username="gn_admin", password="x")
+        self.org = Organization.objects.create(name="Nick Org", discord_server_id=GUILD)
+        self.org.admins.add(self.admin)
+        self.league = League.objects.create(
+            name="Nick League", steam_league_id=77, organization=self.org
+        )
+        self.tournament = Tournament.objects.create(
+            name="Nick Tournament", date_played=timezone.now(), league=self.league
+        )
+        self.client.force_authenticate(user=self.admin)
+
+    def _warm(self, *members: dict) -> None:
+        cache.set(f"discord_members_search_{GUILD}", list(members), timeout=3600)
+
+    def _existing(self) -> CustomUser:
+        return CustomUser.objects.create_user(
+            username="dc_existing", password="x", discordId=DISCORD_ID
+        )
+
+    def _org_nick(self, user: CustomUser) -> str | None:
+        return OrgUser.objects.get(user=user, organization=self.org).guild_nickname
+
+    def test_org_add_new_user_seeds_nickname(self) -> None:
+        self._warm(_member())
+        resp = self.client.post(
+            f"/api/organizations/{self.org.pk}/members/",
+            {"discord_id": DISCORD_ID},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        user = CustomUser.objects.get(discordId=DISCORD_ID)
+        self.assertEqual(self._org_nick(user), "DragonClaw")
+
+    def test_org_add_existing_user_by_discord_id_seeds_nickname(self) -> None:
+        user = self._existing()
+        self._warm(_member())
+        resp = self.client.post(
+            f"/api/organizations/{self.org.pk}/members/",
+            {"discord_id": DISCORD_ID},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(self._org_nick(user), "DragonClaw")
+
+    def test_org_add_existing_user_by_user_id_seeds_nickname(self) -> None:
+        user = self._existing()
+        self._warm(_member())
+        resp = self.client.post(
+            f"/api/organizations/{self.org.pk}/members/",
+            {"user_id": user.pk},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(self._org_nick(user), "DragonClaw")
+
+    def test_org_add_whitespace_nick_is_none(self) -> None:
+        user = self._existing()
+        self._warm(_member(nick="   "))
+        self.client.post(
+            f"/api/organizations/{self.org.pk}/members/",
+            {"user_id": user.pk},
+            format="json",
+        )
+        self.assertIsNone(self._org_nick(user))
+
+    def test_org_add_cold_cache_leaves_none_without_fetch(self) -> None:
+        user = self._existing()
+        with mock.patch(
+            "discordbot.services.discord_members.get_discord_members_data"
+        ) as fetch:
+            resp = self.client.post(
+                f"/api/organizations/{self.org.pk}/members/",
+                {"user_id": user.pk},
+                format="json",
+            )
+        self.assertEqual(resp.status_code, 200)
+        self.assertIsNone(self._org_nick(user))
+        fetch.assert_not_called()
+
+    def test_org_add_already_member_400_no_write(self) -> None:
+        user = self._existing()
+        OrgUser.objects.create(user=user, organization=self.org)
+        self._warm(_member())
+        resp = self.client.post(
+            f"/api/organizations/{self.org.pk}/members/",
+            {"user_id": user.pk},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIsNone(self._org_nick(user))
+
+    def test_org_add_invalidates_user_after_commit(self) -> None:
+        user = self._existing()
+        self._warm(_member())
+        with mock.patch("app.views.admin_team.invalidate_after_commit") as spy:
+            self.client.post(
+                f"/api/organizations/{self.org.pk}/members/",
+                {"user_id": user.pk},
+                format="json",
+            )
+        self.assertTrue(
+            any(
+                isinstance(a, CustomUser) and a.pk == user.pk
+                for call in spy.call_args_list
+                for a in call.args
+            )
+        )
+
+    def test_league_add_by_user_id_seeds_nickname(self) -> None:
+        user = self._existing()
+        self._warm(_member())
+        resp = self.client.post(
+            f"/api/leagues/{self.league.pk}/members/",
+            {"user_id": user.pk},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(
+            LeagueUser.objects.filter(user=user, league=self.league).exists()
+        )
+        self.assertEqual(self._org_nick(user), "DragonClaw")
+
+    def test_league_add_by_discord_id_seeds_nickname(self) -> None:
+        self._warm(_member())
+        resp = self.client.post(
+            f"/api/leagues/{self.league.pk}/members/",
+            {"discord_id": DISCORD_ID},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        user = CustomUser.objects.get(discordId=DISCORD_ID)
+        self.assertTrue(
+            LeagueUser.objects.filter(user=user, league=self.league).exists()
+        )
+        self.assertEqual(self._org_nick(user), "DragonClaw")
+
+    def test_league_add_keeps_existing_org_nickname(self) -> None:
+        user = self._existing()
+        OrgUser.objects.create(
+            user=user, organization=self.org, guild_nickname="Synced"
+        )
+        self._warm(_member())
+        resp = self.client.post(
+            f"/api/leagues/{self.league.pk}/members/",
+            {"user_id": user.pk},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(self._org_nick(user), "Synced")
+
+    def test_league_add_invalidates_user_after_commit(self) -> None:
+        user = self._existing()
+        self._warm(_member())
+        with mock.patch("app.views.admin_team.invalidate_after_commit") as spy:
+            self.client.post(
+                f"/api/leagues/{self.league.pk}/members/",
+                {"user_id": user.pk},
+                format="json",
+            )
+        self.assertTrue(
+            any(
+                isinstance(a, CustomUser) and a.pk == user.pk
+                for call in spy.call_args_list
+                for a in call.args
+            )
+        )
+
+    def test_tournament_add_by_user_id(self) -> None:
+        user = self._existing()
+        resp = self.client.post(
+            f"/api/tournaments/{self.tournament.pk}/members/",
+            {"user_id": user.pk},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(user, self.tournament.users.all())
+
+    def test_tournament_add_by_discord_id(self) -> None:
+        self._warm(_member())
+        resp = self.client.post(
+            f"/api/tournaments/{self.tournament.pk}/members/",
+            {"discord_id": DISCORD_ID},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        user = CustomUser.objects.get(discordId=DISCORD_ID)
+        self.assertIn(user, self.tournament.users.all())
+
+
+class UpdateOrgUserGuildNicknameTest(TestCase):
+    def setUp(self) -> None:
+        self.client = APIClient()
+        self.admin = CustomUser.objects.create_user(username="uo_admin", password="x")
+        self.org = Organization.objects.create(name="Update Org")
+        self.org.admins.add(self.admin)
+        self.user = CustomUser.objects.create_user(username="uo_target", password="x")
+        self.org_user = OrgUser.objects.create(
+            user=self.user, organization=self.org, guild_nickname="Synced"
+        )
+        self.client.force_authenticate(user=self.admin)
+
+    def test_guild_nickname_key_is_ignored(self) -> None:
+        resp = self.client.patch(
+            f"/api/organizations/{self.org.pk}/users/{self.org_user.pk}/",
+            {"guildNickname": "Manual"},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.org_user.refresh_from_db()
+        self.assertEqual(self.org_user.guild_nickname, "Synced")
+        self.assertIsNone(raw_guild_nickname(self.user.pk))

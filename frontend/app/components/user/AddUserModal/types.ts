@@ -1,5 +1,9 @@
+import type {
+  AddMemberPayload,
+  DiscordSearchResult,
+  SearchUserResult,
+} from '~/components/api/api';
 import type { UserType } from '~/components/user/types';
-import type { SearchUserResult, DiscordSearchResult, AddMemberPayload } from '~/components/api/api';
 
 export interface EntityContext {
   orgId?: number;
@@ -29,6 +33,8 @@ export interface SiteUserResultsProps {
   highlightedIndex: number;
   /** Whether to show membership badges (default true) */
   showMembership?: boolean;
+  /** Org whose server nicknames label the results */
+  orgId?: number;
 }
 
 export interface DiscordMemberResultsProps {

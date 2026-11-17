@@ -17,6 +17,7 @@ import { useDebouncedValue } from '~/hooks/useDebouncedValue';
 import { useListKeyboardNav } from '~/hooks/useListKeyboardNav';
 import { cn } from '~/lib/utils';
 import { DiscordMemberResults } from './DiscordMemberResults';
+import { cacheSearchResults } from './searchCache';
 import { SiteUserResults } from './SiteUserResults';
 import type { AddUserModalProps } from './types';
 
@@ -60,7 +61,9 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
       entityContext.leagueId,
     ],
     queryFn: () =>
-      searchUsers(searchTerm, entityContext.orgId, entityContext.leagueId),
+      searchUsers(searchTerm, entityContext.orgId, entityContext.leagueId).then(
+        (r) => cacheSearchResults(r, entityContext),
+      ),
     enabled: open && searchTerm.length >= 1,
   });
 
@@ -191,7 +194,9 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
         if (!result?.pk || checkIsAdded(result)) return;
         try {
           await handleAdd({ user_id: result.pk });
-          toast.success(`Added ${DisplayName(result)}`);
+          toast.success(
+            `Added ${DisplayName(result, undefined, entityContext.orgId)}`,
+          );
         } catch (err) {
           toast.error(
             err instanceof Error ? err.message : 'Failed to add user',
@@ -268,7 +273,7 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
       <div className="relative mb-4">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
-          placeholder="Search by username, nickname, or Steam ID..."
+          placeholder="Search by username, Discord name, or Steam ID..."
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={handleKeyDown}
@@ -317,6 +322,7 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
             isAdded={checkIsAdded}
             queryLength={searchTerm.length}
             highlightedIndex={activeColumn === 'site' ? highlightedIndex : -1}
+            orgId={entityContext.orgId}
           />
         </div>
         <div>
@@ -368,6 +374,7 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
               queryLength={searchTerm.length}
               highlightedIndex={activeColumn === 'site' ? highlightedIndex : -1}
               showMembership={false}
+              orgId={entityContext.orgId}
             />
           </TabsContent>
           <TabsContent value="discord">

@@ -45,7 +45,6 @@ const event: PromoEvent = {
 const candidate: CandidateRow = {
   user_pk: 42,
   username: 'ana',
-  nickname: null,
   discordUsername: 'ana_dc',
   discordId: '1234',
   avatarUrl: null,
@@ -197,6 +196,31 @@ describe('ComposePanel', () => {
     expect(
       screen.queryByTestId('promo-no-points-note'),
     ).not.toBeInTheDocument();
+  });
+
+  it('names the recipient by their server nickname for the org', async () => {
+    vi.mocked(renderPromo).mockResolvedValue({
+      text: RENDERED,
+      warnings: [],
+      will_earn: true,
+    });
+    render(
+      <ComposePanel
+        orgId={1}
+        access={access}
+        event={event}
+        candidate={{
+          ...candidate,
+          discordNickname: 'AnaGlobal',
+          guildNickname: 'AnaServer',
+        }}
+        templates={templates}
+      />,
+      { wrapper: Wrapper },
+    );
+    expect(
+      (await screen.findByTestId('promo-compose-panel')).textContent,
+    ).toContain('Message AnaServer');
   });
 
   it('links to the recipient Discord profile', async () => {

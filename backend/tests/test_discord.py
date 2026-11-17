@@ -59,7 +59,9 @@ def _build_test_discord_members():
     for username, user in TOURNAMENT_USERS.items():
         if user.discord_id:
             members.append(
-                _make_discord_member(user.discord_id, username, user.nickname)
+                _make_discord_member(
+                    user.discord_id, username, user.discord_global_name
+                )
             )
 
     # Unlinked members — no CustomUser match

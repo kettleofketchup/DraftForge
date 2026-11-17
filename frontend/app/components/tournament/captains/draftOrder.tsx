@@ -12,6 +12,7 @@ import {
 import { Label } from '~/components/ui/label';
 import { Spinner } from '~/components/ui/spinner';
 import { DisplayName } from '~/components/user/avatar';
+import { useDisplayOrgId } from '~/hooks/useDisplayOrgId';
 import type { UserType } from '~/index';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
@@ -26,6 +27,7 @@ export const DraftOrderButton: React.FC<{
    * control fits a UserStrip actionSlot column on mobile. */
   compact?: boolean;
 }> = ({ user, draft_order, id, setDraftOrder, compact = false }) => {
+  const orgId = useDisplayOrgId();
   const tournament = useUserStore((state) => state.tournament);
   const getCurrentTournament = useUserStore(
     (state) => state.getCurrentTournament,
@@ -59,7 +61,7 @@ export const DraftOrderButton: React.FC<{
       team: team.name,
     });
     toast.promise(updateTeam(team.pk!, newTeam), {
-      loading: ` Updating Draft order for ${DisplayName(user)}`,
+      loading: ` Updating Draft order for ${DisplayName(user, undefined, orgId)}`,
 
       success: (data) => {
         getCurrentTournament();
@@ -98,7 +100,7 @@ export const DraftOrderButton: React.FC<{
             id={id}
             size="sm"
             className="w-9 px-1 py-0 text-xs justify-center [&>svg]:size-3"
-            aria-label={`Draft order for ${DisplayName(user)}`}
+            aria-label={`Draft order for ${DisplayName(user, undefined, orgId)}`}
             data-testid={`draft-order-trigger-${user.pk}`}
           >
             <SelectValue placeholder={draft_order} />

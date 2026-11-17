@@ -1,16 +1,23 @@
-"""Test that CustomUser.createFromDiscordData seeds nickname from guild nick → global_name → username."""
+"""CustomUser.createFromDiscordData stores Discord names, never the site nickname."""
 
 from django.test import TestCase
+
 from app.models import CustomUser, PositionsModel
+from app.tests.raw_site_nickname import raw_site_nickname
 
 
-class CreateFromDiscordDataNicknameTest(TestCase):
-    """Regression for #196b — new users from Discord must have a non-empty nickname."""
-
-    def setUp(self):
+class CreateFromDiscordDataNamesTest(TestCase):
+    def setUp(self) -> None:
         self.positions = PositionsModel.objects.create()
 
-    def _build_member(self, *, nick=None, global_name=None, username="alice", user_id="123"):
+    def _build_member(
+        self,
+        *,
+        nick: str | None = None,
+        global_name: str | None = None,
+        username: str = "alice",
+        user_id: str = "123",
+    ) -> dict:
         return {
             "nick": nick,
             "user": {
@@ -21,31 +28,43 @@ class CreateFromDiscordDataNicknameTest(TestCase):
             },
         }
 
-    def test_uses_guild_nick_when_present(self):
+    def _create(self, member: dict) -> CustomUser:
         user = CustomUser(positions=self.positions)
-        user.createFromDiscordData(
-            self._build_member(nick="GuildNick", global_name="GlobalName", username="alice")
-        )
-        self.assertEqual(user.nickname, "GuildNick")
+        user.createFromDiscordData(member)
+        user.save()
+        return user
 
-    def test_falls_back_to_global_name_when_no_nick(self):
-        user = CustomUser(positions=self.positions)
-        user.createFromDiscordData(
-            self._build_member(nick=None, global_name="GlobalName", username="alice")
+    def test_never_writes_site_nickname(self) -> None:
+        user = self._create(
+            self._build_member(nick="DragonClaw", global_name="Gwaihir", username="dc")
         )
-        self.assertEqual(user.nickname, "GlobalName")
+        self.assertIsNone(raw_site_nickname(user.pk))
+        self.assertEqual(user.discordNickname, "Gwaihir")
+        self.assertEqual(user.username, "dc")
 
-    def test_falls_back_to_username_when_no_nick_or_global_name(self):
-        """Issue #196b: nickname must be a non-empty string, never blank."""
-        user = CustomUser(positions=self.positions)
-        user.createFromDiscordData(
-            self._build_member(nick=None, global_name=None, username="alice")
-        )
-        self.assertEqual(user.nickname, "alice")
+    def test_never_writes_site_nickname_without_discord_names(self) -> None:
+        user = self._create(self._build_member(username="alice"))
+        self.assertIsNone(raw_site_nickname(user.pk))
 
-    def test_falls_back_to_username_when_nick_and_global_name_empty_string(self):
+    def test_sets_discord_nickname_from_global_name(self) -> None:
         user = CustomUser(positions=self.positions)
         user.createFromDiscordData(
-            self._build_member(nick="", global_name="", username="alice")
+            self._build_member(
+                nick="DragonClaw", global_name="Gwaihir", username="alice"
+            )
         )
-        self.assertEqual(user.nickname, "alice")
+        self.assertEqual(user.discordNickname, "Gwaihir")
+
+    def test_discord_nickname_none_without_global_name(self) -> None:
+        user = CustomUser(positions=self.positions)
+        user.createFromDiscordData(
+            self._build_member(nick="DragonClaw", global_name=None, username="alice")
+        )
+        self.assertIsNone(user.discordNickname)
+
+    def test_discord_nickname_none_for_whitespace_global_name(self) -> None:
+        user = CustomUser(positions=self.positions)
+        user.createFromDiscordData(
+            self._build_member(nick=None, global_name="   ", username="alice")
+        )
+        self.assertIsNone(user.discordNickname)

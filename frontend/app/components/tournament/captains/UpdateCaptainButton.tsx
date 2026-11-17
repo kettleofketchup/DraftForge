@@ -4,6 +4,7 @@ import { AdminOnlyButton } from '~/components/reusable/adminButton';
 import { DestructiveButton, PrimaryButton } from '~/components/ui/buttons';
 import { ConfirmDialog } from '~/components/ui/dialogs';
 import { DisplayName } from '~/components/user/avatar';
+import { useDisplayOrgId } from '~/hooks/useDisplayOrgId';
 import type { TeamType, UserType } from '~/index';
 import { getLogger } from '~/lib/logger';
 import { cn } from '~/lib/utils';
@@ -35,6 +36,7 @@ export const UpdateCaptainButton: React.FC<UpdateCaptainButtonProps> = ({
 }) => {
   const tournament = useUserStore((state) => state.tournament);
   const isStaff = useUserStore((state) => state.isStaff);
+  const orgId = useDisplayOrgId();
 
   const determineIsCaptain = () => {
     return !!tournament?.captains?.some((c) => c.pk === user.pk);
@@ -124,7 +126,9 @@ export const UpdateCaptainButton: React.FC<UpdateCaptainButtonProps> = ({
           size={triggerSize}
           onClick={() => setShowConfirm(true)}
           aria-label={
-            compact ? `${msg()} captain ${DisplayName(user)}` : undefined
+            compact
+              ? `${msg()} captain ${DisplayName(user, undefined, orgId)}`
+              : undefined
           }
           data-testid={`captain-action-${user.pk}`}
         >
@@ -136,7 +140,9 @@ export const UpdateCaptainButton: React.FC<UpdateCaptainButtonProps> = ({
           size={triggerSize}
           onClick={() => setShowConfirm(true)}
           aria-label={
-            compact ? `${msg()} captain ${DisplayName(user)}` : undefined
+            compact
+              ? `${msg()} captain ${DisplayName(user, undefined, orgId)}`
+              : undefined
           }
           data-testid={`captain-action-${user.pk}`}
         >

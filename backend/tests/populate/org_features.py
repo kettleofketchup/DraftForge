@@ -90,7 +90,7 @@ def _ensure_user(data: TestUser) -> CustomUser:
         user = CustomUser(pk=data.pk, positions=PositionsModel.objects.create())
         user.set_unusable_password()
     user.username = data.username
-    user.nickname = data.nickname
+    user.discordNickname = data.discord_global_name
     user.discordId = data.discord_id
     user.save()
     return user

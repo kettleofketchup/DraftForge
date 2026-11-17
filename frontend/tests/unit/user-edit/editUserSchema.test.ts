@@ -5,36 +5,40 @@ import {
   buildDefaults,
   EditUserSchema,
   pickDirty,
-  type EditUserInput,
-  type EditUserScope,
 } from '~/components/user/userCard/editUserSchema';
 
 const baseUser = {
   pk: 42,
   orgUserPk: 7,
   username: 'alice',
-  nickname: 'Ali',
   mmr: 5000,
   steam_account_id: 999,
-  guildNickname: 'AliGuild',
   positions: { carry: 1, mid: 2, offlane: 3, soft_support: 4, hard_support: 5 },
   is_staff: false,
   is_superuser: false,
 } as any;
 
 const org = { pk: 11, name: 'Test Org' } as OrganizationType;
-const league = { pk: 22, name: 'Test League', organization: org } as unknown as LeagueType;
+const league = {
+  pk: 22,
+  name: 'Test League',
+  organization: org,
+} as unknown as LeagueType;
 
 describe('buildDefaults', () => {
   it('includes mmr in org scope', () => {
     const d = buildDefaults(baseUser, { kind: 'org', organization: org });
     expect(d.mmr).toBe(5000);
-    expect(d.nickname).toBe('Ali');
+    expect('nickname' in d).toBe(false);
     expect(d.positions.carry).toBe(1);
   });
 
   it('includes mmr in league scope', () => {
-    const d = buildDefaults(baseUser, { kind: 'league', league, organization: org });
+    const d = buildDefaults(baseUser, {
+      kind: 'league',
+      league,
+      organization: org,
+    });
     expect(d.mmr).toBe(5000);
   });
 
@@ -50,31 +54,41 @@ describe('buildDefaults', () => {
     expect(d.positions.hard_support).toBe(0);
   });
 
-  it('coerces nullish strings to null', () => {
-    const u = { ...baseUser, nickname: undefined };
-    const d = buildDefaults(u, { kind: 'global' });
-    expect(d.nickname).toBe(null);
+  it('never seeds a site nickname', () => {
+    const d = buildDefaults(
+      { ...baseUser, nickname: 'Site' },
+      { kind: 'global' },
+    );
+    expect('nickname' in d).toBe(false);
   });
 });
 
 describe('pickDirty', () => {
   it('returns empty object when no fields are dirty', () => {
-    expect(pickDirty({ nickname: 'x' } as any, {})).toEqual({});
+    expect(pickDirty({ mmr: 1 } as any, {})).toEqual({});
   });
 
   it('picks top-level dirty fields', () => {
     expect(
       pickDirty(
-        { nickname: 'NewNick', mmr: 6000 } as any,
-        { nickname: true } as any,
+        { steam_account_id: 5, mmr: 6000 } as any,
+        { mmr: true } as any,
       ),
-    ).toEqual({ nickname: 'NewNick' });
+    ).toEqual({ mmr: 6000 });
   });
 
   it('recurses into positions for partial nested dirty', () => {
     expect(
       pickDirty(
-        { positions: { carry: 1, mid: 2, offlane: 3, soft_support: 4, hard_support: 5 } } as any,
+        {
+          positions: {
+            carry: 1,
+            mid: 2,
+            offlane: 3,
+            soft_support: 4,
+            hard_support: 5,
+          },
+        } as any,
         { positions: { carry: true, hard_support: true } } as any,
       ),
     ).toEqual({ positions: { carry: 1, hard_support: 5 } });
@@ -82,25 +96,50 @@ describe('pickDirty', () => {
 
   it('combines top-level and nested dirty fields', () => {
     const data = {
-      nickname: 'New',
       mmr: 6000,
-      positions: { carry: 1, mid: 2, offlane: 3, soft_support: 4, hard_support: 5 },
+      steam_account_id: 5,
+      positions: {
+        carry: 1,
+        mid: 2,
+        offlane: 3,
+        soft_support: 4,
+        hard_support: 5,
+      },
     } as any;
-    const dirty = { nickname: true, positions: { carry: true } } as any;
+    const dirty = { mmr: true, positions: { carry: true } } as any;
     expect(pickDirty(data, dirty)).toEqual({
-      nickname: 'New',
+      mmr: 6000,
       positions: { carry: 1 },
     });
   });
 });
 
 describe('EditUserSchema', () => {
+  it('strips a site nickname from parsed output', () => {
+    const out = EditUserSchema.parse({
+      nickname: 'x',
+      steam_account_id: null,
+      positions: {
+        carry: 0,
+        mid: 0,
+        offlane: 0,
+        soft_support: 0,
+        hard_support: 0,
+      },
+    });
+    expect('nickname' in out).toBe(false);
+  });
+
   it('accepts a full valid input', () => {
     const result = EditUserSchema.safeParse({
-      nickname: 'Ali',
       steam_account_id: 999,
-      guildNickname: 'AliGuild',
-      positions: { carry: 1, mid: 2, offlane: 3, soft_support: 4, hard_support: 5 },
+      positions: {
+        carry: 1,
+        mid: 2,
+        offlane: 3,
+        soft_support: 4,
+        hard_support: 5,
+      },
       mmr: 5000,
     });
     expect(result.success).toBe(true);
@@ -108,10 +147,14 @@ describe('EditUserSchema', () => {
 
   it('coerces numeric strings on mmr and steam_account_id', () => {
     const result = EditUserSchema.safeParse({
-      nickname: 'Ali',
       steam_account_id: '999',
-      guildNickname: null,
-      positions: { carry: 0, mid: 0, offlane: 0, soft_support: 0, hard_support: 0 },
+      positions: {
+        carry: 0,
+        mid: 0,
+        offlane: 0,
+        soft_support: 0,
+        hard_support: 0,
+      },
       mmr: '5000',
     });
     expect(result.success).toBe(true);
@@ -123,10 +166,14 @@ describe('EditUserSchema', () => {
 
   it('rejects positions out of range', () => {
     const result = EditUserSchema.safeParse({
-      nickname: 'Ali',
       steam_account_id: 0,
-      guildNickname: null,
-      positions: { carry: 6, mid: 0, offlane: 0, soft_support: 0, hard_support: 0 },
+      positions: {
+        carry: 6,
+        mid: 0,
+        offlane: 0,
+        soft_support: 0,
+        hard_support: 0,
+      },
     });
     expect(result.success).toBe(false);
   });

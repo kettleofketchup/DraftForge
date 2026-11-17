@@ -3,12 +3,13 @@ import { Avatar, AvatarFallback, AvatarImage } from '~/components/ui/avatar';
 import { Button } from '~/components/ui/button';
 import { UserPopover } from '~/components/user/UserPopover';
 import { DisplayName } from '~/components/user/avatar';
+import { useDisplayOrgId } from '~/hooks/useDisplayOrgId';
 import { cn } from '~/lib/utils';
 
 export interface CaptainInfo {
   steam_id: number;
   username: string | null;
-  nickname?: string | null;
+  discordNickname?: string | null;
   avatar: string | null;
   hero_id: number;
 }
@@ -17,7 +18,7 @@ export interface MatchedPlayer {
   steam_id: number;
   user_id: number | null;
   username: string | null;
-  nickname?: string | null;
+  discordNickname?: string | null;
   avatar: string | null;
   hero_id: number;
   player_slot: number;
@@ -46,6 +47,7 @@ interface SteamMatchCardProps {
 }
 
 function PlayerDisplay({ player }: { player: MatchedPlayer }) {
+  const orgId = useDisplayOrgId();
   const content = (
     <div className="flex items-center gap-2 py-1 cursor-pointer">
       <Avatar
@@ -63,7 +65,9 @@ function PlayerDisplay({ player }: { player: MatchedPlayer }) {
           player.user_id && 'hover:underline',
         )}
       >
-        {player.username ? DisplayName(player) : `Steam ${player.steam_id}`}
+        {player.username
+          ? DisplayName(player, undefined, orgId)
+          : `Steam ${player.steam_id}`}
         {player.is_captain && ' (C)'}
       </span>
     </div>

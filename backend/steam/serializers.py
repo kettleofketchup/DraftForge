@@ -1,5 +1,7 @@
 from rest_framework import serializers
 
+from app.models import League
+
 from .constants import LEAGUE_ID
 from .models import LeaguePlayerStats, Match, PlayerMatchStats
 
@@ -8,8 +10,8 @@ class PlayerMatchStatsSerializer(serializers.ModelSerializer):
     username = serializers.CharField(
         source="user.username", read_only=True, default=None
     )
-    nickname = serializers.CharField(
-        source="user.nickname", read_only=True, default=None
+    discordNickname = serializers.CharField(
+        source="user.discordNickname", read_only=True, default=None
     )
 
     class Meta:
@@ -17,7 +19,7 @@ class PlayerMatchStatsSerializer(serializers.ModelSerializer):
         fields = [
             "steam_id",
             "username",
-            "nickname",
+            "discordNickname",
             "player_slot",
             "hero_id",
             "kills",
@@ -196,17 +198,15 @@ class LinkMatchRequestSerializer(serializers.Serializer):
 # =============================================================================
 
 
-def _get_league_for_stats(obj):
+def _get_league_for_stats(obj: LeaguePlayerStats) -> League | None:
     """Look up the League object from a LeaguePlayerStats' league_id (Steam league ID)."""
-    from app.models import League
-
     try:
         return League.objects.get(steam_league_id=obj.league_id)
     except League.DoesNotExist:
         return None
 
 
-def _get_base_mmr(obj):
+def _get_base_mmr(obj: LeaguePlayerStats) -> int:
     from org.models import OrgUser
 
     league = _get_league_for_stats(obj)
@@ -219,7 +219,7 @@ def _get_base_mmr(obj):
         return 0
 
 
-def _get_league_mmr(obj):
+def _get_league_mmr(obj: LeaguePlayerStats) -> int:
     from league.models import LeagueUser
 
     league = _get_league_for_stats(obj)
@@ -234,8 +234,8 @@ def _get_league_mmr(obj):
 
 class LeaguePlayerStatsSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source="user.username", read_only=True)
-    nickname = serializers.CharField(
-        source="user.nickname", read_only=True, allow_null=True
+    discordNickname = serializers.CharField(
+        source="user.discordNickname", read_only=True, allow_null=True
     )
     avatar = serializers.CharField(source="user.avatar", read_only=True)
     base_mmr = serializers.SerializerMethodField()
@@ -247,7 +247,7 @@ class LeaguePlayerStatsSerializer(serializers.ModelSerializer):
         fields = [
             "user_id",
             "username",
-            "nickname",
+            "discordNickname",
             "avatar",
             "base_mmr",
             "league_mmr",
@@ -265,17 +265,17 @@ class LeaguePlayerStatsSerializer(serializers.ModelSerializer):
             "last_updated",
         ]
 
-    def get_base_mmr(self, obj):
+    def get_base_mmr(self, obj: LeaguePlayerStats) -> int:
         return _get_base_mmr(obj)
 
-    def get_league_mmr(self, obj):
+    def get_league_mmr(self, obj: LeaguePlayerStats) -> int:
         return _get_league_mmr(obj)
 
 
 class LeaderboardSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source="user.username", read_only=True)
-    nickname = serializers.CharField(
-        source="user.nickname", read_only=True, allow_null=True
+    discordNickname = serializers.CharField(
+        source="user.discordNickname", read_only=True, allow_null=True
     )
     avatar = serializers.CharField(source="user.avatar", read_only=True)
     base_mmr = serializers.SerializerMethodField()
@@ -288,7 +288,7 @@ class LeaderboardSerializer(serializers.ModelSerializer):
         fields = [
             "user_id",
             "username",
-            "nickname",
+            "discordNickname",
             "avatar",
             "base_mmr",
             "league_mmr",
@@ -303,13 +303,13 @@ class LeaderboardSerializer(serializers.ModelSerializer):
             "avg_xpm",
         ]
 
-    def get_base_mmr(self, obj):
+    def get_base_mmr(self, obj: LeaguePlayerStats) -> int:
         return _get_base_mmr(obj)
 
-    def get_league_mmr(self, obj):
+    def get_league_mmr(self, obj: LeaguePlayerStats) -> int:
         return _get_league_mmr(obj)
 
-    def get_avg_kda(self, obj):
+    def get_avg_kda(self, obj: LeaguePlayerStats) -> float:
         if obj.avg_deaths == 0:
             return obj.avg_kills + obj.avg_assists
         return round((obj.avg_kills + obj.avg_assists) / obj.avg_deaths, 2)

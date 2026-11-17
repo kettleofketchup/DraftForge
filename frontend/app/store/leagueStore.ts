@@ -33,7 +33,7 @@ interface LeagueState {
   reset: () => void;
 
   /** League Users Actions */
-  getLeagueUsers: (leagueId: number) => Promise<void>;
+  getLeagueUsers: (leagueId: number, orgId?: number) => Promise<void>;
   clearLeagueUsers: () => void;
 }
 
@@ -78,22 +78,31 @@ export const useLeagueStore = create<LeagueState>((set, get) => ({
     });
   },
 
-  getLeagueUsers: async (leagueId: number) => {
+  getLeagueUsers: async (leagueId: number, orgId?: number) => {
     // Skip if already loaded for this league
-    if (get().leagueUsersLeagueId === leagueId && get().leagueUserPks.length > 0) {
+    if (
+      get().leagueUsersLeagueId === leagueId &&
+      get().leagueUserPks.length > 0
+    ) {
       log.debug('LeagueUsers already loaded for league:', leagueId);
       return;
     }
 
-    if (get().leagueUsersLoading && get().leagueUsersLeagueId === leagueId) return;
+    if (get().leagueUsersLoading && get().leagueUsersLeagueId === leagueId)
+      return;
 
     const request = ++leagueUsersRequest;
-    set({ leagueUsersLoading: true, leagueUsersError: null, leagueUsersLeagueId: leagueId, leagueUserPks: [] });
+    set({
+      leagueUsersLoading: true,
+      leagueUsersError: null,
+      leagueUsersLeagueId: leagueId,
+      leagueUserPks: [],
+    });
 
     try {
       const users = await getLeagueUsers(leagueId);
       if (request !== leagueUsersRequest) return;
-      useUserCacheStore.getState().upsert(users, { leagueId });
+      useUserCacheStore.getState().upsert(users, { leagueId, orgId });
       set({
         leagueUserPks: users.filter((u) => u.pk != null).map((u) => u.pk!),
         leagueUsersLoading: false,
@@ -104,7 +113,9 @@ export const useLeagueStore = create<LeagueState>((set, get) => ({
       log.error('Error fetching league users:', error);
       set({
         leagueUsersError:
-          error instanceof Error ? error.message : 'Failed to fetch league users',
+          error instanceof Error
+            ? error.message
+            : 'Failed to fetch league users',
         leagueUsersLoading: false,
         leagueUserPks: [],
       });
@@ -113,7 +124,12 @@ export const useLeagueStore = create<LeagueState>((set, get) => ({
 
   clearLeagueUsers: () => {
     leagueUsersRequest++;
-    set({ leagueUserPks: [], leagueUsersLeagueId: null, leagueUsersError: null, leagueUsersLoading: false });
+    set({
+      leagueUserPks: [],
+      leagueUsersLeagueId: null,
+      leagueUsersError: null,
+      leagueUsersLoading: false,
+    });
   },
 }));
 

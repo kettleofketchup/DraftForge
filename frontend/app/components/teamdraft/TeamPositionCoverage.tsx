@@ -18,6 +18,7 @@ import {
 } from '~/components/user/positions/positionEdit';
 import type { UserType } from '~/components/user/types';
 import { UserAvatar } from '~/components/user/UserAvatar';
+import { useDisplayOrgId } from '~/hooks/useDisplayOrgId';
 import { cn } from '~/lib/utils';
 import { selectPositions } from '~/store/selectPositions';
 import { useUserCacheStore } from '~/store/userCacheStore';
@@ -64,6 +65,7 @@ const positionLabels: Record<PositionKey, string> = {
 export const computeTeamPositionCoverage = (
   currentTeam: TeamType | undefined,
   positionsByPk?: Map<number, PositionsType | undefined>,
+  orgId: number | null = null,
 ): TeamPositionCoverageResult => {
   const members = currentTeam?.members || [];
   const positionsFor = (member: UserType): PositionsType | undefined =>
@@ -242,7 +244,7 @@ export const computeTeamPositionCoverage = (
       if (favoriteCount[pos] > 1) {
         const favoritePlayers = playersForPos
           .filter((p) => p.rank === 1)
-          .map((p) => DisplayName(p.user));
+          .map((p) => DisplayName(p.user, undefined, orgId));
         messages.push(`${favoritePlayers.join(' & ')} both want this`);
       }
 
@@ -250,7 +252,7 @@ export const computeTeamPositionCoverage = (
       if (isContested) {
         // Show each player's contest situation
         for (const player of playersForPos.slice(0, 2)) {
-          const playerName = DisplayName(player.user);
+          const playerName = DisplayName(player.user, undefined, orgId);
           const playerContestedPositions: string[] = [];
 
           for (const otherPos of contestedWith) {
@@ -273,7 +275,7 @@ export const computeTeamPositionCoverage = (
           (p) => p.user.pk === assignedPlayerPk,
         );
         if (assignedPlayer) {
-          const playerName = DisplayName(assignedPlayer.user);
+          const playerName = DisplayName(assignedPlayer.user, undefined, orgId);
           if (assignedPlayer.rank === 1) {
             messages.push(`${playerName} guessed - unique & favorite`);
           } else {
@@ -300,7 +302,7 @@ export const computeTeamPositionCoverage = (
           }
           if (otherPositionsNeeded.length > 0) {
             playerConflicts.push(
-              `${DisplayName(user)} needed for ${otherPositionsNeeded.join(', ')}`,
+              `${DisplayName(user, undefined, orgId)} needed for ${otherPositionsNeeded.join(', ')}`,
             );
           }
         }
@@ -324,7 +326,7 @@ export const computeTeamPositionCoverage = (
         );
 
         if (assignedPlayer) {
-          const playerName = DisplayName(assignedPlayer.user);
+          const playerName = DisplayName(assignedPlayer.user, undefined, orgId);
           if (assignedPlayer.rank === 1) {
             messages.push(`${playerName} - unique & favorite`);
           } else {
@@ -338,7 +340,7 @@ export const computeTeamPositionCoverage = (
         const bestPlayer = playersForPos[0];
         const bestPlayerAssignedTo = playerAssignments.get(bestPlayer.user.pk!);
         if (bestPlayerAssignedTo && bestPlayerAssignedTo !== pos) {
-          const playerName = DisplayName(bestPlayer.user);
+          const playerName = DisplayName(bestPlayer.user, undefined, orgId);
           messages.push(
             `${playerName} guessed for ${positionLabels[bestPlayerAssignedTo]}`,
           );
@@ -464,7 +466,8 @@ PositionCoverageCard.displayName = 'PositionCoverageCard';
 const PlayerCard = memo(
   ({ player, isBest }: { player: PlayerWithRank; isBest?: boolean }) => {
     const { user, rank } = player;
-    const displayName = DisplayName(user);
+    const orgId = useDisplayOrgId();
+    const displayName = DisplayName(user, undefined, orgId);
 
     return (
       <div
@@ -693,6 +696,7 @@ export const TeamPositionCoverageRow = memo(
     showFullTable = false,
   }: TeamPositionCoverageRowProps) => {
     const [modalOpen, setModalOpen] = useState(false);
+    const orgId = useDisplayOrgId();
 
     // Subscribe ONCE to a pk→positions record (Rules of Hooks: cannot call the
     // hook per-member inside the pure compute fn). Explicit GAME_TYPE.DOTA2 because
@@ -718,8 +722,8 @@ export const TeamPositionCoverageRow = memo(
       const positionsByPk = new Map<number, PositionsType | undefined>(
         Object.entries(positionsRecord).map(([pk, p]) => [Number(pk), p]),
       );
-      return computeTeamPositionCoverage(team, positionsByPk);
-    }, [team, positionsRecord]);
+      return computeTeamPositionCoverage(team, positionsByPk, orgId);
+    }, [team, positionsRecord, orgId]);
 
     const handleClick = useCallback((e: React.MouseEvent) => {
       e.stopPropagation();
@@ -729,7 +733,9 @@ export const TeamPositionCoverageRow = memo(
     const displayName =
       teamName ||
       team?.name ||
-      (team?.captain ? `${DisplayName(team.captain)}'s Team` : 'Team');
+      (team?.captain
+        ? `${DisplayName(team.captain, undefined, orgId)}'s Team`
+        : 'Team');
 
     // If showFullTable is true, render the table directly without hover/modal
     if (showFullTable) {

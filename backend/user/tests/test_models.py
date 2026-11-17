@@ -9,15 +9,13 @@ class BaseUserProfileModelTests(TestCase):
     def test_create_profile_with_user(self):
         user = CustomUser.objects.create(username="alice")
         # Auto-create from Task 3 makes the initial profile; replace it so we
-        # can assert on the nickname/avatar we set explicitly here.
+        # can assert on the avatar we set explicitly here.
         BaseUserProfile.objects.filter(user=user).delete()
         profile = BaseUserProfile.objects.create(
             user=user,
-            nickname="Alice Wonderland",
             avatar="https://example.com/alice.png",
         )
         assert profile.user == user
-        assert profile.nickname == "Alice Wonderland"
         assert profile.avatar == "https://example.com/alice.png"
 
     def test_one_to_one_constraint(self):
@@ -25,16 +23,16 @@ class BaseUserProfileModelTests(TestCase):
         # explicit create must violate uniqueness.
         user = CustomUser.objects.create(username="bob")
         BaseUserProfile.objects.filter(user=user).delete()  # clear if auto-created
-        BaseUserProfile.objects.create(user=user, nickname="Bob")
+        BaseUserProfile.objects.create(user=user)
         with self.assertRaises(IntegrityError):
-            BaseUserProfile.objects.create(user=user, nickname="Bob 2")
+            BaseUserProfile.objects.create(user=user)
 
     def test_str_includes_username(self):
         user = CustomUser.objects.create(username="carol")
         profile = BaseUserProfile.objects.filter(user=user).first()
         # Tolerant of auto-create from Task 3
         if profile is None:
-            profile = BaseUserProfile.objects.create(user=user, nickname="Carol")
+            profile = BaseUserProfile.objects.create(user=user)
         assert "carol" in str(profile)
 
     def test_reverse_accessor_named_base_profile(self):

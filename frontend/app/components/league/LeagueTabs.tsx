@@ -1,12 +1,12 @@
 import { Users } from 'lucide-react';
+import type { TournamentType } from '~/components/tournament/types';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { useLeagueStore } from '~/store/leagueStore';
-import { InfoTab } from './tabs/InfoTab';
-import { TournamentsTab } from './tabs/TournamentsTab';
-import { MatchesTab } from './tabs/MatchesTab';
-import { UsersTab } from './tabs/UsersTab';
 import type { LeagueType } from './schemas';
-import type { TournamentType } from '~/components/tournament/types';
+import { InfoTab } from './tabs/InfoTab';
+import { MatchesTab } from './tabs/MatchesTab';
+import { TournamentsTab } from './tabs/TournamentsTab';
+import { UsersTab } from './tabs/UsersTab';
 
 interface Props {
   league: LeagueType;
@@ -26,17 +26,24 @@ export const LeagueTabs: React.FC<Props> = ({
   memberAccessSettled,
 }) => {
   const leagueUserPks = useLeagueStore((state) => state.leagueUserPks);
-  const leagueUsersLoading = useLeagueStore((state) => state.leagueUsersLoading);
-  const leagueUsersLeagueId = useLeagueStore((state) => state.leagueUsersLeagueId);
+  const leagueUsersLoading = useLeagueStore(
+    (state) => state.leagueUsersLoading,
+  );
+  const leagueUsersLeagueId = useLeagueStore(
+    (state) => state.leagueUsersLeagueId,
+  );
 
   // Show "..." if loading or if we haven't fetched for this league yet
-  const userCountDisplay = leagueUsersLoading || leagueUsersLeagueId !== league.pk
-    ? '...'
-    : leagueUserPks.length;
+  const userCountDisplay =
+    leagueUsersLoading || leagueUsersLeagueId !== league.pk
+      ? '...'
+      : leagueUserPks.length;
 
   return (
     <Tabs value={activeTab} onValueChange={onTabChange} className="w-full">
-      <TabsList className={`hidden md:grid w-full ${canViewMembers ? 'grid-cols-4' : 'grid-cols-3'}`}>
+      <TabsList
+        className={`hidden md:grid w-full ${canViewMembers ? 'grid-cols-4' : 'grid-cols-3'}`}
+      >
         <TabsTrigger value="info" data-testid="league-tab-info">
           Info
         </TabsTrigger>
@@ -64,7 +71,13 @@ export const LeagueTabs: React.FC<Props> = ({
 
       {canViewMembers && (
         <TabsContent value="users" className="mt-6">
-          {league.pk && <UsersTab leaguePk={league.pk} canLoad={memberAccessSettled} />}
+          {league.pk && (
+            <UsersTab
+              leaguePk={league.pk}
+              leagueOrgId={league.organization?.pk}
+              canLoad={memberAccessSettled}
+            />
+          )}
         </TabsContent>
       )}
 

@@ -111,7 +111,7 @@ def _ensure_user(data: TestUser, force: bool) -> CustomUser:
     user = CustomUser(
         pk=data.pk,
         username=data.username,
-        nickname=data.nickname,
+        discordNickname=data.discord_global_name,
         discordId=data.discord_id,
         steamid=data.get_steam_id_64(),
         positions=PositionsModel.objects.create(),

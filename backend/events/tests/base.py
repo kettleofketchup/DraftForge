@@ -20,7 +20,7 @@ class EventTestCase(TestCase):
         cls.admin.positions = cls.positions
         cls.admin.steamid = 76561198000000001
         cls.admin.discordId = "123456789"
-        cls.admin.nickname = "EventAdmin"
+        cls.admin.discordNickname = "EventAdmin"
         cls.admin.has_active_dota_mmr = True
         cls.admin.save()
 
@@ -30,7 +30,7 @@ class EventTestCase(TestCase):
         cls.user.positions = PositionsModel.objects.create()
         cls.user.steamid = 76561198000000002
         cls.user.discordId = "987654321"
-        cls.user.nickname = "EventUser"
+        cls.user.discordNickname = "EventUser"
         cls.user.save()
 
         cls.user_incomplete = CustomUser.objects.create_user(

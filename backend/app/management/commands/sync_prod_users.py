@@ -105,7 +105,6 @@ class Command(BaseCommand):
 
         user = CustomUser.objects.create(
             username=user_data.get("username", f"user_{user_data.get('pk')}"),
-            nickname=user_data.get("nickname"),
             steamid=user_data.get("steamid"),
             discordId=user_data.get("discordId"),
             avatar=user_data.get("avatar"),

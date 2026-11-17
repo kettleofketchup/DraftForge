@@ -170,11 +170,14 @@ export interface ProfileClaimRequest {
   id: number;
   claimer: number;
   claimer_username: string;
-  claimer_nickname: string | null;
+  claimer_discordNickname?: string | null;
+  claimer_guildNickname?: string | null;
   claimer_discord_id: string | null;
   claimer_avatar: string | null;
   target_user: number;
-  target_nickname: string | null;
+  target_nickname?: string | null;
+  target_username?: string | null;
+  target_discordNickname?: string | null;
   target_steamid: number | null;
   target_mmr: number | null;
   organization: number;
@@ -182,7 +185,8 @@ export interface ProfileClaimRequest {
   status: 'pending' | 'approved' | 'rejected';
   reviewed_by: number | null;
   reviewed_by_username: string | null;
-  reviewed_by_nickname: string | null;
+  reviewed_by_discordNickname?: string | null;
+  reviewed_by_guildNickname?: string | null;
   rejection_reason: string;
   created_at: string;
   reviewed_at: string | null;
@@ -287,7 +291,6 @@ export interface CSVImportRow {
   steam_friend_id?: string;
   discord_id?: string;
   discord_username?: string;
-  name?: string;
   mmr?: number | null;
   team_name?: string;
   team_captain?: boolean;

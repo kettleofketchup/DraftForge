@@ -22,6 +22,8 @@ from typing import Optional
 
 from pydantic import BaseModel
 
+from app.display_names import first_name
+
 # Backward-compat re-exports (moved to discordbot/schemas.py with new names)
 from discordbot.schemas import (  # noqa: F401
     DiscordEventStateSchema as DiscordEventState,
@@ -35,10 +37,10 @@ class TournamentUserSchema(BaseModel):
 
     pk: int
     username: Optional[str] = None
-    nickname: Optional[str] = None
     avatar: Optional[str] = None
     discordId: Optional[str] = None
     discordNickname: Optional[str] = None
+    guildNickname: Optional[str] = None
     steam_account_id: Optional[int] = None
     avatarUrl: Optional[str] = None
     mmr: Optional[int] = None
@@ -46,7 +48,10 @@ class TournamentUserSchema(BaseModel):
 
     @property
     def display_name(self) -> str:
-        return self.nickname or self.username or f"User {self.pk}"
+        return (
+            first_name(self.guildNickname, self.discordNickname, self.username)
+            or f"User {self.pk}"
+        )
 
     model_config = {"extra": "ignore"}
 
@@ -81,7 +86,7 @@ class TournamentTaskSchema(BaseModel):
 
 
 class GameWithoutHeroDraftSchema(BaseModel):
-    """Validates: get_games_without_herodraft() (app/views/internal.py)"""
+    """A game with both teams assigned and no hero draft yet."""
 
     id: int
     radiant_team_id: int
@@ -91,6 +96,13 @@ class GameWithoutHeroDraftSchema(BaseModel):
     round: int = 1
     has_captains: bool = False
     model_config = {"extra": "ignore"}
+
+
+class AutoHeroDraftGameSchema(GameWithoutHeroDraftSchema):
+    """Validates: list_auto_herodraft_games() (app/views/internal.py)"""
+
+    tournament_id: int
+    discord_send_herodraft_link: bool = False
 
 
 # Backward compat aliases — use new names for new code

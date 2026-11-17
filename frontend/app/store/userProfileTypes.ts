@@ -3,7 +3,6 @@ import { z } from 'zod';
 // Single-value user-global fields. T1 ships these; future tickets do not
 // add to base (game/org-scoped data lives in other layers).
 export const BaseProfileSchema = z.object({
-  nickname: z.string().nullable().optional(),
   avatar: z.string().nullable().optional(),
 });
 
@@ -30,9 +29,9 @@ export interface DeadlockUserProfile {
 }
 // Placeholders for T3. Kept as empty objects so the type shape is stable
 // across the epic and no consumer breaks when later tickets fill them in.
-export type OrgUserProfile = Record<string, never>;        // T3 expands
-export type OrgDotaUserProfile = { positions?: never };    // T3 expands
-export type OrgDeadlockUserProfile = { rank?: never };     // T3 expands
+export type OrgUserProfile = Record<string, never>; // T3 expands
+export type OrgDotaUserProfile = { positions?: never }; // T3 expands
+export type OrgDeadlockUserProfile = { rank?: never }; // T3 expands
 
 export interface UserProfileEntry {
   pk: number;
@@ -41,10 +40,13 @@ export interface UserProfileEntry {
     dota?: DotaUserProfile;
     deadlock?: DeadlockUserProfile;
   };
-  orgProfiles: Record<number, {
-    orgUser: OrgUserProfile;
-    dota?: OrgDotaUserProfile;
-    deadlock?: OrgDeadlockUserProfile;
-  }>;
+  orgProfiles: Record<
+    number,
+    {
+      orgUser: OrgUserProfile;
+      dota?: OrgDotaUserProfile;
+      deadlock?: OrgDeadlockUserProfile;
+    }
+  >;
   _fetchedAt: number;
 }

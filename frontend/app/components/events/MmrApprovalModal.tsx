@@ -1,10 +1,19 @@
+import { zodResolver } from '@hookform/resolvers/zod';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 
+import { RankSignalsCard } from '~/components/events/games/RankSignalsCard';
+import type { EventSignupType } from '~/components/events/schemas';
 import { GAME_TYPE } from '~/components/game/constants';
-import { useGameType } from '~/hooks/useGameType';
+import { Badge } from '~/components/ui/badge';
+import {
+  CancelButton,
+  ConfirmButton,
+  DotabuffButton,
+  SubmitButton,
+  brandDialogPanel,
+} from '~/components/ui/buttons';
 import {
   Dialog,
   DialogContent,
@@ -23,28 +32,24 @@ import {
   FormMessage,
 } from '~/components/ui/form';
 import { Input } from '~/components/ui/input';
-import { Badge } from '~/components/ui/badge';
-import {
-  CancelButton,
-  ConfirmButton,
-  DotabuffButton,
-  SubmitButton,
-  brandDialogPanel,
-} from '~/components/ui/buttons';
-import { cn } from '~/lib/utils';
+import type { UserType } from '~/components/user/types';
 import { UserAvatar } from '~/components/user/UserAvatar';
 import { UserStrip } from '~/components/user/UserStrip';
-import { DisplayName } from '~/components/user/avatar';
-import { RankSignalsCard } from '~/components/events/games/RankSignalsCard';
-import type { EventSignupType } from '~/components/events/schemas';
-import type { UserType } from '~/components/user/types';
+import { useDisplayOrgId } from '~/hooks/useDisplayOrgId';
+import { useGameType } from '~/hooks/useGameType';
+import { orgRowNameSource, resolveDisplayName } from '~/lib/userDisplayName';
+import { cn } from '~/lib/utils';
 
 const LARGE_CHANGE_THRESHOLD = 0.2;
 
 const mmrSchema = z.object({
   // zod 4 dropped the `{ coerce: true }` option on z.number; use z.coerce.number()
   // so the resolver still parses string inputs from the <Input> element.
-  mmr: z.coerce.number().int().min(0, 'MMR must be positive').max(20000, 'MMR too high'),
+  mmr: z.coerce
+    .number()
+    .int()
+    .min(0, 'MMR must be positive')
+    .max(20000, 'MMR too high'),
 });
 type MmrFormValues = z.infer<typeof mmrSchema>;
 
@@ -100,13 +105,19 @@ export function MmrApprovalModal({
       : 0;
   const isLargeChange = hasDelta && deltaPct >= LARGE_CHANGE_THRESHOLD;
 
+  const routeOrgId = useDisplayOrgId();
+  const orgId = signup?.organization ?? routeOrgId;
+
   if (!signup) return null;
 
   const profile = signup.dota_profile;
   const user = signup.user_data;
-  const playerName = user ? DisplayName(user) : signup.username ?? `User #${signup.user}`;
+  const playerName = user
+    ? resolveDisplayName(orgRowNameSource(user, orgId), { orgId })
+    : (signup.username ?? `User #${signup.user}`);
 
-  const screenshotUrl = profile?.rank_screenshot ?? profile?.battlecup_screenshot ?? null;
+  const screenshotUrl =
+    profile?.rank_screenshot ?? profile?.battlecup_screenshot ?? null;
 
   // Rank-status badge — values come from PlayerDotaProfile.rank_status:
   // 'active' | 'previous' | 'never'. Earlier mapping checked for 'ranked' /
@@ -114,15 +125,24 @@ export function MmrApprovalModal({
   // Ranked" — including active and previously-ranked players.
   const rankStatusBadge = profile ? (
     profile.rank_status === 'active' ? (
-      <Badge variant="outline" className="px-1.5 py-0 text-xs font-medium text-amber-300 border-amber-500/30">
+      <Badge
+        variant="outline"
+        className="px-1.5 py-0 text-xs font-medium text-amber-300 border-amber-500/30"
+      >
         Active
       </Badge>
     ) : profile.rank_status === 'previous' ? (
-      <Badge variant="outline" className="px-1.5 py-0 text-xs font-medium text-amber-300 border-amber-500/30">
+      <Badge
+        variant="outline"
+        className="px-1.5 py-0 text-xs font-medium text-amber-300 border-amber-500/30"
+      >
         Previous
       </Badge>
     ) : (
-      <Badge variant="outline" className="px-1.5 py-0 text-xs font-medium text-blue-300 border-blue-500/30">
+      <Badge
+        variant="outline"
+        className="px-1.5 py-0 text-xs font-medium text-blue-300 border-blue-500/30"
+      >
         Never Ranked
       </Badge>
     )
@@ -174,6 +194,7 @@ export function MmrApprovalModal({
       {stripUser ? (
         <UserStrip
           user={stripUser}
+          organizationId={orgId ?? undefined}
           showBorder={false}
           className={brandDialogPanel}
           data-testid="mmr-confirm-user-strip"
@@ -189,9 +210,15 @@ export function MmrApprovalModal({
         <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <div className="flex items-center gap-3">
-              <UserAvatar user={user ?? undefined} src={signup.user_avatar ?? undefined} size="lg" />
+              <UserAvatar
+                user={user ?? undefined}
+                src={signup.user_avatar ?? undefined}
+                size="lg"
+              />
               <div className="min-w-0 flex-1">
-                <DialogTitle className="text-lg truncate">{playerName}</DialogTitle>
+                <DialogTitle className="text-lg truncate">
+                  {playerName}
+                </DialogTitle>
                 <DialogDescription className="flex items-center gap-1.5 mt-0.5">
                   {rankStatusBadge ?? 'No Dota profile'}
                 </DialogDescription>
@@ -220,7 +247,10 @@ export function MmrApprovalModal({
           )}
 
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
+            <form
+              onSubmit={form.handleSubmit(handleSubmit)}
+              className="space-y-4"
+            >
               <FormField
                 control={form.control}
                 name="mmr"
@@ -235,8 +265,12 @@ export function MmrApprovalModal({
                         {...field}
                         // field.value is `unknown` (coerce input). Narrow to
                         // number|'' so the <input> value prop typechecks.
-                        value={typeof field.value === 'number' ? field.value : ''}
-                        onChange={(e) => field.onChange(e.target.valueAsNumber || 0)}
+                        value={
+                          typeof field.value === 'number' ? field.value : ''
+                        }
+                        onChange={(e) =>
+                          field.onChange(e.target.valueAsNumber || 0)
+                        }
                       />
                     </FormControl>
                     {gameType === GAME_TYPE.DOTA2 &&
@@ -246,7 +280,8 @@ export function MmrApprovalModal({
                           className="text-xs text-muted-foreground font-mono mt-1"
                         >
                           Suggested range:{' '}
-                          {signup.suggested_mmr_range[0].toLocaleString()}&ndash;
+                          {signup.suggested_mmr_range[0].toLocaleString()}
+                          &ndash;
                           {signup.suggested_mmr_range[1].toLocaleString()}
                           <span className="ml-1 text-muted-foreground/80">
                             (from{' '}
@@ -268,15 +303,21 @@ export function MmrApprovalModal({
                         )}
                       >
                         <span data-testid="mmr-delta-text">
-                          {priorMmr!.toLocaleString()} → {watchedMmr.toLocaleString()} (
+                          {priorMmr!.toLocaleString()} →{' '}
+                          {watchedMmr.toLocaleString()} (
                           {deltaAmount > 0 ? '+' : ''}
                           {deltaAmount.toLocaleString()}
-                          {priorMmr! > 0 ? `, ${Math.round(deltaPct * 100)}%` : ''})
+                          {priorMmr! > 0
+                            ? `, ${Math.round(deltaPct * 100)}%`
+                            : ''}
+                          )
                         </span>
                         {isLargeChange && (
                           <p className="mt-1 text-[11px] text-amber-300/80">
-                            This is more than {Math.round(LARGE_CHANGE_THRESHOLD * 100)}% off
-                            the previously approved MMR — you'll be asked to confirm.
+                            This is more than{' '}
+                            {Math.round(LARGE_CHANGE_THRESHOLD * 100)}% off the
+                            previously approved MMR — you'll be asked to
+                            confirm.
                           </p>
                         )}
                       </div>

@@ -11,6 +11,7 @@ import {
 } from '~/components/ui/table';
 import type { UserType } from '~/components/user/types';
 import { UserAvatar } from '~/components/user/UserAvatar';
+import { useDisplayOrgId } from '~/hooks/useDisplayOrgId';
 import { DisplayName, type TeamType } from '~/index';
 import { getLogger } from '~/lib/logger';
 import { cn } from '~/lib/utils';
@@ -35,6 +36,7 @@ const getOrdinal = (n: number): string => {
 };
 interface DraftTableProps {}
 export const DraftTable: React.FC<DraftTableProps> = () => {
+  const displayOrgId = useDisplayOrgId();
   const tournament = useUserStore((state) => state.tournament);
   const curRound: DraftRoundType = useUserStore((state) => state.curDraftRound);
   const draft = useUserStore((state) => state.draft);
@@ -166,7 +168,7 @@ export const DraftTable: React.FC<DraftTableProps> = () => {
                         size="md"
                         className="hover:ring-2 hover:ring-primary transition-all"
                       />
-                      <span>{DisplayName(user)}</span>
+                      <span>{DisplayName(user, undefined, displayOrgId)}</span>
                     </div>
                   </PlayerPopover>
                 </TableCell>

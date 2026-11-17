@@ -16,7 +16,8 @@ from django.db import transaction
 from django.db.models import Q
 
 from app.models import CustomUser, Organization, PositionsModel
-from org.models import ContributionEntry, PromoSend
+from discordbot.services.member_names import normalise_name
+from org.models import ContributionEntry, OrgUser, PromoSend
 
 from .constants import (
     BRACKET_STEAM_ID_BASE,
@@ -108,11 +109,12 @@ def create_user(
         organization: Optional Organization to create OrgUser for
         taken_steam_ids: Friend IDs already held, shared across a populate run
     """
+    guild_nickname = normalise_name(user_data.get("nick"))
     user, created = CustomUser.objects.get_or_create(discordId=user_data["user"]["id"])
     if not created:
         # Ensure OrgUser exists for existing user
         if organization:
-            ensure_org_user(user, organization)
+            ensure_org_user(user, organization, guild_nickname=guild_nickname)
         return user
 
     mmr = random.randint(200, 6000)
@@ -134,23 +136,40 @@ def create_user(
 
         # Create OrgUser for organization-scoped MMR
         if organization:
-            ensure_org_user(user, organization, mmr=mmr)
+            ensure_org_user(user, organization, mmr=mmr, guild_nickname=guild_nickname)
 
     return user
 
 
-def ensure_org_user(user, organization, mmr=None):
-    """Ensure OrgUser exists for user in organization."""
-    from org.models import OrgUser
+def ensure_org_user(
+    user: CustomUser,
+    organization: Organization,
+    mmr: int | None = None,
+    guild_nickname: str | None = None,
+) -> OrgUser:
+    """Ensure OrgUser exists for user in organization.
 
+    A None guild_nickname leaves an existing server nickname as it is.
+    """
     org_user, created = OrgUser.objects.get_or_create(
         user=user,
         organization=organization,
-        defaults={"mmr": mmr if mmr is not None else 0},
+        defaults={
+            "mmr": mmr if mmr is not None else 0,
+            "guild_nickname": guild_nickname,
+        },
     )
-    if not created and mmr is not None and org_user.mmr != mmr:
+    if created:
+        return org_user
+    update_fields: list[str] = []
+    if mmr is not None and org_user.mmr != mmr:
         org_user.mmr = mmr
-        org_user.save()
+        update_fields.append("mmr")
+    if guild_nickname is not None and org_user.guild_nickname != guild_nickname:
+        org_user.guild_nickname = guild_nickname
+        update_fields.append("guild_nickname")
+    if update_fields:
+        org_user.save(update_fields=update_fields)
     return org_user
 
 

@@ -38,14 +38,14 @@ Both come from the shared user-identity utilities. See [`THEMING-GUIDE.md` §"Us
 |---|---|---|
 | `<img src={user.avatar} ...>` | `<UserAvatar user={user} size="md" />` | Handles Discord CDN, fallback initials, memoization. |
 | `<img src={AvatarUrl(user)} ...>` | `<UserAvatar user={user} size="md" />` | `AvatarUrl()` is wrapped — never call it directly in JSX. |
-| `<UserAvatar user={{ nickname }} />` — partial object **missing the `avatar` hash** | `<UserAvatar user={{ nickname, username, avatar, discordId }} />` | Without `avatar` (or a full `avatarUrl`), `AvatarUrl` can't build the Discord CDN URL and renders a generated `ui-avatars.com` image — so the same user looks different here than elsewhere. If the data is serialized, expose `nickname`/`username`/`avatar` on the payload first. |
-| `<span>{user.username}</span>` / `{log.discord_username}` — raw name string | `<span>{DisplayName(user)}</span>` from `~/components/user/avatar` | `DisplayName()` applies the canonical `nickname` → `username` priority (with optional length cap). Raw strings skip the nickname preference and drift. |
+| `<UserAvatar user={{ username }} />` — partial object **missing the `avatar` hash** | `<UserAvatar user={{ discordNickname, username, avatar, discordId }} />` | Without `avatar` (or a full `avatarUrl`), `AvatarUrl` can't build the Discord CDN URL and renders a generated `ui-avatars.com` image — so the same user looks different here than elsewhere. If the data is serialized, expose `discordNickname`/`username`/`avatar` on the payload first. |
+| `<span>{user.username}</span>` / `{log.discord_username}` — raw name string, or a hand-rolled `guildNickname`/`discordNickname`/`username` fallback | `useDisplayName(user, useDisplayOrgId())` in components; `DisplayName(user, maxLength, orgId)` from `~/components/user/avatar` or `resolveDisplayName(user, { orgId })` elsewhere | The resolver applies the context chain: org server nickname → Discord display name → username → `User <pk>` on org pages, Discord display name → username → `User <pk>` elsewhere. Raw strings skip the chain and drift. |
 | Custom online-indicator dot | `<UserAvatar user={user} showOnline online />` | The component renders the indicator. |
 | Custom captain ring | `<UserAvatar user={user} border="captain" />` | Gold ring is built in. |
 
 Sizes: `tiny` (16px) | `xs` (20px) | `sm` (24px) | `md` (32px) | `lg` (40px) | `xl` (48px). Don't invent intermediate sizes.
 
-Real regression: the Discord activity log (`DiscordLogSection`) showed generated avatars and raw usernames because the log serializer exposed only `discord_user_id` + `discord_username`. Fix = serializer resolves the `CustomUser` and exposes `nickname`/`username`/`avatar`, component renders via `<UserAvatar user={{ nickname, username, avatar, discordId }} />` + `DisplayName()`.
+Real regression: the Discord activity log (`DiscordLogSection`) showed generated avatars and raw usernames because the log serializer exposed only `discord_user_id` + `discord_username`. Fix = serializer resolves the `CustomUser` and exposes `discordNickname`/`username`/`avatar`, component renders via `<UserAvatar user={{ discordNickname, username, avatar, discordId }} />` + the display-name resolver.
 
 ## Breadcrumbs
 

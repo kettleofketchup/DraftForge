@@ -22,7 +22,8 @@ export const MemberSummarySchema = z.object({
   org_user_pk: z.number(),
   user_pk: z.number(),
   username: z.string(),
-  nickname: z.string().nullable(),
+  discordNickname: z.string().nullable().optional(),
+  guildNickname: z.string().nullable().optional(),
   avatarUrl: z.string().nullable(),
 });
 export type MemberSummary = z.infer<typeof MemberSummarySchema>;

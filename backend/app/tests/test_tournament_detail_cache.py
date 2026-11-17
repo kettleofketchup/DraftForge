@@ -46,7 +46,9 @@ class TournamentDetailStaleWriteTests(TransactionTestCase):
             if not fired:
                 fired.append(True)
                 response = self.captain.post(
-                    f"/api/draft/{self.fx.draft.pk}/ready/", {"ready": True}, format="json"
+                    f"/api/draft/{self.fx.draft.pk}/ready/",
+                    {"ready": True},
+                    format="json",
                 )
                 self.assertEqual(response.status_code, 200)
             return original(*args, **kwargs)
@@ -61,16 +63,16 @@ class TournamentDetailStaleWriteTests(TransactionTestCase):
 
         self.assertTrue(self.ready_flag(self.detail().data))
 
-    def test_member_nickname_edit_evicts_cached_detail(self) -> None:
+    def test_member_avatar_edit_evicts_cached_detail(self) -> None:
         member = self.fx.captains[0]
         self.assertEqual(self.detail().status_code, 200)
 
         editor = APIClient()
         editor.force_authenticate(member)
         response = editor.patch(
-            "/api/users/me/profile/base/", {"nickname": "Renamed"}, format="json"
+            "/api/users/me/profile/base/", {"avatar": "renamedhash"}, format="json"
         )
         self.assertEqual(response.status_code, 200)
 
         users = self.detail().data["_users"]
-        self.assertEqual(users[member.pk]["nickname"], "Renamed")
+        self.assertEqual(users[member.pk]["avatar"], "renamedhash")

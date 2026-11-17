@@ -12,7 +12,7 @@ export const OrgFeatureRowSchema = z.object({
     .object({
       pk: z.number(),
       username: z.string(),
-      nickname: z.string().nullable().optional(),
+      discordNickname: z.string().nullable().optional(),
     })
     .nullable(),
   enabled_at: z.string().nullable(),

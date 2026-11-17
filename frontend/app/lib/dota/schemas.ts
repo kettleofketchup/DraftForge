@@ -4,7 +4,7 @@ import { z } from 'zod';
 export const PlayerMatchStatsSchema = z.object({
   steam_id: z.number(),
   username: z.string().nullable(),
-  nickname: z.string().nullable().optional(),
+  discordNickname: z.string().nullable().optional(),
   player_slot: z.number(),
   hero_id: z.number(),
   kills: z.number(),

@@ -427,13 +427,13 @@ from app.views.internal import (
     get_discord_event_state,
     get_due_scheduled_events,
     get_event_for_task,
-    get_games_without_herodraft,
     get_match_participants,
     get_or_create_discord_event,
     get_repeater_subscribers,
     get_sync_discord_state,
     get_tournament_for_task,
     get_tournament_participants,
+    list_auto_herodraft_games,
     list_users_for_avatar_check,
     search_message_logs,
     sweep_stale_discord_leases,
@@ -448,6 +448,10 @@ from user.internal.avatar import (
     bulk_update_user_avatars,
     list_discord_guild_ids,
     list_discord_linked_users,
+)
+from user.internal.discord_names import (
+    bulk_update_member_names,
+    list_discord_name_sync_targets,
 )
 
 urlpatterns += [
@@ -495,16 +499,16 @@ urlpatterns += [
     path("api/internal/events/<int:event_id>/full/", get_event_for_task),
     # Tournament endpoints
     path(
+        "api/internal/tournaments/auto-herodraft-games/",
+        list_auto_herodraft_games,
+    ),
+    path(
         "api/internal/tournaments/<int:tournament_id>/full/",
         get_tournament_for_task,
     ),
     path(
         "api/internal/tournaments/<int:tournament_id>/participants/",
         get_tournament_participants,
-    ),
-    path(
-        "api/internal/tournaments/<int:tournament_id>/games-without-herodraft/",
-        get_games_without_herodraft,
     ),
     path(
         "api/internal/games/<int:game_id>/participants/",
@@ -532,6 +536,16 @@ urlpatterns += [
         "api/internal/users/avatars/bulk-update/",
         bulk_update_user_avatars,
         name="internal_bulk_update_user_avatars",
+    ),
+    path(
+        "api/internal/orgs/discord-name-sync-targets/",
+        list_discord_name_sync_targets,
+        name="internal_discord_name_sync_targets",
+    ),
+    path(
+        "api/internal/discord/member-names/bulk-update/",
+        bulk_update_member_names,
+        name="internal_discord_member_names_bulk_update",
     ),
     # Discord lease sweeper (worker → backend via internal_client)
     path(

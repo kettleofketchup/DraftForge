@@ -38,7 +38,8 @@ class OrgFeaturesApiTest(TestCase):
             self.assertIsNone(row["enabled_at"])
 
     def test_get_shows_existing_row(self) -> None:
-        self.site_admin.nickname = "Admin Nick"
+        self.site_admin.discordNickname = "Admin Global"
+        self.site_admin.save(update_fields=["discordNickname"])
         set_org_feature(
             self.org,
             FeatureKey.PROMOTION,
@@ -58,7 +59,7 @@ class OrgFeaturesApiTest(TestCase):
             {
                 "pk": self.site_admin.pk,
                 "username": self.site_admin.username,
-                "nickname": "Admin Nick",
+                "discordNickname": "Admin Global",
             },
         )
         self.assertIsNotNone(promo["enabled_at"])

@@ -138,6 +138,7 @@ export {
 export {
   editUserField,
   fillEditField,
+  nextSteamAccountId,
   openEditModal,
   readEditField,
   readPositionField,
@@ -173,6 +174,7 @@ export {
 export {
   SIMULATOR_SKIP_REASON,
   bracketNode,
+  clickAndPersistMatchResult,
   closeMatchModal,
   expectLobbyState,
   getDotaLobbyTestData,

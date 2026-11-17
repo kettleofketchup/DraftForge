@@ -16,6 +16,7 @@ import { DisplayName } from '~/components/user/avatar';
 import { RolePositions } from '~/components/user/positions';
 import type { UserType } from '~/components/user/types';
 import { UserAvatar } from '~/components/user/UserAvatar';
+import { useDisplayOrgId } from '~/hooks/useDisplayOrgId';
 
 interface TeamModalProps {
   team: TeamType;
@@ -30,7 +31,9 @@ export const TeamModal: React.FC<TeamModalProps> = ({
   open,
   onOpenChange,
 }) => {
-  const teamName = team.name || `${DisplayName(captain)}'s Team`;
+  const orgId = useDisplayOrgId();
+  const teamName =
+    team.name || `${DisplayName(captain, undefined, orgId)}'s Team`;
   const hasMembers = team.members && team.members.length > 0;
 
   const avgMMR = useMemo(() => {
@@ -98,7 +101,7 @@ export const TeamModal: React.FC<TeamModalProps> = ({
         <UserAvatar user={captain} size="xl" border="primary" />
         <div className="flex-1">
           <div className="font-semibold">
-            {DisplayName(captain)}
+            {DisplayName(captain, undefined, orgId)}
             <span className="ml-2 text-xs text-primary">(Captain)</span>
           </div>
           <div className="text-sm text-muted-foreground">
@@ -135,7 +138,7 @@ export const TeamModal: React.FC<TeamModalProps> = ({
                           className="hover:ring-2 hover:ring-primary transition-all"
                         />
                         <span className="font-medium">
-                          {DisplayName(member)}
+                          {DisplayName(member, undefined, orgId)}
                         </span>
                         {member.pk === captain.pk && (
                           <span className="text-xs text-primary">(C)</span>

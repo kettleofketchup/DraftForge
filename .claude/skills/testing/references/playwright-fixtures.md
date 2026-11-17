@@ -269,13 +269,14 @@ test starts checking a different record without complaining.
 // WRONG — races with every other spec editing the same org
 const firstCard = page.locator('[data-testid^="usercard-"]').first();
 await openEditModal(page, firstCard);
-await fillEditField(page, 'nickname', 'TestNick');
+await fillEditField(page, 'mmr', '4321');
 
 // CORRECT — dedicated user, scoped assertion
 const card = page.locator(`[data-testid="usercard-${TARGET_USERNAME}"]`);
 await openEditModal(page, card);
-await fillEditField(page, 'nickname', 'TestNick');
-await expect(card.getByText('TestNick').first()).toBeVisible();
+await fillEditField(page, 'mmr', '4321');
+await saveEditModal(page);
+await expect(card.getByText('4321').first()).toBeVisible();
 //                          ↑ first() OK here — scoped to one card
 ```
 

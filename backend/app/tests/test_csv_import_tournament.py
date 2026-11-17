@@ -12,6 +12,7 @@ from app.models import (
     Team,
     Tournament,
 )
+from app.tests.raw_site_nickname import raw_site_nickname
 from league.models import LeagueUser
 from org.models import OrgUser
 
@@ -60,6 +61,22 @@ class TournamentCSVImportTest(TestCase):
         # Also creates OrgUser with MMR
         org_user = OrgUser.objects.get(user=user, organization=self.org)
         self.assertEqual(org_user.mmr, 5000)
+
+    def test_import_ignores_name_column(self) -> None:
+        user = CustomUser.objects.create_user(
+            username="player",
+            password="pass",
+            positions=PositionsModel.objects.create(),
+            steamid=76561198012345678,
+        )
+        resp = self.client.post(
+            self.url,
+            {"rows": [{"steam_friend_id": "76561198012345678", "name": "Shadow"}]},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["summary"]["added"], 1)
+        self.assertIsNone(raw_site_nickname(user.pk))
 
     def test_import_with_team_name_creates_team(self):
         """Row with team_name creates/assigns team."""

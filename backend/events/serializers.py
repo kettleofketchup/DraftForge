@@ -5,12 +5,18 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.utils import timezone
 from rest_framework import serializers
 
+from app.auth import InternalServiceUser
+from app.display_names import user_display_name
+from app.legacy_fields import LegacyNullField
 from app.models import CustomUser, League, Organization
 from app.permissions_org import (
     can_view_org_members,
     check_lobby_steam_league_id,
     request_user,
 )
+from app.serializers import TournamentUserSerializer, _serialize_users_with_mmr
+from app.user_cache import serialize_users_core
+from events.mmr_suggestions import suggest_mmr
 from events.models import (
     Event,
     EventRepeater,
@@ -28,6 +34,9 @@ from events.services import (
 )
 from lobby.passwords import MAX_LENGTH as LOBBY_PASSWORD_MAX_LENGTH
 from lobby.passwords import PasswordMode, validate_password
+from org.display_names import guild_nicknames, org_nicknames_public
+from org.models import OrgUser
+from org.models_profiles import PlayerDotaProfile
 
 # The lobby password is write-only on every events serializer: event and
 # series payloads are cached, public and handed to Celery. Staff and
@@ -266,11 +275,24 @@ class EventRepeaterSerializer(
 
 class EventStaffUserSerializer(serializers.ModelSerializer):
     avatarUrl = serializers.CharField(read_only=True)
+    nickname = LegacyNullField()
+    guildNickname = serializers.SerializerMethodField()
 
     class Meta:
         model = CustomUser
-        fields = ["pk", "username", "nickname", "avatarUrl"]
+        fields = [
+            "pk",
+            "username",
+            "nickname",
+            "discordNickname",
+            "guildNickname",
+            "avatarUrl",
+        ]
         read_only_fields = fields
+
+    def get_guildNickname(self, obj: CustomUser) -> str | None:
+        nicks: dict[int, str | None] = self.context.get("_staff_guild_nicknames", {})
+        return nicks.get(obj.pk)
 
 
 class EventSlimSerializer(serializers.ModelSerializer):
@@ -340,6 +362,17 @@ class EventSerializer(
     )
     host = EventStaffUserSerializer(read_only=True)
     helpers = EventStaffUserSerializer(many=True, read_only=True)
+
+    def to_representation(self, instance: Event) -> dict[str, Any]:
+        nicks: dict[int, str | None] = {}
+        org_id = instance.organization_id
+        if org_nicknames_public(org_id):
+            staff_ids = [user.pk for user in instance.helpers.all()]
+            if instance.host_id is not None:
+                staff_ids.append(instance.host_id)
+            nicks = guild_nicknames(org_id, staff_ids)
+        self.context["_staff_guild_nicknames"] = nicks
+        return super().to_representation(instance)
 
     class Meta:
         model = Event
@@ -566,7 +599,7 @@ class EventSerializer(
 
 
 class EventTeamSerializer(serializers.ModelSerializer):
-    captain_name = serializers.CharField(source="captain.nickname", read_only=True)
+    captain_name = serializers.SerializerMethodField()
     # Annotated from queryset
     member_count = serializers.IntegerField(read_only=True)
 
@@ -584,9 +617,45 @@ class EventTeamSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["id", "created_at", "updated_at"]
 
+    def _viewer_sees_org_members(self, org_id: int) -> bool:
+        memo: dict[int, bool] = self.context.setdefault("_team_org_visible", {})
+        if org_id not in memo:
+            request = self.context.get("request")
+            memo[org_id] = request is not None and can_view_org_members(
+                request.user, org_id
+            )
+        return memo[org_id]
+
+    def _captain_nicknames(self, obj: EventTeam) -> dict[int, str | None]:
+        org_id = obj.event.organization_id
+        memo: dict[int, dict[int, str | None]] = self.context.setdefault(
+            "_team_captain_nicknames", {}
+        )
+        nicks = memo.setdefault(org_id, {})
+        if obj.captain_id not in nicks:
+            parent = self.parent
+            rows = (
+                list(parent.instance)
+                if isinstance(parent, serializers.ListSerializer) and parent.instance
+                else [obj]
+            )
+            ids = {
+                row.captain_id for row in rows if row.event.organization_id == org_id
+            } | {obj.captain_id}
+            ids -= nicks.keys()
+            found = guild_nicknames(org_id, ids)
+            nicks.update({user_id: found.get(user_id) for user_id in ids})
+        return nicks
+
+    def get_captain_name(self, obj: EventTeam) -> str:
+        nick = None
+        if self._viewer_sees_org_members(obj.event.organization_id):
+            nick = self._captain_nicknames(obj).get(obj.captain_id)
+        return user_display_name(obj.captain, guild_nickname=nick)
+
 
 class EventSignupSerializer(serializers.ModelSerializer):
-    username = serializers.CharField(source="user.nickname", read_only=True)
+    username = serializers.SerializerMethodField()
     user_avatar = serializers.CharField(source="user.avatar", read_only=True)
     user_data = serializers.SerializerMethodField()
     dota_profile = serializers.SerializerMethodField()
@@ -631,47 +700,116 @@ class EventSignupSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
 
-    def get_user_data(self, obj):
-        from app.models import CustomUser
-        from app.serializers import TournamentUserSerializer, _serialize_user_with_mmr
+    def _batch(self, obj: EventSignup) -> list[EventSignup]:
+        parent = self.parent
+        if isinstance(parent, serializers.ListSerializer) and parent.instance:
+            rows = list(parent.instance)
+            if any(row is obj for row in rows):
+                return rows
+        return [obj]
 
-        # Resolve user — obj.user may be a SimpleLazyObject from request.user
-        # which breaks type(user).objects calls. Always fetch a real instance.
-        user = CustomUser.objects.get(pk=obj.user.pk)
-
-        if not obj.event.tournament:
-            return TournamentUserSerializer(user).data
-        return _serialize_user_with_mmr(user, obj.event.tournament)
-
-    def get_dota_profile(self, obj):
-        """Return DotaProfile data if the user has one for this event's org."""
-        from org.models import OrgUser
-        from org.models_profiles import PlayerDotaProfile
-
-        try:
-            org_user = OrgUser.objects.get(
-                user=obj.user, organization=obj.event.organization
+    def _org_user(self, obj: EventSignup) -> OrgUser | None:
+        """The signup user's OrgUser in the event's org, bulk-loaded per list."""
+        memo: dict[tuple[int, int], OrgUser | None] = self.context.setdefault(
+            "_signup_org_users", {}
+        )
+        key = (obj.user_id, obj.event.organization_id)
+        if key not in memo:
+            keys = {(r.user_id, r.event.organization_id) for r in self._batch(obj)}
+            keys = (keys - memo.keys()) | {key}
+            found = (
+                OrgUser.objects.nocache()
+                .filter(
+                    user_id__in={user_id for user_id, _ in keys},
+                    organization_id__in={org_id for _, org_id in keys},
+                )
+                .select_related("dota_profile")
             )
-            profile = PlayerDotaProfile.objects.get(org_user=org_user)
-            return {
-                "positions": {
-                    "pos_1": profile.pos_1,
-                    "pos_2": profile.pos_2,
-                    "pos_3": profile.pos_3,
-                    "pos_4": profile.pos_4,
-                    "pos_5": profile.pos_5,
-                },
-                "rank_status": profile.rank_status,
-                "rank_medal": profile.rank_medal,
-                "mmr": profile.mmr,
-                "rank_screenshot": profile.rank_screenshot or None,
-                "battlecup_screenshot": profile.battlecup_screenshot or None,
-                "battle_cup_tier": profile.battle_cup_tier,
-            }
-        except (OrgUser.DoesNotExist, PlayerDotaProfile.DoesNotExist):
+            for org_user in found:
+                pair = (org_user.user_id, org_user.organization_id)
+                if pair in keys:
+                    memo[pair] = org_user
+            for pair in keys:
+                memo.setdefault(pair, None)
+        return memo[key]
+
+    def _dota_profile(self, obj: EventSignup) -> PlayerDotaProfile | None:
+        org_user = self._org_user(obj)
+        if org_user is None:
+            return None
+        try:
+            return org_user.dota_profile
+        except PlayerDotaProfile.DoesNotExist:
             return None
 
-    def get_org_user_mmr(self, obj):
+    def _user_payload(self, obj: EventSignup) -> dict[str, Any]:
+        """Serialized user (org-shaped for tournament events), bulk per list."""
+        memo: dict[int | None, dict[int, dict[str, Any]]] = self.context.setdefault(
+            "_signup_user_payloads", {}
+        )
+        tournament_id = obj.event.tournament_id
+        payloads = memo.setdefault(tournament_id, {})
+        if obj.user_id not in payloads:
+            user_ids = {
+                r.user_id
+                for r in self._batch(obj)
+                if r.event.tournament_id == tournament_id
+            } - payloads.keys()
+            user_ids.add(obj.user_id)
+            if tournament_id is None:
+                payloads.update(serialize_users_core(user_ids))
+            else:
+                rows = _serialize_users_with_mmr(
+                    CustomUser.objects.filter(pk__in=user_ids), obj.event.tournament
+                )
+                payloads.update({row["pk"]: row for row in rows})
+            for user_id in user_ids - payloads.keys():
+                payloads[user_id] = TournamentUserSerializer(
+                    CustomUser.objects.get(pk=user_id)
+                ).data
+        return payloads[obj.user_id]
+
+    def get_username(self, obj: EventSignup) -> str:
+        org_user = self._org_user(obj)
+        nick = (
+            org_user.guild_nickname
+            if org_user and self._viewer_sees_org_mmr(obj)
+            else None
+        )
+        return user_display_name(obj.user, guild_nickname=nick)
+
+    def get_user_data(self, obj: EventSignup) -> dict[str, Any]:
+        data = dict(self._user_payload(obj))
+        if obj.event.tournament_id is None:
+            org_user = self._org_user(obj)
+            data["guildNickname"] = org_user.guild_nickname if org_user else None
+        if not self._viewer_sees_org_mmr(obj):
+            for key in ("guildNickname", "mmr", "league_mmr"):
+                data.pop(key, None)
+        return data
+
+    def get_dota_profile(self, obj: EventSignup) -> dict[str, Any] | None:
+        """Return DotaProfile data if the user has one for this event's org."""
+        profile = self._dota_profile(obj)
+        if profile is None:
+            return None
+        return {
+            "positions": {
+                "pos_1": profile.pos_1,
+                "pos_2": profile.pos_2,
+                "pos_3": profile.pos_3,
+                "pos_4": profile.pos_4,
+                "pos_5": profile.pos_5,
+            },
+            "rank_status": profile.rank_status,
+            "rank_medal": profile.rank_medal,
+            "mmr": profile.mmr,
+            "rank_screenshot": profile.rank_screenshot or None,
+            "battlecup_screenshot": profile.battlecup_screenshot or None,
+            "battle_cup_tier": profile.battle_cup_tier,
+        }
+
+    def get_org_user_mmr(self, obj: EventSignup) -> int | None:
         """Return the OrgUser MMR for this user in the event's org.
 
         We surface any non-zero MMR for display purposes regardless of the
@@ -679,45 +817,34 @@ class EventSignupSerializer(serializers.ModelSerializer):
         (auto-approve), not for whether the value is shown. Hidden from
         viewers who may not see the org's member list.
         """
-        from org.models import OrgUser
-
         if not self._viewer_sees_org_mmr(obj):
             return None
-        try:
-            org_user = OrgUser.objects.get(
-                user=obj.user, organization=obj.event.organization
-            )
-        except OrgUser.DoesNotExist:
-            return None
-        return org_user.mmr if org_user.mmr else None
+        org_user = self._org_user(obj)
+        return org_user.mmr if org_user and org_user.mmr else None
 
     def _viewer_sees_org_mmr(self, obj: EventSignup) -> bool:
         request = self.context.get("request")
         if request is None:
             return False
         user = request.user
+        if isinstance(user, InternalServiceUser):
+            return True
         if user.is_authenticated and user.pk == obj.user_id:
             return True
         cache: dict[int, bool] = self.context.setdefault("_org_mmr_visible", {})
-        org = obj.event.organization
-        if org.pk not in cache:
-            cache[org.pk] = can_view_org_members(user, org)
-        return cache[org.pk]
+        org_id = obj.event.organization_id
+        if org_id not in cache:
+            cache[org_id] = can_view_org_members(user, org_id)
+        return cache[org_id]
 
-    def get_org_user_pk(self, obj):
+    def get_org_user_pk(self, obj: EventSignup) -> int | None:
         """Return the OrgUser pk for this user in the event's org.
 
         Frontend caches this alongside org_user_mmr so the user-cache entry's
         org-scoped slot can be hydrated without a separate org-users fetch.
         """
-        from org.models import OrgUser
-
-        try:
-            return OrgUser.objects.get(
-                user=obj.user, organization=obj.event.organization
-            ).pk
-        except OrgUser.DoesNotExist:
-            return None
+        org_user = self._org_user(obj)
+        return org_user.pk if org_user else None
 
     def get_suggested_mmr(self, obj):
         return self._mmr_suggestion(obj)["default"]
@@ -732,26 +859,9 @@ class EventSignupSerializer(serializers.ModelSerializer):
         """Memoize the suggest_mmr result per signup instance."""
         if hasattr(obj, "_mmr_suggestion_cache"):
             return obj._mmr_suggestion_cache
-
-        from events.mmr_suggestions import suggest_mmr
-        from org.models import OrgUser
-        from org.models_profiles import PlayerDotaProfile
-
-        profile = None
-        prior_mmr = None
-        try:
-            org_user = OrgUser.objects.get(
-                user=obj.user, organization=obj.event.organization
-            )
-            prior_mmr = org_user.mmr if org_user.mmr else None
-            try:
-                profile = PlayerDotaProfile.objects.get(org_user=org_user)
-            except PlayerDotaProfile.DoesNotExist:
-                profile = None
-        except OrgUser.DoesNotExist:
-            pass
-
-        obj._mmr_suggestion_cache = suggest_mmr(profile, prior_mmr)
+        org_user = self._org_user(obj)
+        prior_mmr = org_user.mmr if org_user and org_user.mmr else None
+        obj._mmr_suggestion_cache = suggest_mmr(self._dota_profile(obj), prior_mmr)
         return obj._mmr_suggestion_cache
 
 
@@ -830,13 +940,24 @@ class OrgEventDefaultsSerializer(
 
 class RepeaterSubscriptionSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source="user.username", read_only=True)
-    nickname = serializers.CharField(source="user.nickname", read_only=True)
+    nickname = LegacyNullField()
+    discordNickname = serializers.CharField(
+        source="user.discordNickname", read_only=True
+    )
     discordId = serializers.CharField(source="user.discordId", read_only=True)
     avatar = serializers.CharField(source="user.avatar", read_only=True)
 
     class Meta:
         model = RepeaterSubscription
-        fields = ["id", "username", "nickname", "discordId", "avatar", "created_at"]
+        fields = [
+            "id",
+            "username",
+            "nickname",
+            "discordNickname",
+            "discordId",
+            "avatar",
+            "created_at",
+        ]
 
 
 ONE_OFF_OVERRIDE_FIELDS = (

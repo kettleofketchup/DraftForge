@@ -1,15 +1,28 @@
 """Tests for enhanced search_users endpoint."""
 
-from django.test import TestCase
+from unittest.mock import patch
+
+from django.core.cache import cache
+from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
 from app.models import CustomUser, League, Organization
+from app.tests.raw_site_nickname import set_raw_site_nickname
 from league.models import LeagueUser
 from org.models import OrgUser
 
+LOCMEM = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "test_search_users",
+    }
+}
 
+
+@override_settings(CACHES=LOCMEM)
 class SearchUsersTest(TestCase):
     def setUp(self):
+        cache.clear()
         self.client = APIClient()
         self.staff = CustomUser.objects.create_user(
             username="staffuser", password="test123"
@@ -27,7 +40,7 @@ class SearchUsersTest(TestCase):
 
         # User in the league (implies org membership)
         self.league_user = CustomUser.objects.create_user(
-            username="leagueuser", password="test", nickname="LeagueJohn"
+            username="leagueuser", password="test", discordNickname="LeagueJohn"
         )
         org_user = OrgUser.objects.create(user=self.league_user, organization=self.org)
         LeagueUser.objects.create(
@@ -36,20 +49,20 @@ class SearchUsersTest(TestCase):
 
         # User in org only
         self.org_only_user = CustomUser.objects.create_user(
-            username="orgonlyuser", password="test", nickname="OrgJohn"
+            username="orgonlyuser", password="test", discordNickname="OrgJohn"
         )
         OrgUser.objects.create(user=self.org_only_user, organization=self.org)
 
         # User in a different org
         self.other_org = Organization.objects.create(name="Other Org")
         self.other_org_user = CustomUser.objects.create_user(
-            username="otherorguser", password="test", nickname="OtherJohn"
+            username="otherorguser", password="test", discordNickname="OtherJohn"
         )
         OrgUser.objects.create(user=self.other_org_user, organization=self.other_org)
 
         # Global user (no org)
         self.global_user = CustomUser.objects.create_user(
-            username="globaluser", password="test", nickname="GlobalJohn"
+            username="globaluser", password="test", discordNickname="GlobalJohn"
         )
 
         # User with steam ID. CustomUser.save() syncs steamid <-> steam_account_id
@@ -149,8 +162,106 @@ class SearchUsersTest(TestCase):
     def test_max_20_results(self):
         for i in range(25):
             CustomUser.objects.create_user(
-                username=f"bulkuser{i}", password="test", nickname=f"Bulk{i}"
+                username=f"bulkuser{i}", password="test", discordNickname=f"Bulk{i}"
             )
         resp = self.client.get("/api/users/search/", {"q": "bulk"})
         self.assertEqual(resp.status_code, 200)
         self.assertLessEqual(len(resp.data), 20)
+
+    def test_org_search_matches_that_orgs_guild_nickname(self):
+        dragon = CustomUser.objects.create_user(
+            username="dc_account", password="test", discordNickname="Gwaihir"
+        )
+        OrgUser.objects.create(
+            user=dragon, organization=self.org, guild_nickname="DragonClaw"
+        )
+        resp = self.client.get(
+            "/api/users/search/", {"q": "dragon", "org_id": self.org.pk}
+        )
+        self.assertEqual(resp.status_code, 200)
+        rows = {u["pk"]: u for u in resp.data}
+        self.assertIn(dragon.pk, rows)
+        self.assertEqual(rows[dragon.pk]["guildNickname"], "DragonClaw")
+
+    def test_org_search_guild_nickname_null_for_non_members(self):
+        resp = self.client.get(
+            "/api/users/search/", {"q": "globaluser", "org_id": self.org.pk}
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertIsNone(resp.data[0]["guildNickname"])
+
+    def test_other_orgs_guild_nickname_not_matched(self):
+        OrgUser.objects.filter(user=self.other_org_user).update(
+            guild_nickname="Featherfall"
+        )
+        resp = self.client.get(
+            "/api/users/search/", {"q": "featherfall", "org_id": self.org.pk}
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data, [])
+
+    def test_global_search_matches_discord_global_name(self):
+        self.global_user.discordNickname = "Windlord"
+        self.global_user.save()
+        resp = self.client.get("/api/users/search/", {"q": "windlord"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual([u["pk"] for u in resp.data], [self.global_user.pk])
+
+    def test_site_nickname_is_not_searched(self):
+        set_raw_site_nickname(self.global_user.pk, "SiteOnlyName")
+        resp = self.client.get("/api/users/search/", {"q": "siteonly"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data, [])
+
+    def test_non_numeric_org_id_falls_back_to_global(self):
+        resp = self.client.get(
+            "/api/users/search/", {"q": "globaluser", "org_id": "abc"}
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual([u["pk"] for u in resp.data], [self.global_user.pk])
+
+    def test_plain_query_works(self):
+        resp = self.client.get("/api/users/search/", {"q": "abc"})
+        self.assertEqual(resp.status_code, 200)
+
+    @patch("app.views.admin_team.touch_org_activity")
+    def test_non_staff_org_search_does_not_touch(self, touch):
+        regular = CustomUser.objects.create_user(username="regular2", password="x")
+        self.client.force_authenticate(user=regular)
+        resp = self.client.get(
+            "/api/users/search/", {"q": "leagueuser", "org_id": self.org.pk}
+        )
+        self.assertEqual(resp.status_code, 403)
+        touch.assert_not_called()
+
+    @patch("app.views.admin_team.touch_org_activity")
+    def test_staff_org_search_touches_activity(self, touch):
+        self.org.discord_server_id = "555"
+        self.org.save()
+        resp = self.client.get(
+            "/api/users/search/", {"q": "leagueuser", "org_id": self.org.pk}
+        )
+        self.assertEqual(resp.status_code, 200)
+        touch.assert_called_once()
+        args, kwargs = touch.call_args
+        self.assertEqual(args[1], self.org.pk)
+        self.assertEqual(kwargs["guild_id"], "555")
+
+    @patch("app.views.admin_team.touch_org_activity")
+    def test_global_search_does_not_touch(self, touch):
+        resp = self.client.get("/api/users/search/", {"q": "leagueuser"})
+        self.assertEqual(resp.status_code, 200)
+        touch.assert_not_called()
+
+    def test_org_members_ranked_before_slice(self):
+        for i in range(21):
+            CustomUser.objects.create_user(username=f"aaarank{i:02d}", password="test")
+        member = CustomUser.objects.create_user(username="zzzrank", password="test")
+        OrgUser.objects.create(user=member, organization=self.org)
+        resp = self.client.get(
+            "/api/users/search/", {"q": "rank", "org_id": self.org.pk}
+        )
+        self.assertEqual(resp.status_code, 200)
+        pks = [u["pk"] for u in resp.data]
+        self.assertEqual(len(pks), 20)
+        self.assertEqual(pks[0], member.pk)

@@ -11,6 +11,7 @@ import { Input } from '~/components/ui/input';
 import type { UserClassType, UserType } from '~/components/user/types';
 import { UserCard } from '~/components/user/userCard';
 import { useDebouncedValue } from '~/hooks/useDebouncedValue';
+import { matchesUserQueryIn, useOrgNicknames } from '~/hooks/useOrgNicknames';
 import {
   VirtualizedUserGrid,
   type ColumnBreakpoints,
@@ -193,16 +194,16 @@ export function UserList({
   const searchQuery = externalSearchQuery || internalQuery;
   const debouncedQuery = useDebouncedValue(searchQuery, 300);
 
-  // Filter users with debounced query
+  const nicknames = useOrgNicknames(
+    useMemo(() => users.map((u) => u.pk), [users]),
+    organizationId,
+  );
   const filteredUsers = useMemo(() => {
     if (debouncedQuery === '') return users;
-    const q = debouncedQuery.toLowerCase();
-    return users.filter(
-      (person) =>
-        person.username?.toLowerCase().includes(q) ||
-        person.nickname?.toLowerCase().includes(q),
+    return users.filter((person) =>
+      matchesUserQueryIn(person, debouncedQuery, organizationId, nicknames),
     );
-  }, [users, debouncedQuery]);
+  }, [users, debouncedQuery, organizationId, nicknames]);
 
   // Loading state - show skeleton
   if (isLoading && users.length === 0) {

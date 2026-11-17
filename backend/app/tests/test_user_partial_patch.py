@@ -15,6 +15,7 @@ from django.test import TestCase
 from rest_framework.test import APIClient
 
 from app.models import CustomUser, Organization, PositionsModel
+from app.tests.raw_site_nickname import raw_site_nickname, set_raw_site_nickname
 from org.models import OrgUser
 
 
@@ -28,10 +29,10 @@ class PartialUserPatchTests(TestCase):
         )
         self.target = CustomUser.objects.create(
             username="patch-target",
-            nickname="Target",
             steam_account_id=12345,
             positions=self.target_positions,
         )
+        set_raw_site_nickname(self.target.pk, "Target")
         self.org = Organization.objects.create(name="Patch Test Org")
         self.org.admins.add(self.admin)
         self.org_user = OrgUser.objects.create(
@@ -52,7 +53,9 @@ class PartialUserPatchTests(TestCase):
         self.assertEqual(self.target_positions.soft_support, 2)
         self.assertEqual(self.target_positions.hard_support, 2)
 
-    def test_partial_positions_patch_via_global_endpoint_passes_serializer_validation(self):
+    def test_partial_positions_patch_via_global_endpoint_passes_serializer_validation(
+        self,
+    ):
         """PATCH /users/:pk/ {positions: {carry: 3}} must return 200, not trip required-field validation."""
         url = f"/api/users/{self.target.pk}/"
         resp = self.client.patch(url, {"positions": {"carry": 3}}, format="json")
@@ -76,4 +79,26 @@ class PartialUserPatchTests(TestCase):
         self.target.refresh_from_db()
         self.org_user.refresh_from_db()
         self.assertEqual(self.org_user.mmr, 6500)
-        self.assertEqual(self.target.nickname, "Target")
+        self.assertEqual(raw_site_nickname(self.target.pk), "Target")
+
+    def test_org_endpoint_ignores_nickname_key(self) -> None:
+        url = f"/api/organizations/{self.org.pk}/users/{self.org_user.pk}/"
+        resp = self.client.patch(
+            url, {"nickname": "X", "steam_account_id": 54321}, format="json"
+        )
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.target.refresh_from_db()
+        self.assertEqual(self.target.steam_account_id, 54321)
+        self.assertEqual(raw_site_nickname(self.target.pk), "Target")
+
+    def test_profile_update_ignores_nickname_key(self) -> None:
+        self.client.force_authenticate(user=self.target)
+        resp = self.client.post(
+            "/api/profile_update",
+            {"nickname": "X", "steam_account_id": 54321},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 201, resp.content)
+        self.target.refresh_from_db()
+        self.assertEqual(self.target.steam_account_id, 54321)
+        self.assertEqual(raw_site_nickname(self.target.pk), "Target")

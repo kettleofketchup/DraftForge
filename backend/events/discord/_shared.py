@@ -159,7 +159,6 @@ def _get_org_user(
         new_user = CustomUser(
             username=username,
             discordId=discord_id_str,
-            nickname=discord_username or username,
             positions=positions,
         )
         try:
@@ -178,7 +177,6 @@ def _get_org_user(
                 user = CustomUser.objects.create(
                     username=f"discord_{discord_id_str}",
                     discordId=discord_id_str,
-                    nickname=discord_username or f"discord_{discord_id_str}",
                     positions=fallback_positions,
                 )
 

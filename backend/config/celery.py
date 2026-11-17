@@ -48,6 +48,10 @@ _beat_schedule = {
         "task": "lobby.tasks.reconcile_dota_lobbies",
         "schedule": 60.0,
     },
+    "sweep-auto-herodrafts": {
+        "task": "events.tournament_tasks.sweep_auto_herodrafts",
+        "schedule": 10.0,
+    },
     "sweep-stale-discord-leases": {
         "task": "discordbot.tasks.sweep_stale_discord_leases",
         "schedule": 60.0,  # 60s cadence: keeps worker-crash recovery <1.5 min
@@ -61,15 +65,17 @@ _beat_schedule = {
         "task": "app.tasks.avatar_refresh.refresh_all_discord_data",
         "schedule": crontab(hour=4, minute=0),
     },
-    # Daily batched avatar refresh. Pulls one full guild-member fetch per
-    # org from the cached `discord_members_<guild_id>` (1 hr TTL — see
-    # discordbot/services/users.py), then bulk-updates User.avatar via a
-    # single CASE/WHEN UPDATE per 500-row batch. Admin Discord-member
-    # searches during the day already repave that cache, so this task
-    # picks up users who joined since yesterday without a separate fetch.
+    # Daily batched avatar refresh. One guild-member fetch per org guild
+    # (discordbot/services/discord_members.py; the worker's cache is
+    # process-local LocMem, not Daphne's Redis), then bulk-updates
+    # User.avatar via a single CASE/WHEN UPDATE per 500-row batch.
     "refresh-avatars-batched-daily": {
         "task": "app.tasks.avatar_refresh.refresh_avatars_batched",
         "schedule": crontab(hour=4, minute=15),  # 15 min after the daily sweep
+    },
+    "sync-active-org-discord-names": {
+        "task": "app.tasks.discord_name_sync.sync_active_org_discord_names",
+        "schedule": 1800.0,
     },
 }
 

@@ -4,6 +4,7 @@ export interface CSVRow {
   steam_friend_id?: string;
   discord_id?: string;
   discord_username?: string;
+  /** Accepted in uploads but ignored; names come from Discord. */
   name?: string;
   mmr?: string;
   team_name?: string;

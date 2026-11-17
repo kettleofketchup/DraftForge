@@ -19,7 +19,11 @@ vi.mock('~/components/ui/shared-popover-context', () => ({
   useSharedPopoverActions: () => actions,
 }));
 
-const player = { pk: 42, username: 'alice', nickname: 'Alice' } as UserType;
+const player = {
+  pk: 42,
+  username: 'alice',
+  discordNickname: 'Alice',
+} as UserType;
 
 function trigger() {
   return screen.getByRole('button', { name: 'View profile for Alice' });
@@ -46,7 +50,11 @@ describe('PlayerPopoverTrigger statsLeagueId', () => {
     fireEvent.click(trigger());
     expect(actions.openPlayerModal).toHaveBeenCalledWith(
       player,
-      expect.objectContaining({ statsLeagueId: 7, leagueId: 3, organizationId: 9 }),
+      expect.objectContaining({
+        statsLeagueId: 7,
+        leagueId: 3,
+        organizationId: 9,
+      }),
     );
   });
 

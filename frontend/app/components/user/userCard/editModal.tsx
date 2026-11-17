@@ -114,7 +114,7 @@ export function UserEditModal({
         if (user.pk) {
           queryClient.invalidateQueries({ queryKey: ['user', user.pk] });
         }
-        toast.success(`${DisplayName(user)} updated`);
+        toast.success(`${DisplayName(user, undefined, scopeOrgPk)} updated`);
         setOpen(false);
       } catch (err) {
         const conflict = steamAccountIdConflictFromError(
@@ -131,7 +131,7 @@ export function UserEditModal({
         const message =
           err instanceof Error
             ? err.message
-            : `Failed to update ${DisplayName(user)}`;
+            : `Failed to update ${DisplayName(user, undefined, scopeOrgPk)}`;
         toast.error(message);
       }
     },
@@ -158,7 +158,6 @@ export function UserEditModal({
   useEffect(() => {
     if (!open) return;
     const KEY_TO_TESTID: Record<string, string> = {
-      n: 'edit-user-nickname',
       r: 'edit-user-mmr',
       f: 'edit-user-steam_account_id',
       z: 'edit-user-carry',
@@ -217,7 +216,7 @@ export function UserEditModal({
       <FormDialog
         open={open}
         onOpenChange={setOpen}
-        title={`Edit ${DisplayName(user)}`}
+        title={`Edit ${DisplayName(user, undefined, scopeOrgPk)}`}
         description="Update this user's profile."
         submitLabel="Save Changes"
         isSubmitting={isSubmitting}

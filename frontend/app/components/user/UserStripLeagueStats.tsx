@@ -11,6 +11,7 @@ import {
 } from '~/features/league-stats/format';
 import { usePlayerLeagueSummary } from '~/features/league-stats/queries';
 import type { PlayerLeagueSummary } from '~/features/league-stats/schemas';
+import { useDisplayOrgId } from '~/hooks/useDisplayOrgId';
 import { cn } from '~/lib/utils';
 import type { UserEntry } from '~/store/userCacheTypes';
 import type { UserType } from './types';
@@ -56,13 +57,14 @@ interface UserStripLeagueStatsProps {
 export const UserStripLeagueStats = memo(
   ({ leaguePk, player, breakpoint = 'default' }: UserStripLeagueStatsProps) => {
     const { data } = usePlayerLeagueSummary(leaguePk, player.pk ?? -1);
+    const orgId = useDisplayOrgId();
 
     const summary = data?.summary;
     if (!data || !summary || summary.games === 0) return null;
 
     const { population, minGames } = data;
     const tone = winRateTone(summary.win_rate);
-    const playerName = DisplayName(player);
+    const playerName = DisplayName(player, undefined, orgId);
     const label = `League stats for ${playerName}: ${accessibleLabel(summary, population, minGames)}. Opens the player panel`;
 
     return (

@@ -3,7 +3,10 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PlayerPopoverTrigger } from '~/components/player/PlayerPopoverTrigger';
 import type { UserType } from '~/components/user/types';
-import { HIDE_DELAY_MS, SharedPopoverProvider } from '../shared-popover-context';
+import {
+  HIDE_DELAY_MS,
+  SharedPopoverProvider,
+} from '../shared-popover-context';
 import { SharedPopoverRenderer } from '../shared-popover-renderer';
 
 const modal = vi.hoisted(() => ({ open: vi.fn() }));
@@ -17,9 +20,15 @@ vi.mock('~/components/player/PlayerModal', () => ({
   },
 }));
 vi.mock('~/components/team/TeamModal', () => ({ TeamModal: () => null }));
-vi.mock('~/components/team/TeamPopoverContent', () => ({ TeamPopoverContent: () => null }));
+vi.mock('~/components/team/TeamPopoverContent', () => ({
+  TeamPopoverContent: () => null,
+}));
 
-const player = { pk: 42, username: 'alice', nickname: 'Alice' } as UserType;
+const player = {
+  pk: 42,
+  username: 'alice',
+  discordNickname: 'Alice',
+} as UserType;
 
 function renderHoverCard() {
   render(
@@ -30,7 +39,9 @@ function renderHoverCard() {
       <SharedPopoverRenderer />
     </SharedPopoverProvider>,
   );
-  const trigger = screen.getByRole('button', { name: 'View profile for Alice' });
+  const trigger = screen.getByRole('button', {
+    name: 'View profile for Alice',
+  });
   fireEvent.mouseEnter(trigger);
   act(() => vi.advanceTimersByTime(60));
   return trigger;

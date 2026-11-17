@@ -7,8 +7,9 @@ import { PlayerPopover } from '~/components/player/PlayerPopover';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import { Card, CardContent } from '~/components/ui/card';
-import { DisplayName } from '~/components/user/avatar';
 import { UserAvatar } from '~/components/user/UserAvatar';
+import { DisplayName } from '~/components/user/avatar';
+import { useDisplayOrgId } from '~/hooks/useDisplayOrgId';
 import { cn } from '~/lib/utils';
 import type { LeagueMatchType } from './schemas';
 
@@ -17,6 +18,7 @@ interface Props {
 }
 
 export const LeagueMatchCard: React.FC<Props> = ({ match }) => {
+  const orgId = useDisplayOrgId();
   const [showStats, setShowStats] = useState(false);
 
   const radiantWon = match.winning_team === match.radiant_team;
@@ -67,7 +69,7 @@ export const LeagueMatchCard: React.FC<Props> = ({ match }) => {
                     <UserAvatar user={match.radiant_captain} size="lg" />
                     <div>
                       <p className="font-medium text-green-600">
-                        {DisplayName(match.radiant_captain)}
+                        {DisplayName(match.radiant_captain, undefined, orgId)}
                       </p>
                       <p className="text-xs text-muted-foreground">Radiant</p>
                     </div>
@@ -115,7 +117,7 @@ export const LeagueMatchCard: React.FC<Props> = ({ match }) => {
                   <div className="flex items-center gap-2 cursor-pointer">
                     <div className="text-right">
                       <p className="font-medium text-red-600">
-                        {DisplayName(match.dire_captain)}
+                        {DisplayName(match.dire_captain, undefined, orgId)}
                       </p>
                       <p className="text-xs text-muted-foreground">Dire</p>
                     </div>

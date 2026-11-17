@@ -15,18 +15,21 @@ import { DisplayName } from '~/components/user/avatar';
 import { RolePositions } from '~/components/user/positions';
 import type { UserType } from '~/components/user/types';
 import { UserAvatar } from '~/components/user/UserAvatar';
+import { useDisplayOrgId } from '~/hooks/useDisplayOrgId';
 
 // Memoized player row for team popover
 const TeamMemberRow = memo(
   ({
     member,
     isCaptain,
+    orgId,
     onPlayerHover,
     onPlayerLeave,
     onPlayerClick,
   }: {
     member: UserType;
     isCaptain: boolean;
+    orgId: number | null;
     onPlayerHover: (player: UserType, el: HTMLElement) => void;
     onPlayerLeave: () => void;
     onPlayerClick: (player: UserType) => void;
@@ -44,7 +47,9 @@ const TeamMemberRow = memo(
             size="md"
             className="hover:ring-2 hover:ring-primary transition-all"
           />
-          <span className="font-medium">{DisplayName(member)}</span>
+          <span className="font-medium">
+            {DisplayName(member, undefined, orgId)}
+          </span>
           {isCaptain && <span className="text-xs text-primary">(C)</span>}
         </div>
       </TableCell>
@@ -72,9 +77,11 @@ export const TeamPopoverContent: React.FC<TeamPopoverContentProps> = ({
   onPlayerLeave,
   onPlayerClick,
 }) => {
+  const orgId = useDisplayOrgId();
   const captain = team.captain;
   const teamName =
-    team.name || `${captain ? DisplayName(captain) : 'Unknown'}'s Team`;
+    team.name ||
+    `${captain ? DisplayName(captain, undefined, orgId) : 'Unknown'}'s Team`;
   const hasMembers = team.members && team.members.length > 0;
 
   const avgMMR = useMemo(() => {
@@ -146,6 +153,7 @@ export const TeamPopoverContent: React.FC<TeamPopoverContentProps> = ({
                   key={member.pk}
                   member={member}
                   isCaptain={captain?.pk === member.pk}
+                  orgId={orgId}
                   onPlayerHover={onPlayerHover}
                   onPlayerLeave={onPlayerLeave}
                   onPlayerClick={onPlayerClick}

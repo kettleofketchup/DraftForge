@@ -54,9 +54,11 @@ class PromotionApiBase(TestCase):
             set_org_feature(org, FeatureKey.PROMOTION, enabled=True, actor=None)
 
         self.recipient = self._user("papi_recipient")
-        self.recipient.guildNickname = "Recipient Guild"
+        self.recipient.discordNickname = "Recipient Global"
         self.recipient.save()
-        OrgUser.objects.create(user=self.recipient, organization=self.org)
+        OrgUser.objects.create(
+            user=self.recipient, organization=self.org, guild_nickname="Recipient Nick"
+        )
         self.league = League.objects.create(
             name="Promotion API League", organization=self.org, steam_league_id=88401
         )
@@ -350,7 +352,7 @@ class PromotionRenderAndSendTest(PromotionApiBase):
         self.assertEqual(response.status_code, 200, response.content)
         body = response.json()
         stamp = int(self.event.scheduled_at.timestamp())
-        self.assertEqual(body["text"], f"Hi Recipient Guild, <t:{stamp}:F>")
+        self.assertEqual(body["text"], f"Hi Recipient Nick, <t:{stamp}:F>")
         self.assertEqual(body["warnings"], [])
         self.assertTrue(body["will_earn"])
 

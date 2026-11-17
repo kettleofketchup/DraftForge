@@ -1,5 +1,6 @@
 # backend/discordbot/admin.py
 from django.contrib import admin
+from django.http import HttpRequest
 
 from .models import (
     RSVP,
@@ -10,6 +11,8 @@ from .models import (
     DiscordEventMsgSignup,
     DiscordMessageLog,
     DiscordTournamentLog,
+    DraftActivityChannel,
+    DraftActivityInstance,
     EventTemplate,
     ScheduledEvent,
 )
@@ -102,3 +105,20 @@ class DiscordEventDMAdmin(admin.ModelAdmin):
         "created_at",
     ]
     list_filter = ["dm_type", "delivered", "responded"]
+
+
+@admin.register(DraftActivityChannel)
+class DraftActivityChannelAdmin(admin.ModelAdmin):
+    list_display = ["guild_id", "channel_id", "draft", "team_draft"]
+    search_fields = ["guild_id", "channel_id"]
+    raw_id_fields = ["draft", "team_draft"]
+
+
+@admin.register(DraftActivityInstance)
+class DraftActivityInstanceAdmin(admin.ModelAdmin):
+    list_display = ["instance_id", "guild_id", "channel_id", "draft", "team_draft"]
+    search_fields = ["instance_id", "guild_id", "channel_id"]
+    readonly_fields = ["instance_id", "guild_id", "channel_id", "draft", "team_draft"]
+
+    def has_add_permission(self, request: HttpRequest) -> bool:
+        return False

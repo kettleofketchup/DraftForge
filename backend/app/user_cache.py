@@ -13,7 +13,7 @@ def serialize_user_core(pk: int) -> dict:
     """Per-user cached CORE serialization (no MMR — MMR is contextual).
 
     Invalidated only by this user's own model changes. BaseUserProfile dep is
-    required: nickname/avatar are CustomUser @propertys backed by base_profile.
+    required: avatar is a CustomUser @property backed by base_profile.
     DotaUserProfile dep keeps the per-user core fresh on positions/dota edits
     (positions also fire PositionsModel.save()→invalidate_obj(user); the explicit
     dep is robust + matches the test_cacheops guardrail).

@@ -1,9 +1,13 @@
+from django.db import connection, reset_queries
 from django.test import TestCase, TransactionTestCase
+from django.test.utils import CaptureQueriesContext
 from rest_framework.exceptions import ValidationError
 from rest_framework.test import APIClient
 
 from app.models import CustomUser, League, Organization, PositionsModel
 from app.serializers import LeagueSerializer
+from league.models import LeagueUser
+from org.models import OrgUser
 from tests.cache import flush_run_cache
 
 
@@ -68,7 +72,9 @@ class LeaguePatchSteamLeagueIdTest(TestCase):
         cls.admin = CustomUser.objects.create_user(username="lp_admin", password="x")
         cls.admin.positions = PositionsModel.objects.create()
         cls.admin.save()
-        cls.regular = CustomUser.objects.create_user(username="lp_regular", password="x")
+        cls.regular = CustomUser.objects.create_user(
+            username="lp_regular", password="x"
+        )
         cls.regular.positions = PositionsModel.objects.create()
         cls.regular.save()
         cls.org = Organization.objects.create(name="LP Org", owner=cls.admin)
@@ -129,7 +135,9 @@ class LeaguePatchSteamLeagueIdTest(TestCase):
         self.assertEqual(resp.status_code, 400)
         body = resp.json()
         self.assertIn("steam_league_id", body)
-        self.assertIn("already in use by 'Conflicting League'", str(body["steam_league_id"]))
+        self.assertIn(
+            "already in use by 'Conflicting League'", str(body["steam_league_id"])
+        )
 
 
 class LeaguePatchSteamLeagueIdCacheTest(TransactionTestCase):
@@ -174,3 +182,49 @@ class LeaguePatchSteamLeagueIdCacheTest(TransactionTestCase):
         get_resp = self.client.get(f"/api/leagues/{self.league.pk}/")
         self.assertEqual(get_resp.status_code, 200)
         self.assertEqual(get_resp.json()["steam_league_id"], 42009)
+
+
+class LeagueUsersNameFieldsTest(TestCase):
+    def setUp(self) -> None:
+        flush_run_cache()
+        self.staff = CustomUser.objects.create_user(
+            username="lun_staff", password="x", is_staff=True
+        )
+        self.org = Organization.objects.create(name="LUN Org", owner=self.staff)
+        self.client = APIClient()
+        self.client.force_authenticate(self.staff)
+
+    def _league(self, name: str, steam_id: int, size: int) -> League:
+        league = League.objects.create(
+            organization=self.org, name=name, steam_league_id=steam_id
+        )
+        for i in range(size):
+            user = CustomUser.objects.create_user(
+                username=f"{name}_u{i}", password="x", discordNickname=f"Global{i}"
+            )
+            org_user, _ = OrgUser.objects.get_or_create(
+                user=user, organization=self.org
+            )
+            org_user.guild_nickname = f"Server{i}"
+            org_user.save()
+            LeagueUser.objects.get_or_create(
+                user=user, org_user=org_user, league=league
+            )
+        return league
+
+    def _get(self, league: League) -> tuple[list[dict], int]:
+        reset_queries()
+        with CaptureQueriesContext(connection) as ctx:
+            response = self.client.get(f"/api/leagues/{league.pk}/users/")
+        self.assertEqual(response.status_code, 200)
+        return response.json(), len(ctx.captured_queries)
+
+    def test_rows_carry_server_and_global_names(self) -> None:
+        rows, _ = self._get(self._league("lun_a", 51001, 1))
+        self.assertEqual(rows[0]["guildNickname"], "Server0")
+        self.assertEqual(rows[0]["discordNickname"], "Global0")
+
+    def test_query_count_does_not_grow_with_rows(self) -> None:
+        _, one = self._get(self._league("lun_one", 51002, 1))
+        _, five = self._get(self._league("lun_five", 51003, 5))
+        self.assertEqual(one, five)

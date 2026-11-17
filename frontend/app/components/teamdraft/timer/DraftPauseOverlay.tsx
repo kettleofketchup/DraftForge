@@ -2,6 +2,7 @@ import { Play } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { PrimaryButton, SecondaryButton } from '~/components/ui/buttons';
 import { DisplayName } from '~/components/user/avatar';
+import { useDisplayOrgId } from '~/hooks/useDisplayOrgId';
 import type { UserType } from '~/index';
 import type { TeamDraftState } from '../schemas';
 import { useLiveTeamDraftCountdown } from './useTeamDraftCountdown';
@@ -19,18 +20,25 @@ export interface DraftPauseOverlayProps {
   onPickForCaptain: () => void;
 }
 
-export type LiveDraftPauseOverlayProps = Omit<DraftPauseOverlayProps, 'resumingRemainingMs'>;
+export type LiveDraftPauseOverlayProps = Omit<
+  DraftPauseOverlayProps,
+  'resumingRemainingMs'
+>;
 
 export function LiveDraftPauseOverlay(props: LiveDraftPauseOverlayProps) {
   // Only the resuming countdown needs the per-frame clock.
-  if (props.draftStatus === 'resuming') return <LiveResumingOverlay {...props} />;
+  if (props.draftStatus === 'resuming')
+    return <LiveResumingOverlay {...props} />;
   return <DraftPauseOverlay {...props} resumingRemainingMs={0} />;
 }
 
 function LiveResumingOverlay(props: LiveDraftPauseOverlayProps) {
   const countdown = useLiveTeamDraftCountdown();
-  const resumingRemainingMs = countdown.kind === 'armed' ? countdown.resumingRemainingMs : 0;
-  return <DraftPauseOverlay {...props} resumingRemainingMs={resumingRemainingMs} />;
+  const resumingRemainingMs =
+    countdown.kind === 'armed' ? countdown.resumingRemainingMs : 0;
+  return (
+    <DraftPauseOverlay {...props} resumingRemainingMs={resumingRemainingMs} />
+  );
 }
 
 export function DraftPauseOverlay({
@@ -44,6 +52,7 @@ export function DraftPauseOverlay({
   onResume,
   onPickForCaptain,
 }: DraftPauseOverlayProps) {
+  const displayOrgId = useDisplayOrgId();
   const [minimized, setMinimized] = useState(false);
 
   useEffect(() => {
@@ -52,8 +61,14 @@ export function DraftPauseOverlay({
 
   if (draftStatus === 'resuming') {
     return (
-      <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/70" data-testid="draft-paused-overlay">
-        <h2 className="text-3xl font-bold text-green-400" data-testid="draft-resuming-countdown">
+      <div
+        className="absolute inset-0 z-40 flex items-center justify-center bg-black/70"
+        data-testid="draft-paused-overlay"
+      >
+        <h2
+          className="text-3xl font-bold text-green-400"
+          data-testid="draft-resuming-countdown"
+        >
           Resuming in {Math.ceil(resumingRemainingMs / 1000)}…
         </h2>
       </div>
@@ -61,7 +76,9 @@ export function DraftPauseOverlay({
   }
   if (draftStatus !== 'paused') return null;
 
-  const captainName = activeCaptain ? DisplayName(activeCaptain) : 'captain';
+  const captainName = activeCaptain
+    ? DisplayName(activeCaptain, undefined, displayOrgId)
+    : 'captain';
   const message = isManualPause
     ? 'Paused by captain or staff'
     : isActiveCaptainDisconnected
@@ -91,7 +108,10 @@ export function DraftPauseOverlay({
         </span>
         <div className="flex items-center gap-2">
           {resumeButton}
-          <SecondaryButton data-testid="draft-paused-expand" onClick={() => setMinimized(false)}>
+          <SecondaryButton
+            data-testid="draft-paused-expand"
+            onClick={() => setMinimized(false)}
+          >
             Expand
           </SecondaryButton>
         </div>
@@ -100,9 +120,15 @@ export function DraftPauseOverlay({
   }
 
   return (
-    <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/70" data-testid="draft-paused-overlay">
+    <div
+      className="absolute inset-0 z-40 flex items-center justify-center bg-black/70"
+      data-testid="draft-paused-overlay"
+    >
       <div className="space-y-4 text-center">
-        <h2 className="text-3xl font-bold text-yellow-400" data-testid="draft-paused-title">
+        <h2
+          className="text-3xl font-bold text-yellow-400"
+          data-testid="draft-paused-title"
+        >
           Draft Paused
         </h2>
         <p className="text-muted-foreground" data-testid="draft-paused-message">

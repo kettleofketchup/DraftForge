@@ -15,7 +15,6 @@ export class User implements UserClassType {
   avatarUrl!: string;
   is_staff!: boolean;
   is_superuser!: boolean;
-  nickname?: string | null;
   mmr?: number;
   position?: string;
   steam_account_id?: number;
@@ -94,13 +93,10 @@ export class User implements UserClassType {
       throw new Error('Guild member is missing user info.');
     }
 
-    this.nickname = member.nick ?? member.user.global_name ?? null;
-
     this.discordId = member.user.id;
     this.username = member.user.username;
     this.avatar = member.user.avatar ?? undefined;
     this.discordNickname = member.user.global_name ?? null;
-    this.guildNickname = member.nick ?? null;
     log.debug('User set from GuildMember:', this, member);
   }
 }

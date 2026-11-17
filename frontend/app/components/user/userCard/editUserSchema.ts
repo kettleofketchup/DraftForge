@@ -1,24 +1,23 @@
-import { z } from 'zod';
 import type { FieldNamesMarkedBoolean } from 'react-hook-form';
+import { z } from 'zod';
+import { updateOrgUser } from '~/components/api/api';
+import { GAME_TYPE } from '~/components/game/constants';
 import type { LeagueType } from '~/components/league/schemas';
 import type { OrganizationType } from '~/components/organization/schemas';
 import type { UserClassType, UserType } from '~/components/user/types';
-import { isUserEntry, type UserEntry } from '~/store/userCacheTypes';
 import {
   useIsLeagueAdmin,
   useIsOrganizationStaff,
   useIsSuperuser,
 } from '~/hooks/usePermissions';
-import { updateOrgUser } from '~/components/api/api';
-import { GAME_TYPE } from '~/components/game/constants';
 import { selectPositions } from '~/store/selectPositions';
 import { useUserCacheStore } from '~/store/userCacheStore';
+import { isUserEntry, type UserEntry } from '~/store/userCacheTypes';
 
 // Dota positions use a 0-5 self-rating scale: 0=hidden, 1=favorite, 5=avoid.
 const PositionFieldSchema = z.coerce.number().int().min(0).max(5);
 
 export const EditUserSchema = z.object({
-  nickname: z.string().trim().min(2).max(100).nullable(),
   steam_account_id: z.coerce.number().int().min(0).nullable(),
   positions: z.object({
     carry: PositionFieldSchema,
@@ -34,7 +33,12 @@ export type EditUserInput = z.infer<typeof EditUserSchema>;
 
 export type EditUserScope =
   | { kind: 'org'; organization: OrganizationType }
-  | { kind: 'league'; league: LeagueType; organization?: OrganizationType; orgId?: number }
+  | {
+      kind: 'league';
+      league: LeagueType;
+      organization?: OrganizationType;
+      orgId?: number;
+    }
   | { kind: 'global' };
 
 export type EditableField = keyof EditUserInput;
@@ -59,7 +63,9 @@ export function resolveOrgUserLink(
   const maybeEntry = user as UserType | UserEntry;
   if (isUserEntry(maybeEntry)) {
     const id =
-      (ctx.organizationId ? maybeEntry.orgData[ctx.organizationId]?.id : undefined) ??
+      (ctx.organizationId
+        ? maybeEntry.orgData[ctx.organizationId]?.id
+        : undefined) ??
       (ctx.leagueId ? maybeEntry.leagueData[ctx.leagueId]?.id : undefined);
     if (id != null) return id;
   }
@@ -68,7 +74,7 @@ export function resolveOrgUserLink(
 
 /**
  * Shared edit-scope resolver for the player card AND the incomplete-profiles
- * card. No OrgUser link -> global (nickname/positions only). With a link,
+ * card. No OrgUser link -> global (positions/Friend ID only). With a link,
  * league -> org -> global, league scope carrying a DETERMINISTIC orgId from
  * tournament context so the PATCH never depends on currentOrg/
  * currentLeague.organization load timing. `organizationId`/`leagueId` must be
@@ -85,20 +91,16 @@ export function resolveEditScope(
 ): EditUserScope {
   if (resolveOrgUserLink(user, ctx) == null) return { kind: 'global' };
   if (ctx.leagueId && ctx.currentLeague?.pk === ctx.leagueId) {
-    return { kind: 'league', league: ctx.currentLeague, orgId: ctx.organizationId };
+    return {
+      kind: 'league',
+      league: ctx.currentLeague,
+      orgId: ctx.organizationId,
+    };
   }
   if (ctx.currentOrg && ctx.currentOrg.pk === ctx.organizationId) {
     return { kind: 'org', organization: ctx.currentOrg };
   }
   return { kind: 'global' };
-}
-
-// Coerce missing-or-empty string fields to null so Zod's `.nullable()`
-// branch accepts them (an empty string would otherwise hit the .min(2)
-// validator and block submission for users with no Discord nickname).
-function emptyToNull(v: string | null | undefined): string | null {
-  if (v == null) return null;
-  return v === '' ? null : v;
 }
 
 export function buildDefaults(
@@ -115,7 +117,6 @@ export function buildDefaults(
       ? selectPositions(useUserCacheStore.getState(), user.pk, GAME_TYPE.DOTA2)
       : undefined) ?? user.positions;
   const base: Omit<EditUserInput, 'mmr'> = {
-    nickname: emptyToNull(user.nickname),
     steam_account_id: user.steam_account_id ?? null,
     positions: {
       carry: positions?.carry ?? 0,
@@ -192,7 +193,9 @@ export async function dispatchPatch(
       scope.orgId ?? scope.organization?.pk ?? scope.league.organization?.pk;
     const orgUserPk: number | undefined = user.orgUserPk;
     if (!orgId || !orgUserPk) {
-      throw new Error('League scope requires a parent org with an OrgUser link');
+      throw new Error(
+        'League scope requires a parent org with an OrgUser link',
+      );
     }
     return applyLocal(user, await updateOrgUser(orgId, orgUserPk, payload));
   }
@@ -205,7 +208,10 @@ export function scopeToContext(
 ): { orgId?: number } | undefined {
   if (scope.kind === 'org') return { orgId: scope.organization.pk };
   if (scope.kind === 'league')
-    return { orgId: scope.orgId ?? scope.organization?.pk ?? scope.league.organization?.pk };
+    return {
+      orgId:
+        scope.orgId ?? scope.organization?.pk ?? scope.league.organization?.pk,
+    };
   return undefined;
 }
 

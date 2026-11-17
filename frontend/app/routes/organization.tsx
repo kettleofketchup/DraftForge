@@ -91,6 +91,7 @@ import {
   useIsOrganizationOwner,
   useIsOrganizationStaff,
 } from '~/hooks/usePermissions';
+import { OrgParamDisplayOrg } from '~/lib/displayOrgShells';
 import { generateMeta } from '~/lib/seo';
 import type { OrganizationSSR } from '~/lib/ssr-types';
 import { cn } from '~/lib/utils';
@@ -352,7 +353,7 @@ function RepeatersList({
   );
 }
 
-export default function OrganizationDetailPage() {
+function OrganizationDetailPage() {
   const { organizationId } = useParams();
   const pk = organizationId ? parseInt(organizationId, 10) : undefined;
   const queryClient = useQueryClient();
@@ -937,5 +938,13 @@ export default function OrganizationDetailPage() {
         />
       )}
     </div>
+  );
+}
+
+export default function OrganizationRoute() {
+  return (
+    <OrgParamDisplayOrg>
+      <OrganizationDetailPage />
+    </OrgParamDisplayOrg>
   );
 }

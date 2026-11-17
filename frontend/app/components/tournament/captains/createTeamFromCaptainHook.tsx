@@ -77,10 +77,10 @@ export const createTeamFromCaptainHook = async ({
     log.debug(`Team found for captain: ${captain.username}...deleting team`);
     if (team.captain && team.captain.pk === captain.pk) setIsCaptain?.(false);
     toast.promise(deleteTeam(team.pk!), {
-      loading: `Deleting team for ${DisplayName(captain)}`,
+      loading: `Deleting team for ${DisplayName(captain, undefined, tournament.organization_pk)}`,
       success: () => {
         setDraftOrder?.('0');
-        return `Team for ${DisplayName(captain)} has been deleted`;
+        return `Team for ${DisplayName(captain, undefined, tournament.organization_pk)} has been deleted`;
       },
       error: (err) => {
         log.error('Failed to delete team', err);
@@ -109,7 +109,7 @@ export const createTeamFromCaptainHook = async ({
   log.debug(`${msg} captain for user: ${captain.username}`, newTournament);
 
   toast.promise(createTeamFromCaptain(data), {
-    loading: `${msg} ${DisplayName(captain)} as captain...`,
+    loading: `${msg} ${DisplayName(captain, undefined, tournament.organization_pk)} as captain...`,
     success: (rawData) => {
       setTournament(
         hydrateTournament(

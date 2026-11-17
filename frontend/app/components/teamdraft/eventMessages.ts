@@ -1,5 +1,4 @@
-import { DisplayName } from '~/components/user/avatar';
-import { useUserCacheStore } from '~/store/userCacheStore';
+import { displayNameById } from '~/lib/userDisplayName';
 import type {
   CaptainAssignedPayload,
   CaptainPresencePayload,
@@ -26,11 +25,12 @@ export type NameResolver = (
   fallback: string | null | undefined,
 ) => string;
 
-export const cachedUserName: NameResolver = (id, fallback) => {
-  const user =
-    id != null ? useUserCacheStore.getState().getById(id) : undefined;
-  return user ? DisplayName(user) : (fallback ?? '?');
-};
+export const orgUserName =
+  (orgId: number | null | undefined): NameResolver =>
+  (id, fallback) =>
+    displayNameById(id, fallback, orgId);
+
+export const cachedUserName: NameResolver = orgUserName(null);
 
 function captainName(p: CaptainRef, name: NameResolver): string {
   return name(p.captain_id, p.captain_name);

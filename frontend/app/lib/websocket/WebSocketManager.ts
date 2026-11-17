@@ -5,19 +5,24 @@
  * message routing to subscribers, and send queue management.
  */
 
+import {
+  activitySocket,
+  refreshActivityCredential,
+} from '~/lib/activity-session';
 import { getLogger } from '~/lib/logger';
 import { Sentry } from '~/lib/sentry';
 import type {
   ConnectionOptions,
   ConnectionState,
-  ConnectionStatus,
-  DisconnectReason,
   MessageHandler,
   Unsubscribe,
   WebSocketConnection,
 } from './types';
 
 const log = getLogger('WebSocketManager');
+const ACTIVITY_AUTH_CLOSE_CODE = 4401;
+const ACTIVITY_SESSION_ENDED =
+  'Discord session ended. Close and reopen the Activity.';
 
 // Reconnection defaults
 const DEFAULT_MAX_ATTEMPTS = 10;
@@ -47,11 +52,28 @@ class WebSocketManager {
    * Returns a connectionId for subsequent operations.
    */
   connect(url: string, options: ConnectionOptions = {}): string {
+    const draft = new URL(url).pathname.match(
+      /^\/api\/(herodraft|draft)\/(\d+)\/$/,
+    );
+    if (draft) {
+      const kind = draft[1] === 'herodraft' ? 'hero' : 'team';
+      const draftId = Number(draft[2]);
+      const activity = activitySocket(kind, draftId);
+      if (activity.protocols) {
+        url = activity.url;
+        options = { ...options, activity: { kind, draftId } };
+      }
+    }
+
     // Check for existing connection (including pending auto-disconnect)
     const existing = this.connections.get(url);
     if (existing) {
       const status = existing.state.status;
-      if (status === 'connected' || status === 'connecting' || status === 'reconnecting') {
+      if (
+        status === 'connected' ||
+        status === 'connecting' ||
+        status === 'reconnecting'
+      ) {
         log.debug(`Already ${status} to ${url}, reusing connection`);
         // Adjust stale counter if staleTimeoutMs changed during reuse
         const hadStale = !!existing.options.staleTimeoutMs;
@@ -230,19 +252,27 @@ class WebSocketManager {
     const subscriber = { id: Symbol(), handler };
     conn.subscribers.add(subscriber);
 
-    log.debug(`Subscriber added for ${connectionId}, total: ${conn.subscribers.size}`);
+    log.debug(
+      `Subscriber added for ${connectionId}, total: ${conn.subscribers.size}`,
+    );
 
     return () => {
       conn.subscribers.delete(subscriber);
-      log.debug(`Subscriber removed for ${connectionId}, remaining: ${conn.subscribers.size}`);
+      log.debug(
+        `Subscriber removed for ${connectionId}, remaining: ${conn.subscribers.size}`,
+      );
 
       // Debounced auto-disconnect: React StrictMode re-subscribes within ~50ms
       if (conn.subscribers.size === 0) {
-        log.debug(`No subscribers left for ${connectionId}, scheduling auto-disconnect`);
+        log.debug(
+          `No subscribers left for ${connectionId}, scheduling auto-disconnect`,
+        );
         conn.autoDisconnectTimeout = setTimeout(() => {
           conn.autoDisconnectTimeout = null;
           if (conn.subscribers.size === 0) {
-            log.debug(`Auto-disconnecting ${connectionId} (no subscribers after delay)`);
+            log.debug(
+              `Auto-disconnecting ${connectionId} (no subscribers after delay)`,
+            );
             this.disconnect(connectionId, 'No subscribers');
           }
         }, AUTO_DISCONNECT_DELAY_MS);
@@ -261,7 +291,10 @@ class WebSocketManager {
       return false;
     }
 
-    if (conn.state.status === 'connected' && conn.ws?.readyState === WebSocket.OPEN) {
+    if (
+      conn.state.status === 'connected' &&
+      conn.ws?.readyState === WebSocket.OPEN
+    ) {
       // Send immediately
       conn.ws.send(JSON.stringify(message));
       return true;
@@ -292,8 +325,13 @@ class WebSocketManager {
     if (!conn) return;
 
     // Don't reconnect if already connected/connecting
-    if (conn.ws?.readyState === WebSocket.OPEN || conn.ws?.readyState === WebSocket.CONNECTING) {
-      log.debug(`WebSocket already ${conn.ws.readyState === WebSocket.OPEN ? 'open' : 'connecting'}`);
+    if (
+      conn.ws?.readyState === WebSocket.OPEN ||
+      conn.ws?.readyState === WebSocket.CONNECTING
+    ) {
+      log.debug(
+        `WebSocket already ${conn.ws.readyState === WebSocket.OPEN ? 'open' : 'connecting'}`,
+      );
       return;
     }
 
@@ -311,9 +349,23 @@ class WebSocketManager {
     // Emit telemetry
     conn.options.telemetry?.onConnecting?.(url, conn.state.reconnectAttempts);
 
-    log.debug(`Connecting to ${url} (attempt ${conn.state.reconnectAttempts + 1})`);
+    log.debug(
+      `Connecting to ${url} (attempt ${conn.state.reconnectAttempts + 1})`,
+    );
 
-    const ws = new WebSocket(url);
+    let protocols: string[] | undefined;
+    if (conn.options.activity) {
+      const { kind, draftId } = conn.options.activity;
+      protocols = activitySocket(kind, draftId).protocols;
+      if (!protocols) {
+        this.updateState(conn, {
+          status: 'disconnected',
+          error: ACTIVITY_SESSION_ENDED,
+        });
+        return;
+      }
+    }
+    const ws = new WebSocket(url, protocols);
     conn.ws = ws;
 
     ws.onopen = () => {
@@ -324,7 +376,9 @@ class WebSocketManager {
         return;
       }
 
-      const durationMs = conn.connectStartTime ? Date.now() - conn.connectStartTime : 0;
+      const durationMs = conn.connectStartTime
+        ? Date.now() - conn.connectStartTime
+        : 0;
       log.debug(`WebSocket connected to ${url} in ${durationMs}ms`);
 
       this.updateState(conn, {
@@ -369,10 +423,15 @@ class WebSocketManager {
       conn.state.lastMessageAt = Date.now();
 
       // Emit telemetry
-      const msgType = typeof message === 'object' && message !== null && 'type' in message
-        ? String((message as { type: unknown }).type)
-        : 'unknown';
-      conn.options.telemetry?.onMessageReceived?.(url, msgType, event.data.length);
+      const msgType =
+        typeof message === 'object' && message !== null && 'type' in message
+          ? String((message as { type: unknown }).type)
+          : 'unknown';
+      conn.options.telemetry?.onMessageReceived?.(
+        url,
+        msgType,
+        event.data.length,
+      );
 
       // Route to subscribers
       for (const sub of conn.subscribers) {
@@ -409,6 +468,11 @@ class WebSocketManager {
         reason: event.reason,
       });
 
+      if (event.code === ACTIVITY_AUTH_CLOSE_CODE && conn.options.activity) {
+        this.reauthenticateActivity(conn, thisConnectionId);
+        return;
+      }
+
       // Attempt reconnect
       this.scheduleReconnect(conn);
     };
@@ -431,6 +495,29 @@ class WebSocketManager {
     };
   }
 
+  /** Retrying a rejected Activity credential can never succeed; get a new one first. */
+  private reauthenticateActivity(
+    conn: WebSocketConnection,
+    connectionId: number,
+  ): void {
+    this.updateState(conn, {
+      status: 'reconnecting',
+      error: 'Refreshing Discord session...',
+    });
+    void refreshActivityCredential().then((refreshed) => {
+      if (conn.connectionId !== connectionId || conn.ws) return;
+      if (!refreshed) {
+        this.updateState(conn, {
+          status: 'disconnected',
+          error: ACTIVITY_SESSION_ENDED,
+        });
+        return;
+      }
+      this.updateState(conn, { reconnectAttempts: 0 });
+      this.doConnect(conn.url);
+    });
+  }
+
   private scheduleReconnect(conn: WebSocketConnection): void {
     const config = conn.options.reconnect ?? {};
     const maxAttempts = config.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
@@ -440,7 +527,9 @@ class WebSocketManager {
     const attempts = conn.state.reconnectAttempts + 1;
 
     if (attempts > maxAttempts) {
-      log.error(`Max reconnect attempts (${maxAttempts}) exceeded for ${conn.url}`);
+      log.error(
+        `Max reconnect attempts (${maxAttempts}) exceeded for ${conn.url}`,
+      );
       Sentry.captureMessage(
         `WebSocket max reconnect attempts exceeded: ${conn.url}`,
         'warning',
@@ -449,14 +538,18 @@ class WebSocketManager {
         status: 'disconnected',
         error: `Connection lost. Max reconnection attempts exceeded.`,
       });
-      conn.options.telemetry?.onDisconnected?.(conn.url, { type: 'max_retries_exceeded' });
+      conn.options.telemetry?.onDisconnected?.(conn.url, {
+        type: 'max_retries_exceeded',
+      });
       return;
     }
 
     // Exponential backoff: baseDelay * 2^(attempt-1), capped at maxDelay
     const delay = Math.min(baseDelay * Math.pow(2, attempts - 1), maxDelay);
 
-    log.debug(`Scheduling reconnect attempt ${attempts}/${maxAttempts} in ${delay}ms`);
+    log.debug(
+      `Scheduling reconnect attempt ${attempts}/${maxAttempts} in ${delay}ms`,
+    );
 
     this.updateState(conn, {
       status: 'reconnecting',
@@ -477,7 +570,9 @@ class WebSocketManager {
     if (conn.sendQueue.length === 0) return;
     if (!conn.ws || conn.ws.readyState !== WebSocket.OPEN) return;
 
-    log.debug(`Flushing ${conn.sendQueue.length} queued messages for ${conn.url}`);
+    log.debug(
+      `Flushing ${conn.sendQueue.length} queued messages for ${conn.url}`,
+    );
 
     const messages = [...conn.sendQueue];
     conn.sendQueue = [];
@@ -500,7 +595,9 @@ class WebSocketManager {
 
         const staleDuration = now - conn.state.lastMessageAt;
         if (staleDuration > conn.options.staleTimeoutMs) {
-          log.warn(`Stale connection detected: ${conn.url} (no messages for ${staleDuration}ms)`);
+          log.warn(
+            `Stale connection detected: ${conn.url} (no messages for ${staleDuration}ms)`,
+          );
 
           Sentry.captureMessage(
             `WebSocket stale connection detected: ${conn.url}`,
@@ -525,7 +622,10 @@ class WebSocketManager {
     }
   }
 
-  private updateState(conn: WebSocketConnection, updates: Partial<ConnectionState>): void {
+  private updateState(
+    conn: WebSocketConnection,
+    updates: Partial<ConnectionState>,
+  ): void {
     conn.state = { ...conn.state, ...updates };
     conn.options.onStateChange?.(conn.state);
   }

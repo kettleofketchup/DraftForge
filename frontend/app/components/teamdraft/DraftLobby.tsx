@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { setDraftReady, startTeamDraft } from '~/components/api/draftAPI';
 import type { TeamType } from '~/components/team/types';
+import { Badge } from '~/components/ui/badge';
 import { PrimaryButton, SecondaryButton } from '~/components/ui/buttons';
 import { ConfirmDialog } from '~/components/ui/dialogs';
 import { DisplayName } from '~/components/user/avatar';
 import { UserAvatar } from '~/components/user/UserAvatar';
+import { useDisplayOrgId } from '~/hooks/useDisplayOrgId';
 import type { TournamentType } from '~/index';
 import { hydrateTournament } from '~/lib/hydrateTournament';
 import { cn } from '~/lib/utils';
@@ -28,22 +30,28 @@ export function DraftLobby({
   onReadyToggle,
   onStart,
 }: DraftLobbyProps) {
+  const displayOrgId = useDisplayOrgId();
   const setTournament = useUserStore((s) => s.setTournament);
   const setDraft = useUserStore((s) => s.setDraft);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  const ordered = [...teams].sort((a, b) => (a.draft_order ?? 0) - (b.draft_order ?? 0));
+  const ordered = [...teams].sort(
+    (a, b) => (a.draft_order ?? 0) - (b.draft_order ?? 0),
+  );
   const withCaptain = ordered.filter((t) => t.captain);
   const notReady = withCaptain.filter((t) => !t.draft_is_ready);
   const allReady = notReady.length === 0;
-  const myTeam = currentUserPk === undefined
-    ? undefined
-    : teams.find((t) => t.captain?.pk === currentUserPk);
+  const myTeam =
+    currentUserPk === undefined
+      ? undefined
+      : teams.find((t) => t.captain?.pk === currentUserPk);
   const myReady = !!myTeam?.draft_is_ready;
 
   const applyResponse = (raw: unknown) => {
-    const data = hydrateTournament(raw as TournamentType & { _users?: Record<number, unknown> }) as TournamentType;
+    const data = hydrateTournament(
+      raw as TournamentType & { _users?: Record<number, unknown> },
+    ) as TournamentType;
     setTournament(data);
     if (data.draft) setDraft(data.draft);
   };
@@ -53,7 +61,8 @@ export function DraftLobby({
     try {
       await runTimerAction(async () => {
         const res = await action();
-        if (res && typeof res === 'object' && Object.keys(res).length > 0) applyResponse(res);
+        if (res && typeof res === 'object' && Object.keys(res).length > 0)
+          applyResponse(res);
       }, fallback);
     } finally {
       setBusy(false);
@@ -62,11 +71,17 @@ export function DraftLobby({
 
   const toggleReady = () =>
     run(
-      () => (onReadyToggle ?? ((r: boolean) => setDraftReady(draftPk, r)))(!myReady),
+      () =>
+        (onReadyToggle ?? ((r: boolean) => setDraftReady(draftPk, r)))(
+          !myReady,
+        ),
       'Failed to update ready state',
     );
   const start = () =>
-    run(() => (onStart ?? (() => startTeamDraft(draftPk)))(), 'Failed to start draft');
+    run(
+      () => (onStart ?? (() => startTeamDraft(draftPk)))(),
+      'Failed to start draft',
+    );
 
   const onStartClick = () => {
     if (allReady) void start();
@@ -74,54 +89,103 @@ export function DraftLobby({
   };
 
   return (
-    <div data-testid="draft-lobby" className="mx-auto flex w-full max-w-2xl flex-col gap-4">
+    <div
+      data-testid="draft-lobby"
+      className="mx-auto flex w-full max-w-2xl flex-col gap-4"
+    >
       <ul className="flex flex-col gap-2">
-        {ordered.map((team) => (
-          <li
-            key={team.pk}
-            data-testid={`lobby-team-row-${team.pk}`}
-            className="flex items-center gap-3 rounded-md border border-border/50 px-3 py-2"
-          >
-            {team.captain && <UserAvatar user={team.captain} size="sm" />}
-            <span className="flex-1 truncate">{team.captain ? DisplayName(team.captain) : team.name}</span>
-            <span
-              data-testid={`lobby-connected-dot-${team.pk}`}
-              data-state={team.draft_is_connected ? 'connected' : 'disconnected'}
-              title={team.draft_is_connected ? 'Connected' : 'Disconnected'}
-              className={cn('h-2.5 w-2.5 rounded-full', team.draft_is_connected ? 'bg-green-500' : 'bg-gray-500')}
-            />
-            <span
-              data-testid={`lobby-ready-check-${team.pk}`}
-              data-state={team.draft_is_ready ? 'ready' : 'not-ready'}
-              className={cn('text-sm', team.draft_is_ready ? 'text-green-400' : 'text-muted-foreground')}
+        {ordered.map((team) => {
+          const isMe = team.pk === myTeam?.pk;
+          return (
+            <li
+              key={team.pk}
+              data-testid={`lobby-team-row-${team.pk}`}
+              data-current-user={isMe || undefined}
+              className={cn(
+                'flex items-center gap-3 rounded-md border px-3 py-2',
+                isMe ? 'border-primary bg-primary/10' : 'border-border/50',
+              )}
             >
-              {team.draft_is_ready ? 'Ready' : 'Not ready'}
-            </span>
-          </li>
-        ))}
+              {team.captain && <UserAvatar user={team.captain} size="sm" />}
+              <span className="flex min-w-0 flex-1 items-center gap-2">
+                <span className="truncate">
+                  {team.captain
+                    ? DisplayName(team.captain, undefined, displayOrgId)
+                    : team.name}
+                </span>
+                {isMe && (
+                  <Badge
+                    data-testid={`lobby-you-badge-${team.pk}`}
+                    variant="default"
+                  >
+                    You
+                  </Badge>
+                )}
+              </span>
+              <span
+                data-testid={`lobby-connected-dot-${team.pk}`}
+                data-state={
+                  team.draft_is_connected ? 'connected' : 'disconnected'
+                }
+                title={team.draft_is_connected ? 'Connected' : 'Disconnected'}
+                className={cn(
+                  'h-2.5 w-2.5 rounded-full',
+                  team.draft_is_connected ? 'bg-green-500' : 'bg-gray-500',
+                )}
+              />
+              <span
+                data-testid={`lobby-ready-check-${team.pk}`}
+                data-state={team.draft_is_ready ? 'ready' : 'not-ready'}
+                className={cn(
+                  'w-20 shrink-0 text-left text-sm',
+                  team.draft_is_ready
+                    ? 'text-green-400'
+                    : 'text-muted-foreground',
+                )}
+              >
+                {team.draft_is_ready ? 'Ready' : 'Not ready'}
+              </span>
+            </li>
+          );
+        })}
       </ul>
 
       {(myTeam || isStaff) && (
         <div className="flex flex-wrap items-center justify-center gap-3">
           {myTeam &&
             (myReady ? (
-              <SecondaryButton data-testid="lobby-ready-toggle" disabled={busy} onClick={() => void toggleReady()}>
+              <SecondaryButton
+                data-testid="lobby-ready-toggle"
+                disabled={busy}
+                onClick={() => void toggleReady()}
+              >
                 Not ready
               </SecondaryButton>
             ) : (
-              <PrimaryButton data-testid="lobby-ready-toggle" disabled={busy} onClick={() => void toggleReady()}>
+              <PrimaryButton
+                data-testid="lobby-ready-toggle"
+                disabled={busy}
+                onClick={() => void toggleReady()}
+              >
                 Ready up
               </PrimaryButton>
             ))}
           {isStaff && (
-            <PrimaryButton data-testid="lobby-start-button" disabled={busy} onClick={onStartClick}>
+            <PrimaryButton
+              data-testid="lobby-start-button"
+              disabled={busy}
+              onClick={onStartClick}
+            >
               {allReady ? 'Start draft' : 'Force start'}
             </PrimaryButton>
           )}
         </div>
       )}
       {myTeam && !isStaff && allReady && (
-        <p data-testid="lobby-waiting-for-staff" className="text-center text-sm text-muted-foreground">
+        <p
+          data-testid="lobby-waiting-for-staff"
+          className="text-center text-sm text-muted-foreground"
+        >
           Waiting for staff to start
         </p>
       )}
@@ -139,9 +203,14 @@ export function DraftLobby({
             contentTestId="lobby-force-start-dialog"
             confirmTestId="lobby-force-start-confirm"
             bodyContent={
-              <ul data-testid="lobby-force-start-not-ready" className="list-disc pl-5">
+              <ul
+                data-testid="lobby-force-start-not-ready"
+                className="list-disc pl-5"
+              >
                 {notReady.map((t) => (
-                  <li key={t.pk}>{DisplayName(t.captain!)}</li>
+                  <li key={t.pk}>
+                    {DisplayName(t.captain!, undefined, displayOrgId)}
+                  </li>
                 ))}
               </ul>
             }

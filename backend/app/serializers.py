@@ -1,3 +1,5 @@
+from collections.abc import Collection
+from dataclasses import dataclass
 from functools import cache
 from typing import Any
 from zoneinfo import available_timezones
@@ -10,6 +12,7 @@ from rest_framework.utils.serializer_helpers import ReturnList
 from rest_framework.validators import UniqueValidator
 
 from app.cache_utils import invalidate_after_commit
+from app.legacy_fields import LegacyNullField
 from app.permissions_org import check_lobby_steam_league_id, request_user
 from league.models import LeagueUser
 from org.models import OrgUser
@@ -78,17 +81,9 @@ class TournamentUserSerializer(serializers.ModelSerializer):
     positions = PositionsSerializer(many=False, read_only=True)
     # Auto-computed 32-bit Steam Account ID from 64-bit Friend ID
     steam_account_id = serializers.IntegerField(read_only=True)
-    # nickname/avatar live on BaseUserProfile (T1 epic). Use `source="nickname"`
-    # so DRF goes through the CustomUser transitional @property — the getter
-    # reads from base_profile, the setter writes to base_profile + invalidates
-    # cacheops. Critically, this keeps PATCH /users/<pk>/ working for admin
-    # user-edit flows (org / tournament pages), which would otherwise be a
-    # silent no-op if the fields were read_only=True.
-    nickname = serializers.CharField(
-        allow_null=True,
-        allow_blank=True,
-        required=False,
-    )
+    nickname = LegacyNullField()
+    # avatar lives on BaseUserProfile; the CustomUser @property setter writes
+    # it through, so PATCH /users/<pk>/ keeps working for admin edits.
     avatar = serializers.CharField(
         allow_null=True,
         allow_blank=True,
@@ -177,6 +172,89 @@ def _serialize_user_with_mmr(
     return results[0] if results else TournamentUserSerializer(user).data
 
 
+TEAM_USER_INDEX = "team_user_index"
+TEAM_ROSTER_FIELDS: tuple[str, ...] = ("members", "dropin_members", "left_members")
+
+
+@dataclass(frozen=True)
+class TeamUserIndex:
+    """Users of many teams, serialized once, for TeamSerializerForTournament.
+
+    Pass it in serializer context under TEAM_USER_INDEX. Entries match the
+    per-team _serialize_users_with_mmr output; rosters are sorted by user pk,
+    the order that path returns.
+    """
+
+    users: dict[int, dict[str, Any]]
+    rosters: dict[int, dict[str, list[int]]]
+
+
+def build_team_user_index(
+    tournament: Tournament, teams: Collection[Team]
+) -> TeamUserIndex:
+    """Bulk version of _serialize_users_with_mmr for every user on `teams`."""
+    # local: org.serializers imports app.serializers
+    from org.serializers import OrgUserSerializer
+
+    team_ids = {team.pk for team in teams}
+    rosters: dict[int, dict[str, list[int]]] = {
+        pk: {field: [] for field in TEAM_ROSTER_FIELDS} for pk in team_ids
+    }
+    user_pks: set[int] = set()
+    for team in teams:
+        user_pks.update(pk for pk in (team.captain_id, team.deputy_captain_id) if pk)
+    for field in TEAM_ROSTER_FIELDS:
+        m2m = Team._meta.get_field(field)
+        team_col = f"{m2m.m2m_field_name()}_id"
+        user_col = f"{m2m.m2m_reverse_field_name()}_id"
+        rows = (
+            m2m.remote_field.through.objects.filter(**{f"{team_col}__in": team_ids})
+            .order_by(team_col, user_col)
+            .values_list(team_col, user_col)
+        )
+        for team_id, user_id in rows:
+            rosters[team_id][field].append(user_id)
+            user_pks.add(user_id)
+
+    if not user_pks:
+        return TeamUserIndex({}, rosters)
+    org = _tournament_organization(tournament)
+    if not org:
+        users_qs = with_user_profiles(
+            CustomUser.objects.filter(pk__in=user_pks), dota=True
+        ).order_by("pk")
+        serialized = TournamentUserSerializer(users_qs, many=True).data
+        return TeamUserIndex({row["pk"]: row for row in serialized}, rosters)
+
+    league_id = tournament.league_id
+    org_users_qs = (
+        with_user_profiles(
+            OrgUser.objects.filter(organization=org, user_id__in=user_pks),
+            "user",
+            dota=True,
+        )
+        .prefetch_related(
+            Prefetch(
+                "league_memberships",
+                queryset=LeagueUser.objects.filter(league_id=league_id),
+            )
+        )
+        .order_by("user_id")
+    )
+    org_users = list(org_users_qs)
+    missing = user_pks - {ou.user_id for ou in org_users}
+    if missing:
+        OrgUser.objects.bulk_create(
+            [OrgUser(user_id=pk, organization=org) for pk in sorted(missing)],
+            ignore_conflicts=True,
+        )
+        org_users = list(org_users_qs.all())
+    serialized = OrgUserSerializer(
+        org_users, many=True, context={"league_id": league_id}
+    ).data
+    return TeamUserIndex({row["pk"]: row for row in serialized}, rosters)
+
+
 def _collect_tournament_user_pks(tournament: Tournament) -> set[int]:
     """Collect all unique user PKs from a tournament and its teams.
 
@@ -200,9 +278,8 @@ def _collect_tournament_user_pks(tournament: Tournament) -> set[int]:
     return seen_pks
 
 
-# Org-context-only keys that OrgUserSerializer adds on top of the cached core.
-# discordNickname is core-only (TournamentUserSerializer); guildNickname is
-# org-only — so the org shape replaces the former with the latter.
+# Org-context-only keys that OrgUserSerializer adds on top of the cached core
+# (which already carries discordNickname).
 _CONTEXT_MMR_KEYS = ("orgUserPk", "guildNickname", "mmr", "league_mmr")
 
 
@@ -216,13 +293,23 @@ def _collect_context_mmr(
     tournaments carry no MMR). Reuses OrgUserSerializer so the values and the
     league_mmr computation are identical to the legacy path.
     """
+    org = _tournament_organization(tournament, fresh=fresh)
+    return _collect_org_mmr(tournament, org, seen_pks, fresh=fresh)
+
+
+def _collect_org_mmr(
+    tournament: Tournament | None,
+    org: Organization | None,
+    seen_pks: set[int],
+    *,
+    fresh: bool,
+) -> dict:
     # local: org.serializers imports app.serializers
     from org.serializers import OrgUserSerializer
 
-    league = tournament.league if tournament else None
-    org = _tournament_organization(tournament, fresh=fresh)
     if not org:
         return {}
+    league = tournament.league if tournament else None
 
     user_qs = CustomUser.objects.filter(pk__in=seen_pks)
     org_user_qs = OrgUser.objects.all()
@@ -262,22 +349,29 @@ def _collect_context_mmr(
 
 
 def _build_users_dict(tournament: Tournament, *, fresh: bool = False) -> dict:
-    """Build a deduplicated ``{pk: serialized_user}`` dict for a tournament.
+    """Build a deduplicated ``{pk: serialized_user}`` dict for a tournament."""
+    return build_users_dict_with_org(tournament, fresh=fresh)[0]
+
+
+def build_users_dict_with_org(
+    tournament: Tournament, *, fresh: bool = False
+) -> tuple[dict, Organization | None]:
+    """``_build_users_dict`` plus the organization its overlay used.
 
     Shape-preserving: the CORE half comes from one bulk uncached query
     (``serialize_users_core``, same shape as the per-user ``serialize_user_core``)
     and the contextual MMR half is merged per-request.
     Output JSON is byte-identical to the legacy _serialize_users_with_mmr path —
-    org entries carry core + MMR (orgUserPk/mmr/league_mmr/guildNickname, no
-    discordNickname); non-org entries carry core only. ``fresh=True`` reads the
-    organization and MMR overlay past cacheops too.
+    org entries carry core + MMR (orgUserPk/mmr/league_mmr/guildNickname);
+    non-org entries carry core only. ``fresh=True`` reads the organization and
+    MMR overlay past cacheops too.
     """
     # local: app.user_cache imports app.serializers
     from app.user_cache import serialize_users_core
 
     seen_pks = _collect_tournament_user_pks(tournament)
-    mmr_map = _collect_context_mmr(tournament, seen_pks, fresh=fresh)
-    is_org = _tournament_organization(tournament, fresh=fresh) is not None
+    org = _tournament_organization(tournament, fresh=fresh)
+    mmr_map = _collect_org_mmr(tournament, org, seen_pks, fresh=fresh)
     cores = serialize_users_core(seen_pks)
 
     result: dict = {}
@@ -285,15 +379,11 @@ def _build_users_dict(tournament: Tournament, *, fresh: bool = False) -> dict:
         core = cores.get(pk)
         if not core:
             continue
-        if is_org:
-            # Match OrgUserSerializer's shape exactly: it omits discordNickname
-            # and adds guildNickname + the MMR fields from the overlay.
-            entry = {k: v for k, v in core.items() if k != "discordNickname"}
+        entry = dict(core)
+        if org is not None:
             entry.update(mmr_map.get(pk, {}))
-        else:
-            entry = dict(core)
         result[pk] = entry
-    return result
+    return result, org
 
 
 class TournamentSerializerBase(serializers.ModelSerializer):
@@ -325,20 +415,44 @@ class TeamSerializerForTournament(serializers.ModelSerializer):
     deputy_captain = serializers.SerializerMethodField()
     draft_order = serializers.IntegerField()
 
-    def get_members(self, team: Team) -> ReturnList:
-        return _serialize_users_with_mmr(team.members.all(), team.tournament)
+    def _index(self, team: Team) -> TeamUserIndex | None:
+        index: TeamUserIndex | None = self.context.get(TEAM_USER_INDEX)
+        return index if index is not None and team.pk in index.rosters else None
 
-    def get_dropin_members(self, team: Team) -> ReturnList:
-        return _serialize_users_with_mmr(team.dropin_members.all(), team.tournament)
+    def _roster(self, team: Team, field: str) -> list[dict[str, Any]]:
+        index = self._index(team)
+        if index is None:
+            return _serialize_users_with_mmr(
+                getattr(team, field).all(), team.tournament
+            )
+        # users without an OrgUser are left out, as in _serialize_users_with_mmr
+        return [
+            index.users[pk] for pk in index.rosters[team.pk][field] if pk in index.users
+        ]
 
-    def get_left_members(self, team: Team) -> ReturnList:
-        return _serialize_users_with_mmr(team.left_members.all(), team.tournament)
+    def _user(self, team: Team, field: str) -> dict | None:
+        index = self._index(team)
+        user_id = getattr(team, f"{field}_id")
+        if user_id is None:
+            return None
+        if index is not None and user_id in index.users:
+            return index.users[user_id]
+        return _serialize_user_with_mmr(getattr(team, field), team.tournament)
+
+    def get_members(self, team: Team) -> list[dict[str, Any]]:
+        return self._roster(team, "members")
+
+    def get_dropin_members(self, team: Team) -> list[dict[str, Any]]:
+        return self._roster(team, "dropin_members")
+
+    def get_left_members(self, team: Team) -> list[dict[str, Any]]:
+        return self._roster(team, "left_members")
 
     def get_captain(self, team: Team) -> dict | None:
-        return _serialize_user_with_mmr(team.captain, team.tournament)
+        return self._user(team, "captain")
 
     def get_deputy_captain(self, team: Team) -> dict | None:
-        return _serialize_user_with_mmr(team.deputy_captain, team.tournament)
+        return self._user(team, "deputy_captain")
 
     class Meta:
         model = Team
@@ -1392,16 +1506,9 @@ class UserSerializer(serializers.ModelSerializer):
     staff_organization_ids = serializers.SerializerMethodField()
     admin_league_ids = serializers.SerializerMethodField()
     staff_league_ids = serializers.SerializerMethodField()
-    # nickname/avatar live on BaseUserProfile (T1 epic). Use `source="nickname"`
-    # so DRF goes through the CustomUser transitional @property — the getter
-    # reads from base_profile, the setter writes to base_profile + invalidates
-    # cacheops. Keeps PATCH /users/<pk>/ working for admin user-edit flows
-    # (org/tournament pages) which would otherwise be a silent no-op.
-    nickname = serializers.CharField(
-        allow_null=True,
-        allow_blank=True,
-        required=False,
-    )
+    nickname = LegacyNullField()
+    # avatar lives on BaseUserProfile; the CustomUser @property setter writes
+    # it through, so PATCH /users/<pk>/ keeps working for admin edits.
     avatar = serializers.CharField(
         allow_null=True,
         allow_blank=True,
@@ -1414,7 +1521,7 @@ class UserSerializer(serializers.ModelSerializer):
             "pk",
             "username",
             "nickname",
-            "guildNickname",
+            "discordNickname",
             "is_staff",
             "is_active",
             "is_superuser",
@@ -1451,6 +1558,7 @@ class UserSerializer(serializers.ModelSerializer):
         return list(obj.staff_leagues.values_list("pk", flat=True))
 
     def update(self, instance: CustomUser, validated_data: dict) -> CustomUser:
+        validated_data.pop("discordNickname", None)
         with transaction.atomic():
             try:
                 positions_data = validated_data.pop("positions", None)
@@ -1766,6 +1874,31 @@ class DraftTeamSerializerFull(serializers.ModelSerializer):
         ]
 
 
+HERODRAFT_GUILD_NICKNAMES = "herodraft_guild_nicknames"
+
+
+class HeroDraftUserSerializer(TournamentUserSerializer):
+    """Captain/member with the draft tournament org's server nickname."""
+
+    guildNickname = serializers.SerializerMethodField()
+
+    class Meta(TournamentUserSerializer.Meta):
+        fields = (*TournamentUserSerializer.Meta.fields, "guildNickname")
+
+    def get_guildNickname(self, user: CustomUser) -> str | None:
+        return self.context.get(HERODRAFT_GUILD_NICKNAMES, {}).get(user.pk)
+
+
+class HeroDraftTeamSerializer(DraftTeamSerializerFull):
+    captain = HeroDraftUserSerializer(read_only=True)
+    members = HeroDraftUserSerializer(
+        source="tournament_team.members", many=True, read_only=True
+    )
+
+    class Meta(DraftTeamSerializerFull.Meta):
+        pass
+
+
 class HeroDraftEventSerializer(serializers.ModelSerializer):
     """Serializer for HeroDraft events with full captain info for toasts."""
 
@@ -1780,11 +1913,12 @@ class HeroDraftSerializer(serializers.ModelSerializer):
     """Full serializer for HeroDraft with nested relations."""
 
     pk = serializers.IntegerField(source="id", read_only=True)
-    draft_teams = DraftTeamSerializerFull(many=True, read_only=True)
+    draft_teams = HeroDraftTeamSerializer(many=True, read_only=True)
     rounds = HeroDraftRoundSerializerFull(many=True, read_only=True)
-    roll_winner = DraftTeamSerializerFull(read_only=True)
+    roll_winner = serializers.SerializerMethodField()
     current_round = serializers.SerializerMethodField()
     tournament_id = serializers.SerializerMethodField()
+    organization_pk = serializers.SerializerMethodField()
 
     class Meta:
         model = HeroDraft
@@ -1793,6 +1927,7 @@ class HeroDraftSerializer(serializers.ModelSerializer):
             "id",
             "game",
             "tournament_id",
+            "organization_pk",
             "state",
             "roll_winner",
             "draft_teams",
@@ -1814,6 +1949,39 @@ class HeroDraftSerializer(serializers.ModelSerializer):
         if obj.game and obj.game.tournament:
             return obj.game.tournament.id
         return None
+
+    def to_representation(self, instance: HeroDraft) -> dict[str, Any]:
+        org = _tournament_organization(
+            instance.game.tournament if instance.game else None
+        )
+        nicknames: dict[int, str | None] = {}
+        if org is not None:
+            user_ids: set[int] = set()
+            for draft_team in instance.draft_teams.all():
+                team = draft_team.tournament_team
+                if team.captain_id:
+                    user_ids.add(team.captain_id)
+                user_ids.update(member.pk for member in team.members.all())
+            nicknames = dict(
+                OrgUser.objects.nocache()
+                .filter(organization=org, user_id__in=user_ids)
+                .values_list("user_id", "guild_nickname")
+            )
+        self._organization_pk = org.pk if org else None
+        self.context[HERODRAFT_GUILD_NICKNAMES] = nicknames
+        return super().to_representation(instance)
+
+    def get_organization_pk(self, obj: HeroDraft) -> int | None:
+        return self._organization_pk
+
+    def get_roll_winner(self, obj: HeroDraft) -> dict[str, Any] | None:
+        if obj.roll_winner_id is None:
+            return None
+        winner = next(
+            (t for t in obj.draft_teams.all() if t.pk == obj.roll_winner_id),
+            obj.roll_winner,
+        )
+        return HeroDraftTeamSerializer(winner, context=self.context).data
 
 
 class HeroDraftTickSerializer(serializers.Serializer):

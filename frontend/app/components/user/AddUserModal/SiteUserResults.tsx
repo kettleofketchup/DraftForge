@@ -58,6 +58,7 @@ export const SiteUserResults: React.FC<SiteUserResultsProps> = ({
   queryLength,
   highlightedIndex,
   showMembership = true,
+  orgId,
 }) => {
   const [addingPk, setAddingPk] = useState<number | null>(null);
   const itemRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -77,14 +78,14 @@ export const SiteUserResults: React.FC<SiteUserResultsProps> = ({
       setAddingPk(user.pk);
       try {
         await onAdd({ user_id: user.pk });
-        toast.success(`Added ${DisplayName(user)}`);
+        toast.success(`Added ${DisplayName(user, undefined, orgId)}`);
       } catch (err) {
         toast.error(err instanceof Error ? err.message : 'Failed to add user');
       } finally {
         setAddingPk(null);
       }
     },
-    [onAdd],
+    [onAdd, orgId],
   );
 
   if (loading) {
@@ -132,6 +133,7 @@ export const SiteUserResults: React.FC<SiteUserResultsProps> = ({
             >
               <UserStrip
                 user={result}
+                organizationId={orgId}
                 data-testid={`site-user-result-${result.username}`}
                 compact
                 showPositions={false}

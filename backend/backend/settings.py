@@ -26,6 +26,7 @@ import logging
 import warnings
 
 from backend.env_utils import env_bool, env_list
+from config.discord_api import DISCORD_API_BASE_URL, DISCORD_GUILD_ID  # noqa: F401
 from config.dota_lobby import DotaLobbyConfig
 from config.installed_apps import MODEL_APPS
 from config.leagues import app_config
@@ -36,13 +37,12 @@ warnings.filterwarnings("once", message=r".*cacheops cache is unreachable.*")
 
 log = logging.getLogger(__name__)
 load_dotenv()
-DISCORD_API_BASE_URL = "https://discord.com/api"
 SOCIAL_AUTH_DISCORD_KEY = os.environ.get("client_id")
 SOCIAL_AUTH_DISCORD_SECRET = os.environ.get("discord_secret")
 DISCORD_BOT_TOKEN = os.environ.get("DISCORD_BOT_TOKEN")
-DISCORD_GUILD_ID = 734185035623825559
 DISCORD_ADMIN_CHANNEL_ID = os.environ.get("DISCORD_ADMIN_CHANNEL_ID")
 DISCORD_PUBLIC_KEY = os.environ.get("DISCORD_PUBLIC_KEY")
+DISCORD_ACTIVITY_ENABLED = env_bool("DISCORD_ACTIVITY_ENABLED")
 DFLOGO_EMOJI_ID = os.environ.get("DFLOGO_EMOJI_ID")
 SITE_URL = os.environ.get("SITE_URL", "https://localhost")
 
@@ -72,11 +72,6 @@ DOTA_LOBBY_REGION = _dota_lobby.region
 DISCORD_TEST_BOT_2_TOKEN = os.environ.get("DISCORD_TEST_BOT_2_TOKEN")
 DISCORD_TEST_BOT_3_TOKEN = os.environ.get("DISCORD_TEST_BOT_3_TOKEN")
 # SOCIAL_AUTH_LOGIN_REDIRECT_URL= "http://localhost:8000/complete/discord/"
-SOCIAL_AUTH_DJANGO_EXTRA_DATA = [
-    "avatar",
-    "id",
-    "global_name",
-]
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 EXTRA_DATA = [
@@ -166,15 +161,18 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # Django REST Framework — internal service token accepted globally alongside session auth
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
+        "discordbot.activity_auth.ActivityAuthentication",
         "rest_framework.authentication.SessionAuthentication",
         "app.auth.InternalServiceAuth",
     ],
     "EXCEPTION_HANDLER": "app.exception_handler.exception_handler",
 }
 
+# Every entry must be async capable: one sync-only middleware makes each ASGI request
+# hop sync_to_async -> async_to_sync (app.tests.test_middleware_async_chain enforces it).
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
-    "whitenoise.middleware.WhiteNoiseMiddleware",
+    "app.middleware.AsyncWhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -185,7 +183,7 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "corsheaders.middleware.CorsMiddleware",
-    "social_django.middleware.SocialAuthExceptionMiddleware",
+    "app.middleware.AsyncSocialAuthExceptionMiddleware",
 ]
 
 ROOT_URLCONF = "backend.urls"
@@ -367,13 +365,13 @@ CACHEOPS = {
     "app.tournament": {"ops": "all", "timeout": 60 * 60},
     "app.team": {"ops": "all", "timeout": 60 * 60},
     "app.customuser": {"ops": "all", "timeout": 60 * 60},
-    # BaseUserProfile owns nickname/avatar (T1 epic). Every @cached_as
-    # site that ships nickname/avatar must list BaseUserProfile so PATCH
+    # BaseUserProfile owns avatar. Every @cached_as
+    # site that ships avatar must list BaseUserProfile so PATCH
     # /api/users/me/profile/base/ invalidates the cached payload — see
     # backend/user/tests/test_cacheops.py for the grep guardrail.
     "user.baseuserprofile": {"ops": "all", "timeout": 60 * 60},
     # DotaUserProfile owns positions + dota-mmr verification; DeadlockUserProfile
-    # owns rank (T2 epic). @cached_as sites shipping positions must list
+    # owns rank. @cached_as sites shipping positions must list
     # DotaUserProfile so PATCH /api/users/me/profile/game/dota/ invalidates the
     # cached payload — see backend/user/tests/test_cacheops.py grep guardrail.
     "user.dotauserprofile": {"ops": "all", "timeout": 60 * 60},

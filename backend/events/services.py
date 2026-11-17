@@ -150,7 +150,7 @@ def check_requirements(event, user):
         pass  # No profile = skip Dota-specific checks
 
     if event.require_profile_complete:
-        if not (user.nickname and user.steamid and user.discordId):
+        if not (user.steamid and user.discordId):
             return False
     return True
 

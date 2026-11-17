@@ -31,7 +31,8 @@ export const GameMode = {
 export const eventStaffUserSchema = z.object({
   pk: z.number(),
   username: z.string(),
-  nickname: z.string().nullable(),
+  discordNickname: z.string().nullable().optional(),
+  guildNickname: z.string().nullable().optional(),
   avatarUrl: z.string().nullable(),
 });
 
@@ -148,10 +149,10 @@ export const eventSignupSchema = z.object({
     .object({
       pk: z.number(),
       username: z.string(),
-      nickname: z.string().nullable(),
       avatar: z.string().nullable(),
       discordId: z.string().nullable(),
-      discordNickname: z.string().nullable(),
+      discordNickname: z.string().nullable().optional(),
+      guildNickname: z.string().nullable().optional(),
       positions: z
         .object({
           carry: z.number(),
@@ -608,7 +609,8 @@ export const discordEventLogSchema = z.object({
   target_type: z.string(),
   discord_user_id: z.string(),
   discord_username: z.string(),
-  nickname: z.string().nullable(),
+  discordNickname: z.string().nullable().optional(),
+  guildNickname: z.string().nullable().optional(),
   username: z.string().nullable(),
   avatar: z.string().nullable(),
   message_id: z.string().nullable(),
@@ -623,7 +625,8 @@ export const discordEventDMSchema = z.object({
   dm_type: z.number(),
   dm_type_display: z.string(),
   username: z.string().nullable(),
-  nickname: z.string().nullable(),
+  discordNickname: z.string().nullable().optional(),
+  guildNickname: z.string().nullable().optional(),
   avatar: z.string().nullable(),
   discord_user_id: z.string().nullable(),
   can_send: z.boolean(),

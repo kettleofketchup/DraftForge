@@ -2,6 +2,7 @@ from typing import Any, TypedDict
 
 from rest_framework import serializers
 
+from app.display_names import first_name
 from org.contributions.kinds import ContributionKind
 from org.contributions.services import (
     MANUAL_MAX_POINTS,
@@ -19,7 +20,9 @@ class MemberSummary(TypedDict):
     org_user_pk: int
     user_pk: int
     username: str
-    nickname: str | None
+    nickname: None
+    discordNickname: str | None
+    guildNickname: str | None
     avatarUrl: str | None
 
 
@@ -34,7 +37,9 @@ def member_summary(org_user: OrgUser) -> MemberSummary:
         org_user_pk=org_user.pk,
         user_pk=user.pk,
         username=user.username,
-        nickname=user.nickname,
+        nickname=None,
+        discordNickname=first_name(user.discordNickname),
+        guildNickname=first_name(org_user.guild_nickname),
         avatarUrl=user.avatarUrl,
     )
 

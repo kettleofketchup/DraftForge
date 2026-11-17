@@ -58,9 +58,7 @@ describe('sampleContext', () => {
   };
   const sender = {
     username: 'bob',
-    nickname: 'Bobby',
-    discordNickname: null,
-    guildNickname: 'Bob',
+    discordNickname: 'Bobby',
   };
 
   it('fills every placeholder key', () => {
@@ -78,7 +76,7 @@ describe('sampleContext', () => {
 
   it('fills names and links like the backend context', () => {
     const ctx = sampleContext(event, org, sender, 'https://dota.example');
-    expect(ctx.promoter).toBe('Bob');
+    expect(ctx.promoter).toBe('Bobby');
     expect(ctx.event).toBe('Friday Inhouse');
     expect(ctx.event_link).toBe('https://dota.example/events/42');
     expect(ctx.org).toBe('Kettle Club');
@@ -90,7 +88,7 @@ describe('sampleContext', () => {
     const ctx = sampleContext(
       event,
       org,
-      { username: 'bob', nickname: 'Bobby' },
+      { username: 'bob', discordNickname: 'Bobby' },
       'https://x',
     );
     expect(ctx.promoter).toBe('Bobby');

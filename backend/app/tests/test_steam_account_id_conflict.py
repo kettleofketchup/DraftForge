@@ -27,11 +27,11 @@ class SteamAccountIdConflictTests(TestCase):
         )
         self.holder = CustomUser.objects.create(
             username="geo.potter",
-            nickname="George Potter",
+            discordNickname="George Potter",
             steam_account_id=TAKEN_ID,
         )
         self.target = CustomUser.objects.create(
-            username="bigbangg1", nickname="bigbang", steam_account_id=765353
+            username="bigbangg1", steam_account_id=765353
         )
         self.org = Organization.objects.create(name="Steam Conflict Org")
         self.org.admins.add(self.admin)
@@ -60,7 +60,9 @@ class SteamAccountIdConflictTests(TestCase):
         body = resp.json()
         self.assertEqual(body["code"], "steam_account_id_taken")
         self.assertEqual(body["conflict"]["pk"], self.holder.pk)
-        self.assertEqual(body["conflict"]["nickname"], "George Potter")
+        self.assertIsNone(body["conflict"]["nickname"])
+        self.assertEqual(body["conflict"]["discordNickname"], "George Potter")
+        self.assertIn("George Potter (@geo.potter)", body["error"])
         self.assertEqual(body["conflict"]["username"], "geo.potter")
 
     def test_org_patch_conflict_leaves_target_unchanged(self) -> None:
@@ -127,7 +129,7 @@ class SteamAccountIdLookupTests(TestCase):
         )
         self.holder = CustomUser.objects.create(
             username="geo.potter",
-            nickname="George Potter",
+            discordNickname="George Potter",
             steam_account_id=TAKEN_ID,
         )
         self.client = APIClient()
@@ -141,7 +143,8 @@ class SteamAccountIdLookupTests(TestCase):
         self.assertEqual(resp.status_code, 200, resp.content)
         holder = resp.json()["holder"]
         self.assertEqual(holder["pk"], self.holder.pk)
-        self.assertEqual(holder["nickname"], "George Potter")
+        self.assertIsNone(holder["nickname"])
+        self.assertEqual(holder["discordNickname"], "George Potter")
         self.assertEqual(holder["username"], "geo.potter")
 
     def test_lookup_returns_null_holder_for_free_id(self) -> None:

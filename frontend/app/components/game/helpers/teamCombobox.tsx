@@ -19,7 +19,9 @@ import {
   PopoverTrigger,
 } from '~/components/ui/popover';
 import { DisplayName } from '~/components/user/avatar';
+import { useDisplayOrgId } from '~/hooks/useDisplayOrgId';
 import type { TeamType } from '~/index';
+import { userNameCandidates } from '~/lib/userDisplayName';
 import { cn } from '~/lib/utils';
 interface Props {
   teams: TeamType[];
@@ -32,6 +34,7 @@ const log = getLogger('TeamComboBox');
 interface TeamComboBoxType {
   label: string;
   value: number | string;
+  keywords: string[];
 }
 
 export const TeamComboBox: React.FC<Props> = ({
@@ -40,6 +43,7 @@ export const TeamComboBox: React.FC<Props> = ({
   setSelectedTeam,
 }) => {
   const isDesktop = useMediaQuery('(min-width: 768px)');
+  const orgId = useDisplayOrgId();
 
   const [open, setOpen] = React.useState(false);
   const getDropboxValues = () => {
@@ -47,8 +51,11 @@ export const TeamComboBox: React.FC<Props> = ({
     let team: any;
     teams.forEach((value: TeamType) => {
       comboBox.push({
-        label: value.captain ? DisplayName(value.captain) : '',
+        label: value.captain
+          ? DisplayName(value.captain, undefined, orgId)
+          : '',
         value: value.pk || 0,
+        keywords: value.captain ? userNameCandidates(value.captain, orgId) : [],
       });
     });
 
@@ -93,6 +100,7 @@ export const TeamComboBox: React.FC<Props> = ({
                     className="z-50"
                     key={framework.value}
                     value={framework.value.toString()}
+                    keywords={framework.keywords}
                     onSelect={(currentValue) => onChoose(currentValue)}
                   >
                     {framework.label}

@@ -26,8 +26,6 @@ export interface UserEntry {
   steam_account_id?: number | null;
   discordId?: string | null;
   discordNickname?: string | null;
-  guildNickname?: string | null;
-  nickname?: string | null;
   is_staff?: boolean;
   is_superuser?: boolean;
   active_drafts?: ActiveDraftType[];
@@ -35,6 +33,8 @@ export interface UserEntry {
   // Context-scoped data (keyed by org/league id)
   orgData: Record<number, OrgUserData>;
   leagueData: Record<number, LeagueUserData>;
+  /** Discord server nickname per org; `null` means the org has none. */
+  orgNicknames: Record<number, string | null>;
 
   // Staleness tracking
   _fetchedAt: number;
@@ -49,8 +49,6 @@ export interface UpsertContext {
  * Type guard: distinguishes UserEntry (has orgData) from legacy UserType.
  * Use in backward-compat code instead of `as any` casts.
  */
-export function isUserEntry(
-  user: UserType | UserEntry,
-): user is UserEntry {
+export function isUserEntry(user: UserType | UserEntry): user is UserEntry {
   return typeof user === 'object' && user !== null && 'orgData' in user;
 }

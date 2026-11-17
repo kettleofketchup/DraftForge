@@ -4,12 +4,15 @@ Organization Views
 Handles org admin functionality including claim request management.
 """
 
+from typing import Any
+
 from django.db import transaction
-from django.db.models import Q, QuerySet
+from django.db.models import OuterRef, Q, QuerySet, Subquery
 from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.request import Request
 from rest_framework.response import Response
 
 from app.cache_utils import invalidate_after_commit
@@ -41,15 +44,30 @@ from telemetry.logging import get_logger
 log = get_logger(__name__)
 
 
+def _guild_nickname_of(user_field: str) -> Subquery:
+    return Subquery(
+        OrgUser.objects.filter(
+            organization_id=OuterRef("organization_id"), user_id=OuterRef(user_field)
+        ).values("guild_nickname")[:1]
+    )
+
+
 def _with_claim_users(
     qs: QuerySet[ProfileClaimRequest],
 ) -> QuerySet[ProfileClaimRequest]:
-    return qs.select_related(
-        "claimer__base_profile",
-        "reviewed_by__base_profile",
-        "target_user__base_profile",
-        "organization",
-    ).nocache()
+    return (
+        qs.select_related(
+            "claimer__base_profile",
+            "reviewed_by__base_profile",
+            "target_user__base_profile",
+            "organization",
+        )
+        .annotate(
+            claimer_guild_nickname=_guild_nickname_of("claimer_id"),
+            reviewed_by_guild_nickname=_guild_nickname_of("reviewed_by_id"),
+        )
+        .nocache()
+    )
 
 
 class ClaimRequestViewSet(viewsets.ModelViewSet):
@@ -62,7 +80,7 @@ class ClaimRequestViewSet(viewsets.ModelViewSet):
     serializer_class = ProfileClaimRequestSerializer
     permission_classes = [IsAuthenticated, IsOrgStaff]
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet[ProfileClaimRequest]:
         """Filter to requests for organizations the user is staff of."""
         user = self.request.user
 
@@ -78,7 +96,7 @@ class ClaimRequestViewSet(viewsets.ModelViewSet):
             ProfileClaimRequest.objects.filter(organization_id__in=org_ids)
         )
 
-    def list(self, request, *args, **kwargs):
+    def list(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         """List claim requests, optionally filtered by status."""
         queryset = self.get_queryset()
 
@@ -96,7 +114,7 @@ class ClaimRequestViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
     @action(detail=True, methods=["post"])
-    def approve(self, request, pk=None):
+    def approve(self, request: Request, pk: str | None = None) -> Response:
         """
         Approve a claim request and perform the profile merge.
 
@@ -169,7 +187,7 @@ class ClaimRequestViewSet(viewsets.ModelViewSet):
         )
 
     @action(detail=True, methods=["post"])
-    def reject(self, request, pk=None):
+    def reject(self, request: Request, pk: str | None = None) -> Response:
         """Reject a claim request."""
         claim_request = self.get_object()
 
@@ -217,8 +235,6 @@ class ClaimRequestViewSet(viewsets.ModelViewSet):
         claimer.steam_account_id = target_user.steam_account_id
 
         # Copy other fields from target if claimer doesn't have them
-        if target_user.nickname and not claimer.nickname:
-            claimer.nickname = target_user.nickname
         if target_user.avatar and not claimer.avatar:
             claimer.avatar = target_user.avatar
 

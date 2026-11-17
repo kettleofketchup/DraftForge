@@ -3,8 +3,8 @@ import { Bell, ChevronDown, ChevronUp } from 'lucide-react';
 import { useState } from 'react';
 import { getRepeaterSubscribers } from '~/components/api/api';
 import { Badge } from '~/components/ui/badge';
-import { DisplayName } from '~/components/user/avatar';
 import { UserAvatar } from '~/components/user/UserAvatar';
+import { DisplayName } from '~/components/user/avatar';
 
 interface SubscriberListProps {
   repeaterId: number;
@@ -52,7 +52,7 @@ export function SubscriberList({ repeaterId }: SubscriberListProps) {
             >
               <UserAvatar
                 user={{
-                  nickname: sub.nickname,
+                  discordNickname: sub.discordNickname,
                   username: sub.username,
                   discordId: sub.discordId,
                   avatar: sub.avatar,

@@ -13,6 +13,7 @@ ORG_ENTRY_KEYS = {
     "username",
     "nickname",
     "guildNickname",
+    "discordNickname",
     "avatar",
     "discordId",
     "positions",
@@ -47,7 +48,9 @@ class BuildUsersDictOrgTests(TransactionTestCase):
             tournament_type="double_elimination",
             date_played=timezone.now(),
         )
-        self.member = CustomUser.objects.create(username="member", nickname="Member")
+        self.member = CustomUser.objects.create(
+            username="member", discordNickname="Member"
+        )
         self.tournament.users.add(self.member)
 
         from league.models import LeagueUser
@@ -68,7 +71,7 @@ class BuildUsersDictOrgTests(TransactionTestCase):
     def test_org_entry_has_core_and_mmr(self) -> None:
         entry = _build_users_dict(self.tournament)[self.member.pk]
         # core half (cached per-user)
-        assert entry["nickname"] == "Member"
+        assert entry["nickname"] is None
         assert "positions" in entry
         # contextual MMR half (merged per-request)
         assert entry["mmr"] == 4200
@@ -87,11 +90,26 @@ class BuildUsersDictOrgTests(TransactionTestCase):
         for k in ref:
             assert entry[k] == ref[k], (k, entry[k], ref[k])
 
-    def test_nickname_edit_reflected(self) -> None:
+    def test_org_entry_carries_server_and_global_names(self) -> None:
+        from org.models import OrgUser
+
+        OrgUser.objects.filter(user=self.member, organization=self.org).update(
+            guild_nickname="DragonClaw"
+        )
+        CustomUser.objects.filter(pk=self.member.pk).update(
+            discordNickname="GwaihirTheWindlord"
+        )
+        entry = _build_users_dict(self.tournament, fresh=True)[self.member.pk]
+        assert entry["guildNickname"] == "DragonClaw"
+        assert entry["discordNickname"] == "GwaihirTheWindlord"
+
+    def test_discord_nickname_edit_reflected(self) -> None:
         _build_users_dict(self.tournament)  # warm core cache
-        self.member.nickname = "Renamed"
+        self.member.discordNickname = "Renamed"
+        self.member.save()
         entry = _build_users_dict(self.tournament)[self.member.pk]
-        assert entry["nickname"] == "Renamed"
+        assert entry["discordNickname"] == "Renamed"
+        assert entry["nickname"] is None
 
     def test_mmr_change_reflected(self) -> None:
         _build_users_dict(self.tournament)  # warm
@@ -111,7 +129,7 @@ class BuildUsersDictNonOrgTests(TransactionTestCase):
             tournament_type="double_elimination",
             date_played=timezone.now(),
         )
-        self.member = CustomUser.objects.create(username="solo", nickname="Solo")
+        self.member = CustomUser.objects.create(username="solo", discordNickname="Solo")
         self.tournament.users.add(self.member)
 
     def test_nonorg_no_mmr_shape_parity(self) -> None:
@@ -144,7 +162,9 @@ class BuildUsersDictLeaguelessEventTests(TransactionTestCase):
         )
         self.tournament = create_tournament_for_event(event)
         assert self.tournament.league is None
-        self.member = CustomUser.objects.create(username="member", nickname="Member")
+        self.member = CustomUser.objects.create(
+            username="member", discordNickname="Member"
+        )
         self.tournament.users.add(self.member)
         OrgUser.objects.update_or_create(
             user=self.member, organization=self.org, defaults={"mmr": 4200}

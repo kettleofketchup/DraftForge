@@ -4,13 +4,18 @@ import {
   ComboboxOption,
   ComboboxOptions,
 } from '@headlessui/react';
-import type { UserClassType, UserType } from '~/components/user/types';
-import { User } from '~/components/user/user';
+import type { UserType } from '~/components/user/types';
 import { UserAvatar } from '~/components/user/UserAvatar';
 
-import { useState, type FormEvent } from 'react';
+import { useMemo, type FormEvent } from 'react';
 import { Input } from '~/components/ui/input';
+import {
+  matchesUserQueryIn,
+  useOrgNicknames,
+  withOrgNickname,
+} from '~/hooks/useOrgNicknames';
 import { getLogger } from '~/lib/logger';
+import { resolveDisplayName } from '~/lib/userDisplayName';
 
 const log = getLogger('addPlayerDropdown');
 interface Props {
@@ -21,6 +26,7 @@ interface Props {
   addPlayerCallback?: (user: UserType) => Promise<void>;
   removePlayerCallback?: (e: FormEvent, user: UserType) => Promise<void>;
   placeholder?: string;
+  orgId?: number | null;
 }
 
 export const AddPlayerDropdown: React.FC<Props> = ({
@@ -29,72 +35,45 @@ export const AddPlayerDropdown: React.FC<Props> = ({
   query,
   setQuery,
   addPlayerCallback,
-  removePlayerCallback,
   placeholder = 'Search organization members...',
+  orgId = null,
 }) => {
-  const [searchedPerson, setSearchedPerson] = useState(
-    new User({} as UserClassType),
+  const nicknames = useOrgNicknames(
+    useMemo(() => users.map((u) => u?.pk), [users]),
+    orgId,
   );
 
-  const filteredUsers =
-    query === ''
-      ? users.filter(
-          (person) => !addedUsers?.some((added) => added?.pk === person?.pk),
-        )
-      : users.filter(
-          (person) =>
-            !addedUsers?.some((added) => added?.pk === person?.pk) &&
-            (person?.username?.toLowerCase().includes(query.toLowerCase()) ||
-              person?.nickname?.toLowerCase().includes(query.toLowerCase())),
-        );
+  const filteredUsers = useMemo(
+    () =>
+      users.filter(
+        (person) =>
+          !addedUsers?.some((added) => added?.pk === person?.pk) &&
+          (query === '' || matchesUserQueryIn(person, query, orgId, nicknames)),
+      ),
+    [users, addedUsers, query, orgId, nicknames],
+  );
 
-  const handleSearchUserSelect = async (userName: UserType | string | null) => {
-    if (!userName || userName === undefined || userName === '') {
-      log.debug(userName);
-
-      setSearchedPerson(new User({} as UserClassType));
-      return;
-    }
-
-    if (typeof userName === 'object') {
-      log.debug(userName);
-
-      userName = userName.username || userName.nickname || '';
-    }
-    if (!userName || userName === undefined || userName === '') {
-      log.debug('No user selected, resetting searched person');
-      setSearchedPerson(new User({} as UserClassType));
-      return;
-    }
-    log.debug(`Selected user: ${userName}`, userName);
-
-    const user: UserType | undefined = users.find(
-      (user) =>
-        user &&
-        (user?.username?.toLowerCase() === userName?.toLowerCase() ||
-          user?.nickname?.toLowerCase() === userName?.toLowerCase()),
-    );
-
+  const handleSearchUserSelect = async (pk: number | null) => {
+    const user = pk === null ? undefined : users.find((u) => u?.pk === pk);
     if (user === undefined) {
-      log.debug('User not found, resetting searched person');
-      setSearchedPerson(new User({} as UserClassType));
+      log.debug('No user selected');
       return;
     }
-    setSearchedPerson(new User(user as UserClassType));
     if (addPlayerCallback !== undefined) {
-      log.debug('Adding player callback with user:', user);
-      await addPlayerCallback(user as UserType);
-      setQuery(''); // Reset query after selection
+      log.debug('Adding player', { pk });
+      await addPlayerCallback(user);
+      setQuery('');
     }
   };
 
   return (
     <div className="align-middle">
       {users && (
-        <Combobox value={query} onChange={handleSearchUserSelect}>
+        <Combobox<number | null> value={null} onChange={handleSearchUserSelect}>
           <ComboboxInput
             as={Input}
             placeholder={placeholder}
+            displayValue={() => query}
             onChange={(event) => setQuery(event.target.value)}
             data-testid="playerSearchInput"
             aria-label="Search for players to add"
@@ -103,32 +82,35 @@ export const AddPlayerDropdown: React.FC<Props> = ({
             {filteredUsers &&
             filteredUsers.length > 0 &&
             filteredUsers.length < 20 ? (
-              filteredUsers.map((user) => (
-                <ComboboxOption
-                  key={user?.pk}
-                  value={user?.username}
-                  className={({ active }) =>
-                    `cursor-pointer select-none p-2 ${
-                      active ? 'bg-purple-900 text-primary-content' : ''
-                    }`
-                  }
-                  data-testid={`playerOption-${user?.username}`}
-                >
-                  <div className="flex items-center gap-2">
-                    <UserAvatar user={user} size="md" />
-                    <span>
-                      {user?.username}{' '}
-                      {user?.nickname && (
+              filteredUsers.map((user) => {
+                const name = resolveDisplayName(
+                  withOrgNickname(user, orgId, nicknames),
+                  { orgId },
+                );
+                return (
+                  <ComboboxOption
+                    key={user?.pk}
+                    value={user?.pk ?? null}
+                    className={({ active }) =>
+                      `cursor-pointer select-none p-2 ${
+                        active ? 'bg-purple-900 text-primary-content' : ''
+                      }`
+                    }
+                    data-testid={`playerOption-${user?.username}`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <UserAvatar user={user} size="md" />
+                      <span>{name}</span>
+                      {user?.username && user.username !== name && (
                         <span className="text-sm text-gray-500">
-                          ({user?.nickname})
+                          @{user.username}
                         </span>
                       )}
-                    </span>
-
-                    <div className="flex-1" />
-                  </div>
-                </ComboboxOption>
-              ))
+                      <div className="flex-1" />
+                    </div>
+                  </ComboboxOption>
+                );
+              })
             ) : (
               <div className="p-2 text-sm text-gray-500">
                 No users or too many users found

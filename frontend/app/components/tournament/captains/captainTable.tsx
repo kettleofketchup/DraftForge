@@ -15,6 +15,7 @@ import { RolePositions } from '~/components/user/positions';
 import type { UserType } from '~/components/user/types';
 import { UserAvatar } from '~/components/user/UserAvatar';
 import { UserStrip } from '~/components/user/UserStrip';
+import { useDisplayOrgId } from '~/hooks/useDisplayOrgId';
 import type { TeamType } from '~/index';
 import { cn } from '~/lib/utils';
 import { useUserStore } from '~/store/userStore';
@@ -23,6 +24,7 @@ import { UpdateCaptainButton } from './UpdateCaptainButton';
 
 /** Responsive: Table layout at md+, stacked UserStrip list below. */
 export const CaptainTable: React.FC = () => {
+  const orgId = useDisplayOrgId();
   const tournament = useUserStore((state) => state.tournament);
 
   const sortedUsers = useMemo<UserType[]>(() => {
@@ -80,7 +82,7 @@ export const CaptainTable: React.FC = () => {
                         size="md"
                         className="hover:ring-2 hover:ring-primary transition-all"
                       />
-                      <span>{DisplayName(user)}</span>
+                      <span>{DisplayName(user, undefined, orgId)}</span>
                     </div>
                   </PlayerPopover>
                 </TableCell>

@@ -46,7 +46,7 @@ def build_draft_link_embed(
         "title": "Team Draft Started",
         "description": (
             f"The team draft for **[{tournament_name}]({url})** has begun!\n\n"
-            f"Click the button below to view the draft."
+            f"{_draft_instructions()}"
         ),
         "color": COLOR_DRAFT,
         "fields": fields,
@@ -54,8 +54,8 @@ def build_draft_link_embed(
     }
 
 
-def build_draft_link_components(tournament_id):
-    """Link button to view team draft."""
+def build_draft_link_components(tournament_id, *, draft_id=None):
+    """Browser link and optional Activity launcher for the specific team draft."""
     btn = {
         "type": 2,
         "style": 5,
@@ -65,7 +65,7 @@ def build_draft_link_components(tournament_id):
     emoji = _dflogo_emoji()
     if emoji:
         btn["emoji"] = emoji
-    return [{"type": 1, "components": [btn]}]
+    return _draft_buttons(btn, "team", draft_id)
 
 
 def build_herodraft_link_embed(tournament_name, herodraft_pk, radiant_name, dire_name):
@@ -78,7 +78,7 @@ def build_herodraft_link_embed(tournament_name, herodraft_pk, radiant_name, dire
         "description": (
             f"A hero draft has been created for **[{tournament_name}]({url})**!\n\n"
             f"**{radiant_name}** vs **{dire_name}**\n\n"
-            f"Click the button below to join."
+            f"{_draft_instructions()}"
         ),
         "color": COLOR_HERODRAFT,
         "url": url,
@@ -96,7 +96,32 @@ def build_herodraft_link_components(herodraft_pk):
     emoji = _dflogo_emoji()
     if emoji:
         btn["emoji"] = emoji
-    return [{"type": 1, "components": [btn]}]
+    return _draft_buttons(btn, "hero", herodraft_pk)
+
+
+def _draft_buttons(browser_button: dict, kind: str, draft_id: int | None) -> list[dict]:
+    buttons = [browser_button]
+    if getattr(settings, "DISCORD_ACTIVITY_ENABLED", False) and draft_id:
+        buttons.append(
+            {
+                "type": 2,
+                "style": 1,
+                "label": "Launch / Join Activity",
+                "custom_id": f"draft_activity:{kind}:{draft_id}",
+            }
+        )
+    return [{"type": 1, "components": buttons}]
+
+
+def _draft_instructions() -> str:
+    if getattr(settings, "DISCORD_ACTIVITY_ENABLED", False):
+        return (
+            "Join your team's voice channel, then click **Launch / Join Activity** "
+            "to get an invite for this draft in that channel. "
+            "Open the invite to launch or join DraftForge. "
+            "You can also use **Open in Browser**."
+        )
+    return "Click the button below to view the draft."
 
 
 COLOR_LOBBY = 0x57F287

@@ -54,7 +54,10 @@ from tests.populate.league_stats import (
 )
 from tests.populate.org_delete import populate_org_delete
 from tests.populate.org_features import populate_org_features_data
-from tests.populate.organizations import populate_organizations_and_leagues
+from tests.populate.organizations import (
+    populate_discord_name_sync_users,
+    populate_organizations_and_leagues,
+)
 from tests.populate.shuffle_tie import populate_shuffle_tie_data
 from tests.populate.steam import populate_steam_matches
 from tests.populate.tournament_discovery import populate_tournament_discovery
@@ -107,9 +110,11 @@ def populate_all(force: bool = False) -> None:
         # Dota Lobby takes auto-incremented org/league pks, so it must not
         # shift the pks the steps above expect.
         ("Dota Lobby Data", populate_dota_lobby_data),
-        # Last: explicit pks (orgs/leagues 30-32, tournaments 900-906) would
+        # Explicit pks (orgs/leagues 30-32, tournaments 900-906) would
         # bump the auto-increment counters the steps above rely on.
         ("Tournament Discovery Data", populate_tournament_discovery),
+        # After every pk-sensitive step: these users take auto-incremented pks.
+        ("Discord Name Sync Users", populate_discord_name_sync_users),
     ]
 
     console = Console()
@@ -144,6 +149,7 @@ __all__ = [
     "populate_all",
     # Population functions
     "populate_organizations_and_leagues",
+    "populate_discord_name_sync_users",
     "populate_users",
     "populate_test_auth_users",
     "populate_tournaments",

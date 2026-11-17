@@ -8,7 +8,7 @@
 
 export interface SteamAccountIdHolder {
   pk: number;
-  nickname: string;
+  discordNickname?: string | null;
   username: string;
 }
 
@@ -29,19 +29,20 @@ export function describeSteamAccountIdConflict(
 ): string | null {
   if (!holder) return null;
   if (editingUserPk != null && holder.pk === editingUserPk) return null;
-  const who = holder.nickname
-    ? `${holder.nickname} (@${holder.username})`
+  const who = holder.discordNickname
+    ? `${holder.discordNickname} (@${holder.username})`
     : `@${holder.username}`;
   return `Already used by ${who}. ${SUFFIX}`;
 }
 
-export function steamAccountIdConflictFromError(
-  body: unknown,
-): string | null {
+export function steamAccountIdConflictFromError(body: unknown): string | null {
   if (!body || typeof body !== 'object') return null;
   const data = body as Record<string, unknown>;
 
-  if (data.code === 'steam_account_id_taken' && typeof data.error === 'string') {
+  if (
+    data.code === 'steam_account_id_taken' &&
+    typeof data.error === 'string'
+  ) {
     return data.error;
   }
 

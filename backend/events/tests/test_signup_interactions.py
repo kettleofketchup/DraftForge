@@ -3,6 +3,7 @@ from rest_framework.test import APIClient
 from structlog.contextvars import clear_contextvars
 
 from app.models import CustomUser, GameType
+from app.tests.raw_site_nickname import raw_site_nickname
 from events.constants import EventState
 from events.models import EventSignup
 from events.tests.base import EventTestCase
@@ -63,7 +64,8 @@ class HandleSignupButtonTest(EventTestCase):
         # Should auto-create user and proceed to modal (not error)
         self.assertEqual(result["action"], "needs_modal")
         user = CustomUser.objects.get(discordId="999999999999999999")
-        self.assertEqual(user.nickname, "newplayer")
+        self.assertEqual(user.username, "newplayer")
+        self.assertIsNone(raw_site_nickname(user.pk))
 
     def test_closed_event_returns_error(self):
         from events.discord import handle_signup_button

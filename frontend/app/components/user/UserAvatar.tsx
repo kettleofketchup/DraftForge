@@ -14,10 +14,10 @@ type UserLike =
   | {
       pk?: number;
       // Username can be null for Steam-only signups (CustomUser.username is
-      // null=True at the model level). DisplayName already falls back to
-      // nickname / '?'.
+      // null=True at the model level). DisplayName falls back to
+      // discordNickname, then `User <pk>`.
       username?: string | null;
-      nickname?: string | null;
+      discordNickname?: string | null;
       avatar?: string | null;
       avatarUrl?: string | null;
       discordId?: string | null;
@@ -111,7 +111,7 @@ export const AvatarUrl = (
       : `${genUrl}&name=${encodeURIComponent(DisplayName(user))}`;
   }
 
-  // Generate fallback URL from username/nickname
+  // Generate fallback URL from Discord name/username
   const fallback = `${genUrl}&length=2&name=${encodeURIComponent(
     DisplayName(user),
   )}`;
@@ -187,7 +187,9 @@ function arePropsEqual(
     return (
       prevUser.user.id === nextUser.user.id &&
       prevUser.user.avatar === nextUser.user.avatar &&
-      prevUser.nick === nextUser.nick
+      prevUser.nick === nextUser.nick &&
+      prevUser.user.global_name === nextUser.user.global_name &&
+      prevUser.user.username === nextUser.user.username
     );
   }
 
@@ -199,7 +201,7 @@ function arePropsEqual(
       prevUser.avatarUrl === nextUser.avatarUrl &&
       prevUser.discordId === nextUser.discordId &&
       prevUser.username === nextUser.username &&
-      prevUser.nickname === nextUser.nickname
+      prevUser.discordNickname === nextUser.discordNickname
     );
   }
 
@@ -227,11 +229,12 @@ export const UserAvatar = memo(function UserAvatar({
   const guildUserAvatar = isGuildMember ? user.user.avatar : undefined;
   const guildNick = isGuildMember ? user.nick : undefined;
   const guildUsername = isGuildMember ? user.user.username : undefined;
+  const guildGlobalName = isGuildMember ? user.user.global_name : undefined;
   const userPk = !isGuildMember ? user?.pk : undefined;
   const userAvatar = !isGuildMember ? user?.avatar : undefined;
   const userAvatarUrl = !isGuildMember ? user?.avatarUrl : undefined;
   const userDiscordId = !isGuildMember ? user?.discordId : undefined;
-  const userNickname = !isGuildMember ? user?.nickname : undefined;
+  const userGlobalName = !isGuildMember ? user?.discordNickname : undefined;
   const userUsername = !isGuildMember ? user?.username : undefined;
 
   // Memoize the image URL - only recompute when avatar-relevant fields change
@@ -251,7 +254,14 @@ export const UserAvatar = memo(function UserAvatar({
   // Memoize display name for alt and initials
   const displayName = useMemo(
     () => (user ? DisplayName(user) : '?'),
-    [guildNick, guildUsername, userNickname, userUsername],
+    [
+      guildNick,
+      guildUsername,
+      guildGlobalName,
+      userPk,
+      userGlobalName,
+      userUsername,
+    ],
   );
 
   // Memoize alt text

@@ -53,6 +53,7 @@ import { DisplayName } from '~/components/user/avatar';
 import type { UserType } from '~/components/user/types';
 import { UserAvatar } from '~/components/user/UserAvatar';
 import { promotionKeys, useOrgFeatureAccess } from '~/features/org-features';
+import { useDisplayOrgId } from '~/hooks/useDisplayOrgId';
 import {
   useIsLeagueAdmin,
   useIsOrganizationAdmin,
@@ -104,6 +105,7 @@ function UserRow({
   onTransfer,
   isRemoving,
 }: UserRowProps) {
+  const orgId = useDisplayOrgId();
   const roleIcon = {
     owner: <Crown className="h-4 w-4 text-yellow-500" />,
     admin: <Shield className="h-4 w-4 text-blue-500" />,
@@ -119,7 +121,9 @@ function UserRow({
       <div className="flex items-center gap-3">
         {roleIcon[role]}
         <UserAvatar user={user} size="md" />
-        <span className="font-medium">{DisplayName(user)}</span>
+        <span className="font-medium">
+          {DisplayName(user, undefined, orgId)}
+        </span>
       </div>
       <div className="flex gap-2">
         {canTransfer && onTransfer && (
@@ -662,8 +666,11 @@ export function AdminTeamSection({
         description={
           <>
             Are you sure you want to transfer ownership to{' '}
-            <strong>{transferTarget && DisplayName(transferTarget)}</strong>?
-            You will become an admin after the transfer.
+            <strong>
+              {transferTarget &&
+                DisplayName(transferTarget, undefined, entityContext.orgId)}
+            </strong>
+            ? You will become an admin after the transfer.
           </>
         }
         confirmLabel="Transfer"

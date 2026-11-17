@@ -70,7 +70,7 @@ def invalidate_after_commit(*objs: Model) -> None:
     Usage::
 
         with transaction.atomic():
-            user.nickname = "New"
+            user.discordNickname = "New"
             user.save()
             invalidate_after_commit(tournament, org_user, org_user.organization)
     """

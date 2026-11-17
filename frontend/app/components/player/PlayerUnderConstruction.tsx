@@ -12,8 +12,8 @@ const GAMES_THROWN = 2; // Always 2/10 - it's a joke
 const TANGOES_REQUIRED = 46326;
 
 // The joke target - everyone has to throw bucketoffish's games
-const BUCKETOFFISH: { nickname: string; username?: string } = {
-  nickname: 'bucketoffish',
+const BUCKETOFFISH: { discordNickname: string; username?: string } = {
+  discordNickname: 'bucketoffish',
 };
 
 interface PlayerUnderConstructionProps {

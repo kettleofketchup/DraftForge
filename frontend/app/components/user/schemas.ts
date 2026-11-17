@@ -39,16 +39,15 @@ export const UserSchema = z.object({
   avatarUrl: z.string().url().optional(),
   is_staff: z.boolean().optional(),
   is_superuser: z.boolean().optional(),
-  nickname: z.string().min(2).max(100).nullable().optional(),
   mmr: z.number().min(0).nullable().optional(),
   league_mmr: z.number().min(0).nullable().optional(), // MMR snapshot from LeagueUser
   steam_account_id: z.number().min(0).nullable().optional(), // 32-bit Friend ID (Dotabuff)
   avatar: z.string().url().nullable().optional(),
   orgUserPk: z.number().min(0).optional(), // OrgUser pk (for org-scoped PATCH)
   pk: z.number().min(0).optional(), // User pk (for display)
-  discordNickname: z.string().min(2).max(100).nullable().optional(),
+  discordNickname: z.string().min(1).max(100).nullable().optional(),
   discordId: z.string().min(2).max(100).nullable().optional(),
-  guildNickname: z.string().min(2).max(100).nullable().optional(),
+  guildNickname: z.string().min(1).max(100).nullable().optional(),
   active_drafts: z.array(ActiveDraftSchema).optional(),
   // Role-membership PK lists used by permission hooks to gate global
   // create actions (e.g. Create Tournament) without a follow-up fetch.
@@ -64,14 +63,15 @@ export const UserSchema = z.object({
 
 /**
  * Core user fields for the entity cache.
- * Omits context-scoped fields (id=OrgUser pk, mmr=org MMR, league_mmr)
- * which go into orgData/leagueData on UserEntry.
+ * Omits context-scoped fields (id=OrgUser pk, mmr=org MMR, league_mmr,
+ * guildNickname) which go into orgData/leagueData/orgNicknames on UserEntry.
  * pk is overridden from optional to required.
  */
 export const CoreUserSchema = UserSchema.omit({
   orgUserPk: true,
   mmr: true,
   league_mmr: true,
+  guildNickname: true,
 }).extend({ pk: z.number() });
 
 export type CoreUserType = z.infer<typeof CoreUserSchema>;

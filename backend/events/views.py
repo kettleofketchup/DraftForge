@@ -81,8 +81,10 @@ from events.services import (
 )
 from events.utils import starts_in_future
 from lobby.passwords import PasswordMode
+from org.activity import touch_org_activity
 from org.contributions.services import should_sync_staff, sync_event_staff_entries
 from org.feature_errors import not_permitted
+from org.models import OrgUser
 from telemetry.logging import get_logger
 from user.models import BaseUserProfile
 from user.querysets import with_user_profiles
@@ -386,9 +388,9 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
     def subscribers(self, request, pk=None):
         """List all subscribers for this repeater."""
         repeater = self.get_object()
-        # RepeaterSubscriptionSerializer reads user.nickname + user.avatar,
-        # which go through the @property on CustomUser → base_profile (T1
-        # epic). Without this prefetch the list view is N+1 cold-cache.
+        # RepeaterSubscriptionSerializer reads user.avatar through the
+        # CustomUser @property → base_profile; without this prefetch the list
+        # view is N+1 cold-cache.
         subs = with_user_profiles(
             RepeaterSubscription.objects.filter(event_repeater=repeater), "user"
         )
@@ -664,6 +666,8 @@ class EventViewSet(viewsets.ModelViewSet):
             EventSignup,
             CustomUser,
             BaseUserProfile,
+            OrgUser,
+            Organization,
             keep_fresh=True,
             extra=cache_key,
             timeout=60 * 60,
@@ -673,6 +677,7 @@ class EventViewSet(viewsets.ModelViewSet):
             return self.get_serializer(instance).data
 
         data = dict(get_data())  # shallow-copy
+        touch_org_activity(request, data.get("organization"))
         _attach_user_can_manage(data, request.user)
         return Response(data)
 
@@ -990,13 +995,6 @@ class EventViewSet(viewsets.ModelViewSet):
                 ensure_tournament_with_signups(event)
                 event.transition_state(EventState.IN_PROGRESS)
                 finalize_event_tournament(event)
-            # Start auto-create herodrafts polling if enabled
-            if event.tournament and event.tournament.auto_create_hero_drafts:
-                from events.discord.tournament_dispatch import (
-                    start_auto_create_herodrafts,
-                )
-
-                start_auto_create_herodrafts(event.tournament)
             qs = with_event_staff(_annotate_event_qs(Event.objects.filter(pk=event.pk)))
             data = EventSerializer(qs.first()).data
             _attach_user_can_manage(data, request.user)
@@ -1146,6 +1144,9 @@ class EventViewSet(viewsets.ModelViewSet):
             DiscordEventLog,
             DiscordEventDM,
             DiscordMessageLog,
+            CustomUser,
+            OrgUser,
+            Organization,
             extra=f"discord_state:{pk}",
             timeout=60,
         )
@@ -1182,12 +1183,14 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [permissions.AllowAny]
 
     def get_queryset(self):
-        # EventSignupSerializer ships user.nickname (as `username`) +
-        # user.avatar — both resolve through the CustomUser @property to
-        # base_profile (T1 epic). Without user__base_profile this is N+1
+        # EventSignupSerializer ships user.avatar through the CustomUser
+        # @property to base_profile; without user__base_profile this is N+1
         # cold-cache on busy events.
         qs = with_user_profiles(
-            EventSignup.objects.select_related("event", "event_team"), "user"
+            EventSignup.objects.select_related(
+                "event__tournament__league__organization", "event_team"
+            ),
+            "user",
         )
         event_id = self.request.query_params.get("event")
         if event_id:
@@ -1475,7 +1478,8 @@ def get_event_task_schedule(request, event_id):
                 fired_by_data = {
                     "pk": row.fired_by.pk,
                     "username": row.fired_by.username,
-                    "nickname": row.fired_by.nickname,
+                    "nickname": None,
+                    "discordNickname": row.fired_by.discordNickname,
                     "discordId": row.fired_by.discordId,
                     "avatar": row.fired_by.avatar,
                 }

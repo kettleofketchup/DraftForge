@@ -1,26 +1,36 @@
 import { Plus } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { addLeagueMember } from '~/components/api/api';
 import type { AddMemberPayload } from '~/components/api/api';
+import { addLeagueMember } from '~/components/api/api';
 import { PrimaryButton } from '~/components/ui/buttons';
 import { UserList } from '~/components/user';
 import { AddUserModal } from '~/components/user/AddUserModal';
 import type { UserType } from '~/components/user/types';
-import { useIsLeagueAdmin } from '~/hooks/usePermissions';
 import { useLeagueUsers } from '~/hooks/useLeagueUsers';
+import { useIsLeagueAdmin } from '~/hooks/usePermissions';
 import { useLeagueStore } from '~/store/leagueStore';
-import { useUserCacheStore } from '~/store/userCacheStore';
 import { useOrgStore } from '~/store/orgStore';
+import { useUserCacheStore } from '~/store/userCacheStore';
 
 interface Props {
   leaguePk: number;
+  /** The league's org; its server nicknames are cached and shown. */
+  leagueOrgId?: number;
   /** False while member access is still being resolved for a new viewer. */
   canLoad?: boolean;
 }
 
-export const UsersTab: React.FC<Props> = ({ leaguePk, canLoad = true }) => {
-  const { leagueUserPks, leagueUsersLoading, leagueUsersLeagueId, getLeagueUsers } =
-    useLeagueStore();
+export const UsersTab: React.FC<Props> = ({
+  leaguePk,
+  leagueOrgId,
+  canLoad = true,
+}) => {
+  const {
+    leagueUserPks,
+    leagueUsersLoading,
+    leagueUsersLeagueId,
+    getLeagueUsers,
+  } = useLeagueStore();
   const leagueUsers = useLeagueUsers(leaguePk);
   const currentLeague = useLeagueStore((s) => s.currentLeague);
   const currentOrg = useOrgStore((s) => s.currentOrg);
@@ -30,9 +40,9 @@ export const UsersTab: React.FC<Props> = ({ leaguePk, canLoad = true }) => {
 
   useEffect(() => {
     if (leaguePk && canLoad) {
-      getLeagueUsers(leaguePk);
+      getLeagueUsers(leaguePk, leagueOrgId);
     }
-  }, [leaguePk, canLoad, getLeagueUsers, leagueUsersLeagueId]);
+  }, [leaguePk, leagueOrgId, canLoad, getLeagueUsers, leagueUsersLeagueId]);
 
   // AddUserModal callbacks
   const handleAddMember = useCallback(
@@ -40,23 +50,22 @@ export const UsersTab: React.FC<Props> = ({ leaguePk, canLoad = true }) => {
       if (!leaguePk) throw new Error('No league');
       const user = await addLeagueMember(leaguePk, payload);
       // Optimistic update: upsert into cache + append pk
-      useUserCacheStore.getState().upsert(user, { leagueId: leaguePk });
+      useUserCacheStore
+        .getState()
+        .upsert(user, { leagueId: leaguePk, orgId: leagueOrgId });
       const { leagueUserPks } = useLeagueStore.getState();
       if (user.pk != null) {
         useLeagueStore.setState({ leagueUserPks: [...leagueUserPks, user.pk] });
       }
       return user;
     },
-    [leaguePk]
+    [leaguePk, leagueOrgId],
   );
 
-  const addedPkSet = useMemo(
-    () => new Set(leagueUserPks),
-    [leagueUserPks]
-  );
+  const addedPkSet = useMemo(() => new Set(leagueUserPks), [leagueUserPks]);
   const isUserAdded = useCallback(
     (user: UserType) => user.pk != null && addedPkSet.has(user.pk),
-    [addedPkSet]
+    [addedPkSet],
   );
 
   const hasDiscordServer = Boolean(currentOrg?.discord_server_id);
@@ -67,7 +76,8 @@ export const UsersTab: React.FC<Props> = ({ leaguePk, canLoad = true }) => {
         <h2 className="text-xl font-semibold">League Members</h2>
         <div className="flex items-center gap-3">
           <span className="text-sm text-muted-foreground">
-            {leagueUsers.length} {leagueUsers.length === 1 ? 'member' : 'members'}
+            {leagueUsers.length}{' '}
+            {leagueUsers.length === 1 ? 'member' : 'members'}
           </span>
           {canEdit && (
             <PrimaryButton
@@ -96,12 +106,12 @@ export const UsersTab: React.FC<Props> = ({ leaguePk, canLoad = true }) => {
           onOpenChange={setShowAddUser}
           title={`Add Member to ${currentLeague?.name || 'League'}`}
           entityContext={{
-            orgId: currentOrg?.pk,
+            orgId: leagueOrgId,
             leagueId: leaguePk,
           }}
           onAdd={handleAddMember}
           isAdded={isUserAdded}
-                    hasDiscordServer={hasDiscordServer}
+          hasDiscordServer={hasDiscordServer}
         />
       )}
     </div>

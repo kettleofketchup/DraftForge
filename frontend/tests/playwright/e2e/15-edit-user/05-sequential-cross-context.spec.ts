@@ -4,25 +4,28 @@
  * @cicd smoke test verifying that editing a user on the league page
  * invalidates cacheops so the org page shows fresh data.
  *
- * Flow: edit nickname on league page → navigate to org page → verify new nickname.
+ * Flow: edit Friend ID on league page → navigate to org page → the org page's
+ * edit modal shows the new Friend ID.
  *
  * Uses isolated "User Edit" data — does not touch other test entities.
  */
 
-import { API_URL } from '../../fixtures/base-url';
 import {
-  test,
   expect,
-  visitAndWaitForHydration,
+  fillEditField,
+  nextSteamAccountId,
   openEditModal,
   readEditField,
-  fillEditField,
-  saveEditModal,
   restoreUserField,
+  saveEditModal,
+  test,
+  visitAndWaitForHydration,
 } from '../../fixtures';
+import { API_URL } from '../../fixtures/base-url';
 
 const USER_EDIT_ORG_NAME = 'User Edit Org';
 const USER_EDIT_LEAGUE_NAME = 'User Edit League';
+const ALT_STEAM_ACCOUNT_ID = 2_900_000_501;
 
 let orgPk: number;
 let leaguePk: number;
@@ -41,17 +44,29 @@ test.describe.serial('Cross-Context Cache Invalidation (@cicd)', () => {
     // Look up org
     const orgsResp = await context.request.get(`${API_URL}/organizations/`);
     const orgs = await orgsResp.json();
-    const orgList = Array.isArray(orgs) ? orgs : orgs.results ?? [];
-    const editOrg = orgList.find((o: { name: string }) => o.name === USER_EDIT_ORG_NAME);
-    if (!editOrg) throw new Error(`Org "${USER_EDIT_ORG_NAME}" not found. Run just db::populate::all`);
+    const orgList = Array.isArray(orgs) ? orgs : (orgs.results ?? []);
+    const editOrg = orgList.find(
+      (o: { name: string }) => o.name === USER_EDIT_ORG_NAME,
+    );
+    if (!editOrg)
+      throw new Error(
+        `Org "${USER_EDIT_ORG_NAME}" not found. Run just db::populate::all`,
+      );
     orgPk = editOrg.pk;
 
     // Look up league
     const leaguesResp = await context.request.get(`${API_URL}/leagues/`);
     const leagues = await leaguesResp.json();
-    const leagueList = Array.isArray(leagues) ? leagues : leagues.results ?? [];
-    const editLeague = leagueList.find((l: { name: string }) => l.name === USER_EDIT_LEAGUE_NAME);
-    if (!editLeague) throw new Error(`League "${USER_EDIT_LEAGUE_NAME}" not found. Run just db::populate::all`);
+    const leagueList = Array.isArray(leagues)
+      ? leagues
+      : (leagues.results ?? []);
+    const editLeague = leagueList.find(
+      (l: { name: string }) => l.name === USER_EDIT_LEAGUE_NAME,
+    );
+    if (!editLeague)
+      throw new Error(
+        `League "${USER_EDIT_LEAGUE_NAME}" not found. Run just db::populate::all`,
+      );
     leaguePk = editLeague.pk;
 
     await context.close();
@@ -61,8 +76,10 @@ test.describe.serial('Cross-Context Cache Invalidation (@cicd)', () => {
     await loginAdmin();
   });
 
-  test('@cicd smoke: edit on league page, verify on org page', async ({ page }) => {
-    // 1. Navigate to league page and edit nickname
+  test('@cicd smoke: edit on league page, verify on org page', async ({
+    page,
+  }) => {
+    // 1. Navigate to league page and edit the Friend ID
     await visitAndWaitForHydration(page, `/leagues/${leaguePk}`);
     await expect(page.locator('h1')).toBeVisible({ timeout: 15000 });
 
@@ -70,17 +87,19 @@ test.describe.serial('Cross-Context Cache Invalidation (@cicd)', () => {
     await expect(usersTab).toBeVisible({ timeout: 5000 });
     await usersTab.click();
 
-    const leagueCard = page.locator(`[data-testid="usercard-${TARGET_USERNAME}"]`);
+    const leagueCard = page.locator(
+      `[data-testid="usercard-${TARGET_USERNAME}"]`,
+    );
     await expect(leagueCard).toBeVisible({ timeout: 10000 });
 
     await openEditModal(page, leagueCard);
-    const originalNickname = await readEditField(page, 'nickname');
-    const crossContextNick = originalNickname === 'CrossCtx' ? 'CrossCtxAlt' : 'CrossCtx';
+    const originalId = await readEditField(page, 'steam_account_id');
+    const crossContextId = nextSteamAccountId(originalId, ALT_STEAM_ACCOUNT_ID);
 
-    await fillEditField(page, 'nickname', crossContextNick);
+    await fillEditField(page, 'steam_account_id', crossContextId);
     await saveEditModal(page);
 
-    // 2. Navigate to org page and verify the new nickname is visible
+    // 2. Navigate to org page and verify the new Friend ID is served there
     await visitAndWaitForHydration(page, `/organizations/${orgPk}`);
     await expect(page.locator('h1')).toBeVisible({ timeout: 15000 });
 
@@ -88,13 +107,24 @@ test.describe.serial('Cross-Context Cache Invalidation (@cicd)', () => {
     await expect(orgUsersTab).toBeVisible({ timeout: 5000 });
     await orgUsersTab.click();
 
-    const orgUserCard = page.locator(`[data-testid="usercard-${TARGET_USERNAME}"]`);
+    const orgUserCard = page.locator(
+      `[data-testid="usercard-${TARGET_USERNAME}"]`,
+    );
     await expect(orgUserCard).toBeVisible({ timeout: 10000 });
 
-    // The new nickname should be visible on the org page (cacheops invalidated)
-    await expect(orgUserCard.getByText(crossContextNick).first()).toBeVisible({ timeout: 10000 });
+    // The org users payload carries the new Friend ID (cacheops invalidated)
+    await openEditModal(page, orgUserCard);
+    await expect(
+      page.locator('[data-testid="edit-user-steam_account_id"]'),
+    ).toHaveValue(crossContextId, {
+      timeout: 10000,
+    });
+    await page.keyboard.press('Escape');
+    await expect(page.locator('[data-testid="edit-user-modal"]')).toBeHidden({
+      timeout: 5000,
+    });
 
     // 3. Restore original value from the org page
-    await restoreUserField(page, orgUserCard, 'nickname', originalNickname);
+    await restoreUserField(page, orgUserCard, 'steam_account_id', originalId);
   });
 });

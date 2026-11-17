@@ -1,21 +1,24 @@
 from datetime import datetime
 from typing import Final, TypedDict
 
-from django.db.models import Count, Q, QuerySet
+from django.db.models import Count, OuterRef, Q, QuerySet, Subquery
 from django.utils import timezone
 
 from app.models import CustomUser, Organization, Tournament
 from events.constants import EventState, SignupStatus
 from events.models import Event, EventSignup
+from org.display_names import guild_nicknames
+from org.models import OrgUser
 from org.models_promotion import PromoSend
 from org.promotion.render import player_name
+from org.user_search import user_name_q
 from user.querysets import with_user_profiles
 
 MAX_POOL_N: Final[int] = 10
 DEFAULT_POOL_N: Final[int] = 3
 MIN_POOL_N: Final[int] = 1
 
-ACTIVE_SIGNUP_EXCLUDED: Final[tuple[str, ...]] = (
+DECLINED_STATUSES: Final[tuple[str, ...]] = (
     SignupStatus.REJECTED,
     SignupStatus.CANCELLED,
 )
@@ -31,8 +34,10 @@ class LastMessaged(TypedDict):
 class CandidateRow(TypedDict):
     user_pk: int
     username: str
-    nickname: str | None
+    nickname: None
     discordUsername: str | None
+    discordNickname: str | None
+    guildNickname: str | None
     discordId: str | None
     avatarUrl: str | None
     recent_count: int
@@ -79,7 +84,14 @@ def candidate_pool(
         )
         .exclude(discordId="")
         .exclude(pk=sender.pk)
-        .annotate(recent_count=Count("tournaments", distinct=True))
+        .annotate(
+            recent_count=Count("tournaments", distinct=True),
+            org_guild_nickname=Subquery(
+                OrgUser.objects.filter(user=OuterRef("pk"), organization=org).values(
+                    "guild_nickname"
+                )[:1]
+            ),
+        )
     )
     return with_user_profiles(qs)
 
@@ -94,27 +106,21 @@ def candidates(
     hide_messaged: bool = True,
     q: str = "",
 ) -> list[CandidateRow]:
-    active_signups = (
-        EventSignup.objects.nocache()
-        .filter(event=event)
-        .exclude(status__in=ACTIVE_SIGNUP_EXCLUDED)
-    )
+    event_signups = EventSignup.objects.nocache().filter(event=event)
+    active_signups = event_signups.exclude(status__in=DECLINED_STATUSES)
+    declined = event_signups.filter(status__in=DECLINED_STATUSES)
     event_sends = PromoSend.objects.filter(event=event, recipient__isnull=False)
 
-    qs = candidate_pool(org, event, n=n, sender=sender)
+    qs = candidate_pool(org, event, n=n, sender=sender).exclude(
+        pk__in=declined.values("user_id")
+    )
     if hide_signed_up:
         qs = qs.exclude(pk__in=active_signups.values("user_id"))
     if hide_messaged:
         qs = qs.exclude(pk__in=event_sends.values("recipient_id"))
     term = q.strip()
     if term:
-        qs = qs.filter(
-            Q(username__icontains=term)
-            | Q(base_profile__nickname__icontains=term)
-            | Q(discordUsername__icontains=term)
-            | Q(discordNickname__icontains=term)
-            | Q(guildNickname__icontains=term)
-        )
+        qs = qs.filter(user_name_q(term, org_id=org.pk))
     users = list(qs.order_by("-recent_count", "username", "pk"))
     user_pks = [u.pk for u in users]
 
@@ -130,6 +136,9 @@ def candidates(
         if send.earns_points:
             earning.add(send.recipient_id)
 
+    sender_nicks = guild_nicknames(
+        org.pk, {s.sender_id for s in latest.values() if s.sender_id is not None}
+    )
     rows: list[CandidateRow] = []
     for user in users:
         send = latest.get(user.pk)
@@ -137,7 +146,11 @@ def candidates(
         if send is not None:
             last_messaged = {
                 "send_id": send.pk,
-                "by": player_name(send.sender) if send.sender else None,
+                "by": (
+                    player_name(send.sender, sender_nicks.get(send.sender_id))
+                    if send.sender
+                    else None
+                ),
                 "sent_at": send.sent_at,
                 "can_undo": False,
             }
@@ -145,8 +158,10 @@ def candidates(
             {
                 "user_pk": user.pk,
                 "username": user.username,
-                "nickname": user.nickname,
+                "nickname": None,
                 "discordUsername": user.discordUsername,
+                "discordNickname": user.discordNickname,
+                "guildNickname": user.org_guild_nickname,
                 "discordId": user.discordId,
                 "avatarUrl": user.avatarUrl,
                 "recent_count": user.recent_count,

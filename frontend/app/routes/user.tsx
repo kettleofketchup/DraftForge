@@ -1,9 +1,9 @@
-import { UserProfilePage } from '~/pages/user/UserProfilePage';
+import { fetchUser } from '~/components/api/api';
 import { AvatarUrl } from '~/components/user/UserAvatar';
 import { generateMeta } from '~/lib/seo';
-import { fetchUser } from '~/components/api/api';
-import type { Route } from './+types/user';
 import type { UserSSR } from '~/lib/ssr-types';
+import { UserProfilePage } from '~/pages/user/UserProfilePage';
+import type { Route } from './+types/user';
 
 export async function loader({ params }: Route.LoaderArgs) {
   const { fetchSSR } = await import('~/lib/ssr.server');
@@ -27,7 +27,7 @@ export function meta({ data }: Route.MetaArgs) {
   const user = data?.user;
 
   if (user) {
-    const displayName = user.nickname || user.username || 'Player';
+    const displayName = user.discordNickname || user.username || 'Player';
     return generateMeta({
       title: displayName,
       description: `${displayName} — Dota 2 player profile on DraftForge`,

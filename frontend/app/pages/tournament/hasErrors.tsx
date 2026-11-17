@@ -189,7 +189,7 @@ export const hasErrors = () => {
               key={user.pk}
             >
               <div className="text-white text-center underline underline-offset-2 font-bold mb-2 break-words">
-                {DisplayName(user)}
+                {DisplayName(user, undefined, orgId)}
               </div>
               <div className="flex flex-col gap-1 text-center text-sm text-red-100">
                 {issues.map((issue) => (

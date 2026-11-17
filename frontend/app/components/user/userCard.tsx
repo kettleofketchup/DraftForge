@@ -1,6 +1,11 @@
+import { UserPlus } from 'lucide-react';
 import React, { memo, useEffect } from 'react';
 import { Badge } from '~/components/ui/badge';
-import { DotabuffButton, PrimaryButton, ViewIconButton } from '~/components/ui/buttons';
+import {
+  DotabuffButton,
+  PrimaryButton,
+  ViewIconButton,
+} from '~/components/ui/buttons';
 import {
   CardAction,
   CardDescription,
@@ -12,15 +17,16 @@ import { useSharedPopoverActions } from '~/components/ui/shared-popover-context'
 import type { UserClassType, UserType } from '~/components/user/types';
 import { User } from '~/components/user/user';
 import { UserAvatar } from '~/components/user/UserAvatar';
-import { DisplayName } from '~/components/user/avatar';
+import { useDisplayName } from '~/hooks/useDisplayName';
+import { useDisplayOrgId } from '~/hooks/useDisplayOrgId';
 import { usePlayerPositions } from '~/hooks/usePlayerPositions';
 import { getLogger } from '~/lib/logger';
-import { useUserCacheStore } from '~/store/userCacheStore';
-import { isUserEntry } from '~/store/userCacheTypes';
-import type { PositionsType } from '~/store/userCacheTypes';
 import { PlayerRemoveButton } from '~/pages/tournament/tabs/players/playerRemoveButton';
 import { useLeagueStore } from '~/store/leagueStore';
 import { useOrgStore } from '~/store/orgStore';
+import { useUserCacheStore } from '~/store/userCacheStore';
+import type { PositionsType } from '~/store/userCacheTypes';
+import { isUserEntry } from '~/store/userCacheTypes';
 import { useUserStore } from '~/store/userStore';
 import { RolePositions } from './positions';
 import { UserRemoveButton } from './userCard/deleteButton';
@@ -31,16 +37,17 @@ import {
   type EditUserScope,
 } from './userCard/editUserSchema';
 import { LoginAsUserButton } from './userCard/LoginAsUserButton';
-import { UserPlus } from 'lucide-react';
 
 /** Returns true if the user has rated any role > 0. */
 function hasAnyPosition(p: PositionsType | undefined): boolean {
   if (!p) return false;
-  return (p.carry ?? 0) > 0
-    || (p.mid ?? 0) > 0
-    || (p.offlane ?? 0) > 0
-    || (p.soft_support ?? 0) > 0
-    || (p.hard_support ?? 0) > 0;
+  return (
+    (p.carry ?? 0) > 0 ||
+    (p.mid ?? 0) > 0 ||
+    (p.offlane ?? 0) > 0 ||
+    (p.soft_support ?? 0) > 0 ||
+    (p.hard_support ?? 0) > 0
+  );
 }
 const log = getLogger('UserCard');
 
@@ -58,12 +65,22 @@ interface Props {
 }
 
 export const UserCard: React.FC<Props> = memo(
-  ({ user, saveFunc = 'save', compact, deleteButtonType, animationIndex = 0, leagueId, organizationId }) => {
+  ({
+    user,
+    saveFunc = 'save',
+    compact,
+    deleteButtonType,
+    animationIndex = 0,
+    leagueId,
+    organizationId,
+  }) => {
     const currentUser: UserType = useUserStore((state) => state.currentUser);
     const getUsers = useUserStore((state) => state.getUsers);
     // gameType-aware positions over the list-populated entity adapter; fall back
     // to the passed user.positions off-Dota / pre-cache so display is unchanged.
     const positions = usePlayerPositions(user.pk ?? -1) ?? user.positions;
+    const routeOrgId = useDisplayOrgId();
+    const displayName = useDisplayName(user, organizationId ?? routeOrgId);
     const currentOrg = useOrgStore((state) => state.currentOrg);
     const currentLeague = useLeagueStore((state) => state.currentLeague);
     // Actions-only subscription: openPlayerModal is referentially stable, and
@@ -79,14 +96,20 @@ export const UserCard: React.FC<Props> = memo(
         : undefined,
     );
     const orgSource = isUserEntry(user) ? user : cachedEntry;
-    const orgEntry = organizationId ? orgSource?.orgData[organizationId] : undefined;
+    const orgEntry = organizationId
+      ? orgSource?.orgData[organizationId]
+      : undefined;
     const mmr = isUserEntry(user)
-      ? (organizationId ? orgEntry?.mmr : undefined)
+      ? organizationId
+        ? orgEntry?.mmr
+        : undefined
       : (orgEntry?.mmr ?? user.mmr);
     // Same resolution as UserStrip: scoped map for cache entries, flat field
     // for raw payloads.
     const leagueMmr = isUserEntry(user)
-      ? (leagueId ? user.leagueData[leagueId]?.mmr : undefined)
+      ? leagueId
+        ? user.leagueData[leagueId]?.mmr
+        : undefined
       : (user as UserType & { league_mmr?: number | null }).league_mmr;
 
     // Shared resolver (same as the incomplete-profiles card). Gates on the
@@ -99,9 +122,15 @@ export const UserCard: React.FC<Props> = memo(
       resolveOrgUserLink(user, { organizationId, leagueId });
     const editScope = React.useMemo<EditUserScope>(
       () =>
-        resolveEditScope({ orgUserPk: linkPk }, {
-          organizationId, leagueId, currentOrg, currentLeague,
-        }),
+        resolveEditScope(
+          { orgUserPk: linkPk },
+          {
+            organizationId,
+            leagueId,
+            currentOrg,
+            currentLeague,
+          },
+        ),
       [linkPk, organizationId, leagueId, currentOrg, currentLeague],
     );
 
@@ -117,7 +146,11 @@ export const UserCard: React.FC<Props> = memo(
       () =>
         new User(
           linkPk != null
-            ? { ...user, mmr: orgEntry ? orgEntry.mmr : user.mmr, orgUserPk: linkPk }
+            ? {
+                ...user,
+                mmr: orgEntry ? orgEntry.mmr : user.mmr,
+                orgUserPk: linkPk,
+              }
             : user,
         ),
       [user, linkPk, orgEntry?.mmr],
@@ -156,7 +189,6 @@ export const UserCard: React.FC<Props> = memo(
       );
     };
 
-
     const userDotabuff = () => (
       // Reusable DotabuffButton handles the missing-steamAccountId no-op,
       // the icon-only collapse on mobile, the asChild external-link wiring,
@@ -175,7 +207,8 @@ export const UserCard: React.FC<Props> = memo(
       user.steam_account_id &&
       !user.discordId &&
       currentUser?.discordId &&
-      (!currentUser?.steam_account_id || currentUser.steam_account_id === user.steam_account_id) &&
+      (!currentUser?.steam_account_id ||
+        currentUser.steam_account_id === user.steam_account_id) &&
       currentUser?.pk !== user.pk;
 
     const claimProfileButton = () => {
@@ -217,7 +250,8 @@ export const UserCard: React.FC<Props> = memo(
         </div>
       );
     };
-    const showDeleteButton = currentUser.is_staff && saveFunc === 'save' && deleteButtonType;
+    const showDeleteButton =
+      currentUser.is_staff && saveFunc === 'save' && deleteButtonType;
 
     return (
       <div
@@ -256,16 +290,28 @@ export const UserCard: React.FC<Props> = memo(
         >
           {/* Header: 2-col layout with name/badges left, actions right */}
           <CardHeader className="p-0 gap-0.5">
-            <CardTitle className="text-base truncate">
-              {DisplayName(user)}
+            <CardTitle
+              className="text-base truncate"
+              data-testid="usercard-display-name"
+            >
+              {displayName}
             </CardTitle>
+            {user.username && user.username !== displayName && (
+              <CardDescription className="text-xs truncate">
+                @{user.username}
+              </CardDescription>
+            )}
             {!compact && (user.is_staff || user.is_superuser) && (
               <CardDescription className="flex gap-1">
                 {user.is_staff && (
-                  <Badge className="bg-blue-700 text-white text-[10px] px-1.5 py-0">Staff</Badge>
+                  <Badge className="bg-blue-700 text-white text-[10px] px-1.5 py-0">
+                    Staff
+                  </Badge>
                 )}
                 {user.is_superuser && (
-                  <Badge className="bg-red-700 text-white text-[10px] px-1.5 py-0">Admin</Badge>
+                  <Badge className="bg-red-700 text-white text-[10px] px-1.5 py-0">
+                    Admin
+                  </Badge>
                 )}
               </CardDescription>
             )}
@@ -285,16 +331,16 @@ export const UserCard: React.FC<Props> = memo(
           {/* 2-column layout: Avatar left, Positions right */}
           <div className="grid grid-cols-[auto_1fr] gap-2 items-center">
             {/* Left column - Avatar centered */}
-            <div className="flex items-center justify-center">
-              {avatar()}
-            </div>
+            <div className="flex items-center justify-center">{avatar()}</div>
 
             {/* Right column - Positions and MMR */}
             <div className="flex flex-col gap-1 w-full">
               {hasAnyPosition(positions) && (
                 <Item size="sm" variant="muted" className="!p-1.5 w-full">
                   <ItemContent className="!gap-1 items-center w-full">
-                    <ItemTitle className="!text-xs text-muted-foreground">Positions</ItemTitle>
+                    <ItemTitle className="!text-xs text-muted-foreground">
+                      Positions
+                    </ItemTitle>
                     <RolePositions user={user} compact />
                   </ItemContent>
                 </Item>
@@ -307,18 +353,34 @@ export const UserCard: React.FC<Props> = memo(
               {(organizationId || leagueId) && (
                 <div className="flex flex-wrap gap-1 w-full">
                   {organizationId && (
-                    <Item size="sm" variant="muted" className="!p-1 flex-1 min-w-0">
+                    <Item
+                      size="sm"
+                      variant="muted"
+                      className="!p-1 flex-1 min-w-0"
+                    >
                       <ItemContent className="!gap-0 items-center min-w-0">
-                        <ItemTitle className="!text-xs text-muted-foreground">Org MMR</ItemTitle>
-                        <span className="text-sm font-semibold">{mmr ?? '?'}</span>
+                        <ItemTitle className="!text-xs text-muted-foreground">
+                          Org MMR
+                        </ItemTitle>
+                        <span className="text-sm font-semibold">
+                          {mmr ?? '?'}
+                        </span>
                       </ItemContent>
                     </Item>
                   )}
                   {leagueId && leagueMmr != null && (
-                    <Item size="sm" variant="muted" className="!p-1 flex-1 min-w-0">
+                    <Item
+                      size="sm"
+                      variant="muted"
+                      className="!p-1 flex-1 min-w-0"
+                    >
                       <ItemContent className="!gap-0 items-center min-w-0">
-                        <ItemTitle className="!text-xs text-muted-foreground">League MMR</ItemTitle>
-                        <span className="text-sm font-semibold">{leagueMmr}</span>
+                        <ItemTitle className="!text-xs text-muted-foreground">
+                          League MMR
+                        </ItemTitle>
+                        <span className="text-sm font-semibold">
+                          {leagueMmr}
+                        </span>
                       </ItemContent>
                     </Item>
                   )}
@@ -333,26 +395,32 @@ export const UserCard: React.FC<Props> = memo(
               truncate cleanly when the card is narrow. */}
           <div className="flex flex-wrap gap-1">
             {user.username && (
-              <Item size="sm" variant="muted" className="!p-1 flex-1 min-w-0 basis-[calc(50%-0.125rem)]">
+              <Item
+                size="sm"
+                variant="muted"
+                className="!p-1 flex-1 min-w-0 basis-[calc(50%-0.125rem)]"
+              >
                 <ItemContent className="!gap-0 min-w-0">
-                  <ItemTitle className="!text-xs text-muted-foreground">Username</ItemTitle>
+                  <ItemTitle className="!text-xs text-muted-foreground">
+                    Username
+                  </ItemTitle>
                   <span className="text-sm truncate">{user.username}</span>
                 </ItemContent>
               </Item>
             )}
-            {user.nickname && user.nickname !== user.username && (
-              <Item size="sm" variant="muted" className="!p-1 flex-1 min-w-0 basis-[calc(50%-0.125rem)]">
-                <ItemContent className="!gap-0 min-w-0">
-                  <ItemTitle className="!text-xs text-muted-foreground">Nickname</ItemTitle>
-                  <span className="text-sm truncate">{user.nickname}</span>
-                </ItemContent>
-              </Item>
-            )}
             {user.steam_account_id && (
-              <Item size="sm" variant="muted" className="!p-1 flex-1 min-w-0 basis-[calc(50%-0.125rem)]">
+              <Item
+                size="sm"
+                variant="muted"
+                className="!p-1 flex-1 min-w-0 basis-[calc(50%-0.125rem)]"
+              >
                 <ItemContent className="!gap-0 min-w-0">
-                  <ItemTitle className="!text-xs text-muted-foreground">Friend ID</ItemTitle>
-                  <span className="text-sm truncate">{user.steam_account_id}</span>
+                  <ItemTitle className="!text-xs text-muted-foreground">
+                    Friend ID
+                  </ItemTitle>
+                  <span className="text-sm truncate">
+                    {user.steam_account_id}
+                  </span>
                 </ItemContent>
               </Item>
             )}
@@ -360,9 +428,7 @@ export const UserCard: React.FC<Props> = memo(
 
           {/* Error info row */}
           {((organizationId && !mmr) || !positions) && (
-            <div className="flex justify-end">
-              {errorInfo()}
-            </div>
+            <div className="flex justify-end">{errorInfo()}</div>
           )}
 
           {/* Card Footer */}

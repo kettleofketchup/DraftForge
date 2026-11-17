@@ -41,7 +41,8 @@ export type LastMessaged = z.infer<typeof LastMessagedSchema>;
 export const CandidateRowSchema = z.object({
   user_pk: z.number(),
   username: z.string(),
-  nickname: z.string().nullable(),
+  discordNickname: z.string().nullable().optional(),
+  guildNickname: z.string().nullable().optional(),
   discordUsername: z.string().nullable(),
   discordId: z.string().nullable(),
   avatarUrl: z.string().nullable(),

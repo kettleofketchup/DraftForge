@@ -1,7 +1,8 @@
+import { useSuspenseQuery } from '@tanstack/react-query';
 import { lazy, Suspense, useEffect } from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
-import { useSuspenseQuery } from '@tanstack/react-query';
 
+import { getUserProfile } from '~/components/api/userProfileApi';
 import {
   Dialog,
   DialogContent,
@@ -11,11 +12,10 @@ import {
 } from '~/components/ui/dialog';
 import { ScrollArea } from '~/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
-import { getUserProfile } from '~/components/api/userProfileApi';
 import { useUserProfileStore } from '~/store/userProfileStore';
 
-import { ProfileSkeleton } from './EditProfileModal/ProfileSkeleton';
 import { ProfileErrorFallback } from './EditProfileModal/ProfileErrorFallback';
+import { ProfileSkeleton } from './EditProfileModal/ProfileSkeleton';
 
 const BaseTab = lazy(() => import('./EditProfileModal/tabs/BaseTab'));
 const DotaTab = lazy(() => import('./EditProfileModal/tabs/DotaTab'));
@@ -38,9 +38,7 @@ export function EditProfileModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       {/* ScrollArea contract for dialog body — DialogContent needs
           overflow-hidden (NOT overflow-y-auto) so Radix Viewport can
-          drive its themed scrollbar inside <ScrollArea>. T1 body is
-          short today (one nickname field) but the contract is in place
-          now so T2/T3's Dota/Org tabs don't break it later. Ref:
+          drive its themed scrollbar inside <ScrollArea>. Ref:
           docs/theming-guide/ai/references/scrollbars-dialogs.md */}
       <DialogContent className="flex max-h-[90vh] flex-col overflow-hidden sm:max-w-2xl">
         <DialogHeader>

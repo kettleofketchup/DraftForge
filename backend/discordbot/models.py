@@ -458,3 +458,52 @@ class DiscordEventLog(models.Model):
             success=success,
             error_message=error_message,
         )
+
+
+class DraftActivityChannel(models.Model):
+    """Operator-managed voice channel binding; several channels may share a draft."""
+
+    guild_id = models.CharField(max_length=20)
+    channel_id = models.CharField(max_length=20, unique=True)
+    draft = models.ForeignKey(
+        "app.HeroDraft", on_delete=models.CASCADE, null=True, blank=True
+    )
+    team_draft = models.ForeignKey(
+        "app.Draft", on_delete=models.CASCADE, null=True, blank=True
+    )
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(draft__isnull=False, team_draft__isnull=True)
+                    | models.Q(draft__isnull=True, team_draft__isnull=False)
+                ),
+                name="draftactivitychannel_one_draft",
+            )
+        ]
+
+
+class DraftActivityInstance(models.Model):
+    """Keep an Activity attached to its original match when channels are reassigned."""
+
+    instance_id = models.CharField(max_length=100, unique=True)
+    guild_id = models.CharField(max_length=20)
+    channel_id = models.CharField(max_length=20)
+    draft = models.ForeignKey(
+        "app.HeroDraft", on_delete=models.CASCADE, null=True, blank=True
+    )
+    team_draft = models.ForeignKey(
+        "app.Draft", on_delete=models.CASCADE, null=True, blank=True
+    )
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(draft__isnull=False, team_draft__isnull=True)
+                    | models.Q(draft__isnull=True, team_draft__isnull=False)
+                ),
+                name="draftactivityinstance_one_draft",
+            )
+        ]

@@ -48,7 +48,7 @@ def _feature_rows(org: Organization) -> list[dict[str, Any]]:
                     {
                         "pk": enabled_by.pk,
                         "username": enabled_by.username,
-                        "nickname": enabled_by.nickname,
+                        "discordNickname": enabled_by.discordNickname,
                     }
                     if enabled_by
                     else None

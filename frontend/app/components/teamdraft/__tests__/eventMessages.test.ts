@@ -3,6 +3,7 @@ import {
   getEventIcon,
   getEventMessage,
   getEventToast,
+  orgUserName,
 } from '~/components/teamdraft/eventMessages';
 import type { UserType } from '~/components/user/types';
 import { useUserCacheStore } from '~/store/userCacheStore';
@@ -248,21 +249,50 @@ describe('getEventToast', () => {
 describe('names resolve through the user cache', () => {
   afterEach(() => useUserCacheStore.getState().reset());
 
-  it('shows the cached nickname instead of the payload username', () => {
+  const picked = () =>
+    ev('player_picked', {
+      ...cap,
+      captain_name: 'ana_user',
+      picked_id: 9,
+      picked_name: 'pip_user',
+      pick_number: 2,
+    });
+
+  it('shows the cached Discord name instead of the payload username', () => {
     useUserCacheStore.getState().upsert([
-      { pk: 7, username: 'ana_user', nickname: 'Ana Nick' },
-      { pk: 9, username: 'pip_user', nickname: null },
+      { pk: 7, username: 'ana_user', discordNickname: 'Ana Global' },
+      { pk: 9, username: 'pip_user', discordNickname: null },
     ] as UserType[]);
-    const msg = getEventMessage(
-      ev('player_picked', {
-        ...cap,
-        captain_name: 'ana_user',
-        picked_id: 9,
-        picked_name: 'pip_user',
-        pick_number: 2,
-      }),
+    expect(getEventMessage(picked())).toBe(
+      'Ana Global picked pip_user (Pick 2)',
     );
-    expect(msg).toBe('Ana Nick picked pip_user (Pick 2)');
+  });
+
+  it('shows the server nickname for the draft org', () => {
+    useUserCacheStore.getState().upsert(
+      [
+        {
+          pk: 7,
+          username: 'ana_user',
+          discordNickname: 'Ana Global',
+          guildNickname: 'Ana Server',
+        },
+      ] as UserType[],
+      { orgId: 3 },
+    );
+    expect(getEventMessage(picked(), orgUserName(3))).toBe(
+      'Ana Server picked pip_user (Pick 2)',
+    );
+    expect(getEventMessage(picked(), orgUserName(4))).toBe(
+      'Ana Global picked pip_user (Pick 2)',
+    );
+  });
+
+  it('ignores a stale site nickname key', () => {
+    useUserCacheStore
+      .getState()
+      .upsert([{ pk: 7, username: 'ana_user', nickname: 'Site' }] as never);
+    expect(getEventMessage(picked())).toBe('ana_user picked pip_user (Pick 2)');
   });
 
   it('falls back to the payload username for an uncached user', () => {

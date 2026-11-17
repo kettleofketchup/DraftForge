@@ -4,9 +4,11 @@ from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 
 from app.models import CustomUser, League, Organization, Tournament
+from app.tests.raw_site_nickname import set_raw_site_nickname
 from events.constants import EventState, SignupStatus
 from events.models import Event, EventSignup
-from org.models import PromoSend
+from events.services import decline_signup
+from org.models import OrgUser, PromoSend
 from org.promotion.recipients import (
     DEFAULT_POOL_N,
     MAX_POOL_N,
@@ -296,6 +298,8 @@ class CandidatesTest(_PoolFixture):
                 "username",
                 "nickname",
                 "discordUsername",
+                "discordNickname",
+                "guildNickname",
                 "discordId",
                 "avatarUrl",
                 "recent_count",
@@ -305,6 +309,7 @@ class CandidatesTest(_PoolFixture):
             },
         )
         self.assertEqual(row["user_pk"], self.ann.pk)
+        self.assertIsNone(row["nickname"])
         self.assertEqual(row["discordUsername"], "ann_dc")
         self.assertEqual(row["discordId"], self.ann.discordId)
         self.assertEqual(row["avatarUrl"], self.ann.avatarUrl)
@@ -313,6 +318,24 @@ class CandidatesTest(_PoolFixture):
         self.assertIsNone(row["last_messaged"])
         self.assertFalse(row["earning_send_exists"])
         self.assertFalse(row["signed_up"])
+
+    def test_row_carries_global_name_and_this_orgs_server_nickname(self) -> None:
+        self.ann.discordNickname = "Annabel"
+        self.ann.save()
+        OrgUser.objects.update_or_create(
+            user=self.ann, organization=self.org, defaults={"guild_nickname": "AnnDTX"}
+        )
+        OrgUser.objects.update_or_create(
+            user=self.bob,
+            organization=self.other_org,
+            defaults={"guild_nickname": "BobElsewhere"},
+        )
+
+        rows = self._rows_by_username()
+
+        self.assertEqual(rows["ann"]["discordNickname"], "Annabel")
+        self.assertEqual(rows["ann"]["guildNickname"], "AnnDTX")
+        self.assertIsNone(rows["bob"]["guildNickname"])
 
     def test_active_signups_hidden_by_default(self) -> None:
         rsvp = self._user("rsvp_player")
@@ -333,11 +356,23 @@ class CandidatesTest(_PoolFixture):
 
         rows = self._rows_by_username()
 
-        self.assertEqual(
-            set(rows), {"ann", "bob", "cancelled_player", "rejected_player"}
-        )
-        self.assertFalse(rows["cancelled_player"]["signed_up"])
-        self.assertFalse(rows["rejected_player"]["signed_up"])
+        self.assertEqual(set(rows), {"ann", "bob"})
+
+    def test_declined_hidden_even_when_signed_up_filter_off(self) -> None:
+        cancelled = self._user("cancelled_player")
+        rejected = self._user("rejected_player")
+        self._tournament([cancelled, rejected], days_ago=2, league=self.league)
+        self._signup(cancelled, SignupStatus.CANCELLED)
+        self._signup(rejected, SignupStatus.REJECTED)
+
+        rows = self._rows_by_username(hide_signed_up=False)
+
+        self.assertEqual(set(rows), {"ann", "bob"})
+
+    def test_decline_via_service_hides_candidate(self) -> None:
+        decline_signup(self.event, self.ann)
+
+        self.assertEqual(set(self._rows_by_username()), {"bob"})
 
     def test_signed_up_shown_when_filter_off(self) -> None:
         self._signup(self.ann, SignupStatus.RSVP)
@@ -362,8 +397,20 @@ class CandidatesTest(_PoolFixture):
         self.assertIsNotNone(row["last_messaged"])
         self.assertEqual(row["last_messaged"]["send_id"], newest.pk)
         self.assertEqual(row["last_messaged"]["sent_at"], newest.sent_at)
-        self.assertEqual(row["last_messaged"]["by"], "pool_sender_dc")
+        self.assertEqual(row["last_messaged"]["by"], "pool_sender")
         self.assertFalse(row["last_messaged"]["can_undo"])
+
+    def test_last_messaged_by_uses_senders_server_nickname(self) -> None:
+        OrgUser.objects.update_or_create(
+            user=self.sender,
+            organization=self.org,
+            defaults={"guild_nickname": "SenderDTX"},
+        )
+        self._send(self.ann, sent_at_offset=0)
+
+        row = self._rows_by_username(hide_messaged=False)["ann"]
+
+        self.assertEqual(row["last_messaged"]["by"], "SenderDTX")
 
     def test_earning_send_exists_flag(self) -> None:
         self._send(self.ann, sent_at_offset=0)
@@ -407,16 +454,34 @@ class CandidatesTest(_PoolFixture):
         self.assertEqual(set(self._rows_by_username(q="AN")), {"ann"})
         self.assertEqual(set(self._rows_by_username(q="bob_dc")), {"bob"})
 
-    def test_name_search_profile_and_guild_nicknames(self) -> None:
+    def test_name_search_guild_nickname_not_site_nickname(self) -> None:
         nick = self._user("nick_user")
-        nick.nickname = "Zephyrion"
+        set_raw_site_nickname(nick.pk, "Zephyrion")
         guild = self._user("guild_user")
-        guild.guildNickname = "Quillfeather"
-        guild.save()
+        OrgUser.objects.create(
+            user=guild, organization=self.org, guild_nickname="Quillfeather"
+        )
         self._tournament([nick, guild], days_ago=2, league=self.league)
 
-        self.assertEqual(set(self._rows_by_username(q="zephyr")), {"nick_user"})
+        self.assertEqual(set(self._rows_by_username(q="zephyr")), set())
         self.assertEqual(set(self._rows_by_username(q="quillfeather")), {"guild_user"})
+
+    def test_name_search_ignores_other_orgs_guild_nickname(self) -> None:
+        guild = self._user("guild_elsewhere")
+        OrgUser.objects.create(
+            user=guild, organization=self.other_org, guild_nickname="Quillfeather"
+        )
+        self._tournament([guild], days_ago=2, league=self.league)
+
+        self.assertEqual(set(self._rows_by_username(q="quillfeather")), set())
+
+    def test_name_search_global_name(self) -> None:
+        user = self._user("global_user")
+        user.discordNickname = "Windlord"
+        user.save()
+        self._tournament([user], days_ago=2, league=self.league)
+
+        self.assertEqual(set(self._rows_by_username(q="windlord")), {"global_user"})
 
     def test_ordered_by_recent_count(self) -> None:
         self._tournament([self.bob], days_ago=2, league=self.league)

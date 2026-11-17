@@ -10,11 +10,11 @@
  */
 
 import {
-  test,
+  clickAndPersistMatchResult,
   expect,
-  visitAndWaitForHydration,
   getTournamentByKey,
-  TournamentPage,
+  test,
+  visitAndWaitForHydration,
 } from '../../fixtures';
 
 // Tournament PK fetched in beforeAll
@@ -52,7 +52,9 @@ test.describe('Bracket Generation and Winner Advancement (e2e)', () => {
       await expect(bracketContainer).toBeVisible({ timeout: 15000 });
 
       // Staff should see the toolbar
-      const reseedButton = page.locator('[data-testid="reseedBracketButton"], [data-testid="generateBracketButton"]');
+      const reseedButton = page.locator(
+        '[data-testid="reseedBracketButton"], [data-testid="generateBracketButton"]',
+      );
       await expect(reseedButton).toBeVisible();
     });
 
@@ -63,13 +65,21 @@ test.describe('Bracket Generation and Winner Advancement (e2e)', () => {
       await expect(bracketContainer).toBeVisible({ timeout: 15000 });
 
       // Click on Reseed Bracket dropdown
-      const reseedButton = page.locator('[data-testid="reseedBracketButton"], [data-testid="generateBracketButton"]');
+      const reseedButton = page.locator(
+        '[data-testid="reseedBracketButton"], [data-testid="generateBracketButton"]',
+      );
       await reseedButton.click();
 
       // Should show seeding options
-      await expect(page.locator('[data-testid="seedByTeamMmrOption"]')).toBeVisible();
-      await expect(page.locator('[data-testid="seedByCaptainMmrOption"]')).toBeVisible();
-      await expect(page.locator('[data-testid="randomSeedingOption"]')).toBeVisible();
+      await expect(
+        page.locator('[data-testid="seedByTeamMmrOption"]'),
+      ).toBeVisible();
+      await expect(
+        page.locator('[data-testid="seedByCaptainMmrOption"]'),
+      ).toBeVisible();
+      await expect(
+        page.locator('[data-testid="randomSeedingOption"]'),
+      ).toBeVisible();
     });
 
     test('should enable save button after reseeding', async ({ page }) => {
@@ -82,7 +92,9 @@ test.describe('Bracket Generation and Winner Advancement (e2e)', () => {
       await page.waitForLoadState('networkidle');
 
       // Click on Reseed Bracket dropdown
-      const reseedButton = page.locator('[data-testid="reseedBracketButton"], [data-testid="generateBracketButton"]');
+      const reseedButton = page.locator(
+        '[data-testid="reseedBracketButton"], [data-testid="generateBracketButton"]',
+      );
       await reseedButton.click();
 
       // Wait for dropdown to open and select seeding method
@@ -91,7 +103,9 @@ test.describe('Bracket Generation and Winner Advancement (e2e)', () => {
       await randomSeeding.click();
 
       // Wait for and confirm the regenerate dialog
-      const regenerateButton = page.locator('[data-testid="regenerateBracketConfirmButton"]');
+      const regenerateButton = page.locator(
+        '[data-testid="regenerateBracketConfirmButton"]',
+      );
       await regenerateButton.waitFor({ state: 'visible', timeout: 5000 });
       await regenerateButton.click();
 
@@ -99,7 +113,9 @@ test.describe('Bracket Generation and Winner Advancement (e2e)', () => {
       await regenerateButton.waitFor({ state: 'hidden', timeout: 5000 });
 
       // Should show unsaved changes indicator (wait with timeout)
-      await expect(page.locator('text=Unsaved changes')).toBeVisible({ timeout: 10000 });
+      await expect(page.locator('text=Unsaved changes')).toBeVisible({
+        timeout: 10000,
+      });
 
       // Save button should be enabled and clickable
       const saveButton = page.locator('[data-testid="saveBracketButton"]');
@@ -109,7 +125,9 @@ test.describe('Bracket Generation and Winner Advancement (e2e)', () => {
   });
 
   test.describe('Winner Selection', () => {
-    test('should show captain names in winner selection buttons', async ({ page }) => {
+    test('should show captain names in winner selection buttons', async ({
+      page,
+    }) => {
       // Use Pending Bracket Test with teams assigned
       await visitAndWaitForHydration(page, `/tournament/${tournamentPk}/games`);
 
@@ -133,10 +151,15 @@ test.describe('Bracket Generation and Winner Advancement (e2e)', () => {
 
         if (isVisible) {
           // Check for Match Details
-          const hasDetails = await page.locator('[data-testid="match-details-header"]').isVisible().catch(() => false);
+          const hasDetails = await page
+            .locator('[data-testid="match-details-header"]')
+            .isVisible()
+            .catch(() => false);
           if (hasDetails) {
             // Check for "Wins" buttons (indicating teams are assigned)
-            const winButtons = dialog.locator('[data-testid="radiantWinsButton"], [data-testid="direWinsButton"]');
+            const winButtons = dialog.locator(
+              '[data-testid="radiantWinsButton"], [data-testid="direWinsButton"]',
+            );
             const winButtonCount = await winButtons.count();
 
             if (winButtonCount > 0) {
@@ -145,25 +168,33 @@ test.describe('Bracket Generation and Winner Advancement (e2e)', () => {
               for (let j = 0; j < winButtonCount; j++) {
                 const buttonText = await winButtons.nth(j).textContent();
                 // Should not be a generic team name pattern
-                expect(buttonText).not.toMatch(/^Team (Alpha|Beta|Gamma|Delta|Epsilon) Wins$/);
+                expect(buttonText).not.toMatch(
+                  /^Team (Alpha|Beta|Gamma|Delta|Epsilon) Wins$/,
+                );
               }
               break;
             }
           }
           // Close modal and try next node
           await page.keyboard.press('Escape');
-          await dialog.waitFor({ state: 'hidden', timeout: 2000 }).catch(() => {});
+          await dialog
+            .waitFor({ state: 'hidden', timeout: 2000 })
+            .catch(() => {});
         }
       }
 
       // If we found a match with teams, the test passes
       // If no match with teams was found, log it but don't fail
       if (!foundMatchWithTeams) {
-        console.log('No match with both teams assigned found - skipping assertion');
+        console.log(
+          'No match with both teams assigned found - skipping assertion',
+        );
       }
     });
 
-    test('should advance winner to next match after selection', async ({ page }) => {
+    test('should advance winner to next match after selection', async ({
+      page,
+    }) => {
       await visitAndWaitForHydration(page, `/tournament/${tournamentPk}/games`);
 
       const bracketContainer = page.locator('[data-testid="bracketContainer"]');
@@ -186,27 +217,36 @@ test.describe('Bracket Generation and Winner Advancement (e2e)', () => {
 
         if (isVisible) {
           // Check if this match has teams and Set Winner buttons
-          const winButtons = dialog.locator('[data-testid="radiantWinsButton"], [data-testid="direWinsButton"]');
+          const winButtons = dialog.locator(
+            '[data-testid="radiantWinsButton"], [data-testid="direWinsButton"]',
+          );
           const winButtonCount = await winButtons.count();
 
           if (winButtonCount >= 2) {
             foundMatch = true;
-            // Click to set winner
-            await winButtons.first().click();
+            // Saved bracket: the result persists from the modal (issue #466).
+            await clickAndPersistMatchResult(page, winButtons.first());
 
-            // Should show unsaved changes (winner was set locally)
-            await expect(page.locator('text=Unsaved changes')).toBeVisible({ timeout: 5000 });
+            // Restore the shared tournament's pending state.
+            await clickAndPersistMatchResult(
+              page,
+              dialog.locator('[data-testid="unsetWinnerButton"]'),
+            );
             break;
           }
 
           // Close modal and try next node
           await page.keyboard.press('Escape');
-          await dialog.waitFor({ state: 'hidden', timeout: 2000 }).catch(() => {});
+          await dialog
+            .waitFor({ state: 'hidden', timeout: 2000 })
+            .catch(() => {});
         }
       }
 
       if (!foundMatch) {
-        console.log('No match with two teams assigned found - skipping winner selection');
+        console.log(
+          'No match with two teams assigned found - skipping winner selection',
+        );
       }
     });
 
@@ -220,7 +260,7 @@ test.describe('Bracket Generation and Winner Advancement (e2e)', () => {
 
       // Reseed to guarantee a fresh, fully-seeded bracket with loser paths wired.
       const reseedButton = page.locator(
-        '[data-testid="reseedBracketButton"], [data-testid="generateBracketButton"]'
+        '[data-testid="reseedBracketButton"], [data-testid="generateBracketButton"]',
       );
       await reseedButton.click();
 
@@ -231,7 +271,7 @@ test.describe('Bracket Generation and Winner Advancement (e2e)', () => {
       // If the regenerate confirm dialog appears (it does when matches already
       // exist), wait for and click it. If not, we're on a fresh bracket.
       const regenerateButton = page.locator(
-        '[data-testid="regenerateBracketConfirmButton"]'
+        '[data-testid="regenerateBracketConfirmButton"]',
       );
       const needsConfirm = await regenerateButton
         .waitFor({ state: 'visible', timeout: 3000 })
@@ -250,13 +290,13 @@ test.describe('Bracket Generation and Winner Advancement (e2e)', () => {
       // Find the first Winners R1 node — it's guaranteed to have both teams
       // (first-round assignment) and a wired loser path.
       const winnersR1 = page.locator(
-        '[data-testid="bracket-match-node"][data-bracket-type="winners"][data-round="1"]'
+        '[data-testid="bracket-match-node"][data-bracket-type="winners"][data-round="1"]',
       );
       await expect(winnersR1.first()).toBeVisible({ timeout: 10000 });
 
       // Capture team names visible in the losers bracket BEFORE setting a winner.
       const losersNodesLocator = page.locator(
-        '[data-testid="bracket-match-node"][data-bracket-type="losers"]'
+        '[data-testid="bracket-match-node"][data-bracket-type="losers"]',
       );
       const losersTextBefore = (
         await losersNodesLocator.allTextContents()
@@ -311,7 +351,9 @@ test.describe('Bracket Generation and Winner Advancement (e2e)', () => {
       await page.waitForLoadState('networkidle');
 
       // Reseed the bracket
-      const reseedButton = page.locator('[data-testid="reseedBracketButton"], [data-testid="generateBracketButton"]');
+      const reseedButton = page.locator(
+        '[data-testid="reseedBracketButton"], [data-testid="generateBracketButton"]',
+      );
       await reseedButton.click();
 
       // Wait for dropdown and select seeding method
@@ -320,7 +362,9 @@ test.describe('Bracket Generation and Winner Advancement (e2e)', () => {
       await randomSeeding.click();
 
       // Wait for and confirm the regenerate dialog
-      const regenerateButton = page.locator('[data-testid="regenerateBracketConfirmButton"]');
+      const regenerateButton = page.locator(
+        '[data-testid="regenerateBracketConfirmButton"]',
+      );
       await regenerateButton.waitFor({ state: 'visible', timeout: 5000 });
       await regenerateButton.click();
 
@@ -328,7 +372,9 @@ test.describe('Bracket Generation and Winner Advancement (e2e)', () => {
       await regenerateButton.waitFor({ state: 'hidden', timeout: 5000 });
 
       // Should show unsaved changes (expect waits for condition)
-      await expect(page.locator('text=Unsaved changes')).toBeVisible({ timeout: 10000 });
+      await expect(page.locator('text=Unsaved changes')).toBeVisible({
+        timeout: 10000,
+      });
 
       // Save the bracket
       // Note: There's a known Playwright issue with Radix ScrollArea where the html element
@@ -340,8 +386,10 @@ test.describe('Bracket Generation and Winner Advancement (e2e)', () => {
 
       // Set up response listener before clicking
       const saveResponsePromise = page.waitForResponse(
-        (response) => response.request().method() === 'POST' && response.url().includes('/save/'),
-        { timeout: 15000 }
+        (response) =>
+          response.request().method() === 'POST' &&
+          response.url().includes('/save/'),
+        { timeout: 15000 },
       );
 
       // Click via JavaScript to bypass the hit-testing issue
@@ -355,7 +403,9 @@ test.describe('Bracket Generation and Winner Advancement (e2e)', () => {
       await page.waitForLoadState('networkidle');
 
       // Unsaved changes indicator should disappear
-      await expect(page.locator('text=Unsaved changes')).not.toBeVisible({ timeout: 10000 });
+      await expect(page.locator('text=Unsaved changes')).not.toBeVisible({
+        timeout: 10000,
+      });
     });
   });
 });

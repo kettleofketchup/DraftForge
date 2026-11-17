@@ -1,23 +1,27 @@
 // @vitest-environment jsdom
 import { act, render } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { LeagueType } from '~/components/league/schemas';
+import type { OrganizationType } from '~/components/organization/schemas';
+import type { UserClassType } from '~/components/user/types';
 import {
   dispatchPatch,
   resolveOrgUserLink,
   type EditUserScope,
 } from '~/components/user/userCard/editUserSchema';
-import type { UserClassType } from '~/components/user/types';
-import type { LeagueType } from '~/components/league/schemas';
-import type { OrganizationType } from '~/components/organization/schemas';
-import type { UserEntry } from '~/store/userCacheTypes';
 import { useLeagueStore } from '~/store/leagueStore';
 import { useOrgStore } from '~/store/orgStore';
 import { useUserCacheStore } from '~/store/userCacheStore';
+import type { UserEntry } from '~/store/userCacheTypes';
 import { useUserStore } from '~/store/userStore';
 import { hasErrors } from './hasErrors';
 
 const captured = vi.hoisted(
-  () => [] as Array<{ user: { pk?: number; orgUserPk?: number }; scope: EditUserScope }>,
+  () =>
+    [] as Array<{
+      user: { pk?: number; orgUserPk?: number };
+      scope: EditUserScope;
+    }>,
 );
 
 const updateOrgUser = vi.hoisted(() => vi.fn());
@@ -48,20 +52,30 @@ const entry: UserEntry = {
   username: 'incomplete',
   steam_account_id: null,
   orgData: { 8: { id: 77, mmr: 0, _fetchedAt: 0 } },
+  orgNicknames: {},
   leagueData: { 8: { id: 77, mmr: 0, _fetchedAt: 0 } },
   _fetchedAt: 0,
 };
 
-function setTournament(organization_pk: number | null, league_pk: number | null) {
+function setTournament(
+  organization_pk: number | null,
+  league_pk: number | null,
+) {
   useUserStore.setState({
     tournament: { pk: 1, organization_pk, league_pk, users: [10] },
   } as never);
 }
 
 function setStores(orgPk: number, leaguePk: number) {
-  useOrgStore.setState({ currentOrg: { pk: orgPk, name: 'O' } as OrganizationType });
+  useOrgStore.setState({
+    currentOrg: { pk: orgPk, name: 'O' } as OrganizationType,
+  });
   useLeagueStore.setState({
-    currentLeague: { pk: leaguePk, name: 'L', organization: { pk: orgPk } } as LeagueType,
+    currentLeague: {
+      pk: leaguePk,
+      name: 'L',
+      organization: { pk: orgPk },
+    } as LeagueType,
   });
 }
 
@@ -80,7 +94,12 @@ describe('hasErrors incomplete-profile edit scope', () => {
     captured.length = 0;
     useUserStore.setState({
       tournament: {},
-      currentUser: { pk: 1, username: 'admin', is_superuser: true, is_staff: true },
+      currentUser: {
+        pk: 1,
+        username: 'admin',
+        is_superuser: true,
+        is_staff: true,
+      },
     } as never);
     useUserCacheStore.setState({ entities: { 10: entry } } as never);
     useOrgStore.setState({ currentOrg: null });
@@ -118,7 +137,12 @@ describe('hasErrors scope identity (finding 5)', () => {
     captured.length = 0;
     useUserStore.setState({
       tournament: {},
-      currentUser: { pk: 1, username: 'admin', is_superuser: true, is_staff: true },
+      currentUser: {
+        pk: 1,
+        username: 'admin',
+        is_superuser: true,
+        is_staff: true,
+      },
     } as never);
     useUserCacheStore.setState({ entities: { 10: entry } } as never);
   });
@@ -142,7 +166,12 @@ describe('hasErrors edit user carries the scope-gating link (finding 4)', () => 
     updateOrgUser.mockReset();
     useUserStore.setState({
       tournament: {},
-      currentUser: { pk: 1, username: 'admin', is_superuser: true, is_staff: true },
+      currentUser: {
+        pk: 1,
+        username: 'admin',
+        is_superuser: true,
+        is_staff: true,
+      },
     } as never);
     useOrgStore.setState({ currentOrg: null });
     useLeagueStore.setState({ currentLeague: null });
@@ -153,10 +182,18 @@ describe('hasErrors edit user carries the scope-gating link (finding 4)', () => 
   }
 
   it('a leagueData-only link gives league scope with that link on the user', () => {
-    seedEntry({ ...entry, orgData: {}, leagueData: { 8: { id: 41, mmr: 0, _fetchedAt: 0 } } });
+    seedEntry({
+      ...entry,
+      orgData: {},
+      leagueData: { 8: { id: 41, mmr: 0, _fetchedAt: 0 } },
+    });
     setTournament(8, 8);
     useLeagueStore.setState({
-      currentLeague: { pk: 8, name: 'L', organization: { pk: 8 } } as LeagueType,
+      currentLeague: {
+        pk: 8,
+        name: 'L',
+        organization: { pk: 8 },
+      } as LeagueType,
     });
     render(<Harness />);
     const { user, scope } = lastCapture();
@@ -165,20 +202,37 @@ describe('hasErrors edit user carries the scope-gating link (finding 4)', () => 
     expect(user.orgUserPk).toBe(41);
   });
 
-  const rows: Array<{ name: string; source: UserEntry; store: 'org' | 'league' | 'both' }> = [
+  const rows: Array<{
+    name: string;
+    source: UserEntry;
+    store: 'org' | 'league' | 'both';
+  }> = [
     {
       name: 'flat link',
-      source: { ...entry, orgData: {}, leagueData: {}, orgUserPk: 170 } as unknown as UserEntry,
+      source: {
+        ...entry,
+        orgData: {},
+        leagueData: {},
+        orgUserPk: 170,
+      } as unknown as UserEntry,
       store: 'org',
     },
     {
       name: 'orgData link',
-      source: { ...entry, orgData: { 8: { id: 171, mmr: 0, _fetchedAt: 0 } }, leagueData: {} },
+      source: {
+        ...entry,
+        orgData: { 8: { id: 171, mmr: 0, _fetchedAt: 0 } },
+        leagueData: {},
+      },
       store: 'org',
     },
     {
       name: 'leagueData link',
-      source: { ...entry, orgData: {}, leagueData: { 8: { id: 172, mmr: 0, _fetchedAt: 0 } } },
+      source: {
+        ...entry,
+        orgData: {},
+        leagueData: { 8: { id: 172, mmr: 0, _fetchedAt: 0 } },
+      },
       store: 'league',
     },
     {
@@ -188,28 +242,37 @@ describe('hasErrors edit user carries the scope-gating link (finding 4)', () => 
     },
   ];
 
-  it.each(rows)('$name: edit user link matches the resolver', async ({ name, source, store }) => {
-    seedEntry(source);
-    setTournament(8, 8);
-    if (store !== 'league') {
-      useOrgStore.setState({ currentOrg: { pk: 8, name: 'O' } as OrganizationType });
-    }
-    if (store !== 'org') {
-      useLeagueStore.setState({
-        currentLeague: { pk: 8, name: 'L', organization: { pk: 8 } } as LeagueType,
-      });
-    }
-    render(<Harness />);
-    const { user, scope } = lastCapture();
-    if (name === 'no link') {
-      expect(scope.kind).toBe('global');
-      return;
-    }
-    expect(scope.kind).not.toBe('global');
-    const link = resolveOrgUserLink(source, CTX);
-    expect(user.orgUserPk).toBe(link);
-    updateOrgUser.mockResolvedValue({ pk: 10, username: 'incomplete' });
-    await dispatchPatch(user as UserClassType, scope, { nickname: 'x' });
-    expect(updateOrgUser).toHaveBeenCalledWith(8, link, { nickname: 'x' });
-  });
+  it.each(rows)(
+    '$name: edit user link matches the resolver',
+    async ({ name, source, store }) => {
+      seedEntry(source);
+      setTournament(8, 8);
+      if (store !== 'league') {
+        useOrgStore.setState({
+          currentOrg: { pk: 8, name: 'O' } as OrganizationType,
+        });
+      }
+      if (store !== 'org') {
+        useLeagueStore.setState({
+          currentLeague: {
+            pk: 8,
+            name: 'L',
+            organization: { pk: 8 },
+          } as LeagueType,
+        });
+      }
+      render(<Harness />);
+      const { user, scope } = lastCapture();
+      if (name === 'no link') {
+        expect(scope.kind).toBe('global');
+        return;
+      }
+      expect(scope.kind).not.toBe('global');
+      const link = resolveOrgUserLink(source, CTX);
+      expect(user.orgUserPk).toBe(link);
+      updateOrgUser.mockResolvedValue({ pk: 10, username: 'incomplete' });
+      await dispatchPatch(user as UserClassType, scope, { mmr: 1234 });
+      expect(updateOrgUser).toHaveBeenCalledWith(8, link, { mmr: 1234 });
+    },
+  );
 });

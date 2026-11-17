@@ -4,7 +4,7 @@ import type { ProfileClaimRequest } from '~/components/api/api';
 import { Avatar, AvatarFallback, AvatarImage } from '~/components/ui/avatar';
 import { Badge } from '~/components/ui/badge';
 import { ConfirmButton, DestructiveButton } from '~/components/ui/buttons';
-import { DisplayName } from '~/components/user/avatar';
+import { orgRowDisplayName } from '~/lib/userDisplayName';
 
 type ClaimStatus = 'pending' | 'approved' | 'rejected';
 
@@ -52,10 +52,26 @@ const formatDate = (dateStr: string) => {
 };
 
 export const claimerDisplayName = (claim: ProfileClaimRequest): string =>
-  DisplayName({
-    username: claim.claimer_username,
-    nickname: claim.claimer_nickname,
-  });
+  orgRowDisplayName(
+    {
+      pk: claim.claimer,
+      username: claim.claimer_username,
+      discordNickname: claim.claimer_discordNickname,
+      guildNickname: claim.claimer_guildNickname,
+    },
+    claim.organization,
+  );
+
+const reviewerDisplayName = (claim: ProfileClaimRequest): string =>
+  orgRowDisplayName(
+    {
+      pk: claim.reviewed_by ?? undefined,
+      username: claim.reviewed_by_username,
+      discordNickname: claim.reviewed_by_discordNickname,
+      guildNickname: claim.reviewed_by_guildNickname,
+    },
+    claim.organization,
+  );
 
 export const ClaimCard: React.FC<ClaimCardProps> = ({
   claim,
@@ -103,7 +119,9 @@ export const ClaimCard: React.FC<ClaimCardProps> = ({
           {/* Target profile info */}
           <div className="flex-1">
             <div className="font-medium">
-              {claim.target_nickname || `Steam ID: ${claim.target_steamid}`}
+              {claim.target_discordNickname ||
+                claim.target_username ||
+                `Steam ID: ${claim.target_steamid}`}
             </div>
             <div className="text-sm text-muted-foreground">
               {claim.target_mmr ? `${claim.target_mmr} MMR` : 'No MMR'}
@@ -146,12 +164,8 @@ export const ClaimCard: React.FC<ClaimCardProps> = ({
           <div>Created: {formatDate(claim.created_at)}</div>
           {claim.reviewed_at && (
             <div>
-              Reviewed by{' '}
-              {DisplayName({
-                username: claim.reviewed_by_username,
-                nickname: claim.reviewed_by_nickname,
-              })}{' '}
-              on {formatDate(claim.reviewed_at)}
+              Reviewed by {reviewerDisplayName(claim)} on{' '}
+              {formatDate(claim.reviewed_at)}
             </div>
           )}
           {claim.rejection_reason && (

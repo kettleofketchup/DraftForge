@@ -231,14 +231,15 @@ interface UserEntry {
   pk: number;
   username: string;
   avatar?: string | null;
-  nickname?: string | null;
   steam_account_id?: number | null;
   discordId?: string | null;
+  discordNickname?: string | null;  // Discord global display name
   // ... other core fields
 
   // Context-scoped data (keyed by org/league id)
   orgData: Record<number, OrgUserData>;
   leagueData: Record<number, LeagueUserData>;
+  orgNicknames: Record<number, string | null>;  // Discord server nickname per org
 
   // Staleness tracking
   _fetchedAt: number;
@@ -256,6 +257,8 @@ interface LeagueUserData {
   _fetchedAt: number;
 }
 ```
+
+Names are resolved from this entry by `resolveDisplayName` (`frontend/app/lib/userDisplayName.ts`): with an `orgId`, `orgNicknames[orgId]` → `discordNickname` → `username` → `User <pk>`; without one, `discordNickname` → `username` → `User <pk>`. Components use `useDisplayName(userOrPk, useDisplayOrgId())`, which subscribes to the resolved string; code holding only an id uses `displayNameById(pk, fallback, orgId)`.
 
 ### UserCacheStore
 

@@ -13,6 +13,7 @@ import type {
   HeroDraftEvent,
   HeroDraftTick,
 } from '~/components/herodraft/types';
+import type { UserType } from '~/components/user/types';
 import {
   addClockOffsetSample,
   seedClockOffset,
@@ -22,8 +23,21 @@ import {
 import { getLogger } from '~/lib/logger';
 import type { ConnectionStatus, Unsubscribe } from '~/lib/websocket';
 import { getWebSocketManager } from '~/lib/websocket';
+import { useUserCacheStore } from '~/store/userCacheStore';
 
 const log = getLogger('heroDraftStore');
+
+function ingestDraftUsers(draft: HeroDraft): void {
+  const users = draft.draft_teams.flatMap((t) => [
+    ...(t.captain ? [t.captain] : []),
+    ...t.members,
+  ]);
+  if (users.length === 0) return;
+  const orgId = draft.organization_pk ?? undefined;
+  useUserCacheStore
+    .getState()
+    .upsert(users as UserType[], orgId ? { orgId } : undefined);
+}
 
 // Debug logging
 const DEBUG = false;
@@ -194,6 +208,7 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
               message.server_time,
               Date.now(),
             );
+            ingestDraftUsers(message.draft_state);
             set({
               draft: message.draft_state,
               _offsetSamples: clock.samples,
@@ -216,6 +231,7 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
               'current_round:',
               message.draft_state.current_round,
             );
+            ingestDraftUsers(message.draft_state);
             set({ draft: message.draft_state });
           }
 

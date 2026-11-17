@@ -27,7 +27,7 @@ class TestUser(BaseModel):
 
     pk: int | None = None  # None for dynamically created users
     username: str | None = None
-    nickname: str | None = None
+    discord_global_name: str | None = None
     discord_id: str | None = None
     steam_id: int | None = None  # 32-bit Steam ID (will be converted to 64-bit)
     steam_id_64: int | None = None  # Full 64-bit Steam ID (if already converted)

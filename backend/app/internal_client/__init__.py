@@ -10,10 +10,14 @@ Config:
 """
 
 import os
+from typing import TYPE_CHECKING
 
 import requests
 
 from telemetry.logging import get_logger
+
+if TYPE_CHECKING:
+    from app.schemas import AutoHeroDraftGameSchema
 
 logger = get_logger(__name__)
 log = get_logger("app.internal_client")
@@ -545,13 +549,13 @@ def get_match_participants(game_id):
     return []
 
 
-def get_games_without_herodraft(tournament_id):
-    """Get games needing hero drafts. Returns list of GameWithoutHeroDraft."""
-    from app.schemas import GameWithoutHeroDraftSchema
+def get_auto_herodraft_games() -> list["AutoHeroDraftGameSchema"]:
+    """Games ready for an auto-created hero draft. Returns list of AutoHeroDraftGame."""
+    from app.schemas import AutoHeroDraftGameSchema
 
-    resp = _get(f"/tournaments/{tournament_id}/games-without-herodraft/")
+    resp = _get("/tournaments/auto-herodraft-games/")
     if resp and resp.ok:
-        return [GameWithoutHeroDraftSchema.model_validate(g) for g in resp.json()]
+        return [AutoHeroDraftGameSchema.model_validate(g) for g in resp.json()]
     return []
 
 
@@ -625,6 +629,64 @@ def bulk_update_user_avatars(updates):
         return int(resp.json().get("updated", 0))
     except (ValueError, TypeError):
         return 0
+
+
+# ---- Discord name sync (used by app/tasks/discord_name_sync.py) ----
+
+
+def list_discord_name_sync_targets(
+    *, scope: str = "active", org_id: int | None = None, lock: bool = True
+) -> list[dict]:
+    params: dict[str, object] = {"scope": scope}
+    if org_id is not None:
+        params["org_id"] = org_id
+    if lock:
+        params["lock"] = 1
+    resp = _get("/orgs/discord-name-sync-targets/", params=params)
+    if resp is None or not resp.ok:
+        return []
+    try:
+        return resp.json()
+    except ValueError:
+        logger.error(
+            "discord_name_sync_targets_invalid_json",
+            system="internal_client",
+            subsystem="http",
+            body_excerpt=resp.text[:200],
+        )
+        return []
+
+
+def bulk_update_member_names(
+    guild_id: str,
+    org_ids: list[int],
+    members: list[dict],
+    *,
+    complete: bool,
+    fetched_at: float | None,
+) -> dict | None:
+    resp = _post(
+        "/discord/member-names/bulk-update/",
+        {
+            "guild_id": guild_id,
+            "org_ids": org_ids,
+            "complete": complete,
+            "fetched_at": fetched_at,
+            "members": members,
+        },
+    )
+    if resp is None or not resp.ok:
+        return None
+    try:
+        return resp.json()
+    except ValueError:
+        logger.error(
+            "discord_member_names_bulk_update_invalid_json",
+            system="internal_client",
+            subsystem="http",
+            body_excerpt=resp.text[:200],
+        )
+        return None
 
 
 # ---- Discord lease sweeper (used by discordbot/tasks.py) ----

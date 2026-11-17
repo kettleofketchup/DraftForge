@@ -1,4 +1,5 @@
 // Mirror of backend/org/promotion/render.py; render_fixture.json pins parity.
+import { orgRowNameSource, resolveDisplayName } from '~/lib/userDisplayName';
 
 export const PLACEHOLDER_KEYS = [
   'player',
@@ -59,30 +60,28 @@ export interface SampleEvent {
 }
 
 export interface SampleOrg {
+  pk?: number | null;
   name: string;
   discord_link?: string | null;
 }
 
 export interface SampleSender {
+  pk?: number;
   username?: string | null;
-  nickname?: string | null;
-  discordUsername?: string | null;
   discordNickname?: string | null;
   guildNickname?: string | null;
 }
 
 export const SAMPLE_PLAYER = 'Player';
 
-export function playerName(user: SampleSender | null | undefined): string {
+export function playerName(
+  user: SampleSender | null | undefined,
+  orgId: number | null = null,
+): string {
   if (!user) return '';
-  return (
-    user.guildNickname ||
-    user.discordNickname ||
-    user.discordUsername ||
-    user.nickname ||
-    user.username ||
-    ''
-  );
+  const source =
+    user.guildNickname === undefined ? user : orgRowNameSource(user, orgId);
+  return resolveDisplayName(source, { orgId });
 }
 
 function discordTimestamp(iso: string, style: string): string {
@@ -103,7 +102,7 @@ export function sampleContext(
 ): Record<PlaceholderKey, string> {
   return {
     player: SAMPLE_PLAYER,
-    promoter: playerName(sender),
+    promoter: playerName(sender, org.pk ?? null),
     event: event.name,
     event_time: discordTimestamp(event.scheduled_at, 'F'),
     event_time_relative: discordTimestamp(event.scheduled_at, 'R'),
