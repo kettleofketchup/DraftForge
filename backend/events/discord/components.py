@@ -4,7 +4,7 @@ Discord message component builders (buttons, action rows).
 
 from typing import TYPE_CHECKING, Any
 
-from events.admission import self_serve_refusal
+from events.admission import self_serve_offered
 
 if TYPE_CHECKING:
     from events.models import Event
@@ -17,7 +17,7 @@ def build_announcement_components(
     """Build action row components for event announcement message.
 
     Row 1: Sign Up (green) | Tentative (grey) | Decline (grey + ❌); Sign Up and
-    Tentative are omitted when members may not add themselves.
+    Tentative are omitted when the event turns self-serve signups off.
     Row 2: Notify Me for Future Events (grey + 🔔) — only for repeater events
     """
     self_serve = [
@@ -47,7 +47,7 @@ def build_announcement_components(
     row1 = {
         "type": 1,
         "components": [
-            *(self_serve if self_serve_refusal(event) is None else []),
+            *(self_serve if self_serve_offered(event) else []),
             decline,
         ],
     }

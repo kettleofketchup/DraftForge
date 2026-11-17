@@ -1,12 +1,23 @@
 from unittest.mock import MagicMock, patch
 
+from django.test import override_settings
 from rest_framework.test import APIClient
 
-from app.models import CustomUser
+from app.models import CustomUser, GameType
 from discordbot.models import DiscordMessageLog
 from events.admission import SELF_SERVE_DISABLED_MESSAGE
+from events.constants import EventState
 from events.discord.components import build_announcement_components
-from events.discord.handlers import handle_signup_button, handle_tentative_button
+from events.discord.handlers import (
+    handle_battle_cup_submit,
+    handle_previous_rank_submit,
+    handle_rank_medal_select,
+    handle_rank_status_select,
+    handle_screenshot_upload,
+    handle_signup_button,
+    handle_signup_modal_submit,
+    handle_tentative_button,
+)
 from events.discord.reactions import handle_reaction_signup
 from events.models import EventSignup
 from events.schemas import EventTaskSchema
@@ -64,6 +75,60 @@ class DiscordButtonAdmissionTests(EventTestCase):
         self.assertFalse(EventSignup.objects.filter(event=self.closed).exists())
 
 
+class DiscordFollowUpAdmissionTests(EventTestCase):
+    """Flag turned off after the modal opened: later steps write nothing."""
+
+    def setUp(self) -> None:
+        self.closed = self.make_event(
+            allow_user_signups=False, game_type=GameType.DOTA2
+        )
+        self.player = self.make_user()
+        self.player.discordId = DISCORD_ID
+        self.player.save()
+
+    def _assert_untouched(self) -> None:
+        self.assertFalse(
+            PlayerDotaProfile.objects.filter(org_user__user=self.player).exists()
+        )
+        self.assertFalse(EventSignup.objects.filter(event=self.closed).exists())
+
+    def test_modal_submit_refused_before_profile_write(self) -> None:
+        result = handle_signup_modal_submit(
+            self.closed.pk,
+            DISCORD_ID,
+            game_type=GameType.DOTA2,
+            values={"unverified_friend_id": "12345", "rank_status": "active"},
+        )
+
+        self.assertEqual(
+            result, {"action": "error", "message": SELF_SERVE_DISABLED_MESSAGE}
+        )
+        self._assert_untouched()
+
+    def test_rank_steps_refused_before_profile_write(self) -> None:
+        pk = self.closed.pk
+        self.assertIsNone(handle_rank_status_select(pk, DISCORD_ID, "active"))
+        for result in (
+            handle_rank_medal_select(pk, DISCORD_ID, "Legend"),
+            handle_previous_rank_submit(pk, DISCORD_ID, "Legend", "2024"),
+            handle_battle_cup_submit(pk, DISCORD_ID, "3"),
+        ):
+            self.assertEqual(
+                result, {"action": "error", "message": SELF_SERVE_DISABLED_MESSAGE}
+            )
+        self._assert_untouched()
+
+    def test_screenshot_upload_refused_before_profile_write(self) -> None:
+        result = handle_screenshot_upload(
+            self.closed.pk, DISCORD_ID, "rank", "https://cdn.example/r.png"
+        )
+
+        self.assertEqual(
+            result, {"success": False, "message": SELF_SERVE_DISABLED_MESSAGE}
+        )
+        self._assert_untouched()
+
+
 class AnnouncementComponentsTests(EventTestCase):
     def _schema(self, allow_user_signups: bool) -> EventTaskSchema:
         event = self.make_event(allow_user_signups=allow_user_signups)
@@ -86,11 +151,23 @@ class AnnouncementComponentsTests(EventTestCase):
         self.assertTrue(any(i.startswith("event_signup:") for i in ids))
         self.assertTrue(any(i.startswith("event_tentative:") for i in ids))
 
-    def test_task_schema_reads_flag_from_event_payload(self) -> None:
+    def test_self_serve_buttons_follow_flag_not_state(self) -> None:
+        # The post is rebuilt mid roll call (decline, reinstate) and is not
+        # rebuilt on reopen, so a state-aware post would strand Sign Up.
+        event = self.make_event(state=EventState.ROLL_CALL, allow_user_signups=True)
+        ids = _custom_ids(build_announcement_components(event))
+        self.assertTrue(any(i.startswith("event_signup:") for i in ids))
+        self.assertTrue(any(i.startswith("event_tentative:") for i in ids))
+
+    @override_settings(INTERNAL_SERVICE_TOKEN="test-internal-token")
+    def test_task_schema_reads_flag_from_internal_payload(self) -> None:
         event = self.make_event(allow_user_signups=False)
-        client = APIClient()
-        client.force_authenticate(self.admin)
-        data = client.get(f"/api/events/{event.pk}/").json()
+        resp = APIClient().get(
+            f"/api/internal/events/{event.pk}/full/",
+            HTTP_X_INTERNAL_TOKEN="test-internal-token",
+        )
+        self.assertEqual(resp.status_code, 200, resp.content)
+        data = resp.json()
         self.assertIn("allow_user_signups", data)
         self.assertFalse(EventTaskSchema.model_validate(data).allow_user_signups)
 

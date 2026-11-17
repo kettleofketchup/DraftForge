@@ -26,6 +26,11 @@ def self_serve_open_q() -> Q:
     return Q(state=EventState.SIGNUPS_OPEN, allow_user_signups=True)
 
 
+def self_serve_offered(event: SupportsAdmission) -> bool:
+    """Whether signup posts show the self-serve actions; state is checked on click."""
+    return event.allow_user_signups
+
+
 def self_serve_refusal(event: SupportsAdmission) -> str | None:
     if event.state != EventState.SIGNUPS_OPEN:
         return NOT_ACCEPTING_MESSAGE

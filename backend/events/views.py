@@ -45,7 +45,7 @@ from events.admission import ensure_self_serve
 from events.capacity import with_signup_counts
 from events.completion import close_event
 from events.constants import EventState
-from events.discord import notify_signup_changed
+from events.discord import notify_create_discord_event, notify_signup_changed
 from events.models import (
     Event,
     EventRepeater,
@@ -326,8 +326,6 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
         return Response(get_data())
 
     def perform_create(self, serializer: EventRepeaterSerializer) -> None:
-        from app.cache_utils import invalidate_after_commit
-
         org = serializer.validated_data.get("organization")
         if not has_org_staff_access(self.request.user, org):
             raise PermissionDenied("You do not have staff access to this organization.")
@@ -335,8 +333,6 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
         invalidate_after_commit(repeater)
 
     def perform_update(self, serializer: EventRepeaterSerializer) -> None:
-        from app.cache_utils import invalidate_after_commit
-
         # Snapshot schedule fields before save so we can detect a change
         # and tell sync_future_events to realign occurrences. Without this,
         # editing day_of_week leaves stale UPCOMING rows on the old day
@@ -410,7 +406,6 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
     )
     def create_event(self, request: Request, pk: str | None = None) -> Response:
         """Create a single off-schedule ("one-off") event from this series."""
-        from app.cache_utils import invalidate_after_commit
         from events.serializers import OneOffEventCreateSerializer
         from events.services import OccurrenceCollision, create_off_schedule_event
 
@@ -486,7 +481,6 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
     )
     def reactivate(self, request: Request, pk: str | None = None) -> Response:
         """Reactivate a paused series and realign its upcoming events."""
-        from app.cache_utils import invalidate_after_commit
 
         repeater = self.get_object()
         if not has_org_staff_access(request.user, repeater.organization):
@@ -677,7 +671,6 @@ class EventViewSet(viewsets.ModelViewSet):
             raise PermissionDenied(
                 "You do not have permission to create events for this organization."
             )
-        from app.cache_utils import invalidate_after_commit
 
         event = serializer.save(created_by=self.request.user)
         create_tournament_for_event(event)
@@ -690,13 +683,10 @@ class EventViewSet(viewsets.ModelViewSet):
             except ValueError:
                 pass  # Event already in a non-upcoming state
         invalidate_after_commit(event)
-        from events.discord import notify_create_discord_event
 
         notify_create_discord_event(event)
 
     def perform_update(self, serializer: EventSerializer) -> None:
-        from app.cache_utils import invalidate_after_commit
-
         previous_password = serializer.instance.dota_lobby_password
         previous_draft_options = event_draft_option_values(serializer.instance)
         previous_allow_user_signups = serializer.instance.allow_user_signups
@@ -755,8 +745,6 @@ class EventViewSet(viewsets.ModelViewSet):
                 ).exists()
 
             if not has_announcement:
-                from events.discord import notify_create_discord_event
-
                 notify_create_discord_event(event)
 
     def update(self, request: Request, *args: Any, **kwargs: Any) -> Response:
@@ -946,7 +934,6 @@ class EventViewSet(viewsets.ModelViewSet):
         Quiet: no Discord re-announcement, no signup-changed notify. Existing
         confirmations and tournament additions are preserved.
         """
-        from app.cache_utils import invalidate_after_commit
 
         event = self.get_object()
         if not has_event_staff_access(request.user, event):
