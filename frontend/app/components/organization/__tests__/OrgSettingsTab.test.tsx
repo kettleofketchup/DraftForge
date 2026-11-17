@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -20,6 +21,7 @@ import {
 } from 'vitest';
 import {
   getOrgSettings,
+  orgSettingsKey,
   patchOrgSettings,
   type OrgSettings,
 } from '~/components/api/orgSettingsAPI';
@@ -71,8 +73,10 @@ beforeAll(() => {
   Element.prototype.scrollIntoView ??= () => undefined;
 });
 
+let qc: QueryClient;
+
 function renderSection() {
-  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={qc}>{children}</QueryClientProvider>
   );
@@ -82,6 +86,16 @@ function renderSection() {
 async function loaded() {
   renderSection();
   return screen.findByTestId('org-settings-policy-select');
+}
+
+function refetched(changes: Partial<OrgSettings>) {
+  act(() => {
+    qc.setQueryData(orgSettingsKey(7), {
+      ...SETTINGS,
+      ...changes,
+      updated_at: '2026-11-17T12:10:00Z',
+    });
+  });
 }
 
 function checkbox(code: string): HTMLInputElement {
@@ -187,6 +201,47 @@ describe('StaffPlacementSection', () => {
     await waitFor(() => expect(toast.success).toHaveBeenCalled());
     await waitFor(() => expect(saveButton()).toBeDisabled());
     expect(checkbox('over_capacity').checked).toBe(true);
+  });
+
+  it('adopts refetched values while pristine', async () => {
+    await loaded();
+    refetched({
+      staff_override_policy: 'block',
+      staff_override_warning_codes: ['over_capacity'],
+    });
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('org-settings-policy-select'),
+      ).toHaveTextContent('Block'),
+    );
+    for (const code of CODES) {
+      expect(checkbox(code).checked).toBe(code === 'over_capacity');
+    }
+    expect(saveButton()).toBeDisabled();
+  });
+
+  it('keeps local edits when a refetch lands', async () => {
+    await loaded();
+    fireEvent.click(checkbox('gate_outside'));
+    refetched({ staff_override_policy: 'block' });
+    expect(checkbox('gate_outside').checked).toBe(false);
+    expect(saveButton()).toBeEnabled();
+  });
+
+  it('patches only dirty fields', async () => {
+    const rest = CODES.filter((c) => c !== 'gate_outside');
+    vi.mocked(patchOrgSettings).mockResolvedValue({
+      ...SETTINGS,
+      staff_override_warning_codes: rest,
+    });
+    await loaded();
+    fireEvent.click(checkbox('gate_outside'));
+    fireEvent.click(saveButton());
+    await waitFor(() =>
+      expect(patchOrgSettings).toHaveBeenCalledWith(7, {
+        staff_override_warning_codes: rest,
+      }),
+    );
   });
 
   it('keeps values on error', async () => {

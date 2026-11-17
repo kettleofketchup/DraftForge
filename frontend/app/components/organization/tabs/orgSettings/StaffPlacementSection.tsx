@@ -1,5 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 
@@ -118,8 +119,12 @@ function StaffPlacementForm({
   });
   const allCodes = settings.available_warning_codes.map((c) => c.code);
 
+  useEffect(() => {
+    if (!form.formState.isDirty) form.reset(pickFormValues(settings));
+  }, [settings, form]);
+
   const mutation = useMutation({
-    mutationFn: (values: StaffPlacementFormValues) =>
+    mutationFn: (values: Partial<StaffPlacementFormValues>) =>
       patchOrgSettings(organizationId, values),
     onSuccess: (saved) => {
       queryClient.setQueryData(orgSettingsKey(organizationId), saved);
@@ -133,7 +138,16 @@ function StaffPlacementForm({
   });
 
   const onSubmit = form.handleSubmit(async (values) => {
-    await mutation.mutateAsync(values).catch(() => undefined);
+    const dirty = form.formState.dirtyFields;
+    const changes: Partial<StaffPlacementFormValues> = {};
+    if (dirty.staff_override_policy) {
+      changes.staff_override_policy = values.staff_override_policy;
+    }
+    if (dirty.staff_override_warning_codes) {
+      changes.staff_override_warning_codes =
+        values.staff_override_warning_codes;
+    }
+    await mutation.mutateAsync(changes).catch(() => undefined);
   });
 
   const { isDirty, isSubmitting } = form.formState;
