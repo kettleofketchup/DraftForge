@@ -42,7 +42,10 @@ SCOPE_CLOSE_CODE = 4403
 
 
 ActivityKind = Literal["hero", "team"]
-SocketCloseReason = Literal["expired", "revoked", "out_of_scope", "disabled", "client"]
+SocketCloseReason = Literal[
+    "expired", "revoked", "out_of_scope", "disabled", "client", "error", "cancelled"
+]
+INTERNAL_ERROR_CODE = 1011
 OUT_OF_SCOPE = "Activity credentials are only valid for this draft."
 PATH_NOT_ALLOWED = "Activity credentials cannot use this endpoint."
 HERO_SUFFIXES: frozenset[str] = frozenset(
@@ -468,10 +471,20 @@ class ActivitySocketMiddleware:
         next_validation = started + SOCKET_REVALIDATE_SECONDS
         validation_lock = asyncio.Lock()
         last_close_code: int | None = None
+        expiry_logged = False
 
         async def check_session() -> None:
-            nonlocal next_validation, role
+            nonlocal next_validation, role, expiry_logged
             if time.time() >= expires_at:
+                if not expiry_logged:
+                    expiry_logged = True
+                    self._log_rejected(
+                        ActivityAuthFailed(
+                            "activity_session_ended", SESSION_EXPIRED, "expired"
+                        ),
+                        draft_id,
+                        identity,
+                    )
                 raise _ActivitySessionEnded(SESSION_ENDED_CODE, "expired")
             if time.monotonic() < next_validation:
                 return
@@ -516,7 +529,11 @@ class ActivitySocketMiddleware:
                 await check_session()
             await send(message)
 
-        def log_closed(close_code: int | None, reason: SocketCloseReason) -> None:
+        def log_closed(
+            close_code: int | None,
+            reason: SocketCloseReason,
+            **extra: Any,
+        ) -> None:
             log.info(
                 "activity_socket_closed",
                 system="discord",
@@ -530,6 +547,7 @@ class ActivitySocketMiddleware:
                 user_id=identity.user.pk,
                 instance_id=identity.instance.instance_id,
                 tournament_id=identity.tournament_id,
+                **extra,
             )
 
         activity: SocketActivity = {
@@ -549,4 +567,10 @@ class ActivitySocketMiddleware:
             log_closed(ended.close_code, ended.reason)
             await send({"type": "websocket.close", "code": ended.close_code})
             return
+        except asyncio.CancelledError:
+            log_closed(last_close_code, "cancelled")
+            raise
+        except Exception as exc:
+            log_closed(INTERNAL_ERROR_CODE, "error", error_type=type(exc).__name__)
+            raise
         log_closed(last_close_code, "client")
