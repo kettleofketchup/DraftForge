@@ -46,10 +46,13 @@ export function activityBanner(
   const viewed = all.find((e) => sameView(e.view, view));
   const viewedLive = !!viewed && viewed.entry.status !== 'finished';
   const viewedMine = !!viewed?.entry.involves_me;
-  if (viewedLive && viewedMine) return null;
+  if (viewedLive && viewedMine && viewed?.view.kind === 'hero') return null;
 
   const live = all.filter((e) => e.entry.status !== 'finished');
   const mine = live.filter((e) => e.entry.involves_me && e !== viewed);
+  const myHeroes = mine.filter((e) => e.view.kind === 'hero');
+  if (myHeroes.length === 1) return { kind: 'mine', target: myHeroes[0] };
+  if (viewedLive && viewedMine) return null;
   if (mine.length === 1) return { kind: 'mine', target: mine[0] };
   if (!viewedLive && live.length > 0)
     return { kind: 'many', count: live.length };

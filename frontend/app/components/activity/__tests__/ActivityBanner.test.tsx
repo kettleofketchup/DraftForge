@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
   ActivityDraftList,
   ActivityHeroDraftEntry,
+  ActivityTeamDraftEntry,
   ActivityView,
 } from '~/lib/activity-types';
 import { useActivityViewStore } from '~/store/activityViewStore';
@@ -33,16 +34,16 @@ function hero(
   };
 }
 
-function list(heroes: ActivityHeroDraftEntry[]): ActivityDraftList {
+function list(
+  heroes: ActivityHeroDraftEntry[],
+  team: Pick<ActivityTeamDraftEntry, 'state' | 'status'> = {
+    state: 'completed',
+    status: 'finished',
+  },
+): ActivityDraftList {
   return {
     tournament: { id: 12, name: 'Kettle Cup' },
-    team_draft: {
-      id: 40,
-      state: 'completed',
-      status: 'finished',
-      involves_me: true,
-      role: 'player',
-    },
+    team_draft: { id: 40, ...team, involves_me: true, role: 'player' },
     hero_drafts: heroes,
     launch_intent: null,
     notice: null,
@@ -55,8 +56,12 @@ const LIVE_OTHER = { status: 'drafting', involves_me: false } as const;
 
 const setView = vi.fn();
 
-function show(view: ActivityView, heroes: ActivityHeroDraftEntry[]) {
-  useActivityViewStore.setState({ view, drafts: list(heroes), setView });
+function show(
+  view: ActivityView,
+  heroes: ActivityHeroDraftEntry[],
+  team?: Pick<ActivityTeamDraftEntry, 'state' | 'status'>,
+) {
+  useActivityViewStore.setState({ view, drafts: list(heroes, team), setView });
   render(<ActivityBanner />);
 }
 
@@ -141,5 +146,31 @@ describe('ActivityBanner', () => {
   it('stays hidden when nothing is live', () => {
     show({ kind: 'bracket' }, [hero(156)]);
     expect(screen.queryByTestId('activity-banner')).toBeNull();
+  });
+
+  describe.each([
+    { state: 'pending', status: 'waiting' },
+    { state: 'drafting', status: 'drafting' },
+  ] as const)('with an unfinished team draft ($state)', (team) => {
+    const heroes = () => [
+      hero(156, LIVE_MINE as Partial<ActivityHeroDraftEntry>),
+      hero(157, LIVE_OTHER),
+    ];
+
+    it.each([
+      ['the bracket', { kind: 'bracket' }],
+      ['the team draft', { kind: 'team', id: 40 }],
+      ['a live draft that is not mine', { kind: 'hero', id: 157 }],
+    ] as const)('offers my live hero draft while I view %s', (_, view) => {
+      show(view, heroes(), team);
+      expect(screen.getByTestId('activity-banner')).toHaveTextContent(
+        'Game 156 is live',
+      );
+    });
+
+    it('stays hidden while I view my own live hero draft', () => {
+      show({ kind: 'hero', id: 156 }, heroes(), team);
+      expect(screen.queryByTestId('activity-banner')).toBeNull();
+    });
   });
 });

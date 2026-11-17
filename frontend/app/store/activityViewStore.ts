@@ -1,5 +1,7 @@
 import { create } from 'zustand';
+import api from '~/components/api/axios';
 import type { DraftRoundType } from '~/components/teamdraft/types';
+import type { TournamentType } from '~/index';
 import { postActivityView } from '~/lib/activity-api';
 import type {
   ActivityDraftList,
@@ -7,6 +9,7 @@ import type {
   ActivityTrigger,
   ActivityView,
 } from '~/lib/activity-types';
+import { hydrateTournament } from '~/lib/hydrateTournament';
 import { getLogger } from '~/lib/logger';
 import { useDraftWebSocketStore } from './draftWebSocketStore';
 import { useTournamentStore } from './tournamentStore';
@@ -64,9 +67,26 @@ function leaveTeam(): void {
   useDraftWebSocketStore.getState().reset();
 }
 
-function enterTeam(): void {
+async function fetchTeamDraft(tournamentId: number, id: number): Promise<void> {
+  try {
+    const { data } = await api.get(`/tournaments/${tournamentId}/`);
+    const tournament = hydrateTournament(data) as TournamentType;
+    const view = useActivityViewStore.getState().view;
+    if (view?.kind !== 'team' || view.id !== id) return;
+    const user = useUserStore.getState();
+    user.setTournament(tournament);
+    if (tournament.draft?.pk === id) user.setDraft(tournament.draft);
+  } catch (error) {
+    log.warn('activity_team_draft_fetch_failed', { tournamentId, id, error });
+  }
+}
+
+function enterTeam(id: number): void {
   const user = useUserStore.getState();
-  user.setDraft(user.tournament?.draft ?? null);
+  const draft = user.tournament?.draft ?? null;
+  user.setDraft(draft);
+  const tournamentId = user.tournament?.pk;
+  if (draft?.pk !== id && tournamentId) void fetchTeamDraft(tournamentId, id);
   const tournament = useTournamentStore.getState();
   tournament.setLive(true);
   tournament.setAutoAdvance(true);
@@ -96,7 +116,7 @@ export const useActivityViewStore = create<ActivityViewState>((set, get) => ({
 
     if (!unchanged) {
       if (from?.kind === 'team') leaveTeam();
-      if (next.kind === 'team') enterTeam();
+      if (next.kind === 'team') enterTeam(next.id);
     }
 
     set((state) => ({
