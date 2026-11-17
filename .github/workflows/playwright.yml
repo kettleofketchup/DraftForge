@@ -376,5 +376,8 @@ jobs:
       - name: Check the promotion render fixture copies match
         run: cmp backend/org/tests/render_fixture.json frontend/app/features/promotion/__tests__/render_fixture.json
 
+      - name: Check the generated notice types are current
+        run: just py::notice-types-check
+
       - name: Run slot guards
         run: just test::slots-unit
