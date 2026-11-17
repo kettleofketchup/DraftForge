@@ -13,16 +13,19 @@ from structlog.testing import capture_logs
 
 from app.models import CustomUser, Organization
 from events import line
-from events.constants import EventState, SignupStatus
+from events.constants import Commitment, EventState, RsvpClass, SignupStatus
 from events.exceptions import ImmutableFieldError
 from events.line import (
     EventSignupQuerySet,
     line_order_by,
     next_line_seq,
+    restore_place,
     same_gate_distance,
     stamp,
+    swap_places,
 )
 from events.models import Event, EventSignup
+from events.schemas import SignupSnapshot
 from events.tests.base import EventTestCase
 
 FIRST_COLUMNS = {"first_signed_up_at", "first_commitment", "first_rsvp_class"}
@@ -393,3 +396,151 @@ class InsertStampAtomicTests(TransactionTestCase):
         with mock.patch("events.line.next_line_seq", side_effect=recording):
             EventSignup.objects.create(event=event, user=owner)
         self.assertEqual(seen, [True])
+
+
+class LineMutatorTests(LineTestBase):
+    def test_restore_place_sets_fields(self) -> None:
+        s = self.signup(0)
+        before_first = (s.first_signed_up_at, s.first_commitment, s.first_rsvp_class)
+        at = tz.now() - timedelta(days=2)
+        snap = SignupSnapshot(
+            status=SignupStatus.WAITLISTED,
+            commitment=Commitment.MAYBE,
+            rsvp_class=RsvpClass.STANDARD,
+            signed_up_at=at,
+            line_seq=7,
+            waitlist_position=2,
+        )
+        with (
+            mock.patch("events.line.invalidate_after_commit") as inv,
+            capture_logs() as logs,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            restore_place(s, snap)
+        inv.assert_called_once_with(s.event)
+        row = EventSignup.objects.nocache().get(pk=s.pk)
+        self.assertEqual(row.status, SignupStatus.WAITLISTED)
+        self.assertEqual(row.commitment, Commitment.MAYBE)
+        self.assertEqual(row.rsvp_class, RsvpClass.STANDARD)
+        self.assertEqual(row.signed_up_at, at)
+        self.assertEqual(row.line_seq, 7)
+        self.assertEqual(row.waitlist_position, 2)
+        self.assertEqual(
+            (row.first_signed_up_at, row.first_commitment, row.first_rsvp_class),
+            before_first,
+        )
+        restored = [e for e in logs if e["event"] == "signup_line_place_restored"]
+        self.assertEqual(len(restored), 1)
+        self.assertEqual(restored[0]["system"], "events")
+        self.assertEqual(restored[0]["subsystem"], "line")
+        self.assertEqual(restored[0]["signup_id"], s.pk)
+        self.assertEqual(restored[0]["event_id"], self.event.pk)
+        self.assertEqual(restored[0]["line_seq"], 7)
+
+    def test_restore_place_logs_only_on_commit(self) -> None:
+        s = self.signup(0)
+        snap = SignupSnapshot(
+            status=SignupStatus.WAITLISTED,
+            commitment=s.commitment,
+            rsvp_class=s.rsvp_class,
+            signed_up_at=s.signed_up_at,
+            line_seq=s.line_seq,
+        )
+        with capture_logs() as logs, self.captureOnCommitCallbacks() as callbacks:
+            restore_place(s, snap)
+            self.assertFalse(
+                [e for e in logs if e["event"] == "signup_line_place_restored"]
+            )
+        self.assertTrue(callbacks)
+
+    def test_restore_place_saves_only_changed_fields(self) -> None:
+        s = self.signup(0)
+        snap = SignupSnapshot(
+            status=SignupStatus.WAITLISTED,
+            commitment=s.commitment,
+            rsvp_class=s.rsvp_class,
+            signed_up_at=s.signed_up_at,
+            line_seq=s.line_seq,
+            waitlist_position=s.waitlist_position,
+        )
+        with mock.patch.object(EventSignup, "save", autospec=True) as save:
+            restore_place(s, snap)
+        save.assert_called_once()
+        self.assertEqual(
+            sorted(save.call_args.kwargs["update_fields"]), ["status", "updated_at"]
+        )
+
+    def test_restore_place_with_reused_seq(self) -> None:
+        gone = self.signup(0)
+        gone_snap = SignupSnapshot(
+            status=gone.status,
+            commitment=gone.commitment,
+            rsvp_class=gone.rsvp_class,
+            signed_up_at=gone.signed_up_at,
+            line_seq=gone.line_seq,
+            waitlist_position=gone.waitlist_position,
+        )
+        gone.delete()
+        other = self.signup(1)
+        self.assertEqual(other.line_seq, gone_snap.line_seq)
+        target = self.signup(0)
+        other_before = EventSignup.objects.nocache().get(pk=other.pk)
+        with self.captureOnCommitCallbacks(execute=True):
+            restore_place(EventSignup.objects.get(pk=target.pk), gone_snap)
+        target_row = EventSignup.objects.nocache().get(pk=target.pk)
+        other_row = EventSignup.objects.nocache().get(pk=other.pk)
+        self.assertEqual(target_row.line_seq, gone_snap.line_seq)
+        self.assertEqual(target_row.signed_up_at, gone_snap.signed_up_at)
+        self.assertEqual(other_row.line_seq, other_before.line_seq)
+        self.assertEqual(other_row.signed_up_at, other_before.signed_up_at)
+        self.assertEqual(other_row.updated_at, other_before.updated_at)
+
+    def test_swap_places_swaps_line_fields_only(self) -> None:
+        a = self.signup(0, status=SignupStatus.RSVP)
+        b = self.signup(1, status=SignupStatus.WAITLISTED, waitlist_position=1)
+        a_seq, a_at = a.line_seq, a.signed_up_at
+        b_seq, b_at = b.line_seq, b.signed_up_at
+        self.assertEqual((a_seq, b_seq), (1, 2))
+        with (
+            mock.patch("events.line.invalidate_after_commit") as inv,
+            capture_logs() as logs,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            swap_places(a, b)
+        inv.assert_called_once_with(a.event)
+        a_row = EventSignup.objects.nocache().get(pk=a.pk)
+        b_row = EventSignup.objects.nocache().get(pk=b.pk)
+        self.assertEqual((a_row.line_seq, a_row.signed_up_at), (b_seq, b_at))
+        self.assertEqual((b_row.line_seq, b_row.signed_up_at), (a_seq, a_at))
+        self.assertEqual(a_row.status, SignupStatus.RSVP)
+        self.assertEqual(b_row.status, SignupStatus.WAITLISTED)
+        self.assertIsNone(a_row.waitlist_position)
+        self.assertEqual(b_row.waitlist_position, 1)
+        swapped = [e for e in logs if e["event"] == "signup_line_places_swapped"]
+        self.assertEqual(len(swapped), 1)
+        self.assertEqual(swapped[0]["system"], "events")
+        self.assertEqual(swapped[0]["subsystem"], "line")
+        self.assertEqual(swapped[0]["event_id"], self.event.pk)
+        self.assertEqual(swapped[0]["signup_ids"], [a.pk, b.pk])
+        self.assertEqual(swapped[0]["line_seqs"], [b_seq, a_seq])
+
+    def test_swap_places_other_event_raises(self) -> None:
+        a = self.signup(0)
+        b = self.signup(1, event=self.other_event)
+        with (
+            mock.patch("events.line.invalidate_after_commit") as inv,
+            capture_logs() as logs,
+            self.captureOnCommitCallbacks(execute=True),
+            self.assertRaises(ValueError),
+        ):
+            swap_places(a, b)
+        inv.assert_not_called()
+        self.assertFalse(
+            [e for e in logs if e["event"] == "signup_line_places_swapped"]
+        )
+        for s in (a, b):
+            row = EventSignup.objects.nocache().get(pk=s.pk)
+            self.assertEqual(
+                (row.line_seq, row.signed_up_at), (s.line_seq, s.signed_up_at)
+            )
+        self.assertEqual((a.line_seq, b.line_seq), (1, 1))
