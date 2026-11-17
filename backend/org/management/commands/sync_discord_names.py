@@ -3,6 +3,8 @@ from argparse import ArgumentParser
 from typing import Any
 
 import requests
+from cacheops.conf import settings as cacheops_settings
+from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
 from app.models import Organization
@@ -11,15 +13,19 @@ from discordbot.services.discord_members import (
     get_discord_members_data,
 )
 from discordbot.services.member_names import members_from_discord_payload
-from org.activity import (
-    activity_tracking_enabled,
-    guild_sync_lock,
-    release_guild_sync_lock,
-)
+from org.activity import guild_sync_lock, release_guild_sync_lock
 from org.discord_names import apply_guild_member_names, org_ids_for_guild
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
+
+_DUMMY_CACHE_BACKEND = "django.core.cache.backends.dummy.DummyCache"
+
+
+def _cache_enabled() -> bool:
+    if settings.CACHES.get("default", {}).get("BACKEND") == _DUMMY_CACHE_BACKEND:
+        return False
+    return bool(cacheops_settings.CACHEOPS_ENABLED)
 
 
 class Command(BaseCommand):
@@ -33,7 +39,7 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args: Any, **options: Any) -> None:
-        if not activity_tracking_enabled():
+        if not _cache_enabled():
             raise CommandError(
                 "Cache or cacheops is disabled, so cached payloads would keep old "
                 "names. Run via docker exec in the backend container "
