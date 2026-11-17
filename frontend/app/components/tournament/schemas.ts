@@ -1,11 +1,16 @@
 import { z } from 'zod';
+import { TOURNAMENT_TIMEZONES } from '~/lib/timezones';
 
 import { UserSchema } from '../user';
 
 import { GameSchema } from '../game/schemas';
 import { LeagueOrganizationSchema } from '../league/schemas';
 import { TeamSchema } from '../team';
-import { DraftOptionsSchema, DraftSchema } from '../teamdraft/schemas';
+import {
+  DraftOptionsSchema,
+  DraftSchema,
+  DraftSettingsFormSchema,
+} from '../teamdraft/schemas';
 
 // Tournament type values (keys from TOURNAMENT_TYPE enum)
 export const TOURNAMENT_TYPE_VALUES = [
@@ -26,29 +31,8 @@ export const DOTA_LOBBY_LAUNCH_VALUES = ['manual', 'auto'] as const;
 export const DotaLobbyLaunchSchema = z.enum(DOTA_LOBBY_LAUNCH_VALUES);
 export type StateValue = (typeof STATE_VALUES)[number];
 
-// Common timezone values for tournament scheduling
-export const COMMON_TIMEZONES = [
-  'UTC',
-  'America/New_York',
-  'America/Chicago',
-  'America/Denver',
-  'America/Los_Angeles',
-  'America/Toronto',
-  'America/Vancouver',
-  'America/Sao_Paulo',
-  'Europe/London',
-  'Europe/Paris',
-  'Europe/Berlin',
-  'Europe/Moscow',
-  'Asia/Tokyo',
-  'Asia/Shanghai',
-  'Asia/Singapore',
-  'Asia/Seoul',
-  'Asia/Kolkata',
-  'Australia/Sydney',
-  'Australia/Melbourne',
-  'Pacific/Auckland',
-] as const;
+// Tournament dialogs list UTC first; event dialogs use EVENT_TIMEZONES.
+export const COMMON_TIMEZONES = TOURNAMENT_TIMEZONES;
 
 export type TimezoneValue = (typeof COMMON_TIMEZONES)[number] | string;
 
@@ -150,6 +134,7 @@ export const CreateTournamentSchema = z
     captains_draft_time: z.number().int().default(10),
     custom_game_name: z.string().max(255).default(''),
   })
+  .extend(DraftSettingsFormSchema.shape)
   .superRefine((data, ctx) => {
     // Draft time is only shown and sent in Captain's Mode.
     if (data.game_mode === 'captains_mode' && data.captains_draft_time < 1) {

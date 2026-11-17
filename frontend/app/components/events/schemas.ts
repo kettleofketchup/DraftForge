@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { refineLobbyPassword } from '~/components/lobby/password';
+import { DraftSettingsFormSchema } from '~/components/teamdraft/schemas';
 
 export const EventState = {
   UPCOMING: 'upcoming',
@@ -115,6 +116,13 @@ export const eventSchema = z
     dota_lobby_region: z.string().default(''),
     discord_send_lobby_info: z.boolean().default(false),
     dota_lobby_password_mode: z.enum(['random', 'fixed']).default('random'),
+    draft_timer_enabled: z.boolean().optional(),
+    draft_grace_time_ms: z.number().int().optional(),
+    draft_reserve_time_ms: z.number().int().optional(),
+    draft_timeout_action: z.string().optional(),
+    hero_timer_enabled: z.boolean().optional(),
+    hero_grace_time_ms: z.number().int().optional(),
+    hero_reserve_time_ms: z.number().int().optional(),
     user_can_manage: z.boolean().default(false),
     ends_at: z.string().nullable().default(null),
     host: eventStaffUserSchema.nullable().default(null),
@@ -244,32 +252,7 @@ export const DAY_LABELS = [
   'Saturday',
 ];
 
-export const COMMON_TIMEZONES = [
-  'America/New_York',
-  'America/Chicago',
-  'America/Denver',
-  'America/Los_Angeles',
-  'America/Phoenix',
-  'America/Anchorage',
-  'Pacific/Honolulu',
-  'America/Toronto',
-  'America/Vancouver',
-  'America/Sao_Paulo',
-  'Europe/London',
-  'Europe/Paris',
-  'Europe/Berlin',
-  'Europe/Moscow',
-  'Asia/Dubai',
-  'Asia/Kolkata',
-  'Asia/Singapore',
-  'Asia/Tokyo',
-  'Asia/Shanghai',
-  'Asia/Seoul',
-  'Australia/Sydney',
-  'Australia/Melbourne',
-  'Pacific/Auckland',
-  'UTC',
-] as const;
+export { EVENT_TIMEZONES as COMMON_TIMEZONES } from '~/lib/timezones';
 
 /**
  * Convert a naive datetime-local string to UTC ISO string using the given IANA timezone.
@@ -485,24 +468,33 @@ export const DOTA_LOBBY_CONFIG_DEFAULTS = {
   dota_lobby_password_saved: false,
 } as const;
 
-export const createEventInputSchema = z
-  .object({
-    name: z.string().min(1, 'Name is required'),
-    description: z.string(),
+/** Name and description shared by every event-family form. */
+export const eventIdentitySchema = z.object({
+  name: z.string().min(1, 'Name is required'),
+  description: z.string(),
+});
+
+/** Tournament, lobby and timezone fields an event inherits from its template. */
+export const eventTemplateSchema = z.object({
+  tournament_name: z.string().min(1, 'Tournament name is required'),
+  tournament_type: z.string(),
+  game_type: z.number(),
+  draft_type: z.string(),
+  game_mode: z.string(),
+  custom_game_name: z.string(),
+  captains_draft_time: z.number().int().min(1),
+  lobby_steam_league_id: z.number().nullable(),
+  people_per_team: z.number().int().min(1),
+  number_of_teams: z.number().int().min(2).nullable(),
+  timezone: z.string().min(1, 'Timezone is required'),
+});
+
+export const createEventInputSchema = eventIdentitySchema
+  .merge(eventTemplateSchema)
+  .extend({
     scheduled_at: z.string(),
     organization: z.number(),
     tournament_league: z.number().nullable().optional(),
-    tournament_name: z.string().min(1, 'Tournament name is required'),
-    tournament_type: z.string(),
-    game_type: z.number(),
-    draft_type: z.string(),
-    game_mode: z.string(),
-    custom_game_name: z.string(),
-    captains_draft_time: z.number().int().min(1),
-    lobby_steam_league_id: z.number().nullable(),
-    people_per_team: z.number().int().min(1),
-    number_of_teams: z.number().int().min(2).nullable(),
-    timezone: z.string().min(1, 'Timezone is required'),
     discord_notify_new_events: z.boolean().optional(),
     signup_mode: z.enum(['immediate', 'scheduled', 'manual']),
     signup_days_before: z.number().int().min(1).optional(),
@@ -547,27 +539,16 @@ export type CreateSeriesEventInput = z.output<
   typeof createSeriesEventInputSchema
 >;
 
-export const editEventFormSchema = z
-  .object({
-    name: z.string().min(1, 'Name is required'),
-    description: z.string(),
+export const editEventFormSchema = eventIdentitySchema
+  .merge(eventTemplateSchema)
+  .extend({
     scheduled_at: z.string().min(1, 'Scheduled date is required'),
     event_ends_at: z.string().optional(),
-    tournament_name: z.string().min(1, 'Tournament name is required'),
-    tournament_type: z.string(),
-    game_type: z.number(),
-    draft_type: z.string(),
-    game_mode: z.string(),
-    custom_game_name: z.string(),
-    captains_draft_time: z.number().int().min(1),
-    lobby_steam_league_id: z.number().nullable(),
-    people_per_team: z.number().int().min(1),
-    number_of_teams: z.number().int().min(2).nullable(),
-    timezone: z.string().min(1, 'Timezone is required'),
     tournament_league: z.number().nullable(),
   })
   .merge(discordConfigSchema)
   .merge(dotaLobbyConfigSchema)
+  .merge(DraftSettingsFormSchema)
   .superRefine((values, ctx) => {
     refineLobbyPassword(values, ctx);
     refineEventEnd(values, ctx);

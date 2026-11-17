@@ -5,7 +5,10 @@
  */
 
 import { isAxiosError } from 'axios';
-import type { DraftOptionsPatch } from '~/components/teamdraft/schemas';
+import type {
+  DraftOptions,
+  DraftOptionsPatch,
+} from '~/components/teamdraft/schemas';
 import type { DiscordTournamentLogEntry } from '~/components/tournament/schemas';
 import type {
   PaginatedTournaments,
@@ -15,6 +18,10 @@ import type { TournamentsType, TournamentType } from '~/index';
 import { getLogger } from '~/lib/logger';
 import axios from './axios';
 import type { AddMemberPayload } from './types';
+
+export type TournamentWritePayload = Partial<
+  Omit<TournamentType, 'draft_options'>
+> & { draft_options?: Partial<DraftOptions> };
 
 const log = getLogger('api');
 
@@ -101,7 +108,7 @@ export async function fetchTournament(pk: number): Promise<TournamentType> {
 }
 
 export async function createTournament(
-  data: Partial<TournamentType>,
+  data: TournamentWritePayload,
 ): Promise<TournamentType> {
   const response = await axios.post(`/tournament/register`, data);
   return response.data as TournamentType;
@@ -109,7 +116,7 @@ export async function createTournament(
 
 export async function updateTournament(
   pk: number,
-  data: Partial<TournamentType>,
+  data: TournamentWritePayload,
 ): Promise<TournamentType> {
   const response = await axios.patch<TournamentType>(
     `/tournaments/${pk}/`,

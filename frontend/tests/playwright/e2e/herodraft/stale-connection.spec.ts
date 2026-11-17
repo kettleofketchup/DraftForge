@@ -1,9 +1,13 @@
+import type {
+  BrowserContext,
+  Page,
+  WebSocket as PWWebSocket,
+  WebSocketRoute,
+} from '@playwright/test';
+import { chromium, expect, test } from '@playwright/test';
+import { loginUser, waitForHydration } from '../../fixtures/auth';
 import { API_URL, BASE_URL } from '../../fixtures/base-url';
-import { test, expect, chromium } from '@playwright/test';
-import type { BrowserContext, Page, WebSocket as PWWebSocket, WebSocketRoute } from '@playwright/test';
-import { loginAsDiscordId, loginUser, waitForHydration } from '../../fixtures/auth';
 import { HeroDraftPage } from '../../helpers/HeroDraftPage';
-
 
 /**
  * Stale WebSocket Connection Detection Tests
@@ -19,7 +23,7 @@ import { HeroDraftPage } from '../../helpers/HeroDraftPage';
  * kills the WebSocket. The browser still thinks it's connected, so when the
  * draft resumes, the pick timer never updates.
  */
-test.describe('HeroDraft Stale Connection Detection', () => {
+test.describe('@cicd HeroDraft Stale Connection Detection', () => {
   test.setTimeout(60000);
 
   async function createContext(
@@ -72,7 +76,11 @@ test.describe('HeroDraft Stale Connection Detection', () => {
   test('server sends ping messages during PAUSED state', async () => {
     const browser = await chromium.launch({
       headless: true,
-      args: ['--disable-web-security', '--ignore-certificate-errors', '--no-sandbox'],
+      args: [
+        '--disable-web-security',
+        '--ignore-certificate-errors',
+        '--no-sandbox',
+      ],
     });
 
     let context: BrowserContext | null = null;
@@ -86,7 +94,9 @@ test.describe('HeroDraft Stale Connection Detection', () => {
       const matchUrl = `${BASE_URL}/tournament/${tournamentPk}/bracket/match/${gamePk}`;
 
       // Reset draft to waiting_for_captains (no tick messages — only pings)
-      await context.request.post(`${API_URL}/tests/herodraft/${draftPk}/reset/`);
+      await context.request.post(
+        `${API_URL}/tests/herodraft/${draftPk}/reset/`,
+      );
 
       const { draftPage, ws } = await setupSpectator(context, matchUrl);
 
@@ -119,7 +129,11 @@ test.describe('HeroDraft Stale Connection Detection', () => {
   test('connection stays alive during extended PAUSED period', async () => {
     const browser = await chromium.launch({
       headless: true,
-      args: ['--disable-web-security', '--ignore-certificate-errors', '--no-sandbox'],
+      args: [
+        '--disable-web-security',
+        '--ignore-certificate-errors',
+        '--no-sandbox',
+      ],
     });
 
     let context: BrowserContext | null = null;
@@ -132,7 +146,9 @@ test.describe('HeroDraft Stale Connection Detection', () => {
       const gamePk = testInfo.game.pk;
       const matchUrl = `${BASE_URL}/tournament/${tournamentPk}/bracket/match/${gamePk}`;
 
-      await context.request.post(`${API_URL}/tests/herodraft/${draftPk}/reset/`);
+      await context.request.post(
+        `${API_URL}/tests/herodraft/${draftPk}/reset/`,
+      );
 
       const { draftPage, ws } = await setupSpectator(context, matchUrl);
 
@@ -161,7 +177,11 @@ test.describe('HeroDraft Stale Connection Detection', () => {
   test('client reconnects after WebSocket is force-closed', async () => {
     const browser = await chromium.launch({
       headless: true,
-      args: ['--disable-web-security', '--ignore-certificate-errors', '--no-sandbox'],
+      args: [
+        '--disable-web-security',
+        '--ignore-certificate-errors',
+        '--no-sandbox',
+      ],
     });
 
     let context: BrowserContext | null = null;
@@ -174,7 +194,9 @@ test.describe('HeroDraft Stale Connection Detection', () => {
       const gamePk = testInfo.game.pk;
       const matchUrl = `${BASE_URL}/tournament/${tournamentPk}/bracket/match/${gamePk}`;
 
-      await context.request.post(`${API_URL}/tests/herodraft/${draftPk}/reset/`);
+      await context.request.post(
+        `${API_URL}/tests/herodraft/${draftPk}/reset/`,
+      );
 
       // Inline the spectator setup so we can install the WebSocket route
       // BEFORE navigating. page.routeWebSocket only intercepts WebSockets
@@ -232,7 +254,10 @@ test.describe('HeroDraft Stale Connection Detection', () => {
       // what Cloudflare/nginx would send during a stale-connection kill.
       // No app code changes, no test-only globals on window.
       console.log('Force-closing WebSocket via routeWebSocket handle...');
-      await initialRoute.close({ code: 4001, reason: 'Simulated stale connection' });
+      await initialRoute.close({
+        code: 4001,
+        reason: 'Simulated stale connection',
+      });
 
       const reconnectedRoute = await waitForReconnectRoute;
       expect(reconnectedRoute).toBeDefined();

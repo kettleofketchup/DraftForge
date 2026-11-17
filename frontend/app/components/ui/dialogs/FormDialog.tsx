@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { CancelButton, ConfirmButton } from '~/components/ui/buttons';
 import {
   Dialog,
   DialogContent,
@@ -7,11 +8,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from '~/components/ui/dialog';
-import { CancelButton, ConfirmButton } from '~/components/ui/buttons';
 import { ScrollArea } from '~/components/ui/scroll-area';
 import { cn } from '~/lib/utils';
 
-export type FormDialogSize = 'sm' | 'md' | 'lg' | 'xl' | 'full';
+export type FormDialogSize = 'sm' | 'md' | 'lg' | 'xl' | 'full' | 'screen';
 
 export interface FormDialogProps {
   /** Whether the dialog is open */
@@ -65,6 +65,7 @@ const sizeClasses: Record<FormDialogSize, string> = {
   lg: 'sm:max-w-lg md:max-w-2xl',
   xl: 'sm:max-w-2xl md:max-w-4xl',
   full: 'sm:max-w-6xl',
+  screen: '',
 };
 
 /**
@@ -104,7 +105,7 @@ export const FormDialog = React.forwardRef<HTMLDivElement, FormDialogProps>(
       'data-testid': dataTestId,
       titleTestId,
     },
-    ref
+    ref,
   ) => {
     // Internal ref to DialogContent so we can move focus into the dialog when
     // the caller opted out of Radix's auto-focus (otherwise focus stays on the
@@ -138,12 +139,20 @@ export const FormDialog = React.forwardRef<HTMLDivElement, FormDialogProps>(
     //     open listbox/menu/combobox: skip (Enter is the pick gesture).
     const handleContentKeyDown = React.useCallback(
       (e: React.KeyboardEvent<HTMLDivElement>) => {
-        if (e.key !== 'Enter' || e.shiftKey || e.metaKey || e.ctrlKey || e.altKey) return;
+        if (
+          e.key !== 'Enter' ||
+          e.shiftKey ||
+          e.metaKey ||
+          e.ctrlKey ||
+          e.altKey
+        )
+          return;
         const target = e.target as HTMLElement | null;
         // React bubbles keys from portaled children (e.g. a nested confirm dialog) here too.
         if (!target || !e.currentTarget.contains(target)) return;
         const tag = target?.tagName;
-        if (tag === 'TEXTAREA' || tag === 'BUTTON' || target?.isContentEditable) return;
+        if (tag === 'TEXTAREA' || tag === 'BUTTON' || target?.isContentEditable)
+          return;
         const role = target?.getAttribute('role');
         if (
           role === 'option' ||
@@ -169,19 +178,22 @@ export const FormDialog = React.forwardRef<HTMLDivElement, FormDialogProps>(
     // in inputs/triggers): first Escape refocuses the dialog content,
     // second Escape closes. Default mode is the long-standing one-press
     // close so existing AddUser/Tournament/etc. forms keep their Esc UX.
-    const handleEscapeKeyDown = React.useCallback((event: KeyboardEvent) => {
-      const openPopper = document.querySelector(
-        '[data-state="open"][role="listbox"], [data-state="open"][role="menu"]',
-      );
-      if (openPopper) {
+    const handleEscapeKeyDown = React.useCallback(
+      (event: KeyboardEvent) => {
+        const openPopper = document.querySelector(
+          '[data-state="open"][role="listbox"], [data-state="open"][role="menu"]',
+        );
+        if (openPopper) {
+          event.preventDefault();
+          return;
+        }
+        if (!escapeBlursToContent) return;
+        if (document.activeElement === contentRef.current) return;
         event.preventDefault();
-        return;
-      }
-      if (!escapeBlursToContent) return;
-      if (document.activeElement === contentRef.current) return;
-      event.preventDefault();
-      contentRef.current?.focus({ preventScroll: true });
-    }, [escapeBlursToContent]);
+        contentRef.current?.focus({ preventScroll: true });
+      },
+      [escapeBlursToContent],
+    );
 
     // Stable handlers for Radix Dialog's outside-interaction props — these
     // were inline arrows previously, so each FormDialog re-render handed
@@ -207,6 +219,8 @@ export const FormDialog = React.forwardRef<HTMLDivElement, FormDialogProps>(
       [autoFocus],
     );
 
+    const isScreen = size === 'screen';
+
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent
@@ -216,11 +230,15 @@ export const FormDialog = React.forwardRef<HTMLDivElement, FormDialogProps>(
             // Full-screen on mobile
             'h-full max-w-full rounded-none top-0 left-0 translate-x-0 translate-y-0',
             // Centered dialog on sm+
-            'sm:h-auto sm:max-w-[calc(100%-2rem)] sm:rounded-lg sm:top-[50%] sm:left-[50%] sm:translate-x-[-50%] sm:translate-y-[-50%]',
+            'sm:max-w-[calc(100%-2rem)] sm:rounded-lg sm:top-[50%] sm:left-[50%] sm:translate-x-[-50%] sm:translate-y-[-50%]',
+            // 'screen' matches reusable/modal DIALOG_CSS plus the ScrollArea clipping contract
+            isScreen
+              ? 'flex flex-col overflow-hidden min-w-full xl:min-w-[98%] sm:h-[95vh] sm:max-h-[95vh]'
+              : 'sm:h-auto',
             // Disable zoom animation for large dialogs - causes expensive layout calculations
             'data-[state=open]:!zoom-in-100 data-[state=closed]:!zoom-out-100',
             sizeClasses[size],
-            className
+            className,
           )}
           // Prevent outside-click dismissal: form dialogs should only close via
           // explicit actions (X, Cancel, submit). This also fixes nested dialog
@@ -242,13 +260,21 @@ export const FormDialog = React.forwardRef<HTMLDivElement, FormDialogProps>(
             )}
           </DialogHeader>
 
-          <ScrollArea className="max-h-[calc(100svh-10rem)] sm:max-h-[60vh] pr-4">
+          <ScrollArea
+            className={
+              isScreen
+                ? 'flex-1 min-h-0 overflow-hidden -mx-6 px-6'
+                : 'max-h-[calc(100svh-10rem)] sm:max-h-[60vh] pr-4'
+            }
+          >
             {/* px-1 py-1 leaves room for focus rings (3px box-shadow on
                 shadcn Input/Button) which would otherwise be clipped by
-                Radix Viewport's overflow:hidden. */}
+                Radix Viewport's overflow:hidden. `relative` keeps absolutely
+                positioned hidden inputs (Radix Select's native select) inside
+                the scroll viewport instead of overflowing the root. */}
             <form
               onSubmit={handleSubmit}
-              className="space-y-4 px-1 py-1"
+              className="relative space-y-4 px-1 py-1"
             >
               {children}
             </form>
@@ -279,7 +305,7 @@ export const FormDialog = React.forwardRef<HTMLDivElement, FormDialogProps>(
         </DialogContent>
       </Dialog>
     );
-  }
+  },
 );
 
 FormDialog.displayName = 'FormDialog';

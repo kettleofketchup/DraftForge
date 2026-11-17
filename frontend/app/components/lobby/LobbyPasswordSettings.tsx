@@ -1,7 +1,7 @@
-import { useState } from 'react';
-import { useTranslation } from 'react-i18next';
-import type { Control, FieldValues, UseFormWatch } from 'react-hook-form';
 import { Eye, EyeOff, Loader2, RefreshCw } from 'lucide-react';
+import { useState } from 'react';
+import type { Control, FieldValues, UseFormWatch } from 'react-hook-form';
+import { useTranslation } from 'react-i18next';
 import { SecondaryButton } from '~/components/ui/buttons';
 import {
   FormControl,
@@ -33,7 +33,9 @@ interface LobbyPasswordFields {
   dota_lobby_password_saved?: boolean;
 }
 
-interface LobbyPasswordSettingsProps<T extends FieldValues & LobbyPasswordFields> {
+interface LobbyPasswordSettingsProps<
+  T extends FieldValues & LobbyPasswordFields,
+> {
   control: Control<T>;
   watch: UseFormWatch<T>;
   /** A series hands its setting to its events; an event has one password. */
@@ -54,7 +56,9 @@ interface LobbyPasswordSettingsProps<T extends FieldValues & LobbyPasswordFields
  * Series and event setting for the lobby password every lobby of an event
  * uses: random (generated per event) or fixed (typed by staff).
  */
-export function LobbyPasswordSettings<T extends FieldValues & LobbyPasswordFields>({
+export function LobbyPasswordSettings<
+  T extends FieldValues & LobbyPasswordFields,
+>({
   control: parentControl,
   watch: parentWatch,
   scope,
@@ -69,13 +73,16 @@ export function LobbyPasswordSettings<T extends FieldValues & LobbyPasswordField
   const watch = parentWatch as unknown as UseFormWatch<LobbyPasswordFields>;
   const mode = watch('dota_lobby_password_mode');
   const keepsSaved = !!watch('dota_lobby_password_saved');
-  const savedRandom = saved?.mode === 'random' && saved.password ? saved.password : null;
-  const canRegenerate = scope === 'event' && mode !== 'fixed' && !!savedRandom && !!onRegenerate;
+  const savedRandom =
+    saved?.mode === 'random' && saved.password ? saved.password : null;
+  const canRegenerate =
+    scope === 'event' && mode !== 'fixed' && !!savedRandom && !!onRegenerate;
 
   // What to do when the password leaks: only offer actions the form has.
   let leakHelp: string | null = null;
   if (mode === 'fixed') leakHelp = t('password.settings.leak.fixed');
-  else if (scope === 'series') leakHelp = t('password.settings.leak.series_random');
+  else if (scope === 'series')
+    leakHelp = t('password.settings.leak.series_random');
   else if (canRegenerate) leakHelp = t('password.settings.leak.regenerate');
 
   const issueText = (issue: string | undefined): string | null => {
@@ -83,7 +90,9 @@ export function LobbyPasswordSettings<T extends FieldValues & LobbyPasswordField
       case 'required':
         return t('password.errors.required');
       case 'too_long':
-        return t('password.errors.too_long', { max: LOBBY_PASSWORD_MAX_LENGTH });
+        return t('password.errors.too_long', {
+          max: LOBBY_PASSWORD_MAX_LENGTH,
+        });
       case 'invalid_characters':
         return t('password.errors.invalid_characters');
       case 'surrounding_spaces':
@@ -95,9 +104,7 @@ export function LobbyPasswordSettings<T extends FieldValues & LobbyPasswordField
 
   return (
     <div className="space-y-3" data-testid="lobby-password-settings">
-      <h4 className="text-sm font-medium text-muted-foreground">
-        {t('password.settings.title')}
-      </h4>
+      <h3 className="text-sm font-semibold">{t('password.settings.title')}</h3>
       <div className="rounded-md border border-border p-3 space-y-3">
         <FormField
           control={control}
@@ -107,15 +114,24 @@ export function LobbyPasswordSettings<T extends FieldValues & LobbyPasswordField
               <FormLabel>{t('password.settings.mode_label')}</FormLabel>
               <Select onValueChange={field.onChange} value={field.value}>
                 <FormControl>
-                  <SelectTrigger className="w-full" data-testid="lobby-password-mode">
+                  <SelectTrigger
+                    className="w-full"
+                    data-testid="lobby-password-mode"
+                  >
                     <SelectValue />
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
-                  <SelectItem value="random" data-testid="lobby-password-mode-random">
+                  <SelectItem
+                    value="random"
+                    data-testid="lobby-password-mode-random"
+                  >
                     {t('password.settings.mode.random')}
                   </SelectItem>
-                  <SelectItem value="fixed" data-testid="lobby-password-mode-fixed">
+                  <SelectItem
+                    value="fixed"
+                    data-testid="lobby-password-mode-fixed"
+                  >
                     {t('password.settings.mode.fixed')}
                   </SelectItem>
                 </SelectContent>
@@ -137,7 +153,11 @@ export function LobbyPasswordSettings<T extends FieldValues & LobbyPasswordField
                       type={shown ? 'text' : 'password'}
                       autoComplete="off"
                       maxLength={LOBBY_PASSWORD_MAX_LENGTH}
-                      placeholder={keepsSaved ? t('password.settings.keep_placeholder') : undefined}
+                      placeholder={
+                        keepsSaved
+                          ? t('password.settings.keep_placeholder')
+                          : undefined
+                      }
                       data-testid="lobby-password-input"
                       {...field}
                       value={field.value ?? ''}
@@ -147,14 +167,25 @@ export function LobbyPasswordSettings<T extends FieldValues & LobbyPasswordField
                     type="button"
                     size="sm"
                     onClick={() => setShown((s) => !s)}
-                    aria-label={shown ? t('password.settings.hide') : t('password.settings.show')}
+                    aria-label={
+                      shown
+                        ? t('password.settings.hide')
+                        : t('password.settings.show')
+                    }
                     data-testid="lobby-password-toggle"
                   >
-                    {shown ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                    {shown ? (
+                      <EyeOff className="size-4" />
+                    ) : (
+                      <Eye className="size-4" />
+                    )}
                   </SecondaryButton>
                 </div>
                 {fieldState.error && (
-                  <p className="text-sm text-destructive" data-testid="lobby-password-error">
+                  <p
+                    className="text-sm text-destructive"
+                    data-testid="lobby-password-error"
+                  >
                     {issueText(fieldState.error.message)}
                   </p>
                 )}
@@ -162,17 +193,24 @@ export function LobbyPasswordSettings<T extends FieldValues & LobbyPasswordField
             )}
           />
         ) : scope === 'series' ? (
-          <p className="text-sm text-muted-foreground">{t('password.settings.random_series')}</p>
+          <p className="text-sm text-muted-foreground">
+            {t('password.settings.random_series')}
+          </p>
         ) : savedRandom ? (
           <div className="flex flex-wrap items-center gap-2 text-sm">
-            <span className="text-muted-foreground">{t('password.settings.current')}</span>
+            <span className="text-muted-foreground">
+              {t('password.settings.current')}
+            </span>
             <code
               className="rounded bg-muted px-1.5 py-0.5"
               data-testid="lobby-password-current"
             >
               {savedRandom}
             </code>
-            <CopyPasswordButton password={savedRandom} data-testid="lobby-password-copy" />
+            <CopyPasswordButton
+              password={savedRandom}
+              data-testid="lobby-password-copy"
+            />
             {canRegenerate && (
               <SecondaryButton
                 type="button"
@@ -191,12 +229,16 @@ export function LobbyPasswordSettings<T extends FieldValues & LobbyPasswordField
             )}
           </div>
         ) : (
-          <p className="text-sm text-muted-foreground">{t('password.settings.random_new')}</p>
+          <p className="text-sm text-muted-foreground">
+            {t('password.settings.random_new')}
+          </p>
         )}
 
         <FormDescription>{t('password.settings.help_shared')}</FormDescription>
         {leakHelp && (
-          <FormDescription data-testid="lobby-password-leak-help">{leakHelp}</FormDescription>
+          <FormDescription data-testid="lobby-password-leak-help">
+            {leakHelp}
+          </FormDescription>
         )}
         <FormDescription>{t('password.settings.help_changes')}</FormDescription>
         {scope === 'event' && followsSeries && (

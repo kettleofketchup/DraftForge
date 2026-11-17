@@ -58,6 +58,14 @@ def _valid_fixed_password(value: str) -> str:
 
 
 DRAFT_TIME_KWARGS = {"min_value": 1}
+GRACE_TIME_MS_KWARGS = {"min_value": 1000}
+RESERVE_TIME_MS_KWARGS = {"min_value": 0}
+TIMER_FIELD_KWARGS = {
+    "draft_grace_time_ms": GRACE_TIME_MS_KWARGS,
+    "draft_reserve_time_ms": RESERVE_TIME_MS_KWARGS,
+    "hero_grace_time_ms": GRACE_TIME_MS_KWARGS,
+    "hero_reserve_time_ms": RESERVE_TIME_MS_KWARGS,
+}
 
 
 class LobbySteamLeagueMixin:
@@ -168,6 +176,13 @@ class EventRepeaterSerializer(
             "custom_game_name",
             "captains_draft_time",
             "lobby_steam_league_id",
+            "draft_timer_enabled",
+            "draft_grace_time_ms",
+            "draft_reserve_time_ms",
+            "draft_timeout_action",
+            "hero_timer_enabled",
+            "hero_grace_time_ms",
+            "hero_reserve_time_ms",
             # EventConfig
             "timezone",
             "min_players",
@@ -236,6 +251,7 @@ class EventRepeaterSerializer(
         extra_kwargs = {
             "dota_lobby_password": LOBBY_PASSWORD_FIELD_KWARGS,
             "captains_draft_time": DRAFT_TIME_KWARGS,
+            **TIMER_FIELD_KWARGS,
         }
 
     def validate_description(self, value):
@@ -410,6 +426,13 @@ class EventSerializer(
             "custom_game_name",
             "captains_draft_time",
             "lobby_steam_league_id",
+            "draft_timer_enabled",
+            "draft_grace_time_ms",
+            "draft_reserve_time_ms",
+            "draft_timeout_action",
+            "hero_timer_enabled",
+            "hero_grace_time_ms",
+            "hero_reserve_time_ms",
             # EventConfig
             "timezone",
             "min_players",
@@ -479,6 +502,7 @@ class EventSerializer(
         extra_kwargs = {
             "dota_lobby_password": LOBBY_PASSWORD_FIELD_KWARGS,
             "captains_draft_time": DRAFT_TIME_KWARGS,
+            **TIMER_FIELD_KWARGS,
         }
 
     def update(self, instance: Event, validated_data: dict[str, Any]) -> Event:
@@ -885,6 +909,13 @@ class OrgEventDefaultsSerializer(
             "custom_game_name",
             "captains_draft_time",
             "lobby_steam_league_id",
+            "draft_timer_enabled",
+            "draft_grace_time_ms",
+            "draft_reserve_time_ms",
+            "draft_timeout_action",
+            "hero_timer_enabled",
+            "hero_grace_time_ms",
+            "hero_reserve_time_ms",
             # EventConfigMixin
             "timezone",
             "min_players",
@@ -931,7 +962,10 @@ class OrgEventDefaultsSerializer(
             "discord_send_herodraft_link",
         ]
         read_only_fields = ["id", "organization"]
-        extra_kwargs = {"captains_draft_time": DRAFT_TIME_KWARGS}
+        extra_kwargs = {
+            "captains_draft_time": DRAFT_TIME_KWARGS,
+            **TIMER_FIELD_KWARGS,
+        }
 
     def validate(self, data: dict) -> dict:
         self.check_lobby_steam_league(data, self.instance)
@@ -992,6 +1026,10 @@ class OneOffEventCreateSerializer(LobbySteamLeagueMixin, serializers.ModelSerial
             **{name: {"required": False} for name in ONE_OFF_OVERRIDE_FIELDS},
             "dota_lobby_password": LOBBY_PASSWORD_FIELD_KWARGS,
             "captains_draft_time": {"required": False, **DRAFT_TIME_KWARGS},
+            **{
+                name: {"required": False, **kwargs}
+                for name, kwargs in TIMER_FIELD_KWARGS.items()
+            },
         }
 
     def validate_scheduled_at(self, value):

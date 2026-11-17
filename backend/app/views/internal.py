@@ -22,6 +22,7 @@ from rest_framework.response import Response
 
 from app.auth import InternalServiceAuth, IsInternalService
 from app.cache_utils import invalidate_after_commit
+from app.functions.herodraft import new_herodraft_for_game
 from events.completion import close_event
 from events.constants import EventState
 from events.models import Event
@@ -1014,7 +1015,7 @@ def create_herodraft_for_game(request, game_id):
     """
     from django.db import transaction
 
-    from app.models import DraftTeam, Game, HeroDraft, HeroDraftState
+    from app.models import Game
 
     with transaction.atomic():
         game = (
@@ -1033,11 +1034,7 @@ def create_herodraft_for_game(request, game_id):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        herodraft = HeroDraft.objects.create(
-            game=game, state=HeroDraftState.WAITING_FOR_CAPTAINS
-        )
-        DraftTeam.objects.create(draft=herodraft, tournament_team=game.radiant_team)
-        DraftTeam.objects.create(draft=herodraft, tournament_team=game.dire_team)
+        herodraft = new_herodraft_for_game(game)
         invalidate_after_commit(game)
 
     return Response(

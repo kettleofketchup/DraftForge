@@ -3,9 +3,17 @@ import {
   remaining,
   serverNow,
   useAnimationFrameClock,
-} from "~/lib/draftClock";
-import { useHeroDraftStore } from "~/store/heroDraftStore";
-import type { HeroDraftTick } from "./types";
+} from '~/lib/draftClock';
+import { useHeroDraftStore } from '~/store/heroDraftStore';
+import type { HeroDraft, HeroDraftTick } from './types';
+
+export function isTimerEnabled(
+  draft: Pick<HeroDraft, 'timer_enabled'> | null | undefined,
+  tick: Pick<HeroDraftTick, 'timer_enabled'> | null | undefined,
+): boolean {
+  if (tick?.timer_enabled === false) return false;
+  return draft?.timer_enabled !== false;
+}
 
 /**
  * Derived countdown values reconstructed client-side from server anchors.
@@ -46,7 +54,7 @@ function deriveCountdown(
   // server has already pushed round_started_at forward by pause_duration
   // + 3s, so evaluating elapsed at resuming_until reproduces the values
   // from the moment of pause.
-  if (tick.draft_state === "resuming" && tick.resuming_until) {
+  if (tick.draft_state === 'resuming' && tick.resuming_until) {
     const target = Date.parse(tick.resuming_until);
     const resumingRemainingMs = Number.isNaN(target)
       ? 0
@@ -59,7 +67,7 @@ function deriveCountdown(
   }
 
   // DRAFTING — compute grace + per-team reserve from anchors
-  if (tick.draft_state === "drafting") {
+  if (tick.draft_state === 'drafting') {
     return {
       ...computeDraftingValues(tick, serverNowMs),
       resumingRemainingMs: 0,
@@ -72,11 +80,8 @@ function deriveCountdown(
 function computeDraftingValues(
   tick: HeroDraftTick,
   serverNowMs: number,
-): Omit<DraftCountdown, "resumingRemainingMs"> {
-  if (
-    !tick.round_started_at ||
-    typeof tick.round_grace_time_ms !== "number"
-  ) {
+): Omit<DraftCountdown, 'resumingRemainingMs'> {
+  if (!tick.round_started_at || typeof tick.round_grace_time_ms !== 'number') {
     return { graceRemainingMs: 0, teamAReserveMs: 0, teamBReserveMs: 0 };
   }
   const elapsedMs = elapsedSince(tick.round_started_at, serverNowMs);
@@ -119,7 +124,7 @@ function computeDraftingValues(
 export function useDraftCountdown(): DraftCountdown {
   const tick = useHeroDraftStore((s) => s.tick);
   const serverClockOffsetMs = useHeroDraftStore((s) => s.serverClockOffsetMs);
-  const isPaused = useHeroDraftStore((s) => s.draft?.state === "paused");
+  const isPaused = useHeroDraftStore((s) => s.draft?.state === 'paused');
 
   return useAnimationFrameClock({
     derive: () => deriveCountdown(tick, serverClockOffsetMs),
