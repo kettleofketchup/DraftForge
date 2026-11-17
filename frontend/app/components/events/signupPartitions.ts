@@ -14,6 +14,15 @@ export function isRemovedSignup(status: string): boolean {
   return removedStatuses.has(status);
 }
 
+const restorableStatuses: ReadonlySet<string> = new Set([
+  SignupStatus.CANCELLED,
+  SignupStatus.REJECTED,
+]);
+
+export function canRestoreSignup(status: string): boolean {
+  return restorableStatuses.has(status);
+}
+
 export function partitionSignups(signups: EventSignupType[]): SignupPartitions {
   const parts: SignupPartitions = {
     active: [],

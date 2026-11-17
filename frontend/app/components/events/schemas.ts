@@ -36,6 +36,11 @@ export const ROLL_CALL_MODE_LABELS: Record<RollCallMode, string> = {
   automatic: 'Automatic',
 };
 
+export function rollCallLabel(enabled: boolean, mode: string): string {
+  if (!enabled) return 'Disabled';
+  return ROLL_CALL_MODE_LABELS[mode as RollCallMode] ?? mode;
+}
+
 export const READY_CHECK_SCOPES = ['main_only', 'main_and_fill'] as const;
 export type ReadyCheckScope = (typeof READY_CHECK_SCOPES)[number];
 export const READY_CHECK_SCOPE_LABELS: Record<ReadyCheckScope, string> = {

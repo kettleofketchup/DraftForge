@@ -84,8 +84,9 @@ import { MySignupActions } from '~/components/events/MySignupActions';
 import { SubscriberList } from '~/components/events/SubscriberList';
 import { canCompleteEvent } from '~/components/events/eventCompletion';
 import type { EventSignupType, EventType } from '~/components/events/schemas';
-import { EventState, ROLL_CALL_MODE_LABELS } from '~/components/events/schemas';
+import { EventState, rollCallLabel } from '~/components/events/schemas';
 import {
+  canRestoreSignup,
   isRemovedSignup,
   partitionSignups,
 } from '~/components/events/signupPartitions';
@@ -848,12 +849,7 @@ function DetailsTab({
           />
           <Stat
             label="Roll Call"
-            value={
-              event.roll_call_enabled
-                ? (ROLL_CALL_MODE_LABELS[event.roll_call_mode] ??
-                  event.roll_call_mode)
-                : 'Disabled'
-            }
+            value={rollCallLabel(event.roll_call_enabled, event.roll_call_mode)}
           />
         </CardContent>
       </Card>
@@ -1105,8 +1101,7 @@ function SignupsTab({
                   <TooltipContent className="lg:hidden">Approve</TooltipContent>
                 </Tooltip>
               )}
-              {(signup.status === 'cancelled' ||
-                signup.status === 'rejected') && (
+              {canRestoreSignup(signup.status) && (
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <SecondaryButton

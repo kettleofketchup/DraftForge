@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { EventSignupType } from '../schemas';
-import { isRemovedSignup, partitionSignups } from '../signupPartitions';
+import {
+  canRestoreSignup,
+  isRemovedSignup,
+  partitionSignups,
+} from '../signupPartitions';
 
 function signup(id: number, status: string): EventSignupType {
   return { id, status } as unknown as EventSignupType;
@@ -56,4 +60,21 @@ describe('isRemovedSignup', () => {
       expect(isRemovedSignup(status)).toBe(false);
     },
   );
+});
+
+describe('canRestoreSignup', () => {
+  it.each(['cancelled', 'rejected'])('%s can be restored', (status) => {
+    expect(canRestoreSignup(status)).toBe(true);
+  });
+
+  it.each([
+    'dropped',
+    'rsvp',
+    'approved',
+    'confirmed',
+    'tentative',
+    'waitlisted',
+  ])('%s has no restore action', (status) => {
+    expect(canRestoreSignup(status)).toBe(false);
+  });
 });
