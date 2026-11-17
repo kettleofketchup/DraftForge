@@ -1,6 +1,5 @@
 from rest_framework import serializers
 
-from app.legacy_fields import LegacyNullField
 from app.models import ProfileClaimRequest
 from app.serializers import PositionsSerializer
 
@@ -20,7 +19,6 @@ class OrgUserSerializer(serializers.ModelSerializer):
     )  # OrgUser's pk (for PATCH)
     pk = serializers.IntegerField(source="user.pk", read_only=True)  # User's pk
     username = serializers.CharField(source="user.username", read_only=True)
-    nickname = LegacyNullField()
     guildNickname = serializers.CharField(
         source="guild_nickname", read_only=True, allow_null=True
     )
@@ -75,7 +73,6 @@ class OrgUserSerializer(serializers.ModelSerializer):
             "orgUserPk",
             "pk",
             "username",
-            "nickname",
             "guildNickname",
             "discordNickname",
             "avatar",
@@ -97,7 +94,6 @@ class ProfileClaimRequestSerializer(serializers.ModelSerializer):
     )
     claimer_avatar = serializers.CharField(source="claimer.avatarUrl", read_only=True)
 
-    target_nickname = LegacyNullField()
     target_username = serializers.CharField(
         source="target_user.username", read_only=True, allow_null=True
     )
@@ -126,7 +122,6 @@ class ProfileClaimRequestSerializer(serializers.ModelSerializer):
             "claimer_discord_id",
             "claimer_avatar",
             "target_user",
-            "target_nickname",
             "target_username",
             "target_discordNickname",
             "target_steamid",

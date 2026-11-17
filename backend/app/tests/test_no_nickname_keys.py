@@ -1,4 +1,3 @@
-from django.db import connection
 from django.test import TestCase
 from rest_framework.test import APIClient
 
@@ -20,29 +19,11 @@ from user.serializers import BaseUserProfileSerializer
 STEAM_ID = 765353730
 
 
-def set_raw_site_nickname(user_id: int, value: str) -> None:
-    with connection.cursor() as cursor:
-        cursor.execute(
-            "UPDATE user_baseuserprofile SET nickname=%s WHERE user_id=%s",
-            [value, user_id],
-        )
-
-
-def raw_site_nickname(user_id: int) -> str | None:
-    with connection.cursor() as cursor:
-        cursor.execute(
-            "SELECT nickname FROM user_baseuserprofile WHERE user_id=%s", [user_id]
-        )
-        return cursor.fetchone()[0]
-
-
-class LegacyNicknameKeyTests(TestCase):
+class NoNicknameKeyTests(TestCase):
     def setUp(self) -> None:
         self.user = CustomUser.objects.create(
             username="dc", discordNickname="Gwaihir", steam_account_id=STEAM_ID
         )
-        set_raw_site_nickname(self.user.pk, "Site")
-        self.user = CustomUser.objects.nocache().get(pk=self.user.pk)
         self.org = Organization.objects.create(name="Legacy Org")
         self.org_user = OrgUser.objects.create(
             user=self.user, organization=self.org, guild_nickname="DragonClaw"
@@ -54,49 +35,48 @@ class LegacyNicknameKeyTests(TestCase):
             user=self.user, org_user=self.org_user, league=self.league
         )
 
-    def assert_legacy_null(self, data: dict) -> None:
-        self.assertIn("nickname", data)
-        self.assertIsNone(data["nickname"])
+    def assert_no_nickname(self, data: dict) -> None:
+        self.assertNotIn("nickname", data)
 
     def test_tournament_user_serializer(self) -> None:
         data = TournamentUserSerializer(self.user).data
-        self.assert_legacy_null(data)
+        self.assert_no_nickname(data)
         self.assertEqual(data["discordNickname"], "Gwaihir")
 
     def test_user_serializer(self) -> None:
         data = UserSerializer(self.user).data
-        self.assert_legacy_null(data)
+        self.assert_no_nickname(data)
         self.assertEqual(data["discordNickname"], "Gwaihir")
 
     def test_base_profile_serializer(self) -> None:
-        self.assert_legacy_null(BaseUserProfileSerializer(self.user.base_profile).data)
+        self.assert_no_nickname(BaseUserProfileSerializer(self.user.base_profile).data)
 
     def test_org_user_serializer(self) -> None:
         data = OrgUserSerializer(self.org_user).data
-        self.assert_legacy_null(data)
+        self.assert_no_nickname(data)
         self.assertEqual(data["guildNickname"], "DragonClaw")
         self.assertEqual(data["discordNickname"], "Gwaihir")
 
     def test_league_user_serializer(self) -> None:
         data = LeagueUserSerializer(self.league_user).data
-        self.assert_legacy_null(data)
+        self.assert_no_nickname(data)
         self.assertEqual(data["guildNickname"], "DragonClaw")
 
     def test_ssr_user_serializer(self) -> None:
         data = UserSerializerSSR(self.user).data
-        self.assert_legacy_null(data)
+        self.assert_no_nickname(data)
         self.assertEqual(data["discordNickname"], "Gwaihir")
 
     def test_herodraft_user_serializer(self) -> None:
         data = HeroDraftUserSerializer(self.user).data
-        self.assert_legacy_null(data)
+        self.assert_no_nickname(data)
 
     def test_serialize_user_core(self) -> None:
-        self.assert_legacy_null(serialize_user_core(self.user.pk))
+        self.assert_no_nickname(serialize_user_core(self.user.pk))
 
     def test_steam_conflict_payload(self) -> None:
         body = steam_account_id_conflict_payload(STEAM_ID, self.user)
-        self.assert_legacy_null(body["conflict"])
+        self.assert_no_nickname(body["conflict"])
         self.assertEqual(body["conflict"]["discordNickname"], "Gwaihir")
         self.assertEqual(
             body["error"], f"Friend ID {STEAM_ID} is already assigned to Gwaihir (@dc)."
@@ -118,18 +98,16 @@ class LegacyNicknameKeyTests(TestCase):
         client = APIClient()
         client.force_authenticate(user=self.user)
         holder = client.get(f"/api/users/steam-account-id/{STEAM_ID}/").json()["holder"]
-        self.assert_legacy_null(holder)
+        self.assert_no_nickname(holder)
         self.assertEqual(holder["discordNickname"], "Gwaihir")
 
 
-class LegacyNicknameWriteIgnoredTests(TestCase):
+class NicknameWriteIgnoredTests(TestCase):
     def setUp(self) -> None:
         self.staff = CustomUser.objects.create_superuser(
             username="legacy-staff", password="pw"
         )
-        user = CustomUser.objects.create(username="legacy-target")
-        set_raw_site_nickname(user.pk, "Site")
-        self.user = CustomUser.objects.nocache().get(pk=user.pk)
+        self.user = CustomUser.objects.create(username="legacy-target")
         self.client = APIClient()
 
     def test_staff_user_patch_ignores_nickname(self) -> None:
@@ -138,8 +116,7 @@ class LegacyNicknameWriteIgnoredTests(TestCase):
             f"/api/users/{self.user.pk}/", {"nickname": "X"}, format="json"
         )
         self.assertEqual(resp.status_code, 200, resp.content)
-        self.assertIsNone(resp.json()["nickname"])
-        self.assertEqual(raw_site_nickname(self.user.pk), "Site")
+        self.assertNotIn("nickname", resp.json())
 
     def test_me_profile_base_patch_ignores_nickname(self) -> None:
         self.client.force_authenticate(user=self.user)
@@ -147,5 +124,4 @@ class LegacyNicknameWriteIgnoredTests(TestCase):
             "/api/users/me/profile/base/", {"nickname": "X"}, format="json"
         )
         self.assertEqual(resp.status_code, 200, resp.content)
-        self.assertIsNone(resp.json()["nickname"])
-        self.assertEqual(raw_site_nickname(self.user.pk), "Site")
+        self.assertNotIn("nickname", resp.json())

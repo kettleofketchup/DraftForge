@@ -60,7 +60,7 @@ class SteamAccountIdConflictTests(TestCase):
         body = resp.json()
         self.assertEqual(body["code"], "steam_account_id_taken")
         self.assertEqual(body["conflict"]["pk"], self.holder.pk)
-        self.assertIsNone(body["conflict"]["nickname"])
+        self.assertNotIn("nickname", body["conflict"])
         self.assertEqual(body["conflict"]["discordNickname"], "George Potter")
         self.assertIn("George Potter (@geo.potter)", body["error"])
         self.assertEqual(body["conflict"]["username"], "geo.potter")
@@ -143,7 +143,7 @@ class SteamAccountIdLookupTests(TestCase):
         self.assertEqual(resp.status_code, 200, resp.content)
         holder = resp.json()["holder"]
         self.assertEqual(holder["pk"], self.holder.pk)
-        self.assertIsNone(holder["nickname"])
+        self.assertNotIn("nickname", holder)
         self.assertEqual(holder["discordNickname"], "George Potter")
         self.assertEqual(holder["username"], "geo.potter")
 

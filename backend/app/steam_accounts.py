@@ -31,12 +31,10 @@ def steam_account_id_identity(user: CustomUser) -> dict[str, Any]:
     """Identify a Friend ID holder for display.
 
     Global Discord name and username only — the same fields GET /api/users/
-    already exposes to any authenticated user. ``nickname`` stays as null for
-    clients that still require the key.
+    already exposes to any authenticated user.
     """
     return {
         "pk": user.pk,
-        "nickname": None,
         "discordNickname": user.discordNickname,
         "username": user.username,
     }

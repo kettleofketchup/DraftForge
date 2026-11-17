@@ -1,6 +1,5 @@
 from rest_framework import serializers
 
-from app.legacy_fields import LegacyNullField
 from app.serializers import PositionsSerializer
 
 from .models import LeagueUser
@@ -14,7 +13,6 @@ class LeagueUserSerializer(serializers.ModelSerializer):
     id = serializers.IntegerField(read_only=True)  # LeagueUser's pk
     pk = serializers.IntegerField(source="user.pk", read_only=True)  # User's pk
     username = serializers.CharField(source="user.username", read_only=True)
-    nickname = LegacyNullField()
     guildNickname = serializers.CharField(
         source="org_user.guild_nickname", read_only=True, allow_null=True
     )
@@ -36,7 +34,6 @@ class LeagueUserSerializer(serializers.ModelSerializer):
             "id",
             "pk",
             "username",
-            "nickname",
             "guildNickname",
             "discordNickname",
             "avatar",

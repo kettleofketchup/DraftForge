@@ -7,7 +7,6 @@ from rest_framework import serializers
 
 from app.auth import InternalServiceUser
 from app.display_names import user_display_name
-from app.legacy_fields import LegacyNullField
 from app.models import CustomUser, League, Organization
 from app.permissions_org import (
     can_view_org_members,
@@ -275,7 +274,6 @@ class EventRepeaterSerializer(
 
 class EventStaffUserSerializer(serializers.ModelSerializer):
     avatarUrl = serializers.CharField(read_only=True)
-    nickname = LegacyNullField()
     guildNickname = serializers.SerializerMethodField()
 
     class Meta:
@@ -283,7 +281,6 @@ class EventStaffUserSerializer(serializers.ModelSerializer):
         fields = [
             "pk",
             "username",
-            "nickname",
             "discordNickname",
             "guildNickname",
             "avatarUrl",
@@ -940,7 +937,6 @@ class OrgEventDefaultsSerializer(
 
 class RepeaterSubscriptionSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source="user.username", read_only=True)
-    nickname = LegacyNullField()
     discordNickname = serializers.CharField(
         source="user.discordNickname", read_only=True
     )
@@ -952,7 +948,6 @@ class RepeaterSubscriptionSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "username",
-            "nickname",
             "discordNickname",
             "discordId",
             "avatar",

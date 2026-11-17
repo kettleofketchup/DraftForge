@@ -9,7 +9,7 @@ class SerializeUserCoreTests(TransactionTestCase):
         u = CustomUser.objects.create(username="core", discordNickname="Core")
         d = serialize_user_core(u.pk)
         assert d["pk"] == u.pk and d["discordNickname"] == "Core"
-        assert d["nickname"] is None
+        assert "nickname" not in d
         assert "positions" in d
         assert "mmr" not in d and "league_mmr" not in d
 
@@ -59,7 +59,7 @@ class BulkUsersCacheTests(TransactionTestCase):
         u = CustomUser.objects.create(username="b1", avatar="b1")
         r = self.client.post("/api/users/bulk/", {"pks": [u.pk]}, format="json")
         assert r.status_code == 200 and r.json()[0]["avatar"] == "b1"
-        assert r.json()[0]["nickname"] is None
+        assert "nickname" not in r.json()[0]
         u.avatar = "b1x"
         r2 = self.client.post("/api/users/bulk/", {"pks": [u.pk]}, format="json")
         assert r2.json()[0]["avatar"] == "b1x"

@@ -24,7 +24,7 @@ class MeProfileViewTests(TestCase):
         body = response.json()
         assert body["pk"] == self.user.pk
         assert body["base"]["avatar"] == "karahash"
-        assert body["base"]["nickname"] is None
+        assert "nickname" not in body["base"]
         assert set(body["gameUser"].keys()) == {"dota", "deadlock"}
         assert body["orgProfiles"] == {}
 

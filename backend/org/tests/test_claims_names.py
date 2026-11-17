@@ -39,15 +39,14 @@ class ClaimNamesTest(TestCase):
         self.assertEqual(data["target_username"], "steam_76561198000300001")
         self.assertIn("target_discordNickname", data)
         self.assertIsNone(data["target_discordNickname"])
-        self.assertIn("target_nickname", data)
-        self.assertIsNone(data["target_nickname"])
+        self.assertNotIn("target_nickname", data)
 
     def test_target_with_discord_name(self) -> None:
         self.target.discordNickname = "Gwaihir"
         self.target.save()
         data = self._data()
         self.assertEqual(data["target_discordNickname"], "Gwaihir")
-        self.assertIsNone(data["target_nickname"])
+        self.assertNotIn("target_nickname", data)
 
     def test_deleted_target_keeps_keys_null(self) -> None:
         self.target.delete()
@@ -55,7 +54,7 @@ class ClaimNamesTest(TestCase):
         self.assertIsNone(data["target_user"])
         self.assertIsNone(data["target_username"])
         self.assertIsNone(data["target_discordNickname"])
-        self.assertIsNone(data["target_nickname"])
+        self.assertNotIn("target_nickname", data)
 
     def test_str_uses_discord_names_never_site_nickname(self) -> None:
         self.claim.refresh_from_db()

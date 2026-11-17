@@ -34,7 +34,6 @@ class LastMessaged(TypedDict):
 class CandidateRow(TypedDict):
     user_pk: int
     username: str
-    nickname: None
     discordUsername: str | None
     discordNickname: str | None
     guildNickname: str | None
@@ -158,7 +157,6 @@ def candidates(
             {
                 "user_pk": user.pk,
                 "username": user.username,
-                "nickname": None,
                 "discordUsername": user.discordUsername,
                 "discordNickname": user.discordNickname,
                 "guildNickname": user.org_guild_nickname,

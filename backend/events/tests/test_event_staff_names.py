@@ -66,12 +66,11 @@ class PublicOrgStaffNamesTest(EventNameFixture):
         for viewer in (None, self.owner):
             data = self._get(f"/api/events/{self.event.pk}/", viewer)
             host = data["host"]
-            self.assertIn("nickname", host)
-            self.assertIsNone(host["nickname"])
+            self.assertNotIn("nickname", host)
             self.assertEqual(host["discordNickname"], "Gwaihir")
             self.assertEqual(host["guildNickname"], "DragonClaw")
             helper = data["helpers"][0]
-            self.assertIsNone(helper["nickname"])
+            self.assertNotIn("nickname", helper)
             self.assertIsNone(helper["discordNickname"])
             self.assertEqual(helper["guildNickname"], "HelperNick")
 
@@ -86,8 +85,7 @@ class PublicOrgStaffNamesTest(EventNameFixture):
         )
         RepeaterSubscription.objects.create(event_repeater=repeater, user=self.host)
         rows = self._get(f"/api/events/repeaters/{repeater.pk}/subscribers/")
-        self.assertIn("nickname", rows[0])
-        self.assertIsNone(rows[0]["nickname"])
+        self.assertNotIn("nickname", rows[0])
         self.assertEqual(rows[0]["discordNickname"], "Gwaihir")
 
     def test_task_schedule_fired_by_carries_global_name(self) -> None:
@@ -105,8 +103,7 @@ class PublicOrgStaffNamesTest(EventNameFixture):
         tasks = self._get(f"/api/events/{self.event.pk}/task-schedule/", self.owner)
         fired = [t["fired_by"] for t in tasks if t.get("fired_by")]
         self.assertTrue(fired)
-        self.assertIn("nickname", fired[0])
-        self.assertIsNone(fired[0]["nickname"])
+        self.assertNotIn("nickname", fired[0])
         self.assertEqual(fired[0]["discordNickname"], "Gwaihir")
 
     def _discord_state(self) -> dict:
@@ -135,14 +132,13 @@ class PublicOrgStaffNamesTest(EventNameFixture):
     def test_discord_state_rows_carry_discord_names(self) -> None:
         data = self._discord_state()
         log = data["logs"][0]
-        self.assertIsNone(log["nickname"])
+        self.assertNotIn("nickname", log)
         self.assertEqual(log["discordNickname"], "Gwaihir")
         inline = log["message_log"]
-        self.assertIn("fired_by_nickname", inline)
-        self.assertIsNone(inline["fired_by_nickname"])
+        self.assertNotIn("fired_by_nickname", inline)
         self.assertEqual(inline["fired_by_discordNickname"], "Gwaihir")
         dm = data["dms"][0]
-        self.assertIsNone(dm["nickname"])
+        self.assertNotIn("nickname", dm)
         self.assertEqual(dm["discordNickname"], "Gwaihir")
         self.assertEqual(dm["guildNickname"], "DragonClaw")
 
@@ -153,7 +149,7 @@ class PrivateOrgStaffNamesTest(PublicOrgStaffNamesTest):
     def test_host_and_helpers_carry_discord_names(self) -> None:
         for viewer in (None, self.owner):
             data = self._get(f"/api/events/{self.event.pk}/", viewer)
-            self.assertIsNone(data["host"]["nickname"])
+            self.assertNotIn("nickname", data["host"])
             self.assertEqual(data["host"]["discordNickname"], "Gwaihir")
             self.assertIsNone(data["host"]["guildNickname"])
             self.assertIsNone(data["helpers"][0]["guildNickname"])

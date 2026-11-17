@@ -17,13 +17,13 @@ class UserSerializerNicknameAvatarTests(TestCase):
         user.base_profile.save()
 
         data = UserSerializer(user).data
-        assert data["nickname"] is None
+        assert "nickname" not in data
         assert data["avatar"] == "https://example.com/kara.png"
 
     def test_nickname_and_avatar_null_when_unset(self) -> None:
         user = CustomUser.objects.create(username="lior")
         data = UserSerializer(user).data
-        assert data["nickname"] is None
+        assert "nickname" not in data
         assert data["avatar"] is None
 
 
@@ -34,5 +34,5 @@ class TournamentUserSerializerNicknameAvatarTests(TestCase):
         user.base_profile.save()
 
         data = TournamentUserSerializer(user).data
-        assert data["nickname"] is None
+        assert "nickname" not in data
         assert data["avatar"] == "https://example.com/mira.png"

@@ -1478,7 +1478,6 @@ def get_event_task_schedule(request, event_id):
                 fired_by_data = {
                     "pk": row.fired_by.pk,
                     "username": row.fired_by.username,
-                    "nickname": None,
                     "discordNickname": row.fired_by.discordNickname,
                     "discordId": row.fired_by.discordId,
                     "avatar": row.fired_by.avatar,

@@ -323,13 +323,11 @@ class EventStaffCacheTest(TransactionTestCase):
             {
                 "pk",
                 "username",
-                "nickname",
                 "discordNickname",
                 "guildNickname",
                 "avatarUrl",
             },
         )
-        self.assertIsNone(second["helpers"][0]["nickname"])
 
     def test_host_nickname_change_after_cached_get_shows(self) -> None:
         Event.objects.filter(pk=self.event.pk).update(host=self.helper)

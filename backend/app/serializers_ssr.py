@@ -2,7 +2,6 @@
 
 from rest_framework import serializers
 
-from app.legacy_fields import LegacyNullField
 from app.models import CustomUser, HeroDraft, League, Organization, Tournament
 from events.models import Event
 
@@ -88,12 +87,11 @@ class HeroDraftSerializerSSR(serializers.ModelSerializer):
 
 
 class UserSerializerSSR(serializers.ModelSerializer):
-    nickname = LegacyNullField()
     avatar_url = serializers.SerializerMethodField()
 
     class Meta:
         model = CustomUser
-        fields = ["pk", "username", "nickname", "discordNickname", "avatar_url"]
+        fields = ["pk", "username", "discordNickname", "avatar_url"]
 
     def get_avatar_url(self, obj):
         return obj.avatarUrl

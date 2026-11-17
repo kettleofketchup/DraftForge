@@ -1,7 +1,6 @@
 from rest_framework import serializers
 
 from app.display_names import first_name
-from app.legacy_fields import LegacyNullField
 from app.models import CustomUser
 from org.display_names import guild_nicknames, org_nicknames_public
 from user.querysets import with_user_profiles
@@ -45,7 +44,6 @@ class MessageLogInlineSerializer(serializers.ModelSerializer):
     fired_by_username = serializers.CharField(
         source="fired_by.username", read_only=True, default=None
     )
-    fired_by_nickname = LegacyNullField()
     fired_by_discordNickname = serializers.CharField(
         source="fired_by.discordNickname", read_only=True, default=None
     )
@@ -63,7 +61,6 @@ class MessageLogInlineSerializer(serializers.ModelSerializer):
             "embed_data",
             "response_data",
             "fired_by_username",
-            "fired_by_nickname",
             "fired_by_discordNickname",
             "created_at",
         ]
@@ -78,7 +75,6 @@ class DiscordEventLogSerializer(serializers.ModelSerializer):
     # render the canonical avatar/display name via UserAvatar + DisplayName
     # rather than falling back to a generated image. The lookup map is built
     # once per response in DiscordEventDetailSerializer.to_representation.
-    nickname = LegacyNullField()
     discordNickname = serializers.SerializerMethodField()
     guildNickname = serializers.SerializerMethodField()
     username = serializers.SerializerMethodField()
@@ -119,7 +115,6 @@ class DiscordEventLogSerializer(serializers.ModelSerializer):
             "target_type",
             "discord_user_id",
             "discord_username",
-            "nickname",
             "discordNickname",
             "guildNickname",
             "username",
@@ -135,7 +130,6 @@ class DiscordEventLogSerializer(serializers.ModelSerializer):
 
 class DiscordEventDMSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source="org_user.user.username", read_only=True)
-    nickname = LegacyNullField()
     discordNickname = serializers.CharField(
         source="org_user.user.discordNickname", read_only=True
     )
@@ -154,7 +148,6 @@ class DiscordEventDMSerializer(serializers.ModelSerializer):
             "dm_type",
             "dm_type_display",
             "username",
-            "nickname",
             "discordNickname",
             "guildNickname",
             "avatar",

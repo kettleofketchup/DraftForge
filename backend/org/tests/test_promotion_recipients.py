@@ -296,7 +296,6 @@ class CandidatesTest(_PoolFixture):
             {
                 "user_pk",
                 "username",
-                "nickname",
                 "discordUsername",
                 "discordNickname",
                 "guildNickname",
@@ -309,7 +308,6 @@ class CandidatesTest(_PoolFixture):
             },
         )
         self.assertEqual(row["user_pk"], self.ann.pk)
-        self.assertIsNone(row["nickname"])
         self.assertEqual(row["discordUsername"], "ann_dc")
         self.assertEqual(row["discordId"], self.ann.discordId)
         self.assertEqual(row["avatarUrl"], self.ann.avatarUrl)

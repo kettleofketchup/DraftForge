@@ -16,7 +16,6 @@ class LeaderboardRow(TypedDict):
     org_user_pk: int
     user_pk: int
     username: str
-    nickname: None
     discordNickname: str | None
     guildNickname: str | None
     avatarUrl: str | None
@@ -76,7 +75,6 @@ def leaderboard(
                 org_user_pk=s["org_user"],
                 user_pk=user.pk,
                 username=user.username,
-                nickname=None,
                 discordNickname=first_name(user.discordNickname),
                 guildNickname=first_name(org_user.guild_nickname),
                 avatarUrl=user.avatarUrl,

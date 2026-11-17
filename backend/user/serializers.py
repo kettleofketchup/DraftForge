@@ -1,6 +1,5 @@
 from rest_framework import serializers
 
-from app.legacy_fields import LegacyNullField
 from app.models import CustomUser, PositionsModel
 from app.serializers import PositionsSerializer
 
@@ -8,11 +7,9 @@ from .models import BaseUserProfile, DeadlockUserProfile, DotaUserProfile
 
 
 class BaseUserProfileSerializer(serializers.ModelSerializer):
-    nickname = LegacyNullField()
-
     class Meta:
         model = BaseUserProfile
-        fields = ["nickname", "avatar"]
+        fields = ["avatar"]
 
 
 class DotaUserProfileSerializer(serializers.ModelSerializer):

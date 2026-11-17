@@ -95,8 +95,7 @@ class ContributionQueriesTest(TestCase):
         alice = rows[0]
         self.assertEqual(alice["user_pk"], self.alice.pk)
         self.assertEqual(alice["org_user_pk"], self._org_user(self.alice).pk)
-        self.assertIn("nickname", alice)
-        self.assertIsNone(alice["nickname"])
+        self.assertNotIn("nickname", alice)
         self.assertIn("avatarUrl", alice)
 
     def test_leaderboard_rows_carry_discord_names_for_this_org(self) -> None:
@@ -119,7 +118,7 @@ class ContributionQueriesTest(TestCase):
         }
         self.assertEqual(rows["q_alice"]["guildNickname"], "DragonClaw")
         self.assertEqual(rows["q_alice"]["discordNickname"], "Gwaihir")
-        self.assertIsNone(rows["q_alice"]["nickname"])
+        self.assertNotIn("nickname", rows["q_alice"])
         self.assertIsNone(rows["q_bob"]["guildNickname"])
         self.assertIsNone(rows["q_bob"]["discordNickname"])
         other = {
@@ -143,8 +142,7 @@ class ContributionQueriesTest(TestCase):
             summary = member_summary(org_user)
         self.assertEqual(summary["guildNickname"], "DragonClaw")
         self.assertEqual(summary["discordNickname"], "Gwaihir")
-        self.assertIn("nickname", summary)
-        self.assertIsNone(summary["nickname"])
+        self.assertNotIn("nickname", summary)
 
     def test_leaderboard_period_and_limit(self) -> None:
         self._seed()

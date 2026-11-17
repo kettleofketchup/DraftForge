@@ -11,7 +11,6 @@ ORG_ENTRY_KEYS = {
     "orgUserPk",
     "pk",
     "username",
-    "nickname",
     "guildNickname",
     "discordNickname",
     "avatar",
@@ -25,7 +24,6 @@ ORG_ENTRY_KEYS = {
 NONORG_ENTRY_KEYS = {
     "pk",
     "username",
-    "nickname",
     "avatar",
     "discordId",
     "discordNickname",
@@ -71,7 +69,7 @@ class BuildUsersDictOrgTests(TransactionTestCase):
     def test_org_entry_has_core_and_mmr(self) -> None:
         entry = _build_users_dict(self.tournament)[self.member.pk]
         # core half (cached per-user)
-        assert entry["nickname"] is None
+        assert "nickname" not in entry
         assert "positions" in entry
         # contextual MMR half (merged per-request)
         assert entry["mmr"] == 4200
@@ -109,7 +107,7 @@ class BuildUsersDictOrgTests(TransactionTestCase):
         self.member.save()
         entry = _build_users_dict(self.tournament)[self.member.pk]
         assert entry["discordNickname"] == "Renamed"
-        assert entry["nickname"] is None
+        assert "nickname" not in entry
 
     def test_mmr_change_reflected(self) -> None:
         _build_users_dict(self.tournament)  # warm

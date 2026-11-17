@@ -31,7 +31,7 @@ class BaseUserProfileSerializerTests(TestCase):
         user.base_profile.save()
         set_raw_site_nickname(user.pk, "Hans")
         data = BaseUserProfileSerializer(user.base_profile).data
-        assert data["nickname"] is None
+        assert "nickname" not in data
         assert data["avatar"] == "https://example.com/h.png"
 
     def test_partial_update_ignores_nickname(self) -> None:
@@ -56,6 +56,6 @@ class UserProfileLayeredSerializerTests(TestCase):
         user = CustomUser.objects.nocache().get(pk=user.pk)
         data = UserProfileLayeredSerializer(user).data
         assert data["pk"] == user.pk
-        assert data["base"]["nickname"] is None
+        assert "nickname" not in data["base"]
         assert set(data["gameUser"].keys()) == {"dota", "deadlock"}
         assert data["orgProfiles"] == {}

@@ -12,7 +12,6 @@ from rest_framework.utils.serializer_helpers import ReturnList
 from rest_framework.validators import UniqueValidator
 
 from app.cache_utils import invalidate_after_commit
-from app.legacy_fields import LegacyNullField
 from app.permissions_org import check_lobby_steam_league_id, request_user
 from league.models import LeagueUser
 from org.models import OrgUser
@@ -81,7 +80,6 @@ class TournamentUserSerializer(serializers.ModelSerializer):
     positions = PositionsSerializer(many=False, read_only=True)
     # Auto-computed 32-bit Steam Account ID from 64-bit Friend ID
     steam_account_id = serializers.IntegerField(read_only=True)
-    nickname = LegacyNullField()
     # avatar lives on BaseUserProfile; the CustomUser @property setter writes
     # it through, so PATCH /users/<pk>/ keeps working for admin edits.
     avatar = serializers.CharField(
@@ -95,7 +93,6 @@ class TournamentUserSerializer(serializers.ModelSerializer):
         fields = (
             "pk",
             "username",
-            "nickname",
             "avatar",
             "discordId",
             "discordNickname",
@@ -1506,7 +1503,6 @@ class UserSerializer(serializers.ModelSerializer):
     staff_organization_ids = serializers.SerializerMethodField()
     admin_league_ids = serializers.SerializerMethodField()
     staff_league_ids = serializers.SerializerMethodField()
-    nickname = LegacyNullField()
     # avatar lives on BaseUserProfile; the CustomUser @property setter writes
     # it through, so PATCH /users/<pk>/ keeps working for admin edits.
     avatar = serializers.CharField(
@@ -1520,7 +1516,6 @@ class UserSerializer(serializers.ModelSerializer):
         fields = (
             "pk",
             "username",
-            "nickname",
             "discordNickname",
             "is_staff",
             "is_active",
