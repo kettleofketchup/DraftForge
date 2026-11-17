@@ -1,15 +1,19 @@
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 from unittest import mock
 
+from cacheops import invalidate_obj
 from django.conf import settings
 from django.db import IntegrityError, transaction
 from django.db.models import QuerySet
 from django.test import SimpleTestCase, TestCase
+from rest_framework.response import Response
+from rest_framework.test import APIClient
 
 from app.models import CustomUser, Organization, OrgLog
 from org import settings_constants, settings_service
-from org.models import OrgSettings
+from org.models import OrgSettings, OrgUser
 from org.settings_constants import ALL_CODES, StaffOverridePolicy
 from org.settings_service import (
     get_org_settings,
@@ -268,3 +272,339 @@ class OrgSettingsServiceTest(TestCase):
             )
         invalidate.assert_called_once_with(row)
         self.assertEqual(get_org_settings(self.org).staff_override_policy, "block")
+
+
+def settings_url(org_id: int) -> str:
+    return f"/api/organizations/{org_id}/settings/"
+
+
+class OrgSettingsApiTest(TestCase):
+    def setUp(self) -> None:
+        self.site_admin = CustomUser.objects.create_user(
+            username="orgset_site_admin", password="x", is_staff=True
+        )
+        self.owner = CustomUser.objects.create_user(
+            username="orgset_owner", password="x"
+        )
+        self.admin = CustomUser.objects.create_user(
+            username="orgset_admin", password="x"
+        )
+        self.staff = CustomUser.objects.create_user(
+            username="orgset_staff", password="x"
+        )
+        self.promoter = CustomUser.objects.create_user(
+            username="orgset_promoter", password="x"
+        )
+        self.member = CustomUser.objects.create_user(
+            username="orgset_member", password="x"
+        )
+        self.org = Organization.objects.create(name="Orgset Org", owner=self.owner)
+        self.org.admins.add(self.admin)
+        self.org.staff.add(self.staff)
+        self.org.promoters.add(self.promoter)
+        for user in (self.promoter, self.member):
+            OrgUser.objects.create(user=user, organization=self.org)
+
+        self.other_owner = CustomUser.objects.create_user(
+            username="orgset_other_owner", password="x"
+        )
+        self.other_admin = CustomUser.objects.create_user(
+            username="orgset_other_admin", password="x"
+        )
+        self.other_org = Organization.objects.create(
+            name="Orgset Other Org", owner=self.other_owner
+        )
+        self.other_org.admins.add(self.other_admin)
+
+        self.client = APIClient()
+        self.url = settings_url(self.org.pk)
+
+    def _as(self, user: CustomUser | None) -> APIClient:
+        self.client.force_authenticate(user=user)
+        return self.client
+
+    def _count(self) -> int:
+        return OrgSettings.objects.nocache().count()
+
+    def _row(self, org: Organization) -> OrgSettings:
+        return OrgSettings.objects.nocache().get(organization=org)
+
+    def _patch(
+        self, user: CustomUser | None, body: Any, org_id: int | None = None
+    ) -> Response:
+        return self._as(user).patch(
+            settings_url(org_id or self.org.pk), body, format="json"
+        )
+
+    def test_get_allowed_roles(self) -> None:
+        for user in (self.owner, self.admin, self.site_admin):
+            with self.subTest(user=user.username):
+                response = self._as(user).get(self.url)
+                self.assertEqual(response.status_code, 200, response.data)
+                data = response.data
+                self.assertEqual(
+                    set(data),
+                    {
+                        "organization",
+                        "staff_override_policy",
+                        "staff_override_warning_codes",
+                        "available_warning_codes",
+                        "updated_at",
+                    },
+                )
+                self.assertEqual(data["organization"], self.org.pk)
+                self.assertEqual(data["staff_override_policy"], "silent")
+                self.assertEqual(data["staff_override_warning_codes"], ALL_CODES)
+                self.assertEqual(len(data["available_warning_codes"]), 6)
+                self.assertEqual(
+                    data["available_warning_codes"][0],
+                    {"code": "gate_outside", "label": "Outside the signup gate window"},
+                )
+
+    def test_get_denied_roles(self) -> None:
+        for user in (self.staff, self.promoter, self.member):
+            with self.subTest(user=user.username):
+                response = self._as(user).get(self.url)
+                self.assertEqual(response.status_code, 403)
+                self.assertEqual(response.data["code"], "not_permitted")
+        response = self._as(None).get(self.url)
+        self.assertIn(response.status_code, (401, 403))
+
+    def test_get_unknown_org_404(self) -> None:
+        response = self._as(self.admin).get(settings_url(999999))
+        self.assertEqual(response.status_code, 404)
+
+    def test_get_creates_row(self) -> None:
+        self.assertEqual(self._count(), 0)
+        response = self._as(self.admin).get(self.url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self._count(), 1)
+        self.assertEqual(self._row(self.org).organization_id, self.org.pk)
+
+    def test_denied_requests_create_no_row(self) -> None:
+        before = self._count()
+        self._as(self.staff).get(self.url)
+        self._as(self.member).patch(
+            self.url, {"staff_override_policy": "block"}, format="json"
+        )
+        self._as(None).get(self.url)
+        self._as(None).patch(
+            self.url, {"staff_override_policy": "block"}, format="json"
+        )
+        self._as(self.admin).get(settings_url(999999))
+        self._as(self.admin).patch(
+            settings_url(999999), {"staff_override_policy": "block"}, format="json"
+        )
+        self.assertEqual(self._count(), before)
+
+    def test_cross_tenant_denied(self) -> None:
+        other_url = settings_url(self.other_org.pk)
+        for user in (self.owner, self.admin):
+            with self.subTest(user=user.username, method="GET"):
+                self.assertEqual(self._as(user).get(other_url).status_code, 403)
+            with self.subTest(user=user.username, method="PATCH"):
+                response = self._patch(
+                    user, {"staff_override_policy": "block"}, self.other_org.pk
+                )
+                self.assertEqual(response.status_code, 403)
+        self.assertFalse(
+            OrgSettings.objects.nocache().filter(organization=self.other_org).exists()
+        )
+
+        get_org_settings(self.other_org)
+        before = self._row(self.other_org)
+        for user in (self.owner, self.admin):
+            response = self._patch(
+                user,
+                {
+                    "staff_override_policy": "block",
+                    "staff_override_warning_codes": [],
+                },
+                self.other_org.pk,
+            )
+            self.assertEqual(response.status_code, 403)
+        after = self._row(self.other_org)
+        self.assertEqual(after.staff_override_policy, before.staff_override_policy)
+        self.assertEqual(
+            after.staff_override_warning_codes, before.staff_override_warning_codes
+        )
+        self.assertEqual(after.updated_at, before.updated_at)
+
+    def test_patch_allowed_roles(self) -> None:
+        body = {
+            "staff_override_policy": "confirm",
+            "staff_override_warning_codes": ["over_capacity"],
+        }
+        for user in (self.owner, self.admin, self.site_admin):
+            with self.subTest(user=user.username):
+                OrgSettings.objects.nocache().filter(organization=self.org).delete()
+                response = self._patch(user, body)
+                self.assertEqual(response.status_code, 200, response.data)
+                self.assertEqual(response.data["staff_override_policy"], "confirm")
+                self.assertEqual(
+                    response.data["staff_override_warning_codes"], ["over_capacity"]
+                )
+                row = self._row(self.org)
+                self.assertEqual(row.staff_override_policy, "confirm")
+                self.assertEqual(row.staff_override_warning_codes, ["over_capacity"])
+
+    def test_patch_denied_roles(self) -> None:
+        get_org_settings(self.org)
+        before = self._row(self.org)
+        for user in (self.staff, self.promoter, self.member):
+            with self.subTest(user=user.username):
+                response = self._patch(
+                    user,
+                    {
+                        "staff_override_policy": "block",
+                        "staff_override_warning_codes": [],
+                    },
+                )
+                self.assertEqual(response.status_code, 403)
+                self.assertEqual(response.data["code"], "not_permitted")
+        after = self._row(self.org)
+        self.assertEqual(after.staff_override_policy, "silent")
+        self.assertEqual(after.staff_override_warning_codes, ALL_CODES)
+        self.assertEqual(after.updated_at, before.updated_at)
+
+    def test_patch_validation(self) -> None:
+        response = self._patch(self.admin, {"staff_override_warning_codes": ["nope"]})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn(
+            "Unknown warning code(s): nope",
+            str(response.data["staff_override_warning_codes"][0]),
+        )
+
+        response = self._patch(self.admin, {"staff_override_policy": "sometimes"})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("staff_override_policy", response.data)
+
+        for bad in ("gate_outside", [1], [{"a": 1}], None):
+            with self.subTest(codes=bad):
+                response = self._patch(
+                    self.admin, {"staff_override_warning_codes": bad}
+                )
+                self.assertEqual(response.status_code, 400)
+                self.assertIn("staff_override_warning_codes", response.data)
+
+        self.assertEqual(self._row(self.org).staff_override_warning_codes, ALL_CODES)
+
+        response = self._patch(self.admin, {"staff_override_warning_codes": []})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["staff_override_warning_codes"], [])
+        self.assertEqual(self._row(self.org).staff_override_warning_codes, [])
+
+    def test_patch_normalizes(self) -> None:
+        response = self._patch(
+            self.admin,
+            {
+                "staff_override_warning_codes": [
+                    "over_capacity",
+                    "gate_outside",
+                    "gate_outside",
+                ]
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        expected = ["gate_outside", "over_capacity"]
+        self.assertEqual(response.data["staff_override_warning_codes"], expected)
+        self.assertEqual(self._row(self.org).staff_override_warning_codes, expected)
+
+    def test_patch_partial_policy_only(self) -> None:
+        response = self._patch(self.admin, {"staff_override_policy": "block"})
+        self.assertEqual(response.status_code, 200)
+        row = self._row(self.org)
+        self.assertEqual(row.staff_override_policy, "block")
+        self.assertEqual(row.staff_override_warning_codes, ALL_CODES)
+        self.assertEqual(response.data["staff_override_warning_codes"], ALL_CODES)
+
+    def test_patch_ignores_read_only(self) -> None:
+        response = self._patch(
+            self.admin,
+            {
+                "organization": self.other_org.pk,
+                "available_warning_codes": [],
+                "updated_at": "2000-01-01T00:00:00Z",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["organization"], self.org.pk)
+        self.assertEqual(len(response.data["available_warning_codes"]), 6)
+        self.assertEqual(self._row(self.org).organization_id, self.org.pk)
+        self.assertFalse(
+            OrgSettings.objects.nocache().filter(organization=self.other_org).exists()
+        )
+
+    def test_patch_accepts_code_added_at_runtime(self) -> None:
+        with mock.patch.object(
+            settings_constants, "ALL_CODES", [*ALL_CODES, "new_code"]
+        ):
+            response = self._patch(
+                self.admin, {"staff_override_warning_codes": ["new_code"]}
+            )
+            self.assertEqual(response.status_code, 200, response.data)
+            self.assertEqual(
+                response.data["staff_override_warning_codes"], ["new_code"]
+            )
+            self.assertEqual(
+                response.data["available_warning_codes"][-1],
+                {"code": "new_code", "label": "new_code"},
+            )
+        self.assertEqual(self._row(self.org).staff_override_warning_codes, ["new_code"])
+
+    def test_retired_code_filtered_and_policy_patch_ok(self) -> None:
+        row = get_org_settings(self.org)
+        OrgSettings.objects.filter(pk=row.pk).update(
+            staff_override_warning_codes=[*ALL_CODES, "old_code"]
+        )
+        invalidate_obj(row)
+        self.assertIn(
+            "old_code", get_org_settings(self.org).staff_override_warning_codes
+        )
+
+        response = self._as(self.admin).get(self.url)
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("old_code", response.data["staff_override_warning_codes"])
+        self.assertEqual(response.data["staff_override_warning_codes"], ALL_CODES)
+
+        response = self._patch(
+            self.admin,
+            {
+                "staff_override_policy": "confirm",
+                "staff_override_warning_codes": response.data[
+                    "staff_override_warning_codes"
+                ],
+            },
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["staff_override_policy"], "confirm")
+        self.assertEqual(self._row(self.org).staff_override_policy, "confirm")
+
+        response = self._patch(self.admin, {"staff_override_policy": "block"})
+        self.assertEqual(response.status_code, 200, response.data)
+
+
+class OrgSettingsInertTest(SimpleTestCase):
+    FORBIDDEN: tuple[str, ...] = (
+        "org.settings_service",
+        "org.models_settings",
+        "OrgSettings",
+        "staff_override_policy",
+        "staff_override_warning_codes",
+    )
+
+    def test_policy_inert_until_524(self) -> None:
+        """#524 removes this test and replaces it with block/confirm enforcement tests."""
+        base = Path(settings.BASE_DIR)
+        offenders: list[str] = []
+        for path in base.rglob("*.py"):
+            parts = path.relative_to(base).parts
+            if parts[0] == "org" or "migrations" in parts:
+                continue
+            text = path.read_text(encoding="utf-8", errors="ignore")
+            offenders.extend(
+                f"{path.relative_to(base)}: {token}"
+                for token in self.FORBIDDEN
+                if token in text
+            )
+        self.assertEqual(offenders, [])
