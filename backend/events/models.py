@@ -1,10 +1,14 @@
 import copy
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
+from typing import Any
 
 import nh3
 from django.core.exceptions import ValidationError
 from django.core.validators import RegexValidator
-from django.db import models
+from django.db import models, router, transaction
+from django.db.models import F
+from django.db.models.expressions import DatabaseDefault
+from django.db.models.functions import Now
 from django.utils import timezone as tz
 
 from app.cache_utils import invalidate_after_commit
@@ -17,7 +21,13 @@ from app.models import (
     GameType,
     TimeoutAction,
 )
+from events import line
+from events.constants import Commitment, RsvpClass
+from events.exceptions import ImmutableFieldError
 from lobby import passwords as lobby_passwords
+from telemetry.logging import get_logger
+
+log = get_logger(__name__)
 
 discord_id_validator = RegexValidator(
     r"^(\d{17,20})?$",
@@ -25,7 +35,7 @@ discord_id_validator = RegexValidator(
 )
 
 
-from events.constants import (  # noqa: F401 — re-exported for backward compat
+from events.constants import (  # noqa: E402, F401 — re-exported for backward compat
     EVENT_STATE_TRANSITIONS,
     EventState,
     RepeatFrequency,
@@ -334,10 +344,10 @@ class EventRepeater(
     class Meta:
         ordering = ["-created_at"]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.name} ({self.frequency})"
 
-    def save(self, *args, **kwargs):
+    def save(self, *args: Any, **kwargs: Any) -> None:
         if self.description:
             self.description = nh3.clean(self.description)
         super().save(*args, **kwargs)
@@ -422,7 +432,7 @@ class Event(
         ]
         indexes = [models.Index(fields=["state", "scheduled_at"])]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.name} ({self.scheduled_at:%Y-%m-%d})"
 
     def clean(self) -> None:
@@ -434,7 +444,7 @@ class Event(
         ):
             raise ValidationError({"ends_at": "End time must be after the start time."})
 
-    def save(self, *args, **kwargs):
+    def save(self, *args: Any, **kwargs: Any) -> None:
         if self.description:
             self.description = nh3.clean(self.description)
         if (
@@ -499,7 +509,7 @@ class EventTeam(models.Model):
     class Meta:
         ordering = ["created_at"]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.name} ({self.event.name})"
 
 
@@ -526,17 +536,208 @@ class EventSignup(models.Model):
     waitlist_position = models.IntegerField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    signed_up_at = models.DateTimeField(db_default=Now())
+    line_seq = models.PositiveIntegerField(null=True, blank=True)
+    commitment = models.CharField(
+        max_length=8, choices=Commitment.choices, db_default=Commitment.MAIN
+    )
+    rsvp_class = models.CharField(
+        max_length=16,
+        choices=RsvpClass.choices,
+        default=RsvpClass.STANDARD,
+        db_default=RsvpClass.STANDARD,
+    )
+    first_signed_up_at = models.DateTimeField(db_default=Now())
+    first_commitment = models.CharField(
+        max_length=8, choices=Commitment.choices, db_default=Commitment.MAIN
+    )
+    first_rsvp_class = models.CharField(
+        max_length=16, choices=RsvpClass.choices, db_default=RsvpClass.STANDARD
+    )
+
+    objects = line.EventSignupQuerySet.as_manager()
 
     class Meta:
-        ordering = ["created_at"]
+        ordering = [F("line_seq").asc(nulls_last=True), "pk"]
         constraints = [
             models.UniqueConstraint(
                 fields=["event", "user"], name="unique_event_user_signup"
             ),
         ]
+        indexes = [
+            models.Index(
+                fields=["event", "line_seq"], name="eventsignup_event_line_idx"
+            )
+        ]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.user} - {self.event.name} ({self.status})"
+
+    _line_loaded: dict[str, Any]
+    _TRACKED: tuple[str, ...] = ("event_id", "line_seq", *line.FIRST_FIELDS)
+    _EXISTING_FIELDS: tuple[str, ...] = (
+        "event_id",
+        "line_seq",
+        "signed_up_at",
+        "commitment",
+        "rsvp_class",
+        *line.FIRST_FIELDS,
+    )
+
+    @classmethod
+    def from_db(
+        cls, db: str | None, field_names: Sequence[str], values: Sequence[Any]
+    ) -> "EventSignup":
+        instance = super().from_db(db, field_names, values)
+        instance._capture_line_state()
+        return instance
+
+    def refresh_from_db(
+        self,
+        using: str | None = None,
+        fields: Iterable[str] | None = None,
+        from_queryset: models.QuerySet | None = None,
+    ) -> None:
+        fields = list(fields) if fields is not None else None
+        super().refresh_from_db(using=using, fields=fields, from_queryset=from_queryset)
+        if fields is None or not hasattr(self, "_line_loaded"):
+            self._capture_line_state()
+        else:
+            self._capture_line_state(
+                {"event_id" if f == "event" else f for f in fields}
+            )
+
+    def _capture_line_state(self, only: set[str] | None = None) -> None:
+        deferred = self.get_deferred_fields()
+        state = {} if only is None else dict(self._line_loaded)
+        for attname in self._TRACKED:
+            if only is not None and attname not in only:
+                continue
+            if attname in deferred:
+                state.pop(attname, None)
+            else:
+                state[attname] = getattr(self, attname)
+        self._line_loaded = state
+
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        existing: dict[str, Any] | None = None
+        if (
+            self._state.adding
+            and self.pk is not None
+            and not kwargs.get("force_insert")
+        ):
+            existing = (
+                type(self)
+                ._base_manager.nocache()
+                .filter(pk=self.pk)
+                .values(*self._EXISTING_FIELDS)
+                .first()
+            )
+        if self._state.adding and existing is None:
+            self._save_insert(*args, **kwargs)
+        else:
+            self._save_update(existing, *args, **kwargs)
+        self._capture_line_state()
+
+    def _save_insert(self, *args: Any, **kwargs: Any) -> None:
+        using = kwargs.get("using") or router.db_for_write(type(self), instance=self)
+        with transaction.atomic(using=using):
+            if _unset(self.line_seq):
+                at = None if _unset(self.signed_up_at) else self.signed_up_at
+                for name, value in line.stamp(self.event, at=at).items():
+                    setattr(self, name, value)
+            elif _unset(self.signed_up_at):
+                self.signed_up_at = tz.now()
+            if _unset(self.commitment):
+                self.commitment = (
+                    Commitment.MAYBE
+                    if self.status == SignupStatus.TENTATIVE
+                    else Commitment.MAIN
+                )
+            for first in line.FIRST_FIELDS:
+                if _unset(getattr(self, first)):
+                    setattr(self, first, getattr(self, first.removeprefix("first_")))
+            super().save(*args, **kwargs)
+
+    def _save_update(
+        self, existing: dict[str, Any] | None, *args: Any, **kwargs: Any
+    ) -> None:
+        if existing is not None:
+            for name, value in existing.items():
+                if _unset(getattr(self, name)):
+                    setattr(self, name, value)
+            loaded = existing
+        else:
+            loaded = getattr(self, "_line_loaded", {})
+        self._guard_first_fields(loaded)
+        if self._event_changed(loaded):
+            using = kwargs.get("using") or router.db_for_write(
+                type(self), instance=self
+            )
+            with transaction.atomic(using=using):
+                from_event_id = loaded["event_id"]
+                for name, value in line.stamp(self.event).items():
+                    setattr(self, name, value)
+                update_fields = kwargs.get("update_fields")
+                if update_fields is not None:
+                    kwargs["update_fields"] = [
+                        *update_fields,
+                        *(
+                            f
+                            for f in ("line_seq", "signed_up_at")
+                            if f not in update_fields
+                        ),
+                    ]
+                super().save(*args, **kwargs)
+            log.info(
+                "signup_line_restamped_on_event_change",
+                system="events",
+                subsystem="line",
+                signup_id=self.pk,
+                from_event_id=from_event_id,
+                event_id=self.event_id,
+                line_seq=self.line_seq,
+            )
+            return
+        super().save(*args, **kwargs)
+
+    def _guard_first_fields(self, loaded: Mapping[str, Any]) -> None:
+        deferred = self.get_deferred_fields()
+        checked = [f for f in line.FIRST_FIELDS if f not in deferred]
+        originals = dict(loaded)
+        missing = [f for f in checked if f not in originals]
+        if missing and self.pk is not None:
+            originals.update(
+                type(self)
+                ._base_manager.nocache()
+                .filter(pk=self.pk)
+                .values(*missing)
+                .first()
+                or {}
+            )
+        changed = [
+            f for f in checked if f in originals and getattr(self, f) != originals[f]
+        ]
+        if changed:
+            log.warning(
+                "signup_first_fields_mutation_blocked",
+                system="events",
+                subsystem="line",
+                signup_id=self.pk,
+                fields=changed,
+            )
+            raise ImmutableFieldError(f"EventSignup fields are immutable: {changed}")
+
+    def _event_changed(self, loaded: Mapping[str, Any]) -> bool:
+        if "event_id" not in loaded or "event_id" in self.get_deferred_fields():
+            return False
+        if self.event_id == loaded["event_id"]:
+            return False
+        return "line_seq" not in loaded or self.line_seq == loaded["line_seq"]
+
+
+def _unset(value: object) -> bool:
+    return value is None or isinstance(value, DatabaseDefault)
 
 
 class RepeaterSubscription(models.Model):
@@ -563,7 +764,7 @@ class RepeaterSubscription(models.Model):
         ]
         ordering = ["created_at"]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.user} → {self.event_repeater.name}"
 
 
@@ -590,5 +791,5 @@ class OrgEventDefaults(
     class Meta:
         verbose_name_plural = "Org event defaults"
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"Event defaults for {self.organization.name}"
