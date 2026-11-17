@@ -113,7 +113,7 @@ Players RSVP from the event page (web) or via the Discord signup post. The signu
 - **Waitlist** — when max players is reached, new signups are waitlisted with position tracking
 - **Re-RSVP** — cancelled signups can re-register
 
-Each signup keeps a place in line, its original sign-up and a durable record of its changes: see [Signup Ledger & Line Position](events/signup-ledger.md).
+Each signup keeps a place in line and its original sign-up, and the signup ledger will keep a durable record of its changes: see [Signup Ledger & Line Position](events/signup-ledger.md).
 
 #### Web vs Discord parity
 

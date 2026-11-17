@@ -1,6 +1,6 @@
 # Signup Ledger & Line Position
 
-Every event signup has a place in line and an original sign-up that never changes, and every signup keeps a durable record of its changes.
+Every event signup has a place in line and an original sign-up that never changes. A signup ledger is in place to hold a durable record of signup changes; for now it holds only a starting entry for each signup that existed when it was added.
 
 ## Place in line
 
@@ -34,7 +34,7 @@ These fields never change. If a member cancels and signs up again, or switches b
 
 ## Signup record
 
-The signup ledger (`SignupLedgerEntry`) is an append-only record of signup changes. Each entry stores:
+The signup ledger (`SignupLedgerEntry`) is an append-only record meant for signup changes. Each entry stores:
 
 - **Who:** the member the change is about and the person who made it (a member, a staff member or the system), plus whether it was done on someone else's behalf.
 - **How:** the means, such as the website, a Discord button or the system.
@@ -47,7 +47,7 @@ Entries cannot be edited or deleted through the app or the admin. They outlive t
 - Deleting a user clears the link to that user, and the snapshot keeps their name and Discord ID.
 - Merging Discord accounts moves the entries to the remaining account.
 
-Existing signups got a single `backfilled` entry when the ledger was added. It marks where each signup's history starts and is not a change in itself.
+The only entries written today are `backfilled` ones: each signup that existed when the ledger was added got one, marking where its history starts. A `backfilled` entry is not a change in itself. Signups created, cancelled or moved after that get no entry yet; rerunning the backfill gives signups without one a `backfilled` entry.
 
 ## After deploying
 
@@ -63,4 +63,4 @@ Use `docker exec` rather than `just dev::run`, which starts a container on the d
 
 ## Coming later
 
-Views that show a signup's history and a member's signup records will build on this ledger, and this page will describe them when they land.
+Recording signup changes made on the website and in Discord will come later; until then the ledger holds only `backfilled` entries. Views that show a signup's history and a member's signup records will build on this ledger, and this page will describe them when they land.
