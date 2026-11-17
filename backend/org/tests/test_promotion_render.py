@@ -130,7 +130,6 @@ class PlayerNameTest(TestCase):
 
     def test_site_nickname_first(self) -> None:
         user = self._user(
-            guildNickname="Guild",
             discordNickname="DiscNick",
             discordUsername="discuser",
             nickname="SiteNick",
@@ -138,7 +137,7 @@ class PlayerNameTest(TestCase):
         self.assertEqual(player_name(user), "SiteNick")
 
     def test_username_when_no_nickname(self) -> None:
-        user = self._user(guildNickname="Guild", discordUsername="discuser")
+        user = self._user(discordUsername="discuser")
         self.assertEqual(player_name(user), "pn_user")
 
     def test_blank_nickname_is_skipped(self) -> None:

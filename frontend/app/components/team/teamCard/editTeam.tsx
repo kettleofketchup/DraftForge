@@ -5,10 +5,10 @@ import type { UserClassType, UserType } from '~/components/user/types';
 import { useUserStore } from '~/store/userStore';
 
 import { toast } from 'sonner';
-import { DialogClose } from '~/components/ui/dialog';
-import { getLogger } from '~/lib/logger';
 import { PrimaryButton } from '~/components/ui/buttons';
+import { DialogClose } from '~/components/ui/dialog';
 import { Input } from '~/components/ui/input';
+import { getLogger } from '~/lib/logger';
 
 const log = getLogger('editForm');
 interface Props {
@@ -92,7 +92,11 @@ export const TeamEditForm: React.FC<Props> = ({ user, form, setForm }) => {
     }
   };
 
-  const inputView = (key: keyof UserClassType, label: string, type: string = 'text') => {
+  const inputView = (
+    key: keyof UserClassType,
+    label: string,
+    type: string = 'text',
+  ) => {
     return (
       <div>
         <label className="font-semibold">{label}</label>
@@ -101,14 +105,14 @@ export const TeamEditForm: React.FC<Props> = ({ user, form, setForm }) => {
           placeholder={String(user[key] ?? '')}
           value={String(form[key as keyof UserType] ?? '')}
           onFocus={() => handleChange(key, user[key])}
-          onChange={(e) =>
-            handleChange(key, e.target.value)
-          }
+          onChange={(e) => handleChange(key, e.target.value)}
           aria-invalid={!!errorMessage[key as keyof UserType]}
           className="mt-1"
         />
         {errorMessage[key as keyof UserType] && (
-          <p className="text-error text-sm mt-1">{errorMessage[key as keyof UserType]}</p>
+          <p className="text-error text-sm mt-1">
+            {errorMessage[key as keyof UserType]}
+          </p>
         )}
       </div>
     );
@@ -121,7 +125,6 @@ export const TeamEditForm: React.FC<Props> = ({ user, form, setForm }) => {
       {inputView('position', 'Position: ')}
       {inputView('steam_account_id', 'Friend ID: ', 'number')}
       {/* {inputView('discordId', 'Discord ID: ', 'number')} */}
-      {inputView('guildNickname', 'Discord Guild Nickname: ')}
       <div className="flex flex-row items-start gap-4">
         <DialogClose asChild>
           <PrimaryButton

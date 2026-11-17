@@ -7,12 +7,17 @@ collided. See app/discord_accounts.py and app/pipelines.py.
 """
 
 from datetime import timedelta
+from unittest import mock
 
 from django.test import TestCase
 from django.utils import timezone as tz
 from social_django.models import UserSocialAuth
 
-from app.discord_accounts import find_split_discord_accounts, merge_discord_accounts
+from app.discord_accounts import (
+    _CARRYOVER_COLUMN_FIELDS,
+    find_split_discord_accounts,
+    merge_discord_accounts,
+)
 from app.models import CustomUser, Organization
 from app.pipelines import associate_by_discord_id, save_discord
 from events.constants import EventState, SignupStatus
@@ -162,6 +167,50 @@ class MergeDiscordAccountsTest(TestCase):
             [(keep.pk, 3), (keep.pk, 5)],
         )
 
+    def test_merge_collision_keeps_dropped_guild_nickname(self) -> None:
+        keep = CustomUser.objects.create(username="ph", discordId=DISCORD_ID)
+        drop = CustomUser.objects.create(username="loginrow")
+        _social(drop)
+        keep_ou = OrgUser.objects.create(user=keep, organization=self.org)
+        OrgUser.objects.create(
+            user=drop, organization=self.org, guild_nickname="DragonClaw"
+        )
+
+        with mock.patch("app.discord_accounts.invalidate_after_commit") as spy:
+            merge_discord_accounts(keep=keep, drop=drop)
+
+        self.assertEqual(
+            OrgUser.objects.nocache().get(pk=keep_ou.pk).guild_nickname, "DragonClaw"
+        )
+        self.assertTrue(
+            any(
+                isinstance(a, CustomUser) and a.pk == keep.pk
+                for call in spy.call_args_list
+                for a in call.args
+            )
+        )
+
+    def test_merge_collision_keeps_existing_guild_nickname(self) -> None:
+        keep = CustomUser.objects.create(username="ph", discordId=DISCORD_ID)
+        drop = CustomUser.objects.create(username="loginrow")
+        _social(drop)
+        keep_ou = OrgUser.objects.create(
+            user=keep, organization=self.org, guild_nickname="KeepNick"
+        )
+        OrgUser.objects.create(
+            user=drop, organization=self.org, guild_nickname="DropNick"
+        )
+
+        merge_discord_accounts(keep=keep, drop=drop)
+
+        self.assertEqual(
+            OrgUser.objects.nocache().get(pk=keep_ou.pk).guild_nickname, "KeepNick"
+        )
+
+    def test_guild_nickname_not_carried_over_as_column(self) -> None:
+        self.assertNotIn("guildNickname", _CARRYOVER_COLUMN_FIELDS)
+        self.assertIn("discordNickname", _CARRYOVER_COLUMN_FIELDS)
+
     def test_find_split_accounts(self):
         keep = CustomUser.objects.create(username="ph", discordId=DISCORD_ID)
         drop = CustomUser.objects.create(username="loginrow")
@@ -202,6 +251,15 @@ class GetOrgUserPhantomGuardTest(TestCase):
         self.assertEqual(
             associate_by_discord_id(uid=DISCORD_ID, user=None), {"user": user}
         )
+
+    def test_phantom_leaves_synced_names_unset(self) -> None:
+        from events.discord.handlers import _get_org_user
+
+        org_user, user = _get_org_user(self.event, DISCORD_ID, discord_username="ghost")
+        user.refresh_from_db()
+        org_user.refresh_from_db()
+        self.assertIsNone(user.discordNickname)
+        self.assertIsNone(org_user.guild_nickname)
 
     def test_repeat_click_reuses_same_account(self):
         """Clicking again resolves the same row — never a duplicate discordId."""

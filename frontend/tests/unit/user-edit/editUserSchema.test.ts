@@ -5,8 +5,6 @@ import {
   buildDefaults,
   EditUserSchema,
   pickDirty,
-  type EditUserInput,
-  type EditUserScope,
 } from '~/components/user/userCard/editUserSchema';
 
 const baseUser = {
@@ -16,14 +14,17 @@ const baseUser = {
   nickname: 'Ali',
   mmr: 5000,
   steam_account_id: 999,
-  guildNickname: 'AliGuild',
   positions: { carry: 1, mid: 2, offlane: 3, soft_support: 4, hard_support: 5 },
   is_staff: false,
   is_superuser: false,
 } as any;
 
 const org = { pk: 11, name: 'Test Org' } as OrganizationType;
-const league = { pk: 22, name: 'Test League', organization: org } as unknown as LeagueType;
+const league = {
+  pk: 22,
+  name: 'Test League',
+  organization: org,
+} as unknown as LeagueType;
 
 describe('buildDefaults', () => {
   it('includes mmr in org scope', () => {
@@ -34,7 +35,11 @@ describe('buildDefaults', () => {
   });
 
   it('includes mmr in league scope', () => {
-    const d = buildDefaults(baseUser, { kind: 'league', league, organization: org });
+    const d = buildDefaults(baseUser, {
+      kind: 'league',
+      league,
+      organization: org,
+    });
     expect(d.mmr).toBe(5000);
   });
 
@@ -74,7 +79,15 @@ describe('pickDirty', () => {
   it('recurses into positions for partial nested dirty', () => {
     expect(
       pickDirty(
-        { positions: { carry: 1, mid: 2, offlane: 3, soft_support: 4, hard_support: 5 } } as any,
+        {
+          positions: {
+            carry: 1,
+            mid: 2,
+            offlane: 3,
+            soft_support: 4,
+            hard_support: 5,
+          },
+        } as any,
         { positions: { carry: true, hard_support: true } } as any,
       ),
     ).toEqual({ positions: { carry: 1, hard_support: 5 } });
@@ -84,7 +97,13 @@ describe('pickDirty', () => {
     const data = {
       nickname: 'New',
       mmr: 6000,
-      positions: { carry: 1, mid: 2, offlane: 3, soft_support: 4, hard_support: 5 },
+      positions: {
+        carry: 1,
+        mid: 2,
+        offlane: 3,
+        soft_support: 4,
+        hard_support: 5,
+      },
     } as any;
     const dirty = { nickname: true, positions: { carry: true } } as any;
     expect(pickDirty(data, dirty)).toEqual({
@@ -99,8 +118,13 @@ describe('EditUserSchema', () => {
     const result = EditUserSchema.safeParse({
       nickname: 'Ali',
       steam_account_id: 999,
-      guildNickname: 'AliGuild',
-      positions: { carry: 1, mid: 2, offlane: 3, soft_support: 4, hard_support: 5 },
+      positions: {
+        carry: 1,
+        mid: 2,
+        offlane: 3,
+        soft_support: 4,
+        hard_support: 5,
+      },
       mmr: 5000,
     });
     expect(result.success).toBe(true);
@@ -110,8 +134,13 @@ describe('EditUserSchema', () => {
     const result = EditUserSchema.safeParse({
       nickname: 'Ali',
       steam_account_id: '999',
-      guildNickname: null,
-      positions: { carry: 0, mid: 0, offlane: 0, soft_support: 0, hard_support: 0 },
+      positions: {
+        carry: 0,
+        mid: 0,
+        offlane: 0,
+        soft_support: 0,
+        hard_support: 0,
+      },
       mmr: '5000',
     });
     expect(result.success).toBe(true);
@@ -125,8 +154,13 @@ describe('EditUserSchema', () => {
     const result = EditUserSchema.safeParse({
       nickname: 'Ali',
       steam_account_id: 0,
-      guildNickname: null,
-      positions: { carry: 6, mid: 0, offlane: 0, soft_support: 0, hard_support: 0 },
+      positions: {
+        carry: 6,
+        mid: 0,
+        offlane: 0,
+        soft_support: 0,
+        hard_support: 0,
+      },
     });
     expect(result.success).toBe(false);
   });

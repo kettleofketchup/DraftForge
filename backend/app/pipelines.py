@@ -2,6 +2,7 @@ from typing import Any
 
 from django.contrib.auth import get_user_model
 
+from discordbot.services.member_names import normalise_name
 from telemetry.logging import get_logger
 
 from .models import CustomUser, PositionsModel
@@ -71,6 +72,7 @@ def save_discord(
     user.avatar = avatar
     user.discordId = discordId
     user.discordUsername = discordUsername
+    user.discordNickname = normalise_name(social_auth.extra_data.get("global_name"))
     # Leave the username untouched only in the pathological case where a
     # *different* Discord identity still owns the handle (stale rename).
     if username_owner is None:

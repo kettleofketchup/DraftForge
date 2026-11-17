@@ -1523,7 +1523,7 @@ class UserSerializer(serializers.ModelSerializer):
             "pk",
             "username",
             "nickname",
-            "guildNickname",
+            "discordNickname",
             "is_staff",
             "is_active",
             "is_superuser",
@@ -1560,6 +1560,7 @@ class UserSerializer(serializers.ModelSerializer):
         return list(obj.staff_leagues.values_list("pk", flat=True))
 
     def update(self, instance: CustomUser, validated_data: dict) -> CustomUser:
+        validated_data.pop("discordNickname", None)
         with transaction.atomic():
             try:
                 positions_data = validated_data.pop("positions", None)

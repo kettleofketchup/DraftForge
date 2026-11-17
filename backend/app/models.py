@@ -12,6 +12,7 @@ from django.db.utils import IntegrityError
 from django.utils import timezone
 
 from app.cache_utils import invalidate_obj
+from discordbot.services.member_names import normalise_name
 from telemetry.logging import get_logger
 
 if TYPE_CHECKING:
@@ -289,6 +290,7 @@ class CustomUser(AbstractUser):
         self.discordId = data["user"]["id"]
         self.avatar = data["user"]["avatar"]
         self.discordUsername = data["user"]["username"]
+        self.discordNickname = normalise_name(data["user"].get("global_name"))
         # Use server nick first, then global_name, then username (always present)
         self.nickname = (
             data.get("nick")

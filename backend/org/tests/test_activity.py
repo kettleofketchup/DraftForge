@@ -105,7 +105,9 @@ class GuildLockAndEnqueueTest(TestCase):
     def test_broker_unreachable_is_swallowed_and_logged(self) -> None:
         with (
             mock.patch.object(
-                activity.celery_app, "connection_for_write", side_effect=OSError("down")
+                activity.sync_org_discord_names.app,
+                "connection_for_write",
+                side_effect=OSError("down"),
             ) as conn,
             capture_logs() as logs,
         ):
