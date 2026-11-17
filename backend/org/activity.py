@@ -1,97 +1,48 @@
-"""Per-org activity tracking in the Django cache, gating Discord name syncs."""
+"""Which orgs get Discord name syncs, plus the per-guild sync lock and enqueue."""
 
-import time
 from collections.abc import Iterable
+from datetime import datetime, timedelta
 
-from cacheops.conf import settings as cacheops_settings
-from django.conf import settings
 from django.core.cache import cache
 from django.db import transaction
-from rest_framework.request import Request
+from django.db.models import Q
+from django.utils import timezone
 
-from app.auth import InternalServiceAuth, InternalServiceUser
 from app.models import Organization
 from app.tasks.discord_name_sync import sync_org_discord_names
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
 
-ORG_ACTIVITY_TTL_S: int = 3 * 24 * 3600
-ORG_SYNC_DEBOUNCE_S: int = 300
+ACTIVE_LOOKBACK: timedelta = timedelta(days=3)
+ACTIVE_LOOKAHEAD: timedelta = timedelta(days=7)
 GUILD_SYNC_LOCK_TTL_S: int = 600
 
-_DUMMY_CACHE_BACKEND = "django.core.cache.backends.dummy.DummyCache"
 _BROKER_TIMEOUT_S = 0.5
-
-
-def _activity_key(org_id: int) -> str:
-    return f"org_activity_{org_id}"
 
 
 def _guild_lock_key(guild_id: str) -> str:
     return f"discord_name_sync_guild_{guild_id}"
 
 
-def activity_tracking_enabled() -> bool:
-    if settings.CACHES.get("default", {}).get("BACKEND") == _DUMMY_CACHE_BACKEND:
-        return False
-    return bool(cacheops_settings.CACHEOPS_ENABLED)
-
-
-def _is_real_user(request: Request) -> bool:
-    if isinstance(
-        getattr(request, "successful_authenticator", None), InternalServiceAuth
-    ):
-        return False
-    user = getattr(request, "user", None)
-    if isinstance(user, InternalServiceUser):
-        return False
-    return bool(getattr(user, "is_authenticated", False))
-
-
-def _org_guild_id(org_id: int) -> str | None:
-    guild_id = (
-        Organization.objects.filter(pk=org_id)
-        .values_list("discord_server_id", flat=True)
-        .first()
-    )
-    return guild_id or None
-
-
-def touch_org_activity(
-    request: Request, org_id: int | None, *, guild_id: str | None = None
-) -> None:
-    if org_id is None or not activity_tracking_enabled():
-        return
-    try:
-        if not _is_real_user(request):
-            return
-        key = _activity_key(org_id)
-        if not cache.add(key, time.time(), ORG_ACTIVITY_TTL_S):
-            cache.touch(key, ORG_ACTIVITY_TTL_S)
-            return
-        guild = guild_id if guild_id is not None else _org_guild_id(org_id)
-        if not guild:
-            return
-        if not cache.add(f"discord_name_sync_pending_{guild}", 1, ORG_SYNC_DEBOUNCE_S):
-            return
-        enqueue_org_name_sync(org_id)
-    except Exception:
-        log.warning(
-            "org_activity_touch_failed",
-            system="org",
-            subsystem="activity",
-            org_id=org_id,
-            exc_info=True,
-        )
-
-
-def active_org_ids(org_ids: Iterable[int]) -> set[int]:
-    keys = {_activity_key(org_id): org_id for org_id in org_ids}
-    if not keys:
+def active_org_ids(org_ids: Iterable[int], *, now: datetime | None = None) -> set[int]:
+    """Orgs with a tournament in progress, or a tournament or event in the window."""
+    ids = set(org_ids)
+    if not ids:
         return set()
-    found = cache.get_many(list(keys))
-    return {keys[key] for key in found}
+    now = now or timezone.now()
+    start, end = now - ACTIVE_LOOKBACK, now + ACTIVE_LOOKAHEAD
+    tournaments = Q(leagues__tournaments__state="in_progress") | Q(
+        leagues__tournaments__date_played__range=(start, end)
+    )
+    events = Q(events__scheduled_at__range=(start, end))
+    return set(
+        Organization.objects.nocache()
+        .filter(pk__in=ids)
+        .filter(tournaments | events)
+        .values_list("pk", flat=True)
+        .distinct()
+    )
 
 
 def guild_sync_lock(guild_id: str) -> bool:

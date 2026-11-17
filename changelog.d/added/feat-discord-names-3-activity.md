@@ -1,3 +1,2 @@
-- Orgs are marked active when someone views their member-centric pages. An org nobody
-  has used for 3 days gets its Discord names refreshed again the first time someone
-  opens its members.
+- Discord name syncs target orgs with a tournament in progress, or a tournament or event
+  from the last 3 days or the next 7.

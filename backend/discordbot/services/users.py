@@ -24,7 +24,7 @@ from discordbot.services.discord_members import (  # noqa: F401
     get_discord_members_data,
 )
 from discordbot.services.member_names import members_from_discord_payload
-from org.activity import guild_sync_lock, release_guild_sync_lock, touch_org_activity
+from org.activity import guild_sync_lock, release_guild_sync_lock
 from org.discord_names import apply_guild_member_names, org_ids_for_guild
 from telemetry.logging import get_logger
 
@@ -188,7 +188,6 @@ def get_organization_discord_members(request: Request, pk: int) -> JsonResponse:
         return JsonResponse(
             {"error": "You do not have access to this organization"}, status=403
         )
-    touch_org_activity(request, org.pk, guild_id=org.discord_server_id)
 
     if not org.discord_server_id:
         return JsonResponse(
@@ -239,7 +238,6 @@ def search_discord_members(request: Request) -> JsonResponse:
         return JsonResponse(
             {"error": "You do not have access to this organization"}, status=403
         )
-    touch_org_activity(request, org.pk, guild_id=org.discord_server_id)
 
     if not org.discord_server_id:
         return JsonResponse(
@@ -322,7 +320,6 @@ def refresh_discord_members(request: Request) -> JsonResponse:
         return JsonResponse(
             {"error": "You do not have access to this organization"}, status=403
         )
-    touch_org_activity(request, org.pk, guild_id=org.discord_server_id)
 
     if not org.discord_server_id:
         return JsonResponse(
