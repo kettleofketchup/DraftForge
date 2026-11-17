@@ -5,7 +5,7 @@ Constants used for test database population.
 from typing import Final
 
 # Re-export from centralized test data
-from tests.data import (
+from tests.data import (  # noqa: F401
     DTX_LEAGUE_NAME,
     DTX_ORG_NAME,
     DTX_STEAM_LEAGUE_ID,
@@ -127,3 +127,6 @@ MOCK_USERNAMES = [
     "abaddon_shield",
     "lich_chain",
 ]
+
+NAME_SYNC_USERNAME: Final[str] = "name_sync_dragonclaw"
+NAME_SYNC_GLOBAL_ONLY_USERNAME: Final[str] = "name_sync_globalonly"
