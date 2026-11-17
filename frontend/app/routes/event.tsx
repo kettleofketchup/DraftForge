@@ -87,6 +87,7 @@ import { canCompleteEvent } from '~/components/events/eventCompletion';
 import type { EventSignupType, EventType } from '~/components/events/schemas';
 import { EventState } from '~/components/events/schemas';
 import { partitionSignups } from '~/components/events/signupPartition';
+import { rollCallSummary } from '~/components/events/signupRules';
 import {
   describeUnmet,
   signupHoldReason,
@@ -595,11 +596,24 @@ export default function EventPage() {
                     Subscribe
                   </PrimaryButton>
                 ))}
+              {currentUser &&
+                event.state === EventState.SIGNUPS_OPEN &&
+                signups &&
+                !mySignup &&
+                !event.allow_user_signups && (
+                  <span
+                    className="text-sm text-muted-foreground"
+                    data-testid="event-signups-managed"
+                  >
+                    Sign-ups are managed by organizers.
+                  </span>
+                )}
               {/* Not signed up — show Sign Up + Tentative */}
               {currentUser &&
                 event.state === EventState.SIGNUPS_OPEN &&
                 signups &&
-                !mySignup && (
+                !mySignup &&
+                event.allow_user_signups && (
                   <>
                     <PrimaryButton
                       size="sm"
@@ -665,20 +679,22 @@ export default function EventPage() {
                 mySignup &&
                 mySignup.status === 'tentative' && (
                   <>
-                    <PrimaryButton
-                      size="sm"
-                      onClick={() => trySignup('rsvp')}
-                      disabled={
-                        !event ||
-                        !signups ||
-                        !profileLoaded ||
-                        signupMutation.isPending
-                      }
-                      data-testid="event-upgrade-rsvp-btn"
-                    >
-                      <CheckCircle2 className="h-4 w-4 mr-1.5" />
-                      Sign Up
-                    </PrimaryButton>
+                    {event.allow_user_signups && (
+                      <PrimaryButton
+                        size="sm"
+                        onClick={() => trySignup('rsvp')}
+                        disabled={
+                          !event ||
+                          !signups ||
+                          !profileLoaded ||
+                          signupMutation.isPending
+                        }
+                        data-testid="event-upgrade-rsvp-btn"
+                      >
+                        <CheckCircle2 className="h-4 w-4 mr-1.5" />
+                        Sign Up
+                      </PrimaryButton>
+                    )}
                     <DestructiveButton
                       size="sm"
                       onClick={() => setShowCancelRsvpConfirm(true)}
@@ -951,10 +967,7 @@ function DetailsTab({
             label="Auto Confirm"
             value={event.auto_confirm ? 'Yes' : 'No'}
           />
-          <Stat
-            label="Roll Call"
-            value={event.roll_call_enabled ? event.roll_call_mode : 'Disabled'}
-          />
+          <Stat label="Roll call" value={rollCallSummary(event)} />
         </CardContent>
       </Card>
 

@@ -35,6 +35,8 @@ import {
   TimezoneField,
 } from './form';
 import { DISCORD_CONFIG_DEFAULTS, discordConfigSchema } from './schemas';
+import { signupRulesFrom } from './signupRules';
+import { SignupRulesSection } from './SignupRulesSection';
 
 const ids = eventFieldTestIds('org-defaults');
 
@@ -150,6 +152,7 @@ export function EditOrgDefaultsModal({
         require_steam_id: defaults.require_steam_id ?? false,
         require_mmr_verified: defaults.require_mmr_verified ?? false,
         require_profile_complete: defaults.require_profile_complete ?? false,
+        ...signupRulesFrom(defaults),
         ...eventFieldsToDraftSettingsFormInput(defaults),
       });
     }
@@ -275,6 +278,7 @@ export function EditOrgDefaultsModal({
                   ))}
                 </div>
               </div>
+              <SignupRulesSection control={form.control} />
             </>
           ),
         },

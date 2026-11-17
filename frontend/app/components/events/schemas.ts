@@ -369,43 +369,61 @@ export function refineEventEnd(
   }
 }
 
-export const discordConfigSchema = z.object({
-  discord_create_event: z.boolean(),
-  discord_sync_signups: z.boolean(),
-  discord_event_title: z.string(),
-  discord_event_description: z.string(),
-  discord_event_info: z.string(),
-  discord_signup_reminder: z.boolean(),
-  discord_signup_reminder_hours: z.number().int().min(1),
-  discord_confirm_attendance: z.boolean(),
-  discord_confirm_attendance_hours: z.number().int().min(1),
-  discord_profile_reminder: z.boolean(),
-  discord_profile_reminder_hours: z.number().int().min(1),
-  discord_mark_interested: z.boolean(),
-  discord_post_signups: z.boolean(),
-  discord_post_signups_channel_id: z.string(),
-  discord_announcement: z.boolean(),
-  discord_announcement_channel_id: z.string(),
-  discord_announcement_hours: z.number().int().min(1),
-  discord_announcement_role_ids: z.array(z.string()).default([]),
-  discord_signup_role_ids: z.array(z.string()).default([]),
-  discord_subscriber_dm: z.boolean().optional(),
-  discord_subscriber_dm_hours: z.number().int().min(1).optional(),
-  discord_require_rank_screenshot: z.boolean(),
-  discord_require_battlecup_screenshot: z.boolean(),
-  min_mmr: z.number().int().min(0).nullable(),
-  allow_active_mmr: z.boolean(),
-  allow_previous_rank: z.boolean(),
-  allow_battlecup_rating: z.boolean(),
-  // Generic approval requirements rendered by ApprovalConfigSection. These
-  // were referenced by name in the UI but missing from the input schema, so
-  // checkbox state was silently dropped from create/edit submissions. The
-  // backend already accepts these fields (see eventsAPI.ts EventType:168-170
-  // and the `evaluateSignupGap` consumers).
-  require_steam_id: z.boolean(),
-  require_mmr_verified: z.boolean(),
-  require_profile_complete: z.boolean(),
+/** Roll-call modes the forms offer; the mode select appears once there is a choice. */
+export const ROLL_CALL_MODES = ['manual'] as const;
+export type RollCallMode = (typeof ROLL_CALL_MODES)[number];
+
+/** Who may join an event and when they reach the tournament roster. */
+export const signupRulesSchema = z.object({
+  roll_call_enabled: z.boolean(),
+  allow_user_signups: z.boolean(),
+  roll_call_mode: z.enum(ROLL_CALL_MODES).optional(),
 });
+
+export const SIGNUP_RULES_DEFAULTS = {
+  roll_call_enabled: false,
+  allow_user_signups: true,
+} as const;
+
+export const discordConfigSchema = z
+  .object({
+    discord_create_event: z.boolean(),
+    discord_sync_signups: z.boolean(),
+    discord_event_title: z.string(),
+    discord_event_description: z.string(),
+    discord_event_info: z.string(),
+    discord_signup_reminder: z.boolean(),
+    discord_signup_reminder_hours: z.number().int().min(1),
+    discord_confirm_attendance: z.boolean(),
+    discord_confirm_attendance_hours: z.number().int().min(1),
+    discord_profile_reminder: z.boolean(),
+    discord_profile_reminder_hours: z.number().int().min(1),
+    discord_mark_interested: z.boolean(),
+    discord_post_signups: z.boolean(),
+    discord_post_signups_channel_id: z.string(),
+    discord_announcement: z.boolean(),
+    discord_announcement_channel_id: z.string(),
+    discord_announcement_hours: z.number().int().min(1),
+    discord_announcement_role_ids: z.array(z.string()).default([]),
+    discord_signup_role_ids: z.array(z.string()).default([]),
+    discord_subscriber_dm: z.boolean().optional(),
+    discord_subscriber_dm_hours: z.number().int().min(1).optional(),
+    discord_require_rank_screenshot: z.boolean(),
+    discord_require_battlecup_screenshot: z.boolean(),
+    min_mmr: z.number().int().min(0).nullable(),
+    allow_active_mmr: z.boolean(),
+    allow_previous_rank: z.boolean(),
+    allow_battlecup_rating: z.boolean(),
+    // Generic approval requirements rendered by ApprovalConfigSection. These
+    // were referenced by name in the UI but missing from the input schema, so
+    // checkbox state was silently dropped from create/edit submissions. The
+    // backend already accepts these fields (see eventsAPI.ts EventType:168-170
+    // and the `evaluateSignupGap` consumers).
+    require_steam_id: z.boolean(),
+    require_mmr_verified: z.boolean(),
+    require_profile_complete: z.boolean(),
+  })
+  .merge(signupRulesSchema);
 
 export const DISCORD_CONFIG_DEFAULTS = {
   discord_create_event: false,
@@ -438,6 +456,7 @@ export const DISCORD_CONFIG_DEFAULTS = {
   require_steam_id: false,
   require_mmr_verified: false,
   require_profile_complete: false,
+  ...SIGNUP_RULES_DEFAULTS,
 } as const;
 
 /**
