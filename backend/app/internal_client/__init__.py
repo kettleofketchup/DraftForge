@@ -10,7 +10,9 @@ Config:
 """
 
 import os
-from typing import TYPE_CHECKING
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, Any
+from uuid import UUID
 
 import requests
 
@@ -722,3 +724,85 @@ def sweep_discord_leases(pending_threshold_minutes=5, failed_threshold_hours=1):
             body_excerpt=resp.text[:200],
         )
         return {"pending_swept": 0, "failed_swept": 0, "total": 0}
+
+
+# ---- Operations notices ----
+
+
+class OpsNoticeTransientError(Exception):
+    """Network error or 5xx: safe to retry with the same emit_id."""
+
+
+_OPS_NOTICES_PATH = "/ops-notices/"
+
+
+def _ops_notice_post(path: str, body: dict[str, Any]) -> dict[str, Any] | None:
+    resp = _post(path, body)
+    if resp is None or resp.status_code >= 500:
+        raise OpsNoticeTransientError(path)
+    if not resp.ok:
+        return None
+    try:
+        return resp.json()
+    except ValueError:
+        logger.error(
+            "ops_notice_invalid_json",
+            system="internal_client",
+            subsystem="http",
+            http_path=path,
+        )
+        return None
+
+
+def emit_ops_notice(
+    key: str,
+    payload: Mapping[str, Any],
+    *,
+    organization_id: int,
+    event_id: int | None = None,
+    event_name: str | None = None,
+    event_repeater_id: int | None = None,
+    subject_user_id: int | None = None,
+    actor_id: int | None = None,
+    dedupe_key: str | None = None,
+    severity: str | None = None,
+    emit_id: UUID | None = None,
+) -> int | None:
+    optional: dict[str, Any] = {
+        "event_id": event_id,
+        "event_name": event_name,
+        "event_repeater_id": event_repeater_id,
+        "subject_user_id": subject_user_id,
+        "actor_id": actor_id,
+        "dedupe_key": dedupe_key,
+        "severity": severity,
+        "emit_id": str(emit_id) if emit_id is not None else None,
+    }
+    body: dict[str, Any] = {
+        "key": key,
+        "payload": dict(payload),
+        "organization_id": organization_id,
+        **{name: value for name, value in optional.items() if value is not None},
+    }
+    data = _ops_notice_post(_OPS_NOTICES_PATH, body)
+    return data["id"] if data is not None else None
+
+
+def resolve_ops_notice(
+    key: str,
+    dedupe_key: str,
+    *,
+    organization_id: int,
+    event_id: int | None = None,
+    reason: str,
+) -> bool:
+    body: dict[str, Any] = {
+        "key": key,
+        "dedupe_key": dedupe_key,
+        "organization_id": organization_id,
+        "reason": reason,
+    }
+    if event_id is not None:
+        body["event_id"] = event_id
+    data = _ops_notice_post(f"{_OPS_NOTICES_PATH}resolve/", body)
+    return bool(data["resolved"]) if data is not None else False
