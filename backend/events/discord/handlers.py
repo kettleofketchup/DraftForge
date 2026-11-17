@@ -20,9 +20,9 @@ from typing import Any
 
 from structlog.contextvars import bind_contextvars
 
-from events.constants import EventState
 from events.discord._shared import (
     _direct_signup,
+    _discord_self_serve_refusal,
     _existing_active_signup,
     _get_org_user,
     _load_event,
@@ -75,8 +75,9 @@ def handle_signup_button(
     if event is None:
         return {"action": "error", "message": "Event not found."}
 
-    if event.state != EventState.SIGNUPS_OPEN:
-        return {"action": "error", "message": "Event is not accepting signups."}
+    refusal = _discord_self_serve_refusal(event, discord_user_id)
+    if refusal is not None:
+        return {"action": "error", "message": refusal}
 
     org_user, user = _get_org_user(
         event, discord_user_id, discord_username=discord_username
@@ -401,6 +402,10 @@ def handle_tentative_button(
     event = _load_event(event_id)
     if event is None:
         return {"action": "error", "message": "Event not found."}
+
+    refusal = _discord_self_serve_refusal(event, discord_user_id)
+    if refusal is not None:
+        return {"action": "error", "message": refusal}
 
     org_user, user = _get_org_user(
         event, discord_user_id, discord_username=discord_username

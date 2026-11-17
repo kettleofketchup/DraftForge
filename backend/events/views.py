@@ -45,6 +45,7 @@ from events.admission import ensure_self_serve
 from events.capacity import with_signup_counts
 from events.completion import close_event
 from events.constants import EventState
+from events.discord import notify_signup_changed
 from events.models import (
     Event,
     EventRepeater,
@@ -698,6 +699,7 @@ class EventViewSet(viewsets.ModelViewSet):
 
         previous_password = serializer.instance.dota_lobby_password
         previous_draft_options = event_draft_option_values(serializer.instance)
+        previous_allow_user_signups = serializer.instance.allow_user_signups
         previous_ledger_fields = (
             serializer.instance.scheduled_at,
             serializer.instance.ends_at,
@@ -716,6 +718,8 @@ class EventViewSet(viewsets.ModelViewSet):
             ) != previous_ledger_fields and should_sync_staff(event):
                 sync_event_staff_entries(event)
         invalidate_after_commit(event)
+        if event.allow_user_signups != previous_allow_user_signups:
+            transaction.on_commit(lambda: notify_signup_changed(event))
         if event.dota_lobby_password != previous_password:
             log_lobby_password_changed(event, "event_update")
         result = sync_tournament_from_event(

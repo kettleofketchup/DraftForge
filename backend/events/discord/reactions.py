@@ -6,6 +6,7 @@ announcement messages. These are synchronous functions — the bot calls
 them from async handlers via sync_to_async or database_sync_to_async.
 """
 
+from events.discord._shared import _discord_self_serve_refusal
 from telemetry.logging import get_logger
 
 logger = get_logger(__name__)
@@ -58,6 +59,10 @@ def handle_reaction_signup(
         user = CustomUser.objects.get(discordId=str(discord_user_id))
     except CustomUser.DoesNotExist:
         return False, "user_not_linked"
+
+    refusal = _discord_self_serve_refusal(event, discord_user_id)
+    if refusal is not None:
+        return False, refusal
 
     # 3. Process the RSVP
     try:

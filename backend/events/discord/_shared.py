@@ -16,6 +16,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from discordbot.models import DiscordEventLog
+from events.admission import self_serve_refusal
 from events.constants import SignupStatus
 from events.eligibility import steam_friend_id_from_profiles, unmet_labels
 from events.models import Event, EventSignup
@@ -82,6 +83,23 @@ def _log_signup(
             error=str(e),
             exc_info=True,
         )
+
+
+def _discord_self_serve_refusal(event: Event, discord_user_id: int | str) -> str | None:
+    """Refusal message when members may not add themselves, logged; else None."""
+    reason = self_serve_refusal(event)
+    if reason is not None:
+        log.info(
+            "signup_self_serve_refused",
+            system="discord",
+            subsystem="interaction",
+            tags=["events", "signup"],
+            tags_csv="events,signup",
+            event_id=event.pk,
+            discord_user_id=str(discord_user_id),
+            reason=reason,
+        )
+    return reason
 
 
 def _load_event(

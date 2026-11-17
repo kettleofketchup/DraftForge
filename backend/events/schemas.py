@@ -65,6 +65,7 @@ class EventTaskSchema(BaseModel):
     name: str
     description: str = ""
     state: str
+    allow_user_signups: bool = True
     scheduled_at: datetime
     ends_at: datetime | None = None
     signups_open_at: Optional[datetime] = None
