@@ -82,6 +82,7 @@ import { EventSignupModal } from '~/components/events/EventSignupModal';
 import { evaluateSignupGap } from '~/components/events/EventSignupModal/evaluateSignupGap';
 import { EventStaffSection } from '~/components/events/EventStaffCard';
 import { MmrApprovalModal } from '~/components/events/MmrApprovalModal';
+import { OpsNoticesCard } from '~/components/events/OpsNoticesCard';
 import { SubscriberList } from '~/components/events/SubscriberList';
 import { canCompleteEvent } from '~/components/events/eventCompletion';
 import type { EventSignupType, EventType } from '~/components/events/schemas';
@@ -714,6 +715,7 @@ export default function EventPage() {
           </TabsList>
 
           <TabsContent value="details">
+            {isAdmin && <OpsNoticesCard eventId={event.id} />}
             <DetailsTab
               event={event}
               signedIn={!!currentUser?.pk}
