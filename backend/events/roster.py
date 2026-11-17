@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from enum import StrEnum
 
 from django.db.models import Q
@@ -19,10 +20,25 @@ _APPROVED_AND_CONFIRMED: frozenset[SignupStatus] = frozenset(
 )
 
 
+@dataclass(frozen=True)
+class RosterSyncResult:
+    tournament: Tournament
+    added: list[CustomUser]
+    removed: list[CustomUser]
+    kept_on_team: list[CustomUser]
+
+
 def roster_phase(event: Event) -> RosterPhase:
     if event.state == EventState.ROLL_CALL:
         return RosterPhase.ROLL_CALL
     return RosterPhase.SIGNUPS
+
+
+def start_phase(event: Event) -> RosterPhase:
+    """Phase whose rule decides the roster when the tournament starts."""
+    if event.state == EventState.ROLL_CALL:
+        return RosterPhase.ROLL_CALL
+    return RosterPhase.START_FROM_SIGNUPS
 
 
 def roster_statuses(
@@ -35,6 +51,13 @@ def roster_statuses(
     if phase == RosterPhase.START_FROM_SIGNUPS:
         return _APPROVED_AND_CONFIRMED
     return _CONFIRMED_ONLY if event.roll_call_enabled else _APPROVED_AND_CONFIRMED
+
+
+def leaving_statuses(
+    event: Event, phase: RosterPhase | None = None
+) -> frozenset[SignupStatus]:
+    """Roster-eligible statuses that do not belong on the roster in a phase."""
+    return _APPROVED_AND_CONFIRMED - roster_statuses(event, phase)
 
 
 def joins_roster(event: Event, status: str, phase: RosterPhase | None = None) -> bool:

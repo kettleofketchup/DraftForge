@@ -51,8 +51,12 @@ from events.models import (
 from events.reopen import ReopenNotPermitted, reopen_event
 from events.roster import (
     RosterPhase,
+    RosterSyncResult,
     joins_roster,
+    leaving_statuses,
+    roster_phase,
     roster_statuses,
+    start_phase,
     team_bound_user_pks,
 )
 from events.schemas import DotaModalConfig
@@ -166,6 +170,20 @@ def _roster_add_if_joins(signup: EventSignup) -> None:
         add_user_to_tournament(signup.event, signup.user)
 
 
+def _log_kept_on_team(
+    event: Event, tournament: Tournament, user_id: int, **context: str
+) -> None:
+    log.info(
+        "event_roster_sync_skipped_team_member",
+        system="events",
+        subsystem="services",
+        event_id=event.pk,
+        tournament_id=tournament.pk,
+        user_id=user_id,
+        **context,
+    )
+
+
 def _roster_remove_if_left(signup: EventSignup) -> None:
     """Remove the player when their status no longer joins the roster, unless
     they are on a team in the tournament (removal would cascade into the team)."""
@@ -176,14 +194,8 @@ def _roster_remove_if_left(signup: EventSignup) -> None:
     if tournament is None or tournament.state != "future":
         return
     if signup.user_id in team_bound_user_pks(tournament):
-        log.info(
-            "event_roster_sync_skipped_team_member",
-            system="events",
-            subsystem="services",
-            event_id=event.pk,
-            tournament_id=tournament.pk,
-            user_id=signup.user_id,
-            signup_status=signup.status,
+        _log_kept_on_team(
+            event, tournament, signup.user_id, signup_status=signup.status
         )
         return
     remove_user_from_tournament(event, signup.user)
@@ -1002,76 +1014,80 @@ def restart_event_tournament(
     event.save(update_fields=["tournament", "updated_at"])
     old_tournament.delete()
 
-    tournament = create_tournament_for_event(event)
-
-    roster = EventSignup.objects.filter(
-        event=event, status__in=roster_statuses(event, RosterPhase.SIGNUPS)
-    ).select_related("user")
-    for signup in roster:
-        tournament.users.add(signup.user)
-
-    invalidate_after_commit(tournament, event)
-    return tournament
+    create_tournament_for_event(event)
+    return sync_event_roster(event, RosterPhase.SIGNUPS).tournament
 
 
 @transaction.atomic
-def ensure_tournament_with_signups(event: Event) -> Tournament:
-    """Self-heal: create event.tournament if missing, then sync its roster.
+def sync_event_roster(
+    event: Event, phase: RosterPhase | None = None
+) -> RosterSyncResult:
+    """Bring event.tournament.users in line with the roster rule for a phase.
 
-    From ROLL_CALL only CONFIRMED players belong in the tournament (#378), so
-    APPROVED signups (did not confirm) are left out, and removed if present.
-    Otherwise APPROVED + CONFIRMED are added.
-
-    Issue #200 — start_tournament previously silently no-op'd when event.tournament
-    was None (legacy events created before perform_create wired create_tournament_for_event).
-    Idempotent: safe to call multiple times; M2M add()/remove() are no-ops when
-    already applied.
-
-    Cache invalidation deferred to commit so the tournament UI reflects the change
-    immediately rather than after the cacheops 1-hour TTL — Django M2M does NOT
-    auto-invalidate cacheops.
+    Creates the tournament if missing (#200). Adds every signup whose status
+    joins the roster; removes signed-up users whose status left it, except
+    members, captains and deputies of a team in the tournament, who are kept
+    and reported. Users on the roster without a signup are left alone.
+    Idempotent. M2M writes are not tracked by cacheops, so the tournament,
+    the event and every touched user are invalidated on commit.
     """
+    phase = phase or roster_phase(event)
     if event.tournament is None:
         create_tournament_for_event(event)
         event.refresh_from_db()
-
     tournament = event.tournament
-    from_roll_call = event.state == EventState.ROLL_CALL
-    statuses = [SignupStatus.CONFIRMED]
-    if not from_roll_call:
-        statuses.append(SignupStatus.APPROVED)
 
-    roster = EventSignup.objects.filter(
-        event=event, status__in=statuses
-    ).select_related("user")
-    added_users = [signup.user for signup in roster]
-    tournament.users.add(*added_users)
+    added = [
+        signup.user
+        for signup in EventSignup.objects.nocache()
+        .filter(event=event, status__in=roster_statuses(event, phase))
+        .select_related("user")
+    ]
+    tournament.users.add(*added)
 
-    removed_users: list[CustomUser] = []
-    if from_roll_call:
-        removed_users = list(
-            tournament.users.filter(
-                event_signups__event=event,
-                event_signups__status=SignupStatus.APPROVED,
-            )
+    leaving = list(
+        tournament.users.all()
+        .nocache()
+        .filter(
+            event_signups__event=event,
+            event_signups__status__in=leaving_statuses(event, phase),
         )
-        tournament.users.remove(*removed_users)
+        .distinct()
+    )
+    team_bound = team_bound_user_pks(tournament) if leaving else set()
+    kept_on_team = [user for user in leaving if user.pk in team_bound]
+    removed = [user for user in leaving if user.pk not in team_bound]
+    tournament.users.remove(*removed)
+    for user in kept_on_team:
+        _log_kept_on_team(event, tournament, user.pk, phase=str(phase))
 
-    log.info(
-        "event_tournament_roster_synced",
-        system="events",
-        subsystem="services",
-        event_id=event.pk,
-        tournament_id=tournament.pk,
-        from_roll_call=from_roll_call,
-        added_count=len(added_users),
-        removed_count=len(removed_users),
+    sync_fields: dict[str, object] = {
+        "system": "events",
+        "subsystem": "services",
+        "event_id": event.pk,
+        "tournament_id": tournament.pk,
+        "phase": str(phase),
+        "added_count": len(added),
+        "removed_count": len(removed),
+        "kept_on_team_count": len(kept_on_team),
+    }
+    if phase == RosterPhase.ROLL_CALL:
+        log.info("event_roster_synced_on_roll_call", **sync_fields)
+    else:
+        log.info("event_tournament_roster_synced", **sync_fields)
+    invalidate_after_commit(tournament, event, *added, *removed)
+    return RosterSyncResult(
+        tournament=tournament, added=added, removed=removed, kept_on_team=kept_on_team
     )
 
-    # M2M change invalidates both sides: tournament.users.all() AND user.tournament_set.all().
-    # cacheops doesn't auto-track M2M, so we invalidate every user we touched.
-    invalidate_after_commit(tournament, event, *added_users, *removed_users)
-    return tournament
+
+def ensure_tournament_with_signups(
+    event: Event, phase: RosterPhase | None = None
+) -> Tournament:
+    """Self-heal before a tournament starts: create it if missing and sync its
+    roster. Defaults to the start rule: confirmed only from roll call (#378),
+    approved and confirmed when starting straight from signups."""
+    return sync_event_roster(event, phase or start_phase(event)).tournament
 
 
 def teardown_event(event: Event) -> None:

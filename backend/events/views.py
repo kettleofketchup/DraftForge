@@ -55,6 +55,7 @@ from events.models import (
     RepeaterSubscription,
 )
 from events.reopen import ReopenNotPermitted
+from events.roster import RosterSyncResult
 from events.schemas import SignupInputPatch
 from events.serializers import (
     EventRepeaterSerializer,
@@ -88,6 +89,7 @@ from events.services import (
     resolve_or_create_org_user,
     restart_event_tournament,
     staff_add_signup,
+    sync_event_roster,
     sync_future_events,
     sync_tournament_from_event,
     teardown_event,
@@ -159,6 +161,14 @@ def _event_payload(event_pk: int, user: CustomUser) -> dict[str, Any]:
     qs = with_event_staff(with_signup_counts(Event.objects.filter(pk=event_pk)))
     data = EventSerializer(qs.first()).data
     _attach_user_can_manage(data, user)
+    return data
+
+
+def _roster_sync_payload(
+    event: Event, synced: RosterSyncResult, user: CustomUser
+) -> dict[str, Any]:
+    data = _event_payload(event.pk, user)
+    data["roster_kept_on_team"] = [member.pk for member in synced.kept_on_team]
     return data
 
 
@@ -690,6 +700,7 @@ class EventViewSet(viewsets.ModelViewSet):
         previous_password = serializer.instance.dota_lobby_password
         previous_draft_options = event_draft_option_values(serializer.instance)
         previous_allow_user_signups = serializer.instance.allow_user_signups
+        previous_roll_call_enabled = serializer.instance.roll_call_enabled
         previous_ledger_fields = (
             serializer.instance.scheduled_at,
             serializer.instance.ends_at,
@@ -710,6 +721,11 @@ class EventViewSet(viewsets.ModelViewSet):
         invalidate_after_commit(event)
         if event.allow_user_signups != previous_allow_user_signups:
             transaction.on_commit(lambda: notify_signup_changed(event))
+        if (
+            event.roll_call_enabled != previous_roll_call_enabled
+            and event.state == EventState.SIGNUPS_OPEN
+        ):
+            transaction.on_commit(lambda: sync_event_roster(event))
         if event.dota_lobby_password != previous_password:
             log_lobby_password_changed(event, "event_update")
         result = sync_tournament_from_event(
@@ -919,11 +935,10 @@ class EventViewSet(viewsets.ModelViewSet):
         if not has_event_staff_access(request.user, event):
             return Response(status=status.HTTP_403_FORBIDDEN)
         try:
-            event.transition_state(EventState.ROLL_CALL)
-            qs = with_event_staff(with_signup_counts(Event.objects.filter(pk=event.pk)))
-            data = EventSerializer(qs.first()).data
-            _attach_user_can_manage(data, request.user)
-            return Response(data)
+            with transaction.atomic():
+                event.transition_state(EventState.ROLL_CALL)
+                synced = sync_event_roster(event)
+            return Response(_roster_sync_payload(event, synced, request.user))
         except ValueError as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -931,8 +946,9 @@ class EventViewSet(viewsets.ModelViewSet):
     def reopen_signups(self, request: Request, pk: str | None = None) -> Response:
         """Corrective transition from ROLL_CALL back to SIGNUPS_OPEN.
 
-        Quiet: no Discord re-announcement, no signup-changed notify. Existing
-        confirmations and tournament additions are preserved.
+        Quiet: no Discord re-announcement, no signup-changed notify. The
+        roster is resynced to the signup-phase rule, so approved players come
+        back when roll_call_enabled is off.
         """
 
         event = self.get_object()
@@ -941,11 +957,8 @@ class EventViewSet(viewsets.ModelViewSet):
         try:
             with transaction.atomic():
                 event.transition_state(EventState.SIGNUPS_OPEN)
-                invalidate_after_commit(event)
-            qs = with_event_staff(with_signup_counts(Event.objects.filter(pk=event.pk)))
-            data = EventSerializer(qs.first()).data
-            _attach_user_can_manage(data, request.user)
-            return Response(data)
+                synced = sync_event_roster(event)
+            return Response(_roster_sync_payload(event, synced, request.user))
         except ValueError as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 

@@ -1,10 +1,13 @@
+from datetime import time
 from unittest.mock import MagicMock, patch
 
+from django.utils import timezone as tz
+from rest_framework.test import APIClient
 from structlog.testing import capture_logs
 
 from app.models import CustomUser, Game, Team, Tournament
 from events.constants import EventState, SignupStatus
-from events.models import Event, EventSignup
+from events.models import Event, EventRepeater, EventSignup
 from events.roster import (
     RosterPhase,
     joins_roster,
@@ -18,17 +21,19 @@ from events.services import (
     confirm_signup,
     create_tournament_for_event,
     demote_to_waitlist,
+    ensure_tournament_with_signups,
     reinstate_signup,
     reject_signup,
+    restart_event_tournament,
     staff_add_signup,
+    sync_event_roster,
+    sync_future_events,
     unconfirm_signup,
 )
 from events.tests.base import EventTestCase
 
 
-@patch("events.services.notify_signup_changed")
-@patch("events.services.notify_mark_interested")
-class RosterRuleTests(EventTestCase):
+class RosterTestCase(EventTestCase):
     def _event(
         self, *, state: str, roll_call_enabled: bool = False, **extra: object
     ) -> Event:
@@ -68,6 +73,10 @@ class RosterRuleTests(EventTestCase):
             set(fresh.members.values_list("pk", flat=True)),
         )
 
+
+@patch("events.services.notify_signup_changed")
+@patch("events.services.notify_mark_interested")
+class RosterRuleTests(RosterTestCase):
     def test_statuses_per_phase(self, *_mocks: MagicMock) -> None:
         both = frozenset({SignupStatus.APPROVED, SignupStatus.CONFIRMED})
         confirmed = frozenset({SignupStatus.CONFIRMED})
@@ -213,3 +222,190 @@ class RosterRuleTests(EventTestCase):
         event.tournament.users.add(user)
         cancel_signup(signup)
         self.assertNotIn(user.pk, self._roster(event))
+
+
+@patch("events.services.notify_signup_changed")
+@patch("events.services.notify_mark_interested")
+class RosterSyncTests(RosterTestCase):
+    def _staff_client(self) -> APIClient:
+        client = APIClient()
+        client.force_authenticate(user=self.admin)
+        return client
+
+    def _approved_and_confirmed(
+        self, event: Event, *, on_roster: bool = True
+    ) -> tuple[CustomUser, CustomUser]:
+        approved, confirmed = self.make_user(), self.make_user()
+        self._signup(event, approved, SignupStatus.APPROVED)
+        self._signup(event, confirmed, SignupStatus.CONFIRMED)
+        if on_roster:
+            event.tournament.users.add(approved, confirmed)
+        return approved, confirmed
+
+    def test_enter_roll_call_drops_unconfirmed_keeps_confirmed(
+        self, *_mocks: MagicMock
+    ) -> None:
+        event = self._event(state=EventState.SIGNUPS_OPEN)
+        approved, confirmed = self._approved_and_confirmed(event)
+
+        resp = self._staff_client().post(f"/api/events/{event.pk}/start_roll_call/")
+
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertEqual(self._roster(event), {confirmed.pk})
+        self.assertEqual(resp.json()["roster_kept_on_team"], [])
+
+    def test_reopen_flag_off_readds_approved(self, *_mocks: MagicMock) -> None:
+        event = self._event(state=EventState.ROLL_CALL)
+        approved, confirmed = self._approved_and_confirmed(event, on_roster=False)
+
+        resp = self._staff_client().post(f"/api/events/{event.pk}/reopen_signups/")
+
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertEqual(self._roster(event), {approved.pk, confirmed.pk})
+
+    def test_reopen_flag_on_does_not_readd(self, *_mocks: MagicMock) -> None:
+        event = self._event(state=EventState.ROLL_CALL, roll_call_enabled=True)
+        _approved, confirmed = self._approved_and_confirmed(event, on_roster=False)
+
+        resp = self._staff_client().post(f"/api/events/{event.pk}/reopen_signups/")
+
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertEqual(self._roster(event), {confirmed.pk})
+
+    def test_ensure_honours_flag_outside_roll_call(self, *_mocks: MagicMock) -> None:
+        event = self._event(state=EventState.SIGNUPS_OPEN, roll_call_enabled=True)
+        approved, confirmed = self._approved_and_confirmed(event, on_roster=False)
+
+        result = sync_event_roster(event)
+
+        self.assertEqual(self._roster(event), {confirmed.pk})
+        self.assertEqual(result.added, [confirmed])
+        ensure_tournament_with_signups(event, RosterPhase.SIGNUPS)
+        self.assertNotIn(approved.pk, self._roster(event))
+
+    def test_team_member_survives_roll_call_round_trip(
+        self, *_mocks: MagicMock
+    ) -> None:
+        event = self._event(state=EventState.SIGNUPS_OPEN)
+        captain, member = self.make_user(), self.make_user()
+        self._signup(event, captain, SignupStatus.CONFIRMED)
+        self._signup(event, member, SignupStatus.APPROVED)
+        team, game = self._team(event, [captain, member])
+        before = self._team_state(team)
+        client = self._staff_client()
+
+        with capture_logs() as logs:
+            resp = client.post(f"/api/events/{event.pk}/start_roll_call/")
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertIn(member.pk, resp.json()["roster_kept_on_team"])
+        self.assertTrue(
+            any(
+                entry["event"] == "event_roster_sync_skipped_team_member"
+                and entry["user_id"] == member.pk
+                for entry in logs
+            )
+        )
+        self.assertTrue(
+            any(entry["event"] == "event_roster_synced_on_roll_call" for entry in logs)
+        )
+
+        resp = client.post(f"/api/events/{event.pk}/reopen_signups/")
+        self.assertEqual(resp.status_code, 200, resp.content)
+
+        self.assertEqual(self._team_state(team), before)
+        self.assertEqual(before[2], {captain.pk, member.pk})
+        self.assertTrue(Game.objects.nocache().filter(pk=game.pk).exists())
+        self.assertEqual(self._roster(event), {captain.pk, member.pk})
+
+    def test_flag_patch_resyncs(self, *_mocks: MagicMock) -> None:
+        event = self._event(state=EventState.SIGNUPS_OPEN)
+        approved, confirmed = self._approved_and_confirmed(event)
+
+        with self.captureOnCommitCallbacks(execute=True):
+            resp = self._staff_client().patch(
+                f"/api/events/{event.pk}/",
+                {"roll_call_enabled": True},
+                format="json",
+            )
+
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertEqual(self._roster(event), {confirmed.pk})
+
+    def test_flag_patch_outside_signups_does_not_sync(self, *_mocks: MagicMock) -> None:
+        event = self._event(state=EventState.UPCOMING)
+        with (
+            patch("events.views.sync_event_roster") as sync,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            resp = self._staff_client().patch(
+                f"/api/events/{event.pk}/",
+                {"roll_call_enabled": True},
+                format="json",
+            )
+        self.assertEqual(resp.status_code, 200, resp.content)
+        sync.assert_not_called()
+
+    def test_unrelated_patch_does_not_sync(self, *_mocks: MagicMock) -> None:
+        event = self._event(state=EventState.SIGNUPS_OPEN)
+        with (
+            patch("events.views.sync_event_roster") as sync,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            resp = self._staff_client().patch(
+                f"/api/events/{event.pk}/", {"name": "Renamed"}, format="json"
+            )
+        self.assertEqual(resp.status_code, 200, resp.content)
+        sync.assert_not_called()
+
+    def test_series_cascade_leaves_open_event_roster(self, *_mocks: MagicMock) -> None:
+        repeater = EventRepeater.objects.create(
+            organization=self.org,
+            name="Roster Series",
+            day_of_week=1,
+            time_of_day=time(20, 0),
+            timezone="UTC",
+            starts_at=tz.now().date(),
+        )
+        event = self._event(state=EventState.SIGNUPS_OPEN, event_repeater=repeater)
+        approved, confirmed = self._approved_and_confirmed(event)
+        repeater.roll_call_enabled = True
+        repeater.save(update_fields=["roll_call_enabled"])
+
+        with self.captureOnCommitCallbacks(execute=True):
+            touched = sync_future_events(repeater)
+
+        self.assertNotIn(event.pk, {e.pk for e in touched})
+        self.assertEqual(self._roster(event), {approved.pk, confirmed.pk})
+
+    def test_event_without_tournament_enter_roll_call(self, *_mocks: MagicMock) -> None:
+        event = self.make_event(state=EventState.SIGNUPS_OPEN)
+        approved, confirmed = self.make_user(), self.make_user()
+        self._signup(event, approved, SignupStatus.APPROVED)
+        self._signup(event, confirmed, SignupStatus.CONFIRMED)
+
+        resp = self._staff_client().post(f"/api/events/{event.pk}/start_roll_call/")
+
+        self.assertEqual(resp.status_code, 200, resp.content)
+        event.refresh_from_db()
+        self.assertIsNotNone(event.tournament_id)
+        self.assertEqual(self._roster(event), {confirmed.pk})
+
+    def test_start_from_signups_keeps_approved_with_flag_on(
+        self, *_mocks: MagicMock
+    ) -> None:
+        event = self._event(state=EventState.SIGNUPS_OPEN, roll_call_enabled=True)
+        approved, confirmed = self._approved_and_confirmed(event, on_roster=False)
+
+        resp = self._staff_client().post(f"/api/events/{event.pk}/start_tournament/")
+
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertEqual(self._roster(event), {approved.pk, confirmed.pk})
+
+    def test_restart_unchanged(self, *_mocks: MagicMock) -> None:
+        for flag, expected in ((False, 2), (True, 1)):
+            event = self._event(state=EventState.ROLL_CALL, roll_call_enabled=flag)
+            self._approved_and_confirmed(event, on_roster=False)
+            tournament = restart_event_tournament(event)
+            event.refresh_from_db()
+            self.assertEqual(event.state, EventState.SIGNUPS_OPEN)
+            self.assertEqual(tournament.users.count(), expected)

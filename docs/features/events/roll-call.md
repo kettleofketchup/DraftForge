@@ -65,6 +65,21 @@ When enough players are confirmed (meets `min_players` threshold), the "Start To
 
 After confirming, the tournament is created with the confirmed roster and the browser navigates back to the event page. Approved players who never confirmed stay out of the tournament.
 
+### Roster during signups
+
+The event's tournament roster follows one rule per phase:
+
+| Phase | Who is on the roster |
+|-------|----------------------|
+| Signups open, `roll_call_enabled` off | Approved and confirmed players |
+| Signups open, `roll_call_enabled` on | Confirmed players only; approved players wait for roll-call confirmation |
+| Roll call | Confirmed players only |
+| Start tournament straight from signups | Approved and confirmed players, whatever the flag |
+
+The roster is resynced when roll call starts, when signups are reopened from roll call, and when `roll_call_enabled` changes while signups are open. Starting roll call removes approved players who have not confirmed; reopening signups adds them back when the flag is off. Reopening only restores roster entries; it never changes teams.
+
+A player who is a member, captain or deputy of a team in the tournament is never removed by a resync, because removal would also take them off the team. The Start Roll Call and Reopen Signups responses list those players' user IDs in `roster_kept_on_team` so staff can deal with them by hand.
+
 ---
 
 ## Waitlist
@@ -99,7 +114,7 @@ These event config fields control signup behavior. **Game** column flags fields 
 | `auto_confirm` | false | any | Auto-confirm approved signups |
 | `max_players` | null | any | Maximum signups before waitlisting |
 | `min_players` | null | any | Minimum confirmed players to start tournament |
-| `roll_call_enabled` | false | any | Require roll call before tournament start |
+| `roll_call_enabled` | false | any | Players join the roster only after confirming (see [Roster during signups](#roster-during-signups)) |
 | `require_steam_id` | false | any | Require Steam ID (Dota Friend ID / Deadlock Friend ID) for approval |
 | `require_profile_complete` | false | any | Require complete profile for approval (per-game definition: Dota needs rank + positions; Deadlock needs `rank` text) |
 | `require_mmr_verified` | false | Dota | Require admin-verified MMR for approval |
