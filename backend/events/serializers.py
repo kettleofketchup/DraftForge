@@ -22,6 +22,11 @@ from events.models import (
     OrgEventDefaults,
     RepeaterSubscription,
 )
+from events.ready_check_settings import (
+    READY_CHECK_FIELD_KWARGS,
+    READY_CHECK_SETTINGS_FIELDS,
+    validate_ready_check_settings,
+)
 from events.services import (
     DISCORD_CONFIG_FIELDS,
     DISCORD_TOURNAMENT_TEMPLATE_FIELDS,
@@ -196,6 +201,18 @@ class EventRepeaterSerializer(
             "allow_active_mmr",
             "allow_previous_rank",
             "allow_battlecup_rating",
+            "ready_check_scope",
+            "ready_check_open_minutes",
+            "ready_check_escalation_minutes",
+            "ready_check_close_minutes",
+            "ready_check_chase_minutes",
+            "ready_check_min_completion_pct",
+            "ready_check_low_completion_action",
+            "ready_check_notify_on_signup",
+            "ready_check_drop_notice",
+            "start_cull_enabled",
+            "start_cull_minutes_after",
+            "post_cull_fill_mode",
             # DiscordConfig
             "discord_create_event",
             "discord_sync_signups",
@@ -219,6 +236,8 @@ class EventRepeaterSerializer(
             "discord_require_rank_screenshot",
             "discord_require_battlecup_screenshot",
             "min_mmr",
+            "event_voice_channel_id",
+            "voice_presence_confirms",
             "discord_notify_new_events",
             # DiscordTournamentConfig
             "auto_create_hero_drafts",
@@ -248,12 +267,13 @@ class EventRepeaterSerializer(
             "dota_lobby_password": LOBBY_PASSWORD_FIELD_KWARGS,
             "captains_draft_time": DRAFT_TIME_KWARGS,
             **TIMER_FIELD_KWARGS,
+            **READY_CHECK_FIELD_KWARGS,
         }
 
     def validate_description(self, value):
         return nh3.clean(value) if value else value
 
-    def validate(self, data):
+    def validate(self, data: dict[str, Any]) -> dict[str, Any]:
         game_type = data.get(
             "game_type", self.instance.game_type if self.instance else 1
         )
@@ -265,6 +285,9 @@ class EventRepeaterSerializer(
                 {"game_mode": f"{game_mode} is only available for Dota 2."}
             )
         self.check_lobby_steam_league(data, self.instance)
+        validate_ready_check_settings(
+            data, self.instance, is_create=self.instance is None
+        )
         # Fixed: the series stores the password. Random: it stores none,
         # each event generates its own.
         mode = data.get(
@@ -337,8 +360,9 @@ class EventSlimSerializer(serializers.ModelSerializer):
             "discord_confirm_attendance_hours",
             "discord_profile_reminder",
             "discord_profile_reminder_hours",
+            *READY_CHECK_SETTINGS_FIELDS,
         ]
-        read_only_fields = ["ends_at"]
+        read_only_fields = ["ends_at", *READY_CHECK_SETTINGS_FIELDS]
 
 
 class EventSerializer(
@@ -422,6 +446,18 @@ class EventSerializer(
             "allow_active_mmr",
             "allow_previous_rank",
             "allow_battlecup_rating",
+            "ready_check_scope",
+            "ready_check_open_minutes",
+            "ready_check_escalation_minutes",
+            "ready_check_close_minutes",
+            "ready_check_chase_minutes",
+            "ready_check_min_completion_pct",
+            "ready_check_low_completion_action",
+            "ready_check_notify_on_signup",
+            "ready_check_drop_notice",
+            "start_cull_enabled",
+            "start_cull_minutes_after",
+            "post_cull_fill_mode",
             # DiscordConfig
             "discord_create_event",
             "discord_sync_signups",
@@ -445,6 +481,8 @@ class EventSerializer(
             "discord_require_rank_screenshot",
             "discord_require_battlecup_screenshot",
             "min_mmr",
+            "event_voice_channel_id",
+            "voice_presence_confirms",
             # DiscordTournamentConfig
             "auto_create_hero_drafts",
             "discord_send_draft_link",
@@ -475,6 +513,7 @@ class EventSerializer(
             "dota_lobby_password": LOBBY_PASSWORD_FIELD_KWARGS,
             "captains_draft_time": DRAFT_TIME_KWARGS,
             **TIMER_FIELD_KWARGS,
+            **READY_CHECK_FIELD_KWARGS,
         }
 
     def update(self, instance: Event, validated_data: dict[str, Any]) -> Event:
@@ -493,7 +532,7 @@ class EventSerializer(
             )
         return value
 
-    def validate(self, data):
+    def validate(self, data: dict[str, Any]) -> dict[str, Any]:
         game_type = data.get(
             "game_type", self.instance.game_type if self.instance else 1
         )
@@ -505,6 +544,9 @@ class EventSerializer(
                 {"game_mode": f"{game_mode} is only available for Dota 2."}
             )
         self.check_lobby_steam_league(data, self.instance)
+        validate_ready_check_settings(
+            data, self.instance, is_create=self.instance is None
+        )
 
         # Single events have no subscriber list — discord_signup_reminder DMs
         # subscribed users, which is a series-level concept on EventRepeater.
@@ -858,6 +900,18 @@ class OrgEventDefaultsSerializer(
             "allow_active_mmr",
             "allow_previous_rank",
             "allow_battlecup_rating",
+            "ready_check_scope",
+            "ready_check_open_minutes",
+            "ready_check_escalation_minutes",
+            "ready_check_close_minutes",
+            "ready_check_chase_minutes",
+            "ready_check_min_completion_pct",
+            "ready_check_low_completion_action",
+            "ready_check_notify_on_signup",
+            "ready_check_drop_notice",
+            "start_cull_enabled",
+            "start_cull_minutes_after",
+            "post_cull_fill_mode",
             # DiscordEventConfigMixin
             "discord_create_event",
             "discord_sync_signups",
@@ -881,6 +935,8 @@ class OrgEventDefaultsSerializer(
             "discord_require_rank_screenshot",
             "discord_require_battlecup_screenshot",
             "min_mmr",
+            "event_voice_channel_id",
+            "voice_presence_confirms",
             # DiscordTournamentConfig
             "auto_create_hero_drafts",
             "discord_send_draft_link",
@@ -890,10 +946,14 @@ class OrgEventDefaultsSerializer(
         extra_kwargs = {
             "captains_draft_time": DRAFT_TIME_KWARGS,
             **TIMER_FIELD_KWARGS,
+            **READY_CHECK_FIELD_KWARGS,
         }
 
     def validate(self, data: dict) -> dict:
         self.check_lobby_steam_league(data, self.instance)
+        validate_ready_check_settings(
+            data, self.instance, is_create=self.instance is None
+        )
         return data
 
 
@@ -944,6 +1004,10 @@ class OneOffEventCreateSerializer(LobbySteamLeagueMixin, serializers.ModelSerial
                 name: {"required": False, **kwargs}
                 for name, kwargs in TIMER_FIELD_KWARGS.items()
             },
+            **{
+                name: {"required": False, **kwargs}
+                for name, kwargs in READY_CHECK_FIELD_KWARGS.items()
+            },
         }
 
     def validate_scheduled_at(self, value):
@@ -964,7 +1028,7 @@ class OneOffEventCreateSerializer(LobbySteamLeagueMixin, serializers.ModelSerial
             )
         return value
 
-    def validate(self, data):
+    def validate(self, data: dict[str, Any]) -> dict[str, Any]:
         repeater = self.context["repeater"]
         # Same cross-field rule EventSerializer.validate and
         # EventRepeaterSerializer.validate carry; "effective" = override else series.
@@ -980,6 +1044,7 @@ class OneOffEventCreateSerializer(LobbySteamLeagueMixin, serializers.ModelSerial
                 {"ends_at": "End time must be after the start time."}
             )
         self.check_lobby_steam_league(data, repeater)
+        validate_ready_check_settings(data, repeater, is_create=False)
         # The effective mode decides: fixed needs a password (typed here or
         # the series' fixed one); random generates one, so any typed
         # password is dropped.
