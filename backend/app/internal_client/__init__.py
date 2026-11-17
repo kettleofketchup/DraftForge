@@ -15,6 +15,8 @@ from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 import requests
+from pydantic import BaseModel
+from pydantic_core import to_jsonable_python
 
 from telemetry.logging import get_logger
 
@@ -730,7 +732,9 @@ def sweep_discord_leases(pending_threshold_minutes=5, failed_threshold_hours=1):
 
 
 class OpsNoticeTransientError(Exception):
-    """Network error or 5xx: safe to retry with the same emit_id."""
+    """Network error or 5xx (including database_error/event_conflict); retry with
+    the same emit_id. Replay only matches the latest emit on a notice, so a retry
+    that lands after another emit to that notice counts as a new occurrence."""
 
 
 _OPS_NOTICES_PATH = "/ops-notices/"
@@ -745,18 +749,13 @@ def _ops_notice_post(path: str, body: dict[str, Any]) -> dict[str, Any] | None:
     try:
         return resp.json()
     except ValueError:
-        logger.error(
-            "ops_notice_invalid_json",
-            system="internal_client",
-            subsystem="http",
-            http_path=path,
-        )
+        log.error("ops_notice_invalid_json", http_path=path, **_LOG_BASE)
         return None
 
 
 def emit_ops_notice(
     key: str,
-    payload: Mapping[str, Any],
+    payload: BaseModel | Mapping[str, Any],
     *,
     organization_id: int,
     event_id: int | None = None,
@@ -780,7 +779,9 @@ def emit_ops_notice(
     }
     body: dict[str, Any] = {
         "key": key,
-        "payload": dict(payload),
+        "payload": to_jsonable_python(
+            payload if isinstance(payload, BaseModel) else dict(payload)
+        ),
         "organization_id": organization_id,
         **{name: value for name, value in optional.items() if value is not None},
     }

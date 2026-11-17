@@ -14,12 +14,11 @@ from rest_framework.response import Response
 from app.auth import InternalServiceAuth, IsInternalService
 from app.models import CustomUser, Organization
 from events.models import Event
-from opsnotices.models import OpsNotice
 from opsnotices.schemas import EmitNoticeRequest, ResolveNoticeRequest
 from opsnotices.services import (
     EventRef,
     NoticeEmitError,
-    emit_notice,
+    _emit,
     resolve_notice,
 )
 from telemetry.logging import get_logger
@@ -27,6 +26,7 @@ from telemetry.logging import get_logger
 log = get_logger(__name__)
 
 _LOG: dict[str, str] = {"system": "opsnotices", "subsystem": "api"}
+_TRANSIENT_CODES: frozenset[str] = frozenset({"database_error", "event_conflict"})
 
 
 def _error(message: str, code: str, http_status: int) -> Response:
@@ -78,14 +78,8 @@ def emit(request: Request) -> Response:
     organization = Organization.objects.filter(pk=body.organization_id).first()
     if organization is None:
         return _error("organization not found", "not_found", status.HTTP_404_NOT_FOUND)
-    replay = (
-        body.emit_id is not None
-        and OpsNotice.objects.filter(
-            organization_id=organization.id, last_emit_id=body.emit_id
-        ).exists()
-    )
     try:
-        notice = emit_notice(
+        notice, outcome = _emit(
             body.key,
             body.payload,
             organization=organization,
@@ -95,19 +89,23 @@ def emit(request: Request) -> Response:
             dedupe_key=body.dedupe_key,
             severity=body.severity,
             emit_id=body.emit_id,
-            strict=True,
         )
     except NoticeEmitError as exc:
-        log.warning(
+        transient = exc.code in _TRANSIENT_CODES
+        (log.error if transient else log.warning)(
             "ops_notice_internal_rejected",
             code=exc.code,
             notice_key=exc.notice_key,
             organization_id=organization.id,
             **_LOG,
         )
-        return _error("notice rejected", exc.code, status.HTTP_400_BAD_REQUEST)
-    assert notice is not None
-    created = not replay and notice.occurrences == 1
+        http_status = (
+            status.HTTP_503_SERVICE_UNAVAILABLE
+            if transient
+            else status.HTTP_400_BAD_REQUEST
+        )
+        return _error("notice rejected", exc.code, http_status)
+    created = outcome == "created"
     data: dict[str, Any] = {
         "id": notice.pk,
         "created": created,

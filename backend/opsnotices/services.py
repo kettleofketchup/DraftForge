@@ -352,42 +352,34 @@ def _log_failure(exc: NoticeEmitError, organization: Organization | None) -> Non
     )
 
 
-def emit_notice(
+def _emit(
     key: str,
     payload: BaseModel | Mapping[str, Any],
     *,
     organization: Organization,
-    event: Event | EventRef | None = None,
-    subject_user: CustomUser | None = None,
-    actor: CustomUser | None = None,
-    dedupe_key: str | None = None,
-    severity: NoticeSeverity | str | None = None,
-    emit_id: UUID | None = None,
-    strict: bool | None = None,
-) -> OpsNotice | None:
+    event: Event | EventRef | None,
+    subject_user: CustomUser | None,
+    actor: CustomUser | None,
+    dedupe_key: str | None,
+    severity: NoticeSeverity | str | None,
+    emit_id: UUID | None,
+) -> tuple[OpsNotice, _Outcome]:
     _require_database("emit_notice")
-    is_strict = settings.OPS_NOTICES_STRICT if strict is None else strict
+    prepared = _prepare(key, payload, organization, event, dedupe_key, severity)
     try:
-        prepared = _prepare(key, payload, organization, event, dedupe_key, severity)
-        try:
-            with transaction.atomic():
-                notice, outcome = _write(
-                    prepared,
-                    organization,
-                    event is not None,
-                    subject_user,
-                    actor,
-                    emit_id,
-                )
-                if outcome != "replayed":
-                    _hand_off(notice, outcome == "created")
-        except DatabaseError as exc:
-            raise NoticeEmitError("database_error", key) from exc
-    except NoticeEmitError as exc:
-        if is_strict:
-            raise
-        _log_failure(exc, organization)
-        return None
+        with transaction.atomic():
+            notice, outcome = _write(
+                prepared,
+                organization,
+                event is not None,
+                subject_user,
+                actor,
+                emit_id,
+            )
+            if outcome != "replayed":
+                _hand_off(notice, outcome == "created")
+    except DatabaseError as exc:
+        raise NoticeEmitError("database_error", key) from exc
 
     if outcome == "created":
         log.info(
@@ -411,6 +403,39 @@ def emit_notice(
             notice_key=key,
             occurrences=notice.occurrences,
         )
+    return notice, outcome
+
+
+def emit_notice(
+    key: str,
+    payload: BaseModel | Mapping[str, Any],
+    *,
+    organization: Organization,
+    event: Event | EventRef | None = None,
+    subject_user: CustomUser | None = None,
+    actor: CustomUser | None = None,
+    dedupe_key: str | None = None,
+    severity: NoticeSeverity | str | None = None,
+    emit_id: UUID | None = None,
+    strict: bool | None = None,
+) -> OpsNotice | None:
+    try:
+        notice, _ = _emit(
+            key,
+            payload,
+            organization=organization,
+            event=event,
+            subject_user=subject_user,
+            actor=actor,
+            dedupe_key=dedupe_key,
+            severity=severity,
+            emit_id=emit_id,
+        )
+    except NoticeEmitError as exc:
+        if settings.OPS_NOTICES_STRICT if strict is None else strict:
+            raise
+        _log_failure(exc, organization)
+        return None
     return notice
 
 

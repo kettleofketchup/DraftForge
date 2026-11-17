@@ -1,12 +1,15 @@
-from datetime import time
+from datetime import UTC, datetime, time
+from enum import Enum
 from typing import Any
 from unittest.mock import MagicMock, patch
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import requests
+from django.db import OperationalError
 from django.test import SimpleTestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
+from pydantic import BaseModel
 from rest_framework.response import Response
 from rest_framework.test import APIClient
 from structlog.testing import capture_logs
@@ -21,6 +24,7 @@ from events.models import Event, EventRepeater
 from events.tests.base import EventTestCase
 from opsnotices.models import OpsNotice
 from opsnotices.registry import isolated_registry
+from opsnotices.services import NoticeEmitError
 from opsnotices.tests.types import register_test_types
 
 TOKEN = "test-internal-token"
@@ -85,6 +89,8 @@ class InternalEndpointTests(EventTestCase):
             repeat.json(), {"id": notice_id, "created": False, "occurrences": 2}
         )
 
+        # Replay only matches the latest emit on a row: a retry that lands after
+        # another emit counts again (plan review log T7-2).
         late_retry = self._post(self.emit_url, self._body(emit_id=emit_id))
         self.assertEqual(
             late_retry.json(), {"id": notice_id, "created": False, "occurrences": 3}
@@ -143,6 +149,26 @@ class InternalEndpointTests(EventTestCase):
                 self.assertEqual(len(rejected), 1)
                 self.assertEqual(rejected[0]["code"], code)
                 self.assertEqual(rejected[0]["subsystem"], "api")
+        self.assertEqual(OpsNotice.objects.count(), 0)
+
+    def test_transient_failures_return_503_with_code(self) -> None:
+        cases: list[tuple[str, BaseException]] = [
+            ("database_error", OperationalError("database is locked")),
+            ("event_conflict", NoticeEmitError("event_conflict", "test.alert")),
+        ]
+        for code, error in cases:
+            with (
+                self.subTest(code=code),
+                patch("opsnotices.services._write", side_effect=error),
+                capture_logs() as logs,
+            ):
+                resp = self._post(self.emit_url, self._body(emit_id=str(uuid4())))
+                self.assertEqual(resp.status_code, 503)
+                self.assertEqual(resp.json()["code"], code)
+                rejected = [
+                    e for e in logs if e["event"] == "ops_notice_internal_rejected"
+                ]
+                self.assertEqual(rejected[0]["log_level"], "error")
         self.assertEqual(OpsNotice.objects.count(), 0)
 
     def test_event_of_other_org_rejected(self) -> None:
@@ -338,6 +364,49 @@ class InternalClientTests(SimpleTestCase):
         with patch(POST_TARGET, return_value=_response(503)):
             with self.assertRaises(OpsNoticeTransientError):
                 emit_ops_notice("test.alert", {}, organization_id=1)
+
+    def test_emit_ops_notice_raises_transient_on_503_database_error(self) -> None:
+        with patch(
+            POST_TARGET, return_value=_response(503, {"code": "database_error"})
+        ):
+            with self.assertRaises(OpsNoticeTransientError):
+                emit_ops_notice("test.alert", {}, organization_id=1)
+
+    def test_emit_ops_notice_sends_json_native_payload(self) -> None:
+        class Colour(Enum):
+            RED = "red"
+
+        class Payload(BaseModel):
+            at: datetime
+            ref: UUID
+            colour: Colour
+
+        at = datetime(2026, 11, 17, 18, 0, tzinfo=UTC)
+        ref = uuid4()
+        expected = {"at": "2026-11-17T18:00:00Z", "ref": str(ref), "colour": "red"}
+        payloads: list[Any] = [
+            Payload(at=at, ref=ref, colour=Colour.RED),
+            {"at": at, "ref": ref, "colour": Colour.RED},
+        ]
+        for payload in payloads:
+            with (
+                self.subTest(type=type(payload).__name__),
+                patch(POST_TARGET, return_value=_response(201, {"id": 1})) as post,
+            ):
+                self.assertEqual(
+                    emit_ops_notice("test.alert", payload, organization_id=1), 1
+                )
+                self.assertEqual(post.call_args.kwargs["json"]["payload"], expected)
+
+    def test_invalid_json_logged_with_internal_api_tags(self) -> None:
+        resp = _response(200)
+        resp.json.side_effect = ValueError("bad")
+        with patch(POST_TARGET, return_value=resp), capture_logs() as logs:
+            self.assertIsNone(emit_ops_notice("test.alert", {}, organization_id=1))
+        invalid = [e for e in logs if e["event"] == "ops_notice_invalid_json"]
+        self.assertEqual(len(invalid), 1)
+        self.assertEqual(invalid[0]["tags"], ["internal_api", "outbound"])
+        self.assertEqual(invalid[0]["system"], "internal_client")
 
     def test_emit_ops_notice_raises_transient_on_connection_error(self) -> None:
         with patch(POST_TARGET, side_effect=requests.ConnectionError("down")):
