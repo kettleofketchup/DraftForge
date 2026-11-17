@@ -7,11 +7,12 @@ from typing import TYPE_CHECKING, Any
 from zoneinfo import ZoneInfo
 
 from django.contrib.auth.models import AnonymousUser
+from django.core.exceptions import ValidationError
 from django.db import models, transaction
 
 from app.cache_utils import invalidate_after_commit, invalidate_obj
 from app.functions.teamdraft import apply_draft_options
-from app.models import CustomUser, Organization, Team, Tournament
+from app.models import CustomUser, Organization, PositionsModel, Team, Tournament
 from events.capacity import has_free_seat, lock_event, seat_holding_statuses
 from events.constants import (
     EVENT_REOPEN_TRANSITIONS,
@@ -27,6 +28,7 @@ from events.discord import (
     notify_new_event,
     notify_signup_changed,
 )
+from events.eligibility import unmet_requirements
 from events.models import (
     DiscordEventConfigMixin,
     DiscordTournamentConfigMixin,
@@ -40,13 +42,13 @@ from events.models import (
 )
 from events.reopen import ReopenNotPermitted, reopen_event
 from lobby.passwords import PasswordMode, generate_password
+from org.models_profiles import PlayerDotaProfile
 from telemetry.logging import get_logger
 
 if TYPE_CHECKING:
     from discordbot.models import DiscordEvent
     from events.schemas import SignupInputPatch
     from org.models import OrgUser
-    from org.models_profiles import PlayerDotaProfile
 
 logger = get_logger(__name__)
 log = get_logger(__name__)
@@ -106,64 +108,12 @@ def clear_signup_dedup_state(event_id: int) -> dict[str, int]:
 
 def _validate_screenshot_url(url: str | None) -> None:
     if url and not SCREENSHOT_URL_RE.match(url):
-        from django.core.exceptions import ValidationError
-
         raise ValidationError(SCREENSHOT_BAD_URL_MESSAGE, code="screenshot_bad_url")
 
 
 def check_requirements(event: Event, user: CustomUser) -> bool:
     """Check if user meets event confirmation requirements."""
-    from org.models import OrgUser
-    from org.models_profiles import PlayerDotaProfile
-
-    if event.require_steam_id and not user.steamid:
-        return False
-    if event.require_mmr_verified:
-        try:
-            org_user = OrgUser.objects.get(user=user, organization=event.organization)
-            if not org_user.has_active_dota_mmr:
-                return False
-        except OrgUser.DoesNotExist:
-            return False
-
-    # Check rank type restrictions and screenshot requirements (Dota 2 only)
-    try:
-        org_user = OrgUser.objects.get(user=user, organization=event.organization)
-        profile = PlayerDotaProfile.objects.get(org_user=org_user)
-
-        # Rank type allowed?
-        if profile.rank_status == "active" and not event.allow_active_mmr:
-            return False
-        if profile.rank_status == "previous" and not event.allow_previous_rank:
-            return False
-        if profile.rank_status == "never" and not event.allow_battlecup_rating:
-            return False
-
-        # Screenshot required but missing?
-        if event.discord_require_rank_screenshot and profile.rank_status in (
-            "active",
-            "previous",
-        ):
-            if not profile.rank_screenshot:
-                return False
-        if (
-            event.discord_require_battlecup_screenshot
-            and profile.rank_status == "never"
-        ):
-            if not profile.battlecup_screenshot:
-                return False
-
-        # Min MMR check
-        if event.min_mmr and profile.rank_status == "active":
-            if not profile.mmr or profile.mmr < event.min_mmr:
-                return False
-    except (OrgUser.DoesNotExist, PlayerDotaProfile.DoesNotExist):
-        pass  # No profile = skip Dota-specific checks
-
-    if event.require_profile_complete:
-        if not (user.nickname and user.steamid and user.discordId):
-            return False
-    return True
+    return not unmet_requirements(event, user)
 
 
 def resolve_or_create_org_user(
@@ -408,10 +358,6 @@ def apply_signup_input(
         active and fires immediately otherwise. Do NOT wrap in an outer
         transaction.on_commit.
     """
-    from django.core.exceptions import ValidationError
-
-    from org.models_profiles import PlayerDotaProfile
-
     set_fields = patch.model_dump(exclude_unset=True)
     if not set_fields:
         return None
@@ -487,8 +433,6 @@ def apply_signup_input(
         # Write priorities to the user's main PositionsModel so the
         # edit-profile page reflects them. Auto-create the row if missing
         # (matches CustomUser.save() default).
-        from app.models import PositionsModel
-
         user = org_user.user
         user_positions = user.positions
         if user_positions is None:
@@ -522,7 +466,7 @@ def apply_signup_input(
                 RANK_STATUS_DISALLOWED_MESSAGES[status],
                 code="rank_status_disallowed",
             )
-        profile.rank_status = status
+        profile.declare_rank(status)
 
     if "rank_medal" in set_fields:
         profile.rank_medal = set_fields["rank_medal"] or ""

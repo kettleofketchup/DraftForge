@@ -25,7 +25,7 @@ transport package. Request bodies for the same endpoints live in
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TYPE_CHECKING, Annotated, Literal, Optional
+from typing import TYPE_CHECKING, Annotated, Literal, Optional, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -281,6 +281,18 @@ class SignupModalConfig(BaseModel):
     require_steam_id: bool = True
 
 
+class SupportsDotaGates(Protocol):
+    """The Event fields the Dota gates read."""
+
+    require_steam_id: bool
+    discord_require_rank_screenshot: bool
+    discord_require_battlecup_screenshot: bool
+    min_mmr: int | None
+    allow_active_mmr: bool
+    allow_previous_rank: bool
+    allow_battlecup_rating: bool
+
+
 class DotaModalConfig(SignupModalConfig):
     kind: Literal["dota"] = "dota"
     require_rank_screenshot: bool = False
@@ -289,6 +301,18 @@ class DotaModalConfig(SignupModalConfig):
     allow_active_mmr: bool = True
     allow_previous_rank: bool = True
     allow_battlecup_rating: bool = True
+
+    @classmethod
+    def from_event(cls, event: SupportsDotaGates) -> DotaModalConfig:
+        return cls(
+            require_steam_id=event.require_steam_id,
+            require_rank_screenshot=event.discord_require_rank_screenshot,
+            require_battlecup_screenshot=event.discord_require_battlecup_screenshot,
+            min_mmr=event.min_mmr,
+            allow_active_mmr=event.allow_active_mmr,
+            allow_previous_rank=event.allow_previous_rank,
+            allow_battlecup_rating=event.allow_battlecup_rating,
+        )
 
 
 class DeadlockModalConfig(SignupModalConfig):
@@ -307,9 +331,10 @@ ModalConfig = Annotated[
 def dota_require_screenshot(rank_status: str, cfg: "DotaModalConfig") -> bool:
     """Single home for the screenshot-required rule.
 
-    Called by the Dota modal follow-up (``discordbot/components/dota.py``) and
-    by ``DotaHandler`` (``events/discord/providers/dota.py``). Pure over the
-    transported config so both processes call it.
+    Called by the Dota modal follow-up (``discordbot/components/dota.py``),
+    ``DotaHandler`` (``events/discord/providers/dota.py``) and the signup
+    eligibility check (``events/eligibility.py``). Pure over the transported
+    config so every process calls it.
     """
     if rank_status == "active":
         return cfg.require_rank_screenshot

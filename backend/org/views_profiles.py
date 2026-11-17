@@ -7,6 +7,8 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.request import Request
 from rest_framework.response import Response
 
+from app.cache_utils import invalidate_obj
+from app.models import Organization
 from app.permissions_org import has_org_staff_access
 from org.models import OrgUser
 from org.models_profiles import PlayerDotaProfile
@@ -48,6 +50,21 @@ def _serialize_dota_profile(profile: PlayerDotaProfile) -> dict[str, Any]:
     }
 
 
+def _apply_dota_profile_patch(
+    org_user: OrgUser, data: dict[str, Any]
+) -> PlayerDotaProfile:
+    profile, _ = PlayerDotaProfile.objects.get_or_create(org_user=org_user)
+    for field in DOTA_PROFILE_FIELDS - {"rank_status"}:
+        if field in data:
+            setattr(profile, field, data[field])
+    if "rank_status" in data:
+        profile.declare_rank(data["rank_status"])
+    profile.save()
+    invalidate_obj(profile)
+    invalidate_obj(org_user)
+    return profile
+
+
 @api_view(["GET"])
 @permission_classes([permissions.IsAuthenticated])
 def get_my_dota_profile(request: Request, org_id: int) -> Response:
@@ -80,17 +97,7 @@ def update_my_dota_profile(request: Request, org_id: int) -> Response:
             status=status.HTTP_404_NOT_FOUND,
         )
 
-    profile, _ = PlayerDotaProfile.objects.get_or_create(org_user=org_user)
-    for field in DOTA_PROFILE_FIELDS:
-        if field in request.data:
-            setattr(profile, field, request.data[field])
-    profile.save()
-
-    from app.cache_utils import invalidate_obj
-
-    invalidate_obj(profile)
-    invalidate_obj(org_user)
-
+    profile = _apply_dota_profile_patch(org_user, request.data)
     return Response(_serialize_dota_profile(profile))
 
 
@@ -100,8 +107,6 @@ def get_user_dota_profile(request: Request, org_id: int, user_pk: int) -> Respon
     """Get any user's Dota 2 profile for an org (org staff only).
     GET /api/organizations/<org_id>/users/<user_pk>/dota-profile/
     """
-    from app.models import Organization
-
     try:
         org = Organization.objects.get(pk=org_id)
     except Organization.DoesNotExist:
@@ -128,8 +133,6 @@ def update_user_dota_profile(request: Request, org_id: int, user_pk: int) -> Res
     """Update any user's Dota 2 profile (org staff only).
     PATCH /api/organizations/<org_id>/users/<user_pk>/dota-profile/
     """
-    from app.models import Organization
-
     try:
         org = Organization.objects.get(pk=org_id)
     except Organization.DoesNotExist:
@@ -146,17 +149,7 @@ def update_user_dota_profile(request: Request, org_id: int, user_pk: int) -> Res
             status=status.HTTP_404_NOT_FOUND,
         )
 
-    profile, _ = PlayerDotaProfile.objects.get_or_create(org_user=org_user)
-    for field in DOTA_PROFILE_FIELDS:
-        if field in request.data:
-            setattr(profile, field, request.data[field])
-    profile.save()
-
-    from app.cache_utils import invalidate_obj
-
-    invalidate_obj(profile)
-    invalidate_obj(org_user)
-
+    profile = _apply_dota_profile_patch(org_user, request.data)
     return Response(_serialize_dota_profile(profile))
 
 
@@ -166,8 +159,6 @@ def delete_user_dota_profile(request: Request, org_id: int, user_pk: int) -> Res
     """Delete a user's Dota 2 profile (org staff only).
     DELETE /api/organizations/<org_id>/users/<user_pk>/dota-profile/
     """
-    from app.models import Organization
-
     try:
         org = Organization.objects.get(pk=org_id)
     except Organization.DoesNotExist:
@@ -183,7 +174,5 @@ def delete_user_dota_profile(request: Request, org_id: int, user_pk: int) -> Res
 
     deleted, _ = PlayerDotaProfile.objects.filter(org_user=org_user).delete()
     if deleted:
-        from app.cache_utils import invalidate_obj
-
         invalidate_obj(org_user)
     return Response(status=status.HTTP_204_NO_CONTENT)

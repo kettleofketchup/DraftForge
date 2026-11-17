@@ -103,6 +103,7 @@ class EventConfigMixin(models.Model):
     timezone = models.CharField(max_length=50, default="America/New_York")
     min_players = models.IntegerField(null=True, blank=True)
     max_players = models.IntegerField(null=True, blank=True)
+    # Inert until #504.
     signup_deadline_hours = models.IntegerField(null=True, blank=True)
     allow_team_signups = models.BooleanField(default=False)
     allow_user_signups = models.BooleanField(default=True)

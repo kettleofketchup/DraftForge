@@ -170,6 +170,7 @@ def populate_events_data(force=False):
             org_user=ou,
             defaults={
                 "rank_status": profile_data.get("rank_status", "never"),
+                "rank_declared_at": tz.now(),
                 "rank_medal": profile_data.get("rank_medal", ""),
                 "mmr": profile_data.get("mmr"),
                 "battle_cup_tier": profile_data.get("battle_cup_tier"),

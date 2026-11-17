@@ -84,15 +84,7 @@ class DotaHandler:
         return {"unverified_friend_id": _steam_friend_id_prefill(org_user)}
 
     def modal_config(self, event: Event) -> DotaModalConfig:
-        return DotaModalConfig(
-            require_steam_id=event.require_steam_id,
-            require_rank_screenshot=event.discord_require_rank_screenshot,
-            require_battlecup_screenshot=event.discord_require_battlecup_screenshot,
-            min_mmr=event.min_mmr,
-            allow_active_mmr=event.allow_active_mmr,
-            allow_previous_rank=event.allow_previous_rank,
-            allow_battlecup_rating=event.allow_battlecup_rating,
-        )
+        return DotaModalConfig.from_event(event)
 
     def apply_modal_submit(
         self, event: Event, org_user: OrgUser, user: CustomUser, values: dict
@@ -451,11 +443,7 @@ class DotaHandler:
         profile, _ = PlayerDotaProfile.objects.get_or_create(org_user=org_user)
         rank_status = profile.rank_status or "never"
         require_screenshot = dota_require_screenshot(
-            rank_status,
-            DotaModalConfig(
-                require_rank_screenshot=event.discord_require_rank_screenshot,
-                require_battlecup_screenshot=event.discord_require_battlecup_screenshot,
-            ),
+            rank_status, DotaModalConfig.from_event(event)
         )
         return {
             "rank_status": rank_status,

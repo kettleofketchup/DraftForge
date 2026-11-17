@@ -1,0 +1,231 @@
+from itertools import product
+
+from app.models import CustomUser, GameType
+from events.eligibility import (
+    REQUIREMENT_CHECKS,
+    UNMET_LABELS,
+    Unmet,
+    has_steam_id,
+    unmet_requirements,
+)
+from events.models import Event
+from events.schemas import DotaModalConfig, SignupInputPatch, dota_require_screenshot
+from events.services import apply_signup_input
+from events.tests.base import EventTestCase
+from org.models import OrgUser
+from org.models_profiles import PlayerDotaProfile
+
+SCREENSHOT_CODES = {Unmet.RANK_SCREENSHOT_MISSING, Unmet.BATTLECUP_SCREENSHOT_MISSING}
+
+
+class EligibilityMatrixTests(EventTestCase):
+    def _org_user(self, user: CustomUser) -> OrgUser:
+        return OrgUser.objects.get(user=user, organization=self.org)
+
+    def _declared(self, user: CustomUser, rank_status: str, **fields: object) -> None:
+        profile, _ = PlayerDotaProfile.objects.get_or_create(
+            org_user=self._org_user(user)
+        )
+        profile.declare_rank(rank_status)
+        for name, value in fields.items():
+            setattr(profile, name, value)
+        profile.save()
+
+    def test_no_profile_with_gate_is_undeclared(self) -> None:
+        ev = self.make_event(allow_battlecup_rating=False)
+        u = self.make_user()
+        self.assertEqual(unmet_requirements(ev, u), [Unmet.DOTA_RANK_UNDECLARED])
+
+    def test_default_row_from_friend_id_patch_is_undeclared(self) -> None:
+        ev = self.make_event()
+        ev_with_min_mmr = self.make_event(min_mmr=3000)
+        u = self.make_user()
+        ou = self._org_user(u)
+        apply_signup_input(
+            org_user=ou,
+            event=ev,
+            patch=SignupInputPatch(unverified_friend_id="123456"),
+        )
+        self.assertTrue(PlayerDotaProfile.objects.filter(org_user=ou).exists())
+        self.assertIn(
+            Unmet.DOTA_RANK_UNDECLARED, unmet_requirements(ev_with_min_mmr, u)
+        )
+
+    def test_no_gate_no_profile_passes(self) -> None:
+        ev = self.make_event()
+        u = self.make_user()
+        self.assertEqual(unmet_requirements(ev, u), [])
+
+    def test_matrix(self) -> None:
+        cases: list[tuple[str, dict[str, object], str, dict[str, object], list]] = [
+            (
+                "active below min_mmr",
+                {"min_mmr": 3000},
+                "active",
+                {"mmr": 2000},
+                [Unmet.BELOW_MIN_MMR],
+            ),
+            (
+                "active above min_mmr",
+                {"min_mmr": 3000},
+                "active",
+                {"mmr": 4000},
+                [],
+            ),
+            (
+                "previous disallowed",
+                {"allow_previous_rank": False},
+                "previous",
+                {},
+                [Unmet.RANK_TYPE_DISALLOWED],
+            ),
+            (
+                "previous needs no rank screenshot",
+                {"discord_require_rank_screenshot": True},
+                "previous",
+                {},
+                [],
+            ),
+            (
+                "active without rank screenshot",
+                {"discord_require_rank_screenshot": True},
+                "active",
+                {},
+                [Unmet.RANK_SCREENSHOT_MISSING],
+            ),
+            (
+                "active with rank screenshot",
+                {"discord_require_rank_screenshot": True},
+                "active",
+                {"rank_screenshot": "https://x.test/r.png"},
+                [],
+            ),
+            (
+                "never without battlecup screenshot",
+                {"discord_require_battlecup_screenshot": True},
+                "never",
+                {},
+                [Unmet.BATTLECUP_SCREENSHOT_MISSING],
+            ),
+            (
+                "never ignores min_mmr",
+                {"min_mmr": 3000},
+                "never",
+                {},
+                [],
+            ),
+        ]
+        for label, gates, rank_status, fields, expected in cases:
+            with self.subTest(label):
+                ev = self.make_event(**gates)
+                u = self.make_user()
+                self._declared(u, rank_status, **fields)
+                self.assertEqual(unmet_requirements(ev, u), expected)
+
+    def test_screenshot_parity(self) -> None:
+        for rank_status, (rank_req, bc_req) in product(
+            ("active", "previous", "never"), product([True, False], [True, False])
+        ):
+            with self.subTest(rank_status=rank_status, rank=rank_req, bc=bc_req):
+                ev = self.make_event(
+                    discord_require_rank_screenshot=rank_req,
+                    discord_require_battlecup_screenshot=bc_req,
+                )
+                u = self.make_user()
+                self._declared(u, rank_status)
+                codes = set(unmet_requirements(ev, u))
+                self.assertEqual(
+                    bool(codes & SCREENSHOT_CODES),
+                    dota_require_screenshot(
+                        rank_status, DotaModalConfig.from_event(ev)
+                    ),
+                )
+
+    def test_deadlock_event_ignores_dota_profile(self) -> None:
+        ev = self.make_event(
+            game_type=GameType.DEADLOCK,
+            require_mmr_verified=True,
+            allow_active_mmr=False,
+            min_mmr=9000,
+            discord_require_rank_screenshot=True,
+        )
+        u = self.make_user()
+        self._declared(u, "active", mmr=100)
+        ou = self._org_user(u)
+        self.assertFalse(ou.has_active_dota_mmr)
+        self.assertEqual(unmet_requirements(ev, u), [])
+
+    def test_dota_event_mmr_unverified(self) -> None:
+        ev = self.make_event(require_mmr_verified=True)
+        u = self.make_user()
+        self.assertEqual(unmet_requirements(ev, u), [Unmet.MMR_UNVERIFIED])
+
+    def test_registry_covers_every_game_type(self) -> None:
+        self.assertEqual(set(REQUIREMENT_CHECKS), set(GameType))
+
+    def test_labels_cover_every_code(self) -> None:
+        self.assertEqual(set(UNMET_LABELS), set(Unmet))
+
+    def test_has_steam_id_rejects_friend_id_owned_by_other_user(self) -> None:
+        u = self.make_user()
+        other = self.make_user()
+        other.steam_account_id = 555555
+        other.save()
+        ou = self._org_user(u)
+        PlayerDotaProfile.objects.create(org_user=ou, unverified_friend_id="555555")
+        ou = self._org_user(u)
+        self.assertFalse(has_steam_id(u, ou))
+
+    def test_has_steam_id_accepts_own_unowned_friend_id(self) -> None:
+        u = self.make_user()
+        ou = self._org_user(u)
+        PlayerDotaProfile.objects.create(org_user=ou, unverified_friend_id="777777")
+        ou = self._org_user(u)
+        self.assertTrue(has_steam_id(u, ou))
+
+    def test_has_steam_id_rejects_non_numeric_friend_id(self) -> None:
+        u = self.make_user()
+        ou = self._org_user(u)
+        PlayerDotaProfile.objects.create(org_user=ou, unverified_friend_id="abc")
+        ou = self._org_user(u)
+        self.assertFalse(has_steam_id(u, ou))
+
+    def test_has_steam_id_out_of_range_friend_id(self) -> None:
+        u = self.make_user()
+        ou = self._org_user(u)
+        PlayerDotaProfile.objects.create(
+            org_user=ou, unverified_friend_id="99999999999999999999"
+        )
+        ou = self._org_user(u)
+        self.assertTrue(has_steam_id(u, ou))
+
+    def test_require_steam_id_met_by_profile_friend_id(self) -> None:
+        ev = self.make_event(require_steam_id=True)
+        u = self.make_user()
+        PlayerDotaProfile.objects.create(
+            org_user=self._org_user(u), unverified_friend_id="888888"
+        )
+        self.assertEqual(unmet_requirements(ev, u), [])
+
+    def test_profile_incomplete(self) -> None:
+        ev = self.make_event(require_profile_complete=True)
+        u = self.make_user(steamid=76561198000123456)
+        self.assertEqual(unmet_requirements(ev, u), [Unmet.PROFILE_INCOMPLETE])
+
+    def test_event_without_org(self) -> None:
+        # Event.organization is NOT NULL in the schema; an unsaved instance
+        # still exercises the org_user=None path.
+        ev = Event(
+            organization=None,
+            name="Orgless",
+            scheduled_at=self.event.scheduled_at,
+            state=self.event.state,
+            created_by=self.admin,
+            require_steam_id=True,
+        )
+        with_steam = self.make_user(steamid=76561198000654321)
+        without_steam = self.make_user()
+        self.assertEqual(unmet_requirements(ev, with_steam), [])
+        self.assertEqual(
+            unmet_requirements(ev, without_steam), [Unmet.STEAM_ID_MISSING]
+        )

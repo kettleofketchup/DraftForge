@@ -1,4 +1,5 @@
 from django.db import models
+from django.utils import timezone
 
 
 class PlayerProfileMixin(models.Model):
@@ -36,6 +37,11 @@ class PlayerDotaProfile(PlayerProfileMixin):
     )
     rank_status = models.CharField(
         max_length=10, choices=RANK_STATUS_CHOICES, default="never"
+    )
+    rank_declared_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When the player last chose a rank status; null means undeclared",
     )
     rank_medal = models.CharField(
         max_length=50,
@@ -75,6 +81,11 @@ class PlayerDotaProfile(PlayerProfileMixin):
     pos_3 = models.BooleanField(default=False, help_text="Offlane")
     pos_4 = models.BooleanField(default=False, help_text="Soft Support")
     pos_5 = models.BooleanField(default=False, help_text="Hard Support")
+
+    def declare_rank(self, rank_status: str) -> None:
+        """Record an explicit rank answer; the caller saves."""
+        self.rank_status = rank_status
+        self.rank_declared_at = timezone.now()
 
     class Meta:
         verbose_name = "Player Dota Profile"
