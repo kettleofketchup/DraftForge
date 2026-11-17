@@ -2,7 +2,7 @@
 
 from django.core.cache import cache
 from django.db import IntegrityError, transaction
-from django.db.models import Q
+from django.db.models import Exists, OuterRef, Q
 from django.shortcuts import get_object_or_404
 from django.utils import timezone as tz
 from rest_framework import status
@@ -38,6 +38,7 @@ from discordbot.services.member_names import normalise_name
 from league.models import LeagueUser
 from org.models import OrgUser
 from org.serializers import OrgUserSerializer
+from org.user_search import user_name_q
 from user.querysets import with_user_profiles
 
 # =============================================================================
@@ -53,11 +54,11 @@ def search_users(request: Request) -> Response:
 
     Query params:
     - q: Search query (min 3 characters)
-    - org_id: Optional org ID for membership annotation
+    - org_id: Optional org ID; also matches that org's server nicknames,
+      ranks its members first and annotates membership (org staff only)
     - league_id: Optional league ID for membership annotation
 
-    Returns max 20 results, each annotated with membership context
-    when org_id is provided.
+    Returns max 20 results.
     """
     query = request.query_params.get("q", "").strip()
 
@@ -67,95 +68,86 @@ def search_users(request: Request) -> Response:
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    # Build search filter
-    q_filter = (
-        Q(discordUsername__icontains=query)
-        | Q(discordNickname__icontains=query)
-        | Q(guildNickname__icontains=query)
-        | Q(username__icontains=query)
-        # nickname lives on base_profile; ORM filters need the relation path
-        | Q(base_profile__nickname__icontains=query)
-    )
-
-    # Add Steam ID search if query is numeric
-    if query.isdigit():
-        q_filter |= Q(steamid=int(query)) | Q(steam_account_id=int(query))
-
-    users = with_user_profiles(CustomUser.objects.all(), dota=True).filter(q_filter)[
-        :20
-    ]
-    data = TournamentUserSerializer(users, many=True).data
-
-    # Annotate with membership context if org_id provided
+    org: Organization | None = None
     org_id = request.query_params.get("org_id")
-    league_id = request.query_params.get("league_id")
-
     if org_id:
         try:
             org = Organization.objects.get(pk=int(org_id))
         except (Organization.DoesNotExist, ValueError):
             org = None
 
-        # Require org staff access to see membership annotations
-        if org and not has_org_staff_access(request.user, org):
-            return Response(
-                {"error": "You do not have access to this organization"},
-                status=status.HTTP_403_FORBIDDEN,
-            )
+    if org and not has_org_staff_access(request.user, org):
+        return Response(
+            {"error": "You do not have access to this organization"},
+            status=status.HTTP_403_FORBIDDEN,
+        )
 
+    q_filter = user_name_q(query, org_id=org.pk if org else None)
+    if query.isdigit():
+        q_filter |= Q(steamid=int(query)) | Q(steam_account_id=int(query))
+
+    users_qs = with_user_profiles(CustomUser.objects.all(), dota=True).filter(q_filter)
+    if org:
+        users_qs = users_qs.annotate(
+            is_org_member=Exists(
+                OrgUser.objects.filter(user=OuterRef("pk"), organization=org)
+            )
+        ).order_by("-is_org_member", "username")
+    data = TournamentUserSerializer(users_qs[:20], many=True).data
+
+    if org:
         league = None
+        league_id = request.query_params.get("league_id")
         if league_id:
             try:
                 league = League.objects.get(pk=int(league_id))
             except (League.DoesNotExist, ValueError):
                 pass
 
-        if org:
-            user_ids = [u["pk"] for u in data]
+        user_ids = [u["pk"] for u in data]
 
-            # Get league member IDs
-            league_member_ids = set()
-            if league:
-                league_member_ids = set(
-                    LeagueUser.objects.filter(
-                        league=league, user_id__in=user_ids
-                    ).values_list("user_id", flat=True)
-                )
-
-            # Get org member IDs
-            org_member_ids = set(
-                OrgUser.objects.filter(
-                    organization=org, user_id__in=user_ids
+        league_member_ids = set()
+        if league:
+            league_member_ids = set(
+                LeagueUser.objects.filter(
+                    league=league, user_id__in=user_ids
                 ).values_list("user_id", flat=True)
             )
 
-            # Get other org memberships for remaining users
-            other_org_map = {}
-            remaining_ids = set(user_ids) - org_member_ids - league_member_ids
-            if remaining_ids:
-                other_memberships = (
-                    OrgUser.objects.filter(user_id__in=remaining_ids)
-                    .select_related("organization")
-                    .values_list("user_id", "organization__name")
-                )
-                for uid, org_name in other_memberships:
-                    if uid not in other_org_map:
-                        other_org_map[uid] = org_name
+        org_nicknames: dict[int, str | None] = dict(
+            OrgUser.objects.filter(organization=org, user_id__in=user_ids).values_list(
+                "user_id", "guild_nickname"
+            )
+        )
+        org_member_ids = set(org_nicknames)
 
-            for user_data in data:
-                uid = user_data["pk"]
-                if uid in league_member_ids:
-                    user_data["membership"] = "league"
-                    user_data["membership_label"] = league.name if league else ""
-                elif uid in org_member_ids:
-                    user_data["membership"] = "org"
-                    user_data["membership_label"] = org.name
-                elif uid in other_org_map:
-                    user_data["membership"] = "other_org"
-                    user_data["membership_label"] = other_org_map[uid]
-                else:
-                    user_data["membership"] = None
-                    user_data["membership_label"] = None
+        other_org_map = {}
+        remaining_ids = set(user_ids) - org_member_ids - league_member_ids
+        if remaining_ids:
+            other_memberships = (
+                OrgUser.objects.filter(user_id__in=remaining_ids)
+                .select_related("organization")
+                .values_list("user_id", "organization__name")
+            )
+            for uid, org_name in other_memberships:
+                if uid not in other_org_map:
+                    other_org_map[uid] = org_name
+
+        for user_data in data:
+            uid = user_data["pk"]
+            user_data["guildNickname"] = org_nicknames.get(uid)
+            if uid in league_member_ids:
+                user_data["membership"] = "league"
+                user_data["membership_label"] = league.name if league else ""
+            elif uid in org_member_ids:
+                user_data["membership"] = "org"
+                user_data["membership_label"] = org.name
+            elif uid in other_org_map:
+                user_data["membership"] = "other_org"
+                user_data["membership_label"] = other_org_map[uid]
+            else:
+                user_data["membership"] = None
+                user_data["membership_label"] = None
 
     return Response(data)
 

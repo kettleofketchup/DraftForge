@@ -10,6 +10,7 @@ from events.models import Event, EventSignup
 from org.models import OrgUser
 from org.models_promotion import PromoSend
 from org.promotion.render import player_name
+from org.user_search import user_name_q
 from user.querysets import with_user_profiles
 
 MAX_POOL_N: Final[int] = 10
@@ -118,13 +119,7 @@ def candidates(
         qs = qs.exclude(pk__in=event_sends.values("recipient_id"))
     term = q.strip()
     if term:
-        qs = qs.filter(
-            Q(username__icontains=term)
-            | Q(base_profile__nickname__icontains=term)
-            | Q(discordUsername__icontains=term)
-            | Q(discordNickname__icontains=term)
-            | Q(guildNickname__icontains=term)
-        )
+        qs = qs.filter(user_name_q(term, org_id=org.pk))
     users = list(qs.order_by("-recent_count", "username", "pk"))
     user_pks = [u.pk for u in users]
 
