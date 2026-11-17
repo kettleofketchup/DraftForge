@@ -41,6 +41,7 @@ from tests.data.org_features import (
     ORG_FEATURES_ORGS,
     ORG_FEATURES_PLAYERS,
     ORG_FEATURES_ROLE_USERS,
+    ORG_FEATURES_SERVER_NICKNAMES,
     ORG_FEATURES_TEMPLATE_NAMES,
     ORG_FEATURES_TOURNAMENTS,
     ORG_FEATURES_UPCOMING_EVENT_NAME,
@@ -345,6 +346,23 @@ class OrgFeaturesPopulateTest(TestCase):
             OrgUser.objects.filter(
                 organization=private, user_id=roles["private_member"].pk
             ).exists()
+        )
+
+    def test_server_nicknames_are_per_org(self) -> None:
+        nicknames = dict(
+            OrgUser.objects.nocache()
+            .filter(user_id=ORG_FEATURES_PLAYERS[0].pk)
+            .values_list("organization_id", "guild_nickname")
+        )
+        self.assertEqual(
+            nicknames,
+            {
+                FEATURES_ORG.pk: ORG_FEATURES_SERVER_NICKNAMES[
+                    (FEATURES_ORG.pk, ORG_FEATURES_PLAYERS[0].pk)
+                ],
+                LOCKED_FEATURES_ORG.pk: None,
+                PRIVATE_FEATURES_ORG.pk: None,
+            },
         )
 
     def test_upcoming_event_pool_has_candidates(self) -> None:
