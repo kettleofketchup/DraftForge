@@ -30,8 +30,16 @@ def with_signup_counts(qs: QuerySet[Event]) -> QuerySet[Event]:
     )
 
 
+def free_seats(event: Event) -> int | None:
+    """Seats left under max_players; None when capacity is unlimited (unset or 0)."""
+    if not event.max_players:
+        return None
+    return max(0, event.max_players - count_seats(event))
+
+
 def has_free_seat(event: Event) -> bool:
-    return not event.max_players or count_seats(event) < event.max_players
+    free = free_seats(event)
+    return free is None or free > 0
 
 
 def lock_event(event: Event) -> Event:

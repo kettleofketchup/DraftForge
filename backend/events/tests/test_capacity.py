@@ -8,8 +8,14 @@ from django.utils import timezone as tz
 from rest_framework.request import Request
 from rest_framework.test import APIRequestFactory
 
+from app.cache_utils import invalidate_after_commit
 from app.models import CustomUser, Organization
-from events.capacity import count_seats, has_free_seat, with_signup_counts
+from events.capacity import (
+    count_seats,
+    free_seats,
+    has_free_seat,
+    with_signup_counts,
+)
 from events.constants import EventState, SignupStatus
 from events.models import Event, EventSignup
 from events.schemas import EventTaskSchema
@@ -114,6 +120,22 @@ class SeatCapacityTests(EventTestCase):
             )
         self.assertEqual(count_seats(event), 4)
 
+    def test_free_seats(self) -> None:
+        unlimited = self.make_event(max_players=0)
+        self.assertIsNone(free_seats(unlimited))
+        self.assertIsNone(free_seats(self.make_event(max_players=None)))
+
+        event = self.make_event(max_players=2)
+        process_rsvp(event, self.make_user())
+        self.assertEqual(free_seats(event), 1)
+
+        overfull = self.make_event(max_players=1)
+        for _ in range(2):
+            EventSignup.objects.create(
+                event=overfull, user=self.make_user(), status=SignupStatus.APPROVED
+            )
+        self.assertEqual(free_seats(overfull), 0)
+
 
 class SeatCountSurfacesTests(EventTestCase):
     def _one_signup_per_status(self) -> Event:
@@ -216,6 +238,9 @@ class PromoteRequiresAtomicTests(TransactionTestCase):
 NOTIFY_PATH = (
     "events.management.commands.rebalance_event_waitlists.notify_signup_changed"
 )
+INVALIDATE_PATH = (
+    "events.management.commands.rebalance_event_waitlists.invalidate_after_commit"
+)
 
 
 class RebalanceCommandTests(EventTestCase):
@@ -232,6 +257,19 @@ class RebalanceCommandTests(EventTestCase):
             waitlist_position=1,
         )
         self.empty_waitlist = self.make_event(max_players=5)
+        self.roll_call = self.make_event(max_players=2, state=EventState.ROLL_CALL)
+        for _ in range(2):
+            EventSignup.objects.create(
+                event=self.roll_call,
+                user=self.make_user(),
+                status=SignupStatus.TENTATIVE,
+            )
+        self.roll_call_waitlisted = EventSignup.objects.create(
+            event=self.roll_call,
+            user=self.make_user(),
+            status=SignupStatus.WAITLISTED,
+            waitlist_position=1,
+        )
 
     def _run(self, *args: str) -> str:
         out = StringIO()
@@ -253,14 +291,57 @@ class RebalanceCommandTests(EventTestCase):
         self.assertIn("would promote 1", output)
         notify.assert_not_called()
 
-    def test_promotes_and_notifies_once(self) -> None:
-        with patch(NOTIFY_PATH) as notify:
+    def test_promotes_invalidates_and_notifies_once(self) -> None:
+        with (
+            patch(NOTIFY_PATH) as notify,
+            patch(INVALIDATE_PATH, wraps=invalidate_after_commit) as invalidate,
+        ):
             self._run()
 
         self.waitlisted.refresh_from_db()
         self.assertEqual(self.waitlisted.status, SignupStatus.APPROVED)
         self.assertIsNone(self.waitlisted.waitlist_position)
         self.assertEqual(self._notified_pks(notify), [self.phantom.pk])
+        invalidated = [
+            obj.pk
+            for c in invalidate.call_args_list
+            for obj in c.args
+            if isinstance(obj, Event)
+        ]
+        self.assertIn(self.phantom.pk, invalidated)
+
+    def test_skips_events_not_open_for_signups(self) -> None:
+        with patch(NOTIFY_PATH) as notify:
+            dry_output = self._run("--dry-run")
+            self._run()
+
+        self.roll_call_waitlisted.refresh_from_db()
+        self.assertEqual(self.roll_call_waitlisted.status, SignupStatus.WAITLISTED)
+        self.assertEqual(self.roll_call_waitlisted.waitlist_position, 1)
+        self.assertNotIn(self.roll_call.name, dry_output)
+        self.assertNotIn(self.roll_call.pk, self._notified_pks(notify))
+
+    def test_dry_run_matches_real_run_for_unlimited_capacity(self) -> None:
+        unlimited = self.make_event(max_players=0)
+        for position in (1, 2):
+            EventSignup.objects.create(
+                event=unlimited,
+                user=self.make_user(),
+                status=SignupStatus.WAITLISTED,
+                waitlist_position=position,
+            )
+
+        with patch(NOTIFY_PATH):
+            dry_output = self._run("--dry-run")
+            real_output = self._run()
+
+        self.assertIn(f"(#{unlimited.pk}): would promote 2", dry_output)
+        self.assertIn(f"(#{unlimited.pk}): promoted 2", real_output)
+        self.assertFalse(
+            EventSignup.objects.filter(
+                event=unlimited, status=SignupStatus.WAITLISTED
+            ).exists()
+        )
 
     def test_idempotent(self) -> None:
         with patch(NOTIFY_PATH) as notify:

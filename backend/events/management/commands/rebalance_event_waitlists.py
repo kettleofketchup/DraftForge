@@ -10,7 +10,7 @@ from django.core.management.base import BaseCommand, CommandParser
 from django.db import transaction
 
 from app.cache_utils import invalidate_after_commit
-from events.capacity import count_seats
+from events.capacity import free_seats
 from events.constants import EventState, SignupStatus
 from events.discord.dispatch import notify_signup_changed
 from events.models import Event, EventSignup
@@ -26,7 +26,8 @@ def _would_promote(event: Event) -> int:
         .filter(event=event, status=SignupStatus.WAITLISTED)
         .count()
     )
-    return max(0, min(waitlisted, event.max_players - count_seats(event)))
+    free = free_seats(event)
+    return waitlisted if free is None else min(waitlisted, free)
 
 
 class Command(BaseCommand):
