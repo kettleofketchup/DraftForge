@@ -29,7 +29,7 @@ class CelerySettingsBootTest(SimpleTestCase):
         env = {**os.environ, "DJANGO_SETTINGS_MODULE": "config.settings_celery"}
         code = (
             "import json, config.settings_celery as c; "
-            "print(json.dumps([c.DISCORD_API_BASE_URL, c.DISCORD_GUILD_ID]))"
+            "print(json.dumps([c.DISCORD_API_BASE_URL, hasattr(c, 'DISCORD_GUILD_ID')]))"
         )
         result = subprocess.run(
             [sys.executable, "-c", code],
@@ -40,6 +40,7 @@ class CelerySettingsBootTest(SimpleTestCase):
             timeout=120,
         )
         self.assertEqual(result.returncode, 0, result.stderr[-3000:])
-        celery_vals = json.loads(result.stdout.strip().splitlines()[-1])
-        self.assertEqual(celery_vals, [settings.DISCORD_API_BASE_URL, settings.DISCORD_GUILD_ID])
+        base_url, has_guild_id = json.loads(result.stdout.strip().splitlines()[-1])
+        self.assertEqual(base_url, settings.DISCORD_API_BASE_URL)
+        self.assertFalse(has_guild_id)
         self.assertEqual(settings.DISCORD_API_BASE_URL, "https://discord.com/api/v10")
