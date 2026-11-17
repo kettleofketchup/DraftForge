@@ -52,6 +52,16 @@ class SignupStatus(models.TextChoices):
     CANCELLED = "cancelled", "Cancelled"
 
 
+SEAT_HOLDING_STATUSES: frozenset[str] = frozenset(
+    {
+        SignupStatus.RSVP,
+        SignupStatus.PENDING_APPROVAL,
+        SignupStatus.APPROVED,
+        SignupStatus.CONFIRMED,
+    }
+)
+
+
 class SignupType(models.TextChoices):
     USER = "user", "User"
     TEAM = "team", "Team"

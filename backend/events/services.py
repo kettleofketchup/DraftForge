@@ -12,6 +12,7 @@ from django.db import models, transaction
 from app.cache_utils import invalidate_after_commit, invalidate_obj
 from app.functions.teamdraft import apply_draft_options
 from app.models import CustomUser, Organization, Team, Tournament
+from events.capacity import has_free_seat, lock_event, seat_holding_statuses
 from events.constants import (
     EVENT_REOPEN_TRANSITIONS,
     EVENT_RESTART_TRANSITIONS,
@@ -182,21 +183,6 @@ def resolve_or_create_org_user(
     return org_user
 
 
-def _get_active_signup_count(event: Event) -> int:
-    """Count non-cancelled, non-rejected, non-waitlisted signups."""
-    return (
-        EventSignup.objects.filter(event=event)
-        .exclude(
-            status__in=[
-                SignupStatus.CANCELLED,
-                SignupStatus.REJECTED,
-                SignupStatus.WAITLISTED,
-            ],
-        )
-        .count()
-    )
-
-
 @transaction.atomic
 def _create_signup(
     event: Event, user: CustomUser, event_team: EventTeam | None = None
@@ -244,7 +230,7 @@ def _create_signup(
 
     signup_type = SignupType.TEAM if event_team else SignupType.USER
 
-    if event.max_players and _get_active_signup_count(event) >= event.max_players:
+    if not has_free_seat(lock_event(event)):
         max_pos = (
             EventSignup.objects.filter(event=event, status=SignupStatus.WAITLISTED)
             .order_by("-waitlist_position")
@@ -622,10 +608,12 @@ def reject_signup(signup: EventSignup) -> EventSignup:
     """Reject a signup."""
     if signup.status in [SignupStatus.REJECTED, SignupStatus.CANCELLED]:
         raise ValueError(f"Cannot reject signup in '{signup.status}' status.")
+    prior_status = signup.status
     signup.status = SignupStatus.REJECTED
     signup.save(update_fields=["status", "updated_at"])
     remove_user_from_tournament(signup.event, signup.user)
-    _promote_from_waitlist(signup.event)
+    if prior_status in seat_holding_statuses(signup.event):
+        _promote_from_waitlist(signup.event)
     invalidate_after_commit(signup, signup.event)
     transaction.on_commit(lambda: notify_signup_changed(signup.event))
     return signup
@@ -653,7 +641,8 @@ def cancel_signup(signup: EventSignup) -> EventSignup:
     signup.status = SignupStatus.CANCELLED
     signup.save(update_fields=["status", "updated_at"])
     remove_user_from_tournament(signup.event, signup.user)
-    _promote_from_waitlist(signup.event)
+    if prior_status in seat_holding_statuses(signup.event):
+        _promote_from_waitlist(signup.event)
     invalidate_after_commit(signup, signup.event)
     transaction.on_commit(lambda: notify_signup_changed(signup.event))
     # Log on commit, not on entry — same reason as signup_created in process_rsvp:
@@ -731,27 +720,28 @@ def apply_signup_writethrough(signup: EventSignup) -> EventSignup:
     return signup
 
 
-def _promote_from_waitlist(event: Event) -> None:
-    """Promote the next waitlisted user when a slot opens."""
-    if not event.max_players:
-        return
-    if _get_active_signup_count(event) >= event.max_players:
-        return
-    next_waitlisted = (
-        EventSignup.objects.filter(event=event, status=SignupStatus.WAITLISTED)
-        .order_by("waitlist_position")
-        .first()
-    )
-    if next_waitlisted:
+def _promote_from_waitlist(event: Event) -> list[EventSignup]:
+    """Promote waitlisted signups, in waitlist order, into every free seat."""
+    locked = lock_event(event)
+    promoted: list[EventSignup] = []
+    while has_free_seat(locked):
+        next_waitlisted = (
+            EventSignup.objects.nocache()
+            .filter(event=locked, status=SignupStatus.WAITLISTED)
+            .order_by("waitlist_position")
+            .first()
+        )
+        if next_waitlisted is None:
+            break
         next_waitlisted.waitlist_position = None
-        if event.auto_approve and check_requirements(event, next_waitlisted.user):
+        if locked.auto_approve and check_requirements(locked, next_waitlisted.user):
             next_waitlisted.status = SignupStatus.APPROVED
-            if event.auto_confirm:
+            if locked.auto_confirm:
                 next_waitlisted.status = SignupStatus.CONFIRMED
-                add_user_to_tournament(event, next_waitlisted.user)
-            elif not event.roll_call_enabled:
-                add_user_to_tournament(event, next_waitlisted.user)
-        elif event.auto_approve:
+                add_user_to_tournament(locked, next_waitlisted.user)
+            elif not locked.roll_call_enabled:
+                add_user_to_tournament(locked, next_waitlisted.user)
+        elif locked.auto_approve:
             next_waitlisted.status = SignupStatus.PENDING_APPROVAL
         else:
             next_waitlisted.status = SignupStatus.RSVP
@@ -759,6 +749,10 @@ def _promote_from_waitlist(event: Event) -> None:
             update_fields=["status", "waitlist_position", "updated_at"]
         )
         invalidate_after_commit(next_waitlisted)
+        promoted.append(next_waitlisted)
+    if promoted:
+        invalidate_after_commit(locked)
+    return promoted
 
 
 @transaction.atomic
@@ -825,9 +819,7 @@ def reinstate_signup(signup: EventSignup) -> EventSignup:
         raise ValueError("Only cancelled signups can be reinstated.")
     if event.state != "signups_open":
         raise ValueError("Event is not accepting signups.")
-    # Check capacity — if full, go to waitlist
-    active_count = _get_active_signup_count(event)
-    if event.max_players and active_count >= event.max_players:
+    if not has_free_seat(lock_event(event)):
         max_pos = (
             EventSignup.objects.filter(
                 event=event, status=SignupStatus.WAITLISTED
