@@ -1,8 +1,9 @@
 import copy
 from collections.abc import Iterable, Mapping, Sequence
-from typing import Any
+from typing import Any, NoReturn
 
 import nh3
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import RegexValidator
 from django.db import models, router, transaction
@@ -22,8 +23,14 @@ from app.models import (
     TimeoutAction,
 )
 from events import line
-from events.constants import Commitment, RsvpClass
-from events.exceptions import ImmutableFieldError
+from events.constants import (
+    ActorRole,
+    Commitment,
+    RsvpClass,
+    SignupAction,
+    SignupMeans,
+)
+from events.exceptions import ImmutableFieldError, LedgerAppendOnlyError
 from lobby import passwords as lobby_passwords
 from telemetry.logging import get_logger
 
@@ -751,6 +758,136 @@ def _written_attnames(update_fields: Iterable[str] | None) -> set[str] | None:
 
 def _unset(value: object) -> bool:
     return value is None or isinstance(value, DatabaseDefault)
+
+
+LEDGER_MUTABLE_FIELDS = frozenset(
+    {"subject_user", "subject_user_id", "actor_user", "actor_user_id"}
+)
+
+
+def _ledger_blocked(
+    entry_id: int | None, operation: str, fields: list[str]
+) -> NoReturn:
+    log.warning(
+        "signup_ledger_mutation_blocked",
+        system="events",
+        subsystem="ledger",
+        entry_id=entry_id,
+        operation=operation,
+        fields=fields,
+    )
+    raise LedgerAppendOnlyError(
+        f"SignupLedgerEntry is append-only: {operation} {fields}"
+    )
+
+
+class SignupLedgerEntryQuerySet(models.QuerySet):
+    def delete(self) -> tuple[int, dict[str, int]]:
+        _ledger_blocked(None, "queryset_delete", [])
+
+    def update(self, **kwargs: Any) -> int:
+        if not kwargs or not set(kwargs) <= LEDGER_MUTABLE_FIELDS:
+            _ledger_blocked(None, "queryset_update", sorted(kwargs))
+        return super().update(**kwargs)
+
+    def purge(self) -> int:
+        count, _ = models.QuerySet.delete(self)
+        log.info(
+            "signup_ledger_purged", system="events", subsystem="ledger", count=count
+        )
+        return count
+
+
+class SignupLedgerEntry(models.Model):
+    event = models.ForeignKey(
+        Event,
+        on_delete=models.DO_NOTHING,
+        db_constraint=False,
+        related_name="ledger_entries",
+    )
+    organization = models.ForeignKey(
+        "app.Organization",
+        on_delete=models.DO_NOTHING,
+        db_constraint=False,
+        null=True,
+        related_name="+",
+    )
+    signup = models.ForeignKey(
+        EventSignup,
+        on_delete=models.DO_NOTHING,
+        db_constraint=False,
+        null=True,
+        related_name="ledger_entries",
+    )
+    event_snapshot = models.JSONField()
+    subject_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="signup_ledger_entries",
+    )
+    subject_snapshot = models.JSONField()
+    actor_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="signup_ledger_actions",
+    )
+    actor_snapshot = models.JSONField(null=True)
+    actor_role = models.CharField(max_length=16, choices=ActorRole.choices)
+    means = models.CharField(max_length=32, choices=SignupMeans.choices)
+    on_behalf = models.BooleanField(default=False)
+    action = models.CharField(max_length=32, choices=SignupAction.choices)
+    before = models.JSONField(null=True)
+    after = models.JSONField(null=True)
+    reason = models.TextField(blank=True, default="")
+    rules_overridden = models.JSONField(default=list)
+    caused_by = models.ForeignKey(
+        "self",
+        on_delete=models.DO_NOTHING,
+        db_constraint=False,
+        null=True,
+        related_name="effects",
+    )
+    correlation_id = models.CharField(max_length=64, blank=True, default="")
+    occurred_at = models.DateTimeField(default=tz.now)
+
+    objects = SignupLedgerEntryQuerySet.as_manager()
+
+    class Meta:
+        ordering = ["occurred_at", "pk"]
+        indexes = [
+            models.Index(
+                fields=["event", "occurred_at"], name="ledger_event_occurred_idx"
+            ),
+            models.Index(
+                fields=["subject_user", "occurred_at"],
+                name="ledger_subject_occurred_idx",
+            ),
+            models.Index(
+                fields=["event", "subject_user", "action"],
+                name="ledger_event_subject_act_idx",
+            ),
+            models.Index(
+                fields=["organization", "occurred_at"], name="ledger_org_occurred_idx"
+            ),
+            models.Index(fields=["correlation_id"], name="ledger_correlation_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.action} event={self.event_id} user={self.subject_user_id}"
+
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        if not self._state.adding:
+            update_fields = kwargs.get("update_fields")
+            names = None if update_fields is None else list(update_fields)
+            if not names or not set(names) <= LEDGER_MUTABLE_FIELDS:
+                _ledger_blocked(self.pk, "save", names or [])
+        super().save(*args, **kwargs)
+
+    def delete(self, *args: Any, **kwargs: Any) -> tuple[int, dict[str, int]]:
+        _ledger_blocked(self.pk, "delete", [])
 
 
 class RepeaterSubscription(models.Model):
