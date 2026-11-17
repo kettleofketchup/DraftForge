@@ -11,8 +11,8 @@ except ImportError as _import_error:  # pragma: no cover
     ) from _import_error
 
 
-STATE_ONLY = ("app", "0106_state_remove_customuser_guildnickname")
-DROP = ("app", "0107_drop_customuser_guildnickname_column")
+STATE_ONLY = ("app", "0107_state_remove_customuser_guildnickname")
+DROP = ("app", "0108_drop_customuser_guildnickname_column")
 INDEX = "app_customu_guildNi_602cf5_idx"
 
 

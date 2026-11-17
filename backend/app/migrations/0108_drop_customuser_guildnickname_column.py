@@ -3,7 +3,7 @@ from django.db import migrations
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("app", "0106_state_remove_customuser_guildnickname"),
+        ("app", "0107_state_remove_customuser_guildnickname"),
     ]
 
     operations = [
