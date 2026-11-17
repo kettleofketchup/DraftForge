@@ -1,5 +1,6 @@
 from unittest.mock import MagicMock, patch
 
+import requests
 from django.test import TestCase, override_settings
 
 
@@ -27,7 +28,7 @@ class DiscordRateLimiterTest(TestCase):
         mock_redis.eval.return_value = 0
         from discordbot.utils import _acquire_rate_limit_token
 
-        with self.assertRaises(RuntimeError):
+        with self.assertRaises(requests.RequestException):
             _acquire_rate_limit_token(max_wait=0.1)
 
 

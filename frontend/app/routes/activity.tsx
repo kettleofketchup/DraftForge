@@ -156,7 +156,10 @@ export default function DraftActivity() {
     }
 
     setActivityRefresher(() => start(true));
-    setActivityRefreshExhausted(() => store().setTerminal('exhausted'));
+    setActivityRefreshExhausted(() => {
+      log.warn('activity_refresh_exhausted');
+      store().setTerminal('exhausted');
+    });
     setActivityErrorHandlers({
       onScopeLost: () => store().markScopeLost(),
       onDisabled: () => store().setTerminal('disabled'),
@@ -251,6 +254,7 @@ export default function DraftActivity() {
       embedded
       tournamentId={tournamentId}
       openableDraftIds={openableDraftIds}
+      onMatchOpen={() => void refetch()}
       onOpenHeroDraft={(id) =>
         guard(() =>
           useActivityViewStore
