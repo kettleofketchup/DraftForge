@@ -42,3 +42,8 @@ script *args:
 [group('py')]
 test *args:
     {{quote(root / "scripts/in-env.sh")}} test backend {{quote(python)}} -m pytest "$@"
+
+# Regenerate frontend/app/lib/notifications/messageTypes.generated.ts from the message registry
+[group('py')]
+gen-message-types:
+    {{quote(python)}} -I {{quote(backend / "notifications/export_schema.py")}}
