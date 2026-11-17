@@ -23,7 +23,11 @@ import {
   patchOrgSettings,
   type OrgSettings,
 } from '~/components/api/orgSettingsAPI';
+import type { OrganizationType } from '~/components/organization/schemas';
+import { OrgSettingsTab } from '~/components/organization/tabs/OrgSettingsTab';
 import { StaffPlacementSection } from '~/components/organization/tabs/orgSettings/StaffPlacementSection';
+import type { UserType } from '~/components/user/types';
+import { useUserStore } from '~/store/userStore';
 
 vi.mock('~/components/api/orgSettingsAPI', async () => {
   const actual = await vi.importActual<
@@ -203,5 +207,50 @@ describe('StaffPlacementSection', () => {
       'Confirm',
     );
     expect(saveButton()).toBeEnabled();
+  });
+});
+
+describe('OrgSettingsTab', () => {
+  const VIEWER = 5;
+
+  function renderTab(overrides: Partial<OrganizationType>) {
+    useUserStore.setState({
+      currentUser: { pk: VIEWER, username: 'viewer' } as UserType,
+    });
+    const organization = {
+      pk: 7,
+      name: 'Org',
+      owner_id: 1,
+      admin_ids: [],
+      staff_ids: [],
+      members_viewer_pk: VIEWER,
+      ...overrides,
+    } as OrganizationType;
+    const qc = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    return render(
+      <QueryClientProvider client={qc}>
+        <OrgSettingsTab organization={organization} />
+      </QueryClientProvider>,
+    );
+  }
+
+  it('renders the staff placement section for an admin', async () => {
+    renderTab({ admin_ids: [VIEWER] });
+    expect(screen.getByTestId('org-settings-tab')).toBeInTheDocument();
+    expect(
+      await screen.findByTestId('org-settings-policy-select'),
+    ).toBeInTheDocument();
+    expect(getOrgSettings).toHaveBeenCalledWith(7);
+  });
+
+  it('renders no section for org staff', () => {
+    renderTab({ staff_ids: [VIEWER] });
+    expect(screen.getByTestId('org-settings-tab')).toBeInTheDocument();
+    expect(
+      screen.queryByTestId('org-settings-staff-placement'),
+    ).not.toBeInTheDocument();
+    expect(getOrgSettings).not.toHaveBeenCalled();
   });
 });
