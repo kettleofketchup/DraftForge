@@ -68,8 +68,9 @@ MMRS_8: list[int] = [1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000]
 DRAFT_STATE_QUERIES: int = 17
 # Ready = the post-commit broadcast + the tournament response (with its
 # league/source_event/games/captains/draft lookups) + the view's own captain
-# check, row locks, update and event insert. Same for 4 and 8 teams.
-READY_ENDPOINT_QUERIES: int = 43
+# check, row locks, update and event insert. Same for 4 and 8 teams. The
+# leagueless fixture's source_event org lookup runs once per users dict.
+READY_ENDPOINT_QUERIES: int = 41
 # Pick, outermost transaction (TransactionTestCase, cacheops off): 26 for
 # auth, locks, the pick, timing, next-round activation and two event inserts
 # (+BEGIN/COMMIT), 17 for the one shared broadcast state behind both events,
@@ -93,12 +94,17 @@ def legacy_users_dict(tournament: Tournament) -> dict:
         if not core:
             continue
         if is_org:
-            entry = {k: v for k, v in core.items() if k != "discordNickname"}
+            entry = dict(core)
             entry.update(mmr_map.get(pk, {}))
         else:
             entry = dict(core)
         result[pk] = entry
     return result
+
+
+def organization_pk(tournament: Tournament) -> int | None:
+    org = _tournament_organization(tournament)
+    return org.pk if org else None
 
 
 def dumps(data: object) -> str:
@@ -142,6 +148,7 @@ class DraftStateOutputTests(TestCase):
     def lazy_draft_state(self) -> dict:
         draft = Draft.objects.nocache().get(pk=self.fx.draft.pk)
         data = DraftSerializerSlim(draft).data
+        data["organization_pk"] = organization_pk(draft.tournament)
         data["_users"] = {
             str(k): v for k, v in legacy_users_dict(draft.tournament).items()
         }
@@ -202,6 +209,14 @@ class DraftStateOutputTests(TestCase):
             TournamentSerializer(tournament, context={"fresh": True}).data
         get_draft_options.assert_called_once_with(tournament, fresh=True)
 
+    def test_state_carries_the_overlay_organization(self) -> None:
+        org = _tournament_organization(self.fx.tournament)
+        self.assertIsNotNone(org)
+        for fresh in (True, False):
+            with self.subTest(fresh=fresh):
+                state = build_draft_state(self.fx.draft.pk, fresh=fresh)
+                self.assertEqual(state["organization_pk"], org.pk)
+
     def test_missing_draft_returns_none(self) -> None:
         self.assertIsNone(build_draft_state(10_000_000, fresh=True))
 
@@ -254,6 +269,7 @@ class DraftRoundTeamTests(TestCase):
     def test_edge_case_state_matches_lazy_serialization(self) -> None:
         lazy = Draft.objects.nocache().get(pk=self.fx.draft.pk)
         data = DraftSerializerSlim(lazy).data
+        data["organization_pk"] = organization_pk(lazy.tournament)
         data["_users"] = {
             str(k): v for k, v in legacy_users_dict(lazy.tournament).items()
         }
@@ -423,7 +439,7 @@ class DraftStateSnapshotTests(TransactionTestCase):
         fx = TimedDraftFixture(prefix="snap")
         user = fx.players[0]
         seen: dict[str, object] = {}
-        real = draft_state_module._build_users_dict
+        real = draft_state_module.build_users_dict_with_org
 
         def rename() -> None:
             try:
@@ -434,7 +450,9 @@ class DraftStateSnapshotTests(TransactionTestCase):
             finally:
                 connection.close()
 
-        def mid_build(tournament: Tournament, *, fresh: bool) -> dict:
+        def mid_build(
+            tournament: Tournament, *, fresh: bool
+        ) -> tuple[dict, Organization | None]:
             seen["in_atomic"] = connection.in_atomic_block
             writer = threading.Thread(target=rename)
             writer.start()
@@ -442,7 +460,7 @@ class DraftStateSnapshotTests(TransactionTestCase):
             seen["writer"] = writer
             return real(tournament, fresh=fresh)
 
-        with patch.object(draft_state_module, "_build_users_dict", mid_build):
+        with patch.object(draft_state_module, "build_users_dict_with_org", mid_build):
             state = build_draft_state(fx.draft.pk, fresh=True)
         seen["writer"].join(timeout=35)
         self.assertEqual(state["_users"][str(user.pk)]["username"], user.username)
@@ -458,15 +476,17 @@ class DraftStateSnapshotTests(TransactionTestCase):
     def test_cached_build_opens_no_transaction(self) -> None:
         fx = make_fixture(4, "snapc")
         seen: list[bool] = []
-        real = draft_state_module._build_users_dict
+        real = draft_state_module.build_users_dict_with_org
 
-        def mid_build(tournament: Tournament, *, fresh: bool) -> dict:
+        def mid_build(
+            tournament: Tournament, *, fresh: bool
+        ) -> tuple[dict, Organization | None]:
             seen.append(connection.in_atomic_block)
             return real(tournament, fresh=fresh)
 
         reset_queries()
         with (
-            patch.object(draft_state_module, "_build_users_dict", mid_build),
+            patch.object(draft_state_module, "build_users_dict_with_org", mid_build),
             CaptureQueriesContext(connection) as ctx,
         ):
             build_draft_state(fx.draft.pk, fresh=False)

@@ -7,7 +7,7 @@ from app.models import CustomUser, League, Organization, Tournament
 from events.constants import EventState, SignupStatus
 from events.models import Event, EventSignup
 from events.services import decline_signup
-from org.models import PromoSend
+from org.models import OrgUser, PromoSend
 from org.promotion.recipients import (
     DEFAULT_POOL_N,
     MAX_POOL_N,
@@ -297,6 +297,8 @@ class CandidatesTest(_PoolFixture):
                 "username",
                 "nickname",
                 "discordUsername",
+                "discordNickname",
+                "guildNickname",
                 "discordId",
                 "avatarUrl",
                 "recent_count",
@@ -314,6 +316,24 @@ class CandidatesTest(_PoolFixture):
         self.assertIsNone(row["last_messaged"])
         self.assertFalse(row["earning_send_exists"])
         self.assertFalse(row["signed_up"])
+
+    def test_row_carries_global_name_and_this_orgs_server_nickname(self) -> None:
+        self.ann.discordNickname = "Annabel"
+        self.ann.save()
+        OrgUser.objects.update_or_create(
+            user=self.ann, organization=self.org, defaults={"guild_nickname": "AnnDTX"}
+        )
+        OrgUser.objects.update_or_create(
+            user=self.bob,
+            organization=self.other_org,
+            defaults={"guild_nickname": "BobElsewhere"},
+        )
+
+        rows = self._rows_by_username()
+
+        self.assertEqual(rows["ann"]["discordNickname"], "Annabel")
+        self.assertEqual(rows["ann"]["guildNickname"], "AnnDTX")
+        self.assertIsNone(rows["bob"]["guildNickname"])
 
     def test_active_signups_hidden_by_default(self) -> None:
         rsvp = self._user("rsvp_player")

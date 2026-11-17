@@ -15,7 +15,7 @@ from channels.layers import get_channel_layer
 from django.db import DEFAULT_DB_ALIAS, connection, connections, transaction
 from django.db.backends.base.base import BaseDatabaseWrapper
 
-from app.draft_state import build_draft_state
+from app.draft_state import build_draft_state, herodraft_state_queryset
 from app.models import Draft
 from app.serializers import (
     DraftEventSerializer,
@@ -276,13 +276,7 @@ def broadcast_herodraft_event(
 
     # Include full draft state with prefetched members
     try:
-        from app.models import HeroDraft
-
-        draft = HeroDraft.objects.prefetch_related(
-            "draft_teams__tournament_team__captain",
-            "draft_teams__tournament_team__members",
-            "rounds",
-        ).get(id=draft.id)
+        draft = herodraft_state_queryset().get(id=draft.id)
         payload["draft_state"] = HeroDraftSerializer(draft).data
     except Exception as e:
         log.warning(
@@ -365,13 +359,7 @@ def broadcast_herodraft_state(
 
     # Include full draft state with prefetched members
     try:
-        from app.models import HeroDraft
-
-        draft = HeroDraft.objects.prefetch_related(
-            "draft_teams__tournament_team__captain",
-            "draft_teams__tournament_team__members",
-            "rounds",
-        ).get(id=draft.id)
+        draft = herodraft_state_queryset().get(id=draft.id)
         payload["draft_state"] = HeroDraftSerializer(draft).data
     except Exception as e:
         log.warning(

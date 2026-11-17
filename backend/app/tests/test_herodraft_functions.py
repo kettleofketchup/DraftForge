@@ -1,9 +1,24 @@
 from datetime import date
 
+from django.db import connection, reset_queries
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 
-from app.functions.herodraft import CAPTAINS_MODE_SEQUENCE, build_draft_rounds
-from app.models import CustomUser, DraftTeam, Game, HeroDraft, Team, Tournament
+from app.draft_state import herodraft_state_queryset
+from app.functions.herodraft import build_draft_rounds
+from app.models import (
+    CustomUser,
+    DraftTeam,
+    Game,
+    HeroDraft,
+    League,
+    Organization,
+    Team,
+    Tournament,
+)
+from app.serializers import HeroDraftSerializer, _tournament_organization
+from org.models import OrgUser
+from tests.cache import flush_run_cache
 
 
 class BuildDraftRoundsTest(TestCase):
@@ -103,3 +118,113 @@ class BuildDraftRoundsTest(TestCase):
         self.assertEqual(first_picks, 5)
         self.assertEqual(second_bans, 7)
         self.assertEqual(second_picks, 5)
+
+
+class HeroDraftNameFieldsTest(TestCase):
+    def setUp(self) -> None:
+        flush_run_cache()
+        self.owner = CustomUser.objects.create_user(username="hdn_owner", password="x")
+        self.org = Organization.objects.create(name="HDN Org", owner=self.owner)
+        self.league = League.objects.create(
+            name="HDN League", organization=self.org, steam_league_id=77001
+        )
+        self._seq = 0
+
+    def _draft(self, members_per_team: int, *, league: bool = True) -> HeroDraft:
+        self._seq += 1
+        tournament = Tournament.objects.create(
+            name=f"HDN T{self._seq}",
+            date_played=date.today(),
+            league=self.league if league else None,
+        )
+        teams = []
+        for side in ("a", "b"):
+            captain = self._user(f"hdn{self._seq}_{side}_cap")
+            team = Team.objects.create(
+                name=f"HDN {self._seq}{side}", tournament=tournament, captain=captain
+            )
+            team.members.add(
+                captain,
+                *(
+                    self._user(f"hdn{self._seq}_{side}_m{i}")
+                    for i in range(members_per_team - 1)
+                ),
+            )
+            teams.append(team)
+        game = Game.objects.create(
+            tournament=tournament, radiant_team=teams[0], dire_team=teams[1]
+        )
+        draft = HeroDraft.objects.create(game=game)
+        for i, team in enumerate(teams):
+            DraftTeam.objects.create(
+                draft=draft, tournament_team=team, is_first_pick=i == 0
+            )
+        return draft
+
+    def _user(self, username: str) -> CustomUser:
+        user = CustomUser.objects.create_user(username=username, password="x")
+        OrgUser.objects.update_or_create(
+            user=user,
+            organization=self.org,
+            defaults={"guild_nickname": f"{username}_server"},
+        )
+        return user
+
+    def _serialize(self, draft: HeroDraft) -> dict:
+        return HeroDraftSerializer(herodraft_state_queryset().get(pk=draft.pk)).data
+
+    def test_payload_carries_organization_pk(self) -> None:
+        draft = self._draft(2)
+        tournament = draft.game.tournament
+        self.assertEqual(
+            self._serialize(draft)["organization_pk"],
+            _tournament_organization(tournament).pk,
+        )
+
+    def test_organization_pk_is_none_without_an_org(self) -> None:
+        draft = self._draft(2, league=False)
+        self.assertIsNone(self._serialize(draft)["organization_pk"])
+
+    def test_organization_pk_is_none_without_a_tournament(self) -> None:
+        draft = self._draft(2)
+        Game.objects.filter(pk=draft.game_id).update(tournament=None)
+        self.assertIsNone(self._serialize(draft)["organization_pk"])
+
+    def test_captain_and_members_carry_org_server_nickname(self) -> None:
+        draft = self._draft(3)
+        outsider = CustomUser.objects.create_user(username="hdn_outsider", password="x")
+        team = draft.draft_teams.order_by("pk").first().tournament_team
+        team.members.add(outsider)
+        OrgUser.objects.filter(user=outsider).delete()
+
+        data = self._serialize(draft)
+
+        for draft_team in data["draft_teams"]:
+            captain = draft_team["captain"]
+            self.assertEqual(captain["guildNickname"], f"{captain['username']}_server")
+            for member in draft_team["members"]:
+                expected = (
+                    None
+                    if member["username"] == "hdn_outsider"
+                    else f"{member['username']}_server"
+                )
+                self.assertEqual(member["guildNickname"], expected)
+
+    def test_roll_winner_carries_server_nickname(self) -> None:
+        draft = self._draft(2)
+        winner = draft.draft_teams.order_by("pk").first()
+        HeroDraft.objects.filter(pk=draft.pk).update(roll_winner=winner)
+        data = self._serialize(draft)
+        captain = data["roll_winner"]["captain"]
+        self.assertEqual(captain["guildNickname"], f"{captain['username']}_server")
+
+    def test_query_count_does_not_grow_with_members(self) -> None:
+        small = self._draft(2)
+        large = self._draft(10)
+        counts = []
+        for draft in (small, large):
+            reset_queries()
+            with CaptureQueriesContext(connection) as ctx:
+                self._serialize(draft)
+            counts.append(len(ctx.captured_queries))
+        self.assertEqual(counts[0], counts[1])
