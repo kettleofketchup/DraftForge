@@ -84,8 +84,10 @@ export function LeaveDraftConfirm() {
   };
 
   const handleConfirm = () => {
+    const current = usePendingLeave.getState().pending;
     confirmed.current = true;
-    pending?.proceed();
+    usePendingLeave.setState({ pending: null });
+    current?.proceed();
   };
 
   return (

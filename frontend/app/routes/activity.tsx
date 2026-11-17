@@ -251,6 +251,7 @@ export default function DraftActivity() {
       embedded
       tournamentId={tournamentId}
       openableDraftIds={openableDraftIds}
+      onMatchOpen={() => void refetch()}
       onOpenHeroDraft={(id) =>
         guard(() =>
           useActivityViewStore

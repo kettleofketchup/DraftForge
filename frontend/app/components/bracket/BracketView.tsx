@@ -55,13 +55,14 @@ interface BracketViewProps {
   embedded?: boolean;
   onOpenHeroDraft?: (id: number) => void;
   openableDraftIds?: ReadonlySet<number>;
+  onMatchOpen?: () => void;
   header?: ReactNode;
 }
 
 // Layout constants
 const BRACKET_SECTION_GAP = 180;
 const NODE_WIDTH = 220;
-const NODE_HEIGHT = 120; // Increased for better spacing
+const NODE_HEIGHT = 120;
 const NODE_VERTICAL_GAP = 30; // Minimum gap between nodes
 const ROUND_HORIZONTAL_GAP = 180; // Gap between rounds
 
@@ -140,6 +141,7 @@ function BracketFlowInner({
   embedded = false,
   onOpenHeroDraft,
   openableDraftIds,
+  onMatchOpen,
   header,
 }: BracketViewProps) {
   const navigate = useNavigate();
@@ -186,7 +188,9 @@ function BracketFlowInner({
   const [nodes, setNodes, onNodesChange] = useNodesState<MatchNodeType>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [dividerY, setDividerY] = useState<number>(0);
-  const layoutCompleteRef = useRef(false);
+  const nodesRef = useRef<MatchNodeType[]>([]);
+  nodesRef.current = nodes;
+  const [layoutKey, setLayoutKey] = useState<string | null>(null);
 
   // Selected match for stats modal
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
@@ -195,7 +199,7 @@ function BracketFlowInner({
   // Track the draftId to auto-open from deep link
   const [initialDraftId, setInitialDraftId] = useState<number | null>(null);
 
-  // Hero draft modal state (lifted from MatchStatsModal to allow independent modal)
+  // Hero draft modal state, independent of the match modal
   const [heroDraftId, setHeroDraftId] = useState<number | null>(null);
   const [showHeroDraftModal, setShowHeroDraftModal] = useState(false);
 
@@ -261,6 +265,7 @@ function BracketFlowInner({
     if (matches.length === 0) {
       setNodes([]);
       setEdges([]);
+      setLayoutKey(null);
       return;
     }
 
@@ -497,7 +502,12 @@ function BracketFlowInner({
 
       setNodes(allNodes as MatchNodeType[]);
       setEdges(combinedEdges);
-      layoutCompleteRef.current = true;
+      setLayoutKey(
+        allNodes
+          .map((n) => n.id)
+          .sort()
+          .join('|'),
+      );
     };
 
     layoutBracket();
@@ -505,7 +515,7 @@ function BracketFlowInner({
 
   // Left-align viewport after layout is complete
   useEffect(() => {
-    if (nodes.length > 0 && layoutCompleteRef.current) {
+    if (layoutKey) {
       // Small delay to ensure ReactFlow has rendered
       const timer = setTimeout(() => {
         if (embedded) {
@@ -513,7 +523,7 @@ function BracketFlowInner({
           return;
         }
         // Calculate bounds of match nodes only (exclude divider)
-        const matchNodes = nodes.filter((n) => n.type === 'match');
+        const matchNodes = nodesRef.current.filter((n) => n.type === 'match');
         if (matchNodes.length === 0) return;
 
         const minX = Math.min(...matchNodes.map((n) => n.position.x));
@@ -526,7 +536,7 @@ function BracketFlowInner({
         const containerHeight = 700;
         const contentHeight = maxY - minY + NODE_HEIGHT;
 
-        // Choose zoom level - fit vertically if needed, max 1.0
+        // Fit vertically, zoom clamped to 0.4-0.9
         const verticalZoom = containerHeight / (contentHeight + 100);
         const zoom = Math.min(0.9, Math.max(0.4, verticalZoom));
 
@@ -543,11 +553,12 @@ function BracketFlowInner({
 
       return () => clearTimeout(timer);
     }
-  }, [nodes, setViewport, fitView, embedded]);
+  }, [layoutKey, setViewport, fitView, embedded]);
 
   const handleNodeClick = useCallback(
     (_: React.MouseEvent, node: Node) => {
       setSelectedMatchId(node.id);
+      onMatchOpen?.();
       if (embedded) return;
       // Update URL to shareable match URL - prefer gameId (backend ID) over temporary id
       const match = matches.find((m) => m.id === node.id);
@@ -560,7 +571,7 @@ function BracketFlowInner({
         { replace: true },
       );
     },
-    [navigate, tournamentId, matches, searchParams, embedded],
+    [navigate, tournamentId, matches, searchParams, embedded, onMatchOpen],
   );
 
   if (isLoading && matches.length === 0) {
