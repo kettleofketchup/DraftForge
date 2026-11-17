@@ -253,8 +253,45 @@ class EventChangeTests(LineTestBase):
         back = EventSignup.objects.get(pk=mover.pk)
         back.event = self.event
         back.line_seq = 42
-        back.save()
+        with capture_logs() as logs:
+            back.save()
         self.assertEqual(EventSignup.objects.nocache().get(pk=mover.pk).line_seq, 42)
+        self.assertFalse(
+            [e for e in logs if e["event"] == "signup_line_restamped_on_event_change"]
+        )
+
+    def test_event_change_outside_update_fields_does_not_restamp(self) -> None:
+        self.signup(0, self.other_event)
+        self.signup(1, self.other_event)
+        mover = EventSignup.objects.get(pk=self.signup(2).pk)
+        before = (mover.line_seq, mover.signed_up_at)
+        mover.event = self.other_event
+        mover.status = SignupStatus.TENTATIVE
+        with capture_logs() as logs:
+            mover.save(update_fields=["status"])
+        self.assertFalse(
+            [e for e in logs if e["event"] == "signup_line_restamped_on_event_change"]
+        )
+        row = EventSignup.objects.nocache().get(pk=mover.pk)
+        self.assertEqual(row.event_id, self.event.pk)
+        self.assertEqual((row.line_seq, row.signed_up_at), before)
+        self.assertEqual(row.status, SignupStatus.TENTATIVE)
+
+        with capture_logs() as logs:
+            mover.save()
+        row = EventSignup.objects.nocache().get(pk=mover.pk)
+        self.assertEqual(row.event_id, self.other_event.pk)
+        self.assertEqual(row.line_seq, 3)
+        self.assertEqual(
+            len(
+                [
+                    e
+                    for e in logs
+                    if e["event"] == "signup_line_restamped_on_event_change"
+                ]
+            ),
+            1,
+        )
 
 
 class OrderingTests(LineTestBase):

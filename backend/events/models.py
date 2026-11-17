@@ -633,11 +633,16 @@ class EventSignup(models.Model):
                 .values(*self._EXISTING_FIELDS)
                 .first()
             )
+        restamped = False
         if self._state.adding and existing is None:
             self._save_insert(*args, **kwargs)
         else:
-            self._save_update(existing, *args, **kwargs)
-        self._capture_line_state()
+            restamped = self._save_update(existing, *args, **kwargs)
+        written = _written_attnames(kwargs.get("update_fields"))
+        if written is None or not hasattr(self, "_line_loaded"):
+            self._capture_line_state()
+        else:
+            self._capture_line_state(written | ({"line_seq"} if restamped else set()))
 
     def _save_insert(self, *args: Any, **kwargs: Any) -> None:
         using = kwargs.get("using") or router.db_for_write(type(self), instance=self)
@@ -661,7 +666,7 @@ class EventSignup(models.Model):
 
     def _save_update(
         self, existing: dict[str, Any] | None, *args: Any, **kwargs: Any
-    ) -> None:
+    ) -> bool:
         if existing is not None:
             for name, value in existing.items():
                 if _unset(getattr(self, name)):
@@ -670,7 +675,8 @@ class EventSignup(models.Model):
         else:
             loaded = getattr(self, "_line_loaded", {})
         self._guard_first_fields(loaded)
-        if self._event_changed(loaded):
+        written = _written_attnames(kwargs.get("update_fields"))
+        if (written is None or "event_id" in written) and self._event_changed(loaded):
             using = kwargs.get("using") or router.db_for_write(
                 type(self), instance=self
             )
@@ -698,8 +704,9 @@ class EventSignup(models.Model):
                 event_id=self.event_id,
                 line_seq=self.line_seq,
             )
-            return
+            return True
         super().save(*args, **kwargs)
+        return False
 
     def _guard_first_fields(self, loaded: Mapping[str, Any]) -> None:
         deferred = self.get_deferred_fields()
@@ -734,6 +741,12 @@ class EventSignup(models.Model):
         if self.event_id == loaded["event_id"]:
             return False
         return "line_seq" not in loaded or self.line_seq == loaded["line_seq"]
+
+
+def _written_attnames(update_fields: Iterable[str] | None) -> set[str] | None:
+    if update_fields is None:
+        return None
+    return {"event_id" if f == "event" else f for f in update_fields}
 
 
 def _unset(value: object) -> bool:
