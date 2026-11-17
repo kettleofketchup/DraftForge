@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   ready: vi.fn(),
   authorize: vi.fn(),
   authenticate: vi.fn(),
+  openExternalLink: vi.fn(),
   get: vi.fn(),
   post: vi.fn(),
   construct: vi.fn(),
@@ -17,7 +18,11 @@ vi.mock('@discord/embedded-app-sdk', () => ({
   DiscordSDK: class {
     instanceId = 'verified-instance';
     ready = mocks.ready;
-    commands = { authorize: mocks.authorize, authenticate: mocks.authenticate };
+    commands = {
+      authorize: mocks.authorize,
+      authenticate: mocks.authenticate,
+      openExternalLink: mocks.openExternalLink,
+    };
     constructor(id: string) {
       mocks.construct(id);
     }
@@ -53,6 +58,7 @@ describe('Discord handshake', () => {
     expect(mocks.post).toHaveBeenCalledWith('/discord/activity/session/', {
       code: 'oauth-code',
       instance_id: 'verified-instance',
+      mode: 'first',
     });
     expect(mocks.authenticate).toHaveBeenCalledWith({
       access_token: 'oauth-access',
@@ -92,6 +98,44 @@ describe('Discord handshake', () => {
     await expect(initializeDiscord()).rejects.toThrow('unavailable');
     expect(mocks.construct).not.toHaveBeenCalled();
   });
+  it('rejects with ActivityDisabledError when the server turns Activities off', async () => {
+    mocks.get.mockResolvedValue({ data: { enabled: false, client_id: null } });
+    const { initializeDiscord, ActivityDisabledError } =
+      await import('./discord');
+    await expect(initializeDiscord()).rejects.toBeInstanceOf(
+      ActivityDisabledError,
+    );
+  });
+  it('sends the refresh mode and the current view on a forced handshake', async () => {
+    const { initializeDiscord } = await import('./discord');
+    await initializeDiscord();
+    await initializeDiscord({
+      force: true,
+      currentView: { kind: 'hero', id: 3 },
+    });
+    expect(mocks.post).toHaveBeenLastCalledWith('/discord/activity/session/', {
+      code: 'oauth-code',
+      instance_id: 'verified-instance',
+      mode: 'refresh',
+      current_view: { kind: 'hero', id: 3 },
+    });
+  });
+  it('sends the held scope on a forced handshake', async () => {
+    const { initializeDiscord } = await import('./discord');
+    await initializeDiscord();
+    await initializeDiscord({
+      force: true,
+      currentView: { kind: 'hero', id: 3 },
+      scope: 'draft',
+    });
+    expect(mocks.post).toHaveBeenLastCalledWith('/discord/activity/session/', {
+      code: 'oauth-code',
+      instance_id: 'verified-instance',
+      mode: 'refresh',
+      current_view: { kind: 'hero', id: 3 },
+      scope: 'draft',
+    });
+  });
   it('retries a rejected exchange without leaking another SDK message listener', async () => {
     mocks.post.mockRejectedValueOnce(new Error('rejected'));
     const { initializeDiscord } = await import('./discord');
@@ -130,5 +174,27 @@ describe('Discord handshake', () => {
     await initializeDiscord({ force: true });
     expect(mocks.post).toHaveBeenCalledTimes(2);
     expect(mocks.construct).toHaveBeenCalledOnce();
+  });
+});
+
+describe('Open in browser', () => {
+  it('returns false before the SDK exists', async () => {
+    const { openExternal } = await import('./discord');
+    expect(await openExternal('https://site.test/herodraft/1')).toBe(false);
+    expect(mocks.openExternalLink).not.toHaveBeenCalled();
+  });
+  it('reports whether Discord opened the link and never throws', async () => {
+    const { initializeDiscord, openExternal } = await import('./discord');
+    await initializeDiscord();
+    const url = 'https://site.test/herodraft/1';
+    mocks.openExternalLink.mockResolvedValueOnce({ opened: true });
+    expect(await openExternal(url)).toBe(true);
+    expect(mocks.openExternalLink).toHaveBeenCalledWith({ url });
+    mocks.openExternalLink.mockResolvedValueOnce({ opened: false });
+    expect(await openExternal(url)).toBe(false);
+    mocks.openExternalLink.mockResolvedValueOnce({ opened: null });
+    expect(await openExternal(url)).toBe(false);
+    mocks.openExternalLink.mockRejectedValueOnce(new Error('blocked'));
+    expect(await openExternal(url)).toBe(false);
   });
 });

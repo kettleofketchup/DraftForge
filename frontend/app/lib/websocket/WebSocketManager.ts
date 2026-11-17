@@ -7,6 +7,7 @@
 
 import {
   activitySocket,
+  getActivityCredential,
   refreshActivityCredential,
 } from '~/lib/activity-session';
 import { getLogger } from '~/lib/logger';
@@ -21,8 +22,11 @@ import type {
 
 const log = getLogger('WebSocketManager');
 const ACTIVITY_AUTH_CLOSE_CODE = 4401;
-const ACTIVITY_SESSION_ENDED =
+export const ACTIVITY_SCOPE_CLOSE_CODE = 4403;
+export const ACTIVITY_SESSION_ENDED =
   'Discord session ended. Close and reopen the Activity.';
+export const ACTIVITY_OUT_OF_SCOPE =
+  'This draft is no longer part of the tournament.';
 
 // Reconnection defaults
 const DEFAULT_MAX_ATTEMPTS = 10;
@@ -472,6 +476,14 @@ class WebSocketManager {
         this.reauthenticateActivity(conn, thisConnectionId);
         return;
       }
+      if (event.code === ACTIVITY_SCOPE_CLOSE_CODE && conn.options.activity) {
+        log.info(`Activity socket out of scope: ${url}`);
+        this.updateState(conn, {
+          status: 'disconnected',
+          error: ACTIVITY_OUT_OF_SCOPE,
+        });
+        return;
+      }
 
       // Attempt reconnect
       this.scheduleReconnect(conn);
@@ -500,6 +512,14 @@ class WebSocketManager {
     conn: WebSocketConnection,
     connectionId: number,
   ): void {
+    const token = getActivityCredential()?.token;
+    if (token === undefined || token === conn.activityRefreshedToken) {
+      this.updateState(conn, {
+        status: 'disconnected',
+        error: ACTIVITY_SESSION_ENDED,
+      });
+      return;
+    }
     this.updateState(conn, {
       status: 'reconnecting',
       error: 'Refreshing Discord session...',
@@ -513,6 +533,7 @@ class WebSocketManager {
         });
         return;
       }
+      conn.activityRefreshedToken = getActivityCredential()?.token;
       this.updateState(conn, { reconnectAttempts: 0 });
       this.doConnect(conn.url);
     });

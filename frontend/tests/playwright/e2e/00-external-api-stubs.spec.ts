@@ -1,8 +1,10 @@
-import { expect, test } from '../fixtures';
+import { expect, loginAdmin, test } from '../fixtures';
+import { BASE_URL } from '../fixtures/base-url';
 import {
   GITHUB_API_PATTERN,
   GITHUB_CORS_HEADERS,
   STUB_GITHUB_STARS,
+  STUB_HEADER,
 } from '../fixtures/external-apis';
 
 const STAR_COUNT = '[data-testid="githubStarCount"]';
@@ -47,5 +49,48 @@ test.describe('external API stubs @cicd', () => {
     await expect(page.locator(LOGIN_BUTTON)).toBeVisible();
     await expect(page.locator(STAR_COUNT)).toHaveCount(0);
     expect(pageErrors).toEqual([]);
+  });
+
+  test('the home page loads nothing from a third-party host', async ({
+    context,
+    page,
+  }) => {
+    await loginAdmin(context);
+    const appOrigin = new URL(BASE_URL).origin;
+    const unstubbed: string[] = [];
+    page.on('requestfinished', async (req) => {
+      const url = new URL(req.url());
+      if (!url.protocol.startsWith('http') || url.origin === appOrigin) return;
+      const resp = await req.response();
+      if (!resp?.headers()[STUB_HEADER]) unstubbed.push(req.url());
+    });
+    page.on('requestfailed', (req) => {
+      if (new URL(req.url()).origin !== appOrigin) unstubbed.push(req.url());
+    });
+
+    await page.goto('/');
+    // Feature previews load as they scroll into view.
+    const outlet = page.locator(
+      '#outlet_root [data-slot="scroll-area-viewport"]',
+    );
+    for (const f of [0.25, 0.5, 0.75, 1]) {
+      await outlet.evaluate(
+        (el, frac) =>
+          el.scrollTo(0, (el.scrollHeight - el.clientHeight) * frac),
+        f,
+      );
+      await expect
+        .poll(() =>
+          page.evaluate(() =>
+            Array.from(document.images).every(
+              (img) => !img.getAttribute('src') || img.complete,
+            ),
+          ),
+        )
+        .toBe(true);
+    }
+    await page.waitForLoadState('networkidle');
+
+    expect(unstubbed).toEqual([]);
   });
 });

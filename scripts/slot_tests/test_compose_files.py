@@ -29,10 +29,11 @@ def test_slot_render() -> None:
     for svc in ["backend", "celery-worker", "celery-beat", "discord-bot"]:
         assert s[svc]["environment"]["SITE_URL"] == "https://localhost:13443"
     assert s["backend"]["environment"]["OTEL_SERVICE_NAME"] == "backend"
-    assert (
-        s["backend"]["environment"]["DF_EXTRA_CSRF_ORIGINS"]
-        == "https://localhost:13443"
-    )
+    assert s["backend"]["environment"]["DF_EXTRA_CSRF_ORIGINS"].split(",") == [
+        "https://localhost:13443",
+        "https://*.local",
+        "https://*.local:13443",
+    ]
     assert s["backend"]["environment"]["DF_SESSION_COOKIE_NAME"] == "sessionid-s3"
     assert s["backend"]["environment"]["DF_CSRF_COOKIE_NAME"] == "csrftoken-s3"
     assert s["frontend"]["environment"]["VITE_CSRF_COOKIE_NAME"] == "csrftoken-s3"
@@ -105,7 +106,11 @@ def test_base_test_file_invariants() -> None:
     assert names <= {"frontend", "backend", "redis", "nginx"}
     for svc in ("frontend", "backend"):
         env = cfg["services"][svc].get("environment") or {}
-        assert not {"DF_SESSION_COOKIE_NAME", "DF_CSRF_COOKIE_NAME", "VITE_CSRF_COOKIE_NAME"} & set(env), svc
+        assert not {
+            "DF_SESSION_COOKIE_NAME",
+            "DF_CSRF_COOKIE_NAME",
+            "VITE_CSRF_COOKIE_NAME",
+        } & set(env), svc
 
 
 @pytest.mark.parametrize(

@@ -26,9 +26,11 @@ describe('Activity identity in the shared user store', () => {
     );
     const earlierRequest = useUserStore.getState().getCurrentUser();
     setActivityCredential({
-      kind: 'hero',
-      draft_id: 7,
       token: 'secret',
+      scope: 'draft',
+      tournament_id: null,
+      pin: { kind: 'hero', id: 7 },
+      site_url: 'https://site.test',
       user: activityUser,
     });
     useUserStore.getState().setCurrentUser(activityUser);
@@ -46,9 +48,11 @@ describe('Activity identity in the shared user store', () => {
     );
     const earlierRequest = useUserStore.getState().getCurrentUser();
     setActivityCredential({
-      kind: 'team',
-      draft_id: 8,
       token: 'secret',
+      scope: 'draft',
+      tournament_id: null,
+      pin: { kind: 'team', id: 8 },
+      site_url: 'https://site.test',
       user: activityUser,
     });
     reject(new Error('no cookie session'));
@@ -57,9 +61,11 @@ describe('Activity identity in the shared user store', () => {
   });
   it('does not start a cookie-based identity request during an Activity session', async () => {
     setActivityCredential({
-      kind: 'hero',
-      draft_id: 7,
       token: 'secret',
+      scope: 'draft',
+      tournament_id: null,
+      pin: { kind: 'hero', id: 7 },
+      site_url: 'https://site.test',
       user: activityUser,
     });
     await useUserStore.getState().getCurrentUser();

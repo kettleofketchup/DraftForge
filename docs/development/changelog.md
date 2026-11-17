@@ -83,6 +83,7 @@ The `changelog` CI job runs on every PR to `main` and every push to `main`.
 | A PR edits `CHANGELOG.md` without the `changelog:edit` label | Fails |
 | A fragment sits at a path a release already consumed | Fails: delete it if it is the same note, rename it (`<slug>-2.md`) if it is new |
 | A bullet of 40 or more characters is identical to one already released | Fails: remove or reword that bullet (short stock bullets such as `- Updated dependencies.` may recur) |
+| `frontend/app/data/CHANGELOG.md` is missing or differs from `CHANGELOG.md` | Fails: run `cp CHANGELOG.md frontend/app/data/CHANGELOG.md` |
 | A PR adds no fragment | Warning only |
 | A direct push to `main` edits `CHANGELOG.md` outside a release commit | Fails (report only; the commit is already on `main`) |
 
@@ -100,6 +101,10 @@ gh pr edit <N> --add-label changelog:edit
 gh run rerun <run-id> --failed
 ```
 
+A deliberate `changelog:edit` correction updates the copy in the same PR
+(`cp CHANGELOG.md frontend/app/data/CHANGELOG.md`); `python3 scripts/changelog.py check`
+fails until the two files are identical.
+
 Squash-merge such a PR or merge it with a merge commit. A rebase-merge turns the push
 check on `main` red.
 
@@ -108,15 +113,20 @@ check on `main` red.
 `just version::set X.Y.Z` (on an up-to-date, clean `main`):
 
 1. Refuses, before any file changes: a version that is not `X.Y.Z`;
-   `--no-tag-version` without `--no-commit`; a missing `CHANGELOG.md`; a branch other
-   than `main`; any staged or unstaged tracked change; untracked files under
+   `--no-tag-version` without `--no-commit`; a missing `CHANGELOG.md`; a
+   `frontend/app/data/CHANGELOG.md` that is missing or differs from `CHANGELOG.md`
+   (`cp CHANGELOG.md frontend/app/data/CHANGELOG.md`) or is not tracked in `HEAD`
+   (commit it); a branch other than `main`; any staged or unstaged tracked change; untracked files under
    `changelog.d/`; `HEAD` not equal to `origin/main` after `git fetch --tags origin`;
    a tag `X.Y.Z` on `origin` or locally (a leftover local tag from a `--no-commit`
    run: `git tag -d X.Y.Z`). Other untracked files are fine.
 2. Asks for confirmation when there are no fragments.
-3. Rewrites the version files, assembles `CHANGELOG.md` and `git rm`s the fragments.
+3. Rewrites the version files, assembles `CHANGELOG.md` and its frontend copy
+   `frontend/app/data/CHANGELOG.md`, and `git rm`s the fragments.
 4. Commits `Updated version to X.Y.Z` (release paths only), tags `X.Y.Z`, pushes `main`,
-   then pushes the tag, which builds the release images.
+   then pushes the tag, which builds the release images. The `prettier-frontend`
+   pre-commit hook excludes the copy, so the release commit does not need
+   `frontend/node_modules`.
 
 Any failure before the push of `main` rolls everything back (`git checkout HEAD --`
 on the release paths, or `git reset --keep HEAD~1` and `git tag -d` once committed).

@@ -1175,6 +1175,33 @@ class AutoPauseTests(TransactionTestCase):
             async_to_sync(step)(self.fx.draft.pk)
         return keep_going
 
+    def test_last_socket_leaving_still_pauses_after_the_grace_period(self):
+        self.active_team.draft_has_connected = True
+        self.active_team.save()
+        self.r.set(self.hb, str(time.time()))
+        driver = teamdraft_tick.TeamDraftTickDriver()
+        self.addCleanup(driver.forget, self.fx.draft.pk)
+        with (
+            patch("app.tasks.teamdraft_tick.get_connection_count", return_value=0),
+            patch("app.tasks.teamdraft_tick.get_channel_layer", return_value=None),
+        ):
+            self.assertEqual(self.tick(driver), (True, ""))
+            self.assertEqual(self.state(), TeamDraftState.DRAFTING)
+            self.r.set(self.hb, str(time.time() - 9.5))
+            self.assertEqual(self.tick(driver), (True, ""))
+            self.assertEqual(self.state(), TeamDraftState.PAUSED)
+            self.assertEqual(
+                driver.should_continue(self.fx.draft.pk), (False, "no_connections")
+            )
+
+    def test_no_connections_and_absent_active_captain_stops(self):
+        self.assertFalse(self.active_team.draft_has_connected)
+        with patch("app.tasks.teamdraft_tick.get_connection_count", return_value=0):
+            self.assertEqual(
+                teamdraft_tick.should_continue_ticking(self.fx.draft.pk),
+                (False, "no_connections"),
+            )
+
     def test_a_timeout_check_far_from_due_takes_no_write_lock(self):
         self.assertTrue(Draft.objects.get(pk=self.fx.draft.pk).clock_armed)
         with patch.object(

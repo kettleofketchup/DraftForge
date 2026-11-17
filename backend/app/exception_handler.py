@@ -1,15 +1,25 @@
 """Custom DRF exception handler with structured logging."""
 
+from collections.abc import Mapping
+from typing import Any
+
+from rest_framework.response import Response
 from rest_framework.views import exception_handler as drf_exception_handler
 
+from discordbot.activity_errors import ActivityAuthFailed
 from telemetry.logging import get_logger
 
 log = get_logger("app.exception_handler")
 
 
-def exception_handler(exc, context):
+def exception_handler(exc: Exception, context: Mapping[str, Any]) -> Response | None:
     """Wrap DRF's default exception handler to log 4xx/5xx responses."""
     response = drf_exception_handler(exc, context)
+
+    if response is not None and isinstance(exc, ActivityAuthFailed):
+        response.status_code = 401
+        response["WWW-Authenticate"] = "DraftActivity"
+        response.data = {"detail": str(exc.detail), "code": exc.activity_code}
 
     if response is not None and response.status_code >= 400:
         view = context.get("view")

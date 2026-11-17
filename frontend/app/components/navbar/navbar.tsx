@@ -1,4 +1,3 @@
-import { Slot } from '@radix-ui/react-slot';
 import * as React from 'react';
 import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -7,182 +6,12 @@ import { cn } from '~/lib/utils';
 import { useUserStore } from '../../store/userStore';
 import { PreviewLoginMenu } from '../preview/PreviewLoginMenu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
+import { DocsDropdown } from './DocsDropdown';
+import { BUG_REPORT_URL, GITHUB_REPO_URL } from './links';
 import { LoginWithDiscordButton } from './login';
 import { MobileNav } from './MobileNav';
+import { NavItem } from './NavItem';
 import { PageNavBar } from './PageNavBar';
-
-const GITHUB_REPO_URL = 'https://github.com/kettleofketchup/draftforge';
-const DOCS_URL = 'https://kettleofketchup.github.io/DraftForge/';
-const BUG_REPORT_URL = `${GITHUB_REPO_URL}/issues/new?template=bug_report.md`;
-
-/**
- * NavItem label tiers above md (#252). `main` labels follow the left group's
- * @container width, i.e. whatever the right group leaves; `external` labels
- * follow the viewport and collapse first.
- */
-const LABEL_TIERS = {
-  main: {
-    text: 'hidden @min-[700px]:flex',
-    stacked: '@min-[840px]:flex-col',
-    subtitle: 'hidden @min-[840px]:block',
-    tooltip: '@min-[840px]:hidden',
-  },
-  external: {
-    text: 'hidden min-[1600px]:flex',
-    stacked: 'min-[1920px]:flex-col',
-    subtitle: 'hidden min-[1920px]:block',
-    tooltip: 'min-[1920px]:hidden',
-  },
-} as const;
-
-type LabelTier = keyof typeof LABEL_TIERS;
-
-interface NavItemProps extends Omit<
-  React.AnchorHTMLAttributes<HTMLAnchorElement>,
-  'href'
-> {
-  icon?: React.ReactNode;
-  title: string;
-  subtitle?: string;
-  badge?: React.ReactNode;
-  asChild?: boolean;
-  /** Which LABEL_TIERS breakpoints collapse the label to the icon */
-  tier: LabelTier;
-  /** Show the subtitle as a tooltip while it is not shown inline */
-  showSubtitleTooltip?: boolean;
-  /** Use for internal routes (uses React Router Link) */
-  to?: string;
-  /** Use for external links (uses <a> tag) */
-  href?: string;
-  /** Custom class for title text (overrides default color) */
-  titleClassName?: string;
-  /** Test ID for Playwright/testing - auto-generated from route if not provided */
-  'data-testid'?: string;
-}
-
-const NavItem = React.forwardRef<HTMLAnchorElement, NavItemProps>(
-  (
-    {
-      className,
-      icon,
-      title,
-      subtitle,
-      badge,
-      asChild = false,
-      tier,
-      showSubtitleTooltip = false,
-      to,
-      href,
-      titleClassName,
-      'data-testid': dataTestId,
-      ...props
-    },
-    ref,
-  ) => {
-    const tiers = LABEL_TIERS[tier];
-    const testId =
-      dataTestId || (to ? `nav-link-${to.replace(/^\//, '')}` : undefined);
-    const baseClassName = cn(
-      'flex items-center gap-1 xl:gap-2 rounded-md px-1.5 xl:px-2 py-1.5 h-9',
-      'text-sm font-medium',
-      'text-text-primary',
-      'hover:bg-base-400/50',
-      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-      'transition-colors',
-      className,
-    );
-
-    const content = (
-      <>
-        {icon && <span className="shrink-0">{icon}</span>}
-        <div
-          className={cn(
-            'items-center whitespace-nowrap',
-            tiers.text,
-            tiers.stacked,
-          )}
-        >
-          <div className="flex items-center justify-center gap-1">
-            <span
-              className={cn(
-                'text-xs font-bold leading-normal text-center text-outline-sm text-[#646cff]',
-                titleClassName,
-              )}
-            >
-              {title}
-            </span>
-            {badge}
-          </div>
-          {subtitle && (
-            <span
-              className={cn(
-                'text-[10px] text-text-muted leading-normal text-center',
-                tiers.subtitle,
-              )}
-            >
-              {subtitle}
-            </span>
-          )}
-        </div>
-      </>
-    );
-
-    let navContent: React.ReactElement;
-    if (asChild) {
-      navContent = (
-        <Slot
-          ref={ref}
-          className={baseClassName}
-          data-testid={testId}
-          {...props}
-        >
-          {content}
-        </Slot>
-      );
-    } else if (to) {
-      navContent = (
-        <Link
-          ref={ref}
-          to={to}
-          className={baseClassName}
-          data-testid={testId}
-          aria-label={title}
-          {...props}
-        >
-          {content}
-        </Link>
-      );
-    } else {
-      navContent = (
-        <a
-          ref={ref}
-          href={href}
-          className={baseClassName}
-          data-testid={testId}
-          aria-label={title}
-          {...props}
-        >
-          {content}
-        </a>
-      );
-    }
-
-    if (showSubtitleTooltip && subtitle) {
-      return (
-        <Tooltip>
-          <TooltipTrigger asChild>{navContent}</TooltipTrigger>
-          <TooltipContent className={tiers.tooltip}>
-            <p className="font-medium">{title}</p>
-            <p className="text-xs opacity-80">{subtitle}</p>
-          </TooltipContent>
-        </Tooltip>
-      );
-    }
-
-    return navContent;
-  },
-);
-NavItem.displayName = 'NavItem';
 
 const GitHubIcon = () => (
   <svg
@@ -235,22 +64,6 @@ const useGitHubStars = () => {
 
   return { stars, isLoading };
 };
-
-const DocsIcon = () => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className="h-5 w-5"
-    aria-hidden="true"
-  >
-    <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20" />
-  </svg>
-);
 
 const BugIcon = () => (
   <svg
@@ -471,18 +284,7 @@ const ExternalLinks = ({ className }: { className?: string }) => {
         tier="external"
         className="[&_svg]:text-text-primary"
       />
-      <NavItem
-        href={DOCS_URL}
-        target="_blank"
-        rel="noopener noreferrer"
-        icon={<DocsIcon />}
-        title={t('nav.docs')}
-        subtitle={t('nav.docs_subtitle')}
-        aria-label={t('aria.documentation')}
-        tier="external"
-        showSubtitleTooltip
-        className="[&_svg]:text-info"
-      />
+      <DocsDropdown />
       <NavItem
         href={BUG_REPORT_URL}
         target="_blank"
