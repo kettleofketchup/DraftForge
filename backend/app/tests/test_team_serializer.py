@@ -1,14 +1,17 @@
 """Team API writes keep the captain and deputy inside the member set (#571)."""
 
 import itertools
+from io import StringIO
 
 from django.core.exceptions import ValidationError
+from django.core.management import call_command
 from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
 from app.models import CustomUser, PositionsModel, Team, Tournament
 from app.serializers import TeamSerializer
+from app.services.team_leadership import teams_with_leadership_problems
 
 _discord_ids = itertools.count(571000)
 
@@ -197,3 +200,75 @@ class TeamLeadershipMessagesTests(TestCase):
             {"deputy_captain": "Deputy captain cannot be the same as captain."},
         )
         self.assertEqual(Team.leadership_errors(set(), None, None), {})
+
+
+class TeamLeadershipAuditTests(TestCase):
+    def setUp(self):
+        self.tournament = Tournament.objects.create(
+            name="Audit Cup",
+            tournament_type="single_elimination",
+            date_played=timezone.now(),
+        )
+        self.a = _user("audit_a")
+        self.b = _user("audit_b")
+        self.outsider = _user("audit_outsider")
+        self.good = self._team("Good", captain=self.a, deputy=self.b)
+        self.no_captain = self._team("NoCaptain", captain=self.outsider)
+        self.no_deputy = self._team("NoDeputy", captain=self.a, deputy=self.outsider)
+        self.same = self._team("Same", captain=self.a, deputy=self.a)
+
+    def _team(
+        self, name: str, *, captain: CustomUser, deputy: CustomUser | None = None
+    ) -> Team:
+        team = Team.objects.create(tournament=self.tournament, name=name)
+        team.members.set([self.a, self.b])
+        Team.objects.filter(pk=team.pk).update(captain=captain, deputy_captain=deputy)
+        return team
+
+    def _snapshot(self) -> list[tuple]:
+        return [
+            (
+                t.pk,
+                t.captain_id,
+                t.deputy_captain_id,
+                tuple(sorted(t.members.values_list("pk", flat=True))),
+            )
+            for t in Team.objects.nocache().order_by("pk")
+        ]
+
+    def test_predicate_lists_each_problem(self):
+        rows = [
+            (team.pk, problem) for team, problem in teams_with_leadership_problems()
+        ]
+
+        self.assertEqual(
+            rows,
+            [
+                (self.no_captain.pk, "captain_not_member"),
+                (self.no_deputy.pk, "deputy_not_member"),
+                (self.same.pk, "deputy_is_captain"),
+            ],
+        )
+
+    def test_predicate_accepts_queryset(self):
+        rows = teams_with_leadership_problems(Team.objects.filter(pk=self.good.pk))
+
+        self.assertEqual(rows, [])
+
+    def test_command_reports_and_changes_nothing(self):
+        before = self._snapshot()
+        out = StringIO()
+
+        call_command("audit_team_leadership", stdout=out)
+
+        self.assertEqual(self._snapshot(), before)
+        output = out.getvalue()
+        self.assertIn(
+            f"team={self.no_captain.pk} tournament={self.tournament.pk} problem=captain_not_member",
+            output,
+        )
+        self.assertIn(
+            f"team={self.same.pk} tournament={self.tournament.pk} problem=deputy_is_captain",
+            output,
+        )
+        self.assertNotIn(f"team={self.good.pk} ", output)

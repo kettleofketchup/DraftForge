@@ -12,7 +12,7 @@ from django.db.models import QuerySet
 from django.db.utils import IntegrityError
 from django.utils import timezone
 
-from app.cache_utils import invalidate_obj
+from app.cache_utils import invalidate_after_commit, invalidate_obj
 from discordbot.services.member_names import normalise_name
 from telemetry.logging import get_logger
 
@@ -883,6 +883,23 @@ class Tournament(models.Model):
         return options
 
 
+class LeadershipProblem(StrEnum):
+    CAPTAIN_NOT_MEMBER = "captain_not_member"
+    DEPUTY_NOT_MEMBER = "deputy_not_member"
+    DEPUTY_IS_CAPTAIN = "deputy_is_captain"
+
+    @property
+    def message(self) -> str:
+        return _LEADERSHIP_MESSAGES[self]
+
+
+_LEADERSHIP_MESSAGES: dict[LeadershipProblem, str] = {
+    LeadershipProblem.CAPTAIN_NOT_MEMBER: "Captain must be a member of the team.",
+    LeadershipProblem.DEPUTY_NOT_MEMBER: "Deputy captain must be a member of the team.",
+    LeadershipProblem.DEPUTY_IS_CAPTAIN: "Deputy captain cannot be the same as captain.",
+}
+
+
 class Team(models.Model):
     tournament = models.ForeignKey(
         Tournament,
@@ -958,14 +975,55 @@ class Team(models.Model):
         check_captain: bool = True,
         check_deputy: bool = True,
     ) -> dict[str, str]:
-        errors: dict[str, str] = {}
+        problems = Team.leadership_problems(
+            member_pks,
+            captain_pk,
+            deputy_pk,
+            check_captain=check_captain,
+            check_deputy=check_deputy,
+        )
+        return {field: problem.message for field, problem in problems.items()}
+
+    @staticmethod
+    def leadership_problems(
+        member_pks: set[int],
+        captain_pk: int | None,
+        deputy_pk: int | None,
+        *,
+        check_captain: bool = True,
+        check_deputy: bool = True,
+    ) -> dict[str, "LeadershipProblem"]:
+        problems: dict[str, LeadershipProblem] = {}
         if check_captain and captain_pk is not None and captain_pk not in member_pks:
-            errors["captain"] = "Captain must be a member of the team."
+            problems["captain"] = LeadershipProblem.CAPTAIN_NOT_MEMBER
         if check_deputy and deputy_pk is not None and deputy_pk not in member_pks:
-            errors["deputy_captain"] = "Deputy captain must be a member of the team."
+            problems["deputy_captain"] = LeadershipProblem.DEPUTY_NOT_MEMBER
         elif deputy_pk is not None and deputy_pk == captain_pk:
-            errors["deputy_captain"] = "Deputy captain cannot be the same as captain."
-        return errors
+            problems["deputy_captain"] = LeadershipProblem.DEPUTY_IS_CAPTAIN
+        return problems
+
+    def replace_member(self, old: CustomUser, new: CustomUser) -> None:
+        was_member = self.members.filter(pk=old.pk).exists()
+        if was_member:
+            self.members.add(new)
+        update_fields: list[str] = []
+        if self.captain_id == old.pk:
+            self.captain = new
+            update_fields.append("captain")
+        if self.deputy_captain_id == old.pk:
+            self.deputy_captain = new
+            update_fields.append("deputy_captain")
+        if (
+            self.deputy_captain_id is not None
+            and self.deputy_captain_id == self.captain_id
+        ):
+            self.deputy_captain = None
+            update_fields.append("deputy_captain")
+        if update_fields:
+            self.save(update_fields=sorted(set(update_fields)))
+        if was_member:
+            self.members.remove(old)
+        invalidate_after_commit(self, old, new)
 
     def clean(self) -> None:
         super().clean()

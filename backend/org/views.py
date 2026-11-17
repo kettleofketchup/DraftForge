@@ -274,21 +274,24 @@ class ClaimRequestViewSet(viewsets.ModelViewSet):
                 league_user.user = claimer
                 league_user.save()
 
+        # Teams before tournaments: removing target_user from tournament.users
+        # cascades to team.members and would run succession first.
+        for team in (
+            Team.objects.nocache()
+            .filter(
+                Q(members=target_user)
+                | Q(captain=target_user)
+                | Q(deputy_captain=target_user)
+            )
+            .distinct()
+        ):
+            team.replace_member(target_user, claimer)
+
         # Tournament participations (M2M)
         for tournament in target_user.tournaments.all():
             if claimer not in tournament.users.all():
                 tournament.users.add(claimer)
             tournament.users.remove(target_user)
-
-        # Team memberships (M2M)
-        for team in target_user.teams_as_member.all():
-            if claimer not in team.members.all():
-                team.members.add(claimer)
-            team.members.remove(target_user)
-
-        # Team captain/deputy roles
-        Team.objects.filter(captain=target_user).update(captain=claimer)
-        Team.objects.filter(deputy_captain=target_user).update(deputy_captain=claimer)
 
         # Draft rounds captained
         DraftRound.objects.filter(captain=target_user).update(captain=claimer)
