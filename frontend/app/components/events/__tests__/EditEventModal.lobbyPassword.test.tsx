@@ -294,3 +294,105 @@ describe('EditEventModal end time', () => {
     expect(body).not.toHaveProperty('event_ends_at');
   });
 });
+
+describe('EditEventModal draft settings', () => {
+  beforeEach(() => {
+    mutateAsync.mockClear();
+    savedPassword.current = undefined;
+  });
+
+  it('shows saved ms as seconds and sends edits back as flat ms fields', async () => {
+    renderModal({
+      ...event,
+      draft_type: 'snake',
+      draft_timer_enabled: true,
+      draft_grace_time_ms: 20000,
+      draft_reserve_time_ms: 40000,
+      draft_timeout_action: 'skip_turn',
+      hero_timer_enabled: true,
+      hero_grace_time_ms: 25000,
+      hero_reserve_time_ms: 60000,
+    });
+    expect(screen.getByTestId('draft-settings-team-grace-s')).toHaveValue(20);
+    expect(screen.getByTestId('draft-settings-hero-reserve-s')).toHaveValue(60);
+    fireEvent.change(screen.getByTestId('draft-settings-hero-grace-s'), {
+      target: { value: '45' },
+    });
+    fireEvent.click(screen.getByTestId('draft-settings-team-timer-enabled'));
+
+    const body = await submittedBody();
+    expect(body).toMatchObject({
+      draft_type: 'snake',
+      draft_timer_enabled: false,
+      draft_grace_time_ms: 20000,
+      draft_reserve_time_ms: 40000,
+      draft_timeout_action: 'skip_turn',
+      hero_timer_enabled: true,
+      hero_grace_time_ms: 45000,
+      hero_reserve_time_ms: 60000,
+    });
+    expect(body).not.toHaveProperty('draft_grace_time_s');
+    expect(body).not.toHaveProperty('hero_reserve_time_s');
+  });
+
+  it('defaults draft settings for an event without them', async () => {
+    renderModal(event);
+    expect(await submittedBody()).toMatchObject({
+      draft_timer_enabled: true,
+      draft_grace_time_ms: 30000,
+      draft_reserve_time_ms: 30000,
+      hero_timer_enabled: true,
+      hero_grace_time_ms: 30000,
+      hero_reserve_time_ms: 90000,
+    });
+  });
+});
+
+describe('EditEventModal tabs and payload parity', () => {
+  beforeEach(() => {
+    mutateAsync.mockClear();
+    savedPassword.current = undefined;
+  });
+
+  it('renders every event tab with its testid', () => {
+    renderModal(event);
+    for (const tab of ['event', 'tournament', 'lobby', 'approval', 'discord']) {
+      expect(screen.getByTestId(`edit-event-tab-${tab}`)).toBeInTheDocument();
+    }
+    expect(screen.getByTestId('edit-event-tab-event')).toHaveAttribute(
+      'data-state',
+      'active',
+    );
+  });
+
+  it('sends saved Discord ping roles unchanged', async () => {
+    renderModal({
+      ...event,
+      discord_announcement_role_ids: ['1'],
+      discord_signup_role_ids: ['2'],
+    });
+    expect(await submittedBody()).toMatchObject({
+      discord_announcement_role_ids: ['1'],
+      discord_signup_role_ids: ['2'],
+    });
+  });
+
+  it('switches to the Tournament tab when a draft timer is invalid', async () => {
+    renderModal({
+      ...event,
+      draft_timer_enabled: true,
+      draft_grace_time_ms: 20000,
+    });
+    fireEvent.change(screen.getByTestId('draft-settings-team-grace-s'), {
+      target: { value: '-5' },
+    });
+    fireEvent.click(screen.getByTestId('form-dialog-submit'));
+    await waitFor(() =>
+      expect(screen.getByTestId('edit-event-tab-tournament')).toHaveAttribute(
+        'data-state',
+        'active',
+      ),
+    );
+    expect(mutateAsync).not.toHaveBeenCalled();
+  });
+});

@@ -79,6 +79,7 @@ import {
 } from '~/features/org-features';
 import { PromotionTab } from '~/features/promotion';
 import {
+  useEvent,
   useEventRepeaters,
   useEvents,
   useRepeaterSubscriptionMutation,
@@ -375,6 +376,8 @@ function OrganizationDetailPage() {
   const { data: events = [], isLoading: eventsLoading } = useEvents(
     pk ? { organization: pk } : undefined,
   );
+  // The list rows are slim; the edit form needs every event field.
+  const { data: fullEditingEvent } = useEvent(editingEvent?.id ?? null);
   const { data: repeaters = [], isLoading: repeatersLoading } =
     useEventRepeaters(pk ? { organization: pk } : undefined);
 
@@ -697,6 +700,7 @@ function OrganizationDetailPage() {
                         size="icon"
                         className="size-9"
                         aria-label="Edit org event defaults"
+                        data-testid="org-event-defaults-btn"
                         onClick={() => setEditDefaultsOpen(true)}
                       >
                         <Settings className="h-4 w-4" />
@@ -873,9 +877,9 @@ function OrganizationDetailPage() {
         />
       )}
 
-      {editingEvent && (
+      {editingEvent && fullEditingEvent?.id === editingEvent.id && (
         <EditEventModal
-          event={editingEvent}
+          event={fullEditingEvent}
           open={true}
           onOpenChange={(open) => {
             if (!open) setEditingEvent(null);

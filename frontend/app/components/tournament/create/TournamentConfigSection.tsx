@@ -21,14 +21,14 @@ export function TournamentConfigSection({ control }: Props) {
           control={control}
           name="auto_create_hero_drafts"
           render={({ field }) => (
-            <FormItem className="flex items-center gap-3">
+            <FormItem className="flex items-start gap-3 space-y-0">
               <FormControl>
                 <input
                   type="checkbox"
                   data-testid="config-auto-create-herodrafts"
                   checked={field.value}
                   onChange={field.onChange}
-                  className="h-4 w-4 rounded border-border accent-primary"
+                  className="mt-0.5 h-4 w-4 shrink-0 rounded border-border accent-primary"
                 />
               </FormControl>
               <div>

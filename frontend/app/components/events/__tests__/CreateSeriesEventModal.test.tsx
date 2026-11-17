@@ -177,8 +177,17 @@ describe('CreateSeriesEventModal', () => {
     });
   });
 
-  it('does not render the repeater-only "Message interested users" block', () => {
+  it('does not render the repeater-only "Message interested users" block', async () => {
     renderModal();
+    fireEvent.mouseDown(screen.getByTestId('one-off-tab-discord'), {
+      button: 0,
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId('one-off-tab-discord')).toHaveAttribute(
+        'data-state',
+        'active',
+      ),
+    );
     expect(screen.queryByText('Message interested users')).toBeNull();
   });
 });

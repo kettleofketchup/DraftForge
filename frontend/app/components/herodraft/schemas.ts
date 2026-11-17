@@ -59,6 +59,7 @@ export const HeroDraftSchema = z.object({
   rounds: z.array(HeroDraftRoundSchema),
   current_round: z.number().nullable(),
   is_manual_pause: z.boolean().optional(), // True if paused manually by captain/staff
+  timer_enabled: z.boolean().optional().default(true),
   created_at: z.string(),
   updated_at: z.string(),
 });
@@ -76,6 +77,7 @@ export const HeroDraftTickSchema = TickEnvelopeSchema.extend({
   team_a_reserve_ms: z.number().nullable().optional(),
   team_b_id: z.number().nullable().optional(),
   team_b_reserve_ms: z.number().nullable().optional(),
+  timer_enabled: z.boolean().optional(),
 });
 
 // Metadata schema for hero_selected events

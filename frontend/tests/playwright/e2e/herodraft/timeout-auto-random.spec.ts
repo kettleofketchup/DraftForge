@@ -6,11 +6,17 @@
  * without waiting for the full grace + reserve time.
  */
 
-import { API_URL, BASE_URL } from '../../fixtures/base-url';
-import { test, expect, chromium, type Browser, type BrowserContext, type Page } from '@playwright/test';
+import {
+  chromium,
+  expect,
+  test,
+  type Browser,
+  type BrowserContext,
+  type Page,
+} from '@playwright/test';
 import { loginAsDiscordId, waitForHydration } from '../../fixtures/auth';
+import { API_URL, BASE_URL } from '../../fixtures/base-url';
 import { HeroDraftPage } from '../../helpers/HeroDraftPage';
-
 
 /**
  * Wait for server to be ready with retries.
@@ -19,7 +25,7 @@ async function waitForServerReady(
   context: BrowserContext,
   url: string,
   maxRetries = 10,
-  delayMs = 2000
+  delayMs = 2000,
 ): Promise<void> {
   for (let i = 0; i < maxRetries; i++) {
     try {
@@ -79,7 +85,7 @@ interface DraftRound {
   team_name: string;
 }
 
-test.describe('HeroDraft Timeout Auto-Random Pick', () => {
+test.describe('@cicd HeroDraft Timeout Auto-Random Pick', () => {
   let captainA: CaptainContext;
   let captainB: CaptainContext;
   let testInfo: HeroDraftTestInfo;
@@ -124,14 +130,14 @@ test.describe('HeroDraft Timeout Auto-Random Pick', () => {
     // Fetch draft info
     const response = await contextA.request.get(
       `${API_URL}/tests/herodraft-by-key/two_captain_test/`,
-      { failOnStatusCode: false, timeout: 10000 }
+      { failOnStatusCode: false, timeout: 10000 },
     );
 
     if (!response.ok()) {
       const errorText = await response.text();
       throw new Error(
         `Failed to get HeroDraft test data: ${response.status()} - ${errorText}\n` +
-        `Make sure to run 'just db::populate::all' to create test data.`
+          `Make sure to run 'just db::populate::all' to create test data.`,
       );
     }
 
@@ -174,8 +180,12 @@ test.describe('HeroDraft Timeout Auto-Random Pick', () => {
     };
 
     console.log(`\n Timeout Test Setup Complete:`);
-    console.log(`   Captain A: ${captainA.username} (Team: ${captainA.teamName})`);
-    console.log(`   Captain B: ${captainB.username} (Team: ${captainB.teamName})`);
+    console.log(
+      `   Captain A: ${captainA.username} (Team: ${captainA.teamName})`,
+    );
+    console.log(
+      `   Captain B: ${captainB.username} (Team: ${captainB.teamName})`,
+    );
     console.log(`   Draft ID: ${testInfo.pk}`);
   });
 
@@ -184,7 +194,7 @@ test.describe('HeroDraft Timeout Auto-Random Pick', () => {
     const draftPk = testInfo.pk;
     await captainA.context.request.post(
       `${API_URL}/tests/herodraft/${draftPk}/reset/`,
-      { failOnStatusCode: false }
+      { failOnStatusCode: false },
     );
     console.log(`   Draft ${draftPk} reset for new test`);
   });
@@ -226,8 +236,7 @@ test.describe('HeroDraft Timeout Auto-Random Pick', () => {
       waitForHydration(captainB.page),
     ]);
 
-    const startDraftButton = (page: Page) =>
-      page.getByTestId('view-draft-btn');
+    const startDraftButton = (page: Page) => page.getByTestId('view-draft-btn');
 
     await Promise.all([
       startDraftButton(captainA.page).click(),
@@ -252,22 +261,32 @@ test.describe('HeroDraft Timeout Auto-Random Pick', () => {
 
     await captainA.draftPage.clickReady();
     await expect(
-      captainB.page.locator('[data-testid^="herodraft-ready-status-"]').first()
+      captainB.page.locator('[data-testid^="herodraft-ready-status-"]').first(),
     ).toContainText('Ready', { timeout: 5000 });
     await captainB.draftPage.clickReady();
 
     // Rolling Phase - Trigger coin flip with retry
-    await expect(captainA.draftPage.flipCoinButton).toBeVisible({ timeout: 15000 });
+    await expect(captainA.draftPage.flipCoinButton).toBeVisible({
+      timeout: 15000,
+    });
     await captainA.draftPage.clickFlipCoin();
 
     // Choosing Phase - Make choices with longer timeout for stability
     await Promise.race([
-      captainA.page.getByTestId('herodraft-choosing-phase').waitFor({ state: 'visible', timeout: 20000 }),
-      captainB.page.getByTestId('herodraft-choosing-phase').waitFor({ state: 'visible', timeout: 20000 }),
+      captainA.page
+        .getByTestId('herodraft-choosing-phase')
+        .waitFor({ state: 'visible', timeout: 20000 }),
+      captainB.page
+        .getByTestId('herodraft-choosing-phase')
+        .waitFor({ state: 'visible', timeout: 20000 }),
     ]);
 
-    const winnerChoiceFirstA = captainA.page.getByTestId('herodraft-choice-first-pick');
-    const isAWinner = await winnerChoiceFirstA.isVisible({ timeout: 2000 }).catch(() => false);
+    const winnerChoiceFirstA = captainA.page.getByTestId(
+      'herodraft-choice-first-pick',
+    );
+    const isAWinner = await winnerChoiceFirstA
+      .isVisible({ timeout: 2000 })
+      .catch(() => false);
 
     if (isAWinner) {
       // Use helper which properly confirms the dialog
@@ -288,10 +307,12 @@ test.describe('HeroDraft Timeout Auto-Random Pick', () => {
   /**
    * Force timeout and return the response data
    */
-  async function forceTimeout(draftPk: number): Promise<{ responseData: any; autoPickedHeroId: number }> {
+  async function forceTimeout(
+    draftPk: number,
+  ): Promise<{ responseData: any; autoPickedHeroId: number }> {
     const timeoutResponse = await captainA.context.request.post(
       `${API_URL}/tests/herodraft/${draftPk}/force-timeout/`,
-      { failOnStatusCode: false }
+      { failOnStatusCode: false },
     );
 
     const responseData = await timeoutResponse.json();
@@ -301,9 +322,10 @@ test.describe('HeroDraft Timeout Auto-Random Pick', () => {
     }
 
     // Find the most recently completed round with a hero
-    const completedRounds = responseData.rounds?.filter(
-      (r: DraftRound) => r.state === 'completed' && r.hero_id !== null
-    ) || [];
+    const completedRounds =
+      responseData.rounds?.filter(
+        (r: DraftRound) => r.state === 'completed' && r.hero_id !== null,
+      ) || [];
 
     const lastCompletedRound = completedRounds[completedRounds.length - 1];
     if (!lastCompletedRound) {
@@ -335,8 +357,12 @@ test.describe('HeroDraft Timeout Auto-Random Pick', () => {
     await captainA.page.waitForTimeout(3000);
 
     // Check if state updated via WebSocket first
-    let heroButtonA = captainA.page.getByTestId(`herodraft-hero-${autoPickedHeroId}`);
-    const availableViaWS = await heroButtonA.getAttribute('data-hero-available');
+    let heroButtonA = captainA.page.getByTestId(
+      `herodraft-hero-${autoPickedHeroId}`,
+    );
+    const availableViaWS = await heroButtonA.getAttribute(
+      'data-hero-available',
+    );
 
     // If WebSocket didn't update, reload pages
     if (availableViaWS === 'true') {
@@ -351,15 +377,25 @@ test.describe('HeroDraft Timeout Auto-Random Pick', () => {
         captainB.draftPage.waitForModal(),
       ]);
 
-      heroButtonA = captainA.page.getByTestId(`herodraft-hero-${autoPickedHeroId}`);
+      heroButtonA = captainA.page.getByTestId(
+        `herodraft-hero-${autoPickedHeroId}`,
+      );
     }
 
-    const heroButtonB = captainB.page.getByTestId(`herodraft-hero-${autoPickedHeroId}`);
+    const heroButtonB = captainB.page.getByTestId(
+      `herodraft-hero-${autoPickedHeroId}`,
+    );
 
-    await expect(heroButtonA).toHaveAttribute('data-hero-available', 'false', { timeout: 5000 });
-    await expect(heroButtonB).toHaveAttribute('data-hero-available', 'false', { timeout: 5000 });
+    await expect(heroButtonA).toHaveAttribute('data-hero-available', 'false', {
+      timeout: 5000,
+    });
+    await expect(heroButtonB).toHaveAttribute('data-hero-available', 'false', {
+      timeout: 5000,
+    });
 
-    console.log(`   Hero ${autoPickedHeroId} is unavailable on both pages - auto-pick worked!`);
+    console.log(
+      `   Hero ${autoPickedHeroId} is unavailable on both pages - auto-pick worked!`,
+    );
 
     const finalState = responseData.state;
     console.log(`   Final draft state: ${finalState}`);
@@ -393,7 +429,9 @@ test.describe('HeroDraft Timeout Auto-Random Pick', () => {
 
     // Verify all 3 heroes are different (random selection working)
     const uniqueHeroes = new Set(autoPickedHeroes);
-    console.log(`   Unique heroes picked: ${uniqueHeroes.size} (${autoPickedHeroes.join(', ')})`);
+    console.log(
+      `   Unique heroes picked: ${uniqueHeroes.size} (${autoPickedHeroes.join(', ')})`,
+    );
     expect(uniqueHeroes.size).toBe(3);
 
     // Reload and verify all heroes are unavailable
@@ -410,7 +448,9 @@ test.describe('HeroDraft Timeout Auto-Random Pick', () => {
 
     for (const heroId of autoPickedHeroes) {
       const heroButton = captainA.page.getByTestId(`herodraft-hero-${heroId}`);
-      await expect(heroButton).toHaveAttribute('data-hero-available', 'false', { timeout: 5000 });
+      await expect(heroButton).toHaveAttribute('data-hero-available', 'false', {
+        timeout: 5000,
+      });
       console.log(`   Hero ${heroId} confirmed unavailable`);
     }
 
@@ -428,7 +468,8 @@ test.describe('HeroDraft Timeout Auto-Random Pick', () => {
     console.log('   Draft started!');
 
     // Force timeouts and track round types
-    const roundResults: Array<{ round: number; type: string; heroId: number }> = [];
+    const roundResults: Array<{ round: number; type: string; heroId: number }> =
+      [];
 
     // Force 8 timeouts to get past bans (7 bans) and into picks
     for (let i = 1; i <= 8; i++) {
@@ -436,7 +477,7 @@ test.describe('HeroDraft Timeout Auto-Random Pick', () => {
 
       const timeoutResponse = await captainA.context.request.post(
         `${API_URL}/tests/herodraft/${draftPk}/force-timeout/`,
-        { failOnStatusCode: false }
+        { failOnStatusCode: false },
       );
 
       const responseData = await timeoutResponse.json();
@@ -447,9 +488,10 @@ test.describe('HeroDraft Timeout Auto-Random Pick', () => {
       }
 
       // Find the round that was just completed (most recent completed round)
-      const completedRounds = responseData.rounds?.filter(
-        (r: DraftRound) => r.state === 'completed' && r.hero_id !== null
-      ) || [];
+      const completedRounds =
+        responseData.rounds?.filter(
+          (r: DraftRound) => r.state === 'completed' && r.hero_id !== null,
+        ) || [];
 
       const lastRound = completedRounds[completedRounds.length - 1];
       if (lastRound) {
@@ -458,23 +500,27 @@ test.describe('HeroDraft Timeout Auto-Random Pick', () => {
           type: lastRound.action_type,
           heroId: lastRound.hero_id,
         });
-        console.log(`   Round ${lastRound.round_number} (${lastRound.action_type}): hero ${lastRound.hero_id}`);
+        console.log(
+          `   Round ${lastRound.round_number} (${lastRound.action_type}): hero ${lastRound.hero_id}`,
+        );
       }
 
       await captainA.page.waitForTimeout(300);
     }
 
     // Verify we have both ban and pick rounds
-    const banRounds = roundResults.filter(r => r.type === 'ban');
-    const pickRounds = roundResults.filter(r => r.type === 'pick');
+    const banRounds = roundResults.filter((r) => r.type === 'ban');
+    const pickRounds = roundResults.filter((r) => r.type === 'pick');
 
-    console.log(`\n   Completed ${roundResults.length} rounds: ${banRounds.length} bans, ${pickRounds.length} picks`);
+    console.log(
+      `\n   Completed ${roundResults.length} rounds: ${banRounds.length} bans, ${pickRounds.length} picks`,
+    );
 
     expect(banRounds.length).toBeGreaterThan(0);
     expect(pickRounds.length).toBeGreaterThan(0);
 
     // Verify all heroes are unique
-    const heroIds = roundResults.map(r => r.heroId);
+    const heroIds = roundResults.map((r) => r.heroId);
     const uniqueHeroIds = new Set(heroIds);
     expect(uniqueHeroIds.size).toBe(heroIds.length);
     console.log(`   All ${heroIds.length} heroes are unique`);
@@ -502,7 +548,7 @@ test.describe('HeroDraft Timeout Auto-Random Pick', () => {
     while (currentState === 'drafting' && roundCount < maxRounds) {
       const timeoutResponse = await captainA.context.request.post(
         `${API_URL}/tests/herodraft/${draftPk}/force-timeout/`,
-        { failOnStatusCode: false }
+        { failOnStatusCode: false },
       );
 
       const responseData = await timeoutResponse.json();
@@ -511,7 +557,7 @@ test.describe('HeroDraft Timeout Auto-Random Pick', () => {
         // Check if it's because draft completed
         const draftResponse = await captainA.context.request.get(
           `${API_URL}/herodraft/${draftPk}/`,
-          { failOnStatusCode: false }
+          { failOnStatusCode: false },
         );
         const draftData = await draftResponse.json();
         currentState = draftData.state;
@@ -521,7 +567,9 @@ test.describe('HeroDraft Timeout Auto-Random Pick', () => {
           break;
         }
 
-        console.log(`   Timeout failed at round ${roundCount}: ${JSON.stringify(responseData)}`);
+        console.log(
+          `   Timeout failed at round ${roundCount}: ${JSON.stringify(responseData)}`,
+        );
         break;
       }
 
@@ -529,14 +577,18 @@ test.describe('HeroDraft Timeout Auto-Random Pick', () => {
       roundCount++;
 
       if (roundCount % 5 === 0) {
-        console.log(`   Progress: ${roundCount} rounds completed, state: ${currentState}`);
+        console.log(
+          `   Progress: ${roundCount} rounds completed, state: ${currentState}`,
+        );
       }
 
       await captainA.page.waitForTimeout(200);
     }
 
     console.log(`Step 3: Verifying draft completion...`);
-    console.log(`   Final state: ${currentState}, rounds completed: ${roundCount}`);
+    console.log(
+      `   Final state: ${currentState}, rounds completed: ${roundCount}`,
+    );
 
     // Verify the draft is completed
     expect(currentState).toBe('completed');
@@ -549,14 +601,24 @@ test.describe('HeroDraft Timeout Auto-Random Pick', () => {
     ]);
 
     // Check for completion indicators on both pages
-    const completedIndicatorA = captainA.page.getByTestId('herodraft-completed-phase');
-    const completedIndicatorB = captainB.page.getByTestId('herodraft-completed-phase');
+    const completedIndicatorA = captainA.page.getByTestId(
+      'herodraft-completed-phase',
+    );
+    const completedIndicatorB = captainB.page.getByTestId(
+      'herodraft-completed-phase',
+    );
 
     // At least one should indicate completed (might show different UI)
-    const isCompletedA = await completedIndicatorA.isVisible({ timeout: 5000 }).catch(() => false);
-    const isCompletedB = await completedIndicatorB.isVisible({ timeout: 5000 }).catch(() => false);
+    const isCompletedA = await completedIndicatorA
+      .isVisible({ timeout: 5000 })
+      .catch(() => false);
+    const isCompletedB = await completedIndicatorB
+      .isVisible({ timeout: 5000 })
+      .catch(() => false);
 
-    console.log(`   Completed indicator visible: A=${isCompletedA}, B=${isCompletedB}`);
+    console.log(
+      `   Completed indicator visible: A=${isCompletedA}, B=${isCompletedB}`,
+    );
 
     console.log('\n   Full draft timeout completion test PASSED!');
   });

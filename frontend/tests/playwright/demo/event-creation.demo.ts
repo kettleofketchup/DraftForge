@@ -14,16 +14,19 @@
  * Pipeline: just demo::events → just demo::trim → just demo::gifs
  */
 
-import { BASE_URL } from '../fixtures/base-url';
-import { test, chromium, type Page, type Locator } from '@playwright/test';
-import { loginAdmin, waitForHydration, API_URL } from '../fixtures/auth';
-import { waitForDemoReady } from '../fixtures/demo-utils';
-import * as path from 'path';
+import { chromium, test, type Locator, type Page } from '@playwright/test';
 import * as fs from 'fs';
+import * as path from 'path';
+import { API_URL, loginAdmin, waitForHydration } from '../fixtures/auth';
+import { BASE_URL } from '../fixtures/base-url';
+import { waitForDemoReady } from '../fixtures/demo-utils';
 
 const VIDEO_OUTPUT_DIR = 'demo-results/videos/event_creation';
 const FINAL_VIDEO_DIR = '../docs/assets/videos';
-const DEMO_METADATA_FILE = path.join('demo-results/videos', 'event_creation.demo.yaml');
+const DEMO_METADATA_FILE = path.join(
+  'demo-results/videos',
+  'event_creation.demo.yaml',
+);
 
 // ---------------------------------------------------------------------------
 // Cursor helpers
@@ -36,12 +39,18 @@ function cursorInitScript() {
     const el = document.createElement('div');
     el.id = 'demo-cursor';
     el.style.cssText = [
-      'position:fixed', 'width:20px', 'height:20px', 'border-radius:50%',
-      'background:rgba(239,68,68,0.55)', 'border:2px solid white',
+      'position:fixed',
+      'width:20px',
+      'height:20px',
+      'border-radius:50%',
+      'background:rgba(239,68,68,0.55)',
+      'border:2px solid white',
       'box-shadow:0 0 6px rgba(0,0,0,0.4)',
-      'pointer-events:none', 'z-index:999999',
+      'pointer-events:none',
+      'z-index:999999',
       'transform:translate(-50%,-50%)',
-      'left:-40px', 'top:-40px',
+      'left:-40px',
+      'top:-40px',
     ].join(';');
     document.body.appendChild(el);
     document.addEventListener('mousemove', (e) => {
@@ -66,7 +75,10 @@ async function moveTo(page: Page, locator: Locator, durationMs = 500) {
     ({ tx, ty, ms }) => {
       return new Promise<void>((resolve) => {
         const cursor = document.getElementById('demo-cursor');
-        if (!cursor) { resolve(); return; }
+        if (!cursor) {
+          resolve();
+          return;
+        }
         const fromX = parseFloat(cursor.style.left) || 400;
         const fromY = parseFloat(cursor.style.top) || 400;
         const steps = Math.max(12, Math.round(ms / 16));
@@ -129,7 +141,11 @@ async function smoothScroll(page: Page, deltaY: number, durationMs: number) {
 }
 
 /** Smooth scroll inside a dialog's ScrollArea viewport. */
-async function smoothScrollDialog(page: Page, deltaY: number, durationMs: number) {
+async function smoothScrollDialog(
+  page: Page,
+  deltaY: number,
+  durationMs: number,
+) {
   await page.evaluate(
     ({ dy, ms }) => {
       return new Promise<void>((resolve) => {
@@ -139,7 +155,10 @@ async function smoothScrollDialog(page: Page, deltaY: number, durationMs: number
           dialog?.querySelector('[data-slot="scroll-area-viewport"]') ||
           dialog?.querySelector('[data-radix-scroll-area-viewport]') ||
           dialog;
-        if (!el) { resolve(); return; }
+        if (!el) {
+          resolve();
+          return;
+        }
         const start = (el as HTMLElement).scrollTop;
         const steps = Math.max(1, Math.round(ms / 16));
         let i = 0;
@@ -186,7 +205,8 @@ test.describe('Event Creation Demo', () => {
       fs.mkdirSync(videoDir, { recursive: true });
     }
 
-    let executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined;
+    let executablePath =
+      process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined;
     if (executablePath === '/usr/bin/chromium-browser') {
       executablePath = '/usr/lib/chromium/chromium';
     }
@@ -231,11 +251,16 @@ test.describe('Event Creation Demo', () => {
     // Find the Events Test Org dynamically (PK may differ across environments)
     const orgsResp = await context.request.get(`${API_URL}/organizations/`);
     const orgs = await orgsResp.json();
-    const eventsOrg = orgs.find((o: { name: string }) => o.name === 'Events Test Org');
-    if (!eventsOrg) throw new Error('Events Test Org not found — run just db::populate::all');
+    const eventsOrg = orgs.find(
+      (o: { name: string }) => o.name === 'Events Test Org',
+    );
+    if (!eventsOrg)
+      throw new Error('Events Test Org not found — run just db::populate::all');
     const orgPk = eventsOrg.pk;
     // Find the league for this org (events were wiped, so get from leagues API)
-    const leaguesResp = await context.request.get(`${API_URL}/leagues/?organization=${orgPk}`);
+    const leaguesResp = await context.request.get(
+      `${API_URL}/leagues/?organization=${orgPk}`,
+    );
     const leagues = await leaguesResp.json();
     const leaguePk = leagues[0]?.pk ?? orgPk;
     console.log(`Found Events Test Org: pk=${orgPk}, league=${leaguePk}`);
@@ -307,7 +332,15 @@ test.describe('Event Creation Demo', () => {
     // Step 6 — Fill Tournament Name: "Inhouse #42"
     // =========================================================================
     console.log('Step 6: Fill tournament name');
-    const tournamentNameInput = page.locator('[data-testid="event-tournament-name-input"]');
+    const tournamentTab = page.locator(
+      '[data-testid="event-modal-tab-tournament"]',
+    );
+    await tournamentTab.waitFor({ state: 'visible', timeout: 5000 });
+    await demoClick(page, tournamentTab, 300);
+    await page.waitForTimeout(500);
+    const tournamentNameInput = page.locator(
+      '[data-testid="event-tournament-name-input"]',
+    );
     await tournamentNameInput.waitFor({ state: 'visible', timeout: 5000 });
     await moveTo(page, tournamentNameInput, 300);
     await tournamentNameInput.click();
@@ -324,7 +357,8 @@ test.describe('Event Creation Demo', () => {
     await demoClick(page, leagueSelect, 300);
     await page.waitForTimeout(300);
 
-    const leagueOption = page.getByRole('option', { name: 'Events Test League' });
+    // Events Test League (pk 7); a name match also hits "Events Test League B".
+    const leagueOption = page.getByTestId('event-league-option-7');
     await leagueOption.waitFor({ state: 'visible', timeout: 5000 });
     await demoClick(page, leagueOption, 200);
     await page.waitForTimeout(300);
@@ -353,13 +387,17 @@ test.describe('Event Creation Demo', () => {
     // Click the signup channel picker to show the channel dropdown
     console.log('Step 9c: Show channel picker dropdown');
     try {
-      const channelSelect = page.locator('[data-testid="discord-signup-channel-select"]');
+      const channelSelect = page.locator(
+        '[data-testid="discord-signup-channel-select"]',
+      );
       await channelSelect.waitFor({ state: 'visible', timeout: 3000 });
       await demoClick(page, channelSelect, 200);
       await page.waitForTimeout(800);
 
       // Select "announcements" channel
-      const announcementsOption = page.getByRole('option', { name: /announcements/ });
+      const announcementsOption = page.getByRole('option', {
+        name: /announcements/,
+      });
       try {
         await announcementsOption.waitFor({ state: 'visible', timeout: 3000 });
         await demoClick(page, announcementsOption, 200);
@@ -370,11 +408,15 @@ test.describe('Event Creation Demo', () => {
       }
       await page.waitForTimeout(300);
     } catch {
+      // No channels (no Discord bot on this stack): close the open picker so it doesn't block the tabs.
+      await page.keyboard.press('Escape');
       console.log('Step 9c: Channel picker not interactive, continuing');
     }
 
     // Continue scrolling to show announcement section and remaining options
-    console.log('Step 9d: Scroll to show announcement + remaining Discord config');
+    console.log(
+      'Step 9d: Scroll to show announcement + remaining Discord config',
+    );
     await smoothScrollDialog(page, 400, 800);
     await page.waitForTimeout(500);
     await smoothScrollDialog(page, 400, 800);
@@ -395,7 +437,9 @@ test.describe('Event Creation Demo', () => {
     // Step 11 — Click Recurring checkbox → show fields
     // =========================================================================
     console.log('Step 11: Enable recurring');
-    const recurringCheckbox = page.locator('[data-testid="event-recurring-checkbox"]');
+    const recurringCheckbox = page.locator(
+      '[data-testid="event-recurring-checkbox"]',
+    );
     await recurringCheckbox.waitFor({ state: 'visible', timeout: 5000 });
     await demoClick(page, recurringCheckbox, 300);
     await page.waitForTimeout(500);
@@ -404,7 +448,9 @@ test.describe('Event Creation Demo', () => {
     // Step 12 — Select Frequency → "Weekly"
     // =========================================================================
     console.log('Step 12: Select frequency Weekly');
-    const frequencySelect = page.locator('[data-testid="event-frequency-select"]');
+    const frequencySelect = page.locator(
+      '[data-testid="event-frequency-select"]',
+    );
     await frequencySelect.waitFor({ state: 'visible', timeout: 5000 });
     await demoClick(page, frequencySelect, 300);
     await page.waitForTimeout(300);
@@ -481,10 +527,15 @@ test.describe('Event Creation Demo', () => {
     await page.close();
     await context.close();
 
-    const videoFiles = fs.readdirSync(videoDir).filter((f) => f.endsWith('.webm'));
+    const videoFiles = fs
+      .readdirSync(videoDir)
+      .filter((f) => f.endsWith('.webm'));
     if (videoFiles.length > 0) {
       const sorted = videoFiles
-        .map((f) => ({ name: f, time: fs.statSync(path.join(videoDir, f)).mtimeMs }))
+        .map((f) => ({
+          name: f,
+          time: fs.statSync(path.join(videoDir, f)).mtimeMs,
+        }))
         .sort((a, b) => b.time - a.time);
       const src = path.join(videoDir, sorted[0].name);
       // Copy to docs/assets/videos/ which is OUTSIDE Playwright's outputDir

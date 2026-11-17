@@ -61,9 +61,7 @@ export function LobbyConfigSection<T extends FieldValues & LobbyFields>({
 
   return (
     <div className="space-y-4">
-      <h4 className="text-sm font-medium text-muted-foreground">
-        Lobby & Tournament Config
-      </h4>
+      <h3 className="text-sm font-semibold">Game lobby</h3>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <FormField
