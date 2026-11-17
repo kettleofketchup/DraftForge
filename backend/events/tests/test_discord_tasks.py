@@ -1,6 +1,7 @@
 from contextlib import ExitStack
 from unittest.mock import MagicMock, patch
 
+from celery.exceptions import Retry
 from django.test import override_settings
 from structlog.testing import capture_logs
 
@@ -376,10 +377,15 @@ class SignupReadUnavailableTest(_DiscordTaskTestCase):
         send_event_announcement(self.event.pk)
         mock_req.reset_mock()
 
-        with self._unavailable(), capture_logs() as logs:
+        with (
+            self._unavailable(),
+            capture_logs() as logs,
+            self.assertRaises(Retry),
+        ):
             send_signup_update(self.event.pk)
 
         self._assert_skipped(logs, mock_req)
+        self.assertIn("celery_task_retry", [entry["event"] for entry in logs])
 
     @patch("discordbot.utils._rate_limited_request")
     def test_attendance_reminder_not_sent(self, mock_req: MagicMock) -> None:

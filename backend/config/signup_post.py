@@ -8,6 +8,8 @@ Environment variables:
 
     SIGNUP_POST_DEBOUNCE_SECONDS  delay before a queued post edit runs, default 2
     SIGNUP_POST_LOCK_SECONDS      per-event edit lock lifetime, default 90
+    SIGNUP_POST_READ_RETRIES      retries when the signup list cannot be read,
+                                  default 3
     SIGNUP_POST_DISABLED          skip the pending flag and lock (every change
                                   edits the post directly); DISABLE_CACHE also
                                   disables it
@@ -23,6 +25,7 @@ from django.core.exceptions import ImproperlyConfigured
 
 DEFAULT_DEBOUNCE_SECONDS = 2
 DEFAULT_LOCK_SECONDS = 90
+DEFAULT_READ_RETRIES = 3
 PENDING_TTL_MARGIN_SECONDS = 10
 _TRUE = ("1", "true", "yes", "on")
 
@@ -34,7 +37,7 @@ def _bool(env: Mapping[str, str], key: str, default: bool) -> bool:
     return raw.strip().lower() in _TRUE
 
 
-def _seconds(env: Mapping[str, str], key: str, default: int, *, minimum: int) -> int:
+def _whole(env: Mapping[str, str], key: str, default: int, *, minimum: int) -> int:
     raw = env.get(key, "").strip()
     if not raw:
         return default
@@ -54,6 +57,7 @@ class SignupPostConfig:
     debounce_seconds: int = DEFAULT_DEBOUNCE_SECONDS
     lock_seconds: int = DEFAULT_LOCK_SECONDS
     disabled: bool = False
+    read_retries: int = DEFAULT_READ_RETRIES
 
     @property
     def pending_ttl_seconds(self) -> int:
@@ -69,12 +73,15 @@ class SignupPostConfig:
     ) -> SignupPostConfig:
         env = os.environ if environ is None else environ
         return cls(
-            debounce_seconds=_seconds(
+            debounce_seconds=_whole(
                 env, "SIGNUP_POST_DEBOUNCE_SECONDS", DEFAULT_DEBOUNCE_SECONDS, minimum=0
             ),
-            lock_seconds=_seconds(
+            lock_seconds=_whole(
                 env, "SIGNUP_POST_LOCK_SECONDS", DEFAULT_LOCK_SECONDS, minimum=1
             ),
             disabled=_bool(env, "SIGNUP_POST_DISABLED", disabled_default)
             or _bool(env, "DISABLE_CACHE", False),
+            read_retries=_whole(
+                env, "SIGNUP_POST_READ_RETRIES", DEFAULT_READ_RETRIES, minimum=0
+            ),
         )

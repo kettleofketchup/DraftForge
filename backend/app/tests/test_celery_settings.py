@@ -79,6 +79,7 @@ class SharedSettingsParityTest(SimpleTestCase):
         "REDIS_KEY_SCOPE": "df-s3:",
         "SIGNUP_POST_DEBOUNCE_SECONDS": "4",
         "SIGNUP_POST_LOCK_SECONDS": "60",
+        "SIGNUP_POST_READ_RETRIES": "5",
         "DISABLE_CACHE": "false",
     }
 
@@ -117,7 +118,8 @@ class SharedSettingsParityTest(SimpleTestCase):
         self.assertEqual(
             web,
             [
-                "SignupPostConfig(debounce_seconds=4, lock_seconds=60, disabled=False)",
+                "SignupPostConfig(debounce_seconds=4, lock_seconds=60, disabled=False,"
+                " read_retries=5)",
                 "'df-s3:'",
                 "'redis.internal'",
             ],

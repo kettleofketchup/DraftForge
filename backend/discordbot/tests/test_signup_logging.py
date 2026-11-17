@@ -18,6 +18,7 @@ import asyncio
 from contextlib import ExitStack
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from django.conf import settings
 from django.test import TransactionTestCase
 from django.utils import timezone
 from structlog.contextvars import clear_contextvars
@@ -176,7 +177,7 @@ class FullSignupPipelineTests(TransactionTestCase):
         with (
             _patch_signup_button_inproc(),
             capture_logs() as logs,
-            patch("events.tasks.send_signup_update.delay") as mock_delay,
+            patch("events.tasks.send_signup_update.apply_async") as mock_apply_async,
             patch("discordbot.components.base.respond_to_signup_user", new=AsyncMock()),
         ):
             asyncio.run(button.callback(interaction))
@@ -237,7 +238,11 @@ class FullSignupPipelineTests(TransactionTestCase):
         self.assertEqual(finished["tags_csv"], "events,signup")
 
         # Celery dispatch fires EXACTLY ONCE per signup (Task 8 Step 7 dedupe fix)
-        mock_delay.assert_called_once_with(self.event.pk, interaction_id="12345")
+        mock_apply_async.assert_called_once_with(
+            (self.event.pk,),
+            {"interaction_id": "12345"},
+            countdown=settings.SIGNUP_POST.debounce_seconds,
+        )
 
 
 class CeleryHopTests(TransactionTestCase):
@@ -325,7 +330,7 @@ class DispatchSkippedBranchTests(TransactionTestCase):
 
         with (
             capture_logs() as logs,
-            patch("events.tasks.send_signup_update.delay") as mock_delay,
+            patch("events.tasks.send_signup_update.apply_async") as mock_apply_async,
         ):
             notify_signup_changed(self.event)
 
@@ -334,7 +339,7 @@ class DispatchSkippedBranchTests(TransactionTestCase):
         self.assertEqual(len(skipped), 1)
         self.assertEqual(skipped[0]["reason"], "discord_announcement_disabled")
         self.assertEqual(len(queued), 0)
-        mock_delay.assert_not_called()
+        mock_apply_async.assert_not_called()
 
 
 class SignupsClosedFailurePathTests(TransactionTestCase):
@@ -451,7 +456,7 @@ class RollbackPathTests(TransactionTestCase):
 
         with (
             capture_logs() as logs,
-            patch("events.tasks.send_signup_update.delay") as mock_delay,
+            patch("events.tasks.send_signup_update.apply_async") as mock_apply_async,
         ):
             try:
                 with transaction.atomic():
@@ -467,7 +472,7 @@ class RollbackPathTests(TransactionTestCase):
         self.assertNotIn(
             "signup_created", events
         )  # New: deferred to on_commit, suppressed on rollback
-        mock_delay.assert_not_called()
+        mock_apply_async.assert_not_called()
         self.assertEqual(
             EventSignup.objects.filter(event=self.event, user=self.user).count(), 0
         )

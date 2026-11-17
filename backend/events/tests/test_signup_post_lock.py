@@ -189,6 +189,7 @@ class SignupPostConfigTests(SimpleTestCase):
         self.assertEqual(config.debounce_seconds, 2)
         self.assertEqual(config.lock_seconds, 90)
         self.assertFalse(config.disabled)
+        self.assertEqual(config.read_retries, 3)
         self.assertEqual(config.pending_ttl_seconds, 102)
 
     def test_from_env_parses_mapping(self) -> None:
@@ -197,11 +198,14 @@ class SignupPostConfigTests(SimpleTestCase):
                 "SIGNUP_POST_DEBOUNCE_SECONDS": "5",
                 "SIGNUP_POST_LOCK_SECONDS": "30",
                 "SIGNUP_POST_DISABLED": "true",
+                "SIGNUP_POST_READ_RETRIES": "0",
             }
         )
         self.assertEqual(
             config,
-            SignupPostConfig(debounce_seconds=5, lock_seconds=30, disabled=True),
+            SignupPostConfig(
+                debounce_seconds=5, lock_seconds=30, disabled=True, read_retries=0
+            ),
         )
         self.assertEqual(config.pending_ttl_seconds, 45)
 
@@ -231,6 +235,7 @@ class SignupPostConfigTests(SimpleTestCase):
             {"SIGNUP_POST_LOCK_SECONDS": "abc"},
             {"SIGNUP_POST_LOCK_SECONDS": "0"},
             {"SIGNUP_POST_DEBOUNCE_SECONDS": "-1"},
+            {"SIGNUP_POST_READ_RETRIES": "-1"},
         ):
             with self.subTest(env=env), self.assertRaises(ImproperlyConfigured):
                 SignupPostConfig.from_env(environ=env)
