@@ -86,6 +86,7 @@ import { SubscriberList } from '~/components/events/SubscriberList';
 import { canCompleteEvent } from '~/components/events/eventCompletion';
 import type { EventSignupType, EventType } from '~/components/events/schemas';
 import { EventState } from '~/components/events/schemas';
+import { partitionSignups } from '~/components/events/signupPartition';
 import type { GameTypeValue } from '~/components/game/constants';
 import { EventLobbyPassword } from '~/components/lobby/EventLobbyPassword';
 import { useOrganization } from '~/components/organization';
@@ -331,24 +332,11 @@ export default function EventPage() {
     );
   }, [signups, currentUser?.pk]);
 
-  const activeSignups = useMemo(
-    () =>
-      (signups ?? []).filter(
-        (s) =>
-          !['waitlisted', 'tentative', 'cancelled', 'rejected'].includes(
-            s.status,
-          ),
-      ),
-    [signups],
-  );
-  const tentativeSignups = useMemo(
-    () => (signups ?? []).filter((s) => s.status === 'tentative'),
-    [signups],
-  );
-  const waitlistedSignups = useMemo(
-    () => (signups ?? []).filter((s) => s.status === 'waitlisted'),
-    [signups],
-  );
+  const {
+    active: activeSignups,
+    tentative: tentativeSignups,
+    waitlisted: waitlistedSignups,
+  } = useMemo(() => partitionSignups(signups ?? []), [signups]);
   const removedSignups = useMemo(
     () =>
       (signups ?? []).filter(
