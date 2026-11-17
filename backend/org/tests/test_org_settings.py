@@ -584,6 +584,128 @@ class OrgSettingsApiTest(TestCase):
         self.assertEqual(response.status_code, 200, response.data)
 
 
+ADMIN_CHANGELIST_URL = "/admin/org/orgsettings/"
+ADMIN_ADD_URL = "/admin/org/orgsettings/add/"
+
+
+def admin_change_url(pk: int) -> str:
+    return f"/admin/org/orgsettings/{pk}/change/"
+
+
+class OrgSettingsAdminTest(TestCase):
+    def setUp(self) -> None:
+        self.superuser = CustomUser.objects.create_superuser(
+            username="settings_admin", password="x", email="sa@example.com"
+        )
+        self.client.force_login(self.superuser)
+        self.org = Organization.objects.create(name="Admin Settings Org")
+        self.other_org = Organization.objects.create(name="Other Settings Org")
+
+    def _post_change(self, row: OrgSettings, data: dict[str, Any]) -> Any:
+        return self.client.post(admin_change_url(row.pk), {**data, "_save": "Save"})
+
+    def test_changelist_and_change_view_load(self) -> None:
+        row = get_org_settings(self.org)
+        self.assertEqual(self.client.get(ADMIN_CHANGELIST_URL).status_code, 200)
+        self.assertEqual(self.client.get(admin_change_url(row.pk)).status_code, 200)
+
+    def test_admin_change_routes_through_service(self) -> None:
+        row = get_org_settings(self.org)
+        with (
+            mock.patch("app.cache_utils._cacheops_invalidate_obj") as invalidate,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            response = self._post_change(
+                row,
+                {
+                    "staff_override_policy": "confirm",
+                    "staff_override_warning_codes": '["over_capacity"]',
+                },
+            )
+        self.assertEqual(response.status_code, 302)
+        after = OrgSettings.objects.nocache().get(pk=row.pk)
+        self.assertEqual(after.staff_override_policy, "confirm")
+        self.assertEqual(after.staff_override_warning_codes, ["over_capacity"])
+        log = OrgLog.objects.get(organization=self.org, action="update")
+        self.assertEqual(log.actor, self.superuser)
+        self.assertEqual(log.details["area"], "settings")
+        self.assertEqual(
+            log.details["changed_fields"],
+            ["staff_override_policy", "staff_override_warning_codes"],
+        )
+        invalidate.assert_called_once_with(after)
+
+    def test_admin_add_creates_row(self) -> None:
+        with (
+            mock.patch("app.cache_utils._cacheops_invalidate_obj") as invalidate,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            response = self.client.post(
+                ADMIN_ADD_URL,
+                {
+                    "organization": self.org.pk,
+                    "staff_override_policy": "block",
+                    "staff_override_warning_codes": (
+                        '["over_capacity", "gate_outside", "gate_outside"]'
+                    ),
+                    "_save": "Save",
+                },
+            )
+        self.assertEqual(response.status_code, 302)
+        row = OrgSettings.objects.nocache().get(organization=self.org)
+        self.assertEqual(row.staff_override_policy, "block")
+        self.assertEqual(
+            row.staff_override_warning_codes, ["gate_outside", "over_capacity"]
+        )
+        invalidate.assert_called_once_with(row)
+
+    def test_admin_rejects_bad_codes_json(self) -> None:
+        row = get_org_settings(self.org)
+        for bad in ("null", "{}", '"gate_outside"', '["nope"]', "[1]"):
+            with self.subTest(codes=bad):
+                response = self._post_change(
+                    row,
+                    {
+                        "staff_override_policy": "confirm",
+                        "staff_override_warning_codes": bad,
+                    },
+                )
+                self.assertEqual(response.status_code, 200)
+                form = response.context["adminform"].form
+                self.assertIn("staff_override_warning_codes", form.errors)
+                after = OrgSettings.objects.nocache().get(pk=row.pk)
+                self.assertEqual(after.staff_override_policy, "silent")
+                self.assertEqual(after.staff_override_warning_codes, list(ALL_CODES))
+        self.assertFalse(OrgLog.objects.filter(organization=self.org).exists())
+
+    def test_organization_readonly_on_change(self) -> None:
+        row = get_org_settings(self.org)
+        response = self._post_change(
+            row,
+            {
+                "organization": self.other_org.pk,
+                "staff_override_policy": "confirm",
+                "staff_override_warning_codes": "[]",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        after = OrgSettings.objects.nocache().get(pk=row.pk)
+        self.assertEqual(after.organization_id, self.org.pk)
+        self.assertEqual(after.staff_override_warning_codes, [])
+        self.assertFalse(
+            OrgSettings.objects.nocache().filter(organization=self.other_org).exists()
+        )
+
+    def test_delete_disabled(self) -> None:
+        row = get_org_settings(self.org)
+        response = self.client.get(f"/admin/org/orgsettings/{row.pk}/delete/")
+        self.assertEqual(response.status_code, 403)
+        changelist = self.client.get(ADMIN_CHANGELIST_URL)
+        self.assertEqual(changelist.status_code, 200)
+        self.assertNotContains(changelist, "delete_selected")
+        self.assertTrue(OrgSettings.objects.nocache().filter(pk=row.pk).exists())
+
+
 class OrgSettingsInertTest(SimpleTestCase):
     FORBIDDEN: tuple[str, ...] = (
         "org.settings_service",
