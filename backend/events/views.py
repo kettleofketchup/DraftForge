@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from cacheops import cached_as
@@ -19,8 +19,9 @@ from django.db.models import (
 from django.db.models.functions import Abs, Coalesce, Now
 from django.http import QueryDict
 from django.utils import timezone
+from django.utils import timezone as tz
 from rest_framework import permissions, serializers, status, viewsets
-from rest_framework.decorators import action
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.exceptions import (
     NotAuthenticated,
     PermissionDenied,
@@ -28,6 +29,9 @@ from rest_framework.exceptions import (
 )
 from rest_framework.request import Request
 from rest_framework.response import Response
+from rest_framework.serializers import BaseSerializer
+from rest_framework.utils.serializer_helpers import ReturnDict, ReturnList
+from rest_framework.views import APIView
 
 from app.cache_utils import invalidate_after_commit, invalidate_obj
 from app.models import CustomUser, Game, HeroDraft, Organization, OrgLog
@@ -91,14 +95,14 @@ logger = get_logger(__name__)
 
 
 class IsOrgStaff(permissions.BasePermission):
-    def has_object_permission(self, request, view, obj):
+    def has_object_permission(self, request: Request, view: APIView, obj: Any) -> bool:
         org = getattr(obj, "organization", None)
         if org is None and hasattr(obj, "event"):
             org = obj.event.organization
         return org and has_org_staff_access(request.user, org)
 
 
-def _annotate_event_qs(qs):
+def _annotate_event_qs(qs: QuerySet[Event]) -> QuerySet[Event]:
     """Add signup_count and confirmed_count annotations."""
     return qs.annotate(
         signup_count=Count(
@@ -242,18 +246,18 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
     serializer_class = EventRepeaterSerializer
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
-    def get_serializer_class(self):
+    def get_serializer_class(self) -> type[BaseSerializer]:
         if self.action == "list":
             return EventRepeaterSlimSerializer
         return EventRepeaterSerializer
 
-    def check_object_permissions(self, request, obj):
+    def check_object_permissions(self, request: Request, obj: EventRepeater) -> None:
         super().check_object_permissions(request, obj)
         if self.action in ("update", "partial_update", "destroy"):
             if not has_org_staff_access(request.user, obj.organization):
                 self.permission_denied(request)
 
-    def perform_destroy(self, instance):
+    def perform_destroy(self, instance: EventRepeater) -> None:
         """Tear down the series' still-active occurrences (and their live Discord
         scheduled events) before deleting the series, so sync_discord_events can't
         resurrect them as ghosts. Terminal (completed/cancelled) occurrences are
@@ -268,7 +272,7 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
             teardown_event(event)
         instance.delete()
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet[EventRepeater]:
         from django.db.models import Min
 
         qs = EventRepeater.objects.select_related(
@@ -303,18 +307,18 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
             qs = qs.filter(is_active=False)
         return qs
 
-    def list(self, request, *args, **kwargs):
+    def list(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         cache_key = f"repeater_list:{request.get_full_path()}"
 
         @cached_as(EventRepeater, Event, extra=cache_key, timeout=60 * 60)
-        def get_data():
+        def get_data() -> ReturnList:
             queryset = self.filter_queryset(self.get_queryset())
             serializer = self.get_serializer(queryset, many=True)
             return serializer.data
 
         return Response(get_data())
 
-    def retrieve(self, request, *args, **kwargs):
+    def retrieve(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         pk = kwargs.get("pk")
         cache_key = f"repeater_detail:{pk}"
 
@@ -324,13 +328,13 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
             extra=cache_key,
             timeout=60 * 60,
         )
-        def get_data():
+        def get_data() -> ReturnDict:
             instance = self.get_object()
             return self.get_serializer(instance).data
 
         return Response(get_data())
 
-    def perform_create(self, serializer):
+    def perform_create(self, serializer: EventRepeaterSerializer) -> None:
         from app.cache_utils import invalidate_after_commit
 
         org = serializer.validated_data.get("organization")
@@ -339,7 +343,7 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
         repeater = serializer.save(created_by=self.request.user)
         invalidate_after_commit(repeater)
 
-    def perform_update(self, serializer):
+    def perform_update(self, serializer: EventRepeaterSerializer) -> None:
         from app.cache_utils import invalidate_after_commit
 
         # Snapshot schedule fields before save so we can detect a change
@@ -369,7 +373,7 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
     @action(
         detail=True, methods=["post"], permission_classes=[permissions.IsAuthenticated]
     )
-    def subscribe(self, request, pk=None):
+    def subscribe(self, request: Request, pk: str | None = None) -> Response:
         """Subscribe to event notifications for this repeater.
         Any authenticated user can subscribe (not limited to org staff).
         """
@@ -383,7 +387,7 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
         return Response({"detail": "Already subscribed"}, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=["get"])
-    def subscribers(self, request, pk=None):
+    def subscribers(self, request: Request, pk: str | None = None) -> Response:
         """List all subscribers for this repeater."""
         repeater = self.get_object()
         # RepeaterSubscriptionSerializer reads user.nickname + user.avatar,
@@ -397,7 +401,7 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
     @action(
         detail=True, methods=["post"], permission_classes=[permissions.IsAuthenticated]
     )
-    def unsubscribe(self, request, pk=None):
+    def unsubscribe(self, request: Request, pk: str | None = None) -> Response:
         """Unsubscribe from event notifications for this repeater."""
         repeater = self.get_object()
         deleted, _ = RepeaterSubscription.objects.filter(
@@ -413,7 +417,7 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
         url_path="create-event",
         permission_classes=[permissions.IsAuthenticated],
     )
-    def create_event(self, request, pk=None):
+    def create_event(self, request: Request, pk: str | None = None) -> Response:
         """Create a single off-schedule ("one-off") event from this series."""
         from app.cache_utils import invalidate_after_commit
         from events.serializers import OneOffEventCreateSerializer
@@ -467,7 +471,7 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
         url_path="lobby-password",
         permission_classes=[permissions.IsAuthenticated],
     )
-    def lobby_password(self, request, pk=None):
+    def lobby_password(self, request: Request, pk: str | None = None) -> Response:
         """The series' lobby password mode and fixed password (org staff only).
 
         Never cached. Writes go through the series PATCH (write-only field).
@@ -489,7 +493,7 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
     @action(
         detail=True, methods=["post"], permission_classes=[permissions.IsAuthenticated]
     )
-    def reactivate(self, request, pk=None):
+    def reactivate(self, request: Request, pk: str | None = None) -> Response:
         """Reactivate a paused series and realign its upcoming events."""
         from app.cache_utils import invalidate_after_commit
 
@@ -556,7 +560,7 @@ class EventViewSet(viewsets.ModelViewSet):
     serializer_class = EventSerializer
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
-    def get_serializer_class(self):
+    def get_serializer_class(self) -> type[BaseSerializer]:
         if self.action == "list":
             return EventSlimSerializer
         return EventSerializer
@@ -641,11 +645,11 @@ class EventViewSet(viewsets.ModelViewSet):
 
         return qs
 
-    def list(self, request, *args, **kwargs):
+    def list(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         cache_key = f"event_list:{request.get_full_path()}"
 
         @cached_as(Event, EventSignup, extra=cache_key, timeout=60 * 60)
-        def get_data():
+        def get_data() -> ReturnList:
             queryset = self.filter_queryset(self.get_queryset())
             serializer = self.get_serializer(queryset, many=True)
             return serializer.data
@@ -655,7 +659,7 @@ class EventViewSet(viewsets.ModelViewSet):
         _attach_user_can_manage(data, request.user)
         return Response(data)
 
-    def retrieve(self, request, *args, **kwargs):
+    def retrieve(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         pk = kwargs.get("pk")
         cache_key = f"event_detail:{pk}"
 
@@ -668,7 +672,7 @@ class EventViewSet(viewsets.ModelViewSet):
             extra=cache_key,
             timeout=60 * 60,
         )
-        def get_data():
+        def get_data() -> ReturnDict:
             instance = self.get_object()
             return self.get_serializer(instance).data
 
@@ -676,7 +680,7 @@ class EventViewSet(viewsets.ModelViewSet):
         _attach_user_can_manage(data, request.user)
         return Response(data)
 
-    def perform_create(self, serializer):
+    def perform_create(self, serializer: EventSerializer) -> None:
         org = serializer.validated_data.get("organization")
         if not has_org_staff_access(self.request.user, org):
             raise PermissionDenied(
@@ -765,7 +769,7 @@ class EventViewSet(viewsets.ModelViewSet):
             response.data["_warning"] = self._cascade_warning
         return response
 
-    def check_object_permissions(self, request, obj):
+    def check_object_permissions(self, request: Request, obj: Event) -> None:
         super().check_object_permissions(request, obj)
         # Only enforce staff check for standard CRUD mutations (update/delete).
         # Custom actions (rsvp, open_signups, etc.) handle permissions internally.
@@ -779,7 +783,7 @@ class EventViewSet(viewsets.ModelViewSet):
         url_path="lobby-password",
         permission_classes=[permissions.AllowAny],
     )
-    def lobby_password(self, request, pk=None):
+    def lobby_password(self, request: Request, pk: str | None = None) -> Response:
         """The event's lobby password, for org staff and registered players.
 
         Staff (who may edit the event) also get the mode and where the
@@ -807,7 +811,9 @@ class EventViewSet(viewsets.ModelViewSet):
         url_path="lobby-password/regenerate",
         permission_classes=[permissions.IsAuthenticated],
     )
-    def regenerate_lobby_password(self, request, pk=None):
+    def regenerate_lobby_password(
+        self, request: Request, pk: str | None = None
+    ) -> Response:
         """Generate a new random lobby password (org staff, random mode only).
 
         Lobbies that already exist keep their password.
@@ -831,7 +837,7 @@ class EventViewSet(viewsets.ModelViewSet):
         methods=["post"],
         permission_classes=[permissions.IsAuthenticated],
     )
-    def signup(self, request, pk=None):
+    def signup(self, request: Request, pk: str | None = None) -> Response:
         """Single canonical signup endpoint accepting an intent + optional profile patch.
 
         Body: {"intent": "rsvp" | "tentative", "profile": {...}}
@@ -891,7 +897,7 @@ class EventViewSet(viewsets.ModelViewSet):
         )
 
     @action(detail=True, methods=["post"], url_path="admin-signup")
-    def admin_signup(self, request, pk=None):
+    def admin_signup(self, request: Request, pk: str | None = None) -> Response:
         """Admin adds a user to the event signup list.
         POST /api/events/<pk>/admin-signup/ {"user_id": <pk>}
         """
@@ -921,7 +927,7 @@ class EventViewSet(viewsets.ModelViewSet):
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=True, methods=["post"])
-    def open_signups(self, request, pk=None):
+    def open_signups(self, request: Request, pk: str | None = None) -> Response:
         event = self.get_object()
         if not has_event_staff_access(request.user, event):
             return Response(status=status.HTTP_403_FORBIDDEN)
@@ -935,7 +941,7 @@ class EventViewSet(viewsets.ModelViewSet):
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=True, methods=["post"])
-    def start_roll_call(self, request, pk=None):
+    def start_roll_call(self, request: Request, pk: str | None = None) -> Response:
         event = self.get_object()
         if not has_event_staff_access(request.user, event):
             return Response(status=status.HTTP_403_FORBIDDEN)
@@ -949,7 +955,7 @@ class EventViewSet(viewsets.ModelViewSet):
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=True, methods=["post"])
-    def reopen_signups(self, request, pk=None):
+    def reopen_signups(self, request: Request, pk: str | None = None) -> Response:
         """Corrective transition from ROLL_CALL back to SIGNUPS_OPEN.
 
         Quiet: no Discord re-announcement, no signup-changed notify. Existing
@@ -997,12 +1003,12 @@ class EventViewSet(viewsets.ModelViewSet):
         except ValueError as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-    def perform_destroy(self, instance):
+    def perform_destroy(self, instance: Event) -> None:
         """Clean up tournament and Discord messages before deleting event."""
         teardown_event(instance)
 
     @action(detail=True, methods=["post"])
-    def cancel(self, request, pk=None):
+    def cancel(self, request: Request, pk: str | None = None) -> Response:
         event = self.get_object()
         if not has_event_staff_access(request.user, event):
             return Response(status=status.HTTP_403_FORBIDDEN)
@@ -1116,7 +1122,7 @@ class EventViewSet(viewsets.ModelViewSet):
         return Response(_event_payload(event.pk, request.user))
 
     @action(detail=True, methods=["get"])
-    def discord(self, request, pk=None):
+    def discord(self, request: Request, pk: str | None = None) -> Response:
         """Get Discord state for this event.
         GET /api/events/<pk>/discord/
         """
@@ -1142,7 +1148,7 @@ class EventViewSet(viewsets.ModelViewSet):
             extra=f"discord_state:{pk}",
             timeout=60,
         )
-        def get_data():
+        def get_data() -> ReturnDict:
             return DiscordEventDetailSerializer(discord_event).data
 
         return Response(get_data())
@@ -1174,7 +1180,7 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = EventSignupSerializer
     permission_classes = [permissions.AllowAny]
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet[EventSignup]:
         # EventSignupSerializer ships user.nickname (as `username`) +
         # user.avatar — both resolve through the CustomUser @property to
         # base_profile (T1 epic). Without user__base_profile this is N+1
@@ -1188,7 +1194,7 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
         return qs
 
     @action(detail=True, methods=["post"])
-    def approve(self, request, pk=None):
+    def approve(self, request: Request, pk: str | None = None) -> Response:
         signup = self.get_object()
         if not has_event_staff_access(request.user, signup.event):
             return Response(status=status.HTTP_403_FORBIDDEN)
@@ -1233,7 +1239,7 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
         )
 
     @action(detail=True, methods=["post"])
-    def reject(self, request, pk=None):
+    def reject(self, request: Request, pk: str | None = None) -> Response:
         signup = self.get_object()
         if not has_event_staff_access(request.user, signup.event):
             return Response(status=status.HTTP_403_FORBIDDEN)
@@ -1247,7 +1253,7 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=True, methods=["post"])
-    def confirm(self, request, pk=None):
+    def confirm(self, request: Request, pk: str | None = None) -> Response:
         signup = self.get_object()
         if not has_event_staff_access(request.user, signup.event):
             return Response(status=status.HTTP_403_FORBIDDEN)
@@ -1261,7 +1267,7 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=True, methods=["post"])
-    def cancel_signup(self, request, pk=None):
+    def cancel_signup(self, request: Request, pk: str | None = None) -> Response:
         signup = self.get_object()
         if signup.user != request.user and not has_event_staff_access(
             request.user, signup.event
@@ -1277,7 +1283,7 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=True, methods=["post"])
-    def unconfirm(self, request, pk=None):
+    def unconfirm(self, request: Request, pk: str | None = None) -> Response:
         """Revert a confirmed signup back to approved."""
         signup = self.get_object()
         if not has_event_staff_access(request.user, signup.event):
@@ -1292,7 +1298,7 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=True, methods=["post"])
-    def demote(self, request, pk=None):
+    def demote(self, request: Request, pk: str | None = None) -> Response:
         """Move an active signup to the end of the waitlist."""
         signup = self.get_object()
         if not has_event_staff_access(request.user, signup.event):
@@ -1307,7 +1313,7 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=True, methods=["post"])
-    def reinstate(self, request, pk=None):
+    def reinstate(self, request: Request, pk: str | None = None) -> Response:
         """Reinstate a cancelled signup (user can reinstate their own)."""
         signup = self.get_object()
         if signup.user != request.user and not has_event_staff_access(
@@ -1328,13 +1334,13 @@ class EventTeamViewSet(viewsets.ModelViewSet):
     serializer_class = EventTeamSerializer
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
-    def check_object_permissions(self, request, obj):
+    def check_object_permissions(self, request: Request, obj: EventTeam) -> None:
         super().check_object_permissions(request, obj)
         if self.action in ("update", "partial_update", "destroy"):
             if not has_org_staff_access(request.user, obj.event.organization):
                 self.permission_denied(request)
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet[EventTeam]:
         qs = EventTeam.objects.select_related("event", "captain").annotate(
             member_count=Count("members"),
         )
@@ -1343,7 +1349,7 @@ class EventTeamViewSet(viewsets.ModelViewSet):
             qs = qs.filter(event_id=event_id)
         return qs
 
-    def perform_create(self, serializer):
+    def perform_create(self, serializer: EventTeamSerializer) -> None:
         event = serializer.validated_data.get("event")
         if not has_org_staff_access(self.request.user, event.organization):
             raise PermissionDenied(
@@ -1362,10 +1368,10 @@ class OrgEventDefaultsViewSet(viewsets.GenericViewSet):
     serializer_class = OrgEventDefaultsSerializer
     permission_classes = [permissions.IsAuthenticated]
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet[OrgEventDefaults]:
         return OrgEventDefaults.objects.select_related("organization")
 
-    def list(self, request):
+    def list(self, request: Request) -> Response:
         org_id = request.query_params.get("organization")
         if not org_id:
             return Response(
@@ -1382,7 +1388,7 @@ class OrgEventDefaultsViewSet(viewsets.GenericViewSet):
         defaults, _ = OrgEventDefaults.objects.get_or_create(organization=org)
         return Response(OrgEventDefaultsSerializer(defaults).data)
 
-    def partial_update(self, request, pk=None):
+    def partial_update(self, request: Request, pk: str | None = None) -> Response:
         defaults = self.get_object()
         if not has_org_staff_access(request.user, defaults.organization):
             raise PermissionDenied("Staff access required.")
@@ -1397,15 +1403,10 @@ class OrgEventDefaultsViewSet(viewsets.GenericViewSet):
 # Task Schedule — per-event projected timeline
 # ---------------------------------------------------------------------------
 
-from datetime import timedelta
-
-from django.utils import timezone as tz
-from rest_framework.decorators import api_view, permission_classes
-
 
 @api_view(["GET"])
 @permission_classes([permissions.IsAuthenticated])
-def get_event_task_schedule(request, event_id):
+def get_event_task_schedule(request: Request, event_id: int) -> Response:
     """Return projected task timeline for an event.
 
     Calculates when each notification/task will fire based on the event's
@@ -1478,15 +1479,15 @@ def get_event_task_schedule(request, event_id):
             }
 
     def _task(
-        task,
-        label,
-        enabled,
-        fires_at=None,
-        log_source=None,
-        misconfigured=False,
-        check_interval=None,
-        description="",
-    ):
+        task: str,
+        label: str,
+        enabled: bool,
+        fires_at: datetime | None = None,
+        log_source: str | None = None,
+        misconfigured: bool = False,
+        check_interval: str | None = None,
+        description: str = "",
+    ) -> dict[str, Any]:
         """Build a task entry with status and timing details."""
         entry = {
             "task": task,
