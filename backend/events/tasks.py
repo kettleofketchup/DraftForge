@@ -9,6 +9,7 @@ from celery import shared_task
 from structlog.contextvars import bind_contextvars, clear_contextvars
 
 from app.internal_client import (
+    InternalAPIUnavailable,
     auto_close_event,
     check_message_log_exists,
     claim_discord_message_log,
@@ -95,6 +96,22 @@ def _celery_bookend_fields(
         fields["interaction_id"] = interaction_id
     fields.update({k: v for k, v in extra.items() if v is not None})
     return fields
+
+
+def _skip_signup_list_unavailable(
+    task_name: str, event_id: int, exc: InternalAPIUnavailable
+) -> str:
+    log.warning(
+        "signup_list_unavailable",
+        system="discord",
+        subsystem="celery",
+        tags=["events", "signup"],
+        tags_csv="events,signup",
+        task=task_name,
+        event_id=event_id,
+        error=str(exc),
+    )
+    return f"Skipped: signup list unavailable for event {event_id}"
 
 
 def _run_with_bookends(
@@ -502,7 +519,10 @@ def _send_event_announcement_impl(event_id: int) -> str:
     if not event.discord_announcement or not event.discord_announcement_channel_id:
         return "Skipped: announcement disabled"
 
-    result = build_announcement_v2(event)
+    try:
+        result = build_announcement_v2(event)
+    except InternalAPIUnavailable as exc:
+        return _skip_signup_list_unavailable("send_event_announcement", event_id, exc)
     embeds = result["embeds"]
     components = result["components"]
     signup_content = result.get("content")
@@ -626,7 +646,10 @@ def send_attendance_reminder(event_id: int) -> str:
     if not event.discord_confirm_attendance:
         return f"Attendance reminder disabled for event {event_id}"
 
-    result = build_attendance_reminder_embed(event)
+    try:
+        result = build_attendance_reminder_embed(event)
+    except InternalAPIUnavailable as exc:
+        return _skip_signup_list_unavailable("send_attendance_reminder", event_id, exc)
     response = sync_send_embed_with_components(
         channel_id=event.discord_announcement_channel_id,
         embed=result["embed"],
@@ -675,7 +698,10 @@ def send_profile_reminder(event_id: int) -> str:
     if not event.discord_profile_reminder:
         return f"Profile reminder disabled for event {event_id}"
 
-    result = build_profile_reminder_embed(event)
+    try:
+        result = build_profile_reminder_embed(event)
+    except InternalAPIUnavailable as exc:
+        return _skip_signup_list_unavailable("send_profile_reminder", event_id, exc)
     response = sync_send_embed_with_components(
         channel_id=event.discord_announcement_channel_id,
         embed=result["embed"],
@@ -805,7 +831,10 @@ def _send_signup_update_impl(event_id: int, interaction_id: str | None) -> str:
         if response_data.get("id") and response_data.get("message"):
             edit_channel_id = response_data.get("id")
 
-    result = build_announcement_v2(event)
+    try:
+        result = build_announcement_v2(event)
+    except InternalAPIUnavailable as exc:
+        return _skip_signup_list_unavailable("send_signup_update", event_id, exc)
 
     # Edit the message. sync_edit_message raises MessageDeletedError on the
     # specific "the post is gone" case (Discord 404 + code 10008) and returns
@@ -1232,7 +1261,10 @@ def fire_event_reminder(
     if not event.discord_announcement_channel_id:
         return f"No announcement channel configured for event {event_id}"
 
-    result = builder(event)
+    try:
+        result = builder(event)
+    except InternalAPIUnavailable as exc:
+        return _skip_signup_list_unavailable("fire_event_reminder", event_id, exc)
     response = sync_send_embed_with_components(
         channel_id=event.discord_announcement_channel_id,
         embed=result["embed"],
@@ -1321,8 +1353,15 @@ def send_subscriber_notifications(event_id: int) -> str:
         return "No Discord event"
     discord_event_pk = discord_state.discord_event_pk
 
-    # Build embed up front (used both as the lease payload AND each subscriber DM)
-    dm_data = build_subscriber_dm_embed(event)
+    # Read signups and build the embed before claiming the lease, so a failed
+    # read neither DMs users who already signed up nor strands a lease.
+    try:
+        all_signups = get_event_signups(event_id)
+        dm_data = build_subscriber_dm_embed(event)
+    except InternalAPIUnavailable as exc:
+        return _skip_signup_list_unavailable(
+            "send_subscriber_notifications", event_id, exc
+        )
     embed = dm_data["embed"]
     components = dm_data.get("components")
 
@@ -1345,9 +1384,6 @@ def send_subscriber_notifications(event_id: int) -> str:
         )
         return f"Signup reminder for event {event_id}: lease held by another worker"
 
-    # Get user PKs who already signed up — skip them
-
-    all_signups = get_event_signups(event_id)
     signed_up_user_pks = {s.user for s in all_signups if s.status != "cancelled"}
 
     subscribers = get_repeater_subscribers(event.event_repeater_id)

@@ -1,6 +1,7 @@
 import os
 from unittest.mock import MagicMock, patch
 
+import requests
 from django.test import TestCase, override_settings
 
 
@@ -93,6 +94,42 @@ class InternalClientGetTest(TestCase):
         get("/events/1/")
         args, kwargs = mock_get.call_args
         self.assertIn("/events/1/", args[0])
+
+
+class GetEventSignupsUnavailableTest(TestCase):
+    """A failed signup read must raise, never look like an empty list."""
+
+    @patch("app.internal_client.transport.requests.get")
+    def test_error_status_raises(self, mock_get: MagicMock) -> None:
+        from app.internal_client import InternalAPIUnavailable, get_event_signups
+
+        resp = requests.Response()
+        resp.status_code = 500
+        resp._content = b"boom"
+        mock_get.return_value = resp
+
+        with self.assertRaises(InternalAPIUnavailable):
+            get_event_signups(1)
+
+    @patch("app.internal_client.transport.requests.get")
+    def test_network_error_raises(self, mock_get: MagicMock) -> None:
+        from app.internal_client import InternalAPIUnavailable, get_event_signups
+
+        mock_get.side_effect = requests.ConnectionError("refused")
+
+        with self.assertRaises(InternalAPIUnavailable):
+            get_event_signups(1)
+
+    @patch("app.internal_client.transport.requests.get")
+    def test_empty_ok_response_is_an_empty_list(self, mock_get: MagicMock) -> None:
+        from app.internal_client import get_event_signups
+
+        resp = requests.Response()
+        resp.status_code = 200
+        resp._content = b"[]"
+        mock_get.return_value = resp
+
+        self.assertEqual(get_event_signups(1), [])
 
 
 class InternalClientConvenienceTest(TestCase):
