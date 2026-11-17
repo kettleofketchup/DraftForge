@@ -55,6 +55,10 @@ from tests.data.tournament_discovery import (
 from tests.data.users import AUTH_MATRIX_ORG_PROMOTER_USER, EVENT_LEAGUE_STAFF_USER
 from tests.helpers.tournament_config import TEST_TOURNAMENTS, populate_test_tournaments
 from tests.populate.auth_matrix import populate_auth_matrix_data
+from tests.populate.constants import (
+    NAME_SYNC_GLOBAL_ONLY_USERNAME,
+    NAME_SYNC_USERNAME,
+)
 from tests.populate.demo import (
     populate_demo_shuffle_draft_tournament,
     populate_demo_snake_draft_tournament,
@@ -63,10 +67,6 @@ from tests.populate.org_delete import populate_org_delete
 from tests.populate.org_features import (
     populate_org_features_data,
     reset_org_features_data,
-)
-from tests.populate.constants import (
-    NAME_SYNC_GLOBAL_ONLY_USERNAME,
-    NAME_SYNC_USERNAME,
 )
 from tests.populate.organizations import (
     populate_discord_name_sync_users,
