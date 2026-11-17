@@ -4,7 +4,7 @@ from typing import Any, Literal
 from uuid import UUID
 
 from django.conf import settings
-from django.db import DatabaseError, IntegrityError, transaction
+from django.db import DatabaseError, IntegrityError, connection, transaction
 from django.db.models import F
 from django.utils import timezone
 from pydantic import BaseModel, ValidationError
@@ -18,11 +18,13 @@ from opsnotices.registry import (
     UnknownNoticeType,
     get_notice_type,
 )
+from opsnotices.signals import notice_emitted, notice_resolved
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
 
 DEDUPE_KEY_MAX: int = 200
+CLOSE_NOTE_MAX: int = 200
 _DUMMY_ENGINE: str = "django.db.backends.dummy"
 
 _Outcome = Literal["created", "repeated", "replayed"]
@@ -64,12 +66,12 @@ class _Prepared:
     event_repeater_id: int | None
 
 
-def _require_database(caller: str) -> None:
+def _require_database(caller: str, client: str = "emit_ops_notice") -> None:
     engine = settings.DATABASES.get("default", {}).get("ENGINE", _DUMMY_ENGINE)
     if engine == _DUMMY_ENGINE:
         raise RuntimeError(
             f"{caller} needs a database; Celery code must call "
-            "app.internal_client.emit_ops_notice"
+            f"app.internal_client.{client}"
         )
 
 
@@ -268,8 +270,53 @@ def _write(
     ), "repeated"
 
 
+def _log_receiver_failures(notice_id: int, responses: list[tuple[Any, object]]) -> None:
+    for receiver, result in responses:
+        if isinstance(result, BaseException):
+            log.error(
+                "ops_notice_handoff_receiver_failed",
+                system="opsnotices",
+                subsystem="emit",
+                notice_id=notice_id,
+                receiver=getattr(receiver, "__qualname__", repr(receiver)),
+                exc_info=result,
+            )
+
+
+class _HandOff:
+    def __init__(self, notice_id: int, created: bool) -> None:
+        self.notice_id: int = notice_id
+        self.created: bool = created
+        self.fired: bool = False
+
+    def __call__(self) -> None:
+        self.fired = True
+        occurrences = (
+            OpsNotice.objects.filter(pk=self.notice_id)
+            .values_list("occurrences", flat=True)
+            .first()
+        )
+        if occurrences is None:
+            return
+        responses = notice_emitted.send_robust(
+            sender=OpsNotice,
+            notice_id=self.notice_id,
+            created=self.created,
+            occurrences=occurrences,
+        )
+        _log_receiver_failures(self.notice_id, responses)
+
+
 def _hand_off(notice: OpsNotice, created: bool) -> None:
-    return None
+    for _sids, func, _robust in connection.run_on_commit:
+        if (
+            isinstance(func, _HandOff)
+            and func.notice_id == notice.pk
+            and not func.fired
+        ):
+            func.created = func.created or created
+            return
+    transaction.on_commit(_HandOff(notice.pk, created))
 
 
 def _log_failure(exc: NoticeEmitError, organization: Organization | None) -> None:
@@ -354,3 +401,77 @@ def emit_notice(
             occurrences=notice.occurrences,
         )
     return notice
+
+
+def _check_close_note(reason: str) -> None:
+    if not reason.strip():
+        raise ValueError("reason is required")
+    if len(reason) > CLOSE_NOTE_MAX:
+        raise ValueError(f"reason exceeds {CLOSE_NOTE_MAX} characters")
+
+
+def _send_resolved(notice_id: int) -> None:
+    responses = notice_resolved.send_robust(sender=OpsNotice, notice_id=notice_id)
+    _log_receiver_failures(notice_id, responses)
+
+
+def _close(notice: OpsNotice, reason: str, closed_by: CustomUser | None) -> OpsNotice:
+    with transaction.atomic():
+        updated = OpsNotice.objects.filter(pk=notice.pk, closed_at__isnull=True).update(
+            state=OpsNotice.State.RESOLVED,
+            closed_at=timezone.now(),
+            close_note=reason,
+            closed_by=closed_by,
+        )
+        notice.refresh_from_db()
+        if not updated:
+            return notice
+        notice_id = notice.pk
+        transaction.on_commit(lambda: _send_resolved(notice_id))
+    log.info(
+        "ops_notice_resolved",
+        system="opsnotices",
+        subsystem="emit",
+        notice_id=notice.pk,
+        notice_key=notice.key,
+        close_note=reason,
+        closed_by_id=getattr(closed_by, "pk", None),
+    )
+    return notice
+
+
+def resolve_notice(
+    key: str,
+    dedupe_key: str,
+    *,
+    organization: Organization,
+    event: Event | EventRef | None = None,
+    reason: str,
+    closed_by: CustomUser | None = None,
+) -> OpsNotice | None:
+    _require_database("resolve_notice", "resolve_ops_notice")
+    if not dedupe_key:
+        raise ValueError("resolve_notice needs a dedupe_key; resolve by id instead")
+    _check_close_note(reason)
+    event_key = event.id if event is not None else 0
+    notice = _find_open_notice(organization.id, key, event_key, dedupe_key)
+    if notice is None:
+        log.debug(
+            "ops_notice_resolve_missing",
+            system="opsnotices",
+            subsystem="emit",
+            notice_key=key,
+            organization_id=organization.id,
+        )
+        return None
+    return _close(notice, reason, closed_by)
+
+
+def resolve_notice_by_id(
+    notice: OpsNotice, *, reason: str, closed_by: CustomUser | None
+) -> OpsNotice:
+    _require_database("resolve_notice_by_id", "resolve_ops_notice")
+    _check_close_note(reason)
+    if notice.closed_at is not None:
+        return notice
+    return _close(notice, reason, closed_by)
