@@ -10,16 +10,19 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Protocol
 
+from django.core.exceptions import ValidationError
+
 from app.models import CustomUser, GameType
 from events.models import Event
 from events.schemas import DotaModalConfig, dota_require_screenshot
 from org.models import OrgUser
-from org.models_profiles import PlayerDotaProfile
+from org.models_profiles import PlayerDeadlockProfile, PlayerDotaProfile
 
 # Steam account IDs are unsigned 32-bit; 0 is never assigned.
 STEAM_ACCOUNT_ID_RANGE = range(1, 2**32)
 # Range of the CustomUser.steam_account_id IntegerField.
 STORED_STEAM_ACCOUNT_ID_MAX = 2**31 - 1
+FRIEND_ID_MAX_LENGTH = 20
 
 
 class Unmet(StrEnum):
@@ -60,6 +63,43 @@ def steam_friend_id_from_profiles(org_user: OrgUser | None) -> str:
         if value.isascii() and value.isdigit():
             return value
     return ""
+
+
+def validate_friend_id(fid: str, org_user: OrgUser) -> str:
+    """Return ``fid`` stripped, or raise if it is malformed or owned by
+    another account (any game profile, or another user's Steam account).
+
+    ``""`` is returned as-is so callers can clear the field.
+    """
+    fid = fid.strip()
+    if not fid:
+        return fid
+    if not (fid.isascii() and fid.isdigit()) or len(fid) > FRIEND_ID_MAX_LENGTH:
+        raise ValidationError(
+            f"Friend ID must be digits only (max {FRIEND_ID_MAX_LENGTH}).",
+            code="invalid_friend_id",
+        )
+    # Global scope: Friend ID is unique site-wide, not per-org.
+    collision = any(
+        model.objects.filter(unverified_friend_id=fid)
+        .exclude(org_user=org_user)
+        .exists()
+        for model in (PlayerDotaProfile, PlayerDeadlockProfile)
+    )
+    account_id = int(fid)
+    if not collision and account_id <= STORED_STEAM_ACCOUNT_ID_MAX:
+        collision = (
+            CustomUser.objects.filter(steam_account_id=account_id)
+            .exclude(pk=org_user.user_id)
+            .exists()
+        )
+    if collision:
+        raise ValidationError(
+            f"Friend ID {fid} is already registered to another account. "
+            f"Contact an admin or login to https://dota.kettle.sh to claim it.",
+            code="duplicate_friend_id",
+        )
+    return fid
 
 
 def has_steam_id(user: CustomUser, org_user: OrgUser | None) -> bool:

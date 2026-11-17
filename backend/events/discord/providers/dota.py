@@ -23,6 +23,7 @@ from events.discord._shared import (
     _log_signup,
     _steam_friend_id_prefill,
 )
+from events.eligibility import validate_friend_id
 from events.models import Event
 from events.schemas import (
     DotaModalConfig,
@@ -91,7 +92,12 @@ class DotaHandler:
     ) -> dict:
         from events.services import apply_signup_input
 
-        friend_id = values.get("unverified_friend_id", "").strip()
+        try:
+            friend_id = validate_friend_id(
+                values.get("unverified_friend_id", ""), org_user
+            )
+        except DjangoValidationError as exc:
+            return {"action": "error", "message": exc.messages[0]}
 
         # NOTE: positions are collected in the follow-up PositionConfirmButton
         # flow, not in this modal.

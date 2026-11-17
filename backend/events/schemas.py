@@ -244,7 +244,9 @@ class SignupInputPatch(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    unverified_friend_id: Optional[str] = Field(default=None, max_length=20)
+    unverified_friend_id: Optional[str] = Field(
+        default=None, max_length=20, pattern=r"^\d*$"
+    )
     positions: Optional[PositionPriorities | list[int]] = None
     rank_status: Optional[Literal["active", "previous", "never"]] = None
     rank_medal: Optional[str] = Field(default=None, max_length=64)

@@ -1,5 +1,7 @@
 from itertools import product
 
+from django.core.exceptions import ValidationError as DjangoValidationError
+
 from app.models import CustomUser, GameType
 from events.discord.providers.dota import _check_dota_profile_complete
 from events.eligibility import (
@@ -9,6 +11,7 @@ from events.eligibility import (
     has_steam_id,
     steam_friend_id_from_profiles,
     unmet_requirements,
+    validate_friend_id,
 )
 from events.models import Event
 from events.schemas import DotaModalConfig, SignupInputPatch, dota_require_screenshot
@@ -311,3 +314,67 @@ class DiscordProfileCompleteTests(EventTestCase):
         profile.save()
         ou = OrgUser.objects.get(pk=ou.pk)
         self.assertTrue(_check_dota_profile_complete(ou, self.event))
+
+
+class ValidateFriendIdTests(EventTestCase):
+    def _org_user(self, user: CustomUser) -> OrgUser:
+        return OrgUser.objects.get(user=user, organization=self.org)
+
+    def test_leading_zero_and_whitespace_collide_by_value(self) -> None:
+        u = self.make_user()
+        other = self.make_user()
+        other.steam_account_id = 123
+        other.save()
+        with self.assertRaises(DjangoValidationError) as cm:
+            validate_friend_id(" 0123 ", self._org_user(u))
+        self.assertEqual(cm.exception.code, "duplicate_friend_id")
+
+    def test_returns_stripped_value(self) -> None:
+        u = self.make_user()
+        self.assertEqual(validate_friend_id(" 424242 ", self._org_user(u)), "424242")
+
+    def test_own_steam_account_id_is_not_a_collision(self) -> None:
+        u = self.make_user()
+        u.steam_account_id = 31337
+        u.save()
+        self.assertEqual(validate_friend_id("31337", self._org_user(u)), "31337")
+
+    def test_length_boundaries(self) -> None:
+        ou = self._org_user(self.make_user())
+        for fid in ("1234567890", "12345678901", "9" * 20):
+            with self.subTest(fid=fid):
+                self.assertEqual(validate_friend_id(fid, ou), fid)
+        with self.assertRaises(DjangoValidationError) as cm:
+            validate_friend_id("9" * 21, ou)
+        self.assertEqual(cm.exception.code, "invalid_friend_id")
+
+    def test_non_numeric_is_invalid(self) -> None:
+        ou = self._org_user(self.make_user())
+        for fid in ("abc", "12a", "١٢٣"):
+            with self.subTest(fid=fid):
+                with self.assertRaises(DjangoValidationError) as cm:
+                    validate_friend_id(fid, ou)
+                self.assertEqual(cm.exception.code, "invalid_friend_id")
+
+    def test_out_of_range_still_checks_profiles(self) -> None:
+        fid = "9" * 20
+        other = self._org_user(self.make_user())
+        PlayerDotaProfile.objects.create(org_user=other, unverified_friend_id=fid)
+        with self.assertRaises(DjangoValidationError) as cm:
+            validate_friend_id(fid, self._org_user(self.make_user()))
+        self.assertEqual(cm.exception.code, "duplicate_friend_id")
+
+    def test_collides_with_deadlock_profile_of_other_user(self) -> None:
+        other = self._org_user(self.make_user())
+        PlayerDeadlockProfile.objects.create(
+            org_user=other, unverified_friend_id="565656"
+        )
+        with self.assertRaises(DjangoValidationError) as cm:
+            validate_friend_id("565656", self._org_user(self.make_user()))
+        self.assertEqual(cm.exception.code, "duplicate_friend_id")
+
+    def test_own_profiles_are_not_a_collision(self) -> None:
+        ou = self._org_user(self.make_user())
+        PlayerDotaProfile.objects.create(org_user=ou, unverified_friend_id="676767")
+        PlayerDeadlockProfile.objects.create(org_user=ou, unverified_friend_id="676767")
+        self.assertEqual(validate_friend_id("676767", ou), "676767")

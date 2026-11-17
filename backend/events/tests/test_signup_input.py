@@ -1,6 +1,7 @@
 from datetime import timedelta
 from unittest.mock import patch as mock_patch
 
+import pydantic
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from django.test import TestCase
@@ -10,7 +11,9 @@ from app.models import CustomUser, GameType, Organization
 from events.models import Event, EventState
 from events.schemas import SignupInputPatch
 from events.services import apply_signup_input, resolve_or_create_org_user
-from org.models_profiles import PlayerDotaProfile
+from events.tests.base import EventTestCase
+from org.models import OrgUser
+from org.models_profiles import PlayerDeadlockProfile, PlayerDotaProfile
 
 
 class ApplySignupInputTests(TestCase):
@@ -303,3 +306,56 @@ class ApplySignupInputTests(TestCase):
             except RuntimeError:
                 pass
         spy.assert_not_called()
+
+
+class FriendIdInputTests(EventTestCase):
+    def _org_user(self, user: CustomUser) -> OrgUser:
+        return OrgUser.objects.get(user=user, organization=self.org)
+
+    def test_collides_with_other_users_steam_account_id(self) -> None:
+        ev = self.make_event()
+        u = self.make_user()
+        other = self.make_user()
+        other.steam_account_id = 4242
+        other.save()
+        with self.assertRaises(DjangoValidationError) as cm:
+            apply_signup_input(
+                org_user=self._org_user(u),
+                event=ev,
+                patch=SignupInputPatch(unverified_friend_id="4242"),
+            )
+        self.assertEqual(cm.exception.code, "duplicate_friend_id")
+        self.assertFalse(
+            PlayerDotaProfile.objects.filter(org_user=self._org_user(u)).exists()
+        )
+
+    def test_collides_with_deadlock_profile_of_other_user(self) -> None:
+        ev = self.make_event()
+        other = self._org_user(self.make_user())
+        PlayerDeadlockProfile.objects.create(
+            org_user=other, unverified_friend_id="373737"
+        )
+        with self.assertRaises(DjangoValidationError) as cm:
+            apply_signup_input(
+                org_user=self._org_user(self.make_user()),
+                event=ev,
+                patch=SignupInputPatch(unverified_friend_id="373737"),
+            )
+        self.assertEqual(cm.exception.code, "duplicate_friend_id")
+
+    def test_schema_rejects_non_numeric(self) -> None:
+        for fid in ("abc", " 123", "9" * 21):
+            with self.subTest(fid=fid):
+                with self.assertRaises(pydantic.ValidationError):
+                    SignupInputPatch(unverified_friend_id=fid)
+
+    def test_empty_string_still_clears(self) -> None:
+        ev = self.make_event()
+        ou = self._org_user(self.make_user())
+        PlayerDotaProfile.objects.create(org_user=ou, unverified_friend_id="191919")
+        apply_signup_input(
+            org_user=ou, event=ev, patch=SignupInputPatch(unverified_friend_id="")
+        )
+        self.assertEqual(
+            PlayerDotaProfile.objects.get(org_user=ou).unverified_friend_id, ""
+        )

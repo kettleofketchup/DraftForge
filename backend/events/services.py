@@ -28,7 +28,7 @@ from events.discord import (
     notify_new_event,
     notify_signup_changed,
 )
-from events.eligibility import unmet_requirements
+from events.eligibility import unmet_requirements, validate_friend_id
 from events.models import (
     DiscordEventConfigMixin,
     DiscordTournamentConfigMixin,
@@ -342,7 +342,8 @@ def apply_signup_input(
 
     Used by both the web `/signup/` endpoint and the Discord adapters so the
     write path is identical. Per-field branches:
-      - unverified_friend_id: site-wide uniqueness check, then write.
+      - unverified_friend_id: validate_friend_id (digits, site-wide
+        uniqueness), then write.
       - positions: priorities dict or list[int] of roles; writes pos_1..pos_5
         booleans and CustomUser.positions priorities.
       - rank_status: validated against event.allow_* flags before writing.
@@ -363,23 +364,14 @@ def apply_signup_input(
     if not set_fields:
         return None
 
-    profile, _ = PlayerDotaProfile.objects.get_or_create(org_user=org_user)
+    friend_id: str | None = None
     if "unverified_friend_id" in set_fields:
-        fid = set_fields["unverified_friend_id"]
-        if fid:
-            # Global scope: Friend ID is unique site-wide, not per-org.
-            collision = (
-                PlayerDotaProfile.objects.filter(unverified_friend_id=fid)
-                .exclude(org_user=org_user)
-                .exists()
-            )
-            if collision:
-                raise ValidationError(
-                    f"Friend ID {fid} is already registered to another account. "
-                    f"Contact an admin or login to https://dota.kettle.sh to claim it.",
-                    code="duplicate_friend_id",
-                )
-        profile.unverified_friend_id = fid
+        friend_id = validate_friend_id(
+            set_fields["unverified_friend_id"] or "", org_user
+        )
+    profile, _ = PlayerDotaProfile.objects.get_or_create(org_user=org_user)
+    if friend_id is not None:
+        profile.unverified_friend_id = friend_id
     if "positions" in set_fields:
         # Two accepted input shapes (normalized to per-role priorities here):
         #   - dict {carry, mid, offlane, soft_support, hard_support} each 0..5
