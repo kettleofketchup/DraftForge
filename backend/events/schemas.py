@@ -25,7 +25,7 @@ transport package. Request bodies for the same endpoints live in
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TYPE_CHECKING, Annotated, Literal, Optional
+from typing import TYPE_CHECKING, Annotated, Any, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -383,3 +383,15 @@ def _rebuild_forward_refs() -> None:
 
 
 _rebuild_forward_refs()
+
+
+class SignupSnapshot(BaseModel):
+    status: str
+    commitment: str
+    rsvp_class: str
+    signed_up_at: datetime | None = None
+    line_seq: int | None = None
+    waitlist_position: int | None = None
+    event_team_id: int | None = None
+    extra: dict[str, Any] = {}
+    model_config = {"extra": "ignore"}
