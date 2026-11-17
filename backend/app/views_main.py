@@ -1529,6 +1529,13 @@ class TournamentCreateView(generics.CreateAPIView):
     serializer_class = TournamentSerializer
     permission_classes = [IsStaff]
 
+    def perform_create(self, serializer: TournamentSerializer) -> None:
+        opts = serializer.validated_data.pop("draft_options", None)
+        with transaction.atomic():
+            serializer.save()
+            if opts is not None:
+                apply_draft_options(serializer.instance, opts, actor=self.request.user)
+
 
 class DraftCreateView(generics.CreateAPIView):
     serializer_class = DraftSerializer

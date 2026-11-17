@@ -308,6 +308,7 @@ def reset_herodraft_on_team_change(
     # written yet (we're in pre_save), so the new IDs live on `instance`,
     # not in the DB. Match prior assignments to new slots by the prior
     # tournament_team_id.
+    reserve_ms = draft.snapshot_timer_options(instance.tournament)
     updated_draft_teams = []
     for dt in DraftTeam.objects.filter(draft=draft):
         if dt.tournament_team_id == prior.radiant_team_id:
@@ -327,7 +328,7 @@ def reset_herodraft_on_team_change(
         # what reset_draft does in herodraft_views.py.
         dt.is_first_pick = None
         dt.is_radiant = None
-        dt.reserve_time_remaining = 90000
+        dt.reserve_time_remaining = reserve_ms
         dt.save()
         updated_draft_teams.append(dt)
 

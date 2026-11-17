@@ -1,6 +1,9 @@
 import { useMemo } from 'react';
 import type { HeroDraft, HeroDraftTick } from '~/components/herodraft/types';
-import { useDraftCountdown } from '~/components/herodraft/useDraftCountdown';
+import {
+  isTimerEnabled,
+  useDraftCountdown,
+} from '~/components/herodraft/useDraftCountdown';
 import { PlayerPopover } from '~/components/player';
 import { brandBg } from '~/components/ui/buttons/styles';
 import { DisplayName } from '~/components/user/avatar';
@@ -82,6 +85,7 @@ export function DraftTopBar({ draft, tick }: DraftTopBarProps) {
       ? (tick?.active_team_id ?? currentRound?.draft_team ?? null)
       : null;
 
+  const timerEnabled = isTimerEnabled(draft, tick);
   const countdown = useDraftCountdown();
   const graceRemaining = countdown.graceRemainingMs;
 
@@ -104,11 +108,13 @@ export function DraftTopBar({ draft, tick }: DraftTopBarProps) {
   // pulsing in unison when both happen to start a round under 30s, and
   // avoids a brief flash after `hero_selected` nulls active_team_id.
   const teamAIsCritical =
+    timerEnabled &&
     graceRemaining === 0 &&
     teamAReserve < RESERVE_CRITICAL_MS &&
     tick?.active_team_id != null &&
     teamA?.id === tick.active_team_id;
   const teamBIsCritical =
+    timerEnabled &&
     graceRemaining === 0 &&
     teamBReserve < RESERVE_CRITICAL_MS &&
     tick?.active_team_id != null &&
@@ -326,79 +332,99 @@ export function DraftTopBar({ draft, tick }: DraftTopBarProps) {
       </div>
 
       {/* Row 2: Timers */}
-      <div
-        className="grid grid-cols-3 sm:grid-cols-5 items-center p-1 sm:p-2 border-t border-gray-800"
-        data-testid="herodraft-timers-row"
-      >
-        {/* Team A Reserve */}
+      {timerEnabled ? (
         <div
-          className={cn(
-            'text-center font-mono text-sm sm:text-lg overflow-visible',
-            teamAReserve < RESERVE_CRITICAL_MS && 'text-red-400',
-          )}
-          data-testid="herodraft-team-a-reserve"
+          className="grid grid-cols-3 sm:grid-cols-5 items-center p-1 sm:p-2 border-t border-gray-800"
+          data-testid="herodraft-timers-row"
         >
-          <span className="text-[10px] sm:text-xs text-muted-foreground block">
-            Reserve
-          </span>
-          <span
+          {/* Team A Reserve */}
+          <div
             className={cn(
-              'inline-block origin-center',
-              teamAIsCritical && 'animate-reserve-critical',
+              'text-center font-mono text-sm sm:text-lg overflow-visible',
+              teamAReserve < RESERVE_CRITICAL_MS && 'text-red-400',
             )}
-            data-testid="herodraft-team-a-reserve-time"
+            data-testid="herodraft-team-a-reserve"
           >
-            {formatTime(teamAReserve)}
-          </span>
+            <span className="text-[10px] sm:text-xs text-muted-foreground block">
+              Reserve
+            </span>
+            <span
+              className={cn(
+                'inline-block origin-center',
+                teamAIsCritical && 'animate-reserve-critical',
+              )}
+              data-testid="herodraft-team-a-reserve-time"
+            >
+              {formatTime(teamAReserve)}
+            </span>
+          </div>
+
+          <div className="hidden sm:block" />
+
+          {/* Current pick timer */}
+          <div className="text-center" data-testid="herodraft-grace-timer">
+            <span
+              className="text-[10px] sm:text-xs text-muted-foreground block uppercase"
+              data-testid="herodraft-current-action"
+            >
+              {currentAction}
+            </span>
+            <span
+              className={cn(
+                'font-mono text-xl sm:text-2xl font-bold inline-block origin-center',
+                graceRemaining < GRACE_URGENT_MS
+                  ? 'text-red-400 animate-grace-urgent'
+                  : 'text-yellow-400',
+              )}
+              data-testid="herodraft-grace-time"
+            >
+              {formatTime(graceRemaining)}
+            </span>
+          </div>
+
+          <div className="hidden sm:block" />
+
+          {/* Team B Reserve */}
+          <div
+            className={cn(
+              'text-center font-mono text-sm sm:text-lg overflow-visible',
+              teamBReserve < RESERVE_CRITICAL_MS && 'text-red-400',
+            )}
+            data-testid="herodraft-team-b-reserve"
+          >
+            <span className="text-[10px] sm:text-xs text-muted-foreground block">
+              Reserve
+            </span>
+            <span
+              className={cn(
+                'inline-block origin-center',
+                teamBIsCritical && 'animate-reserve-critical',
+              )}
+              data-testid="herodraft-team-b-reserve-time"
+            >
+              {formatTime(teamBReserve)}
+            </span>
+          </div>
         </div>
-
-        <div className="hidden sm:block" />
-
-        {/* Current pick timer */}
-        <div className="text-center" data-testid="herodraft-grace-timer">
+      ) : (
+        <div
+          className="flex items-center justify-center gap-2 p-1 sm:p-2 border-t border-border"
+          data-testid="herodraft-timers-row"
+        >
           <span
-            className="text-[10px] sm:text-xs text-muted-foreground block uppercase"
+            className="text-[10px] sm:text-xs text-muted-foreground uppercase"
             data-testid="herodraft-current-action"
           >
             {currentAction}
           </span>
           <span
-            className={cn(
-              'font-mono text-xl sm:text-2xl font-bold inline-block origin-center',
-              graceRemaining < GRACE_URGENT_MS
-                ? 'text-red-400 animate-grace-urgent'
-                : 'text-yellow-400',
-            )}
-            data-testid="herodraft-grace-time"
+            className="rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] sm:text-xs text-muted-foreground"
+            data-testid="herodraft-no-timer"
           >
-            {formatTime(graceRemaining)}
+            No turn timer
           </span>
         </div>
-
-        <div className="hidden sm:block" />
-
-        {/* Team B Reserve */}
-        <div
-          className={cn(
-            'text-center font-mono text-sm sm:text-lg overflow-visible',
-            teamBReserve < RESERVE_CRITICAL_MS && 'text-red-400',
-          )}
-          data-testid="herodraft-team-b-reserve"
-        >
-          <span className="text-[10px] sm:text-xs text-muted-foreground block">
-            Reserve
-          </span>
-          <span
-            className={cn(
-              'inline-block origin-center',
-              teamBIsCritical && 'animate-reserve-critical',
-            )}
-            data-testid="herodraft-team-b-reserve-time"
-          >
-            {formatTime(teamBReserve)}
-          </span>
-        </div>
-      </div>
+      )}
     </div>
   );
 }

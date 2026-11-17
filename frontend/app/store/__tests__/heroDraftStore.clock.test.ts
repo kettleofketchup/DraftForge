@@ -149,3 +149,19 @@ describe('heroDraftStore clock offset (characterisation)', () => {
     expect(getServerNowISO()).toBe(new Date(T0 + 2_500).toISOString());
   });
 });
+
+describe('heroDraftStore tick timer_enabled', () => {
+  it('stores timer_enabled from the tick when present', () => {
+    handlers[0]({
+      ...baseTick,
+      server_time: new Date(T0).toISOString(),
+      timer_enabled: false,
+    });
+    expect(useHeroDraftStore.getState().tick?.timer_enabled).toBe(false);
+  });
+
+  it('leaves timer_enabled undefined for ticks without it', () => {
+    handlers[0]({ ...baseTick, server_time: new Date(T0).toISOString() });
+    expect(useHeroDraftStore.getState().tick?.timer_enabled).toBeUndefined();
+  });
+});

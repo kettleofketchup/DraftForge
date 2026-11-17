@@ -283,6 +283,13 @@ export interface EventRepeaterType {
   dota_lobby_password_mode?: 'random' | 'fixed';
   /** Write-only: never in responses (staff read it from lobby-password/). */
   dota_lobby_password?: string;
+  draft_timer_enabled?: boolean;
+  draft_grace_time_ms?: number;
+  draft_reserve_time_ms?: number;
+  draft_timeout_action?: string;
+  hero_timer_enabled?: boolean;
+  hero_grace_time_ms?: number;
+  hero_reserve_time_ms?: number;
   subscriber_count: number;
   is_subscribed: boolean;
   next_event_date: string | null;
@@ -331,6 +338,13 @@ export interface OrgEventDefaultsType {
   tournament_type: string;
   game_type: number;
   draft_type: string;
+  draft_timer_enabled?: boolean;
+  draft_grace_time_ms?: number;
+  draft_reserve_time_ms?: number;
+  draft_timeout_action?: string;
+  hero_timer_enabled?: boolean;
+  hero_grace_time_ms?: number;
+  hero_reserve_time_ms?: number;
   people_per_team: number;
   number_of_teams: number | null;
   tournament_date: string | null;

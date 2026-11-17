@@ -13,6 +13,7 @@ from rest_framework.response import Response
 from app.broadcast import broadcast_herodraft_event
 from app.functions.herodraft import (
     get_available_heroes,
+    new_herodraft_for_game,
     submit_choice,
     submit_pick,
     trigger_roll,
@@ -113,13 +114,7 @@ def create_herodraft(request, game_pk):
         )
 
     # Create the draft
-    draft = HeroDraft.objects.create(
-        game=game, state=HeroDraftState.WAITING_FOR_CAPTAINS
-    )
-
-    # Create draft teams
-    DraftTeam.objects.create(draft=draft, tournament_team=game.radiant_team)
-    DraftTeam.objects.create(draft=draft, tournament_team=game.dire_team)
+    draft = new_herodraft_for_game(game)
 
     log.info(
         "herodraft_created",
@@ -615,13 +610,13 @@ def reset_draft(request, draft_pk):
     # Delete all events
     draft.events.all().delete()
 
-    # Reset draft teams
+    reserve = draft.snapshot_timer_options(draft.game.tournament)
     for team in draft.draft_teams.all():
         team.is_ready = False
         team.is_connected = False
         team.is_first_pick = None
         team.is_radiant = None
-        team.reserve_time_remaining = 90000  # 1:30 reserve time (matches model default)
+        team.reserve_time_remaining = reserve
         team.save()
 
     # Reset draft state

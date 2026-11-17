@@ -35,7 +35,7 @@ const test = base.extend<{
   },
 });
 
-test.describe('HeroDraft Captain Connection Management', () => {
+test.describe('@cicd HeroDraft Captain Connection Management', () => {
   test('should kick old connection when captain opens new tab', async ({
     browser,
     heroDraft,

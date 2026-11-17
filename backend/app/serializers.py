@@ -885,10 +885,20 @@ class TournamentSerializerForWebSocket(serializers.ModelSerializer):
 class DraftOptionsSerializer(serializers.ModelSerializer):
     grace_time_ms = serializers.IntegerField(min_value=1000, required=False)
     reserve_time_ms = serializers.IntegerField(min_value=0, required=False)
+    hero_grace_time_ms = serializers.IntegerField(min_value=1000, required=False)
+    hero_reserve_time_ms = serializers.IntegerField(min_value=0, required=False)
 
     class Meta:
         model = DraftOptions
-        fields = ("timer_enabled", "grace_time_ms", "reserve_time_ms", "timeout_action")
+        fields = (
+            "timer_enabled",
+            "grace_time_ms",
+            "reserve_time_ms",
+            "timeout_action",
+            "hero_timer_enabled",
+            "hero_grace_time_ms",
+            "hero_reserve_time_ms",
+        )
         read_only_fields = ("timeout_action",)
 
 
@@ -1934,6 +1944,7 @@ class HeroDraftSerializer(serializers.ModelSerializer):
             "rounds",
             "current_round",
             "is_manual_pause",
+            "timer_enabled",
             "created_at",
             "updated_at",
         ]

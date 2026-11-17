@@ -1,9 +1,8 @@
-import { API_URL, BASE_URL } from '../../fixtures/base-url';
-import { test, expect, chromium } from '@playwright/test';
 import type { BrowserContext, Page } from '@playwright/test';
+import { chromium, expect, test } from '@playwright/test';
 import { loginAsDiscordId, waitForHydration } from '../../fixtures/auth';
+import { API_URL, BASE_URL } from '../../fixtures/base-url';
 import { HeroDraftPage } from '../../helpers/HeroDraftPage';
-
 
 /**
  * WebSocket Reconnection Fuzzing Tests
@@ -14,7 +13,7 @@ import { HeroDraftPage } from '../../helpers/HeroDraftPage';
  * - Verifying state is maintained across reconnections
  * - Completing drafts despite connection interruptions
  */
-test.describe('HeroDraft WebSocket Reconnection Fuzzing', () => {
+test.describe('@cicd HeroDraft WebSocket Reconnection Fuzzing', () => {
   test.setTimeout(180000); // 3 minutes for fuzzing tests
 
   /**
@@ -32,7 +31,7 @@ test.describe('HeroDraft WebSocket Reconnection Fuzzing', () => {
   async function setupCaptain(
     context: BrowserContext,
     discordId: string,
-    matchUrl: string
+    matchUrl: string,
   ): Promise<{ page: Page; draftPage: HeroDraftPage }> {
     await loginAsDiscordId(context, discordId);
     const page = await context.newPage();
@@ -53,7 +52,11 @@ test.describe('HeroDraft WebSocket Reconnection Fuzzing', () => {
   test('should maintain state through multiple connection drops during waiting phase', async () => {
     const browser = await chromium.launch({
       headless: true,
-      args: ['--disable-web-security', '--ignore-certificate-errors', '--no-sandbox'],
+      args: [
+        '--disable-web-security',
+        '--ignore-certificate-errors',
+        '--no-sandbox',
+      ],
     });
 
     let contextA: BrowserContext | null = null;
@@ -64,7 +67,7 @@ test.describe('HeroDraft WebSocket Reconnection Fuzzing', () => {
       contextA = await createContext(browser);
       const response = await contextA.request.get(
         `${API_URL}/tests/herodraft-by-key/two_captain_test/`,
-        { failOnStatusCode: false, timeout: 10000 }
+        { failOnStatusCode: false, timeout: 10000 },
       );
 
       if (!response.ok()) {
@@ -83,13 +86,15 @@ test.describe('HeroDraft WebSocket Reconnection Fuzzing', () => {
       console.log(`Captain B: ${teams[1].captain.username}`);
 
       // Reset draft
-      await contextA.request.post(`${API_URL}/tests/herodraft/${draftPk}/reset/`);
+      await contextA.request.post(
+        `${API_URL}/tests/herodraft/${draftPk}/reset/`,
+      );
 
       // Setup captain A
       const { page: pageA, draftPage: draftPageA } = await setupCaptain(
         contextA,
         teams[0].captain.discordId,
-        matchUrl
+        matchUrl,
       );
 
       // Setup captain B
@@ -97,7 +102,7 @@ test.describe('HeroDraft WebSocket Reconnection Fuzzing', () => {
       const { page: pageB, draftPage: draftPageB } = await setupCaptain(
         contextB,
         teams[1].captain.discordId,
-        matchUrl
+        matchUrl,
       );
 
       console.log('Both captains connected');
@@ -115,7 +120,7 @@ test.describe('HeroDraft WebSocket Reconnection Fuzzing', () => {
       const reconnectA = await setupCaptain(
         contextA,
         teams[0].captain.discordId,
-        matchUrl
+        matchUrl,
       );
 
       // Verify captain A can see the draft
@@ -134,7 +139,7 @@ test.describe('HeroDraft WebSocket Reconnection Fuzzing', () => {
       const reconnectB = await setupCaptain(
         contextB,
         teams[1].captain.discordId,
-        matchUrl
+        matchUrl,
       );
 
       await reconnectB.draftPage.waitForModal();
@@ -162,7 +167,11 @@ test.describe('HeroDraft WebSocket Reconnection Fuzzing', () => {
   test('should recover draft state after reconnection during drafting phase', async () => {
     const browser = await chromium.launch({
       headless: true,
-      args: ['--disable-web-security', '--ignore-certificate-errors', '--no-sandbox'],
+      args: [
+        '--disable-web-security',
+        '--ignore-certificate-errors',
+        '--no-sandbox',
+      ],
     });
 
     let contextA: BrowserContext | null = null;
@@ -175,7 +184,7 @@ test.describe('HeroDraft WebSocket Reconnection Fuzzing', () => {
       // Get test draft info
       const response = await contextA.request.get(
         `${API_URL}/tests/herodraft-by-key/two_captain_test/`,
-        { failOnStatusCode: false, timeout: 10000 }
+        { failOnStatusCode: false, timeout: 10000 },
       );
 
       const testInfo = await response.json();
@@ -186,18 +195,20 @@ test.describe('HeroDraft WebSocket Reconnection Fuzzing', () => {
       const matchUrl = `${BASE_URL}/tournament/${tournamentPk}/bracket/match/${gamePk}`;
 
       // Reset draft
-      await contextA.request.post(`${API_URL}/tests/herodraft/${draftPk}/reset/`);
+      await contextA.request.post(
+        `${API_URL}/tests/herodraft/${draftPk}/reset/`,
+      );
 
       // Setup both captains
       const { page: pageA, draftPage: draftPageA } = await setupCaptain(
         contextA,
         teams[0].captain.discordId,
-        matchUrl
+        matchUrl,
       );
       const { page: pageB, draftPage: draftPageB } = await setupCaptain(
         contextB,
         teams[1].captain.discordId,
-        matchUrl
+        matchUrl,
       );
 
       // Ready up
@@ -211,7 +222,10 @@ test.describe('HeroDraft WebSocket Reconnection Fuzzing', () => {
       ]);
 
       // Flip coin
-      await draftPageA.flipCoinButton.waitFor({ state: 'visible', timeout: 15000 });
+      await draftPageA.flipCoinButton.waitFor({
+        state: 'visible',
+        timeout: 15000,
+      });
       await draftPageA.clickFlipCoin();
 
       // Wait for choosing phase
@@ -221,7 +235,9 @@ test.describe('HeroDraft WebSocket Reconnection Fuzzing', () => {
       ]);
 
       // Make choices
-      const winnerChoices = pageA.locator('[data-testid="herodraft-winner-choices"]');
+      const winnerChoices = pageA.locator(
+        '[data-testid="herodraft-winner-choices"]',
+      );
       const isAWinner = await winnerChoices.isVisible().catch(() => false);
 
       if (isAWinner) {
@@ -273,23 +289,27 @@ test.describe('HeroDraft WebSocket Reconnection Fuzzing', () => {
         const reconnect = await setupCaptain(
           contextA,
           teams[0].captain.discordId,
-          matchUrl
+          matchUrl,
         );
         await reconnect.draftPage.waitForPhaseTransition('drafting', 10000);
 
         // Verify the hero we picked is still marked as unavailable
         await reconnect.draftPage.assertHeroUnavailable(pickedHeroId);
-        console.log(`Verified hero ${pickedHeroId} still unavailable after reconnect`);
+        console.log(
+          `Verified hero ${pickedHeroId} still unavailable after reconnect`,
+        );
       } else {
         contextB = await createContext(browser);
         const reconnect = await setupCaptain(
           contextB,
           teams[1].captain.discordId,
-          matchUrl
+          matchUrl,
         );
         await reconnect.draftPage.waitForPhaseTransition('drafting', 10000);
         await reconnect.draftPage.assertHeroUnavailable(pickedHeroId);
-        console.log(`Verified hero ${pickedHeroId} still unavailable after reconnect`);
+        console.log(
+          `Verified hero ${pickedHeroId} still unavailable after reconnect`,
+        );
       }
 
       console.log('TEST PASSED: Draft state recovered after reconnection');
@@ -303,7 +323,11 @@ test.describe('HeroDraft WebSocket Reconnection Fuzzing', () => {
   test('should handle rapid connection drops and reconnects', async () => {
     const browser = await chromium.launch({
       headless: true,
-      args: ['--disable-web-security', '--ignore-certificate-errors', '--no-sandbox'],
+      args: [
+        '--disable-web-security',
+        '--ignore-certificate-errors',
+        '--no-sandbox',
+      ],
     });
 
     let context: BrowserContext | null = null;
@@ -314,7 +338,7 @@ test.describe('HeroDraft WebSocket Reconnection Fuzzing', () => {
       // Get test draft info
       const response = await context.request.get(
         `${API_URL}/tests/herodraft-by-key/two_captain_test/`,
-        { failOnStatusCode: false, timeout: 10000 }
+        { failOnStatusCode: false, timeout: 10000 },
       );
 
       const testInfo = await response.json();
@@ -325,7 +349,9 @@ test.describe('HeroDraft WebSocket Reconnection Fuzzing', () => {
       const matchUrl = `${BASE_URL}/tournament/${tournamentPk}/bracket/match/${gamePk}`;
 
       // Reset draft
-      await context.request.post(`${API_URL}/tests/herodraft/${draftPk}/reset/`);
+      await context.request.post(
+        `${API_URL}/tests/herodraft/${draftPk}/reset/`,
+      );
 
       const discordId = teams[0].captain.discordId;
 
@@ -336,7 +362,11 @@ test.describe('HeroDraft WebSocket Reconnection Fuzzing', () => {
       for (let i = 0; i < CYCLES; i++) {
         console.log(`Cycle ${i + 1}/${CYCLES}: Connecting...`);
 
-        const { page, draftPage } = await setupCaptain(context, discordId, matchUrl);
+        const { page, draftPage } = await setupCaptain(
+          context,
+          discordId,
+          matchUrl,
+        );
 
         // Verify connection
         await draftPage.waitForModal();
@@ -361,7 +391,7 @@ test.describe('HeroDraft WebSocket Reconnection Fuzzing', () => {
       const { draftPage: finalDraft } = await setupCaptain(
         context,
         discordId,
-        matchUrl
+        matchUrl,
       );
 
       await finalDraft.waitForModal();
@@ -379,7 +409,11 @@ test.describe('HeroDraft WebSocket Reconnection Fuzzing', () => {
   test.skip('should pause timer when disconnected and resume on reconnect', async () => {
     const browser = await chromium.launch({
       headless: true,
-      args: ['--disable-web-security', '--ignore-certificate-errors', '--no-sandbox'],
+      args: [
+        '--disable-web-security',
+        '--ignore-certificate-errors',
+        '--no-sandbox',
+      ],
     });
 
     let contextA: BrowserContext | null = null;
@@ -392,7 +426,7 @@ test.describe('HeroDraft WebSocket Reconnection Fuzzing', () => {
       // Get test draft info
       const response = await contextA.request.get(
         `${API_URL}/tests/herodraft-by-key/two_captain_test/`,
-        { failOnStatusCode: false, timeout: 10000 }
+        { failOnStatusCode: false, timeout: 10000 },
       );
 
       const testInfo = await response.json();
@@ -403,18 +437,20 @@ test.describe('HeroDraft WebSocket Reconnection Fuzzing', () => {
       const matchUrl = `${BASE_URL}/tournament/${tournamentPk}/bracket/match/${gamePk}`;
 
       // Reset draft
-      await contextA.request.post(`${API_URL}/tests/herodraft/${draftPk}/reset/`);
+      await contextA.request.post(
+        `${API_URL}/tests/herodraft/${draftPk}/reset/`,
+      );
 
       // Setup both captains
       const { page: pageA, draftPage: draftPageA } = await setupCaptain(
         contextA,
         teams[0].captain.discordId,
-        matchUrl
+        matchUrl,
       );
       const { page: pageB, draftPage: draftPageB } = await setupCaptain(
         contextB,
         teams[1].captain.discordId,
-        matchUrl
+        matchUrl,
       );
 
       // Progress to drafting phase
@@ -426,7 +462,10 @@ test.describe('HeroDraft WebSocket Reconnection Fuzzing', () => {
         draftPageB.waitForPhaseTransition('rolling', 15000),
       ]);
 
-      await draftPageA.flipCoinButton.waitFor({ state: 'visible', timeout: 15000 });
+      await draftPageA.flipCoinButton.waitFor({
+        state: 'visible',
+        timeout: 15000,
+      });
       await draftPageA.clickFlipCoin();
 
       await Promise.all([
@@ -469,7 +508,9 @@ test.describe('HeroDraft WebSocket Reconnection Fuzzing', () => {
       const teamATimeBefore = await draftPageA.getTeamAReserveTimeSeconds();
       const teamBTimeBefore = await draftPageA.getTeamBReserveTimeSeconds();
 
-      console.log(`Timer before disconnect: grace=${graceTimeBefore}s, teamA=${teamATimeBefore}s, teamB=${teamBTimeBefore}s`);
+      console.log(
+        `Timer before disconnect: grace=${graceTimeBefore}s, teamA=${teamATimeBefore}s, teamB=${teamBTimeBefore}s`,
+      );
 
       // Disconnect captain A (simulates WebSocket drop)
       console.log('FUZZ: Dropping captain A connection...');
@@ -487,7 +528,7 @@ test.describe('HeroDraft WebSocket Reconnection Fuzzing', () => {
       const { draftPage: reconnectedDraftPageA } = await setupCaptain(
         contextA,
         teams[0].captain.discordId,
-        matchUrl
+        matchUrl,
       );
 
       await reconnectedDraftPageA.waitForPhaseTransition('drafting', 10000);
@@ -498,10 +539,14 @@ test.describe('HeroDraft WebSocket Reconnection Fuzzing', () => {
 
       // Record timer AFTER reconnection
       const graceTimeAfter = await reconnectedDraftPageA.getGraceTimeSeconds();
-      const teamATimeAfter = await reconnectedDraftPageA.getTeamAReserveTimeSeconds();
-      const teamBTimeAfter = await reconnectedDraftPageA.getTeamBReserveTimeSeconds();
+      const teamATimeAfter =
+        await reconnectedDraftPageA.getTeamAReserveTimeSeconds();
+      const teamBTimeAfter =
+        await reconnectedDraftPageA.getTeamBReserveTimeSeconds();
 
-      console.log(`Timer after reconnect: grace=${graceTimeAfter}s, teamA=${teamATimeAfter}s, teamB=${teamBTimeAfter}s`);
+      console.log(
+        `Timer after reconnect: grace=${graceTimeAfter}s, teamA=${teamATimeAfter}s, teamB=${teamBTimeAfter}s`,
+      );
 
       // Calculate elapsed time - should be minimal if timer was paused
       // Allow for up to 3 seconds of actual elapsed time (for connection/setup overhead)
@@ -509,7 +554,9 @@ test.describe('HeroDraft WebSocket Reconnection Fuzzing', () => {
       const teamAElapsed = teamATimeBefore - teamATimeAfter;
       const teamBElapsed = teamBTimeBefore - teamBTimeAfter;
 
-      console.log(`Elapsed: grace=${graceElapsed}s, teamA=${teamAElapsed}s, teamB=${teamBElapsed}s`);
+      console.log(
+        `Elapsed: grace=${graceElapsed}s, teamA=${teamAElapsed}s, teamB=${teamBElapsed}s`,
+      );
 
       // If timer wasn't paused, we'd see ~5 seconds elapsed
       // With pause, we should see much less (accounting for reconnect overhead)
@@ -518,7 +565,9 @@ test.describe('HeroDraft WebSocket Reconnection Fuzzing', () => {
       // Check grace time (if it was running)
       if (graceTimeBefore > 0 && graceTimeAfter > 0) {
         expect(graceElapsed).toBeLessThanOrEqual(MAX_ALLOWED_ELAPSED);
-        console.log(`✓ Grace timer paused correctly (${graceElapsed}s elapsed vs ${DISCONNECT_DURATION_MS / 1000}s disconnected)`);
+        console.log(
+          `✓ Grace timer paused correctly (${graceElapsed}s elapsed vs ${DISCONNECT_DURATION_MS / 1000}s disconnected)`,
+        );
       }
 
       // Check reserve times - at least one should have been active
@@ -526,10 +575,14 @@ test.describe('HeroDraft WebSocket Reconnection Fuzzing', () => {
         const maxReserveElapsed = Math.max(teamAElapsed, teamBElapsed);
         // Reserve time should not have decreased significantly
         expect(maxReserveElapsed).toBeLessThanOrEqual(MAX_ALLOWED_ELAPSED);
-        console.log(`✓ Reserve timer paused correctly (max ${maxReserveElapsed}s elapsed vs ${DISCONNECT_DURATION_MS / 1000}s disconnected)`);
+        console.log(
+          `✓ Reserve timer paused correctly (max ${maxReserveElapsed}s elapsed vs ${DISCONNECT_DURATION_MS / 1000}s disconnected)`,
+        );
       }
 
-      console.log('TEST PASSED: Timer paused during disconnection and resumed on reconnect');
+      console.log(
+        'TEST PASSED: Timer paused during disconnection and resumed on reconnect',
+      );
     } finally {
       if (contextA) await contextA.close().catch(() => {});
       if (contextB) await contextB.close().catch(() => {});
@@ -543,7 +596,11 @@ test.describe('HeroDraft WebSocket Reconnection Fuzzing', () => {
   test.skip('should complete full draft with intermittent connection drops', async () => {
     const browser = await chromium.launch({
       headless: true,
-      args: ['--disable-web-security', '--ignore-certificate-errors', '--no-sandbox'],
+      args: [
+        '--disable-web-security',
+        '--ignore-certificate-errors',
+        '--no-sandbox',
+      ],
     });
 
     let contextA: BrowserContext | null = null;
@@ -560,7 +617,7 @@ test.describe('HeroDraft WebSocket Reconnection Fuzzing', () => {
       // Get test draft info
       const response = await contextA.request.get(
         `${API_URL}/tests/herodraft-by-key/two_captain_test/`,
-        { failOnStatusCode: false, timeout: 10000 }
+        { failOnStatusCode: false, timeout: 10000 },
       );
 
       const testInfo = await response.json();
@@ -571,12 +628,18 @@ test.describe('HeroDraft WebSocket Reconnection Fuzzing', () => {
       const matchUrl = `${BASE_URL}/tournament/${tournamentPk}/bracket/match/${gamePk}`;
 
       // Reset draft
-      await contextA.request.post(`${API_URL}/tests/herodraft/${draftPk}/reset/`);
+      await contextA.request.post(
+        `${API_URL}/tests/herodraft/${draftPk}/reset/`,
+      );
 
       // Helper to reconnect a captain
       const reconnectCaptain = async (
-        isA: boolean
-      ): Promise<{ context: BrowserContext; page: Page; draftPage: HeroDraftPage }> => {
+        isA: boolean,
+      ): Promise<{
+        context: BrowserContext;
+        page: Page;
+        draftPage: HeroDraftPage;
+      }> => {
         const ctx = await createContext(browser);
         const discordId = isA
           ? teams[0].captain.discordId
@@ -589,7 +652,7 @@ test.describe('HeroDraft WebSocket Reconnection Fuzzing', () => {
       const setupA = await setupCaptain(
         contextA,
         teams[0].captain.discordId,
-        matchUrl
+        matchUrl,
       );
       pageA = setupA.page;
       draftPageA = setupA.draftPage;
@@ -597,7 +660,7 @@ test.describe('HeroDraft WebSocket Reconnection Fuzzing', () => {
       const setupB = await setupCaptain(
         contextB,
         teams[1].captain.discordId,
-        matchUrl
+        matchUrl,
       );
       pageB = setupB.page;
       draftPageB = setupB.draftPage;
@@ -611,7 +674,10 @@ test.describe('HeroDraft WebSocket Reconnection Fuzzing', () => {
         draftPageB.waitForPhaseTransition('rolling', 15000),
       ]);
 
-      await draftPageA.flipCoinButton.waitFor({ state: 'visible', timeout: 15000 });
+      await draftPageA.flipCoinButton.waitFor({
+        state: 'visible',
+        timeout: 15000,
+      });
       await draftPageA.clickFlipCoin();
 
       await Promise.all([
@@ -664,7 +730,9 @@ test.describe('HeroDraft WebSocket Reconnection Fuzzing', () => {
         const shouldDrop = dropCount < MAX_DROPS && Math.random() < 0.33;
 
         if (shouldDrop) {
-          console.log(`FUZZ: Dropping ${teamAPicking ? 'A' : 'B'} before pick...`);
+          console.log(
+            `FUZZ: Dropping ${teamAPicking ? 'A' : 'B'} before pick...`,
+          );
           dropCount++;
 
           if (teamAPicking) {
@@ -695,7 +763,9 @@ test.describe('HeroDraft WebSocket Reconnection Fuzzing', () => {
           console.log(`Round ${round + 1}: Picked hero ${heroId}`);
           heroIndex++;
         } catch (e) {
-          console.log(`Round ${round + 1}: Pick failed, hero might be banned. Trying next...`);
+          console.log(
+            `Round ${round + 1}: Pick failed, hero might be banned. Trying next...`,
+          );
           heroIndex++;
         }
 
@@ -703,7 +773,9 @@ test.describe('HeroDraft WebSocket Reconnection Fuzzing', () => {
         await new Promise((r) => setTimeout(r, 1000));
       }
 
-      console.log(`TEST PASSED: Completed ${heroIndex} picks/bans with ${dropCount} connection drops`);
+      console.log(
+        `TEST PASSED: Completed ${heroIndex} picks/bans with ${dropCount} connection drops`,
+      );
     } finally {
       if (contextA) await contextA.close().catch(() => {});
       if (contextB) await contextB.close().catch(() => {});

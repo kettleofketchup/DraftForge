@@ -131,3 +131,31 @@ describe('read schemas', () => {
     expect(ev.organization_id).toBe(8);
   });
 });
+
+describe('draft settings errors', () => {
+  it('maps draft settings fields to config', () => {
+    expect(tabForField('draft_grace_time_s')).toBe('config');
+    expect(tabForField('hero_timer_enabled')).toBe('config');
+  });
+
+  it('flattens nested draft_options errors onto the seconds fields', () => {
+    expect(
+      fieldErrorsFrom({
+        draft_options: {
+          grace_time_ms: ['Too small'],
+          hero_reserve_time_ms: ['Bad'],
+          unknown: ['x'],
+        },
+      }),
+    ).toEqual([
+      { field: 'draft_grace_time_s', message: 'Too small' },
+      { field: 'hero_reserve_time_s', message: 'Bad' },
+    ]);
+  });
+
+  it('defaults draft settings when the form omits them', () => {
+    const v = CreateTournamentSchema.parse(minimalValid);
+    expect(v.draft_timer_enabled).toBe(true);
+    expect(v.hero_reserve_time_s).toBe(90);
+  });
+});

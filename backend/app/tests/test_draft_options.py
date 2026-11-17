@@ -328,6 +328,34 @@ class SettingsWriteTests(TestCase):
             Team.objects.get(pk=self.fx.teams[0].pk).draft_reserve_ms, 15000
         )
 
+    def test_register_endpoint_applies_draft_options(self) -> None:
+        r = self.client.post(
+            "/api/tournament/register",
+            {
+                "name": "Register With Options",
+                "date_played": timezone.now().isoformat(),
+                "tournament_type": "double_elimination",
+                "draft_options": {
+                    "timer_enabled": False,
+                    "grace_time_ms": 12000,
+                    "hero_timer_enabled": False,
+                    "hero_reserve_time_ms": 45000,
+                },
+            },
+            format="json",
+        )
+        self.assertEqual(r.status_code, 201, r.data)
+        options = DraftOptions.objects.get(tournament_id=r.data["pk"])
+        self.assertEqual(
+            (
+                options.timer_enabled,
+                options.grace_time_ms,
+                options.hero_timer_enabled,
+                options.hero_reserve_time_ms,
+            ),
+            (False, 12000, False, 45000),
+        )
+
     def test_non_staff_patch_is_forbidden(self):
         self.client.force_authenticate(self.fx.captains[0])
         r = self.client.patch(

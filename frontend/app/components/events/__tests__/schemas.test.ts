@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import {
+  createEventInputSchema,
   createSeriesEventInputSchema,
   DISCORD_CONFIG_DEFAULTS,
   discordConfigSchema,
   DOTA_LOBBY_CONFIG_DEFAULTS,
+  editEventFormSchema,
   eventSchema,
   localToUTC,
   refineEventEnd,
@@ -168,6 +170,127 @@ describe('eventSchema end and staff fields', () => {
         'contributions_awarded_at',
         'user_can_manage_event_staff',
       ]),
+    );
+  });
+});
+
+// Pre-refactor key lists: the fragment composition must keep them exact.
+const TEMPLATE_KEYS = [
+  'name',
+  'description',
+  'tournament_name',
+  'tournament_type',
+  'game_type',
+  'draft_type',
+  'game_mode',
+  'custom_game_name',
+  'captains_draft_time',
+  'lobby_steam_league_id',
+  'people_per_team',
+  'number_of_teams',
+  'timezone',
+];
+const DISCORD_KEYS = [
+  'discord_create_event',
+  'discord_sync_signups',
+  'discord_event_title',
+  'discord_event_description',
+  'discord_event_info',
+  'discord_signup_reminder',
+  'discord_signup_reminder_hours',
+  'discord_confirm_attendance',
+  'discord_confirm_attendance_hours',
+  'discord_profile_reminder',
+  'discord_profile_reminder_hours',
+  'discord_mark_interested',
+  'discord_post_signups',
+  'discord_post_signups_channel_id',
+  'discord_announcement',
+  'discord_announcement_channel_id',
+  'discord_announcement_hours',
+  'discord_announcement_role_ids',
+  'discord_signup_role_ids',
+  'discord_subscriber_dm',
+  'discord_subscriber_dm_hours',
+  'discord_require_rank_screenshot',
+  'discord_require_battlecup_screenshot',
+  'min_mmr',
+  'allow_active_mmr',
+  'allow_previous_rank',
+  'allow_battlecup_rating',
+  'require_steam_id',
+  'require_mmr_verified',
+  'require_profile_complete',
+];
+const LOBBY_KEYS = [
+  'dota_lobby_mode',
+  'dota_lobby_launch',
+  'dota_lobby_region',
+  'discord_send_lobby_info',
+  'dota_lobby_password_mode',
+  'dota_lobby_password',
+  'dota_lobby_password_saved',
+];
+
+describe('event form schema key sets', () => {
+  const keys = (shape: object) => Object.keys(shape).sort();
+
+  it('createEventInputSchema', () => {
+    expect(keys(createEventInputSchema.shape)).toEqual(
+      [
+        ...TEMPLATE_KEYS,
+        ...DISCORD_KEYS,
+        ...LOBBY_KEYS,
+        ...[
+          'scheduled_at',
+          'organization',
+          'tournament_league',
+          'discord_notify_new_events',
+          'signup_mode',
+          'signup_days_before',
+          'is_recurring',
+          'frequency',
+          'day_of_week',
+          'time_of_day',
+          'starts_at',
+          'ends_at',
+          'generate_days_ahead',
+          'event_ends_at',
+        ],
+      ].sort(),
+    );
+  });
+
+  it('createSeriesEventInputSchema', () => {
+    expect(keys(createSeriesEventInputSchema.shape)).toEqual(
+      [
+        ...TEMPLATE_KEYS,
+        ...DISCORD_KEYS,
+        ...LOBBY_KEYS,
+        ...['scheduled_at', 'tournament_league', 'open_signups'],
+      ].sort(),
+    );
+  });
+
+  it('editEventFormSchema', () => {
+    expect(keys(editEventFormSchema.shape)).toEqual(
+      [
+        ...TEMPLATE_KEYS,
+        ...DISCORD_KEYS,
+        ...LOBBY_KEYS,
+        ...[
+          'scheduled_at',
+          'event_ends_at',
+          'tournament_league',
+          'draft_timer_enabled',
+          'draft_grace_time_s',
+          'draft_reserve_time_s',
+          'draft_timeout_action',
+          'hero_timer_enabled',
+          'hero_grace_time_s',
+          'hero_reserve_time_s',
+        ],
+      ].sort(),
     );
   });
 });

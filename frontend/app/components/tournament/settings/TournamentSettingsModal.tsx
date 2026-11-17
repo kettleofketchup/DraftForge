@@ -49,7 +49,10 @@ export function TournamentSettingsModal({
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="settings" className="flex-1 overflow-auto mt-4">
+          <TabsContent
+            value="settings"
+            className="mt-4 flex min-h-0 flex-1 flex-col"
+          >
             <TournamentEditForm
               tourn={tournament as TournamentClassType}
               onSuccess={() => onOpenChange(false)}
