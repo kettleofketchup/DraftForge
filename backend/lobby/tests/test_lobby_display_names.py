@@ -4,7 +4,6 @@ from django.test.utils import CaptureQueriesContext
 from rest_framework.test import APIClient
 
 from app.models import CustomUser, DotaLobbyMode, Game, League, Organization
-from app.tests.raw_site_nickname import set_raw_site_nickname
 from lobby import services
 from lobby.tests.helpers import (
     lobby_settings,
@@ -45,7 +44,6 @@ class LobbyDisplayNamesTest(TestCase):
         for user in users:
             user.discordNickname = f"global_{user.pk}"
             user.save()
-            set_raw_site_nickname(user.pk, f"site_{user.pk}")
             OrgUser.objects.create(
                 user=user, organization=self.org, guild_nickname=f"server_{user.pk}"
             )
@@ -68,7 +66,6 @@ class LobbyDisplayNamesTest(TestCase):
         dragon = roster[0]
         dragon.discordNickname = "Gwaihir"
         dragon.save()
-        set_raw_site_nickname(dragon.pk, "SiteDragon")
         resp = self.client.get(f"/api/games/{self.game.pk}/lobby/")
         names = {row["user_id"]: row["name"] for row in resp.data["players"]}
         self.assertEqual(names[dragon.pk], "Gwaihir")

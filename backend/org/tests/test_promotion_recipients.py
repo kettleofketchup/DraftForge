@@ -4,7 +4,6 @@ from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 
 from app.models import CustomUser, League, Organization, Tournament
-from app.tests.raw_site_nickname import set_raw_site_nickname
 from events.constants import EventState, SignupStatus
 from events.models import Event, EventSignup
 from events.services import decline_signup
@@ -454,7 +453,6 @@ class CandidatesTest(_PoolFixture):
 
     def test_name_search_guild_nickname_not_site_nickname(self) -> None:
         nick = self._user("nick_user")
-        set_raw_site_nickname(nick.pk, "Zephyrion")
         guild = self._user("guild_user")
         OrgUser.objects.create(
             user=guild, organization=self.org, guild_nickname="Quillfeather"

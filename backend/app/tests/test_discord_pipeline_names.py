@@ -3,7 +3,6 @@ from social_django.models import UserSocialAuth
 
 from app.models import CustomUser
 from app.pipelines import save_discord
-from app.tests.raw_site_nickname import raw_site_nickname
 
 DISCORD_ID = "555000111222333999"
 
@@ -39,7 +38,6 @@ class SaveDiscordGlobalNameTest(TestCase):
         save_discord(strategy=None, details={}, user=user)
 
         user = CustomUser.objects.get(pk=user.pk)
-        self.assertIsNone(raw_site_nickname(user.pk))
         self.assertEqual(user.discordNickname, "Gwaihir")
 
     def test_missing_global_name_overwrites_stored(self) -> None:

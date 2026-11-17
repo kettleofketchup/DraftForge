@@ -2,7 +2,6 @@ from django.contrib import admin
 from django.test import TestCase
 
 from app.models import CustomUser, League, Organization
-from app.tests.raw_site_nickname import set_raw_site_nickname
 from league.models import LeagueUser
 from org.models import OrgUser
 from user.models import BaseUserProfile
@@ -23,7 +22,6 @@ class AdminSearchFieldsTest(TestCase):
             password="x",
             discordNickname="GlobalNick",
         )
-        set_raw_site_nickname(user.pk, "SiteNick")
         org_user = OrgUser.objects.create(
             user=user, organization=org, guild_nickname="ServerNick"
         )

@@ -11,7 +11,6 @@ from datetime import timedelta
 from pathlib import Path
 
 from django.contrib.sessions.backends.db import SessionStore
-from django.db import connection
 from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIRequestFactory
@@ -131,14 +130,6 @@ DISCORD_USERS_JSON = Path(__file__).parent / "data" / "discord_users.json"
 VORPAL_DISCORD_ID = "284829273590857728"
 
 
-def raw_site_nicknames_set() -> int:
-    with connection.cursor() as cursor:
-        cursor.execute(
-            "SELECT COUNT(*) FROM user_baseuserprofile WHERE nickname IS NOT NULL"
-        )
-        return cursor.fetchone()[0]
-
-
 class DiscordNameSyncPopulateTest(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
@@ -172,7 +163,6 @@ class DiscordNameSyncPopulateTest(TestCase):
                 ),
                 [self.dtx_org.pk],
             )
-        self.assertEqual(raw_site_nicknames_set(), 0)
 
     def test_seeds_users_with_distinct_discord_and_server_names(self) -> None:
         self._assert_seeded()
@@ -207,7 +197,6 @@ class DiscordFixtureServerNicknameTest(TestCase):
         self.assertEqual(
             CustomUser.objects.nocache().get(pk=user.pk).discordNickname, "Dankus"
         )
-        self.assertEqual(raw_site_nicknames_set(), 0)
 
     def test_existing_user_gets_changed_nick(self) -> None:
         create_user(self.vorpal, organization=self.dtx_org)
@@ -236,9 +225,6 @@ class PopulatedUsersCarryDiscordNamesTest(TestCase):
         populate_dota_lobby_data(force=True)
         populate_tournament_discovery(force=True)
         populate_discord_name_sync_users(force=True)
-
-    def test_no_populated_user_has_a_site_nickname(self) -> None:
-        self.assertEqual(raw_site_nicknames_set(), 0)
 
     def test_fixture_global_name_lands_on_discord_nickname(self) -> None:
         for data in (ORG_ADMIN_USER, EVENT_PLAYER_1, ORG_FEATURES_PLAYERS[0]):

@@ -3,7 +3,6 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from app.models import CustomUser, League, Organization, Team, Tournament
-from app.tests.raw_site_nickname import set_raw_site_nickname
 from org.models import OrgUser
 
 URL = "/api/tournaments/create-team-from-captain"
@@ -17,7 +16,6 @@ class TeamNameFromCaptainTest(TestCase):
         self.captain = CustomUser.objects.create_user(
             username="tnc_dragon", password="x", discordNickname="Gwaihir"
         )
-        set_raw_site_nickname(self.captain.pk, "SiteDragon")
         self.client = APIClient()
         self.client.force_authenticate(self.staff)
 

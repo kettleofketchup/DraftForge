@@ -1,10 +1,7 @@
-from django.db import connection
 from django.test import TestCase
 
 from app.models import CustomUser, Organization, ProfileClaimRequest
-from app.tests.raw_site_nickname import raw_site_nickname, set_raw_site_nickname
 from org.serializers import ProfileClaimRequestSerializer
-from org.views import ClaimRequestViewSet
 
 
 class ClaimNamesTest(TestCase):
@@ -18,11 +15,6 @@ class ClaimNamesTest(TestCase):
         )
         self.target.steamid = 76561198000300001
         self.target.save()
-        with connection.cursor() as cursor:
-            cursor.execute(
-                "UPDATE user_baseuserprofile SET nickname='Site' WHERE user_id=%s",
-                [self.target.pk],
-            )
         self.claim = ProfileClaimRequest.objects.create(
             claimer=self.claimer,
             target_user=self.target,
@@ -70,20 +62,3 @@ class ClaimNamesTest(TestCase):
         self.target.save()
         self.claim.refresh_from_db()
         self.assertEqual(str(self.claim), "cn_claimer -> 76561198000300001 (pending)")
-
-
-class ClaimMergeNicknameTest(TestCase):
-    def test_merge_does_not_carry_site_nickname(self) -> None:
-        claimer = CustomUser.objects.create_user(username="cm_claimer", password="x")
-        target = CustomUser.objects.create_user(
-            username="steam_76561198000300002", password="x"
-        )
-        target.steamid = 76561198000300002
-        target.save()
-        set_raw_site_nickname(target.pk, "Site")
-
-        ClaimRequestViewSet()._merge_profiles(
-            claimer, CustomUser.objects.nocache().get(pk=target.pk)
-        )
-
-        self.assertIsNone(raw_site_nickname(claimer.pk))

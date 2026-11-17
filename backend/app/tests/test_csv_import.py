@@ -4,7 +4,6 @@ from django.test import TestCase
 from rest_framework.test import APIClient
 
 from app.models import CustomUser, Organization, PositionsModel
-from app.tests.raw_site_nickname import raw_site_nickname
 from org.models import OrgUser
 
 
@@ -255,7 +254,6 @@ class OrgCSVImportTest(TestCase):
         self.assertEqual(resp.data["summary"]["created"], 1)
         user = CustomUser.objects.get(steamid=76561198099999999)
         self.assertEqual(user.username, "steam_76561198099999999")
-        self.assertIsNone(raw_site_nickname(user.pk))
 
     def test_import_ignores_name_on_existing_user(self) -> None:
         pos = PositionsModel.objects.create()
@@ -272,7 +270,9 @@ class OrgCSVImportTest(TestCase):
         )
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.data["summary"]["added"], 1)
-        self.assertIsNone(raw_site_nickname(user.pk))
+        self.assertEqual(
+            CustomUser.objects.nocache().get(pk=user.pk).username, "nonickname"
+        )
 
     def test_conflict_message_uses_discord_name(self) -> None:
         CustomUser.objects.create_user(

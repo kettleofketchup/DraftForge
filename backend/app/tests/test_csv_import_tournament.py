@@ -12,7 +12,6 @@ from app.models import (
     Team,
     Tournament,
 )
-from app.tests.raw_site_nickname import raw_site_nickname
 from league.models import LeagueUser
 from org.models import OrgUser
 
@@ -76,7 +75,9 @@ class TournamentCSVImportTest(TestCase):
         )
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.data["summary"]["added"], 1)
-        self.assertIsNone(raw_site_nickname(user.pk))
+        self.assertEqual(
+            CustomUser.objects.nocache().get(pk=user.pk).username, "player"
+        )
 
     def test_import_with_team_name_creates_team(self):
         """Row with team_name creates/assigns team."""
@@ -109,13 +110,13 @@ class TournamentCSVImportTest(TestCase):
         """Multiple rows with same team_name go to the same team."""
         pos1 = PositionsModel.objects.create()
         pos2 = PositionsModel.objects.create()
-        u1 = CustomUser.objects.create_user(
+        CustomUser.objects.create_user(
             username="p1",
             password="pass",
             positions=pos1,
             steamid=76561198011111111,
         )
-        u2 = CustomUser.objects.create_user(
+        CustomUser.objects.create_user(
             username="p2",
             password="pass",
             positions=pos2,
@@ -170,7 +171,7 @@ class TournamentCSVImportTest(TestCase):
             positions=pos,
             steamid=76561198012345678,
         )
-        org_user = OrgUser.objects.create(user=user, organization=self.org, mmr=1000)
+        OrgUser.objects.create(user=user, organization=self.org, mmr=1000)
         self.tournament.users.add(user)
 
         resp = self.client.post(

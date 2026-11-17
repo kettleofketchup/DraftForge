@@ -1,7 +1,6 @@
 from django.test import TestCase
 
 from app.models import CustomUser, Organization
-from app.tests.raw_site_nickname import set_raw_site_nickname
 from org.models import OrgUser
 from org.user_search import user_name_q
 
@@ -16,7 +15,6 @@ class UserNameQTest(TestCase):
             discordUsername="dragon_dc_handle",
             discordNickname="GwaihirTheWindlord",
         )
-        set_raw_site_nickname(self.dragon.pk, "SiteDragon")
         self.other = CustomUser.objects.create_user(username="bystander", password="x")
         OrgUser.objects.create(
             user=self.dragon, organization=self.org_a, guild_nickname="DragonClaw"

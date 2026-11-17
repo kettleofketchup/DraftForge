@@ -7,7 +7,6 @@ from rest_framework.test import APIClient
 
 from app.models import CustomUser
 from app.serializers import UserSerializer
-from app.tests.raw_site_nickname import raw_site_nickname
 
 BACKEND_DIR = Path(settings.BASE_DIR)
 
@@ -43,7 +42,6 @@ class UserSerializerDiscordNamesTest(TestCase):
         serializer.save()
         fresh = CustomUser.objects.nocache().get(pk=self.user.pk)
         self.assertEqual(fresh.discordNickname, "Gwaihir")
-        self.assertIsNone(raw_site_nickname(self.user.pk))
 
     def test_update_ignores_guild_nickname(self) -> None:
         serializer = UserSerializer(

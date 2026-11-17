@@ -11,7 +11,6 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from app.models import CustomUser, League, Organization, Tournament
-from app.tests.raw_site_nickname import raw_site_nickname, set_raw_site_nickname
 from discordbot.services.member_names import MemberNames
 from org import discord_names
 from org.discord_names import (
@@ -55,7 +54,6 @@ class ApplyGuildMemberNamesTests(TestCase):
         self.user = CustomUser.objects.create(
             username="dragonclaw_site", discordId="42", discordUsername="dc_old"
         )
-        set_raw_site_nickname(self.user.pk, "MySite")
         self.ou_a = OrgUser.objects.create(user=self.user, organization=self.org_a)
         self.ou_b = OrgUser.objects.create(user=self.user, organization=self.org_b)
         self.ou_c = OrgUser.objects.create(
@@ -85,7 +83,6 @@ class ApplyGuildMemberNamesTests(TestCase):
         self.assertEqual(self.user.discordNickname, "GwaihirTheWindlord")
         self.assertEqual(self.user.discordUsername, "dc_new")
         self.assertEqual(self.user.username, "dragonclaw_site")
-        self.assertEqual(raw_site_nickname(self.user.pk), "MySite")
         for ou in (self.ou_a, self.ou_b):
             ou.refresh_from_db()
             self.assertEqual(ou.guild_nickname, "DragonClaw")

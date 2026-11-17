@@ -3,7 +3,6 @@ from datetime import date
 from django.test import TestCase
 
 from app.models import CustomUser, Game, League, Organization, Team, Tournament
-from app.tests.raw_site_nickname import set_raw_site_nickname
 from org.models import OrgUser
 from steam.models import Match, PlayerMatchStats, SuggestionTier
 from steam.services.match_suggestions import (
@@ -386,7 +385,6 @@ class GetMatchSuggestionsFallbackTest(TestCase):
         )
 
     def test_name_search_matches_captain_names(self):
-        set_raw_site_nickname(self.radiant_captain.pk, "DragonSite")
         self.radiant_captain.discordNickname = "Windlord"
         self.radiant_captain.save()
         with_rcap = self._create_match(match_id=1, league_id=19571)

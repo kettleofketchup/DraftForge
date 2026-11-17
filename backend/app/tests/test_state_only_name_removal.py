@@ -48,18 +48,12 @@ class ModelStateTest(TestCase):
         self.assertNotIn("guildNickname", _columns("app_customuser"))
         self.assertNotIn("app_customu_guildNi_602cf5_idx", _indexes("app_customuser"))
 
-    def test_site_nickname_column_still_exists(self) -> None:
-        self.assertIn("nickname", _columns("user_baseuserprofile"))
+    def test_site_nickname_column_dropped(self) -> None:
+        self.assertNotIn("nickname", _columns("user_baseuserprofile"))
 
-    def test_inserts_leave_site_nickname_column_null(self) -> None:
+    def test_inserts_create_base_profile(self) -> None:
         user = CustomUser.objects.create(username="state_only_insert")
         self.assertTrue(BaseUserProfile.objects.filter(user=user).exists())
-        with connection.cursor() as cursor:
-            cursor.execute(
-                "SELECT nickname FROM user_baseuserprofile WHERE user_id = %s",
-                [user.pk],
-            )
-            self.assertIsNone(cursor.fetchone()[0])
 
 
 class StateOnlyMigrationKeepsDataTest(MigratorTestCase):

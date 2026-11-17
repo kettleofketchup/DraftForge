@@ -20,7 +20,6 @@ from app.discord_accounts import (
 )
 from app.models import CustomUser, Organization
 from app.pipelines import associate_by_discord_id, save_discord
-from app.tests.raw_site_nickname import raw_site_nickname
 from events.constants import EventState, SignupStatus
 from events.models import Event, EventSignup
 from org.contributions.kinds import ContributionKind
@@ -261,7 +260,6 @@ class GetOrgUserPhantomGuardTest(TestCase):
         org_user.refresh_from_db()
         self.assertIsNone(user.discordNickname)
         self.assertIsNone(org_user.guild_nickname)
-        self.assertIsNone(raw_site_nickname(user.pk))
 
     def test_repeat_click_reuses_same_account(self):
         """Clicking again resolves the same row — never a duplicate discordId."""

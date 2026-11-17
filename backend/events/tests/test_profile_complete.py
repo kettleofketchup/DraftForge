@@ -4,7 +4,6 @@ from django.test import TestCase
 from django.utils import timezone as tz
 
 from app.models import CustomUser, Organization
-from app.tests.raw_site_nickname import raw_site_nickname
 from events.constants import EventState
 from events.models import Event
 from events.services import check_requirements
@@ -27,7 +26,6 @@ class RequireProfileCompleteTest(TestCase):
         user = CustomUser.objects.create(
             username="fresh", steamid=76561198000000042, discordId="4242"
         )
-        self.assertIsNone(raw_site_nickname(user.pk))
         self.assertTrue(check_requirements(self.event, user))
 
     def test_without_steam_is_not_eligible(self) -> None:

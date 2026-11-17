@@ -7,7 +7,6 @@ from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
 from app.models import CustomUser, League, Organization
-from app.tests.raw_site_nickname import set_raw_site_nickname
 from league.models import LeagueUser
 from org.models import OrgUser
 
@@ -208,7 +207,6 @@ class SearchUsersTest(TestCase):
         self.assertEqual([u["pk"] for u in resp.data], [self.global_user.pk])
 
     def test_site_nickname_is_not_searched(self):
-        set_raw_site_nickname(self.global_user.pk, "SiteOnlyName")
         resp = self.client.get("/api/users/search/", {"q": "siteonly"})
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.data, [])

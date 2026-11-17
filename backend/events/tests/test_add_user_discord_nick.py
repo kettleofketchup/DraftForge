@@ -1,9 +1,8 @@
-"""CustomUser.createFromDiscordData stores Discord names, never the site nickname."""
+"""CustomUser.createFromDiscordData stores Discord names."""
 
 from django.test import TestCase
 
 from app.models import CustomUser, PositionsModel
-from app.tests.raw_site_nickname import raw_site_nickname
 
 
 class CreateFromDiscordDataNamesTest(TestCase):
@@ -34,17 +33,12 @@ class CreateFromDiscordDataNamesTest(TestCase):
         user.save()
         return user
 
-    def test_never_writes_site_nickname(self) -> None:
+    def test_stores_global_name_and_username(self) -> None:
         user = self._create(
             self._build_member(nick="DragonClaw", global_name="Gwaihir", username="dc")
         )
-        self.assertIsNone(raw_site_nickname(user.pk))
         self.assertEqual(user.discordNickname, "Gwaihir")
         self.assertEqual(user.username, "dc")
-
-    def test_never_writes_site_nickname_without_discord_names(self) -> None:
-        user = self._create(self._build_member(username="alice"))
-        self.assertIsNone(raw_site_nickname(user.pk))
 
     def test_sets_discord_nickname_from_global_name(self) -> None:
         user = CustomUser(positions=self.positions)
