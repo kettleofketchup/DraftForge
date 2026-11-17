@@ -16,7 +16,7 @@ from django.core.exceptions import ValidationError
 
 from app.cache_utils import invalidate_obj
 from events.discord._shared import _direct_signup, _steam_friend_id_prefill
-from events.eligibility import validate_friend_id
+from events.eligibility import refresh_unmet_requirements, validate_friend_id
 from events.models import Event
 from events.schemas import DeadlockModalConfig
 from org.models_profiles import PlayerDeadlockProfile
@@ -76,6 +76,7 @@ class DeadlockHandler:
         profile.rank = values.get("deadlock_rank", "")
         profile.save()
         invalidate_obj(profile)
+        refresh_unmet_requirements(org_user)
 
         try:
             return _direct_signup(event, user)

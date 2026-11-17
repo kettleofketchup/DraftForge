@@ -3,16 +3,18 @@ from unittest.mock import MagicMock, patch
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.test import override_settings
+from django.utils import timezone as tz
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, GameType, Organization
-from events.constants import SignupStatus
+from app.models import CustomUser, GameType, Organization, Tournament
+from events.constants import EventState, SignupStatus
 from events.discord.providers.dota import _check_dota_profile_complete
 from events.eligibility import (
     REQUIREMENT_CHECKS,
     UNMET_LABELS,
     Unmet,
     has_steam_id,
+    refresh_unmet_requirements,
     steam_friend_id_from_profiles,
     unmet_requirements,
     validate_friend_id,
@@ -25,7 +27,6 @@ from events.services import (
     approve_signup,
     cancel_signup,
     process_rsvp,
-    refresh_unmet_requirements,
     reinstate_signup,
 )
 from events.tests.base import EventTestCase
@@ -547,6 +548,100 @@ class UnmetRequirementsPersistenceTests(EventTestCase):
         u = self.make_user()
         s = EventSignup.objects.create(event=ev, user=u, status=SignupStatus.CANCELLED)
         reinstate_signup(s)
+        s.refresh_from_db()
+        self.assertEqual(s.status, SignupStatus.PENDING_APPROVAL)
+        self.assertEqual(s.unmet_requirements, [Unmet.DOTA_RANK_UNDECLARED.value])
+
+    def test_reinstate_eligible_auto_approve_is_approved(
+        self, _notify: MagicMock
+    ) -> None:
+        ev = self.make_event()
+        s = EventSignup.objects.create(
+            event=ev, user=self.make_user(), status=SignupStatus.CANCELLED
+        )
+        reinstate_signup(s)
+        s.refresh_from_db()
+        self.assertEqual(s.status, SignupStatus.APPROVED)
+        self.assertEqual(s.unmet_requirements, [])
+
+    def test_reinstate_auto_confirm_joins_roster(self, _notify: MagicMock) -> None:
+        tournament = Tournament.objects.create(
+            name="Reinstate Roster", date_played=tz.now(), state="future"
+        )
+        ev = self.make_event(auto_confirm=True, tournament=tournament)
+        u = self.make_user()
+        s = EventSignup.objects.create(event=ev, user=u, status=SignupStatus.CANCELLED)
+        reinstate_signup(s)
+        s.refresh_from_db()
+        self.assertEqual(s.status, SignupStatus.CONFIRMED)
+        self.assertTrue(tournament.users.filter(pk=u.pk).exists())
+
+    def test_reinstate_manual_approval_stays_rsvp_with_codes(
+        self, _notify: MagicMock
+    ) -> None:
+        ev = self._screenshot_event()
+        u = self.make_user()
+        self._declared(u, "active", mmr=4000)
+        s = EventSignup.objects.create(event=ev, user=u, status=SignupStatus.CANCELLED)
+        reinstate_signup(s)
+        s.refresh_from_db()
+        self.assertEqual(s.status, SignupStatus.RSVP)
+        self.assertEqual(s.unmet_requirements, [Unmet.RANK_SCREENSHOT_MISSING.value])
+
+    def test_roll_call_reinstate_clears_codes(self, _notify: MagicMock) -> None:
+        ev = self.make_event(state=EventState.ROLL_CALL, min_mmr=3000)
+        s = EventSignup.objects.create(
+            event=ev,
+            user=self.make_user(),
+            status=SignupStatus.REJECTED,
+            unmet_requirements=[Unmet.DOTA_RANK_UNDECLARED.value],
+        )
+        reinstate_signup(s)
+        s.refresh_from_db()
+        self.assertEqual(s.status, SignupStatus.APPROVED)
+        self.assertEqual(s.unmet_requirements, [])
+
+    def test_approve_with_mmr_override_refreshes_other_signups(
+        self, _notify: MagicMock
+    ) -> None:
+        u = self.make_user()
+        first = process_rsvp(self.make_event(require_mmr_verified=True), u)
+        other = process_rsvp(self.make_event(require_mmr_verified=True), u)
+        other.refresh_from_db()
+        self.assertEqual(other.unmet_requirements, [Unmet.MMR_UNVERIFIED.value])
+        approve_signup(first, mmr_override=5000)
+        other.refresh_from_db()
+        self.assertEqual(other.unmet_requirements, [])
+
+    def test_admin_mmr_edit_refreshes_codes(self, _notify: MagicMock) -> None:
+        u = self.make_user()
+        s = process_rsvp(self.make_event(require_mmr_verified=True), u)
+        api = APIClient()
+        api.force_authenticate(self.admin)
+        resp = api.patch(
+            f"/api/organizations/{self.org.pk}/users/{self._org_user(u).pk}/",
+            {"mmr": 5000},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 200, resp.content)
+        s.refresh_from_db()
+        self.assertEqual(s.unmet_requirements, [])
+
+    def test_deleting_dota_profile_restores_undeclared(
+        self, _notify: MagicMock
+    ) -> None:
+        ev = self.make_event(auto_approve=False, min_mmr=3000)
+        u = self.make_user()
+        self._declared(u, "active", mmr=4000)
+        s = process_rsvp(ev, u)
+        s.refresh_from_db()
+        self.assertEqual(s.unmet_requirements, [])
+        api = APIClient()
+        api.force_authenticate(self.admin)
+        resp = api.delete(
+            f"/api/organizations/{self.org.pk}/users/{u.pk}/dota-profile/delete/"
+        )
+        self.assertEqual(resp.status_code, 204, resp.content)
         s.refresh_from_db()
         self.assertEqual(s.unmet_requirements, [Unmet.DOTA_RANK_UNDECLARED.value])
 

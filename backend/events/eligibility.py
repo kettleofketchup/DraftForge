@@ -17,7 +17,8 @@ from django.db import IntegrityError, transaction
 
 from app.cache_utils import invalidate_after_commit
 from app.models import CustomUser, GameType, Organization
-from events.models import Event
+from events.constants import UNMET_TRACKED_STATUSES
+from events.models import Event, EventSignup
 from events.schemas import DotaModalConfig, dota_require_screenshot
 from org.models import OrgUser
 from org.models_profiles import PlayerDeadlockProfile, PlayerDotaProfile
@@ -301,3 +302,36 @@ def unmet_requirements(event: Event, user: CustomUser) -> list[Unmet]:
         codes.append(Unmet.PROFILE_INCOMPLETE)
     codes.extend(game.unmet(event, user, org_user))
     return list(dict.fromkeys(codes))
+
+
+def unmet_codes(event: Event, user: CustomUser) -> list[str]:
+    """``unmet_requirements`` as the string codes stored on a signup."""
+    return [code.value for code in unmet_requirements(event, user)]
+
+
+def refresh_unmet_requirements(org_user: OrgUser) -> int:
+    """Recompute stored ``unmet_requirements`` on the user's open signups in
+    the org; the status is not re-decided. Every writer of a requirement
+    input (game profiles, MMR verification) calls this after saving.
+    Returns the number of rows changed."""
+    signups = (
+        EventSignup.objects.nocache()
+        .filter(
+            user_id=org_user.user_id,
+            event__organization_id=org_user.organization_id,
+            status__in=UNMET_TRACKED_STATUSES,
+        )
+        .select_related("event", "user")
+    )
+    changed: list[EventSignup] = []
+    for signup in signups:
+        codes = unmet_codes(signup.event, signup.user)
+        if codes == signup.unmet_requirements:
+            continue
+        signup.unmet_requirements = codes
+        signup.save(update_fields=["unmet_requirements"])
+        changed.append(signup)
+    if changed:
+        events = {signup.event_id: signup.event for signup in changed}
+        invalidate_after_commit(*changed, *events.values())
+    return len(changed)

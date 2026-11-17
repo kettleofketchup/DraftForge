@@ -18,7 +18,6 @@ from events.capacity import has_free_seat, lock_event, seat_holding_statuses
 from events.constants import (
     EVENT_REOPEN_TRANSITIONS,
     EVENT_RESTART_TRANSITIONS,
-    UNMET_TRACKED_STATUSES,
     EventState,
     RepeatFrequency,
     SignupStatus,
@@ -31,7 +30,9 @@ from events.discord import (
     notify_signup_changed,
 )
 from events.eligibility import (
+    refresh_unmet_requirements,
     sync_steam_account_from_profiles,
+    unmet_codes,
     unmet_requirements,
     validate_friend_id,
 )
@@ -123,37 +124,6 @@ def check_requirements(event: Event, user: CustomUser) -> bool:
     return not unmet_requirements(event, user)
 
 
-def _unmet_codes(event: Event, user: CustomUser) -> list[str]:
-    return [code.value for code in unmet_requirements(event, user)]
-
-
-def refresh_unmet_requirements(org_user: OrgUser) -> int:
-    """Recompute stored ``unmet_requirements`` on the user's open signups in
-    the org after a profile change; the status is not re-decided. Returns the
-    number of rows changed."""
-    signups = (
-        EventSignup.objects.nocache()
-        .filter(
-            user_id=org_user.user_id,
-            event__organization_id=org_user.organization_id,
-            status__in=UNMET_TRACKED_STATUSES,
-        )
-        .select_related("event", "user")
-    )
-    changed: list[EventSignup] = []
-    for signup in signups:
-        codes = _unmet_codes(signup.event, signup.user)
-        if codes == signup.unmet_requirements:
-            continue
-        signup.unmet_requirements = codes
-        signup.save(update_fields=["unmet_requirements"])
-        changed.append(signup)
-    if changed:
-        events = {signup.event_id: signup.event for signup in changed}
-        invalidate_after_commit(*changed, *events.values())
-    return len(changed)
-
-
 def resolve_or_create_org_user(
     user: CustomUser, organization: Organization
 ) -> "OrgUser":
@@ -167,6 +137,28 @@ def resolve_or_create_org_user(
     """
     org_user, _ = OrgUser.objects.get_or_create(user=user, organization=organization)
     return org_user
+
+
+def _decide_signup_status(event: Event, unmet: list[str]) -> SignupStatus:
+    """Status for a signup taking a seat. Auto-approve events approve (or
+    confirm) eligible players and hold the rest for staff; manual-approval
+    events leave everyone at RSVP."""
+    if not event.auto_approve:
+        return SignupStatus.RSVP
+    if unmet:
+        return SignupStatus.PENDING_APPROVAL
+    if event.auto_confirm:
+        return SignupStatus.CONFIRMED
+    return SignupStatus.APPROVED
+
+
+def _add_to_roster_if_seated(
+    event: Event, user: CustomUser, status: SignupStatus
+) -> None:
+    if status == SignupStatus.CONFIRMED or (
+        status == SignupStatus.APPROVED and not event.roll_call_enabled
+    ):
+        add_user_to_tournament(event, user)
 
 
 @transaction.atomic
@@ -216,7 +208,7 @@ def _create_signup(
 
     signup_type = SignupType.TEAM if event_team else SignupType.USER
     _sync_signup_steam_account(event, user)
-    unmet = _unmet_codes(event, user)
+    unmet = unmet_codes(event, user)
 
     if not has_free_seat(lock_event(event)):
         max_pos = (
@@ -245,15 +237,7 @@ def _create_signup(
         transaction.on_commit(lambda: notify_signup_changed(event))
         return signup
 
-    status = SignupStatus.RSVP
-    if event.auto_approve:
-        if not unmet:
-            status = SignupStatus.APPROVED
-            if event.auto_confirm:
-                status = SignupStatus.CONFIRMED
-        else:
-            status = SignupStatus.PENDING_APPROVAL
-
+    status = _decide_signup_status(event, unmet)
     signup = EventSignup.objects.create(
         event=event,
         user=user,
@@ -262,10 +246,7 @@ def _create_signup(
         status=status,
         unmet_requirements=unmet,
     )
-    if status == SignupStatus.CONFIRMED:
-        add_user_to_tournament(event, user)
-    elif status == SignupStatus.APPROVED and not event.roll_call_enabled:
-        add_user_to_tournament(event, user)
+    _add_to_roster_if_seated(event, user, status)
     invalidate_after_commit(event)
     log.info(
         "signup_post_commit_hooks_scheduled",
@@ -559,6 +540,7 @@ def approve_signup(signup: EventSignup, mmr_override: int | None = None) -> Even
             update_fields=["mmr", "has_active_dota_mmr", "dota_mmr_last_verified"]
         )
         invalidate_after_commit(org_user)
+        refresh_unmet_requirements(org_user)
 
     signup.status = SignupStatus.APPROVED
     signup.waitlist_position = None
@@ -663,19 +645,10 @@ def _promote_from_waitlist(event: Event) -> list[EventSignup]:
             break
         next_waitlisted.waitlist_position = None
         _sync_signup_steam_account(locked, next_waitlisted.user)
-        unmet = _unmet_codes(locked, next_waitlisted.user)
+        unmet = unmet_codes(locked, next_waitlisted.user)
         next_waitlisted.unmet_requirements = unmet
-        if locked.auto_approve and not unmet:
-            next_waitlisted.status = SignupStatus.APPROVED
-            if locked.auto_confirm:
-                next_waitlisted.status = SignupStatus.CONFIRMED
-                add_user_to_tournament(locked, next_waitlisted.user)
-            elif not locked.roll_call_enabled:
-                add_user_to_tournament(locked, next_waitlisted.user)
-        elif locked.auto_approve:
-            next_waitlisted.status = SignupStatus.PENDING_APPROVAL
-        else:
-            next_waitlisted.status = SignupStatus.RSVP
+        next_waitlisted.status = _decide_signup_status(locked, unmet)
+        _add_to_roster_if_seated(locked, next_waitlisted.user, next_waitlisted.status)
         next_waitlisted.save(
             update_fields=[
                 "status",
@@ -733,7 +706,8 @@ def reinstate_signup(signup: EventSignup) -> EventSignup:
     """Bring a removed signup back into the active list.
 
     Behavior depends on event state:
-      - signups_open: CANCELLED → RSVP (or WAITLISTED if full).
+      - signups_open: CANCELLED → the status a new signup would get
+                      (``_decide_signup_status``), or WAITLISTED if full.
       - roll_call:    CANCELLED or REJECTED → APPROVED, so the player
                       reappears in the Awaiting Confirmation list and admins
                       can re-confirm without leaving the rollcall screen.
@@ -746,7 +720,15 @@ def reinstate_signup(signup: EventSignup) -> EventSignup:
             )
         signup.status = SignupStatus.APPROVED
         signup.waitlist_position = None
-        signup.save(update_fields=["status", "waitlist_position", "updated_at"])
+        signup.unmet_requirements = []
+        signup.save(
+            update_fields=[
+                "status",
+                "waitlist_position",
+                "unmet_requirements",
+                "updated_at",
+            ]
+        )
         invalidate_after_commit(signup, event)
         transaction.on_commit(lambda: notify_signup_changed(event))
         return signup
@@ -755,7 +737,10 @@ def reinstate_signup(signup: EventSignup) -> EventSignup:
         raise ValueError("Only cancelled signups can be reinstated.")
     if event.state != "signups_open":
         raise ValueError("Event is not accepting signups.")
-    if not has_free_seat(lock_event(event)):
+    locked = lock_event(event)
+    _sync_signup_steam_account(locked, signup.user)
+    unmet = unmet_codes(locked, signup.user)
+    if not has_free_seat(locked):
         max_pos = (
             EventSignup.objects.filter(
                 event=event, status=SignupStatus.WAITLISTED
@@ -765,9 +750,10 @@ def reinstate_signup(signup: EventSignup) -> EventSignup:
         signup.status = SignupStatus.WAITLISTED
         signup.waitlist_position = max_pos + 1
     else:
-        signup.status = SignupStatus.RSVP
+        signup.status = _decide_signup_status(locked, unmet)
         signup.waitlist_position = None
-    signup.unmet_requirements = _unmet_codes(event, signup.user)
+        _add_to_roster_if_seated(locked, signup.user, signup.status)
+    signup.unmet_requirements = unmet
     signup.save(
         update_fields=[
             "status",

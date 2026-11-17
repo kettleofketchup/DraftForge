@@ -55,6 +55,25 @@ class FriendIdModalTests(EventTestCase):
             "515151",
         )
 
+    def test_deadlock_friend_id_refreshes_codes_on_other_signups(self) -> None:
+        dota_ev = self.make_event(auto_approve=False, require_steam_id=True)
+        u = self.make_user()
+        held = EventSignup.objects.create(
+            event=dota_ev,
+            user=u,
+            status=SignupStatus.RSVP,
+            unmet_requirements=["steam_id_missing"],
+        )
+        result = DeadlockHandler().apply_modal_submit(
+            self.make_event(game_type=GameType.DEADLOCK),
+            self._org_user(u),
+            u,
+            {"unverified_friend_id": "535353", "deadlock_rank": "Ritualist"},
+        )
+        self.assertEqual(result["action"], "signed_up")
+        held.refresh_from_db()
+        self.assertEqual(held.unmet_requirements, [])
+
     def test_dota_modal_rejects_bad_friend_id(self) -> None:
         ev = self.make_event()
         for fid in ("abc", "9" * 21, self._taken_friend_id()):
