@@ -55,6 +55,23 @@ class StampPayload(BaseModel):
     ref: uuid.UUID
 
 
+class TypeErrorPayload(BaseModel):
+    name: str
+
+    @field_validator("name")
+    @classmethod
+    def _explode(cls, value: str) -> str:
+        raise TypeError(f"{SENTINEL} {value}")
+
+
+def _raising_hook(payload: AlertPayload) -> str:
+    raise KeyError(f"{SENTINEL} {payload.reason}")
+
+
+def _non_str_hook(payload: AlertPayload) -> str:
+    return payload.member_id  # type: ignore[return-value]
+
+
 def _register_extra_types() -> None:
     register_notice_type(
         NoticeType(
@@ -80,6 +97,35 @@ def _register_extra_types() -> None:
             sample_payload=lambda: StampPayload(at=datetime.now(UTC), ref=uuid.uuid4()),
         )
     )
+    register_notice_type(
+        NoticeType(
+            key="test.typeerror",
+            label="TypeError",
+            description="Validator raises TypeError",
+            category=NoticeCategory.LOG,
+            default_severity=NoticeSeverity.INFO,
+            payload=TypeErrorPayload,
+            summary=lambda p: "typeerror",
+            sample_payload=lambda: TypeErrorPayload.model_construct(name="x"),
+        )
+    )
+    for hook_key, hook in (
+        ("test.badhook", _raising_hook),
+        ("test.nonstrhook", _non_str_hook),
+    ):
+        register_notice_type(
+            NoticeType(
+                key=hook_key,
+                label=hook_key,
+                description="Broken dedupe hook",
+                category=NoticeCategory.URGENT,
+                default_severity=NoticeSeverity.INFO,
+                payload=AlertPayload,
+                summary=lambda p: "hook",
+                sample_payload=lambda: AlertPayload(member_id=1, reason="x"),
+                dedupe_key=hook,
+            )
+        )
 
 
 def _alert(member_id: int = 1, reason: str = "late") -> dict[str, Any]:
@@ -152,13 +198,44 @@ class FailureTriggers(EmitTestBase):
                 ),
             ),
             ("database_error", db_error),
+            (
+                "invalid_payload",
+                lambda: emit_notice(
+                    "test.typeerror", {"name": "member-name"}, organization=org
+                ),
+            ),
+            (
+                "invalid_payload",
+                lambda: emit_notice(
+                    "test.alert",
+                    AlertPayload.model_construct(member_id="x", reason="r"),
+                    organization=org,
+                ),
+            ),
+            (
+                "invalid_dedupe_key",
+                lambda: emit_notice("test.badhook", _alert(), organization=org),
+            ),
+            (
+                "invalid_dedupe_key",
+                lambda: emit_notice("test.nonstrhook", _alert(), organization=org),
+            ),
+            (
+                "invalid_dedupe_key",
+                lambda: emit_notice(
+                    "test.alert",
+                    _alert(),
+                    organization=org,
+                    dedupe_key=5,  # type: ignore[arg-type]
+                ),
+            ),
         ]
 
 
 class StrictFailureTests(FailureTriggers):
     def test_each_failure_raises_with_code(self) -> None:
-        for code, trigger in self._triggers():
-            with self.subTest(code=code):
+        for index, (code, trigger) in enumerate(self._triggers()):
+            with self.subTest(index=index, code=code):
                 with self.assertRaises(NoticeEmitError) as ctx:
                     trigger()
                 self.assertEqual(ctx.exception.code, code)
@@ -197,6 +274,41 @@ class StrictFailureTests(FailureTriggers):
             {tuple(e["loc"]) for e in exc.errors}, {("member_id",), ("reason",)}
         )
 
+    def test_dedupe_hook_failure_is_chained(self) -> None:
+        with self.assertRaises(NoticeEmitError) as ctx:
+            emit_notice("test.badhook", _alert(), organization=self.org)
+        self.assertEqual(ctx.exception.code, "invalid_dedupe_key")
+        self.assertIsInstance(ctx.exception.__cause__, KeyError)
+        self.assertNotIn(SENTINEL, str(ctx.exception))
+
+    def test_unvalidated_instance_is_revalidated(self) -> None:
+        with self.assertRaises(NoticePayloadError) as ctx:
+            emit_notice(
+                "test.alert",
+                AlertPayload.model_construct(member_id="x", reason="r"),
+                organization=self.org,
+            )
+        self.assertEqual(
+            ctx.exception.errors, [{"loc": ("member_id",), "type": "int_parsing"}]
+        )
+        mutated = AlertPayload(member_id=1, reason="r")
+        mutated.member_id = "y"  # type: ignore[assignment]
+        with self.assertRaises(NoticePayloadError):
+            emit_notice("test.alert", mutated, organization=self.org)
+        self.assertEqual(OpsNotice.objects.count(), 0)
+
+    def test_subclass_instance_drops_extra_fields(self) -> None:
+        class WiderPayload(AlertPayload):
+            secret: str
+
+        notice = emit_notice(
+            "test.alert",
+            WiderPayload(member_id=2, reason="r", secret="s"),
+            organization=self.org,
+        )
+        assert notice is not None
+        self.assertEqual(notice.payload, {"member_id": 2, "reason": "r"})
+
     def test_wrong_model_instance_is_invalid_payload(self) -> None:
         with self.assertRaises(NoticePayloadError) as ctx:
             emit_notice(
@@ -210,9 +322,9 @@ class StrictFailureTests(FailureTriggers):
 @override_settings(OPS_NOTICES_STRICT=False)
 class LenientFailureTests(FailureTriggers):
     def test_each_failure_returns_none_and_keeps_outer_transaction(self) -> None:
-        for code, trigger in self._triggers():
-            with self.subTest(code=code):
-                sentinel_name = f"Sentinel {code}"
+        for index, (code, trigger) in enumerate(self._triggers()):
+            with self.subTest(index=index, code=code):
+                sentinel_name = f"Sentinel {index} {code}"
                 with capture_logs() as logs, transaction.atomic():
                     Organization.objects.create(name=sentinel_name, owner=self.admin)
                     self.assertIsNone(trigger())
@@ -226,6 +338,7 @@ class LenientFailureTests(FailureTriggers):
                 self.assertEqual(failed[0]["log_level"], "error")
                 self.assertEqual(failed[0]["system"], "opsnotices")
                 self.assertEqual(failed[0]["subsystem"], "emit")
+                self.assertNotIn(SENTINEL, repr(logs))
 
     def test_payload_failure_log_fields(self) -> None:
         with capture_logs() as logs:
@@ -236,6 +349,23 @@ class LenientFailureTests(FailureTriggers):
         self.assertEqual(entry["organization_id"], self.org.id)
         self.assertIn(entry["first_error_loc"], {"member_id", "reason"})
         self.assertTrue(entry["first_error_type"])
+        self.assertNotIn("error_type", entry)
+
+    def test_chained_cause_type_is_logged(self) -> None:
+        with (
+            patch.object(OpsNotice.objects, "create", side_effect=DatabaseError("x")),
+            capture_logs() as logs,
+        ):
+            emit_notice("test.alert", _alert(), organization=self.org)
+        with capture_logs() as hook_logs:
+            emit_notice("test.badhook", _alert(), organization=self.org)
+        (db_entry,) = self._failed_logs(logs)
+        (hook_entry,) = self._failed_logs(hook_logs)
+        self.assertEqual(db_entry["code"], "database_error")
+        self.assertEqual(db_entry["error_type"], "DatabaseError")
+        self.assertEqual(hook_entry["code"], "invalid_dedupe_key")
+        self.assertEqual(hook_entry["error_type"], "KeyError")
+        self.assertNotIn(SENTINEL, repr(hook_logs))
 
 
 class ValidatorLeakTests(EmitTestBase):
@@ -487,6 +617,26 @@ class EventIdentityTests(EmitTestBase):
         self.assertEqual(again.event_key, self.event.id)
         self.assertEqual(OpsNotice.objects.count(), 4)
 
+    def test_event_ref_reemit_refreshes_snapshot(self) -> None:
+        first = emit_notice(
+            "test.alert",
+            _alert(),
+            organization=self.org,
+            event=EventRef(id=999, name="Old", event_repeater_id=7),
+        )
+        again = emit_notice(
+            "test.alert",
+            _alert(),
+            organization=self.org,
+            event=EventRef(id=999, name="New", event_repeater_id=8),
+        )
+        assert first is not None and again is not None
+        self.assertEqual(again.pk, first.pk)
+        self.assertEqual(again.event_name, "New")
+        self.assertEqual(again.event_repeater_id, 8)
+        self.assertEqual(again.event_key, 999)
+        self.assertIsNone(again.event_id)
+
     def test_event_repeater_id_snapshot(self) -> None:
         repeater = self._repeater()
         series_event = self._event("Series")
@@ -532,6 +682,28 @@ class IdempotencyTests(EmitTestBase):
         assert first is not None and second is not None
         self.assertEqual(first.pk, second.pk)
         self.assertEqual(OpsNotice.objects.count(), 1)
+
+    def test_emit_without_id_keeps_earlier_emit_id(self) -> None:
+        emit_id = uuid.uuid4()
+        emit_notice("test.alert", _alert(), organization=self.org, emit_id=emit_id)
+        bumped = emit_notice("test.alert", _alert(), organization=self.org)
+        assert bumped is not None
+        self.assertEqual(bumped.occurrences, 2)
+        self.assertEqual(bumped.last_emit_id, emit_id)
+        with capture_logs() as logs:
+            replay = emit_notice(
+                "test.alert", _alert(), organization=self.org, emit_id=emit_id
+            )
+        assert replay is not None
+        self.assertEqual(replay.pk, bumped.pk)
+        self.assertEqual(replay.occurrences, 2)
+        self.assertFalse(
+            [
+                e
+                for e in logs
+                if e["event"] in {"ops_notice_emitted", "ops_notice_repeated"}
+            ]
+        )
 
     def test_new_emit_id_bumps_and_records(self) -> None:
         emit_notice("test.alert", _alert(), organization=self.org, emit_id=uuid.uuid4())
@@ -585,12 +757,14 @@ class IntegrityRetryTests(EmitTestBase):
         self.assertTrue(Organization.objects.filter(name="Sentinel retry").exists())
 
     def test_integrity_error_retry_miss_event_conflict(self) -> None:
+        error = IntegrityError("NOT NULL constraint failed")
         with (
-            patch.object(OpsNotice.objects, "create", side_effect=IntegrityError),
+            patch.object(OpsNotice.objects, "create", side_effect=error),
             self.assertRaises(NoticeEmitError) as ctx,
         ):
             emit_notice("test.alert", _alert(), organization=self.org)
         self.assertEqual(ctx.exception.code, "event_conflict")
+        self.assertIs(ctx.exception.__cause__, error)
 
         with (
             override_settings(OPS_NOTICES_STRICT=False),
@@ -604,6 +778,7 @@ class IntegrityRetryTests(EmitTestBase):
             )
         (entry,) = self._failed_logs(logs)
         self.assertEqual(entry["code"], "event_conflict")
+        self.assertEqual(entry["error_type"], "IntegrityError")
         self.assertEqual(OpsNotice.objects.count(), 0)
         self.assertTrue(Organization.objects.filter(name="Sentinel conflict").exists())
 

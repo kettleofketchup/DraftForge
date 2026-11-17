@@ -88,13 +88,11 @@ def _find_open_notice(
 def _validate_payload(
     notice_type: NoticeType[Any], payload: BaseModel | Mapping[str, Any]
 ) -> BaseModel:
-    if isinstance(payload, BaseModel):
-        if not isinstance(payload, notice_type.payload):
-            raise NoticePayloadError(
-                notice_type.key, [{"loc": (), "type": "model_type"}]
-            )
-        return payload
+    if isinstance(payload, BaseModel) and not isinstance(payload, notice_type.payload):
+        raise NoticePayloadError(notice_type.key, [{"loc": (), "type": "model_type"}])
     try:
+        if isinstance(payload, BaseModel):
+            payload = payload.model_dump(by_alias=True, warnings=False)
         return notice_type.payload.model_validate(payload)
     except ValidationError as exc:
         errors = [
@@ -102,6 +100,28 @@ def _validate_payload(
             for error in exc.errors(include_url=False, include_context=False)
         ]
         raise NoticePayloadError(notice_type.key, errors) from None
+    except Exception as exc:
+        raise NoticePayloadError(
+            notice_type.key, [{"loc": (), "type": "validator_raised"}]
+        ) from exc
+
+
+def _resolve_dedupe_key(
+    notice_type: NoticeType[Any], model: BaseModel, dedupe_key: str | None
+) -> str:
+    resolved: object = ""
+    if dedupe_key is not None:
+        resolved = dedupe_key
+    elif notice_type.dedupe_key is not None:
+        try:
+            resolved = notice_type.dedupe_key(model)
+        except Exception as exc:
+            raise NoticeEmitError("invalid_dedupe_key", notice_type.key) from exc
+    if not isinstance(resolved, str):
+        raise NoticeEmitError("invalid_dedupe_key", notice_type.key)
+    if len(resolved) > DEDUPE_KEY_MAX:
+        raise NoticeEmitError("dedupe_key_too_long", notice_type.key)
+    return resolved
 
 
 def _prepare(
@@ -127,14 +147,7 @@ def _prepare(
         except ValueError:
             raise NoticeEmitError("invalid_severity", key) from None
 
-    if dedupe_key is not None:
-        resolved_dedupe = dedupe_key
-    elif notice_type.dedupe_key is not None:
-        resolved_dedupe = notice_type.dedupe_key(model)
-    else:
-        resolved_dedupe = ""
-    if len(resolved_dedupe) > DEDUPE_KEY_MAX:
-        raise NoticeEmitError("dedupe_key_too_long", key)
+    resolved_dedupe = _resolve_dedupe_key(notice_type, model, dedupe_key)
 
     fk: Event | None = None
     event_key, event_name, repeater_id = 0, "", None
@@ -229,14 +242,15 @@ def _write(
                 last_emit_id=emit_id,
             )
         return notice, "created"
-    except IntegrityError:
+    except IntegrityError as exc:
         if not prepared.dedupe_key:
             raise
+        conflict = exc
     existing = _find_open_notice(
         organization.id, key, prepared.event_key, prepared.dedupe_key
     )
     if existing is None:
-        raise NoticeEmitError("event_conflict", key)
+        raise NoticeEmitError("event_conflict", key) from conflict
     return _bump(
         existing, prepared, has_event, subject_user, actor, emit_id
     ), "repeated"
@@ -255,6 +269,8 @@ def _log_failure(exc: NoticeEmitError, organization: Organization | None) -> Non
             "first_error_loc": ".".join(str(part) for part in first["loc"]),
             "first_error_type": first["type"],
         }
+    if exc.__cause__ is not None:
+        fields["error_type"] = type(exc.__cause__).__name__
     log.error(
         "ops_notice_emit_failed",
         system="opsnotices",
