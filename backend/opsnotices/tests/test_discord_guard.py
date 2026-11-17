@@ -222,14 +222,16 @@ class EmitNoNetworkTests(EventTestCase):
                         side_effect=AssertionError(name),
                     )
                 )
-            for target, attr in (
+            network_targets: tuple[tuple[Any, str], ...] = (
                 (requests, "post"),
                 (requests, "request"),
                 (requests.Session, "request"),
-            ):
-                mocks[f"requests.{attr}"] = stack.enter_context(
+            )
+            for target, attr in network_targets:
+                mocks[f"{target.__name__}.{attr}"] = stack.enter_context(
                     patch.object(target, attr, side_effect=AssertionError(attr))
                 )
+            self.assertEqual(len(mocks), len(helper_names) + len(network_targets))
             with self.captureOnCommitCallbacks(execute=True):
                 notice = emit_notice(
                     "test.alert",
