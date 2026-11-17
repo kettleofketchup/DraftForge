@@ -206,9 +206,7 @@ def populate_events_data(force=False):
     if event_league_staff:
         if event_league_staff not in league.staff.all():
             league.staff.add(event_league_staff)
-            print(
-                f"    Added {event_league_staff.username} as staff of {league.name}"
-            )
+            print(f"    Added {event_league_staff.username} as staff of {league.name}")
         invalidate_obj(league)
 
     # 5. Create a sample EventRepeater + Event for E2E tests
@@ -418,7 +416,7 @@ def populate_events_data(force=False):
             defaults={"status": SignupStatus.CONFIRMED},
         )
 
-    print(f"    Created 4 demo events with signups (incl. Demo MMR Approval Event)")
+    print("    Created 4 demo events with signups (incl. Demo MMR Approval Event)")
 
     # 5b-i. Deadlock event with require_steam_id=True (Friend ID universal across game types)
     Event.objects.update_or_create(
@@ -515,7 +513,7 @@ def populate_events_data(force=False):
     # Add captains as team members
     team_a.members.add(site_admin)
     team_b.members.add(CustomUser.objects.get(pk=EVENTS_USERS[0].pk))
-    print(f"    Created Draft Test Tournament (pk=100) with 10 players, 2 captains")
+    print("    Created Draft Test Tournament (pk=100) with 10 players, 2 captains")
 
     # 6. Create org event defaults
     OrgEventDefaults.objects.update_or_create(

@@ -21,7 +21,9 @@ class UserSignupsOpenTournamentIdsTests(TestCase):
     def setUpTestData(cls) -> None:
         cls.org = Organization.objects.create(name="Window Org")
         cls.league = League.objects.create(organization=cls.org, name="Window League")
-        cls.user = CustomUser.objects.create_user(username="window_player", password="x")
+        cls.user = CustomUser.objects.create_user(
+            username="window_player", password="x"
+        )
         cls.user.positions = PositionsModel.objects.create()
         cls.user.save()
 

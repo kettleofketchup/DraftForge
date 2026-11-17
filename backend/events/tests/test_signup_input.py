@@ -82,7 +82,7 @@ class ApplySignupInputTests(TestCase):
         self.user.refresh_from_db()
         positions = self.user.positions
         self.assertEqual(positions.offlane, 1)  # 1st pick → Favorite
-        self.assertEqual(positions.carry, 2)    # 2nd pick → Can play
+        self.assertEqual(positions.carry, 2)  # 2nd pick → Can play
         self.assertEqual(positions.hard_support, 3)  # 3rd pick → If team needs
         self.assertEqual(positions.mid, 0)
         self.assertEqual(positions.soft_support, 0)
@@ -138,19 +138,20 @@ class ApplySignupInputTests(TestCase):
 
     def test_rank_status_active_writes(self):
         apply_signup_input(
-            org_user=self.org_user, event=self.event,
+            org_user=self.org_user,
+            event=self.event,
             patch=SignupInputPatch(rank_status="active"),
         )
         profile = PlayerDotaProfile.objects.get(org_user=self.org_user)
         self.assertEqual(profile.rank_status, "active")
-
 
     def test_rank_status_disallowed_raises(self):
         self.event.allow_active_mmr = False
         self.event.save()
         with self.assertRaises(DjangoValidationError) as ctx:
             apply_signup_input(
-                org_user=self.org_user, event=self.event,
+                org_user=self.org_user,
+                event=self.event,
                 patch=SignupInputPatch(rank_status="active"),
             )
         self.assertEqual(ctx.exception.code, "rank_status_disallowed")
@@ -158,16 +159,17 @@ class ApplySignupInputTests(TestCase):
 
     def test_rank_medal_writes(self):
         apply_signup_input(
-            org_user=self.org_user, event=self.event,
+            org_user=self.org_user,
+            event=self.event,
             patch=SignupInputPatch(rank_medal="Crusader 3"),
         )
         profile = PlayerDotaProfile.objects.get(org_user=self.org_user)
         self.assertEqual(profile.rank_medal, "Crusader 3")
 
-
     def test_battle_cup_tier_writes(self):
         apply_signup_input(
-            org_user=self.org_user, event=self.event,
+            org_user=self.org_user,
+            event=self.event,
             patch=SignupInputPatch(battle_cup_tier=5),
         )
         profile = PlayerDotaProfile.objects.get(org_user=self.org_user)
@@ -175,33 +177,34 @@ class ApplySignupInputTests(TestCase):
 
     def test_rank_screenshot_writes(self):
         apply_signup_input(
-            org_user=self.org_user, event=self.event,
+            org_user=self.org_user,
+            event=self.event,
             patch=SignupInputPatch(rank_screenshot="https://i.imgur.com/abc.png"),
         )
         profile = PlayerDotaProfile.objects.get(org_user=self.org_user)
         self.assertEqual(profile.rank_screenshot, "https://i.imgur.com/abc.png")
 
-
     def test_screenshot_bad_shape_raises(self):
         with self.assertRaises(DjangoValidationError) as ctx:
             apply_signup_input(
-                org_user=self.org_user, event=self.event,
+                org_user=self.org_user,
+                event=self.event,
                 patch=SignupInputPatch(rank_screenshot="ftp://example.com/x.png"),
             )
         self.assertEqual(ctx.exception.code, "screenshot_bad_url")
 
-
     def test_screenshot_bad_extension_raises(self):
         with self.assertRaises(DjangoValidationError):
             apply_signup_input(
-                org_user=self.org_user, event=self.event,
+                org_user=self.org_user,
+                event=self.event,
                 patch=SignupInputPatch(rank_screenshot="https://i.imgur.com/abc.gif"),
             )
 
-
     def test_battlecup_screenshot_writes(self):
         apply_signup_input(
-            org_user=self.org_user, event=self.event,
+            org_user=self.org_user,
+            event=self.event,
             patch=SignupInputPatch(battlecup_screenshot="https://i.imgur.com/bc.jpg"),
         )
         profile = PlayerDotaProfile.objects.get(org_user=self.org_user)
@@ -212,10 +215,13 @@ class ApplySignupInputTests(TestCase):
         other_org = Organization.objects.create(name="Other Org")
         bob = CustomUser.objects.create(username="bob")
         bob_org_user = resolve_or_create_org_user(bob, other_org)
-        PlayerDotaProfile.objects.create(org_user=bob_org_user, unverified_friend_id="9999")
+        PlayerDotaProfile.objects.create(
+            org_user=bob_org_user, unverified_friend_id="9999"
+        )
         with self.assertRaises(DjangoValidationError) as ctx:
             apply_signup_input(
-                org_user=self.org_user, event=self.event,
+                org_user=self.org_user,
+                event=self.event,
                 patch=SignupInputPatch(unverified_friend_id="9999"),
             )
         self.assertEqual(ctx.exception.code, "duplicate_friend_id")
@@ -226,19 +232,23 @@ class ApplySignupInputTests(TestCase):
         # Mirror Discord's 4-turn flow: rank_status, then positions, then medal,
         # then screenshot. Each call commits independently; final state has all writes.
         apply_signup_input(
-            org_user=self.org_user, event=self.event,
+            org_user=self.org_user,
+            event=self.event,
             patch=SignupInputPatch(rank_status="active"),
         )
         apply_signup_input(
-            org_user=self.org_user, event=self.event,
+            org_user=self.org_user,
+            event=self.event,
             patch=SignupInputPatch(positions=[1, 2]),
         )
         apply_signup_input(
-            org_user=self.org_user, event=self.event,
+            org_user=self.org_user,
+            event=self.event,
             patch=SignupInputPatch(rank_medal="Legend 4"),
         )
         apply_signup_input(
-            org_user=self.org_user, event=self.event,
+            org_user=self.org_user,
+            event=self.event,
             patch=SignupInputPatch(rank_screenshot="https://i.imgur.com/x.png"),
         )
         profile = PlayerDotaProfile.objects.get(org_user=self.org_user)
@@ -247,7 +257,6 @@ class ApplySignupInputTests(TestCase):
         self.assertFalse(profile.pos_3)
         self.assertEqual(profile.rank_medal, "Legend 4")
         self.assertEqual(profile.rank_screenshot, "https://i.imgur.com/x.png")
-
 
     def test_idempotent_re_application(self):
         patch = SignupInputPatch(rank_status="active", positions=[3])

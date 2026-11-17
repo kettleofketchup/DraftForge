@@ -79,7 +79,7 @@ class PlayerDotaProfile(PlayerProfileMixin):
     class Meta:
         verbose_name = "Player Dota Profile"
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.org_user} — Dota ({self.rank_status})"
 
 
@@ -106,5 +106,5 @@ class PlayerDeadlockProfile(PlayerProfileMixin):
     class Meta:
         verbose_name = "Player Deadlock Profile"
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.org_user} — Deadlock ({self.rank or 'unranked'})"

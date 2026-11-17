@@ -1,5 +1,6 @@
 from datetime import timedelta
-from django.test import TestCase
+
+from django.test import TestCase, TransactionTestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
@@ -71,6 +72,7 @@ class SignupEndpointAuthTests(TestCase):
 class SignupEndpointHappyPathTests(TestCase):
     def setUp(self):
         from datetime import timedelta
+
         from django.utils import timezone
 
         self.client = APIClient()
@@ -114,8 +116,8 @@ class SignupEndpointHappyPathTests(TestCase):
             format="json",
         )
         self.assertEqual(resp.status_code, 201, resp.content)
-        from org.models_profiles import PlayerDotaProfile
         from org.models import OrgUser
+        from org.models_profiles import PlayerDotaProfile
 
         org_user = OrgUser.objects.get(user=self.user, organization=self.org)
         profile = PlayerDotaProfile.objects.get(org_user=org_user)
@@ -135,9 +137,6 @@ class SignupEndpointHappyPathTests(TestCase):
         self.assertEqual(signup.status, SignupStatus.TENTATIVE)
 
 
-from django.test import TransactionTestCase
-
-
 class SignupEndpointRollbackTests(TransactionTestCase):
     """Pin transactional rollback: when process_rsvp raises, profile writes from
     apply_signup_input must roll back too.
@@ -152,6 +151,7 @@ class SignupEndpointRollbackTests(TransactionTestCase):
 
     def test_process_rsvp_failure_rolls_back_profile_write(self):
         from datetime import timedelta
+
         from django.utils import timezone
 
         from app.models import CustomUser, GameType, Organization
@@ -162,8 +162,8 @@ class SignupEndpointRollbackTests(TransactionTestCase):
             SignupStatus,
             SignupType,
         )
-        from org.models_profiles import PlayerDotaProfile
         from org.models import OrgUser
+        from org.models_profiles import PlayerDotaProfile
 
         org = Organization.objects.create(name="Org")
         event = Event.objects.create(
@@ -263,10 +263,11 @@ class SignupEndpointRollbackTests(TransactionTestCase):
 
     def test_discord_then_web_idempotent(self):
         from datetime import timedelta
+
         from django.utils import timezone
 
         from app.models import CustomUser, GameType, Organization
-        from events.models import Event, EventState, EventSignup
+        from events.models import Event, EventSignup, EventState
         from events.services import process_rsvp
 
         org = Organization.objects.create(name="Org")
@@ -293,6 +294,4 @@ class SignupEndpointRollbackTests(TransactionTestCase):
         )
         self.assertEqual(resp.status_code, 400)
         # Only one signup exists.
-        self.assertEqual(
-            EventSignup.objects.filter(event=event, user=user).count(), 1
-        )
+        self.assertEqual(EventSignup.objects.filter(event=event, user=user).count(), 1)

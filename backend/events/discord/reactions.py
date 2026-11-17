@@ -11,7 +11,9 @@ from telemetry.logging import get_logger
 logger = get_logger(__name__)
 
 
-def handle_reaction_signup(discord_message_id, discord_user_id):
+def handle_reaction_signup(
+    discord_message_id: int | str, discord_user_id: int | str
+) -> tuple[bool, str]:
     """Process a reaction on an event announcement -> create EventSignup.
 
     Returns (success: bool, detail: str) tuple.
@@ -81,7 +83,9 @@ def handle_reaction_signup(discord_message_id, discord_user_id):
         return False, str(e)
 
 
-def handle_reaction_cancel(discord_message_id, discord_user_id):
+def handle_reaction_cancel(
+    discord_message_id: int | str, discord_user_id: int | str
+) -> tuple[bool, str]:
     """Process a reaction removal on an event announcement -> cancel EventSignup.
 
     Returns (success: bool, detail: str) tuple.

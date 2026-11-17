@@ -3,14 +3,15 @@ import datetime
 import re
 from collections.abc import Collection
 from datetime import timedelta
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from zoneinfo import ZoneInfo
 
+from django.contrib.auth.models import AnonymousUser
 from django.db import models, transaction
 
 from app.cache_utils import invalidate_after_commit, invalidate_obj
 from app.functions.teamdraft import apply_draft_options
-from app.models import CustomUser, Team, Tournament
+from app.models import CustomUser, Organization, Team, Tournament
 from events.constants import (
     EVENT_REOPEN_TRANSITIONS,
     EVENT_RESTART_TRANSITIONS,
@@ -33,11 +34,18 @@ from events.models import (
     EventConfigMixin,
     EventRepeater,
     EventSignup,
+    EventTeam,
     TournamentTemplateMixin,
 )
 from events.reopen import ReopenNotPermitted, reopen_event
 from lobby.passwords import PasswordMode, generate_password
 from telemetry.logging import get_logger
+
+if TYPE_CHECKING:
+    from discordbot.models import DiscordEvent
+    from events.schemas import SignupInputPatch
+    from org.models import OrgUser
+    from org.models_profiles import PlayerDotaProfile
 
 logger = get_logger(__name__)
 log = get_logger(__name__)
@@ -53,7 +61,7 @@ SCREENSHOT_URL_RE = re.compile(r"^https?://.+\.(png|jpe?g|webp)(\?.*)?$", re.IGN
 SCREENSHOT_BAD_URL_MESSAGE = "Screenshot must be a direct .png/.jpg/.jpeg/.webp URL."
 
 
-def clear_signup_dedup_state(event_id):
+def clear_signup_dedup_state(event_id: int) -> dict[str, int]:
     """Reset the dedup gates that block recreating a Discord signup post.
 
     Two gates need to flip so the next sync_discord_events run treats the
@@ -95,14 +103,14 @@ def clear_signup_dedup_state(event_id):
     }
 
 
-def _validate_screenshot_url(url):
+def _validate_screenshot_url(url: str | None) -> None:
     if url and not SCREENSHOT_URL_RE.match(url):
         from django.core.exceptions import ValidationError
 
         raise ValidationError(SCREENSHOT_BAD_URL_MESSAGE, code="screenshot_bad_url")
 
 
-def check_requirements(event, user):
+def check_requirements(event: Event, user: CustomUser) -> bool:
     """Check if user meets event confirmation requirements."""
     from org.models import OrgUser
     from org.models_profiles import PlayerDotaProfile
@@ -157,7 +165,9 @@ def check_requirements(event, user):
     return True
 
 
-def resolve_or_create_org_user(user, organization):
+def resolve_or_create_org_user(
+    user: CustomUser, organization: Organization
+) -> "OrgUser":
     """Get or create OrgUser for (user, organization).
 
     Single source of truth for "user joins org by signing up." Used by:
@@ -172,7 +182,7 @@ def resolve_or_create_org_user(user, organization):
     return org_user
 
 
-def _get_active_signup_count(event):
+def _get_active_signup_count(event: Event) -> int:
     """Count non-cancelled, non-rejected, non-waitlisted signups."""
     return (
         EventSignup.objects.filter(event=event)
@@ -188,7 +198,9 @@ def _get_active_signup_count(event):
 
 
 @transaction.atomic
-def _create_signup(event, user, event_team=None):
+def _create_signup(
+    event: Event, user: CustomUser, event_team: EventTeam | None = None
+) -> EventSignup:
     """Internal: create a signup with no state check.
 
     Handles existing-signup detection, waitlist placement, auto-approve / auto-confirm,
@@ -294,7 +306,9 @@ def _create_signup(event, user, event_team=None):
     return signup
 
 
-def process_rsvp(event, user, event_team=None):
+def process_rsvp(
+    event: Event, user: CustomUser, event_team: EventTeam | None = None
+) -> EventSignup:
     """Public-path signup. Locked to SIGNUPS_OPEN."""
     log.info(
         "process_rsvp_started",
@@ -323,7 +337,7 @@ def process_rsvp(event, user, event_team=None):
 
 
 @transaction.atomic
-def create_tentative_signup(event, user):
+def create_tentative_signup(event: Event, user: CustomUser) -> EventSignup:
     """Create a TENTATIVE EventSignup, upgrading any active signup to tentative.
 
     Funnel point for both the DRF action and the Discord tentative button.
@@ -384,7 +398,9 @@ def decline_signup(event: Event, user: CustomUser) -> EventSignup:
     return signup
 
 
-def apply_signup_input(*, org_user, event, patch):
+def apply_signup_input(
+    *, org_user: "OrgUser", event: Event, patch: "SignupInputPatch"
+) -> "PlayerDotaProfile | None":
     """Idempotently write any provided fields onto the OrgUser's PlayerDotaProfile.
 
     Used by both the web `/signup/` endpoint and the Discord adapters so the
@@ -549,7 +565,9 @@ def apply_signup_input(*, org_user, event, patch):
     return profile
 
 
-def staff_add_signup(event, user, event_team=None):
+def staff_add_signup(
+    event: Event, user: CustomUser, event_team: EventTeam | None = None
+) -> EventSignup:
     """Staff-path signup. Allowed during SIGNUPS_OPEN or ROLL_CALL."""
     if event.state not in (EventState.SIGNUPS_OPEN, EventState.ROLL_CALL):
         raise ValueError("Event is not accepting signups.")
@@ -568,7 +586,7 @@ APPROVABLE_STATUSES = [
 
 
 @transaction.atomic
-def approve_signup(signup, mmr_override=None):
+def approve_signup(signup: EventSignup, mmr_override: int | None = None) -> EventSignup:
     """Approve a signup, optionally setting the user's MMR."""
     from django.utils import timezone as tz
 
@@ -600,7 +618,7 @@ def approve_signup(signup, mmr_override=None):
 
 
 @transaction.atomic
-def reject_signup(signup):
+def reject_signup(signup: EventSignup) -> EventSignup:
     """Reject a signup."""
     if signup.status in [SignupStatus.REJECTED, SignupStatus.CANCELLED]:
         raise ValueError(f"Cannot reject signup in '{signup.status}' status.")
@@ -614,7 +632,7 @@ def reject_signup(signup):
 
 
 @transaction.atomic
-def confirm_signup(signup):
+def confirm_signup(signup: EventSignup) -> EventSignup:
     """Confirm a signup (e.g., during roll call)."""
     if signup.status != SignupStatus.APPROVED:
         raise ValueError("Only approved signups can be confirmed.")
@@ -627,7 +645,7 @@ def confirm_signup(signup):
 
 
 @transaction.atomic
-def cancel_signup(signup):
+def cancel_signup(signup: EventSignup) -> EventSignup:
     """Cancel a signup."""
     if signup.status in [SignupStatus.CANCELLED, SignupStatus.REJECTED]:
         raise ValueError(f"Cannot cancel signup in '{signup.status}' status.")
@@ -656,7 +674,7 @@ def cancel_signup(signup):
 
 
 @transaction.atomic
-def apply_signup_writethrough(signup):
+def apply_signup_writethrough(signup: EventSignup) -> EventSignup:
     """Mirror signup-submitted PlayerDotaProfile fields to the User-level fields.
 
     Issue #196a — steam_account_id is first-write-wins on User.steam_account_id
@@ -713,7 +731,7 @@ def apply_signup_writethrough(signup):
     return signup
 
 
-def _promote_from_waitlist(event):
+def _promote_from_waitlist(event: Event) -> None:
     """Promote the next waitlisted user when a slot opens."""
     if not event.max_players:
         return
@@ -744,7 +762,7 @@ def _promote_from_waitlist(event):
 
 
 @transaction.atomic
-def unconfirm_signup(signup):
+def unconfirm_signup(signup: EventSignup) -> EventSignup:
     """Revert a confirmed signup back to approved (e.g., during roll call adjustments)."""
     if signup.status != SignupStatus.CONFIRMED:
         raise ValueError("Only confirmed signups can be unconfirmed.")
@@ -757,7 +775,7 @@ def unconfirm_signup(signup):
 
 
 @transaction.atomic
-def demote_to_waitlist(signup):
+def demote_to_waitlist(signup: EventSignup) -> EventSignup:
     """Move an active signup to the end of the waitlist."""
     if signup.status in [
         SignupStatus.CANCELLED,
@@ -781,7 +799,7 @@ def demote_to_waitlist(signup):
 
 
 @transaction.atomic
-def reinstate_signup(signup):
+def reinstate_signup(signup: EventSignup) -> EventSignup:
     """Bring a removed signup back into the active list.
 
     Behavior depends on event state:
@@ -882,7 +900,7 @@ def apply_event_draft_options(
 
 
 @transaction.atomic
-def create_tournament_for_event(event):
+def create_tournament_for_event(event: Event) -> Tournament:
     """Create a future Tournament from event template fields. Returns Tournament."""
     tournament = Tournament.objects.create(
         name=event.tournament_name,
@@ -915,7 +933,7 @@ def create_tournament_for_event(event):
     return tournament
 
 
-def ensure_discord_event(event):
+def ensure_discord_event(event: Event) -> "DiscordEvent | None":
     """Auto-create a DiscordEvent row if the org has a discord_server_id.
 
     This ensures the Discord tab works immediately after event creation
@@ -941,21 +959,21 @@ def ensure_discord_event(event):
     return de
 
 
-def add_user_to_tournament(event, user):
+def add_user_to_tournament(event: Event, user: CustomUser) -> None:
     """Add a user to the event's linked future tournament."""
     if event.tournament and event.tournament.state == "future":
         event.tournament.users.add(user)
         invalidate_obj(event.tournament)
 
 
-def remove_user_from_tournament(event, user):
+def remove_user_from_tournament(event: Event, user: CustomUser) -> None:
     """Remove a user from the event's linked future tournament."""
     if event.tournament and event.tournament.state == "future":
         event.tournament.users.remove(user)
         invalidate_obj(event.tournament)
 
 
-def finalize_event_tournament(event):
+def finalize_event_tournament(event: Event) -> None:
     """Transition linked tournament from future to in_progress."""
     if event.tournament and event.tournament.state == "future":
         event.tournament.state = "in_progress"
@@ -1168,7 +1186,9 @@ def teardown_event(event: Event) -> None:
 REGISTERED_SIGNUP_STATUSES = (SignupStatus.APPROVED, SignupStatus.CONFIRMED)
 
 
-def is_registered_for_event(user, event: Event) -> bool:
+def is_registered_for_event(
+    user: CustomUser | AnonymousUser | None, event: Event
+) -> bool:
     """The user plays in the event: an accepted signup, or on a team roster.
 
     Accepted means APPROVED or CONFIRMED. rsvp, pending_approval,
@@ -1291,7 +1311,7 @@ REPEATER_CREATE_COPY_FIELDS = (
 )
 
 
-def _python_weekday(sunday_zero_dow):
+def _python_weekday(sunday_zero_dow: int) -> int:
     """Convert Sunday=0 day-of-week to Python's datetime.weekday() (Monday=0).
 
     EventRepeater.day_of_week uses the JS/frontend convention (Sunday=0..Saturday=6)
@@ -1301,7 +1321,9 @@ def _python_weekday(sunday_zero_dow):
     return (sunday_zero_dow - 1) % 7
 
 
-def _get_next_occurrences(repeater, from_date, to_date):
+def _get_next_occurrences(
+    repeater: EventRepeater, from_date: datetime.date, to_date: datetime.date
+) -> list[datetime.datetime]:
     """Calculate next occurrence datetimes for a repeater within a date range."""
     tz_info = ZoneInfo(repeater.timezone)
     occurrences = []
@@ -1356,18 +1378,20 @@ def _get_next_occurrences(repeater, from_date, to_date):
     return occurrences
 
 
-def _copy_mixin_fields(source, target, field_names):
+def _copy_mixin_fields(
+    source: models.Model, target: models.Model, field_names: list[str]
+) -> None:
     """Copy mixin field values from source to target model instance."""
     for field_name in field_names:
         setattr(target, field_name, getattr(source, field_name))
 
 
-def _today():
+def _today() -> datetime.date:
     """Return today's date. Extracted for testability."""
     return datetime.date.today()
 
 
-def generate_events_for_repeater(repeater):
+def generate_events_for_repeater(repeater: EventRepeater) -> list[Event]:
     """Generate upcoming events for a repeater. Returns list of created Events."""
     if not repeater.is_active:
         return []
@@ -1485,7 +1509,9 @@ def create_off_schedule_event(
 
 
 @transaction.atomic
-def sync_future_events(repeater, *, realign_schedule=False):
+def sync_future_events(
+    repeater: EventRepeater, *, realign_schedule: bool = False
+) -> list[Event]:
     """Propagate repeater changes to all upcoming events in the series.
 
     Only updates events that haven't progressed past 'upcoming' state

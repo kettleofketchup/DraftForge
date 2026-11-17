@@ -16,6 +16,7 @@ approve_signup(mmr_override=...).
 from django.db import transaction
 from django.test import TestCase
 from django.utils import timezone as tz
+
 from app.models import CustomUser, Organization, PositionsModel
 from events.models import Event, EventSignup
 from org.models import OrgUser
@@ -40,8 +41,16 @@ class SignupWritethroughTest(TestCase):
             roll_call_enabled=False,
         )
 
-    def _signup_with_positions(self, *, pos_1=False, pos_2=False, pos_3=False,
-                                pos_4=False, pos_5=False, unverified_friend_id=None):
+    def _signup_with_positions(
+        self,
+        *,
+        pos_1=False,
+        pos_2=False,
+        pos_3=False,
+        pos_4=False,
+        pos_5=False,
+        unverified_friend_id=None,
+    ):
         """Helper: populate the user's dota profile, create signup, run writethrough.
 
         Uses unverified_friend_id (the actual PlayerDotaProfile/PlayerProfileMixin
@@ -58,6 +67,7 @@ class SignupWritethroughTest(TestCase):
         profile.save()
         signup = EventSignup.objects.create(event=self.event, user=self.user)
         from events.services import apply_signup_writethrough
+
         apply_signup_writethrough(signup)
         signup.refresh_from_db()
         self.user.refresh_from_db()
@@ -87,7 +97,11 @@ class SignupWritethroughTest(TestCase):
         # Signup with PlayerDotaProfile.pos_N flags set. The writethrough
         # would, in the old behavior, have flattened all of these to 1.
         self._signup_with_positions(
-            pos_1=True, pos_2=True, pos_3=True, pos_4=True, pos_5=True,
+            pos_1=True,
+            pos_2=True,
+            pos_3=True,
+            pos_4=True,
+            pos_5=True,
         )
         self.user.positions.refresh_from_db()
 
@@ -176,6 +190,7 @@ class SignupWritethroughInvariantsTest(SignupWritethroughTest):
         write in the writethrough's post-#217 body).
         """
         from unittest.mock import patch
+
         from events.services import apply_signup_writethrough
 
         # Pre-create profile so the writethrough proceeds past its early returns.

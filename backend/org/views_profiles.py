@@ -1,7 +1,10 @@
 """API views for player profiles scoped to organizations."""
 
+from typing import Any
+
 from rest_framework import permissions, status
 from rest_framework.decorators import api_view, permission_classes
+from rest_framework.request import Request
 from rest_framework.response import Response
 
 from app.permissions_org import has_org_staff_access
@@ -25,7 +28,7 @@ DOTA_PROFILE_FIELDS = {
 }
 
 
-def _serialize_dota_profile(profile):
+def _serialize_dota_profile(profile: PlayerDotaProfile) -> dict[str, Any]:
     return {
         "id": profile.pk,
         "org_user_id": profile.org_user_id,
@@ -47,7 +50,7 @@ def _serialize_dota_profile(profile):
 
 @api_view(["GET"])
 @permission_classes([permissions.IsAuthenticated])
-def get_my_dota_profile(request, org_id):
+def get_my_dota_profile(request: Request, org_id: int) -> Response:
     """Get the current user's Dota 2 profile for an organization.
     GET /api/organizations/<org_id>/my-dota-profile/
     """
@@ -65,7 +68,7 @@ def get_my_dota_profile(request, org_id):
 
 @api_view(["PATCH"])
 @permission_classes([permissions.IsAuthenticated])
-def update_my_dota_profile(request, org_id):
+def update_my_dota_profile(request: Request, org_id: int) -> Response:
     """Update the current user's Dota 2 profile for an organization.
     PATCH /api/organizations/<org_id>/my-dota-profile/
     """
@@ -93,7 +96,7 @@ def update_my_dota_profile(request, org_id):
 
 @api_view(["GET"])
 @permission_classes([permissions.IsAuthenticated])
-def get_user_dota_profile(request, org_id, user_pk):
+def get_user_dota_profile(request: Request, org_id: int, user_pk: int) -> Response:
     """Get any user's Dota 2 profile for an org (org staff only).
     GET /api/organizations/<org_id>/users/<user_pk>/dota-profile/
     """
@@ -121,7 +124,7 @@ def get_user_dota_profile(request, org_id, user_pk):
 
 @api_view(["PATCH"])
 @permission_classes([permissions.IsAuthenticated])
-def update_user_dota_profile(request, org_id, user_pk):
+def update_user_dota_profile(request: Request, org_id: int, user_pk: int) -> Response:
     """Update any user's Dota 2 profile (org staff only).
     PATCH /api/organizations/<org_id>/users/<user_pk>/dota-profile/
     """
@@ -159,7 +162,7 @@ def update_user_dota_profile(request, org_id, user_pk):
 
 @api_view(["DELETE"])
 @permission_classes([permissions.IsAuthenticated])
-def delete_user_dota_profile(request, org_id, user_pk):
+def delete_user_dota_profile(request: Request, org_id: int, user_pk: int) -> Response:
     """Delete a user's Dota 2 profile (org staff only).
     DELETE /api/organizations/<org_id>/users/<user_pk>/dota-profile/
     """

@@ -172,7 +172,10 @@ class TournamentListScopeTests(TestCase):
             ("organizations=0", "organizations"),
             ("organizations=-3", "organizations"),
             ("organizations=1,,2", "organizations"),
-            ("organizations=" + ",".join(str(i) for i in range(1, 102)), "organizations"),
+            (
+                "organizations=" + ",".join(str(i) for i in range(1, 102)),
+                "organizations",
+            ),
             ("open_signups=yes", "open_signups"),
             ("open_signups=", "open_signups"),
             (f"organization={1}&organizations=2", "organizations"),

@@ -2,10 +2,16 @@
 Discord message component builders (buttons, action rows).
 """
 
-from django.conf import settings
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from events.models import Event
+    from events.schemas import EventTaskSchema
 
 
-def build_announcement_components(event):
+def build_announcement_components(
+    event: "Event | EventTaskSchema",
+) -> list[dict[str, Any]]:
     """Build action row components for event announcement message.
 
     Row 1: Sign Up (green) | Tentative (grey) | Decline (grey + ❌)

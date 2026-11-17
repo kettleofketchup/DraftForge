@@ -20,10 +20,7 @@ Usage::
 
 from __future__ import annotations
 
-from datetime import datetime, timezone as dtz
-from types import SimpleNamespace
 from unittest.mock import patch
-
 
 # ---- ORM-direct reads ----
 
@@ -52,9 +49,7 @@ def _get_event_for_task_orm(pk):
         return None
     data = EventSerializer(event).data
     data["organization_id"] = event.organization_id
-    data["organization_discord_server_id"] = (
-        event.organization.discord_server_id or ""
-    )
+    data["organization_discord_server_id"] = event.organization.discord_server_id or ""
     data["organization_logo"] = event.organization.logo or ""
     data["event_repeater_id"] = event.event_repeater_id
     return EventTaskSchema.model_validate(data)
@@ -141,8 +136,8 @@ def _search_message_logs_orm(*args, **kwargs):
     """ORM-backed replacement that accepts BOTH the old positional signature and
     the new keyword-only signature (production has a duplicated def — last one
     wins, breaking positional callers)."""
-    from discordbot.schemas import MessageLogSchema
     from discordbot.models import DiscordMessageLog
+    from discordbot.schemas import MessageLogSchema
 
     if args:
         keys = ["source", "source_id", "success", "limit"]
@@ -205,8 +200,13 @@ def _create_message_log_orm(**data):
 
 
 def _claim_discord_message_log_orm(
-    *, source, source_id, channel_id, embed_data,
-    fired_by_user_id=None, tournament_log_id=None,
+    *,
+    source,
+    source_id,
+    channel_id,
+    embed_data,
+    fired_by_user_id=None,
+    tournament_log_id=None,
 ):
     """ORM-backed lease claim — mirrors the HTTP endpoint."""
     from django.db import IntegrityError, transaction
@@ -235,7 +235,12 @@ def _claim_discord_message_log_orm(
 
 
 def _finalize_discord_message_log_orm(
-    log_id, *, success, discord_message_id=None, status_code=None, response_data=None,
+    log_id,
+    *,
+    success,
+    discord_message_id=None,
+    status_code=None,
+    response_data=None,
 ):
     """ORM-backed finalize — mirrors the HTTP endpoint."""
     from discordbot.models import DiscordMessageLog
@@ -283,9 +288,7 @@ def _get_or_create_discord_event_orm(**data):
         event_id=data["event_id"],
         defaults={"guild_id": data.get("guild_id", "")},
     )
-    return _ResponseLike(
-        201 if created else 200, {"id": de.pk, "created": created}
-    )
+    return _ResponseLike(201 if created else 200, {"id": de.pk, "created": created})
 
 
 def _update_discord_event_orm(pk, **data):
@@ -320,9 +323,7 @@ def _create_or_update_signup_message_orm(**data):
         if field in payload:
             setattr(msg, field, payload[field])
     msg.save()
-    return _ResponseLike(
-        201 if created else 200, {"id": msg.pk, "created": created}
-    )
+    return _ResponseLike(201 if created else 200, {"id": msg.pk, "created": created})
 
 
 def _clear_event_signup_state_orm(event_id):
@@ -353,9 +354,7 @@ def _create_or_update_announcement_orm(**data):
         if field in payload:
             setattr(msg, field, payload[field])
     msg.save()
-    return _ResponseLike(
-        201 if created else 200, {"id": msg.pk, "created": created}
-    )
+    return _ResponseLike(201 if created else 200, {"id": msg.pk, "created": created})
 
 
 def _get_repeater_subscribers_orm(repeater_id):
