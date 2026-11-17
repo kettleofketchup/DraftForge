@@ -50,6 +50,7 @@ class SignupStatus(models.TextChoices):
     TENTATIVE = "tentative", "Tentative"
     REJECTED = "rejected", "Rejected"
     CANCELLED = "cancelled", "Cancelled"
+    DROPPED = "dropped", "Dropped"
 
 
 class SignupType(models.TextChoices):
