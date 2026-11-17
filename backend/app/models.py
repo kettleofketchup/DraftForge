@@ -1025,6 +1025,54 @@ class Team(models.Model):
             self.members.remove(old)
         invalidate_after_commit(self, old, new)
 
+    def reduce_members_to_captain(self) -> list[CustomUser]:
+        """Leave only the captain as a member; returns the removed members.
+
+        Add before remove: removing first can empty a team whose captain is
+        not a member, and the removal signal then deletes it with its games.
+        """
+        if self.captain_id is None:
+            raise ValueError(f"Team {self.pk} has no captain to reset to.")
+        self.members.add(self.captain_id)
+        removed = list(self.members.exclude(pk=self.captain_id))
+        if removed:
+            self.members.remove(*removed)
+        return removed
+
+    def reset_to_captain(self) -> list[CustomUser]:
+        """Reset the team in place for a fresh draft; returns the removed members."""
+        removed = self.reduce_members_to_captain()
+        self.dropin_members.clear()
+        self.left_members.clear()
+        league = self.tournament.league if self.tournament_id else None
+        self.league_users.set(
+            self.league_users.model.objects.filter(
+                user_id=self.captain_id, league=league
+            )
+            if league
+            else []
+        )
+        self.deputy_captain = None
+        self.draft_reserve_ms = None
+        self.draft_is_ready = False
+        self.draft_is_connected = False
+        self.draft_has_connected = False
+        self.current_points = self._meta.get_field("current_points").get_default()
+        self.placement = self._meta.get_field("placement").get_default()
+        self.save(
+            update_fields=[
+                "deputy_captain",
+                "draft_reserve_ms",
+                "draft_is_ready",
+                "draft_is_connected",
+                "draft_has_connected",
+                "current_points",
+                "placement",
+            ]
+        )
+        invalidate_after_commit(self, *removed, self.captain)
+        return removed
+
     def clean(self) -> None:
         super().clean()
 
@@ -1635,13 +1683,11 @@ class Draft(models.Model):
                 team_name=team.name,
                 tournament_name=self.tournament.name,
             )
-            # Remove all members except captain to avoid triggering empty team deletion
-            # (using remove() instead of clear() keeps captain as member during operation)
-            members_to_remove = list(team.members.exclude(pk=team.captain.pk))
-            if members_to_remove:
-                team.members.remove(*members_to_remove)
-            # Ensure captain is a member (in case they weren't already)
-            team.members.add(team.captain)
+            if clear_only:
+                team.reset_to_captain()
+            else:
+                team.reduce_members_to_captain()
+                invalidate_after_commit(team)
 
         # Skip re-adding draft choices if we're just clearing for a restart
         if clear_only:
