@@ -113,6 +113,8 @@ Players RSVP from the event page (web) or via the Discord signup post. The signu
 - **Waitlist** — when max players is reached, new signups are waitlisted with position tracking
 - **Re-RSVP** — cancelled signups can re-register
 
+Each signup keeps a place in line, its original sign-up and a durable record of its changes: see [Signup Ledger & Line Position](events/signup-ledger.md).
+
 #### Web vs Discord parity
 
 Both signup paths funnel through `apply_signup_input` and write the same per-org `PlayerDotaProfile` row, so the two surfaces are interchangeable for Dota events. The table below shows where each field is captured and which model it lands on.
