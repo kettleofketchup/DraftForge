@@ -97,9 +97,7 @@ class GuildMemberFetchTest(TestCase):
 
     @patch("discordbot.services.discord_members.time.sleep")
     @patch("discordbot.services.discord_members.requests.get")
-    def test_429_twice_raises(
-        self, mock_get: MagicMock, mock_sleep: MagicMock
-    ) -> None:
+    def test_429_twice_raises(self, mock_get: MagicMock, mock_sleep: MagicMock) -> None:
         mock_get.side_effect = [
             _resp(429, {"retry_after": 0.01}),
             _resp(429, {"retry_after": 0.01}),

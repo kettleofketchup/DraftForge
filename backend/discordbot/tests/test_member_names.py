@@ -119,6 +119,4 @@ class ModuleImportTests(SimpleTestCase):
         for name in modules:
             self.assertFalse(name.startswith("django.db"), name)
             self.assertFalse(name.startswith("cacheops"), name)
-            self.assertFalse(
-                name == "models" or name.endswith(".models"), name
-            )
+            self.assertFalse(name == "models" or name.endswith(".models"), name)

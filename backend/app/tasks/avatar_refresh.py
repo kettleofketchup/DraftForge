@@ -18,7 +18,10 @@ log = get_logger(__name__)
 
 def _is_test_environment():
     """Check if running in test environment (skip Discord API calls)."""
-    return os.environ.get("TEST", "").lower() == "true" and os.environ.get("DEBUG", "").lower() == "true"
+    return (
+        os.environ.get("TEST", "").lower() == "true"
+        and os.environ.get("DEBUG", "").lower() == "true"
+    )
 
 
 def _is_avatar_url_valid(url):
