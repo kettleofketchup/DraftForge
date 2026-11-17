@@ -109,7 +109,7 @@ def _celery_bookend_fields(
 
 
 def _skip_signup_list_unavailable(
-    task_name: str, event_id: int, exc: InternalAPIUnavailable
+    task_name: str, event_id: int, exc: InternalAPIUnavailable, **extra: Any
 ) -> str:
     log.warning(
         "signup_list_unavailable",
@@ -120,6 +120,7 @@ def _skip_signup_list_unavailable(
         task=task_name,
         event_id=event_id,
         error=str(exc),
+        **extra,
     )
     return f"Skipped: signup list unavailable for event {event_id}"
 
@@ -746,7 +747,7 @@ def send_profile_reminder(event_id: int) -> str:
 
 @shared_task(bind=True)
 def send_signup_update(
-    self: Task, event_id: int, interaction_id: str | None = None
+    self: Task, event_id: int, interaction_id: str | None = None, busy_passes: int = 0
 ) -> str:
     """Edit the original announcement embed with updated signup lists.
 
@@ -758,26 +759,36 @@ def send_signup_update(
         "send_signup_update",
         event_id,
         interaction_id,
-        lambda: _serialised_signup_update(self, event_id, interaction_id),
+        lambda: _serialised_signup_update(self, event_id, interaction_id, busy_passes),
     )
 
 
-def _reschedule_signup_update(event_id: int, interaction_id: str | None) -> None:
+def _reschedule_signup_update(
+    event_id: int, interaction_id: str | None, busy_passes: int
+) -> None:
     send_signup_update.apply_async(
         (event_id,),
-        {"interaction_id": interaction_id},
-        countdown=settings.SIGNUP_POST.debounce_seconds,
+        {"interaction_id": interaction_id, "busy_passes": busy_passes},
+        countdown=settings.SIGNUP_POST.retry_seconds,
     )
 
 
 def _serialised_signup_update(
-    task: Task, event_id: int, interaction_id: str | None
+    task: Task, event_id: int, interaction_id: str | None, busy_passes: int
 ) -> str:
     fields = _celery_bookend_fields("send_signup_update", event_id, interaction_id)
+    config = settings.SIGNUP_POST
     token = acquire_lock(event_id)
     if token is None:
-        log.debug("signup_update_lock_busy", **fields)
-        _reschedule_signup_update(event_id, interaction_id)
+        log.debug("signup_update_lock_busy", busy_passes=busy_passes, **fields)
+        if busy_passes == config.busy_warn_passes:
+            log.warning(
+                "signup_update_lock_stalled",
+                busy_passes=busy_passes,
+                waited_seconds=busy_passes * config.retry_seconds,
+                **fields,
+            )
+        _reschedule_signup_update(event_id, interaction_id, busy_passes + 1)
         return f"Rescheduled: signup post for event {event_id} is being edited"
 
     # Cleared before the read, so a change during this run queues another.
@@ -787,13 +798,20 @@ def _serialised_signup_update(
     except InternalAPIUnavailable as exc:
         release_lock(event_id, token)
         token = None
-        skipped = _skip_signup_list_unavailable("send_signup_update", event_id, exc)
-        config = settings.SIGNUP_POST
-        if task.request.retries >= config.read_retries:
+        attempt = task.request.retries
+        exhausted = attempt >= config.read_retries
+        skipped = _skip_signup_list_unavailable(
+            "send_signup_update",
+            event_id,
+            exc,
+            attempt=attempt,
+            retries_exhausted=exhausted,
+        )
+        if exhausted:
             return skipped
         mark_pending(event_id)
         raise task.retry(
-            countdown=config.debounce_seconds, max_retries=config.read_retries
+            countdown=config.retry_seconds, max_retries=config.read_retries
         ) from exc
     finally:
         if token is not None:

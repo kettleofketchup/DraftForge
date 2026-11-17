@@ -116,10 +116,76 @@ class SignupPostSerialisationTest(DiscordTestMixin, EventTestCase):
 
         self.apply_async.assert_called_once_with(
             (self.pk,),
-            {"interaction_id": None},
-            countdown=settings.SIGNUP_POST.debounce_seconds,
+            {"interaction_id": None, "busy_passes": 1},
+            countdown=settings.SIGNUP_POST.retry_seconds,
         )
         self.edit.assert_not_called()
+
+    @override_settings(SIGNUP_POST=SignupPostConfig(disabled=False, debounce_seconds=0))
+    def test_zero_debounce_still_waits_before_busy_reschedule(self) -> None:
+        self.assertIsNotNone(signup_post_lock.acquire_lock(self.pk))
+
+        send_signup_update(self.pk)
+
+        self.assertGreaterEqual(self.apply_async.call_args.kwargs["countdown"], 1)
+
+    @override_settings(SIGNUP_POST=SignupPostConfig(disabled=False, debounce_seconds=0))
+    def test_zero_debounce_still_waits_before_read_retry(self) -> None:
+        with (
+            patch(
+                "events.discord.embeds.get_event_signups",
+                side_effect=InternalAPIUnavailable("signups"),
+            ),
+            patch.object(send_signup_update, "retry", side_effect=Retry()) as retry,
+            self.assertRaises(Retry),
+        ):
+            send_signup_update(self.pk)
+
+        self.assertGreaterEqual(retry.call_args.kwargs["countdown"], 1)
+
+    def test_busy_lock_warns_once_after_configured_passes(self) -> None:
+        self.assertIsNotNone(signup_post_lock.acquire_lock(self.pk))
+        threshold = settings.SIGNUP_POST.busy_warn_passes
+
+        with capture_logs() as logs:
+            for passes in range(threshold + 2):
+                send_signup_update(self.pk, busy_passes=passes)
+
+        stalled = [e for e in logs if e["event"] == "signup_update_lock_stalled"]
+        self.assertEqual(len(stalled), 1)
+        self.assertEqual(stalled[0]["log_level"], "warning")
+        self.assertEqual(stalled[0]["busy_passes"], threshold)
+        self.assertEqual(stalled[0]["system"], "discord")
+        busy = [e for e in logs if e["event"] == "signup_update_lock_busy"]
+        self.assertEqual(len(busy), threshold + 2)
+        self.assertTrue(all(e["log_level"] == "debug" for e in busy))
+
+    def test_overlapping_run_reschedules_and_final_patch_has_latest_list(
+        self,
+    ) -> None:
+        self._add_signup("FirstSigner")
+
+        def read_while_b_runs(event_id: int) -> list:
+            self._add_signup("MidRunSigner")
+            send_signup_update(self.pk)
+            return _get_event_signups_orm(event_id)
+
+        with patch(
+            "events.discord.embeds.get_event_signups", side_effect=read_while_b_runs
+        ):
+            send_signup_update(self.pk)
+
+        self.assertEqual(self.edit.call_count, 1)
+        self.apply_async.assert_called_once()
+        args, kwargs = self.apply_async.call_args.args
+        self.assertEqual(args, (self.pk,))
+
+        send_signup_update(*args, **kwargs)
+
+        self.assertEqual(self.edit.call_count, 2)
+        last_payload = json.dumps(self.edit.call_args.kwargs["embed"])
+        self.assertIn("MidRunSigner", last_payload)
+        self.assertIn("FirstSigner", last_payload)
 
     def test_change_during_run_enqueues_new_run(self) -> None:
         notify_signup_changed(self.post_event)
@@ -162,6 +228,9 @@ class SignupPostSerialisationTest(DiscordTestMixin, EventTestCase):
         self.edit.assert_not_called()
         events = [entry["event"] for entry in logs]
         self.assertIn("celery_task_retry", events)
+        unavailable = next(e for e in logs if e["event"] == "signup_list_unavailable")
+        self.assertFalse(unavailable["retries_exhausted"])
+        self.assertEqual(unavailable["attempt"], 0)
         self.assertNotIn("celery_task_failed", events)
         self.assertNotIn("celery_task_finished", events)
         self.assertNotIn(signup_post_lock.lock_key(self.pk), self.redis.data)
@@ -182,6 +251,9 @@ class SignupPostSerialisationTest(DiscordTestMixin, EventTestCase):
         self.edit.assert_not_called()
         events = [entry["event"] for entry in logs]
         self.assertIn("signup_list_unavailable", events)
+        unavailable = next(e for e in logs if e["event"] == "signup_list_unavailable")
+        self.assertTrue(unavailable["retries_exhausted"])
+        self.assertEqual(unavailable["attempt"], settings.SIGNUP_POST.read_retries)
         self.assertNotIn("celery_task_failed", events)
         self.assertNotIn(signup_post_lock.lock_key(self.pk), self.redis.data)
         self.assertNotIn(signup_post_lock.pending_key(self.pk), self.redis.data)

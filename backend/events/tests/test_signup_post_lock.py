@@ -190,6 +190,8 @@ class SignupPostConfigTests(SimpleTestCase):
         self.assertEqual(config.lock_seconds, 90)
         self.assertFalse(config.disabled)
         self.assertEqual(config.read_retries, 3)
+        self.assertEqual(config.retry_seconds, 2)
+        self.assertEqual(config.busy_warn_passes, 5)
         self.assertEqual(config.pending_ttl_seconds, 102)
 
     def test_from_env_parses_mapping(self) -> None:
@@ -199,12 +201,19 @@ class SignupPostConfigTests(SimpleTestCase):
                 "SIGNUP_POST_LOCK_SECONDS": "30",
                 "SIGNUP_POST_DISABLED": "true",
                 "SIGNUP_POST_READ_RETRIES": "0",
+                "SIGNUP_POST_RETRY_SECONDS": "7",
+                "SIGNUP_POST_BUSY_WARN_PASSES": "3",
             }
         )
         self.assertEqual(
             config,
             SignupPostConfig(
-                debounce_seconds=5, lock_seconds=30, disabled=True, read_retries=0
+                debounce_seconds=5,
+                lock_seconds=30,
+                disabled=True,
+                read_retries=0,
+                retry_seconds=7,
+                busy_warn_passes=3,
             ),
         )
         self.assertEqual(config.pending_ttl_seconds, 45)
@@ -236,6 +245,8 @@ class SignupPostConfigTests(SimpleTestCase):
             {"SIGNUP_POST_LOCK_SECONDS": "0"},
             {"SIGNUP_POST_DEBOUNCE_SECONDS": "-1"},
             {"SIGNUP_POST_READ_RETRIES": "-1"},
+            {"SIGNUP_POST_RETRY_SECONDS": "0"},
+            {"SIGNUP_POST_BUSY_WARN_PASSES": "0"},
         ):
             with self.subTest(env=env), self.assertRaises(ImproperlyConfigured):
                 SignupPostConfig.from_env(environ=env)

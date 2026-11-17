@@ -10,6 +10,10 @@ Environment variables:
     SIGNUP_POST_LOCK_SECONDS      per-event edit lock lifetime, default 90
     SIGNUP_POST_READ_RETRIES      retries when the signup list cannot be read,
                                   default 3
+    SIGNUP_POST_RETRY_SECONDS     wait before a read retry or before trying a
+                                  held lock again, default 2, at least 1
+    SIGNUP_POST_BUSY_WARN_PASSES  held-lock passes before one warning is
+                                  logged, default 5
     SIGNUP_POST_DISABLED          skip the pending flag and lock (every change
                                   edits the post directly); DISABLE_CACHE also
                                   disables it
@@ -26,6 +30,8 @@ from django.core.exceptions import ImproperlyConfigured
 DEFAULT_DEBOUNCE_SECONDS = 2
 DEFAULT_LOCK_SECONDS = 90
 DEFAULT_READ_RETRIES = 3
+DEFAULT_RETRY_SECONDS = 2
+DEFAULT_BUSY_WARN_PASSES = 5
 PENDING_TTL_MARGIN_SECONDS = 10
 _TRUE = ("1", "true", "yes", "on")
 
@@ -58,6 +64,8 @@ class SignupPostConfig:
     lock_seconds: int = DEFAULT_LOCK_SECONDS
     disabled: bool = False
     read_retries: int = DEFAULT_READ_RETRIES
+    retry_seconds: int = DEFAULT_RETRY_SECONDS
+    busy_warn_passes: int = DEFAULT_BUSY_WARN_PASSES
 
     @property
     def pending_ttl_seconds(self) -> int:
@@ -83,5 +91,14 @@ class SignupPostConfig:
             or _bool(env, "DISABLE_CACHE", False),
             read_retries=_whole(
                 env, "SIGNUP_POST_READ_RETRIES", DEFAULT_READ_RETRIES, minimum=0
+            ),
+            retry_seconds=_whole(
+                env, "SIGNUP_POST_RETRY_SECONDS", DEFAULT_RETRY_SECONDS, minimum=1
+            ),
+            busy_warn_passes=_whole(
+                env,
+                "SIGNUP_POST_BUSY_WARN_PASSES",
+                DEFAULT_BUSY_WARN_PASSES,
+                minimum=1,
             ),
         )

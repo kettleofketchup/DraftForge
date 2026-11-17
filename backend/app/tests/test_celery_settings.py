@@ -80,6 +80,8 @@ class SharedSettingsParityTest(SimpleTestCase):
         "SIGNUP_POST_DEBOUNCE_SECONDS": "4",
         "SIGNUP_POST_LOCK_SECONDS": "60",
         "SIGNUP_POST_READ_RETRIES": "5",
+        "SIGNUP_POST_RETRY_SECONDS": "3",
+        "SIGNUP_POST_BUSY_WARN_PASSES": "4",
         "DISABLE_CACHE": "false",
     }
 
@@ -89,7 +91,8 @@ class SharedSettingsParityTest(SimpleTestCase):
         env = {
             k: v
             for k, v in os.environ.items()
-            if k not in ("SIGNUP_POST_DISABLED", "RUNNING_TESTS", "REDIS_HOST")
+            if k not in ("RUNNING_TESTS", "REDIS_HOST")
+            and not k.startswith("SIGNUP_POST_")
         }
         env.update(self.ENV, DJANGO_SETTINGS_MODULE=module)
         if redis_host is not None:
@@ -119,7 +122,7 @@ class SharedSettingsParityTest(SimpleTestCase):
             web,
             [
                 "SignupPostConfig(debounce_seconds=4, lock_seconds=60, disabled=False,"
-                " read_retries=5)",
+                " read_retries=5, retry_seconds=3, busy_warn_passes=4)",
                 "'df-s3:'",
                 "'redis.internal'",
             ],
