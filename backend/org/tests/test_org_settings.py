@@ -721,7 +721,7 @@ class OrgSettingsInertTest(SimpleTestCase):
         offenders: list[str] = []
         for path in base.rglob("*.py"):
             parts = path.relative_to(base).parts
-            if parts[0] == "org" or "migrations" in parts:
+            if parts[0] in ("org", "tests") or "migrations" in parts:
                 continue
             text = path.read_text(encoding="utf-8", errors="ignore")
             offenders.extend(

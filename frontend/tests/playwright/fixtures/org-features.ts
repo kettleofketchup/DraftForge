@@ -101,7 +101,7 @@ async function csrfHeaders(
 /** A same-session API call with the CSRF header; throws on a non-2xx answer. */
 export async function orgFeaturesApi<T = unknown>(
   context: BrowserContext,
-  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE',
   path: string,
   data?: Record<string, unknown>,
 ): Promise<T> {

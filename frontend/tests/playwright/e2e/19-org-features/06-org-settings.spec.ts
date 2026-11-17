@@ -1,33 +1,20 @@
-import type { BrowserContext } from '@playwright/test';
+import type { Page } from '@playwright/test';
 
 import {
   expect,
   loginOrgFeatures,
-  orgFeaturesApi,
   resetOrgFeatures,
   test,
   visitAndWaitForHydration,
   type OrgFeaturesTestData,
 } from '../../fixtures';
 
-const ALL_CODES = [
-  'gate_outside',
-  'gate_out_of_range',
-  'over_capacity',
-  'special_seat_role_mismatch',
-  'maybe_special_seat',
-  'maybe_forced_main',
-];
-
-async function resetOrgSettings(
-  context: BrowserContext,
-  orgPk: number,
-): Promise<void> {
-  await loginOrgFeatures(context, 'admin');
-  await orgFeaturesApi(context, 'PATCH', `/organizations/${orgPk}/settings/`, {
-    staff_override_policy: 'silent',
-    staff_override_warning_codes: ALL_CODES,
-  });
+async function expectSettingsRedirected(page: Page): Promise<void> {
+  await expect(page.getByTestId('org-tab-leagues')).toHaveAttribute(
+    'data-state',
+    'active',
+  );
+  await expect(page).not.toHaveURL(/tab=settings/);
 }
 
 test.describe('Org features: settings tab @cicd', () => {
@@ -35,11 +22,7 @@ test.describe('Org features: settings tab @cicd', () => {
 
   test.beforeEach(async ({ request, context }) => {
     data = await resetOrgFeatures(request);
-    await resetOrgSettings(context, data.orgs.features.pk);
-  });
-
-  test.afterEach(async ({ context }) => {
-    await resetOrgSettings(context, data.orgs.features.pk);
+    await loginOrgFeatures(context, 'admin');
   });
 
   test('admin saves and reloads settings @cicd', async ({ page }) => {
@@ -86,11 +69,7 @@ test.describe('Org features: settings tab @cicd', () => {
       `/organizations/${data.orgs.features.pk}?tab=settings`,
     );
 
-    await expect(page.getByTestId('org-tab-leagues')).toHaveAttribute(
-      'data-state',
-      'active',
-    );
-    await expect(page).not.toHaveURL(/tab=settings/);
+    await expectSettingsRedirected(page);
     await expect(page.getByTestId('org-tab-settings')).toHaveCount(0);
     await expect(page.getByTestId('org-settings-tab')).toHaveCount(0);
   });
@@ -103,6 +82,7 @@ test.describe('Org features: settings tab @cicd', () => {
         page,
         `/organizations/${data.orgs.features.pk}`,
       );
+      await expect(page.getByTestId('org-tab-settings')).toHaveCount(1);
 
       await page.getByTestId('page-nav-trigger').click();
       const option = page.getByTestId('page-nav-settings');
@@ -117,8 +97,9 @@ test.describe('Org features: settings tab @cicd', () => {
       await loginOrgFeatures(context, 'staff');
       await visitAndWaitForHydration(
         page,
-        `/organizations/${data.orgs.features.pk}`,
+        `/organizations/${data.orgs.features.pk}?tab=settings`,
       );
+      await expectSettingsRedirected(page);
 
       await page.getByTestId('page-nav-trigger').click();
       await expect(page.getByTestId('page-nav-leagues')).toBeVisible();
