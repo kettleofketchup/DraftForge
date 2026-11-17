@@ -182,7 +182,7 @@ def _create_signup(
             raise ValueError("User has already signed up for this event.")
 
     signup_type = SignupType.TEAM if event_team else SignupType.USER
-    sync_steam_account_from_profiles(user, event.organization, event_id=event.pk)
+    _sync_signup_steam_account(event, user)
 
     if not has_free_seat(lock_event(event)):
         max_pos = (
@@ -199,7 +199,6 @@ def _create_signup(
             status=SignupStatus.WAITLISTED,
             waitlist_position=max_pos + 1,
         )
-        apply_signup_writethrough(signup)
         invalidate_after_commit(event)
         log.info(
             "signup_post_commit_hooks_scheduled",
@@ -227,7 +226,6 @@ def _create_signup(
         signup_type=signup_type,
         status=status,
     )
-    apply_signup_writethrough(signup)
     if status == SignupStatus.CONFIRMED:
         add_user_to_tournament(event, user)
     elif status == SignupStatus.APPROVED and not event.roll_call_enabled:
@@ -597,32 +595,14 @@ def cancel_signup(signup: EventSignup) -> EventSignup:
     return signup
 
 
-@transaction.atomic
-def apply_signup_writethrough(signup: EventSignup) -> EventSignup:
-    """Mirror the profile friend ID onto ``User.steam_account_id``
-    (first-write-wins, see ``sync_steam_account_from_profiles``).
-
-    Positions are NOT mirrored (apply_signup_input owns them) and MMR is NOT
-    touched here (it routes through approve_signup). Cache invalidation is
-    deferred to commit so the 'incomplete profile' panel reflects the
-    writethrough on the next render rather than after the cacheops TTL.
-    """
-    user = signup.user
-    org = signup.event.organization
-    if org is None:
-        return signup
-    org_user = OrgUser.objects.filter(user=user, organization=org).first()
-    if org_user is None:
-        return signup
-
-    sync_steam_account_from_profiles(user, org, event_id=signup.event_id)
-
-    tournament = signup.event.tournament
-    objs_to_invalidate = [user, org_user]
-    if tournament is not None:
-        objs_to_invalidate.append(tournament)
-    invalidate_after_commit(*objs_to_invalidate)
-    return signup
+def _sync_signup_steam_account(event: Event, user: CustomUser) -> None:
+    """Mirror the profile friend ID onto ``User.steam_account_id`` once per
+    signup decision, before requirements are checked."""
+    wrote = sync_steam_account_from_profiles(
+        user, event.organization, event_id=event.pk
+    )
+    if wrote and event.tournament_id is not None:
+        invalidate_after_commit(event.tournament)
 
 
 def _promote_from_waitlist(event: Event) -> list[EventSignup]:
@@ -639,9 +619,7 @@ def _promote_from_waitlist(event: Event) -> list[EventSignup]:
         if next_waitlisted is None:
             break
         next_waitlisted.waitlist_position = None
-        sync_steam_account_from_profiles(
-            next_waitlisted.user, locked.organization, event_id=locked.pk
-        )
+        _sync_signup_steam_account(locked, next_waitlisted.user)
         if locked.auto_approve and check_requirements(locked, next_waitlisted.user):
             next_waitlisted.status = SignupStatus.APPROVED
             if locked.auto_confirm:
