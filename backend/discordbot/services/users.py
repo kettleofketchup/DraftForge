@@ -1,7 +1,13 @@
+import time
+
 import requests
-from django.http import JsonResponse
+from cacheops import cached
+from django.core.cache import cache
+from django.http import HttpResponse, JsonResponse
+from django.shortcuts import get_object_or_404
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.request import Request
 
 from app.models import (
     CustomUser,
@@ -10,16 +16,24 @@ from app.models import (
 from app.permissions import IsStaff
 from app.permissions_org import has_org_staff_access
 from backend import settings
+
+# Re-exported for existing importers; celery imports discord_members directly.
+from discordbot.services.discord_members import (  # noqa: F401
+    DISCORD_HTTP_TIMEOUT_S,
+    DISCORD_MEMBER_CACHE_TTL_S,
+    get_discord_members_data,
+)
+from discordbot.services.member_names import members_from_discord_payload
+from org.activity import guild_sync_lock, release_guild_sync_lock
+from org.discord_names import apply_guild_member_names, org_ids_for_guild
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
 
-from django.core.cache import cache
-
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
-def get_user_guilds(request):
+def get_user_guilds(request: Request) -> JsonResponse:
     access_token = request.user.social_auth.get(provider="discord").extra_data[
         "access_token"
     ]
@@ -40,20 +54,7 @@ def get_user_guilds(request):
         return JsonResponse({"error": str(e)}, status=500)
 
 
-# Re-export from the celery-safe module so the existing
-# `from discordbot.services.users import get_discord_members_data`
-# import paths keep working for DRF view consumers. The Celery worker
-# imports directly from `discord_members` to avoid loading this module
-# (which has ORM-heavy top-level imports that crash with
-# settings_celery.DATABASES = {}).
-from discordbot.services.discord_members import (  # noqa: F401
-    DISCORD_HTTP_TIMEOUT_S,
-    DISCORD_MEMBER_CACHE_TTL_S,
-    get_discord_members_data,
-)
-
-
-def get_discord_members_api():
+def get_discord_members_api() -> JsonResponse:
     """
     API endpoint function that returns JsonResponse with discord members.
     """
@@ -64,19 +65,16 @@ def get_discord_members_api():
         return JsonResponse({"error": str(e)}, status=500)
 
 
-from cacheops import cached
-
-
 @api_view(["GET"])
 @permission_classes([AllowAny])
 @cached(timeout=15)
-def get_discord_members(request):
+def get_discord_members(request: Request) -> HttpResponse:
     return get_discord_members_api()
 
 
 @api_view(["GET"])
 @permission_classes([IsStaff])
-def get_discord_voice_channel_activity(request):
+def get_discord_voice_channel_activity(request: Request) -> JsonResponse:
     """
     Fetches all voice channels in the configured Discord guild that have active members.
     Returns a list of voice channels, each with its name, ID, and a list of member objects.
@@ -173,7 +171,7 @@ def get_discord_voice_channel_activity(request):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
-def get_organization_discord_members(request, pk):
+def get_organization_discord_members(request: Request, pk: int) -> JsonResponse:
     """
     Fetches Discord members for a specific organization's configured Discord server.
 
@@ -183,10 +181,6 @@ def get_organization_discord_members(request, pk):
     Returns:
         JSON response with list of Discord members
     """
-    from django.shortcuts import get_object_or_404
-
-    from app.permissions_org import has_org_staff_access
-
     org = get_object_or_404(Organization, pk=pk)
 
     # Check user has staff access to this organization
@@ -219,7 +213,7 @@ DISCORD_MEMBERS_CACHE_TTL = 3600  # 1 hour
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
-def search_discord_members(request):
+def search_discord_members(request: Request) -> JsonResponse:
     """
     Search Discord members for a specific organization's Discord server.
     Results are cached in Redis for 1 hour.
@@ -310,7 +304,7 @@ def search_discord_members(request):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
-def refresh_discord_members(request):
+def refresh_discord_members(request: Request) -> JsonResponse:
     """Refresh Discord members cache for a specific organization."""
     org_id = request.data.get("org_id")
 
@@ -339,31 +333,71 @@ def refresh_discord_members(request):
             {"error": "Please wait before refreshing again"}, status=429
         )
 
-    # Clear search cache and re-fetch
-    cache_key = f"discord_members_search_{org.discord_server_id}"
+    guild_id = org.discord_server_id
+    cache_key = f"discord_members_search_{guild_id}"
     cache.delete(cache_key)
 
+    fetched_at = time.time()
+    locked = guild_sync_lock(guild_id)
     try:
-        members = get_discord_members_data(guild_id=org.discord_server_id)
-    except Exception as e:
-        log.error(
-            "members_refresh_failed",
-            system="discord",
-            subsystem="users",
-            org_id=org.pk,
-            error=str(e),
-        )
-        return JsonResponse({"error": "Failed to fetch Discord members"}, status=502)
-    cache.set(cache_key, members, timeout=DISCORD_MEMBERS_CACHE_TTL)
-    cache.set(cooldown_key, True, timeout=300)  # 5-minute cooldown
+        try:
+            members = get_discord_members_data(guild_id=guild_id, force=True)
+        except Exception as e:
+            log.error(
+                "members_refresh_failed",
+                system="discord",
+                subsystem="users",
+                org_id=org.pk,
+                error=str(e),
+            )
+            return JsonResponse(
+                {"error": "Failed to fetch Discord members"}, status=502
+            )
+        cache.set(cache_key, members, timeout=DISCORD_MEMBERS_CACHE_TTL)
+        cache.set(cooldown_key, True, timeout=300)  # 5-minute cooldown
+        if locked:
+            _apply_refreshed_names(guild_id, members, fetched_at, org.pk)
+        else:
+            log.info(
+                "name_sync_skipped_guild_locked",
+                system="discord",
+                subsystem="name_sync",
+                guild_id=guild_id,
+                org_id=org.pk,
+            )
+    finally:
+        if locked:
+            release_guild_sync_lock(guild_id)
 
     return JsonResponse({"refreshed": True, "count": len(members)})
+
+
+def _apply_refreshed_names(
+    guild_id: str, raw_members: list[dict], fetched_at: float, org_id: int
+) -> None:
+    try:
+        apply_guild_member_names(
+            guild_id,
+            org_ids_for_guild(guild_id),
+            members_from_discord_payload(raw_members),
+            complete=True,
+            fetched_at=fetched_at,
+        )
+    except Exception:
+        log.error(
+            "name_sync_refresh_apply_failed",
+            system="discord",
+            subsystem="name_sync",
+            guild_id=guild_id,
+            org_id=org_id,
+            exc_info=True,
+        )
 
 
 BOT_ACCESS_CACHE_TTL = 300  # 5 minutes
 
 
-def check_bot_guild_access(guild_id):
+def check_bot_guild_access(guild_id: str) -> bool:
     """
     Check if the bot can access a Discord guild by fetching 1 member.
     Returns True if the bot has access, False otherwise.
@@ -393,10 +427,8 @@ def check_bot_guild_access(guild_id):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
-def check_discord_bot_status(request, pk):
+def check_discord_bot_status(request: Request, pk: int) -> JsonResponse:
     """Check if the DraftForge bot has access to an organization's Discord server."""
-    from django.shortcuts import get_object_or_404
-
     org = get_object_or_404(Organization, pk=pk)
 
     if not org.discord_server_id:
