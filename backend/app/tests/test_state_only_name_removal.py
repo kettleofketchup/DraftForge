@@ -66,11 +66,11 @@ class ModelStateTest(TestCase):
 
 class StateOnlyMigrationKeepsDataTest(MigratorTestCase):
     migrate_from = [
-        ("app", "0105_orglog_reopen_event"),
+        ("app", "0106_draftoptions_hero_grace_time_ms_and_more"),
         ("user", "0004_backfill_game_profiles"),
     ]
     migrate_to = [
-        ("app", "0106_state_remove_customuser_guildnickname"),
+        ("app", "0107_state_remove_customuser_guildnickname"),
         ("user", "0005_state_remove_baseuserprofile_nickname"),
     ]
 
