@@ -20,6 +20,7 @@ MIN_POOL_N: Final[int] = 1
 DECLINED_STATUSES: Final[tuple[str, ...]] = (
     SignupStatus.REJECTED,
     SignupStatus.CANCELLED,
+    SignupStatus.DROPPED,
 )
 
 

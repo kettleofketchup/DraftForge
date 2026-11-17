@@ -31,8 +31,8 @@ def _event_url(event):
     return f"{SITE_URL}/events/{event.pk}" if SITE_URL else ""
 
 
-INACTIVE_STATUSES = {"cancelled", "rejected", "waitlisted", "tentative"}
-DECLINED_STATUSES = {"cancelled", "rejected"}
+INACTIVE_STATUSES = {"cancelled", "rejected", "waitlisted", "tentative", "dropped"}
+DECLINED_STATUSES = {"cancelled", "rejected", "dropped"}
 CONFIRMED_STATUSES = {"confirmed", "approved"}
 
 

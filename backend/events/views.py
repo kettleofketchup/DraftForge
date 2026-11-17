@@ -113,6 +113,7 @@ def _annotate_event_qs(qs: QuerySet[Event]) -> QuerySet[Event]:
                 signups__status__in=[
                     SignupStatus.CANCELLED,
                     SignupStatus.REJECTED,
+                    SignupStatus.DROPPED,
                 ]
             ),
         ),

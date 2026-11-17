@@ -35,6 +35,7 @@ from events.models import (
     EventSignup,
     TournamentTemplateMixin,
 )
+from events.ready_check_constants import REMOVED_SIGNUP_STATUSES
 from events.reopen import ReopenNotPermitted, reopen_event
 from lobby.passwords import PasswordMode, generate_password
 from telemetry.logging import get_logger
@@ -173,16 +174,10 @@ def resolve_or_create_org_user(user, organization):
 
 
 def _get_active_signup_count(event):
-    """Count non-cancelled, non-rejected, non-waitlisted signups."""
+    """Count signups that are neither removed nor waitlisted."""
     return (
         EventSignup.objects.filter(event=event)
-        .exclude(
-            status__in=[
-                SignupStatus.CANCELLED,
-                SignupStatus.REJECTED,
-                SignupStatus.WAITLISTED,
-            ],
-        )
+        .exclude(status__in=[*REMOVED_SIGNUP_STATUSES, SignupStatus.WAITLISTED])
         .count()
     )
 
@@ -331,6 +326,7 @@ def create_tentative_signup(event, user):
     Behavior:
       - Event must be SIGNUPS_OPEN.
       - If existing TENTATIVE signup -> raise ValueError (already tentative).
+      - If existing DROPPED signup -> raise ValueError; the row is kept.
       - If existing active signup (RSVP/APPROVED/CONFIRMED/PENDING/WAITLISTED)
         -> cancel it, delete the row, then create a fresh TENTATIVE.
       - If existing CANCELLED/REJECTED row -> delete it, create fresh TENTATIVE.
@@ -346,6 +342,8 @@ def create_tentative_signup(event, user):
     if existing:
         if existing.status == SignupStatus.TENTATIVE:
             raise ValueError("Already marked as tentative")
+        if existing.status == SignupStatus.DROPPED:
+            raise ValueError("You were dropped from this event")
         if existing.status not in (SignupStatus.CANCELLED, SignupStatus.REJECTED):
             cancel_signup(existing)
             notify_scheduled_by_cancel = True
@@ -372,7 +370,7 @@ def decline_signup(event: Event, user: CustomUser) -> EventSignup:
     """
     existing = EventSignup.objects.filter(event=event, user=user).first()
     if existing:
-        if existing.status in (SignupStatus.CANCELLED, SignupStatus.REJECTED):
+        if existing.status in REMOVED_SIGNUP_STATUSES:
             raise ValueError("Already declined")
         return cancel_signup(existing)
 
@@ -602,7 +600,7 @@ def approve_signup(signup, mmr_override=None):
 @transaction.atomic
 def reject_signup(signup):
     """Reject a signup."""
-    if signup.status in [SignupStatus.REJECTED, SignupStatus.CANCELLED]:
+    if signup.status in REMOVED_SIGNUP_STATUSES:
         raise ValueError(f"Cannot reject signup in '{signup.status}' status.")
     signup.status = SignupStatus.REJECTED
     signup.save(update_fields=["status", "updated_at"])
@@ -629,7 +627,7 @@ def confirm_signup(signup):
 @transaction.atomic
 def cancel_signup(signup):
     """Cancel a signup."""
-    if signup.status in [SignupStatus.CANCELLED, SignupStatus.REJECTED]:
+    if signup.status in REMOVED_SIGNUP_STATUSES:
         raise ValueError(f"Cannot cancel signup in '{signup.status}' status.")
     prior_status = signup.status
     signup.status = SignupStatus.CANCELLED
@@ -759,11 +757,7 @@ def unconfirm_signup(signup):
 @transaction.atomic
 def demote_to_waitlist(signup):
     """Move an active signup to the end of the waitlist."""
-    if signup.status in [
-        SignupStatus.CANCELLED,
-        SignupStatus.REJECTED,
-        SignupStatus.WAITLISTED,
-    ]:
+    if signup.status in (*REMOVED_SIGNUP_STATUSES, SignupStatus.WAITLISTED):
         raise ValueError(f"Cannot demote signup in '{signup.status}' status.")
     max_pos = (
         EventSignup.objects.filter(
@@ -1059,7 +1053,7 @@ def ensure_tournament_with_signups(event: Event) -> Tournament:
 
     From ROLL_CALL only CONFIRMED players belong in the tournament (#378), so
     APPROVED signups (did not confirm) are left out, and removed if present.
-    Otherwise APPROVED + CONFIRMED are added.
+    Otherwise APPROVED + CONFIRMED are added. DROPPED players are always removed.
 
     Issue #200 — start_tournament previously silently no-op'd when event.tournament
     was None (legacy events created before perform_create wired create_tournament_for_event).
@@ -1086,15 +1080,16 @@ def ensure_tournament_with_signups(event: Event) -> Tournament:
     added_users = [signup.user for signup in roster]
     tournament.users.add(*added_users)
 
-    removed_users: list[CustomUser] = []
+    leaving: list[str] = [SignupStatus.DROPPED]
     if from_roll_call:
-        removed_users = list(
-            tournament.users.filter(
-                event_signups__event=event,
-                event_signups__status=SignupStatus.APPROVED,
-            )
+        leaving.append(SignupStatus.APPROVED)
+    removed_users: list[CustomUser] = list(
+        tournament.users.filter(
+            event_signups__event=event,
+            event_signups__status__in=leaving,
         )
-        tournament.users.remove(*removed_users)
+    )
+    tournament.users.remove(*removed_users)
 
     log.info(
         "event_tournament_roster_synced",
@@ -1165,6 +1160,7 @@ def teardown_event(event: Event) -> None:
 
 # Signup statuses that put a player in the event's tournament
 # (approve_signup / confirm_signup call add_user_to_tournament).
+# An allow-list, so DROPPED is excluded on purpose.
 REGISTERED_SIGNUP_STATUSES = (SignupStatus.APPROVED, SignupStatus.CONFIRMED)
 
 
