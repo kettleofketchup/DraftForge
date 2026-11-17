@@ -47,7 +47,7 @@ interface UserState {
   setDiscordUsers: (users: GuildMembers) => void;
   /** Global user pk array (resolved via useResolvedUsers hook) */
   globalUserPks: number[];
-  /** Upsert a user into the cache (replaces old array-based setUser) */
+  /** Upsert a user into the cache */
   setUser: (user: UserType) => void;
   /** Add a user to cache + global pk array */
   addUser: (user: UserType) => void;
@@ -60,7 +60,7 @@ interface UserState {
   team: TeamType;
   teams: TeamType[];
   tournament: TournamentType;
-  draft: DraftType;
+  draft: DraftType | null;
   setDraft: (draft: DraftType | null) => void;
   tournaments: TournamentType[];
   curDraftRound: DraftRoundType;
@@ -118,7 +118,7 @@ export const useUserStore = create<UserState>()(
   persist(
     (set, get) => ({
       tournament: {} as TournamentType,
-      draft: get()?.tournament?.draft as DraftType,
+      draft: null,
       autoRefreshDraft: null,
       setAutoRefreshDraft: (refresh) => set({ autoRefreshDraft: refresh }),
       getDraft: async () => {
@@ -146,7 +146,7 @@ export const useUserStore = create<UserState>()(
           log.error('Failed to fetch draft:', err);
         }
       },
-      setDraft: (draft: DraftType | null) => set({ draft: draft as DraftType }),
+      setDraft: (draft: DraftType | null) => set({ draft }),
       tournaments: [] as TournamentType[],
       game: {} as GameType,
       games: [] as GameType[],
@@ -154,11 +154,12 @@ export const useUserStore = create<UserState>()(
       team: {} as TeamType,
 
       updateCurrentDraft: async () => {
-        if (!get().draft?.pk) {
+        const pk = get().draft?.pk;
+        if (!pk) {
           console.debug('Current draft does not have a primary key (pk).');
           return;
         }
-        const draft = await fetchDraft(get().draft.pk!);
+        const draft = await fetchDraft(pk);
         set({ draft: draft });
       },
       curDraftRound: {} as DraftRoundType,
@@ -478,7 +479,7 @@ export const useUserStore = create<UserState>()(
       },
     }),
     {
-      name: 'dtx-storage', // key in localStorage
+      name: 'dtx-storage', // sessionStorage key
       partialize: (state) => ({
         currentUser: state.currentUser,
       }),
@@ -490,8 +491,8 @@ export const useUserStore = create<UserState>()(
         }
         state?.setHasHydrated(true);
       },
-      storage: createJSONStorage(() => sessionStorage), // (optional) by default, 'localStorage' is used
-      skipHydration: false, // (optional) if you want to skip hydration
+      storage: createJSONStorage(() => sessionStorage),
+      skipHydration: false,
     },
   ),
 );

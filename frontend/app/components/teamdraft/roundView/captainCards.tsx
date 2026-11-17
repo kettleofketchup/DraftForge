@@ -2,14 +2,14 @@ import { useMemo } from 'react';
 import type { TeamType, TournamentType } from '~/components/tournament/types';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
-import type { DraftRoundType, DraftType } from '../types';
+import type { DraftRoundType } from '../types';
 import { deriveDraftIndex } from '../utils';
 import { DraftRoundCard } from './draftRoundCard';
 const log = getLogger('CaptainCards');
 interface CaptainCardsProps {}
 
 export const CaptainCards: React.FC<CaptainCardsProps> = () => {
-  const draft: DraftType = useUserStore((state) => state.draft);
+  const draft = useUserStore((state) => state.draft);
   const curDraftRound = useUserStore((state) => state.curDraftRound);
   const draftIndex = deriveDraftIndex(draft?.draft_rounds, curDraftRound?.pk);
   const tournament: TournamentType = useUserStore((state) => state.tournament);

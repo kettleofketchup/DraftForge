@@ -254,6 +254,7 @@ class DraftActivityTests(ClearIntentsMixin, TestCase):
 
     @patch("discordbot.activity.discord_json")
     def test_team_session_resolves_tournament(self, discord):
+        HeroDraft.objects.filter(pk=self.hero.pk).update(state=HeroDraftState.COMPLETED)
         self.binding.draft = None
         self.binding.team_draft = self.team_draft
         self.binding.save()
@@ -325,7 +326,7 @@ class DraftActivityTests(ClearIntentsMixin, TestCase):
                 "scope": "tournament",
                 "initial_kind": "hero",
                 "initial_draft_id": self.hero.pk,
-                "source": "channel_last",
+                "source": "involves_me",
                 "role": "captain",
                 "notice": False,
                 "intent_id": None,
@@ -664,6 +665,22 @@ class DraftActivityTests(ClearIntentsMixin, TestCase):
         )
         self.assertEqual(started["source"], "involves_me")
         self.assertEqual(started["role"], "captain")
+
+    @patch("discordbot.activity.discord_json")
+    def test_involves_me_prefers_my_hero_draft_over_unfinished_team_draft(
+        self, discord
+    ):
+        for state in ("pending", "drafting"):
+            with self.subTest(state=state):
+                Draft.objects.filter(pk=self.team_draft.pk).update(state=state)
+                self.binding.draft = self.other
+                self.binding.save()
+                response, started = self.first_session(discord, f"i-stale-{state}")
+                self.assertEqual(
+                    response.data["initial_view"],
+                    {"kind": "hero", "id": self.hero.pk},
+                )
+                self.assertEqual(started["source"], "involves_me")
 
     @patch("discordbot.activity.discord_json")
     def test_finished_match_does_not_count_as_involves_me(self, discord):
@@ -1601,6 +1618,11 @@ class ActivitySocketDatabaseTests(ClearIntentsMixin, TransactionTestCase):
             await socket.disconnect()
         closed = [e for e in logs if e["event"] == "activity_socket_closed"]
         self.assertEqual([e["reason"] for e in closed], ["expired"])
+        rejected = [e for e in logs if e["event"] == "activity_auth_rejected"]
+        self.assertEqual(
+            [(e["reason"], e["code"], e["surface"]) for e in rejected],
+            [("expired", "activity_session_ended", "socket")],
+        )
 
     async def test_client_disconnect_is_logged(self):
         with capture_logs() as logs:
@@ -1616,6 +1638,38 @@ class ActivitySocketDatabaseTests(ClearIntentsMixin, TransactionTestCase):
         self.assertEqual(closed[0]["kind"], "hero")
         self.assertEqual(closed[0]["system"], "discord")
         self.assertEqual(closed[0]["subsystem"], "activity")
+
+    async def test_consumer_crash_is_logged_and_reraised(self):
+        async def application(scope, receive, send):
+            await receive()
+            await send({"type": "websocket.accept"})
+            raise RuntimeError("consumer exploded")
+
+        socket = WebsocketCommunicator(
+            self._router(application),
+            f"/draft/{self.draft_pk}/",
+            subprotocols=["draftactivity", self.token],
+        )
+        with capture_logs() as logs:
+            self.assertTrue((await socket.connect(timeout=5))[0])
+            with self.assertRaises(RuntimeError):
+                await socket.receive_output(timeout=5)
+        closed = [e for e in logs if e["event"] == "activity_socket_closed"]
+        self.assertEqual(len(closed), 1)
+        self.assertEqual(closed[0]["reason"], "error")
+        self.assertEqual(closed[0]["close_code"], 1011)
+        self.assertEqual(closed[0]["error_type"], "RuntimeError")
+        self.assertEqual(closed[0]["user_id"], self.user_pk)
+        self.assertEqual(closed[0]["instance_id"], "socket-instance")
+
+    async def test_consumer_cancel_is_logged_and_reraised(self):
+        socket = await self._open_guarded_socket()
+        with capture_logs() as logs:
+            socket.future.cancel()
+            with self.assertRaises(asyncio.CancelledError):
+                await socket.future
+        closed = [e for e in logs if e["event"] == "activity_socket_closed"]
+        self.assertEqual([e["reason"] for e in closed], ["cancelled"])
 
     async def test_scope_activity_is_set(self):
         async def application(scope, receive, send):
