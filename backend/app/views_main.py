@@ -59,6 +59,7 @@ from events.models import Event
 from events.signup_window import user_signups_open_tournament_ids
 from league.models import LeagueUser
 from league.serializers import LeagueUserSerializer
+from org.activity import touch_org_activity
 from org.contributions.services import delete_user_entries
 from org.features import FeatureKey, active_features
 from org.membership import member_organization_ids, viewer_member_organization_ids
@@ -518,6 +519,7 @@ class TournamentView(viewsets.ModelViewSet):
             return data
 
         data = get_data()
+        touch_org_activity(request, data.get("organization_pk"))
         return Response(data)
 
     def patch(self, request: Request, *args: Any, **kwargs: Any) -> Response:
@@ -1319,6 +1321,7 @@ class OrganizationView(viewsets.ModelViewSet):
             return serializer.data
 
         data = get_data()
+        touch_org_activity(request, data.get("pk"))
         return Response({**data, **_org_viewer_access(request.user, data)})
 
     @action(detail=True, methods=["get"])
@@ -1347,6 +1350,7 @@ class OrganizationView(viewsets.ModelViewSet):
             return serializer.data
 
         data = get_data()
+        touch_org_activity(request, org.pk, guild_id=org.discord_server_id)
         return Response(data)
 
 
@@ -1449,6 +1453,7 @@ class LeagueView(viewsets.ModelViewSet):
             return serializer.data
 
         data = get_data()
+        touch_org_activity(request, (data.get("organization") or {}).get("pk"))
         return Response(
             {
                 **data,
