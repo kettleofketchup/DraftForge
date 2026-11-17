@@ -7,7 +7,7 @@ import os
 
 from dotenv import load_dotenv
 
-from config.discord_api import DISCORD_API_BASE_URL, DISCORD_GUILD_ID  # noqa: F401
+from config.discord_api import DISCORD_API_BASE_URL  # noqa: F401
 from config.dota_lobby import DotaLobbyConfig
 from config.installed_apps import MODEL_APPS
 
