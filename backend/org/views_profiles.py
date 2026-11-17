@@ -50,15 +50,30 @@ def _serialize_dota_profile(profile: PlayerDotaProfile) -> dict[str, Any]:
     }
 
 
+def _invalid_rank_status(data: dict[str, Any]) -> Response | None:
+    if "rank_status" in data and (
+        data["rank_status"] not in PlayerDotaProfile.RANK_STATUSES
+    ):
+        return Response(
+            {
+                "rank_status": (
+                    f"Must be one of {', '.join(PlayerDotaProfile.RANK_STATUSES)}."
+                )
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    return None
+
+
 def _apply_dota_profile_patch(
     org_user: OrgUser, data: dict[str, Any]
 ) -> PlayerDotaProfile:
     profile, _ = PlayerDotaProfile.objects.get_or_create(org_user=org_user)
-    for field in DOTA_PROFILE_FIELDS - {"rank_status"}:
+    previous_status = profile.rank_status
+    for field in DOTA_PROFILE_FIELDS:
         if field in data:
             setattr(profile, field, data[field])
-    if "rank_status" in data:
-        profile.declare_rank(data["rank_status"])
+    profile.sync_rank_declaration(previous_status)
     profile.save()
     invalidate_obj(profile)
     invalidate_obj(org_user)
@@ -97,6 +112,8 @@ def update_my_dota_profile(request: Request, org_id: int) -> Response:
             status=status.HTTP_404_NOT_FOUND,
         )
 
+    if (error := _invalid_rank_status(request.data)) is not None:
+        return error
     profile = _apply_dota_profile_patch(org_user, request.data)
     return Response(_serialize_dota_profile(profile))
 
@@ -149,6 +166,8 @@ def update_user_dota_profile(request: Request, org_id: int, user_pk: int) -> Res
             status=status.HTTP_404_NOT_FOUND,
         )
 
+    if (error := _invalid_rank_status(request.data)) is not None:
+        return error
     profile = _apply_dota_profile_patch(org_user, request.data)
     return Response(_serialize_dota_profile(profile))
 

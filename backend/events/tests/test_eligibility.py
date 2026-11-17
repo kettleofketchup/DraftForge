@@ -1,11 +1,13 @@
 from itertools import product
 
 from app.models import CustomUser, GameType
+from events.discord.providers.dota import _check_dota_profile_complete
 from events.eligibility import (
     REQUIREMENT_CHECKS,
     UNMET_LABELS,
     Unmet,
     has_steam_id,
+    steam_friend_id_from_profiles,
     unmet_requirements,
 )
 from events.models import Event
@@ -13,7 +15,7 @@ from events.schemas import DotaModalConfig, SignupInputPatch, dota_require_scree
 from events.services import apply_signup_input
 from events.tests.base import EventTestCase
 from org.models import OrgUser
-from org.models_profiles import PlayerDotaProfile
+from org.models_profiles import PlayerDeadlockProfile, PlayerDotaProfile
 
 SCREENSHOT_CODES = {Unmet.RANK_SCREENSHOT_MISSING, Unmet.BATTLECUP_SCREENSHOT_MISSING}
 
@@ -50,6 +52,50 @@ class EligibilityMatrixTests(EventTestCase):
         self.assertIn(
             Unmet.DOTA_RANK_UNDECLARED, unmet_requirements(ev_with_min_mmr, u)
         )
+
+    def test_every_single_gate_fails_closed_without_profile(self) -> None:
+        gates: list[dict[str, object]] = [
+            {"allow_active_mmr": False},
+            {"allow_previous_rank": False},
+            {"allow_battlecup_rating": False},
+            {"discord_require_rank_screenshot": True},
+            {"discord_require_battlecup_screenshot": True},
+            {"min_mmr": 3000},
+        ]
+        for gate in gates:
+            with self.subTest(**gate):
+                ev = self.make_event(**gate)
+                u = self.make_user()
+                self.assertEqual(
+                    unmet_requirements(ev, u), [Unmet.DOTA_RANK_UNDECLARED]
+                )
+
+    def test_unknown_declared_status_counts_as_undeclared(self) -> None:
+        gated = self.make_event(min_mmr=3000)
+        open_event = self.make_event()
+        u = self.make_user()
+        PlayerDotaProfile.objects.create(
+            org_user=self._org_user(u),
+            rank_status="x",
+            rank_declared_at=gated.scheduled_at,
+        )
+        self.assertEqual(unmet_requirements(gated, u), [Unmet.DOTA_RANK_UNDECLARED])
+        self.assertEqual(unmet_requirements(open_event, u), [])
+
+    def test_unknown_status_is_not_an_allowed_rank_type(self) -> None:
+        cfg = DotaModalConfig.from_event(self.make_event())
+        self.assertFalse(cfg.allows_rank_status("x"))
+
+    def test_signup_input_rank_status_declares(self) -> None:
+        ev = self.make_event(min_mmr=3000)
+        u = self.make_user()
+        ou = self._org_user(u)
+        apply_signup_input(
+            org_user=ou, event=ev, patch=SignupInputPatch(rank_status="never")
+        )
+        profile = PlayerDotaProfile.objects.get(org_user=ou)
+        self.assertIsNotNone(profile.rank_declared_at)
+        self.assertEqual(unmet_requirements(ev, u), [])
 
     def test_no_gate_no_profile_passes(self) -> None:
         ev = self.make_event()
@@ -190,14 +236,36 @@ class EligibilityMatrixTests(EventTestCase):
         ou = self._org_user(u)
         self.assertFalse(has_steam_id(u, ou))
 
-    def test_has_steam_id_out_of_range_friend_id(self) -> None:
-        u = self.make_user()
-        ou = self._org_user(u)
-        PlayerDotaProfile.objects.create(
-            org_user=ou, unverified_friend_id="99999999999999999999"
-        )
-        ou = self._org_user(u)
-        self.assertTrue(has_steam_id(u, ou))
+    def test_has_steam_id_account_id_range(self) -> None:
+        cases = {
+            "0": False,
+            "99999999999999999999": False,
+            str(2**32): False,
+            str(2**32 - 1): True,
+            str(2**31): True,
+        }
+        for fid, expected in cases.items():
+            with self.subTest(fid=fid):
+                u = self.make_user()
+                PlayerDotaProfile.objects.create(
+                    org_user=self._org_user(u), unverified_friend_id=fid
+                )
+                self.assertEqual(has_steam_id(u, self._org_user(u)), expected)
+
+    def test_blank_or_non_numeric_dota_id_falls_back_to_deadlock(self) -> None:
+        for dota_value in ("abc", "   "):
+            with self.subTest(dota_value=dota_value):
+                u = self.make_user()
+                ou = self._org_user(u)
+                PlayerDotaProfile.objects.create(
+                    org_user=ou, unverified_friend_id=dota_value
+                )
+                PlayerDeadlockProfile.objects.create(
+                    org_user=ou, unverified_friend_id="246810"
+                )
+                ou = self._org_user(u)
+                self.assertEqual(steam_friend_id_from_profiles(ou), "246810")
+                self.assertTrue(has_steam_id(u, ou))
 
     def test_require_steam_id_met_by_profile_friend_id(self) -> None:
         ev = self.make_event(require_steam_id=True)
@@ -229,3 +297,17 @@ class EligibilityMatrixTests(EventTestCase):
         self.assertEqual(
             unmet_requirements(ev, without_steam), [Unmet.STEAM_ID_MISSING]
         )
+
+
+class DiscordProfileCompleteTests(EventTestCase):
+    def test_undeclared_row_is_not_complete(self) -> None:
+        u = self.make_user()
+        ou = OrgUser.objects.get(user=u, organization=self.org)
+        profile = PlayerDotaProfile.objects.create(
+            org_user=ou, rank_status="active", rank_medal="Herald 1", pos_1=True
+        )
+        self.assertFalse(_check_dota_profile_complete(ou, self.event))
+        profile.declare_rank("active")
+        profile.save()
+        ou = OrgUser.objects.get(pk=ou.pk)
+        self.assertTrue(_check_dota_profile_complete(ou, self.event))

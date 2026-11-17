@@ -5,6 +5,7 @@ from rest_framework.test import APIClient
 from app.models import CustomUser, Organization
 from org.models import OrgUser
 from org.models_profiles import PlayerDotaProfile
+from org.tests.rank_evidence_cases import RANK_EVIDENCE_CASES
 
 
 class DeclareRankTest(TestCase):
@@ -14,6 +15,19 @@ class DeclareRankTest(TestCase):
         profile.declare_rank("previous")
         self.assertEqual(profile.rank_status, "previous")
         self.assertIsNotNone(profile.rank_declared_at)
+
+    def test_declare_rank_rejects_unknown_status(self) -> None:
+        profile = PlayerDotaProfile()
+        with self.assertRaises(ValueError):
+            profile.declare_rank("x")
+        self.assertIsNone(profile.rank_declared_at)
+
+    def test_has_rank_evidence_matches_backfill_rule(self) -> None:
+        for key, (fields, expected) in RANK_EVIDENCE_CASES.items():
+            with self.subTest(key):
+                self.assertEqual(
+                    PlayerDotaProfile(**fields).has_rank_evidence(), expected
+                )
 
 
 class RankDeclaredViewTest(TestCase):
@@ -32,7 +46,7 @@ class RankDeclaredViewTest(TestCase):
         client = APIClient()
         client.force_authenticate(self.member)
         url = reverse("update-my-dota-profile", args=[self.org.pk])
-        resp = client.patch(url, {"rank_status": "never"}, format="json")
+        resp = client.patch(url, {"rank_status": "previous"}, format="json")
         self.assertEqual(resp.status_code, 200)
         self.assertIsNotNone(self._profile().rank_declared_at)
 
@@ -53,3 +67,41 @@ class RankDeclaredViewTest(TestCase):
         profile = self._profile()
         self.assertEqual(profile.rank_status, "active")
         self.assertIsNotNone(profile.rank_declared_at)
+
+    def _member_patch(self, data: dict[str, object]) -> int:
+        client = APIClient()
+        client.force_authenticate(self.member)
+        url = reverse("update-my-dota-profile", args=[self.org.pk])
+        return client.patch(url, data, format="json").status_code
+
+    def test_unknown_rank_status_rejected(self) -> None:
+        self.assertEqual(self._member_patch({"rank_status": "x"}), 400)
+        profile = PlayerDotaProfile.objects.filter(org_user=self.org_user).first()
+        if profile is not None:
+            self.assertEqual(profile.rank_status, "never")
+            self.assertIsNone(profile.rank_declared_at)
+
+    def test_card_style_patch_with_default_status_stays_undeclared(self) -> None:
+        status_code = self._member_patch(
+            {
+                "rank_status": "never",
+                "rank_medal": "",
+                "battle_cup_tier": None,
+                "unverified_friend_id": "123456",
+                "pos_1": True,
+            }
+        )
+        self.assertEqual(status_code, 200)
+        self.assertIsNone(self._profile().rank_declared_at)
+
+    def test_battle_cup_tier_patch_declares(self) -> None:
+        self.assertEqual(self._member_patch({"battle_cup_tier": 3}), 200)
+        self.assertIsNotNone(self._profile().rank_declared_at)
+
+    def test_unchanged_status_keeps_declaration_time(self) -> None:
+        self.assertEqual(self._member_patch({"rank_status": "active"}), 200)
+        first = self._profile().rank_declared_at
+        self.assertEqual(
+            self._member_patch({"rank_status": "active", "pos_2": True}), 200
+        )
+        self.assertEqual(self._profile().rank_declared_at, first)

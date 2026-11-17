@@ -16,8 +16,10 @@ from events.schemas import DotaModalConfig, dota_require_screenshot
 from org.models import OrgUser
 from org.models_profiles import PlayerDotaProfile
 
+# Steam account IDs are unsigned 32-bit; 0 is never assigned.
+STEAM_ACCOUNT_ID_RANGE = range(1, 2**32)
 # Range of the CustomUser.steam_account_id IntegerField.
-STEAM_ACCOUNT_ID_MAX = 2**31 - 1
+STORED_STEAM_ACCOUNT_ID_MAX = 2**31 - 1
 
 
 class Unmet(StrEnum):
@@ -43,11 +45,10 @@ UNMET_LABELS: dict[Unmet, str] = {
 }
 
 _PROFILE_ATTRS = ("dota_profile", "deadlock_profile")
-_RANK_STATUSES = ("active", "previous", "never")
 
 
 def steam_friend_id_from_profiles(org_user: OrgUser | None) -> str:
-    """Friend ID from the Dota profile, else the Deadlock one; ``""`` if none.
+    """First numeric friend ID across the game profiles; ``""`` if none.
 
     One Steam account backs both games, so either profile identifies it.
     """
@@ -55,7 +56,8 @@ def steam_friend_id_from_profiles(org_user: OrgUser | None) -> str:
         return ""
     for attr in _PROFILE_ATTRS:
         value = getattr(getattr(org_user, attr, None), "unverified_friend_id", "")
-        if value:
+        value = (value or "").strip()
+        if value.isascii() and value.isdigit():
             return value
     return ""
 
@@ -65,11 +67,13 @@ def has_steam_id(user: CustomUser, org_user: OrgUser | None) -> bool:
     no other user owns as ``steam_account_id``."""
     if user.steamid:
         return True
-    fid = steam_friend_id_from_profiles(org_user).strip()
-    if not (fid.isascii() and fid.isdigit()):
+    fid = steam_friend_id_from_profiles(org_user)
+    if not fid:
         return False
     account_id = int(fid)
-    if account_id > STEAM_ACCOUNT_ID_MAX:
+    if account_id not in STEAM_ACCOUNT_ID_RANGE:
+        return False
+    if account_id > STORED_STEAM_ACCOUNT_ID_MAX:
         return True
     return (
         not CustomUser.objects.filter(steam_account_id=account_id)
@@ -93,14 +97,13 @@ class DotaRequirements:
     def unmet(
         self, event: Event, user: CustomUser, org_user: OrgUser | None
     ) -> list[Unmet]:
-        profile = (
-            PlayerDotaProfile.objects.filter(org_user=org_user).first()
-            if org_user is not None
-            else None
-        )
-        if profile is None or profile.rank_declared_at is None:
+        profile: PlayerDotaProfile | None = getattr(org_user, "dota_profile", None)
+        if profile is None or not profile.is_rank_declared:
             # Fail closed when any gate would reject some undeclared answer.
-            probes = (PlayerDotaProfile(rank_status=s) for s in _RANK_STATUSES)
+            probes = (
+                PlayerDotaProfile(rank_status=s)
+                for s in PlayerDotaProfile.RANK_STATUSES
+            )
             if any(self._rank_codes(event, p) for p in probes):
                 return [Unmet.DOTA_RANK_UNDECLARED]
             return []
@@ -111,13 +114,8 @@ class DotaRequirements:
         players have no current MMR and are judged by ``allow_*`` instead."""
         cfg = DotaModalConfig.from_event(event)
         status = profile.rank_status
-        allowed = {
-            "active": cfg.allow_active_mmr,
-            "previous": cfg.allow_previous_rank,
-            "never": cfg.allow_battlecup_rating,
-        }
         codes: list[Unmet] = []
-        if not allowed.get(status, True):
+        if not cfg.allows_rank_status(status):
             codes.append(Unmet.RANK_TYPE_DISALLOWED)
         if dota_require_screenshot(status, cfg):
             if status == "active" and not profile.rank_screenshot:
@@ -158,13 +156,18 @@ def unmet_requirements(event: Event, user: CustomUser) -> list[Unmet]:
     """Codes for every requirement ``user`` misses; empty means eligible."""
     org_user = _org_user_for(event, user)
     game = REQUIREMENT_CHECKS[GameType(event.game_type)]
+    steam_ok = (
+        has_steam_id(user, org_user)
+        if event.require_steam_id or event.require_profile_complete
+        else True
+    )
     codes: list[Unmet] = []
-    if event.require_steam_id and not has_steam_id(user, org_user):
+    if event.require_steam_id and not steam_ok:
         codes.append(Unmet.STEAM_ID_MISSING)
     if event.require_mmr_verified and not game.mmr_verified(org_user):
         codes.append(Unmet.MMR_UNVERIFIED)
     if event.require_profile_complete and not (
-        user.nickname and has_steam_id(user, org_user) and user.discordId
+        user.nickname and steam_ok and user.discordId
     ):
         codes.append(Unmet.PROFILE_INCOMPLETE)
     codes.extend(game.unmet(event, user, org_user))

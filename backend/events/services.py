@@ -41,6 +41,7 @@ from events.models import (
     TournamentTemplateMixin,
 )
 from events.reopen import ReopenNotPermitted, reopen_event
+from events.schemas import DotaModalConfig
 from lobby.passwords import PasswordMode, generate_password
 from org.models_profiles import PlayerDotaProfile
 from telemetry.logging import get_logger
@@ -456,12 +457,7 @@ def apply_signup_input(
             invalidate_after_commit(user_positions, user)
     if "rank_status" in set_fields:
         status = set_fields["rank_status"]
-        allowed = (
-            (status == "active" and event.allow_active_mmr)
-            or (status == "previous" and event.allow_previous_rank)
-            or (status == "never" and event.allow_battlecup_rating)
-        )
-        if not allowed:
+        if not DotaModalConfig.from_event(event).allows_rank_status(status):
             raise ValidationError(
                 RANK_STATUS_DISALLOWED_MESSAGES[status],
                 code="rank_status_disallowed",

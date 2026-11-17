@@ -49,7 +49,7 @@ def _check_dota_profile_complete(org_user: OrgUser, event: Event | None = None) 
         has_positions = any(
             [profile.pos_1, profile.pos_2, profile.pos_3, profile.pos_4, profile.pos_5]
         )
-        has_rank = (
+        has_rank = profile.is_rank_declared and (
             (profile.rank_status == "active" and profile.rank_medal)
             or (profile.rank_status == "previous" and profile.rank_medal)
             or (profile.rank_status == "never" and profile.battle_cup_tier is not None)

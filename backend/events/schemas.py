@@ -314,6 +314,18 @@ class DotaModalConfig(SignupModalConfig):
             allow_battlecup_rating=event.allow_battlecup_rating,
         )
 
+    def allows_rank_status(self, rank_status: str) -> bool:
+        """Whether the event accepts this rank type; unknown types are refused."""
+        flag = _RANK_STATUS_ALLOW_FLAGS.get(rank_status)
+        return flag is not None and getattr(self, flag)
+
+
+_RANK_STATUS_ALLOW_FLAGS: dict[str, str] = {
+    "active": "allow_active_mmr",
+    "previous": "allow_previous_rank",
+    "never": "allow_battlecup_rating",
+}
+
 
 class DeadlockModalConfig(SignupModalConfig):
     kind: Literal["deadlock"] = "deadlock"

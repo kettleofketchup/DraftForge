@@ -89,6 +89,7 @@ class SignupButtonHappyPathTests(TransactionTestCase):
             pos_1=True,
             rank_status="active",
             rank_medal="Archon 3",
+            rank_declared_at=timezone.now(),
         )
 
     def tearDown(self):
@@ -162,6 +163,7 @@ class FullSignupPipelineTests(TransactionTestCase):
             pos_1=True,
             rank_status="active",
             rank_medal="Archon 3",
+            rank_declared_at=timezone.now(),
         )
 
     def tearDown(self):
@@ -436,6 +438,7 @@ class RollbackPathTests(TransactionTestCase):
             pos_1=True,
             rank_status="active",
             rank_medal="Archon 3",
+            rank_declared_at=timezone.now(),
         )
 
     def tearDown(self):
@@ -533,6 +536,7 @@ class DMContextEdgeCaseTests(TransactionTestCase):
             pos_1=True,
             rank_status="active",
             rank_medal="Archon 3",
+            rank_declared_at=timezone.now(),
         )
 
     def tearDown(self):
