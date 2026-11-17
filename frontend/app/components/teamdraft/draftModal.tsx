@@ -7,6 +7,7 @@ import {
   Users,
 } from 'lucide-react';
 import React, {
+  type ReactNode,
   useCallback,
   useEffect,
   useMemo,
@@ -82,9 +83,10 @@ import { useTeamDraftTimerProps } from './timer/useTeamDraftTimerProps';
 import type { DraftRoundType, DraftType, TieResolution } from './types';
 import { deriveDraftIndex, resolveViewedRound } from './utils';
 const log = getLogger('DraftModal');
-type DraftModalParams = { embedded?: boolean };
+type DraftModalParams = { embedded?: boolean; activityHeader?: ReactNode };
 export const DraftModal: React.FC<DraftModalParams> = ({
   embedded = false,
+  activityHeader,
 }) => {
   const displayOrgId = useDisplayOrgId();
   const tournament = useUserStore((state) => state.tournament);
@@ -694,6 +696,7 @@ export const DraftModal: React.FC<DraftModalParams> = ({
 
         {/* Full screen layout */}
         <div className="flex flex-col h-full w-full overflow-hidden">
+          {embedded && activityHeader}
           {/* Top bar: Live/Auto buttons left, Draft round centered */}
           <div className="flex items-center justify-between px-4 py-2 border-b border-gray-800 shrink-0">
             <LiveAutoButtons isPolling={livePolling} />
@@ -793,7 +796,7 @@ export const DraftModal: React.FC<DraftModalParams> = ({
                         hasNewEvent={hasNewEvent}
                         onViewed={clearNewEventFlag}
                       />
-                      <ShareDraftButton />
+                      {!embedded && <ShareDraftButton />}
                     </div>
                   </CollapsibleContent>
                 </Collapsible>
@@ -856,7 +859,7 @@ export const DraftModal: React.FC<DraftModalParams> = ({
                     hasNewEvent={hasNewEvent}
                     onViewed={clearNewEventFlag}
                   />
-                  <ShareDraftButton />
+                  {!embedded && <ShareDraftButton />}
                 </div>
               </div>
             </div>

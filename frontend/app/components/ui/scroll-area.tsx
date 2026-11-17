@@ -1,41 +1,49 @@
-import * as React from "react"
-import * as ScrollAreaPrimitive from "@radix-ui/react-scroll-area"
+import * as ScrollAreaPrimitive from '@radix-ui/react-scroll-area';
+import * as React from 'react';
 
-import { cn } from "~/lib/utils"
+import { cn } from '~/lib/utils';
 
-interface ScrollAreaProps extends React.ComponentProps<typeof ScrollAreaPrimitive.Root> {
+interface ScrollAreaProps extends React.ComponentProps<
+  typeof ScrollAreaPrimitive.Root
+> {
   /** Control scrollbar visibility: "auto" (default), "always", "scroll", "hover" */
-  type?: "auto" | "always" | "scroll" | "hover";
+  type?: 'auto' | 'always' | 'scroll' | 'hover';
+  viewportProps?: React.ComponentProps<typeof ScrollAreaPrimitive.Viewport>;
 }
 
 function ScrollArea({
   className,
   children,
-  type = "auto",
+  type = 'auto',
+  viewportProps,
   ...props
 }: ScrollAreaProps) {
   return (
     <ScrollAreaPrimitive.Root
       data-slot="scroll-area"
-      className={cn("relative", className)}
+      className={cn('relative', className)}
       type={type}
       {...props}
     >
       <ScrollAreaPrimitive.Viewport
         data-slot="scroll-area-viewport"
-        className="focus-visible:ring-ring/50 size-full rounded-[inherit] transition-[color,box-shadow] outline-none focus-visible:ring-[3px] focus-visible:outline-1"
+        {...viewportProps}
+        className={cn(
+          'focus-visible:ring-ring/50 size-full rounded-[inherit] transition-[color,box-shadow] outline-none focus-visible:ring-[3px] focus-visible:outline-1',
+          viewportProps?.className,
+        )}
       >
         {children}
       </ScrollAreaPrimitive.Viewport>
       <ScrollBar />
       <ScrollAreaPrimitive.Corner />
     </ScrollAreaPrimitive.Root>
-  )
+  );
 }
 
 function ScrollBar({
   className,
-  orientation = "vertical",
+  orientation = 'vertical',
   ...props
 }: React.ComponentProps<typeof ScrollAreaPrimitive.ScrollAreaScrollbar>) {
   return (
@@ -43,12 +51,12 @@ function ScrollBar({
       data-slot="scroll-area-scrollbar"
       orientation={orientation}
       className={cn(
-        "flex touch-none p-px transition-colors select-none",
-        orientation === "vertical" &&
-          "h-full w-2.5 border-l border-l-transparent",
-        orientation === "horizontal" &&
-          "h-2.5 flex-col border-t border-t-transparent",
-        className
+        'flex touch-none p-px transition-colors select-none',
+        orientation === 'vertical' &&
+          'h-full w-2.5 border-l border-l-transparent',
+        orientation === 'horizontal' &&
+          'h-2.5 flex-col border-t border-t-transparent',
+        className,
       )}
       {...props}
     >
@@ -57,7 +65,7 @@ function ScrollBar({
         className="bg-border relative flex-1 rounded-full"
       />
     </ScrollAreaPrimitive.ScrollAreaScrollbar>
-  )
+  );
 }
 
-export { ScrollArea, ScrollBar }
+export { ScrollArea, ScrollBar };

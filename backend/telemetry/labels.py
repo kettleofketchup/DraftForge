@@ -6,8 +6,11 @@ from typing import Any
 # Known resource patterns and their label names
 # Order matters: more specific patterns should come first
 RESOURCE_PATTERNS = [
+    (r"/discord/activity/draft/(\d+)", "herodraft"),
+    (r"/herodraft/(\d+)", "herodraft"),
+    (r"/team-draft/(\d+)", "draft"),
     # WebSocket singular paths (CRITICAL FIX #7)
-    (r"/draft/(\d+)", "draft"),
+    (r"(?<!/activity)/draft/(\d+)", "draft"),
     (r"/tournament/(\d+)", "tournament"),
     # Plural resources with IDs
     (r"/tournaments/(\d+)", "tournament"),

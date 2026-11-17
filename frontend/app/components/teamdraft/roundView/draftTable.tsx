@@ -45,7 +45,7 @@ export const DraftTable: React.FC<DraftTableProps> = () => {
   }, [curRound?.choice]);
   useEffect(() => {
     log.debug('rerender: draft users_remaining changed changed');
-  }, [draft.users_remaining?.length]);
+  }, [draft?.users_remaining?.length]);
 
   const isShuffle = draft?.draft_style === 'shuffle';
 

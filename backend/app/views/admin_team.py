@@ -36,7 +36,6 @@ from app.steam_accounts import (
 )
 from discordbot.services.member_names import normalise_name
 from league.models import LeagueUser
-from org.activity import touch_org_activity
 from org.models import OrgUser
 from org.serializers import OrgUserSerializer
 from org.user_search import user_name_q
@@ -149,8 +148,6 @@ def search_users(request: Request) -> Response:
             else:
                 user_data["membership"] = None
                 user_data["membership_label"] = None
-
-        touch_org_activity(request, org.pk, guild_id=org.discord_server_id)
 
     return Response(data)
 

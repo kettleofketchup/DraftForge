@@ -1,6 +1,15 @@
 import type { DiscordSDK } from '@discord/embedded-app-sdk';
 import api from '~/components/api/axios';
 import type { UserType } from '~/index';
+import type {
+  ActivityNotice,
+  ActivityScope,
+  ActivityView,
+  LaunchIntentRef,
+} from '~/lib/activity-types';
+import { getLogger } from '~/lib/logger';
+
+const log = getLogger('activity');
 
 export interface DraftActivitySession {
   token: string;
@@ -8,6 +17,18 @@ export interface DraftActivitySession {
   kind: 'hero' | 'team';
   tournament_id: number | null;
   user: UserType;
+  scope?: 'tournament' | 'draft';
+  initial_view?: ActivityView | null;
+  launch_intent?: LaunchIntentRef | null;
+  site_url?: string;
+  notice?: ActivityNotice | null;
+}
+
+export class ActivityDisabledError extends Error {
+  constructor() {
+    super('Discord Activities are unavailable on this server.');
+    this.name = 'ActivityDisabledError';
+  }
 }
 
 /** These prefixes must also be configured in the Discord Developer Portal. */
@@ -35,7 +56,13 @@ export function releaseDiscordSession(): void {
 
 export function initializeDiscord({
   force = false,
-}: { force?: boolean } = {}): Promise<DraftActivitySession> {
+  currentView,
+  scope,
+}: {
+  force?: boolean;
+  currentView?: ActivityView;
+  scope?: ActivityScope;
+} = {}): Promise<DraftActivitySession> {
   clearTimeout(resetTimer);
   if (
     (force && initializedAt) ||
@@ -44,14 +71,26 @@ export function initializeDiscord({
     initialization = undefined;
     initializedAt = 0;
   }
-  initialization ??= connect().catch((error: unknown) => {
+  initialization ??= connect(
+    force
+      ? {
+          mode: 'refresh',
+          ...(currentView && { current_view: currentView }),
+          ...(scope && { scope }),
+        }
+      : { mode: 'first' },
+  ).catch((error: unknown) => {
     initialization = undefined;
     throw error;
   });
   return initialization;
 }
 
-async function connect(): Promise<DraftActivitySession> {
+type SessionMode =
+  | { mode: 'first' }
+  | { mode: 'refresh'; current_view?: ActivityView; scope?: ActivityScope };
+
+async function connect(mode: SessionMode): Promise<DraftActivitySession> {
   if (!new URLSearchParams(window.location.search).has('frame_id')) {
     throw new Error(
       'Launch DraftForge from Discord in a configured voice channel.',
@@ -61,7 +100,8 @@ async function connect(): Promise<DraftActivitySession> {
     enabled: boolean;
     client_id: string | null;
   }>('/discord/activity/config/');
-  if (!config.enabled || !config.client_id) {
+  if (!config.enabled) throw new ActivityDisabledError();
+  if (!config.client_id) {
     throw new Error('Discord Activities are unavailable on this server.');
   }
   // Never construct the SDK during SSR or ordinary website navigation.
@@ -89,9 +129,29 @@ async function connect(): Promise<DraftActivitySession> {
   });
   const { data } = await api.post<
     DraftActivitySession & { access_token: string }
-  >('/discord/activity/session/', { code, instance_id: sdk.instanceId });
+  >('/discord/activity/session/', {
+    code,
+    instance_id: sdk.instanceId,
+    ...mode,
+  });
   await sdk.commands.authenticate({ access_token: data.access_token });
   const { access_token: _accessToken, ...session } = data;
   initializedAt = Date.now();
   return session;
+}
+
+export async function openExternal(url: string): Promise<boolean> {
+  if (!sdk) {
+    log.warn('activity_open_external_unavailable');
+    return false;
+  }
+  try {
+    const result = await sdk.commands.openExternalLink({ url });
+    const opened = result?.opened === true;
+    if (!opened) log.info('activity_open_external_declined', { url });
+    return opened;
+  } catch (error) {
+    log.warn('activity_open_external_failed', { url, error });
+    return false;
+  }
 }

@@ -1,6 +1,6 @@
 {
   "aria": {
-    "documentation": "Documentación",
+    "docs_menu": "Documentación y registro de cambios",
     "main_nav": "Navegación principal",
     "open_menu": "Abrir menú",
     "report_bug": "Reportar un problema",
@@ -14,11 +14,15 @@
     "about_subtitle": "Quiénes somos",
     "admin": "Administración",
     "admin_subtitle": "Gestionar sitio",
+    "changelog": "Registro de cambios",
+    "changelog_empty": "Aún no hay versiones",
+    "changelog_load_error": "No se pudieron cargar las notas de la versión.",
     "docs": "Documentación",
     "docs_subtitle": "El ingrediente secreto",
     "documentation": "Documentación",
     "documentation_subtitle": "Aprende cómo funciona",
     "events": "Eventos",
+    "full_changelog": "Registro de cambios completo",
     "github": "GitHub",
     "github_subtitle": "Pidiendo estrellas",
     "github_subtitle_star": "¡Danos una estrella!",
@@ -31,7 +35,8 @@
     "report_issue_subtitle": "Ayúdanos a solucionarlo",
     "report_issue_subtitle_improve": "Ayúdanos a mejorar",
     "tournaments": "Torneos",
-    "tournaments_subtitle": "Competir y ganar"
+    "tournaments_subtitle": "Competir y ganar",
+    "whats_new": "Novedades"
   },
   "profile": "Perfil",
   "section": {

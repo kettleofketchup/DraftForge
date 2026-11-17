@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """Changelog fragments: validate changelog.d/ and assemble it into CHANGELOG.md.
 
-    scripts/changelog.py check           # every fragment rule; exit 1 on a problem
+    scripts/changelog.py check           # every fragment rule and the frontend copy; exit 1 on a problem
     scripts/changelog.py slug [BRANCH]   # the conventional fragment slug (default: current branch)
     scripts/changelog.py has-label NAME  # exit 0 if the PR has NAME, 1 if not, 2 on API error
 
 The release (`just version::set`, scripts/version.py) calls release_preflight(),
 fragment_paths() and release(); there is deliberately no CLI for assembling, since
-that would leave the consumed fragments in place.
+that would leave the consumed fragments in place. The release also writes
+frontend/app/data/CHANGELOG.md, an identical copy the frontend image imports.
 
 PRs add files under changelog.d/<section>/ and never edit CHANGELOG.md, so a branch
 that merges after a release cannot drop its notes under the version already released.
@@ -28,6 +29,7 @@ from typing import Any
 
 POINTER = "<!-- Do not edit. Unreleased changes live in changelog.d/; `just version::set` assembles them here. -->"
 FRAGMENT_DIR = "changelog.d"
+FRONTEND_COPY = "frontend/app/data/CHANGELOG.md"
 NO_CHANGES = "- No notable changes."
 
 SLUG = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
@@ -375,6 +377,20 @@ def _check_resurrection(
     return problems
 
 
+COPY_FIX = f"run: cp CHANGELOG.md {FRONTEND_COPY}"
+COPY_FIX_IN_PR = f"fix it in a PR: cp CHANGELOG.md {FRONTEND_COPY} and commit"
+
+
+def _copy_problem(root: Path, fix: str = COPY_FIX) -> str | None:
+    """The frontend copy must match CHANGELOG.md byte for byte."""
+    copy = root / FRONTEND_COPY
+    if not copy.exists():
+        return f"{FRONTEND_COPY}:1: missing; {fix}"
+    if copy.read_bytes() != (root / "CHANGELOG.md").read_bytes():
+        return f"{FRONTEND_COPY}:1: differs from CHANGELOG.md; {fix}"
+    return None
+
+
 def check(root: Path) -> list[str]:
     """Every rule, over tracked and untracked (not ignored) files under changelog.d/."""
     root = Path(root)
@@ -391,6 +407,9 @@ def check(root: Path) -> list[str]:
         text = changelog.read_text(encoding="utf-8")
         history = released(text)
         problems += _unreleased_problems(text)
+        drift = _copy_problem(root)
+        if drift:
+            problems.append(drift)
     gone = released_paths(root)
     for path in sorted(set(_tracked(root)) | set(_untracked(root))):
         if path in (f"{FRAGMENT_DIR}/sections.json", f"{FRAGMENT_DIR}/README.md"):
@@ -480,6 +499,9 @@ def assemble(root: Path, version: str, date: str) -> list[str]:
     new = text[: match.start()] + f"## [Unreleased]\n\n{POINTER}\n\n{section}"
     new += f"\n{tail}" if tail else ""
     path.write_text(new, encoding="utf-8")
+    copy = root / FRONTEND_COPY
+    copy.parent.mkdir(parents=True, exist_ok=True)
+    copy.write_text(new, encoding="utf-8")
     return paths
 
 
@@ -520,7 +542,12 @@ VERSION_FILES: tuple[str, ...] = (
     "docker/.env.release",
 )
 # FRAGMENT_DIR's deletions are staged by assemble_release's git rm.
-RELEASE_PATHS: tuple[str, ...] = (*VERSION_FILES, "CHANGELOG.md", FRAGMENT_DIR)
+RELEASE_PATHS: tuple[str, ...] = (
+    *VERSION_FILES,
+    "CHANGELOG.md",
+    FRONTEND_COPY,
+    FRAGMENT_DIR,
+)
 
 
 def release_subject(version: str) -> str:
@@ -559,6 +586,14 @@ def release_preflight(
     if _git(root, "status", "--porcelain", "--untracked-files=no").stdout.strip():
         raise ChangelogError(
             "uncommitted changes to tracked files; commit or stash them first"
+        )
+    drift = _copy_problem(root, COPY_FIX_IN_PR)
+    if drift:
+        raise ChangelogError(drift)
+    if _git(root, "cat-file", "-e", f"HEAD:{FRONTEND_COPY}").returncode != 0:
+        raise ChangelogError(
+            f"{FRONTEND_COPY} is not tracked in HEAD (a rollback would abort on it); "
+            f"{COPY_FIX_IN_PR}"
         )
     untracked = _git(
         root, "ls-files", "--others", "--exclude-standard", "--", FRAGMENT_DIR
@@ -629,7 +664,7 @@ def release_commit_tag_push(
     Undoes everything before the branch push on failure; raises ChangelogError.
     """
     root = Path(root)
-    add = _git(root, "add", "--", *VERSION_FILES, "CHANGELOG.md")
+    add = _git(root, "add", "--", *VERSION_FILES, "CHANGELOG.md", FRONTEND_COPY)
     if add.returncode != 0:
         rollback_release(root)
         raise ChangelogError(f"git add failed: {add.stderr.strip()}; rolled back")

@@ -109,6 +109,11 @@
       "count": 4
     }
   },
+  "app/components/navbar/NavItem.tsx": {
+    "shadcn/no-raw-colors": {
+      "count": 1
+    }
+  },
   "app/components/navbar/login.tsx": {
     "shadcn/no-raw-colors": {
       "count": 2
@@ -116,7 +121,7 @@
   },
   "app/components/navbar/navbar.tsx": {
     "shadcn/no-raw-colors": {
-      "count": 4
+      "count": 3
     }
   },
   "app/components/organization/tabs/ClaimCard.tsx": {

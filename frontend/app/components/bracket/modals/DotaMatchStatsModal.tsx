@@ -1,35 +1,39 @@
 // frontend/app/components/bracket/modals/DotaMatchStatsModal.tsx
 import { ScrollArea } from '@radix-ui/react-scroll-area';
 import { ExternalLink } from 'lucide-react';
+import type { MouseEvent } from 'react';
+import { DIALOG_CSS, SCROLLAREA_CSS } from '~/components/reusable/modal';
+import { Button } from '~/components/ui/button';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
 } from '~/components/ui/dialog';
-import { Button } from '~/components/ui/button';
 import { Skeleton } from '~/components/ui/skeleton';
-import { DIALOG_CSS, SCROLLAREA_CSS } from '~/components/reusable/modal';
 import { useMatchStats } from '~/hooks/useMatchStats';
+import { openExternal } from '~/lib/discord';
 import {
-  splitPlayersByTeam,
   formatDuration,
   formatMatchDate,
+  splitPlayersByTeam,
 } from '~/lib/dota/utils';
-import { PlayerStatsTable } from './PlayerStatsTable';
 import { cn } from '~/lib/utils';
+import { PlayerStatsTable } from './PlayerStatsTable';
 
 interface DotaMatchStatsModalProps {
   open: boolean;
   onClose: () => void;
   matchId: number | null;
+  embedded?: boolean;
 }
 
 export function DotaMatchStatsModal({
   open,
   onClose,
   matchId,
+  embedded = false,
 }: DotaMatchStatsModalProps) {
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
@@ -42,7 +46,7 @@ export function DotaMatchStatsModal({
             </DialogDescription>
           </DialogHeader>
           {matchId ? (
-            <MatchStatsContent matchId={matchId} />
+            <MatchStatsContent matchId={matchId} embedded={embedded} />
           ) : (
             <MatchStatsSkeleton />
           )}
@@ -52,7 +56,13 @@ export function DotaMatchStatsModal({
   );
 }
 
-function MatchStatsContent({ matchId }: { matchId: number }) {
+function MatchStatsContent({
+  matchId,
+  embedded,
+}: {
+  matchId: number;
+  embedded: boolean;
+}) {
   const { data: match, isLoading, error } = useMatchStats(matchId);
 
   if (isLoading) return <MatchStatsSkeleton />;
@@ -62,46 +72,51 @@ function MatchStatsContent({ matchId }: { matchId: number }) {
   const { radiant, dire } = splitPlayersByTeam(match.players);
   const radiantTotals = calculateTeamTotals(radiant);
   const direTotals = calculateTeamTotals(dire);
+  const dotabuffUrl = `https://www.dotabuff.com/matches/${match.match_id}`;
+  const opendotaUrl = `https://www.opendota.com/matches/${match.match_id}`;
+  const openInDiscord = (url: string) => (event: MouseEvent) => {
+    if (!embedded) return;
+    event.preventDefault();
+    void openExternal(url);
+  };
 
   return (
     <div className="space-y-4">
       {/* Match header with external links */}
       <div className="flex items-start justify-between">
         <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            asChild
-          >
+          <Button variant="outline" size="sm" asChild>
             <a
-              href={`https://www.dotabuff.com/matches/${match.match_id}`}
+              href={dotabuffUrl}
               target="_blank"
               rel="noopener noreferrer"
+              onClick={openInDiscord(dotabuffUrl)}
             >
-              <img
-                src="https://cdn.brandfetch.io/idKrze_WBi/w/96/h/96/theme/dark/logo.png?c=1dxbfHSJFAPEGdCLU4o5B"
-                alt="Dotabuff"
-                className="size-4 mr-1"
-              />
+              {!embedded && (
+                <img
+                  src="https://cdn.brandfetch.io/idKrze_WBi/w/96/h/96/theme/dark/logo.png?c=1dxbfHSJFAPEGdCLU4o5B"
+                  alt="Dotabuff"
+                  className="size-4 mr-1"
+                />
+              )}
               Dotabuff
               <ExternalLink className="size-3 ml-1" />
             </a>
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            asChild
-          >
+          <Button variant="outline" size="sm" asChild>
             <a
-              href={`https://www.opendota.com/matches/${match.match_id}`}
+              href={opendotaUrl}
               target="_blank"
               rel="noopener noreferrer"
+              onClick={openInDiscord(opendotaUrl)}
             >
-              <img
-                src="https://raw.githubusercontent.com/odota/web/master/public/assets/images/logo.png"
-                alt="OpenDota"
-                className="size-4 mr-1"
-              />
+              {!embedded && (
+                <img
+                  src="https://raw.githubusercontent.com/odota/web/master/public/assets/images/logo.png"
+                  alt="OpenDota"
+                  className="size-4 mr-1"
+                />
+              )}
               OpenDota
               <ExternalLink className="size-3 ml-1" />
             </a>
@@ -110,7 +125,8 @@ function MatchStatsContent({ matchId }: { matchId: number }) {
         <div className="text-center flex-1">
           <h2 className="text-lg font-semibold">Match {match.match_id}</h2>
           <p className="text-sm text-muted-foreground">
-            {formatDuration(match.duration)} • {formatMatchDate(match.start_time)}
+            {formatDuration(match.duration)} •{' '}
+            {formatMatchDate(match.start_time)}
           </p>
         </div>
         <div className="w-[140px]" /> {/* Spacer for balance */}
@@ -122,7 +138,7 @@ function MatchStatsContent({ matchId }: { matchId: number }) {
           'text-center py-2 rounded-md font-semibold',
           match.radiant_win
             ? 'bg-green-900/50 text-green-400'
-            : 'bg-red-900/50 text-red-400'
+            : 'bg-red-900/50 text-red-400',
         )}
       >
         {match.radiant_win ? 'Radiant Victory' : 'Dire Victory'}
@@ -180,6 +196,6 @@ function calculateTeamTotals(players: PlayerStats[]) {
       deaths: acc.deaths + player.deaths,
       assists: acc.assists + player.assists,
     }),
-    { kills: 0, deaths: 0, assists: 0 }
+    { kills: 0, deaths: 0, assists: 0 },
   );
 }

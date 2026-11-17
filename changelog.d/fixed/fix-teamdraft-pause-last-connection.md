@@ -1,0 +1,1 @@
+- Team drafts now pause when the captain on the clock leaves and nobody else is connected. Before, the 9-second disconnect check stopped with the last socket and the clock kept running.

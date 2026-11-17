@@ -1,7 +1,5 @@
 """Tests for enhanced search_users endpoint."""
 
-from unittest.mock import patch
-
 from django.core.cache import cache
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
@@ -222,34 +220,13 @@ class SearchUsersTest(TestCase):
         resp = self.client.get("/api/users/search/", {"q": "abc"})
         self.assertEqual(resp.status_code, 200)
 
-    @patch("app.views.admin_team.touch_org_activity")
-    def test_non_staff_org_search_does_not_touch(self, touch):
+    def test_non_staff_org_search_is_forbidden(self):
         regular = CustomUser.objects.create_user(username="regular2", password="x")
         self.client.force_authenticate(user=regular)
         resp = self.client.get(
             "/api/users/search/", {"q": "leagueuser", "org_id": self.org.pk}
         )
         self.assertEqual(resp.status_code, 403)
-        touch.assert_not_called()
-
-    @patch("app.views.admin_team.touch_org_activity")
-    def test_staff_org_search_touches_activity(self, touch):
-        self.org.discord_server_id = "555"
-        self.org.save()
-        resp = self.client.get(
-            "/api/users/search/", {"q": "leagueuser", "org_id": self.org.pk}
-        )
-        self.assertEqual(resp.status_code, 200)
-        touch.assert_called_once()
-        args, kwargs = touch.call_args
-        self.assertEqual(args[1], self.org.pk)
-        self.assertEqual(kwargs["guild_id"], "555")
-
-    @patch("app.views.admin_team.touch_org_activity")
-    def test_global_search_does_not_touch(self, touch):
-        resp = self.client.get("/api/users/search/", {"q": "leagueuser"})
-        self.assertEqual(resp.status_code, 200)
-        touch.assert_not_called()
 
     def test_org_members_ranked_before_slice(self):
         for i in range(21):

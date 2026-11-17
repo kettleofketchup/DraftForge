@@ -313,7 +313,7 @@ export const DraftStyleModal: React.FC<DraftStyleModalProps> = ({
     return (
       <Button
         onClick={() => handleStyleChange(selectedStyle)}
-        disabled={selectedStyle === draft.draft_style}
+        disabled={selectedStyle === draft?.draft_style}
         data-testid={`apply-${selectedStyle}-draft-button`}
       >
         Apply{' '}

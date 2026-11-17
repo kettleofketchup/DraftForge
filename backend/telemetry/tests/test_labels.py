@@ -98,3 +98,19 @@ class ExtractLabelsTest(TestCase):
         result = extract_labels("/tournament/10/")
         self.assertEqual(result["labels"], ["tournament"])
         self.assertEqual(result["tournament.id"], 10)
+
+    def test_activity_hero_draft_socket(self) -> None:
+        result = extract_labels("/api/discord/activity/draft/5/")
+        self.assertEqual(result, {"labels": ["herodraft"], "herodraft.id": 5})
+
+    def test_hero_draft_socket(self) -> None:
+        result = extract_labels("/api/herodraft/5/")
+        self.assertEqual(result, {"labels": ["herodraft"], "herodraft.id": 5})
+
+    def test_activity_team_draft_socket(self) -> None:
+        result = extract_labels("/api/discord/activity/team-draft/7/")
+        self.assertEqual(result, {"labels": ["draft"], "draft.id": 7})
+
+    def test_team_draft_socket(self) -> None:
+        result = extract_labels("/api/draft/7/")
+        self.assertEqual(result, {"labels": ["draft"], "draft.id": 7})
