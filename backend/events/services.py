@@ -49,6 +49,12 @@ from events.models import (
     TournamentTemplateMixin,
 )
 from events.reopen import ReopenNotPermitted, reopen_event
+from events.roster import (
+    RosterPhase,
+    joins_roster,
+    roster_statuses,
+    team_bound_user_pks,
+)
 from events.schemas import DotaModalConfig
 from lobby.passwords import PasswordMode, generate_password
 from org.models import OrgUser
@@ -153,13 +159,34 @@ def _decide_signup_status(event: Event, unmet: list[str]) -> SignupStatus:
     return SignupStatus.APPROVED
 
 
-def _add_to_roster_if_seated(
-    event: Event, user: CustomUser, status: SignupStatus
-) -> None:
-    if status == SignupStatus.CONFIRMED or (
-        status == SignupStatus.APPROVED and not event.roll_call_enabled
-    ):
-        add_user_to_tournament(event, user)
+def _roster_add_if_joins(signup: EventSignup) -> None:
+    """Add the player when their status joins the roster in the current phase.
+    Never removes: a status outside the roster leaves existing membership alone."""
+    if joins_roster(signup.event, signup.status):
+        add_user_to_tournament(signup.event, signup.user)
+
+
+def _roster_remove_if_left(signup: EventSignup) -> None:
+    """Remove the player when their status no longer joins the roster, unless
+    they are on a team in the tournament (removal would cascade into the team)."""
+    event = signup.event
+    if joins_roster(event, signup.status):
+        return
+    tournament = event.tournament
+    if tournament is None or tournament.state != "future":
+        return
+    if signup.user_id in team_bound_user_pks(tournament):
+        log.info(
+            "event_roster_sync_skipped_team_member",
+            system="events",
+            subsystem="services",
+            event_id=event.pk,
+            tournament_id=tournament.pk,
+            user_id=signup.user_id,
+            signup_status=signup.status,
+        )
+        return
+    remove_user_from_tournament(event, signup.user)
 
 
 @transaction.atomic
@@ -247,7 +274,7 @@ def _create_signup(
         status=status,
         unmet_requirements=unmet,
     )
-    _add_to_roster_if_seated(event, user, status)
+    _roster_add_if_joins(signup)
     invalidate_after_commit(event)
     log.info(
         "signup_post_commit_hooks_scheduled",
@@ -552,9 +579,7 @@ def approve_signup(signup: EventSignup, mmr_override: int | None = None) -> Even
             "updated_at",
         ]
     )
-    # If no roll call, approved means ready for tournament
-    if not signup.event.roll_call_enabled:
-        add_user_to_tournament(signup.event, signup.user)
+    _roster_add_if_joins(signup)
     invalidate_after_commit(signup, signup.event)
     transaction.on_commit(lambda: notify_signup_changed(signup.event))
     return signup
@@ -568,7 +593,7 @@ def reject_signup(signup: EventSignup) -> EventSignup:
     prior_status = signup.status
     signup.status = SignupStatus.REJECTED
     signup.save(update_fields=["status", "updated_at"])
-    remove_user_from_tournament(signup.event, signup.user)
+    _roster_remove_if_left(signup)
     if prior_status in seat_holding_statuses(signup.event):
         _promote_from_waitlist(signup.event)
     invalidate_after_commit(signup, signup.event)
@@ -583,7 +608,7 @@ def confirm_signup(signup: EventSignup) -> EventSignup:
         raise ValueError("Only approved signups can be confirmed.")
     signup.status = SignupStatus.CONFIRMED
     signup.save(update_fields=["status", "updated_at"])
-    add_user_to_tournament(signup.event, signup.user)
+    _roster_add_if_joins(signup)
     invalidate_after_commit(signup, signup.event)
     transaction.on_commit(lambda: notify_signup_changed(signup.event))
     return signup
@@ -597,7 +622,7 @@ def cancel_signup(signup: EventSignup) -> EventSignup:
     prior_status = signup.status
     signup.status = SignupStatus.CANCELLED
     signup.save(update_fields=["status", "updated_at"])
-    remove_user_from_tournament(signup.event, signup.user)
+    _roster_remove_if_left(signup)
     if prior_status in seat_holding_statuses(signup.event):
         _promote_from_waitlist(signup.event)
     invalidate_after_commit(signup, signup.event)
@@ -647,7 +672,7 @@ def _promote_from_waitlist(event: Event) -> list[EventSignup]:
         unmet = unmet_codes(locked, next_waitlisted.user)
         next_waitlisted.unmet_requirements = unmet
         next_waitlisted.status = _decide_signup_status(locked, unmet)
-        _add_to_roster_if_seated(locked, next_waitlisted.user, next_waitlisted.status)
+        _roster_add_if_joins(next_waitlisted)
         next_waitlisted.save(
             update_fields=[
                 "status",
@@ -670,7 +695,7 @@ def unconfirm_signup(signup: EventSignup) -> EventSignup:
         raise ValueError("Only confirmed signups can be unconfirmed.")
     signup.status = SignupStatus.APPROVED
     signup.save(update_fields=["status", "updated_at"])
-    remove_user_from_tournament(signup.event, signup.user)
+    _roster_remove_if_left(signup)
     invalidate_after_commit(signup, signup.event)
     transaction.on_commit(lambda: notify_signup_changed(signup.event))
     return signup
@@ -694,7 +719,7 @@ def demote_to_waitlist(signup: EventSignup) -> EventSignup:
     signup.status = SignupStatus.WAITLISTED
     signup.waitlist_position = max_pos + 1
     signup.save(update_fields=["status", "waitlist_position", "updated_at"])
-    remove_user_from_tournament(signup.event, signup.user)
+    _roster_remove_if_left(signup)
     invalidate_after_commit(signup, signup.event)
     transaction.on_commit(lambda: notify_signup_changed(signup.event))
     return signup
@@ -751,7 +776,7 @@ def reinstate_signup(signup: EventSignup) -> EventSignup:
     else:
         signup.status = _decide_signup_status(locked, unmet)
         signup.waitlist_position = None
-        _add_to_roster_if_seated(locked, signup.user, signup.status)
+        _roster_add_if_joins(signup)
     signup.unmet_requirements = unmet
     signup.save(
         update_fields=[
@@ -979,11 +1004,8 @@ def restart_event_tournament(
 
     tournament = create_tournament_for_event(event)
 
-    statuses = [SignupStatus.CONFIRMED]
-    if not event.roll_call_enabled:
-        statuses.append(SignupStatus.APPROVED)
     roster = EventSignup.objects.filter(
-        event=event, status__in=statuses
+        event=event, status__in=roster_statuses(event, RosterPhase.SIGNUPS)
     ).select_related("user")
     for signup in roster:
         tournament.users.add(signup.user)
