@@ -10,7 +10,7 @@ services:
     container_name: backend${DF_SUFFIX:?run via scripts.slots}
     environment:
       SITE_URL: ${DF_BASE_URL:?run via scripts.slots}
-      DF_EXTRA_CSRF_ORIGINS: ${DF_BASE_URL:?run via scripts.slots}
+      DF_EXTRA_CSRF_ORIGINS: ${DF_BASE_URL:?run via scripts.slots},https://*.local,https://*.local:${DF_HTTPS_PORT:?run via scripts.slots}
       DF_SESSION_COOKIE_NAME: sessionid${DF_SUFFIX:?run via scripts.slots}
       DF_CSRF_COOKIE_NAME: csrftoken${DF_SUFFIX:?run via scripts.slots}
   nginx:
