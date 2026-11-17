@@ -347,3 +347,52 @@ describe('EditEventModal draft settings', () => {
     });
   });
 });
+
+describe('EditEventModal tabs and payload parity', () => {
+  beforeEach(() => {
+    mutateAsync.mockClear();
+    savedPassword.current = undefined;
+  });
+
+  it('renders every event tab with its testid', () => {
+    renderModal(event);
+    for (const tab of ['event', 'tournament', 'lobby', 'approval', 'discord']) {
+      expect(screen.getByTestId(`edit-event-tab-${tab}`)).toBeInTheDocument();
+    }
+    expect(screen.getByTestId('edit-event-tab-event')).toHaveAttribute(
+      'data-state',
+      'active',
+    );
+  });
+
+  it('sends saved Discord ping roles unchanged', async () => {
+    renderModal({
+      ...event,
+      discord_announcement_role_ids: ['1'],
+      discord_signup_role_ids: ['2'],
+    });
+    expect(await submittedBody()).toMatchObject({
+      discord_announcement_role_ids: ['1'],
+      discord_signup_role_ids: ['2'],
+    });
+  });
+
+  it('switches to the Tournament tab when a draft timer is invalid', async () => {
+    renderModal({
+      ...event,
+      draft_timer_enabled: true,
+      draft_grace_time_ms: 20000,
+    });
+    fireEvent.change(screen.getByTestId('draft-settings-team-grace-s'), {
+      target: { value: '-5' },
+    });
+    fireEvent.click(screen.getByTestId('form-dialog-submit'));
+    await waitFor(() =>
+      expect(screen.getByTestId('edit-event-tab-tournament')).toHaveAttribute(
+        'data-state',
+        'active',
+      ),
+    );
+    expect(mutateAsync).not.toHaveBeenCalled();
+  });
+});

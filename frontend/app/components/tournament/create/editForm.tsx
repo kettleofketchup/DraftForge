@@ -1,7 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { format, parseISO } from 'date-fns';
-import { CalendarIcon, Globe } from 'lucide-react';
+import { CalendarIcon, Settings2, Trophy } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useForm, type FieldErrors } from 'react-hook-form';
 import { useLocation } from 'react-router';
@@ -9,9 +9,12 @@ import { toast } from 'sonner';
 
 import { createTournament, updateTournament } from '~/components/api/api';
 import type { TournamentWritePayload } from '~/components/api/tournamentAPI';
+import { DiscordIcon } from '~/components/events/DiscordConfigSection';
+import { BracketTypeField } from '~/components/events/form/fields/BracketTypeField';
+import { TimezoneField } from '~/components/events/form/fields/TimezoneField';
+import { FormTabsList } from '~/components/events/form/FormTabsList';
 import { LobbyConfigSection } from '~/components/events/LobbyConfigSection';
 import type { LeagueType } from '~/components/league/schemas';
-import { SCROLLAREA_CSS } from '~/components/reusable/modal';
 import { DraftSettingsSection } from '~/components/teamdraft/DraftSettingsSection';
 import {
   draftSettingsFormToPatch,
@@ -24,7 +27,6 @@ import { DialogClose } from '~/components/ui/dialog';
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -44,9 +46,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '~/components/ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
+import { Tabs, TabsContent } from '~/components/ui/tabs';
 import { extractApiError } from '~/lib/apiError';
 import { getLogger } from '~/lib/logger';
+import { TOURNAMENT_TIMEZONES } from '~/lib/timezones';
 import {
   canCreateTournament,
   leagueOptionsFor,
@@ -54,7 +57,6 @@ import {
 import { cn } from '~/lib/utils';
 import { useUserStore } from '~/store/userStore';
 import {
-  COMMON_TIMEZONES,
   CreateTournamentSchema,
   type CreateTournamentInput,
   type TournamentTypeValue,
@@ -328,39 +330,32 @@ export const TournamentEditForm: React.FC<Props> = ({
   }
 
   return (
-    <ScrollArea className={SCROLLAREA_CSS}>
-      <Form {...form}>
-        <form
-          onSubmit={form.handleSubmit(onSubmit, onInvalid)}
-          className="flex flex-col gap-4 p-1"
-          data-testid="tournament-form"
-        >
-          <Tabs value={tab} onValueChange={(v) => setTab(v as FormTab)}>
-            <TabsList className="w-full">
-              <TabsTrigger
-                value="general"
-                className="flex-1"
-                data-testid="tournament-form-tab-general"
-              >
-                General
-              </TabsTrigger>
-              <TabsTrigger
-                value="config"
-                className="flex-1"
-                data-testid="tournament-form-tab-config"
-              >
-                Config
-              </TabsTrigger>
-              <TabsTrigger
-                value="discord"
-                className="flex-1"
-                data-testid="tournament-form-tab-discord"
-              >
-                Discord
-              </TabsTrigger>
-            </TabsList>
+    <Form {...form}>
+      <form
+        onSubmit={form.handleSubmit(onSubmit, onInvalid)}
+        className="flex min-h-0 flex-1 flex-col"
+        data-testid="tournament-form"
+      >
+        <ScrollArea className="-mx-6 min-h-0 flex-1 px-6">
+          <Tabs
+            value={tab}
+            onValueChange={(v) => setTab(v as FormTab)}
+            className="gap-4 p-1"
+          >
+            <FormTabsList
+              className="sticky top-0 z-10 bg-background"
+              testIdPrefix="tournament-form"
+              tabs={[
+                { value: 'general', label: 'General', icon: Trophy },
+                { value: 'config', label: 'Config', icon: Settings2 },
+                { value: 'discord', label: 'Discord', icon: DiscordIcon },
+              ]}
+            />
 
-            <TabsContent value="general" className="space-y-4 mt-4">
+            <TabsContent
+              value="general"
+              className="mx-auto flex w-full max-w-4xl flex-col gap-4"
+            >
               {/* Tournament Name */}
               <FormField
                 control={form.control}
@@ -380,46 +375,19 @@ export const TournamentEditForm: React.FC<Props> = ({
                 )}
               />
 
-              {/* Tournament Type */}
-              <FormField
+              <BracketTypeField
                 control={form.control}
-                name="tournament_type"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Tournament Type</FormLabel>
-                    <Select
-                      onValueChange={field.onChange}
-                      defaultValue={field.value}
-                    >
-                      <FormControl>
-                        <SelectTrigger data-testid="tournament-type-select">
-                          <SelectValue placeholder="Select tournament type" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem
-                          value="single_elimination"
-                          data-testid="tournament-type-single"
-                        >
-                          Single Elimination
-                        </SelectItem>
-                        <SelectItem
-                          value="double_elimination"
-                          data-testid="tournament-type-double"
-                        >
-                          Double Elimination
-                        </SelectItem>
-                        <SelectItem
-                          value="swiss"
-                          data-testid="tournament-type-swiss"
-                        >
-                          Swiss System
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
+                label="Tournament Type"
+                description={null}
+                placeholder="Select tournament type"
+                triggerTestId="tournament-type-select"
+                itemTestIds={{
+                  single_elimination: 'tournament-type-single',
+                  double_elimination: 'tournament-type-double',
+                  swiss: 'tournament-type-swiss',
+                }}
+                optionLabels={{ swiss: 'Swiss System' }}
+                order={['single_elimination', 'double_elimination', 'swiss']}
               />
 
               {/* Date & Time Picker */}
@@ -486,42 +454,16 @@ export const TournamentEditForm: React.FC<Props> = ({
                 )}
               />
 
-              {/* Timezone Picker */}
-              <FormField
+              <TimezoneField
                 control={form.control}
-                name="timezone"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="flex items-center gap-2">
-                      <Globe className="h-4 w-4" />
-                      Timezone
-                    </FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger data-testid="tournament-timezone-select">
-                          <SelectValue placeholder="Select timezone" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {COMMON_TIMEZONES.map((tz) => (
-                          <SelectItem
-                            key={tz}
-                            value={tz}
-                            data-testid={`tournament-timezone-${tz}`}
-                          >
-                            {tz === 'UTC'
-                              ? 'UTC'
-                              : `${formatTimezoneLabel(tz)} (${tz})`}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormDescription>
-                      The timezone in which the tournament will be played
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
+                showIcon
+                description="The timezone in which the tournament will be played"
+                triggerTestId="tournament-timezone-select"
+                itemTestIdPrefix="tournament-timezone-"
+                timezones={TOURNAMENT_TIMEZONES}
+                formatLabel={(tz) =>
+                  tz === 'UTC' ? 'UTC' : `${formatTimezoneLabel(tz)} (${tz})`
+                }
               />
 
               {/* League Picker */}
@@ -549,7 +491,10 @@ export const TournamentEditForm: React.FC<Props> = ({
                       disabled={leagueLocked}
                     >
                       <FormControl>
-                        <SelectTrigger data-testid="tournament-league-select">
+                        <SelectTrigger
+                          className="w-full"
+                          data-testid="tournament-league-select"
+                        >
                           <SelectValue placeholder="Select a league" />
                         </SelectTrigger>
                       </FormControl>
@@ -584,7 +529,10 @@ export const TournamentEditForm: React.FC<Props> = ({
               />
             </TabsContent>
 
-            <TabsContent value="config" className="mt-4 flex flex-col gap-4">
+            <TabsContent
+              value="config"
+              className="mx-auto flex w-full max-w-4xl flex-col gap-4"
+            >
               <LobbyConfigSection control={form.control} watch={form.watch} />
               <TournamentConfigSection control={form.control} />
               <DraftSettingsSection
@@ -598,32 +546,34 @@ export const TournamentEditForm: React.FC<Props> = ({
               />
             </TabsContent>
 
-            <TabsContent value="discord" className="mt-4">
+            <TabsContent
+              value="discord"
+              className="mx-auto flex w-full max-w-4xl flex-col gap-4"
+            >
               <DiscordTournamentConfigSection control={form.control} />
             </TabsContent>
           </Tabs>
+        </ScrollArea>
 
-          {/* Submit Button — sticky bottom */}
-          <div className="flex flex-row justify-end gap-2 pt-4 mt-auto sticky bottom-0 bg-background/95 backdrop-blur-sm pb-2 -mb-2">
-            <DialogClose asChild>
-              <CancelButton
-                type="button"
-                disabled={isSubmitting}
-                data-testid="tournament-cancel-button"
-              >
-                Cancel
-              </CancelButton>
-            </DialogClose>
-            <SubmitButton
-              loading={isSubmitting}
-              loadingText={isEditing ? 'Saving...' : 'Creating...'}
-              data-testid="tournament-submit-button"
+        <div className="flex flex-none flex-row justify-end gap-2 pt-4">
+          <DialogClose asChild>
+            <CancelButton
+              type="button"
+              disabled={isSubmitting}
+              data-testid="tournament-cancel-button"
             >
-              {isEditing ? 'Save Changes' : 'Create Tournament'}
-            </SubmitButton>
-          </div>
-        </form>
-      </Form>
-    </ScrollArea>
+              Cancel
+            </CancelButton>
+          </DialogClose>
+          <SubmitButton
+            loading={isSubmitting}
+            loadingText={isEditing ? 'Saving...' : 'Creating...'}
+            data-testid="tournament-submit-button"
+          >
+            {isEditing ? 'Save Changes' : 'Create Tournament'}
+          </SubmitButton>
+        </div>
+      </form>
+    </Form>
   );
 };

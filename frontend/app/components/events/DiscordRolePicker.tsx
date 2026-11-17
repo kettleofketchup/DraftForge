@@ -1,8 +1,8 @@
 import { RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { getDiscordRoles, type DiscordRole } from '~/components/api/api';
-import { Button } from '~/components/ui/button';
 import { Badge } from '~/components/ui/badge';
+import { Button } from '~/components/ui/button';
 import {
   Popover,
   PopoverContent,
@@ -41,7 +41,7 @@ export function DiscordRolePicker({
         setLoading(false);
       }
     },
-    [organizationId]
+    [organizationId],
   );
 
   useEffect(() => {
@@ -67,13 +67,13 @@ export function DiscordRolePicker({
           <Button
             type="button"
             variant="outline"
-            className="w-full justify-start font-normal"
+            className="h-auto min-h-9 w-full min-w-0 shrink justify-start font-normal"
             disabled={disabled || loading}
           >
             {loading ? (
               'Loading...'
             ) : selectedNames.length > 0 ? (
-              <div className="flex flex-wrap gap-1">
+              <div className="flex min-w-0 flex-wrap gap-1">
                 {selectedNames.map((name) => (
                   <Badge key={name} variant="secondary" className="text-xs">
                     @{name}
@@ -81,7 +81,9 @@ export function DiscordRolePicker({
                 ))}
               </div>
             ) : (
-              <span className="text-muted-foreground">Select roles to mention</span>
+              <span className="truncate text-muted-foreground">
+                Select roles to mention
+              </span>
             )}
           </Button>
         </PopoverTrigger>
@@ -104,7 +106,7 @@ export function DiscordRolePicker({
                   onClick={() => toggleRole(role.id)}
                   className={cn(
                     'w-full text-left px-2 py-1.5 rounded text-sm flex items-center gap-2 hover:bg-accent',
-                    value.includes(role.id) && 'bg-accent'
+                    value.includes(role.id) && 'bg-accent',
                   )}
                 >
                   <div
@@ -117,7 +119,9 @@ export function DiscordRolePicker({
                   />
                   <span>@{role.name}</span>
                   {value.includes(role.id) && (
-                    <span className="ml-auto text-xs text-muted-foreground">&#10003;</span>
+                    <span className="ml-auto text-xs text-muted-foreground">
+                      &#10003;
+                    </span>
                   )}
                 </button>
               ))}

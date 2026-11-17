@@ -82,6 +82,22 @@ function Wrapper({ children }: { children: React.ReactNode }) {
   );
 }
 
+describe('EditOrgDefaultsModal tabs', () => {
+  it('renders event, tournament, lobby and discord tabs without approval', async () => {
+    render(
+      <EditOrgDefaultsModal organizationId={1} open onOpenChange={() => {}} />,
+      { wrapper: Wrapper },
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId('org-defaults-tab-event')).toBeInTheDocument(),
+    );
+    for (const tab of ['tournament', 'lobby', 'discord']) {
+      expect(screen.getByTestId(`org-defaults-tab-${tab}`)).toBeInTheDocument();
+    }
+    expect(screen.queryByTestId('org-defaults-tab-approval')).toBeNull();
+  });
+});
+
 describe('EditOrgDefaultsModal draft settings', () => {
   beforeEach(() => mutateAsync.mockClear());
 

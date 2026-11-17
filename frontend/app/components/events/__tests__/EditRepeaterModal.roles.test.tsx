@@ -116,6 +116,20 @@ const repeater = {
   is_subscribed: false,
 } satisfies EventRepeaterType;
 
+describe('EditRepeaterModal tabs', () => {
+  it('renders event, tournament, lobby and discord tabs without approval', () => {
+    render(
+      <EditRepeaterModal repeater={repeater} open onOpenChange={() => {}} />,
+      { wrapper: Wrapper },
+    );
+    for (const tab of ['event', 'tournament', 'lobby', 'discord']) {
+      expect(screen.getByTestId(`edit-series-tab-${tab}`)).toBeInTheDocument();
+    }
+    expect(screen.queryByTestId('edit-series-tab-approval')).toBeNull();
+    expect(screen.getByTestId('edit-series-modal')).toBeInTheDocument();
+  });
+});
+
 describe('EditRepeaterModal Discord ping roles', () => {
   beforeEach(() => {
     mutateAsync.mockClear();

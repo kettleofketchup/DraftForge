@@ -1,0 +1,1 @@
+- The Event, Series, one-off and Org event defaults dialogs are now full-screen and tabbed (Event, Tournament, Lobby, Approval, Discord), sharing one set of fields with the Tournament dialog. Draft type sits with the draft timers in every dialog, the Save button stays pinned to the bottom, and on phones the tabs fit on one scrollable row and the dialogs no longer scroll sideways.

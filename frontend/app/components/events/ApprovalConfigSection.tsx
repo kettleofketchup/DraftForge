@@ -47,17 +47,19 @@ function CheckboxField({
       control={control}
       name={name}
       render={({ field }) => (
-        <FormItem className="flex items-center gap-3">
+        <FormItem className="flex items-start gap-3 space-y-0">
           <FormControl>
             <input
               type="checkbox"
               checked={!!field.value}
               onChange={field.onChange}
-              className="h-4 w-4 rounded border-border accent-primary"
+              className="mt-0.5 h-4 w-4 shrink-0 rounded border-border accent-primary"
             />
           </FormControl>
           <div>
-            <FormLabel className="text-sm font-medium cursor-pointer">{label}</FormLabel>
+            <FormLabel className="text-sm font-medium cursor-pointer">
+              {label}
+            </FormLabel>
             <FormDescription className="text-xs">{description}</FormDescription>
           </div>
         </FormItem>
@@ -85,7 +87,9 @@ export function ApprovalConfigSection<T extends FieldValues & ApprovalFields>({
       {/* Rank Type Restrictions */}
       <div className="space-y-4">
         <div>
-          <h4 className="text-sm font-semibold text-foreground">Allowed Rank Types</h4>
+          <h4 className="text-sm font-semibold text-foreground">
+            Allowed Rank Types
+          </h4>
           <p className="text-xs text-muted-foreground mt-1">
             Control which Dota 2 rank categories can sign up for this event.
           </p>
@@ -100,7 +104,7 @@ export function ApprovalConfigSection<T extends FieldValues & ApprovalFields>({
             description="Players with a current ranked medal"
           />
           {allowActiveMmr && (
-            <div className="ml-7 space-y-3 border-l-2 border-primary/20 pl-4">
+            <div className="ml-7 space-y-3">
               <CheckboxField
                 control={control}
                 name="discord_require_rank_screenshot"
@@ -146,7 +150,7 @@ export function ApprovalConfigSection<T extends FieldValues & ApprovalFields>({
             description="Players who had a rank but are no longer active"
           />
           {allowPreviousRank && (
-            <div className="ml-7 border-l-2 border-primary/20 pl-4">
+            <div className="ml-7">
               <CheckboxField
                 control={control}
                 name="discord_require_rank_screenshot"
@@ -166,7 +170,7 @@ export function ApprovalConfigSection<T extends FieldValues & ApprovalFields>({
             description="Players who have never played ranked — use battle cup tier for estimation"
           />
           {allowBattlecupRating && (
-            <div className="ml-7 border-l-2 border-primary/20 pl-4">
+            <div className="ml-7">
               <CheckboxField
                 control={control}
                 name="discord_require_battlecup_screenshot"
@@ -180,7 +184,9 @@ export function ApprovalConfigSection<T extends FieldValues & ApprovalFields>({
 
       {/* General Approval Settings */}
       <div className="space-y-4">
-        <h4 className="text-sm font-semibold text-foreground">General Requirements</h4>
+        <h4 className="text-sm font-semibold text-foreground">
+          General Requirements
+        </h4>
 
         <CheckboxField
           control={control}

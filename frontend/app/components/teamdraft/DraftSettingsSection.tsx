@@ -30,12 +30,15 @@ import {
   type DraftSettingsFormInput,
 } from './schemas';
 
+export const DRAFT_TYPE_DESCRIPTION = 'How captains build their teams';
+
 type DraftSettingsFields = DraftSettingsFormInput & { draft_type?: string };
 type SecondsField = keyof typeof DRAFT_SETTINGS_SECONDS_MIN;
 
 interface Props<T extends FieldValues & DraftSettingsFields> {
   control: Control<T>;
   showDraftType?: boolean;
+  draftTypeTestId?: string;
   showTimeoutAction?: boolean;
 }
 
@@ -44,6 +47,7 @@ export function DraftSettingsSection<
 >({
   control: parentControl,
   showDraftType = true,
+  draftTypeTestId = 'draft-settings-draft-type',
   showTimeoutAction = true,
 }: Props<T>) {
   const control = parentControl as unknown as Control<DraftSettingsFields>;
@@ -71,7 +75,7 @@ export function DraftSettingsSection<
       control={control}
       name={name}
       render={({ field }) => (
-        <FormItem className="flex items-center gap-3">
+        <FormItem className="flex items-start gap-3 space-y-0">
           <FormControl>
             <input
               type="checkbox"
@@ -85,7 +89,7 @@ export function DraftSettingsSection<
                 field.onChange(on);
                 if (!on) resetInvalid(seconds);
               }}
-              className="h-4 w-4 rounded border-border accent-primary"
+              className="mt-0.5 h-4 w-4 shrink-0 rounded border-border accent-primary"
             />
           </FormControl>
           <div>
@@ -183,8 +187,8 @@ export function DraftSettingsSection<
           'Draft type',
           DRAFT_STYLE_VALUES,
           DRAFT_STYLE_LABELS,
-          'draft-settings-draft-type',
-          'How captains build their teams',
+          draftTypeTestId,
+          DRAFT_TYPE_DESCRIPTION,
         )}
 
       <div
@@ -199,7 +203,7 @@ export function DraftSettingsSection<
           ['draft_grace_time_s', 'draft_reserve_time_s'],
         )}
         {teamTimerOn && (
-          <div className="ml-7 grid grid-cols-1 gap-4 border-l-2 border-primary/20 pl-4 sm:grid-cols-2">
+          <div className="ml-7 grid grid-cols-1 gap-4 sm:grid-cols-2">
             {secondsInput(
               'draft_grace_time_s',
               'Grace time (seconds)',
@@ -237,7 +241,7 @@ export function DraftSettingsSection<
           ['hero_grace_time_s', 'hero_reserve_time_s'],
         )}
         {heroTimerOn && (
-          <div className="ml-7 grid grid-cols-1 gap-4 border-l-2 border-primary/20 pl-4 sm:grid-cols-2">
+          <div className="ml-7 grid grid-cols-1 gap-4 sm:grid-cols-2">
             {secondsInput(
               'hero_grace_time_s',
               'Grace per pick (seconds)',

@@ -80,7 +80,10 @@ export function DotaLobbyConfigSection<
               <FormLabel>Hosted lobbies</FormLabel>
               <Select onValueChange={field.onChange} value={field.value}>
                 <FormControl>
-                  <SelectTrigger data-testid="config-dota-lobby-mode">
+                  <SelectTrigger
+                    className="w-full"
+                    data-testid="config-dota-lobby-mode"
+                  >
                     <SelectValue />
                   </SelectTrigger>
                 </FormControl>
@@ -112,7 +115,10 @@ export function DotaLobbyConfigSection<
               <FormLabel>Match start</FormLabel>
               <Select onValueChange={field.onChange} value={field.value}>
                 <FormControl>
-                  <SelectTrigger data-testid="config-dota-lobby-launch">
+                  <SelectTrigger
+                    className="w-full"
+                    data-testid="config-dota-lobby-launch"
+                  >
                     <SelectValue />
                   </SelectTrigger>
                 </FormControl>
@@ -157,14 +163,14 @@ export function DotaLobbyConfigSection<
             control={control}
             name="discord_send_lobby_info"
             render={({ field }) => (
-              <FormItem className="flex items-center gap-3">
+              <FormItem className="flex items-start gap-3 space-y-0">
                 <FormControl>
                   <input
                     type="checkbox"
                     data-testid="config-dota-lobby-send-info"
                     checked={field.value}
                     onChange={field.onChange}
-                    className="h-4 w-4 rounded border-border accent-primary"
+                    className="mt-0.5 h-4 w-4 shrink-0 rounded border-border accent-primary"
                   />
                 </FormControl>
                 <div>

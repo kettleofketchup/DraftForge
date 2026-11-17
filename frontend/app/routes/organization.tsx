@@ -699,6 +699,7 @@ export default function OrganizationDetailPage() {
                         size="icon"
                         className="size-9"
                         aria-label="Edit org event defaults"
+                        data-testid="org-event-defaults-btn"
                         onClick={() => setEditDefaultsOpen(true)}
                       >
                         <Settings className="h-4 w-4" />

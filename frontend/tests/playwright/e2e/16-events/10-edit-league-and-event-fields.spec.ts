@@ -58,8 +58,13 @@ test.describe.serial('Edit league + event fields @cicd', () => {
     const eventInfo = await getEventsTestData(context);
     await loginAdmin(context);
 
-    await visitAndWaitForHydration(page, `/leagues/${eventInfo.eventsLeaguePk}`);
-    await expect(page.getByTestId('edit-league-button')).toBeVisible({ timeout: 15000 });
+    await visitAndWaitForHydration(
+      page,
+      `/leagues/${eventInfo.eventsLeaguePk}`,
+    );
+    await expect(page.getByTestId('edit-league-button')).toBeVisible({
+      timeout: 15000,
+    });
     await page.getByTestId('edit-league-button').click();
 
     // Change steam_league_id to a fresh unused value.
@@ -67,29 +72,47 @@ test.describe.serial('Edit league + event fields @cicd', () => {
     // input event — works correctly with the Controller + parseInt onChange.
     const newId = '99999';
     await page.getByTestId('edit-league-steam-id').fill(newId);
-    await page.getByTestId('edit-league-modal').getByTestId('form-dialog-submit').click();
+    await page
+      .getByTestId('edit-league-modal')
+      .getByTestId('form-dialog-submit')
+      .click();
 
     // Toast confirms success (sonner: [data-sonner-toast][data-type="success"]).
-    await expect(page.locator('[data-sonner-toast][data-type="success"]').filter({ hasText: /updated successfully/i })).toBeVisible();
+    await expect(
+      page
+        .locator('[data-sonner-toast][data-type="success"]')
+        .filter({ hasText: /updated successfully/i }),
+    ).toBeVisible();
 
     // Reload and assert the badge reflects the new ID.
     await page.reload();
     await expect(page.getByText(`Steam ID: ${newId}`).first()).toBeVisible();
   });
 
-  test('edit league steam_league_id can be cleared (null is valid)', async ({ page, context }) => {
+  test('edit league steam_league_id can be cleared (null is valid)', async ({
+    page,
+    context,
+  }) => {
     const eventInfo = await getEventsTestData(context);
     await loginAdmin(context);
 
-    await visitAndWaitForHydration(page, `/leagues/${eventInfo.eventsLeaguePk}`);
-    await expect(page.getByTestId('edit-league-button')).toBeVisible({ timeout: 15000 });
+    await visitAndWaitForHydration(
+      page,
+      `/leagues/${eventInfo.eventsLeaguePk}`,
+    );
+    await expect(page.getByTestId('edit-league-button')).toBeVisible({
+      timeout: 15000,
+    });
     await page.getByTestId('edit-league-button').click();
 
     // Empty the input — Controller onChange emits null, schema accepts it,
     // backend validator returns the value through, DB stores NULL (which the
     // partial unique constraint ignores).
     await page.getByTestId('edit-league-steam-id').fill('');
-    await page.getByTestId('edit-league-modal').getByTestId('form-dialog-submit').click();
+    await page
+      .getByTestId('edit-league-modal')
+      .getByTestId('form-dialog-submit')
+      .click();
 
     await expect(
       page
@@ -105,13 +128,19 @@ test.describe.serial('Edit league + event fields @cicd', () => {
     const eventInfo = await getEventsTestData(context);
     await loginAdmin(context);
 
-    await visitAndWaitForHydration(page, `/leagues/${eventInfo.eventsLeaguePk}`);
-    await expect(page.getByTestId('edit-league-button')).toBeVisible({ timeout: 15000 });
+    await visitAndWaitForHydration(
+      page,
+      `/leagues/${eventInfo.eventsLeaguePk}`,
+    );
+    await expect(page.getByTestId('edit-league-button')).toBeVisible({
+      timeout: 15000,
+    });
     await page.getByTestId('edit-league-button').click();
 
     const patches: string[] = [];
     page.on('request', (req) => {
-      if (req.method() === 'PATCH' && req.url().includes('/api/leagues/')) patches.push(req.url());
+      if (req.method() === 'PATCH' && req.url().includes('/api/leagues/'))
+        patches.push(req.url());
     });
 
     await page.getByTestId('open-delete-league-dialog').click();
@@ -128,13 +157,21 @@ test.describe.serial('Edit league + event fields @cicd', () => {
     const eventInfo = await getEventsTestData(context);
     await loginAdmin(context);
 
-    await visitAndWaitForHydration(page, `/leagues/${eventInfo.eventsLeaguePk}`);
-    await expect(page.getByTestId('edit-league-button')).toBeVisible({ timeout: 15000 });
+    await visitAndWaitForHydration(
+      page,
+      `/leagues/${eventInfo.eventsLeaguePk}`,
+    );
+    await expect(page.getByTestId('edit-league-button')).toBeVisible({
+      timeout: 15000,
+    });
     await page.getByTestId('edit-league-button').click();
 
     // Change to DTX_LEAGUE.steam_league_id (17929) — already in use.
     await page.getByTestId('edit-league-steam-id').fill('17929');
-    await page.getByTestId('edit-league-modal').getByTestId('form-dialog-submit').click();
+    await page
+      .getByTestId('edit-league-modal')
+      .getByTestId('form-dialog-submit')
+      .click();
 
     // Toast surfaces the colliding-league error from extractApiError → DRF field-level shape.
     // The custom validator on LeagueSerializer must fire (not the auto-UniqueValidator),
@@ -151,22 +188,30 @@ test.describe.serial('Edit league + event fields @cicd', () => {
     await loginAdmin(context);
 
     await visitAndWaitForHydration(page, `/events/${eventInfo.pk}`);
-    await expect(page.getByTestId('event-edit-btn')).toBeVisible({ timeout: 15000 });
+    await expect(page.getByTestId('event-edit-btn')).toBeVisible({
+      timeout: 15000,
+    });
     await page.getByTestId('event-edit-btn').click();
+    await page.getByTestId('edit-event-tab-tournament').click();
 
     // Pick the alt league from the same org via per-option testid.
     await page.getByTestId('edit-event-tournament-league').click();
     await page.getByTestId(`league-option-${eventInfo.altLeaguePk}`).click();
 
     // Wait for the trigger to reflect the new selection so submit has the latest form state.
-    await expect(page.getByTestId('edit-event-tournament-league')).toContainText(
-      eventInfo.altLeagueName,
-    );
+    await expect(
+      page.getByTestId('edit-event-tournament-league'),
+    ).toContainText(eventInfo.altLeagueName);
 
-    await page.getByTestId('edit-event-modal').getByTestId('form-dialog-submit').click();
+    await page
+      .getByTestId('edit-event-modal')
+      .getByTestId('form-dialog-submit')
+      .click();
 
     // Wait for the modal to close — confirms the PATCH completed and onSuccess fired.
-    await expect(page.getByTestId('edit-event-modal')).not.toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId('edit-event-modal')).not.toBeVisible({
+      timeout: 10000,
+    });
 
     // Confirm the league has changed via API (the detail page does not surface
     // the league name in a stable testable element).
@@ -181,26 +226,39 @@ test.describe.serial('Edit league + event fields @cicd', () => {
     });
   });
 
-  test('edit event tournament_league: clear via combobox', async ({ page, context }) => {
+  test('edit event tournament_league: clear via combobox', async ({
+    page,
+    context,
+  }) => {
     const eventInfo = await getEventsTestData(context);
     await loginAdmin(context);
 
     await visitAndWaitForHydration(page, `/events/${eventInfo.pk}`);
-    await expect(page.getByTestId('event-edit-btn')).toBeVisible({ timeout: 15000 });
+    await expect(page.getByTestId('event-edit-btn')).toBeVisible({
+      timeout: 15000,
+    });
     await page.getByTestId('event-edit-btn').click();
+    await page.getByTestId('edit-event-tab-tournament').click();
 
     // Open combobox and pick Clear
     await page.getByTestId('edit-event-tournament-league').click();
     await page.getByTestId('edit-event-league-clear').click();
 
     // Trigger shows the placeholder
-    await expect(page.getByTestId('edit-event-tournament-league')).toContainText(/select/i);
+    await expect(
+      page.getByTestId('edit-event-tournament-league'),
+    ).toContainText(/select/i);
 
     // Save (the modal uses form-dialog-submit, scoped to the edit-event-modal)
-    await page.getByTestId('edit-event-modal').getByTestId('form-dialog-submit').click();
+    await page
+      .getByTestId('edit-event-modal')
+      .getByTestId('form-dialog-submit')
+      .click();
 
     // Wait for the modal to close — confirms the PATCH completed
-    await expect(page.getByTestId('edit-event-modal')).not.toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId('edit-event-modal')).not.toBeVisible({
+      timeout: 10000,
+    });
 
     // API sanity-check
     const apiResp = await context.request.get(`/api/events/${eventInfo.pk}/`);
@@ -221,14 +279,14 @@ test.describe.serial('Edit league + event fields @cicd', () => {
     await loginEventAdmin(context);
 
     // DTX_LEAGUE pk=1 is in a different organization.
-    const resp = await patchWithCsrf(
-      context,
-      `/api/events/${eventInfo.pk}/`,
-      { tournament_league: 1 },
-    );
+    const resp = await patchWithCsrf(context, `/api/events/${eventInfo.pk}/`, {
+      tournament_league: 1,
+    });
     expect(resp.status()).toBe(400);
     const body = await resp.json();
-    expect(JSON.stringify(body)).toMatch(/must belong to the event's organization/i);
+    expect(JSON.stringify(body)).toMatch(
+      /must belong to the event's organization/i,
+    );
   });
 
   test('cache-correctness: PATCH then GET returns new steam_league_id', async ({

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { TOURNAMENT_TIMEZONES } from '~/lib/timezones';
 
 import { UserSchema } from '../user';
 
@@ -30,29 +31,8 @@ export const DOTA_LOBBY_LAUNCH_VALUES = ['manual', 'auto'] as const;
 export const DotaLobbyLaunchSchema = z.enum(DOTA_LOBBY_LAUNCH_VALUES);
 export type StateValue = (typeof STATE_VALUES)[number];
 
-// Common timezone values for tournament scheduling
-export const COMMON_TIMEZONES = [
-  'UTC',
-  'America/New_York',
-  'America/Chicago',
-  'America/Denver',
-  'America/Los_Angeles',
-  'America/Toronto',
-  'America/Vancouver',
-  'America/Sao_Paulo',
-  'Europe/London',
-  'Europe/Paris',
-  'Europe/Berlin',
-  'Europe/Moscow',
-  'Asia/Tokyo',
-  'Asia/Shanghai',
-  'Asia/Singapore',
-  'Asia/Seoul',
-  'Asia/Kolkata',
-  'Australia/Sydney',
-  'Australia/Melbourne',
-  'Pacific/Auckland',
-] as const;
+// Tournament dialogs list UTC first; event dialogs use EVENT_TIMEZONES.
+export const COMMON_TIMEZONES = TOURNAMENT_TIMEZONES;
 
 export type TimezoneValue = (typeof COMMON_TIMEZONES)[number] | string;
 
