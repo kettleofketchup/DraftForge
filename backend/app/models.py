@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any, Self
 import requests
 from django.conf import settings
 from django.contrib.auth.models import AbstractUser
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import QuerySet
 from django.db.utils import IntegrityError
@@ -948,33 +949,38 @@ class Team(models.Model):
             models.Index(fields=["deputy_captain"]),
         ]
 
-    def clean(self) -> None:
-        from django.core.exceptions import ValidationError
+    @staticmethod
+    def leadership_errors(
+        member_pks: set[int],
+        captain_pk: int | None,
+        deputy_pk: int | None,
+        *,
+        check_captain: bool = True,
+        check_deputy: bool = True,
+    ) -> dict[str, str]:
+        errors: dict[str, str] = {}
+        if check_captain and captain_pk is not None and captain_pk not in member_pks:
+            errors["captain"] = "Captain must be a member of the team."
+        if check_deputy and deputy_pk is not None and deputy_pk not in member_pks:
+            errors["deputy_captain"] = "Deputy captain must be a member of the team."
+        elif deputy_pk is not None and deputy_pk == captain_pk:
+            errors["deputy_captain"] = "Deputy captain cannot be the same as captain."
+        return errors
 
+    def clean(self) -> None:
         super().clean()
 
         # Skip ManyToMany validation if team has no pk yet (being created)
         if not self.pk:
             return
 
-        # Captain must be a member
-        if self.captain and not self.members.filter(pk=self.captain.pk).exists():
-            raise ValidationError({"captain": "Captain must be a member of the team."})
-
-        # Deputy must be a member
-        if (
-            self.deputy_captain
-            and not self.members.filter(pk=self.deputy_captain.pk).exists()
-        ):
-            raise ValidationError(
-                {"deputy_captain": "Deputy captain must be a member of the team."}
-            )
-
-        # Deputy cannot be the same as captain
-        if self.captain and self.deputy_captain and self.captain == self.deputy_captain:
-            raise ValidationError(
-                {"deputy_captain": "Deputy captain cannot be the same as captain."}
-            )
+        errors = Team.leadership_errors(
+            set(self.members.values_list("pk", flat=True)),
+            self.captain_id,
+            self.deputy_captain_id,
+        )
+        if errors:
+            raise ValidationError(errors)
 
     def __str__(self) -> str:
         return self.name

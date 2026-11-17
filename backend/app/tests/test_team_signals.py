@@ -59,6 +59,22 @@ class TeamMemberRemovalTests(TestCase):
         self.assertEqual(self.team.captain, deputy)
         self.assertIsNone(self.team.deputy_captain)
 
+    def test_captain_removed_non_member_deputy_not_promoted(self):
+        """A deputy who is not a member is never promoted to captain (#571)."""
+        outsider = CustomUser.objects.create(
+            username="outsider",
+            discordId="discord_outsider",
+            positions=PositionsModel.objects.create(),
+        )
+        Team.objects.filter(pk=self.team.pk).update(deputy_captain=outsider)
+        self.team.refresh_from_db()
+
+        self.team.members.remove(self.users[0])
+        self.team.refresh_from_db()
+
+        self.assertEqual(self.team.captain, self.users[1])
+        self.assertIsNone(self.team.deputy_captain)
+
     def test_captain_and_deputy_removed_highest_mmr_promoted(self):
         """When both captain and deputy removed, highest MMR member becomes captain."""
         captain = self.team.captain

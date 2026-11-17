@@ -1,7 +1,7 @@
 from collections.abc import Collection
 from dataclasses import dataclass
 from functools import cache
-from typing import Any
+from typing import Any, ClassVar
 from zoneinfo import available_timezones
 
 import nh3
@@ -1195,6 +1195,38 @@ class TeamSerializer(serializers.ModelSerializer):
         read_only=False,
         required=False,
     )
+
+    _LEADERSHIP_ERROR_FIELDS: ClassVar[dict[str, str]] = {
+        "captain": "captain_id",
+        "deputy_captain": "deputy_captain_id",
+    }
+
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
+        instance: Team | None = self.instance
+        if "members" in attrs:
+            member_pks = {user.pk for user in attrs["members"]}
+        elif instance is not None:
+            member_pks = set(instance.members.values_list("pk", flat=True))
+        else:
+            member_pks = set()
+
+        def final_pk(field: str) -> int | None:
+            if field in attrs:
+                return getattr(attrs[field], "pk", None)
+            return getattr(instance, f"{field}_id", None)
+
+        errors = Team.leadership_errors(
+            member_pks,
+            final_pk("captain"),
+            final_pk("deputy_captain"),
+            check_captain="captain" in attrs,
+            check_deputy="deputy_captain" in attrs,
+        )
+        if errors:
+            raise serializers.ValidationError(
+                {self._LEADERSHIP_ERROR_FIELDS[k]: v for k, v in errors.items()}
+            )
+        return attrs
 
     def get_total_mmr(self, obj: Team) -> int:
         """Sum of captain MMR + all member MMRs (excluding captain from members to avoid double-counting)."""
