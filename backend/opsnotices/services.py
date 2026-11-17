@@ -106,6 +106,17 @@ def _validate_payload(
         ) from exc
 
 
+def _serialize_payload(
+    notice_type: NoticeType[Any], model: BaseModel
+) -> dict[str, Any]:
+    try:
+        return model.model_dump(mode="json")
+    except Exception as exc:
+        raise NoticePayloadError(
+            notice_type.key, [{"loc": (), "type": "serialization_failed"}]
+        ) from exc
+
+
 def _resolve_dedupe_key(
     notice_type: NoticeType[Any], model: BaseModel, dedupe_key: str | None
 ) -> str:
@@ -138,6 +149,7 @@ def _prepare(
         raise NoticeEmitError("unknown_notice_type", key) from None
 
     model = _validate_payload(notice_type, payload)
+    serialized = _serialize_payload(notice_type, model)
 
     if severity is None:
         resolved_severity = notice_type.default_severity
@@ -160,7 +172,7 @@ def _prepare(
         repeater_id = event.event_repeater_id
     return _Prepared(
         notice_type=notice_type,
-        payload=model.model_dump(mode="json"),
+        payload=serialized,
         severity=resolved_severity,
         dedupe_key=resolved_dedupe,
         event=fk,

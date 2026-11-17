@@ -13,7 +13,7 @@ from unittest.mock import patch
 from django.db import DatabaseError, IntegrityError, transaction
 from django.test import SimpleTestCase, override_settings
 from django.utils import timezone
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_serializer, field_validator
 from structlog.testing import capture_logs
 
 from app.models import Organization
@@ -64,6 +64,20 @@ class TypeErrorPayload(BaseModel):
         raise TypeError(f"{SENTINEL} {value}")
 
 
+class SerializerPayload(BaseModel):
+    name: str
+
+    @field_serializer("name")
+    def _explode(self, value: str) -> str:
+        if value == "sample":
+            return value
+        raise KeyError(f"{SENTINEL} {value}")
+
+
+class AnyPayload(BaseModel):
+    value: Any
+
+
 def _raising_hook(payload: AlertPayload) -> str:
     raise KeyError(f"{SENTINEL} {payload.reason}")
 
@@ -107,6 +121,30 @@ def _register_extra_types() -> None:
             payload=TypeErrorPayload,
             summary=lambda p: "typeerror",
             sample_payload=lambda: TypeErrorPayload.model_construct(name="x"),
+        )
+    )
+    register_notice_type(
+        NoticeType(
+            key="test.serializer",
+            label="Serializer",
+            description="Field serializer raises",
+            category=NoticeCategory.LOG,
+            default_severity=NoticeSeverity.INFO,
+            payload=SerializerPayload,
+            summary=lambda p: "serializer",
+            sample_payload=lambda: SerializerPayload(name="sample"),
+        )
+    )
+    register_notice_type(
+        NoticeType(
+            key="test.anyvalue",
+            label="Any value",
+            description="Any-typed field",
+            category=NoticeCategory.LOG,
+            default_severity=NoticeSeverity.INFO,
+            payload=AnyPayload,
+            summary=lambda p: "any",
+            sample_payload=lambda: AnyPayload(value=1),
         )
     )
     for hook_key, hook in (
@@ -229,6 +267,18 @@ class FailureTriggers(EmitTestBase):
                     dedupe_key=5,  # type: ignore[arg-type]
                 ),
             ),
+            (
+                "invalid_payload",
+                lambda: emit_notice(
+                    "test.serializer", {"name": "member-name"}, organization=org
+                ),
+            ),
+            (
+                "invalid_payload",
+                lambda: emit_notice(
+                    "test.anyvalue", {"value": object()}, organization=org
+                ),
+            ),
         ]
 
 
@@ -280,6 +330,17 @@ class StrictFailureTests(FailureTriggers):
         self.assertEqual(ctx.exception.code, "invalid_dedupe_key")
         self.assertIsInstance(ctx.exception.__cause__, KeyError)
         self.assertNotIn(SENTINEL, str(ctx.exception))
+
+    def test_serialization_failure_is_payload_error(self) -> None:
+        with self.assertRaises(NoticePayloadError) as ctx:
+            emit_notice(
+                "test.serializer", {"name": "member-name"}, organization=self.org
+            )
+        exc = ctx.exception
+        self.assertEqual(exc.errors, [{"loc": (), "type": "serialization_failed"}])
+        self.assertIsNotNone(exc.__cause__)
+        self.assertNotIn(SENTINEL, str(exc))
+        self.assertNotIn("member-name", str(exc))
 
     def test_unvalidated_instance_is_revalidated(self) -> None:
         with self.assertRaises(NoticePayloadError) as ctx:
