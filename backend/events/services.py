@@ -14,6 +14,7 @@ from django.utils import timezone
 from app.cache_utils import invalidate_after_commit, invalidate_obj
 from app.functions.teamdraft import apply_draft_options
 from app.models import CustomUser, Organization, PositionsModel, Team, Tournament
+from events.admission import ensure_self_serve
 from events.capacity import has_free_seat, lock_event, seat_holding_statuses
 from events.constants import (
     EVENT_REOPEN_TRANSITIONS,
@@ -264,7 +265,7 @@ def _create_signup(
 def process_rsvp(
     event: Event, user: CustomUser, event_team: EventTeam | None = None
 ) -> EventSignup:
-    """Public-path signup. Locked to SIGNUPS_OPEN."""
+    """Public-path signup. Self-serve admission applies (events.admission)."""
     log.info(
         "process_rsvp_started",
         system="events",
@@ -272,8 +273,7 @@ def process_rsvp(
         event_id=event.pk,
         user_id=user.pk,
     )
-    if event.state != EventState.SIGNUPS_OPEN:
-        raise ValueError("Event is not accepting signups.")
+    ensure_self_serve(event, user)
     signup = _create_signup(event, user, event_team=event_team)
     # Defer signup_created log until the outermost atomic commits — otherwise
     # rollback paths produce a log claiming a signup that doesn't persist.
@@ -298,7 +298,7 @@ def create_tentative_signup(event: Event, user: CustomUser) -> EventSignup:
     Funnel point for both the DRF action and the Discord tentative button.
 
     Behavior:
-      - Event must be SIGNUPS_OPEN.
+      - Self-serve admission applies (events.admission).
       - If existing TENTATIVE signup -> raise ValueError (already tentative).
       - If existing active signup (RSVP/APPROVED/CONFIRMED/PENDING/WAITLISTED)
         -> cancel it, delete the row, then create a fresh TENTATIVE.
@@ -307,8 +307,7 @@ def create_tentative_signup(event: Event, user: CustomUser) -> EventSignup:
         (cancel_signup also schedules one when invoked; we skip registering
         a duplicate in that case).
     """
-    if event.state != EventState.SIGNUPS_OPEN:
-        raise ValueError("Event is not accepting signups")
+    ensure_self_serve(event, user)
 
     existing = EventSignup.objects.filter(event=event, user=user).first()
     notify_scheduled_by_cancel = False

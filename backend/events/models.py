@@ -105,6 +105,7 @@ class EventConfigMixin(models.Model):
     max_players = models.IntegerField(null=True, blank=True)
     # Inert until #504.
     signup_deadline_hours = models.IntegerField(null=True, blank=True)
+    # Inert until #547.
     allow_team_signups = models.BooleanField(default=False)
     allow_user_signups = models.BooleanField(default=True)
     auto_approve = models.BooleanField(default=False)

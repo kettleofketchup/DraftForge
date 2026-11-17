@@ -76,7 +76,6 @@ class UserSignupsOpenTournamentIdsTests(TestCase):
         for overrides in (
             {"signups_open_at": now + timedelta(days=1)},
             {"scheduled_at": now + timedelta(minutes=30), "signup_deadline_hours": 1},
-            {"allow_user_signups": False},
         ):
             with self.subTest(**{k: str(v) for k, v in overrides.items()}):
                 _, tournament = self._event(**overrides)

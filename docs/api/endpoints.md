@@ -91,9 +91,12 @@ the frontend gates on: `admin_organization_ids`, `staff_organization_ids`,
 - No `bucket`: every tournament, newest `date_played` first.
 
 **Open signups:** a tournament's signups are open when one of its source events
-(`Event.tournament`) is in state `signups_open`. That is the same rule the signup
-endpoint, `process_rsvp` and the Discord buttons apply; `signups_open_at`,
-`signup_deadline_hours` and `allow_user_signups` do not change it. The `/tournaments` page's
+(`Event.tournament`) is in state `signups_open` with `allow_user_signups` on. That is
+the self-serve admission rule in `events/admission.py`, the same one the signup
+endpoint, `process_rsvp` and `create_tentative_signup` apply; `signups_open_at` and
+`signup_deadline_hours` do not change it. With `allow_user_signups` off, members get a
+400 ("Self sign-ups are disabled for this event; ask an organizer to add you.") while
+staff can still add them through `admin-signup`. The `/tournaments` page's
 "My organizations" view sends `organizations=mine&open_signups=1` on Upcoming and only
 `organizations=mine` on Archived. The cache key holds the expanded organization IDs, so
 users with the same memberships share an entry and nothing is cached per user.
@@ -148,8 +151,8 @@ tournament's signups are open as defined above.
 !!! note
     Search results are not cached. Other results are cached for 10 minutes, keyed by every
     parameter including `cursor` and `page_size`, and invalidated
-    when any Tournament, League, Organization or Event changes, so an event state change
-    shows up in `signups_open` and `open_signups=1` results on the next request.
+    when any Tournament, League, Organization or Event changes, so an event state or
+    `allow_user_signups` change shows up in `signups_open` and `open_signups=1` results on the next request.
 
 ## Teams
 

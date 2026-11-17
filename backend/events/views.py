@@ -20,6 +20,7 @@ from django.db.models.functions import Abs, Coalesce, Now
 from django.http import QueryDict
 from django.utils import timezone
 from django.utils import timezone as tz
+from pydantic import ValidationError as PydanticValidationError
 from rest_framework import permissions, serializers, status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.exceptions import (
@@ -40,6 +41,7 @@ from app.permissions_org import (
     has_org_admin_access,
     has_org_staff_access,
 )
+from events.admission import ensure_self_serve
 from events.capacity import with_signup_counts
 from events.completion import close_event
 from events.constants import EventState
@@ -52,6 +54,7 @@ from events.models import (
     RepeaterSubscription,
 )
 from events.reopen import ReopenNotPermitted
+from events.schemas import SignupInputPatch
 from events.serializers import (
     EventRepeaterSerializer,
     EventRepeaterSlimSerializer,
@@ -63,10 +66,12 @@ from events.serializers import (
     RepeaterSubscriptionSerializer,
 )
 from events.services import (
+    apply_signup_input,
     approve_signup,
     cancel_signup,
     changed_draft_option_fields,
     confirm_signup,
+    create_tentative_signup,
     create_tournament_for_event,
     demote_to_waitlist,
     ensure_discord_event,
@@ -75,6 +80,7 @@ from events.services import (
     finalize_event_tournament,
     is_registered_for_event,
     log_lobby_password_changed,
+    process_rsvp,
     regenerate_event_lobby_password,
     reinstate_signup,
     reject_signup,
@@ -830,23 +836,11 @@ class EventViewSet(viewsets.ModelViewSet):
         Body: {"intent": "rsvp" | "tentative", "profile": {...}}
         Replaces the older /rsvp/ and /tentative/ actions (deleted in Task 29).
         """
-        from django.db import transaction
-        from pydantic import ValidationError as PydanticValidationError
-
-        from events.schemas import SignupInputPatch
-        from events.services import (
-            apply_signup_input,
-            create_tentative_signup,
-            process_rsvp,
-            resolve_or_create_org_user,
-        )
-
         event = self.get_object()
-        if event.state != EventState.SIGNUPS_OPEN:
-            return Response(
-                {"error": "Event is not accepting signups"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        try:
+            ensure_self_serve(event, request.user)
+        except ValueError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
         body = request.data or {}
         intent = body.get("intent")
