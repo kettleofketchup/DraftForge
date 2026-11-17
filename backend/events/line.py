@@ -5,10 +5,22 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any, Self
 
 from django.db import transaction
-from django.db.models import F, Max, OrderBy, QuerySet
+from django.db.models import (
+    Case,
+    F,
+    IntegerField,
+    Max,
+    OrderBy,
+    QuerySet,
+    Value,
+    When,
+    Window,
+)
+from django.db.models.functions import RowNumber
 from django.utils import timezone
 
 from app.cache_utils import invalidate_after_commit
+from events.constants import LINE_EXCLUDED_STATUSES
 from events.exceptions import ImmutableFieldError
 from telemetry.logging import get_logger
 
@@ -104,6 +116,23 @@ def same_gate_distance(a: EventSignup, b: EventSignup) -> bool:
 class EventSignupQuerySet(QuerySet):
     def in_line_order(self) -> Self:
         return self.order_by(*line_order_by())
+
+    def annotate_line_rank(self) -> Self:
+        excluded = When(status__in=LINE_EXCLUDED_STATUSES, then=Value(1))
+        return self.annotate(
+            line_rank=Case(
+                When(status__in=LINE_EXCLUDED_STATUSES, then=Value(None)),
+                default=Window(
+                    RowNumber(),
+                    partition_by=[
+                        F("event_id"),
+                        Case(excluded, default=Value(0), output_field=IntegerField()),
+                    ],
+                    order_by=line_order_by(),
+                ),
+                output_field=IntegerField(),
+            )
+        )
 
     def update(self, **kwargs: Any) -> int:
         _block_first_fields(kwargs)

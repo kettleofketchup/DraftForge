@@ -164,6 +164,11 @@ class EventSignupSchema(BaseModel):
     waitlist_position: Optional[int] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
+    signed_up_at: Optional[str] = None
+    commitment: Optional[str] = None
+    rsvp_class: Optional[str] = None
+    first_signed_up_at: Optional[str] = None
+    line_rank: Optional[int] = None
 
     @property
     def display_name(self) -> str:
