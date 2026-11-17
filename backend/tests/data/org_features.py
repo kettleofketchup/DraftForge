@@ -139,6 +139,11 @@ ORG_FEATURES_MEMBERS: Final[dict[int, list[TestUser]]] = {
     ],
 }
 
+# Discord server nicknames keyed by (org pk, user pk).
+ORG_FEATURES_SERVER_NICKNAMES: Final[dict[tuple[int, int], str]] = {
+    (FEATURES_ORG.pk, ORG_FEATURES_PLAYERS[0].pk): "Ashveil",
+}
+
 # (pk, name, days before now, players) — past tournaments in FEATURES_LEAGUE.
 ORG_FEATURES_TOURNAMENTS: Final[list[tuple[int, str, int, list[TestUser]]]] = [
     (260, "Features Cup 1", 28, ORG_FEATURES_PLAYERS[0:6]),
