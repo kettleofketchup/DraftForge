@@ -7,6 +7,7 @@ import os
 
 from dotenv import load_dotenv
 
+from config.discord_api import DISCORD_API_BASE_URL  # noqa: F401
 from config.dota_lobby import DotaLobbyConfig
 from config.installed_apps import MODEL_APPS
 
@@ -48,7 +49,9 @@ DATABASES = {}
 # Celery configuration
 REDIS_HOST = os.environ.get("REDIS_HOST", "redis")
 CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", f"redis://{REDIS_HOST}:6379/1")
-CELERY_RESULT_BACKEND = os.environ.get("CELERY_RESULT_BACKEND", f"redis://{REDIS_HOST}:6379/1")
+CELERY_RESULT_BACKEND = os.environ.get(
+    "CELERY_RESULT_BACKEND", f"redis://{REDIS_HOST}:6379/1"
+)
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"

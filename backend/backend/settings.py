@@ -26,6 +26,7 @@ import logging
 import warnings
 
 from backend.env_utils import env_bool, env_list
+from config.discord_api import DISCORD_API_BASE_URL  # noqa: F401
 from config.dota_lobby import DotaLobbyConfig
 from config.installed_apps import MODEL_APPS
 from config.leagues import app_config
@@ -36,7 +37,6 @@ warnings.filterwarnings("once", message=r".*cacheops cache is unreachable.*")
 
 log = logging.getLogger(__name__)
 load_dotenv()
-DISCORD_API_BASE_URL = "https://discord.com/api"
 SOCIAL_AUTH_DISCORD_KEY = os.environ.get("client_id")
 SOCIAL_AUTH_DISCORD_SECRET = os.environ.get("discord_secret")
 DISCORD_BOT_TOKEN = os.environ.get("DISCORD_BOT_TOKEN")
