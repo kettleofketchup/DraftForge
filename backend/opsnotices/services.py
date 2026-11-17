@@ -1,11 +1,12 @@
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import timedelta
 from typing import Any, Literal
 from uuid import UUID
 
 from django.conf import settings
 from django.db import DatabaseError, IntegrityError, connection, transaction
-from django.db.models import F
+from django.db.models import F, Q
 from django.utils import timezone
 from pydantic import BaseModel, ValidationError
 
@@ -13,6 +14,7 @@ from app.models import CustomUser, Organization
 from events.models import Event
 from opsnotices.models import OpsNotice
 from opsnotices.registry import (
+    NoticeCategory,
     NoticeSeverity,
     NoticeType,
     UnknownNoticeType,
@@ -25,6 +27,7 @@ log = get_logger(__name__)
 
 DEDUPE_KEY_MAX: int = 200
 CLOSE_NOTE_MAX: int = 200
+RETENTION_MIN: timedelta = timedelta(days=365)
 _DUMMY_ENGINE: str = "django.db.backends.dummy"
 
 _Outcome = Literal["created", "repeated", "replayed"]
@@ -488,3 +491,28 @@ def resolve_notice_by_id(
     if notice.closed_at is not None:
         return notice
     return _close(notice, reason, closed_by)
+
+
+def purge_notices(
+    *, older_than: timedelta, organization: Organization | None = None
+) -> int:
+    if older_than < RETENTION_MIN:
+        raise ValueError(f"older_than must be at least {RETENTION_MIN.days} days")
+    cutoff = timezone.now() - older_than
+    rows = OpsNotice.objects.filter(
+        Q(closed_at__lt=cutoff)
+        | Q(category=NoticeCategory.LOG, last_seen_at__lt=cutoff)
+    )
+    if organization is not None:
+        rows = rows.filter(organization=organization)
+    _, per_model = rows.delete()
+    deleted = per_model.get(OpsNotice._meta.label, 0)
+    log.info(
+        "ops_notice_purged",
+        system="opsnotices",
+        subsystem="retention",
+        deleted=deleted,
+        organization_id=getattr(organization, "pk", None),
+        older_than_days=older_than.days,
+    )
+    return deleted
