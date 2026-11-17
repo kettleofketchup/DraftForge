@@ -16,6 +16,9 @@ it on an up-to-date `main`, and report the CI result.
 1. **Preflight** (`changelog.release_preflight`). It refuses, changing nothing, when:
    - the version is not `MAJOR.MINOR.PATCH` (or `just version::set` got `--no-tag-version`);
    - the current branch is not `main`, or tracked files have uncommitted changes;
+   - `frontend/app/data/CHANGELOG.md` is missing or differs from `CHANGELOG.md`
+     (`cp CHANGELOG.md frontend/app/data/CHANGELOG.md`), or is not tracked in `HEAD`
+     (commit it: the rollback's `git checkout HEAD --` would abort on it);
    - there are untracked files under `changelog.d/` (they would miss the release);
    - `HEAD` is not `origin/main` after `git fetch --tags origin`;
    - tag `X.Y.Z` already exists on `origin` or locally.
@@ -23,12 +26,12 @@ it on an up-to-date `main`, and report the CI result.
    notes? [y/N]`. Anything but `y` cancels with nothing changed.
 3. Rewrites the version in `pyproject.toml`, `docker/.env.prod`, `docker/.env.release`.
 4. **Assembles the changelog.** Every fragment goes into a new `## [X.Y.Z] - DATE`
-   section, sections in `changelog.d/sections.json` order, and the consumed fragments
-   are `git rm`ed. It refuses if a fragment fails `scripts/changelog.py check`, if
+   section, sections in `changelog.d/sections.json` order, writes the same text to
+   `frontend/app/data/CHANGELOG.md`, and `git rm`s the consumed fragments. It refuses if a fragment fails `scripts/changelog.py check`, if
    `[Unreleased]` holds anything but the pointer comment, or if `[X.Y.Z]` already
-   exists; then it rolls the version files and `changelog.d/` back.
-5. Commits `Updated version to X.Y.Z` (version files, `CHANGELOG.md`, removed
-   fragments), tags `X.Y.Z`, pushes `main`, then the tag. If the commit, tag or `main`
+   exists; then it rolls the version files, both changelog files and `changelog.d/` back.
+5. Commits `Updated version to X.Y.Z` (version files, `CHANGELOG.md`, its frontend
+   copy, removed fragments), tags `X.Y.Z`, pushes `main`, then the tag. If the commit, tag or `main`
    push fails, the commit and tag are undone locally.
 
 ## What the tag triggers
@@ -74,7 +77,8 @@ is created and nothing deploys automatically.
 
 - **Preflight refused:** fix what the message names (switch to `main`, commit or
   stash, `git merge --ff-only origin/main`, pick an unused version) and run again.
-  Nothing was changed.
+  Nothing was changed. A drifted or untracked frontend copy is fixed in a PR
+  (`cp CHANGELOG.md frontend/app/data/CHANGELOG.md`, commit it), not on `main` by hand.
 - **Assembly failed:** already rolled back. Fix the fragment or `[Unreleased]` in a
   PR, merge, and run again.
 - **`main` push rejected:** the commit and tag are already undone. Usually `main`

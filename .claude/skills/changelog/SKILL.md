@@ -34,7 +34,7 @@ version commit.
    have not `git add`-ed yet (not ignored ones), so run it before or after staging.
    Then commit and push.
 
-Never edit `CHANGELOG.md` in a PR. A note for a PR that already merged without one is
+Never edit `CHANGELOG.md` (or its copy `frontend/app/data/CHANGELOG.md`) in a PR. A note for a PR that already merged without one is
 `changelog.d/<section>/pr-<N>.md`, committed on `main` (never `main.md`).
 
 ## The CI gate (`changelog` job, `just ci::changelog-check`)
@@ -48,6 +48,7 @@ On a pull request to `main`:
 | `CHANGELOG.md` edited elsewhere, no `changelog:edit` label | fails | move the bullets to a fragment and revert the hunk, or add the label (below) |
 | `this path was already released in X.Y.Z` | fails | same note restored: delete it; new note on a reused branch name: rename it, e.g. `<slug>-2.md` |
 | `this bullet is identical to one released in X.Y.Z` (or `this note ...` for `upgrading`) | fails | remove or reword that bullet; the rest of the file stays |
+| `frontend/app/data/CHANGELOG.md:1: differs from CHANGELOG.md` (or `...: missing`) | fails | `cp CHANGELOG.md frontend/app/data/CHANGELOG.md` |
 | no fragment added | warning only | add one if the change is user- or operator-visible |
 
 The job runs every check before it exits, so one run lists every problem. Every row
@@ -64,6 +65,9 @@ CI, so re-run the failed job:
 gh pr edit <N> --add-label changelog:edit
 gh run rerun <run-id> --failed
 ```
+
+A deliberate `changelog:edit` correction updates the copy in the same PR
+(`cp CHANGELOG.md frontend/app/data/CHANGELOG.md`), or `check` fails.
 
 Merge such a PR with squash or a merge commit, never rebase-merge.
 

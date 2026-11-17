@@ -23,6 +23,7 @@ export default [
   route('leaderboard', 'routes/leaderboard.tsx'),
   route('about', 'routes/about.tsx'),
   route('blog', 'routes/blog.tsx'),
+  route('changelog', 'routes/changelog.tsx'),
   route('users', 'routes/users.tsx'),
   route('user/:pk', 'routes/user.tsx'),
   route('logout', 'routes/logoutRedirect.tsx'),

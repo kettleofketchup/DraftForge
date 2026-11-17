@@ -1,5 +1,10 @@
-import axios from 'axios';
-import { activityAuthorization } from '~/lib/activity-session';
+import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios';
+import {
+  activityAuthorization,
+  getActivityCredential,
+  isActivityFrame,
+  refreshActivityCredential,
+} from '~/lib/activity-session';
 import { Sentry } from '~/lib/sentry';
 
 import {
@@ -7,6 +12,27 @@ import {
   getCsrfToken,
   syncCsrfCookieName,
 } from './utils';
+
+declare module 'axios' {
+  interface AxiosRequestConfig {
+    skipActivityErrorHandling?: boolean;
+    _activityToken?: string;
+    _activityRetried?: boolean;
+  }
+}
+
+interface ActivityErrorHandlers {
+  onScopeLost(): void;
+  onDisabled(): void;
+}
+
+let activityHandlers: ActivityErrorHandlers | null = null;
+
+export function setActivityErrorHandlers(
+  handlers: ActivityErrorHandlers | null,
+): void {
+  activityHandlers = handlers;
+}
 
 // Determine the API base URL based on environment
 // On server (SSR): use internal URL (configurable via SSR_API_URL env var)
@@ -33,7 +59,10 @@ export const api = axios.create({
 
 api.interceptors.request.use((config) => {
   const activityAuth = activityAuthorization(config.url || '');
-  if (activityAuth) config.headers.Authorization = activityAuth;
+  if (activityAuth) {
+    config.headers.Authorization = activityAuth;
+    config._activityToken = getActivityCredential()?.token;
+  }
   const method = config.method?.toUpperCase();
   const needsCSRF = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method || '');
 
@@ -46,6 +75,64 @@ api.interceptors.request.use((config) => {
 
 const isBrowser = typeof window !== 'undefined';
 
+function activityToast(message: string, info = false): void {
+  import('sonner').then(({ toast }) => {
+    if (info) toast.info(message, { id: 'activity-reconnecting' });
+    else toast.error(message);
+  });
+}
+
+function retryActivity(config: InternalAxiosRequestConfig) {
+  return api.request({ ...config, _activityRetried: true });
+}
+
+async function handleActivityError(error: AxiosError): Promise<unknown> {
+  const status = error.response?.status;
+  const data = (error.response?.data ?? {}) as {
+    code?: unknown;
+    error?: unknown;
+    detail?: unknown;
+  };
+  const config = error.config;
+  if (status === 403) {
+    const text =
+      typeof data.error === 'string'
+        ? data.error
+        : typeof data.detail === 'string'
+          ? data.detail
+          : 'You do not have permission to do that.';
+    activityToast(text);
+  } else if (status === 401) {
+    switch (data.code) {
+      case 'activity_session_ended': {
+        if (!config || config._activityRetried) break;
+        const current = getActivityCredential()?.token;
+        if (current && current !== config._activityToken)
+          return retryActivity(config);
+        activityToast('Reconnecting…', true);
+        if (await refreshActivityCredential()) return retryActivity(config);
+        break;
+      }
+      case 'activity_out_of_scope':
+        activityHandlers?.onScopeLost();
+        break;
+      case 'activity_disabled':
+        activityHandlers?.onDisabled();
+        break;
+      case 'activity_path_not_allowed':
+        activityToast('This action is not available in the Activity.');
+        break;
+      default:
+        activityToast(
+          'The Activity could not verify you. Reopen the Activity if this keeps happening.',
+        );
+    }
+  }
+  if (!status || status >= 500 || status === 429)
+    Sentry.captureException(error);
+  return Promise.reject(error);
+}
+
 api.interceptors.response.use(
   (response) => {
     if (isBrowser)
@@ -53,8 +140,10 @@ api.interceptors.response.use(
     return response;
   },
   (error) => {
+    if (error.config?.skipActivityErrorHandling) return Promise.reject(error);
     if (isBrowser)
       syncCsrfCookieName(error.response?.headers?.[CSRF_COOKIE_NAME_HEADER]);
+    if (isActivityFrame()) return handleActivityError(error);
     const status = error.response?.status;
 
     // A coded 403 (feature_locked, not_permitted) is a permission answer, not an expired session.

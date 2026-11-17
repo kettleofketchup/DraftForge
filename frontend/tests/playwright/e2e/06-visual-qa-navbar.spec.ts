@@ -1,5 +1,5 @@
-import { test, expect, loginUser } from '../fixtures';
 import type { Page } from '@playwright/test';
+import { expect, loginUser, test } from '../fixtures';
 
 const VIEWPORTS = [
   { name: 'mobile', width: 375, height: 800 },
@@ -35,9 +35,13 @@ for (const vp of VIEWPORTS) {
       // Horizontal-overflow assertion at mobile width.
       if (vp.name === 'mobile') {
         const overflow = await page.evaluate(
-          () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+          () =>
+            document.documentElement.scrollWidth >
+            document.documentElement.clientWidth,
         );
-        expect(overflow, `horizontal overflow at ${vp.name} ${locale}`).toBe(false);
+        expect(overflow, `horizontal overflow at ${vp.name} ${locale}`).toBe(
+          false,
+        );
       }
 
       await page.screenshot({
@@ -116,13 +120,15 @@ for (const locale of LOCALES) {
   });
 }
 
-// 5. Hover-revealed Tooltip on translated icon button (2)
-// Navbar has icon buttons with aria-labels: Star us on GitHub, Documentation,
-// Report a Bug. Hovering reveals a <TooltipContent>. This scenario captures
-// the Documentation tooltip — translated in Task 15.
+// 5. Documentation dropdown (2)
+// Clicking the Docs item opens a dialog with the docs link and the latest
+// release notes. This scenario captures the open panel in both locales.
 for (const locale of LOCALES) {
-  const ariaLabel = locale === 'es' ? 'Documentación' : 'Documentation';
-  test(`hover documentation tooltip @ desktop ${locale}`, async ({ browser }) => {
+  const ariaLabel =
+    locale === 'es'
+      ? 'Documentación y registro de cambios'
+      : 'Docs and changelog';
+  test(`documentation dropdown @ desktop ${locale}`, async ({ browser }) => {
     const ctx = await browser.newContext({
       viewport: { width: 1280, height: 800 },
       locale: locale === 'es' ? 'es-ES' : 'en-US',
@@ -130,12 +136,13 @@ for (const locale of LOCALES) {
     const page = await ctx.newPage();
     await page.goto('/');
     await settleNavbar(page, locale);
-    await page.locator(`[aria-label="${ariaLabel}"]`).first().hover();
-    // Verify the tooltip rendered (Radix tooltips have role="tooltip").
-    await expect(page.locator('[role="tooltip"]').first()).toBeVisible();
+    await page.locator(`[aria-label="${ariaLabel}"]`).first().click();
+    const panel = page.locator('[data-testid="nav-docs-panel"]');
+    await expect(panel).toBeVisible();
+    await expect(panel).toHaveAttribute('role', 'dialog');
     await page.evaluate(() => document.fonts.ready);
     await page.screenshot({
-      path: `screenshots/i18n/tooltip-docs-${locale}.png`,
+      path: `screenshots/i18n/dropdown-docs-${locale}.png`,
       fullPage: false,
     });
     await ctx.close();

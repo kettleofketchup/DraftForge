@@ -10,7 +10,14 @@ import {
   type Node,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import './bracket-styles.css';
 
@@ -18,6 +25,7 @@ import { HeroDraftModal } from '~/components/herodraft/HeroDraftModal';
 import { useOrganization } from '~/components/organization';
 import { useBracketQuery } from '~/hooks/useBracket';
 import { useCanEditTournament } from '~/hooks/usePermissions';
+import { cn } from '~/lib/utils';
 import { useBracketStore } from '~/store/bracketStore';
 import { useTournamentStore } from '~/store/tournamentStore';
 import { useUserStore } from '~/store/userStore';
@@ -44,12 +52,17 @@ const edgeTypes = {
 
 interface BracketViewProps {
   tournamentId: number;
+  embedded?: boolean;
+  onOpenHeroDraft?: (id: number) => void;
+  openableDraftIds?: ReadonlySet<number>;
+  onMatchOpen?: () => void;
+  header?: ReactNode;
 }
 
 // Layout constants
 const BRACKET_SECTION_GAP = 180;
 const NODE_WIDTH = 220;
-const NODE_HEIGHT = 120; // Increased for better spacing
+const NODE_HEIGHT = 120;
 const NODE_VERTICAL_GAP = 30; // Minimum gap between nodes
 const ROUND_HORIZONTAL_GAP = 180; // Gap between rounds
 
@@ -123,7 +136,14 @@ function createStructuralEdges(matches: BracketMatch[]): Edge[] {
     }));
 }
 
-function BracketFlowInner({ tournamentId }: BracketViewProps) {
+function BracketFlowInner({
+  tournamentId,
+  embedded = false,
+  onOpenHeroDraft,
+  openableDraftIds,
+  onMatchOpen,
+  header,
+}: BracketViewProps) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const tournament = useUserStore((state) => state.tournament);
@@ -168,7 +188,9 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState<MatchNodeType>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [dividerY, setDividerY] = useState<number>(0);
-  const layoutCompleteRef = useRef(false);
+  const nodesRef = useRef<MatchNodeType[]>([]);
+  nodesRef.current = nodes;
+  const [layoutKey, setLayoutKey] = useState<string | null>(null);
 
   // Selected match for stats modal
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
@@ -177,12 +199,25 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
   // Track the draftId to auto-open from deep link
   const [initialDraftId, setInitialDraftId] = useState<number | null>(null);
 
-  // Hero draft modal state (lifted from MatchStatsModal to allow independent modal)
+  // Hero draft modal state, independent of the match modal
   const [heroDraftId, setHeroDraftId] = useState<number | null>(null);
   const [showHeroDraftModal, setShowHeroDraftModal] = useState(false);
 
+  useEffect(() => {
+    if (!embedded) return;
+    if (pendingDraftId) setPendingDraftId(null);
+    if (pendingMatchId) setPendingMatchId(null);
+  }, [
+    embedded,
+    pendingDraftId,
+    pendingMatchId,
+    setPendingDraftId,
+    setPendingMatchId,
+  ]);
+
   // Deep-linking: auto-open hero draft modal when pendingDraftId is set
   useEffect(() => {
+    if (embedded) return;
     if (pendingDraftId && matches.length > 0) {
       const matchWithDraft = matches.find(
         (m) => m.herodraft_id === pendingDraftId,
@@ -195,10 +230,11 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
         setPendingDraftId(null);
       }
     }
-  }, [pendingDraftId, matches, setPendingDraftId]);
+  }, [embedded, pendingDraftId, matches, setPendingDraftId]);
 
   // Deep-linking: auto-open match modal when pendingMatchId is set
   useEffect(() => {
+    if (embedded) return;
     if (pendingMatchId && matches.length > 0) {
       // Try to parse as numeric gameId first, then fall back to string id
       const numericId = parseInt(pendingMatchId, 10);
@@ -219,7 +255,7 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
         setPendingMatchId(null);
       }
     }
-  }, [pendingMatchId, matches, setPendingMatchId]);
+  }, [embedded, pendingMatchId, matches, setPendingMatchId]);
 
   // Pre-compute badge mapping for all matches
   const badgeMapping = useMemo(() => buildBadgeMapping(matches), [matches]);
@@ -229,6 +265,7 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
     if (matches.length === 0) {
       setNodes([]);
       setEdges([]);
+      setLayoutKey(null);
       return;
     }
 
@@ -465,7 +502,12 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
 
       setNodes(allNodes as MatchNodeType[]);
       setEdges(combinedEdges);
-      layoutCompleteRef.current = true;
+      setLayoutKey(
+        allNodes
+          .map((n) => n.id)
+          .sort()
+          .join('|'),
+      );
     };
 
     layoutBracket();
@@ -473,11 +515,15 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
 
   // Left-align viewport after layout is complete
   useEffect(() => {
-    if (nodes.length > 0 && layoutCompleteRef.current) {
+    if (layoutKey) {
       // Small delay to ensure ReactFlow has rendered
       const timer = setTimeout(() => {
+        if (embedded) {
+          fitView({ padding: 0.1 });
+          return;
+        }
         // Calculate bounds of match nodes only (exclude divider)
-        const matchNodes = nodes.filter((n) => n.type === 'match');
+        const matchNodes = nodesRef.current.filter((n) => n.type === 'match');
         if (matchNodes.length === 0) return;
 
         const minX = Math.min(...matchNodes.map((n) => n.position.x));
@@ -490,7 +536,7 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
         const containerHeight = 700;
         const contentHeight = maxY - minY + NODE_HEIGHT;
 
-        // Choose zoom level - fit vertically if needed, max 1.0
+        // Fit vertically, zoom clamped to 0.4-0.9
         const verticalZoom = containerHeight / (contentHeight + 100);
         const zoom = Math.min(0.9, Math.max(0.4, verticalZoom));
 
@@ -507,11 +553,13 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
 
       return () => clearTimeout(timer);
     }
-  }, [nodes, setViewport]);
+  }, [layoutKey, setViewport, fitView, embedded]);
 
   const handleNodeClick = useCallback(
     (_: React.MouseEvent, node: Node) => {
       setSelectedMatchId(node.id);
+      onMatchOpen?.();
+      if (embedded) return;
       // Update URL to shareable match URL - prefer gameId (backend ID) over temporary id
       const match = matches.find((m) => m.id === node.id);
       const urlId = match?.gameId ?? node.id;
@@ -523,7 +571,7 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
         { replace: true },
       );
     },
-    [navigate, tournamentId, matches, searchParams],
+    [navigate, tournamentId, matches, searchParams, embedded, onMatchOpen],
   );
 
   if (isLoading && matches.length === 0) {
@@ -537,9 +585,17 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
   const teams = tournament?.teams ?? [];
 
   return (
-    <div className="w-full space-y-4">
+    <div
+      className={
+        embedded
+          ? 'flex h-full min-h-0 w-full flex-col gap-4'
+          : 'w-full space-y-4'
+      }
+    >
+      {header}
+
       {/* Staff toolbar */}
-      {canEdit && (
+      {canEdit && !embedded && (
         <BracketToolbar
           tournamentId={tournamentId}
           teams={teams}
@@ -561,7 +617,7 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
       {matches.length === 0 && !isLoading && !bracketData?.matches?.length && (
         <div className="flex flex-col items-center justify-center h-96 text-muted-foreground">
           <p className="mb-4">No bracket generated yet.</p>
-          {canEdit && teams.length >= 2 && (
+          {canEdit && !embedded && teams.length >= 2 && (
             <p className="text-sm">
               Use the toolbar above to generate a bracket.
             </p>
@@ -577,7 +633,10 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
       {/* Single ReactFlow instance for entire bracket */}
       {matches.length > 0 && (
         <div
-          className="h-[700px] border rounded-lg overflow-hidden bg-background"
+          className={cn(
+            'border rounded-lg overflow-hidden bg-background',
+            embedded ? 'min-h-0 flex-1' : 'h-[700px]',
+          )}
           data-testid="bracketContainer"
         >
           <ReactFlow
@@ -588,7 +647,7 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onNodeClick={handleNodeClick}
-            nodesDraggable={canEdit}
+            nodesDraggable={canEdit && !embedded}
             nodesConnectable={false}
             elementsSelectable={true}
             panOnDrag={true}
@@ -617,6 +676,7 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
         onClose={() => {
           setSelectedMatchId(null);
           setInitialDraftId(null);
+          if (embedded) return;
           // Restore URL without match - preserve search params to keep tab
           const params = searchParams.toString();
           const queryString = params ? `?${params}` : '';
@@ -625,7 +685,15 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
           });
         }}
         initialDraftId={initialDraftId}
+        embedded={embedded}
+        openableDraftIds={openableDraftIds}
         onOpenHeroDraft={(draftId) => {
+          if (embedded) {
+            setSelectedMatchId(null);
+            setInitialDraftId(null);
+            onOpenHeroDraft?.(draftId);
+            return;
+          }
           setHeroDraftId(draftId);
           setShowHeroDraftModal(true);
           // Close match modal when opening hero draft
@@ -635,7 +703,7 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
       />
 
       {/* Hero Draft Modal - rendered at bracket level for independent lifecycle */}
-      {heroDraftId && (
+      {heroDraftId && !embedded && (
         <HeroDraftModal
           draftId={heroDraftId}
           open={showHeroDraftModal}
@@ -655,10 +723,10 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
   );
 }
 
-export function BracketView({ tournamentId }: BracketViewProps) {
+export function BracketView(props: BracketViewProps) {
   return (
     <ReactFlowProvider>
-      <BracketFlowInner tournamentId={tournamentId} />
+      <BracketFlowInner {...props} />
     </ReactFlowProvider>
   );
 }

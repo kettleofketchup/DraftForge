@@ -9,6 +9,11 @@ import type { BracketMatch } from '../../types';
 import { MatchStatsModal } from '../MatchStatsModal';
 
 const persistMutate = vi.fn();
+const { useGameLobby } = vi.hoisted(() => ({
+  useGameLobby: vi.fn((_gameId?: number, _enabled?: boolean) => ({
+    data: undefined,
+  })),
+}));
 
 // jsdom has no layout, so this checks the structure that keeps the dialog
 // inside the viewport: a height-capped flex column whose header and close
@@ -45,9 +50,7 @@ vi.mock('~/hooks/useHeroDraft', () => ({
 vi.mock('~/hooks/useBracket', () => ({
   usePersistMatchResult: () => ({ isPending: false, mutate: persistMutate }),
 }));
-vi.mock('~/hooks/useGameLobby', () => ({
-  useGameLobby: () => ({ data: undefined }),
-}));
+vi.mock('~/hooks/useGameLobby', () => ({ useGameLobby }));
 vi.mock('~/components/lobby/LobbyPanel', () => ({
   LobbyPanel: () => <div data-testid="lobby-panel" style={{ height: 2000 }} />,
 }));
@@ -182,5 +185,93 @@ describe('MatchStatsModal match result persistence (issue #466)', () => {
     fireEvent.click(screen.getByTestId('unsetWinnerButton'));
 
     expect(persistMutate).toHaveBeenCalledWith({ gameId: 42, winner: null });
+  });
+});
+
+describe('MatchStatsModal embedded in the Activity', () => {
+  const draftMatch: BracketMatch = {
+    ...match,
+    status: 'live',
+    herodraft_id: 156,
+  };
+
+  beforeEach(() => {
+    useGameLobby.mockClear();
+  });
+
+  it('opens an openable hero draft through onOpenHeroDraft', () => {
+    const onOpenHeroDraft = vi.fn();
+    render(
+      <MatchStatsModal
+        match={draftMatch}
+        isOpen
+        onClose={() => {}}
+        embedded
+        openableDraftIds={new Set([156])}
+        onOpenHeroDraft={onOpenHeroDraft}
+      />,
+      { wrapper: Wrapper },
+    );
+
+    fireEvent.click(screen.getByTestId('view-draft-btn'));
+
+    expect(onOpenHeroDraft).toHaveBeenCalledWith(156);
+  });
+
+  it('hides staff, lobby and draft-start controls', () => {
+    render(
+      <MatchStatsModal
+        match={draftMatch}
+        isOpen
+        onClose={() => {}}
+        embedded
+        openableDraftIds={new Set([156])}
+        onOpenHeroDraft={vi.fn()}
+      />,
+      { wrapper: Wrapper },
+    );
+
+    expect(screen.queryByTestId('reset-draft-btn')).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId('link-steam-match-btn'),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId('lobby-panel')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('radiantWinsButton')).not.toBeInTheDocument();
+    expect(useGameLobby).toHaveBeenCalled();
+    expect(useGameLobby.mock.calls.every(([, enabled]) => !enabled)).toBe(true);
+  });
+
+  it('shows no open-draft or Start Draft button for a draft that is not openable', () => {
+    render(
+      <MatchStatsModal
+        match={draftMatch}
+        isOpen
+        onClose={() => {}}
+        embedded
+        openableDraftIds={new Set([999])}
+        onOpenHeroDraft={vi.fn()}
+      />,
+      { wrapper: Wrapper },
+    );
+
+    expect(screen.queryByTestId('view-draft-btn')).not.toBeInTheDocument();
+    expect(screen.queryByText('Start Draft')).not.toBeInTheDocument();
+  });
+
+  it('never offers Start Draft for a match with no draft', () => {
+    render(
+      <MatchStatsModal
+        match={match}
+        isOpen
+        onClose={() => {}}
+        embedded
+        openableDraftIds={new Set([156])}
+        onOpenHeroDraft={vi.fn()}
+      />,
+      { wrapper: Wrapper },
+    );
+
+    expect(screen.queryByTestId('view-draft-btn')).not.toBeInTheDocument();
+    expect(screen.queryByText('Start Draft')).not.toBeInTheDocument();
   });
 });

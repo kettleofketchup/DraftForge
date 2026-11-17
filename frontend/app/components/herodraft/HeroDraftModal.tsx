@@ -1,6 +1,6 @@
 // frontend/app/components/herodraft/HeroDraftModal.tsx
 import { ArrowLeft, Pause, Play, Send, Users } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { LoginButton } from '~/components/navbar/login';
@@ -30,6 +30,8 @@ import {
   getHeroIcon,
   getHeroName as getHeroNameFromLib,
 } from '~/lib/dota/heroes';
+import { cn } from '~/lib/utils';
+import { useActivityViewStore } from '~/store/activityViewStore';
 import { heroDraftSelectors, useHeroDraftStore } from '~/store/heroDraftStore';
 import { useUserStore } from '~/store/userStore';
 import {
@@ -83,12 +85,84 @@ function WaitingForCaptain({
   );
 }
 
+export function KickedOverlay({
+  embedded,
+  onClose,
+}: {
+  embedded: boolean;
+  onClose: () => void;
+}) {
+  if (embedded) {
+    return (
+      <div
+        className="absolute inset-0 z-50 flex items-center justify-center bg-black/80"
+        data-testid="herodraft-kicked-overlay"
+      >
+        <div className="flex max-w-md flex-col items-center gap-4 px-6 text-center">
+          <h2
+            className="text-2xl font-bold text-warning"
+            data-testid="herodraft-kicked-title"
+          >
+            This draft was opened in another window
+          </h2>
+          <PrimaryButton
+            onClick={() =>
+              useActivityViewStore.getState().remount('kicked_recover')
+            }
+            data-testid="herodraft-kicked-recover-btn"
+          >
+            Take control back
+          </PrimaryButton>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div
+      className="absolute inset-0 bg-black/80 flex items-center justify-center z-50"
+      data-testid="herodraft-kicked-overlay"
+    >
+      <div className="text-center space-y-4 max-w-md px-6">
+        <h2
+          className="text-2xl font-bold text-orange-400"
+          data-testid="herodraft-kicked-title"
+        >
+          Session Replaced
+        </h2>
+        <p className="text-gray-300" data-testid="herodraft-kicked-message">
+          Another browser tab has taken over this draft session. Refresh this
+          page to take control back.
+        </p>
+        <div className="flex flex-col gap-2 items-center pt-2">
+          <Button
+            variant="default"
+            onClick={() => window.location.reload()}
+            className="bg-orange-500 hover:bg-orange-600 text-white"
+            data-testid="herodraft-kicked-refresh-btn"
+          >
+            Refresh Page
+          </Button>
+          <PrimaryButton
+            size="sm"
+            onClick={onClose}
+            data-testid="herodraft-kicked-close-btn"
+          >
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back to Bracket
+          </PrimaryButton>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 interface HeroDraftModalProps {
   draftId: number;
   open: boolean;
   onClose: () => void;
   /** Inside a Discord Activity there is no website to return to. */
   embedded?: boolean;
+  activityHeader?: ReactNode;
 }
 
 export function HeroDraftModal({
@@ -96,9 +170,11 @@ export function HeroDraftModal({
   open,
   onClose,
   embedded = false,
+  activityHeader,
 }: HeroDraftModalProps) {
   const navigate = useNavigate();
   const { currentUser } = useUserStore();
+  const showActivityHeader = embedded && activityHeader != null;
 
   // WebSocket store - unified state and connection management
   const draft = useHeroDraftStore((state) => state.draft);
@@ -513,7 +589,10 @@ export function HeroDraftModal({
     <>
       <Dialog open={open} onOpenChange={(o) => !o && handleClose()}>
         <DialogContent
-          className="!fixed !inset-0 !translate-x-0 !translate-y-0 !top-0 !left-0 !max-w-none !w-full !h-full !p-0 !gap-0 !rounded-none !border-0 bg-background overflow-hidden"
+          className={cn(
+            '!fixed !inset-0 !translate-x-0 !translate-y-0 !top-0 !left-0 !max-w-none !w-full !h-full !p-0 !gap-0 !rounded-none !border-0 bg-background overflow-hidden',
+            showActivityHeader && 'flex flex-col',
+          )}
           showCloseButton={false}
           data-testid="herodraft-modal"
           // Prevent closing from backdrop clicks or escape key - only close via the Close button
@@ -527,9 +606,13 @@ export function HeroDraftModal({
               Captain's Mode hero draft interface
             </DialogDescription>
           </VisuallyHidden>
+          {showActivityHeader && activityHeader}
           {draft && (
             <div
-              className="flex flex-col h-full w-full bg-background overflow-hidden"
+              className={cn(
+                'flex flex-col w-full bg-background overflow-hidden',
+                showActivityHeader ? 'relative flex-1 min-h-0' : 'h-full',
+              )}
               data-testid="herodraft-container"
             >
               {/* Top Bar */}
@@ -1106,48 +1189,8 @@ export function HeroDraftModal({
                 );
               })()}
 
-              {/* Kicked overlay - shows when connection was replaced by another tab */}
               {wasKicked && (
-                <div
-                  className="absolute inset-0 bg-black/80 flex items-center justify-center z-50"
-                  data-testid="herodraft-kicked-overlay"
-                >
-                  <div className="text-center space-y-4 max-w-md px-6">
-                    <h2
-                      className="text-2xl font-bold text-orange-400"
-                      data-testid="herodraft-kicked-title"
-                    >
-                      Session Replaced
-                    </h2>
-                    <p
-                      className="text-gray-300"
-                      data-testid="herodraft-kicked-message"
-                    >
-                      Another browser tab has taken over this draft session.
-                      Refresh this page to take control back.
-                    </p>
-                    <div className="flex flex-col gap-2 items-center pt-2">
-                      <Button
-                        variant="default"
-                        onClick={() => window.location.reload()}
-                        className="bg-orange-500 hover:bg-orange-600 text-white"
-                        data-testid="herodraft-kicked-refresh-btn"
-                      >
-                        Refresh Page
-                      </Button>
-                      {!embedded && (
-                        <PrimaryButton
-                          size="sm"
-                          onClick={handleClose}
-                          data-testid="herodraft-kicked-close-btn"
-                        >
-                          <ArrowLeft className="h-4 w-4 mr-2" />
-                          Back to Bracket
-                        </PrimaryButton>
-                      )}
-                    </div>
-                  </div>
-                </div>
+                <KickedOverlay embedded={embedded} onClose={handleClose} />
               )}
 
               {/* Connection status */}
