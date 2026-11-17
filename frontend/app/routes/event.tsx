@@ -47,7 +47,6 @@ import {
   Building2,
   CheckCircle2,
   Clock,
-  HelpCircle,
   Loader2,
   Repeat,
   Undo2,
@@ -55,7 +54,6 @@ import {
   UserPlus,
   Users,
   UserX,
-  XCircle,
 } from 'lucide-react';
 import {
   useCallback,
@@ -82,10 +80,15 @@ import { EventSignupModal } from '~/components/events/EventSignupModal';
 import { evaluateSignupGap } from '~/components/events/EventSignupModal/evaluateSignupGap';
 import { EventStaffSection } from '~/components/events/EventStaffCard';
 import { MmrApprovalModal } from '~/components/events/MmrApprovalModal';
+import { MySignupActions } from '~/components/events/MySignupActions';
 import { SubscriberList } from '~/components/events/SubscriberList';
 import { canCompleteEvent } from '~/components/events/eventCompletion';
 import type { EventSignupType, EventType } from '~/components/events/schemas';
-import { EventState } from '~/components/events/schemas';
+import { EventState, ROLL_CALL_MODE_LABELS } from '~/components/events/schemas';
+import {
+  isRemovedSignup,
+  partitionSignups,
+} from '~/components/events/signupPartitions';
 import type { GameTypeValue } from '~/components/game/constants';
 import { EventLobbyPassword } from '~/components/lobby/EventLobbyPassword';
 import { useOrganization } from '~/components/organization';
@@ -331,31 +334,12 @@ export default function EventPage() {
     );
   }, [signups, currentUser?.pk]);
 
-  const activeSignups = useMemo(
-    () =>
-      (signups ?? []).filter(
-        (s) =>
-          !['waitlisted', 'tentative', 'cancelled', 'rejected'].includes(
-            s.status,
-          ),
-      ),
-    [signups],
-  );
-  const tentativeSignups = useMemo(
-    () => (signups ?? []).filter((s) => s.status === 'tentative'),
-    [signups],
-  );
-  const waitlistedSignups = useMemo(
-    () => (signups ?? []).filter((s) => s.status === 'waitlisted'),
-    [signups],
-  );
-  const removedSignups = useMemo(
-    () =>
-      (signups ?? []).filter(
-        (s) => s.status === 'cancelled' || s.status === 'rejected',
-      ),
-    [signups],
-  );
+  const {
+    active: activeSignups,
+    tentative: tentativeSignups,
+    waitlisted: waitlistedSignups,
+    removed: removedSignups,
+  } = useMemo(() => partitionSignups(signups ?? []), [signups]);
 
   const handleTabChange = useCallback(
     (newTab: string) => {
@@ -594,92 +578,16 @@ export default function EventPage() {
                     Subscribe
                   </PrimaryButton>
                 ))}
-              {/* Not signed up — show Sign Up + Tentative */}
-              {currentUser &&
-                event.state === EventState.SIGNUPS_OPEN &&
-                signups &&
-                !mySignup && (
-                  <>
-                    <PrimaryButton
-                      size="sm"
-                      onClick={() => trySignup('rsvp')}
-                      disabled={
-                        !event ||
-                        !signups ||
-                        !profileLoaded ||
-                        signupMutation.isPending
-                      }
-                      data-testid="event-signup-btn"
-                    >
-                      <CheckCircle2 className="h-4 w-4 mr-1.5" />
-                      Sign Up
-                    </PrimaryButton>
-                    <SecondaryButton
-                      size="sm"
-                      onClick={() => trySignup('tentative')}
-                      disabled={
-                        !event ||
-                        !signups ||
-                        !profileLoaded ||
-                        signupMutation.isPending
-                      }
-                      data-testid="event-tentative-btn"
-                    >
-                      <HelpCircle className="h-4 w-4 mr-1.5" />
-                      <span className="hidden sm:inline">Tentative</span>
-                    </SecondaryButton>
-                  </>
-                )}
-              {/* Signed up (active) — show status + cancel */}
-              {currentUser &&
-                event.state === EventState.SIGNUPS_OPEN &&
-                signups &&
-                mySignup &&
-                mySignup.status !== 'tentative' && (
-                  <DestructiveButton
-                    size="sm"
-                    onClick={() => setShowCancelRsvpConfirm(true)}
-                    loading={signupActions.cancel.isPending}
-                    depth={false}
-                    data-testid="event-cancel-rsvp-btn"
-                  >
-                    <XCircle className="h-4 w-4 mr-1.5" />
-                    Cancel RSVP
-                  </DestructiveButton>
-                )}
-              {/* Tentative — can upgrade to full signup or cancel */}
-              {currentUser &&
-                event.state === EventState.SIGNUPS_OPEN &&
-                signups &&
-                mySignup &&
-                mySignup.status === 'tentative' && (
-                  <>
-                    <PrimaryButton
-                      size="sm"
-                      onClick={() => trySignup('rsvp')}
-                      disabled={
-                        !event ||
-                        !signups ||
-                        !profileLoaded ||
-                        signupMutation.isPending
-                      }
-                      data-testid="event-upgrade-rsvp-btn"
-                    >
-                      <CheckCircle2 className="h-4 w-4 mr-1.5" />
-                      Sign Up
-                    </PrimaryButton>
-                    <DestructiveButton
-                      size="sm"
-                      onClick={() => setShowCancelRsvpConfirm(true)}
-                      loading={signupActions.cancel.isPending}
-                      depth={false}
-                      data-testid="event-cancel-tentative-btn"
-                    >
-                      <XCircle className="h-4 w-4 mr-1.5" />
-                      Cancel
-                    </DestructiveButton>
-                  </>
-                )}
+              {currentUser && signups && (
+                <MySignupActions
+                  mySignup={mySignup}
+                  signupsOpen={event.state === EventState.SIGNUPS_OPEN}
+                  signupDisabled={!profileLoaded || signupMutation.isPending}
+                  cancelPending={signupActions.cancel.isPending}
+                  onSignup={trySignup}
+                  onCancel={() => setShowCancelRsvpConfirm(true)}
+                />
+              )}
             </div>
           </div>
         )}
@@ -940,7 +848,12 @@ function DetailsTab({
           />
           <Stat
             label="Roll Call"
-            value={event.roll_call_enabled ? event.roll_call_mode : 'Disabled'}
+            value={
+              event.roll_call_enabled
+                ? (ROLL_CALL_MODE_LABELS[event.roll_call_mode] ??
+                  event.roll_call_mode)
+                : 'Disabled'
+            }
           />
         </CardContent>
       </Card>
@@ -1211,29 +1124,28 @@ function SignupsTab({
                   </TooltipContent>
                 </Tooltip>
               )}
-              {signup.status !== 'cancelled' &&
-                signup.status !== 'rejected' && (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <DestructiveButton
-                        size="sm"
-                        depth={false}
-                        onClick={() => {
-                          const name = user
-                            ? user.nickname || user.username
-                            : `User #${signup.user}`;
-                          setRemoveSignup({ signup, name });
-                        }}
-                      >
-                        <UserX className="h-3.5 w-3.5" />
-                        <span className="hidden lg:inline ml-1">Remove</span>
-                      </DestructiveButton>
-                    </TooltipTrigger>
-                    <TooltipContent className="lg:hidden">
-                      Remove user
-                    </TooltipContent>
-                  </Tooltip>
-                )}
+              {!isRemovedSignup(signup.status) && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <DestructiveButton
+                      size="sm"
+                      depth={false}
+                      onClick={() => {
+                        const name = user
+                          ? user.nickname || user.username
+                          : `User #${signup.user}`;
+                        setRemoveSignup({ signup, name });
+                      }}
+                    >
+                      <UserX className="h-3.5 w-3.5" />
+                      <span className="hidden lg:inline ml-1">Remove</span>
+                    </DestructiveButton>
+                  </TooltipTrigger>
+                  <TooltipContent className="lg:hidden">
+                    Remove user
+                  </TooltipContent>
+                </Tooltip>
+              )}
             </div>
           ) : undefined;
 
