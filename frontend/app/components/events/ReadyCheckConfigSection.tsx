@@ -10,6 +10,7 @@ import {
   type PathValue,
   type UseFormSetValue,
 } from 'react-hook-form';
+import type { z } from 'zod';
 import {
   Collapsible,
   CollapsibleContent,
@@ -101,11 +102,13 @@ const VOICE_FIELDS: (keyof ReadyCheckFields)[] = [
   'start_cull_enabled',
   'post_cull_fill_mode',
 ];
+type ReadyCheckFormInput = z.input<typeof readyCheckConfigSchema>;
+
 const refinedSchema = readyCheckConfigSchema.superRefine((values, ctx) =>
   refineReadyCheck(values, ctx),
 );
 
-interface Props<T extends FieldValues & ReadyCheckFields> {
+interface Props<T extends FieldValues & ReadyCheckFormInput> {
   control: Control<T>;
   setValue: UseFormSetValue<T>;
   organizationId: number | null;
@@ -113,7 +116,7 @@ interface Props<T extends FieldValues & ReadyCheckFields> {
 }
 
 export function ReadyCheckConfigSection<
-  T extends FieldValues & ReadyCheckFields,
+  T extends FieldValues & ReadyCheckFormInput,
 >({
   control: parentControl,
   setValue: parentSetValue,

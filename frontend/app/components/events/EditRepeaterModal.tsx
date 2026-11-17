@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import { z } from 'zod';
@@ -18,6 +18,7 @@ import {
 import { useUpdateEventRepeaterMutation } from '~/hooks/useEvent';
 import { useRepeaterLobbyPassword } from '~/hooks/useLobbyPassword';
 import { DiscordConfigSection } from './DiscordConfigSection';
+import { ReadyCheckConfigSection } from './ReadyCheckConfigSection';
 import {
   discordResetValues,
   dotaLobbyResetValues,
@@ -27,6 +28,7 @@ import {
   EventIdentityFields,
   EventLobbyFields,
   EventTournamentFields,
+  readyCheckResetValues,
   SeriesScheduleFields,
   TimezoneField,
 } from './form';
@@ -38,6 +40,9 @@ import {
   eventIdentitySchema,
   eventTemplateSchema,
   Frequency,
+  READY_CHECK_CONFIG_DEFAULTS,
+  readyCheckConfigSchema,
+  refineReadyCheck,
 } from './schemas';
 
 const editRepeaterSchema = eventIdentitySchema
@@ -53,6 +58,7 @@ const editRepeaterSchema = eventIdentitySchema
   .merge(discordConfigSchema)
   .merge(dotaLobbyConfigSchema)
   .merge(DraftSettingsFormSchema)
+  .merge(readyCheckConfigSchema)
   .superRefine(refineLobbyPassword);
 
 const ids = eventFieldTestIds('edit-series');
@@ -73,6 +79,15 @@ export function EditRepeaterModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const mutation = useUpdateEventRepeaterMutation(repeater?.id ?? 0);
   const { data: savedPassword } = useRepeaterLobbyPassword(repeater?.id, open);
+  const schema = useMemo(
+    () =>
+      editRepeaterSchema.superRefine((values, ctx) =>
+        refineReadyCheck(values, ctx, {
+          baseline: readyCheckResetValues(repeater),
+        }),
+      ),
+    [repeater],
+  );
 
   // 3-generic useForm to align TFieldValues=z.input and TTransformedValues=z.output
   // — zodResolver returns Resolver<z.input<S>, _, z.output<S>> under zod 4.
@@ -82,7 +97,7 @@ export function EditRepeaterModal({
     unknown,
     EditRepeaterInput
   >({
-    resolver: zodResolver(editRepeaterSchema),
+    resolver: zodResolver(schema),
     defaultValues: {
       ...EVENT_TEMPLATE_DEFAULTS,
       frequency: Frequency.WEEKLY,
@@ -94,6 +109,7 @@ export function EditRepeaterModal({
       discord_notify_new_events: true,
       ...DISCORD_CONFIG_DEFAULTS,
       ...DOTA_LOBBY_CONFIG_DEFAULTS,
+      ...READY_CHECK_CONFIG_DEFAULTS,
       ...draftSettingsToFormInput(null),
     },
   });
@@ -123,6 +139,7 @@ export function EditRepeaterModal({
         discord_notify_new_events: repeater.discord_notify_new_events,
         ...discordResetValues(repeater),
         ...dotaLobbyResetValues(repeater, { savedFromMode: true }),
+        ...readyCheckResetValues(repeater),
       });
     }
   }, [repeater, open]);
@@ -243,6 +260,16 @@ export function EditRepeaterModal({
               watch={form.watch}
               isRepeater={true}
               organizationId={repeater?.organization ?? 0}
+            />
+          ),
+        },
+        {
+          value: 'ready',
+          content: (
+            <ReadyCheckConfigSection
+              control={form.control}
+              setValue={form.setValue}
+              organizationId={repeater?.organization ?? null}
             />
           ),
         },

@@ -9,6 +9,7 @@ import {
   editEventFormSchema,
   eventSchema,
   localToUTC,
+  READY_CHECK_CONFIG_DEFAULTS,
   refineEventEnd,
   utcToLocalInput,
 } from '~/components/events/schemas';
@@ -231,6 +232,7 @@ const LOBBY_KEYS = [
   'dota_lobby_password',
   'dota_lobby_password_saved',
 ];
+const READY_CHECK_KEYS = Object.keys(READY_CHECK_CONFIG_DEFAULTS);
 
 describe('event form schema key sets', () => {
   const keys = (shape: object) => Object.keys(shape).sort();
@@ -241,6 +243,7 @@ describe('event form schema key sets', () => {
         ...TEMPLATE_KEYS,
         ...DISCORD_KEYS,
         ...LOBBY_KEYS,
+        ...READY_CHECK_KEYS,
         ...[
           'scheduled_at',
           'organization',
@@ -267,6 +270,7 @@ describe('event form schema key sets', () => {
         ...TEMPLATE_KEYS,
         ...DISCORD_KEYS,
         ...LOBBY_KEYS,
+        ...READY_CHECK_KEYS,
         ...['scheduled_at', 'tournament_league', 'open_signups'],
       ].sort(),
     );
@@ -278,6 +282,7 @@ describe('event form schema key sets', () => {
         ...TEMPLATE_KEYS,
         ...DISCORD_KEYS,
         ...LOBBY_KEYS,
+        ...READY_CHECK_KEYS,
         ...[
           'scheduled_at',
           'event_ends_at',

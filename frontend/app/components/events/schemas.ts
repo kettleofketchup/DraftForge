@@ -726,7 +726,8 @@ export const createEventInputSchema = eventIdentitySchema
     event_ends_at: z.string().optional(),
   })
   .merge(discordConfigSchema)
-  .merge(dotaLobbyConfigSchema);
+  .merge(dotaLobbyConfigSchema)
+  .merge(readyCheckConfigSchema);
 
 export type CreateEventInput = z.infer<typeof createEventInputSchema>;
 
@@ -750,7 +751,8 @@ export const createSeriesEventInputSchema = createEventInputSchema
   })
   .extend({ open_signups: z.boolean().default(false) })
   .merge(discordConfigSchema)
-  .merge(dotaLobbyConfigSchema);
+  .merge(dotaLobbyConfigSchema)
+  .merge(readyCheckConfigSchema);
 
 export type CreateSeriesEventInput = z.output<
   typeof createSeriesEventInputSchema
@@ -766,6 +768,7 @@ export const editEventFormSchema = eventIdentitySchema
   .merge(discordConfigSchema)
   .merge(dotaLobbyConfigSchema)
   .merge(DraftSettingsFormSchema)
+  .merge(readyCheckConfigSchema)
   .superRefine((values, ctx) => {
     refineLobbyPassword(values, ctx);
     refineEventEnd(values, ctx);

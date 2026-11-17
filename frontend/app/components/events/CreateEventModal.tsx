@@ -29,6 +29,7 @@ import {
 import { Input } from '~/components/ui/input';
 import { ApprovalConfigSection } from './ApprovalConfigSection';
 import { DiscordConfigSection } from './DiscordConfigSection';
+import { ReadyCheckConfigSection } from './ReadyCheckConfigSection';
 import {
   discordResetValues,
   EVENT_TEMPLATE_DEFAULTS,
@@ -38,6 +39,7 @@ import {
   EventLobbyFields,
   EventTournamentFields,
   OneOffScheduleFields,
+  readyCheckResetValues,
   SeriesScheduleFields,
   TimezoneField,
 } from './form';
@@ -47,7 +49,11 @@ import {
   DOTA_LOBBY_CONFIG_DEFAULTS,
   Frequency,
   localToUTC,
+  READY_CHECK_CONFIG_DEFAULTS,
+  READY_CHECK_PREFILL_KEYS,
   refineEventEnd,
+  refineReadyCheck,
+  type ReadyCheckFields,
 } from './schemas';
 
 const ids = eventFieldTestIds('event');
@@ -58,6 +64,7 @@ const createEventFormSchema = createEventInputSchema
   .superRefine((values, ctx) => {
     refineLobbyPassword(values, ctx);
     if (!values.is_recurring) refineEventEnd(values, ctx);
+    refineReadyCheck(values, ctx);
   });
 type CreateEventFormOutput = z.output<typeof createEventFormSchema>;
 
@@ -111,6 +118,7 @@ export function CreateEventModal({
       discord_notify_new_events: true,
       ...DISCORD_CONFIG_DEFAULTS,
       ...DOTA_LOBBY_CONFIG_DEFAULTS,
+      ...READY_CHECK_CONFIG_DEFAULTS,
       signup_mode: 'immediate' as const,
       signup_days_before: 3,
       is_recurring: false,
@@ -151,6 +159,11 @@ export function CreateEventModal({
         // off and a random password.
         ...DOTA_LOBBY_CONFIG_DEFAULTS,
         ...eventFieldsToDraftSettingsFormInput(orgDefaults),
+        ...readyCheckResetValues(
+          Object.fromEntries(
+            READY_CHECK_PREFILL_KEYS.map((key) => [key, orgDefaults[key]]),
+          ) as Partial<ReadyCheckFields>,
+        ),
       });
       setDefaultsApplied(true);
     }
@@ -459,6 +472,16 @@ export function CreateEventModal({
               control={form.control}
               watch={form.watch}
               isRepeater={isRecurring}
+              organizationId={organizationId}
+            />
+          ),
+        },
+        {
+          value: 'ready',
+          content: (
+            <ReadyCheckConfigSection
+              control={form.control}
+              setValue={form.setValue}
               organizationId={organizationId}
             />
           ),

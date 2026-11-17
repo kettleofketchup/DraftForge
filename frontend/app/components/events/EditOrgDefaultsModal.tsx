@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQuery } from '@tanstack/react-query';
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import { z } from 'zod';
@@ -28,13 +28,21 @@ import {
 } from '~/components/ui/select';
 import { useUpdateOrgDefaultsMutation } from '~/hooks/useEvent';
 import { DiscordConfigSection } from './DiscordConfigSection';
+import { ReadyCheckConfigSection } from './ReadyCheckConfigSection';
 import {
   eventFieldTestIds,
   EventFormDialog,
   EventTournamentFields,
+  readyCheckResetValues,
   TimezoneField,
 } from './form';
-import { DISCORD_CONFIG_DEFAULTS, discordConfigSchema } from './schemas';
+import {
+  DISCORD_CONFIG_DEFAULTS,
+  discordConfigSchema,
+  READY_CHECK_CONFIG_DEFAULTS,
+  readyCheckConfigSchema,
+  refineReadyCheck,
+} from './schemas';
 
 const ids = eventFieldTestIds('org-defaults');
 
@@ -52,10 +60,10 @@ const orgDefaultsSchema = z
     game_mode: z.string(),
     max_players: z.number().int().min(1).nullable(),
     auto_approve: z.boolean(),
-    auto_confirm: z.boolean(),
   })
   .merge(discordConfigSchema)
-  .merge(DraftSettingsFormSchema);
+  .merge(DraftSettingsFormSchema)
+  .merge(readyCheckConfigSchema);
 
 type OrgDefaultsInput = z.infer<typeof orgDefaultsSchema>;
 
@@ -77,6 +85,16 @@ export function EditOrgDefaultsModal({
     queryFn: () => getOrgEventDefaults(organizationId),
     enabled: open && !!organizationId,
   });
+  const schema = useMemo(
+    () =>
+      orgDefaultsSchema.superRefine((values, ctx) =>
+        refineReadyCheck(values, ctx, {
+          baseline: readyCheckResetValues(defaults),
+          autoConfirmVisible: true,
+        }),
+      ),
+    [defaults],
+  );
 
   // 3-generic useForm to align TFieldValues=z.input and TTransformedValues=z.output
   // — zodResolver returns Resolver<z.input<S>, _, z.output<S>> under zod 4.
@@ -86,7 +104,7 @@ export function EditOrgDefaultsModal({
     unknown,
     OrgDefaultsInput
   >({
-    resolver: zodResolver(orgDefaultsSchema),
+    resolver: zodResolver(schema),
     defaultValues: {
       tournament_name: '',
       tournament_type: 'double_elimination',
@@ -98,9 +116,9 @@ export function EditOrgDefaultsModal({
       game_mode: 'normal',
       max_players: null,
       auto_approve: false,
-      auto_confirm: false,
       ...DISCORD_CONFIG_DEFAULTS,
       ...draftSettingsToFormInput(null),
+      ...READY_CHECK_CONFIG_DEFAULTS,
     },
   });
 
@@ -117,7 +135,6 @@ export function EditOrgDefaultsModal({
         game_mode: defaults.game_mode,
         max_players: defaults.max_players,
         auto_approve: defaults.auto_approve,
-        auto_confirm: defaults.auto_confirm,
         discord_create_event: defaults.discord_create_event,
         discord_sync_signups: defaults.discord_sync_signups,
         discord_event_title: defaults.discord_event_title,
@@ -151,6 +168,7 @@ export function EditOrgDefaultsModal({
         require_mmr_verified: defaults.require_mmr_verified ?? false,
         require_profile_complete: defaults.require_profile_complete ?? false,
         ...eventFieldsToDraftSettingsFormInput(defaults),
+        ...readyCheckResetValues(defaults),
       });
     }
   }, [defaults, open]);
@@ -244,11 +262,6 @@ export function EditOrgDefaultsModal({
                         'Auto-approve signups',
                         'org-defaults-auto-approve-checkbox',
                       ],
-                      [
-                        'auto_confirm',
-                        'Auto-confirm signups',
-                        'org-defaults-auto-confirm-checkbox',
-                      ],
                     ] as const
                   ).map(([name, label, testId]) => (
                     <FormField
@@ -337,6 +350,17 @@ export function EditOrgDefaultsModal({
               watch={form.watch}
               isRepeater={false}
               organizationId={organizationId}
+            />
+          ),
+        },
+        {
+          value: 'ready',
+          content: (
+            <ReadyCheckConfigSection
+              control={form.control}
+              setValue={form.setValue}
+              organizationId={organizationId}
+              showAutoConfirm
             />
           ),
         },
