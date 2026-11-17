@@ -1,11 +1,12 @@
 from datetime import timedelta
 from unittest.mock import patch as mock_patch
 
-import pydantic
+from django.conf import settings
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from django.test import TestCase
 from django.utils import timezone
+from rest_framework.test import APIClient
 
 from app.models import CustomUser, GameType, Organization
 from events.models import Event, EventState
@@ -229,7 +230,7 @@ class ApplySignupInputTests(TestCase):
             )
         self.assertEqual(ctx.exception.code, "duplicate_friend_id")
         self.assertIn("9999", str(ctx.exception))
-        self.assertIn("dota.kettle.sh", str(ctx.exception))
+        self.assertIn(settings.SITE_URL, str(ctx.exception))
 
     def test_multi_call_partial_patch_accumulates(self):
         # Mirror Discord's 4-turn flow: rank_status, then positions, then medal,
@@ -343,11 +344,23 @@ class FriendIdInputTests(EventTestCase):
             )
         self.assertEqual(cm.exception.code, "duplicate_friend_id")
 
-    def test_schema_rejects_non_numeric(self) -> None:
-        for fid in ("abc", " 123", "9" * 21):
+    def test_schema_strips_friend_id(self) -> None:
+        patch = SignupInputPatch(unverified_friend_id=" 123 ")
+        self.assertEqual(patch.unverified_friend_id, "123")
+
+    def test_malformed_friend_id_rejected_by_validator(self) -> None:
+        ev = self.make_event()
+        ou = self._org_user(self.make_user())
+        for fid in ("abc", "\u0661\u0662\u0663", "9" * 21):
             with self.subTest(fid=fid):
-                with self.assertRaises(pydantic.ValidationError):
-                    SignupInputPatch(unverified_friend_id=fid)
+                with self.assertRaises(DjangoValidationError) as cm:
+                    apply_signup_input(
+                        org_user=ou,
+                        event=ev,
+                        patch=SignupInputPatch(unverified_friend_id=fid),
+                    )
+                self.assertEqual(cm.exception.code, "invalid_friend_id")
+        self.assertFalse(PlayerDotaProfile.objects.filter(org_user=ou).exists())
 
     def test_empty_string_still_clears(self) -> None:
         ev = self.make_event()
@@ -359,3 +372,30 @@ class FriendIdInputTests(EventTestCase):
         self.assertEqual(
             PlayerDotaProfile.objects.get(org_user=ou).unverified_friend_id, ""
         )
+
+
+class SignupViewFriendIdTests(EventTestCase):
+    def _post(self, user: CustomUser, event: Event, fid: str) -> object:
+        client = APIClient()
+        client.force_authenticate(user)
+        return client.post(
+            f"/api/events/{event.pk}/signup/",
+            {"intent": "rsvp", "profile": {"unverified_friend_id": fid}},
+            format="json",
+        )
+
+    def test_padded_friend_id_is_stored_stripped(self) -> None:
+        ev = self.make_event()
+        u = self.make_user()
+        resp = self._post(u, ev, " 0777123 ")
+        self.assertEqual(resp.status_code, 201, resp.data)
+        ou = OrgUser.objects.get(user=u, organization=self.org)
+        self.assertEqual(
+            PlayerDotaProfile.objects.get(org_user=ou).unverified_friend_id, "777123"
+        )
+
+    def test_non_numeric_friend_id_gets_friendly_error(self) -> None:
+        ev = self.make_event()
+        resp = self._post(self.make_user(), ev, "abc")
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.data["error"], "Friend ID must be digits only (max 20).")

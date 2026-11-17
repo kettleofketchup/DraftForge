@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 from app.models import CustomUser, GameType
 from events.discord.providers.deadlock import DeadlockHandler
 from events.discord.providers.dota import DotaHandler
@@ -65,3 +67,37 @@ class FriendIdModalTests(EventTestCase):
                 self.assertTrue(result["message"])
                 self.assertFalse(PlayerDotaProfile.objects.filter(org_user=ou).exists())
                 self.assertFalse(EventSignup.objects.filter(event=ev, user=u).exists())
+
+
+class FriendIdModalLoggingTests(EventTestCase):
+    def _assert_logged(self, module: str, handler: object, ev: object) -> None:
+        u = self.make_user()
+        ou = OrgUser.objects.get(user=u, organization=self.org)
+        with patch(f"events.discord.providers.{module}.log") as log:
+            result = handler.apply_modal_submit(
+                ev,
+                ou,
+                u,
+                {
+                    "unverified_friend_id": "abc",
+                    "deadlock_rank": "Ritualist",
+                    "rank_status": "active",
+                },
+            )
+        self.assertEqual(result["action"], "error")
+        log.info.assert_any_call(
+            "signup_input_rejected",
+            system="discord",
+            subsystem="interaction",
+            reason="invalid_friend_id",
+        )
+        for call in log.info.call_args_list:
+            self.assertNotIn("abc", call.kwargs.values())
+
+    def test_deadlock_logs_rejection(self) -> None:
+        self._assert_logged(
+            "deadlock", DeadlockHandler(), self.make_event(game_type=GameType.DEADLOCK)
+        )
+
+    def test_dota_logs_rejection(self) -> None:
+        self._assert_logged("dota", DotaHandler(), self.make_event())

@@ -61,6 +61,12 @@ class DeadlockHandler:
                 values.get("unverified_friend_id", ""), org_user
             )
         except ValidationError as e:
+            log.info(
+                "signup_input_rejected",
+                system="discord",
+                subsystem="interaction",
+                reason=e.code,
+            )
             return {"action": "error", "message": e.messages[0]}
 
         # Save Deadlock profile and sign up directly

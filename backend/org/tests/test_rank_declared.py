@@ -1,5 +1,6 @@
 from django.test import TestCase
 from django.urls import reverse
+from rest_framework.response import Response
 from rest_framework.test import APIClient
 
 from app.models import CustomUser, Organization
@@ -105,3 +106,60 @@ class RankDeclaredViewTest(TestCase):
             self._member_patch({"rank_status": "active", "pos_2": True}), 200
         )
         self.assertEqual(self._profile().rank_declared_at, first)
+
+
+class DotaProfileFriendIdTest(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.owner = CustomUser.objects.create_user(username="fid_owner", password="x")
+        cls.member = CustomUser.objects.create_user(username="fid_member", password="x")
+        cls.other = CustomUser.objects.create_user(username="fid_other", password="x")
+        cls.org = Organization.objects.create(name="Friend ID Org", owner=cls.owner)
+        cls.org.staff.add(cls.owner)
+        cls.org_user = OrgUser.objects.create(user=cls.member, organization=cls.org)
+        other_ou = OrgUser.objects.create(user=cls.other, organization=cls.org)
+        PlayerDotaProfile.objects.create(org_user=other_ou, unverified_friend_id="5150")
+        PlayerDotaProfile.objects.create(
+            org_user=cls.org_user, unverified_friend_id="111"
+        )
+
+    def _patch(self, actor: CustomUser, url: str, fid: str) -> Response:
+        client = APIClient()
+        client.force_authenticate(actor)
+        return client.patch(
+            url, {"unverified_friend_id": fid, "pos_1": True}, format="json"
+        )
+
+    def _my_url(self) -> str:
+        return reverse("update-my-dota-profile", args=[self.org.pk])
+
+    def _staff_url(self) -> str:
+        return reverse("update-user-dota-profile", args=[self.org.pk, self.member.pk])
+
+    def _profile(self) -> PlayerDotaProfile:
+        return PlayerDotaProfile.objects.get(org_user=self.org_user)
+
+    def test_rejected_ids_leave_profile_unchanged(self) -> None:
+        cases = [
+            (self.member, self._my_url(), "5150"),
+            (self.member, self._my_url(), "abc"),
+            (self.owner, self._staff_url(), "05150"),
+        ]
+        for actor, url, fid in cases:
+            with self.subTest(actor=actor.username, fid=fid):
+                resp = self._patch(actor, url, fid)
+                self.assertEqual(resp.status_code, 400)
+                self.assertTrue(resp.data["unverified_friend_id"])
+                profile = self._profile()
+                self.assertEqual(profile.unverified_friend_id, "111")
+                self.assertFalse(profile.pos_1)
+
+    def test_valid_id_is_stored_canonical(self) -> None:
+        resp = self._patch(self.member, self._my_url(), " 0222 ")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(self._profile().unverified_friend_id, "222")
+
+    def test_empty_id_clears(self) -> None:
+        resp = self._patch(self.member, self._my_url(), "")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(self._profile().unverified_friend_id, "")

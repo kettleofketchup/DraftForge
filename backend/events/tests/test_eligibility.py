@@ -1,6 +1,7 @@
 from itertools import product
 
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.test import override_settings
 
 from app.models import CustomUser, GameType
 from events.discord.providers.dota import _check_dota_profile_complete
@@ -372,6 +373,26 @@ class ValidateFriendIdTests(EventTestCase):
         with self.assertRaises(DjangoValidationError) as cm:
             validate_friend_id("565656", self._org_user(self.make_user()))
         self.assertEqual(cm.exception.code, "duplicate_friend_id")
+
+    def test_leading_zero_collides_with_other_profile(self) -> None:
+        other = self._org_user(self.make_user())
+        PlayerDotaProfile.objects.create(org_user=other, unverified_friend_id="123")
+        with self.assertRaises(DjangoValidationError) as cm:
+            validate_friend_id("0123", self._org_user(self.make_user()))
+        self.assertEqual(cm.exception.code, "duplicate_friend_id")
+
+    def test_returns_canonical_form(self) -> None:
+        ou = self._org_user(self.make_user())
+        self.assertEqual(validate_friend_id(" 00424242 ", ou), "424242")
+
+    @override_settings(SITE_URL="https://events.example.test")
+    def test_duplicate_message_points_at_site_url(self) -> None:
+        other = self._org_user(self.make_user())
+        PlayerDotaProfile.objects.create(org_user=other, unverified_friend_id="454545")
+        with self.assertRaises(DjangoValidationError) as cm:
+            validate_friend_id("454545", self._org_user(self.make_user()))
+        self.assertIn("https://events.example.test", cm.exception.messages[0])
+        self.assertNotIn("dota.kettle.sh", cm.exception.messages[0])
 
     def test_own_profiles_are_not_a_collision(self) -> None:
         ou = self._org_user(self.make_user())

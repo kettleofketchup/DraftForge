@@ -2,6 +2,7 @@
 
 from typing import Any
 
+from django.core.exceptions import ValidationError
 from rest_framework import permissions, status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.request import Request
@@ -10,6 +11,7 @@ from rest_framework.response import Response
 from app.cache_utils import invalidate_obj
 from app.models import Organization
 from app.permissions_org import has_org_staff_access
+from events.eligibility import validate_friend_id
 from org.models import OrgUser
 from org.models_profiles import PlayerDotaProfile
 
@@ -68,11 +70,16 @@ def _invalid_rank_status(data: dict[str, Any]) -> Response | None:
 def _apply_dota_profile_patch(
     org_user: OrgUser, data: dict[str, Any]
 ) -> PlayerDotaProfile:
+    """Raises ValidationError for a bad friend ID before writing anything."""
+    fields = {f: data[f] for f in DOTA_PROFILE_FIELDS if f in data}
+    if "unverified_friend_id" in fields:
+        fields["unverified_friend_id"] = validate_friend_id(
+            str(fields["unverified_friend_id"] or ""), org_user
+        )
     profile, _ = PlayerDotaProfile.objects.get_or_create(org_user=org_user)
     previous_status = profile.rank_status
-    for field in DOTA_PROFILE_FIELDS:
-        if field in data:
-            setattr(profile, field, data[field])
+    for field, value in fields.items():
+        setattr(profile, field, value)
     profile.sync_rank_declaration(previous_status)
     profile.save()
     invalidate_obj(profile)
@@ -114,7 +121,13 @@ def update_my_dota_profile(request: Request, org_id: int) -> Response:
 
     if (error := _invalid_rank_status(request.data)) is not None:
         return error
-    profile = _apply_dota_profile_patch(org_user, request.data)
+    try:
+        profile = _apply_dota_profile_patch(org_user, request.data)
+    except ValidationError as e:
+        return Response(
+            {"unverified_friend_id": e.messages[0]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
     return Response(_serialize_dota_profile(profile))
 
 
@@ -168,7 +181,13 @@ def update_user_dota_profile(request: Request, org_id: int, user_pk: int) -> Res
 
     if (error := _invalid_rank_status(request.data)) is not None:
         return error
-    profile = _apply_dota_profile_patch(org_user, request.data)
+    try:
+        profile = _apply_dota_profile_patch(org_user, request.data)
+    except ValidationError as e:
+        return Response(
+            {"unverified_friend_id": e.messages[0]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
     return Response(_serialize_dota_profile(profile))
 
 

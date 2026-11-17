@@ -10,6 +10,7 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Protocol
 
+from django.conf import settings
 from django.core.exceptions import ValidationError
 
 from app.models import CustomUser, GameType
@@ -66,8 +67,9 @@ def steam_friend_id_from_profiles(org_user: OrgUser | None) -> str:
 
 
 def validate_friend_id(fid: str, org_user: OrgUser) -> str:
-    """Return ``fid`` stripped, or raise if it is malformed or owned by
-    another account (any game profile, or another user's Steam account).
+    """Return ``fid`` in canonical form (stripped, no leading zeros), or
+    raise if it is malformed or owned by another account (any game profile,
+    or another user's Steam account).
 
     ``""`` is returned as-is so callers can clear the field.
     """
@@ -79,6 +81,7 @@ def validate_friend_id(fid: str, org_user: OrgUser) -> str:
             f"Friend ID must be digits only (max {FRIEND_ID_MAX_LENGTH}).",
             code="invalid_friend_id",
         )
+    fid = str(int(fid))
     # Global scope: Friend ID is unique site-wide, not per-org.
     collision = any(
         model.objects.filter(unverified_friend_id=fid)
@@ -96,7 +99,7 @@ def validate_friend_id(fid: str, org_user: OrgUser) -> str:
     if collision:
         raise ValidationError(
             f"Friend ID {fid} is already registered to another account. "
-            f"Contact an admin or login to https://dota.kettle.sh to claim it.",
+            f"Contact an admin or login to {settings.SITE_URL} to claim it.",
             code="duplicate_friend_id",
         )
     return fid

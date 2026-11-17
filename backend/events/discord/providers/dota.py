@@ -97,6 +97,12 @@ class DotaHandler:
                 values.get("unverified_friend_id", ""), org_user
             )
         except DjangoValidationError as exc:
+            log.info(
+                "signup_input_rejected",
+                system="discord",
+                subsystem="interaction",
+                reason=exc.code,
+            )
             return {"action": "error", "message": exc.messages[0]}
 
         # NOTE: positions are collected in the follow-up PositionConfirmButton
