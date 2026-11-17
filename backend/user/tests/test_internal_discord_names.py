@@ -1,13 +1,15 @@
+from datetime import timedelta
 from typing import Any
 from unittest import mock
 
 from django.core.cache import cache
 from django.test import TestCase, override_settings
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 import app.internal_client as internal_client
-from app.models import CustomUser, Organization
+from app.models import CustomUser, League, Organization, Tournament
 from org.activity import guild_sync_lock
 from org.models import OrgUser
 from user.internal import discord_names as internal_discord_names
@@ -24,8 +26,13 @@ TARGETS_URL = "/api/internal/orgs/discord-name-sync-targets/"
 BULK_URL = "/api/internal/discord/member-names/bulk-update/"
 
 
-def _touch(org_id: int) -> None:
-    cache.set(f"org_activity_{org_id}", 1, 60)
+def _make_active(org: Organization) -> None:
+    league = League.objects.create(name=f"{org.name} league", organization=org)
+    Tournament.objects.create(
+        name=f"{org.name} cup",
+        date_played=timezone.now() + timedelta(days=1),
+        league=league,
+    )
 
 
 @override_settings(INTERNAL_SERVICE_TOKEN=TOKEN, CACHES=LOCMEM)
@@ -51,11 +58,11 @@ class DiscordNameSyncTargetsTest(TestCase):
         resp = self.client.get(TARGETS_URL)
         self.assertIn(resp.status_code, (401, 403))
 
-    def test_active_scope_returns_only_touched_orgs(self) -> None:
-        _touch(self.a.pk)
-        _touch(self.c.pk)
-        _touch(self.none.pk)
-        _touch(self.blank.pk)
+    def test_active_scope_returns_orgs_with_current_tournaments(self) -> None:
+        _make_active(self.a)
+        _make_active(self.c)
+        _make_active(self.none)
+        _make_active(self.blank)
         rows = self._get(scope="active")
         self.assertEqual(
             sorted((r["org_id"], r["guild_id"]) for r in rows),
@@ -63,7 +70,7 @@ class DiscordNameSyncTargetsTest(TestCase):
         )
 
     def test_default_scope_is_active(self) -> None:
-        _touch(self.c.pk)
+        _make_active(self.c)
         self.assertEqual(self._get(), [{"org_id": self.c.pk, "guild_id": "222"}])
 
     def test_empty_guild_orgs_never_returned(self) -> None:
@@ -91,8 +98,8 @@ class DiscordNameSyncTargetsTest(TestCase):
         self.assertFalse(guild_sync_lock("111"))
 
     def test_lock_skips_only_locked_guilds(self) -> None:
-        _touch(self.a.pk)
-        _touch(self.c.pk)
+        _make_active(self.a)
+        _make_active(self.c)
         self.assertTrue(guild_sync_lock("111"))
         rows = self._get(scope="active", lock=1)
         self.assertEqual(rows, [{"org_id": self.c.pk, "guild_id": "222"}])

@@ -81,7 +81,6 @@ from events.services import (
 )
 from events.utils import starts_in_future
 from lobby.passwords import PasswordMode
-from org.activity import touch_org_activity
 from org.contributions.services import should_sync_staff, sync_event_staff_entries
 from org.feature_errors import not_permitted
 from telemetry.logging import get_logger
@@ -674,7 +673,6 @@ class EventViewSet(viewsets.ModelViewSet):
             return self.get_serializer(instance).data
 
         data = dict(get_data())  # shallow-copy
-        touch_org_activity(request, data.get("organization"))
         _attach_user_can_manage(data, request.user)
         return Response(data)
 
