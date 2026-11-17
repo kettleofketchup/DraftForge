@@ -172,6 +172,16 @@ def resolve_or_create_org_user(user, organization):
     return org_user
 
 
+def _first_fields_carry(existing: EventSignup | None) -> dict[str, Any]:
+    if existing is None:
+        return {}
+    return {
+        "first_signed_up_at": existing.first_signed_up_at,
+        "first_commitment": existing.first_commitment,
+        "first_rsvp_class": existing.first_rsvp_class,
+    }
+
+
 def _get_active_signup_count(event):
     """Count non-cancelled, non-rejected, non-waitlisted signups."""
     return (
@@ -199,6 +209,7 @@ def _create_signup(event, user, event_team=None):
     re-warm it with stale data.
     """
     existing = EventSignup.objects.filter(event=event, user=user).first()
+    carry = _first_fields_carry(existing)
     if existing:
         logger.info(
             "signup_existing_found",
@@ -246,6 +257,7 @@ def _create_signup(event, user, event_team=None):
             signup_type=signup_type,
             status=SignupStatus.WAITLISTED,
             waitlist_position=max_pos + 1,
+            **carry,
         )
         apply_signup_writethrough(signup)
         invalidate_after_commit(event)
@@ -274,6 +286,7 @@ def _create_signup(event, user, event_team=None):
         event_team=event_team,
         signup_type=signup_type,
         status=status,
+        **carry,
     )
     apply_signup_writethrough(signup)
     if status == SignupStatus.CONFIRMED:
@@ -342,6 +355,7 @@ def create_tentative_signup(event, user):
         raise ValueError("Event is not accepting signups")
 
     existing = EventSignup.objects.filter(event=event, user=user).first()
+    carry = _first_fields_carry(existing)
     notify_scheduled_by_cancel = False
     if existing:
         if existing.status == SignupStatus.TENTATIVE:
@@ -352,7 +366,7 @@ def create_tentative_signup(event, user):
         EventSignup.objects.filter(pk=existing.pk).delete()
 
     signup = EventSignup.objects.create(
-        event=event, user=user, status=SignupStatus.TENTATIVE
+        event=event, user=user, status=SignupStatus.TENTATIVE, **carry
     )
     # invalidate_after_commit is on_commit-aware internally; do NOT wrap.
     invalidate_after_commit(signup, event)
