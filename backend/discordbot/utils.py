@@ -40,6 +40,10 @@ DISCORD_API_BASE = "https://discord.com/api/v10"
 DISCORD_CODE_UNKNOWN_MESSAGE = 10008
 
 
+class DiscordRateLimitTimeout(requests.RequestException, RuntimeError):
+    """No rate-limit token within max_wait; a RequestException so callers treat it as a failed send."""
+
+
 class MessageDeletedError(Exception):
     """Raised when Discord reports the target message no longer exists (404 / 10008)."""
 
@@ -92,7 +96,7 @@ def _acquire_rate_limit_token(max_wait: float = 10.0) -> bool:
     Blocks up to max_wait seconds waiting for a token. Falls back to allowing
     the request if Redis is unavailable.
 
-    Raises RuntimeError if no token is acquired within max_wait.
+    Raises DiscordRateLimitTimeout if no token is acquired within max_wait.
     """
     rate = getattr(settings, "DISCORD_RATE_LIMIT", 40)
     burst = getattr(settings, "DISCORD_RATE_LIMIT_BURST", 40)
@@ -110,7 +114,9 @@ def _acquire_rate_limit_token(max_wait: float = 10.0) -> bool:
             )
             return True
         if _time.monotonic() >= deadline:
-            raise RuntimeError(f"Discord rate limit: no token within {max_wait}s")
+            raise DiscordRateLimitTimeout(
+                f"Discord rate limit: no token within {max_wait}s"
+            )
         _time.sleep(0.05)
 
 

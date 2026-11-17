@@ -1,10 +1,12 @@
 from datetime import timedelta
+from unittest.mock import patch
 
 from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, Organization
+from app.models import CustomUser, Game, HeroDraft, Organization, Team, Tournament
+from events.models import Event
 
 
 class TaskScheduleEndpointTest(TestCase):
@@ -57,8 +59,7 @@ class TaskScheduleEndpointTest(TestCase):
         tasks = resp.json()
         task_names = [t["task"] for t in tasks]
         self.assertIn("announcement", task_names)
-        # signup_reminder absorbed the former subscriber_dm task — it now drives
-        # subscriber DMs and uses has_dms for fired detection.
+        # signup_reminder drives subscriber DMs; fired detection uses has_dms.
         self.assertIn("signup_reminder", task_names)
         self.assertIn("confirm_attendance", task_names)
         self.assertIn("profile_reminder", task_names)
@@ -199,9 +200,7 @@ class FireSignupPostRepostTest(TestCase):
             discord_announcement_channel_id="ch_ann",
         )
         # Both is_staff and is_superuser bypass the org-admin cascade
-        # (see has_org_admin_access in app/permissions_org.py). We use a
-        # superuser here because the test predates that cascade widening
-        # and there's no reason to narrow it.
+        # (see has_org_admin_access in app/permissions_org.py).
         self.admin = CustomUser.objects.create_superuser(
             username="repost_admin", password="x"
         )
@@ -326,3 +325,68 @@ class ScheduledEventPastStartTest(TestCase):
         self.assertEqual(resp.status_code, 400, resp.content)
         self.assertEqual(resp.json()["error"], "Event start time has passed")
         mock_app.send_task.assert_not_called()
+
+
+class FireHeroDraftDmTest(TestCase):
+    def setUp(self) -> None:
+        self.client = APIClient()
+        self.org = Organization.objects.create(name="HeroDraft DM Org")
+        self.tournament = Tournament.objects.create(
+            name="HeroDraft DM Tournament", date_played=timezone.now()
+        )
+        captain1 = CustomUser.objects.create_user(username="hd_cap1", password="x")
+        captain2 = CustomUser.objects.create_user(username="hd_cap2", password="x")
+        self.radiant = Team.objects.create(
+            name="Radiant Team", tournament=self.tournament, captain=captain1
+        )
+        self.dire = Team.objects.create(
+            name="Dire Team", tournament=self.tournament, captain=captain2
+        )
+        self.game = Game.objects.create(
+            tournament=self.tournament,
+            radiant_team=self.radiant,
+            dire_team=self.dire,
+        )
+        self.herodraft = HeroDraft.objects.create(game=self.game)
+        self.event = Event.objects.create(
+            organization=self.org,
+            name="HeroDraft DM Event",
+            state="signups_open",
+            scheduled_at=timezone.now() + timedelta(hours=24),
+            tournament=self.tournament,
+        )
+        admin = CustomUser.objects.create_superuser(username="hd_admin", password="x")
+        self.client.force_authenticate(user=admin)
+
+    def test_resend_passes_game_id_to_task(self) -> None:
+        with patch("celery.current_app") as mock_app:
+            resp = self.client.post(
+                f"/api/events/{self.event.pk}/task-schedule/herodraft_dm/fire/"
+            )
+
+        self.assertEqual(resp.status_code, 200, resp.content)
+        mock_app.send_task.assert_called_once()
+        call = mock_app.send_task.call_args
+        self.assertEqual(
+            call.args[0], "events.tournament_tasks.send_tournament_herodraft_links"
+        )
+        args = list(call.kwargs.get("args", []))
+        kwargs = dict(call.kwargs.get("kwargs") or {})
+        params = dict(
+            zip(
+                [
+                    "tournament_id",
+                    "herodraft_id",
+                    "game_id",
+                    "radiant_name",
+                    "dire_name",
+                ],
+                args,
+            )
+        )
+        params.update(kwargs)
+        self.assertEqual(params["tournament_id"], self.tournament.pk)
+        self.assertEqual(params["herodraft_id"], self.herodraft.pk)
+        self.assertEqual(params["game_id"], self.game.pk)
+        self.assertEqual(params["radiant_name"], "Radiant Team")
+        self.assertEqual(params["dire_name"], "Dire Team")
