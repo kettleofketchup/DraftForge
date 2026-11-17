@@ -357,9 +357,8 @@ test.describe('Event Creation Demo', () => {
     await demoClick(page, leagueSelect, 300);
     await page.waitForTimeout(300);
 
-    const leagueOption = page.getByRole('option', {
-      name: 'Events Test League',
-    });
+    // Events Test League (pk 7); a name match also hits "Events Test League B".
+    const leagueOption = page.getByTestId('event-league-option-7');
     await leagueOption.waitFor({ state: 'visible', timeout: 5000 });
     await demoClick(page, leagueOption, 200);
     await page.waitForTimeout(300);
@@ -409,6 +408,8 @@ test.describe('Event Creation Demo', () => {
       }
       await page.waitForTimeout(300);
     } catch {
+      // No channels (no Discord bot on this stack): close the open picker so it doesn't block the tabs.
+      await page.keyboard.press('Escape');
       console.log('Step 9c: Channel picker not interactive, continuing');
     }
 
