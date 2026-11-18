@@ -10,6 +10,7 @@ import {
   HoverCardContent,
   HoverCardTrigger,
 } from '~/components/ui/hover-card';
+import { DisplayName } from '~/components/user/avatar';
 import {
   positionIcons,
   positionKeys,
@@ -241,7 +242,7 @@ export const computeTeamPositionCoverage = (
       if (favoriteCount[pos] > 1) {
         const favoritePlayers = playersForPos
           .filter((p) => p.rank === 1)
-          .map((p) => p.user.nickname || p.user.username);
+          .map((p) => DisplayName(p.user));
         messages.push(`${favoritePlayers.join(' & ')} both want this`);
       }
 
@@ -249,7 +250,7 @@ export const computeTeamPositionCoverage = (
       if (isContested) {
         // Show each player's contest situation
         for (const player of playersForPos.slice(0, 2)) {
-          const playerName = player.user.nickname || player.user.username;
+          const playerName = DisplayName(player.user);
           const playerContestedPositions: string[] = [];
 
           for (const otherPos of contestedWith) {
@@ -272,8 +273,7 @@ export const computeTeamPositionCoverage = (
           (p) => p.user.pk === assignedPlayerPk,
         );
         if (assignedPlayer) {
-          const playerName =
-            assignedPlayer.user.nickname || assignedPlayer.user.username;
+          const playerName = DisplayName(assignedPlayer.user);
           if (assignedPlayer.rank === 1) {
             messages.push(`${playerName} guessed - unique & favorite`);
           } else {
@@ -300,7 +300,7 @@ export const computeTeamPositionCoverage = (
           }
           if (otherPositionsNeeded.length > 0) {
             playerConflicts.push(
-              `${user.nickname || user.username} needed for ${otherPositionsNeeded.join(', ')}`,
+              `${DisplayName(user)} needed for ${otherPositionsNeeded.join(', ')}`,
             );
           }
         }
@@ -324,8 +324,7 @@ export const computeTeamPositionCoverage = (
         );
 
         if (assignedPlayer) {
-          const playerName =
-            assignedPlayer.user.nickname || assignedPlayer.user.username;
+          const playerName = DisplayName(assignedPlayer.user);
           if (assignedPlayer.rank === 1) {
             messages.push(`${playerName} - unique & favorite`);
           } else {
@@ -339,8 +338,7 @@ export const computeTeamPositionCoverage = (
         const bestPlayer = playersForPos[0];
         const bestPlayerAssignedTo = playerAssignments.get(bestPlayer.user.pk!);
         if (bestPlayerAssignedTo && bestPlayerAssignedTo !== pos) {
-          const playerName =
-            bestPlayer.user.nickname || bestPlayer.user.username;
+          const playerName = DisplayName(bestPlayer.user);
           messages.push(
             `${playerName} guessed for ${positionLabels[bestPlayerAssignedTo]}`,
           );
@@ -466,7 +464,7 @@ PositionCoverageCard.displayName = 'PositionCoverageCard';
 const PlayerCard = memo(
   ({ player, isBest }: { player: PlayerWithRank; isBest?: boolean }) => {
     const { user, rank } = player;
-    const displayName = user.nickname || user.username || '?';
+    const displayName = DisplayName(user);
 
     return (
       <div
@@ -731,9 +729,7 @@ export const TeamPositionCoverageRow = memo(
     const displayName =
       teamName ||
       team?.name ||
-      (team?.captain
-        ? `${team.captain.nickname || team.captain.username}'s Team`
-        : 'Team');
+      (team?.captain ? `${DisplayName(team.captain)}'s Team` : 'Team');
 
     // If showFullTable is true, render the table directly without hover/modal
     if (showFullTable) {

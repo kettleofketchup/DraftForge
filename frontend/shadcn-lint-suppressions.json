@@ -31,9 +31,6 @@
     }
   },
   "app/components/bracket/modals/PlayerStatsTable.tsx": {
-    "draftforge/use-display-name": {
-      "count": 1
-    },
     "shadcn/no-raw-colors": {
       "count": 15
     }
@@ -88,9 +85,6 @@
     }
   },
   "app/components/game/gameCard/gameCard.tsx": {
-    "draftforge/use-display-name": {
-      "count": 2
-    },
     "shadcn/no-raw-colors": {
       "count": 3
     }
@@ -261,9 +255,6 @@
     }
   },
   "app/components/teamdraft/TeamPositionCoverage.tsx": {
-    "draftforge/use-display-name": {
-      "count": 4
-    },
     "shadcn/no-raw-colors": {
       "count": 11
     }
