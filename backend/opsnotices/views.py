@@ -59,7 +59,7 @@ def _parse_list_params(request: Request) -> tuple[list[str], list[str] | None, i
 def _notices() -> QuerySet[OpsNotice]:
     return OpsNotice.objects.select_related(
         "event", "subject_user__base_profile", "actor__base_profile", "closed_by"
-    )
+    ).nocache()
 
 
 def _list(request: Request, notices: QuerySet[OpsNotice]) -> Response:
