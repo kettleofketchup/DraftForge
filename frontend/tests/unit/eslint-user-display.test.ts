@@ -23,7 +23,13 @@ tester.run('use-display-name', rule('use-display-name'), {
   valid: [
     'const a = <span>{DisplayName(p)}</span>;',
     "const a = <span>{p.username ? DisplayName(p) : 'Steam'}</span>;",
-    'const a = <span title={p.username}>{p.pk}</span>;',
+    'const a = <span data-testid={`row-${p.username}`}>{p.pk}</span>;',
+    'const a = <li key={p.username}>{p.pk}</li>;',
+    'log.debug(`removing ${p.username}`);',
+    'logger.info(`x ${p.nickname}`);',
+    "const q = { queryKey: ['user', `${p.username}`] };",
+    'const url = `/users/${p.pk}`;',
+    'const n = 1 + p.username;',
     'const a = <span>{team.name}</span>;',
     'const a = <span>{p.username && <b>x</b>}</span>;',
   ],
@@ -52,6 +58,70 @@ tester.run('use-display-name', rule('use-display-name'), {
       code: 'const a = <span>{show && p.username}</span>;',
       errors: [{ messageId: 'raw' }],
     },
+    {
+      code: 'const a = <span title={p.username}>{p.pk}</span>;',
+      errors: [{ messageId: 'raw', data: { field: 'username' } }],
+    },
+    {
+      code: 'const a = <img alt={`${p.discordNickname} avatar`} />;',
+      errors: [{ messageId: 'raw', data: { field: 'discordNickname' } }],
+    },
+    {
+      code: 'toast.success(`${user.username} has been removed`);',
+      errors: [{ messageId: 'raw', data: { field: 'username' } }],
+    },
+    {
+      code: "const msg = 'Removing ' + user.nickname;",
+      errors: [{ messageId: 'raw', data: { field: 'nickname' } }],
+    },
+    {
+      code: 'const a = <button onClick={() => toast(`Hi ${u.username}`)} />;',
+      errors: [{ messageId: 'raw', data: { field: 'username' } }],
+    },
+    {
+      code: 'const names = users.map((u) => `${u.username}`);',
+      errors: [{ messageId: 'raw' }],
+    },
+  ],
+});
+
+tester.run('no-display-org-arg', rule('no-display-org-arg'), {
+  valid: ['DisplayName(p);', 'DisplayName(p, 12);', 'other(p, 1, orgId);'],
+  invalid: [
+    {
+      code: 'DisplayName(p, undefined, orgId);',
+      errors: [{ messageId: 'explicit' }],
+    },
+    { code: 'DisplayName(p, 10, null);', errors: [{ messageId: 'explicit' }] },
+  ],
+});
+
+tester.run('no-user-reshape', rule('no-user-reshape'), {
+  valid: [
+    'const a = <UserAvatar user={player} />;',
+    'const a = <UserAvatar user={player.user} />;',
+    'const a = <UserAvatar user={{ pk: a.pk, avatar: b.avatar }} />;',
+    "const a = <UserAvatar user={{ pk: 1, username: 'x' }} />;",
+    'const a = <Other user={{ pk: p.pk }} />;',
+    'const a = <UserAvatar user={{ username: payload.captain_name }} />;',
+  ],
+  invalid: [
+    {
+      code: 'const a = <UserAvatar user={{ pk: p.user_id ?? undefined, username: p.username, avatar: p.avatar }} />;',
+      errors: [{ messageId: 'reshape', data: { root: 'p' } }],
+    },
+    {
+      code: 'const a = <UserAvatar user={{ pk: row.member.pk, avatar: row.member.avatar }} />;',
+      errors: [{ messageId: 'reshape', data: { root: 'row.member' } }],
+    },
+  ],
+});
+
+tester.run('no-direct-name-resolver', rule('no-direct-name-resolver'), {
+  valid: ['DisplayName(p);', 'const x = obj.resolveDisplayName;'],
+  invalid: [
+    { code: 'resolveDisplayName(p);', errors: [{ messageId: 'direct' }] },
+    { code: 'const u = AvatarUrl(p);', errors: [{ messageId: 'direct' }] },
   ],
 });
 
