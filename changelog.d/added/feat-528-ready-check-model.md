@@ -1,0 +1,4 @@
+- Ready check settings on events, series and organization defaults, edited on a new Ready check tab: the Mandatory RSVP Confirmation toggle, Staff-verified or Automatic mode, who is asked, open, escalation, close and ops chase timings, a minimum-completion threshold with its action, member notices, and the start cull. The settings are stored and validated only; the ready check that uses them arrives in a later release.
+- Dropped signup status: dropped members are left out of signup counts, waitlist thresholds and tournament rosters, show with a Dropped badge, and cannot sign up again for the same event.
+- Event voice channel picker that lists a server's voice and stage channels.
+- The event page shows the roll call mode as Staff-verified or Automatic.
