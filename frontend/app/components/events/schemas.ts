@@ -620,8 +620,8 @@ const VOICE_CHANNEL_MESSAGES = {
 } as const;
 
 /**
- * zod superRefine mirroring backend rules R1-R4 and R6. With a baseline, a
- * rule group runs only when one of its fields differs from it.
+ * zod superRefine mirroring validate_ready_check_settings in the backend. With a
+ * baseline, a rule group runs only when one of its fields differs from it.
  */
 export function refineReadyCheck(
   values: ReadyCheckFields,

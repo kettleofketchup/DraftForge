@@ -4,7 +4,7 @@ import type {
 } from '~/components/api/api';
 import { READY_CHECK_CONFIG_DEFAULTS, type EventType } from '../schemas';
 
-/** Roll call on with auto-confirm on: valid before #528, rejected by R1 now. */
+/** Roll call on with auto-confirm on: a legacy row the confirm-mandatory rule now rejects. */
 export const LEGACY_READY_CHECK = {
   roll_call_enabled: true,
   auto_confirm: true,
