@@ -40,7 +40,7 @@ const GRACE_URGENT_MS = 10_000;
 const RESERVE_CRITICAL_MS = 30_000;
 
 /**
- * Convert draft captain data to UserType for PlayerPopover/AvatarUrl compatibility
+ * Convert draft captain data to UserType for PlayerPopover compatibility
  */
 function captainToUser(captain: {
   pk: number;
