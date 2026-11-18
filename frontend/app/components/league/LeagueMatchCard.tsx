@@ -7,6 +7,7 @@ import { PlayerPopover } from '~/components/player/PlayerPopover';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import { Card, CardContent } from '~/components/ui/card';
+import { DisplayName } from '~/components/user/avatar';
 import { UserAvatar } from '~/components/user/UserAvatar';
 import { cn } from '~/lib/utils';
 import type { LeagueMatchType } from './schemas';
@@ -66,8 +67,7 @@ export const LeagueMatchCard: React.FC<Props> = ({ match }) => {
                     <UserAvatar user={match.radiant_captain} size="lg" />
                     <div>
                       <p className="font-medium text-green-600">
-                        {match.radiant_captain.nickname ||
-                          match.radiant_captain.username}
+                        {DisplayName(match.radiant_captain)}
                       </p>
                       <p className="text-xs text-muted-foreground">Radiant</p>
                     </div>
@@ -115,8 +115,7 @@ export const LeagueMatchCard: React.FC<Props> = ({ match }) => {
                   <div className="flex items-center gap-2 cursor-pointer">
                     <div className="text-right">
                       <p className="font-medium text-red-600">
-                        {match.dire_captain.nickname ||
-                          match.dire_captain.username}
+                        {DisplayName(match.dire_captain)}
                       </p>
                       <p className="text-xs text-muted-foreground">Dire</p>
                     </div>

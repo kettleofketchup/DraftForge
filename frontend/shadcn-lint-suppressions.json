@@ -1,8 +1,5 @@
 {
   "app/components/admin-team/AdminTeamSection.tsx": {
-    "draftforge/use-display-name": {
-      "count": 3
-    },
     "shadcn/no-raw-colors": {
       "count": 11
     }
@@ -118,9 +115,6 @@
     }
   },
   "app/components/league/LeagueMatchCard.tsx": {
-    "draftforge/use-display-name": {
-      "count": 4
-    },
     "shadcn/no-raw-colors": {
       "count": 6
     }
