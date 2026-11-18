@@ -187,6 +187,7 @@ function arePropsEqual(
     a.avatarUrl === b.avatarUrl &&
     a.discordId === b.discordId &&
     a.username === b.username &&
+    a.nickname === b.nickname &&
     a.discordNickname === b.discordNickname &&
     a.guildNickname === b.guildNickname &&
     a.orgNicknames === b.orgNicknames

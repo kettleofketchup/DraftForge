@@ -32,6 +32,15 @@ describe('UserAvatar with the user cache', () => {
     expect(img()).toHaveAttribute('alt', 'u');
   });
 
+  it('re-renders when the site nickname changes', () => {
+    const { rerender } = render(
+      <UserAvatar user={{ pk: 4, username: 'u', nickname: 'Old' }} />,
+    );
+    expect(img()).toHaveAttribute('alt', 'Old');
+    rerender(<UserAvatar user={{ pk: 4, username: 'u', nickname: 'New' }} />);
+    expect(img()).toHaveAttribute('alt', 'New');
+  });
+
   it('updates when the cache entry arrives', () => {
     render(<UserAvatar user={{ user_id: 3, avatar: 'hash' }} />);
     expect(img().getAttribute('src')).toContain('ui-avatars.com');
