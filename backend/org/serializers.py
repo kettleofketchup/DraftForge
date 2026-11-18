@@ -99,6 +99,12 @@ class ProfileClaimRequestSerializer(serializers.ModelSerializer):
     target_nickname = serializers.CharField(
         source="target_user.nickname", read_only=True
     )
+    target_username = serializers.CharField(
+        source="target_user.username", read_only=True, allow_null=True
+    )
+    target_discordNickname = serializers.CharField(
+        source="target_user.discordNickname", read_only=True, allow_null=True
+    )
     target_steamid = serializers.IntegerField(
         source="target_user.steamid", read_only=True
     )
@@ -122,6 +128,8 @@ class ProfileClaimRequestSerializer(serializers.ModelSerializer):
             "claimer_avatar",
             "target_user",
             "target_nickname",
+            "target_username",
+            "target_discordNickname",
             "target_steamid",
             "target_mmr",
             "organization",
