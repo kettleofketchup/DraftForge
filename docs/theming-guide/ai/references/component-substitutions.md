@@ -122,8 +122,9 @@ Variants on `BrandDropdownAction`:
 
 | Anti-pattern | Replace with | Notes |
 |---|---|---|
-| Record list built from flex `<div>` rows with badges + right-aligned meta | A `<Domain>Table` on `<DataTable>` from `~/components/ui/data-table` | Flex rows collapse the text column on mobile (one character per line). `DataTable` scrolls horizontally instead. |
-| New raw `<table>` or direct `ui/table` primitives (`Table`/`TableRow`/`TableCell`) for records | `<DataTable columns={...} data={...} getRowId={...} />` | Sorting, empty row, `aria-sort` and test ids come for free. Existing raw tables are legacy: migrate when substantially touched. |
+| Record list built from flex `<div>` rows with badges + right-aligned meta | A `<Domain>Table` on `<DataTable>` from `~/components/ui/data-table` | Flex rows collapse the text column on mobile (one character per line). `DataTable` fits the width and hides secondary columns per breakpoint. |
+| New raw `<table>` or direct `ui/table` primitives (`Table`/`TableRow`/`TableCell`) for records | `<DataTable columns={make<Domain>Columns(...)} data={...} getRowId={...} />` | Sorting, pagination, empty row, `aria-sort` and test ids come for free. Existing raw tables are legacy: migrate when substantially touched. |
+| Columns re-declared per page | One `make<Domain>Columns` factory; callers pick columns by id | Same record, same columns everywhere. |
 | Hand-rolled sort arrows / clickable `<th>` | `<DataTableColumnHeader column={column} title="..." />` | Its ghost `<Button>` is a structural exception like a dropdown trigger. |
 
 How to write one: the `table` skill (`.claude/skills/table/SKILL.md`). Why: [`THEMING-GUIDE.md` §"Data Tables"](../../../THEMING-GUIDE.md#data-tables).

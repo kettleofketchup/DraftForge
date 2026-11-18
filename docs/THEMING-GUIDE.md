@@ -467,11 +467,11 @@ import { DisplayName } from '~/components/user/avatar';
 
 ### Data Tables
 
-**Lists of records render through `<DataTable>`** (`~/components/ui/data-table`, TanStack Table on the shadcn `Table` primitives), wrapped in one reusable `<Domain>Table` per record type that owns its columns, e.g. `OpsNoticeTable`.
+**Lists of records render through `<DataTable>`** (`~/components/ui/data-table`, TanStack Table on the shadcn `Table` primitives). Each record type has one column factory (`makeOpsNoticeColumns`) and one reusable `<Domain>Table` (`OpsNoticeTable`); pages pick columns by id instead of re-declaring them.
 
-- Cells don't wrap; the table scrolls sideways on narrow screens. Only the one free-text column wraps (`meta.cellClassName: 'min-w-40 whitespace-normal wrap-anywhere'`).
-- Severity/state/category cells are `Badge`s; row actions are brand buttons (`SecondaryButton size="sm"`).
-- Sortable headers use `<DataTableColumnHeader>`; numbers are right-aligned `tabular-nums`; secondary text is `text-muted-foreground`.
+- The table fits its container (`table-fixed`): secondary columns get fixed widths and hide on small screens (`hidden md:table-cell`), one main column takes the rest and wraps. Sideways scrolling (`scrollX`) is opt-in.
+- Data hidden on phones is stacked under the main cell in `text-xs text-muted-foreground`.
+- Severity/state/category cells are `Badge`s; row actions are brand buttons (`SecondaryButton size="sm"`); numbers are right-aligned `tabular-nums`.
 
 **DO NOT** build record lists from flex rows: on mobile the text column collapses to one character per line. Build guide: the `table` skill.
 

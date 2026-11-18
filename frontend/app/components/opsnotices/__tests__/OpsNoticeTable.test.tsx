@@ -1,5 +1,11 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -79,18 +85,52 @@ describe('OpsNoticeTable', () => {
     ]);
   });
 
-  it('shows the event column by default and hides it on request', () => {
+  it('shows the event column by default and drops it from a custom column list', () => {
     renderTable();
     expect(
       screen.getByRole('columnheader', { name: 'Event' }),
     ).toBeInTheDocument();
     expect(screen.getByTestId('ops-notice-row-4')).toHaveTextContent('Night 4');
     cleanup();
-    renderTable({ showEvent: false });
+    renderTable({
+      columns: ['severity', 'summary', 'last_seen', 'actions'],
+      onResolve: vi.fn(),
+    });
     expect(screen.queryByRole('columnheader', { name: 'Event' })).toBeNull();
+    expect(screen.queryByRole('columnheader', { name: 'Type' })).toBeNull();
     expect(screen.getByTestId('ops-notice-row-4')).not.toHaveTextContent(
       'Night 4',
     );
+  });
+
+  it('namespaces test ids with testIdPrefix', () => {
+    renderTable({ testIdPrefix: 'org-notices', onResolve: vi.fn() });
+    expect(screen.getByTestId('org-notices-table')).toBeInTheDocument();
+    expect(screen.getByTestId('org-notices-row-4')).toBeInTheDocument();
+    expect(screen.getByTestId('org-notices-resolve-4')).toBeInTheDocument();
+  });
+
+  it('stacks type and age under the notice for small screens', () => {
+    renderTable();
+    const summary = within(screen.getByTestId('ops-notice-row-1')).getByText(
+      'Check in late players',
+    );
+    expect(summary.parentElement).toHaveTextContent(/task ·/);
+  });
+
+  it('resolving does not trigger the row click', () => {
+    const onResolve = vi.fn();
+    const onRowClick = vi.fn();
+    renderTable({ onResolve, onRowClick });
+    fireEvent.click(screen.getByTestId('ops-notice-resolve-4'));
+    expect(onResolve).toHaveBeenCalledWith(critical);
+    expect(onRowClick).not.toHaveBeenCalled();
+  });
+
+  it('turns header sorting off with sortable=false', () => {
+    renderTable({ sortable: false });
+    expect(screen.queryByTestId('data-table-sort-last_seen')).toBeNull();
+    expect(screen.queryByTestId('data-table-sort-severity')).toBeNull();
   });
 
   it('shows the occurrence count only above one', () => {

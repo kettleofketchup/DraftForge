@@ -6,11 +6,23 @@ import {
   resolveEventOpsNotice,
   type OpsNotice,
 } from '~/components/api/opsNoticesAPI';
-import { OpsNoticeTable } from '~/components/opsnotices/OpsNoticeTable';
+import {
+  OpsNoticeTable,
+  type OpsNoticeColumnId,
+} from '~/components/opsnotices/OpsNoticeTable';
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card';
 import { getLogger } from '~/lib/logger';
 
 const log = getLogger('OpsNoticesCard');
+
+const EVENT_CARD_COLUMNS: readonly OpsNoticeColumnId[] = [
+  'severity',
+  'category',
+  'summary',
+  'occurrences',
+  'last_seen',
+  'actions',
+];
 
 const RESOLVE_ERROR_MESSAGES: Record<string, string> = {
   task_resolve_unsupported: 'task notices close on their own',
@@ -102,7 +114,7 @@ export function OpsNoticesCard({ eventId, noticeHref }: OpsNoticesCardProps) {
         )}
         <OpsNoticeTable
           notices={data}
-          showEvent={false}
+          columns={EVENT_CARD_COLUMNS}
           noticeHref={noticeHref}
           onResolve={onResolve}
           resolving={resolve.isPending}

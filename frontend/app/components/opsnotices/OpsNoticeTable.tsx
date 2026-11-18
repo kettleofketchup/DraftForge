@@ -1,169 +1,76 @@
-import {
-  createColumnHelper,
-  type ColumnDef,
-  type Row,
-} from '@tanstack/react-table';
-import { formatDistanceToNow } from 'date-fns';
 import { useMemo } from 'react';
-import { Link } from 'react-router';
 
 import type { OpsNotice } from '~/components/api/opsNoticesAPI';
-import { Badge } from '~/components/ui/badge';
-import { SecondaryButton } from '~/components/ui/buttons';
-import { DataTable, DataTableColumnHeader } from '~/components/ui/data-table';
-import type { NoticeSeverity } from '~/lib/opsnotices/noticeTypes.generated';
+import { DataTable } from '~/components/ui/data-table';
 
-const SEVERITY_VARIANT: Record<
-  NoticeSeverity,
-  'destructive' | 'secondary' | 'outline'
-> = {
-  critical: 'destructive',
-  warning: 'secondary',
-  info: 'outline',
-};
+import {
+  DEFAULT_OPS_NOTICE_COLUMNS,
+  makeOpsNoticeColumns,
+  type OpsNoticeColumnId,
+} from './opsNoticeColumns';
 
-const SEVERITY_RANK: Record<NoticeSeverity, number> = {
-  info: 0,
-  warning: 1,
-  critical: 2,
-};
+export type { OpsNoticeColumnId } from './opsNoticeColumns';
 
 export interface OpsNoticeTableProps {
   notices: OpsNotice[];
-  showEvent?: boolean;
+  /** Test id namespace: the table is `${prefix}-table`, rows `${prefix}-row-<id>`. */
+  testIdPrefix?: string;
+  columns?: readonly OpsNoticeColumnId[];
+  sortable?: boolean;
   noticeHref?: (n: OpsNotice) => string;
   onResolve?: (n: OpsNotice) => void;
   resolving?: boolean;
+  onRowClick?: (n: OpsNotice) => void;
+  pageSize?: number;
+  density?: 'default' | 'compact';
   emptyMessage?: string;
+  scrollX?: boolean;
 }
 
-const col = createColumnHelper<OpsNotice>();
-
-const lastSeen = (n: OpsNotice): number => new Date(n.last_seen_at).getTime();
-
-function bySeverityThenLastSeen(a: Row<OpsNotice>, b: Row<OpsNotice>): number {
-  const rank =
-    SEVERITY_RANK[a.original.severity] - SEVERITY_RANK[b.original.severity];
-  return rank || lastSeen(a.original) - lastSeen(b.original);
-}
-
-function buildColumns({
-  showEvent,
-  noticeHref,
-  onResolve,
-  resolving,
-}: Omit<OpsNoticeTableProps, 'notices' | 'emptyMessage'>): ColumnDef<
-  OpsNotice,
-  any
->[] {
-  const columns: ColumnDef<OpsNotice, any>[] = [
-    col.accessor((n) => SEVERITY_RANK[n.severity], {
-      id: 'severity',
-      enableSorting: true,
-      sortDescFirst: true,
-      sortingFn: bySeverityThenLastSeen,
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Severity" />
-      ),
-      cell: ({ row }) => (
-        <Badge variant={SEVERITY_VARIANT[row.original.severity]}>
-          {row.original.severity}
-        </Badge>
-      ),
-    }),
-    col.accessor('category', {
-      header: 'Type',
-      cell: ({ getValue }) => <Badge variant="outline">{getValue()}</Badge>,
-    }),
-    col.accessor('summary', {
-      header: 'Notice',
-      meta: { cellClassName: 'min-w-40 whitespace-normal wrap-anywhere' },
-      cell: ({ row, getValue }) =>
-        noticeHref ? (
-          <Link to={noticeHref(row.original)} className="hover:underline">
-            {getValue()}
-          </Link>
-        ) : (
-          getValue()
-        ),
-    }),
-  ];
-  if (showEvent) {
-    columns.push(
-      col.accessor('event_name', {
-        header: 'Event',
-        meta: { cellClassName: 'text-muted-foreground' },
-        cell: ({ getValue }) => getValue() || '—',
-      }),
-    );
-  }
-  columns.push(
-    col.accessor('occurrences', {
-      header: 'Count',
-      meta: {
-        headerClassName: 'text-right',
-        cellClassName: 'text-right tabular-nums text-muted-foreground',
-      },
-      cell: ({ getValue }) => (getValue() > 1 ? `x${getValue()}` : ''),
-    }),
-    col.accessor(lastSeen, {
-      id: 'last_seen',
-      enableSorting: true,
-      sortDescFirst: true,
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Last seen" />
-      ),
-      meta: { cellClassName: 'text-muted-foreground' },
-      cell: ({ row }) =>
-        formatDistanceToNow(new Date(row.original.last_seen_at), {
-          addSuffix: true,
-        }),
-    }),
-  );
-  if (onResolve) {
-    columns.push(
-      col.display({
-        id: 'actions',
-        header: () => <span className="sr-only">Actions</span>,
-        meta: { cellClassName: 'text-right' },
-        cell: ({ row }) =>
-          row.original.category === 'urgent' ? (
-            <SecondaryButton
-              size="sm"
-              data-testid={`ops-notice-resolve-${row.original.id}`}
-              disabled={resolving}
-              onClick={() => onResolve(row.original)}
-            >
-              Resolve
-            </SecondaryButton>
-          ) : null,
-      }),
-    );
-  }
-  return columns;
-}
-
+/** The shared operations-notice table: DataTable over makeOpsNoticeColumns. */
 export function OpsNoticeTable({
   notices,
-  showEvent = true,
+  testIdPrefix = 'ops-notice',
+  columns = DEFAULT_OPS_NOTICE_COLUMNS,
+  sortable = true,
   noticeHref,
   onResolve,
   resolving = false,
+  onRowClick,
+  pageSize = 25,
+  density = 'default',
   emptyMessage = 'No open notices',
+  scrollX = false,
 }: OpsNoticeTableProps) {
-  const columns = useMemo(
-    () => buildColumns({ showEvent, noticeHref, onResolve, resolving }),
-    [showEvent, noticeHref, onResolve, resolving],
+  const cols = useMemo(
+    () =>
+      makeOpsNoticeColumns({
+        testIdPrefix,
+        columns,
+        sortable,
+        noticeHref,
+        onResolve,
+        resolving,
+      }),
+    [testIdPrefix, columns, sortable, noticeHref, onResolve, resolving],
   );
   return (
     <DataTable
-      columns={columns}
+      columns={cols}
       data={notices}
-      getRowId={(n) => String(n.id)}
-      initialSorting={[{ id: 'severity', desc: true }]}
+      getRowId={(n) => n.id}
+      getRowTestId={(n) => `${testIdPrefix}-row-${n.id}`}
+      onRowClick={onRowClick}
+      initialSorting={
+        columns.includes('severity') ? [{ id: 'severity', desc: true }] : []
+      }
+      pageSize={pageSize}
+      density={density}
       emptyMessage={emptyMessage}
-      data-testid="ops-notice-table"
-      rowTestId={(n) => `ops-notice-row-${n.id}`}
+      scrollX={scrollX}
+      scrollTestId={scrollX ? `${testIdPrefix}-scroll` : undefined}
+      scrollLabel={scrollX ? 'Operations notices' : undefined}
+      data-testid={`${testIdPrefix}-table`}
     />
   );
 }
