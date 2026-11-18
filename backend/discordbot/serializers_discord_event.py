@@ -1,6 +1,8 @@
 from rest_framework import serializers
 
+from app.display_names import first_name
 from app.models import CustomUser
+from org.display_names import org_nicknames_public
 from user.querysets import with_user_profiles
 
 from .models import (
@@ -45,6 +47,9 @@ class MessageLogInlineSerializer(serializers.ModelSerializer):
     fired_by_nickname = serializers.CharField(
         source="fired_by.nickname", read_only=True, default=None
     )
+    fired_by_discordNickname = serializers.CharField(
+        source="fired_by.discordNickname", read_only=True, default=None
+    )
 
     class Meta:
         model = DiscordMessageLog
@@ -60,6 +65,7 @@ class MessageLogInlineSerializer(serializers.ModelSerializer):
             "response_data",
             "fired_by_username",
             "fired_by_nickname",
+            "fired_by_discordNickname",
             "created_at",
         ]
 
@@ -74,6 +80,7 @@ class DiscordEventLogSerializer(serializers.ModelSerializer):
     # rather than falling back to a generated image. The lookup map is built
     # once per response in DiscordEventDetailSerializer.to_representation.
     nickname = serializers.SerializerMethodField()
+    discordNickname = serializers.SerializerMethodField()
     username = serializers.SerializerMethodField()
     avatar = serializers.SerializerMethodField()
 
@@ -84,6 +91,10 @@ class DiscordEventLogSerializer(serializers.ModelSerializer):
     def get_nickname(self, obj: DiscordEventLog) -> str | None:
         user = self._resolved_user(obj)
         return user.nickname if user else None
+
+    def get_discordNickname(self, obj: DiscordEventLog) -> str | None:
+        user = self._resolved_user(obj)
+        return user.discordNickname if user else None
 
     def get_username(self, obj: DiscordEventLog) -> str | None:
         user = self._resolved_user(obj)
@@ -104,6 +115,7 @@ class DiscordEventLogSerializer(serializers.ModelSerializer):
             "discord_user_id",
             "discord_username",
             "nickname",
+            "discordNickname",
             "username",
             "avatar",
             "message_id",
@@ -118,6 +130,10 @@ class DiscordEventLogSerializer(serializers.ModelSerializer):
 class DiscordEventDMSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source="org_user.user.username", read_only=True)
     nickname = serializers.CharField(source="org_user.user.nickname", read_only=True)
+    discordNickname = serializers.CharField(
+        source="org_user.user.discordNickname", read_only=True
+    )
+    guildNickname = serializers.SerializerMethodField()
     avatar = serializers.CharField(source="org_user.user.avatar", read_only=True)
     discord_user_id = serializers.CharField(read_only=True)
     can_send = serializers.BooleanField(read_only=True)
@@ -133,6 +149,8 @@ class DiscordEventDMSerializer(serializers.ModelSerializer):
             "dm_type_display",
             "username",
             "nickname",
+            "discordNickname",
+            "guildNickname",
             "avatar",
             "discord_user_id",
             "can_send",
@@ -144,6 +162,11 @@ class DiscordEventDMSerializer(serializers.ModelSerializer):
             "responded_at",
             "created_at",
         ]
+
+    def get_guildNickname(self, obj: DiscordEventDM) -> str | None:
+        if not self.context.get("guild_nicknames_public"):
+            return None
+        return first_name(obj.org_user.guild_nickname)
 
 
 class DiscordEventDetailSerializer(serializers.ModelSerializer):
@@ -166,6 +189,9 @@ class DiscordEventDetailSerializer(serializers.ModelSerializer):
             )
             user_map = {user.discordId: user for user in users}
         self.context["discord_user_map"] = user_map
+        self.context["guild_nicknames_public"] = org_nicknames_public(
+            instance.event.organization_id
+        )
         return super().to_representation(instance)
 
     class Meta:

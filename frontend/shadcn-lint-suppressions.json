@@ -67,11 +67,17 @@
     }
   },
   "app/components/events/SubscriberList.tsx": {
+    "draftforge/no-user-reshape": {
+      "count": 1
+    },
     "draftforge/use-display-name": {
       "count": 2
     }
   },
   "app/components/events/TaskScheduleSection.tsx": {
+    "draftforge/no-user-reshape": {
+      "count": 1
+    },
     "draftforge/use-display-name": {
       "count": 2
     }
@@ -185,7 +191,7 @@
   },
   "app/components/team/TeamModal.tsx": {
     "draftforge/use-display-name": {
-      "count": 4
+      "count": 6
     },
     "shadcn/no-raw-colors": {
       "count": 1
@@ -193,15 +199,30 @@
   },
   "app/components/team/TeamPopoverContent.tsx": {
     "draftforge/use-display-name": {
-      "count": 2
+      "count": 4
     },
     "shadcn/no-raw-colors": {
+      "count": 1
+    }
+  },
+  "app/components/team/TeamPopoverTrigger.tsx": {
+    "draftforge/use-display-name": {
+      "count": 2
+    }
+  },
+  "app/components/team/hooks/addPlayer.tsx": {
+    "draftforge/use-display-name": {
       "count": 1
     }
   },
   "app/components/team/teamCard.tsx": {
     "shadcn/no-raw-colors": {
       "count": 2
+    }
+  },
+  "app/components/team/teamCard/editTeam.tsx": {
+    "draftforge/use-display-name": {
+      "count": 5
     }
   },
   "app/components/team/teamTable/teamTable.tsx": {
@@ -240,6 +261,9 @@
     }
   },
   "app/components/teamdraft/TeamPositionCoverage.tsx": {
+    "draftforge/use-display-name": {
+      "count": 4
+    },
     "shadcn/no-raw-colors": {
       "count": 11
     }
@@ -334,7 +358,15 @@
       "count": 2
     }
   },
+  "app/components/tournament/captains/createTeamFromCaptainHook.tsx": {
+    "draftforge/use-display-name": {
+      "count": 3
+    }
+  },
   "app/components/tournament/captains/draftOrder.tsx": {
+    "draftforge/use-display-name": {
+      "count": 1
+    },
     "shadcn/no-raw-colors": {
       "count": 2
     }
@@ -414,6 +446,21 @@
       "count": 6
     }
   },
+  "app/components/user/AddUserModal/AddUserModal.tsx": {
+    "draftforge/use-display-name": {
+      "count": 4
+    }
+  },
+  "app/components/user/AddUserModal/DiscordMemberResults.tsx": {
+    "draftforge/use-display-name": {
+      "count": 2
+    }
+  },
+  "app/components/user/AddUserModal/SiteUserResults.tsx": {
+    "draftforge/use-display-name": {
+      "count": 2
+    }
+  },
   "app/components/user/DiscordUserDropdown.tsx": {
     "draftforge/use-display-name": {
       "count": 2
@@ -480,6 +527,31 @@
   },
   "app/components/user/userCard/LoginAsUserButton.tsx": {
     "shadcn/no-raw-colors": {
+      "count": 3
+    }
+  },
+  "app/components/user/userCard/createModal.tsx": {
+    "draftforge/use-display-name": {
+      "count": 2
+    }
+  },
+  "app/components/user/userCard/deleteButton.tsx": {
+    "draftforge/use-display-name": {
+      "count": 3
+    }
+  },
+  "app/components/user/userCard/editModal.tsx": {
+    "draftforge/use-display-name": {
+      "count": 4
+    }
+  },
+  "app/components/user/userCard/handleSaveHook.tsx": {
+    "draftforge/use-display-name": {
+      "count": 5
+    }
+  },
+  "app/components/user/userCard/steamAccountIdConflict.ts": {
+    "draftforge/use-display-name": {
       "count": 3
     }
   },
@@ -557,6 +629,11 @@
       "count": 1
     }
   },
+  "app/pages/tournament/tabs/players/playerRemoveButton.tsx": {
+    "draftforge/use-display-name": {
+      "count": 3
+    }
+  },
   "app/pages/user/UserProfilePage.tsx": {
     "draftforge/use-display-name": {
       "count": 3
@@ -582,6 +659,11 @@
   },
   "app/routes/rollcall.tsx": {
     "draftforge/use-display-name": {
+      "count": 2
+    }
+  },
+  "app/routes/user.tsx": {
+    "draftforge/no-direct-name-resolver": {
       "count": 1
     }
   }

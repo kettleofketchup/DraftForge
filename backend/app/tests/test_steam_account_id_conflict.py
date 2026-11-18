@@ -14,6 +14,7 @@ from django.test import TestCase
 from rest_framework.test import APIClient
 
 from app.models import CustomUser, Organization
+from app.steam_accounts import steam_account_id_conflict_payload
 from org.models import OrgUser
 
 TAKEN_ID = 765353730
@@ -62,6 +63,10 @@ class SteamAccountIdConflictTests(TestCase):
         self.assertEqual(body["conflict"]["pk"], self.holder.pk)
         self.assertEqual(body["conflict"]["nickname"], "George Potter")
         self.assertEqual(body["conflict"]["username"], "geo.potter")
+        self.assertEqual(
+            body["error"],
+            f"Friend ID {TAKEN_ID} is already assigned to George Potter (@geo.potter).",
+        )
 
     def test_org_patch_conflict_leaves_target_unchanged(self) -> None:
         self.client.patch(self.org_url, {"steam_account_id": TAKEN_ID}, format="json")
@@ -153,3 +158,34 @@ class SteamAccountIdLookupTests(TestCase):
         self.client.force_authenticate(user=None)
         resp = self.client.get(self.url(TAKEN_ID))
         self.assertIn(resp.status_code, (401, 403))
+
+
+class SteamAccountIdConflictLabelTests(TestCase):
+    def test_global_name_without_site_nickname(self) -> None:
+        user = CustomUser.objects.create(username="dc", discordNickname="Gwaihir")
+        body = steam_account_id_conflict_payload(1, user)
+        self.assertEqual(body["conflict"]["discordNickname"], "Gwaihir")
+        self.assertEqual(
+            body["error"], "Friend ID 1 is already assigned to Gwaihir (@dc)."
+        )
+
+    def test_site_nickname_before_global_name(self) -> None:
+        user = CustomUser.objects.create(
+            username="dc", nickname="Site", discordNickname="Gwaihir"
+        )
+        body = steam_account_id_conflict_payload(1, user)
+        self.assertEqual(
+            body["error"], "Friend ID 1 is already assigned to Site (@dc)."
+        )
+
+    def test_steam_only_holder(self) -> None:
+        user = CustomUser.objects.create(username=None)
+        body = steam_account_id_conflict_payload(1, user)
+        self.assertEqual(
+            body["error"], f"Friend ID 1 is already assigned to User {user.pk}."
+        )
+
+    def test_omits_redundant_username(self) -> None:
+        user = CustomUser.objects.create(username="plainuser")
+        body = steam_account_id_conflict_payload(2, user)
+        self.assertEqual(body["error"], "Friend ID 2 is already assigned to plainuser.")

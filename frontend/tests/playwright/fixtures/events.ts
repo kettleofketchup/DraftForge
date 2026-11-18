@@ -14,10 +14,9 @@
  * - event_player_3 (pk=5003) - regular player
  */
 
+import type { BrowserContext } from '@playwright/test';
 import { API_URL } from './base-url';
 import { isCsrfCookie } from './cookies';
-import type { BrowserContext } from '@playwright/test';
-
 
 export const EVENTS_ORG_NAME = 'Events Test Org';
 export const EVENTS_EVENT_NAME = 'E2E Signup Event';
@@ -76,18 +75,30 @@ export interface EventInfo {
 }
 
 /** Look up the Events Test Org and E2E Signup Event by name. */
-export async function getEventsTestData(context: BrowserContext): Promise<EventInfo> {
+export async function getEventsTestData(
+  context: BrowserContext,
+): Promise<EventInfo> {
   // Find org
   const orgsResp = await context.request.get(`${API_URL}/organizations/`);
   const orgs = await orgsResp.json();
-  const eventsOrg = orgs.find((o: { name: string }) => o.name === EVENTS_ORG_NAME);
-  if (!eventsOrg) throw new Error(`${EVENTS_ORG_NAME} not found. Run just db::populate::all`);
+  const eventsOrg = orgs.find(
+    (o: { name: string }) => o.name === EVENTS_ORG_NAME,
+  );
+  if (!eventsOrg)
+    throw new Error(`${EVENTS_ORG_NAME} not found. Run just db::populate::all`);
 
   // Find event
-  const eventsResp = await context.request.get(`${API_URL}/events/?organization=${eventsOrg.pk}`);
+  const eventsResp = await context.request.get(
+    `${API_URL}/events/?organization=${eventsOrg.pk}`,
+  );
   const events = await eventsResp.json();
-  const signupEvent = events.find((e: { name: string }) => e.name === EVENTS_EVENT_NAME);
-  if (!signupEvent) throw new Error(`${EVENTS_EVENT_NAME} not found. Run just db::populate::all`);
+  const signupEvent = events.find(
+    (e: { name: string }) => e.name === EVENTS_EVENT_NAME,
+  );
+  if (!signupEvent)
+    throw new Error(
+      `${EVENTS_EVENT_NAME} not found. Run just db::populate::all`,
+    );
 
   return {
     pk: signupEvent.id,
@@ -120,7 +131,9 @@ export async function loginEventAdmin(context: BrowserContext) {
 }
 
 /** Trigger event generation synchronously (calls the Celery task directly). */
-export async function triggerEventGeneration(context: BrowserContext): Promise<string> {
+export async function triggerEventGeneration(
+  context: BrowserContext,
+): Promise<string> {
   const resp = await context.request.post(`${API_URL}/tests/events/generate/`);
   if (!resp.ok()) {
     throw new Error(`Event generation trigger failed: ${resp.status()}`);
@@ -135,7 +148,8 @@ export async function loginEventPlayer(context: BrowserContext) {
     data: { user_pk: 5001 },
     headers: { 'Content-Type': 'application/json' },
   });
-  if (!resp.ok()) throw new Error(`Login event player failed: ${resp.status()}`);
+  if (!resp.ok())
+    throw new Error(`Login event player failed: ${resp.status()}`);
   return resp.json();
 }
 
@@ -145,7 +159,8 @@ export async function loginEventPlayer4(context: BrowserContext) {
     data: { user_pk: 5004 },
     headers: { 'Content-Type': 'application/json' },
   });
-  if (!resp.ok()) throw new Error(`Login event player 4 failed: ${resp.status()}`);
+  if (!resp.ok())
+    throw new Error(`Login event player 4 failed: ${resp.status()}`);
   return resp.json();
 }
 
@@ -164,7 +179,9 @@ export async function setApprovedMmr(
     },
   );
   if (!resp.ok()) {
-    throw new Error(`setApprovedMmr failed: ${resp.status()} ${await resp.text()}`);
+    throw new Error(
+      `setApprovedMmr failed: ${resp.status()} ${await resp.text()}`,
+    );
   }
   return resp.json();
 }
@@ -175,15 +192,22 @@ export async function loginEventPlayerNoProfile(context: BrowserContext) {
     data: { user_pk: 5099 },
     headers: { 'Content-Type': 'application/json' },
   });
-  if (!resp.ok()) throw new Error(`Login event_player_no_profile failed: ${resp.status()}`);
+  if (!resp.ok())
+    throw new Error(`Login event_player_no_profile failed: ${resp.status()}`);
   return resp.json();
 }
 
 /** Trigger sync_discord_events synchronously. */
-export async function syncDiscordEvents(context: BrowserContext): Promise<string> {
-  const resp = await context.request.post(`${API_URL}/tests/events/sync-discord/`);
+export async function syncDiscordEvents(
+  context: BrowserContext,
+): Promise<string> {
+  const resp = await context.request.post(
+    `${API_URL}/tests/events/sync-discord/`,
+  );
   if (!resp.ok()) {
-    throw new Error(`Discord sync trigger failed: ${resp.status()}`);
+    throw new Error(
+      `Discord sync trigger failed: ${resp.status()} ${await resp.text()}`,
+    );
   }
   const data = await resp.json();
   return data.message;
@@ -229,6 +253,8 @@ export async function verifyDiscordMessages(
   context: BrowserContext,
   eventId: number,
 ) {
-  const resp = await context.request.get(`${API_URL}/tests/events/${eventId}/discord-verify/`);
+  const resp = await context.request.get(
+    `${API_URL}/tests/events/${eventId}/discord-verify/`,
+  );
   return resp.json();
 }

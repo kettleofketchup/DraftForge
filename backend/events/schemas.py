@@ -154,7 +154,7 @@ class EventSignupSchema(BaseModel):
     id: int
     event: int
     user: int  # user PK
-    username: Optional[str] = None  # user.nickname
+    username: Optional[str] = None  # display name, org-aware behind the member gate
     user_avatar: Optional[str] = None
     user_data: Optional["TournamentUserSchema"] = None
     dota_profile: Optional[DotaProfileSchema] = None

@@ -21,28 +21,25 @@ flowchart LR
 
 ## The models
 
-```python
-from pydantic import BaseModel, ConfigDict
-from pydantic.alias_generators import to_camel
+Two kinds of binding, with different model config:
 
+| | API payloads | Static data (catalogues) |
+|---|---|---|
+| Example | a view's request/response bodies | `backend/notifications/registry.py` |
+| Field names | snake_case, as DRF sends them (no alias generator) | `alias_generator=to_camel` |
+| `extra="forbid"` | requests only; never on responses, so a browser on an old build accepts new fields | yes |
+| `data=` in the bundle | no | yes, emitted as a typed const |
 
-class Base(BaseModel):
-    model_config = ConfigDict(
-        frozen=True,
-        extra="forbid",                 # Zod .strict()
-        alias_generator=to_camel,       # camelCase on the frontend
-        validate_by_name=True,
-        validate_by_alias=True,
-        json_schema_serialization_defaults_required=True,
-    )
-```
-
-`json_schema_serialization_defaults_required` matters: without it a field with a
-default is optional in the schema and `field?: T | undefined` in TypeScript.
+Both set `json_schema_serialization_defaults_required=True` on models the backend
+serializes. Without it a field with a default is optional in the schema and
+`field?: T | undefined` in TypeScript.
 
 Use one root model whose `$defs` cover everything the frontend needs. It becomes
 `<Title>Schema`, and each nested model or enum becomes `<Name>Schema` plus
 `type <Name>`, so pick class names that read well in TypeScript.
+
+The `api` Claude skill (`.claude/skills/api/`) walks through an API binding end to end,
+from the axios call to the query hook.
 
 ## The exporter
 

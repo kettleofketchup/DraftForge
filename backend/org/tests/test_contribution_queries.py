@@ -17,8 +17,10 @@ from org.contributions.queries import (
     member_totals,
     org_total,
 )
+from org.contributions.serializers import member_summary
 from org.contributions.services import award_entry
 from org.models import ContributionEntry, OrgUser
+from user.querysets import with_user_profiles
 
 NY = ZoneInfo("America/New_York")
 OCT31_11PM_NY = datetime(2026, 10, 31, 23, 0, tzinfo=NY).astimezone(UTC)
@@ -95,6 +97,55 @@ class ContributionQueriesTest(TestCase):
         self.assertEqual(alice["org_user_pk"], self._org_user(self.alice).pk)
         self.assertIn("nickname", alice)
         self.assertIn("avatarUrl", alice)
+
+    def test_leaderboard_rows_carry_discord_names_for_this_org(self) -> None:
+        self.alice.discordNickname = "Gwaihir"
+        self.alice.nickname = "AliceSite"
+        self.alice.save()
+        self._seed()
+        self._award(self.alice, 1, NOV_5, org=self.other_org)
+        OrgUser.objects.filter(user=self.alice, organization=self.org).update(
+            guild_nickname="DragonClaw"
+        )
+        OrgUser.objects.filter(user=self.alice, organization=self.other_org).update(
+            guild_nickname="OtherNick"
+        )
+        OrgUser.objects.filter(user=self.bob, organization=self.org).update(
+            guild_nickname="   "
+        )
+        rows = {
+            r["username"]: r
+            for r in leaderboard(self.org, parse_period(self.org, None))
+        }
+        self.assertEqual(rows["q_alice"]["guildNickname"], "DragonClaw")
+        self.assertEqual(rows["q_alice"]["discordNickname"], "Gwaihir")
+        self.assertEqual(rows["q_alice"]["nickname"], "AliceSite")
+        self.assertIsNone(rows["q_bob"]["nickname"])
+        self.assertIsNone(rows["q_bob"]["guildNickname"])
+        self.assertIsNone(rows["q_bob"]["discordNickname"])
+        other = {
+            r["username"]: r
+            for r in leaderboard(self.other_org, parse_period(self.other_org, None))
+        }
+        self.assertEqual(other["q_alice"]["guildNickname"], "OtherNick")
+
+    def test_member_summary_carries_discord_names(self) -> None:
+        self.alice.discordNickname = "Gwaihir"
+        self.alice.nickname = "AliceSite"
+        self.alice.save()
+        self._award(self.alice, 1, NOV_5)
+        OrgUser.objects.filter(user=self.alice, organization=self.org).update(
+            guild_nickname="DragonClaw"
+        )
+        org_user = with_user_profiles(
+            OrgUser.objects.nocache().filter(user=self.alice, organization=self.org),
+            "user",
+        ).get()
+        with self.assertNumQueries(0):
+            summary = member_summary(org_user)
+        self.assertEqual(summary["guildNickname"], "DragonClaw")
+        self.assertEqual(summary["discordNickname"], "Gwaihir")
+        self.assertEqual(summary["nickname"], "AliceSite")
 
     def test_leaderboard_period_and_limit(self) -> None:
         self._seed()
