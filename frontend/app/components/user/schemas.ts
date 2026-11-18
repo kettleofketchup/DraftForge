@@ -64,7 +64,7 @@ export const UserSchema = z.object({
 
 /**
  * Core user fields for the entity cache.
- * Omits context-scoped fields (id=OrgUser pk, mmr=org MMR, league_mmr,
+ * Omits context-scoped fields (orgUserPk, mmr=org MMR, league_mmr,
  * guildNickname) which go into orgData/leagueData/orgNicknames on UserEntry.
  * pk is overridden from optional to required.
  */
