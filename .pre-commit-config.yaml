@@ -41,5 +41,5 @@ repos:
         name: shadcn design-system lint (frontend)
         entry: frontend/scripts/shadcn-lint-files.sh
         language: system
-        files: ^frontend/(app/.*\.(js|jsx|ts|tsx)|eslint\.shadcn\.config\.js|shadcn-lint-suppressions\.json)$
+        files: ^frontend/(app/.*\.(js|jsx|ts|tsx)|eslint\.shadcn\.config\.js|shadcn-lint-suppressions\.json|eslint-rules/.*\.js)$
         pass_filenames: true

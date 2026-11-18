@@ -118,6 +118,8 @@ nav:
       - Contributing: development/contributing.md
       - Changelog: development/changelog.md
       - Operations Notices: development/ops-notices.md
+      - Notification Message Types: development/notifications.md
+      - Pydantic to Zod: development/pydantic-zod.md
       - Theming Guide: THEMING-GUIDE.md
       - Demo Videos: ai/demo/index.md
       - Telemetry:

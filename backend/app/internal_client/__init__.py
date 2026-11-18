@@ -21,7 +21,22 @@ from pydantic_core import to_jsonable_python
 from telemetry.logging import get_logger
 
 if TYPE_CHECKING:
-    from app.schemas import AutoHeroDraftGameSchema
+    from app.schemas import (
+        AutoHeroDraftGameSchema,
+        TournamentParticipantSchema,
+        TournamentTaskSchema,
+    )
+    from discordbot.schemas import (
+        DiscordEventStateSchema,
+        MessageLogSchema,
+        SyncDiscordStateSchema,
+    )
+    from events.schemas import (
+        EventSignupSchema,
+        EventTaskSchema,
+        RepeaterSubscriberSchema,
+        ScheduledEventDueSchema,
+    )
 
 logger = get_logger(__name__)
 log = get_logger("app.internal_client")
@@ -38,7 +53,7 @@ API_BASE_URL = os.environ.get(
 TIMEOUT = 30
 
 
-def _headers():
+def _headers() -> dict[str, str]:
     return {
         "X-Internal-Token": os.environ.get("INTERNAL_SERVICE_TOKEN", ""),
         "Content-Type": "application/json",
@@ -124,7 +139,7 @@ def _get(path: str, params: dict | None = None) -> requests.Response | None:
 # ---- Discord writes ----
 
 
-def create_message_log(**data):
+def create_message_log(**data: Any) -> requests.Response | None:
     """Create DiscordMessageLog entry."""
     return _post("/discord/message-log/", data)
 
@@ -137,7 +152,7 @@ def claim_discord_message_log(
     embed_data: dict,
     fired_by_user_id: int | None = None,
     tournament_log_id: int | None = None,
-):
+) -> int | None:
     """Acquire a pre-send lease for (source, source_id).
 
     Returns the new DiscordMessageLog PK on success, or None if a row
@@ -145,7 +160,7 @@ def claim_discord_message_log(
     Workers MUST call this BEFORE the Discord HTTP send so the partial
     unique constraint can serialize concurrent claim attempts.
     """
-    payload = {
+    payload: dict[str, Any] = {
         "source": source,
         "source_id": source_id,
         "channel_id": channel_id,
@@ -173,13 +188,13 @@ def finalize_discord_message_log(
     discord_message_id: str | None = None,
     status_code: int | None = None,
     response_data: dict | None = None,
-):
+) -> requests.Response | None:
     """Update the lease row to its final state after the Discord HTTP send.
 
     Silently no-ops on 410 Gone — that means sweep_stale_discord_leases
     reaped the row before finalize landed (rare, only on slow workers).
     """
-    payload = {"success": success}
+    payload: dict[str, Any] = {"success": success}
     if discord_message_id is not None:
         payload["discord_message_id"] = discord_message_id
     if status_code is not None:
@@ -190,37 +205,37 @@ def finalize_discord_message_log(
     return _post(f"/discord/message-log/{log_id}/finalize/", payload)
 
 
-def create_event_log(**data):
+def create_event_log(**data: Any) -> requests.Response | None:
     """Create DiscordEventLog audit entry."""
     return _post("/discord/event-log/", data)
 
 
-def create_tournament_log(**data):
+def create_tournament_log(**data: Any) -> requests.Response | None:
     """Create DiscordTournamentLog entry."""
     return _post("/discord/tournament-log/", data)
 
 
-def update_tournament_log(pk, **data):
+def update_tournament_log(pk: int, **data: Any) -> requests.Response | None:
     """Update DiscordTournamentLog entry (recipient_count, message, success)."""
     return _patch(f"/discord/tournament-log/{pk}/", data)
 
 
-def get_or_create_discord_event(**data):
+def get_or_create_discord_event(**data: Any) -> requests.Response | None:
     """Get or create DiscordEvent for an event."""
     return _post("/discord/events/get-or-create/", data)
 
 
-def update_discord_event(pk, **data):
+def update_discord_event(pk: int, **data: Any) -> requests.Response | None:
     """Update DiscordEvent fields (scheduled_event_id, etc.)."""
     return _patch(f"/discord/events/{pk}/", data)
 
 
-def create_or_update_signup_message(**data):
+def create_or_update_signup_message(**data: Any) -> requests.Response | None:
     """Create/update DiscordEventMsgSignup record."""
     return _post("/discord/signup-message/", data)
 
 
-def clear_event_signup_state(event_id):
+def clear_event_signup_state(event_id: int) -> requests.Response | None:
     """Reset signup dedup state for an event (auto-recovery + manual repost).
 
     Flips DiscordEventMsgSignup.has_posted=False AND DiscordMessageLog.success=False
@@ -230,22 +245,22 @@ def clear_event_signup_state(event_id):
     return _post("/discord/signup-message/clear/", {"event_id": event_id})
 
 
-def create_or_update_announcement(**data):
+def create_or_update_announcement(**data: Any) -> requests.Response | None:
     """Create/update DiscordEventMsgAnnouncement record."""
     return _post("/discord/announcement/", data)
 
 
-def update_scheduled_event(pk, **data):
+def update_scheduled_event(pk: int, **data: Any) -> requests.Response | None:
     """Update ScheduledEvent fields (discord_message_id, next_post_at)."""
     return _patch(f"/discord/scheduled-events/{pk}/", data)
 
 
-def create_event_dm(**data):
+def create_event_dm(**data: Any) -> requests.Response | None:
     """Create DiscordEventDM record (crash-safe: create before send)."""
     return _post("/discord/event-dm/", data)
 
 
-def update_event_dm(pk, **data):
+def update_event_dm(pk: int, **data: Any) -> requests.Response | None:
     """Update DiscordEventDM delivery status after DM sent."""
     return _patch(f"/discord/event-dm/{pk}/", data)
 
@@ -253,7 +268,7 @@ def update_event_dm(pk, **data):
 # ---- Event writes ----
 
 
-def transition_event_state(event_pk, new_state):
+def transition_event_state(event_pk: int, new_state: str) -> requests.Response | None:
     """Transition event to a new state."""
     return _post(f"/events/{event_pk}/transition/", {"state": new_state})
 
@@ -281,12 +296,12 @@ def _api_get(path: str, params: dict | None = None) -> requests.Response | None:
         return None
 
 
-def get_event(pk):
+def get_event(pk: int) -> requests.Response | None:
     """Get event data by PK via public API."""
     return _api_get(f"/events/{pk}/")
 
 
-def get_event_signups(event_id):
+def get_event_signups(event_id: int) -> list["EventSignupSchema"]:
     """Get signup list for an event via public API.
 
     Returns list of EventSignupData (Pydantic), or empty list on error.
@@ -299,7 +314,7 @@ def get_event_signups(event_id):
     return []
 
 
-def get_events_list(**params):
+def get_events_list(**params: Any) -> list[dict[str, Any]]:
     """Get events list via public API with query params.
 
     Returns list of dicts (slim serializer output).
@@ -311,7 +326,7 @@ def get_events_list(**params):
     return []
 
 
-def get_active_repeaters():
+def get_active_repeaters() -> list[dict[str, Any]]:
     """Get all active repeaters via internal API."""
     resp = _get("/repeaters/active/")
     if resp and resp.ok:
@@ -319,7 +334,7 @@ def get_active_repeaters():
     return []
 
 
-def generate_repeater_events(repeater_pk):
+def generate_repeater_events(repeater_pk: int) -> int:
     """Trigger event generation for a specific repeater. Returns created count."""
     resp = _post(f"/repeaters/{repeater_pk}/generate/", {})
     if resp and resp.ok:
@@ -327,7 +342,7 @@ def generate_repeater_events(repeater_pk):
     return 0
 
 
-def get_event_for_task(pk):
+def get_event_for_task(pk: int) -> "EventTaskSchema | None":
     """Get full event data + org Discord config for celery tasks.
 
     Returns EventTaskData (Pydantic) with typed attribute access,
@@ -341,12 +356,12 @@ def get_event_for_task(pk):
     return None
 
 
-def get_events(params=None):
+def get_events(params: dict[str, Any] | None = None) -> requests.Response | None:
     """List events with filters via public API."""
     return _api_get("/events/", params=params)
 
 
-def check_message_log_exists(source, source_id):
+def check_message_log_exists(source: str, source_id: int) -> bool:
     """Check if a successful DiscordMessageLog exists for idempotency."""
     resp = _get("/discord/check-log/", {"source": source, "source_id": source_id})
     if resp and resp.ok:
@@ -354,7 +369,7 @@ def check_message_log_exists(source, source_id):
     return False
 
 
-def search_message_logs(**params):
+def search_message_logs(**params: Any) -> list["MessageLogSchema"]:
     """Search DiscordMessageLog entries. Returns list of MessageLogEntry."""
     from discordbot.schemas import MessageLogSchema
 
@@ -364,7 +379,7 @@ def search_message_logs(**params):
     return []
 
 
-def get_fired_message_sources(event_id):
+def get_fired_message_sources(event_id: int) -> set[str]:
     """Get set of fired log sources for an event (for sync_discord_events)."""
     logs = search_message_logs(
         source_id=event_id,
@@ -374,7 +389,7 @@ def get_fired_message_sources(event_id):
     return {log.source for log in logs}
 
 
-def get_first_message_log(source, source_id):
+def get_first_message_log(source: str, source_id: int) -> "MessageLogSchema | None":
     """Get the most recent successful message log for a source+source_id."""
     logs = search_message_logs(
         source=source, source_id=source_id, success="true", limit=1
@@ -382,7 +397,7 @@ def get_first_message_log(source, source_id):
     return logs[0] if logs else None
 
 
-def get_sync_discord_state():
+def get_sync_discord_state() -> "SyncDiscordStateSchema | None":
     """Get bulk Discord sync state. Returns SyncDiscordState or None."""
     from discordbot.schemas import SyncDiscordStateSchema
 
@@ -392,7 +407,7 @@ def get_sync_discord_state():
     return None
 
 
-def get_discord_event_state(event_id):
+def get_discord_event_state(event_id: int) -> "DiscordEventStateSchema | None":
     """Get Discord event state. Returns DiscordEventState or None."""
     from discordbot.schemas import DiscordEventStateSchema
 
@@ -402,7 +417,7 @@ def get_discord_event_state(event_id):
     return None
 
 
-def get_repeater_subscribers(repeater_id):
+def get_repeater_subscribers(repeater_id: int) -> list["RepeaterSubscriberSchema"]:
     """Get subscribers for a repeater. Returns list of RepeaterSubscriber."""
     from events.schemas import RepeaterSubscriberSchema
 
@@ -412,7 +427,7 @@ def get_repeater_subscribers(repeater_id):
     return []
 
 
-def get_due_scheduled_events():
+def get_due_scheduled_events() -> list["ScheduledEventDueSchema"]:
     """Get ScheduledEvents due for posting. Returns list of ScheduledEventDue."""
     from events.schemas import ScheduledEventDueSchema
 
@@ -425,7 +440,7 @@ def get_due_scheduled_events():
 # ---- Steam sync ----
 
 
-def get_steam_sync_state(league_id):
+def get_steam_sync_state(league_id: int) -> dict[str, Any] | None:
     """Get LeagueSyncState for a league (creates if missing)."""
     resp = _get(f"/steam/sync-state/{league_id}/")
     if resp and resp.ok:
@@ -433,7 +448,7 @@ def get_steam_sync_state(league_id):
     return None
 
 
-def get_tracked_steam_league_ids():
+def get_tracked_steam_league_ids() -> list[int] | None:
     """Return list of League.steam_league_id values currently configured.
 
     Returns None on transport error so the caller can distinguish that
@@ -445,7 +460,7 @@ def get_tracked_steam_league_ids():
     return None
 
 
-def update_steam_sync_state(league_id, **fields):
+def update_steam_sync_state(league_id: int, **fields: Any) -> bool:
     """Update sync state fields. Returns True on success."""
     resp = _patch(f"/steam/sync-state/{league_id}/", fields)
     return resp is not None and resp.ok
@@ -469,7 +484,7 @@ def store_steam_match(match_data: dict) -> tuple[dict | None, int | None]:
     return None, resp.status_code
 
 
-def update_league_stats(league_id):
+def update_league_stats(league_id: int) -> int | None:
     """Trigger league stats recalculation. Returns updated_count or None."""
     resp = _post(f"/steam/update-league-stats/{league_id}/", {})
     if resp and resp.ok:
@@ -477,7 +492,7 @@ def update_league_stats(league_id):
     return None
 
 
-def recalculate_user_mmr(user_id):
+def recalculate_user_mmr(user_id: int) -> dict[str, Any] | None:
     """Recalculate a user's league MMR. Returns response dict or None."""
     resp = _post(f"/steam/recalculate-mmr/{user_id}/", {})
     if resp and resp.ok:
@@ -485,12 +500,12 @@ def recalculate_user_mmr(user_id):
     return None
 
 
-def batch_upsert_matches(data):
+def batch_upsert_matches(data: dict[str, Any]) -> requests.Response | None:
     """Batch create/update Match + PlayerMatchStats records."""
     return _post("/steam/matches/", data)
 
 
-def update_sync_state(pk, **data):
+def update_sync_state(pk: int, **data: Any) -> requests.Response | None:
     """Update LeagueSyncState after sync."""
     return _patch(f"/steam/sync-state/{pk}/", data)
 
@@ -498,12 +513,14 @@ def update_sync_state(pk, **data):
 # ---- User reads ----
 
 
-def get_users_for_avatar_check(has_avatar=None, limit=100, offset=0):
+def get_users_for_avatar_check(
+    has_avatar: bool | None = None, limit: int = 100, offset: int = 0
+) -> list[dict[str, Any]]:
     """Get users with Discord IDs for avatar validation.
 
     Returns list of dicts with pk, discord_id, avatar, username.
     """
-    params = {"limit": limit, "offset": offset}
+    params: dict[str, Any] = {"limit": limit, "offset": offset}
     if has_avatar is not None:
         params["has_avatar"] = "true" if has_avatar else "false"
     resp = _get("/users/avatar-check/", params=params)
@@ -515,7 +532,7 @@ def get_users_for_avatar_check(has_avatar=None, limit=100, offset=0):
 # ---- User writes ----
 
 
-def update_user_avatar(pk, avatar):
+def update_user_avatar(pk: int, avatar: str) -> requests.Response | None:
     """Update CustomUser avatar hash."""
     return _patch(f"/users/{pk}/avatar/", {"avatar": avatar})
 
@@ -523,7 +540,7 @@ def update_user_avatar(pk, avatar):
 # ---- Tournament reads ----
 
 
-def get_tournament_for_task(pk):
+def get_tournament_for_task(pk: int) -> "TournamentTaskSchema | None":
     """Get tournament config for Celery tasks. Returns TournamentTaskData or None."""
     from app.schemas import TournamentTaskSchema
 
@@ -533,7 +550,9 @@ def get_tournament_for_task(pk):
     return None
 
 
-def get_tournament_participants(tournament_id):
+def get_tournament_participants(
+    tournament_id: int,
+) -> list["TournamentParticipantSchema"]:
     """Get participants with Discord IDs. Returns list of TournamentParticipant."""
     from app.schemas import TournamentParticipantSchema
 
@@ -543,7 +562,7 @@ def get_tournament_participants(tournament_id):
     return []
 
 
-def get_match_participants(game_id):
+def get_match_participants(game_id: int) -> list["TournamentParticipantSchema"]:
     """Get match players with Discord IDs. Returns list of TournamentParticipant."""
     from app.schemas import TournamentParticipantSchema
 
@@ -566,7 +585,7 @@ def get_auto_herodraft_games() -> list["AutoHeroDraftGameSchema"]:
 # ---- Tournament writes ----
 
 
-def create_herodraft_for_game(game_id):
+def create_herodraft_for_game(game_id: int) -> requests.Response | None:
     """Atomically create a HeroDraft for a game. Returns response or None."""
     return _post(f"/games/{game_id}/create-herodraft/", {})
 
@@ -574,7 +593,7 @@ def create_herodraft_for_game(game_id):
 # ---- Batched avatar refresh (used by app/tasks/avatar_refresh.py) ----
 
 
-def list_discord_linked_users():
+def list_discord_linked_users() -> list[dict[str, Any]]:
     """Return every Discord-linked user as a flat list, or [] on failure.
 
     Each entry: {pk, discord_id, avatar, username}.
@@ -599,7 +618,7 @@ def list_discord_linked_users():
         return []
 
 
-def list_discord_guild_ids():
+def list_discord_guild_ids() -> list[str]:
     """Return distinct Org discord_server_ids, or [] on failure.
 
     See list_discord_linked_users for the empty-vs-failure semantics.
@@ -619,7 +638,7 @@ def list_discord_guild_ids():
         return []
 
 
-def bulk_update_user_avatars(updates):
+def bulk_update_user_avatars(updates: list[dict[str, Any]]) -> int:
     """Bulk-update avatar hashes. `updates`: list of {pk, avatar}.
 
     Returns updated count (0 on empty or network failure).
@@ -696,7 +715,9 @@ def bulk_update_member_names(
 # ---- Discord lease sweeper (used by discordbot/tasks.py) ----
 
 
-def sweep_discord_leases(pending_threshold_minutes=5, failed_threshold_hours=1):
+def sweep_discord_leases(
+    pending_threshold_minutes: int = 5, failed_threshold_hours: int = 1
+) -> dict[str, int]:
     """Reap stuck DiscordMessageLog rows.
 
     Renamed from `sweep_stale_discord_leases` so callers can `import` it
