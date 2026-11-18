@@ -264,3 +264,41 @@ class ConsumerDbConnectionCleanupTests(SimpleTestCase):
         self.assertEqual([e for e, _ in events], ["close", "work", "close"])
         self.assertEqual(len({t for _, t in events}), 1)
         self.assertTrue(events[0][1].startswith("ws-db"), events)
+
+
+class DraftOrderLoopTests(SimpleTestCase):
+    """Each async test runs on its own loop; a lock must not outlive it (#588)."""
+
+    def test_same_draft_contends_on_a_second_event_loop(self) -> None:
+        created: list[asyncio.Lock] = []
+
+        class KeptLock(asyncio.Lock):
+            def __init__(self) -> None:
+                super().__init__()
+                created.append(self)
+
+        consumer = DraftConsumer()
+        consumer.draft_id = 588_000
+
+        async def contended_writes() -> list[str]:
+            order: list[str] = []
+            release = asyncio.Event()
+
+            async def first() -> None:
+                await release.wait()
+                order.append("first")
+
+            async def second() -> None:
+                order.append("second")
+
+            a = asyncio.ensure_future(consumer.in_draft_order(first))
+            await asyncio.sleep(0)
+            b = asyncio.ensure_future(consumer.in_draft_order(second))
+            await asyncio.sleep(0)
+            release.set()
+            await asyncio.gather(a, b)
+            return order
+
+        with patch.object(asyncio, "Lock", KeptLock):
+            self.assertEqual(asyncio.run(contended_writes()), ["first", "second"])
+            self.assertEqual(asyncio.run(contended_writes()), ["first", "second"])

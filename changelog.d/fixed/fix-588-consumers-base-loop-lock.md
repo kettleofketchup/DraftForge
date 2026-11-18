@@ -1,0 +1,1 @@
+- Backend consumer tests no longer fail with "bound to a different event loop" when the `app` tests run in the same process as other labels. The per-draft write lock is now kept per event loop (#588).
