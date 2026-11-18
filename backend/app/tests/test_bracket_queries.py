@@ -2,7 +2,6 @@
 
 import itertools
 import json
-from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -10,6 +9,7 @@ from typing import Any
 from django.db import connection
 from django.db.models import Q
 from django.test import TestCase, override_settings
+from django.test.utils import CaptureQueriesContext
 from rest_framework.test import APIClient
 
 from app.models import (
@@ -173,23 +173,10 @@ class BracketQueryTests(TestCase):
         self.client = APIClient()
 
     def get_bracket(self, tournament: Tournament) -> tuple[bytes, int]:
-        # CaptureQueriesContext drops queries when the request resets the log.
-        seen: list[str] = []
-
-        def record(
-            execute: Callable[..., Any],
-            sql: str,
-            params: Any,
-            many: bool,
-            context: dict[str, Any],
-        ) -> Any:
-            seen.append(sql)
-            return execute(sql, params, many, context)
-
-        with connection.execute_wrapper(record):
+        with CaptureQueriesContext(connection) as ctx:
             response = self.client.get(f"/api/bracket/tournaments/{tournament.pk}/")
         self.assertEqual(response.status_code, 200)
-        return response.content, len(seen)
+        return response.content, len(ctx)
 
     def test_query_count_is_fixed(self) -> None:
         fx = build_bracket("big")
