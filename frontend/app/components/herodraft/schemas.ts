@@ -8,6 +8,8 @@ export const DraftTeamCaptainSchema = z.object({
   // nickname / '?' via DisplayName.
   username: z.string().nullable(),
   nickname: z.string().nullable(),
+  discordNickname: z.string().nullable().optional(),
+  guildNickname: z.string().nullable().optional(),
   avatar: z.string().nullable(),
   avatarUrl: z.string().nullable().optional(),
   discordId: z.string().nullable().optional(),
@@ -44,6 +46,7 @@ export const HeroDraftSchema = z.object({
   id: z.number(),
   game: z.number(),
   tournament_id: z.number().nullable().optional(), // Tournament for "Return to Bracket" navigation
+  organization_pk: z.number().nullable().optional(),
   state: z.enum([
     'waiting_for_captains',
     'rolling',

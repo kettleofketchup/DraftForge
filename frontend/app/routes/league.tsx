@@ -49,6 +49,7 @@ import {
   EntityBreadcrumb,
   type BreadcrumbSegment,
 } from '~/components/ui/entity-breadcrumb';
+import { DisplayOrgProvider } from '~/components/user/DisplayOrgProvider';
 import { useMemberAccess } from '~/hooks/useMemberAccess';
 import { usePageNav } from '~/hooks/usePageNav';
 import { useIsLeagueAdmin } from '~/hooks/usePermissions';
@@ -197,7 +198,7 @@ export default function LeaguePage() {
     );
   }
 
-  return (
+  const page = (
     <div className="container mx-auto py-6 px-4 space-y-6">
       <div className="flex flex-col gap-6 rounded-lg border border-border bg-base-200/50 p-4 md:p-6">
         {breadcrumbSegments.length > 1 && (
@@ -268,5 +269,13 @@ export default function LeaguePage() {
         />
       )}
     </div>
+  );
+
+  return (
+    <DisplayOrgProvider
+      orgId={league.organization?.pk ?? league.organization_id}
+    >
+      {page}
+    </DisplayOrgProvider>
   );
 }

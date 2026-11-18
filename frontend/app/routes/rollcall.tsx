@@ -54,6 +54,7 @@ import {
 import { ConfirmDialog } from '~/components/ui/dialogs';
 import { EntityBreadcrumb } from '~/components/ui/entity-breadcrumb';
 import { UserStrip } from '~/components/user';
+import { DisplayOrgProvider } from '~/components/user/DisplayOrgProvider';
 import {
   useEvent,
   useEventActionMutation,
@@ -213,7 +214,7 @@ export default function RollCallPage() {
   const maxPlayers = event.max_players;
   const hasEnough = !minPlayers || totalReady >= minPlayers;
 
-  return (
+  const page = (
     <div className="container mx-auto py-6 px-4 space-y-6">
       <EntityBreadcrumb
         segments={[
@@ -572,6 +573,10 @@ export default function RollCallPage() {
         confirmTestId="rollcall-start-dialog-confirm"
       />
     </div>
+  );
+
+  return (
+    <DisplayOrgProvider orgId={event.organization}>{page}</DisplayOrgProvider>
   );
 }
 

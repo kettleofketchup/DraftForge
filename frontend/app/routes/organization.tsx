@@ -45,7 +45,6 @@ import {
   EditOrganizationModal,
   useOrganization,
 } from '~/components/organization';
-import { buildOrgPageNavOptions } from '~/components/organization/orgPageNavOptions';
 import { Badge } from '~/components/ui/badge';
 import {
   AddDiscordBotButton,
@@ -71,6 +70,7 @@ import {
 import { UserList } from '~/components/user';
 import { AddUserModal } from '~/components/user/AddUserModal';
 import { CSVImportModal } from '~/components/user/CSVImportModal';
+import { DisplayOrgProvider } from '~/components/user/DisplayOrgProvider';
 import type { UserType } from '~/components/user/types';
 import { ContributionsTab } from '~/features/contributions';
 import {
@@ -354,7 +354,7 @@ function RepeatersList({
   );
 }
 
-export default function OrganizationDetailPage() {
+function OrganizationDetailPage() {
   const { organizationId } = useParams();
   const pk = organizationId ? parseInt(organizationId, 10) : undefined;
   const queryClient = useQueryClient();
@@ -444,7 +444,6 @@ export default function OrganizationDetailPage() {
   const isOrgStaff = useIsOrganizationStaff(organization);
   const canEditEvents = isOrgStaff;
   const canAddMembers = isOrgStaff;
-  const canViewClaims = isOrgStaff;
 
   // AddUserModal callbacks
   const handleAddMember = useCallback(
@@ -487,27 +486,33 @@ export default function OrganizationDetailPage() {
   // Page nav options for mobile navbar dropdown
   const userCountDisplay =
     orgUsersLoading || orgUsersOrgId !== pk ? '...' : orgUserPks.length;
-  const pageNavOptions = useMemo(
-    () =>
-      buildOrgPageNavOptions({
-        leaguesCount: leagues.length,
-        eventsCount: events.length,
-        userCountDisplay,
-        canViewMembers,
-        canViewContributions,
-        canUsePromotion,
-        canViewClaims,
-      }),
-    [
-      leagues.length,
-      events.length,
-      userCountDisplay,
-      canViewMembers,
-      canViewContributions,
-      canUsePromotion,
-      canViewClaims,
-    ],
-  );
+  const pageNavOptions = useMemo(() => {
+    const opts = [
+      { value: 'leagues', label: `Leagues (${leagues.length})` },
+      { value: 'events', label: `Events (${events.length})` },
+    ];
+    if (canViewMembers) {
+      opts.push({ value: 'users', label: `Users (${userCountDisplay})` });
+    }
+    if (canViewContributions) {
+      opts.push({ value: 'contributions', label: 'Contributions' });
+    }
+    if (canUsePromotion) {
+      opts.push({ value: 'promotion', label: 'Promotion' });
+    }
+    if (isOrgAdmin) {
+      opts.push({ value: 'claims', label: 'Claims' });
+    }
+    return opts;
+  }, [
+    leagues.length,
+    events.length,
+    userCountDisplay,
+    canViewMembers,
+    canViewContributions,
+    canUsePromotion,
+    isOrgAdmin,
+  ]);
 
   usePageNav(organization ? pageNavOptions : null, activeTab, setActiveTab);
 
@@ -638,7 +643,7 @@ export default function OrganizationDetailPage() {
                 Promotion
               </TabsTrigger>
             )}
-            {canViewClaims && (
+            {isOrgStaff && (
               <TabsTrigger value="claims" data-testid="org-tab-claims">
                 <ClipboardList className="w-4 h-4 mr-2" />
                 Claims
@@ -842,7 +847,7 @@ export default function OrganizationDetailPage() {
           )}
 
           {/* Claims Tab (Staff+) */}
-          {canViewClaims && pk && (
+          {isOrgStaff && pk && (
             <TabsContent value="claims">
               <ClaimsTab organizationId={pk} />
             </TabsContent>
@@ -937,5 +942,15 @@ export default function OrganizationDetailPage() {
         />
       )}
     </div>
+  );
+}
+
+export default function OrganizationRoute() {
+  const { organizationId } = useParams();
+  const pk = organizationId ? parseInt(organizationId, 10) : NaN;
+  return (
+    <DisplayOrgProvider orgId={Number.isNaN(pk) ? null : pk}>
+      <OrganizationDetailPage />
+    </DisplayOrgProvider>
   );
 }
