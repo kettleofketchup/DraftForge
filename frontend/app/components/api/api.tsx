@@ -191,3 +191,18 @@ export type {
   RepeaterSubscriber,
   SignupBody,
 } from './eventsAPI';
+
+// Org settings
+export {
+  OrgSettingsSchema,
+  StaffOverridePolicySchema,
+  StaffPlacementFormSchema,
+  getOrgSettings,
+  orgSettingsKey,
+  patchOrgSettings,
+} from './orgSettingsAPI';
+export type {
+  OrgSettings,
+  StaffOverridePolicy,
+  StaffPlacementFormValues,
+} from './orgSettingsAPI';

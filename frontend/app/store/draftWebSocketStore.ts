@@ -22,7 +22,6 @@ import {
 import { getLogger } from '~/lib/logger';
 import type { ConnectionStatus, Unsubscribe } from '~/lib/websocket';
 import { getWebSocketManager } from '~/lib/websocket';
-import { useOrgStore } from '~/store/orgStore';
 import { useUserCacheStore } from '~/store/userCacheStore';
 import { useUserStore } from '~/store/userStore';
 import type {
@@ -117,9 +116,18 @@ function resumeEndedBy(
 function ingestDraftStateUsers(draftState: WebSocketDraftState): void {
   if (draftState._users) {
     const users = Object.values(draftState._users) as UserType[];
-    const orgId = useOrgStore.getState().currentOrg?.pk;
-    useUserCacheStore.getState().upsert(users, { orgId });
+    const orgId = draftOrgId(draftState);
+    useUserCacheStore.getState().upsert(users, orgId ? { orgId } : undefined);
   }
+}
+
+// _users carry the tournament org's guildNickname and MMR, so tag them with that org, not orgStore.currentOrg.
+function draftOrgId(draftState: WebSocketDraftState): number | undefined {
+  if (draftState.organization_pk != null) return draftState.organization_pk;
+  const tournament = useUserStore.getState().tournament;
+  if (tournament?.pk == null || tournament.pk !== draftState.tournament?.pk)
+    return undefined;
+  return tournament.organization_pk ?? undefined;
 }
 
 /**

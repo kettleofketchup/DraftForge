@@ -44,6 +44,10 @@ class DiscordRateLimitTimeout(requests.RequestException, RuntimeError):
     """No rate-limit token within max_wait; a RequestException so callers treat it as a failed send."""
 
 
+class DiscordAuthError(requests.HTTPError):
+    """Discord rejected the bot token (401); never retried."""
+
+
 class MessageDeletedError(Exception):
     """Raised when Discord reports the target message no longer exists (404 / 10008)."""
 
@@ -126,6 +130,7 @@ def _rate_limited_request(
     """Make a rate-limited HTTP request to the Discord API.
 
     Acquires a token before each attempt and retries on 429 responses.
+    Raises DiscordAuthError on 401.
     Applies DISCORD_HTTP_TIMEOUT_S unless the caller passes its own timeout.
     """
     kwargs.setdefault("timeout", DISCORD_HTTP_TIMEOUT_S)
@@ -144,6 +149,17 @@ def _rate_limited_request(
             )
             _time.sleep(retry_after)
             continue
+        if response.status_code == 401:
+            log.error(
+                "discord_auth_failed",
+                system="discord",
+                subsystem="utils",
+                method=method,
+                url=url,
+            )
+            raise DiscordAuthError(
+                "Discord rejected the bot token (401)", response=response
+            )
         return response
     return response
 

@@ -20,12 +20,15 @@ just frontend::lint-shadcn-prune   # after fixing baselined violations
 | --- | --- |
 | `shadcn/no-raw-colors` | Raw palette classes (`text-green-500`, `bg-slate-900`) and hex values instead of brand tokens. Same policy as the `brand` skill, now machine-checked. |
 | `shadcn/no-unknown-classes` | Classes Tailwind emits **no CSS** for: `align-center`, `justify-left`, `items-top`, `3xl:*` (no such breakpoint), `prose*` (`@tailwindcss/typography` is not installed). Each hit is a silent styling bug. Zero baseline entries: every hit fails. |
-| `draftforge/use-display-name` | A person-name field (`username`, `nickname`, `discordNickname`, `guildNickname`, `discordUsername`, `global_name`) rendered straight into JSX, including `a.nickname \|\| a.username`, `??`, ternary branches and template literals. Use `DisplayName(user)`, which applies org server nicknames and Discord names. A ternary *test* (`p.username ? DisplayName(p) : …`) and attributes like `title` are allowed. |
+| `draftforge/use-display-name` | A person-name field (`username`, `nickname`, `discordNickname`, `guildNickname`, `discordUsername`, `global_name`) shown to a person without `DisplayName`: JSX children, user-facing attributes (`title`, `alt`, `aria-label`, `placeholder`, `label`), and strings built by template literals or `+` (toasts, confirms, team names). Not flagged: a ternary *test*, logger calls (`log.*`, `logger.*`, `console.*`), `data-*`, `key`, `id`, `className`, links and query keys, where the raw username is correct. |
 | `draftforge/use-user-avatar` | `<AvatarImage>` whose `src` reads `.avatar` / `.avatarUrl`. Use `<UserAvatar user={…} />` for the shared fallback, sizes and Discord URL handling. Non-user images (org logos) are not flagged. |
+| `draftforge/no-display-org-arg` | `DisplayName(x, …, org)`. The org is derived from the current page (`lib/displayOrg.ts`), so call `DisplayName(x)`; a deliberate override gets a line-level disable with a reason. Off in tests. |
+| `draftforge/no-user-reshape` | `<UserAvatar user={{ pk: x.pk, username: x.username, … }} />` copying same-named fields from one object (or `pk` from `user_id`/`user`/`id`). Pass `user={x}`; `UserAvatar` resolves the user by id and fills the rest from the user cache. Translations such as `{ username: payload.captain_name }` are not flagged. |
+| `draftforge/no-direct-name-resolver` | Calling `resolveDisplayName` or `AvatarUrl` outside the helpers. Use `DisplayName(user)` / `<UserAvatar user={…} />`. Off in tests. |
 
-The two `draftforge/*` rules are local (`frontend/eslint-rules/user-display.js`, tests in
+The `draftforge/*` rules are local (`frontend/eslint-rules/user-display.js`, tests in
 `frontend/tests/unit/eslint-user-display.test.ts`) and are off in the helpers that implement
-them (`UserAvatar.tsx`, `avatar.tsx`, `ui/**`). When a screen deliberately shows one specific
+them (`UserAvatar.tsx`, `avatar.tsx`, `lib/userDisplayName.ts`, `lib/displayOrg.ts`, `ui/**`). When a screen deliberately shows one specific
 field (an `@handle`, a labelled "Username:" row, a Discord member picker), opt out on that
 line with a reason: `// eslint-disable-next-line draftforge/use-display-name -- shows the handle`.
 

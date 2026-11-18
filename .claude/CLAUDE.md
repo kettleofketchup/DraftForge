@@ -396,7 +396,7 @@ See `docs/development/test-stack-slots.md`.
 - `visual-debugging` - Chrome MCP browser automation for debugging
 - `changelog` - Changelog fragments (`changelog.d/`), the `changelog` CI check and release assembly
 - `release` - Cutting a release with `just version::set X.Y.Z`: preflight, changelog assembly, tag, image CI
-- `pydantic-zod` - Generate frontend Zod schemas from backend pydantic models (`just py::gen-*`, `--check` in CI)
+- `api` - Frontend↔backend API binding: axios client, Zod response parsing, TanStack Query hooks, DRF errors, generated Zod from pydantic models (`just py::gen-*`)
 
 ## Demo Video Recording
 
