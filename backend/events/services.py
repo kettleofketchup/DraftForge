@@ -185,20 +185,12 @@ def _log_kept_on_team(
 
 
 def _roster_remove_if_left(signup: EventSignup) -> None:
-    """Remove the player when their status no longer joins the roster, unless
-    they are on a team in the tournament (removal would cascade into the team)."""
-    event = signup.event
-    if joins_roster(event, signup.status):
+    """Remove the player when their status no longer joins the roster. This
+    is an explicit staff or player action, so it also drops them from their
+    team; only the bulk sync in sync_event_roster keeps team members."""
+    if joins_roster(signup.event, signup.status):
         return
-    tournament = event.tournament
-    if tournament is None or tournament.state != "future":
-        return
-    if signup.user_id in team_bound_user_pks(tournament):
-        _log_kept_on_team(
-            event, tournament, signup.user_id, signup_status=signup.status
-        )
-        return
-    remove_user_from_tournament(event, signup.user)
+    remove_user_from_tournament(signup.event, signup.user)
 
 
 @transaction.atomic

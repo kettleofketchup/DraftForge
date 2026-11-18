@@ -172,48 +172,49 @@ class RosterRuleTests(RosterTestCase):
 
     def test_approve_in_roll_call_keeps_team_member(self, *_mocks: MagicMock) -> None:
         event = self._event(state=EventState.ROLL_CALL)
-        captain, member = self.make_user(), self.make_user()
-        team, game = self._team(event, [captain, member])
+        captain, member, waiting = self.make_user(), self.make_user(), self.make_user()
+        team, game = self._team(event, [captain, member, waiting])
         before = self._team_state(team)
-        signup = self._signup(event, member, SignupStatus.CANCELLED)
 
-        reinstate_signup(signup)
-        demote_to_waitlist(signup)
-        approve_signup(signup)
+        reinstate_signup(self._signup(event, member, SignupStatus.CANCELLED))
+        approve_signup(
+            self._signup(event, waiting, SignupStatus.WAITLISTED, waitlist_position=1)
+        )
 
         self.assertEqual(self._team_state(team), before)
         self.assertTrue(Game.objects.nocache().filter(pk=game.pk).exists())
-        self.assertIn(member.pk, self._roster(event))
+        self.assertTrue({member.pk, waiting.pk} <= self._roster(event))
 
-    def test_cancel_team_member_not_removed(self, *_mocks: MagicMock) -> None:
+    def test_explicit_removals_drop_team_members(self, *_mocks: MagicMock) -> None:
+        actions = {
+            "cancel": (SignupStatus.APPROVED, EventState.SIGNUPS_OPEN, cancel_signup),
+            "reject": (SignupStatus.CONFIRMED, EventState.SIGNUPS_OPEN, reject_signup),
+            "demote": (
+                SignupStatus.APPROVED,
+                EventState.SIGNUPS_OPEN,
+                demote_to_waitlist,
+            ),
+            "unconfirm": (
+                SignupStatus.CONFIRMED,
+                EventState.ROLL_CALL,
+                unconfirm_signup,
+            ),
+        }
+        for name, (status, state, action) in actions.items():
+            with self.subTest(action=name):
+                event = self._event(state=state)
+                captain, member = self.make_user(), self.make_user()
+                team, _game = self._team(event, [captain, member])
+                action(self._signup(event, member, status))
+                self.assertNotIn(member.pk, self._roster(event))
+                self.assertNotIn(member.pk, self._team_state(team)[2])
+
+    def test_reject_team_captain_removed(self, *_mocks: MagicMock) -> None:
         event = self._event(state=EventState.SIGNUPS_OPEN)
         captain, member = self.make_user(), self.make_user()
-        team, game = self._team(event, [captain, member])
-        before = self._team_state(team)
-        signup = self._signup(event, member, SignupStatus.APPROVED)
-
-        with capture_logs() as logs:
-            cancel_signup(signup)
-
-        self.assertEqual(self._team_state(team), before)
-        self.assertTrue(Game.objects.nocache().filter(pk=game.pk).exists())
-        self.assertIn(member.pk, self._roster(event))
-        skipped = [
-            entry
-            for entry in logs
-            if entry["event"] == "event_roster_sync_skipped_team_member"
-        ]
-        self.assertEqual(len(skipped), 1)
-        self.assertEqual(skipped[0]["user_id"], member.pk)
-
-    def test_reject_team_captain_not_removed(self, *_mocks: MagicMock) -> None:
-        event = self._event(state=EventState.SIGNUPS_OPEN)
-        captain, member = self.make_user(), self.make_user()
-        team, _game = self._team(event, [captain, member])
-        before = self._team_state(team)
+        self._team(event, [captain, member])
         reject_signup(self._signup(event, captain, SignupStatus.CONFIRMED))
-        self.assertEqual(self._team_state(team), before)
-        self.assertIn(captain.pk, self._roster(event))
+        self.assertNotIn(captain.pk, self._roster(event))
 
     def test_cancel_outside_team_removes(self, *_mocks: MagicMock) -> None:
         event = self._event(state=EventState.SIGNUPS_OPEN)
