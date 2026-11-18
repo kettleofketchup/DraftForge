@@ -35,13 +35,14 @@ export function describeSteamAccountIdConflict(
   return `Already used by ${who}. ${SUFFIX}`;
 }
 
-export function steamAccountIdConflictFromError(
-  body: unknown,
-): string | null {
+export function steamAccountIdConflictFromError(body: unknown): string | null {
   if (!body || typeof body !== 'object') return null;
   const data = body as Record<string, unknown>;
 
-  if (data.code === 'steam_account_id_taken' && typeof data.error === 'string') {
+  if (
+    data.code === 'steam_account_id_taken' &&
+    typeof data.error === 'string'
+  ) {
     return data.error;
   }
 

@@ -10,13 +10,13 @@ import {
   TableRow,
 } from '~/components/ui/table';
 import { PositionEnum } from '~/components/user';
-import { UserAvatar } from '~/components/user/UserAvatar';
 import { RolePositions } from '~/components/user/positions';
 import type { UserType } from '~/components/user/types';
+import { UserAvatar } from '~/components/user/UserAvatar';
 import { UserStrip } from '~/components/user/UserStrip';
+import type { TeamType } from '~/index';
 import { cn } from '~/lib/utils';
 import { useUserStore } from '~/store/userStore';
-import type { TeamType } from '~/index';
 import { DraftOrderButton } from './draftOrder';
 import { UpdateCaptainButton } from './UpdateCaptainButton';
 
@@ -108,7 +108,10 @@ interface CaptainStripRowProps {
   isCaptain: boolean;
 }
 
-const CaptainStripRow: React.FC<CaptainStripRowProps> = ({ user, isCaptain }) => {
+const CaptainStripRow: React.FC<CaptainStripRowProps> = ({
+  user,
+  isCaptain,
+}) => {
   const tournament = useUserStore((state) => state.tournament);
   const team = useMemo<TeamType | undefined>(
     () => tournament?.teams?.find((t) => t.captain?.pk === user.pk),

@@ -1,9 +1,8 @@
 // frontend/app/components/team/TeamPopoverContent.tsx
-import { memo, useMemo } from 'react';
 import { Trophy, Users } from 'lucide-react';
-import { RolePositions } from '~/components/user/positions';
-import { UserAvatar } from '~/components/user/UserAvatar';
+import { memo, useMemo } from 'react';
 import { TeamPositionCoverageRow } from '~/components/teamdraft/TeamPositionCoverage';
+import type { TeamType } from '~/components/tournament/types';
 import {
   Table,
   TableBody,
@@ -12,52 +11,53 @@ import {
   TableHeader,
   TableRow,
 } from '~/components/ui/table';
-import type { TeamType } from '~/components/tournament/types';
+import { RolePositions } from '~/components/user/positions';
 import type { UserType } from '~/components/user/types';
+import { UserAvatar } from '~/components/user/UserAvatar';
 
 // Memoized player row for team popover
-const TeamMemberRow = memo(({
-  member,
-  isCaptain,
-  onPlayerHover,
-  onPlayerLeave,
-  onPlayerClick,
-}: {
-  member: UserType;
-  isCaptain: boolean;
-  onPlayerHover: (player: UserType, el: HTMLElement) => void;
-  onPlayerLeave: () => void;
-  onPlayerClick: (player: UserType) => void;
-}) => (
-  <TableRow>
-    <TableCell>
-      <div
-        className="flex items-center gap-2 cursor-pointer hover:text-primary transition-colors"
-        onMouseEnter={(e) => onPlayerHover(member, e.currentTarget)}
-        onMouseLeave={onPlayerLeave}
-        onClick={() => onPlayerClick(member)}
-      >
-        <UserAvatar
-          user={member}
-          size="md"
-          className="hover:ring-2 hover:ring-primary transition-all"
-        />
-        <span className="font-medium">
-          {member.nickname || member.username}
-        </span>
-        {isCaptain && (
-          <span className="text-xs text-primary">(C)</span>
-        )}
-      </div>
-    </TableCell>
-    <TableCell className="text-right">
-      {member.mmr?.toLocaleString() || 'N/A'}
-    </TableCell>
-    <TableCell>
-      <RolePositions user={member} />
-    </TableCell>
-  </TableRow>
-));
+const TeamMemberRow = memo(
+  ({
+    member,
+    isCaptain,
+    onPlayerHover,
+    onPlayerLeave,
+    onPlayerClick,
+  }: {
+    member: UserType;
+    isCaptain: boolean;
+    onPlayerHover: (player: UserType, el: HTMLElement) => void;
+    onPlayerLeave: () => void;
+    onPlayerClick: (player: UserType) => void;
+  }) => (
+    <TableRow>
+      <TableCell>
+        <div
+          className="flex items-center gap-2 cursor-pointer hover:text-primary transition-colors"
+          onMouseEnter={(e) => onPlayerHover(member, e.currentTarget)}
+          onMouseLeave={onPlayerLeave}
+          onClick={() => onPlayerClick(member)}
+        >
+          <UserAvatar
+            user={member}
+            size="md"
+            className="hover:ring-2 hover:ring-primary transition-all"
+          />
+          <span className="font-medium">
+            {member.nickname || member.username}
+          </span>
+          {isCaptain && <span className="text-xs text-primary">(C)</span>}
+        </div>
+      </TableCell>
+      <TableCell className="text-right">
+        {member.mmr?.toLocaleString() || 'N/A'}
+      </TableCell>
+      <TableCell>
+        <RolePositions user={member} />
+      </TableCell>
+    </TableRow>
+  ),
+);
 TeamMemberRow.displayName = 'TeamMemberRow';
 
 export interface TeamPopoverContentProps {
@@ -74,14 +74,18 @@ export const TeamPopoverContent: React.FC<TeamPopoverContentProps> = ({
   onPlayerClick,
 }) => {
   const captain = team.captain;
-  const teamName = team.name || `${captain?.nickname || captain?.username || 'Unknown'}'s Team`;
+  const teamName =
+    team.name ||
+    `${captain?.nickname || captain?.username || 'Unknown'}'s Team`;
   const hasMembers = team.members && team.members.length > 0;
 
   const avgMMR = useMemo(() => {
     if (!hasMembers) return 0;
     return Math.round(
-      team.members!.reduce((sum: number, m: UserType) => sum + (m.mmr || 0), 0) /
-        team.members!.length
+      team.members!.reduce(
+        (sum: number, m: UserType) => sum + (m.mmr || 0),
+        0,
+      ) / team.members!.length,
     );
   }, [team.members, hasMembers]);
 

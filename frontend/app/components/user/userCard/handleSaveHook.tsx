@@ -4,8 +4,8 @@ import { toast } from 'sonner';
 import { updateOrgUser } from '~/components/api/api';
 import type { UserClassType, UserType } from '~/components/user/types';
 import { User } from '~/components/user/user';
-import { useUserCacheStore } from '~/store/userCacheStore';
 import { getLogger } from '~/lib/logger';
+import { useUserCacheStore } from '~/store/userCacheStore';
 import { steamAccountIdConflictFromError } from './steamAccountIdConflict';
 const log = getLogger('handleSaveHook');
 
@@ -116,10 +116,14 @@ export const handleSave = async (
         setUser(data);
         // Update entity cache so all contexts (org, league, tournament) reflect the change
         if (data.pk) {
-          useUserCacheStore.getState().upsert(
-            [data],
-            isOrgUpdate && organizationId ? { orgId: organizationId } : undefined,
-          );
+          useUserCacheStore
+            .getState()
+            .upsert(
+              [data],
+              isOrgUpdate && organizationId
+                ? { orgId: organizationId }
+                : undefined,
+            );
         }
         resetForm();
         onSuccess?.();

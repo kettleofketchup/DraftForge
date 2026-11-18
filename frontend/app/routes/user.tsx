@@ -1,9 +1,9 @@
-import { UserProfilePage } from '~/pages/user/UserProfilePage';
+import { fetchUser } from '~/components/api/api';
 import { AvatarUrl } from '~/components/user/UserAvatar';
 import { generateMeta } from '~/lib/seo';
-import { fetchUser } from '~/components/api/api';
-import type { Route } from './+types/user';
 import type { UserSSR } from '~/lib/ssr-types';
+import { UserProfilePage } from '~/pages/user/UserProfilePage';
+import type { Route } from './+types/user';
 
 export async function loader({ params }: Route.LoaderArgs) {
   const { fetchSSR } = await import('~/lib/ssr.server');

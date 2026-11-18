@@ -1,36 +1,36 @@
-import React, { useState } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { PlusCircleIcon } from 'lucide-react';
+import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
-import { PlusCircleIcon } from 'lucide-react';
 
+import { PrimaryButton } from '~/components/ui/buttons';
+import { FormDialog } from '~/components/ui/dialogs';
+import { Form } from '~/components/ui/form';
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from '~/components/ui/tooltip';
-import { PrimaryButton } from '~/components/ui/buttons';
-import { FormDialog } from '~/components/ui/dialogs';
-import { Form } from '~/components/ui/form';
 import DiscordUserDropdown from '~/components/user/DiscordUserDropdown';
-import { User } from '~/components/user/user';
 import type {
   GuildMember,
   UserClassType,
   UserType,
 } from '~/components/user/types';
-import { useUserStore } from '~/store/userStore';
-import { useUserCacheStore } from '~/store/userCacheStore';
+import { User } from '~/components/user/user';
 import { useResolvedUsers } from '~/hooks/useResolvedUsers';
 import { getLogger } from '~/lib/logger';
+import { useUserCacheStore } from '~/store/userCacheStore';
+import { useUserStore } from '~/store/userStore';
 
+import { UserEditForm } from './editForm';
 import {
   buildDefaults,
   EditUserSchema,
   type EditUserInput,
 } from './editUserSchema';
-import { UserEditForm } from './editForm';
 
 const log = getLogger('createModal');
 
@@ -56,7 +56,9 @@ export const UserCreateModal: React.FC<Props> = ({ query, setQuery }) => {
   const form = useForm<EditUserInput>({
     // Cast: matches the pattern used in editModal — z.coerce produces
     // input=unknown / output=EditUserInput, but our defaults are clean.
-    resolver: zodResolver(EditUserSchema) as unknown as import('react-hook-form').Resolver<EditUserInput>,
+    resolver: zodResolver(
+      EditUserSchema,
+    ) as unknown as import('react-hook-form').Resolver<EditUserInput>,
     defaultValues: buildDefaults({} as UserClassType, { kind: 'global' }),
   });
 

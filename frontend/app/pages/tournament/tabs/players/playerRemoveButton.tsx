@@ -1,6 +1,6 @@
+import { useQueryClient } from '@tanstack/react-query';
 import type { FormEvent } from 'react';
 import React, { useCallback } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { useShallow } from 'zustand/react/shallow';
 import { updateTournament } from '~/components/api/api';
@@ -46,9 +46,15 @@ export const PlayerRemoveButton: React.FC<PropsRemoveButton> = ({
         ['tournament', tournament.pk],
         (old) =>
           old
-            ? { ...old, users: old.users?.filter((u) =>
-                typeof u === 'number' ? u !== user.pk : u.username !== user.username
-              ) ?? null }
+            ? {
+                ...old,
+                users:
+                  old.users?.filter((u) =>
+                    typeof u === 'number'
+                      ? u !== user.pk
+                      : u.username !== user.username,
+                  ) ?? null,
+              }
             : old,
       );
 
@@ -60,7 +66,9 @@ export const PlayerRemoveButton: React.FC<PropsRemoveButton> = ({
           error: (err: unknown) => {
             log.error('Failed to remove user', err);
             // Revert optimistic update on failure
-            queryClient.invalidateQueries({ queryKey: ['tournament', tournament.pk] });
+            queryClient.invalidateQueries({
+              queryKey: ['tournament', tournament.pk],
+            });
             return `Failed to remove ${user.username}`;
           },
         },

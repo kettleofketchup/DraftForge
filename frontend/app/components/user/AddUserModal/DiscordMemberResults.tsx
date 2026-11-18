@@ -1,13 +1,16 @@
+import { RefreshCw } from 'lucide-react';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { toast } from 'sonner';
+import type {
+  AddMemberPayload,
+  DiscordSearchResult,
+} from '~/components/api/api';
 import { Button } from '~/components/ui/button';
 import { AddDiscordBotButton } from '~/components/ui/buttons';
 import { ScrollArea } from '~/components/ui/scroll-area';
-import { RefreshCw } from 'lucide-react';
-import { toast } from 'sonner';
 import { DiscordMemberStrip } from '~/components/user/DiscordMemberStrip';
 import { cn } from '~/lib/utils';
 import type { DiscordMemberResultsProps } from './types';
-import type { AddMemberPayload, DiscordSearchResult } from '~/components/api/api';
 
 export const DiscordMemberResults: React.FC<DiscordMemberResultsProps> = ({
   results,
@@ -42,17 +45,15 @@ export const DiscordMemberResults: React.FC<DiscordMemberResultsProps> = ({
           : { discord_id: member.user.id };
         await onAdd(payload);
         toast.success(
-          `Added ${member.nick || member.user.global_name || member.user.username}`
+          `Added ${member.nick || member.user.global_name || member.user.username}`,
         );
       } catch (err) {
-        toast.error(
-          err instanceof Error ? err.message : 'Failed to add user'
-        );
+        toast.error(err instanceof Error ? err.message : 'Failed to add user');
       } finally {
         setAddingId(null);
       }
     },
-    [onAdd]
+    [onAdd],
   );
 
   if (!hasDiscordServer) {
@@ -73,7 +74,9 @@ export const DiscordMemberResults: React.FC<DiscordMemberResultsProps> = ({
         onClick={onRefresh}
         disabled={refreshing}
       >
-        <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+        <RefreshCw
+          className={`mr-2 h-4 w-4 ${refreshing ? 'animate-spin' : ''}`}
+        />
         {refreshing ? 'Refreshing...' : 'Refresh Discord Members'}
       </Button>
 
@@ -95,10 +98,13 @@ export const DiscordMemberResults: React.FC<DiscordMemberResultsProps> = ({
               return (
                 <div
                   key={member.user.id}
-                  ref={(el) => { itemRefs.current[index] = el; }}
+                  ref={(el) => {
+                    itemRefs.current[index] = el;
+                  }}
                   className={cn(
                     'rounded-lg',
-                    highlighted && 'ring-2 ring-primary ring-offset-1 ring-offset-background',
+                    highlighted &&
+                      'ring-2 ring-primary ring-offset-1 ring-offset-background',
                   )}
                 >
                   <DiscordMemberStrip
