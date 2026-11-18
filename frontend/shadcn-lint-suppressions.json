@@ -90,9 +90,6 @@
     }
   },
   "app/components/herodraft/CompletedDraftView.tsx": {
-    "draftforge/use-user-avatar": {
-      "count": 1
-    },
     "shadcn/no-raw-colors": {
       "count": 7
     }

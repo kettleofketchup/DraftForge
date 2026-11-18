@@ -1,10 +1,11 @@
 // frontend/app/components/herodraft/CompletedDraftView.tsx
 import { History } from 'lucide-react';
 import { useMemo } from 'react';
-import { Avatar, AvatarFallback, AvatarImage } from '~/components/ui/avatar';
+import { Avatar, AvatarFallback } from '~/components/ui/avatar';
 import { PrimaryButton } from '~/components/ui/buttons';
 import { FastTooltip } from '~/components/ui/tooltip';
 import { DisplayName } from '~/components/user/avatar';
+import { UserAvatar } from '~/components/user/UserAvatar';
 import { getHeroIcon, getHeroName } from '~/lib/dota/heroes';
 import { cn } from '~/lib/utils';
 import type { DraftTeam, HeroDraft, HeroDraftRound } from './types';
@@ -54,20 +55,27 @@ function TeamPicks({ team, picks, side }: TeamPicksProps) {
     >
       {/* Team header */}
       <div className="flex flex-col items-center mb-4 md:mb-6">
-        <Avatar
-          className="h-16 w-16 md:h-20 md:w-20 mb-2 ring-2 ring-offset-2 ring-offset-gray-900"
+        <div
+          className="mb-2 flex rounded-full ring-2 ring-offset-2 ring-offset-gray-900"
           style={{
             ['--tw-ring-color' as string]:
               side === 'radiant' ? 'rgb(34 197 94)' : 'rgb(239 68 68)',
           }}
         >
-          <AvatarImage
-            src={captain?.avatarUrl ?? captain?.avatar ?? undefined}
-          />
-          <AvatarFallback className="text-lg md:text-xl font-bold">
-            {initials}
-          </AvatarFallback>
-        </Avatar>
+          {captain ? (
+            <UserAvatar
+              user={captain}
+              size="xl"
+              className="h-16 w-16 md:h-20 md:w-20"
+            />
+          ) : (
+            <Avatar className="h-16 w-16 md:h-20 md:w-20">
+              <AvatarFallback className="text-lg md:text-xl font-bold">
+                {initials}
+              </AvatarFallback>
+            </Avatar>
+          )}
+        </div>
         <h3 className="text-lg md:text-xl font-bold text-white">
           {displayName}
         </h3>
