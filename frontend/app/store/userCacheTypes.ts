@@ -49,8 +49,6 @@ export interface UpsertContext {
  * Type guard: distinguishes UserEntry (has orgData) from legacy UserType.
  * Use in backward-compat code instead of `as any` casts.
  */
-export function isUserEntry(
-  user: UserType | UserEntry,
-): user is UserEntry {
+export function isUserEntry(user: UserType | UserEntry): user is UserEntry {
   return typeof user === 'object' && user !== null && 'orgData' in user;
 }
