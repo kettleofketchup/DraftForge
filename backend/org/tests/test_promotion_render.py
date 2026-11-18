@@ -7,6 +7,7 @@ from django.test import SimpleTestCase, TestCase, override_settings
 
 from app.models import CustomUser, League, Organization
 from events.models import Event
+from org.models import OrgUser
 from org.promotion.render import (
     ANY_TOKEN_RE,
     PLACEHOLDERS,
@@ -128,21 +129,41 @@ class PlayerNameTest(TestCase):
         user.save()
         return user
 
-    def test_site_nickname_first(self) -> None:
+    def test_server_nickname_first(self) -> None:
         user = self._user(
-            discordNickname="DiscNick",
-            discordUsername="discuser",
-            nickname="SiteNick",
+            discordNickname="Gwaihir", discordUsername="discuser", nickname="SiteNick"
+        )
+        self.assertEqual(player_name(user, guild_nickname="DragonClaw"), "DragonClaw")
+
+    def test_site_nickname_before_global_name(self) -> None:
+        user = self._user(
+            discordNickname="DiscNick", discordUsername="discuser", nickname="SiteNick"
         )
         self.assertEqual(player_name(user), "SiteNick")
 
-    def test_username_when_no_nickname(self) -> None:
-        user = self._user(discordUsername="discuser")
-        self.assertEqual(player_name(user), "pn_user")
-
-    def test_blank_nickname_is_skipped(self) -> None:
+    def test_blank_site_nickname_is_skipped(self) -> None:
         user = self._user(nickname="")
         self.assertEqual(player_name(user), "pn_user")
+
+    def test_global_name_without_server_nickname(self) -> None:
+        user = self._user(discordNickname="Gwaihir", discordUsername="discuser")
+        self.assertEqual(player_name(user), "Gwaihir")
+        self.assertEqual(player_name(user, guild_nickname="  "), "Gwaihir")
+
+    def test_username_when_no_discord_name(self) -> None:
+        user = self._user(discordUsername="discuser", discordNickname="")
+        self.assertEqual(player_name(user), "pn_user")
+
+    def test_null_username_falls_back_to_pk(self) -> None:
+        user = self._user(username=None)
+        self.assertEqual(player_name(user), f"User {user.pk}")
+
+    def test_placeholder_description(self) -> None:
+        spec = next(p for p in PLACEHOLDERS if p["key"] == "player")
+        self.assertEqual(
+            spec["description"],
+            "Recipient's server nickname, site nickname, Discord name, or username",
+        )
 
 
 @override_settings(SITE_URL="https://dota.example")
@@ -150,12 +171,12 @@ class BuildContextTest(TestCase):
     def setUp(self) -> None:
         self.admin = CustomUser.objects.create_user(username="bc_admin", password="x")
         self.sender = CustomUser.objects.create_user(username="bc_sender", password="x")
-        self.sender.nickname = "Sender"
+        self.sender.discordNickname = "Sender"
         self.sender.save()
         self.recipient = CustomUser.objects.create_user(
             username="bc_recipient", password="x"
         )
-        self.recipient.nickname = "Ann"
+        self.recipient.discordNickname = "Gwaihir"
         self.recipient.save()
         self.org = Organization.objects.create(
             name="Render Org",
@@ -173,6 +194,15 @@ class BuildContextTest(TestCase):
             created_by=self.admin,
             tournament_league=self.league,
         )
+        OrgUser.objects.create(
+            user=self.recipient, organization=self.org, guild_nickname="Ann"
+        )
+        self.other_org = Organization.objects.create(
+            name="Render Other Org", owner=self.admin
+        )
+        OrgUser.objects.create(
+            user=self.sender, organization=self.other_org, guild_nickname="Elsewhere"
+        )
 
     def _context(self) -> dict[str, str]:
         return build_context(
@@ -181,6 +211,19 @@ class BuildContextTest(TestCase):
             sender=self.sender,
             org=self.org,
         )
+
+    def test_player_falls_back_to_global_then_username(self) -> None:
+        OrgUser.objects.filter(user=self.recipient, organization=self.org).update(
+            guild_nickname=None
+        )
+        self.assertEqual(self._context()["player"], "Gwaihir")
+        self.recipient.discordNickname = None
+        self.recipient.save()
+        self.assertEqual(self._context()["player"], "bc_recipient")
+
+    def test_names_use_one_query(self) -> None:
+        with self.assertNumQueries(1):
+            self._context()
 
     def test_keys_match_placeholders(self) -> None:
         self.assertEqual(set(self._context()), {p["key"] for p in PLACEHOLDERS})
