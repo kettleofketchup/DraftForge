@@ -444,11 +444,3 @@ On failure, CI uploads:
 | Network mocking | `page.route()` | `cy.intercept()` |
 | Cross-origin | Supported | Limited |
 | Mobile emulation | Native | Plugin required |
-
-## Migrating from Cypress
-
-See the [Cypress to Playwright Migration Plan](../plans/2026-01-23-cypress-to-playwright-migration.md) for details on:
-
-- API mapping (cy.visit → page.goto, etc.)
-- Custom command conversion
-- Test structure changes

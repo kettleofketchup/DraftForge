@@ -4,7 +4,7 @@ Replace hand-rolled HTML and one-off styled markup with DraftForge's brand compo
 
 ## Buttons (Primary Targets)
 
-Per [`THEMING-GUIDE.md` §"Button Policy"](../../THEMING-GUIDE.md#button-policy): all user-facing actions use a brand button wrapper from `~/components/ui/buttons`. Raw `<Button>` is reserved for structural uses only.
+Per [`THEMING-GUIDE.md` §"Button Policy"](../../../THEMING-GUIDE.md#button-policy): all user-facing actions use a brand button wrapper from `~/components/ui/buttons`. Raw `<Button>` is reserved for structural uses only.
 
 | Anti-pattern | Replace with | Notes |
 |---|---|---|
@@ -32,7 +32,7 @@ If `<Button>` has an `onClick` that performs a domain action (save, delete, navi
 
 ## Avatars & Display Names
 
-Both come from the shared user-identity utilities. See [`THEMING-GUIDE.md` §"User Avatars"](../../THEMING-GUIDE.md#user-avatars) and §"Display Names" for the *why*.
+Both come from the shared user-identity utilities. See [`THEMING-GUIDE.md` §"User Avatars"](../../../THEMING-GUIDE.md#user-avatars) and §"Display Names" for the *why*.
 
 | Anti-pattern | Replace with | Notes |
 |---|---|---|
