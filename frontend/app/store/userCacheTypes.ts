@@ -26,7 +26,6 @@ export interface UserEntry {
   steam_account_id?: number | null;
   discordId?: string | null;
   discordNickname?: string | null;
-  guildNickname?: string | null;
   nickname?: string | null;
   is_staff?: boolean;
   is_superuser?: boolean;
@@ -35,6 +34,8 @@ export interface UserEntry {
   // Context-scoped data (keyed by org/league id)
   orgData: Record<number, OrgUserData>;
   leagueData: Record<number, LeagueUserData>;
+  /** Discord server nickname per org; `null` means the org member has none. */
+  orgNicknames?: Record<number, string | null>;
 
   // Staleness tracking
   _fetchedAt: number;

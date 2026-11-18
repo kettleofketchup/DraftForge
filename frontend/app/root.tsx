@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useEffect } from 'react';
+import { useEffect, useLayoutEffect } from 'react';
 import type { LoaderFunctionArgs } from 'react-router';
 import {
   data,
@@ -19,6 +19,10 @@ import { SharedPopoverRenderer } from '~/components/ui/shared-popover-renderer';
 import { Toaster } from '~/components/ui/sonner';
 import { TooltipProvider } from '~/components/ui/tooltip';
 import { activityEntryPath } from '~/lib/activity-entry';
+import {
+  notifyDisplayOrgRoute,
+  setDisplayOrgQueryClient,
+} from '~/lib/displayOrg';
 import { getLogger } from '~/lib/logger';
 import { Sentry } from '~/lib/sentry';
 import { resolveSessionHint } from '~/lib/sessionHint';
@@ -99,10 +103,12 @@ export const queryClient = new QueryClient({
     },
   },
 });
+setDisplayOrgQueryClient(queryClient);
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const loaderData = useLoaderData<typeof loader>();
   const { pathname, search } = useLocation();
+  useLayoutEffect(notifyDisplayOrgRoute, [pathname]);
   const isActivity =
     pathname === '/activity' || activityEntryPath(pathname, search) !== null;
   const locale = loaderData?.locale ?? 'en';

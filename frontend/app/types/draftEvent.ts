@@ -239,6 +239,7 @@ export interface WebSocketDraftState {
   }>;
   latest_round: number | null;
   draft_style: string;
+  organization_pk?: number | null;
   /** Deduplicated user map from slim serializer (consumed during hydration). */
   _users?: Record<number, Record<string, unknown>>;
   tournament?: {

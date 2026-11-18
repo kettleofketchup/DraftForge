@@ -51,7 +51,7 @@ vi.mock('~/features/league-stats/queries', () => ({
 const plainUser = {
   pk: 42,
   username: 'alice',
-  nickname: 'Alice',
+  discordNickname: 'Alice',
   mmr: 4200,
   league_mmr: 1500,
 } as UserType & { league_mmr: number };
@@ -59,7 +59,7 @@ const plainUser = {
 const entryUser: UserEntry = {
   pk: 43,
   username: 'bob',
-  nickname: 'Bob',
+  discordNickname: 'Bob',
   orgData: { 5: { id: 1, mmr: 3000, _fetchedAt: 0 } },
   leagueData: { 7: { id: 2, mmr: 1700, _fetchedAt: 0 } },
   _fetchedAt: 0,

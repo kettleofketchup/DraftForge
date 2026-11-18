@@ -58,7 +58,7 @@ describe('sampleContext', () => {
   };
   const sender = {
     username: 'bob',
-    nickname: 'Bobby',
+    discordNickname: 'Bobby',
   };
 
   it('fills every placeholder key', () => {
@@ -88,7 +88,7 @@ describe('sampleContext', () => {
     const ctx = sampleContext(
       event,
       org,
-      { username: 'bob', nickname: 'Bobby' },
+      { username: 'bob', discordNickname: 'Bobby' },
       'https://x',
     );
     expect(ctx.promoter).toBe('Bobby');
