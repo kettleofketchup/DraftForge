@@ -66,6 +66,7 @@ export interface SampleOrg {
 
 export interface SampleSender {
   username?: string | null;
+  discordNickname?: string | null;
   nickname?: string | null;
 }
 

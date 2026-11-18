@@ -70,3 +70,60 @@ describe('userCacheStore.dropScoped', () => {
     expect(useUserCacheStore.getState().entities).toBe(before);
   });
 });
+
+describe('userCacheStore orgNicknames', () => {
+  beforeEach(() => {
+    useUserCacheStore.getState().reset();
+  });
+
+  const entry = (pk = 1) => useUserCacheStore.getState().entities[pk];
+  const upsert = (raw: Record<string, unknown>, orgId?: number) =>
+    useUserCacheStore
+      .getState()
+      .upsert(raw as never, orgId ? { orgId } : undefined);
+
+  it('records guildNickname under the upsert org', () => {
+    upsert({ pk: 1, username: 'u', guildNickname: 'Claw' }, 7);
+    expect(entry().orgNicknames).toEqual({ 7: 'Claw' });
+    expect(entry().orgData[7]).toBeUndefined();
+    expect(
+      (entry() as unknown as Record<string, unknown>).guildNickname,
+    ).toBeUndefined();
+  });
+
+  it('ignores guildNickname without an org context', () => {
+    upsert({ pk: 1, username: 'u', guildNickname: 'Claw' });
+    expect(entry().orgNicknames).toEqual({});
+  });
+
+  it('keeps nicknames from several orgs and applies nickname-only changes', () => {
+    upsert({ pk: 1, username: 'u', guildNickname: 'A' }, 7);
+    upsert({ pk: 1, username: 'u', guildNickname: 'B' }, 8);
+    upsert({ pk: 1, username: 'u', guildNickname: 'A2' }, 7);
+    expect(entry().orgNicknames).toEqual({ 7: 'A2', 8: 'B' });
+  });
+
+  it('keeps the nickname when absent and clears it on explicit null', () => {
+    upsert({ pk: 1, username: 'u', guildNickname: 'A' }, 7);
+    upsert({ pk: 1, username: 'u' }, 7);
+    expect(entry().orgNicknames?.[7]).toBe('A');
+    upsert({ pk: 1, username: 'u', guildNickname: null }, 7);
+    expect(entry().orgNicknames).toEqual({ 7: null });
+  });
+
+  it('keeps MMR alongside the nickname', () => {
+    upsert(
+      { pk: 1, username: 'u', guildNickname: 'A', mmr: 4000, orgUserPk: 3 },
+      7,
+    );
+    expect(entry().orgData[7]?.mmr).toBe(4000);
+    expect(entry().orgNicknames?.[7]).toBe('A');
+  });
+
+  it('dropScoped removes only that org nickname', () => {
+    upsert({ pk: 1, username: 'u', guildNickname: 'A' }, 7);
+    upsert({ pk: 1, username: 'u', guildNickname: 'B' }, 8);
+    useUserCacheStore.getState().dropScoped({ orgId: 7 });
+    expect(entry().orgNicknames).toEqual({ 8: 'B' });
+  });
+});

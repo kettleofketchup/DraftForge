@@ -22,6 +22,8 @@ from typing import Optional
 
 from pydantic import BaseModel
 
+from app.display_names import first_name
+
 # Backward-compat re-exports (moved to discordbot/schemas.py with new names)
 from discordbot.schemas import (  # noqa: F401
     DiscordEventStateSchema as DiscordEventState,
@@ -39,6 +41,7 @@ class TournamentUserSchema(BaseModel):
     avatar: Optional[str] = None
     discordId: Optional[str] = None
     discordNickname: Optional[str] = None
+    guildNickname: Optional[str] = None
     steam_account_id: Optional[int] = None
     avatarUrl: Optional[str] = None
     mmr: Optional[int] = None
@@ -46,7 +49,12 @@ class TournamentUserSchema(BaseModel):
 
     @property
     def display_name(self) -> str:
-        return self.nickname or self.username or f"User {self.pk}"
+        return (
+            first_name(
+                self.guildNickname, self.nickname, self.discordNickname, self.username
+            )
+            or f"User {self.pk}"
+        )
 
     model_config = {"extra": "ignore"}
 

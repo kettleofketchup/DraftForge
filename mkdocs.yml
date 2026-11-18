@@ -95,6 +95,7 @@ nav:
           - Overview: features/events.md
           - Roll Call: features/events/roll-call.md
       - Organization Locked Features: features/organization-locked-features.md
+      - Organization Settings: features/organization-settings.md
       - Planned:
           - Overview: features/planned/index.md
           - Team Management & Seasons: features/planned/team-management.md

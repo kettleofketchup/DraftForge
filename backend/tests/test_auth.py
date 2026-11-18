@@ -54,6 +54,7 @@ from tests.data.users import (
 from tests.populate.bracket import populate_bracket_unset_winner_tournament
 from tests.populate.shuffle_tie import populate_shuffle_tie_data
 from tests.populate.utils import ensure_org_user
+from tests.test_events_discord import discord_auth_failure
 from tests.test_teamdraft import clear_teamdraft_redis
 
 log = logging.getLogger(__name__)
@@ -1541,5 +1542,8 @@ def sync_discord_events_test(request):
 
     from events.tasks import sync_discord_events
 
+    auth_failure = discord_auth_failure()
+    if auth_failure is not None:
+        return auth_failure
     result = sync_discord_events()
     return Response({"message": result})

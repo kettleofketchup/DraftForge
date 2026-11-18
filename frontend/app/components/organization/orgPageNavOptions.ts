@@ -8,6 +8,7 @@ export interface OrgPageNavInput {
   canViewContributions: boolean;
   canUsePromotion: boolean;
   canViewClaims: boolean;
+  canViewSettings: boolean;
 }
 
 // Mobile page-nav entries; must match the desktop TabsList gates.
@@ -29,6 +30,9 @@ export function buildOrgPageNavOptions(
   }
   if (input.canViewClaims) {
     opts.push({ value: 'claims', label: 'Claims' });
+  }
+  if (input.canViewSettings) {
+    opts.push({ value: 'settings', label: 'Settings' });
   }
   return opts;
 }

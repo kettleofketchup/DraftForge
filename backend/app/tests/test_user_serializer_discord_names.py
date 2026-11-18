@@ -99,4 +99,7 @@ def _in_customuser_meta(text: str, pos: int) -> bool:
     if re.search(r"\n\S", text[meta:pos]):
         return False
     model_line = re.search(r"model\s*=\s*(\w+)", text[meta:pos])
-    return bool(model_line and model_line.group(1) == "CustomUser")
+    if not (model_line and model_line.group(1) == "CustomUser"):
+        return False
+    body = text[text.rfind("\nclass ", 0, meta) : meta]
+    return "guildNickname = serializers.SerializerMethodField(" not in body
