@@ -864,17 +864,24 @@ class Tournament(models.Model):
         return self.users.filter(teams_as_captain__tournament=self).distinct()
 
     def draft_eligible_teams(self) -> "QuerySet[Team]":
-        """Teams whose captain is in the tournament's player pool."""
-        return self.teams.filter(captain_id__in=self.users.values("pk"))
+        """Teams whose captain is in the tournament's player pool.
+
+        Not cached: cacheops does not invalidate on subquery tables.
+        """
+        return self.teams.nocache().filter(captain_id__in=self.users.values("pk"))
 
     def draft_ineligible_teams(self) -> "QuerySet[Team]":
-        return self.teams.exclude(pk__in=self.draft_eligible_teams().values("pk"))
+        return self.teams.nocache().exclude(
+            pk__in=self.draft_eligible_teams().values("pk")
+        )
 
     def draft_locked_user_ids(self) -> "QuerySet[CustomUser]":
         """Members of teams outside the draft; they are not draftable."""
-        return CustomUser.objects.filter(
-            teams_as_member__in=self.draft_ineligible_teams()
-        ).values("pk")
+        return (
+            CustomUser.objects.nocache()
+            .filter(teams_as_member__in=self.draft_ineligible_teams())
+            .values("pk")
+        )
 
     @property
     def linked_steam_league_id(self) -> int | None:
@@ -1430,9 +1437,8 @@ class Draft(models.Model):
 
             # Get all available players (excluding captains) sorted by MMR desc
             all_player_ids = list(
-                self.tournament.users.exclude(
-                    teams_as_captain__tournament=self.tournament
-                )
+                self.tournament.users.nocache()
+                .exclude(teams_as_captain__tournament=self.tournament)
                 .exclude(pk__in=self.tournament.draft_locked_user_ids())
                 .values_list("id", flat=True)
             )
@@ -1630,7 +1636,8 @@ class Draft(models.Model):
             excluded_count=len(excluded_ids),
         )
         return (
-            self.tournament.users.exclude(id__in=excluded_ids)
+            self.tournament.users.nocache()
+            .exclude(id__in=excluded_ids)
             .exclude(id__in=self.tournament.draft_locked_user_ids())
             .distinct()
         )

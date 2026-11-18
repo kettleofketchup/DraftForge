@@ -183,6 +183,41 @@ class TeamResetCacheTests(TeamResetFixture, TransactionTestCase):
         )
 
 
+class DraftEligibilityCacheTests(TeamResetFixture, TransactionTestCase):
+    def setUp(self) -> None:
+        if not _redis_reachable():
+            self.skipTest("Cacheops Redis not reachable")
+        super().setUp()
+        self.draft = Draft.objects.create(tournament=self.tournament)
+
+    def remaining_pks(self) -> set[int]:
+        draft = Draft.objects.get(pk=self.draft.pk)
+        return set(draft.users_remaining.values_list("pk", flat=True))
+
+    def team_pks(self) -> set[int]:
+        draft = Draft.objects.get(pk=self.draft.pk)
+        return set(draft.teams.values_list("pk", flat=True))
+
+    def test_users_remaining_drops_player_added_to_kept_team(self) -> None:
+        self.assertEqual(self.remaining_pks(), {self.x.pk, self.y.pk, self.z.pk})
+
+        self.team.members.add(self.x)
+
+        self.assertEqual(self.remaining_pks(), {self.y.pk, self.z.pk})
+
+    def test_teams_include_team_once_captain_joins_pool(self) -> None:
+        captain = self.make_user("reset_n")
+        other = Team.objects.create(
+            tournament=self.tournament, name="Newcomers", captain=captain
+        )
+        other.members.add(captain)
+        self.assertEqual(self.team_pks(), set())
+
+        self.tournament.users.add(captain)
+
+        self.assertEqual(self.team_pks(), {other.pk})
+
+
 INIT_DRAFT_URL = "/api/tournaments/init-draft"
 REBUILD_URL = "/api/tournaments/draft-rebuild"
 
