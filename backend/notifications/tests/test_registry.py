@@ -1,35 +1,35 @@
-"""Message registry invariants and the TS/Zod exporter.
+"""Message registry invariants and the Zod bundle exporter.
 
 Plain unittest so the module also runs without Django:
 `python -m unittest notifications.tests.test_registry` from backend/.
 """
 
-import io
+import json
 import os
-import re
 import subprocess
 import sys
-import tempfile
-from contextlib import redirect_stderr, redirect_stdout
-from dataclasses import replace
 from pathlib import Path
 from unittest import TestCase
+
+from pydantic import ValidationError
 
 from notifications import export_schema
 from notifications.registry import (
     CONDUCT_GROUP,
     GROUPS,
     MESSAGE_TYPES,
+    REGISTRY,
     Audience,
     Channel,
     GroupKey,
     MessageGroup,
     MessageKey,
+    MessageRegistry,
     MessageType,
     get_group,
     get_message_type,
+    registry_errors,
     types_in_group,
-    validate_registry,
 )
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
@@ -81,7 +81,7 @@ class RegistryImportTest(TestCase):
 
 class RegistryInvariantTest(TestCase):
     def test_catalogue_is_valid(self) -> None:
-        self.assertEqual(validate_registry(GROUPS, MESSAGE_TYPES), [])
+        self.assertEqual(registry_errors(GROUPS, MESSAGE_TYPES), [])
 
     def test_seeded_keys_present(self) -> None:
         self.assertTrue(SEEDED_KEYS <= {m.key for m in MESSAGE_TYPES})
@@ -154,50 +154,90 @@ class RegistryInvariantTest(TestCase):
         self.assertTrue(get_message_type("rsvp.escalation_nudge").urgent)
 
 
-class ValidateRegistryTest(TestCase):
-    def _type(self, **overrides: object) -> MessageType:
-        return replace(get_message_type(MessageKey.RSVP_ROSTER_CHANGE), **overrides)
+def _entry(**overrides: object) -> dict[str, object]:
+    base = get_message_type(MessageKey.RSVP_ROSTER_CHANGE).model_dump()
+    return {**base, **overrides}
 
+
+def _type(**overrides: object) -> MessageType:
+    return MessageType(**_entry(**overrides))
+
+
+class EntryValidationTest(TestCase):
+    def test_locked_without_essential(self) -> None:
+        with self.assertRaisesRegex(ValidationError, "essential_locked"):
+            _type(essential_locked=True, essential_default=False)
+
+    def test_blank_or_empty_fields(self) -> None:
+        for field, value in (("label", " "), ("description", ""), ("channels", ())):
+            with self.subTest(field=field), self.assertRaises(ValidationError):
+                _type(**{field: value})
+
+    def test_duplicate_channels(self) -> None:
+        with self.assertRaisesRegex(ValidationError, "duplicate channels"):
+            _type(channels=(Channel.DM, Channel.DM))
+
+    def test_unknown_enum_values(self) -> None:
+        for field in ("key", "group", "audience"):
+            with self.subTest(field=field), self.assertRaises(ValidationError):
+                _type(**{field: "nope"})
+
+    def test_unknown_field_rejected(self) -> None:
+        with self.assertRaises(ValidationError):
+            _type(surprise=True)
+
+    def test_frozen(self) -> None:
+        with self.assertRaises(ValidationError):
+            get_message_type(MessageKey.RSVP_PROMOTION).urgent = False  # type: ignore[misc]
+
+    def test_locked_group_must_not_be_opt_outable(self) -> None:
+        conduct = get_group(CONDUCT_GROUP).model_dump()
+        with self.assertRaisesRegex(ValidationError, "opt-outable"):
+            MessageGroup(**{**conduct, "opt_outable_default": True})
+
+    def test_camel_case_round_trip(self) -> None:
+        for m in MESSAGE_TYPES:
+            with self.subTest(key=m.key):
+                dumped = m.model_dump(mode="json", by_alias=True)
+                self.assertIn("essentialDefault", dumped)
+                self.assertEqual(MessageType.model_validate(dumped), m)
+
+
+class RegistryErrorsTest(TestCase):
     def test_duplicate_key(self) -> None:
-        errors = validate_registry(GROUPS, (*MESSAGE_TYPES, MESSAGE_TYPES[0]))
+        errors = registry_errors(GROUPS, (*MESSAGE_TYPES, MESSAGE_TYPES[0]))
         self.assertTrue(any("duplicate message key" in e for e in errors), errors)
 
     def test_unknown_group(self) -> None:
-        errors = validate_registry(GROUPS, (self._type(group="nope"),))
+        groups = tuple(g for g in GROUPS if g.key != GroupKey.ROSTER_CHANGES)
+        errors = registry_errors(groups, (_type(),))
         self.assertTrue(any("unknown group" in e for e in errors), errors)
 
-    def test_locked_without_essential(self) -> None:
-        bad = self._type(essential_locked=True, essential_default=False)
-        errors = validate_registry(GROUPS, (bad,))
-        self.assertTrue(any("essential_locked" in e for e in errors), errors)
+    def test_missing_conduct_group(self) -> None:
+        groups = tuple(g for g in GROUPS if g.key != CONDUCT_GROUP)
+        errors = registry_errors(groups, ())
+        self.assertTrue(any("missing reserved group" in e for e in errors), errors)
 
     def test_unlocked_type_in_conduct(self) -> None:
-        bad = self._type(group=GroupKey.CONDUCT, essential_default=True)
-        errors = validate_registry(GROUPS, (bad,))
+        bad = _type(group=GroupKey.CONDUCT, essential_default=True)
+        errors = registry_errors(GROUPS, (bad,))
         self.assertTrue(any("conduct" in e for e in errors), errors)
 
     def test_channel_post_only_in_opt_outable_group(self) -> None:
-        bad = self._type(channels=(Channel.CHANNEL_POST,))
-        errors = validate_registry(GROUPS, (bad,))
+        bad = _type(channels=(Channel.CHANNEL_POST,))
+        errors = registry_errors(GROUPS, (bad,))
         self.assertTrue(any("channel_post" in e for e in errors), errors)
 
-    def test_empty_fields(self) -> None:
-        bad = self._type(label=" ", description="", channels=())
-        errors = validate_registry(GROUPS, (bad,))
-        for word in ("label", "description", "channels"):
-            self.assertTrue(any(word in e for e in errors), (word, errors))
-
     def test_bad_key_format(self) -> None:
-        errors = validate_registry(GROUPS, (self._type(key="Bad-Key"),))
+        bad = MessageType.model_construct(**_entry(key="Bad-Key"))
+        errors = registry_errors(GROUPS, (bad,))
         self.assertTrue(any("key format" in e for e in errors), errors)
 
-    def test_locked_group_must_not_be_opt_outable(self) -> None:
-        groups = tuple(
-            replace(g, opt_outable_default=True) if g.key == CONDUCT_GROUP else g
-            for g in GROUPS
-        )
-        errors = validate_registry(groups, MESSAGE_TYPES)
-        self.assertTrue(any("conduct" in e for e in errors), errors)
+    def test_registry_model_runs_the_checks(self) -> None:
+        with self.assertRaisesRegex(ValidationError, "duplicate message key"):
+            MessageRegistry(
+                groups=GROUPS, message_types=(*MESSAGE_TYPES, MESSAGE_TYPES[0])
+            )
 
 
 class GetMessageTypeTest(TestCase):
@@ -224,102 +264,45 @@ class GetMessageTypeTest(TestCase):
 
 
 class ExporterTest(TestCase):
-    def _run_main(self, *argv: str) -> tuple[int, str, str]:
-        out, err = io.StringIO(), io.StringIO()
-        with redirect_stdout(out), redirect_stderr(err):
-            code = export_schema.main(list(argv))
-        return code, out.getvalue(), err.getvalue()
+    def test_bundle_is_deterministic(self) -> None:
+        self.assertEqual(export_schema.bundle(), export_schema.bundle())
 
-    def test_render_is_deterministic(self) -> None:
-        self.assertEqual(export_schema.render(), export_schema.render())
-
-    def test_render_contents(self) -> None:
-        text = export_schema.render()
-        self.assertTrue(text.startswith("// GENERATED FILE"))
-        self.assertTrue(text.endswith("\n"))
-        self.assertNotIn("\n\n\n", text)
-        self.assertIn("import { z } from 'zod';", text)
-        for name in (
-            "MessageKeySchema",
-            "MessageGroupKeySchema",
-            "MessageGroupSchema",
-            "MessageTypeSchema",
-            "MESSAGE_KEYS",
-            "MESSAGE_GROUPS",
-            "MESSAGE_TYPES",
-        ):
-            self.assertRegex(text, rf"export const {name}\b")
-        for m in MESSAGE_TYPES:
-            self.assertIn(f"'{m.key}'", text)
-        for line in text.splitlines():
-            self.assertEqual(line, line.rstrip(), "trailing whitespace")
-
-    def test_string_quoting_follows_prettier(self) -> None:
-        self.assertEqual(export_schema.ts_string("plain"), "'plain'")
-        self.assertEqual(export_schema.ts_string("it's"), '"it\'s"')
-        self.assertEqual(export_schema.ts_string('a "b" c\'s'), "'a \"b\" c\\'s'")
-        self.assertEqual(export_schema.ts_string("back\\slash"), "'back\\\\slash'")
-
-    def test_long_values_break_like_prettier(self) -> None:
-        long = "x" * 80
-        text = export_schema.object_literal((("key", long), ("label", long)))
-        self.assertIn(f"    key: '{long}',\n", text)
-        self.assertIn(f"    label:\n      '{long}',\n", text)
-        fits = "x" * (80 - len("    label: '',"))
-        text = export_schema.object_literal((("label", fits),))
-        self.assertIn(f"    label: '{fits}',\n", text)
-
-    def test_write_then_check_passes(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            out = Path(tmp) / "nested" / "messageTypes.generated.ts"
-            code, _, _ = self._run_main("--out", str(out))
-            self.assertEqual(code, 0)
-            self.assertEqual(out.read_text(encoding="utf-8"), export_schema.render())
-            first = out.read_bytes()
-            self._run_main("--out", str(out))
-            self.assertEqual(out.read_bytes(), first)
-            code, _, err = self._run_main("--out", str(out), "--check")
-            self.assertEqual(code, 0, err)
-
-    def test_check_fails_with_diff_when_stale(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            out = Path(tmp) / "messageTypes.generated.ts"
-            out.write_text(
-                export_schema.render().replace("'lobby.info'", "'lobby.old'"),
-                encoding="utf-8",
-            )
-            before = out.read_bytes()
-            code, stdout, stderr = self._run_main("--out", str(out), "--check")
-            self.assertEqual(code, 1)
-            self.assertIn("-  'lobby.old'", stdout + stderr)
-            self.assertIn("+  'lobby.info'", stdout + stderr)
-            self.assertIn("just py::gen-message-types", stdout + stderr)
-            self.assertEqual(out.read_bytes(), before)
-
-    def test_check_fails_when_missing(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            out = Path(tmp) / "missing.ts"
-            code, _, _ = self._run_main("--out", str(out), "--check")
-            self.assertEqual(code, 1)
-            self.assertFalse(out.exists())
-
-    def test_default_out_path(self) -> None:
-        self.assertEqual(
-            export_schema.DEFAULT_OUT.relative_to(BACKEND_DIR.parent).as_posix(),
-            "frontend/app/lib/notifications/messageTypes.generated.ts",
+    def test_bundle_shape(self) -> None:
+        b = export_schema.bundle()
+        self.assertEqual(b["version"], 1)
+        self.assertEqual(b["source"], "backend/notifications/registry.py")
+        self.assertEqual(b["regen"], "just py::gen-message-types")
+        self.assertEqual(b["schema"]["title"], "MessageRegistry")
+        self.assertLessEqual(
+            {"MessageGroup", "MessageType", "MessageKey", "GroupKey"},
+            set(b["schema"]["$defs"]),
         )
+        self.assertEqual(b["data"]["name"], "MESSAGE_REGISTRY")
+        self.assertEqual(b["data"]["type"], "MessageRegistry")
+        value = b["data"]["value"]
+        self.assertEqual(MessageRegistry.model_validate(value), REGISTRY)
+
+    def test_every_field_required_and_strict(self) -> None:
+        defs = export_schema.bundle()["schema"]["$defs"]
+        for name in ("MessageGroup", "MessageType"):
+            with self.subTest(model=name):
+                schema = defs[name]
+                self.assertEqual(set(schema["required"]), set(schema["properties"]))
+                self.assertIs(schema["additionalProperties"], False)
+
+    def test_constraints_reach_the_schema(self) -> None:
+        props = export_schema.bundle()["schema"]["$defs"]["MessageType"]["properties"]
+        self.assertEqual(props["label"]["minLength"], 1)
+        self.assertEqual(props["label"]["pattern"], r"\S")
+        self.assertEqual(props["channels"]["minItems"], 1)
 
     def test_script_runs_isolated(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            out = Path(tmp) / "gen.ts"
-            args = [sys.executable, "-I", str(SCRIPT), "--out", str(out)]
-            kwargs = dict(env=_clean_env(), capture_output=True, text=True, timeout=60)
-            first = subprocess.run(args, cwd=tmp, **kwargs)
-            self.assertEqual(first.returncode, 0, first.stderr)
-            self.assertEqual(out.read_text(encoding="utf-8"), export_schema.render())
-            ok = subprocess.run([*args, "--check"], cwd=tmp, **kwargs)
-            self.assertEqual(ok.returncode, 0, ok.stderr)
-            out.write_text("stale\n", encoding="utf-8")
-            stale = subprocess.run([*args, "--check"], cwd=tmp, **kwargs)
-            self.assertEqual(stale.returncode, 1)
-            self.assertTrue(re.search(r"^\+// GENERATED FILE", stale.stdout, re.M))
+        result = subprocess.run(
+            [sys.executable, "-I", str(SCRIPT)],
+            env=_clean_env(),
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout), export_schema.bundle())

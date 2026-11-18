@@ -115,8 +115,3 @@ backend-test-labels group:
             ;;
         *) echo "unknown group: $group (app or rest)" >&2; exit 2 ;;
     esac
-
-# Fail with a diff when frontend/app/lib/notifications/messageTypes.generated.ts is stale (fix: just py::gen-message-types)
-[group('ci')]
-message-types-check:
-    python3 -I {{quote(root / "backend/notifications/export_schema.py")}} --check

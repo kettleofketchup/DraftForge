@@ -1,14 +1,19 @@
 """Catalogue of every member message DraftForge sends.
 
-Pure Python with no Django imports: the TS/Zod exporter and the CI freshness
-check load it with `python -I`. To add a message type, add a `MessageKey`
-member and a `MessageType` entry, then run `just py::gen-message-types`.
+Pydantic, no Django imports: the TS/Zod exporter and the CI freshness check
+load it with `python -I`. Field constraints and validators here are the single
+source for the generated Zod schemas. To add a message type, add a
+`MessageKey` member and a `MessageType` entry, then run
+`just py::gen-message-types`.
 """
 
 import re
 from collections.abc import Iterable
-from dataclasses import dataclass
 from enum import StrEnum
+from typing import Annotated, Self
+
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
+from pydantic.alias_generators import to_camel
 
 
 class Channel(StrEnum):
@@ -57,27 +62,66 @@ CONDUCT_GROUP = GroupKey.CONDUCT
 MESSAGE_KEY_RE = re.compile(r"^[a-z][a-z_]*\.[a-z][a-z_]*$")
 GROUP_KEY_RE = re.compile(r"^[a-z][a-z_]*$")
 
+NonBlank = Annotated[str, StringConstraints(min_length=1, pattern=r"\S")]
 
-@dataclass(frozen=True, slots=True)
-class MessageGroup:
+
+class RegistryModel(BaseModel):
+    model_config = ConfigDict(
+        frozen=True,
+        extra="forbid",
+        alias_generator=to_camel,
+        validate_by_name=True,
+        validate_by_alias=True,
+        json_schema_serialization_defaults_required=True,
+    )
+
+
+class MessageGroup(RegistryModel):
     key: GroupKey
-    label: str
-    description: str
+    label: NonBlank
+    description: NonBlank
     opt_outable_default: bool
     essential_locked: bool = False
 
+    @model_validator(mode="after")
+    def _locked_is_not_opt_outable(self) -> Self:
+        if self.essential_locked and self.opt_outable_default:
+            raise ValueError(f"group {self.key!r}: locked group cannot be opt-outable")
+        return self
 
-@dataclass(frozen=True, slots=True)
-class MessageType:
+
+class MessageType(RegistryModel):
     key: MessageKey
     group: GroupKey
-    label: str
-    description: str
+    label: NonBlank
+    description: NonBlank
     audience: Audience
-    channels: tuple[Channel, ...]
+    channels: Annotated[tuple[Channel, ...], Field(min_length=1)]
     essential_default: bool = False
     essential_locked: bool = False
     urgent: bool = False
+
+    @model_validator(mode="after")
+    def _check_flags(self) -> Self:
+        if len(set(self.channels)) != len(self.channels):
+            raise ValueError(f"message {self.key!r}: duplicate channels")
+        if self.essential_locked and not self.essential_default:
+            raise ValueError(
+                f"message {self.key!r}: essential_locked requires essential_default"
+            )
+        return self
+
+
+class MessageRegistry(RegistryModel):
+    groups: tuple[MessageGroup, ...]
+    message_types: tuple[MessageType, ...]
+
+    @model_validator(mode="after")
+    def _check_catalogue(self) -> Self:
+        errors = registry_errors(self.groups, self.message_types)
+        if errors:
+            raise ValueError("; ".join(errors))
+        return self
 
 
 DM_OR_EPHEMERAL: tuple[Channel, ...] = (Channel.DM, Channel.EPHEMERAL)
@@ -265,9 +309,10 @@ MESSAGE_TYPES: tuple[MessageType, ...] = (
 )
 
 
-def validate_registry(
+def registry_errors(
     groups: Iterable[MessageGroup], types: Iterable[MessageType]
 ) -> list[str]:
+    """Rules that span the catalogue; per-entry rules live on the models."""
     errors: list[str] = []
     groups_by_key: dict[str, MessageGroup] = {}
     for group in groups:
@@ -275,10 +320,6 @@ def validate_registry(
             errors.append(f"duplicate group key {group.key!r}")
         if not GROUP_KEY_RE.match(group.key):
             errors.append(f"group {group.key!r}: bad key format")
-        if not group.label.strip() or not group.description.strip():
-            errors.append(f"group {group.key!r}: label and description required")
-        if group.essential_locked and group.opt_outable_default:
-            errors.append(f"group {group.key!r}: locked group cannot be opt-outable")
         groups_by_key[group.key] = group
     if CONDUCT_GROUP not in groups_by_key:
         errors.append(f"missing reserved group {CONDUCT_GROUP.value!r}")
@@ -293,16 +334,6 @@ def validate_registry(
         seen.add(m.key)
         if not MESSAGE_KEY_RE.match(m.key):
             errors.append(f"{where}: bad key format (want 'area.name')")
-        if not m.label.strip():
-            errors.append(f"{where}: empty label")
-        if not m.description.strip():
-            errors.append(f"{where}: empty description")
-        if not m.channels:
-            errors.append(f"{where}: no channels")
-        elif len(set(m.channels)) != len(m.channels):
-            errors.append(f"{where}: duplicate channels")
-        if m.essential_locked and not m.essential_default:
-            errors.append(f"{where}: essential_locked requires essential_default")
         group = groups_by_key.get(m.group)
         if group is None:
             errors.append(f"{where}: unknown group {m.group!r}")
@@ -315,6 +346,8 @@ def validate_registry(
             )
     return errors
 
+
+REGISTRY = MessageRegistry(groups=GROUPS, message_types=MESSAGE_TYPES)
 
 _GROUPS_BY_KEY: dict[str, MessageGroup] = {g.key.value: g for g in GROUPS}
 _TYPES_BY_KEY: dict[str, MessageType] = {m.key.value: m for m in MESSAGE_TYPES}

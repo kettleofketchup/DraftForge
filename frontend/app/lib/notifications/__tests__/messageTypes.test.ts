@@ -1,22 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import {
-  MESSAGE_GROUP_KEYS,
-  MESSAGE_GROUPS,
-  MESSAGE_KEYS,
-  MESSAGE_TYPES,
-  MessageGroupSchema,
+  GroupKeySchema,
+  MESSAGE_REGISTRY,
   MessageKeySchema,
+  MessageRegistrySchema,
   MessageTypeSchema,
 } from '~/lib/notifications/messageTypes.generated';
 
+const { groups, messageTypes } = MESSAGE_REGISTRY;
+
 describe('generated message types', () => {
-  it('parses every message type and group with its schema', () => {
-    for (const type of MESSAGE_TYPES) {
-      expect(MessageTypeSchema.parse(type)).toEqual(type);
-    }
-    for (const group of MESSAGE_GROUPS) {
-      expect(MessageGroupSchema.parse(group)).toEqual(group);
-    }
+  it('parses the whole registry with its schema', () => {
+    expect(MessageRegistrySchema.parse(MESSAGE_REGISTRY)).toEqual(
+      MESSAGE_REGISTRY,
+    );
   });
 
   it('accepts known keys and rejects unknown ones', () => {
@@ -24,13 +21,24 @@ describe('generated message types', () => {
     expect(MessageKeySchema.safeParse('rsvp.nope').success).toBe(false);
   });
 
-  it('keeps the key arrays in step with the catalogue', () => {
-    expect(MESSAGE_TYPES.map((t) => t.key)).toEqual([...MESSAGE_KEYS]);
-    expect(MESSAGE_GROUPS.map((g) => g.key)).toEqual([...MESSAGE_GROUP_KEYS]);
+  it('carries the pydantic field constraints', () => {
+    const valid = messageTypes[0];
+    for (const bad of [
+      { ...valid, label: ' ' },
+      { ...valid, channels: [] },
+      { ...valid, extra: true },
+    ]) {
+      expect(MessageTypeSchema.safeParse(bad).success).toBe(false);
+    }
+  });
+
+  it('keeps the key enums in step with the catalogue', () => {
+    expect(messageTypes.map((t) => t.key)).toEqual(MessageKeySchema.options);
+    expect(groups.map((g) => g.key)).toEqual(GroupKeySchema.options);
   });
 
   it('marks the promotion message essential and urgent', () => {
-    const promotion = MESSAGE_TYPES.find((t) => t.key === 'rsvp.promotion');
+    const promotion = messageTypes.find((t) => t.key === 'rsvp.promotion');
     expect(promotion).toMatchObject({
       group: 'roster_changes',
       essentialDefault: true,

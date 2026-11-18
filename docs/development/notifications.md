@@ -21,8 +21,9 @@ without a frontend change.
 | Essential | Delivered even when the member opted out. Orgs can change the essential set, except for `essential_locked` types. |
 | `conduct` group | Reserved and locked: every type in it must be `essential_locked`. |
 
-The registry is plain Python with no Django imports, so the exporter and the CI check
-run with `python3 -I` and no virtualenv.
+The registry is a set of frozen pydantic models with no Django imports, so the exporter
+runs with `python -I`. Its field constraints and validators are also the source of the
+frontend's Zod schemas; see [Pydantic to Zod](pydantic-zod.md).
 
 ## Adding a message type
 
@@ -43,36 +44,37 @@ run with `python3 -I` and no virtualenv.
     just test::run 'python manage.py test notifications.tests -v 2'
     ```
 
-`validate_registry()` enforces the rules below; the exporter refuses to write an invalid
-registry and the tests fail on one.
+Building `REGISTRY` (a `MessageRegistry`) at import enforces the rules below, so an
+invalid registry fails on import, in the exporter and in the tests.
 
-- keys are unique and well formed;
-- every type's group exists;
-- `essential_locked` implies `essential_default`;
-- every `conduct` type is locked, and a locked group cannot be opt-outable;
-- a type delivered only as a `channel_post` cannot sit in an opt-outable group;
-- label, description and channels are not empty.
+| Rule | Enforced by | Reaches Zod |
+|---|---|---|
+| label and description not blank, at least one channel | `Field` constraints | yes |
+| keys, groups, audiences and channels are known values | the `StrEnum`s | yes |
+| no unknown fields | `extra="forbid"` | yes (`.strict()`) |
+| no duplicate channels; `essential_locked` implies `essential_default`; a locked group is not opt-outable | model validators on `MessageType` / `MessageGroup` | no |
+| keys unique and well formed; every type's group exists; every `conduct` type locked; a `channel_post`-only type is not in an opt-outable group | `registry_errors()`, run by `MessageRegistry` | no |
 
 ## The generated file
 
 `messageTypes.generated.ts` holds:
 
-- const arrays: `MESSAGE_CHANNELS`, `MESSAGE_AUDIENCES`, `MESSAGE_GROUP_KEYS`, `MESSAGE_KEYS`;
-- Zod schemas and inferred types: `MessageKeySchema`, `MessageGroupKeySchema`,
-  `MessageGroupSchema`, `MessageTypeSchema` (and the channel/audience enums);
-- the catalogue itself: `MESSAGE_GROUPS` and `MESSAGE_TYPES`, with camelCase fields.
+- a Zod schema and inferred type per model and enum: `MessageKeySchema`,
+  `GroupKeySchema`, `ChannelSchema`, `AudienceSchema`, `MessageGroupSchema`,
+  `MessageTypeSchema`, `MessageRegistrySchema` (enum values via `.options`);
+- the catalogue itself: `MESSAGE_REGISTRY`, typed as `MessageRegistry`, with camelCase
+  fields (`MESSAGE_REGISTRY.messageTypes`, `MESSAGE_REGISTRY.groups`).
 
-The exporter formats the file the way Prettier does, so it passes `prettier --check`,
-and two runs produce identical bytes. Never edit it by hand.
+It is formatted with the frontend's Prettier config, and two runs produce identical
+bytes. Never edit it by hand.
 
 ## CI freshness check
 
 ```bash
-just ci::message-types-check
+just py::gen-message-types --check
 ```
 
-This runs `python3 -I backend/notifications/export_schema.py --check`, which writes
-nothing and exits 1 with a unified diff when the committed file differs from what the
-registry produces. The `unit` job in `.github/workflows/playwright.yml` runs it, so a
-registry change without a regenerated file fails CI. `--out PATH` points either mode at
-another file.
+This writes nothing and exits 1, naming the first differing line, when the committed
+file differs from what the registry produces. The `unit` job in
+`.github/workflows/playwright.yml` runs it, so a registry change without a regenerated
+file fails CI.
