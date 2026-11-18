@@ -21,35 +21,31 @@ interface PlayerPickedToastProps {
  * Format: [Captain Avatar] Captain Name picked [Player Avatar] Player Name (Pick N)
  */
 export function PlayerPickedToast({ payload }: PlayerPickedToastProps) {
-  const captainInitial = payload.captain_name?.charAt(0).toUpperCase() || '?';
-  const pickedInitial = payload.picked_name?.charAt(0).toUpperCase() || '?';
+  const captain = { pk: payload.captain_id, username: payload.captain_name };
+  const picked = { pk: payload.picked_id, username: payload.picked_name };
+  const captainName = DisplayName(captain);
+  const pickedName = DisplayName(picked);
 
   return (
     <div className="flex items-center gap-1.5 flex-wrap">
       <UserAvatar
         src={payload.captain_avatar_url || undefined}
-        user={{ username: payload.captain_name }}
+        user={captain}
         size="xs"
         className="shrink-0"
       />
-      <span
-        className="font-medium truncate max-w-[80px]"
-        title={payload.captain_name}
-      >
-        {truncateName(payload.captain_name)}
+      <span className="font-medium truncate max-w-[80px]" title={captainName}>
+        {truncateName(captainName)}
       </span>
       <span className="text-green-500 font-semibold">picked</span>
       <UserAvatar
         src={payload.picked_avatar_url || undefined}
-        user={{ username: payload.picked_name }}
+        user={picked}
         size="xs"
         className="shrink-0"
       />
-      <span
-        className="font-medium truncate max-w-[80px]"
-        title={payload.picked_name}
-      >
-        {truncateName(payload.picked_name)}
+      <span className="font-medium truncate max-w-[80px]" title={pickedName}>
+        {truncateName(pickedName)}
       </span>
       <span className="text-muted-foreground text-sm">
         (Pick {payload.pick_number})
