@@ -7,23 +7,22 @@
  * Sends a real DM to Discord user 243497113906970625.
  */
 
-import { API_URL } from '../../fixtures/base-url';
 import {
-  test,
   expect,
   getEventsTestData,
-  resetEventsData,
   loginEventAdmin,
+  resetEventsData,
+  test,
   triggerEventGeneration,
   type EventInfo,
 } from '../../fixtures';
+import { API_URL } from '../../fixtures/base-url';
 
 import {
   postWithCsrf,
-  syncDiscordEvents,
   sendTestNotification,
+  syncDiscordEvents,
 } from '../../fixtures/events';
-
 
 let eventInfo: EventInfo;
 
@@ -39,39 +38,46 @@ test.describe('Event Notification DM (@cicd)', () => {
     await loginEventAdmin(context);
   });
 
-  test('send pre-event notification DM to specific Discord user', async ({ context, page }) => {
+  test('send pre-event notification DM to specific Discord user', async ({
+    context,
+    page,
+  }) => {
     test.setTimeout(90_000);
 
     // 1. Create repeater with subscriber DM enabled
-    const repeaterResp = await postWithCsrf(context, `${API_URL}/events/repeaters/`, {
-      organization: eventInfo.orgPk,
-      name: 'DM Notification Test',
-      description: 'Testing subscriber DM notifications',
-      frequency: 'daily',
-      time_of_day: '20:00',
-      starts_at: new Date().toISOString().split('T')[0],
-      generate_days_ahead: 7,
-      is_active: true,
-      tournament_name: 'DM Test Tournament',
-      tournament_league: eventInfo.leaguePk,
-      tournament_type: 'single_elimination',
-      game_type: 1,
-      draft_type: 'shuffle',
-      people_per_team: 5,
-      number_of_teams: 2,
-      max_players: 10,
-      auto_approve: false,
-      timezone: 'America/New_York',
-      discord_announcement: true,
-      discord_announcement_channel_id: '1482767177063858216',
-      discord_post_signups: true,
-      discord_post_signups_channel_id: '1482767709279096893',
-      // discord_signup_reminder is the actual subscriber-DM toggle on
-      // EventRepeater. Each subscriber gets a DM signup_reminder_hours
-      // before scheduled_at (default 24).
-      discord_signup_reminder: true,
-      discord_signup_reminder_hours: 24,
-    });
+    const repeaterResp = await postWithCsrf(
+      context,
+      `${API_URL}/events/repeaters/`,
+      {
+        organization: eventInfo.orgPk,
+        name: 'DM Notification Test',
+        description: 'Testing subscriber DM notifications',
+        frequency: 'daily',
+        time_of_day: '20:00',
+        starts_at: new Date().toISOString().split('T')[0],
+        generate_days_ahead: 7,
+        is_active: true,
+        tournament_name: 'DM Test Tournament',
+        tournament_league: eventInfo.leaguePk,
+        tournament_type: 'single_elimination',
+        game_type: 1,
+        draft_type: 'shuffle',
+        people_per_team: 5,
+        number_of_teams: 2,
+        max_players: 10,
+        auto_approve: false,
+        timezone: 'America/New_York',
+        discord_announcement: true,
+        discord_announcement_channel_id: '1482767177063858216',
+        discord_post_signups: true,
+        discord_post_signups_channel_id: '1482767709279096893',
+        // discord_signup_reminder is the actual subscriber-DM toggle on
+        // EventRepeater. Each subscriber gets a DM signup_reminder_hours
+        // before scheduled_at (default 24).
+        discord_signup_reminder: true,
+        discord_signup_reminder_hours: 24,
+      },
+    );
     expect(repeaterResp.ok()).toBeTruthy();
 
     // 2. Generate event
@@ -91,14 +97,19 @@ test.describe('Event Notification DM (@cicd)', () => {
     const eventId = generatedEvent.id;
 
     // 4. Open signups
-    const openResp = await postWithCsrf(context, `${API_URL}/events/${eventId}/open_signups/`);
+    const openResp = await postWithCsrf(
+      context,
+      `${API_URL}/events/${eventId}/open_signups/`,
+    );
     expect(openResp.ok()).toBeTruthy();
 
     // 5. Wait for Discord announcement (poll)
     let discordReady = false;
     for (let i = 0; i < 15; i++) {
       await page.waitForTimeout(2000);
-      const discordResp = await context.request.get(`${API_URL}/events/${eventId}/discord/`);
+      const discordResp = await context.request.get(
+        `${API_URL}/events/${eventId}/discord/`,
+      );
       if (discordResp.ok()) {
         const data = await discordResp.json();
         if (data.signup_message?.has_posted) {
@@ -110,11 +121,17 @@ test.describe('Event Notification DM (@cicd)', () => {
     }
 
     // 6. Send notification DM to specific user (243497113906970625)
-    const notifResp = await sendTestNotification(context, eventId, '243497113906970625');
+    const notifResp = await sendTestNotification(
+      context,
+      eventId,
+      '243497113906970625',
+    );
 
     if (!notifResp.ok()) {
       // DM may fail if bot tokens not configured or user has DMs disabled
-      console.warn(`Notification DM failed: ${notifResp.status()} ${await notifResp.text()}`);
+      console.warn(
+        `Notification DM failed: ${notifResp.status()} ${await notifResp.text()}`,
+      );
       return;
     }
 
@@ -127,9 +144,11 @@ test.describe('Event Notification DM (@cicd)', () => {
     expect(notif.embed.title).toContain('DM Notification Test');
 
     // Buttons should be present in components (Sign Up + View Event)
-    const buttons = notif.components?.flatMap((row: { components: { label: string }[] }) =>
-      row.components?.map((btn) => btn.label) ?? []
-    ) ?? [];
+    const buttons =
+      notif.components?.flatMap(
+        (row: { components: { label: string }[] }) =>
+          row.components?.map((btn) => btn.label) ?? [],
+      ) ?? [];
     expect(buttons).toContain('View Event');
     if (discordReady) {
       expect(buttons).toContain('Sign Up');
