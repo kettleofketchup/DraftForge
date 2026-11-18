@@ -2,4 +2,6 @@
   chosen number of days before each event starts, and single events, one-off
   series events and the edit form use the same setting. Choosing
   "immediately" on a series opens every upcoming event it has already
-  generated (#577).
+  generated. New single events now start from the org default (manual
+  unless the org changes it) instead of always opening sign-ups
+  immediately (#577).
