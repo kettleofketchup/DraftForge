@@ -1,0 +1,88 @@
+"""Reset a tournament's teams in place for a fresh team draft."""
+
+from dataclasses import dataclass, field
+from enum import StrEnum
+
+from app.models import CustomUser, Team, Tournament
+from app.services.team_references import team_references
+
+
+class IneligibleReason(StrEnum):
+    NO_CAPTAIN = "no_captain"
+    CAPTAIN_NOT_IN_POOL = "captain_not_in_pool"
+
+
+class DraftResetError(Exception):
+    pass
+
+
+class NoEligibleCaptains(DraftResetError):
+    pass
+
+
+class TeamsReferenced(DraftResetError):
+    def __init__(self, references: dict[str, int]) -> None:
+        super().__init__("Teams are used by games or other records.")
+        self.references = references
+
+
+@dataclass
+class DraftResetReport:
+    reset_teams: list[Team] = field(default_factory=list)
+    dropped_teams: list[dict[str, object]] = field(default_factory=list)
+    kept_teams: list[dict[str, object]] = field(default_factory=list)
+    cleared_deputies: list[dict[str, int]] = field(default_factory=list)
+    removed_users: list[CustomUser] = field(default_factory=list)
+
+    def as_dict(self) -> dict[str, list]:
+        return {
+            "reset_teams": [team.pk for team in self.reset_teams],
+            "dropped_teams": self.dropped_teams,
+            "kept_teams": self.kept_teams,
+            "cleared_deputies": self.cleared_deputies,
+        }
+
+
+def _ineligible_reason(team: Team) -> IneligibleReason:
+    if team.captain_id is None:
+        return IneligibleReason.NO_CAPTAIN
+    return IneligibleReason.CAPTAIN_NOT_IN_POOL
+
+
+def reset_draft_teams(tournament: Tournament, *, force: bool) -> DraftResetReport:
+    """Validate, then reset eligible teams to their captains; call inside ``transaction.atomic``.
+
+    Raises before any write: ``NoEligibleCaptains`` when no team can be drafted,
+    ``TeamsReferenced`` when other records use the teams and ``force`` is False.
+    """
+    teams = tournament.teams.nocache().order_by("pk")
+    eligible_pks = set(
+        tournament.draft_eligible_teams().nocache().values_list("pk", flat=True)
+    )
+    if not eligible_pks:
+        raise NoEligibleCaptains
+    references = team_references(teams)
+    if references and not force:
+        raise TeamsReferenced(references)
+
+    report = DraftResetReport()
+    for team in teams:
+        if team.pk not in eligible_pks:
+            entry = {
+                "pk": team.pk,
+                "name": team.name,
+                "reason": _ineligible_reason(team),
+            }
+            if team_references([team]):
+                report.kept_teams.append(entry)
+            else:
+                team.delete()
+                report.dropped_teams.append(entry)
+            continue
+        if team.deputy_captain_id is not None:
+            report.cleared_deputies.append(
+                {"team": team.pk, "user": team.deputy_captain_id}
+            )
+        report.removed_users.extend(team.reset_to_captain())
+        report.reset_teams.append(team)
+    return report

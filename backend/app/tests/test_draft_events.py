@@ -197,12 +197,13 @@ class ShuffleDraftEventIntegrationTest(TestCase):
             draft_style="shuffle",
         )
 
-    @patch("app.functions.shuffle_draft.broadcast_event")
+    @patch("app.broadcast.broadcast_event")
     def test_build_shuffle_rounds_creates_draft_started_event(self, mock_broadcast):
-        """Building shuffle rounds creates a draft_started event."""
+        """Building shuffle rounds creates a draft_started event, broadcast on commit."""
         from app.functions.shuffle_draft import build_shuffle_rounds
 
-        build_shuffle_rounds(self.draft)
+        with self.captureOnCommitCallbacks(execute=True):
+            build_shuffle_rounds(self.draft)
 
         events = DraftEvent.objects.filter(draft=self.draft, event_type="draft_started")
         self.assertEqual(events.count(), 1)

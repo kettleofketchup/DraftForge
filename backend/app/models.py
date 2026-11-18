@@ -863,6 +863,10 @@ class Tournament(models.Model):
             return []
         return self.users.filter(teams_as_captain__tournament=self).distinct()
 
+    def draft_eligible_teams(self) -> "QuerySet[Team]":
+        """Teams whose captain is in the tournament's player pool."""
+        return self.teams.filter(captain_id__in=self.users.values("pk"))
+
     @property
     def linked_steam_league_id(self) -> int | None:
         """Steam league id resolved via the parent League FK.
@@ -1323,14 +1327,16 @@ class Draft(models.Model):
         active = self.active_round
         return active is not None and active.started_at is not None
 
-    def reset_timer_state(self, options: "DraftOptions") -> None:
+    def reset_timer_state(
+        self, options: "DraftOptions", teams: "Iterable[Team] | None" = None
+    ) -> None:
         self.state = (
             TeamDraftState.PENDING if options.timer_enabled else TeamDraftState.DRAFTING
         )
         self.paused_at = None
         self.resuming_until = None
         self.is_manual_pause = False
-        for team in self.tournament.teams.all():
+        for team in self.tournament.teams.all() if teams is None else teams:
             team.draft_reserve_ms = options.reserve_time_ms
             team.draft_is_ready = False
             team.draft_is_connected = False
@@ -1354,7 +1360,8 @@ class Draft(models.Model):
         return TeamDraftState.DRAFTING
 
     def _emit_lobby_opened(self, options: "DraftOptions") -> None:
-        from app.broadcast import broadcast_event
+        # Cycle: app.broadcast imports app.models.
+        from app.broadcast import broadcast_event_after_commit
 
         event = DraftEvent.objects.create(
             draft=self,
@@ -1365,7 +1372,7 @@ class Draft(models.Model):
                 "reserve_time_ms": options.reserve_time_ms,
             },
         )
-        broadcast_event(event)
+        broadcast_event_after_commit(event)
 
     def save(self, *args: object, **kwargs: object) -> None:
         super().save(*args, **kwargs)
@@ -1720,7 +1727,11 @@ class Draft(models.Model):
                 team.members.add(draft_round.choice)
                 team.save()
 
-    def build_rounds(self) -> None:
+    def build_rounds(self, teams: "QuerySet[Team] | None" = None) -> None:
+        """Rebuild the draft rounds for ``teams`` (default: every tournament team)."""
+        if teams is None:
+            teams = self.tournament.teams.all()
+        teams = teams.order_by("draft_order")
         log.debug(
             "build_rounds_started",
             system="tournament",
@@ -1741,18 +1752,18 @@ class Draft(models.Model):
             round.delete()
 
         options = self.tournament.get_draft_options(fresh=True)
-        self.reset_timer_state(options)
+        self.reset_timer_state(options, teams)
 
         # Delegate to shuffle module for shuffle style
         if self.draft_style == "shuffle":
             from app.functions.shuffle_draft import build_shuffle_rounds
 
-            build_shuffle_rounds(self)
+            build_shuffle_rounds(self, teams)
             if self.state == TeamDraftState.PENDING:
                 self._emit_lobby_opened(options)
             return
 
-        teams = list(self.tournament.teams.order_by("draft_order"))
+        teams = list(teams)
         if not teams:
             log.error(
                 "no_teams_found",
