@@ -1,8 +1,8 @@
-import { generateMeta } from '~/lib/seo';
+import { useNavigate, useParams } from 'react-router';
 import { getEvent } from '~/components/api/api';
-import { useParams, useNavigate } from 'react-router';
-import type { Route } from './+types/rollcall';
+import { generateMeta } from '~/lib/seo';
 import type { EventSSR } from '~/lib/ssr-types';
+import type { Route } from './+types/rollcall';
 
 export async function loader({ params }: Route.LoaderArgs) {
   const { fetchSSR } = await import('~/lib/ssr.server');
@@ -29,27 +29,39 @@ export function meta({ data }: Route.MetaArgs) {
   });
 }
 
-import { useState, useMemo, useEffect, useCallback } from 'react';
-import { Loader2, Users, CheckCircle2, XCircle, ArrowLeft, Undo2 } from 'lucide-react';
+import {
+  ArrowLeft,
+  CheckCircle2,
+  Loader2,
+  Undo2,
+  Users,
+  XCircle,
+} from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { Badge } from '~/components/ui/badge';
-import { PrimaryButton, SecondaryButton, DestructiveButton, brandDialogPanel } from '~/components/ui/buttons';
-import { Button } from '~/components/ui/button';
 import { EventStateBadge, MmrApprovalModal } from '~/components/events';
-import { EventState, SignupStatus } from '~/components/events/schemas';
 import type { EventSignupType } from '~/components/events/schemas';
+import { EventState, SignupStatus } from '~/components/events/schemas';
+import { useOrganization } from '~/components/organization';
+import { Badge } from '~/components/ui/badge';
+import { Button } from '~/components/ui/button';
+import {
+  brandDialogPanel,
+  DestructiveButton,
+  PrimaryButton,
+  SecondaryButton,
+} from '~/components/ui/buttons';
+import { ConfirmDialog } from '~/components/ui/dialogs';
+import { EntityBreadcrumb } from '~/components/ui/entity-breadcrumb';
 import { UserStrip } from '~/components/user';
 import {
   useEvent,
+  useEventActionMutation,
   useEventSignups,
   useEventSignupUsers,
-  useEventActionMutation,
   useSignupActionMutations,
 } from '~/hooks/useEvent';
 import { useResolvedUsers } from '~/hooks/useResolvedUsers';
-import { useOrganization } from '~/components/organization';
-import { ConfirmDialog } from '~/components/ui/dialogs';
-import { EntityBreadcrumb } from '~/components/ui/entity-breadcrumb';
 
 export default function RollCallPage() {
   const { eventId } = useParams<{ eventId: string }>();
@@ -62,15 +74,25 @@ export default function RollCallPage() {
   const actions = useEventActionMutation(id ?? 0);
   const signupActions = useSignupActionMutations(id ?? 0);
 
-  const { organization: eventOrg } = useOrganization(event?.organization ?? undefined);
+  const { organization: eventOrg } = useOrganization(
+    event?.organization ?? undefined,
+  );
   const isAdmin = event?.user_can_manage ?? false;
 
   const [showStartConfirm, setShowStartConfirm] = useState(false);
   const [isNavigating, setIsNavigating] = useState(false);
-  const [approvalSignup, setApprovalSignup] = useState<EventSignupType | null>(null);
-  const [confirmSignup, setConfirmSignup] = useState<EventSignupType | null>(null);
-  const [rejectSignup, setRejectSignup] = useState<EventSignupType | null>(null);
-  const [cancelSignup, setCancelSignup] = useState<EventSignupType | null>(null);
+  const [approvalSignup, setApprovalSignup] = useState<EventSignupType | null>(
+    null,
+  );
+  const [confirmSignup, setConfirmSignup] = useState<EventSignupType | null>(
+    null,
+  );
+  const [rejectSignup, setRejectSignup] = useState<EventSignupType | null>(
+    null,
+  );
+  const [cancelSignup, setCancelSignup] = useState<EventSignupType | null>(
+    null,
+  );
 
   const userPks = useMemo(() => signups.map((s) => s.user), [signups]);
   const resolvedUsers = useResolvedUsers(userPks);
@@ -84,7 +106,10 @@ export default function RollCallPage() {
   const handleRestore = useCallback(
     (signup: EventSignupType) => {
       signupActions.reinstate.mutate(signup.id, {
-        onSuccess: () => toast.success(`Restored ${signup.username ?? `User #${signup.user}`}`),
+        onSuccess: () =>
+          toast.success(
+            `Restored ${signup.username ?? `User #${signup.user}`}`,
+          ),
         onError: () => toast.error('Failed to restore signup'),
       });
     },
@@ -103,9 +128,22 @@ export default function RollCallPage() {
       if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return;
       const target = e.target as HTMLElement | null;
       const tag = target?.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target?.isContentEditable) return;
+      if (
+        tag === 'INPUT' ||
+        tag === 'TEXTAREA' ||
+        tag === 'SELECT' ||
+        target?.isContentEditable
+      )
+        return;
       // Ignore while another dialog is open — those have their own Enter/Backspace bindings.
-      if (approvalSignup || confirmSignup || rejectSignup || cancelSignup || showStartConfirm) return;
+      if (
+        approvalSignup ||
+        confirmSignup ||
+        rejectSignup ||
+        cancelSignup ||
+        showStartConfirm
+      )
+        return;
       if (!firstAwaiting) return;
       if (e.key === '1') {
         e.preventDefault();
@@ -117,7 +155,15 @@ export default function RollCallPage() {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [isAdmin, firstAwaiting, approvalSignup, confirmSignup, rejectSignup, cancelSignup, showStartConfirm]);
+  }, [
+    isAdmin,
+    firstAwaiting,
+    approvalSignup,
+    confirmSignup,
+    rejectSignup,
+    cancelSignup,
+    showStartConfirm,
+  ]);
 
   if (isLoading) {
     return (
@@ -137,10 +183,17 @@ export default function RollCallPage() {
     return (
       <div className="container mx-auto py-6 px-4">
         <div className="text-center py-12">
-          <p data-testid="rollcall-not-active" className="text-muted-foreground mb-4">
+          <p
+            data-testid="rollcall-not-active"
+            className="text-muted-foreground mb-4"
+          >
             This event is not in roll call mode.
           </p>
-          <Button data-testid="rollcall-back-btn" variant="outline" onClick={() => navigate(`/events/${eventId}`)}>
+          <Button
+            data-testid="rollcall-back-btn"
+            variant="outline"
+            onClick={() => navigate(`/events/${eventId}`)}
+          >
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back to Event
           </Button>
@@ -151,7 +204,9 @@ export default function RollCallPage() {
 
   const confirmed = signups.filter((s) => s.status === 'confirmed');
   const approved = signups.filter((s) => s.status === 'approved');
-  const others = signups.filter((s) => !['confirmed', 'approved'].includes(s.status));
+  const others = signups.filter(
+    (s) => !['confirmed', 'approved'].includes(s.status),
+  );
 
   const totalReady = confirmed.length;
   const minPlayers = event.min_players;
@@ -162,8 +217,20 @@ export default function RollCallPage() {
     <div className="container mx-auto py-6 px-4 space-y-6">
       <EntityBreadcrumb
         segments={[
-          ...(eventOrg ? [{ type: 'organization' as const, label: eventOrg.name, href: `/organizations/${eventOrg.pk}` }] : []),
-          { type: 'event' as const, label: event.name, href: `/events/${eventId}` },
+          ...(eventOrg
+            ? [
+                {
+                  type: 'organization' as const,
+                  label: eventOrg.name,
+                  href: `/organizations/${eventOrg.pk}`,
+                },
+              ]
+            : []),
+          {
+            type: 'event' as const,
+            label: event.name,
+            href: `/events/${eventId}`,
+          },
         ]}
         currentLabel="Roll Call"
       />
@@ -180,7 +247,12 @@ export default function RollCallPage() {
               >
                 <ArrowLeft className="h-4 w-4" />
               </Button>
-              <h1 data-testid="rollcall-heading" className="text-xl md:text-2xl font-bold">Roll Call</h1>
+              <h1
+                data-testid="rollcall-heading"
+                className="text-xl md:text-2xl font-bold"
+              >
+                Roll Call
+              </h1>
               <EventStateBadge state={event.state} />
             </div>
             <p className="text-sm text-muted-foreground ml-11">{event.name}</p>
@@ -221,7 +293,10 @@ export default function RollCallPage() {
         {/* Confirmed players */}
         {confirmed.length > 0 && (
           <div>
-            <h3 data-testid="rollcall-confirmed-section" className="text-sm font-semibold text-muted-foreground mb-2 uppercase tracking-wider">
+            <h3
+              data-testid="rollcall-confirmed-section"
+              className="text-sm font-semibold text-muted-foreground mb-2 uppercase tracking-wider"
+            >
               Confirmed ({confirmed.length})
             </h3>
             <div className="space-y-1.5">
@@ -248,7 +323,10 @@ export default function RollCallPage() {
         {/* Approved but not confirmed */}
         {approved.length > 0 && (
           <div>
-            <h3 data-testid="rollcall-awaiting-section" className="text-sm font-semibold text-muted-foreground mb-2 uppercase tracking-wider">
+            <h3
+              data-testid="rollcall-awaiting-section"
+              className="text-sm font-semibold text-muted-foreground mb-2 uppercase tracking-wider"
+            >
               Awaiting Confirmation ({approved.length})
             </h3>
             <div className="space-y-1.5">
@@ -312,11 +390,16 @@ export default function RollCallPage() {
       <MmrApprovalModal
         signup={approvalSignup}
         open={!!approvalSignup}
-        onOpenChange={(open) => { if (!open) setApprovalSignup(null); }}
+        onOpenChange={(open) => {
+          if (!open) setApprovalSignup(null);
+        }}
         onApprove={(signupId, mmr) => {
-          signupActions.approve.mutate({ id: signupId, mmr }, {
-            onSuccess: () => setApprovalSignup(null),
-          });
+          signupActions.approve.mutate(
+            { id: signupId, mmr },
+            {
+              onSuccess: () => setApprovalSignup(null),
+            },
+          );
         }}
         isApproving={signupActions.approve.isPending}
       />
@@ -324,7 +407,9 @@ export default function RollCallPage() {
       {/* Per-row Confirm (approved → confirmed) */}
       <ConfirmDialog
         open={!!confirmSignup}
-        onOpenChange={(open) => { if (!open) setConfirmSignup(null); }}
+        onOpenChange={(open) => {
+          if (!open) setConfirmSignup(null);
+        }}
         title="Confirm attendance"
         description={
           confirmSignup ? (
@@ -343,11 +428,15 @@ export default function RollCallPage() {
               })()}
               <p data-testid="rollcall-confirm-summary">
                 Mark this player as present for{' '}
-                <span className="font-medium">{event?.name ?? 'the event'}</span>?
-                They&apos;ll be locked into the roster.
+                <span className="font-medium">
+                  {event?.name ?? 'the event'}
+                </span>
+                ? They&apos;ll be locked into the roster.
               </p>
             </div>
-          ) : ''
+          ) : (
+            ''
+          )
         }
         confirmLabel="Confirm"
         cancelLabel="Cancel"
@@ -365,7 +454,9 @@ export default function RollCallPage() {
       {/* Per-row Reject (approved → rejected) */}
       <ConfirmDialog
         open={!!rejectSignup}
-        onOpenChange={(open) => { if (!open) setRejectSignup(null); }}
+        onOpenChange={(open) => {
+          if (!open) setRejectSignup(null);
+        }}
         title="Reject signup"
         description={
           rejectSignup ? (
@@ -383,11 +474,14 @@ export default function RollCallPage() {
                 ) : null;
               })()}
               <p data-testid="rollcall-reject-summary">
-                Reject this signup? They&apos;ll be removed from the active roster.
-                You can restore them from the Other section without leaving this screen.
+                Reject this signup? They&apos;ll be removed from the active
+                roster. You can restore them from the Other section without
+                leaving this screen.
               </p>
             </div>
-          ) : ''
+          ) : (
+            ''
+          )
         }
         confirmLabel="Reject"
         cancelLabel="Cancel"
@@ -407,7 +501,9 @@ export default function RollCallPage() {
       {/* Per-row Cancel (confirmed → cancelled) */}
       <ConfirmDialog
         open={!!cancelSignup}
-        onOpenChange={(open) => { if (!open) setCancelSignup(null); }}
+        onOpenChange={(open) => {
+          if (!open) setCancelSignup(null);
+        }}
         title="Remove confirmed player"
         description={
           cancelSignup ? (
@@ -425,11 +521,13 @@ export default function RollCallPage() {
                 ) : null;
               })()}
               <p data-testid="rollcall-cancel-summary">
-                Remove this player from the confirmed roster? You can restore them from
-                the Other section without leaving this screen.
+                Remove this player from the confirmed roster? You can restore
+                them from the Other section without leaving this screen.
               </p>
             </div>
-          ) : ''
+          ) : (
+            ''
+          )
         }
         confirmLabel="Remove"
         cancelLabel="Cancel"
@@ -520,7 +618,8 @@ function SignupStrip({
   };
 
   const isRemoved =
-    signup.status === SignupStatus.REJECTED || signup.status === SignupStatus.CANCELLED;
+    signup.status === SignupStatus.REJECTED ||
+    signup.status === SignupStatus.CANCELLED;
 
   const actionSlot = isAdmin ? (
     <div className="flex gap-1">

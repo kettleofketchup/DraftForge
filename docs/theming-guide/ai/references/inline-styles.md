@@ -14,7 +14,7 @@ DraftForge's brand is enforced through semantic tokens (`bg-primary`, `bg-base-9
 <div className="bg-base-950 p-4">
 ```
 
-Acceptable only for dynamic computed values (`width: ${pct}%`, CSS variable injection). Static styling MUST be Tailwind. Exception: `[background-image:var(--brand-bg)]` on dialog surfaces (see [`THEMING-GUIDE.md` §"Brand Surface Background"](../../THEMING-GUIDE.md#brand-surface-background-brandbg)).
+Acceptable only for dynamic computed values (`width: ${pct}%`, CSS variable injection). Static styling MUST be Tailwind. Exception: `[background-image:var(--brand-bg)]` on dialog surfaces (see [`THEMING-GUIDE.md` §"Brand Surface Background"](../../../THEMING-GUIDE.md#brand-surface-background-brandbg)).
 
 ### Raw violet/indigo Tailwind classes
 
@@ -39,7 +39,7 @@ The brand primary is a gradient — use `<PrimaryButton>` or import `brandGradie
 <div className="bg-base-800 border border-border">
 ```
 
-See [`THEMING-GUIDE.md` §"Background Scale (Slate)"](../../THEMING-GUIDE.md#background-scale-slate).
+See [`THEMING-GUIDE.md` §"Background Scale (Slate)"](../../../THEMING-GUIDE.md#background-scale-slate).
 
 ### Hand-rolled gradients
 

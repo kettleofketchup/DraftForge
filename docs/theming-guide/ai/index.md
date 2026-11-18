@@ -1,8 +1,8 @@
 # Theming Guide — AI References
 
-This subtree is the AI-targeted slice of [`docs/THEMING-GUIDE.md`](../THEMING-GUIDE.md). The canonical brand content (palette, button system, status colors, gradients, glow effects, mandatory components) lives in `THEMING-GUIDE.md` and is human-first.
+This subtree is the AI-targeted slice of [`docs/THEMING-GUIDE.md`](../../THEMING-GUIDE.md). The canonical brand content (palette, button system, status colors, gradients, glow effects, mandatory components) lives in `THEMING-GUIDE.md` and is human-first.
 
-The pages under [`references/`](references/) are written for review automation: short, grep-friendly, full of concrete file paths and replacement snippets. The companion `brand` skill (`.claude/skills/brand/SKILL.md`) loads them on demand when reviewing or writing UI code.
+The pages under [`references/`](#reference-map) are written for review automation: short, grep-friendly, full of concrete file paths and replacement snippets. The companion `brand` skill (`.claude/skills/brand/SKILL.md`) loads them on demand when reviewing or writing UI code.
 
 ## When These Pages Activate
 
@@ -27,15 +27,15 @@ The skill itself is short — it points back to the pages here. Update content *
 
 ## Hidden From MkDocs Nav
 
-These files are intentionally NOT listed in `mkdocs.yml`'s `nav:` block. MkDocs uses an explicit nav (no awesome-nav), so omitting an entry hides it from the sidebar. The pages still build and are linkable, and `THEMING-GUIDE.md` includes their content via `pymdownx.snippets` (`--8<-- "theming-guide/ai/references/<name>.md"`).
+These files are intentionally NOT listed in `mkdocs.yml`'s `nav:` block. MkDocs uses an explicit nav (no awesome-nav), so omitting an entry hides it from the sidebar. The pages still build and are linkable, and the `## References` section of `THEMING-GUIDE.md` links to each one. They are not inlined with `pymdownx.snippets`: their relative links (`../../../THEMING-GUIDE.md#...`, sibling `scope.md`) only resolve from their own location.
 
 ## Updating These References
 
-Run the `/brand-update` slash command (`.claude/commands/brand-update.md`). It walks the lockstep edit of these reference files, the skill, and `THEMING-GUIDE.md`, and verifies backlinks + snippet integrity. Hand-editing one side without the other is a known drift source — don't do it.
+Run the `/brand-update` slash command (`.claude/commands/brand-update.md`). It walks the lockstep edit of these reference files, the skill, and `THEMING-GUIDE.md`, and verifies backlinks + reference links. Hand-editing one side without the other is a known drift source — don't do it.
 
 ## Backlinks
 
-- Canonical brand guide: [`../THEMING-GUIDE.md`](../THEMING-GUIDE.md)
+- Canonical brand guide: [`docs/THEMING-GUIDE.md`](../../THEMING-GUIDE.md)
 - Token SSOT: `frontend/app/app.css`
 - Brand style constants: `frontend/app/components/ui/buttons/styles.ts`
 - Buttons folder convention: `frontend/app/components/ui/buttons/README.md`

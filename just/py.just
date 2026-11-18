@@ -42,3 +42,10 @@ script *args:
 [group('py')]
 test *args:
     {{quote(root / "scripts/in-env.sh")}} test backend {{quote(python)}} -m pytest "$@"
+
+# Regenerate frontend/app/lib/notifications/messageTypes.generated.ts from the message registry; --check fails instead of writing when stale
+[group('py')]
+gen-message-types *args:
+    {{quote(python)}} -I {{quote(backend / "notifications/export_schema.py")}} \
+        | node {{quote(root / "frontend/scripts/zod-from-json-schema.mjs")}} \
+            --out {{quote(root / "frontend/app/lib/notifications/messageTypes.generated.ts")}} "$@"

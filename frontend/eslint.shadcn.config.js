@@ -8,6 +8,8 @@ import reactHooks from 'eslint-plugin-react-hooks';
 import { defineConfig } from 'eslint/config';
 import tseslint from 'typescript-eslint';
 
+import draftforge from './eslint-rules/user-display.js';
+
 export default defineConfig([
   {
     ignores: [
@@ -27,6 +29,7 @@ export default defineConfig([
     // Registered with no rules on, so eslint-disable comments for them still resolve.
     plugins: {
       shadcn,
+      draftforge,
       i18next,
       'react-hooks': reactHooks,
       '@typescript-eslint': tseslint.plugin,
@@ -47,11 +50,29 @@ export default defineConfig([
         { allow: ['nodrag', 'nopan', 'toaster', 'spinner'] },
       ],
 
+      // People render through the shared helpers so org server nicknames, Discord
+      // names and avatar fallbacks stay consistent.
+      'draftforge/use-display-name': 'error',
+      'draftforge/use-user-avatar': 'error',
+
       // Off: conflicts with the brand guide or is a design decision, not a lint one.
       'shadcn/no-restyle': 'off',
       'shadcn/no-inline-styles': 'off',
       'shadcn/no-arbitrary-values': 'off',
       'shadcn/require-static-classes': 'off',
+    },
+  },
+  {
+    // The helpers themselves, and the shadcn primitives they wrap.
+    files: [
+      'app/components/user/UserAvatar.tsx',
+      'app/components/user/avatar.tsx',
+      'app/lib/userDisplayName.ts',
+      'app/components/ui/**',
+    ],
+    rules: {
+      'draftforge/use-display-name': 'off',
+      'draftforge/use-user-avatar': 'off',
     },
   },
 ]);

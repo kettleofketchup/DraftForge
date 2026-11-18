@@ -10,7 +10,7 @@ DraftForge's visual identity is "Neon Cyber Esports" — a violet/indigo primary
 ## Canonical Sources (priority order)
 
 1. **`docs/THEMING-GUIDE.md`** — single source of truth. Palette, brand button system (`PrimaryButton`/`SecondaryButton`/`ConfirmButton`/`EditButton`), `bg-base-*` scale, status colors, gradient utilities, glow effects, mandatory `<UserAvatar>` / `<EntityBreadcrumb>` components, button policy. Read first.
-2. **`docs/theming-guide/ai/references/`** — AI-targeted review references (hidden from MkDocs nav, mirrored into the canonical guide via `pymdownx.snippets`).
+2. **`docs/theming-guide/ai/references/`** — AI-targeted review references (hidden from MkDocs nav, linked from the canonical guide's `## References` section).
 3. **`frontend/app/app.css`** — token SSOT (CSS variables for palette, oklch values, gradients).
 4. **`frontend/app/components/ui/buttons/styles.ts`** — exported brand style constants (`brandGradient`, `brandSecondary`, `brandErrorBg`, `brandSuccessBg`, `brandBg`, `buttonLift`, etc.).
 5. **`frontend/app/components/ui/buttons/README.md`** — folder convention (root for generic buttons, `icons/` for icon-only, `<domain>/` for domain-specific).
@@ -51,7 +51,7 @@ Activate this skill whenever:
 
 ## References (loaded on demand)
 
-All of the below live in `docs/theming-guide/ai/references/` (hidden from the MkDocs nav, included into `THEMING-GUIDE.md` via `pymdownx.snippets`):
+All of the below live in `docs/theming-guide/ai/references/` (hidden from the MkDocs nav, linked from `THEMING-GUIDE.md` `## References`):
 
 - [scope.md](../../../docs/theming-guide/ai/references/scope.md) — in-scope source trees and special cases.
 - [component-substitutions.md](../../../docs/theming-guide/ai/references/component-substitutions.md) — raw `<button>` → `<PrimaryButton>` / `<SecondaryButton>` / `<ConfirmButton>` / `<EditButton>` table; `<img>` → `<UserAvatar>`; manual breadcrumbs → `<EntityBreadcrumb>`; bare shadcn `<Select>` → `<BrandSelect>` family; structural `<Button>` exceptions.
@@ -63,7 +63,7 @@ All of the below live in `docs/theming-guide/ai/references/` (hidden from the Mk
 
 ## Updating This Skill
 
-Use the `/brand-update` slash command (defined at `.claude/commands/brand-update.md`). It edits the docs references and this skill in lockstep, verifies backlinks, line counts, and snippet integrity. Do NOT hand-edit one side without the other — they will drift.
+Use the `/brand-update` slash command (defined at `.claude/commands/brand-update.md`). It edits the docs references and this skill in lockstep, verifies backlinks, line counts, and reference links. Do NOT hand-edit one side without the other — they will drift.
 
 ## Backlinks
 
