@@ -1,0 +1,1 @@
+- The frontend design-system lint also catches names built into toasts, titles and other strings without `DisplayName`, explicit org arguments to `DisplayName`, payloads reshaped for `UserAvatar`, and direct calls to the name and avatar resolvers.
