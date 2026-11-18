@@ -6,6 +6,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { updateTournament } from '~/components/api/api';
 import type { TournamentType } from '~/components/tournament/types';
 import { TrashIconButton } from '~/components/ui/buttons';
+import { DisplayName } from '~/components/user/avatar';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
 
@@ -61,15 +62,15 @@ export const PlayerRemoveButton: React.FC<PropsRemoveButton> = ({
       toast.promise(
         updateTournament(tournament.pk, { user_ids: updatedUserIds ?? [] }),
         {
-          loading: `Removing ${user.username}...`,
-          success: () => `${user.username} has been removed`,
+          loading: `Removing ${DisplayName(user)}...`,
+          success: () => `${DisplayName(user)} has been removed`,
           error: (err: unknown) => {
             log.error('Failed to remove user', err);
             // Revert optimistic update on failure
             queryClient.invalidateQueries({
               queryKey: ['tournament', tournament.pk],
             });
-            return `Failed to remove ${user.username}`;
+            return `Failed to remove ${DisplayName(user)}`;
           },
         },
       );

@@ -11,6 +11,7 @@ import {
 } from '~/components/ui/brand-select';
 import { Label } from '~/components/ui/label';
 import { Spinner } from '~/components/ui/spinner';
+import { DisplayName } from '~/components/user/avatar';
 import type { UserType } from '~/index';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
@@ -58,7 +59,7 @@ export const DraftOrderButton: React.FC<{
       team: team.name,
     });
     toast.promise(updateTeam(team.pk!, newTeam), {
-      loading: ` Updating Draft order for ${user.username}`,
+      loading: ` Updating Draft order for ${DisplayName(user)}`,
 
       success: (data) => {
         getCurrentTournament();
@@ -97,7 +98,7 @@ export const DraftOrderButton: React.FC<{
             id={id}
             size="sm"
             className="w-9 px-1 py-0 text-xs justify-center [&>svg]:size-3"
-            aria-label={`Draft order for ${user.username ?? ''}`.trim()}
+            aria-label={`Draft order for ${DisplayName(user)}`}
             data-testid={`draft-order-trigger-${user.pk}`}
           >
             <SelectValue placeholder={draft_order} />

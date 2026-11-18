@@ -9,6 +9,7 @@ import {
   CollapsibleTrigger,
 } from '~/components/ui/collapsible';
 import type { UserClassType, UserType } from '~/components/user';
+import { DisplayName } from '~/components/user/avatar';
 import UserEditModal from '~/components/user/userCard/editModal';
 import {
   resolveEditScope,
@@ -188,7 +189,7 @@ export const hasErrors = () => {
               key={user.pk}
             >
               <div className="text-white text-center underline underline-offset-2 font-bold mb-2 break-words">
-                {user.nickname || user.username}
+                {DisplayName(user)}
               </div>
               <div className="flex flex-col gap-1 text-center text-sm text-red-100">
                 {issues.map((issue) => (

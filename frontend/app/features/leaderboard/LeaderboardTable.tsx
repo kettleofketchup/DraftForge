@@ -7,6 +7,7 @@ import {
   TableRow,
 } from '~/components/ui/table';
 import { UserPopover } from '~/components/user/UserPopover';
+import { DisplayName } from '~/components/user/avatar';
 import {
   formatWinRate,
   toneClass,
@@ -77,7 +78,7 @@ export function LeaderboardTable({
                   avatar={entry.avatar}
                 >
                   <span className="cursor-pointer font-medium hover:underline">
-                    {entry.username}
+                    {DisplayName(entry)}
                   </span>
                 </UserPopover>
               </TableCell>

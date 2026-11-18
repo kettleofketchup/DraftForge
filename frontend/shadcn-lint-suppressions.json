@@ -329,20 +329,7 @@
       "count": 4
     }
   },
-  "app/components/tournament/captains/captainTable.tsx": {
-    "draftforge/use-display-name": {
-      "count": 2
-    }
-  },
-  "app/components/tournament/captains/createTeamFromCaptainHook.tsx": {
-    "draftforge/use-display-name": {
-      "count": 3
-    }
-  },
   "app/components/tournament/captains/draftOrder.tsx": {
-    "draftforge/use-display-name": {
-      "count": 1
-    },
     "shadcn/no-raw-colors": {
       "count": 2
     }
@@ -498,9 +485,6 @@
     }
   },
   "app/features/leaderboard/LeaderboardTable.tsx": {
-    "draftforge/use-display-name": {
-      "count": 1
-    },
     "shadcn/no-raw-colors": {
       "count": 2
     }
@@ -536,9 +520,6 @@
     }
   },
   "app/pages/tournament/hasErrors.tsx": {
-    "draftforge/use-display-name": {
-      "count": 2
-    },
     "shadcn/no-raw-colors": {
       "count": 2
     }
@@ -551,11 +532,6 @@
   "app/pages/tournament/tabs/players/addPlayerModal.tsx": {
     "shadcn/no-raw-colors": {
       "count": 1
-    }
-  },
-  "app/pages/tournament/tabs/players/playerRemoveButton.tsx": {
-    "draftforge/use-display-name": {
-      "count": 3
     }
   },
   "app/pages/user/UserProfilePage.tsx": {
