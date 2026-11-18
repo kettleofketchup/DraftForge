@@ -4,3 +4,6 @@
   tournament roster straight away instead of at tournament start, and reopening
   signups puts them back when the setting is off. The event page shows the roll
   call as "In progress", "Confirm to join roster" or "Optional" (#569).
+- Cancelling, rejecting, demoting or unconfirming a signup still takes the
+  player off the tournament roster and their team, as before. Only the roster
+  resync on Start Roll Call and Reopen Signups leaves team members in place.

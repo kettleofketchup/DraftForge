@@ -31,7 +31,7 @@ class PlayerDotaProfile(PlayerProfileMixin):
     ]
     RANK_STATUSES = tuple(value for value, _ in RANK_STATUS_CHOICES)
     DEFAULT_RANK_STATUS = "never"
-    # Same rule as the org 0010 backfill (org/tests/rank_evidence_cases.py).
+    # Same rule as the org 0011 backfill (org/tests/rank_evidence_cases.py).
     RANK_EVIDENCE_FIELDS = (
         "rank_medal",
         "battle_cup_tier",

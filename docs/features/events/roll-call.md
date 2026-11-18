@@ -78,7 +78,7 @@ The event's tournament roster follows one rule per phase:
 
 The roster is resynced when roll call starts, when signups are reopened from roll call, and when `roll_call_enabled` changes while signups are open. Starting roll call removes approved players who have not confirmed; reopening signups adds them back when the flag is off. Reopening only restores roster entries; it never changes teams.
 
-A player who is a member, captain or deputy of a team in the tournament is never removed by a resync, because removal would also take them off the team. The Start Roll Call and Reopen Signups responses list those players' user IDs in `roster_kept_on_team` so staff can deal with them by hand.
+A player who is a member, captain or deputy of a team in the tournament is never removed by a resync, because removal would also take them off the team. The Start Roll Call and Reopen Signups API responses list those players' user IDs in `roster_kept_on_team`; the event page does not show this list yet. Cancelling, rejecting, demoting or unconfirming one player's signup is an explicit action and still removes them from the roster and their team.
 
 ---
 
