@@ -1,6 +1,7 @@
 from datetime import time, timedelta
 
 from django.contrib.admin.sites import site as admin_site
+from django.contrib.auth.models import Permission
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.test import RequestFactory
@@ -170,6 +171,27 @@ class ReadyCheckModelTests(EventTestCase):
                 self.assertFalse(
                     admin_site._registry[model].has_add_permission(request)
                 )
+
+    def test_admin_delete_superuser_only(self) -> None:
+        request = RequestFactory().get("/")
+        staff = CustomUser.objects.create_user(
+            username="rc_staff", password="x", is_staff=True
+        )
+        staff.user_permissions.set(
+            Permission.objects.filter(
+                content_type__app_label="events", codename__startswith="delete_"
+            )
+        )
+        request.user = CustomUser.objects.get(pk=staff.pk)
+        superuser_request = RequestFactory().get("/")
+        superuser_request.user = CustomUser.objects.create_superuser(
+            username="rc_superuser_del", password="x"
+        )
+        for model in (ReadyCheck, ReadyCheckEntry, EventVoicePresence):
+            with self.subTest(model=model.__name__):
+                model_admin = admin_site._registry[model]
+                self.assertFalse(model_admin.has_delete_permission(request))
+                self.assertTrue(model_admin.has_delete_permission(superuser_request))
 
     def test_signup_delete_keeps_entry(self) -> None:
         event = self._event()

@@ -53,6 +53,11 @@ class _ReadOnlyFieldsAdmin(admin.ModelAdmin):
     def has_add_permission(self, request: HttpRequest) -> bool:
         return False
 
+    def has_delete_permission(
+        self, request: HttpRequest, obj: Model | None = None
+    ) -> bool:
+        return request.user.is_superuser
+
 
 @admin.register(ReadyCheck)
 class ReadyCheckAdmin(_ReadOnlyFieldsAdmin):
