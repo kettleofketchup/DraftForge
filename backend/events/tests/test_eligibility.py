@@ -412,6 +412,20 @@ class ValidateFriendIdTests(EventTestCase):
         PlayerDeadlockProfile.objects.create(org_user=ou, unverified_friend_id="676767")
         self.assertEqual(validate_friend_id("676767", ou), "676767")
 
+    def test_same_users_profile_in_other_org_is_not_a_collision(self) -> None:
+        u = self.make_user()
+        other_org = Organization.objects.create(name="Second Org")
+        other_ou = OrgUser.objects.create(user=u, organization=other_org)
+        PlayerDotaProfile.objects.create(
+            org_user=other_ou, unverified_friend_id="686868"
+        )
+        PlayerDeadlockProfile.objects.create(
+            org_user=other_ou, unverified_friend_id="696969"
+        )
+        ou = self._org_user(u)
+        self.assertEqual(validate_friend_id("686868", ou), "686868")
+        self.assertEqual(validate_friend_id("696969", ou), "696969")
+
 
 @patch("events.services.notify_signup_changed")
 class UnmetRequirementsPersistenceTests(EventTestCase):

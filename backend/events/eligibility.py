@@ -155,8 +155,8 @@ def _log_writethrough_skipped(
 
 def validate_friend_id(fid: str, org_user: OrgUser) -> str:
     """Return ``fid`` in canonical form (stripped, no leading zeros), or
-    raise if it is malformed or owned by another account (any game profile,
-    or another user's Steam account).
+    raise if it is malformed or owned by another user (any of their game
+    profiles in any org, or their Steam account).
 
     ``""`` is returned as-is so callers can clear the field.
     """
@@ -172,7 +172,7 @@ def validate_friend_id(fid: str, org_user: OrgUser) -> str:
     # Global scope: Friend ID is unique site-wide, not per-org.
     collision = any(
         model.objects.filter(unverified_friend_id=fid)
-        .exclude(org_user=org_user)
+        .exclude(org_user__user_id=org_user.user_id)
         .exists()
         for model in (PlayerDotaProfile, PlayerDeadlockProfile)
     )

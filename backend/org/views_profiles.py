@@ -67,15 +67,26 @@ def _invalid_rank_status(data: dict[str, Any]) -> Response | None:
     return None
 
 
+def _canonical_friend_id(fid: str) -> str:
+    return str(int(fid)) if fid.isascii() and fid.isdigit() else fid
+
+
 def _apply_dota_profile_patch(
     org_user: OrgUser, data: dict[str, Any]
 ) -> PlayerDotaProfile:
     """Raises ValidationError for a bad friend ID before writing anything."""
     fields = {f: data[f] for f in DOTA_PROFILE_FIELDS if f in data}
     if "unverified_friend_id" in fields:
-        fields["unverified_friend_id"] = validate_friend_id(
-            str(fields["unverified_friend_id"] or ""), org_user
+        submitted = str(fields["unverified_friend_id"] or "").strip()
+        stored = (
+            PlayerDotaProfile.objects.filter(org_user=org_user)
+            .values_list("unverified_friend_id", flat=True)
+            .first()
         )
+        if stored and _canonical_friend_id(submitted) == stored:
+            fields["unverified_friend_id"] = stored
+        else:
+            fields["unverified_friend_id"] = validate_friend_id(submitted, org_user)
     profile, _ = PlayerDotaProfile.objects.get_or_create(org_user=org_user)
     previous_status = profile.rank_status
     for field, value in fields.items():

@@ -344,6 +344,26 @@ class FriendIdInputTests(EventTestCase):
             )
         self.assertEqual(cm.exception.code, "duplicate_friend_id")
 
+    def test_own_id_from_other_org_is_accepted(self) -> None:
+        ev = self.make_event()
+        u = self.make_user()
+        other_org = Organization.objects.create(name="Other Signup Org")
+        other_ou = OrgUser.objects.create(user=u, organization=other_org)
+        PlayerDotaProfile.objects.create(
+            org_user=other_ou, unverified_friend_id="383838"
+        )
+        apply_signup_input(
+            org_user=self._org_user(u),
+            event=ev,
+            patch=SignupInputPatch(unverified_friend_id="383838"),
+        )
+        self.assertEqual(
+            PlayerDotaProfile.objects.get(
+                org_user=self._org_user(u)
+            ).unverified_friend_id,
+            "383838",
+        )
+
     def test_schema_strips_friend_id(self) -> None:
         patch = SignupInputPatch(unverified_friend_id=" 123 ")
         self.assertEqual(patch.unverified_friend_id, "123")

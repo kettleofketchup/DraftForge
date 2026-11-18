@@ -163,3 +163,29 @@ class DotaProfileFriendIdTest(TestCase):
         resp = self._patch(self.member, self._my_url(), "")
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(self._profile().unverified_friend_id, "")
+
+    def test_same_users_id_in_other_org_is_accepted(self) -> None:
+        other_org = Organization.objects.create(name="Friend ID Org 2")
+        other_ou = OrgUser.objects.create(user=self.member, organization=other_org)
+        PlayerDotaProfile.objects.create(org_user=other_ou, unverified_friend_id="777")
+        for actor, url in (
+            (self.member, self._my_url()),
+            (self.owner, self._staff_url()),
+        ):
+            with self.subTest(actor=actor.username):
+                resp = self._patch(actor, url, "777")
+                self.assertEqual(resp.status_code, 200, resp.content)
+                self.assertEqual(self._profile().unverified_friend_id, "777")
+
+    def test_unchanged_stored_id_skips_collision_check(self) -> None:
+        PlayerDotaProfile.objects.filter(org_user=self.org_user).update(
+            unverified_friend_id="5150"
+        )
+        for actor, url in (
+            (self.member, self._my_url()),
+            (self.owner, self._staff_url()),
+        ):
+            with self.subTest(actor=actor.username):
+                resp = self._patch(actor, url, "5150")
+                self.assertEqual(resp.status_code, 200, resp.content)
+                self.assertTrue(self._profile().pos_1)
