@@ -1,10 +1,18 @@
 import {
+  columnVisibilityFeature,
+  createPaginatedRowModel,
+  createSortedRowModel,
   flexRender,
-  getCoreRowModel,
-  getPaginationRowModel,
-  getSortedRowModel,
-  useReactTable,
+  metaHelper,
+  rowPaginationFeature,
+  rowSortingFeature,
+  sortFn_alphanumeric,
+  sortFn_basic,
+  tableFeatures,
+  useTable,
+  type Column,
   type ColumnDef,
+  type Row,
   type RowData,
   type SortingState,
 } from '@tanstack/react-table';
@@ -25,21 +33,40 @@ import { cn } from '~/lib/utils';
 
 import { ScrollFrame } from './ScrollFrame';
 
-declare module '@tanstack/react-table' {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  interface ColumnMeta<TData extends RowData, TValue> {
+/**
+ * The app's TanStack v9 feature set. v9 registers features explicitly: an API that is
+ * missing at runtime means its feature is not listed here. `columnMeta` types the
+ * per-column classes DataTable reads.
+ */
+export const appTableFeatures = tableFeatures({
+  columnVisibilityFeature,
+  rowSortingFeature,
+  rowPaginationFeature,
+  sortedRowModel: createSortedRowModel(),
+  paginatedRowModel: createPaginatedRowModel(),
+  sortFns: { alphanumeric: sortFn_alphanumeric, basic: sortFn_basic },
+  columnMeta: metaHelper<{
     headClassName?: string;
     cellClassName?: string;
     headTestId?: string;
-  }
-}
+  }>(),
+});
+
+export type AppFeatures = typeof appTableFeatures;
 
 /** Column def for DataTable. Import this rather than TanStack's `ColumnDef`. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type AppColumnDef<TData extends RowData, TValue = any> = ColumnDef<
+  AppFeatures,
   TData,
   TValue
 >;
+export type AppColumn<TData extends RowData, TValue = unknown> = Column<
+  AppFeatures,
+  TData,
+  TValue
+>;
+export type AppRow<TData extends RowData> = Row<AppFeatures, TData>;
 
 export const CELL_BREAKPOINT_QUERIES = {
   sm: '(min-width: 640px)',
@@ -120,23 +147,21 @@ export function DataTable<TData extends RowData>({
 }: DataTableProps<TData>) {
   const [sorting, setSorting] = useState<SortingState>(initialSorting);
   const bp = useCellBreakpoints();
-  const table = useReactTable({
+  const table = useTable({
+    features: appTableFeatures,
     data,
     columns,
-    getRowId: (row) => String(getRowId(row)),
+    getRowId: (row: TData) => String(getRowId(row)),
     state: { sorting },
     onSortingChange: setSorting,
     enableMultiSort: false,
     initialState: { pagination: { pageIndex: 0, pageSize } },
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
   });
 
   const rows = table.getRowModel().rows;
   const pageCount = table.getPageCount();
-  const { pageIndex } = table.getState().pagination;
-  const totalRows = table.getPrePaginationRowModel().rows.length;
+  const { pageIndex } = table.state.pagination;
+  const totalRows = table.getPrePaginatedRowModel().rows.length;
   const renderedSpan =
     table
       .getVisibleLeafColumns()

@@ -1,4 +1,3 @@
-import type { Row } from '@tanstack/react-table';
 import { formatDistanceToNow } from 'date-fns';
 import { Link } from 'react-router';
 
@@ -8,6 +7,7 @@ import { SecondaryButton } from '~/components/ui/buttons';
 import {
   DataTableColumnHeader,
   type AppColumnDef,
+  type AppRow,
 } from '~/components/ui/data-table';
 import type { NoticeSeverity } from '~/lib/opsnotices/noticeTypes.generated';
 
@@ -49,7 +49,10 @@ const lastSeen = (n: OpsNotice): number => new Date(n.last_seen_at).getTime();
 const age = (n: OpsNotice): string =>
   formatDistanceToNow(new Date(n.last_seen_at), { addSuffix: true });
 
-function bySeverityThenLastSeen(a: Row<OpsNotice>, b: Row<OpsNotice>): number {
+function bySeverityThenLastSeen(
+  a: AppRow<OpsNotice>,
+  b: AppRow<OpsNotice>,
+): number {
   const rank =
     SEVERITY_RANK[a.original.severity] - SEVERITY_RANK[b.original.severity];
   return rank || lastSeen(a.original) - lastSeen(b.original);
@@ -82,7 +85,7 @@ export function makeOpsNoticeColumns({
       accessorFn: (n) => SEVERITY_RANK[n.severity],
       enableSorting: sortable,
       sortDescFirst: true,
-      sortingFn: bySeverityThenLastSeen,
+      sortFn: bySeverityThenLastSeen,
       header: ({ column }) => (
         <DataTableColumnHeader column={column} title="Severity" />
       ),

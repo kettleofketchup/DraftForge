@@ -1,11 +1,13 @@
-import type { Column } from '@tanstack/react-table';
+import type { RowData } from '@tanstack/react-table';
 import { ArrowDown, ArrowUp, ChevronsUpDown } from 'lucide-react';
 
 import { Button } from '~/components/ui/button';
 import { cn } from '~/lib/utils';
 
-export interface DataTableColumnHeaderProps<TData, TValue> {
-  column: Column<TData, TValue>;
+import type { AppColumn } from './DataTable';
+
+export interface DataTableColumnHeaderProps<TData extends RowData, TValue> {
+  column: AppColumn<TData, TValue>;
   title: string;
   className?: string;
 }
@@ -15,7 +17,7 @@ export interface DataTableColumnHeaderProps<TData, TValue> {
  * Clicks follow TanStack's order (first direction from `sortDescFirst`, then the
  * other, then unsorted). Plain text when the column can't sort.
  */
-export function DataTableColumnHeader<TData, TValue>({
+export function DataTableColumnHeader<TData extends RowData, TValue>({
   column,
   title,
   className,

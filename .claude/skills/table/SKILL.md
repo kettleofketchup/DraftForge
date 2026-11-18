@@ -1,13 +1,13 @@
 ---
 name: table
-description: DraftForge data tables with TanStack Table. Use when showing rows of records (lists with columns, admin queues, logs, stats) or touching DataTable, AppColumnDef, make*Columns, or a *Table.tsx component.
+description: DraftForge data tables with TanStack Table v9. Use when showing rows of records (lists with columns, admin queues, logs, stats) or touching DataTable, AppColumnDef, make*Columns, or a *Table.tsx component.
 ---
 
 # DraftForge Data Tables
 
 Record lists render through the shared `DataTable` (`frontend/app/components/ui/data-table/`,
-TanStack Table v8 on the shadcn `ui/table` primitives): one shared table,
-one column factory per record type, one thin `<Domain>Table` reused everywhere that type is listed.
+TanStack Table **v9** on the shadcn `ui/table` primitives): one shared table, one column
+factory per record type, one thin `<Domain>Table` reused everywhere that type is listed.
 
 Worked example: `components/opsnotices/` (`opsNoticeColumns.tsx` + `OpsNoticeTable.tsx`).
 Brand rule ("lists use `DataTable`"): `docs/theming-guide/ai/references/component-substitutions.md#tables`.
@@ -16,12 +16,24 @@ Brand rule ("lists use `DataTable`"): `docs/theming-guide/ai/references/componen
 
 | Layer | File | Owns |
 |---|---|---|
-| `DataTable` | `ui/data-table/DataTable.tsx` | sorting, pagination (hidden when it fits), striping, row click, empty row, `table-fixed` layout, `scrollX` |
+| `DataTable` | `ui/data-table/DataTable.tsx` | feature set, sorting, pagination (hidden when it fits), striping, row click, empty row, `table-fixed` layout, `scrollX` |
 | `make<Domain>Columns(options)` | `components/<domain>/<domain>Columns.tsx` | every column def, keyed by a `<Domain>ColumnId` union, plus `DEFAULT_<DOMAIN>_COLUMNS` |
 | `<Domain>Table` | `components/<domain>/<Domain>Table.tsx` | `useMemo` over the factory, `getRowId`, test-id prefix, default sort |
 
 Callers pick columns by id (`columns={['severity', 'summary', 'actions']}`), never re-column per
 page. Need another column? Add it to the factory's union.
+
+## TanStack v9 specifics
+
+- Features are registered explicitly in `appTableFeatures` (`tableFeatures({...})` in
+  `DataTable.tsx`). An API that's `undefined` at runtime means its feature isn't listed there.
+  Add a feature (filtering, faceting, grouping, selection) there, opt-in, when a table needs it.
+- Types carry the feature set: use `AppColumnDef<Row>`, `AppColumn<Row>`, `AppRow<Row>` from
+  `~/components/ui/data-table`, never TanStack's bare `ColumnDef` / `Column` / `Row`.
+- Column `meta` is typed by `metaHelper` in the feature set (no `declare module`):
+  `headClassName`, `cellClassName`, `headTestId`.
+- Custom sort is `sortFn` (v8's `sortingFn`): `(rowA, rowB, columnId) => number`.
+- Read state from `table.state`, not `table.getState()`.
 
 ## Layout: fit first, scroll by opt-in
 
@@ -39,13 +51,10 @@ page. Need another column? Add it to the factory's union.
 
 ## Columns
 
-- Type them as `AppColumnDef<Row>[]`, not TanStack's `ColumnDef`.
-- `meta`: `headClassName`, `cellClassName`, `headTestId` (augmented in `DataTable.tsx`; add new
-  meta fields there).
 - Sortable header: `header: ({ column }) => <DataTableColumnHeader column={column} title="Last seen" />`.
   Clicks follow TanStack's order (first direction from `sortDescFirst`, numbers default to
   descending), then unsorted. A plain-string header isn't sortable; also set `enableSorting: false`.
-- Single-column sort only. A tie-break (severity, then recency) is that column's `sortingFn`.
+- Single-column sort only. A tie-break (severity, then recency) is that column's `sortFn`.
 - Numbers: `text-right tabular-nums`. Secondary text: `text-muted-foreground`.
 - States/categories are `Badge`s with a fixed variant map.
 - Cell actions are brand buttons (`SecondaryButton size="sm" className="min-h-11 sm:min-h-8"`),
@@ -67,6 +76,5 @@ jsdom has no `matchMedia`; `useMediaQuery` returns `false`, so every breakpoint 
 
 ## Not built yet
 
-Toolbar (faceted filters, group-by), column visibility, controlled/URL state, `title` tab,
-`fillHeight`. Add each as an opt-in prop when a table needs it, so
-existing tables don't change.
+Toolbar (faceted filters, group-by), column visibility toggles, controlled/URL state, a table
+title, fill-height layouts. Add each as an opt-in prop so existing tables don't change.
