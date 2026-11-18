@@ -126,13 +126,18 @@ export function ReadyCheckConfigSection<
   const control = parentControl as unknown as Control<ReadyCheckFields>;
   const setValue =
     parentSetValue as unknown as UseFormSetValue<ReadyCheckFields>;
-  const { getValues, resetField } = useFormContext<ReadyCheckFields>();
+  const {
+    getValues,
+    resetField,
+    formState: { defaultValues },
+  } = useFormContext<ReadyCheckFields>();
   const { errors } = useFormState({ control });
   const hasError = (names: (keyof ReadyCheckFields)[]) =>
     names.some((name) => errors[name]);
   const settingsError = hasError(SETTINGS_FIELDS);
   const voiceError = hasError(VOICE_FIELDS);
   const rollCallOn = useWatch({ control, name: 'roll_call_enabled' });
+  const rollCallMode = useWatch({ control, name: 'roll_call_mode' });
   const chase = useWatch({ control, name: 'ready_check_chase_minutes' });
   const pct = useWatch({ control, name: 'ready_check_min_completion_pct' });
   const cullOn = useWatch({ control, name: 'start_cull_enabled' });
@@ -171,7 +176,8 @@ export function ReadyCheckConfigSection<
   const onToggle = (on: boolean) => {
     if (on) {
       setDirty('roll_call_enabled', READY_CHECK_PRESET_ON.roll_call_enabled);
-      setDirty('roll_call_mode', READY_CHECK_PRESET_ON.roll_call_mode);
+      if (!defaultValues?.roll_call_enabled)
+        setDirty('roll_call_mode', READY_CHECK_PRESET_ON.roll_call_mode);
       setDirty('auto_confirm', READY_CHECK_PRESET_ON.auto_confirm);
     } else {
       setDirty('roll_call_enabled', false);
@@ -329,7 +335,9 @@ export function ReadyCheckConfigSection<
           'roll_call_enabled',
           IDS.toggle,
           'Mandatory RSVP Confirmation',
-          'Every rostered member must confirm before teams are made; unconfirmed members are dropped.',
+          rollCallMode === 'automatic'
+            ? 'Every rostered member must confirm before teams are made. Automatic drops of unconfirmed members arrive in a later release; until then staff verify roll call.'
+            : 'Every rostered member must confirm before teams are made. Staff verify who confirmed; nobody is dropped automatically.',
           { onChange: onToggle },
         )}
         {showAutoConfirm &&

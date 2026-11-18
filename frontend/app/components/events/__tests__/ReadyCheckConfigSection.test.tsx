@@ -107,6 +107,33 @@ describe('ReadyCheckConfigSection', () => {
     expect(form.getValues('ready_check_open_minutes')).toBe(90);
   });
 
+  it('keeps a saved Staff-verified mode when switched off and on again', () => {
+    renderSection({
+      initial: { roll_call_enabled: true, roll_call_mode: 'manual' },
+    });
+    click(IDS.toggle);
+    click(IDS.toggle);
+    expect(form.getValues('roll_call_enabled')).toBe(true);
+    expect(form.getValues('roll_call_mode')).toBe('manual');
+  });
+
+  it('describes Staff-verified mode without automatic drops', () => {
+    renderSection({
+      initial: { roll_call_enabled: true, roll_call_mode: 'manual' },
+    });
+    const section = screen.getByTestId(IDS.section);
+    expect(section).toHaveTextContent('nobody is dropped automatically');
+    expect(section).not.toHaveTextContent('later release');
+  });
+
+  it('says automatic drops arrive in a later release', () => {
+    renderSection();
+    click(IDS.toggle);
+    const section = screen.getByTestId(IDS.section);
+    expect(section).toHaveTextContent('later release');
+    expect(section).not.toHaveTextContent('unconfirmed members are dropped.');
+  });
+
   it('shows an existing manual check as Staff-verified', () => {
     renderSection({
       initial: { roll_call_enabled: true, roll_call_mode: 'manual' },

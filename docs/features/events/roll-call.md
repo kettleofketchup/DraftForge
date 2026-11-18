@@ -132,7 +132,7 @@ The **Ready check** tab in the event, series and organization defaults dialogs h
 
 ### The toggle
 
-**Mandatory RSVP Confirmation** turns roll call on. Every rostered member must confirm before teams are made, and unconfirmed members are dropped. Switching it on sets the mode to **Automatic** and turns `auto_confirm` off. Switching it off only clears `roll_call_enabled`, so the other settings are kept for next time. An existing event with a staff-verified roll call shows the toggle on with the mode left as **Staff-verified**.
+**Mandatory RSVP Confirmation** turns roll call on. Every rostered member must confirm before teams are made. In **Staff-verified** mode staff check who confirmed and nobody is dropped automatically. **Automatic** mode will drop unconfirmed members once the automatic ready check ships in a later release; until then staff verify roll call in both modes. Switching the toggle on sets the mode to **Automatic** and turns `auto_confirm` off, unless roll call was already on when the dialog opened, in which case the saved mode is kept. Switching it off only clears `roll_call_enabled`, so the other settings are kept for next time. An existing event with a staff-verified roll call shows the toggle on with the mode left as **Staff-verified**.
 
 Everything under the toggle is collapsed by default:
 
