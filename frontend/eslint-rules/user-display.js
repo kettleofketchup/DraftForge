@@ -34,7 +34,7 @@ function unwrap(node) {
 }
 
 // Members whose value ends up rendered: the expression itself, || / ?? operands,
-// ternary branches (not the test) and template-literal parts.
+// the right side of &&, ternary branches (not the test) and template-literal parts.
 function renderedMembers(node, out = []) {
   const n = unwrap(node);
   if (!n) return out;
