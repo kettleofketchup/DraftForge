@@ -569,43 +569,23 @@ All shadcn components automatically use the theme:
 
 ## References
 
-The pages below are AI-targeted review references. They live under `docs/theming-guide/ai/` (intentionally not listed in `mkdocs.yml` `nav:`, so they don't appear in the sidebar) and are pulled in here via `pymdownx.snippets` so the canonical guide carries the full review surface in one place.
+The pages below are AI-targeted review references. They live under `docs/theming-guide/ai/` (intentionally not listed in `mkdocs.yml` `nav:`, so they don't appear in the sidebar) and are linked from here rather than inlined, so their relative links resolve on their own pages. The hub is [AI References](theming-guide/ai/index.md).
 
-The companion `brand` skill (`.claude/skills/brand/SKILL.md`) loads these same files on demand when reviewing or writing UI in `frontend/app/`. Update content **here** and the skill picks it up automatically.
+The companion `brand` skill (`.claude/skills/brand/SKILL.md`) loads these same files on demand when reviewing or writing UI in `frontend/app/`. Update content in the reference pages and the skill picks it up automatically.
 
-### Scope
-
---8<-- "theming-guide/ai/references/scope.md"
-
-### Component Substitutions
-
---8<-- "theming-guide/ai/references/component-substitutions.md"
-
-### Inline Styles & Hardcoded Values
-
---8<-- "theming-guide/ai/references/inline-styles.md"
-
-### Review Checklist
-
---8<-- "theming-guide/ai/references/review-checklist.md"
-
-### Grep Recipes
-
---8<-- "theming-guide/ai/references/grep-recipes.md"
-
-### Severity Rubric
-
---8<-- "theming-guide/ai/references/severity-rubric.md"
-
-### ScrollArea inside Dialog
-
---8<-- "theming-guide/ai/references/scrollbars-dialogs.md"
+- [Scope](theming-guide/ai/references/scope.md)
+- [Component Substitutions](theming-guide/ai/references/component-substitutions.md)
+- [Inline Styles & Hardcoded Values](theming-guide/ai/references/inline-styles.md)
+- [Review Checklist](theming-guide/ai/references/review-checklist.md)
+- [Grep Recipes](theming-guide/ai/references/grep-recipes.md)
+- [Severity Rubric](theming-guide/ai/references/severity-rubric.md)
+- [ScrollArea inside Dialog](theming-guide/ai/references/scrollbars-dialogs.md)
 
 ---
 
 ## Updating This Guide
 
-To add, change, or remove a brand-review rule, run the `/brand-update` slash command (`.claude/commands/brand-update.md`). It walks the lockstep edit of this guide, the AI references under `docs/theming-guide/ai/references/`, and the `brand` skill, and verifies that backlinks and snippet blocks stay intact. Hand-editing one side without the other is a known drift source.
+To add, change, or remove a brand-review rule, run the `/brand-update` slash command (`.claude/commands/brand-update.md`). It walks the lockstep edit of this guide, the AI references under `docs/theming-guide/ai/references/`, and the `brand` skill, and verifies that backlinks and reference links stay intact. Hand-editing one side without the other is a known drift source.
 
 ## Backlinks
 

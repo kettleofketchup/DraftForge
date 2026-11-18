@@ -7,7 +7,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from asgiref.sync import iscoroutinefunction, markcoroutinefunction, sync_to_async
-from django.db import connection, reset_queries
+from django.db import connection
 from django.http import HttpRequest, HttpResponse
 
 from telemetry.config import env_bool
@@ -40,7 +40,9 @@ class QueryStatsMiddleware:
 
     Uses force_debug_cursor per-request to capture query timing with DEBUG=False.
     This has a small overhead (Django records SQL strings in memory per request).
-    Mitigated by reset_queries() clearing the buffer each request.
+    Django's request_started handler clears the log each request and the log is a
+    bounded deque. The middleware counts from an offset instead of clearing it, so
+    an outer CaptureQueriesContext/assertNumQueries spanning requests stays intact.
 
     Note: Queries served from cacheops (Redis) don't appear in connection.queries,
     so this middleware measures actual SQLite load, not cached data.
@@ -76,11 +78,11 @@ class QueryStatsMiddleware:
         if not self.enabled:
             return self.get_response(request)
 
-        force_debug = self._begin()
+        force_debug, start = self._begin()
         try:
             response = self.get_response(request)
         finally:
-            self._finish(request, force_debug)
+            self._finish(request, force_debug, start)
 
         return response
 
@@ -88,30 +90,27 @@ class QueryStatsMiddleware:
         if not self.enabled:
             return await self.get_response(request)
 
-        force_debug = await sync_to_async(self._begin, thread_sensitive=True)()
+        force_debug, start = await sync_to_async(self._begin, thread_sensitive=True)()
         try:
             response = await self.get_response(request)
         finally:
             await sync_to_async(self._finish, thread_sensitive=True)(
-                request, force_debug
+                request, force_debug, start
             )
 
         return response
 
     @staticmethod
-    def _begin() -> bool:
+    def _begin() -> tuple[bool, int]:
         # Enable query logging for this request (works even with DEBUG=False)
         force_debug = not connection.force_debug_cursor
         if force_debug:
             connection.force_debug_cursor = True
+        return force_debug, len(connection.queries_log)
 
-        # Reset query log for accurate per-request counts
-        reset_queries()
-        return force_debug
-
-    def _finish(self, request: HttpRequest, force_debug: bool) -> None:
+    def _finish(self, request: HttpRequest, force_debug: bool, start: int) -> None:
         try:
-            self._log_query_stats(request)
+            self._log_query_stats(request, start)
         except Exception:
             logging.getLogger("telemetry.db").debug(
                 "Failed to log query stats", exc_info=True
@@ -119,9 +118,10 @@ class QueryStatsMiddleware:
         if force_debug:
             connection.force_debug_cursor = False
 
-    def _log_query_stats(self, request: HttpRequest) -> None:
-        """Log query count, total time, and any slow queries."""
-        queries = connection.queries
+    def _log_query_stats(self, request: HttpRequest, start: int) -> None:
+        """Log query count, total time, and any slow queries since ``start``."""
+        # Once the bounded log is full the offset overshoots: undercount, never raise.
+        queries = connection.queries[start:]
         if not queries:
             log.info(
                 "db_query_stats",

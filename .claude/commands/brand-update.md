@@ -16,7 +16,7 @@ This command edits ONLY these files. Do not edit any other UI/component file in 
 
 | File | Role |
 |---|---|
-| `docs/THEMING-GUIDE.md` | Canonical brand guide (human-first). Edit only when a *fundamental* rule changes (palette, button policy, status colors, mandatory components, status patterns, glow effects, dialog surface contract). The `## References` section at the bottom must keep the existing `pymdownx.snippets` blocks (`--8<-- "theming-guide/ai/references/<name>.md"`) intact — that's how AI references show up in the rendered guide. |
+| `docs/THEMING-GUIDE.md` | Canonical brand guide (human-first). Edit only when a *fundamental* rule changes (palette, button policy, status colors, mandatory components, status patterns, glow effects, dialog surface contract). The `## References` section at the bottom must keep one link per AI reference page (`theming-guide/ai/references/<name>.md`). Do not inline them with `pymdownx.snippets`: their relative links only resolve from their own location. |
 | `docs/theming-guide/ai/index.md` | AI-references hub (hidden from MkDocs nav by simply not being listed in `mkdocs.yml`). Update the reference map table when adding/removing reference files. |
 | `docs/theming-guide/ai/references/scope.md` | In-scope source trees + special cases (mandatory components, button policy, dialog surface exception). Edit when scope changes. |
 | `docs/theming-guide/ai/references/component-substitutions.md` | Raw HTML / hand-rolled markup → DraftForge component replacement table. Buttons, avatars, breadcrumbs, dialogs, status indicators. |
@@ -34,8 +34,8 @@ This command edits ONLY these files. Do not edit any other UI/component file in 
 1. **Read the user's instruction.** Classify it:
    - **Add a rule** → which reference file does it belong in? (substitution, inline-style anti-pattern, accessibility rule, etc.) Pick exactly one.
    - **Change an existing rule** → find the reference file that owns it; edit there.
-   - **Remove a rule** → confirm with the user it's no longer needed; delete from the reference file AND remove the `--8<--` snippet from `THEMING-GUIDE.md` if the whole reference file is going away.
-   - **Add a new reference file** → create under `theming-guide/ai/references/`, append a row to the reference map in `theming-guide/ai/index.md`, append a `--8<-- "theming-guide/ai/references/<name>.md"` snippet block at the end of the `## References` section in `THEMING-GUIDE.md`, append a bullet to the SKILL.md "References (loaded on demand)" list.
+   - **Remove a rule** → confirm with the user it's no longer needed; delete from the reference file AND remove its link from `THEMING-GUIDE.md` `## References` if the whole reference file is going away.
+   - **Add a new reference file** → create under `theming-guide/ai/references/`, append a row to the reference map in `theming-guide/ai/index.md`, append a `- [Title](theming-guide/ai/references/<name>.md)` link to the `## References` list in `THEMING-GUIDE.md`, append a bullet to the SKILL.md "References (loaded on demand)" list.
    - **Change scope** (a frontend tree joins/leaves) → edit `scope.md` AND the SKILL.md description AND the `When To Use` section.
    - **New mandatory component** → add to `scope.md`, `component-substitutions.md`, AND `THEMING-GUIDE.md` §"Component Patterns".
 
@@ -67,14 +67,14 @@ This command edits ONLY these files. Do not edit any other UI/component file in 
          docs/theming-guide/ai/index.md \
          docs/theming-guide/ai/references/*.md
    ```
-   Each file must be ≤ 150 lines. If a reference file overflows, split it (and add a row to the reference map + snippet block in `THEMING-GUIDE.md`).
+   Each file must be ≤ 150 lines. If a reference file overflows, split it (and add a row to the reference map + a link in `THEMING-GUIDE.md`).
 
-7. **Verify snippet integrity.** The `## References` section in `THEMING-GUIDE.md` must contain one `--8<--` block per file under `theming-guide/ai/references/`:
+7. **Verify reference links.** The `## References` section in `THEMING-GUIDE.md` must link every file under `theming-guide/ai/references/`:
    ```bash
    diff <(ls docs/theming-guide/ai/references/*.md | xargs -n1 basename | sort) \
         <(rg -o 'theming-guide/ai/references/[a-z-]+\.md' docs/THEMING-GUIDE.md | xargs -n1 basename | sort -u)
    ```
-   No diff = good. Any mismatch = fix the snippet blocks.
+   No diff = good. Any mismatch = fix the links.
 
 8. **Confirm AI references stay hidden from nav.** The `nav:` block in `mkdocs.yml` must NOT list anything under `theming-guide/`. The canonical `THEMING-GUIDE.md` is listed as `Theming Guide: THEMING-GUIDE.md` under Development; the AI references are kept invisible:
    ```bash
@@ -82,11 +82,12 @@ This command edits ONLY these files. Do not edit any other UI/component file in 
    # Expected: zero matches (the directory is intentionally not navigated)
    ```
 
-9. **Smoke-render the docs** (only if mkdocs is available locally — skip otherwise):
+9. **Check links and smoke-render the docs** (only if mkdocs is available locally — skip otherwise):
    ```bash
-   just docs::serve  # or mkdocs serve from repo root
+   python3 scripts/test_docs_links.py  # fails on any broken link or anchor in the build
+   just docs::serve
    ```
-   Verify the canonical THEMING-GUIDE page renders the included AI reference content under `## References` and that nothing under `theming-guide/` appears in the left navigation tree.
+   Verify the `## References` links on the THEMING-GUIDE page open each AI reference page, the `THEMING-GUIDE.md` links on those pages land on the right section, and nothing under `theming-guide/` appears in the left navigation tree.
 
 10. **Report changes.** End the pass with a one-paragraph summary listing: which reference file(s) changed, whether the skill description/scope changed, whether sibling skill pointers changed, and whether the canonical guide changed. Cite paths.
 

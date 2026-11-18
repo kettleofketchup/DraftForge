@@ -26,4 +26,5 @@ MODEL_APPS: list[str] = [
     "org",
     "league.apps.LeagueConfig",
     "lobby",
+    "notifications",
 ]

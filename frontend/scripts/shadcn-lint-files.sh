@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Usage: shadcn-lint-files.sh <repo-relative paths...>
 # Runs the @shadcn/lint gate (eslint.shadcn.config.js) on the given frontend/app
-# sources; other paths are skipped. A change to the config or the suppressions
-# baseline lints all of app/ instead.
+# sources; other paths are skipped. A change to the config, the suppressions
+# baseline or a local rule in eslint-rules/ lints all of app/ instead.
 set -euo pipefail
 
 FRONTEND="$(cd "$(dirname "$0")/.." && pwd)"
@@ -14,7 +14,7 @@ files=()
 full=0
 for path in "$@"; do
   case "$path" in
-    "frontend/$CONFIG" | "frontend/$SUPPRESSIONS") full=1 ;;
+    "frontend/$CONFIG" | "frontend/$SUPPRESSIONS" | frontend/eslint-rules/*) full=1 ;;
     frontend/app/*.js | frontend/app/*.jsx | frontend/app/*.ts | frontend/app/*.tsx)
       files+=("${path#frontend/}") ;;
   esac
