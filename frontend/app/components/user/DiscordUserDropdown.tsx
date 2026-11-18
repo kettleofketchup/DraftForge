@@ -69,7 +69,7 @@ const DiscordUserDropdown: React.FC<Props> = ({
             .toLowerCase()
             .includes(query?.toLowerCase());
 
-          const nickname = (person as any).user?.nick
+          const nickname = person.nick
             ?.toLowerCase()
             .includes(query?.toLowerCase());
 
@@ -126,6 +126,7 @@ const DiscordUserDropdown: React.FC<Props> = ({
           >
             Username:
           </Label>
+          {/* eslint-disable-next-line draftforge/use-display-name -- labelled row shows Discord's own username */}
           <p id={`global-username-${user.user.id}`}>{user.user.username} </p>
         </div>
       );
@@ -144,6 +145,7 @@ const DiscordUserDropdown: React.FC<Props> = ({
           >
             Global:
           </Label>
+          {/* eslint-disable-next-line draftforge/use-display-name -- labelled row shows Discord's own global name */}
           <p id={`global-name-${user.user.id}`}>{user.user.global_name} </p>
         </div>
       );

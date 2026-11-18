@@ -8,6 +8,7 @@ import type {
 import { Button } from '~/components/ui/button';
 import { AddDiscordBotButton } from '~/components/ui/buttons';
 import { ScrollArea } from '~/components/ui/scroll-area';
+import { DisplayName } from '~/components/user/avatar';
 import { DiscordMemberStrip } from '~/components/user/DiscordMemberStrip';
 import { cn } from '~/lib/utils';
 import type { DiscordMemberResultsProps } from './types';
@@ -44,9 +45,7 @@ export const DiscordMemberResults: React.FC<DiscordMemberResultsProps> = ({
           ? { user_id: member.site_user_pk! }
           : { discord_id: member.user.id };
         await onAdd(payload);
-        toast.success(
-          `Added ${member.nick || member.user.global_name || member.user.username}`,
-        );
+        toast.success(`Added ${DisplayName(member)}`);
       } catch (err) {
         toast.error(err instanceof Error ? err.message : 'Failed to add user');
       } finally {

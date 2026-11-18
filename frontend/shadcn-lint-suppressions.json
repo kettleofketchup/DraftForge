@@ -422,25 +422,7 @@
       "count": 6
     }
   },
-  "app/components/user/AddUserModal/AddUserModal.tsx": {
-    "draftforge/use-display-name": {
-      "count": 4
-    }
-  },
-  "app/components/user/AddUserModal/DiscordMemberResults.tsx": {
-    "draftforge/use-display-name": {
-      "count": 2
-    }
-  },
-  "app/components/user/AddUserModal/SiteUserResults.tsx": {
-    "draftforge/use-display-name": {
-      "count": 2
-    }
-  },
   "app/components/user/DiscordUserDropdown.tsx": {
-    "draftforge/use-display-name": {
-      "count": 2
-    },
     "shadcn/no-raw-colors": {
       "count": 6
     }
@@ -486,9 +468,6 @@
     }
   },
   "app/components/user/searchUser.tsx": {
-    "draftforge/use-display-name": {
-      "count": 2
-    },
     "shadcn/no-raw-colors": {
       "count": 2
     }
@@ -565,9 +544,6 @@
     }
   },
   "app/pages/tournament/tabs/players/addPlayerDropdown.tsx": {
-    "draftforge/use-display-name": {
-      "count": 2
-    },
     "shadcn/no-raw-colors": {
       "count": 2
     }
