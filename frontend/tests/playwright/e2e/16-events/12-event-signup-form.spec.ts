@@ -14,12 +14,12 @@
  * Notes
  *   - Fast-path / upgrade tests use `E2E Signup Event` because event_player_1's
  *     populate profile (active rank, Legend 3, positions, no Friend ID required)
- *     satisfies that event's requirements. The screenshot/Deadlock events require
- *     unverified_friend_id which is not seeded — so fast-path against them would
- *     always open the modal regardless of intent.
- *   - Modal-presence tests use the screenshot event plus the no-profile
- *     player (no game profile, linked Steam account) to guarantee the modal
- *     opens.
+ *     satisfies that event's requirements.
+ *   - A linked Steam account meets the friend-ID gate (#574), so the Deadlock
+ *     event (friend ID is its only gate) takes the fast path for
+ *     event_player_no_profile.
+ *   - Modal-presence tests use the screenshot event, whose Dota rank and
+ *     position gates the no-profile player cannot meet, so the modal opens.
  */
 
 import { expect, type BrowserContext, type Page } from '@playwright/test';
