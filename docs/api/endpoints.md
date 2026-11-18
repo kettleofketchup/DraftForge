@@ -971,7 +971,10 @@ Teams whose captain is in the tournament's player pool are reset to their
 captain: other members, drop-ins, left members and the deputy are cleared, and
 draft state, points and placement return to their defaults. Teams with no
 captain, or a captain outside the pool, take no part in the draft. They are
-deleted when nothing references them and kept untouched otherwise.
+deleted when nothing references them and kept untouched otherwise. Members of
+a kept team cannot be drafted, even when they are in the player pool. The
+same rule applies to `draft-rebuild`, the timer and the MMR predictions: only
+teams whose captain is in the pool count as draft teams.
 
 **Responses:**
 

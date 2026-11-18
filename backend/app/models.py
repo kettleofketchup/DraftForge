@@ -867,6 +867,15 @@ class Tournament(models.Model):
         """Teams whose captain is in the tournament's player pool."""
         return self.teams.filter(captain_id__in=self.users.values("pk"))
 
+    def draft_ineligible_teams(self) -> "QuerySet[Team]":
+        return self.teams.exclude(pk__in=self.draft_eligible_teams().values("pk"))
+
+    def draft_locked_user_ids(self) -> "QuerySet[CustomUser]":
+        """Members of teams outside the draft; they are not draftable."""
+        return CustomUser.objects.filter(
+            teams_as_member__in=self.draft_ineligible_teams()
+        ).values("pk")
+
     @property
     def linked_steam_league_id(self) -> int | None:
         """Steam league id resolved via the parent League FK.
@@ -1336,7 +1345,7 @@ class Draft(models.Model):
         self.paused_at = None
         self.resuming_until = None
         self.is_manual_pause = False
-        for team in self.tournament.teams.all() if teams is None else teams:
+        for team in self.teams if teams is None else teams:
             team.draft_reserve_ms = options.reserve_time_ms
             team.draft_is_ready = False
             team.draft_is_connected = False
@@ -1393,7 +1402,7 @@ class Draft(models.Model):
         def get_simulation_data(
             draft_style: str = draft_style,
         ) -> dict[int, list[tuple[int, int]]]:
-            teams = list(self.tournament.teams.order_by("draft_order"))
+            teams = list(self.teams.order_by("draft_order"))
             log.debug(
                 "simulation_teams_loaded",
                 system="tournament",
@@ -1423,7 +1432,9 @@ class Draft(models.Model):
             all_player_ids = list(
                 self.tournament.users.exclude(
                     teams_as_captain__tournament=self.tournament
-                ).values_list("id", flat=True)
+                )
+                .exclude(pk__in=self.tournament.draft_locked_user_ids())
+                .values_list("id", flat=True)
             )
             available_players = sorted(
                 [(pid, mmr_map.get(pid, 0)) for pid in all_player_ids],
@@ -1496,7 +1507,7 @@ class Draft(models.Model):
             return 0
 
         # First team in draft order
-        first_team = self.tournament.teams.order_by("draft_order").first()
+        first_team = self.teams.order_by("draft_order").first()
         if not first_team or first_team.id not in simulation:
             return 0
         return sum(mmr for _, mmr in simulation[first_team.id])
@@ -1509,7 +1520,7 @@ class Draft(models.Model):
             return 0
 
         # Last team in draft order
-        last_team = self.tournament.teams.order_by("draft_order").last()
+        last_team = self.teams.order_by("draft_order").last()
         if not last_team or last_team.id not in simulation:
             return 0
 
@@ -1523,7 +1534,7 @@ class Draft(models.Model):
             return 0
 
         # First team in draft order
-        first_team = self.tournament.teams.order_by("draft_order").first()
+        first_team = self.teams.order_by("draft_order").first()
         if not first_team or first_team.id not in simulation:
             return 0
 
@@ -1537,7 +1548,7 @@ class Draft(models.Model):
             return 0
 
         # Last team in draft order
-        last_team = self.tournament.teams.order_by("draft_order").last()
+        last_team = self.teams.order_by("draft_order").last()
         if not last_team or last_team.id not in simulation:
             return 0
 
@@ -1550,7 +1561,7 @@ class Draft(models.Model):
         if not simulation:
             return 0
 
-        first_team = self.tournament.teams.order_by("draft_order").first()
+        first_team = self.teams.order_by("draft_order").first()
         if not first_team or first_team.id not in simulation:
             return 0
 
@@ -1563,18 +1574,16 @@ class Draft(models.Model):
         if not simulation:
             return 0
 
-        last_team = self.tournament.teams.order_by("draft_order").last()
+        last_team = self.teams.order_by("draft_order").last()
         if not last_team or last_team.id not in simulation:
             return 0
 
         return sum(mmr for _, mmr in simulation[last_team.id])
 
     @property
-    def teams(self) -> list[Team] | QuerySet[Team]:
-        if not self.tournament.teams.exists():
-            return []
-
-        return self.tournament.teams.all()
+    def teams(self) -> QuerySet[Team]:
+        """The teams taking part in this draft."""
+        return self.tournament.draft_eligible_teams()
 
     @property
     def users(self) -> list[CustomUser] | QuerySet[CustomUser]:
@@ -1620,7 +1629,11 @@ class Draft(models.Model):
             subsystem="draft",
             excluded_count=len(excluded_ids),
         )
-        return self.tournament.users.exclude(id__in=excluded_ids).distinct()
+        return (
+            self.tournament.users.exclude(id__in=excluded_ids)
+            .exclude(id__in=self.tournament.draft_locked_user_ids())
+            .distinct()
+        )
 
     @property
     def captains(self) -> QuerySet[CustomUser]:
@@ -1682,7 +1695,7 @@ class Draft(models.Model):
             subsystem="draft",
             tournament_name=self.tournament.name,
         )
-        for team in self.tournament.teams.all():
+        for team in self.teams:
             log.debug(
                 "rebuild_team",
                 system="tournament",
@@ -1728,9 +1741,9 @@ class Draft(models.Model):
                 team.save()
 
     def build_rounds(self, teams: "QuerySet[Team] | None" = None) -> None:
-        """Rebuild the draft rounds for ``teams`` (default: every tournament team)."""
+        """Rebuild the draft rounds for ``teams`` (default: ``Draft.teams``)."""
         if teams is None:
-            teams = self.tournament.teams.all()
+            teams = self.teams
         teams = teams.order_by("draft_order")
         log.debug(
             "build_rounds_started",
@@ -1900,7 +1913,7 @@ class Draft(models.Model):
             - team_mmr: The MMR of the team that will pick
             - tie_resolution: Dict with tie info if a tie occurred, else None
         """
-        teams = list(self.tournament.teams.all())
+        teams = list(self.teams)
 
         if not teams:
             raise ValueError("No teams in tournament")

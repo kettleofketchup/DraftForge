@@ -216,7 +216,7 @@ def generate_draft_rounds(request: Request) -> Response:
             draft.draft_style = draft_style
 
         invalidate_after_commit(tournament, draft, *report.reset_teams)
-        draft.build_rounds(teams=tournament.draft_eligible_teams())
+        draft.build_rounds()
         draft.save()
         _notify_draft_started_after_commit(tournament, draft)
 
@@ -226,6 +226,7 @@ def generate_draft_rounds(request: Request) -> Response:
         subsystem="draft",
         tournament_id=tournament.pk,
         reset_count=len(report.reset_teams),
+        removed_count=len(report.removed_users),
         dropped_count=len(report.dropped_teams),
         kept_count=len(report.kept_teams),
         forced=force,

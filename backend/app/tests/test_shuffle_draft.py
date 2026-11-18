@@ -233,6 +233,7 @@ class BuildShuffleRoundsTest(TestCase):
                 name=f"Team {i}", captain=captain, tournament=self.tournament
             )
             team.members.add(captain)
+            self.tournament.users.add(captain)
             self.teams.append(team)
 
         # Create draft
@@ -394,6 +395,7 @@ class DraftBuildRoundsIntegrationTest(TestCase):
                 name=f"Team {i}", captain=captain, tournament=self.tournament
             )
             team.members.add(captain)
+            self.tournament.users.add(captain)
 
         DraftOptions.ensure_for(self.tournament, timer_enabled=False)
         self.draft = Draft.objects.create(
@@ -538,8 +540,7 @@ class PickAuthorizationTest(TestCase):
         )
         self.team2.members.add(self.captain2)
 
-        # Add player to tournament
-        self.tournament.users.add(self.player1)
+        self.tournament.users.add(self.captain1, self.captain2, self.player1)
 
         # Create draft
         DraftOptions.ensure_for(self.tournament, timer_enabled=False)

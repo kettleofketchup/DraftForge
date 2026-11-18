@@ -7,6 +7,7 @@ from django.test import TestCase, TransactionTestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
+from app.draft_state import tournament_state_queryset
 from app.models import (
     CustomUser,
     Draft,
@@ -19,6 +20,7 @@ from app.models import (
     Team,
     Tournament,
 )
+from app.serializers import _users_remaining_pks
 from app.services.team_references import all_reference_keys, team_references
 from bracket.models import BracketSlot, TournamentBracket
 from league.models import LeagueUser
@@ -341,6 +343,78 @@ class InitDraftEndpointTests(TestCase):
         )
         self.assertEqual(draft.draft_rounds.count(), 8)
 
+    def test_kept_team_members_in_pool_are_not_draftable(self) -> None:
+        p3 = self.make_user("init_p3", 1500)
+        p4 = self.make_user("init_p4", 1800)
+        self.tournament.users.add(p3, p4)
+        kept = self.make_team("Kept", None, [p3], order=3)
+        self.make_herodraft(kept)
+
+        resp = self.post(force=True)
+
+        self.assertEqual(resp.status_code, 201)
+        draft = Draft.objects.get(tournament=self.tournament)
+        remaining = set(draft.users_remaining.values_list("pk", flat=True))
+        self.assertEqual(remaining, {self.p1.pk, self.p2.pk, p4.pk})
+        state = tournament_state_queryset(fresh=True).get(pk=self.tournament.pk)
+        self.assertNotIn(p3.pk, _users_remaining_pks(state.draft))
+        first = draft.draft_rounds.order_by("pick_number").first()
+        with self.assertRaises(ValueError):
+            first.pick_player(p3)
+        self.assertEqual(
+            list(p3.teams_as_member.values_list("pk", flat=True)), [kept.pk]
+        )
+
+    def test_rebuild_skips_kept_captainless_team(self) -> None:
+        outsider = self.make_user("rebuild_outsider", 1000)
+        self.tournament.users.add(self.make_user("rebuild_p3", 1500))
+        kept = self.make_team("Kept", None, [outsider], order=3)
+        foreign = self.make_team("Foreign", outsider, [], order=4)
+        self.make_herodraft(kept)
+        self.make_herodraft(foreign)
+
+        resp = self.post(REBUILD_URL)
+
+        self.assertEqual(resp.status_code, 201)
+        self.assertEqual(
+            list(Team.objects.get(pk=kept.pk).members.values_list("pk", flat=True)),
+            [outsider.pk],
+        )
+        self.assertEqual(
+            list(Team.objects.get(pk=foreign.pk).members.values_list("pk", flat=True)),
+            [outsider.pk],
+        )
+        draft = Draft.objects.get(tournament=self.tournament)
+        self.assertEqual(
+            set(draft.draft_rounds.values_list("captain_id", flat=True)),
+            {self.cap_a.pk, self.cap_b.pk},
+        )
+        self.assertEqual(draft.draft_rounds.count(), 8)
+
+    def test_draft_teams_are_the_eligible_teams(self) -> None:
+        outsider = self.make_user("teams_outsider", 1000)
+        self.make_team("Kept", None, [outsider], order=0)
+        draft = Draft.objects.create(tournament=self.tournament)
+
+        self.assertEqual(
+            set(draft.teams.values_list("pk", flat=True)),
+            {self.team_a.pk, self.team_b.pk},
+        )
+        self.assertEqual(
+            set(draft._simulate_draft("snake")), {self.team_a.pk, self.team_b.pk}
+        )
+        self.assertEqual(draft.snake_first_pick_mmr, 3000 + 2500)
+
+    def test_reset_logs_removed_count(self) -> None:
+        with patch("app.functions.tournament.log") as log:
+            resp = self.post()
+
+        self.assertEqual(resp.status_code, 201)
+        completed = [
+            c for c in log.info.call_args_list if c.args[0] == "draft_reset_completed"
+        ]
+        self.assertEqual(completed[0].kwargs["removed_count"], 2)
+
     def test_restart_keeps_pks_and_resets(self) -> None:
         self.team_a.deputy_captain = self.p1
         self.team_a.current_points = 5
@@ -383,7 +457,7 @@ class InitDraftEndpointTests(TestCase):
         order = MagicMock()
         with (
             patch("app.functions.tournament.notify_draft_started") as notify,
-            patch("app.functions.tournament.invalidate_after_commit") as invalidate,
+            patch("app.cache_utils.invalidate_obj") as invalidate,
             patch("app.broadcast.broadcast_event") as broadcast,
         ):
             order.attach_mock(invalidate, "invalidate")
@@ -394,7 +468,7 @@ class InitDraftEndpointTests(TestCase):
             self.assertEqual(resp.status_code, 201)
             notify.assert_not_called()
             broadcast.assert_not_called()
-            invalidate.assert_called_once()
+            invalidate.assert_not_called()
             for callback in callbacks:
                 callback()
 
@@ -403,11 +477,15 @@ class InitDraftEndpointTests(TestCase):
         self.assertIn("draft_started", event_types)
         self.assertIn("draft_lobby_opened", event_types)
         names = [
-            c[0]
-            for c in order.mock_calls
-            if c[0] in ("invalidate", "broadcast", "notify")
+            name
+            for name, args, _ in order.mock_calls
+            if name in ("broadcast", "notify")
+            or (name == "invalidate" and isinstance(args[0], Tournament | Draft))
         ]
-        self.assertEqual(names[0], "invalidate")
+        self.assertIn("invalidate", names)
+        first_invalidate = names.index("invalidate")
+        self.assertLess(first_invalidate, names.index("broadcast"))
+        self.assertLess(first_invalidate, names.index("notify"))
 
     def test_no_side_effects_when_build_rounds_raises(self) -> None:
         self.tournament.discord_send_draft_link = True
@@ -439,22 +517,24 @@ class InitDraftEndpointTests(TestCase):
     def test_select_for_update_and_atomic(self) -> None:
         manager = Tournament.objects
         real_select_for_update = manager.select_for_update
-        seen: list[bool] = []
+        depth_outside = len(connection.atomic_blocks)
+        depths: list[int] = []
 
-        def record_atomic(*args: object, **kwargs: object) -> None:
-            seen.append(connection.in_atomic_block)
+        def record_depth(*args: object, **kwargs: object) -> None:
+            depths.append(len(connection.atomic_blocks))
 
         with (
             patch.object(
                 manager, "select_for_update", side_effect=real_select_for_update
             ) as select_for_update,
-            patch.object(Draft, "build_rounds", side_effect=record_atomic),
+            patch.object(Draft, "build_rounds", side_effect=record_depth),
         ):
             resp = self.post()
 
         self.assertEqual(resp.status_code, 201)
         select_for_update.assert_called()
-        self.assertEqual(seen, [True])
+        self.assertEqual(len(depths), 1)
+        self.assertGreater(depths[0], depth_outside)
 
     def test_rebuild_team_atomic_with_non_member_captain(self) -> None:
         self.team_a.members.set([self.p1])

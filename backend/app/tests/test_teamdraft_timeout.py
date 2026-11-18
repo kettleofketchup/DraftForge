@@ -8,7 +8,7 @@ from django.test import TestCase, TransactionTestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.functions import shuffle_draft
+from app.functions import shuffle_draft, teamdraft
 from app.functions.teamdraft_timeout import (
     TIMEOUT_ACTIONS,
     find_swap_target,
@@ -172,6 +172,27 @@ class SkipTurnSnakeTests(TestCase):
             nxt = skip_turn(self.fx.draft, rnd5)
         self.assertEqual((nxt.pick_number, nxt.captain_id), (5, b))
         self.assertEqual(self.captain_order()[4:8], [b, d, d, a])
+
+    def test_kept_team_outside_draft_does_not_shift_pick_phase(self):
+        for i in range(4):
+            Team.objects.create(
+                tournament=self.fx.tournament, name=f"Kept {i}", draft_order=9 + i
+            )
+        for _ in range(3):
+            with self.captureOnCommitCallbacks(execute=True):
+                self.fx.pick(self.fx.draft.active_round, self.fx.staff)
+        rnd4 = self.fx.draft.active_round
+        expire(rnd4)
+        with self.captureOnCommitCallbacks(execute=True):
+            skip_turn(self.fx.draft, rnd4)
+        self.assertEqual([self.fx.round(n).pick_phase for n in (4, 5, 6)], [1, 2, 2])
+
+    def test_draft_completed_counts_only_drafting_teams(self):
+        Team.objects.create(tournament=self.fx.tournament, name="Kept", draft_order=9)
+        with self.captureOnCommitCallbacks(execute=True):
+            teamdraft.complete_draft(self.fx.draft)
+        ev = self.fx.events("draft_completed").get()
+        self.assertEqual(ev.payload["team_count"], 4)
 
     def test_swap_then_undo_keeps_deferred_captain(self):
         a, b, c, d = [t.captain_id for t in self.fx.teams]

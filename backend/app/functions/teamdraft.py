@@ -204,7 +204,7 @@ def complete_draft(draft: Draft) -> None:
         {
             "draft_id": draft.pk,
             "draft_style": draft.draft_style,
-            "team_count": draft.tournament.teams.count(),
+            "team_count": draft.teams.count(),
         },
     )
 

@@ -120,7 +120,7 @@ def get_lowest_mmr_team(teams: list) -> tuple:
 
 def build_shuffle_rounds(draft: Draft, teams: QuerySet[Team] | None = None) -> None:
     """Create all rounds for a shuffle draft over ``teams`` and assign the first captain."""
-    teams = list(draft.tournament.teams.all() if teams is None else teams)
+    teams = list(draft.teams if teams is None else teams)
     num_teams = len(teams)
     total_picks = num_teams * 4
 
@@ -168,7 +168,7 @@ def reassign_round_captain(
     """Assign the lowest-MMR eligible team's captain to `round`; None if no team is eligible."""
     eligible_teams = [
         t
-        for t in draft.tournament.draft_eligible_teams()
+        for t in draft.teams
         if t.members.count() < MAX_TEAM_SIZE and t.pk not in exclude_team_ids
     ]
     if not eligible_teams:
