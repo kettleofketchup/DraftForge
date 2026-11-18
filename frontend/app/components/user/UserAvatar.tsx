@@ -1,6 +1,15 @@
 import { memo, useMemo } from 'react';
 import { SimpleAvatar } from '~/components/ui/simple-avatar';
+import {
+  isDiscordMember,
+  mergeCachedUser,
+  resolveDisplayName,
+  type UserRef,
+  userRefPk,
+} from '~/lib/userDisplayName';
 import { cn } from '~/lib/utils';
+import { useDisplayOrgId } from '~/store/displayOrgStore';
+import { useUserCacheStore } from '~/store/userCacheStore';
 import type { GuildMember, UserClassType, UserType } from './types';
 
 /**
@@ -10,17 +19,7 @@ import type { GuildMember, UserClassType, UserType } from './types';
 type UserLike =
   | UserType
   | GuildMember
-  | {
-      pk?: number;
-      // Username can be null for Steam-only signups (CustomUser.username is
-      // null=True at the model level). DisplayName already falls back to
-      // nickname / '?'.
-      username?: string | null;
-      nickname?: string | null;
-      avatar?: string | null;
-      avatarUrl?: string | null;
-      discordId?: string | null;
-    };
+  | (UserRef & { nickname?: string | null });
 
 export type UserAvatarSize = 'tiny' | 'xs' | 'sm' | 'md' | 'lg' | 'xl';
 export type UserAvatarBorder = 'none' | 'primary' | 'muted' | 'captain';
@@ -103,18 +102,16 @@ export const AvatarUrl = (
     return `${genUrl}&name=?&length=1`;
   }
 
-  if ('user' in user) {
-    // user is GuildMember
-    return user.user.avatar
-      ? `${discordCdn}/${user.user.id}/${user.user.avatar}`
-      : `${genUrl}&name=${encodeURIComponent(
-          user.nick || user.user.global_name || user.user.username,
-        )}`;
+  if (isDiscordMember(user)) {
+    const member = user as GuildMember;
+    return member.user.avatar
+      ? `${discordCdn}/${member.user.id}/${member.user.avatar}`
+      : `${genUrl}&name=${encodeURIComponent(resolveDisplayName(member))}`;
   }
+  const ref = user as UserRef;
 
-  // Generate fallback URL from username/nickname
   const fallback = `${genUrl}&length=2&name=${encodeURIComponent(
-    user.nickname || user.username || '?',
+    ref.discordNickname || ref.username || '?',
   )}`;
 
   // Helper to check if URL is a Discord default/embed avatar (not a custom one)
@@ -122,49 +119,23 @@ export const AvatarUrl = (
     url.includes('cdn.discordapp.com/embed/avatars/');
 
   // 1. Use avatarUrl if available (full URL from backend), unless it's a Discord default
-  if (user.avatarUrl && !isDiscordDefaultAvatar(user.avatarUrl)) {
-    return user.avatarUrl;
+  if (ref.avatarUrl && !isDiscordDefaultAvatar(ref.avatarUrl)) {
+    return ref.avatarUrl;
   }
 
   // 2. If avatar is already a full URL and not a Discord default, use it
-  if (user.avatar?.startsWith('http') && !isDiscordDefaultAvatar(user.avatar)) {
-    return user.avatar;
+  if (ref.avatar?.startsWith('http') && !isDiscordDefaultAvatar(ref.avatar)) {
+    return ref.avatar;
   }
 
   // 3. If we have discordId and avatar hash, construct Discord CDN URL
-  if (user.discordId && user.avatar) {
-    return `${discordCdn}/${user.discordId}/${user.avatar}`;
+  if (ref.discordId && ref.avatar) {
+    return `${discordCdn}/${ref.discordId}/${ref.avatar}`;
   }
 
   // 4. Fall back to generated avatar from username
   return fallback;
 };
-
-/**
- * Get display name from user-like object
- */
-function getDisplayName(user: UserLike | undefined): string {
-  if (!user) return '?';
-  if (typeof user !== 'object') return '?';
-
-  if ('user' in user) {
-    // GuildMember
-    return user.nick || user.user.global_name || user.user.username;
-  }
-
-  return user.nickname || user.username || '?';
-}
-
-/**
- * Get initials for fallback display
- */
-function getInitials(user: UserLike | undefined): string {
-  const name = getDisplayName(user);
-  if (name === '?') return '?';
-
-  // Return first character uppercase
-  return name.charAt(0).toUpperCase();
-}
 
 /**
  * Custom comparison for memo - only re-render when avatar-relevant data changes
@@ -198,28 +169,33 @@ function arePropsEqual(
   if (typeof prevUser !== 'object' || typeof nextUser !== 'object')
     return false;
 
-  // For GuildMember
-  if ('user' in prevUser && 'user' in nextUser) {
+  const prevMember = isDiscordMember(prevUser);
+  if (prevMember !== isDiscordMember(nextUser)) return false;
+
+  if (prevMember) {
+    const a = prevUser as GuildMember;
+    const b = nextUser as GuildMember;
     return (
-      prevUser.user.id === nextUser.user.id &&
-      prevUser.user.avatar === nextUser.user.avatar &&
-      prevUser.nick === nextUser.nick
+      a.user.id === b.user.id &&
+      a.user.avatar === b.user.avatar &&
+      a.user.username === b.user.username &&
+      a.user.global_name === b.user.global_name &&
+      a.nick === b.nick
     );
   }
 
-  // For UserType/UserLike
-  if (!('user' in prevUser) && !('user' in nextUser)) {
-    return (
-      prevUser.pk === nextUser.pk &&
-      prevUser.avatar === nextUser.avatar &&
-      prevUser.avatarUrl === nextUser.avatarUrl &&
-      prevUser.discordId === nextUser.discordId &&
-      prevUser.username === nextUser.username &&
-      prevUser.nickname === nextUser.nickname
-    );
-  }
-
-  return false;
+  const a = prevUser as UserRef;
+  const b = nextUser as UserRef;
+  return (
+    userRefPk(a) === userRefPk(b) &&
+    a.avatar === b.avatar &&
+    a.avatarUrl === b.avatarUrl &&
+    a.discordId === b.discordId &&
+    a.username === b.username &&
+    a.discordNickname === b.discordNickname &&
+    a.guildNickname === b.guildNickname &&
+    a.orgNicknames === b.orgNicknames
+  );
 }
 
 /**
@@ -237,37 +213,25 @@ export const UserAvatar = memo(function UserAvatar({
   alt,
   'data-testid': testId,
 }: UserAvatarProps) {
-  // Extract stable keys for memoization
-  const isGuildMember = user && typeof user === 'object' && 'user' in user;
-  const guildUserId = isGuildMember ? user.user.id : undefined;
-  const guildUserAvatar = isGuildMember ? user.user.avatar : undefined;
-  const guildNick = isGuildMember ? user.nick : undefined;
-  const guildUsername = isGuildMember ? user.user.username : undefined;
-  const userPk = !isGuildMember ? user?.pk : undefined;
-  const userAvatar = !isGuildMember ? user?.avatar : undefined;
-  const userAvatarUrl = !isGuildMember ? user?.avatarUrl : undefined;
-  const userDiscordId = !isGuildMember ? user?.discordId : undefined;
-  const userNickname = !isGuildMember ? user?.nickname : undefined;
-  const userUsername = !isGuildMember ? user?.username : undefined;
-
-  // Memoize the image URL - only recompute when avatar-relevant fields change
-  const imageUrl = useMemo(
-    () => src || (user ? AvatarUrl(user as UserType) : undefined),
-    [
-      src,
-      guildUserId,
-      guildUserAvatar,
-      userPk,
-      userAvatar,
-      userAvatarUrl,
-      userDiscordId,
-    ],
+  const pk = userRefPk(user);
+  const cached = useUserCacheStore((s) =>
+    pk != null ? s.entities[pk] : undefined,
   );
+  const orgId = useDisplayOrgId();
 
-  // Memoize display name for alt and initials
+  const imageUrl = useMemo(() => {
+    if (src) return src;
+    if (!user || typeof user !== 'object') return undefined;
+    if (isDiscordMember(user)) return AvatarUrl(user);
+    return AvatarUrl(mergeCachedUser(user as UserRef, cached));
+  }, [src, user, cached]);
+
   const displayName = useMemo(
-    () => (user ? getDisplayName(user) : '?'),
-    [guildNick, guildUsername, userNickname, userUsername],
+    () =>
+      user && typeof user === 'object'
+        ? resolveDisplayName(user as UserRef, { orgId, cached: cached ?? null })
+        : '?',
+    [user, cached, orgId],
   );
 
   // Memoize alt text

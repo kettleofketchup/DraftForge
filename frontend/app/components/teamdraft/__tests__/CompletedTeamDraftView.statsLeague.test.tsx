@@ -28,13 +28,13 @@ globalThis.ResizeObserver ??=
 const captain: UserType = {
   pk: 41,
   username: 'alice',
-  nickname: 'Alice',
+  discordNickname: 'Alice',
   mmr: 5000,
 } as UserType;
 const member: UserType = {
   pk: 42,
   username: 'bob',
-  nickname: 'Bob',
+  discordNickname: 'Bob',
   mmr: 4200,
 } as UserType;
 
