@@ -491,7 +491,6 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
     )
     def reactivate(self, request: Request, pk: str | None = None) -> Response:
         """Reactivate a paused series and realign its upcoming events."""
-
         repeater = self.get_object()
         if not has_org_staff_access(request.user, repeater.organization):
             return Response(
@@ -681,7 +680,6 @@ class EventViewSet(viewsets.ModelViewSet):
             raise PermissionDenied(
                 "You do not have permission to create events for this organization."
             )
-
         event = serializer.save(created_by=self.request.user)
         create_tournament_for_event(event)
         # Auto-create DiscordEvent if org has Discord configured
@@ -890,8 +888,6 @@ class EventViewSet(viewsets.ModelViewSet):
         """Admin adds a user to the event signup list.
         POST /api/events/<pk>/admin-signup/ {"user_id": <pk>}
         """
-        from app.models import CustomUser
-
         event = self.get_object()
         if not has_event_staff_access(request.user, event):
             return Response(status=status.HTTP_403_FORBIDDEN)
@@ -950,7 +946,6 @@ class EventViewSet(viewsets.ModelViewSet):
         roster is resynced to the signup-phase rule, so approved players come
         back when roll_call_enabled is off.
         """
-
         event = self.get_object()
         if not has_event_staff_access(request.user, event):
             return Response(status=status.HTTP_403_FORBIDDEN)
@@ -1120,8 +1115,6 @@ class EventViewSet(viewsets.ModelViewSet):
         except DiscordEvent.DoesNotExist:
             return Response({"detail": "No Discord state for this event"}, status=404)
 
-        from cacheops import cached_as
-
         from discordbot.models import DiscordEventDM, DiscordEventLog, DiscordMessageLog
         from discordbot.serializers_discord_event import DiscordEventDetailSerializer
 
@@ -1212,8 +1205,6 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
 
         # Audit log for MMR override
         if mmr_override is not None:
-            from app.models import OrgLog
-
             OrgLog.objects.create(
                 organization=signup.event.organization,
                 actor=request.user,
