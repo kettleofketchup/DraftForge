@@ -5,6 +5,7 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.utils import timezone
 from rest_framework import serializers
 
+from app.display_names import user_display_name
 from app.models import CustomUser, League, Organization
 from app.permissions_org import (
     can_view_org_members,
@@ -31,6 +32,7 @@ from events.services import (
 )
 from lobby.passwords import MAX_LENGTH as LOBBY_PASSWORD_MAX_LENGTH
 from lobby.passwords import PasswordMode, validate_password
+from org.display_names import guild_nicknames, org_nicknames_public
 from org.models import OrgUser
 from org.models_profiles import PlayerDotaProfile
 
@@ -287,11 +289,23 @@ class EventRepeaterSerializer(
 
 class EventStaffUserSerializer(serializers.ModelSerializer):
     avatarUrl = serializers.CharField(read_only=True)
+    guildNickname = serializers.SerializerMethodField()
 
     class Meta:
         model = CustomUser
-        fields = ["pk", "username", "nickname", "avatarUrl"]
+        fields = [
+            "pk",
+            "username",
+            "nickname",
+            "discordNickname",
+            "guildNickname",
+            "avatarUrl",
+        ]
         read_only_fields = fields
+
+    def get_guildNickname(self, obj: CustomUser) -> str | None:
+        nicks: dict[int, str | None] = self.context.get("_staff_guild_nicknames", {})
+        return nicks.get(obj.pk)
 
 
 class EventSlimSerializer(serializers.ModelSerializer):
@@ -361,6 +375,17 @@ class EventSerializer(
     )
     host = EventStaffUserSerializer(read_only=True)
     helpers = EventStaffUserSerializer(many=True, read_only=True)
+
+    def to_representation(self, instance: Event) -> dict[str, Any]:
+        nicks: dict[int, str | None] = {}
+        org_id = instance.organization_id
+        if org_nicknames_public(org_id):
+            staff_ids = [user.pk for user in instance.helpers.all()]
+            if instance.host_id is not None:
+                staff_ids.append(instance.host_id)
+            nicks = guild_nicknames(org_id, staff_ids)
+        self.context["_staff_guild_nicknames"] = nicks
+        return super().to_representation(instance)
 
     class Meta:
         model = Event
@@ -595,7 +620,7 @@ class EventSerializer(
 
 
 class EventTeamSerializer(serializers.ModelSerializer):
-    captain_name = serializers.CharField(source="captain.nickname", read_only=True)
+    captain_name = serializers.SerializerMethodField()
     # Annotated from queryset
     member_count = serializers.IntegerField(read_only=True)
 
@@ -613,9 +638,45 @@ class EventTeamSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["id", "created_at", "updated_at"]
 
+    def _viewer_sees_org_members(self, org_id: int) -> bool:
+        memo: dict[int, bool] = self.context.setdefault("_team_org_visible", {})
+        if org_id not in memo:
+            request = self.context.get("request")
+            memo[org_id] = request is not None and can_view_org_members(
+                request.user, org_id
+            )
+        return memo[org_id]
+
+    def _captain_nicknames(self, obj: EventTeam) -> dict[int, str | None]:
+        org_id = obj.event.organization_id
+        memo: dict[int, dict[int, str | None]] = self.context.setdefault(
+            "_team_captain_nicknames", {}
+        )
+        nicks = memo.setdefault(org_id, {})
+        if obj.captain_id not in nicks:
+            parent = self.parent
+            rows = (
+                list(parent.instance)
+                if isinstance(parent, serializers.ListSerializer) and parent.instance
+                else [obj]
+            )
+            ids = {
+                row.captain_id for row in rows if row.event.organization_id == org_id
+            } | {obj.captain_id}
+            ids -= nicks.keys()
+            found = guild_nicknames(org_id, ids)
+            nicks.update({user_id: found.get(user_id) for user_id in ids})
+        return nicks
+
+    def get_captain_name(self, obj: EventTeam) -> str:
+        nick = None
+        if self._viewer_sees_org_members(obj.event.organization_id):
+            nick = self._captain_nicknames(obj).get(obj.captain_id)
+        return user_display_name(obj.captain, guild_nickname=nick)
+
 
 class EventSignupSerializer(serializers.ModelSerializer):
-    username = serializers.CharField(source="user.nickname", read_only=True)
+    username = serializers.SerializerMethodField()
     user_avatar = serializers.CharField(source="user.avatar", read_only=True)
     user_data = serializers.SerializerMethodField()
     dota_profile = serializers.SerializerMethodField()
@@ -728,6 +789,15 @@ class EventSignupSerializer(serializers.ModelSerializer):
                     CustomUser.objects.get(pk=user_id)
                 ).data
         return payloads[obj.user_id]
+
+    def get_username(self, obj: EventSignup) -> str:
+        org_user = self._org_user(obj)
+        nick = (
+            org_user.guild_nickname
+            if org_user and self._viewer_sees_org_mmr(obj)
+            else None
+        )
+        return user_display_name(obj.user, guild_nickname=nick)
 
     def get_user_data(self, obj: EventSignup) -> dict[str, Any]:
         data = dict(self._user_payload(obj))
@@ -900,12 +970,23 @@ class OrgEventDefaultsSerializer(
 class RepeaterSubscriptionSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source="user.username", read_only=True)
     nickname = serializers.CharField(source="user.nickname", read_only=True)
+    discordNickname = serializers.CharField(
+        source="user.discordNickname", read_only=True
+    )
     discordId = serializers.CharField(source="user.discordId", read_only=True)
     avatar = serializers.CharField(source="user.avatar", read_only=True)
 
     class Meta:
         model = RepeaterSubscription
-        fields = ["id", "username", "nickname", "discordId", "avatar", "created_at"]
+        fields = [
+            "id",
+            "username",
+            "nickname",
+            "discordNickname",
+            "discordId",
+            "avatar",
+            "created_at",
+        ]
 
 
 ONE_OFF_OVERRIDE_FIELDS = (
