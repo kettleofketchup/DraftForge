@@ -140,7 +140,10 @@ export function UserProfilePage() {
                 </div>
 
                 {user.nickname && user.nickname !== user.username && (
-                  <p className="text-muted-foreground mb-2">@{user.username}</p>
+                  <p className="text-muted-foreground mb-2">
+                    {/* eslint-disable-next-line draftforge/use-display-name -- profile @handle is the account username */}
+                    @{user.username}
+                  </p>
                 )}
 
                 {/* Quick Stats */}
@@ -233,11 +236,13 @@ function OverviewTab({ user }: { user: UserType }) {
         <CardContent className="space-y-3 min-w-0">
           <div className="flex justify-between gap-2">
             <span className="text-muted-foreground shrink-0">Username</span>
+            {/* eslint-disable-next-line draftforge/use-display-name -- labelled Username field shows the account handle */}
             <span className="font-medium truncate">{user.username}</span>
           </div>
           {user.nickname && (
             <div className="flex justify-between gap-2">
               <span className="text-muted-foreground shrink-0">Nickname</span>
+              {/* eslint-disable-next-line draftforge/use-display-name -- labelled Nickname field shows the site nickname itself */}
               <span className="font-medium truncate">{user.nickname}</span>
             </div>
           )}

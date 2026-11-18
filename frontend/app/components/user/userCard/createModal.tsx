@@ -13,6 +13,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '~/components/ui/tooltip';
+import { DisplayName } from '~/components/user/avatar';
 import DiscordUserDropdown from '~/components/user/DiscordUserDropdown';
 import type {
   GuildMember,
@@ -78,8 +79,8 @@ export const UserCreateModal: React.FC<Props> = ({ query, setQuery }) => {
     try {
       const created = await toast
         .promise(newUser.dbCreate(), {
-          loading: `Creating ${merged.username || 'user'}…`,
-          success: `${merged.username || 'User'} created`,
+          loading: `Creating ${merged.username ? DisplayName(merged) : 'user'}…`,
+          success: `${merged.username ? DisplayName(merged) : 'User'} created`,
           error: (err) =>
             err instanceof Error
               ? `Failed to create user: ${err.message}`

@@ -167,9 +167,6 @@
     }
   },
   "app/components/player/PlayerModal.tsx": {
-    "draftforge/use-display-name": {
-      "count": 2
-    },
     "shadcn/no-raw-colors": {
       "count": 2
     }
@@ -497,40 +494,12 @@
     }
   },
   "app/components/user/userCard.tsx": {
-    "draftforge/use-display-name": {
-      "count": 2
-    },
     "shadcn/no-raw-colors": {
       "count": 6
     }
   },
   "app/components/user/userCard/LoginAsUserButton.tsx": {
     "shadcn/no-raw-colors": {
-      "count": 3
-    }
-  },
-  "app/components/user/userCard/createModal.tsx": {
-    "draftforge/use-display-name": {
-      "count": 2
-    }
-  },
-  "app/components/user/userCard/deleteButton.tsx": {
-    "draftforge/use-display-name": {
-      "count": 3
-    }
-  },
-  "app/components/user/userCard/editModal.tsx": {
-    "draftforge/use-display-name": {
-      "count": 4
-    }
-  },
-  "app/components/user/userCard/handleSaveHook.tsx": {
-    "draftforge/use-display-name": {
-      "count": 5
-    }
-  },
-  "app/components/user/userCard/steamAccountIdConflict.ts": {
-    "draftforge/use-display-name": {
       "count": 3
     }
   },
@@ -614,9 +583,6 @@
     }
   },
   "app/pages/user/UserProfilePage.tsx": {
-    "draftforge/use-display-name": {
-      "count": 3
-    },
     "shadcn/no-raw-colors": {
       "count": 2
     }
@@ -639,11 +605,6 @@
   "app/routes/rollcall.tsx": {
     "draftforge/use-display-name": {
       "count": 2
-    }
-  },
-  "app/routes/user.tsx": {
-    "draftforge/no-direct-name-resolver": {
-      "count": 1
     }
   }
 }

@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { EditIconButton } from '~/components/ui/buttons';
 import { FormDialog } from '~/components/ui/dialogs';
 import { Form } from '~/components/ui/form';
+import { DisplayName } from '~/components/user/avatar';
 import type { UserClassType } from '~/components/user/types';
 import { useUserCacheStore } from '~/store/userCacheStore';
 import { UserEditForm } from './editForm';
@@ -113,7 +114,7 @@ export function UserEditModal({
         if (user.pk) {
           queryClient.invalidateQueries({ queryKey: ['user', user.pk] });
         }
-        toast.success(`${user.username} updated`);
+        toast.success(`${DisplayName(user)} updated`);
         setOpen(false);
       } catch (err) {
         const conflict = steamAccountIdConflictFromError(
@@ -130,7 +131,7 @@ export function UserEditModal({
         const message =
           err instanceof Error
             ? err.message
-            : `Failed to update ${user.username}`;
+            : `Failed to update ${DisplayName(user)}`;
         toast.error(message);
       }
     },
@@ -216,7 +217,7 @@ export function UserEditModal({
       <FormDialog
         open={open}
         onOpenChange={setOpen}
-        title={`Edit ${user.nickname || user.username}`}
+        title={`Edit ${DisplayName(user)}`}
         description="Update this user's profile."
         submitLabel="Save Changes"
         isSubmitting={isSubmitting}

@@ -240,12 +240,14 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
           {displayPlayer.username && (
             <div>
               <span className="font-semibold">Username:</span>{' '}
+              {/* eslint-disable-next-line draftforge/use-display-name -- labelled Username field shows the account handle */}
               {displayPlayer.username}
             </div>
           )}
           {displayPlayer.nickname && (
             <div>
               <span className="font-semibold">Nickname:</span>{' '}
+              {/* eslint-disable-next-line draftforge/use-display-name -- labelled Nickname field shows the site nickname itself */}
               {displayPlayer.nickname}
             </div>
           )}

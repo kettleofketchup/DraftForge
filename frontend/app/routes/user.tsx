@@ -31,6 +31,7 @@ export function meta({ data }: Route.MetaArgs) {
     return generateMeta({
       title: displayName,
       description: `${displayName} — Dota 2 player profile on DraftForge`,
+      // eslint-disable-next-line draftforge/no-direct-name-resolver -- meta tags need the avatar URL string, not a component
       image: AvatarUrl(user),
       url: `/user/${user.pk}`,
     });

@@ -393,6 +393,7 @@ export const UserCard: React.FC<Props> = memo(
                   <ItemTitle className="!text-xs text-muted-foreground">
                     Username
                   </ItemTitle>
+                  {/* eslint-disable-next-line draftforge/use-display-name -- labelled Username field shows the account handle */}
                   <span className="text-sm truncate">{user.username}</span>
                 </ItemContent>
               </Item>
@@ -407,6 +408,7 @@ export const UserCard: React.FC<Props> = memo(
                   <ItemTitle className="!text-xs text-muted-foreground">
                     Nickname
                   </ItemTitle>
+                  {/* eslint-disable-next-line draftforge/use-display-name -- labelled Nickname field shows the site nickname itself */}
                   <span className="text-sm truncate">{user.nickname}</span>
                 </ItemContent>
               </Item>
