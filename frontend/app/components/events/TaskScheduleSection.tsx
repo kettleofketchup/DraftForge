@@ -6,6 +6,7 @@ import api from '~/components/api/axios';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import { ConfirmDialog } from '~/components/ui/dialogs';
+import { DisplayName } from '~/components/user/avatar';
 import { UserAvatar } from '~/components/user/UserAvatar';
 import { useUserStore } from '~/store/userStore';
 
@@ -243,17 +244,9 @@ export function TaskScheduleSection({
               <td className="py-2.5 hidden lg:table-cell">
                 {task.fired_by ? (
                   <div className="flex items-center gap-1.5">
-                    <UserAvatar
-                      user={{
-                        nickname: task.fired_by.nickname,
-                        username: task.fired_by.username,
-                        discordId: task.fired_by.discordId,
-                        avatar: task.fired_by.avatar,
-                      }}
-                      size="xs"
-                    />
+                    <UserAvatar user={task.fired_by} size="xs" />
                     <span className="text-xs text-foreground truncate max-w-[100px]">
-                      {task.fired_by.nickname || task.fired_by.username}
+                      {DisplayName(task.fired_by)}
                     </span>
                   </div>
                 ) : task.status === 'fired' ? (

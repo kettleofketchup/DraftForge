@@ -3,6 +3,7 @@ import { Bell, ChevronDown, ChevronUp } from 'lucide-react';
 import { useState } from 'react';
 import { getRepeaterSubscribers } from '~/components/api/api';
 import { Badge } from '~/components/ui/badge';
+import { DisplayName } from '~/components/user/avatar';
 import { UserAvatar } from '~/components/user/UserAvatar';
 
 interface SubscriberListProps {
@@ -44,22 +45,15 @@ export function SubscriberList({ repeaterId }: SubscriberListProps) {
       </button>
       {expanded && (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-1 mt-2 rounded-lg border border-border p-2">
-          {subscribers.map((sub) => (
+          {subscribers.map(({ id, ...subscriber }) => (
             <div
-              key={sub.id}
+              key={id}
               className="flex items-center gap-2 p-1.5 rounded-md hover:bg-muted/40 transition-colors"
             >
-              <UserAvatar
-                user={{
-                  nickname: sub.nickname,
-                  username: sub.username,
-                  discordId: sub.discordId,
-                  avatar: sub.avatar,
-                }}
-                size="sm"
-              />
+              {/* id is the subscription's, not the user's pk, so it stays out of the cache lookup */}
+              <UserAvatar user={subscriber} size="sm" />
               <span className="text-sm text-foreground truncate">
-                {sub.nickname || sub.username}
+                {DisplayName(subscriber)}
               </span>
             </div>
           ))}

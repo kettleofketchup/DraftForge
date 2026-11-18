@@ -66,22 +66,6 @@
       "count": 10
     }
   },
-  "app/components/events/SubscriberList.tsx": {
-    "draftforge/no-user-reshape": {
-      "count": 1
-    },
-    "draftforge/use-display-name": {
-      "count": 2
-    }
-  },
-  "app/components/events/TaskScheduleSection.tsx": {
-    "draftforge/no-user-reshape": {
-      "count": 1
-    },
-    "draftforge/use-display-name": {
-      "count": 2
-    }
-  },
   "app/components/events/games/dota2/Dota2RankSignalsCard.tsx": {
     "shadcn/no-raw-colors": {
       "count": 7
@@ -647,18 +631,8 @@
       "count": 1
     }
   },
-  "app/routes/event.tsx": {
-    "draftforge/use-display-name": {
-      "count": 1
-    }
-  },
   "app/routes/organization.tsx": {
     "shadcn/no-raw-colors": {
-      "count": 2
-    }
-  },
-  "app/routes/rollcall.tsx": {
-    "draftforge/use-display-name": {
       "count": 2
     }
   },
