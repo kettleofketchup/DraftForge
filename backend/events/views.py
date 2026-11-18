@@ -1192,10 +1192,10 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [permissions.AllowAny]
 
     def get_queryset(self) -> QuerySet[EventSignup]:
-        # EventSignupSerializer ships user.nickname (as `username`) +
-        # user.avatar — both resolve through the CustomUser @property to
-        # base_profile (T1 epic). Without user__base_profile this is N+1
-        # cold-cache on busy events.
+        # EventSignupSerializer's `username` (display name) reads
+        # user.nickname, and it ships user.avatar — both resolve through the
+        # CustomUser @property to base_profile (T1 epic). Without
+        # user__base_profile this is N+1 cold-cache on busy events.
         qs = with_user_profiles(
             EventSignup.objects.select_related(
                 "event__tournament__league__organization", "event_team"
