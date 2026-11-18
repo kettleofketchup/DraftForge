@@ -61,7 +61,7 @@ from events.roster import (
     team_bound_user_pks,
 )
 from events.schemas import DotaModalConfig
-from events.signup_schedule import apply_signup_open_policy
+from events.signup_schedule import SIGNUP_OPEN_POLICY_FIELDS, apply_signup_open_policy
 from lobby.passwords import PasswordMode, generate_password
 from org.models import OrgUser
 from org.models_profiles import PlayerDotaProfile
@@ -1498,9 +1498,11 @@ def sync_future_events(
     RegistryMixinCoverageTest enforces that registry fields stay on the
     mixin.
 
-    signups_open_at is recomputed only when the signup open policy changed
-    (policy_changed) or the schedule moved, and never for a manual series, so
-    a hand-set open time survives unrelated edits.
+    The signup open policy is copied only when the series policy changed
+    (policy_changed), which also recomputes signups_open_at (None for manual).
+    A schedule move recomputes it from each event's own policy, skipping
+    manual events, so a per-event policy or hand-set time survives unrelated
+    edits.
     """
     if realign_schedule and repeater.is_active:
         # Compute the new occurrence set using the same helper that
@@ -1542,18 +1544,20 @@ def sync_future_events(
         .select_related("tournament")
     )
     shared_fields = ["name", "description"]
+    config_fields = [
+        f for f in EVENT_CONFIG_FIELDS if f not in SIGNUP_OPEN_POLICY_FIELDS
+    ]
     update_fields = (
         shared_fields
         + TOURNAMENT_TEMPLATE_FIELDS
-        + EVENT_CONFIG_FIELDS
+        + config_fields
         + DISCORD_CONFIG_FIELDS
         + DOTA_LOBBY_CONFIG_FIELDS
         + ["dota_lobby_password"]
     )
-    recompute_open_at = (
-        policy_changed or realign_schedule
-    ) and repeater.signup_open_mode != SignupOpenMode.MANUAL
-    if recompute_open_at:
+    if policy_changed:
+        update_fields += [*SIGNUP_OPEN_POLICY_FIELDS, "signups_open_at"]
+    elif realign_schedule:
         update_fields.append("signups_open_at")
     now = timezone.now()
     for event in future_events:
@@ -1563,14 +1567,17 @@ def sync_future_events(
         for field_name in shared_fields:
             setattr(event, field_name, getattr(repeater, field_name))
         _copy_mixin_fields(repeater, event, TOURNAMENT_TEMPLATE_FIELDS)
-        _copy_mixin_fields(repeater, event, EVENT_CONFIG_FIELDS)
+        _copy_mixin_fields(repeater, event, config_fields)
         _copy_mixin_fields(repeater, event, DISCORD_CONFIG_FIELDS)
         _copy_mixin_fields(repeater, event, DOTA_LOBBY_CONFIG_FIELDS)
         event.dota_lobby_password = series_lobby_password(
             repeater, previous_mode, previous_password
         )
         event.tournament_date = event.scheduled_at
-        if recompute_open_at:
+        if policy_changed:
+            _copy_mixin_fields(repeater, event, list(SIGNUP_OPEN_POLICY_FIELDS))
+            apply_signup_open_policy(event, now)
+        elif realign_schedule and event.signup_open_mode != SignupOpenMode.MANUAL:
             apply_signup_open_policy(event, now)
         event.save(update_fields=update_fields + ["tournament_date", "updated_at"])
         if event.dota_lobby_password != previous_password:

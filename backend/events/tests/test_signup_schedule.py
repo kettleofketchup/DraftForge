@@ -317,11 +317,34 @@ class RepeaterPolicyCascadeTests(_ApiCase):
         self.assertEqual(self.open.signups_open_at, self.hand_set)
         self.assertEqual(self.one_off.signups_open_at, self.hand_set)
 
-    def test_manual_cascade_never_touches(self) -> None:
+    def test_switch_to_manual_cancels_scheduled_openings(self) -> None:
         self._patch({"signup_open_mode": SignupOpenMode.MANUAL})
-        self.assertEqual(self.upcoming.signups_open_at, self.hand_set)
+        self.assertEqual(self.upcoming.signup_open_mode, SignupOpenMode.MANUAL)
+        self.assertIsNone(self.upcoming.signups_open_at)
+        self.assertEqual(self.open.signups_open_at, self.hand_set)
+        self.assertEqual(self.one_off.signups_open_at, self.hand_set)
         self._patch({"description": "edited"})
-        self.assertEqual(self.upcoming.signups_open_at, self.hand_set)
+        self.assertIsNone(self.upcoming.signups_open_at)
+
+    def test_unrelated_patch_keeps_per_event_policy(self) -> None:
+        own_at = self.at + timedelta(days=2)
+        manual = self._series_event(own_at, signup_open_mode=SignupOpenMode.MANUAL)
+        scheduled = self._series_event(
+            own_at + timedelta(hours=1),
+            signups_open_hours_before=24,
+            signups_open_at=own_at + timedelta(hours=1) - timedelta(hours=24),
+        )
+        self._patch({"description": "only the blurb"})
+        manual.refresh_from_db()
+        scheduled.refresh_from_db()
+        self.assertEqual(manual.signup_open_mode, SignupOpenMode.MANUAL)
+        self.assertIsNone(manual.signups_open_at)
+        self.assertEqual(scheduled.signups_open_hours_before, 24)
+        self.assertEqual(
+            scheduled.signups_open_at,
+            scheduled.scheduled_at - timedelta(hours=24),
+        )
+        self.assertEqual(manual.description, "only the blurb")
 
 
 @patch("events.services.notify_create_discord_event", MagicMock())

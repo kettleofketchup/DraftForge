@@ -1,6 +1,7 @@
 """sync_future_events: returns touched events + cascades reminder fields."""
 
 from datetime import datetime, time, timedelta
+from datetime import timezone as dt_tz
 
 from django.utils import timezone as tz
 
@@ -14,11 +15,6 @@ class SyncFutureEventsReturnTypeTest(_DiscordTaskTestCase):
     def test_returns_list_of_touched_events(self):
         # _DiscordTaskTestCase already creates self.event; create another
         # in upcoming state for the same repeater
-        from datetime import datetime, time
-        from datetime import timezone as dt_tz
-
-        from events.models import Event, EventRepeater
-
         repeater = EventRepeater.objects.create(
             organization=self.event.organization,
             name="Test Repeater",
@@ -50,11 +46,6 @@ class SyncFutureEventsReturnTypeTest(_DiscordTaskTestCase):
         self.assertEqual({e.pk for e in result}, {e1.pk, e2.pk})
 
     def test_does_not_touch_past_state_events(self):
-        from datetime import datetime, time
-        from datetime import timezone as dt_tz
-
-        from events.models import Event, EventRepeater
-
         repeater = EventRepeater.objects.create(
             organization=self.event.organization,
             name="Test Repeater 2",
