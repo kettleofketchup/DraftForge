@@ -114,7 +114,7 @@ test.describe('Event Notification DM (@cicd)', () => {
 
     if (!notifResp.ok()) {
       // DM may fail if bot tokens not configured or user has DMs disabled
-      console.warn('Notification DM failed — bot tokens may not be configured');
+      console.warn(`Notification DM failed: ${notifResp.status()} ${await notifResp.text()}`);
       return;
     }
 

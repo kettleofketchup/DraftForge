@@ -7,6 +7,8 @@ Test-only endpoints for Discord event lifecycle E2E testing.
 
 import logging
 
+import requests
+from django.conf import settings
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework import status
 from rest_framework.decorators import (
@@ -18,8 +20,35 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from common.utils import isTestEnvironment
+from discordbot.utils import (
+    DISCORD_API_BASE,
+    DiscordAuthError,
+    _get_headers,
+    _rate_limited_request,
+)
 
 log = logging.getLogger(__name__)
+
+
+def discord_auth_failure() -> Response | None:
+    """503 when Discord rejects the configured bot token, else None."""
+    if not settings.DISCORD_BOT_TOKEN:
+        return None
+    try:
+        _rate_limited_request(
+            "GET", f"{DISCORD_API_BASE}/users/@me", headers=_get_headers()
+        )
+    except DiscordAuthError:
+        return Response(
+            {
+                "error": "discord_auth_failed",
+                "detail": "Discord rejected the bot token (401)",
+            },
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+    except requests.RequestException:
+        return None
+    return None
 
 
 @csrf_exempt
@@ -214,6 +243,9 @@ def send_test_notification(request, event_pk):
                 "components": components,
             }
         )
+    auth_failure = discord_auth_failure()
+    if auth_failure is not None:
+        return auth_failure
     return Response(
         {"success": False, "error": "Failed to send DM. User may have DMs disabled."},
         status=500,

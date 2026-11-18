@@ -183,7 +183,7 @@ export async function loginEventPlayerNoProfile(context: BrowserContext) {
 export async function syncDiscordEvents(context: BrowserContext): Promise<string> {
   const resp = await context.request.post(`${API_URL}/tests/events/sync-discord/`);
   if (!resp.ok()) {
-    throw new Error(`Discord sync trigger failed: ${resp.status()}`);
+    throw new Error(`Discord sync trigger failed: ${resp.status()} ${await resp.text()}`);
   }
   const data = await resp.json();
   return data.message;
