@@ -70,6 +70,11 @@ function hasScopedChanged(
     const a = existing.orgData[context.orgId];
     const b = incoming.orgData[context.orgId];
     if (a?.mmr !== b?.mmr || a?.id !== b?.id) return true;
+    if (
+      existing.orgNicknames?.[context.orgId] !==
+      incoming.orgNicknames?.[context.orgId]
+    )
+      return true;
   }
   if (context?.leagueId) {
     const a = existing.leagueData[context.leagueId];
@@ -103,6 +108,7 @@ function toUserEntry(
   // unnecessary re-renders.
   let orgData = existing?.orgData ?? {};
   let leagueData = existing?.leagueData ?? {};
+  let orgNicknames = existing?.orgNicknames ?? {};
 
   if (context?.orgId && raw.mmr != null && raw.orgUserPk != null) {
     orgData = {
@@ -113,6 +119,10 @@ function toUserEntry(
         _fetchedAt: now,
       },
     };
+  }
+
+  if (context?.orgId && raw.guildNickname !== undefined) {
+    orgNicknames = { ...orgNicknames, [context.orgId]: raw.guildNickname };
   }
 
   if (context?.leagueId && raw.league_mmr != null && raw.orgUserPk != null) {
@@ -132,6 +142,7 @@ function toUserEntry(
     pk: raw.pk,
     orgData,
     leagueData,
+    orgNicknames,
     _fetchedAt: now,
   } as UserEntry;
 }
@@ -232,9 +243,14 @@ export const useUserCacheStore = create<UserCacheState>()(
         for (const entry of Object.values(state.entities)) {
           const orgData = { ...entry.orgData };
           const leagueData = { ...entry.leagueData };
+          const orgNicknames = { ...entry.orgNicknames };
           let changed = false;
           if (orgId != null && orgId in orgData) {
             delete orgData[orgId];
+            changed = true;
+          }
+          if (orgId != null && orgId in orgNicknames) {
+            delete orgNicknames[orgId];
             changed = true;
           }
           if (leagueId != null && leagueId in leagueData) {
@@ -243,7 +259,12 @@ export const useUserCacheStore = create<UserCacheState>()(
           }
           if (!changed) continue;
           if (!newEntities) newEntities = { ...state.entities };
-          newEntities[entry.pk] = { ...entry, orgData, leagueData };
+          newEntities[entry.pk] = {
+            ...entry,
+            orgData,
+            leagueData,
+            orgNicknames,
+          };
         }
         if (!newEntities) return;
         set({ entities: newEntities }, undefined, 'dropScoped');
