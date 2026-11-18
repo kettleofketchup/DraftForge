@@ -1,0 +1,243 @@
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect } from 'react';
+import { useForm } from 'react-hook-form';
+import { toast } from 'sonner';
+
+import {
+  getOrgSettings,
+  orgSettingsKey,
+  patchOrgSettings,
+  StaffPlacementFormSchema,
+  type OrgSettings,
+  type StaffOverridePolicy,
+  type StaffPlacementFormValues,
+} from '~/components/api/orgSettingsAPI';
+import { PrimaryButton } from '~/components/ui/buttons';
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '~/components/ui/form';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '~/components/ui/select';
+import { Skeleton } from '~/components/ui/skeleton';
+import { extractApiError } from '~/lib/apiError';
+import { getLogger } from '~/lib/logger';
+
+const log = getLogger('OrgSettingsTab');
+
+const POLICY_OPTIONS: readonly {
+  value: StaffOverridePolicy;
+  label: string;
+  help: string;
+}[] = [
+  {
+    value: 'silent',
+    label: 'Silent',
+    help: 'Staff placements ignore seating rules (current behaviour)',
+  },
+  {
+    value: 'confirm',
+    label: 'Confirm',
+    help: 'Staff must confirm a warning naming the broken rule',
+  },
+  {
+    value: 'block',
+    label: 'Block',
+    help: 'Staff placements that break seating rules are refused',
+  },
+];
+
+export function pickFormValues(s: OrgSettings): StaffPlacementFormValues {
+  return {
+    staff_override_policy: s.staff_override_policy,
+    staff_override_warning_codes: [...s.staff_override_warning_codes],
+  };
+}
+
+export function StaffPlacementSection({
+  organizationId,
+}: {
+  organizationId: number;
+}) {
+  const { data, isLoading, isError, error } = useQuery({
+    queryKey: orgSettingsKey(organizationId),
+    queryFn: () => getOrgSettings(organizationId),
+  });
+
+  return (
+    <section
+      data-testid="org-settings-staff-placement"
+      className="rounded-lg border border-border p-6"
+    >
+      <h2 className="text-lg font-semibold">Staff placement</h2>
+      <p className="mt-1 text-sm text-muted-foreground">
+        How seating rules apply when staff place members on a roster.
+      </p>
+      {isLoading && (
+        <div className="mt-4 flex flex-col gap-3">
+          <Skeleton className="h-9 w-full" />
+          <Skeleton className="h-32 w-full" />
+        </div>
+      )}
+      {isError && (
+        <p
+          className="mt-4 text-sm text-destructive"
+          data-testid="org-settings-error"
+        >
+          {extractApiError(error) ?? 'Failed to load settings'}
+        </p>
+      )}
+      {data && (
+        <StaffPlacementForm organizationId={organizationId} settings={data} />
+      )}
+    </section>
+  );
+}
+
+function StaffPlacementForm({
+  organizationId,
+  settings,
+}: {
+  organizationId: number;
+  settings: OrgSettings;
+}) {
+  const queryClient = useQueryClient();
+  const form = useForm<StaffPlacementFormValues>({
+    resolver: zodResolver(StaffPlacementFormSchema),
+    defaultValues: pickFormValues(settings),
+  });
+  const allCodes = settings.available_warning_codes.map((c) => c.code);
+
+  useEffect(() => {
+    if (!form.formState.isDirty) form.reset(pickFormValues(settings));
+  }, [settings, form]);
+
+  const mutation = useMutation({
+    mutationFn: (values: Partial<StaffPlacementFormValues>) =>
+      patchOrgSettings(organizationId, values),
+    onSuccess: (saved) => {
+      queryClient.setQueryData(orgSettingsKey(organizationId), saved);
+      form.reset(pickFormValues(saved));
+      toast.success('Settings saved');
+    },
+    onError: (err) => {
+      log.error('Failed to save org settings', { organizationId, err });
+      toast.error(extractApiError(err) ?? 'Could not save settings');
+    },
+  });
+
+  const onSubmit = form.handleSubmit(async (values) => {
+    const dirty = form.formState.dirtyFields;
+    const changes: Partial<StaffPlacementFormValues> = {};
+    if (dirty.staff_override_policy) {
+      changes.staff_override_policy = values.staff_override_policy;
+    }
+    if (dirty.staff_override_warning_codes) {
+      changes.staff_override_warning_codes =
+        values.staff_override_warning_codes;
+    }
+    await mutation.mutateAsync(changes).catch(() => undefined);
+  });
+
+  const { isDirty, isSubmitting } = form.formState;
+
+  return (
+    <Form {...form}>
+      <form onSubmit={onSubmit} className="mt-4 flex flex-col gap-6">
+        <FormField
+          control={form.control}
+          name="staff_override_policy"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Staff override policy</FormLabel>
+              <Select onValueChange={field.onChange} value={field.value}>
+                <FormControl>
+                  <SelectTrigger
+                    data-testid="org-settings-policy-select"
+                    className="w-full sm:w-64"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  {POLICY_OPTIONS.map((o) => (
+                    <SelectItem
+                      key={o.value}
+                      value={o.value}
+                      data-testid={`org-settings-policy-option-${o.value}`}
+                    >
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FormDescription>
+                {POLICY_OPTIONS.find((o) => o.value === field.value)?.help}
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="staff_override_warning_codes"
+          render={({ field }) => {
+            const selected = new Set(field.value);
+            const toggle = (code: string, checked: boolean) => {
+              const next = new Set(selected);
+              if (checked) next.add(code);
+              else next.delete(code);
+              field.onChange(allCodes.filter((c) => next.has(c)));
+            };
+            return (
+              <FormItem>
+                <FormLabel>Rules staff are warned about</FormLabel>
+                <div className="flex flex-col gap-2">
+                  {settings.available_warning_codes.map(({ code, label }) => (
+                    <label
+                      key={code}
+                      className="flex min-h-11 cursor-pointer items-center gap-3 text-sm sm:min-h-0"
+                    >
+                      <input
+                        type="checkbox"
+                        data-testid={`org-settings-code-${code}`}
+                        checked={selected.has(code)}
+                        onChange={(e) => toggle(code, e.target.checked)}
+                        className="h-4 w-4 shrink-0 rounded border-border accent-primary"
+                      />
+                      {label}
+                    </label>
+                  ))}
+                </div>
+                <FormMessage />
+              </FormItem>
+            );
+          }}
+        />
+        <p className="text-xs text-muted-foreground">
+          These settings take effect when staff placement checks ship.
+        </p>
+        <div>
+          <PrimaryButton
+            type="submit"
+            data-testid="org-settings-save"
+            disabled={!isDirty || isSubmitting}
+          >
+            Save
+          </PrimaryButton>
+        </div>
+      </form>
+    </Form>
+  );
+}

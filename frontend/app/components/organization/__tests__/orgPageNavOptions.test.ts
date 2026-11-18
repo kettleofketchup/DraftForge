@@ -12,6 +12,7 @@ const base: OrgPageNavInput = {
   canViewContributions: false,
   canUsePromotion: false,
   canViewClaims: false,
+  canViewSettings: false,
 };
 
 const values = (input: OrgPageNavInput): string[] =>
@@ -33,6 +34,11 @@ describe('buildOrgPageNavOptions', () => {
     expect(values(base)).not.toContain('claims');
   });
 
+  it('lists settings only when the viewer can view settings', () => {
+    expect(values({ ...base, canViewSettings: true })).toContain('settings');
+    expect(values(base)).not.toContain('settings');
+  });
+
   it('keeps the tab order of the desktop tab list', () => {
     expect(
       values({
@@ -41,6 +47,7 @@ describe('buildOrgPageNavOptions', () => {
         canViewContributions: true,
         canUsePromotion: true,
         canViewClaims: true,
+        canViewSettings: true,
       }),
     ).toEqual([
       'leagues',
@@ -49,6 +56,7 @@ describe('buildOrgPageNavOptions', () => {
       'contributions',
       'promotion',
       'claims',
+      'settings',
     ]);
   });
 });

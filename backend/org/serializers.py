@@ -1,9 +1,14 @@
+from typing import Any
+
 from rest_framework import serializers
 
 from app.models import ProfileClaimRequest
 from app.serializers import PositionsSerializer
+from org import settings_constants
+from org.settings_constants import StaffOverridePolicy
+from org.settings_service import normalize_warning_codes
 
-from .models import OrgUser
+from .models import OrgSettings, OrgUser
 
 
 class OrgUserSerializer(serializers.ModelSerializer):
@@ -36,7 +41,7 @@ class OrgUserSerializer(serializers.ModelSerializer):
     mmr = serializers.IntegerField(read_only=True)  # From OrgUser.mmr
     league_mmr = serializers.SerializerMethodField()
 
-    def get_league_mmr(self, org_user):
+    def get_league_mmr(self, org_user: OrgUser) -> int | None:
         """Get MMR from LeagueUser if league_id is in context.
 
         Uses prefetched league_users if available to avoid N+1 queries.
@@ -153,9 +158,7 @@ class ProfileClaimRequestSerializer(serializers.ModelSerializer):
             "reviewed_at",
         )
 
-    def get_target_mmr(self, obj):
-        from org.models import OrgUser
-
+    def get_target_mmr(self, obj: ProfileClaimRequest) -> int:
         try:
             org_user = OrgUser.objects.get(
                 user=obj.target_user, organization=obj.organization
@@ -163,3 +166,43 @@ class ProfileClaimRequestSerializer(serializers.ModelSerializer):
             return org_user.mmr or 0
         except OrgUser.DoesNotExist:
             return 0
+
+
+class OrgSettingsSerializer(serializers.ModelSerializer):
+    staff_override_policy = serializers.ChoiceField(choices=StaffOverridePolicy.choices)
+    staff_override_warning_codes = serializers.ListField(
+        child=serializers.CharField(), allow_empty=True
+    )
+    available_warning_codes = serializers.SerializerMethodField()
+
+    class Meta:
+        model = OrgSettings
+        fields = [
+            "organization",
+            "staff_override_policy",
+            "staff_override_warning_codes",
+            "available_warning_codes",
+            "updated_at",
+        ]
+        read_only_fields = ["organization", "available_warning_codes", "updated_at"]
+
+    def to_representation(self, instance: OrgSettings) -> dict[str, Any]:
+        data = super().to_representation(instance)
+        all_codes = settings_constants.ALL_CODES
+        data["staff_override_warning_codes"] = [
+            code for code in data["staff_override_warning_codes"] if code in all_codes
+        ]
+        return data
+
+    def validate_staff_override_warning_codes(self, value: list[str]) -> list[str]:
+        try:
+            return normalize_warning_codes(value)
+        except ValueError as exc:
+            raise serializers.ValidationError(str(exc)) from exc
+
+    def get_available_warning_codes(self, obj: OrgSettings) -> list[dict[str, str]]:
+        labels = settings_constants.WARNING_CODE_LABELS
+        return [
+            {"code": code, "label": labels.get(code, code)}
+            for code in settings_constants.ALL_CODES
+        ]
