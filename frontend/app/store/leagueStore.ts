@@ -80,15 +80,24 @@ export const useLeagueStore = create<LeagueState>((set, get) => ({
 
   getLeagueUsers: async (leagueId: number) => {
     // Skip if already loaded for this league
-    if (get().leagueUsersLeagueId === leagueId && get().leagueUserPks.length > 0) {
+    if (
+      get().leagueUsersLeagueId === leagueId &&
+      get().leagueUserPks.length > 0
+    ) {
       log.debug('LeagueUsers already loaded for league:', leagueId);
       return;
     }
 
-    if (get().leagueUsersLoading && get().leagueUsersLeagueId === leagueId) return;
+    if (get().leagueUsersLoading && get().leagueUsersLeagueId === leagueId)
+      return;
 
     const request = ++leagueUsersRequest;
-    set({ leagueUsersLoading: true, leagueUsersError: null, leagueUsersLeagueId: leagueId, leagueUserPks: [] });
+    set({
+      leagueUsersLoading: true,
+      leagueUsersError: null,
+      leagueUsersLeagueId: leagueId,
+      leagueUserPks: [],
+    });
 
     try {
       const users = await getLeagueUsers(leagueId);
@@ -104,7 +113,9 @@ export const useLeagueStore = create<LeagueState>((set, get) => ({
       log.error('Error fetching league users:', error);
       set({
         leagueUsersError:
-          error instanceof Error ? error.message : 'Failed to fetch league users',
+          error instanceof Error
+            ? error.message
+            : 'Failed to fetch league users',
         leagueUsersLoading: false,
         leagueUserPks: [],
       });
@@ -113,7 +124,12 @@ export const useLeagueStore = create<LeagueState>((set, get) => ({
 
   clearLeagueUsers: () => {
     leagueUsersRequest++;
-    set({ leagueUserPks: [], leagueUsersLeagueId: null, leagueUsersError: null, leagueUsersLoading: false });
+    set({
+      leagueUserPks: [],
+      leagueUsersLeagueId: null,
+      leagueUsersError: null,
+      leagueUsersLoading: false,
+    });
   },
 }));
 

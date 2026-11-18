@@ -1,10 +1,10 @@
 // frontend/app/pages/herodraft/HeroDraftPage.tsx
-import { useEffect, useState, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router';
+import { useCallback, useEffect, useState } from 'react';
+import { useNavigate, useParams } from 'react-router';
 import axios from '~/components/api/axios';
 import { HeroDraftModal } from '~/components/herodraft/HeroDraftModal';
-import { getLogger } from '~/lib/logger';
 import type { HeroDraft } from '~/components/herodraft/types';
+import { getLogger } from '~/lib/logger';
 
 const log = getLogger('HeroDraftPage');
 
@@ -55,7 +55,10 @@ export const HeroDraftPage: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center" data-testid="herodraft-loading">
+      <div
+        className="min-h-screen bg-gray-900 flex items-center justify-center"
+        data-testid="herodraft-loading"
+      >
         <div className="text-white text-lg">Loading draft...</div>
       </div>
     );
@@ -70,11 +73,7 @@ export const HeroDraftPage: React.FC = () => {
   }
 
   return (
-    <HeroDraftModal
-      draftId={draftId!}
-      open={true}
-      onClose={handleClose}
-    />
+    <HeroDraftModal draftId={draftId!} open={true} onClose={handleClose} />
   );
 };
 
