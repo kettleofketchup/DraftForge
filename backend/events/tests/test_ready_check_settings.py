@@ -30,6 +30,33 @@ REFERENCE_PRESET: dict[str, Any] = {
     "event_voice_channel_id": "123456789012345678",
 }
 
+CASCADE_FIELDS: tuple[str, ...] = (
+    "roll_call_enabled",
+    "roll_call_mode",
+    "auto_confirm",
+    *READY_CHECK_SETTINGS_FIELDS,
+)
+
+SECOND_PRESET: dict[str, Any] = {
+    "roll_call_enabled": False,
+    "roll_call_mode": "manual",
+    "auto_confirm": True,
+    "ready_check_scope": "main_only",
+    "ready_check_open_minutes": 90,
+    "ready_check_escalation_minutes": 45,
+    "ready_check_close_minutes": 15,
+    "ready_check_chase_minutes": 25,
+    "ready_check_min_completion_pct": 55,
+    "ready_check_low_completion_action": "hold_for_staff",
+    "ready_check_notify_on_signup": False,
+    "ready_check_drop_notice": False,
+    "start_cull_enabled": False,
+    "start_cull_minutes_after": 5,
+    "post_cull_fill_mode": "voice_arrival",
+    "event_voice_channel_id": "223456789012345678",
+    "voice_presence_confirms": True,
+}
+
 LEGACY_R1: dict[str, Any] = {"roll_call_enabled": True, "auto_confirm": True}
 
 VALIDATION_MATRIX: tuple[tuple[str, dict[str, Any], str], ...] = (
@@ -276,18 +303,23 @@ class ReadyCheckSettingsApiTests(EventTestCase):
 
         off_schedule, *scheduled = events
         Event.objects.filter(pk=off_schedule.pk).update(is_off_schedule=True)
+        off_schedule.refresh_from_db()
+        before = {f: getattr(off_schedule, f) for f in CASCADE_FIELDS}
+        self.assertEqual(set(SECOND_PRESET), set(CASCADE_FIELDS))
+        for field, value in SECOND_PRESET.items():
+            self.assertNotEqual(before[field], value, field)
+
         resp = self.client.patch(
-            f"/api/events/repeaters/{repeater.pk}/",
-            {"ready_check_open_minutes": 90},
-            format="json",
+            f"/api/events/repeaters/{repeater.pk}/", SECOND_PRESET, format="json"
         )
         self.assertEqual(resp.status_code, 200, resp.data)
         for event in scheduled:
             event.refresh_from_db()
             self.assertEqual(event.state, EventState.UPCOMING)
-            self.assertEqual(event.ready_check_open_minutes, 90)
+            for field, value in SECOND_PRESET.items():
+                self.assertEqual(getattr(event, field), value, field)
         off_schedule.refresh_from_db()
-        self.assertEqual(off_schedule.ready_check_open_minutes, 120)
+        self.assertEqual({f: getattr(off_schedule, f) for f in CASCADE_FIELDS}, before)
 
 
 class EventSlimReadyCheckFieldsTest(EventTestCase):
