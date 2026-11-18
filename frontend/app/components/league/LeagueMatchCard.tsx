@@ -1,16 +1,15 @@
 import { format } from 'date-fns';
-import { Calendar, Trophy, Link as LinkIcon } from 'lucide-react';
+import { Calendar, Link as LinkIcon, Trophy } from 'lucide-react';
 import { useState } from 'react';
 
-import { Card, CardContent } from '~/components/ui/card';
+import { DotaMatchStatsModal } from '~/components/bracket/modals/DotaMatchStatsModal';
+import { PlayerPopover } from '~/components/player/PlayerPopover';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
+import { Card, CardContent } from '~/components/ui/card';
 import { UserAvatar } from '~/components/user/UserAvatar';
-import { PlayerPopover } from '~/components/player/PlayerPopover';
-import { DotaMatchStatsModal } from '~/components/bracket/modals/DotaMatchStatsModal';
 import { cn } from '~/lib/utils';
 import type { LeagueMatchType } from './schemas';
-import type { UserType } from '~/components/user/types';
 
 interface Props {
   match: LeagueMatchType;
@@ -26,7 +25,10 @@ export const LeagueMatchCard: React.FC<Props> = ({ match }) => {
 
   return (
     <>
-      <Card className="hover:shadow-md transition-shadow" data-testid={`league-match-card-${match.pk}`}>
+      <Card
+        className="hover:shadow-md transition-shadow"
+        data-testid={`league-match-card-${match.pk}`}
+      >
         <CardContent className="p-4">
           {/* Header: Tournament + Round */}
           <div className="flex items-center justify-between mb-3">
@@ -55,7 +57,7 @@ export const LeagueMatchCard: React.FC<Props> = ({ match }) => {
             <div
               className={cn(
                 'flex items-center gap-3 flex-1',
-                radiantWon && 'ring-2 ring-green-500 rounded-lg p-2'
+                radiantWon && 'ring-2 ring-green-500 rounded-lg p-2',
               )}
             >
               {match.radiant_captain ? (
@@ -105,7 +107,7 @@ export const LeagueMatchCard: React.FC<Props> = ({ match }) => {
             <div
               className={cn(
                 'flex items-center gap-3 flex-1 justify-end',
-                direWon && 'ring-2 ring-red-500 rounded-lg p-2'
+                direWon && 'ring-2 ring-red-500 rounded-lg p-2',
               )}
             >
               {match.dire_captain ? (
