@@ -347,6 +347,13 @@ describe('eventSignupSchema line fields', () => {
     ).toBe(false);
   });
 
+  it('rejects an unknown commitment', () => {
+    expect(
+      eventSignupSchema.safeParse({ ...oldPayload, commitment: 'sometimes' })
+        .success,
+    ).toBe(false);
+  });
+
   it('exposes the Commitment values', () => {
     expect(Commitment).toEqual({ MAIN: 'main', MAYBE: 'maybe' });
   });

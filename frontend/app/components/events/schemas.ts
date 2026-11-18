@@ -208,7 +208,9 @@ export const eventSignupSchema = z.object({
   created_at: z.string(),
   updated_at: z.string(),
   signed_up_at: z.string().nullable().default(null),
-  commitment: z.string().default('main'),
+  commitment: z
+    .enum([Commitment.MAIN, Commitment.MAYBE])
+    .default(Commitment.MAIN),
   rsvp_class: z.string().default('standard'),
   first_signed_up_at: z.string().nullable().default(null),
   line_rank: z.number().int().nullable().default(null),
