@@ -1,12 +1,10 @@
 // @vitest-environment jsdom
 import { act, render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { useDisplayOrgStore } from '~/store/displayOrgStore';
 import { useUserCacheStore } from '~/store/userCacheStore';
 
 import { DisplayName } from '../avatar';
-import { DisplayOrgProvider } from '../DisplayOrgProvider';
 import { UserAvatar } from '../UserAvatar';
 
 const upsert = (raw: Record<string, unknown>, orgId?: number) =>
@@ -15,10 +13,12 @@ const upsert = (raw: Record<string, unknown>, orgId?: number) =>
     .upsert(raw as never, orgId ? { orgId } : undefined);
 
 const img = () => screen.getByRole('img');
+const goTo = (path: string) => window.history.pushState({}, '', path);
+
+afterEach(() => goTo('/'));
 
 beforeEach(() => {
   useUserCacheStore.getState().reset();
-  useDisplayOrgStore.setState({ stack: [], orgId: null });
 });
 
 describe('UserAvatar with the user cache', () => {
@@ -50,13 +50,10 @@ describe('UserAvatar with the user cache', () => {
     expect(img()).toHaveAttribute('alt', 'Glob');
   });
 
-  it('uses the org server nickname inside a DisplayOrgProvider', () => {
+  it('uses the org server nickname on an org page', () => {
     upsert({ pk: 3, username: 'u', guildNickname: 'Server' }, 7);
-    render(
-      <DisplayOrgProvider orgId={7}>
-        <UserAvatar user={{ pk: 3 }} />
-      </DisplayOrgProvider>,
-    );
+    goTo('/organizations/7');
+    render(<UserAvatar user={{ pk: 3 }} />);
     expect(screen.getByText('S')).toBeInTheDocument();
   });
 
@@ -75,16 +72,17 @@ describe('UserAvatar with the user cache', () => {
 });
 
 describe('DisplayName', () => {
-  it('defaults the org to the DisplayOrgProvider org', () => {
+  it("defaults the org to the current page's org", () => {
     upsert(
       { pk: 1, username: 'u', discordNickname: 'Glob', guildNickname: 'Srv' },
       7,
     );
     expect(DisplayName({ pk: 1 })).toBe('Glob');
-    const token = useDisplayOrgStore.getState().push(7);
+    goTo('/organizations/7');
     expect(DisplayName({ pk: 1 })).toBe('Srv');
     expect(DisplayName({ pk: 1 }, undefined, null)).toBe('Glob');
-    useDisplayOrgStore.getState().pop(token);
+    goTo('/users');
+    expect(DisplayName({ pk: 1 })).toBe('Glob');
   });
 
   it('keeps the (user, maxLength) signature and ignores the site nickname', () => {
@@ -99,11 +97,8 @@ describe('DisplayName', () => {
         {DisplayName({ user_id: 9, username: 'u', guildNickname: 'Nick' })}
       </span>
     );
-    render(
-      <DisplayOrgProvider orgId={2}>
-        <Name />
-      </DisplayOrgProvider>,
-    );
+    goTo('/organizations/2');
+    render(<Name />);
     expect(screen.getByTestId('n')).toHaveTextContent('Nick');
   });
 });

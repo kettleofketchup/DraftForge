@@ -1,5 +1,6 @@
 import { memo, useMemo } from 'react';
 import { SimpleAvatar } from '~/components/ui/simple-avatar';
+import { useDisplayOrgId } from '~/lib/displayOrg';
 import {
   isDiscordMember,
   mergeCachedUser,
@@ -8,7 +9,6 @@ import {
   userRefPk,
 } from '~/lib/userDisplayName';
 import { cn } from '~/lib/utils';
-import { useDisplayOrgId } from '~/store/displayOrgStore';
 import { useUserCacheStore } from '~/store/userCacheStore';
 import type { GuildMember, UserClassType, UserType } from './types';
 

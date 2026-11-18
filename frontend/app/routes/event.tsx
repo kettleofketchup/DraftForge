@@ -112,7 +112,6 @@ import {
 import type { DotaProfileData } from '~/components/user';
 import { UserEventStrip } from '~/components/user';
 import { AddUserModal } from '~/components/user/AddUserModal';
-import { DisplayOrgProvider } from '~/components/user/DisplayOrgProvider';
 import type { UserType } from '~/components/user/types';
 import {
   removeFeatureQueries,
@@ -448,7 +447,7 @@ export default function EventPage() {
       )
     : null;
 
-  const page = (
+  return (
     <div className="max-w-7xl mx-auto py-4 md:py-8 px-4 md:px-6 space-y-5 md:space-y-8">
       {/* Breadcrumb */}
       {breadcrumbSegments.length > 1 && (
@@ -857,10 +856,6 @@ export default function EventPage() {
         />
       )}
     </div>
-  );
-
-  return (
-    <DisplayOrgProvider orgId={event.organization}>{page}</DisplayOrgProvider>
   );
 }
 

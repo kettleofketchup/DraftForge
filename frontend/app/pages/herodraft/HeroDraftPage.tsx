@@ -4,7 +4,6 @@ import { useNavigate, useParams } from 'react-router';
 import axios from '~/components/api/axios';
 import { HeroDraftModal } from '~/components/herodraft/HeroDraftModal';
 import type { HeroDraft } from '~/components/herodraft/types';
-import { DisplayOrgProvider } from '~/components/user/DisplayOrgProvider';
 import { getLogger } from '~/lib/logger';
 
 const log = getLogger('HeroDraftPage');
@@ -73,9 +72,7 @@ export const HeroDraftPage: React.FC = () => {
   }
 
   return (
-    <DisplayOrgProvider orgId={draft.organization_pk}>
-      <HeroDraftModal draftId={draftId!} open={true} onClose={handleClose} />
-    </DisplayOrgProvider>
+    <HeroDraftModal draftId={draftId!} open={true} onClose={handleClose} />
   );
 };
 

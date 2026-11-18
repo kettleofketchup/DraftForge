@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ActivityBanner } from '~/components/activity/ActivityBanner';
 import {
   ActivityHeader,
@@ -10,7 +10,6 @@ import api, { setActivityErrorHandlers } from '~/components/api/axios';
 import { BracketView } from '~/components/bracket/BracketView';
 import { HeroDraftModal } from '~/components/herodraft/HeroDraftModal';
 import { DraftModal } from '~/components/teamdraft/draftModal';
-import { DisplayOrgProvider } from '~/components/user/DisplayOrgProvider';
 import { useActivityDraftsPolling } from '~/hooks/useActivityDraftsPolling';
 import type { TournamentType } from '~/index';
 import {
@@ -83,7 +82,6 @@ export default function DraftActivity() {
   const heroError = useHeroDraftStore((s) => s.error);
   const teamError = useDraftWebSocketStore((s) => s.error);
   const guard = useLeaveGuard();
-  const orgId = useUserStore((s) => s.tournament?.organization_pk ?? null);
 
   useEffect(() => {
     let cancelled = false;
@@ -229,16 +227,12 @@ export default function DraftActivity() {
       </>
     ) : undefined;
 
-  const withOrg = (node: ReactNode) => (
-    <DisplayOrgProvider orgId={orgId}>{node}</DisplayOrgProvider>
-  );
-
   if (view.kind === 'team')
-    return withOrg(
-      <DraftModal key={`team-${epoch}`} embedded activityHeader={header} />,
+    return (
+      <DraftModal key={`team-${epoch}`} embedded activityHeader={header} />
     );
   if (view.kind === 'hero')
-    return withOrg(
+    return (
       <HeroDraftModal
         key={`hero-${view.id}-${epoch}`}
         draftId={view.id}
@@ -246,7 +240,7 @@ export default function DraftActivity() {
         embedded
         activityHeader={header}
         onClose={() => {}}
-      />,
+      />
     );
   if (tournamentId === null)
     return (
@@ -254,7 +248,7 @@ export default function DraftActivity() {
         {CONNECT_ERROR}
       </div>
     );
-  return withOrg(
+  return (
     <BracketView
       key={`bracket-${epoch}`}
       embedded
@@ -282,6 +276,6 @@ export default function DraftActivity() {
           )}
         </>
       }
-    />,
+    />
   );
 }

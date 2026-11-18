@@ -1,15 +1,15 @@
 import type { GuildMember, UserClassType, UserType } from '~/index';
+import { currentDisplayOrgId } from '~/lib/displayOrg';
 import {
   type DiscordMemberLike,
   resolveDisplayName,
   type UserRef,
 } from '~/lib/userDisplayName';
-import { useDisplayOrgStore } from '~/store/displayOrgStore';
 
 /**
  * Display name for any user payload: org server nickname (in an org context),
  * then global Discord name, then username. Missing fields come from the user
- * cache. `orgId` defaults to the DisplayOrgProvider org; pass `null` for none.
+ * cache. `orgId` defaults to the current page's org; pass `null` for none.
  */
 export const DisplayName = (
   user: UserType | GuildMember | UserClassType | UserRef | undefined,
@@ -21,7 +21,7 @@ export const DisplayName = (
   }
   return resolveDisplayName(user as UserRef | DiscordMemberLike, {
     maxLength,
-    orgId: orgId === undefined ? useDisplayOrgStore.getState().orgId : orgId,
+    orgId: orgId === undefined ? currentDisplayOrgId() : orgId,
   });
 };
 

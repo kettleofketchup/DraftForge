@@ -16,7 +16,6 @@ import {
   type BreadcrumbSegment,
 } from '~/components/ui/entity-breadcrumb';
 import { PageHeader } from '~/components/ui/page-header';
-import { DisplayOrgProvider } from '~/components/user/DisplayOrgProvider';
 import type { UserType } from '~/components/user/types';
 import { useTournament } from '~/hooks/useTournament';
 import { useTournamentSocket } from '~/hooks/useTournamentSocket';
@@ -368,7 +367,7 @@ export const TournamentDetailPage: React.FC = () => {
     );
   };
 
-  const page = (
+  return (
     <div
       className="max-w-full overflow-x-hidden px-3 py-3 sm:container sm:mx-auto sm:p-4"
       data-testid="tournamentDetailPage"
@@ -396,14 +395,6 @@ export const TournamentDetailPage: React.FC = () => {
         cancelTestId="delete-tournament-cancel"
       />
     </div>
-  );
-
-  return (
-    <DisplayOrgProvider
-      orgId={tournamentEditContext(tournament).organizationId}
-    >
-      {page}
-    </DisplayOrgProvider>
   );
 };
 

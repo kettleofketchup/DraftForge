@@ -8,7 +8,7 @@ import { AddUserModal } from '~/components/user/AddUserModal';
 import type { UserType } from '~/components/user/types';
 import { useLeagueUsers } from '~/hooks/useLeagueUsers';
 import { useIsLeagueAdmin } from '~/hooks/usePermissions';
-import { useDisplayOrgId } from '~/store/displayOrgStore';
+import { useDisplayOrgId } from '~/lib/displayOrg';
 import { useLeagueStore } from '~/store/leagueStore';
 import { useOrgStore } from '~/store/orgStore';
 import { useUserCacheStore } from '~/store/userCacheStore';
