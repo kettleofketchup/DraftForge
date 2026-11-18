@@ -17,7 +17,10 @@ vi.mock('~/components/ui/shared-popover-context', () => ({
   }),
 }));
 
-const summaryCalls = vi.hoisted(() => ({ count: 0, leaguePks: [] as unknown[] }));
+const summaryCalls = vi.hoisted(() => ({
+  count: 0,
+  leaguePks: [] as unknown[],
+}));
 vi.mock('~/features/league-stats/queries', () => ({
   usePlayerLeagueSummary: (leaguePk: number | null | undefined) => {
     summaryCalls.count += 1;
@@ -85,13 +88,25 @@ beforeEach(() => {
 describe('UserStrip statsLeagueId', () => {
   it('does not re-render the stats column when the parent passes a new actionSlot', () => {
     const { rerender } = render(
-      wrap(<UserStrip user={plainUser} statsLeagueId={1} actionSlot={<span>a</span>} />),
+      wrap(
+        <UserStrip
+          user={plainUser}
+          statsLeagueId={1}
+          actionSlot={<span>a</span>}
+        />,
+      ),
     );
     expect(screen.getByTestId('strip-league-stats')).toBeTruthy();
     const before = summaryCalls.count;
     expect(before).toBeGreaterThan(0);
     rerender(
-      wrap(<UserStrip user={plainUser} statsLeagueId={1} actionSlot={<span>b</span>} />),
+      wrap(
+        <UserStrip
+          user={plainUser}
+          statsLeagueId={1}
+          actionSlot={<span>b</span>}
+        />,
+      ),
     );
     expect(screen.getByText('b')).toBeTruthy();
     expect(summaryCalls.count).toBe(before);
@@ -122,12 +137,19 @@ describe('UserStrip statsLeagueId', () => {
   });
 
   it('L: badge output identical with and without statsLeagueId (UserEntry)', () => {
-    const a = render(wrap(<UserStrip user={entryUser} organizationId={5} leagueId={7} />));
+    const a = render(
+      wrap(<UserStrip user={entryUser} organizationId={5} leagueId={7} />),
+    );
     const without = leagueBadgeText(a.container);
     a.unmount();
     const b = render(
       wrap(
-        <UserStrip user={entryUser} organizationId={5} leagueId={7} statsLeagueId={7} />,
+        <UserStrip
+          user={entryUser}
+          organizationId={5}
+          leagueId={7}
+          statsLeagueId={7}
+        />,
       ),
     );
     expect(without).toContain('1,700');
@@ -138,19 +160,27 @@ describe('UserStrip statsLeagueId', () => {
     const a = render(wrap(<UserStrip user={plainUser} data-testid="strip" />));
     expect(screen.getByTestId('strip').className).not.toContain('@container');
     a.unmount();
-    render(wrap(<UserStrip user={plainUser} statsLeagueId={1} data-testid="strip" />));
-    expect(screen.getByTestId('strip').className.split(' ')).toContain('@container');
+    render(
+      wrap(
+        <UserStrip user={plainUser} statsLeagueId={1} data-testid="strip" />,
+      ),
+    );
+    expect(screen.getByTestId('strip').className.split(' ')).toContain(
+      '@container',
+    );
   });
 
   it('name min-width narrows only with statsLeagueId', () => {
     const a = render(wrap(<UserStrip user={plainUser} />));
-    const nameWithout = screen.getByText('Alice', { selector: '.hidden.sm\\:inline' })
-      .parentElement!;
+    const nameWithout = screen.getByText('Alice', {
+      selector: '.hidden.sm\\:inline',
+    }).parentElement!;
     expect(nameWithout.className).toContain('sm:min-w-[20ch]');
     a.unmount();
     render(wrap(<UserStrip user={plainUser} statsLeagueId={1} />));
-    const nameWith = screen.getByText('Alice', { selector: '.hidden.sm\\:inline' })
-      .parentElement!;
+    const nameWith = screen.getByText('Alice', {
+      selector: '.hidden.sm\\:inline',
+    }).parentElement!;
     const withClasses = nameWith.className.split(' ');
     expect(withClasses).toContain('min-w-[12ch]');
     expect(withClasses).not.toContain('min-w-[15ch]');
@@ -159,14 +189,22 @@ describe('UserStrip statsLeagueId', () => {
 
   it('stats column uses the default container threshold', () => {
     render(wrap(<UserStrip user={plainUser} statsLeagueId={1} />));
-    const classes = screen.getByTestId('strip-league-stats').className.split(' ');
+    const classes = screen
+      .getByTestId('strip-league-stats')
+      .className.split(' ');
     expect(classes).toContain('@[30rem]:flex');
     expect(classes).not.toContain('@[44rem]:flex');
   });
 
   it('statsBreakpoint="wide" raises the container threshold', () => {
-    render(wrap(<UserStrip user={plainUser} statsLeagueId={1} statsBreakpoint="wide" />));
-    const classes = screen.getByTestId('strip-league-stats').className.split(' ');
+    render(
+      wrap(
+        <UserStrip user={plainUser} statsLeagueId={1} statsBreakpoint="wide" />,
+      ),
+    );
+    const classes = screen
+      .getByTestId('strip-league-stats')
+      .className.split(' ');
     expect(classes).toContain('@[44rem]:flex');
     expect(classes).not.toContain('@[30rem]:flex');
   });
@@ -181,7 +219,9 @@ describe('UserStrip statsLeagueId', () => {
   });
 
   it('column renders with showMmr={false}', () => {
-    render(wrap(<UserStrip user={plainUser} statsLeagueId={1} showMmr={false} />));
+    render(
+      wrap(<UserStrip user={plainUser} statsLeagueId={1} showMmr={false} />),
+    );
     expect(screen.getByTestId('strip-league-stats')).toBeTruthy();
   });
 
@@ -192,15 +232,25 @@ describe('UserStrip statsLeagueId', () => {
 
   it('no column for a user without a pk', () => {
     const noPk = { ...plainUser, pk: undefined } as unknown as UserType;
-    render(wrap(<UserStrip user={noPk} statsLeagueId={1} data-testid="strip" />));
-    expect(screen.getByTestId('strip').className.split(' ')).toContain('@container');
+    render(
+      wrap(<UserStrip user={noPk} statsLeagueId={1} data-testid="strip" />),
+    );
+    expect(screen.getByTestId('strip').className.split(' ')).toContain(
+      '@container',
+    );
     expect(screen.queryByTestId('strip-league-stats')).toBeNull();
     expect(summaryCalls.count).toBe(0);
   });
 
   it('statsLeagueId=0 keeps @container but renders no column', () => {
-    render(wrap(<UserStrip user={plainUser} statsLeagueId={0} data-testid="strip" />));
-    expect(screen.getByTestId('strip').className.split(' ')).toContain('@container');
+    render(
+      wrap(
+        <UserStrip user={plainUser} statsLeagueId={0} data-testid="strip" />,
+      ),
+    );
+    expect(screen.getByTestId('strip').className.split(' ')).toContain(
+      '@container',
+    );
     expect(summaryCalls.leaguePks).toEqual([0]);
     expect(screen.queryByTestId('strip-league-stats')).toBeNull();
   });
