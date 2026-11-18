@@ -3,11 +3,12 @@ import { TickEnvelopeSchema } from '~/lib/draftClock';
 
 export const DraftTeamCaptainSchema = z.object({
   pk: z.number(), // Backend uses 'pk' not 'id'
-  // ``CustomUser.username`` is nullable (Steam-only signups don't pick one),
-  // so the schema has to accept null too. Render sites fall back to
-  // nickname / '?' via DisplayName.
+  // ``CustomUser.username`` is null for Steam-only signups; DisplayName then
+  // falls back to Discord names or `User <pk>`.
   username: z.string().nullable(),
   nickname: z.string().nullable(),
+  discordNickname: z.string().nullable().optional(),
+  guildNickname: z.string().nullable().optional(),
   avatar: z.string().nullable(),
   avatarUrl: z.string().nullable().optional(),
   discordId: z.string().nullable().optional(),
@@ -44,6 +45,7 @@ export const HeroDraftSchema = z.object({
   id: z.number(),
   game: z.number(),
   tournament_id: z.number().nullable().optional(), // Tournament for "Return to Bracket" navigation
+  organization_pk: z.number().nullable().optional(),
   state: z.enum([
     'waiting_for_captains',
     'rolling',

@@ -281,6 +281,7 @@ class EventDetailCacheDepsTest(SimpleTestCase):
         source = inspect.getsource(EventViewSet.retrieve)
         self.assertIn("CustomUser,", source)
         self.assertIn("BaseUserProfile,", source)
+        self.assertIn("OrgUser,", source)
 
 
 class EventStaffCacheTest(TransactionTestCase):
@@ -319,7 +320,15 @@ class EventStaffCacheTest(TransactionTestCase):
         second = self.client.get(self.url).json()
         self.assertEqual([h["pk"] for h in second["helpers"]], [self.helper.pk])
         self.assertEqual(
-            set(second["helpers"][0]), {"pk", "username", "nickname", "avatarUrl"}
+            set(second["helpers"][0]),
+            {
+                "pk",
+                "username",
+                "nickname",
+                "discordNickname",
+                "guildNickname",
+                "avatarUrl",
+            },
         )
 
     def test_host_nickname_change_after_cached_get_shows(self) -> None:

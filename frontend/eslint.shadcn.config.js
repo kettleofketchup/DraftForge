@@ -26,7 +26,8 @@ export default defineConfig([
       parser: tsParser,
       parserOptions: { ecmaFeatures: { jsx: true } },
     },
-    // Registered with no rules on, so eslint-disable comments for them still resolve.
+    // i18next, react-hooks and @typescript-eslint have no rules on; registered so
+    // eslint-disable comments for them still resolve.
     plugins: {
       shadcn,
       draftforge,
@@ -54,6 +55,10 @@ export default defineConfig([
       // names and avatar fallbacks stay consistent.
       'draftforge/use-display-name': 'error',
       'draftforge/use-user-avatar': 'error',
+      // The org comes from the route and user data from the cache (#600).
+      'draftforge/no-display-org-arg': 'error',
+      'draftforge/no-user-reshape': 'error',
+      'draftforge/no-direct-name-resolver': 'error',
 
       // Off: conflicts with the brand guide or is a design decision, not a lint one.
       'shadcn/no-restyle': 'off',
@@ -68,11 +73,23 @@ export default defineConfig([
       'app/components/user/UserAvatar.tsx',
       'app/components/user/avatar.tsx',
       'app/lib/userDisplayName.ts',
+      'app/lib/displayOrg.ts',
       'app/components/ui/**',
     ],
     rules: {
       'draftforge/use-display-name': 'off',
       'draftforge/use-user-avatar': 'off',
+      'draftforge/no-display-org-arg': 'off',
+      'draftforge/no-user-reshape': 'off',
+      'draftforge/no-direct-name-resolver': 'off',
+    },
+  },
+  {
+    // Tests exercise the resolver and the org override directly.
+    files: ['app/**/*.test.{ts,tsx}', 'app/**/__tests__/**'],
+    rules: {
+      'draftforge/no-display-org-arg': 'off',
+      'draftforge/no-direct-name-resolver': 'off',
     },
   },
 ]);

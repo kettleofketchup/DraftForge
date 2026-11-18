@@ -89,6 +89,7 @@ from events.utils import starts_in_future
 from lobby.passwords import PasswordMode
 from org.contributions.services import should_sync_staff, sync_event_staff_entries
 from org.feature_errors import not_permitted
+from org.models import OrgUser
 from telemetry.logging import get_logger
 from user.models import BaseUserProfile
 from user.querysets import with_user_profiles
@@ -671,6 +672,8 @@ class EventViewSet(viewsets.ModelViewSet):
             EventSignup,
             CustomUser,
             BaseUserProfile,
+            OrgUser,
+            Organization,
             keep_fresh=True,
             extra=cache_key,
             timeout=60 * 60,
@@ -1151,6 +1154,9 @@ class EventViewSet(viewsets.ModelViewSet):
             DiscordEventLog,
             DiscordEventDM,
             DiscordMessageLog,
+            CustomUser,
+            OrgUser,
+            Organization,
             extra=f"discord_state:{pk}",
             timeout=60,
         )
@@ -1187,10 +1193,10 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [permissions.AllowAny]
 
     def get_queryset(self) -> QuerySet[EventSignup]:
-        # EventSignupSerializer ships user.nickname (as `username`) +
-        # user.avatar — both resolve through the CustomUser @property to
-        # base_profile (T1 epic). Without user__base_profile this is N+1
-        # cold-cache on busy events.
+        # EventSignupSerializer's `username` (display name) reads
+        # user.nickname, and it ships user.avatar — both resolve through the
+        # CustomUser @property to base_profile (T1 epic). Without
+        # user__base_profile this is N+1 cold-cache on busy events.
         qs = with_user_profiles(
             EventSignup.objects.select_related(
                 "event__tournament__league__organization", "event_team"
@@ -1350,8 +1356,10 @@ class EventTeamViewSet(viewsets.ModelViewSet):
                 self.permission_denied(request)
 
     def get_queryset(self) -> QuerySet[EventTeam]:
-        qs = EventTeam.objects.select_related("event", "captain").annotate(
-            member_count=Count("members"),
+        qs = (
+            EventTeam.objects.select_related("event", "captain")
+            .prefetch_related("captain__base_profile")
+            .annotate(member_count=Count("members"))
         )
         event_id = self.request.query_params.get("event")
         if event_id:
@@ -1479,6 +1487,7 @@ def get_event_task_schedule(request: Request, event_id: int) -> Response:
                     "pk": row.fired_by.pk,
                     "username": row.fired_by.username,
                     "nickname": row.fired_by.nickname,
+                    "discordNickname": row.fired_by.discordNickname,
                     "discordId": row.fired_by.discordId,
                     "avatar": row.fired_by.avatar,
                 }

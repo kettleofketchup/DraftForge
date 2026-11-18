@@ -26,7 +26,13 @@ from events.models import Event
 from org.contributions.kinds import ContributionKind
 from org.contributions.services import award_entry, set_point_value
 from org.features import FeatureKey, org_has_feature, set_org_feature
-from org.models import ContributionEntry, ContributionPointValue, OrgUser, PromoSend
+from org.models import (
+    ContributionEntry,
+    ContributionPointValue,
+    OrgSettings,
+    OrgUser,
+    PromoSend,
+)
 from org.models_promotion import PromoTemplate
 from org.promotion.recipients import candidates
 from org.promotion.services import record_promo_send
@@ -518,6 +524,22 @@ class OrgFeaturesPopulateTest(TestCase):
         org = Organization.objects.nocache().get(pk=org.pk)
         self.assertEqual(org.timezone, FEATURES_ORG.timezone)
         self.assertEqual(org.name, FEATURES_ORG.name)
+
+    def test_reset_deletes_org_settings_rows(self) -> None:
+        for org_data in ORG_FEATURES_ORGS:
+            OrgSettings.objects.create(
+                organization_id=org_data.pk,
+                staff_override_policy=OrgSettings.StaffOverridePolicy.CONFIRM,
+                staff_override_warning_codes=[],
+            )
+
+        reset_org_features_data()
+
+        self.assertFalse(
+            OrgSettings.objects.nocache()
+            .filter(organization_id__in=[o.pk for o in ORG_FEATURES_ORGS])
+            .exists()
+        )
 
 
 class ForceRepopulateWithLedgerRowsTest(TestCase):
