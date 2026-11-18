@@ -1,29 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { formatDistanceToNow } from 'date-fns';
-import { useEffect, useRef } from 'react';
-import { Link } from 'react-router';
+import { useCallback, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import {
   fetchEventOpsNotices,
   resolveEventOpsNotice,
   type OpsNotice,
 } from '~/components/api/opsNoticesAPI';
-import { Badge } from '~/components/ui/badge';
-import { SecondaryButton } from '~/components/ui/buttons';
+import { OpsNoticeTable } from '~/components/opsnotices/OpsNoticeTable';
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card';
 import { getLogger } from '~/lib/logger';
-import type { NoticeSeverity } from '~/lib/opsnotices/noticeTypes.generated';
 
 const log = getLogger('OpsNoticesCard');
-
-const SEVERITY_VARIANT: Record<
-  NoticeSeverity,
-  'destructive' | 'secondary' | 'outline'
-> = {
-  critical: 'destructive',
-  warning: 'secondary',
-  info: 'outline',
-};
 
 const RESOLVE_ERROR_MESSAGES: Record<string, string> = {
   task_resolve_unsupported: 'task notices close on their own',
@@ -76,6 +63,12 @@ export function OpsNoticesCard({ eventId, noticeHref }: OpsNoticesCardProps) {
     },
   });
 
+  const { mutate: resolveMutate } = resolve;
+  const onResolve = useCallback(
+    (n: OpsNotice) => resolveMutate(n.id),
+    [resolveMutate],
+  );
+
   const loggedFailure = useRef(false);
   useEffect(() => {
     if (!error) {
@@ -107,50 +100,13 @@ export function OpsNoticesCard({ eventId, noticeHref }: OpsNoticesCardProps) {
             Couldn&apos;t refresh operations notices
           </p>
         )}
-        {data.map((notice) => (
-          <div
-            key={notice.id}
-            data-testid={`ops-notice-row-${notice.id}`}
-            className="flex flex-wrap items-center gap-2 text-sm"
-          >
-            <Badge variant={SEVERITY_VARIANT[notice.severity]}>
-              {notice.severity}
-            </Badge>
-            <Badge variant="outline">{notice.category}</Badge>
-            <span className="min-w-0 flex-1 break-words">
-              {noticeHref ? (
-                <Link to={noticeHref(notice)} className="hover:underline">
-                  {notice.summary}
-                </Link>
-              ) : (
-                notice.summary
-              )}
-            </span>
-            {notice.event_name && (
-              <span className="text-muted-foreground">{notice.event_name}</span>
-            )}
-            {notice.occurrences > 1 && (
-              <span className="text-muted-foreground">
-                x{notice.occurrences}
-              </span>
-            )}
-            <span className="text-muted-foreground">
-              {formatDistanceToNow(new Date(notice.last_seen_at), {
-                addSuffix: true,
-              })}
-            </span>
-            {notice.category === 'urgent' && (
-              <SecondaryButton
-                size="sm"
-                data-testid={`ops-notice-resolve-${notice.id}`}
-                disabled={resolve.isPending}
-                onClick={() => resolve.mutate(notice.id)}
-              >
-                Resolve
-              </SecondaryButton>
-            )}
-          </div>
-        ))}
+        <OpsNoticeTable
+          notices={data}
+          showEvent={false}
+          noticeHref={noticeHref}
+          onResolve={onResolve}
+          resolving={resolve.isPending}
+        />
       </CardContent>
     </Card>
   );

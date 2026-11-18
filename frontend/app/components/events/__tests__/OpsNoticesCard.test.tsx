@@ -131,7 +131,7 @@ describe('OpsNoticesCard', () => {
     );
   });
 
-  it('lists rows with severity badge, event name and occurrence count', async () => {
+  it('lists rows with severity badge and occurrence count, without the event column', async () => {
     fetchEventOpsNotices.mockResolvedValue([urgent, task]);
     renderCard();
     expect(await screen.findByTestId('ops-notices-card')).toBeInTheDocument();
@@ -139,7 +139,7 @@ describe('OpsNoticesCard', () => {
     const row = screen.getByTestId('ops-notice-row-1');
     expect(row).toHaveTextContent('Lobby bot is offline');
     expect(row).toHaveTextContent('critical');
-    expect(row).toHaveTextContent('Night 4');
+    expect(row).not.toHaveTextContent('Night 4');
     expect(row).toHaveTextContent('x3');
     expect(screen.getByTestId('ops-notice-row-2')).not.toHaveTextContent('x1');
   });

@@ -465,6 +465,16 @@ import { DisplayName } from '~/components/user/avatar';
 
 **DO NOT** render `{user.username}` / `{log.discord_username}` directly — it bypasses the nickname preference and drifts from the rest of the UI.
 
+### Data Tables
+
+**Lists of records render through `<DataTable>`** (`~/components/ui/data-table`, TanStack Table on the shadcn `Table` primitives), wrapped in one reusable `<Domain>Table` per record type that owns its columns, e.g. `OpsNoticeTable`.
+
+- Cells don't wrap; the table scrolls sideways on narrow screens. Only the one free-text column wraps (`meta.cellClassName: 'min-w-40 whitespace-normal wrap-anywhere'`).
+- Severity/state/category cells are `Badge`s; row actions are brand buttons (`SecondaryButton size="sm"`).
+- Sortable headers use `<DataTableColumnHeader>`; numbers are right-aligned `tabular-nums`; secondary text is `text-muted-foreground`.
+
+**DO NOT** build record lists from flex rows: on mobile the text column collapses to one character per line. Build guide: the `table` skill.
+
 ---
 
 ## Navbar Styling

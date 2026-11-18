@@ -26,12 +26,13 @@ This skill applies to **every** file that renders DraftForge UI in the frontend.
 
 ### Mandatory components
 
-Two components MUST be used wherever applicable; raw markup is a `block`:
+These components MUST be used wherever applicable; raw markup is a `block`:
 
 | Use case | Required component | Why |
 |---|---|---|
 | Showing a user's avatar | `<UserAvatar>` from `~/components/user/UserAvatar` | Handles Discord CDN, fallback initials, online indicator, captain ring, memoization. Raw `<img>` with `AvatarUrl()` is a known regression source. |
 | Detail-page breadcrumb on org/league/event/series/tournament/rollcall | `<EntityBreadcrumb>` from `~/components/ui/entity-breadcrumb` | Renders the typed segment labels ("ORGANIZATION" above "DTX") and disables the last segment automatically. Manual breadcrumb nav is a `block`. |
+| A new list of records (queues, logs, rosters, stats) | `<DataTable>` from `~/components/ui/data-table`, wrapped in a `<Domain>Table` | Flex-row lists break on mobile. Legacy raw `<table>`s are a `warn`, not a `block`, until migrated. |
 
 See [`THEMING-GUIDE.md` §"Component Patterns"](../../../THEMING-GUIDE.md#component-patterns) for the full mandatory list.
 
