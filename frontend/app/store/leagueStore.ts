@@ -48,7 +48,6 @@ export const useLeagueStore = create<LeagueState>((set, get) => ({
   setCurrentLeague: (league) => set({ currentLeague: league }),
 
   getLeague: async (leaguePk: number) => {
-    // Skip if already loaded for this league
     if (get().currentLeague?.pk === leaguePk) {
       log.debug('League already loaded:', leaguePk);
       return;
@@ -79,7 +78,6 @@ export const useLeagueStore = create<LeagueState>((set, get) => ({
   },
 
   getLeagueUsers: async (leagueId: number, orgId?: number) => {
-    // Skip if already loaded for this league
     if (
       get().leagueUsersLeagueId === leagueId &&
       get().leagueUserPks.length > 0
