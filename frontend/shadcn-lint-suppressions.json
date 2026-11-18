@@ -31,7 +31,7 @@
   },
   "app/components/bracket/modals/SteamMatchCard.tsx": {
     "shadcn/no-raw-colors": {
-      "count": 4
+      "count": 3
     }
   },
   "app/components/bracket/nodes/HeroIconRow.tsx": {

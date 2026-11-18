@@ -1290,6 +1290,11 @@ function SignupsTab({
             );
           }
 
+          const signupName = DisplayName(
+            { pk: signup.user, username: signup.username },
+            undefined,
+            orgId,
+          );
           // Fallback for signups not yet in cache
           return (
             <div
@@ -1297,12 +1302,10 @@ function SignupsTab({
               className="flex items-center gap-3 rounded-lg p-2 border border-border/50 bg-muted/25"
             >
               <div className="w-9 h-9 rounded-full bg-muted shrink-0 flex items-center justify-center text-xs text-muted-foreground">
-                {(signup.username ?? '?')[0]?.toUpperCase()}
+                {signupName[0]?.toUpperCase()}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium truncate">
-                  {signup.username ?? `User #${signup.user}`}
-                </p>
+                <p className="text-sm font-medium truncate">{signupName}</p>
               </div>
               {statusSlot}
               {adminActions}

@@ -1,6 +1,5 @@
-import { User } from 'lucide-react';
-import { Avatar, AvatarFallback, AvatarImage } from '~/components/ui/avatar';
 import { Button } from '~/components/ui/button';
+import { UserAvatar } from '~/components/user/UserAvatar';
 import { UserPopover } from '~/components/user/UserPopover';
 import { DisplayName } from '~/components/user/avatar';
 import { useDisplayOrgId } from '~/hooks/useDisplayOrgId';
@@ -50,14 +49,16 @@ function PlayerDisplay({ player }: { player: MatchedPlayer }) {
   const orgId = useDisplayOrgId();
   const content = (
     <div className="flex items-center gap-2 py-1 cursor-pointer">
-      <Avatar
-        className={cn('h-6 w-6', player.is_captain && 'ring-2 ring-yellow-500')}
-      >
-        <AvatarImage src={player.avatar || undefined} />
-        <AvatarFallback>
-          <User className="h-3 w-3" />
-        </AvatarFallback>
-      </Avatar>
+      <UserAvatar
+        user={{
+          pk: player.user_id ?? undefined,
+          username: player.username,
+          discordNickname: player.discordNickname,
+          avatar: player.avatar,
+        }}
+        size="sm"
+        border={player.is_captain ? 'captain' : 'none'}
+      />
       <span
         className={cn(
           'text-xs truncate max-w-[100px]',
