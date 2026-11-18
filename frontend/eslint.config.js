@@ -5,6 +5,7 @@ import react from 'eslint-plugin-react';
 import reactHooks from 'eslint-plugin-react-hooks';
 import reactRefresh from 'eslint-plugin-react-refresh';
 import tseslint from 'typescript-eslint';
+import draftforge from './eslint-rules/user-display.js';
 
 export default [
   {
@@ -23,6 +24,8 @@ export default [
   {
     files: ['**/*.{ts,tsx}'],
     plugins: {
+      // Rules run in eslint.shadcn.config.js; loaded here so their disable comments resolve.
+      draftforge,
       react,
       'react-hooks': reactHooks,
       'react-refresh': reactRefresh,
