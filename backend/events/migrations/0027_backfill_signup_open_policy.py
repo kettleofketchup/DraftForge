@@ -1,8 +1,10 @@
+from datetime import timedelta
+
 from django.apps.registry import Apps
 from django.db import migrations
 from django.db.backends.base.schema import BaseDatabaseSchemaEditor
 
-from events.signup_schedule import policy_from_explicit_open_at
+MAX_HOURS_BEFORE = 24 * 60
 
 
 def backfill_scheduled_policy(
@@ -11,10 +13,9 @@ def backfill_scheduled_policy(
     Event = apps.get_model("events", "Event")
     events = list(Event.objects.filter(state="upcoming", signups_open_at__isnull=False))
     for event in events:
-        for field, value in policy_from_explicit_open_at(
-            event.scheduled_at, event.signups_open_at
-        ).items():
-            setattr(event, field, value)
+        hours = round((event.scheduled_at - event.signups_open_at) / timedelta(hours=1))
+        event.signup_open_mode = "scheduled"
+        event.signups_open_hours_before = min(max(hours, 0), MAX_HOURS_BEFORE)
     Event.objects.bulk_update(events, ["signup_open_mode", "signups_open_hours_before"])
 
 
