@@ -33,7 +33,7 @@ interface LeagueState {
   reset: () => void;
 
   /** League Users Actions */
-  getLeagueUsers: (leagueId: number) => Promise<void>;
+  getLeagueUsers: (leagueId: number, orgId?: number) => Promise<void>;
   clearLeagueUsers: () => void;
 }
 
@@ -78,7 +78,7 @@ export const useLeagueStore = create<LeagueState>((set, get) => ({
     });
   },
 
-  getLeagueUsers: async (leagueId: number) => {
+  getLeagueUsers: async (leagueId: number, orgId?: number) => {
     // Skip if already loaded for this league
     if (
       get().leagueUsersLeagueId === leagueId &&
@@ -102,7 +102,7 @@ export const useLeagueStore = create<LeagueState>((set, get) => ({
     try {
       const users = await getLeagueUsers(leagueId);
       if (request !== leagueUsersRequest) return;
-      useUserCacheStore.getState().upsert(users, { leagueId });
+      useUserCacheStore.getState().upsert(users, { leagueId, orgId });
       set({
         leagueUserPks: users.filter((u) => u.pk != null).map((u) => u.pk!),
         leagueUsersLoading: false,

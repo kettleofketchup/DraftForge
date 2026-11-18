@@ -8,6 +8,7 @@ import { AddUserModal } from '~/components/user/AddUserModal';
 import type { UserType } from '~/components/user/types';
 import { useLeagueUsers } from '~/hooks/useLeagueUsers';
 import { useIsLeagueAdmin } from '~/hooks/usePermissions';
+import { useDisplayOrgId } from '~/store/displayOrgStore';
 import { useLeagueStore } from '~/store/leagueStore';
 import { useOrgStore } from '~/store/orgStore';
 import { useUserCacheStore } from '~/store/userCacheStore';
@@ -28,15 +29,16 @@ export const UsersTab: React.FC<Props> = ({ leaguePk, canLoad = true }) => {
   const leagueUsers = useLeagueUsers(leaguePk);
   const currentLeague = useLeagueStore((s) => s.currentLeague);
   const currentOrg = useOrgStore((s) => s.currentOrg);
+  const displayOrgId = useDisplayOrgId();
   const [showAddUser, setShowAddUser] = useState(false);
 
   const canEdit = useIsLeagueAdmin(currentLeague);
 
   useEffect(() => {
     if (leaguePk && canLoad) {
-      getLeagueUsers(leaguePk);
+      getLeagueUsers(leaguePk, displayOrgId ?? undefined);
     }
-  }, [leaguePk, canLoad, getLeagueUsers, leagueUsersLeagueId]);
+  }, [leaguePk, canLoad, getLeagueUsers, leagueUsersLeagueId, displayOrgId]);
 
   // AddUserModal callbacks
   const handleAddMember = useCallback(
