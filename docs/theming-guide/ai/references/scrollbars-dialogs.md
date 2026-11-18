@@ -2,7 +2,7 @@
 
 Long forms inside `<DialogContent>` MUST scroll via shadcn `<ScrollArea>`, not raw `overflow-y-auto`. The Radix Viewport gives a brand-styled thin scrollbar; the OS-default scrollbar inside an otherwise-themed dialog reads as visual drift.
 
-See [`THEMING-GUIDE.md` §"Dialog Widths"](../../THEMING-GUIDE.md#dialog-widths) for width conventions; this reference covers the **clipping contract** that makes the ScrollArea inside a Dialog actually work.
+See [`THEMING-GUIDE.md` §"Dialog Widths"](../../../THEMING-GUIDE.md#dialog-widths) for width conventions; this reference covers the **clipping contract** that makes the ScrollArea inside a Dialog actually work.
 
 ## The rule
 
