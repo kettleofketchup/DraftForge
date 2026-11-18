@@ -66,16 +66,6 @@
       "count": 10
     }
   },
-  "app/components/events/SubscriberList.tsx": {
-    "draftforge/use-display-name": {
-      "count": 2
-    }
-  },
-  "app/components/events/TaskScheduleSection.tsx": {
-    "draftforge/use-display-name": {
-      "count": 2
-    }
-  },
   "app/components/events/games/dota2/Dota2RankSignalsCard.tsx": {
     "shadcn/no-raw-colors": {
       "count": 7
@@ -128,9 +118,6 @@
     }
   },
   "app/components/league/LeagueMatchCard.tsx": {
-    "draftforge/use-display-name": {
-      "count": 4
-    },
     "shadcn/no-raw-colors": {
       "count": 6
     }
@@ -184,17 +171,11 @@
     }
   },
   "app/components/team/TeamModal.tsx": {
-    "draftforge/use-display-name": {
-      "count": 4
-    },
     "shadcn/no-raw-colors": {
       "count": 1
     }
   },
   "app/components/team/TeamPopoverContent.tsx": {
-    "draftforge/use-display-name": {
-      "count": 2
-    },
     "shadcn/no-raw-colors": {
       "count": 1
     }
@@ -329,11 +310,6 @@
       "count": 4
     }
   },
-  "app/components/tournament/captains/captainTable.tsx": {
-    "draftforge/use-display-name": {
-      "count": 2
-    }
-  },
   "app/components/tournament/captains/draftOrder.tsx": {
     "shadcn/no-raw-colors": {
       "count": 2
@@ -464,7 +440,7 @@
   },
   "app/components/user/searchUser.tsx": {
     "draftforge/use-display-name": {
-      "count": 2
+      "count": 1
     },
     "shadcn/no-raw-colors": {
       "count": 2
@@ -485,12 +461,7 @@
   },
   "app/features/contributions/admin/LedgerTable.tsx": {
     "draftforge/use-display-name": {
-      "count": 3
-    }
-  },
-  "app/features/contributions/admin/ManualAwardForm.tsx": {
-    "draftforge/use-display-name": {
-      "count": 2
+      "count": 1
     }
   },
   "app/features/leaderboard/LeaderboardPage.tsx": {
@@ -537,16 +508,13 @@
     }
   },
   "app/pages/tournament/hasErrors.tsx": {
-    "draftforge/use-display-name": {
-      "count": 2
-    },
     "shadcn/no-raw-colors": {
       "count": 2
     }
   },
   "app/pages/tournament/tabs/players/addPlayerDropdown.tsx": {
     "draftforge/use-display-name": {
-      "count": 2
+      "count": 1
     },
     "shadcn/no-raw-colors": {
       "count": 2
