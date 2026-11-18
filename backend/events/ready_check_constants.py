@@ -57,6 +57,7 @@ class ReadyCheckConfirmVia(models.TextChoices):
     STAFF = "staff", "Staff"
 
 
+DROPPED_SIGNUP_MESSAGE: Final = "You were dropped from this event"
 READY_CHECK_MAX_MINUTES: Final = 1440
 START_CULL_MAX_MINUTES: Final = 120
 READY_CHECK_FIELD_RANGES: Final[dict[str, tuple[int, int]]] = {

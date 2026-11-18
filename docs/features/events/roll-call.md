@@ -86,7 +86,7 @@ When an event reaches `max_players`, new RSVPs go to the waitlist:
 | Cancel RSVP | Sets status to cancelled, opens slot for waitlist |
 | RSVP after cancel | Deletes old signup, creates fresh one |
 | RSVP when full | Added to waitlist with position number |
-| RSVP after being dropped | Web: error "User has already signed up". Discord: "You're already signed up (status: dropped)." Tentative RSVP fails with "You were dropped from this event" |
+| RSVP after being dropped | Error on the web, in Discord and for tentative RSVPs: "You were dropped from this event". The Dropped row is kept |
 
 ### Dropped status
 

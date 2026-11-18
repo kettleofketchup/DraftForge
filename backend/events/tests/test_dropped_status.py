@@ -11,8 +11,9 @@ from app.models import CustomUser, PositionsModel
 from events.constants import EventState, SignupStatus
 from events.discord._shared import _existing_active_signup
 from events.discord.embeds import build_announcement_embeds, build_announcement_v2
+from events.discord.handlers import handle_signup_button
 from events.models import Event, EventSignup, ReadyCheck, ReadyCheckEntry
-from events.ready_check_constants import ReadyCheckEntryState
+from events.ready_check_constants import DROPPED_SIGNUP_MESSAGE, ReadyCheckEntryState
 from events.services import (
     _get_active_signup_count,
     cancel_signup,
@@ -25,6 +26,7 @@ from events.services import (
     reject_signup,
 )
 from events.tests.base import EventTestCase
+from org.models import OrgUser
 from org.promotion.recipients import candidates
 from org.tests.test_promotion_recipients import _PoolFixture
 
@@ -100,13 +102,13 @@ class DroppedStatusTests(EventTestCase):
     def test_tentative_message(self) -> None:
         self._dropped()
 
-        with self.assertRaisesMessage(ValueError, "You were dropped from this event"):
+        with self.assertRaisesMessage(ValueError, DROPPED_SIGNUP_MESSAGE):
             create_tentative_signup(self.dropped_event, self.player)
 
     def test_resignup_rejected_and_row_kept(self) -> None:
         signup = self._dropped()
 
-        with self.assertRaisesMessage(ValueError, "already signed up"):
+        with self.assertRaisesMessage(ValueError, DROPPED_SIGNUP_MESSAGE):
             process_rsvp(self.dropped_event, self.player)
 
         rows = EventSignup.objects.filter(event=self.dropped_event, user=self.player)
@@ -165,6 +167,16 @@ class DroppedStatusTests(EventTestCase):
         self.assertEqual(
             _existing_active_signup(self.dropped_event, self.player), signup
         )
+
+    def test_discord_signup_button_says_dropped(self) -> None:
+        self.player.discordId = "100000000000000777"
+        self.player.save()
+        OrgUser.objects.create(user=self.player, organization=self.org)
+        self._dropped()
+
+        result = handle_signup_button(self.dropped_event.pk, "100000000000000777")
+
+        self.assertEqual(result, {"action": "error", "message": DROPPED_SIGNUP_MESSAGE})
 
 
 def _row(name: str, status: str) -> SimpleNamespace:

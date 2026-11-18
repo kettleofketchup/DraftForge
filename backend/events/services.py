@@ -35,7 +35,10 @@ from events.models import (
     EventSignup,
     TournamentTemplateMixin,
 )
-from events.ready_check_constants import REMOVED_SIGNUP_STATUSES
+from events.ready_check_constants import (
+    DROPPED_SIGNUP_MESSAGE,
+    REMOVED_SIGNUP_STATUSES,
+)
 from events.reopen import ReopenNotPermitted, reopen_event
 from lobby.passwords import PasswordMode, generate_password
 from telemetry.logging import get_logger
@@ -222,6 +225,8 @@ def _create_signup(event, user, event_team=None):
                 user_id=user.pk,
                 event_id=event.pk,
             )
+        elif existing.status == SignupStatus.DROPPED:
+            raise ValueError(DROPPED_SIGNUP_MESSAGE)
         else:
             raise ValueError("User has already signed up for this event.")
 
@@ -343,7 +348,7 @@ def create_tentative_signup(event, user):
         if existing.status == SignupStatus.TENTATIVE:
             raise ValueError("Already marked as tentative")
         if existing.status == SignupStatus.DROPPED:
-            raise ValueError("You were dropped from this event")
+            raise ValueError(DROPPED_SIGNUP_MESSAGE)
         if existing.status not in (SignupStatus.CANCELLED, SignupStatus.REJECTED):
             cancel_signup(existing)
             notify_scheduled_by_cancel = True

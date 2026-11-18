@@ -20,7 +20,7 @@ from typing import Any
 
 from structlog.contextvars import bind_contextvars
 
-from events.constants import EventState
+from events.constants import EventState, SignupStatus
 from events.discord._shared import (
     _direct_signup,
     _existing_active_signup,
@@ -31,6 +31,7 @@ from events.discord._shared import (
 )
 from events.discord.providers.dota import DotaHandler
 from events.discord.providers.registry import SIGNUP_HANDLERS, get_signup_handler
+from events.ready_check_constants import DROPPED_SIGNUP_MESSAGE
 from events.schemas import STALE_MODAL_MESSAGE
 from telemetry.logging import get_logger
 
@@ -93,6 +94,8 @@ def handle_signup_button(
 
     # Check if already signed up (tentative can upgrade to full signup)
     existing = _existing_active_signup(event, user)
+    if existing and existing.status == SignupStatus.DROPPED:
+        return {"action": "error", "message": DROPPED_SIGNUP_MESSAGE}
     if existing:
         return {
             "action": "error",
