@@ -2,7 +2,6 @@ from collections.abc import Callable
 from datetime import timedelta
 from unittest import mock
 
-from cacheops import invalidate_all
 from django.contrib.auth.models import AnonymousUser
 from django.db import connection
 from django.test import TestCase
@@ -17,6 +16,7 @@ from events.models import Event, EventSignup
 from events.schemas import EventSignupSchema
 from events.serializers import EventSignupSerializer
 from events.services import cancel_signup, process_rsvp
+from tests.cache import flush_run_cache
 
 NEW_FIELDS = [
     "signed_up_at",
@@ -89,7 +89,7 @@ class SignupLineRankApiTests(TestCase):
 
     def _count_list_queries(self) -> int:
         # QueryStatsMiddleware calls reset_queries(), which breaks CaptureQueriesContext.
-        invalidate_all()
+        flush_run_cache()
         executed: list[str] = []
 
         def record(execute: Callable, sql: str, *args: object) -> object:
