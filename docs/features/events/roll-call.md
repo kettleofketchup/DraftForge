@@ -86,7 +86,7 @@ When an event reaches `max_players`, new RSVPs go to the waitlist:
 | Cancel RSVP | Sets status to cancelled, opens slot for waitlist |
 | RSVP after cancel | Deletes old signup, creates fresh one |
 | RSVP when full | Added to waitlist with position number |
-| RSVP after being dropped | Error: "User has already signed up" (web and Discord). Tentative RSVP fails with "You were dropped from this event" |
+| RSVP after being dropped | Web: error "User has already signed up". Discord: "You're already signed up (status: dropped)." Tentative RSVP fails with "You were dropped from this event" |
 
 ### Dropped status
 
@@ -143,16 +143,18 @@ Everything under the toggle is collapsed by default:
 
 All timings are minutes before the event's start, except the ops chase, which counts back from the close:
 
+With the defaults, the steps fire in this order (minutes before start):
+
 ```text
-open ──── escalation ──── chase ──── close ──── start
- 120          30        (close+30)     10
+open ──── chase ──── escalation ──── close ──── start
+ 120        40           30            10
 ```
 
-The settings must stay in this order:
+The chase is 30 minutes before the 10-minute close, so it fires at 40, before the escalation. The chase has no fixed place relative to the escalation. The rules are:
 
 - the check closes after it opens (`open > close`);
 - escalation falls between open and close (`open > escalation >= close`), or is 0 to turn it off;
-- the chase lands after the check opens (`chase + close < open`), or is off.
+- the chase lands after the check opens (`chase + close < open`), or is off. This is its only limit.
 
 These rules apply even with the toggle off, so turning the check on later never exposes a broken timing. A rule is checked only when you create something or change one of its fields, so older events with out-of-order values can still be edited for anything else.
 
