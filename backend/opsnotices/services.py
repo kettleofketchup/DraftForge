@@ -90,6 +90,18 @@ def _find_open_notice(
     ).first()
 
 
+def _find_replay(
+    organization_id: int, key: str, event_key: int, dedupe_key: str, emit_id: UUID
+) -> OpsNotice | None:
+    return OpsNotice.objects.filter(
+        organization_id=organization_id,
+        key=key,
+        event_key=event_key,
+        dedupe_key=dedupe_key,
+        last_emit_id=emit_id,
+    ).first()
+
+
 def _validate_payload(
     notice_type: NoticeType[Any], payload: BaseModel | Mapping[str, Any]
 ) -> BaseModel:
@@ -194,7 +206,7 @@ def _bump(
     subject_user: CustomUser | None,
     actor: CustomUser | None,
     emit_id: UUID | None,
-) -> OpsNotice:
+) -> OpsNotice | None:
     severity = max(
         NoticeSeverity(existing.severity), prepared.severity, key=lambda s: s.rank
     )
@@ -211,7 +223,12 @@ def _bump(
     if has_event:
         changes["event_name"] = prepared.event_name
         changes["event_repeater_id"] = prepared.event_repeater_id
-    OpsNotice.objects.filter(pk=existing.pk).update(**changes)
+    with transaction.atomic():
+        updated = OpsNotice.objects.filter(
+            pk=existing.pk, closed_at__isnull=True
+        ).update(**changes)
+    if not updated:
+        return None
     existing.refresh_from_db()
     return existing
 
@@ -225,23 +242,20 @@ def _write(
     emit_id: UUID | None,
 ) -> tuple[OpsNotice, _Outcome]:
     key = prepared.notice_type.key
+    identity = (organization.id, key, prepared.event_key, prepared.dedupe_key)
+    bump_args = (prepared, has_event, subject_user, actor, emit_id)
     if emit_id is not None:
-        replay = OpsNotice.objects.filter(
-            organization_id=organization.id, last_emit_id=emit_id
-        ).first()
+        replay = _find_replay(*identity, emit_id)
         if replay is not None:
             return replay, "replayed"
 
-    if prepared.dedupe_key:
-        existing = _find_open_notice(
-            organization.id, key, prepared.event_key, prepared.dedupe_key
-        )
-        if existing is not None:
-            return _bump(
-                existing, prepared, has_event, subject_user, actor, emit_id
-            ), "repeated"
-
     try:
+        if prepared.dedupe_key:
+            existing = _find_open_notice(*identity)
+            if existing is not None:
+                bumped = _bump(existing, *bump_args)
+                if bumped is not None:
+                    return bumped, "repeated"
         with transaction.atomic():
             notice = OpsNotice.objects.create(
                 organization=organization,
@@ -260,17 +274,19 @@ def _write(
             )
         return notice, "created"
     except IntegrityError as exc:
-        if not prepared.dedupe_key:
-            raise
         conflict = exc
-    existing = _find_open_notice(
-        organization.id, key, prepared.event_key, prepared.dedupe_key
-    )
-    if existing is None:
-        raise NoticeEmitError("event_conflict", key) from conflict
-    return _bump(
-        existing, prepared, has_event, subject_user, actor, emit_id
-    ), "repeated"
+    if emit_id is not None:
+        replay = _find_replay(*identity, emit_id)
+        if replay is not None:
+            return replay, "replayed"
+    if not prepared.dedupe_key:
+        raise conflict
+    existing = _find_open_notice(*identity)
+    if existing is not None:
+        bumped = _bump(existing, *bump_args)
+        if bumped is not None:
+            return bumped, "repeated"
+    raise NoticeEmitError("event_conflict", key) from conflict
 
 
 def _log_receiver_failures(notice_id: int, responses: list[tuple[Any, object]]) -> None:
@@ -475,7 +491,7 @@ def _close(
         subsystem="emit",
         notice_id=notice.pk,
         notice_key=notice.key,
-        close_note=reason,
+        close_note_len=len(reason),
         closed_by_id=getattr(closed_by, "pk", None),
     )
     return notice

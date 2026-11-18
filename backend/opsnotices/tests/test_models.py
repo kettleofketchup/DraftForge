@@ -1,4 +1,5 @@
 from datetime import time
+from uuid import uuid4
 
 from django.db import IntegrityError, transaction
 from django.utils import timezone
@@ -37,6 +38,18 @@ class OpsNoticeModelTests(EventTestCase):
         self._notice(event_key=5)
         self._notice(event_key=0)
         self.assertEqual(OpsNotice.objects.count(), 2)
+
+    def test_emit_id_unique_per_notice_identity(self) -> None:
+        emit_id = uuid4()
+        self._notice(dedupe_key="", last_emit_id=emit_id)
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            self._notice(dedupe_key="", last_emit_id=emit_id)
+        self._notice(key="test.other", dedupe_key="", last_emit_id=emit_id)
+        self._notice(dedupe_key="d2", last_emit_id=emit_id)
+        self._notice(dedupe_key="", event_key=7, last_emit_id=emit_id)
+        self._notice(dedupe_key="", last_emit_id=None)
+        self._notice(dedupe_key="", last_emit_id=None)
+        self.assertEqual(OpsNotice.objects.count(), 6)
 
     def test_occurrences_check_constraint(self) -> None:
         with self.assertRaises(IntegrityError), transaction.atomic():

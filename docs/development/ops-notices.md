@@ -132,7 +132,7 @@ module imports `opsnotices.services`. Tasks call the internal API through
 `app.internal_client` instead:
 
 ```python
-from uuid import UUID
+from uuid import UUID, uuid5
 
 from celery import shared_task
 
@@ -151,13 +151,17 @@ def notify_late_drop(self, org_id: int, event_id: int, member_id: int) -> None:
         {"member_id": member_id, "member_name": "...", "hours_before_start": 2},
         organization_id=org_id,
         event_id=event_id,
-        emit_id=UUID(self.request.id),
+        emit_id=uuid5(UUID(self.request.id), f"rsvp.late_drop:{event_id}:{member_id}"),
     )
 ```
 
-- Generate `emit_id` once per logical emit and keep it across retries (`self.request.id`
-  is stable across Celery retries). A retry with the same `emit_id` returns the existing
-  notice without counting again.
+- Derive `emit_id` from the task id and what makes this emit distinct (key, event,
+  member), so it stays the same across retries (`self.request.id` is stable across Celery
+  retries) but differs between emits in one run. A retry with the same `emit_id` returns
+  the existing notice without counting again.
+- A replay only matches a notice with the same key, event and dedupe key, so reusing one
+  `emit_id` for different notices does not drop them. Two emits of the same non-deduped
+  notice in one run do need distinct ids, or the second is treated as a retry.
 - Idempotency only matches the **latest** emit on a notice: a retry that lands after
   another emit touched the same notice counts as a new occurrence. This is a known
   limitation; there is no emit-id ledger.

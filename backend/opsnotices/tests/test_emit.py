@@ -776,6 +776,108 @@ class IdempotencyTests(EmitTestBase):
         self.assertEqual(notice.occurrences, 2)
         self.assertEqual(notice.last_emit_id, later)
 
+    def test_shared_emit_id_across_keys_creates_each(self) -> None:
+        emit_id = uuid.uuid4()
+        alert = emit_notice(
+            "test.alert", _alert(), organization=self.org, emit_id=emit_id
+        )
+        chore = emit_notice(
+            "test.chore", _alert(), organization=self.org, emit_id=emit_id
+        )
+        nodedupe = emit_notice(
+            "test.nodedupe", _alert(), organization=self.org, emit_id=emit_id
+        )
+        assert alert is not None and chore is not None and nodedupe is not None
+        self.assertEqual(len({alert.pk, chore.pk, nodedupe.pk}), 3)
+        self.assertEqual(OpsNotice.objects.count(), 3)
+
+    def test_shared_emit_id_across_dedupe_keys_creates_each(self) -> None:
+        emit_id = uuid.uuid4()
+        first = emit_notice(
+            "test.alert", _alert(member_id=1), organization=self.org, emit_id=emit_id
+        )
+        second = emit_notice(
+            "test.alert", _alert(member_id=2), organization=self.org, emit_id=emit_id
+        )
+        assert first is not None and second is not None
+        self.assertNotEqual(first.pk, second.pk)
+        self.assertEqual(OpsNotice.objects.count(), 2)
+
+    def test_shared_emit_id_across_events_creates_each(self) -> None:
+        emit_id = uuid.uuid4()
+        other = self._event("Other")
+        first = emit_notice(
+            "test.alert",
+            _alert(),
+            organization=self.org,
+            event=self.event,
+            emit_id=emit_id,
+        )
+        second = emit_notice(
+            "test.alert", _alert(), organization=self.org, event=other, emit_id=emit_id
+        )
+        assert first is not None and second is not None
+        self.assertNotEqual(first.pk, second.pk)
+
+    def test_concurrent_replay_without_dedupe_returns_existing(self) -> None:
+        emit_id = uuid.uuid4()
+        first = emit_notice(
+            "test.nodedupe", _alert(), organization=self.org, emit_id=emit_id
+        )
+        assert first is not None
+        real = services._find_replay
+        calls: list[int] = []
+
+        def miss_first(*args: Any) -> OpsNotice | None:
+            calls.append(1)
+            return None if len(calls) == 1 else real(*args)
+
+        with (
+            patch("opsnotices.services._find_replay", side_effect=miss_first),
+            transaction.atomic(),
+        ):
+            Organization.objects.create(name="Sentinel replay", owner=self.admin)
+            replay = emit_notice(
+                "test.nodedupe", _alert(), organization=self.org, emit_id=emit_id
+            )
+        self.assertEqual(len(calls), 2)
+        assert replay is not None
+        self.assertEqual(replay.pk, first.pk)
+        self.assertEqual(OpsNotice.objects.count(), 1)
+        self.assertTrue(Organization.objects.filter(name="Sentinel replay").exists())
+
+
+class ResolveRaceTests(EmitTestBase):
+    def test_bump_skips_notice_resolved_mid_emit(self) -> None:
+        original = emit_notice("test.alert", _alert(), organization=self.org)
+        assert original is not None
+        real = services._find_open_notice
+
+        def resolve_then_return(
+            organization_id: int, key: str, event_key: int, dedupe_key: str
+        ) -> OpsNotice | None:
+            found = real(organization_id, key, event_key, dedupe_key)
+            if found is not None:
+                OpsNotice.objects.filter(pk=found.pk).update(
+                    state=OpsNotice.State.RESOLVED, closed_at=timezone.now()
+                )
+            return found
+
+        with patch(
+            "opsnotices.services._find_open_notice", side_effect=resolve_then_return
+        ):
+            notice = emit_notice(
+                "test.alert", _alert(reason="again"), organization=self.org
+            )
+        assert notice is not None
+        self.assertNotEqual(notice.pk, original.pk)
+        self.assertIsNone(notice.closed_at)
+        self.assertEqual(notice.occurrences, 1)
+        original.refresh_from_db()
+        self.assertEqual(original.occurrences, 1)
+        self.assertEqual(original.payload, _alert())
+        self.assertEqual(original.state, OpsNotice.State.RESOLVED)
+
 
 @contextmanager
 def _miss_first_lookup() -> Iterator[list[int]]:

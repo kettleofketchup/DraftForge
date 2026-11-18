@@ -81,6 +81,17 @@ class OpsNotice(models.Model):
                 condition=Q(closed_at__isnull=True) & ~Q(dedupe_key=""),
                 name="opsnotice_open_dedupe_uniq",
             ),
+            models.UniqueConstraint(
+                fields=[
+                    "organization",
+                    "key",
+                    "event_key",
+                    "dedupe_key",
+                    "last_emit_id",
+                ],
+                condition=Q(last_emit_id__isnull=False),
+                name="opsnotice_emit_id_uniq",
+            ),
             models.CheckConstraint(
                 condition=Q(occurrences__gte=1), name="opsnotice_occurrences_gte_1"
             ),

@@ -90,7 +90,7 @@ class InternalEndpointTests(EventTestCase):
         )
 
         # Replay only matches the latest emit on a row: a retry that lands after
-        # another emit counts again (plan review log T7-2).
+        # another emit counts again.
         late_retry = self._post(self.emit_url, self._body(emit_id=emit_id))
         self.assertEqual(
             late_retry.json(), {"id": notice_id, "created": False, "occurrences": 3}
