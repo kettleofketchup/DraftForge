@@ -95,7 +95,6 @@ function toUserEntry(
 ): UserEntry {
   const now = Date.now();
 
-  // Extract core fields from raw user using schema keys
   const coreFields = pick(raw, coreKeys as string[]);
 
   // Only create new scoped data objects when context provides data.
@@ -272,10 +271,8 @@ export const useUserCacheStore = create<UserCacheState>()(
         const now = Date.now();
         const staleMs = get().staleAfterMs;
 
-        // Check core staleness
         if (now - entry._fetchedAt > staleMs) return true;
 
-        // Check scoped staleness
         if (context?.orgId) {
           const orgEntry = entry.orgData[context.orgId];
           if (!orgEntry || now - orgEntry._fetchedAt > staleMs) return true;

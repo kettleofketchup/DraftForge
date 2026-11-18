@@ -69,7 +69,6 @@ export default function LeaguePage() {
   const [activeTab, setActiveTab] = useState(tab || 'info');
   const [editModalOpen, setEditModalOpen] = useState(false);
 
-  // Fetch tournaments
   useEffect(() => {
     getTournaments();
   }, [getTournaments]);
@@ -125,7 +124,6 @@ export default function LeaguePage() {
     [leagueId, navigate],
   );
 
-  // Filter tournaments for this league
   // league can be a number (ID) or object (from list endpoint with pk, name, organization_name)
   const leagueTournaments =
     tournaments?.filter((t) => {

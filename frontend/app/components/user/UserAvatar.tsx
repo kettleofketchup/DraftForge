@@ -46,7 +46,6 @@ interface UserAvatarProps {
   'data-testid'?: string;
 }
 
-// Size mappings
 const sizeClasses: Record<UserAvatarSize, string> = {
   tiny: 'h-4 w-4', // 16px - position coverage, inline
   xs: 'h-5 w-5', // 20px - compact lists, event logs
@@ -56,7 +55,6 @@ const sizeClasses: Record<UserAvatarSize, string> = {
   xl: 'h-12 w-12', // 48px - user cards, prominent
 };
 
-// Fallback text sizes for each avatar size
 const fallbackTextSizes: Record<UserAvatarSize, string> = {
   tiny: 'text-[7px]',
   xs: 'text-[8px]',
@@ -66,7 +64,6 @@ const fallbackTextSizes: Record<UserAvatarSize, string> = {
   xl: 'text-base',
 };
 
-// Online indicator sizes
 const onlineIndicatorSizes: Record<UserAvatarSize, string> = {
   tiny: 'h-1.5 w-1.5',
   xs: 'h-2 w-2',
@@ -76,7 +73,6 @@ const onlineIndicatorSizes: Record<UserAvatarSize, string> = {
   xl: 'h-3.5 w-3.5',
 };
 
-// Border classes
 const borderClasses: Record<UserAvatarBorder, string> = {
   none: '',
   primary: 'ring-2 ring-primary',
@@ -136,13 +132,10 @@ export const AvatarUrl = (
     return `${discordCdn}/${user.discordId}/${user.avatar}`;
   }
 
-  // 4. Fall back to generated avatar from username
+  // 4. Fall back to the generated avatar
   return fallback;
 };
 
-/**
- * Get display name from user-like object
- */
 function getDisplayName(user: UserLike | undefined): string {
   if (!user) return '?';
   if (typeof user !== 'object') return '?';
@@ -162,7 +155,6 @@ function getInitials(user: UserLike | undefined): string {
   const name = getDisplayName(user);
   if (name === '?') return '?';
 
-  // Return first character uppercase
   return name.charAt(0).toUpperCase();
 }
 
@@ -173,7 +165,6 @@ function arePropsEqual(
   prevProps: UserAvatarProps,
   nextProps: UserAvatarProps,
 ): boolean {
-  // Compare primitive props directly
   if (
     prevProps.src !== nextProps.src ||
     prevProps.size !== nextProps.size ||
@@ -270,13 +261,11 @@ export const UserAvatar = memo(function UserAvatar({
     [guildNick, guildUsername, userNickname, userUsername],
   );
 
-  // Memoize alt text
   const altText = useMemo(
     () => alt || (user ? displayName : 'User avatar'),
     [alt, user, displayName],
   );
 
-  // Memoize initials
   const initials = useMemo(
     () => (displayName === '?' ? '?' : displayName.charAt(0).toUpperCase()),
     [displayName],

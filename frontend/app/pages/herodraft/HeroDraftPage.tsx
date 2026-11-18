@@ -49,7 +49,6 @@ export const HeroDraftPage: React.FC = () => {
   }, [fetchDraft]);
 
   const handleClose = useCallback(() => {
-    // Navigate back or to home
     navigate(-1);
   }, [navigate]);
 

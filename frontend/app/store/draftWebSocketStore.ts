@@ -238,7 +238,6 @@ export const useDraftWebSocketStore = create<DraftWebSocketState>(
     connect: (draftId: number) => {
       const current = get();
 
-      // Already connected to same draft
       if (
         current._currentDraftId === draftId &&
         current.status !== 'disconnected'
@@ -247,7 +246,6 @@ export const useDraftWebSocketStore = create<DraftWebSocketState>(
         return;
       }
 
-      // Different draft - disconnect first
       if (
         current._currentDraftId !== null &&
         current._currentDraftId !== draftId
@@ -258,7 +256,6 @@ export const useDraftWebSocketStore = create<DraftWebSocketState>(
         get().disconnect();
       }
 
-      // Clean up any existing connection
       if (current._unsubscribe) {
         current._unsubscribe();
       }
