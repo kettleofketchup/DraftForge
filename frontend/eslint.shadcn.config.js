@@ -26,7 +26,8 @@ export default defineConfig([
       parser: tsParser,
       parserOptions: { ecmaFeatures: { jsx: true } },
     },
-    // Registered with no rules on, so eslint-disable comments for them still resolve.
+    // i18next, react-hooks and @typescript-eslint have no rules on; registered so
+    // eslint-disable comments for them still resolve.
     plugins: {
       shadcn,
       draftforge,
