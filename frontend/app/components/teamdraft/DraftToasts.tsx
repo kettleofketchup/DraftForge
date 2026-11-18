@@ -1,8 +1,8 @@
 // frontend/app/components/draft/DraftToasts.tsx
-import { DisplayName } from "~/components/user/avatar";
-import { UserAvatar } from "~/components/user/UserAvatar";
-import type { UserType } from "~/index";
-import type { PlayerPickedPayload } from "~/types/draftEvent";
+import { DisplayName } from '~/components/user/avatar';
+import { UserAvatar } from '~/components/user/UserAvatar';
+import type { UserType } from '~/index';
+import type { PlayerPickedPayload } from '~/types/draftEvent';
 
 /**
  * Truncate a string to maxLength characters with ellipsis
@@ -32,7 +32,10 @@ export function PlayerPickedToast({ payload }: PlayerPickedToastProps) {
         size="xs"
         className="shrink-0"
       />
-      <span className="font-medium truncate max-w-[80px]" title={payload.captain_name}>
+      <span
+        className="font-medium truncate max-w-[80px]"
+        title={payload.captain_name}
+      >
         {truncateName(payload.captain_name)}
       </span>
       <span className="text-green-500 font-semibold">picked</span>
@@ -42,10 +45,15 @@ export function PlayerPickedToast({ payload }: PlayerPickedToastProps) {
         size="xs"
         className="shrink-0"
       />
-      <span className="font-medium truncate max-w-[80px]" title={payload.picked_name}>
+      <span
+        className="font-medium truncate max-w-[80px]"
+        title={payload.picked_name}
+      >
         {truncateName(payload.picked_name)}
       </span>
-      <span className="text-muted-foreground text-sm">(Pick {payload.pick_number})</span>
+      <span className="text-muted-foreground text-sm">
+        (Pick {payload.pick_number})
+      </span>
     </div>
   );
 }
@@ -60,8 +68,8 @@ interface PlayerPickToastProps {
  * Format: [Captain Avatar] Captain Name picked [Player Avatar] Player Name
  */
 export function PlayerPickToast({ captain, player }: PlayerPickToastProps) {
-  const captainName = captain ? DisplayName(captain) : "Unknown";
-  const playerName = player ? DisplayName(player) : "Unknown";
+  const captainName = captain ? DisplayName(captain) : 'Unknown';
+  const playerName = player ? DisplayName(player) : 'Unknown';
 
   return (
     <div className="flex items-center gap-2">
@@ -82,13 +90,15 @@ interface DoublePickToastProps {
  * Toast for when a captain gets a double pick in shuffle draft
  */
 export function DoublePickToast({ captain }: DoublePickToastProps) {
-  const captainName = captain ? DisplayName(captain) : "Unknown";
+  const captainName = captain ? DisplayName(captain) : 'Unknown';
 
   return (
     <div className="flex items-center gap-2">
       <UserAvatar user={captain || undefined} size="sm" className="shrink-0" />
       <span className="font-medium">{captainName}</span>
-      <span className="text-orange-500 font-semibold">gets double pick! 🔥</span>
+      <span className="text-orange-500 font-semibold">
+        gets double pick! 🔥
+      </span>
     </div>
   );
 }
@@ -101,7 +111,7 @@ interface CaptainTurnToastProps {
  * Toast for when it's a captain's turn to pick
  */
 export function CaptainTurnToast({ captain }: CaptainTurnToastProps) {
-  const captainName = captain ? DisplayName(captain) : "Unknown";
+  const captainName = captain ? DisplayName(captain) : 'Unknown';
 
   return (
     <div className="flex items-center gap-2">

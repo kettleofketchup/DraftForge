@@ -1,6 +1,4 @@
 // frontend/app/components/bracket/modals/PlayerStatsTable.tsx
-import { getHeroIcon, getHeroName } from '~/lib/dota';
-import { formatNumber } from '~/lib/dota/utils';
 import {
   Table,
   TableBody,
@@ -9,8 +7,10 @@ import {
   TableHeader,
   TableRow,
 } from '~/components/ui/table';
-import { cn } from '~/lib/utils';
+import { getHeroIcon, getHeroName } from '~/lib/dota';
 import type { PlayerMatchStats } from '~/lib/dota/schemas';
+import { formatNumber } from '~/lib/dota/utils';
+import { cn } from '~/lib/utils';
 
 interface TeamTotals {
   kills: number;
@@ -31,14 +31,16 @@ export function PlayerStatsTable({
   isWinner,
   teamTotals,
 }: PlayerStatsTableProps) {
-  const totals = teamTotals ?? players.reduce(
-    (acc, p) => ({
-      kills: acc.kills + p.kills,
-      deaths: acc.deaths + p.deaths,
-      assists: acc.assists + p.assists,
-    }),
-    { kills: 0, deaths: 0, assists: 0 }
-  );
+  const totals =
+    teamTotals ??
+    players.reduce(
+      (acc, p) => ({
+        kills: acc.kills + p.kills,
+        deaths: acc.deaths + p.deaths,
+        assists: acc.assists + p.assists,
+      }),
+      { kills: 0, deaths: 0, assists: 0 },
+    );
 
   const teamLabel = team === 'radiant' ? 'RADIANT' : 'DIRE';
 
@@ -46,21 +48,21 @@ export function PlayerStatsTable({
     <div
       className={cn(
         'rounded-lg overflow-hidden',
-        team === 'radiant' ? 'bg-green-950/60' : 'bg-red-950/60'
+        team === 'radiant' ? 'bg-green-950/60' : 'bg-red-950/60',
       )}
     >
       {/* Team Header */}
       <div
         className={cn(
           'flex items-center justify-between px-3 py-2',
-          team === 'radiant' ? 'bg-green-900/50' : 'bg-red-900/50'
+          team === 'radiant' ? 'bg-green-900/50' : 'bg-red-900/50',
         )}
       >
         <div className="flex items-center gap-2">
           <span
             className={cn(
               'font-semibold uppercase',
-              team === 'radiant' ? 'text-green-400' : 'text-red-400'
+              team === 'radiant' ? 'text-green-400' : 'text-red-400',
             )}
           >
             {teamLabel}
@@ -103,7 +105,7 @@ export function PlayerStatsTable({
                     : 'bg-green-900/30'
                   : index % 2 === 0
                     ? 'bg-red-950/40'
-                    : 'bg-red-900/30'
+                    : 'bg-red-900/30',
               )}
             >
               <TableCell className="p-1">
