@@ -39,6 +39,8 @@ import {
   localToUTC,
   type CreateSeriesEventInput,
 } from './schemas';
+import { signupOpenFrom } from './signupOpen';
+import { SignupOpenSection } from './SignupOpenSection';
 import { signupRulesFrom } from './signupRules';
 import { SignupRulesSection } from './SignupRulesSection';
 
@@ -103,6 +105,7 @@ export function CreateSeriesEventModal({
       // unlike CreateEventModal's repeater-less branch, which forces it off.
       ...discordResetValues(repeater),
       ...signupRulesFrom(repeater),
+      ...signupOpenFrom(repeater),
       ...dotaLobbyResetValues(repeater, { savedFromMode: false }),
     });
   }, [repeater, open]);
@@ -224,6 +227,8 @@ export function CreateSeriesEventModal({
                   </FormItem>
                 )}
               />
+
+              <SignupOpenSection control={form.control} />
             </>
           ),
         },

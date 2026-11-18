@@ -82,6 +82,8 @@ const repeater = {
   require_profile_complete: false,
   roll_call_enabled: false,
   roll_call_mode: 'none',
+  signup_open_mode: 'manual' as const,
+  signups_open_hours_before: 72,
   allow_active_mmr: true,
   allow_previous_rank: true,
   allow_battlecup_rating: true,
@@ -253,5 +255,37 @@ describe('EditRepeaterModal draft settings', () => {
     });
     expect(body).not.toHaveProperty('draft_grace_time_s');
     expect(body).not.toHaveProperty('hero_reserve_time_s');
+  });
+});
+
+describe('EditRepeaterModal signup open policy', () => {
+  beforeEach(() => {
+    mutateAsync.mockClear();
+    savedPassword.current = undefined;
+  });
+
+  it('shows stored hours as days and submits them back unchanged', async () => {
+    render(
+      <EditRepeaterModal
+        repeater={{
+          ...repeater,
+          signup_open_mode: 'scheduled',
+          signups_open_hours_before: 72,
+        }}
+        open
+        onOpenChange={() => {}}
+      />,
+      { wrapper: Wrapper },
+    );
+    expect(screen.getByTestId('signup-open-days-input')).toHaveValue(3);
+    expect(
+      screen.getByText(/recalculates open times for upcoming events/i),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('form-dialog-submit'));
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalled());
+    expect(mutateAsync.mock.calls[0][0]).toMatchObject({
+      signup_open_mode: 'scheduled',
+      signups_open_hours_before: 72,
+    });
   });
 });

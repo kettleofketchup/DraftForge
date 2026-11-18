@@ -38,6 +38,27 @@ export const eventStaffUserSchema = z.object({
 
 export type EventStaffUser = z.infer<typeof eventStaffUserSchema>;
 
+/** When an event opens signups; the backend derives signups_open_at from it. */
+export const SIGNUP_OPEN_MODES = ['manual', 'immediate', 'scheduled'] as const;
+export type SignupOpenMode = (typeof SIGNUP_OPEN_MODES)[number];
+
+/** Mirrors MAX_SIGNUPS_OPEN_HOURS_BEFORE in backend/events/signup_schedule.py. */
+export const MAX_SIGNUPS_OPEN_HOURS_BEFORE = 24 * 60;
+
+export const signupOpenSchema = z.object({
+  signup_open_mode: z.enum(SIGNUP_OPEN_MODES),
+  signups_open_hours_before: z
+    .number()
+    .int()
+    .min(0)
+    .max(MAX_SIGNUPS_OPEN_HOURS_BEFORE),
+});
+
+export const SIGNUP_OPEN_DEFAULTS: z.input<typeof signupOpenSchema> = {
+  signup_open_mode: 'manual',
+  signups_open_hours_before: 72,
+};
+
 export const eventSchema = z
   .object({
     id: z.number(),
@@ -81,6 +102,8 @@ export const eventSchema = z
     require_profile_complete: z.boolean(),
     roll_call_enabled: z.boolean(),
     roll_call_mode: z.string(),
+    signup_open_mode: z.enum(SIGNUP_OPEN_MODES).default('manual'),
+    signups_open_hours_before: z.number().default(72),
     allow_active_mmr: z.boolean(),
     allow_previous_rank: z.boolean(),
     allow_battlecup_rating: z.boolean(),
@@ -516,8 +539,6 @@ export const createEventInputSchema = eventIdentitySchema
     organization: z.number(),
     tournament_league: z.number().nullable().optional(),
     discord_notify_new_events: z.boolean().optional(),
-    signup_mode: z.enum(['immediate', 'scheduled', 'manual']),
-    signup_days_before: z.number().int().min(1).optional(),
     // Recurring fields
     is_recurring: z.boolean(),
     frequency: z.string().optional(),
@@ -529,13 +550,13 @@ export const createEventInputSchema = eventIdentitySchema
     event_ends_at: z.string().optional(),
   })
   .merge(discordConfigSchema)
-  .merge(dotaLobbyConfigSchema);
+  .merge(dotaLobbyConfigSchema)
+  .merge(signupOpenSchema);
 
 export type CreateEventInput = z.infer<typeof createEventInputSchema>;
 
 // A one-off event inherits its schedule-shape from the series, so every
-// recurring/signup-scheduling key is dropped. signup_mode has no backend
-// counterpart here and discord_notify_new_events lives on EventRepeater only.
+// recurring key is dropped. discord_notify_new_events lives on EventRepeater only.
 export const createSeriesEventInputSchema = createEventInputSchema
   .omit({
     is_recurring: true,
@@ -545,8 +566,6 @@ export const createSeriesEventInputSchema = createEventInputSchema
     starts_at: true,
     ends_at: true,
     generate_days_ahead: true,
-    signup_mode: true,
-    signup_days_before: true,
     organization: true,
     discord_notify_new_events: true,
     event_ends_at: true,
@@ -569,6 +588,7 @@ export const editEventFormSchema = eventIdentitySchema
   .merge(discordConfigSchema)
   .merge(dotaLobbyConfigSchema)
   .merge(DraftSettingsFormSchema)
+  .merge(signupOpenSchema)
   .superRefine((values, ctx) => {
     refineLobbyPassword(values, ctx);
     refineEventEnd(values, ctx);

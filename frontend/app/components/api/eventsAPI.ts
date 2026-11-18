@@ -2,6 +2,7 @@ import type {
   CreateSeriesEventInput,
   EventSignupType,
   EventType,
+  SignupOpenMode,
 } from '~/components/events/schemas';
 import axios from './axios';
 
@@ -245,6 +246,8 @@ export interface EventRepeaterType {
   require_profile_complete: boolean;
   roll_call_enabled: boolean;
   roll_call_mode: string;
+  signup_open_mode: SignupOpenMode;
+  signups_open_hours_before: number;
   allow_active_mmr: boolean;
   allow_previous_rank: boolean;
   allow_battlecup_rating: boolean;
@@ -365,6 +368,8 @@ export interface OrgEventDefaultsType {
   require_profile_complete: boolean;
   roll_call_enabled: boolean;
   roll_call_mode: string;
+  signup_open_mode: SignupOpenMode;
+  signups_open_hours_before: number;
   allow_active_mmr: boolean;
   allow_previous_rank: boolean;
   allow_battlecup_rating: boolean;

@@ -101,6 +101,8 @@ const repeater = {
   require_profile_complete: false,
   roll_call_enabled: false,
   roll_call_mode: 'none',
+  signup_open_mode: 'manual' as const,
+  signups_open_hours_before: 72,
   allow_active_mmr: true,
   allow_previous_rank: true,
   allow_battlecup_rating: true,
@@ -189,5 +191,32 @@ describe('CreateSeriesEventModal', () => {
       ),
     );
     expect(screen.queryByText('Message interested users')).toBeNull();
+  });
+});
+
+describe('CreateSeriesEventModal signup open policy', () => {
+  beforeEach(() => {
+    createSeriesOneOffEvent.mockClear();
+  });
+
+  it("starts from the series' policy and sends it", async () => {
+    render(
+      <CreateSeriesEventModal
+        repeater={{
+          ...repeater,
+          signup_open_mode: 'scheduled',
+          signups_open_hours_before: 48,
+        }}
+        open
+        onOpenChange={() => {}}
+      />,
+      { wrapper: Wrapper },
+    );
+    expect(screen.getByTestId('signup-open-days-input')).toHaveValue(2);
+    await submitWithScheduledAt();
+    expect(createSeriesOneOffEvent.mock.calls[0][1]).toMatchObject({
+      signup_open_mode: 'scheduled',
+      signups_open_hours_before: 48,
+    });
   });
 });

@@ -34,7 +34,14 @@ import {
   EventTournamentFields,
   TimezoneField,
 } from './form';
-import { DISCORD_CONFIG_DEFAULTS, discordConfigSchema } from './schemas';
+import {
+  DISCORD_CONFIG_DEFAULTS,
+  discordConfigSchema,
+  SIGNUP_OPEN_DEFAULTS,
+  signupOpenSchema,
+} from './schemas';
+import { signupOpenFrom } from './signupOpen';
+import { SignupOpenSection } from './SignupOpenSection';
 import { signupRulesFrom } from './signupRules';
 import { SignupRulesSection } from './SignupRulesSection';
 
@@ -57,7 +64,8 @@ const orgDefaultsSchema = z
     auto_confirm: z.boolean(),
   })
   .merge(discordConfigSchema)
-  .merge(DraftSettingsFormSchema);
+  .merge(DraftSettingsFormSchema)
+  .merge(signupOpenSchema);
 
 type OrgDefaultsInput = z.infer<typeof orgDefaultsSchema>;
 
@@ -103,6 +111,7 @@ export function EditOrgDefaultsModal({
       auto_confirm: false,
       ...DISCORD_CONFIG_DEFAULTS,
       ...draftSettingsToFormInput(null),
+      ...SIGNUP_OPEN_DEFAULTS,
     },
   });
 
@@ -154,6 +163,7 @@ export function EditOrgDefaultsModal({
         require_profile_complete: defaults.require_profile_complete ?? false,
         ...signupRulesFrom(defaults),
         ...eventFieldsToDraftSettingsFormInput(defaults),
+        ...signupOpenFrom(defaults),
       });
     }
   }, [defaults, open]);
@@ -278,6 +288,7 @@ export function EditOrgDefaultsModal({
                   ))}
                 </div>
               </div>
+              <SignupOpenSection control={form.control} />
               <SignupRulesSection control={form.control} />
             </>
           ),

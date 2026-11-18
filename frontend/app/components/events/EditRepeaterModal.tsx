@@ -38,7 +38,15 @@ import {
   eventIdentitySchema,
   eventTemplateSchema,
   Frequency,
+  SIGNUP_OPEN_DEFAULTS,
+  signupOpenSchema,
 } from './schemas';
+import { signupOpenFrom } from './signupOpen';
+import {
+  SERIES_IMMEDIATE_HELP,
+  SERIES_POLICY_CHANGE_HELP,
+  SignupOpenSection,
+} from './SignupOpenSection';
 import { signupRulesFrom } from './signupRules';
 import { SignupRulesSection } from './SignupRulesSection';
 
@@ -55,6 +63,7 @@ const editRepeaterSchema = eventIdentitySchema
   .merge(discordConfigSchema)
   .merge(dotaLobbyConfigSchema)
   .merge(DraftSettingsFormSchema)
+  .merge(signupOpenSchema)
   .superRefine(refineLobbyPassword);
 
 const ids = eventFieldTestIds('edit-series');
@@ -97,6 +106,7 @@ export function EditRepeaterModal({
       ...DISCORD_CONFIG_DEFAULTS,
       ...DOTA_LOBBY_CONFIG_DEFAULTS,
       ...draftSettingsToFormInput(null),
+      ...SIGNUP_OPEN_DEFAULTS,
     },
   });
 
@@ -125,6 +135,7 @@ export function EditRepeaterModal({
         discord_notify_new_events: repeater.discord_notify_new_events,
         ...discordResetValues(repeater),
         ...signupRulesFrom(repeater),
+        ...signupOpenFrom(repeater),
         ...dotaLobbyResetValues(repeater, { savedFromMode: true }),
       });
     }
@@ -216,6 +227,10 @@ export function EditRepeaterModal({
               <TimezoneField
                 control={form.control}
                 triggerTestId={ids.timezone}
+              />
+              <SignupOpenSection
+                control={form.control}
+                helpText={`${SERIES_POLICY_CHANGE_HELP} ${SERIES_IMMEDIATE_HELP}`}
               />
               <SignupRulesSection control={form.control} />
             </>

@@ -26,7 +26,6 @@ import {
   FormItem,
   FormLabel,
 } from '~/components/ui/form';
-import { Input } from '~/components/ui/input';
 import { ApprovalConfigSection } from './ApprovalConfigSection';
 import { DiscordConfigSection } from './DiscordConfigSection';
 import {
@@ -48,7 +47,10 @@ import {
   Frequency,
   localToUTC,
   refineEventEnd,
+  SIGNUP_OPEN_DEFAULTS,
 } from './schemas';
+import { signupOpenFrom } from './signupOpen';
+import { SERIES_IMMEDIATE_HELP, SignupOpenSection } from './SignupOpenSection';
 import { signupRulesFrom } from './signupRules';
 import { SignupRulesSection } from './SignupRulesSection';
 
@@ -113,8 +115,7 @@ export function CreateEventModal({
       discord_notify_new_events: true,
       ...DISCORD_CONFIG_DEFAULTS,
       ...DOTA_LOBBY_CONFIG_DEFAULTS,
-      signup_mode: 'immediate' as const,
-      signup_days_before: 3,
+      ...SIGNUP_OPEN_DEFAULTS,
       is_recurring: false,
       frequency: Frequency.WEEKLY,
       generate_days_ahead: 7,
@@ -143,8 +144,7 @@ export function CreateEventModal({
         number_of_teams: orgDefaults.number_of_teams,
         timezone: orgDefaults.timezone,
         discord_notify_new_events: true,
-        signup_mode: 'immediate' as const,
-        signup_days_before: 3,
+        ...signupOpenFrom(orgDefaults),
         ...discordResetValues(orgDefaults),
         ...signupRulesFrom(orgDefaults),
         is_recurring: false,
@@ -180,8 +180,6 @@ export function CreateEventModal({
         scheduled_at: rawScheduledAt,
         event_ends_at: rawEndsAt,
         discord_notify_new_events,
-        signup_mode,
-        signup_days_before,
         dota_lobby_password_mode,
         dota_lobby_password,
         dota_lobby_password_saved: _saved,
@@ -230,14 +228,6 @@ export function CreateEventModal({
         });
         toast.success('Recurring event created');
       } else {
-        // Calculate signups_open_at for scheduled mode
-        let signupsOpenAt: string | undefined;
-        if (signup_mode === 'scheduled' && scheduled_at && signup_days_before) {
-          const eventDate = new Date(scheduled_at);
-          eventDate.setDate(eventDate.getDate() - signup_days_before);
-          signupsOpenAt = eventDate.toISOString();
-        }
-
         // Single events have no subscriber list — force signup_reminder
         // off regardless of org defaults so the backend validator (which
         // rejects discord_signup_reminder=true on single events) doesn't
@@ -250,17 +240,16 @@ export function CreateEventModal({
             scheduled_at,
             ends_at: rawEndsAt ? localToUTC(rawEndsAt, data.timezone) : null,
             discord_signup_reminder: false,
-            ...(signupsOpenAt ? { signups_open_at: signupsOpenAt } : {}),
           },
-          signup_mode === 'immediate',
+          data.signup_open_mode === 'immediate',
         );
 
         const modeMessages = {
           immediate: 'Event created with signups open',
-          scheduled: `Event created — signups open ${signup_days_before} days before`,
+          scheduled: 'Event created — signups open on schedule',
           manual: 'Event created',
         };
-        toast.success(modeMessages[signup_mode]);
+        toast.success(modeMessages[data.signup_open_mode]);
       }
 
       queryClient.invalidateQueries({ queryKey: ['events'] });
@@ -273,8 +262,6 @@ export function CreateEventModal({
       setIsSubmitting(false);
     }
   }
-
-  const signupMode = form.watch('signup_mode');
 
   return (
     <EventFormDialog
@@ -307,6 +294,11 @@ export function CreateEventModal({
                 testIds={ids}
                 namePlaceholder="Weekly inhouse"
                 descriptionPlaceholder="Event description"
+              />
+
+              <SignupOpenSection
+                control={form.control}
+                helpText={isRecurring ? SERIES_IMMEDIATE_HELP : undefined}
               />
 
               <FormField
@@ -342,80 +334,11 @@ export function CreateEventModal({
                   showStartsAt
                 />
               ) : (
-                <>
-                  <OneOffScheduleFields
-                    control={form.control}
-                    testIds={ids}
-                    showEndsAt
-                  />
-                  <div className="flex flex-col gap-3 rounded-md border border-border p-3">
-                    <FormLabel className="text-sm font-medium">
-                      When to open signups
-                    </FormLabel>
-                    <FormField
-                      control={form.control}
-                      name="signup_mode"
-                      render={({ field }) => (
-                        <FormItem className="gap-2">
-                          <FormControl>
-                            <div className="flex flex-col gap-2">
-                              {(
-                                [
-                                  ['immediate', 'Open immediately'],
-                                  ['scheduled', 'Open days before event'],
-                                  ['manual', 'Open manually'],
-                                ] as const
-                              ).map(([value, label]) => (
-                                <label
-                                  key={value}
-                                  className="flex cursor-pointer items-center gap-2"
-                                >
-                                  <input
-                                    type="radio"
-                                    value={value}
-                                    checked={field.value === value}
-                                    onChange={() => field.onChange(value)}
-                                    className="h-4 w-4 accent-primary"
-                                    data-testid={`event-signup-${value}`}
-                                  />
-                                  <span className="text-sm">{label}</span>
-                                </label>
-                              ))}
-                            </div>
-                          </FormControl>
-                        </FormItem>
-                      )}
-                    />
-                    {signupMode === 'scheduled' && (
-                      <FormField
-                        control={form.control}
-                        name="signup_days_before"
-                        render={({ field }) => (
-                          <FormItem className="ml-6">
-                            <FormLabel>Days before event</FormLabel>
-                            <FormControl>
-                              <Input
-                                type="number"
-                                min={1}
-                                data-testid="event-signup-days-input"
-                                {...field}
-                                onChange={(e) =>
-                                  field.onChange(
-                                    parseInt(e.target.value, 10) || 3,
-                                  )
-                                }
-                              />
-                            </FormControl>
-                            <FormDescription>
-                              Signups will open this many days before the
-                              scheduled date
-                            </FormDescription>
-                          </FormItem>
-                        )}
-                      />
-                    )}
-                  </div>
-                </>
+                <OneOffScheduleFields
+                  control={form.control}
+                  testIds={ids}
+                  showEndsAt
+                />
               )}
 
               <TimezoneField
