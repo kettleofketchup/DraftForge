@@ -1,12 +1,14 @@
 """Tests for database query stats middleware."""
 
 import os
+from collections import deque
 from unittest import mock
 
 from asgiref.sync import iscoroutinefunction, sync_to_async
 from django.db import connection, reset_queries
-from django.http import HttpResponse
+from django.http import HttpRequest, HttpResponse
 from django.test import RequestFactory, TestCase, override_settings
+from django.test.utils import CaptureQueriesContext
 
 from telemetry.db import QueryStatsMiddleware
 
@@ -103,8 +105,8 @@ class QueryStatsMiddlewareTest(TestCase):
 
         self.assertEqual(response.status_code, 200)
 
-    def test_resets_queries_before_request(self):
-        """Middleware resets query log before processing so counts are per-request."""
+    def test_counts_only_queries_from_this_request(self):
+        """Queries already in the log before the request are not counted."""
         _run_raw_query()
         initial_count = len(connection.queries)
         self.assertGreaterEqual(initial_count, 1)
@@ -120,6 +122,61 @@ class QueryStatsMiddlewareTest(TestCase):
 
         call_args = mock_log.info.call_args
         self.assertEqual(call_args[1]["db.query_count"], 0)
+
+    def test_capture_spans_two_requests(self) -> None:
+        """An outer CaptureQueriesContext keeps queries from every request."""
+
+        def handler_with_query(request: HttpRequest) -> HttpResponse:
+            _run_raw_query()
+            return HttpResponse("OK")
+
+        middleware = QueryStatsMiddleware(handler_with_query)
+        with mock.patch("telemetry.db.log") as mock_log:
+            with CaptureQueriesContext(connection) as ctx:
+                middleware(self.factory.get("/api/a/"))
+                middleware(self.factory.get("/api/b/"))
+
+        self.assertEqual(len(ctx), 2)
+        counts = [
+            c[1]["db.query_count"]
+            for c in mock_log.info.call_args_list
+            if c[0][0] == "db_query_stats"
+        ]
+        self.assertEqual(counts, [1, 1])
+
+    def test_capture_keeps_query_run_before_request(self) -> None:
+        """A query captured before the request survives it and is not counted in it."""
+
+        def handler_with_query(request: HttpRequest) -> HttpResponse:
+            _run_raw_query()
+            return HttpResponse("OK")
+
+        middleware = QueryStatsMiddleware(handler_with_query)
+        with mock.patch("telemetry.db.log") as mock_log:
+            with CaptureQueriesContext(connection) as ctx:
+                _run_raw_query()
+                middleware(self.factory.get("/api/a/"))
+
+        self.assertEqual(len(ctx), 2)
+        self.assertEqual(mock_log.info.call_args[1]["db.query_count"], 1)
+
+    def test_full_query_log_does_not_go_negative(self) -> None:
+        """When the bounded log is full the count stays within the log."""
+
+        def handler_with_query(request: HttpRequest) -> HttpResponse:
+            _run_raw_query()
+            return HttpResponse("OK")
+
+        middleware = QueryStatsMiddleware(handler_with_query)
+        with mock.patch.object(connection, "queries_log", deque(maxlen=2)):
+            _run_raw_query()
+            _run_raw_query()
+            with mock.patch("telemetry.db.log") as mock_log:
+                middleware(self.factory.get("/api/a/"))
+
+        count = mock_log.info.call_args[1]["db.query_count"]
+        self.assertGreaterEqual(count, 0)
+        self.assertLessEqual(count, 2)
 
     def test_disabled_via_env_var(self):
         """Middleware is a no-op when DB_QUERY_STATS_ENABLED=false."""
@@ -174,6 +231,31 @@ class QueryStatsMiddlewareAsyncTest(TestCase):
                 await QueryStatsMiddleware(view)(request)
 
         self.assertEqual(mock_log.info.call_args[1]["db.query_count"], 1)
+
+    async def test_capture_spans_two_requests(self) -> None:
+        async def view(request: HttpRequest) -> HttpResponse:
+            await sync_to_async(_run_raw_query)()
+            return HttpResponse("OK")
+
+        middleware = QueryStatsMiddleware(view)
+        factory = RequestFactory()
+        with mock.patch("telemetry.db.log") as mock_log:
+            ctx = CaptureQueriesContext(connection)
+            await sync_to_async(ctx.__enter__)()
+            try:
+                await middleware(factory.get("/api/a/"))
+                await middleware(factory.get("/api/b/"))
+            finally:
+                await sync_to_async(ctx.__exit__)(None, None, None)
+
+        # The connection is thread-local: read it on the thread that ran the queries.
+        self.assertEqual(await sync_to_async(len)(ctx), 2)
+        counts = [
+            c[1]["db.query_count"]
+            for c in mock_log.info.call_args_list
+            if c[0][0] == "db_query_stats"
+        ]
+        self.assertEqual(counts, [1, 1])
 
     async def test_disabled_via_env_var(self):
         async def view(request):
