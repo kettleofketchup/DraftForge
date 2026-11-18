@@ -3,6 +3,7 @@ import { OctagonAlert } from 'lucide-react';
 import { useState } from 'react';
 import { AdminOnlyButton } from '~/components/reusable/adminButton';
 import { initDraftHook } from '~/components/teamdraft/hooks/initDraftHook';
+import { useConfirmForceReset } from '~/components/teamdraft/hooks/useConfirmForceReset';
 import { Button } from '~/components/ui/button';
 import { ConfirmDialog } from '~/components/ui/dialogs';
 import {
@@ -32,6 +33,7 @@ export const InitDraftButton: React.FC = () => {
   const curDraftRound = useUserStore((state) => state.curDraftRound);
   const setCurDraftRound = useUserStore((state) => state.setCurDraftRound);
   const isStaff = useUserStore((state) => state.isStaff);
+  const { confirmForce, confirmForceDialog } = useConfirmForceReset();
 
   const handleChange = async () => {
     log.debug('handleChange');
@@ -45,12 +47,13 @@ export const InitDraftButton: React.FC = () => {
       return;
     }
 
-    initDraftHook({
+    void initDraftHook({
       tournament,
       setTournament,
       setDraft,
       curDraftRound,
       setCurDraftRound,
+      confirmForce,
     });
     setOpen(false);
   };
@@ -87,18 +90,19 @@ export const InitDraftButton: React.FC = () => {
           </motion.div>
         </TooltipTrigger>
         <TooltipContent className="bg-red-900 text-white">
-          <p>This will delete draft data and reset the draft choices.</p>
+          <p>This clears the picks and resets every team to its captain.</p>
         </TooltipContent>
       </Tooltip>
       <ConfirmDialog
         open={open}
         onOpenChange={setOpen}
-        title="Restart Draft? This will delete all choices so far"
-        description="This action cannot be undone. Drafts started must be deleted and recreated."
+        title="Restart Draft? Teams will be reset to their captains"
+        description="Every pick so far is cleared and each team goes back to just its captain. Games and other records that use the teams are kept."
         confirmLabel="Restart Draft"
         variant="destructive"
         onConfirm={handleChange}
       />
+      {confirmForceDialog}
     </>
   );
 };

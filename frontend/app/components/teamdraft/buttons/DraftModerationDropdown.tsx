@@ -11,10 +11,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '~/components/ui/dropdown-menu';
-import { cn } from '~/lib/utils';
 import { getLogger } from '~/lib/logger';
+import { cn } from '~/lib/utils';
 import { useUserStore } from '~/store/userStore';
 import { initDraftHook } from '../hooks/initDraftHook';
+import { useConfirmForceReset } from '../hooks/useConfirmForceReset';
 
 const log = getLogger('DraftModerationDropdown');
 
@@ -22,9 +23,9 @@ interface DraftModerationDropdownProps {
   onOpenDraftStyleModal: () => void;
 }
 
-export const DraftModerationDropdown: React.FC<DraftModerationDropdownProps> = ({
-  onOpenDraftStyleModal,
-}) => {
+export const DraftModerationDropdown: React.FC<
+  DraftModerationDropdownProps
+> = ({ onOpenDraftStyleModal }) => {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const tournament = useUserStore((state) => state.tournament);
   const setTournament = useUserStore((state) => state.setTournament);
@@ -33,6 +34,7 @@ export const DraftModerationDropdown: React.FC<DraftModerationDropdownProps> = (
   const curDraftRound = useUserStore((state) => state.curDraftRound);
   const setCurDraftRound = useUserStore((state) => state.setCurDraftRound);
   const isStaff = useUserStore((state) => state.isStaff);
+  const { confirmForce, confirmForceDialog } = useConfirmForceReset();
 
   const handleRestartDraft = async () => {
     log.debug('handleRestartDraft');
@@ -46,14 +48,15 @@ export const DraftModerationDropdown: React.FC<DraftModerationDropdownProps> = (
       return;
     }
 
-    await initDraftHook({
+    setConfirmOpen(false);
+    void initDraftHook({
       tournament,
       setTournament,
       setDraft,
       curDraftRound,
       setCurDraftRound,
+      confirmForce,
     });
-    setConfirmOpen(false);
   };
 
   // Hide moderation controls entirely for non-staff users
@@ -65,7 +68,10 @@ export const DraftModerationDropdown: React.FC<DraftModerationDropdownProps> = (
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" className={cn('gap-2 text-white', brandErrorBg)}>
+          <Button
+            variant="outline"
+            className={cn('gap-2 text-white', brandErrorBg)}
+          >
             <ShieldAlert className="h-4 w-4" />
             <span className="hidden sm:inline">Moderation</span>
           </Button>
@@ -81,7 +87,10 @@ export const DraftModerationDropdown: React.FC<DraftModerationDropdownProps> = (
             <OctagonAlert className="mr-2 h-4 w-4" />
             Restart Draft
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={onOpenDraftStyleModal} data-testid="change-draft-style-option">
+          <DropdownMenuItem
+            onClick={onOpenDraftStyleModal}
+            data-testid="change-draft-style-option"
+          >
             <Settings className="mr-2 h-4 w-4" />
             Change Draft Style
           </DropdownMenuItem>
@@ -91,12 +100,14 @@ export const DraftModerationDropdown: React.FC<DraftModerationDropdownProps> = (
       <ConfirmDialog
         open={confirmOpen}
         onOpenChange={setConfirmOpen}
-        title="Restart Draft? This will delete all choices so far"
-        description="This action cannot be undone. Drafts started must be deleted and recreated."
+        title="Restart Draft? Teams will be reset to their captains"
+        description="Every pick so far is cleared and each team goes back to just its captain. Games and other records that use the teams are kept."
         confirmLabel="Restart Draft"
         variant="destructive"
         onConfirm={handleRestartDraft}
+        confirmTestId="restart-draft-confirm"
       />
+      {confirmForceDialog}
     </>
   );
 };
