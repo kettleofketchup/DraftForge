@@ -43,6 +43,8 @@ export const CandidateRowSchema = z.object({
   username: z.string(),
   nickname: z.string().nullable(),
   discordUsername: z.string().nullable(),
+  discordNickname: z.string().nullish(),
+  guildNickname: z.string().nullish(),
   discordId: z.string().nullable(),
   avatarUrl: z.string().nullable(),
   recent_count: z.number(),

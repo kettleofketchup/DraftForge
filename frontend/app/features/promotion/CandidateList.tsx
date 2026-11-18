@@ -202,16 +202,7 @@ export function CandidateList({
               )}
               data-testid={`promo-candidate-${row.user_pk}`}
             >
-              <UserAvatar
-                user={{
-                  pk: row.user_pk,
-                  username: row.username,
-                  nickname: row.nickname,
-                  avatarUrl: row.avatarUrl,
-                  discordId: row.discordId,
-                }}
-                size="sm"
-              />
+              <UserAvatar user={{ ...row, pk: row.user_pk }} size="sm" />
               <div className="flex min-w-0 flex-1 flex-col">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-medium">{DisplayName(row)}</span>
@@ -222,6 +213,7 @@ export function CandidateList({
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                   {row.discordUsername && (
                     <span className="inline-flex items-center gap-1">
+                      {/* eslint-disable-next-line draftforge/use-display-name -- the Discord @handle shown next to its copy button */}
                       @{row.discordUsername}
                       <SecondaryButton
                         type="button"

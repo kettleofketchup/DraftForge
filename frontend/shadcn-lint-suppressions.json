@@ -539,16 +539,6 @@
       "count": 3
     }
   },
-  "app/features/contributions/admin/LedgerTable.tsx": {
-    "draftforge/use-display-name": {
-      "count": 3
-    }
-  },
-  "app/features/contributions/admin/ManualAwardForm.tsx": {
-    "draftforge/use-display-name": {
-      "count": 2
-    }
-  },
   "app/features/leaderboard/LeaderboardPage.tsx": {
     "shadcn/no-raw-colors": {
       "count": 5
@@ -560,16 +550,6 @@
     },
     "shadcn/no-raw-colors": {
       "count": 2
-    }
-  },
-  "app/features/org-features/LockedFeaturesPanel.tsx": {
-    "draftforge/use-display-name": {
-      "count": 1
-    }
-  },
-  "app/features/promotion/CandidateList.tsx": {
-    "draftforge/use-display-name": {
-      "count": 1
     }
   },
   "app/pages/about/sections/MaintainerSection.tsx": {
