@@ -668,3 +668,44 @@ class RepeaterLeagueOrgValidationTest(EventTestCase):
             format="json",
         )
         self.assertEqual(resp.status_code, 200, resp.content)
+
+
+class OffSchedulePolicyTest(EventTestCase):
+    def setUp(self) -> None:
+        from events.constants import SignupOpenMode
+
+        self.repeater = EventRepeater.objects.create(
+            organization=self.org,
+            name="Policy Series",
+            frequency=RepeatFrequency.WEEKLY,
+            day_of_week=0,
+            time_of_day=time(18, 0),
+            starts_at=tz.now().date(),
+            created_by=self.admin,
+            signup_open_mode=SignupOpenMode.SCHEDULED,
+            signups_open_hours_before=48,
+        )
+
+    @patch("events.services.ensure_discord_event")
+    @patch("events.services.create_tournament_for_event")
+    @patch("events.services.notify_create_discord_event")
+    @patch("events.services.notify_new_event")
+    def test_off_schedule_inherits_and_override_wins(self, *_mocks: object) -> None:
+        from events.services import create_off_schedule_event
+
+        when = tz.now() + timedelta(days=3, hours=5)
+        inherited = create_off_schedule_event(
+            self.repeater, scheduled_at=when, created_by=self.admin
+        )
+        self.assertEqual(inherited.signups_open_at, when - timedelta(hours=48))
+
+        later = when + timedelta(hours=2)
+        overridden = create_off_schedule_event(
+            self.repeater,
+            scheduled_at=later,
+            created_by=self.admin,
+            overrides={"signups_open_hours_before": 6},
+        )
+        self.assertEqual(overridden.signups_open_at, later - timedelta(hours=6))
+        overridden.refresh_from_db()
+        self.assertEqual(overridden.signups_open_at, later - timedelta(hours=6))

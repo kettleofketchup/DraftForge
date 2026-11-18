@@ -18,6 +18,7 @@ from app.permissions_org import (
 from app.serializers import TournamentUserSerializer, _serialize_users_with_mmr
 from app.user_cache import serialize_users_core
 from events.capacity import seat_holding_statuses
+from events.constants import EventState, SignupOpenMode
 from events.mmr_suggestions import suggest_mmr
 from events.models import (
     Event,
@@ -33,6 +34,12 @@ from events.services import (
     DOTA_LOBBY_CONFIG_FIELDS,
     EVENT_CONFIG_FIELDS,
     TOURNAMENT_TEMPLATE_FIELDS,
+)
+from events.signup_schedule import (
+    MAX_SIGNUPS_OPEN_HOURS_BEFORE,
+    SIGNUP_OPEN_POLICY_FIELDS,
+    apply_signup_open_policy,
+    policy_from_explicit_open_at,
 )
 from lobby.passwords import MAX_LENGTH as LOBBY_PASSWORD_MAX_LENGTH
 from lobby.passwords import PasswordMode, validate_password
@@ -68,6 +75,7 @@ TIMER_FIELD_KWARGS = {
     "hero_grace_time_ms": GRACE_TIME_MS_KWARGS,
     "hero_reserve_time_ms": RESERVE_TIME_MS_KWARGS,
 }
+SIGNUPS_OPEN_HOURS_KWARGS = {"max_value": MAX_SIGNUPS_OPEN_HOURS_BEFORE}
 
 
 class LobbySteamLeagueMixin:
@@ -202,6 +210,8 @@ class EventRepeaterSerializer(
             "allow_active_mmr",
             "allow_previous_rank",
             "allow_battlecup_rating",
+            "signup_open_mode",
+            "signups_open_hours_before",
             # DiscordConfig
             "discord_create_event",
             "discord_sync_signups",
@@ -254,6 +264,7 @@ class EventRepeaterSerializer(
             "dota_lobby_password": LOBBY_PASSWORD_FIELD_KWARGS,
             "captains_draft_time": DRAFT_TIME_KWARGS,
             **TIMER_FIELD_KWARGS,
+            "signups_open_hours_before": SIGNUPS_OPEN_HOURS_KWARGS,
         }
 
     def validate_description(self, value: str | None) -> str | None:
@@ -451,6 +462,8 @@ class EventSerializer(
             "allow_active_mmr",
             "allow_previous_rank",
             "allow_battlecup_rating",
+            "signup_open_mode",
+            "signups_open_hours_before",
             # DiscordConfig
             "discord_create_event",
             "discord_sync_signups",
@@ -504,13 +517,73 @@ class EventSerializer(
             "dota_lobby_password": LOBBY_PASSWORD_FIELD_KWARGS,
             "captains_draft_time": DRAFT_TIME_KWARGS,
             **TIMER_FIELD_KWARGS,
+            "signups_open_hours_before": SIGNUPS_OPEN_HOURS_KWARGS,
         }
 
+    def create(self, validated_data: dict[str, Any]) -> Event:
+        if self._takes_legacy_open_at(validated_data):
+            validated_data.update(
+                policy_from_explicit_open_at(
+                    validated_data["scheduled_at"], validated_data["signups_open_at"]
+                )
+            )
+            return super().create(validated_data)
+        defaults = OrgEventDefaults.objects.filter(
+            organization=validated_data["organization"]
+        ).first()
+        if defaults is not None:
+            for field in SIGNUP_OPEN_POLICY_FIELDS:
+                validated_data.setdefault(field, getattr(defaults, field))
+        probe = Event(
+            scheduled_at=validated_data["scheduled_at"],
+            **{
+                f: validated_data[f]
+                for f in SIGNUP_OPEN_POLICY_FIELDS
+                if f in validated_data
+            },
+        )
+        apply_signup_open_policy(probe, timezone.now())
+        validated_data["signups_open_at"] = probe.signups_open_at
+        return super().create(validated_data)
+
     def update(self, instance: Event, validated_data: dict[str, Any]) -> Event:
+        before = {
+            f: getattr(instance, f)
+            for f in (*SIGNUP_OPEN_POLICY_FIELDS, "scheduled_at")
+        }
+        upcoming = instance.state == EventState.UPCOMING
+        legacy = upcoming and self._takes_legacy_open_at(validated_data)
+        if legacy:
+            validated_data.update(
+                policy_from_explicit_open_at(
+                    validated_data.get("scheduled_at", instance.scheduled_at),
+                    validated_data["signups_open_at"],
+                )
+            )
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
-        instance.save(update_fields=[*validated_data, "updated_at"])
+        update_fields = [*validated_data, "updated_at"]
+        if upcoming and not legacy:
+            policy_changed = any(
+                before[f] != getattr(instance, f) for f in SIGNUP_OPEN_POLICY_FIELDS
+            )
+            moved = before["scheduled_at"] != instance.scheduled_at
+            # A manual event keeps a pre-policy hand-set open time on reschedule.
+            if policy_changed or (
+                moved and instance.signup_open_mode != SignupOpenMode.MANUAL
+            ):
+                apply_signup_open_policy(instance, timezone.now())
+                if "signups_open_at" not in update_fields:
+                    update_fields.append("signups_open_at")
+        instance.save(update_fields=update_fields)
         return instance
+
+    @staticmethod
+    def _takes_legacy_open_at(validated_data: dict[str, Any]) -> bool:
+        return (
+            "signups_open_at" in validated_data
+            and "signup_open_mode" not in validated_data
+        )
 
     def validate_description(self, value: str | None) -> str | None:
         return nh3.clean(value) if value else value
@@ -957,6 +1030,8 @@ class OrgEventDefaultsSerializer(
             "allow_active_mmr",
             "allow_previous_rank",
             "allow_battlecup_rating",
+            "signup_open_mode",
+            "signups_open_hours_before",
             # DiscordEventConfigMixin
             "discord_create_event",
             "discord_sync_signups",
@@ -989,6 +1064,7 @@ class OrgEventDefaultsSerializer(
         extra_kwargs = {
             "captains_draft_time": DRAFT_TIME_KWARGS,
             **TIMER_FIELD_KWARGS,
+            "signups_open_hours_before": SIGNUPS_OPEN_HOURS_KWARGS,
         }
 
     def validate(self, data: dict) -> dict:
@@ -1053,6 +1129,10 @@ class OneOffEventCreateSerializer(LobbySteamLeagueMixin, serializers.ModelSerial
             **{
                 name: {"required": False, **kwargs}
                 for name, kwargs in TIMER_FIELD_KWARGS.items()
+            },
+            "signups_open_hours_before": {
+                "required": False,
+                **SIGNUPS_OPEN_HOURS_KWARGS,
             },
         }
 

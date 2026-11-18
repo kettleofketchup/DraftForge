@@ -95,6 +95,7 @@ from events.services import (
     teardown_event,
     unconfirm_signup,
 )
+from events.signup_schedule import SIGNUP_OPEN_POLICY_FIELDS
 from events.utils import starts_in_future
 from lobby.passwords import PasswordMode
 from org.contributions.services import should_sync_staff, sync_event_staff_entries
@@ -359,12 +360,22 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
             "frequency",
             "is_active",
         )
-        before = {f: getattr(serializer.instance, f) for f in schedule_fields}
+        before = {
+            f: getattr(serializer.instance, f)
+            for f in (*schedule_fields, *SIGNUP_OPEN_POLICY_FIELDS)
+        }
         repeater = serializer.save()
         schedule_changed = any(
             before[f] != getattr(repeater, f) for f in schedule_fields
         )
-        future_events = sync_future_events(repeater, realign_schedule=schedule_changed)
+        policy_changed = any(
+            before[f] != getattr(repeater, f) for f in SIGNUP_OPEN_POLICY_FIELDS
+        )
+        future_events = sync_future_events(
+            repeater,
+            realign_schedule=schedule_changed,
+            policy_changed=policy_changed,
+        )
         # Single batched invalidation — repeater + every cascaded child
         invalidate_after_commit(repeater, *future_events)
 
