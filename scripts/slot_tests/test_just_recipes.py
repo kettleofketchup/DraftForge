@@ -92,7 +92,14 @@ class Runner:
     def dry_run(self, *args: str) -> str:
         assert JUST is not None
         result = subprocess.run(
-            [JUST, "--justfile", str(ROOT / "justfile"), "--dry-run", "--no-deps", *args],
+            [
+                JUST,
+                "--justfile",
+                str(ROOT / "justfile"),
+                "--dry-run",
+                "--no-deps",
+                *args,
+            ],
             cwd=ROOT,
             env=self.env,
             capture_output=True,
@@ -116,7 +123,12 @@ def run(tmp_path: Path) -> Runner:
         "DF_JUST_PYTHON": str(bin_dir / "python"),
         "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
     }
-    for key in ("TEST", "DISABLE_CACHE", "DF_BASE_URL", "DOTA_LOBBY_SIMULATOR_REQUIRED"):
+    for key in (
+        "TEST",
+        "DISABLE_CACHE",
+        "DF_BASE_URL",
+        "DOTA_LOBBY_SIMULATOR_REQUIRED",
+    ):
         env.pop(key, None)
     return Runner(log, env)
 
@@ -134,7 +146,17 @@ def test_test_run_keeps_shell_semantics(run: Runner, cmd: str) -> None:
     assert result.returncode == 0, result.stderr
     [call] = run.calls()
     assert call.cwd == ROOT
-    assert call.argv == [*SLOTS, "run", "--rm", "--entrypoint", "", "backend", "sh", "-c", cmd]
+    assert call.argv == [
+        *SLOTS,
+        "run",
+        "--rm",
+        "--entrypoint",
+        "",
+        "backend",
+        "sh",
+        "-c",
+        cmd,
+    ]
 
 
 def test_test_run_empty_cmd_uses_image_default(run: Runner) -> None:
@@ -157,12 +179,33 @@ def test_test_run_failure_exits_nonzero(run: Runner) -> None:
 def test_dev_run_keeps_shell_semantics(run: Runner, cmd: str) -> None:
     assert run("dev::run", cmd).returncode == 0
     [call] = run.calls()
-    assert call.argv == [*SLOTS, "--stack", "dev", "run", "--rm", "backend", "sh", "-c", cmd]
+    assert call.argv == [
+        *SLOTS,
+        "--stack",
+        "dev",
+        "run",
+        "--rm",
+        "backend",
+        "sh",
+        "-c",
+        cmd,
+    ]
 
 
-@pytest.mark.parametrize("recipe,stack", [("test::exec", []), ("dev::exec", ["--stack", "dev"]), ("prod::exec", ["--stack", "prod"])])
-@pytest.mark.parametrize("cmd", ["python manage.py shell", "cat a > b && echo $X | wc", "echo 'unbalanced"])
-def test_exec_keeps_shell_semantics(run: Runner, recipe: str, stack: list[str], cmd: str) -> None:
+@pytest.mark.parametrize(
+    "recipe,stack",
+    [
+        ("test::exec", []),
+        ("dev::exec", ["--stack", "dev"]),
+        ("prod::exec", ["--stack", "prod"]),
+    ],
+)
+@pytest.mark.parametrize(
+    "cmd", ["python manage.py shell", "cat a > b && echo $X | wc", "echo 'unbalanced"]
+)
+def test_exec_keeps_shell_semantics(
+    run: Runner, recipe: str, stack: list[str], cmd: str
+) -> None:
     assert run(recipe, "backend", cmd).returncode == 0
     [call] = run.calls()
     assert call.argv == [*SLOTS, *stack, "exec", "backend", "sh", "-c", cmd]
@@ -181,7 +224,9 @@ def test_exec_keeps_shell_semantics(run: Runner, recipe: str, stack: list[str], 
         ("dev::up", ["--stack", "dev", "up", "--remove-orphans"]),
     ],
 )
-def test_stack_verbs_go_through_the_slot_helper(run: Runner, recipe: str, tail: list[str]) -> None:
+def test_stack_verbs_go_through_the_slot_helper(
+    run: Runner, recipe: str, tail: list[str]
+) -> None:
     args = ["--no-sync"] if recipe == "dev::up" else []
     assert run(recipe, *args).returncode == 0, recipe
     [call] = run.calls()
@@ -213,7 +258,9 @@ def test_dota_lobby_simulator_recipe_rejects_unknown_actions(run: Runner) -> Non
 
 
 def test_test_compose_passes_args_verbatim(run: Runner) -> None:
-    assert run("test::compose", "--stack", "dev", "config", "--services").returncode == 0
+    assert (
+        run("test::compose", "--stack", "dev", "config", "--services").returncode == 0
+    )
     [call] = run.calls()
     assert call.argv == [*SLOTS, "--stack", "dev", "config", "--services"]
 
@@ -225,10 +272,20 @@ def test_dev_up_rejects_unknown_options(run: Runner) -> None:
 
 
 @pytest.mark.parametrize("stack,expected", [(None, "dev"), ("test", "test")])
-def test_discord_logs_follows_the_stack(run: Runner, stack: str | None, expected: str) -> None:
+def test_discord_logs_follows_the_stack(
+    run: Runner, stack: str | None, expected: str
+) -> None:
     assert run("discord::logs", *([stack] if stack else [])).returncode == 0
     [call] = run.calls()
-    assert call.argv == [*SLOTS, "--stack", expected, "logs", "-f", "--tail=100", "discord-bot"]
+    assert call.argv == [
+        *SLOTS,
+        "--stack",
+        expected,
+        "logs",
+        "-f",
+        "--tail=100",
+        "discord-bot",
+    ]
 
 
 def test_dev_debug_migrates_with_dev_env_then_starts_dev(run: Runner) -> None:
@@ -239,9 +296,22 @@ def test_dev_debug_migrates_with_dev_env_then_starts_dev(run: Runner) -> None:
         ["manage.py", "makemigrations", *APPS],
         ["manage.py", "migrate"],
     ]
-    assert all(c.cwd == ROOT / "backend" and c.test == "false" and c.disable_cache == "true" for c in manage)
+    assert all(
+        c.cwd == ROOT / "backend" and c.test == "false" and c.disable_cache == "true"
+        for c in manage
+    )
     up = calls[-1]
-    assert up.argv == [*SLOTS, "--stack", "dev", "--ansi", "always", "up", "--no-attach", "nginx", "--remove-orphans"]
+    assert up.argv == [
+        *SLOTS,
+        "--stack",
+        "dev",
+        "--ansi",
+        "always",
+        "up",
+        "--no-attach",
+        "nginx",
+        "--remove-orphans",
+    ]
     assert up.test == "false"
 
 
@@ -255,7 +325,9 @@ def test_migrate_all_uses_each_env(run: Runner) -> None:
     "args,apps",
     [((), APPS), (("app", "events"), ["app", "events"])],
 )
-def test_makemigrations_app_list(run: Runner, args: tuple[str, ...], apps: list[str]) -> None:
+def test_makemigrations_app_list(
+    run: Runner, args: tuple[str, ...], apps: list[str]
+) -> None:
     assert run("db::makemigrations", *args).returncode == 0
     [call] = run.calls()
     assert call.argv == ["manage.py", "makemigrations", *apps]
@@ -269,7 +341,9 @@ def test_populate_users_migrates_test_then_passes_force(run: Runner) -> None:
 
 
 @pytest.mark.parametrize("flags,force", [((), "False"), (("--force",), "True")])
-def test_populate_shell_helpers_pass_force(run: Runner, flags: tuple[str, ...], force: str) -> None:
+def test_populate_shell_helpers_pass_force(
+    run: Runner, flags: tuple[str, ...], force: str
+) -> None:
     assert run("db::populate::demo-tournaments", *flags).returncode == 0
     [call] = run.calls()
     code = f"from tests.populate import populate_demo_tournaments; populate_demo_tournaments(force={force})"
@@ -289,14 +363,25 @@ def test_test_populate_all_is_a_fresh_populate(run: Runner) -> None:
 @pytest.mark.parametrize(
     "args,tail",
     [
-        (("version::set", "1.2.3", "--no-commit"), ["-m", "scripts.version", "set", "1.2.3", "--no-commit"]),
+        (
+            ("version::set", "1.2.3", "--no-commit"),
+            ["-m", "scripts.version", "set", "1.2.3", "--no-commit"],
+        ),
         (("version::from-pyproject",), ["-m", "scripts.version", "from-pyproject"]),
-        (("demo::create", "shuffle"), ["-m", "scripts.demo", "create", "--spec", "shuffle"]),
+        (
+            ("demo::create", "shuffle"),
+            ["-m", "scripts.demo", "create", "--spec", "shuffle"],
+        ),
         (("demo::gifs", "--fps", "15"), ["-m", "scripts.demo", "gifs", "--fps", "15"]),
-        (("test::demo::trim", "--no-auto"), ["-m", "scripts.demo", "trim", "--no-auto"]),
+        (
+            ("test::demo::trim", "--no-auto"),
+            ["-m", "scripts.demo", "trim", "--no-auto"],
+        ),
     ],
 )
-def test_python_cli_recipes(run: Runner, args: tuple[str, ...], tail: list[str]) -> None:
+def test_python_cli_recipes(
+    run: Runner, args: tuple[str, ...], tail: list[str]
+) -> None:
     assert run(*args).returncode == 0
     [call] = run.calls()
     assert call.cwd == ROOT and call.argv == tail
@@ -310,7 +395,15 @@ def test_playwright_runs_in_frontend_with_the_slot_url(run: Runner) -> None:
     assert flush_call.argv == ["-m", "scripts.compose", "flush-redis"]
     assert npx.tool == "npx" and npx.cwd == ROOT / "frontend"
     assert npx.base_url == "https://localhost:13443"
-    assert npx.argv == ["playwright", "test", "--grep", "@cicd", "--project=chromium", "--no-deps", "--shard=1/4"]
+    assert npx.argv == [
+        "playwright",
+        "test",
+        "--grep",
+        "@cicd",
+        "--project=chromium",
+        "--no-deps",
+        "--shard=1/4",
+    ]
 
 
 def test_org_features_cicd_runs_only_its_project(run: Runner) -> None:
@@ -341,15 +434,24 @@ DOTA_LOBBY_PW = ["--project=dota-lobby-sequential", "--no-deps", "--workers=1"]
     "recipe,grep",
     [("test::pw::dota-lobby", []), ("test::pw::cicd-dota-lobby", ["--grep", "@cicd"])],
 )
-def test_dota_lobby_specs_skip_without_the_simulator(run: Runner, recipe: str, grep: list[str]) -> None:
+def test_dota_lobby_specs_skip_without_the_simulator(
+    run: Runner, recipe: str, grep: list[str]
+) -> None:
     assert run(recipe, "--workers=1").returncode == 0
     ps, *_, npx = run.calls()
     assert ps.argv == SIM_PS
-    assert npx.tool == "npx" and npx.argv == ["playwright", "test", *grep, *DOTA_LOBBY_PW]
+    assert npx.tool == "npx" and npx.argv == [
+        "playwright",
+        "test",
+        *grep,
+        *DOTA_LOBBY_PW,
+    ]
     assert npx.sim_required == ""
 
 
-@pytest.mark.parametrize("recipe", ["test::pw::dota-lobby", "test::pw::cicd-dota-lobby"])
+@pytest.mark.parametrize(
+    "recipe", ["test::pw::dota-lobby", "test::pw::cicd-dota-lobby"]
+)
 def test_dota_lobby_specs_require_a_running_simulator(run: Runner, recipe: str) -> None:
     assert run(recipe, "--workers=1", DF_FAKE_SIM_RUNNING="1").returncode == 0
     npx = run.calls()[-1]
@@ -357,7 +459,11 @@ def test_dota_lobby_specs_require_a_running_simulator(run: Runner, recipe: str) 
 
 
 def test_dota_lobby_specs_keep_the_callers_choice(run: Runner) -> None:
-    result = run("test::pw::dota-lobby", DOTA_LOBBY_SIMULATOR_REQUIRED="0", DF_FAKE_SIM_RUNNING="1")
+    result = run(
+        "test::pw::dota-lobby",
+        DOTA_LOBBY_SIMULATOR_REQUIRED="0",
+        DF_FAKE_SIM_RUNNING="1",
+    )
     assert result.returncode == 0
     calls = run.calls()
     assert SIM_PS not in [c.argv for c in calls]
@@ -365,9 +471,18 @@ def test_dota_lobby_specs_keep_the_callers_choice(run: Runner) -> None:
 
 
 def test_playwright_grep_keeps_spaces(run: Runner) -> None:
-    assert run("test::pw::grep", "should complete a draft", "--workers=1").returncode == 0
+    assert (
+        run("test::pw::grep", "should complete a draft", "--workers=1").returncode == 0
+    )
     npx = run.calls()[-1]
-    assert npx.argv == ["playwright", "test", "--grep", "should complete a draft", "--no-deps", "--workers=1"]
+    assert npx.argv == [
+        "playwright",
+        "test",
+        "--grep",
+        "should complete a draft",
+        "--no-deps",
+        "--workers=1",
+    ]
 
 
 def test_playwright_stops_when_there_is_no_slot(run: Runner) -> None:
@@ -414,22 +529,40 @@ def _index(calls: list[Call], pred: object) -> int:
     return next(i for i, c in enumerate(calls) if pred(c))  # type: ignore[operator]
 
 
-def test_dev_up_waits_for_backend_then_syncs_links_and_follows_logs(run: Runner) -> None:
+def test_dev_up_waits_for_backend_then_syncs_links_and_follows_logs(
+    run: Runner,
+) -> None:
     result = run("dev::up", DF_FAKE_PS_FAILS="1")
     assert result.returncode == 0, result.stderr
     assert "Backend is ready!" in result.stdout
     calls = [c for c in run.calls() if c.tool == "python"]
     dev = [*SLOTS, "--stack", "dev"]
-    ps = [i for i, c in enumerate(calls) if c.argv == [*dev, "ps", "backend", "--format", "json"]]
+    ps = [
+        i
+        for i, c in enumerate(calls)
+        if c.argv == [*dev, "ps", "backend", "--format", "json"]
+    ]
     order = [
         _index(calls, lambda c: c.argv == [*dev, "up", "-d", "--remove-orphans"]),
         ps[0],
         ps[1],
-        _index(calls, lambda c: c.argv[: len(dev) + 2] == [*dev, "exec", "-T"] and "requests.get" in c.argv[-1]),
+        _index(
+            calls,
+            lambda c: c.argv[: len(dev) + 2] == [*dev, "exec", "-T"]
+            and "requests.get" in c.argv[-1],
+        ),
         _index(calls, lambda c: c.argv == ["manage.py", "sync_prod_users"]),
         _index(calls, lambda c: c.argv == ["manage.py", "sync_prod_tournaments"]),
-        _index(calls, lambda c: c.argv == ["manage.py", "populate_steam_matches", "--relink-users"]),
-        _index(calls, lambda c: c.argv[: len(dev) + 2] == [*dev, "exec", "-T"] and "auto_link_matches_for_tournament" in c.argv[-1]),
+        _index(
+            calls,
+            lambda c: c.argv
+            == ["manage.py", "populate_steam_matches", "--relink-users"],
+        ),
+        _index(
+            calls,
+            lambda c: c.argv[: len(dev) + 2] == [*dev, "exec", "-T"]
+            and "auto_link_matches_for_tournament" in c.argv[-1],
+        ),
         _index(calls, lambda c: c.argv == [*dev, "logs", "-f"]),
     ]
     assert len(ps) == 2 and order == sorted(order)

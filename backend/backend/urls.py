@@ -1,12 +1,7 @@
 from django.contrib import admin
 from django.urls import include, path
-from rest_framework import routers
-
-from telemetry.logging import get_logger
-
-log = get_logger(__name__)
-
 from django.views.generic.base import RedirectView
+from rest_framework import routers
 
 from app import views_main as app_views
 from app.functions.draft_picks import pick_player_for_round, undo_last_pick
@@ -71,6 +66,41 @@ from app.views.admin_team import (
     update_org_user,
 )
 from app.views.csv_import import import_csv_org, import_csv_tournament
+from app.views.internal import (
+    auto_close_event,
+    check_message_log_exists,
+    claim_discord_message_log,
+    clear_event_signup_state,
+    create_discord_event_log,
+    create_discord_message_log,
+    create_event_dm,
+    create_herodraft_for_game,
+    create_or_update_announcement,
+    create_or_update_signup_message,
+    create_tournament_log,
+    finalize_discord_message_log,
+    generate_repeater_events,
+    get_active_repeaters,
+    get_discord_event_state,
+    get_due_scheduled_events,
+    get_event_for_task,
+    get_match_participants,
+    get_or_create_discord_event,
+    get_repeater_subscribers,
+    get_sync_discord_state,
+    get_tournament_for_task,
+    get_tournament_participants,
+    list_auto_herodraft_games,
+    list_users_for_avatar_check,
+    search_message_logs,
+    sweep_stale_discord_leases,
+    transition_event_state,
+    update_discord_event,
+    update_event_dm,
+    update_scheduled_event,
+    update_tournament_log,
+    update_user_avatar,
+)
 from app.views.ssr import (
     EventSSRView,
     HeroDraftSSRView,
@@ -81,6 +111,7 @@ from app.views.ssr import (
 )
 from app.views_joke import buy_tango, get_tangoes
 from common.utils import isTestEnvironment
+from events.views import fire_event_task, get_event_task_schedule
 from org.views import ClaimRequestViewSet
 from org.views_features import org_features, org_promoters, remove_org_promoter
 from org.views_profiles import (
@@ -91,6 +122,25 @@ from org.views_profiles import (
     update_user_dota_profile,
 )
 from org.views_settings import org_settings_view
+from steam.views_internal import (
+    recalculate_mmr,
+    steam_sync_state,
+    store_match,
+    tracked_leagues,
+    update_league_stats,
+)
+from telemetry.logging import get_logger
+from user.internal.avatar import (
+    bulk_update_user_avatars,
+    list_discord_guild_ids,
+    list_discord_linked_users,
+)
+from user.internal.discord_names import (
+    bulk_update_member_names,
+    list_discord_name_sync_targets,
+)
+
+log = get_logger(__name__)
 
 router = routers.DefaultRouter()
 router.register(r"users", UserView, "users")
@@ -399,8 +449,6 @@ urlpatterns = [
 ]
 
 # Event task schedule
-from events.views import fire_event_task, get_event_task_schedule
-
 urlpatterns += [
     path(
         "api/events/<int:event_id>/task-schedule/",
@@ -415,51 +463,6 @@ urlpatterns += [
 ]
 
 # Internal API — celery workers and Discord bot (token auth via X-Internal-Token)
-from app.views.internal import (
-    auto_close_event,
-    check_message_log_exists,
-    claim_discord_message_log,
-    clear_event_signup_state,
-    create_discord_event_log,
-    create_discord_message_log,
-    create_event_dm,
-    create_herodraft_for_game,
-    create_or_update_announcement,
-    create_or_update_signup_message,
-    create_tournament_log,
-    finalize_discord_message_log,
-    generate_repeater_events,
-    get_active_repeaters,
-    get_discord_event_state,
-    get_due_scheduled_events,
-    get_event_for_task,
-    get_match_participants,
-    get_or_create_discord_event,
-    get_repeater_subscribers,
-    get_sync_discord_state,
-    get_tournament_for_task,
-    get_tournament_participants,
-    list_auto_herodraft_games,
-    list_users_for_avatar_check,
-    search_message_logs,
-    sweep_stale_discord_leases,
-    transition_event_state,
-    update_discord_event,
-    update_event_dm,
-    update_scheduled_event,
-    update_tournament_log,
-    update_user_avatar,
-)
-from user.internal.avatar import (
-    bulk_update_user_avatars,
-    list_discord_guild_ids,
-    list_discord_linked_users,
-)
-from user.internal.discord_names import (
-    bulk_update_member_names,
-    list_discord_name_sync_targets,
-)
-
 urlpatterns += [
     path("api/internal/discord/message-log/", create_discord_message_log),
     path("api/internal/discord/message-log/claim/", claim_discord_message_log),
@@ -572,14 +575,6 @@ urlpatterns += [
 ]
 
 # Internal API — Steam sync endpoints
-from steam.views_internal import (
-    recalculate_mmr,
-    steam_sync_state,
-    store_match,
-    tracked_leagues,
-    update_league_stats,
-)
-
 urlpatterns += [
     path("api/internal/steam/sync-state/<int:league_id>/", steam_sync_state),
     path("api/internal/steam/store-match/", store_match),

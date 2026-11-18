@@ -1,4 +1,3 @@
-from collections.abc import Callable
 from datetime import UTC, datetime, timedelta, timezone
 from typing import Any
 from unittest import mock
@@ -6,6 +5,7 @@ from urllib.parse import parse_qs, urlsplit
 
 from django.db import connection
 from django.test import TestCase, override_settings
+from django.test.utils import CaptureQueriesContext
 from rest_framework.response import Response
 from rest_framework.test import APIClient
 
@@ -70,23 +70,10 @@ class LeagueMinimalSerializerTests(TestCase):
         self.assertIsNone(row["league"])
 
     def _count_list_queries(self) -> int:
-        # CaptureQueriesContext drops queries when the request resets the log.
-        seen: list[str] = []
-
-        def record(
-            execute: Callable[..., Any],
-            sql: str,
-            params: Any,
-            many: bool,
-            context: dict[str, Any],
-        ) -> Any:
-            seen.append(sql)
-            return execute(sql, params, many, context)
-
-        with connection.execute_wrapper(record):
+        with CaptureQueriesContext(connection) as ctx:
             response = self.client.get(LIST_URL)
         self.assertEqual(response.status_code, 200)
-        return len(seen)
+        return len(ctx)
 
     def test_query_count_constant_in_row_count(self) -> None:
         leagues = [self.league, self.blank_league]
