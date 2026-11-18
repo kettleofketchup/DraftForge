@@ -52,10 +52,24 @@ describe('resolveDisplayName', () => {
     );
   });
 
-  it('never shows the site nickname', () => {
+  it('keeps the site nickname above Discord names until its removal', () => {
     expect(
-      resolveDisplayName({ username: 'u', nickname: 'Site' } as never),
-    ).toBe('u');
+      resolveDisplayName({
+        username: 'u',
+        nickname: 'Site',
+        discordNickname: 'Global',
+      }),
+    ).toBe('Site');
+    expect(
+      resolveDisplayName(
+        { username: 'u', nickname: 'Site', guildNickname: 'Server' },
+        { orgId: 7 },
+      ),
+    ).toBe('Server');
+    useUserCacheStore
+      .getState()
+      .upsert({ pk: 5, username: 'c', nickname: 'Cached' });
+    expect(resolveDisplayName({ pk: 5 })).toBe('Cached');
   });
 
   it('in an org: server nickname, then global name, then username', () => {

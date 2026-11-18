@@ -1,2 +1,1 @@
-- Names and avatars now fill in from the shared user cache and the page's organization automatically: on organization, league, tournament, event, roll call, hero draft and Activity pages a player shows their server nickname, then their Discord name, then their username; elsewhere their Discord name, then their username.
-- The site nickname is no longer shown as a player's name.
+- Names and avatars now fill in from the shared user cache and the page's organization automatically: on organization, league, tournament, event, roll call, hero draft and Activity pages a player's server nickname for that organization is shown first. Otherwise names show as before.

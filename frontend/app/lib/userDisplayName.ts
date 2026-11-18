@@ -12,6 +12,7 @@ export type UserRef = {
   user?: unknown;
   id?: unknown;
   username?: string | null;
+  nickname?: string | null;
   discordNickname?: string | null;
   guildNickname?: string | null;
   orgNicknames?: Record<number, string | null>;
@@ -53,7 +54,10 @@ export function userRefPk(u: unknown): number | undefined {
   if (isNum(ref.user)) return ref.user;
   if (
     isNum(ref.id) &&
-    ('username' in ref || 'discordNickname' in ref || 'avatar' in ref)
+    ('username' in ref ||
+      'nickname' in ref ||
+      'discordNickname' in ref ||
+      'avatar' in ref)
   ) {
     return ref.id;
   }
@@ -76,6 +80,7 @@ export function mergeCachedUser<T extends UserRef>(
     ...payload,
     pk: entry.pk,
     username: present(payload.username) ? payload.username : entry.username,
+    nickname: present(payload.nickname) ? payload.nickname : entry.nickname,
     discordNickname: present(payload.discordNickname)
       ? payload.discordNickname
       : entry.discordNickname,
@@ -102,7 +107,8 @@ function fallbackName(pk: number | undefined): string {
   return pk == null ? '?' : `User ${pk}`;
 }
 
-/** Org server nickname (with an org) > global Discord name > username > `User <pk>` > `?`. */
+// Site nickname stays until its removal lands, so names outside an org match main.
+/** Org server nickname (with an org) > site nickname > global Discord name > username > `User <pk>` > `?`. */
 export function resolveDisplayName(
   user: UserRef | DiscordMemberLike | null | undefined,
   opts?: ResolveOptions,
@@ -120,6 +126,7 @@ export function resolveDisplayName(
     const merged = mergeCachedUser(user, entry);
     const chain = [
       isNum(orgId) ? orgNickname(user, entry, orgId) : undefined,
+      merged.nickname,
       merged.discordNickname,
       merged.username,
     ];

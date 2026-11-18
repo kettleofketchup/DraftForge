@@ -85,10 +85,11 @@ describe('DisplayName', () => {
     expect(DisplayName({ pk: 1 })).toBe('Glob');
   });
 
-  it('keeps the (user, maxLength) signature and ignores the site nickname', () => {
-    expect(
-      DisplayName({ username: 'abcdef', nickname: 'Site' } as never, 3),
-    ).toBe('abc…');
+  it('keeps the (user, maxLength) signature', () => {
+    expect(DisplayName({ username: 'abcdef' }, 3)).toBe('abc…');
+    expect(DisplayName({ username: 'u', nickname: 'Sitename' }, 4)).toBe(
+      'Site…',
+    );
   });
 
   it('reads a payload guildNickname in an org context', () => {
