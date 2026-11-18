@@ -190,39 +190,18 @@
     }
   },
   "app/components/team/TeamModal.tsx": {
-    "draftforge/use-display-name": {
-      "count": 6
-    },
     "shadcn/no-raw-colors": {
       "count": 1
     }
   },
   "app/components/team/TeamPopoverContent.tsx": {
-    "draftforge/use-display-name": {
-      "count": 4
-    },
     "shadcn/no-raw-colors": {
-      "count": 1
-    }
-  },
-  "app/components/team/TeamPopoverTrigger.tsx": {
-    "draftforge/use-display-name": {
-      "count": 2
-    }
-  },
-  "app/components/team/hooks/addPlayer.tsx": {
-    "draftforge/use-display-name": {
       "count": 1
     }
   },
   "app/components/team/teamCard.tsx": {
     "shadcn/no-raw-colors": {
       "count": 2
-    }
-  },
-  "app/components/team/teamCard/editTeam.tsx": {
-    "draftforge/use-display-name": {
-      "count": 5
     }
   },
   "app/components/team/teamTable/teamTable.tsx": {

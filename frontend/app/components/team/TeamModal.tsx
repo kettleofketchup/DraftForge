@@ -12,6 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from '~/components/ui/table';
+import { DisplayName } from '~/components/user/avatar';
 import { RolePositions } from '~/components/user/positions';
 import type { UserType } from '~/components/user/types';
 import { UserAvatar } from '~/components/user/UserAvatar';
@@ -29,8 +30,7 @@ export const TeamModal: React.FC<TeamModalProps> = ({
   open,
   onOpenChange,
 }) => {
-  const teamName =
-    team.name || `${captain.nickname || captain.username}'s Team`;
+  const teamName = team.name || `${DisplayName(captain)}'s Team`;
   const hasMembers = team.members && team.members.length > 0;
 
   const avgMMR = useMemo(() => {
@@ -98,7 +98,7 @@ export const TeamModal: React.FC<TeamModalProps> = ({
         <UserAvatar user={captain} size="xl" border="primary" />
         <div className="flex-1">
           <div className="font-semibold">
-            {captain.nickname || captain.username}
+            {DisplayName(captain)}
             <span className="ml-2 text-xs text-primary">(Captain)</span>
           </div>
           <div className="text-sm text-muted-foreground">
@@ -135,7 +135,7 @@ export const TeamModal: React.FC<TeamModalProps> = ({
                           className="hover:ring-2 hover:ring-primary transition-all"
                         />
                         <span className="font-medium">
-                          {member.nickname || member.username}
+                          {DisplayName(member)}
                         </span>
                         {member.pk === captain.pk && (
                           <span className="text-xs text-primary">(C)</span>

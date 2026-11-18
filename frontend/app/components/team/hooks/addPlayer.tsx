@@ -1,5 +1,6 @@
 import { toast } from 'sonner';
 import { updateTeam } from '~/components/api/api';
+import { DisplayName } from '~/components/user/avatar';
 import type { TeamType, UserType } from '~/index';
 import { getLogger } from '~/lib/logger';
 const log = getLogger('AddPlayerHook');
@@ -32,7 +33,7 @@ export const addPlayerHook = async ({ team, player }: hookParams) => {
   };
 
   toast.promise(updateTeam(team.pk, payload), {
-    loading: `Adding ${player.username} to ${team.name}`,
+    loading: `Adding ${DisplayName(player)} to ${team.name}`,
     success: (data) => {
       return `${team.name} has been updated successfully!`;
     },
