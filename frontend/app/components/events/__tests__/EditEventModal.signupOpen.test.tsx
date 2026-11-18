@@ -101,7 +101,7 @@ describe('EditEventModal signup open policy', () => {
 
   it('explains the series cascade for a series event', () => {
     renderModal({ ...upcoming, event_repeater: 7, event_repeater_name: 'S' });
-    expect(screen.getByText(/series policy recalculates/i)).toBeInTheDocument();
+    expect(screen.getByText(/overwrites edits made here/i)).toBeInTheDocument();
   });
 
   it('never renders the signup deadline', () => {

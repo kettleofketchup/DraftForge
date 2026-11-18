@@ -219,4 +219,30 @@ describe('CreateSeriesEventModal signup open policy', () => {
       signups_open_hours_before: 48,
     });
   });
+
+  it('has one control for opening signups, not a separate checkbox', () => {
+    renderModal();
+    expect(screen.queryByTestId('one-off-open-signups-checkbox')).toBeNull();
+    expect(screen.getAllByTestId('signup-open-section')).toHaveLength(1);
+  });
+
+  it.each([
+    ['manual', false],
+    ['scheduled', false],
+    ['immediate', true],
+  ] as const)('opens signups on create only for %s=%s', async (mode, open) => {
+    render(
+      <CreateSeriesEventModal
+        repeater={{ ...repeater, signup_open_mode: mode }}
+        open
+        onOpenChange={() => {}}
+      />,
+      { wrapper: Wrapper },
+    );
+    await submitWithScheduledAt();
+    expect(createSeriesOneOffEvent.mock.calls[0][1]).toMatchObject({
+      signup_open_mode: mode,
+      open_signups: open,
+    });
+  });
 });

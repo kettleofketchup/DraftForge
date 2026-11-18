@@ -12,13 +12,6 @@ import {
   lobbyPasswordPayload,
   refineLobbyPassword,
 } from '~/components/lobby/password';
-import {
-  FormControl,
-  FormDescription,
-  FormField,
-  FormItem,
-  FormLabel,
-} from '~/components/ui/form';
 import { useRepeaterLobbyPassword } from '~/hooks/useLobbyPassword';
 import { ApprovalConfigSection } from './ApprovalConfigSection';
 import { DiscordConfigSection } from './DiscordConfigSection';
@@ -100,7 +93,6 @@ export function CreateSeriesEventModal({
       people_per_team: repeater.people_per_team,
       number_of_teams: repeater.number_of_teams,
       timezone: repeater.timezone,
-      open_signups: false,
       // A one-off has a repeater, so the subscriber reminder is valid here —
       // unlike CreateEventModal's repeater-less branch, which forces it off.
       ...discordResetValues(repeater),
@@ -139,6 +131,7 @@ export function CreateSeriesEventModal({
           dota_lobby_password,
         }),
         tournament_league: data.tournament_league ?? null,
+        open_signups: data.signup_open_mode === 'immediate',
         scheduled_at: data.scheduled_at
           ? localToUTC(data.scheduled_at, data.timezone)
           : data.scheduled_at,
@@ -203,31 +196,6 @@ export function CreateSeriesEventModal({
                 description="Inherited from the series"
                 triggerTestId="one-off-timezone-input"
               />
-              <FormField
-                control={form.control}
-                name="open_signups"
-                render={({ field }) => (
-                  <FormItem className="flex items-start gap-3 space-y-0 rounded-md border border-border p-3">
-                    <FormControl>
-                      <input
-                        data-testid="one-off-open-signups-checkbox"
-                        type="checkbox"
-                        checked={!!field.value}
-                        onChange={(e) => field.onChange(e.target.checked)}
-                        className="mt-0.5 h-4 w-4 shrink-0 rounded border-border accent-primary"
-                      />
-                    </FormControl>
-                    <div>
-                      <FormLabel>Open signups immediately</FormLabel>
-                      <FormDescription>
-                        Otherwise the event stays upcoming until you open
-                        signups by hand.
-                      </FormDescription>
-                    </div>
-                  </FormItem>
-                )}
-              />
-
               <SignupOpenSection control={form.control} />
             </>
           ),

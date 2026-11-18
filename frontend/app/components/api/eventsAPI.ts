@@ -452,6 +452,7 @@ export type SeriesOneOffPayload = Omit<
 > & {
   dota_lobby_password_mode?: 'random' | 'fixed';
   dota_lobby_password?: string;
+  open_signups?: boolean;
 };
 
 export async function createSeriesOneOffEvent(

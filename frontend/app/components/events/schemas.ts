@@ -570,7 +570,6 @@ export const createSeriesEventInputSchema = createEventInputSchema
     discord_notify_new_events: true,
     event_ends_at: true,
   })
-  .extend({ open_signups: z.boolean().default(false) })
   .merge(discordConfigSchema)
   .merge(dotaLobbyConfigSchema);
 

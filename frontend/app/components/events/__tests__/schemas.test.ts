@@ -275,7 +275,7 @@ describe('event form schema key sets', () => {
         ...DISCORD_KEYS,
         ...LOBBY_KEYS,
         ...SIGNUP_OPEN_KEYS,
-        ...['scheduled_at', 'tournament_league', 'open_signups'],
+        ...['scheduled_at', 'tournament_league'],
       ].sort(),
     );
   });

@@ -4,9 +4,13 @@
  * merges signupOpenSchema, so the narrowing cast below is sound.
  */
 
-import { useId } from 'react';
-import type { Control, FieldValues } from 'react-hook-form';
-import { useWatch } from 'react-hook-form';
+import { useEffect, useId, useRef, useState } from 'react';
+import type {
+  Control,
+  ControllerRenderProps,
+  FieldValues,
+} from 'react-hook-form';
+import { useController, useWatch } from 'react-hook-form';
 import type { z } from 'zod';
 import {
   FormControl,
@@ -21,14 +25,21 @@ import { Label } from '~/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '~/components/ui/radio-group';
 import {
   MAX_SIGNUPS_OPEN_HOURS_BEFORE,
+  SIGNUP_OPEN_DEFAULTS,
   type SignupOpenMode,
-  type signupOpenSchema,
+  signupOpenSchema,
 } from './schemas';
 
 type SignupOpenFields = z.input<typeof signupOpenSchema>;
 
 const HOURS_PER_DAY = 24;
 const MAX_DAYS = MAX_SIGNUPS_OPEN_HOURS_BEFORE / HOURS_PER_DAY;
+
+const isValidHours = (hours: unknown): hours is number =>
+  signupOpenSchema.shape.signups_open_hours_before.safeParse(hours).success;
+
+const daysText = (hours: number | undefined): string =>
+  String(Math.round((hours ?? 0) / HOURS_PER_DAY));
 
 export const SIGNUP_OPEN_OPTIONS: readonly {
   mode: SignupOpenMode;
@@ -44,7 +55,7 @@ export const SERIES_IMMEDIATE_HELP =
 export const SERIES_POLICY_CHANGE_HELP =
   'Changing this policy recalculates open times for upcoming events in the series.';
 export const SERIES_EVENT_POLICY_HELP =
-  'The series policy recalculates this open time when it changes.';
+  'Changing the series policy recalculates this open time and overwrites edits made here.';
 
 interface SignupOpenSectionProps<T extends FieldValues & SignupOpenFields> {
   control: Control<T>;
@@ -60,6 +71,17 @@ export function SignupOpenSection<T extends FieldValues & SignupOpenFields>({
   const control = parentControl as unknown as Control<SignupOpenFields>;
   const idPrefix = useId();
   const mode = useWatch({ control, name: 'signup_open_mode' });
+  // The days input unmounts outside scheduled mode, taking its error with it,
+  // so leaving scheduled restores the last valid hours.
+  const { field: hoursField } = useController({
+    control,
+    name: 'signups_open_hours_before',
+  });
+  const lastValidHours = useRef(SIGNUP_OPEN_DEFAULTS.signups_open_hours_before);
+  useEffect(() => {
+    if (isValidHours(hoursField.value))
+      lastValidHours.current = hoursField.value;
+  }, [hoursField.value]);
 
   return (
     <div
@@ -80,7 +102,12 @@ export function SignupOpenSection<T extends FieldValues & SignupOpenFields>({
             <FormControl>
               <RadioGroup
                 value={field.value}
-                onValueChange={field.onChange}
+                onValueChange={(next) => {
+                  field.onChange(next);
+                  if (next !== 'scheduled' && !isValidHours(hoursField.value)) {
+                    hoursField.onChange(lastValidHours.current);
+                  }
+                }}
                 disabled={disabled}
               >
                 {SIGNUP_OPEN_OPTIONS.map((option) => (
@@ -114,24 +141,7 @@ export function SignupOpenSection<T extends FieldValues & SignupOpenFields>({
               <FormItem className="ml-6">
                 <FormLabel>Days before event</FormLabel>
                 <FormControl>
-                  <Input
-                    type="number"
-                    min={0}
-                    max={MAX_DAYS}
-                    step={1}
-                    disabled={disabled}
-                    data-testid="signup-open-days-input"
-                    name={field.name}
-                    ref={field.ref}
-                    onBlur={field.onBlur}
-                    value={Math.round(hours / HOURS_PER_DAY)}
-                    onChange={(e) => {
-                      const days = parseInt(e.target.value, 10);
-                      if (!Number.isNaN(days)) {
-                        field.onChange(days * HOURS_PER_DAY);
-                      }
-                    }}
-                  />
+                  <DaysInput field={field} disabled={disabled} />
                 </FormControl>
                 <FormDescription>
                   {wholeDays
@@ -145,5 +155,43 @@ export function SignupOpenSection<T extends FieldValues & SignupOpenFields>({
         />
       )}
     </div>
+  );
+}
+
+/** Holds its own text so staff can clear the field; commits whole days as hours. */
+function DaysInput({
+  field,
+  disabled,
+}: {
+  field: ControllerRenderProps<SignupOpenFields, 'signups_open_hours_before'>;
+  disabled: boolean;
+}) {
+  const [text, setText] = useState(() => daysText(field.value));
+  const [shownHours, setShownHours] = useState(field.value);
+  if (field.value !== shownHours) {
+    setShownHours(field.value);
+    setText(daysText(field.value));
+  }
+  return (
+    <Input
+      type="number"
+      min={0}
+      max={MAX_DAYS}
+      step={1}
+      disabled={disabled}
+      data-testid="signup-open-days-input"
+      name={field.name}
+      ref={field.ref}
+      value={text}
+      onChange={(e) => {
+        setText(e.target.value);
+        const days = parseInt(e.target.value, 10);
+        if (!Number.isNaN(days)) field.onChange(days * HOURS_PER_DAY);
+      }}
+      onBlur={() => {
+        if (Number.isNaN(parseInt(text, 10))) setText(daysText(field.value));
+        field.onBlur();
+      }}
+    />
   );
 }
