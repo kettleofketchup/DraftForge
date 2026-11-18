@@ -1,8 +1,10 @@
-import { generateMeta } from '~/lib/seo';
+import { Building2, Loader2, Pencil, Trophy } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate, useParams } from 'react-router';
 import { fetchLeague } from '~/components/api/api';
-import { useParams, useNavigate } from 'react-router';
-import type { Route } from './+types/league';
+import { generateMeta } from '~/lib/seo';
 import type { LeagueSSR } from '~/lib/ssr-types';
+import type { Route } from './+types/league';
 
 export async function loader({ params }: Route.LoaderArgs) {
   const { fetchSSR } = await import('~/lib/ssr.server');
@@ -39,20 +41,21 @@ export function meta({ data }: Route.MetaArgs) {
     description: 'League standings and tournament schedule',
   });
 }
-import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Trophy, Building2, Loader2, Pencil } from 'lucide-react';
 
+import { EditLeagueModal, LeagueTabs, useLeague } from '~/components/league';
 import { Badge } from '~/components/ui/badge';
 import { PrimaryButton } from '~/components/ui/buttons';
-import { useLeague, LeagueTabs, EditLeagueModal } from '~/components/league';
-import { useUserStore } from '~/store/userStore';
-import { useOrgStore } from '~/store/orgStore';
-import { useLeagueStore } from '~/store/leagueStore';
-import { useUserCacheStore } from '~/store/userCacheStore';
+import {
+  EntityBreadcrumb,
+  type BreadcrumbSegment,
+} from '~/components/ui/entity-breadcrumb';
 import { useMemberAccess } from '~/hooks/useMemberAccess';
-import { useIsLeagueAdmin } from '~/hooks/usePermissions';
 import { usePageNav } from '~/hooks/usePageNav';
-import { EntityBreadcrumb, type BreadcrumbSegment } from '~/components/ui/entity-breadcrumb';
+import { useIsLeagueAdmin } from '~/hooks/usePermissions';
+import { useLeagueStore } from '~/store/leagueStore';
+import { useOrgStore } from '~/store/orgStore';
+import { useUserCacheStore } from '~/store/userCacheStore';
+import { useUserStore } from '~/store/userStore';
 
 export default function LeaguePage() {
   const { leagueId, tab } = useParams<{ leagueId: string; tab?: string }>();
@@ -66,7 +69,6 @@ export default function LeaguePage() {
   const [activeTab, setActiveTab] = useState(tab || 'info');
   const [editModalOpen, setEditModalOpen] = useState(false);
 
-  // Fetch tournaments
   useEffect(() => {
     getTournaments();
   }, [getTournaments]);
@@ -104,10 +106,8 @@ export default function LeaguePage() {
     if (pk) useUserCacheStore.getState().dropScoped({ leagueId: pk });
     refetch({ silent: true });
   }, [pk, refetch]);
-  const { canView: canViewMembers, settled: memberAccessSettled } = useMemberAccess(
-    league,
-    onMemberViewerChange,
-  );
+  const { canView: canViewMembers, settled: memberAccessSettled } =
+    useMemberAccess(league, onMemberViewerChange);
 
   useEffect(() => {
     if (memberAccessSettled && !canViewMembers && activeTab === 'users') {
@@ -115,18 +115,21 @@ export default function LeaguePage() {
     }
   }, [memberAccessSettled, canViewMembers, activeTab]);
 
-  const handleTabChange = useCallback((newTab: string) => {
-    setActiveTab(newTab);
-    // Don't use replace: true - we want history entries for browser back/forward
-    navigate(`/leagues/${leagueId}/${newTab}`);
-  }, [leagueId, navigate]);
+  const handleTabChange = useCallback(
+    (newTab: string) => {
+      setActiveTab(newTab);
+      // Don't use replace: true - we want history entries for browser back/forward
+      navigate(`/leagues/${leagueId}/${newTab}`);
+    },
+    [leagueId, navigate],
+  );
 
-  // Filter tournaments for this league
   // league can be a number (ID) or object (from list endpoint with pk, name, organization_name)
-  const leagueTournaments = tournaments?.filter((t) => {
-    const leagueId = typeof t.league === 'object' ? t.league?.pk : t.league;
-    return leagueId === pk || t.league_pk === pk;
-  }) || [];
+  const leagueTournaments =
+    tournaments?.filter((t) => {
+      const leagueId = typeof t.league === 'object' ? t.league?.pk : t.league;
+      return leagueId === pk || t.league_pk === pk;
+    }) || [];
 
   // Permission check for edit - includes org admins via useIsLeagueAdmin
   const canEdit = useIsLeagueAdmin(league);
@@ -135,7 +138,8 @@ export default function LeaguePage() {
     if (!league) return [];
     const segments: BreadcrumbSegment[] = [];
 
-    const org = typeof league.organization === 'object' ? league.organization : null;
+    const org =
+      typeof league.organization === 'object' ? league.organization : null;
     if (league.organization_name && org) {
       segments.push({
         type: 'organization',
@@ -156,15 +160,22 @@ export default function LeaguePage() {
   const leagueUserPks = useLeagueStore((s) => s.leagueUserPks);
   const leagueUsersLoading = useLeagueStore((s) => s.leagueUsersLoading);
   const leagueUsersLeagueId = useLeagueStore((s) => s.leagueUsersLeagueId);
-  const userCountDisplay = leagueUsersLoading || leagueUsersLeagueId !== pk
-    ? '...' : leagueUserPks.length;
+  const userCountDisplay =
+    leagueUsersLoading || leagueUsersLeagueId !== pk
+      ? '...'
+      : leagueUserPks.length;
 
-  const pageNavOptions = useMemo(() => [
-    { value: 'info', label: 'Info' },
-    { value: 'tournaments', label: `${leagueTournaments.length} Tourneys` },
-    ...(canViewMembers ? [{ value: 'users', label: `${userCountDisplay} Users` }] : []),
-    { value: 'matches', label: 'Matches' },
-  ], [leagueTournaments.length, userCountDisplay, canViewMembers]);
+  const pageNavOptions = useMemo(
+    () => [
+      { value: 'info', label: 'Info' },
+      { value: 'tournaments', label: `${leagueTournaments.length} Tourneys` },
+      ...(canViewMembers
+        ? [{ value: 'users', label: `${userCountDisplay} Users` }]
+        : []),
+      { value: 'matches', label: 'Matches' },
+    ],
+    [leagueTournaments.length, userCountDisplay, canViewMembers],
+  );
 
   usePageNav(league ? pageNavOptions : null, activeTab, handleTabChange);
 
@@ -187,13 +198,17 @@ export default function LeaguePage() {
   return (
     <div className="container mx-auto py-6 px-4 space-y-6">
       <div className="flex flex-col gap-6 rounded-lg border border-border bg-base-200/50 p-4 md:p-6">
-        {breadcrumbSegments.length > 1 && <EntityBreadcrumb segments={breadcrumbSegments} />}
+        {breadcrumbSegments.length > 1 && (
+          <EntityBreadcrumb segments={breadcrumbSegments} />
+        )}
         {/* Header */}
         <div className="flex flex-col sm:flex-row items-start sm:justify-between gap-3">
           <div className="space-y-2 min-w-0">
             <div className="flex items-center gap-3">
               <Trophy className="h-7 w-7 md:h-8 md:w-8 text-primary shrink-0" />
-              <h1 className="text-xl! md:text-3xl! font-bold truncate">{league.name}</h1>
+              <h1 className="text-xl! md:text-3xl! font-bold truncate">
+                {league.name}
+              </h1>
             </div>
             <div className="flex flex-wrap items-center gap-2 text-muted-foreground">
               {league.organization_name && (

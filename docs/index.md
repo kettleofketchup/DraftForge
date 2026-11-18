@@ -82,7 +82,7 @@ just demo::herodraft   # Hero draft with bracket
 just demo::csv         # CSV import with bracket
 ```
 
-See [Just Commands](development/just-commands.md#demo-tasks) for all options.
+See [Just Commands](development/just-commands.md#demo-commands-just-demo) for all options.
 
 ## Project Structure
 

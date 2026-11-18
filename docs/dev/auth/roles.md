@@ -300,6 +300,6 @@ feature suites.
 | Edit + bracket matrix             | `frontend/tests/playwright/e2e/17-auth/02-edit-and-bracket-gates.spec.ts`              |
 | Locked-feature gates              | `backend/org/feature_errors.py`, `frontend/tests/playwright/e2e/19-org-features/`      |
 
-[hooks]: ../../../frontend/app/hooks/usePermissions.ts
-[permissions]: ../../../backend/app/permissions_org.py
-[matrix]: ../../../frontend/tests/playwright/e2e/17-auth/
+[hooks]: https://github.com/kettleofketchup/DraftForge/blob/main/frontend/app/hooks/usePermissions.ts
+[permissions]: https://github.com/kettleofketchup/DraftForge/blob/main/backend/app/permissions_org.py
+[matrix]: https://github.com/kettleofketchup/DraftForge/tree/main/frontend/tests/playwright/e2e/17-auth
