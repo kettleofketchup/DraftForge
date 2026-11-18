@@ -8,9 +8,10 @@ from channels_redis.core import ChannelLock, RedisChannelLayer
 
 
 class CancelSafeChannelLock(ChannelLock):
-    """channels_redis 4.3.0 leaks a wait count when a waiting acquire is cancelled.
+    """ChannelLock that undoes its wait count when a waiting acquire is cancelled.
 
-    The lock is then never dropped and stays bound to the loop it waited on.
+    channels_redis 4.3.0 leaves the count raised, so the lock is never dropped
+    and stays bound to the loop it waited on.
     """
 
     async def acquire(self, channel: str) -> bool:
