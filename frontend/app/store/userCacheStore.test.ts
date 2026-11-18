@@ -6,7 +6,13 @@ const user = () =>
   ({
     pk: 5,
     username: 'x',
-    positions: { carry: 5, mid: 0, offlane: 0, soft_support: 0, hard_support: 0 },
+    positions: {
+      carry: 5,
+      mid: 0,
+      offlane: 0,
+      soft_support: 0,
+      hard_support: 0,
+    },
     admin_organization_ids: [1, 2],
   }) as never;
 
@@ -26,7 +32,13 @@ describe('userCacheStore.upsert', () => {
     useUserCacheStore.getState().upsert(user());
     useUserCacheStore.getState().upsert({
       ...(user() as object),
-      positions: { carry: 1, mid: 0, offlane: 0, soft_support: 0, hard_support: 0 },
+      positions: {
+        carry: 1,
+        mid: 0,
+        offlane: 0,
+        soft_support: 0,
+        hard_support: 0,
+      },
     } as never);
     expect(useUserCacheStore.getState().entities[5].positions?.carry).toBe(1);
   });
@@ -39,8 +51,12 @@ describe('userCacheStore.dropScoped', () => {
 
   it('drops only the named org slot', () => {
     const store = useUserCacheStore.getState();
-    store.upsert({ pk: 5, username: 'x', mmr: 4000, orgUserPk: 11 } as never, { orgId: 1 });
-    store.upsert({ pk: 5, username: 'x', mmr: 3000, orgUserPk: 12 } as never, { orgId: 2 });
+    store.upsert({ pk: 5, username: 'x', mmr: 4000, orgUserPk: 11 } as never, {
+      orgId: 1,
+    });
+    store.upsert({ pk: 5, username: 'x', mmr: 3000, orgUserPk: 12 } as never, {
+      orgId: 2,
+    });
     useUserCacheStore.getState().dropScoped({ orgId: 1 });
     const entry = useUserCacheStore.getState().entities[5];
     expect(entry.orgData[1]).toBeUndefined();

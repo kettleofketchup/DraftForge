@@ -1,18 +1,13 @@
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 
-import { CoreUserSchema } from '~/components/user/schemas';
 import type { CoreUserType } from '~/components/user/schemas';
+import { CoreUserSchema } from '~/components/user/schemas';
 import type { UserType } from '~/components/user/types';
 import { createEntityAdapter, type EntityState } from '~/lib/entityAdapter';
 import { getLogger } from '~/lib/logger';
 
-import type {
-  LeagueUserData,
-  OrgUserData,
-  UpsertContext,
-  UserEntry,
-} from './userCacheTypes';
+import type { UpsertContext, UserEntry } from './userCacheTypes';
 
 const log = getLogger('UserCache');
 
@@ -35,19 +30,32 @@ function pick<T extends Record<string, unknown>>(
 // Payloads rebuild nested values (positions, id lists) on every fetch, so compare by value.
 function sameValue(a: unknown, b: unknown): boolean {
   if (a === b) return true;
-  if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false;
+  if (
+    typeof a !== 'object' ||
+    typeof b !== 'object' ||
+    a === null ||
+    b === null
+  )
+    return false;
   if (Array.isArray(a) !== Array.isArray(b)) return false;
   const ka = Object.keys(a);
   const kb = Object.keys(b);
   if (ka.length !== kb.length) return false;
   return ka.every((k) =>
-    sameValue((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k]),
+    sameValue(
+      (a as Record<string, unknown>)[k],
+      (b as Record<string, unknown>)[k],
+    ),
   );
 }
 
 function hasCoreChanged(existing: UserEntry, incoming: UserEntry): boolean {
   return coreKeys.some(
-    (k) => !sameValue(existing[k as keyof UserEntry], incoming[k as keyof UserEntry]),
+    (k) =>
+      !sameValue(
+        existing[k as keyof UserEntry],
+        incoming[k as keyof UserEntry],
+      ),
   );
 }
 
@@ -87,7 +95,6 @@ function toUserEntry(
 ): UserEntry {
   const now = Date.now();
 
-  // Extract core fields from raw user using schema keys
   const coreFields = pick(raw, coreKeys as string[]);
 
   // Only create new scoped data objects when context provides data.
@@ -132,10 +139,7 @@ export interface UserCacheState extends EntityState<UserEntry> {
   staleAfterMs: number;
 
   // Write operations
-  upsert(
-    incoming: UserType | UserType[],
-    context?: UpsertContext,
-  ): void;
+  upsert(incoming: UserType | UserType[], context?: UpsertContext): void;
   remove(pk: number): void;
   /** Forget org/league-scoped data (e.g. MMR) cached for every user. */
   dropScoped(scope: UpsertContext): void;
@@ -193,9 +197,7 @@ export const useUserCacheStore = create<UserCacheState>()(
         }
 
         if (!newEntities) {
-          log.debug(
-            `Skipping upsert — ${users.length} users unchanged`,
-          );
+          log.debug(`Skipping upsert — ${users.length} users unchanged`);
           return;
         }
 
@@ -251,11 +253,7 @@ export const useUserCacheStore = create<UserCacheState>()(
       },
 
       getByDiscordId(discordId) {
-        return userAdapter.selectByIndex(
-          get(),
-          'byDiscordId',
-          discordId,
-        );
+        return userAdapter.selectByIndex(get(), 'byDiscordId', discordId);
       },
 
       getBySteamAccountId(steam_account_id) {
@@ -273,10 +271,8 @@ export const useUserCacheStore = create<UserCacheState>()(
         const now = Date.now();
         const staleMs = get().staleAfterMs;
 
-        // Check core staleness
         if (now - entry._fetchedAt > staleMs) return true;
 
-        // Check scoped staleness
         if (context?.orgId) {
           const orgEntry = entry.orgData[context.orgId];
           if (!orgEntry || now - orgEntry._fetchedAt > staleMs) return true;
@@ -291,11 +287,7 @@ export const useUserCacheStore = create<UserCacheState>()(
       },
 
       reset() {
-        set(
-          { ...userAdapter.getInitialState() },
-          undefined,
-          'reset',
-        );
+        set({ ...userAdapter.getInitialState() }, undefined, 'reset');
         log.debug('Cache cleared');
       },
     }),

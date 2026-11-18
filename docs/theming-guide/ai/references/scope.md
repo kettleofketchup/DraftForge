@@ -33,7 +33,7 @@ Two components MUST be used wherever applicable; raw markup is a `block`:
 | Showing a user's avatar | `<UserAvatar>` from `~/components/user/UserAvatar` | Handles Discord CDN, fallback initials, online indicator, captain ring, memoization. Raw `<img>` with `AvatarUrl()` is a known regression source. |
 | Detail-page breadcrumb on org/league/event/series/tournament/rollcall | `<EntityBreadcrumb>` from `~/components/ui/entity-breadcrumb` | Renders the typed segment labels ("ORGANIZATION" above "DTX") and disables the last segment automatically. Manual breadcrumb nav is a `block`. |
 
-See [`THEMING-GUIDE.md` §"Component Patterns"](../../THEMING-GUIDE.md#component-patterns) for the full mandatory list.
+See [`THEMING-GUIDE.md` §"Component Patterns"](../../../THEMING-GUIDE.md#component-patterns) for the full mandatory list.
 
 ### Button policy
 
