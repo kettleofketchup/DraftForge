@@ -378,6 +378,18 @@ class RankFlowStateResponse(BaseModel):
     model_config = {"extra": "ignore"}
 
 
+class SignupSnapshot(BaseModel):
+    status: str
+    commitment: str
+    rsvp_class: str
+    signed_up_at: datetime | None = None
+    line_seq: int | None = None
+    waitlist_position: int | None = None
+    event_team_id: int | None = None
+    extra: dict[str, Any] = {}
+    model_config = ConfigDict(extra="ignore")
+
+
 def _rebuild_forward_refs() -> None:
     """Resolve deferred TournamentUserSchema reference (avoids circular import)."""
     from app.schemas import TournamentUserSchema  # noqa: F811
@@ -388,15 +400,3 @@ def _rebuild_forward_refs() -> None:
 
 
 _rebuild_forward_refs()
-
-
-class SignupSnapshot(BaseModel):
-    status: str
-    commitment: str
-    rsvp_class: str
-    signed_up_at: datetime | None = None
-    line_seq: int | None = None
-    waitlist_position: int | None = None
-    event_team_id: int | None = None
-    extra: dict[str, Any] = {}
-    model_config = {"extra": "ignore"}

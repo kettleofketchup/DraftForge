@@ -14,6 +14,7 @@ from app.models import CustomUser, Team, Tournament
 from events.constants import (
     EVENT_REOPEN_TRANSITIONS,
     EVENT_RESTART_TRANSITIONS,
+    Commitment,
     EventState,
     RepeatFrequency,
     SignupStatus,
@@ -33,6 +34,7 @@ from events.models import (
     EventConfigMixin,
     EventRepeater,
     EventSignup,
+    EventTeam,
     TournamentTemplateMixin,
 )
 from events.reopen import ReopenNotPermitted, reopen_event
@@ -198,7 +200,9 @@ def _get_active_signup_count(event):
 
 
 @transaction.atomic
-def _create_signup(event, user, event_team=None):
+def _create_signup(
+    event: Event, user: CustomUser, event_team: EventTeam | None = None
+) -> EventSignup:
     """Internal: create a signup with no state check.
 
     Handles existing-signup detection, waitlist placement, auto-approve / auto-confirm,
@@ -336,7 +340,7 @@ def process_rsvp(event, user, event_team=None):
 
 
 @transaction.atomic
-def create_tentative_signup(event, user):
+def create_tentative_signup(event: Event, user: CustomUser) -> EventSignup:
     """Create a TENTATIVE EventSignup, upgrading any active signup to tentative.
 
     Funnel point for both the DRF action and the Discord tentative button.
@@ -812,7 +816,10 @@ def reinstate_signup(signup):
             )
         signup.status = SignupStatus.APPROVED
         signup.waitlist_position = None
-        signup.save(update_fields=["status", "waitlist_position", "updated_at"])
+        signup.commitment = Commitment.MAIN
+        signup.save(
+            update_fields=["status", "waitlist_position", "commitment", "updated_at"]
+        )
         invalidate_after_commit(signup, event)
         transaction.on_commit(lambda: notify_signup_changed(event))
         return signup
@@ -835,7 +842,10 @@ def reinstate_signup(signup):
     else:
         signup.status = SignupStatus.RSVP
         signup.waitlist_position = None
-    signup.save(update_fields=["status", "waitlist_position", "updated_at"])
+    signup.commitment = Commitment.MAIN
+    signup.save(
+        update_fields=["status", "waitlist_position", "commitment", "updated_at"]
+    )
     invalidate_after_commit(signup, event)
     transaction.on_commit(lambda: notify_signup_changed(event))
     return signup

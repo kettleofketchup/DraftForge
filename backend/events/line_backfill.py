@@ -8,7 +8,7 @@ later schema change breaks this module, freeze its current body into 0026.
 
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 from uuid import uuid4
 
@@ -31,6 +31,7 @@ from telemetry.logging import get_logger
 log = get_logger(__name__)
 
 BATCH_SIZE = 500
+DECLINE_ONLY_WINDOW = timedelta(seconds=1)
 STAMPED_FIELDS: list[str] = [
     "line_seq",
     "signed_up_at",
@@ -69,6 +70,13 @@ def _waitlist_key(signup: Model) -> tuple[bool, int, datetime, int]:
     return (position is None, position or 0, signup.created_at, signup.pk)
 
 
+def _declined_without_signing_up(signup: Model) -> bool:
+    return (
+        signup.status == SignupStatus.CANCELLED
+        and signup.updated_at - signup.created_at < DECLINE_ONLY_WINDOW
+    )
+
+
 def _stamp(signup: Model, seq: int, signed_up_at: datetime) -> None:
     commitment = (
         Commitment.MAYBE if signup.status == SignupStatus.TENTATIVE else Commitment.MAIN
@@ -77,6 +85,11 @@ def _stamp(signup: Model, seq: int, signed_up_at: datetime) -> None:
     signup.signed_up_at = signed_up_at
     signup.commitment = commitment
     signup.rsvp_class = RsvpClass.STANDARD
+    if _declined_without_signing_up(signup):
+        signup.first_signed_up_at = None
+        signup.first_commitment = None
+        signup.first_rsvp_class = None
+        return
     signup.first_signed_up_at = signup.created_at
     signup.first_commitment = commitment
     signup.first_rsvp_class = RsvpClass.STANDARD
@@ -181,7 +194,7 @@ def backfill_signup_line(apps: Apps) -> BackfillResult:
         .filter(action=SignupAction.BACKFILLED, signup_id__isnull=False)
         .values_list("signup_id", flat=True)
     )
-    missing = [s for rows in by_event.values() for s in rows if s.pk not in backfilled]
+    missing = [s for s in stamped if s.pk not in backfilled]
     users = _user_snapshots(apps, {s.user_id for s in missing})
     correlation_id = f"backfill-{uuid4().hex[:12]}"
     occurred_at = timezone.now()

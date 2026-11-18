@@ -24,6 +24,7 @@ from app.models import (
 )
 from events import line
 from events.constants import (
+    LINE_EXCLUDED_STATUSES,
     ActorRole,
     Commitment,
     RsvpClass,
@@ -351,10 +352,10 @@ class EventRepeater(
     class Meta:
         ordering = ["-created_at"]
 
-    def __str__(self) -> str:
+    def __str__(self):
         return f"{self.name} ({self.frequency})"
 
-    def save(self, *args: Any, **kwargs: Any) -> None:
+    def save(self, *args, **kwargs):
         if self.description:
             self.description = nh3.clean(self.description)
         super().save(*args, **kwargs)
@@ -439,7 +440,7 @@ class Event(
         ]
         indexes = [models.Index(fields=["state", "scheduled_at"])]
 
-    def __str__(self) -> str:
+    def __str__(self):
         return f"{self.name} ({self.scheduled_at:%Y-%m-%d})"
 
     def clean(self) -> None:
@@ -451,7 +452,7 @@ class Event(
         ):
             raise ValidationError({"ends_at": "End time must be after the start time."})
 
-    def save(self, *args: Any, **kwargs: Any) -> None:
+    def save(self, *args, **kwargs):
         if self.description:
             self.description = nh3.clean(self.description)
         if (
@@ -516,7 +517,7 @@ class EventTeam(models.Model):
     class Meta:
         ordering = ["created_at"]
 
-    def __str__(self) -> str:
+    def __str__(self):
         return f"{self.name} ({self.event.name})"
 
 
@@ -554,12 +555,15 @@ class EventSignup(models.Model):
         default=RsvpClass.STANDARD,
         db_default=RsvpClass.STANDARD,
     )
-    first_signed_up_at = models.DateTimeField(db_default=Now())
+    first_signed_up_at = models.DateTimeField(null=True, db_default=Now())
     first_commitment = models.CharField(
-        max_length=8, choices=Commitment.choices, db_default=Commitment.MAIN
+        max_length=8, choices=Commitment.choices, null=True, db_default=Commitment.MAIN
     )
     first_rsvp_class = models.CharField(
-        max_length=16, choices=RsvpClass.choices, db_default=RsvpClass.STANDARD
+        max_length=16,
+        choices=RsvpClass.choices,
+        null=True,
+        db_default=RsvpClass.STANDARD,
     )
 
     objects = line.EventSignupQuerySet.as_manager()
@@ -666,9 +670,14 @@ class EventSignup(models.Model):
                     if self.status == SignupStatus.TENTATIVE
                     else Commitment.MAIN
                 )
+            never_signed_up = self.status in LINE_EXCLUDED_STATUSES
             for first in line.FIRST_FIELDS:
                 if _unset(getattr(self, first)):
-                    setattr(self, first, getattr(self, first.removeprefix("first_")))
+                    setattr(
+                        self,
+                        first,
+                        None if never_signed_up else line.first_value(self, first),
+                    )
             super().save(*args, **kwargs)
 
     def _save_update(
@@ -682,6 +691,7 @@ class EventSignup(models.Model):
         else:
             loaded = getattr(self, "_line_loaded", {})
         self._guard_first_fields(loaded)
+        self._fill_first_fields(kwargs)
         written = _written_attnames(kwargs.get("update_fields"))
         if (written is None or "event_id" in written) and self._event_changed(loaded):
             using = kwargs.get("using") or router.db_for_write(
@@ -715,6 +725,22 @@ class EventSignup(models.Model):
         super().save(*args, **kwargs)
         return False
 
+    def _fill_first_fields(self, kwargs: dict[str, Any]) -> None:
+        if self.status in LINE_EXCLUDED_STATUSES:
+            return
+        if "first_signed_up_at" in self.get_deferred_fields():
+            return
+        if self.first_signed_up_at is not None:
+            return
+        for first in line.FIRST_FIELDS:
+            setattr(self, first, line.first_value(self, first, at=tz.now()))
+        update_fields = kwargs.get("update_fields")
+        if update_fields is not None:
+            kwargs["update_fields"] = [
+                *update_fields,
+                *(f for f in line.FIRST_FIELDS if f not in update_fields),
+            ]
+
     def _guard_first_fields(self, loaded: Mapping[str, Any]) -> None:
         deferred = self.get_deferred_fields()
         checked = [f for f in line.FIRST_FIELDS if f not in deferred]
@@ -730,7 +756,11 @@ class EventSignup(models.Model):
                 or {}
             )
         changed = [
-            f for f in checked if f in originals and getattr(self, f) != originals[f]
+            f
+            for f in checked
+            if f in originals
+            and originals[f] is not None
+            and getattr(self, f) != originals[f]
         ]
         if changed:
             log.warning(
@@ -914,7 +944,7 @@ class RepeaterSubscription(models.Model):
         ]
         ordering = ["created_at"]
 
-    def __str__(self) -> str:
+    def __str__(self):
         return f"{self.user} → {self.event_repeater.name}"
 
 
@@ -941,5 +971,5 @@ class OrgEventDefaults(
     class Meta:
         verbose_name_plural = "Org event defaults"
 
-    def __str__(self) -> str:
+    def __str__(self):
         return f"Event defaults for {self.organization.name}"

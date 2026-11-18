@@ -51,17 +51,17 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='eventsignup',
             name='first_commitment',
-            field=models.CharField(choices=[('main', 'Main'), ('maybe', 'Maybe')], db_default='main', max_length=8),
+            field=models.CharField(choices=[('main', 'Main'), ('maybe', 'Maybe')], db_default='main', max_length=8, null=True),
         ),
         migrations.AddField(
             model_name='eventsignup',
             name='first_rsvp_class',
-            field=models.CharField(choices=[('standard', 'Standard')], db_default='standard', max_length=16),
+            field=models.CharField(choices=[('standard', 'Standard')], db_default='standard', max_length=16, null=True),
         ),
         migrations.AddField(
             model_name='eventsignup',
             name='first_signed_up_at',
-            field=models.DateTimeField(db_default=django.db.models.functions.datetime.Now()),
+            field=models.DateTimeField(db_default=django.db.models.functions.datetime.Now(), null=True),
         ),
         migrations.AddField(
             model_name='eventsignup',

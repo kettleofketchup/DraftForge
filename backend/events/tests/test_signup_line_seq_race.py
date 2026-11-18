@@ -62,6 +62,13 @@ class SignupLineSeqTransactionTests(TransactionTestCase):
         )
         self.assertTrue(all(in_atomic for _, in_atomic in records), records)
 
+    def test_writes_take_the_write_lock_up_front(self) -> None:
+        """line_seq has no unique constraint; BEGIN IMMEDIATE is what serializes stamps."""
+        self.assertEqual(connection.vendor, "sqlite")
+        self.assertEqual(
+            connection.settings_dict["OPTIONS"]["transaction_mode"], "IMMEDIATE"
+        )
+
     def test_concurrent_rsvp_seqs(self) -> None:
         """Smoke only: retries serialize the writers; the atomic test is the proof."""
         self.event.max_players = 10

@@ -37,6 +37,12 @@ FIRST_FIELDS: tuple[str, ...] = (
 )
 
 
+def first_value(signup: EventSignup, first: str, *, at: datetime | None = None) -> Any:
+    if first == "first_signed_up_at" and at is not None:
+        return at
+    return getattr(signup, first.removeprefix("first_"))
+
+
 def next_line_seq(event: Event) -> int:
     current = event.signups.nocache().aggregate(m=Max("line_seq"))["m"]
     return (current or 0) + 1

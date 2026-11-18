@@ -18,7 +18,7 @@ Moving a signup to another event gives it a new place at the end of that event's
 
 ## Commitment
 
-Each signup is either a **main** or a **maybe** signup (`commitment`). A tentative signup is a maybe; every other signup is a main. Each signup also has an RSVP class (`rsvp_class`), which is `standard` for every signup today.
+Each signup is either a **main** or a **maybe** signup (`commitment`). A tentative signup is a maybe; every other signup is a main. A tentative signup that is cancelled and then reinstated by a staff member comes back as a main. Each signup also has an RSVP class (`rsvp_class`), which is `standard` for every signup today.
 
 ## Original sign-up
 
@@ -30,7 +30,9 @@ Each signup remembers when and how the member first signed up for the event:
 | `first_commitment` | Their commitment at that first sign-up |
 | `first_rsvp_class` | Their RSVP class at that first sign-up |
 
-These fields never change. If a member cancels and signs up again, or switches between tentative and RSVP, the new signup keeps the original values while its place in line moves to the end. The app refuses any change to them, and the Django admin shows them as read-only.
+These fields never change once set. If a member cancels and signs up again, or switches between tentative and RSVP, the new signup keeps the original values while its place in line moves to the end. The app refuses any change to them, and the Django admin shows them as read-only.
+
+A member who declines without having signed up has a declined signup with these fields empty, because a decline is not a sign-up. They are filled in the first time that member signs up, goes tentative or is reinstated. The upgrade treats an existing cancelled signup as a decline of this kind when it was never changed after it was created.
 
 ## Signup record
 
@@ -47,7 +49,7 @@ Entries cannot be edited or deleted through the app or the admin. They outlive t
 - Deleting a user clears the link to that user, and the snapshot keeps their name and Discord ID.
 - Merging Discord accounts moves the entries to the remaining account.
 
-The only entries written today are `backfilled` ones: each signup that existed when the ledger was added got one, marking where its history starts. A `backfilled` entry is not a change in itself. Signups created, cancelled or moved after that get no entry yet; rerunning the backfill gives signups without one a `backfilled` entry.
+The only entries written today are `backfilled` ones: each signup that existed when the ledger was added got one, marking where its history starts. A `backfilled` entry is not a change in itself. Signups created, cancelled or moved after that get no entry yet.
 
 ## After deploying
 
@@ -57,7 +59,7 @@ Signups created by the old containers while migrations ran have no place in line
 docker exec <backend-container> python manage.py backfill_signup_line
 ```
 
-It gives those signups a place in line and adds their `backfilled` entries. It is safe to run again.
+It gives those signups a place in line and adds their `backfilled` entries. It is safe to run again: a rerun adds entries only for signups it gives a place in line, never for signups created after the upgrade.
 
 Use `docker exec` rather than `just dev::run`, which starts a container on the dev stack, or `just db::manage`, which disables the cache so the command's flush of cached signup lists does nothing.
 

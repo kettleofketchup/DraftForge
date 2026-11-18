@@ -12,6 +12,7 @@ from app.models import CustomUser
 from events.constants import EventState, SignupAction, SignupStatus
 from events.line_backfill import BackfillResult, backfill_signup_line
 from events.models import Event, EventSignup, SignupLedgerEntry
+from events.services import process_rsvp
 from events.tests.base import EventTestCase
 from user.models import BaseUserProfile
 
@@ -78,6 +79,7 @@ class LineBackfillTests(LineBackfillBase):
 
     def test_rerun_appends_null_rows(self) -> None:
         rows = [self.signup(p) for p in self.players[:3]]
+        self.unstamp(*rows)
         backfill_signup_line(apps)
         untouched = {
             r["id"]: r
@@ -106,6 +108,39 @@ class LineBackfillTests(LineBackfillBase):
             )
             self.assertEqual(len(self.entries_for(EventSignup(pk=pk))), 1)
 
+    def test_decline_only_row_has_no_first_fields(self) -> None:
+        declined = self.signup(self.players[0], status=SignupStatus.CANCELLED)
+        cancelled = self.signup(self.players[1])
+        later = tz.now() + timedelta(hours=1)
+        EventSignup._base_manager.filter(pk=declined.pk).update(
+            first_signed_up_at=tz.now(), first_commitment="main"
+        )
+        EventSignup._base_manager.filter(pk=cancelled.pk).update(
+            status=SignupStatus.CANCELLED, updated_at=later
+        )
+        self.unstamp(declined, cancelled)
+
+        backfill_signup_line(apps)
+
+        declined = EventSignup.objects.nocache().get(pk=declined.pk)
+        cancelled = EventSignup.objects.nocache().get(pk=cancelled.pk)
+        self.assertIsNotNone(declined.line_seq)
+        self.assertIsNone(declined.first_signed_up_at)
+        self.assertIsNone(declined.first_commitment)
+        self.assertIsNone(declined.first_rsvp_class)
+        self.assertEqual(cancelled.first_signed_up_at, cancelled.created_at)
+        self.assertEqual(cancelled.first_commitment, "main")
+
+    def test_rerun_skips_signups_created_after_backfill(self) -> None:
+        self.signup(self.players[0])
+        backfill_signup_line(apps)
+        fresh = process_rsvp(self.event, self.players[1])
+
+        result = backfill_signup_line(apps)
+
+        self.assertEqual(result.ledger_entries, 0)
+        self.assertEqual(self.entries_for(fresh), [])
+
     def test_user_without_profile(self) -> None:
         user = self.players[0]
         BaseUserProfile.objects.filter(user=user).delete()
@@ -120,6 +155,7 @@ class LineBackfillTests(LineBackfillBase):
 
     def test_nickname_in_snapshot(self) -> None:
         row = self.signup(self.user)
+        self.unstamp(row)
         backfill_signup_line(apps)
         [entry] = self.entries_for(row)
         self.assertEqual(entry.subject_snapshot["nickname"], "EventUser")

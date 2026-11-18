@@ -7,6 +7,7 @@ from rest_framework.test import APIClient
 
 from app.models import CustomUser, Organization
 from events.constants import Commitment, EventState, SignupStatus
+from events.exceptions import ImmutableFieldError
 from events.models import Event, EventSignup
 from events.services import (
     cancel_signup,
@@ -73,6 +74,10 @@ class SignupLineStampingTests(TestCase):
         for s in signups:
             self.assertEqual(s.status, SignupStatus.CANCELLED)
             self.assertEqual(s.commitment, Commitment.MAIN)
+            s.refresh_from_db()
+            self.assertIsNone(s.first_signed_up_at)
+            self.assertIsNone(s.first_commitment)
+            self.assertIsNone(s.first_rsvp_class)
 
     def test_mixed_create_sites_share_one_sequence(self) -> None:
         event = self._event()
@@ -115,14 +120,68 @@ class SignupLineStampingTests(TestCase):
         self.assertEqual(new.commitment, Commitment.MAYBE)
         self._assert_carried(new, old.pk, past, later, Commitment.MAIN)
 
-    def test_decline_to_rsvp_carries_first_fields(self) -> None:
+    def test_decline_then_rsvp_starts_first_fields_at_rsvp(self) -> None:
         event = self._event()
-        old = decline_signup(event, self.users[0])
+        decline_signup(event, self.users[0])
+        new = process_rsvp(event, self.users[0])
+        new.refresh_from_db()
+        self.assertEqual(new.status, SignupStatus.RSVP)
+        self.assertEqual(new.first_signed_up_at, new.signed_up_at)
+        self.assertEqual(new.first_commitment, Commitment.MAIN)
+        self.assertEqual(new.first_rsvp_class, new.rsvp_class)
+
+    def test_decline_then_tentative_starts_first_fields_as_maybe(self) -> None:
+        event = self._event()
+        decline_signup(event, self.users[0])
+        new = create_tentative_signup(event, self.users[0])
+        new.refresh_from_db()
+        self.assertEqual(new.first_signed_up_at, new.signed_up_at)
+        self.assertEqual(new.first_commitment, Commitment.MAYBE)
+
+    def test_rsvp_cancel_rsvp_carries_first_fields(self) -> None:
+        event = self._event()
+        old = process_rsvp(event, self.users[0])
         later = process_rsvp(event, self.users[1])
         past = self._age_first(old)
+        cancel_signup(old)
         new = process_rsvp(event, self.users[0])
-        self.assertEqual(new.status, SignupStatus.RSVP)
         self._assert_carried(new, old.pk, past, later, Commitment.MAIN)
+
+    def test_reinstating_a_decline_sets_first_fields_once(self) -> None:
+        event = self._event()
+        declined = decline_signup(event, self.users[0])
+        before = tz.now()
+        reinstate_signup(declined)
+        declined.refresh_from_db()
+        self.assertEqual(declined.status, SignupStatus.RSVP)
+        self.assertGreaterEqual(declined.first_signed_up_at, before)
+        self.assertEqual(declined.first_commitment, Commitment.MAIN)
+        self.assertEqual(declined.first_rsvp_class, declined.rsvp_class)
+        declined.first_commitment = Commitment.MAYBE
+        with self.assertRaises(ImmutableFieldError):
+            declined.save()
+
+    def test_reinstated_tentative_is_main(self) -> None:
+        event = self._event()
+        signup = create_tentative_signup(event, self.users[0])
+        cancel_signup(signup)
+        signup.refresh_from_db()
+        reinstate_signup(signup)
+        signup.refresh_from_db()
+        self.assertEqual(signup.status, SignupStatus.RSVP)
+        self.assertEqual(signup.commitment, Commitment.MAIN)
+        self.assertEqual(signup.first_commitment, Commitment.MAYBE)
+
+    def test_reinstated_tentative_in_roll_call_is_main(self) -> None:
+        event = self._event()
+        signup = create_tentative_signup(event, self.users[0])
+        cancel_signup(signup)
+        Event.objects.filter(pk=event.pk).update(state=EventState.ROLL_CALL)
+        signup = EventSignup.objects.nocache().get(pk=signup.pk)
+        reinstate_signup(signup)
+        signup.refresh_from_db()
+        self.assertEqual(signup.status, SignupStatus.APPROVED)
+        self.assertEqual(signup.commitment, Commitment.MAIN)
 
     def test_reject_to_rsvp_carries_first_fields(self) -> None:
         event = self._event()
