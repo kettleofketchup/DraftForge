@@ -20,6 +20,14 @@ just frontend::lint-shadcn-prune   # after fixing baselined violations
 | --- | --- |
 | `shadcn/no-raw-colors` | Raw palette classes (`text-green-500`, `bg-slate-900`) and hex values instead of brand tokens. Same policy as the `brand` skill, now machine-checked. |
 | `shadcn/no-unknown-classes` | Classes Tailwind emits **no CSS** for: `align-center`, `justify-left`, `items-top`, `3xl:*` (no such breakpoint), `prose*` (`@tailwindcss/typography` is not installed). Each hit is a silent styling bug. Zero baseline entries: every hit fails. |
+| `draftforge/use-display-name` | A person-name field (`username`, `nickname`, `discordNickname`, `guildNickname`, `discordUsername`, `global_name`) rendered straight into JSX, including `a.nickname \|\| a.username`, `??`, ternary branches and template literals. Use `DisplayName(user)`, which applies org server nicknames and Discord names. A ternary *test* (`p.username ? DisplayName(p) : …`) and attributes like `title` are allowed. |
+| `draftforge/use-user-avatar` | `<AvatarImage>` whose `src` reads `.avatar` / `.avatarUrl`. Use `<UserAvatar user={…} />` for the shared fallback, sizes and Discord URL handling. Non-user images (org logos) are not flagged. |
+
+The two `draftforge/*` rules are local (`frontend/eslint-rules/user-display.js`, tests in
+`frontend/tests/unit/eslint-user-display.test.ts`) and are off in the helpers that implement
+them (`UserAvatar.tsx`, `avatar.tsx`, `ui/**`). When a screen deliberately shows one specific
+field (an `@handle`, a labelled "Username:" row, a Discord member picker), opt out on that
+line with a reason: `// eslint-disable-next-line draftforge/use-display-name -- shows the handle`.
 
 Runtime hook classes that are not Tailwind utilities go in the rule's `allow` list
 (`nodrag`/`nopan` for React Flow, `toaster` for sonner, `spinner` for an inline `<style>`).
