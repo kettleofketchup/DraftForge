@@ -5,6 +5,7 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.utils import timezone
 from rest_framework import serializers
 
+from app.auth import InternalServiceUser
 from app.display_names import user_display_name
 from app.models import CustomUser, League, Organization
 from app.permissions_org import (
@@ -848,6 +849,8 @@ class EventSignupSerializer(serializers.ModelSerializer):
         if request is None:
             return False
         user = request.user
+        if isinstance(user, InternalServiceUser):
+            return True
         if user.is_authenticated and user.pk == obj.user_id:
             return True
         cache: dict[int, bool] = self.context.setdefault("_org_mmr_visible", {})
