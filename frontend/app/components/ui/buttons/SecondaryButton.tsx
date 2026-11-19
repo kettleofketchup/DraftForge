@@ -17,7 +17,6 @@ export type SecondaryColor =
   | 'red'
   | 'sky'
   | 'cyan'
-  | 'lime'
   | 'emerald';
 
 export interface SecondaryButtonProps extends Omit<
@@ -40,7 +39,6 @@ const colorStyles: Record<SecondaryColor, string> = {
   red: `${buttonLift} ${buttonDisabled} bg-destructive/60 hover:bg-destructive/75 text-white shadow-destructive/25`,
   sky: `${buttonLift} ${buttonDisabled} bg-accent/75 hover:bg-accent/95 text-white shadow-accent/30`,
   cyan: `${buttonLift} ${buttonDisabled} bg-interactive/55 hover:bg-interactive/70 text-white shadow-interactive/15`,
-  lime: `${buttonLift} ${buttonDisabled} bg-lime-700 hover:bg-lime-600 text-white shadow-lime-900/50`,
   emerald: `${buttonLift} ${buttonDisabled} bg-success/40 hover:bg-success/55 text-white shadow-success/15`,
 };
 

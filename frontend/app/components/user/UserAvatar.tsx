@@ -78,7 +78,7 @@ const borderClasses: Record<UserAvatarBorder, string> = {
   none: '',
   primary: 'ring-2 ring-primary',
   muted: 'border border-background',
-  captain: 'ring-2 ring-yellow-500',
+  captain: 'ring-2 ring-captain',
 };
 
 /**

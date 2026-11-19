@@ -51,7 +51,7 @@ const HeroButton = memo(function HeroButton({
           isSelected &&
             'ring-2 ring-turn scale-110 z-10 from-turn/40 to-base-400',
           isHighlighted &&
-            'ring-2 ring-green-400 from-green-600/30 to-base-400',
+            'ring-2 ring-search-match from-search-match/30 to-base-400',
           isDimmed && 'opacity-30 grayscale',
           !available && 'cursor-not-allowed',
         )}
