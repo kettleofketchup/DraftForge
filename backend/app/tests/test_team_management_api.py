@@ -2,11 +2,19 @@
 
 import json
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 
+from cacheops import invalidate_model
+from cacheops.conf import settings as cacheops_settings
 from django.core.serializers.json import DjangoJSONEncoder
-from django.db import connection, reset_queries
-from django.test import SimpleTestCase, TestCase, override_settings
+from django.db import connection, reset_queries, transaction
+from django.test import (
+    SimpleTestCase,
+    TestCase,
+    TransactionTestCase,
+    override_settings,
+)
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
@@ -16,9 +24,12 @@ from app.draft_state import build_draft_state
 from app.exception_handler import exception_handler
 from app.functions.tournament import _serialize_tournament
 from app.models import (
+    CustomUser,
     DraftTeam,
     Game,
     HeroDraft,
+    League,
+    Organization,
     Team,
     TeamLog,
     TeamLogVia,
@@ -316,3 +327,242 @@ class ExceptionHandlerTests(SimpleTestCase):
         self.assertEqual(
             response.data, {"code": "not_member", "detail": "X is not on the team."}
         )
+
+
+def action_url(team_pk: int | str, path: str) -> str:
+    return f"/api/teams/{team_pk}/{path}/"
+
+
+@dataclass(frozen=True)
+class ActionCase:
+    url: str
+    prepare: Callable[[Any], dict[str, Any]]
+
+
+ACTION_CASES: list[ActionCase] = [
+    ActionCase("set-captain", lambda t: {"user_id": t.m1.pk, "reason": "matrix check"}),
+    ActionCase("set-deputy", lambda t: {"user_id": t.m1.pk, "reason": "matrix check"}),
+    ActionCase("rename", lambda t: {"name": "Matrix Name", "reason": "matrix check"}),
+]
+
+
+class TeamApiFixture(TeamManagementFixture):
+    def setUp(self) -> None:
+        super().setUp()
+        self.site_staff = self.make_user("api_site_staff")
+        self.site_staff.is_staff = True
+        self.site_staff.save()
+        self.org_staff = self.make_user("api_org_staff")
+        self.org.staff.add(self.org_staff)
+        self.league_staff = self.make_user("api_league_staff")
+        self.league.staff.add(self.league_staff)
+        self.league_admin = self.make_user("api_league_admin")
+        self.league.admins.add(self.league_admin)
+
+    def client_for(self, user: CustomUser | None) -> APIClient:
+        client = APIClient()
+        if user is not None:
+            client.force_authenticate(user)
+        return client
+
+    def post(
+        self,
+        path: str,
+        body: dict[str, Any],
+        user: CustomUser | None = None,
+        team_pk: int | str | None = None,
+    ) -> Any:
+        client = self.client_for(self.site_staff if user is None else user)
+        pk = self.team.pk if team_pk is None else team_pk
+        return client.post(action_url(pk, path), body, format="json")
+
+    def log_count(self) -> int:
+        return TeamLog.objects.filter(team_snapshot_id=self.team.pk).count()
+
+    def other_org_tournament(self) -> Tournament:
+        org = Organization.objects.create(name="Elsewhere Org")
+        league = League.objects.create(
+            organization=org, name="Elsewhere League", steam_league_id=92002
+        )
+        return Tournament.objects.create(
+            name="Elsewhere Cup", date_played=timezone.now(), league=league
+        )
+
+
+class TeamActionPermissionTests(TeamApiFixture, TestCase):
+    def test_permission_matrix(self) -> None:
+        allowed = {
+            "site_staff": self.site_staff,
+            "org_staff": self.org_staff,
+            "league_staff": self.league_staff,
+            "league_admin": self.league_admin,
+        }
+        denied = {"captain": self.c, "outsider": self.outsider}
+        roles: list[tuple[str, CustomUser | None, int]] = [
+            *((name, user, 200) for name, user in allowed.items()),
+            *((name, user, 403) for name, user in denied.items()),
+            ("anonymous", None, 401),
+        ]
+        for role, user, expected in roles:
+            for case in ACTION_CASES:
+                with self.subTest(role=role, action=case.url), transaction.atomic():
+                    body = case.prepare(self)
+                    resp = self.client_for(user).post(
+                        action_url(self.team.pk, case.url), body, format="json"
+                    )
+                    self.assertEqual(resp.status_code, expected, resp.content)
+                    if expected == 200:
+                        self.assertIs(resp.json()["can_manage_team"], True)
+                    elif expected == 403:
+                        self.assertEqual(resp.json()["code"], "not_permitted")
+                    else:
+                        self.assertIn("WWW-Authenticate", resp)
+                    transaction.set_rollback(True)
+
+    def test_url_names_reverse(self) -> None:
+        for name, path in (
+            ("teams-set-captain", "set-captain"),
+            ("teams-set-deputy", "set-deputy"),
+            ("teams-rename", "rename"),
+        ):
+            with self.subTest(name=name):
+                self.assertEqual(
+                    reverse(name, args=[self.team.pk]), action_url(self.team.pk, path)
+                )
+
+    def test_tournamentless_team_actions_forbidden_for_site_staff(self) -> None:
+        loose = Team.objects.create(tournament=None, name="Loose", captain=self.m1)
+        loose.members.add(self.m1)
+        resp = self.post(
+            "rename", {"name": "Still Loose", "reason": "tidy"}, team_pk=loose.pk
+        )
+        self.assertEqual(resp.status_code, 403)
+        self.assertEqual(resp.json()["code"], "not_permitted")
+
+    def test_legacy_patch_denial_body_unchanged(self) -> None:
+        resp = self.client_for(self.outsider).patch(
+            f"/api/teams/{self.team.pk}/", {"name": "Nope"}, format="json"
+        )
+        self.assertEqual(resp.status_code, 403)
+        self.assertNotIn("code", resp.json())
+
+    def test_permission_uses_current_tournament(self) -> None:
+        Team.objects.filter(pk=self.team.pk).update(
+            tournament=self.other_org_tournament()
+        )
+        before = self.log_count()
+        resp = self.post(
+            "rename", {"name": "Moved", "reason": "move"}, user=self.league_admin
+        )
+        self.assertEqual(resp.status_code, 403)
+        self.assertEqual(resp.json()["code"], "not_permitted")
+        self.assertEqual(self.log_count(), before)
+
+
+class LeadershipActionTests(TeamApiFixture, TestCase):
+    def test_set_captain_happy_path(self) -> None:
+        resp = self.post(
+            "set-captain", {"user_id": self.m1.pk, "reason": "  late swap  "}
+        )
+        self.assertEqual(resp.status_code, 200, resp.content)
+        data = resp.json()
+        self.assertEqual(data["captain"]["pk"], self.m1.pk)
+        self.assertIs(data["can_manage_team"], True)
+        self.assertIsInstance(data["left_members"], list)
+        self.assertEqual(data["leadership_problems"], [])
+        log = self.only_log()
+        self.assertEqual(log.via, "web")
+        self.assertEqual(log.actor_id, self.site_staff.pk)
+        self.assertEqual(log.reason, "late swap")
+
+    def test_set_captain_reseats_ghost(self) -> None:
+        self.make_ghost_captain(self.team, self.outsider)
+        resp = self.post(
+            "set-captain", {"user_id": self.outsider.pk, "reason": "reseat"}
+        )
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertEqual(resp.json()["leadership_problems"], [])
+
+    def test_set_deputy_null_clears(self) -> None:
+        resp = self.post("set-deputy", {"user_id": None, "reason": "clear"})
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertIsNone(resp.json()["deputy_captain"])
+
+    def test_rename_blank_is_name_blank(self) -> None:
+        for name in ("", "   "):
+            with self.subTest(name=name):
+                resp = self.post("rename", {"name": name, "reason": "tidy"})
+                self.assertEqual(resp.status_code, 400)
+                self.assertEqual(resp.json()["code"], "name_blank")
+        resp = self.post("rename", {"name": self.team.name, "reason": "tidy"})
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.json()["code"], "name_unchanged")
+
+    def test_missing_reason_400(self) -> None:
+        resp = self.post("set-captain", {"user_id": self.m1.pk})
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("reason", resp.json())
+        self.assertEqual(self.log_count(), 0)
+
+    def test_service_refusal_coded(self) -> None:
+        resp = self.post("set-deputy", {"user_id": self.outsider.pk, "reason": "x"})
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.json()["code"], "deputy_not_member")
+        self.assertTrue(resp.json()["detail"])
+        self.assertEqual(self.log_count(), 0)
+
+    def test_bad_ids(self) -> None:
+        for user_id in ("abc", 999999):
+            with self.subTest(user_id=user_id):
+                resp = self.post("set-captain", {"user_id": user_id, "reason": "x"})
+                self.assertEqual(resp.status_code, 400)
+                self.assertIn("user_id", resp.json())
+        resp = self.post(
+            "set-captain", {"user_id": self.m1.pk, "reason": "x"}, team_pk="abc"
+        )
+        self.assertEqual(resp.status_code, 404)
+        resp = self.post("rename", {"name": "Gone", "reason": "x"}, team_pk=999999)
+        self.assertEqual(resp.status_code, 404)
+        resp = self.post(
+            "set-captain", {"user_id": 999999, "reason": "x"}, user=self.outsider
+        )
+        self.assertEqual(resp.status_code, 403)
+        self.assertEqual(resp.json()["code"], "not_permitted")
+
+    def test_staff_acting_on_self(self) -> None:
+        self.team.members.add(self.site_staff)
+        resp = self.post("set-captain", {"user_id": self.site_staff.pk})
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("reason", resp.json())
+        resp = self.post("set-captain", {"user_id": self.site_staff.pk, "reason": "me"})
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertEqual(resp.json()["captain"]["pk"], self.site_staff.pk)
+
+
+class CachedPermissionTests(TeamApiFixture, TransactionTestCase):
+    def setUp(self) -> None:
+        if not cacheops_settings.CACHEOPS_ENABLED:
+            self.skipTest("cacheops disabled")
+        super().setUp()
+        invalidate_model(Team)
+        invalidate_model(Tournament)
+
+    def test_permission_ignores_cached_team(self) -> None:
+        Team.objects.get(pk=self.team.pk)
+        with self.assertNumQueries(0):
+            Team.objects.get(pk=self.team.pk)
+        elsewhere = self.other_org_tournament()
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "UPDATE app_team SET tournament_id = %s WHERE id = %s",
+                [elsewhere.pk, self.team.pk],
+            )
+        self.assertEqual(
+            Team.objects.get(pk=self.team.pk).tournament_id, self.tournament.pk
+        )
+        before = self.log_count()
+        resp = self.post(
+            "rename", {"name": "Moved", "reason": "move"}, user=self.league_admin
+        )
+        self.assertEqual(resp.status_code, 403)
+        self.assertEqual(self.log_count(), before)
