@@ -1,11 +1,15 @@
 import copy
-from collections.abc import Mapping, Sequence
-from typing import Any
+from collections.abc import Iterable, Mapping, Sequence
+from typing import Any, NoReturn
 
 import nh3
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import RegexValidator
-from django.db import models
+from django.db import models, router, transaction
+from django.db.models import F
+from django.db.models.expressions import DatabaseDefault
+from django.db.models.functions import Now
 from django.utils import timezone as tz
 
 from app.cache_utils import invalidate_after_commit
@@ -18,14 +22,25 @@ from app.models import (
     GameType,
     TimeoutAction,
 )
+from events import line
 from events.constants import (  # noqa: F401 — re-exported for backward compat
     EVENT_STATE_TRANSITIONS,
+    LINE_EXCLUDED_STATUSES,
+    ActorRole,
+    Commitment,
     EventState,
     RepeatFrequency,
+    RsvpClass,
+    SignupAction,
+    SignupMeans,
     SignupStatus,
     SignupType,
 )
+from events.exceptions import ImmutableFieldError, LedgerAppendOnlyError
 from lobby import passwords as lobby_passwords
+from telemetry.logging import get_logger
+
+log = get_logger(__name__)
 
 discord_id_validator = RegexValidator(
     r"^(\d{17,20})?$",
@@ -529,17 +544,380 @@ class EventSignup(models.Model):
     unmet_requirements = models.JSONField(default=list, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    signed_up_at = models.DateTimeField(db_default=Now())
+    line_seq = models.PositiveIntegerField(null=True, blank=True)
+    commitment = models.CharField(
+        max_length=8, choices=Commitment.choices, db_default=Commitment.MAIN
+    )
+    rsvp_class = models.CharField(
+        max_length=16,
+        choices=RsvpClass.choices,
+        default=RsvpClass.STANDARD,
+        db_default=RsvpClass.STANDARD,
+    )
+    first_signed_up_at = models.DateTimeField(null=True, db_default=Now())
+    first_commitment = models.CharField(
+        max_length=8, choices=Commitment.choices, null=True, db_default=Commitment.MAIN
+    )
+    first_rsvp_class = models.CharField(
+        max_length=16,
+        choices=RsvpClass.choices,
+        null=True,
+        db_default=RsvpClass.STANDARD,
+    )
+
+    objects = line.EventSignupQuerySet.as_manager()
 
     class Meta:
-        ordering = ["created_at"]
+        ordering = [F("line_seq").asc(nulls_last=True), "pk"]
         constraints = [
             models.UniqueConstraint(
                 fields=["event", "user"], name="unique_event_user_signup"
             ),
         ]
+        indexes = [
+            models.Index(
+                fields=["event", "line_seq"], name="eventsignup_event_line_idx"
+            )
+        ]
 
     def __str__(self) -> str:
         return f"{self.user} - {self.event.name} ({self.status})"
+
+    _line_loaded: dict[str, Any]
+    _TRACKED: tuple[str, ...] = ("event_id", "line_seq", *line.FIRST_FIELDS)
+    _EXISTING_FIELDS: tuple[str, ...] = (
+        "event_id",
+        "line_seq",
+        "signed_up_at",
+        "commitment",
+        "rsvp_class",
+        *line.FIRST_FIELDS,
+    )
+
+    @classmethod
+    def from_db(
+        cls, db: str | None, field_names: Sequence[str], values: Sequence[Any]
+    ) -> "EventSignup":
+        instance = super().from_db(db, field_names, values)
+        instance._capture_line_state()
+        return instance
+
+    def refresh_from_db(
+        self,
+        using: str | None = None,
+        fields: Iterable[str] | None = None,
+        from_queryset: models.QuerySet | None = None,
+    ) -> None:
+        fields = list(fields) if fields is not None else None
+        super().refresh_from_db(using=using, fields=fields, from_queryset=from_queryset)
+        if fields is None or not hasattr(self, "_line_loaded"):
+            self._capture_line_state()
+        else:
+            self._capture_line_state(
+                {"event_id" if f == "event" else f for f in fields}
+            )
+
+    def _capture_line_state(self, only: set[str] | None = None) -> None:
+        deferred = self.get_deferred_fields()
+        state = {} if only is None else dict(self._line_loaded)
+        for attname in self._TRACKED:
+            if only is not None and attname not in only:
+                continue
+            if attname in deferred:
+                state.pop(attname, None)
+            else:
+                state[attname] = getattr(self, attname)
+        self._line_loaded = state
+
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        existing: dict[str, Any] | None = None
+        if (
+            self._state.adding
+            and self.pk is not None
+            and not kwargs.get("force_insert")
+        ):
+            existing = (
+                type(self)
+                ._base_manager.nocache()
+                .filter(pk=self.pk)
+                .values(*self._EXISTING_FIELDS)
+                .first()
+            )
+        restamped = False
+        if self._state.adding and existing is None:
+            self._save_insert(*args, **kwargs)
+        else:
+            restamped = self._save_update(existing, *args, **kwargs)
+        written = _written_attnames(kwargs.get("update_fields"))
+        if written is None or not hasattr(self, "_line_loaded"):
+            self._capture_line_state()
+        else:
+            self._capture_line_state(written | ({"line_seq"} if restamped else set()))
+
+    def _save_insert(self, *args: Any, **kwargs: Any) -> None:
+        using = kwargs.get("using") or router.db_for_write(type(self), instance=self)
+        with transaction.atomic(using=using):
+            if _unset(self.line_seq):
+                at = None if _unset(self.signed_up_at) else self.signed_up_at
+                for name, value in line.stamp(self.event, at=at).items():
+                    setattr(self, name, value)
+            elif _unset(self.signed_up_at):
+                self.signed_up_at = tz.now()
+            if _unset(self.commitment):
+                self.commitment = (
+                    Commitment.MAYBE
+                    if self.status == SignupStatus.TENTATIVE
+                    else Commitment.MAIN
+                )
+            never_signed_up = self.status in LINE_EXCLUDED_STATUSES
+            for first in line.FIRST_FIELDS:
+                if _unset(getattr(self, first)):
+                    setattr(
+                        self,
+                        first,
+                        None if never_signed_up else line.first_value(self, first),
+                    )
+            super().save(*args, **kwargs)
+
+    def _save_update(
+        self, existing: dict[str, Any] | None, *args: Any, **kwargs: Any
+    ) -> bool:
+        if existing is not None:
+            for name, value in existing.items():
+                if _unset(getattr(self, name)):
+                    setattr(self, name, value)
+            loaded = existing
+        else:
+            loaded = getattr(self, "_line_loaded", {})
+        self._guard_first_fields(loaded)
+        self._fill_first_fields(kwargs)
+        written = _written_attnames(kwargs.get("update_fields"))
+        if (written is None or "event_id" in written) and self._event_changed(loaded):
+            using = kwargs.get("using") or router.db_for_write(
+                type(self), instance=self
+            )
+            with transaction.atomic(using=using):
+                from_event_id = loaded["event_id"]
+                for name, value in line.stamp(self.event).items():
+                    setattr(self, name, value)
+                update_fields = kwargs.get("update_fields")
+                if update_fields is not None:
+                    kwargs["update_fields"] = [
+                        *update_fields,
+                        *(
+                            f
+                            for f in ("line_seq", "signed_up_at")
+                            if f not in update_fields
+                        ),
+                    ]
+                super().save(*args, **kwargs)
+            log.info(
+                "signup_line_restamped_on_event_change",
+                system="events",
+                subsystem="line",
+                signup_id=self.pk,
+                from_event_id=from_event_id,
+                event_id=self.event_id,
+                line_seq=self.line_seq,
+            )
+            return True
+        super().save(*args, **kwargs)
+        return False
+
+    def _fill_first_fields(self, kwargs: dict[str, Any]) -> None:
+        if self.status in LINE_EXCLUDED_STATUSES:
+            return
+        if "first_signed_up_at" in self.get_deferred_fields():
+            return
+        if self.first_signed_up_at is not None:
+            return
+        for first in line.FIRST_FIELDS:
+            setattr(self, first, line.first_value(self, first, at=tz.now()))
+        update_fields = kwargs.get("update_fields")
+        if update_fields is not None:
+            kwargs["update_fields"] = [
+                *update_fields,
+                *(f for f in line.FIRST_FIELDS if f not in update_fields),
+            ]
+
+    def _guard_first_fields(self, loaded: Mapping[str, Any]) -> None:
+        deferred = self.get_deferred_fields()
+        checked = [f for f in line.FIRST_FIELDS if f not in deferred]
+        originals = dict(loaded)
+        missing = [f for f in checked if f not in originals]
+        if missing and self.pk is not None:
+            originals.update(
+                type(self)
+                ._base_manager.nocache()
+                .filter(pk=self.pk)
+                .values(*missing)
+                .first()
+                or {}
+            )
+        changed = [
+            f
+            for f in checked
+            if f in originals
+            and originals[f] is not None
+            and getattr(self, f) != originals[f]
+        ]
+        if changed:
+            log.warning(
+                "signup_first_fields_mutation_blocked",
+                system="events",
+                subsystem="line",
+                signup_id=self.pk,
+                fields=changed,
+            )
+            raise ImmutableFieldError(f"EventSignup fields are immutable: {changed}")
+
+    def _event_changed(self, loaded: Mapping[str, Any]) -> bool:
+        if "event_id" not in loaded or "event_id" in self.get_deferred_fields():
+            return False
+        if self.event_id == loaded["event_id"]:
+            return False
+        return "line_seq" not in loaded or self.line_seq == loaded["line_seq"]
+
+
+def _written_attnames(update_fields: Iterable[str] | None) -> set[str] | None:
+    if update_fields is None:
+        return None
+    return {"event_id" if f == "event" else f for f in update_fields}
+
+
+def _unset(value: object) -> bool:
+    return value is None or isinstance(value, DatabaseDefault)
+
+
+LEDGER_MUTABLE_FIELDS = frozenset(
+    {"subject_user", "subject_user_id", "actor_user", "actor_user_id"}
+)
+
+
+def _ledger_blocked(
+    entry_id: int | None, operation: str, fields: list[str]
+) -> NoReturn:
+    log.warning(
+        "signup_ledger_mutation_blocked",
+        system="events",
+        subsystem="ledger",
+        entry_id=entry_id,
+        operation=operation,
+        fields=fields,
+    )
+    raise LedgerAppendOnlyError(
+        f"SignupLedgerEntry is append-only: {operation} {fields}"
+    )
+
+
+class SignupLedgerEntryQuerySet(models.QuerySet):
+    def delete(self) -> tuple[int, dict[str, int]]:
+        _ledger_blocked(None, "queryset_delete", [])
+
+    def update(self, **kwargs: Any) -> int:
+        if not kwargs or not set(kwargs) <= LEDGER_MUTABLE_FIELDS:
+            _ledger_blocked(None, "queryset_update", sorted(kwargs))
+        return super().update(**kwargs)
+
+    def purge(self) -> int:
+        count, _ = models.QuerySet.delete(self)
+        log.info(
+            "signup_ledger_purged", system="events", subsystem="ledger", count=count
+        )
+        return count
+
+
+class SignupLedgerEntry(models.Model):
+    event = models.ForeignKey(
+        Event,
+        on_delete=models.DO_NOTHING,
+        db_constraint=False,
+        related_name="ledger_entries",
+    )
+    organization = models.ForeignKey(
+        "app.Organization",
+        on_delete=models.DO_NOTHING,
+        db_constraint=False,
+        null=True,
+        related_name="+",
+    )
+    signup = models.ForeignKey(
+        EventSignup,
+        on_delete=models.DO_NOTHING,
+        db_constraint=False,
+        null=True,
+        related_name="ledger_entries",
+    )
+    event_snapshot = models.JSONField()
+    subject_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="signup_ledger_entries",
+    )
+    subject_snapshot = models.JSONField()
+    actor_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="signup_ledger_actions",
+    )
+    actor_snapshot = models.JSONField(null=True)
+    actor_role = models.CharField(max_length=16, choices=ActorRole.choices)
+    means = models.CharField(max_length=32, choices=SignupMeans.choices)
+    on_behalf = models.BooleanField(default=False)
+    action = models.CharField(max_length=32, choices=SignupAction.choices)
+    before = models.JSONField(null=True)
+    after = models.JSONField(null=True)
+    reason = models.TextField(blank=True, default="")
+    rules_overridden = models.JSONField(default=list)
+    caused_by = models.ForeignKey(
+        "self",
+        on_delete=models.DO_NOTHING,
+        db_constraint=False,
+        null=True,
+        related_name="effects",
+    )
+    correlation_id = models.CharField(max_length=64, blank=True, default="")
+    occurred_at = models.DateTimeField(default=tz.now)
+
+    objects = SignupLedgerEntryQuerySet.as_manager()
+
+    class Meta:
+        ordering = ["occurred_at", "pk"]
+        indexes = [
+            models.Index(
+                fields=["event", "occurred_at"], name="ledger_event_occurred_idx"
+            ),
+            models.Index(
+                fields=["subject_user", "occurred_at"],
+                name="ledger_subject_occurred_idx",
+            ),
+            models.Index(
+                fields=["event", "subject_user", "action"],
+                name="ledger_event_subject_act_idx",
+            ),
+            models.Index(
+                fields=["organization", "occurred_at"], name="ledger_org_occurred_idx"
+            ),
+            models.Index(fields=["correlation_id"], name="ledger_correlation_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.action} event={self.event_id} user={self.subject_user_id}"
+
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        if not self._state.adding:
+            update_fields = kwargs.get("update_fields")
+            names = None if update_fields is None else list(update_fields)
+            if not names or not set(names) <= LEDGER_MUTABLE_FIELDS:
+                _ledger_blocked(self.pk, "save", names or [])
+        super().save(*args, **kwargs)
+
+    def delete(self, *args: Any, **kwargs: Any) -> tuple[int, dict[str, int]]:
+        _ledger_blocked(self.pk, "delete", [])
 
 
 class RepeaterSubscription(models.Model):

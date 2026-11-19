@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import {
+  Commitment,
   createEventInputSchema,
   createSeriesEventInputSchema,
   DISCORD_CONFIG_DEFAULTS,
@@ -8,6 +9,7 @@ import {
   DOTA_LOBBY_CONFIG_DEFAULTS,
   editEventFormSchema,
   eventSchema,
+  eventSignupSchema,
   localToUTC,
   refineEventEnd,
   utcToLocalInput,
@@ -297,5 +299,67 @@ describe('event form schema key sets', () => {
         ],
       ].sort(),
     );
+  });
+});
+
+describe('eventSignupSchema line fields', () => {
+  const oldPayload = {
+    id: 1,
+    event: 2,
+    user: 3,
+    username: 'player',
+    user_avatar: null,
+    user_data: null,
+    dota_profile: null,
+    org_user_mmr: null,
+    org_user_pk: null,
+    organization: null,
+    suggested_mmr: 3000,
+    suggested_mmr_range: [2500, 3500],
+    suggested_mmr_range_source: 'fallback',
+    event_team: null,
+    signup_type: 'player',
+    status: 'rsvp',
+    waitlist_position: null,
+    created_at: '2026-11-01T10:00:00Z',
+    updated_at: '2026-11-01T10:00:00Z',
+  };
+
+  it('fills defaults for a payload without line fields', () => {
+    const parsed = eventSignupSchema.parse(oldPayload);
+    expect(parsed.signed_up_at).toBeNull();
+    expect(parsed.commitment).toBe('main');
+    expect(parsed.rsvp_class).toBe('standard');
+    expect(parsed.first_signed_up_at).toBeNull();
+    expect(parsed.line_rank).toBeNull();
+  });
+
+  it('round-trips line fields', () => {
+    const lineFields = {
+      signed_up_at: '2026-11-02T12:00:00Z',
+      commitment: Commitment.MAYBE,
+      rsvp_class: 'standard',
+      first_signed_up_at: '2026-10-30T08:00:00Z',
+      line_rank: 4,
+    };
+    const parsed = eventSignupSchema.parse({ ...oldPayload, ...lineFields });
+    expect(parsed).toMatchObject(lineFields);
+  });
+
+  it('rejects a non-integer line_rank', () => {
+    expect(
+      eventSignupSchema.safeParse({ ...oldPayload, line_rank: 1.5 }).success,
+    ).toBe(false);
+  });
+
+  it('rejects an unknown commitment', () => {
+    expect(
+      eventSignupSchema.safeParse({ ...oldPayload, commitment: 'sometimes' })
+        .success,
+    ).toBe(false);
+  });
+
+  it('exposes the Commitment values', () => {
+    expect(Commitment).toEqual({ MAIN: 'main', MAYBE: 'maybe' });
   });
 });

@@ -18,6 +18,7 @@ from app.permissions_org import (
 from app.serializers import TournamentUserSerializer, _serialize_users_with_mmr
 from app.user_cache import serialize_users_core
 from events.capacity import seat_holding_statuses
+from events.constants import LINE_EXCLUDED_STATUSES
 from events.mmr_suggestions import suggest_mmr
 from events.models import (
     Event,
@@ -694,6 +695,7 @@ class EventSignupSerializer(serializers.ModelSerializer):
     suggested_mmr_range_source = serializers.SerializerMethodField()
     holds_seat = serializers.SerializerMethodField()
     unmet_requirements = serializers.SerializerMethodField()
+    line_rank = serializers.SerializerMethodField()
 
     class Meta:
         model = EventSignup
@@ -719,6 +721,11 @@ class EventSignupSerializer(serializers.ModelSerializer):
             "unmet_requirements",
             "created_at",
             "updated_at",
+            "signed_up_at",
+            "commitment",
+            "rsvp_class",
+            "first_signed_up_at",
+            "line_rank",
         ]
         read_only_fields = [
             "id",
@@ -727,7 +734,33 @@ class EventSignupSerializer(serializers.ModelSerializer):
             "waitlist_position",
             "created_at",
             "updated_at",
+            "signed_up_at",
+            "commitment",
+            "rsvp_class",
+            "first_signed_up_at",
+            "line_rank",
         ]
+
+    def get_line_rank(self, obj: EventSignup) -> int | None:
+        if obj.status in LINE_EXCLUDED_STATUSES:
+            return None
+        if hasattr(obj, "line_rank"):
+            return obj.line_rank
+        ranks: dict[int, dict[int, int]] = self.context.setdefault(
+            "_signup_line_ranks", {}
+        )
+        if obj.event_id not in ranks:
+            rows = (
+                EventSignup.objects.nocache()
+                .filter(event_id=obj.event_id)
+                .in_line_order()
+                .values_list("pk", "status")
+            )
+            in_line = [
+                pk for pk, status in rows if status not in LINE_EXCLUDED_STATUSES
+            ]
+            ranks[obj.event_id] = {pk: i for i, pk in enumerate(in_line, start=1)}
+        return ranks[obj.event_id].get(obj.pk)
 
     def _batch(self, obj: EventSignup) -> list[EventSignup]:
         parent = self.parent

@@ -94,6 +94,7 @@ nav:
       - Events:
           - Overview: features/events.md
           - Roll Call: features/events/roll-call.md
+          - Signup Ledger: features/events/signup-ledger.md
       - Organization Locked Features: features/organization-locked-features.md
       - Organization Settings: features/organization-settings.md
       - Planned:

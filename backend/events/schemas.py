@@ -25,7 +25,7 @@ transport package. Request bodies for the same endpoints live in
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TYPE_CHECKING, Annotated, Literal, Optional, Protocol
+from typing import TYPE_CHECKING, Annotated, Any, Literal, Optional, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -167,6 +167,11 @@ class EventSignupSchema(BaseModel):
     unmet_requirements: list[str] = Field(default_factory=list)
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
+    signed_up_at: Optional[str] = None
+    commitment: Optional[str] = None
+    rsvp_class: Optional[str] = None
+    first_signed_up_at: Optional[str] = None
+    line_rank: Optional[int] = None
 
     @property
     def display_name(self) -> str:
@@ -418,6 +423,18 @@ class RankFlowStateResponse(BaseModel):
     )
     message: str | None = None
     model_config = {"extra": "ignore"}
+
+
+class SignupSnapshot(BaseModel):
+    status: str
+    commitment: str
+    rsvp_class: str
+    signed_up_at: datetime | None = None
+    line_seq: int | None = None
+    waitlist_position: int | None = None
+    event_team_id: int | None = None
+    extra: dict[str, Any] = {}
+    model_config = ConfigDict(extra="ignore")
 
 
 def _rebuild_forward_refs() -> None:
