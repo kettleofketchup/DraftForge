@@ -39,6 +39,7 @@ from app.services.team_signals import (
     owning_team_audit,
     send_roster_changed_on_commit,
 )
+from events.eligibility import unmet_codes, unmet_labels
 from events.overrides import (
     OverrideReasonRequired,
     OverrideRequired,
@@ -516,6 +517,77 @@ def remove_standin(
     return _apply(
         team,
         TeamLogAction.REMOVE_STANDIN,
+        actor=actor,
+        via=via,
+        reason=reason,
+        acknowledged_codes=acknowledged_codes,
+        target_user=lambda locked: user,
+        affected_users=lambda locked: [user],
+        validate=validate,
+        mutate=mutate,
+        touched=(),
+    )
+
+
+def _standin_violations(team: Team, user: CustomUser) -> list[Violation]:
+    violations: list[Violation] = []
+    cap = standin_cap(team)
+    count = team.dropin_members.nocache().count()
+    if count + 1 > cap:
+        violations.append(
+            Violation(
+                code="team_standin_cap",
+                rule="override-warning",
+                message=f"The team already has {count} stand-ins (limit {cap}).",
+                category="team",
+            )
+        )
+    event = source_event(team.tournament)
+    if event is not None:
+        codes = unmet_codes(event, user)
+        violations.extend(
+            Violation(
+                code=code, rule="staff-override", message=label, category="eligibility"
+            )
+            for code, label in zip(codes, unmet_labels(codes), strict=True)
+        )
+    return violations
+
+
+def add_standin(
+    team: Team,
+    user: CustomUser,
+    *,
+    actor: CustomUser | None,
+    via: TeamLogVia,
+    reason: str = "",
+    acknowledged_codes: Collection[str] = (),
+) -> TeamChange:
+    def validate(locked: Team) -> list[Violation]:
+        if (
+            _is_member(locked, user)
+            or _is_standin(locked, user)
+            or _is_dropout(locked, user)
+        ):
+            raise TeamManagementError(
+                "already_on_team",
+                "This player is already on this team as a member, stand-in or dropout.",
+            )
+        if user.pk in _other_team_user_ids(locked):
+            raise TeamManagementError(
+                "on_other_team",
+                "This player is on another team in this tournament. "
+                "Remove them there first.",
+            )
+        return _standin_violations(locked, user)
+
+    def mutate(locked: Team) -> dict[str, Any]:
+        locked.dropin_members.add(user)
+        return {}
+
+    return _apply(
+        team,
+        TeamLogAction.ADD_STANDIN,
         actor=actor,
         via=via,
         reason=reason,

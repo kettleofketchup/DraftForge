@@ -37,6 +37,7 @@ from app.services.team_management import (
     TeamManagementError,
     _apply,
     _other_team_user_ids,
+    add_standin,
     mark_dropout,
     remove_standin,
     rename,
@@ -47,9 +48,14 @@ from app.services.team_management import (
     sub_in,
 )
 from app.services.team_signals import TeamRosterChange, team_roster_changed
+from events.eligibility import UNMET_LABELS, Unmet, unmet_codes
 from events.models import Event
+from events.overrides import OverrideReasonRequired, OverrideRequired
 from league.models import LeagueUser
-from org.models import OrgUser
+from org.models import OrgSettings, OrgUser
+from org.models_profiles import PlayerDotaProfile
+from org.settings_constants import StaffOverridePolicy
+from org.settings_service import get_org_settings
 from user.tests.test_cacheops_integration import _redis_reachable
 
 
@@ -1222,3 +1228,200 @@ class SubInTests(TeamManagementFixture, TestCase):
                 via=TeamLogVia.WEB,
             )
         self.assertEqual(ctx.exception.code, "reason_required")
+
+
+class AddStandinTests(TeamManagementFixture, TestCase):
+    def add(self, user: CustomUser, **kwargs: Any) -> TeamChange:
+        kwargs.setdefault("reason", "r")
+        return add_standin(
+            self.team, user, actor=self.actor, via=TeamLogVia.WEB, **kwargs
+        )
+
+    def fill_standins(self) -> None:
+        for i in range(DEFAULT_MAX_STANDINS):
+            self.team.dropin_members.add(self.make_user(f"roster_s{i}"))
+
+    def gate_event(self) -> CustomUser:
+        Event.objects.filter(pk=self.event.pk).update(
+            require_steam_id=True, min_mmr=5000
+        )
+        user = self.make_user("roster_low")
+        profile = PlayerDotaProfile.objects.create(
+            org_user=OrgUser.objects.get(user=user, organization=self.org)
+        )
+        profile.declare_rank("active")
+        profile.mmr = 3000
+        profile.save()
+        return user
+
+    def test_add_standin(self) -> None:
+        change = self.add(self.outsider)
+
+        team = self.refresh(self.team)
+        self.assertTrue(team.dropin_members.filter(pk=self.outsider.pk).exists())
+        self.assertNotIn(self.outsider.pk, self.member_pks(team))
+        self.assertFalse(self.tournament.users.filter(pk=self.outsider.pk).exists())
+        row = self.only_log()
+        self.assertEqual(change.log, row)
+        self.assertEqual(change.overridden, [])
+        self.assertEqual(row.action, TeamLogAction.ADD_STANDIN)
+        self.assertEqual(row.target_user_id, self.outsider.pk)
+        self.assertEqual(row.override_rules, [])
+        self.assertNotIn("violations", row.details)
+        self.assertEqual(row.details["before"]["dropin_ids"], [])
+        self.assertEqual(row.details["after"]["dropin_ids"], [self.outsider.pk])
+
+    def test_add_standin_already_on_team_refused(self) -> None:
+        self.team.dropin_members.add(self.o1)
+        self.team.left_members.add(self.outsider)
+        Team.members.through.objects.filter(
+            team_id=self.other.pk, customuser_id=self.o1.pk
+        ).delete()
+        for user in (self.m1, self.o1, self.outsider):
+            with self.subTest(user=user.username):
+                with self.assertRaises(TeamManagementError) as ctx:
+                    self.add(user)
+                self.assertEqual(ctx.exception.code, "already_on_team")
+        self.assertFalse(TeamLog.objects.exists())
+
+    def test_add_standin_on_other_team_refused(self) -> None:
+        self.other.dropin_members.add(self.outsider)
+        for user in (self.o1, self.outsider):
+            with self.subTest(user=user.username):
+                with self.assertRaises(TeamManagementError) as ctx:
+                    self.add(user)
+                self.assertEqual(ctx.exception.code, "on_other_team")
+        self.assertFalse(self.refresh(self.team).dropin_members.nocache().exists())
+
+    def test_add_standin_self_needs_no_reason(self) -> None:
+        add_standin(self.team, self.outsider, actor=self.outsider, via=TeamLogVia.WEB)
+        self.assertEqual(self.only_log().reason, "")
+
+    def test_add_standin_reason_required(self) -> None:
+        with self.assertRaises(TeamManagementError) as ctx:
+            self.add(self.outsider, reason="")
+        self.assertEqual(ctx.exception.code, "reason_required")
+
+    def test_third_standin_requires_override(self) -> None:
+        self.fill_standins()
+        with self.assertRaises(OverrideRequired) as ctx:
+            self.add(self.outsider)
+        violations = ctx.exception.violations
+        self.assertEqual([v.code for v in violations], ["team_standin_cap"])
+        self.assertEqual(violations[0].category, "team")
+        self.assertEqual(violations[0].rule, "override-warning")
+        self.assertIn(str(DEFAULT_MAX_STANDINS), violations[0].message)
+        team = self.refresh(self.team)
+        self.assertEqual(team.dropin_members.count(), DEFAULT_MAX_STANDINS)
+        self.assertFalse(TeamLog.objects.exists())
+
+    def test_cap_comes_from_standin_cap(self) -> None:
+        with patch.object(team_management, "standin_cap", return_value=0):
+            with self.assertRaises(OverrideRequired) as ctx:
+                self.add(self.outsider)
+        self.assertEqual(
+            [v.code for v in ctx.exception.violations], ["team_standin_cap"]
+        )
+
+    def test_override_acknowledged_with_reason(self) -> None:
+        self.fill_standins()
+
+        change = self.add(
+            self.outsider,
+            reason="league allows a third tonight",
+            acknowledged_codes=["team_standin_cap"],
+        )
+
+        self.assertEqual(change.overridden, ["team_standin_cap"])
+        team = self.refresh(self.team)
+        self.assertEqual(team.dropin_members.count(), DEFAULT_MAX_STANDINS + 1)
+        row = self.only_log()
+        self.assertEqual(row.override_rules, ["team_standin_cap"])
+        self.assertEqual(row.reason, "league allows a third tonight")
+        self.assertEqual(
+            [v["code"] for v in row.details["violations"]], ["team_standin_cap"]
+        )
+        self.assertEqual(row.details["violations"][0]["category"], "team")
+
+    def test_override_without_reason(self) -> None:
+        self.fill_standins()
+        with self.assertRaises(OverrideReasonRequired):
+            add_standin(
+                self.team,
+                self.outsider,
+                actor=self.outsider,
+                via=TeamLogVia.WEB,
+                acknowledged_codes=["team_standin_cap"],
+            )
+        self.assertEqual(
+            self.refresh(self.team).dropin_members.count(), DEFAULT_MAX_STANDINS
+        )
+        self.assertFalse(TeamLog.objects.exists())
+
+    def test_silent_policy_still_raises(self) -> None:
+        settings = get_org_settings(self.org)
+        OrgSettings.objects.filter(pk=settings.pk).update(
+            staff_override_policy=StaffOverridePolicy.SILENT
+        )
+        self.fill_standins()
+
+        with patch.object(
+            team_management, "check_overrides", wraps=team_management.check_overrides
+        ) as spy:
+            with self.assertRaises(OverrideRequired):
+                self.add(self.outsider)
+
+        passed = spy.call_args.kwargs["org_settings"]
+        self.assertIsInstance(passed, OrgSettings)
+        self.assertEqual(passed.pk, settings.pk)
+        self.assertEqual(passed.staff_override_policy, StaffOverridePolicy.SILENT)
+
+    def test_eligibility_violations_from_source_event(self) -> None:
+        user = self.gate_event()
+        event = Event.objects.get(pk=self.event.pk)
+        expected = unmet_codes(event, user)
+        self.assertIn("below_min_mmr", expected)
+        self.assertIn("steam_id_missing", expected)
+
+        with self.assertRaises(OverrideRequired) as ctx:
+            self.add(user)
+
+        violations = ctx.exception.violations
+        self.assertCountEqual([v.code for v in violations], expected)
+        for v in violations:
+            self.assertEqual(v.category, "eligibility")
+            self.assertEqual(v.rule, "staff-override")
+            self.assertEqual(v.message, UNMET_LABELS[Unmet(v.code)])
+        self.assertFalse(TeamLog.objects.exists())
+
+    def test_eligibility_override_recorded(self) -> None:
+        user = self.gate_event()
+        codes = unmet_codes(Event.objects.get(pk=self.event.pk), user)
+
+        change = self.add(user, reason="verified by staff", acknowledged_codes=codes)
+
+        self.assertCountEqual(change.overridden, codes)
+        row = self.only_log()
+        self.assertCountEqual(row.override_rules, codes)
+        self.assertCountEqual([v["code"] for v in row.details["violations"]], codes)
+
+    def test_no_source_event_no_eligibility_check(self) -> None:
+        user = self.gate_event()
+        Event.objects.filter(pk=self.event.pk).update(tournament=None)
+
+        change = self.add(user)
+
+        self.assertEqual(change.overridden, [])
+        self.assertTrue(
+            self.refresh(self.team).dropin_members.filter(pk=user.pk).exists()
+        )
+
+    def test_standin_cap_default(self) -> None:
+        Event.objects.filter(pk=self.event.pk).update(tournament=None)
+        self.assertEqual(standin_cap(self.team), DEFAULT_MAX_STANDINS)
+        self.fill_standins()
+        with self.assertRaises(OverrideRequired) as ctx:
+            self.add(self.outsider)
+        self.assertEqual(
+            [v.code for v in ctx.exception.violations], ["team_standin_cap"]
+        )
