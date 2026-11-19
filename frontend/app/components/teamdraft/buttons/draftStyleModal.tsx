@@ -359,7 +359,7 @@ export const DraftStyleModal: React.FC<DraftStyleModalProps> = ({
                   setSelectedStyle(value as 'snake' | 'normal' | 'shuffle')
                 }
               >
-                <SelectTrigger className="w-full !h-auto py-3 !whitespace-normal [&_[data-slot=select-value]]:!line-clamp-none ring-1 ring-violet-400/30 border-violet-400/20 hover:ring-violet-400/50">
+                <SelectTrigger className="w-full !h-auto py-3 !whitespace-normal [&_[data-slot=select-value]]:!line-clamp-none ring-1 ring-primary/30 border-primary/20 hover:ring-primary/50">
                   <SelectValue placeholder="Select draft style" />
                 </SelectTrigger>
                 <SelectContent>
@@ -398,8 +398,8 @@ export const DraftStyleModal: React.FC<DraftStyleModalProps> = ({
               {/* Snake Draft Stats */}
               <div className="rounded-lg border p-4 space-y-2">
                 <div className="flex items-center justify-between">
-                  <h4 className="font-medium text-green-600">Snake Draft</h4>
-                  <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">
+                  <h4 className="font-medium text-draft-snake">Snake Draft</h4>
+                  <span className="text-xs bg-draft-snake/15 text-draft-snake px-2 py-1 rounded">
                     {snakeBalance()}% imbalance
                   </span>
                 </div>
@@ -438,8 +438,10 @@ export const DraftStyleModal: React.FC<DraftStyleModalProps> = ({
               {/* Normal Draft Stats */}
               <div className="rounded-lg border p-4 space-y-2">
                 <div className="flex items-center justify-between">
-                  <h4 className="font-medium text-orange-600">Normal Draft</h4>
-                  <span className="text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded">
+                  <h4 className="font-medium text-draft-normal">
+                    Normal Draft
+                  </h4>
+                  <span className="text-xs bg-draft-normal/15 text-draft-normal px-2 py-1 rounded">
                     {normalBalance()}% imbalance
                   </span>
                 </div>
@@ -478,8 +480,10 @@ export const DraftStyleModal: React.FC<DraftStyleModalProps> = ({
               {/* Shuffle Draft Stats */}
               <div className="rounded-lg border p-4 space-y-2">
                 <div className="flex items-center justify-between">
-                  <h4 className="font-medium text-purple-600">Shuffle Draft</h4>
-                  <span className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded">
+                  <h4 className="font-medium text-draft-shuffle">
+                    Shuffle Draft
+                  </h4>
+                  <span className="text-xs bg-draft-shuffle/15 text-draft-shuffle px-2 py-1 rounded">
                     Dynamic balance
                   </span>
                 </div>
@@ -491,8 +495,8 @@ export const DraftStyleModal: React.FC<DraftStyleModalProps> = ({
               </div>
 
               {/* Recommendation */}
-              <div className="bg-blue-50 dark:bg-blue-950/20 rounded-lg p-3">
-                <p className="text-sm text-blue-800 dark:text-blue-200">
+              <div className="bg-info/10 rounded-lg p-3">
+                <p className="text-sm text-info">
                   <strong>Recommendation:</strong>{' '}
                   {snakeBalance() < normalBalance() ? (
                     <>
