@@ -600,11 +600,17 @@ export const DraftModal: React.FC<DraftModalParams> = ({
     }
 
     return (
-      <>
-        <LiveDraftClockBar {...timer.clockBarProps} />
-        <DraftBalanceDisplay />
-        <DraftRoundView />
-      </>
+      <div className="flex flex-col draft-split:h-full">
+        <div className="shrink-0 draft-stacked:sticky draft-stacked:z-30 draft-stacked:rounded-lg draft-stacked:bg-background draft-stacked:shadow-lg max-md:-top-2 md:-top-4">
+          <LiveDraftClockBar {...timer.clockBarProps} />
+        </div>
+        <div className="shrink-0">
+          <DraftBalanceDisplay />
+        </div>
+        <div className="flex flex-col draft-split:flex-1 draft-split:min-h-0">
+          <DraftRoundView />
+        </div>
+      </div>
     );
   };
 
