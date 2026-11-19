@@ -1,7 +1,7 @@
 """
-Dispatch functions — check config flags and call .delay().
+Dispatch functions — check config flags and enqueue the Celery task.
 
-IMPORTANT: These dispatch functions call .delay() which publishes to Redis
+IMPORTANT: These dispatch functions enqueue tasks, which publishes to Redis
 immediately. When called from inside @transaction.atomic services, the caller
 MUST wrap in transaction.on_commit() to ensure data is committed before the
 Celery worker reads it.
@@ -12,8 +12,10 @@ are safe there.
 
 from typing import TYPE_CHECKING
 
+from django.conf import settings
 from structlog.contextvars import get_contextvars
 
+from events.signup_post_lock import mark_pending
 from telemetry.logging import get_logger
 
 if TYPE_CHECKING:
@@ -68,17 +70,23 @@ def notify_event_announced(event: "Event") -> None:
 
 
 def notify_signup_changed(event: "Event") -> None:
-    """Dispatch signup update task to edit the announcement embed."""
+    """Queue one debounced edit of the announcement embed per burst of changes."""
     if not event.discord_announcement:
         _log_skipped(event, "discord_announcement_disabled", "send_signup_update")
         return
     if not event.discord_announcement_channel_id:
         _log_skipped(event, "no_channel_id", "send_signup_update")
         return
+    if not mark_pending(event.pk):
+        _log_skipped(event, "update_already_pending", "send_signup_update")
+        return
     from events.tasks import send_signup_update
 
-    interaction_id = _current_interaction_id()
-    send_signup_update.delay(event.pk, interaction_id=interaction_id)
+    send_signup_update.apply_async(
+        (event.pk,),
+        {"interaction_id": _current_interaction_id()},
+        countdown=settings.SIGNUP_POST.debounce_seconds,
+    )
     _log_queued(event, "send_signup_update")
 
 

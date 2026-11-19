@@ -9,6 +9,8 @@ from pathlib import Path
 from django.conf import settings
 from django.test import SimpleTestCase
 
+from config.redis_host import resolve_redis_host
+
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 
 
@@ -68,3 +70,81 @@ class CelerySettingsBootTest(SimpleTestCase):
         self.assertEqual(base_url, settings.DISCORD_API_BASE_URL)
         self.assertFalse(has_guild_id)
         self.assertEqual(settings.DISCORD_API_BASE_URL, "https://discord.com/api/v10")
+
+
+class SharedSettingsParityTest(SimpleTestCase):
+    """Web and worker must agree on the signup-post lock config and key scope."""
+
+    ENV: dict[str, str] = {
+        "REDIS_KEY_SCOPE": "df-s3:",
+        "SIGNUP_POST_DEBOUNCE_SECONDS": "4",
+        "SIGNUP_POST_LOCK_SECONDS": "60",
+        "SIGNUP_POST_READ_RETRIES": "5",
+        "SIGNUP_POST_RETRY_SECONDS": "3",
+        "SIGNUP_POST_BUSY_WARN_PASSES": "4",
+        "DISABLE_CACHE": "false",
+    }
+
+    def _read(
+        self, module: str, redis_host: str | None = "redis.internal"
+    ) -> list[str]:
+        env = {
+            k: v
+            for k, v in os.environ.items()
+            if k not in ("RUNNING_TESTS", "REDIS_HOST")
+            and not k.startswith("SIGNUP_POST_")
+        }
+        env.update(self.ENV, DJANGO_SETTINGS_MODULE=module)
+        if redis_host is not None:
+            env["REDIS_HOST"] = redis_host
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                "from django.conf import settings as s; "
+                "print(repr(s.SIGNUP_POST)); print(repr(s.REDIS_KEY_SCOPE)); "
+                "print(repr(s.REDIS_HOST))",
+            ],
+            cwd=BACKEND_DIR,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr[-3000:])
+        return result.stdout.strip().splitlines()[-3:]
+
+    def test_signup_post_and_scope_parity(self) -> None:
+        web = self._read("backend.settings")
+        worker = self._read("config.settings_celery")
+        self.assertEqual(web, worker)
+        self.assertEqual(
+            web,
+            [
+                "SignupPostConfig(debounce_seconds=4, lock_seconds=60, disabled=False,"
+                " read_retries=5, retry_seconds=3, busy_warn_passes=4)",
+                "'df-s3:'",
+                "'redis.internal'",
+            ],
+        )
+
+    def test_redis_host_fallback_parity(self) -> None:
+        for redis_host in (None, ""):
+            with self.subTest(redis_host=redis_host):
+                web = self._read("backend.settings", redis_host)
+                worker = self._read("config.settings_celery", redis_host)
+                self.assertEqual(web[-1], worker[-1])
+                self.assertNotEqual(web[-1], "''")
+
+
+class ResolveRedisHostTest(SimpleTestCase):
+    def test_explicit_host_wins(self) -> None:
+        env = {"REDIS_HOST": "redis.internal"}
+        self.assertEqual(resolve_redis_host(env, in_docker=False), "redis.internal")
+        self.assertEqual(resolve_redis_host(env, in_docker=True), "redis.internal")
+
+    def test_unset_or_empty_falls_back_by_runtime(self) -> None:
+        for env in ({}, {"REDIS_HOST": ""}, {"REDIS_HOST": "  "}):
+            with self.subTest(env=env):
+                self.assertEqual(resolve_redis_host(env, in_docker=True), "redis")
+                self.assertEqual(resolve_redis_host(env, in_docker=False), "localhost")

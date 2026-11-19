@@ -1,7 +1,11 @@
+from contextlib import ExitStack
 from unittest.mock import MagicMock, patch
 
+from celery.exceptions import Retry
 from django.test import override_settings
+from structlog.testing import capture_logs
 
+from app.internal_client import InternalAPIUnavailable
 from discordbot.models import DiscordMessageLog
 from events.constants import EventState
 from events.tests._internal_client_orm import DiscordTestMixin
@@ -320,4 +324,111 @@ class CheckEventRemindersTaskTest(_DiscordTaskTestCase):
                 source="signup_reminder", source_id=self.event.pk
             ).count(),
             1,
+        )
+
+
+class SignupReadUnavailableTest(_DiscordTaskTestCase):
+    """A failed signup read must never post or edit with an empty list."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.event.discord_announcement = True
+        self.event.discord_announcement_channel_id = "1482767177063858216"
+        self.event.discord_confirm_attendance = True
+        self.event.discord_profile_reminder = True
+        self.event.state = EventState.SIGNUPS_OPEN
+        self.event.save()
+
+    def _unavailable(self) -> ExitStack:
+        stack = ExitStack()
+        for target in (
+            "events.discord.embeds.get_event_signups",
+            "events.tasks.get_event_signups",
+        ):
+            stack.enter_context(
+                patch(target, side_effect=InternalAPIUnavailable("signups"))
+            )
+        return stack
+
+    def _assert_skipped(self, logs: list[dict], mock_req: MagicMock) -> None:
+        mock_req.assert_not_called()
+        events = [entry["event"] for entry in logs]
+        self.assertIn("signup_list_unavailable", events)
+        self.assertNotIn("celery_task_failed", events)
+        entry = next(e for e in logs if e["event"] == "signup_list_unavailable")
+        self.assertEqual(entry["event_id"], self.event.pk)
+        self.assertEqual(entry["system"], "discord")
+        self.assertEqual(entry["subsystem"], "celery")
+
+    @patch("discordbot.utils._rate_limited_request")
+    def test_announcement_not_posted(self, mock_req: MagicMock) -> None:
+        from events.tasks import send_event_announcement
+
+        with self._unavailable(), capture_logs() as logs:
+            send_event_announcement(self.event.pk)
+
+        self._assert_skipped(logs, mock_req)
+
+    @patch("discordbot.utils._rate_limited_request")
+    def test_signup_update_does_not_edit(self, mock_req: MagicMock) -> None:
+        from events.tasks import send_event_announcement, send_signup_update
+
+        mock_req.return_value = _ok_response({"id": "orig111"})
+        send_event_announcement(self.event.pk)
+        mock_req.reset_mock()
+
+        with (
+            self._unavailable(),
+            capture_logs() as logs,
+            self.assertRaises(Retry),
+        ):
+            send_signup_update(self.event.pk)
+
+        self._assert_skipped(logs, mock_req)
+        self.assertIn("celery_task_retry", [entry["event"] for entry in logs])
+
+    @patch("discordbot.utils._rate_limited_request")
+    def test_attendance_reminder_not_sent(self, mock_req: MagicMock) -> None:
+        from events.tasks import send_attendance_reminder
+
+        with self._unavailable(), capture_logs() as logs:
+            send_attendance_reminder(self.event.pk)
+
+        self._assert_skipped(logs, mock_req)
+
+    @patch("discordbot.utils._rate_limited_request")
+    def test_profile_reminder_not_sent(self, mock_req: MagicMock) -> None:
+        from events.tasks import send_profile_reminder
+
+        with self._unavailable(), capture_logs() as logs:
+            send_profile_reminder(self.event.pk)
+
+        self._assert_skipped(logs, mock_req)
+
+    @patch("discordbot.utils._rate_limited_request")
+    def test_fired_signup_reminder_not_sent(self, mock_req: MagicMock) -> None:
+        from events.tasks import fire_event_reminder
+
+        with self._unavailable(), capture_logs() as logs:
+            fire_event_reminder(self.event.pk, "signup_reminder")
+
+        self._assert_skipped(logs, mock_req)
+
+    @patch("events.tasks.sync_send_dm")
+    @patch("discordbot.utils._rate_limited_request")
+    def test_subscriber_dms_not_sent_and_no_lease_held(
+        self, mock_req: MagicMock, mock_send_dm: MagicMock
+    ) -> None:
+        CheckEventRemindersTaskTest._arm_signup_reminder(self)
+        from events.tasks import send_subscriber_notifications
+
+        with self._unavailable(), capture_logs() as logs:
+            send_subscriber_notifications(self.event.pk)
+
+        mock_send_dm.assert_not_called()
+        self._assert_skipped(logs, mock_req)
+        self.assertFalse(
+            DiscordMessageLog.objects.filter(
+                source="signup_reminder", source_id=self.event.pk
+            ).exists()
         )
