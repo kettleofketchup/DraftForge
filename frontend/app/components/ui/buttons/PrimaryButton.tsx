@@ -4,6 +4,7 @@ import { cn } from '~/lib/utils';
 import {
   brandGlowLift,
   brandGradient,
+  brandGradientDisabled,
   brandLabelOnGradient,
   buttonDisabled,
   buttonLift,
@@ -34,7 +35,7 @@ const colorClasses: Record<PrimaryButtonColor, string> = {
 const primaryTextStroke =
   '[text-shadow:_0_1px_0_rgba(0,0,0,0.85),_0_2px_3px_rgba(0,0,0,0.5)]';
 
-const brandExtras = `${brandGlowLift} ${brandLabelOnGradient}`;
+const brandExtras = `${brandGlowLift} ${brandLabelOnGradient} ${brandGradientDisabled}`;
 
 const PrimaryButton = React.forwardRef<HTMLButtonElement, PrimaryButtonProps>(
   ({ color, className, children, depth = true, ...props }, ref) => {

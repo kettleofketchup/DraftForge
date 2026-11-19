@@ -105,6 +105,11 @@ export const buttonLift =
 export const buttonDisabled =
   'disabled:shadow-none disabled:bg-muted-foreground disabled:text-base-50 disabled:cursor-not-allowed disabled:opacity-70';
 
+// Disabled brand-gradient buttons: drop the gradient for a muted surface so the
+// label stays legible instead of dark text on violet.
+export const brandGradientDisabled =
+  'disabled:bg-none disabled:bg-base-200 disabled:text-muted-foreground disabled:opacity-100 disabled:shadow-none disabled:ring-1 disabled:ring-border disabled:[text-shadow:none] disabled:[&_svg]:text-muted-foreground disabled:[&_svg]:drop-shadow-none';
+
 // Icon styling to ensure icons inherit text color
 const iconWhite =
   '[&_svg]:text-white [&_svg]:drop-shadow-[1px_1px_1px_rgba(0,0,0,0.5)]';
@@ -130,7 +135,7 @@ export const brandNeutralOpaqueLift = `${buttonLift} ${buttonDisabled} ${brandNe
 export const brandButtonVariants = {
   destructive: `${buttonLift} ${buttonDisabled} ${iconWhite} ${iconMuted} bg-destructive text-white hover:bg-destructive/90 shadow-destructive/25`,
   warning: `${buttonLift} ${buttonDisabled} ${iconMuted} [&_svg]:text-warning-foreground bg-warning text-warning-foreground hover:bg-warning/90 shadow-warning/20`,
-  success: `${buttonLift} ${buttonDisabled} ${iconWhite} ${iconMuted} ${brandGradient} ${brandGlowLift}`,
+  success: `${buttonLift} ${buttonDisabled} ${iconWhite} ${iconMuted} ${brandGradient} ${brandGlowLift} ${brandGradientDisabled}`,
   primary: `${buttonLift} ${buttonDisabled} bg-primary text-primary-foreground hover:bg-primary/90`,
   secondary: `${brandSecondaryLift}`,
   outline: `${buttonLift} ${buttonDisabled}`,
