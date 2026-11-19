@@ -235,6 +235,8 @@ test.describe.serial('Roll Call Flow (@cicd)', () => {
 
     // S opens Start Tournament (this event has no minimum).
     await page.keyboard.press('1');
+    // Enter only confirms once the dialog is open and focused.
+    await expect(page.getByTestId('rollcall-confirm-summary')).toBeVisible();
     await page.keyboard.press('Enter');
     await expect(
       page.getByTestId(`rollcall-cancel-btn-${secondId}`),
