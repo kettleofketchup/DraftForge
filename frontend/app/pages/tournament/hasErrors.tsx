@@ -159,7 +159,7 @@ export const hasErrors = () => {
       data-testid="incomplete-profiles-banner"
     >
       <CollapsibleTrigger
-        className="grid grid-cols-[auto_1fr_auto] items-center gap-3 w-full p-3 sm:p-4 text-red-500 font-bold cursor-pointer min-h-11"
+        className="grid grid-cols-[auto_1fr_auto] items-center gap-3 w-full p-3 sm:p-4 text-error font-bold cursor-pointer min-h-11"
         data-testid="incomplete-profiles-toggle"
         aria-label={open ? `Hide ${label}` : `Show ${label}`}
       >
@@ -191,7 +191,7 @@ export const hasErrors = () => {
               <div className="text-white text-center underline underline-offset-2 font-bold mb-2 break-words">
                 {DisplayName(user)}
               </div>
-              <div className="flex flex-col gap-1 text-center text-sm text-red-100">
+              <div className="flex flex-col gap-1 text-center text-sm text-error-foreground">
                 {issues.map((issue) => (
                   <span key={issue}>{issue}</span>
                 ))}

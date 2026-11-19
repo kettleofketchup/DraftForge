@@ -89,9 +89,9 @@ export function LeaderboardTable({
                     className={cn(
                       'text-xs',
                       entry.mmr_adjustment > 0
-                        ? 'text-green-500'
+                        ? 'text-success'
                         : entry.mmr_adjustment < 0
-                          ? 'text-red-500'
+                          ? 'text-error'
                           : 'text-muted-foreground',
                     )}
                   >

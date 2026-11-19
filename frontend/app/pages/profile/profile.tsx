@@ -96,7 +96,7 @@ export const ProfilePage: React.FC = () => {
       },
       error: 'Failed to update user',
       description: (
-        <pre className="mt-2 w-[320px] rounded-md bg-neutral-950 p-4">
+        <pre className="mt-2 w-[320px] rounded-md bg-base-950 p-4">
           <code className="text-white">{JSON.stringify(data, null, 2)}</code>
         </pre>
       ),
@@ -107,7 +107,7 @@ export const ProfilePage: React.FC = () => {
     <div className="container px-1 sm:mx-auto sm:p-4">
       <div className="flex flex-col  gap-4">
         <div className="flex flex-col sm:flex-row w-90 justify-center text-center w-full">
-          <h1 className="text-title text-pretty text-center">
+          <h1 className="text-pretty text-center">
             {DisplayName(currentUser)}
           </h1>
         </div>
