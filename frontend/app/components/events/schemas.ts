@@ -20,6 +20,64 @@ export const SignupStatus = {
   TENTATIVE: 'tentative',
   REJECTED: 'rejected',
   CANCELLED: 'cancelled',
+  DROPPED: 'dropped',
+} as const;
+
+export const REMOVED_SIGNUP_STATUSES = [
+  'cancelled',
+  'rejected',
+  'dropped',
+] as const;
+
+export const ROLL_CALL_MODES = ['manual', 'automatic'] as const;
+export type RollCallMode = (typeof ROLL_CALL_MODES)[number];
+export const ROLL_CALL_MODE_LABELS: Record<RollCallMode, string> = {
+  manual: 'Staff-verified',
+  automatic: 'Automatic',
+};
+
+export function rollCallLabel(enabled: boolean, mode: string): string {
+  if (!enabled) return 'Disabled';
+  return ROLL_CALL_MODE_LABELS[mode as RollCallMode] ?? mode;
+}
+
+export const READY_CHECK_SCOPES = ['main_only', 'main_and_fill'] as const;
+export type ReadyCheckScope = (typeof READY_CHECK_SCOPES)[number];
+export const READY_CHECK_SCOPE_LABELS: Record<ReadyCheckScope, string> = {
+  main_only: 'Main roster only',
+  main_and_fill: 'Main roster and fill list',
+};
+
+export const LOW_COMPLETION_ACTIONS = [
+  'non_binding',
+  'hold_for_staff',
+  'drop_anyway',
+] as const;
+export type LowCompletionAction = (typeof LOW_COMPLETION_ACTIONS)[number];
+export const LOW_COMPLETION_ACTION_LABELS: Record<LowCompletionAction, string> =
+  {
+    non_binding: 'Make the check non-binding (drop nobody)',
+    hold_for_staff: 'Hold drops for staff',
+    drop_anyway: 'Drop unconfirmed anyway',
+  };
+
+export const POST_CULL_FILL_MODES = [
+  'none',
+  'line_order',
+  'voice_arrival',
+] as const;
+export type PostCullFillMode = (typeof POST_CULL_FILL_MODES)[number];
+export const POST_CULL_FILL_MODE_LABELS: Record<PostCullFillMode, string> = {
+  none: 'Do not fill',
+  line_order: 'Line order',
+  voice_arrival: 'Order of arrival in the event call',
+};
+
+const DISCORD_ID_REGEX = /^(\d{17,20})?$/;
+
+export const Commitment = {
+  MAIN: 'main',
+  MAYBE: 'maybe',
 } as const;
 
 export const GameMode = {
@@ -105,7 +163,7 @@ export const eventSchema = z
     require_steam_id: z.boolean(),
     require_profile_complete: z.boolean(),
     roll_call_enabled: z.boolean(),
-    roll_call_mode: z.string(),
+    roll_call_mode: z.enum(ROLL_CALL_MODES),
     signup_open_mode: z.enum(SIGNUP_OPEN_MODES).default('manual'),
     signups_open_hours_before: z.number().default(72),
     allow_active_mmr: z.boolean(),
@@ -135,6 +193,22 @@ export const eventSchema = z
     discord_require_rank_screenshot: z.boolean(),
     discord_require_battlecup_screenshot: z.boolean(),
     min_mmr: z.number().nullable(),
+    ready_check_scope: z.enum(READY_CHECK_SCOPES).optional(),
+    ready_check_open_minutes: z.number().int().optional(),
+    ready_check_escalation_minutes: z.number().int().optional(),
+    ready_check_close_minutes: z.number().int().optional(),
+    ready_check_chase_minutes: z.number().int().nullable().optional(),
+    ready_check_min_completion_pct: z.number().int().optional(),
+    ready_check_low_completion_action: z
+      .enum(LOW_COMPLETION_ACTIONS)
+      .optional(),
+    ready_check_notify_on_signup: z.boolean().optional(),
+    ready_check_drop_notice: z.boolean().optional(),
+    start_cull_enabled: z.boolean().optional(),
+    start_cull_minutes_after: z.number().int().optional(),
+    post_cull_fill_mode: z.enum(POST_CULL_FILL_MODES).optional(),
+    event_voice_channel_id: z.string().optional(),
+    voice_presence_confirms: z.boolean().optional(),
     is_off_schedule: z.boolean().optional(),
     // dota_lobby settings (the password itself is never in event payloads).
     dota_lobby_mode: z.enum(['off', 'manual', 'auto']).default('off'),
@@ -231,6 +305,13 @@ export const eventSignupSchema = z.object({
   waitlist_position: z.number().nullable(),
   created_at: z.string(),
   updated_at: z.string(),
+  signed_up_at: z.string().nullable().default(null),
+  commitment: z
+    .enum([Commitment.MAIN, Commitment.MAYBE])
+    .default(Commitment.MAIN),
+  rsvp_class: z.string().default('standard'),
+  first_signed_up_at: z.string().nullable().default(null),
+  line_rank: z.number().int().nullable().default(null),
 });
 
 export type EventSignupType = z.infer<typeof eventSignupSchema>;
@@ -396,19 +477,12 @@ export function refineEventEnd(
   }
 }
 
-/** Roll-call modes the forms offer; the mode select appears once there is a choice. */
-export const ROLL_CALL_MODES = ['manual'] as const;
-export type RollCallMode = (typeof ROLL_CALL_MODES)[number];
-
-/** Who may join an event and when they reach the tournament roster. */
+/** Whether members may add themselves; the roster rule is in readyCheckConfigSchema. */
 export const signupRulesSchema = z.object({
-  roll_call_enabled: z.boolean(),
   allow_user_signups: z.boolean(),
-  roll_call_mode: z.enum(ROLL_CALL_MODES).optional(),
 });
 
 export const SIGNUP_RULES_DEFAULTS = {
-  roll_call_enabled: false,
   allow_user_signups: true,
 } as const;
 
@@ -515,6 +589,160 @@ export const DOTA_LOBBY_CONFIG_DEFAULTS = {
   dota_lobby_password_saved: false,
 } as const;
 
+const minutes = (min: number, max: number) =>
+  z.number().int().min(min).max(max);
+
+/** Mandatory RSVP Confirmation settings; bounds mirror READY_CHECK_FIELD_RANGES. */
+export const readyCheckConfigSchema = z.object({
+  roll_call_enabled: z.boolean().default(false),
+  roll_call_mode: z.enum(ROLL_CALL_MODES).default('manual'),
+  auto_confirm: z.boolean().default(false),
+  ready_check_scope: z.enum(READY_CHECK_SCOPES).default('main_only'),
+  ready_check_open_minutes: minutes(1, 1440).default(120),
+  ready_check_escalation_minutes: minutes(0, 1440).default(30),
+  ready_check_close_minutes: minutes(0, 1440).default(10),
+  ready_check_chase_minutes: minutes(1, 1440).nullable().default(30),
+  ready_check_min_completion_pct: minutes(0, 100).default(70),
+  ready_check_low_completion_action: z
+    .enum(LOW_COMPLETION_ACTIONS)
+    .default('non_binding'),
+  ready_check_notify_on_signup: z.boolean().default(true),
+  ready_check_drop_notice: z.boolean().default(true),
+  start_cull_enabled: z.boolean().default(false),
+  start_cull_minutes_after: minutes(0, 120).default(1),
+  post_cull_fill_mode: z.enum(POST_CULL_FILL_MODES).default('line_order'),
+  event_voice_channel_id: z
+    .string()
+    .regex(DISCORD_ID_REGEX, 'Must be a valid Discord snowflake ID')
+    .default(''),
+  voice_presence_confirms: z.boolean().default(false),
+});
+
+export type ReadyCheckFields = z.infer<typeof readyCheckConfigSchema>;
+
+export const READY_CHECK_CONFIG_DEFAULTS: ReadyCheckFields = {
+  roll_call_enabled: false,
+  roll_call_mode: 'manual',
+  auto_confirm: false,
+  ready_check_scope: 'main_only',
+  ready_check_open_minutes: 120,
+  ready_check_escalation_minutes: 30,
+  ready_check_close_minutes: 10,
+  ready_check_chase_minutes: 30,
+  ready_check_min_completion_pct: 70,
+  ready_check_low_completion_action: 'non_binding',
+  ready_check_notify_on_signup: true,
+  ready_check_drop_notice: true,
+  start_cull_enabled: false,
+  start_cull_minutes_after: 1,
+  post_cull_fill_mode: 'line_order',
+  event_voice_channel_id: '',
+  voice_presence_confirms: false,
+};
+
+export const READY_CHECK_PRESET_ON = {
+  roll_call_enabled: true,
+  roll_call_mode: 'automatic',
+  auto_confirm: false,
+} as const;
+
+/** Keys the create wizard copies from org defaults; never auto_confirm. */
+export const READY_CHECK_PREFILL_KEYS = (
+  Object.keys(READY_CHECK_CONFIG_DEFAULTS) as (keyof ReadyCheckFields)[]
+).filter((key) => key !== 'auto_confirm');
+
+const ROLL_CALL_RULE_FIELDS = ['roll_call_enabled', 'auto_confirm'] as const;
+const TIMING_RULE_FIELDS = [
+  'ready_check_open_minutes',
+  'ready_check_escalation_minutes',
+  'ready_check_close_minutes',
+  'ready_check_chase_minutes',
+] as const;
+const VOICE_RULE_FIELDS = [
+  'event_voice_channel_id',
+  'start_cull_enabled',
+  'voice_presence_confirms',
+  'post_cull_fill_mode',
+] as const;
+
+const VOICE_CHANNEL_MESSAGES = {
+  start_cull_enabled: 'The start cull needs an event voice channel.',
+  voice_presence_confirms:
+    'Voice presence confirms need an event voice channel.',
+  post_cull_fill_mode: 'Filling by voice arrival needs an event voice channel.',
+} as const;
+
+/**
+ * zod superRefine mirroring validate_ready_check_settings in the backend. With a
+ * baseline, a rule group runs only when one of its fields differs from it.
+ */
+export function refineReadyCheck(
+  values: ReadyCheckFields,
+  ctx: z.RefinementCtx,
+  opts?: {
+    baseline?: Partial<ReadyCheckFields> | null;
+    autoConfirmVisible?: boolean;
+  },
+): void {
+  const baseline = opts?.baseline;
+  const touched = (fields: readonly (keyof ReadyCheckFields)[]): boolean =>
+    !baseline ||
+    fields.some(
+      (f) =>
+        values[f] !==
+        (baseline[f] === undefined
+          ? READY_CHECK_CONFIG_DEFAULTS[f]
+          : baseline[f]),
+    );
+  const fail = (path: keyof ReadyCheckFields, message: string): void => {
+    ctx.addIssue({ code: 'custom', path: [path], message });
+  };
+
+  if (
+    touched(ROLL_CALL_RULE_FIELDS) &&
+    values.roll_call_enabled &&
+    values.auto_confirm
+  ) {
+    fail(
+      opts?.autoConfirmVisible ? 'auto_confirm' : 'roll_call_enabled',
+      'Auto-confirm must be off while the ready check (roll call) is on: every member has to confirm themselves.',
+    );
+  }
+
+  if (touched(TIMING_RULE_FIELDS)) {
+    const open = values.ready_check_open_minutes;
+    const close = values.ready_check_close_minutes;
+    const escalation = values.ready_check_escalation_minutes;
+    const chase = values.ready_check_chase_minutes;
+    if (!(open > close)) {
+      fail(
+        'ready_check_close_minutes',
+        'The check must close after it opens (close minutes must be fewer than open minutes).',
+      );
+    } else if (escalation && !(open > escalation && escalation >= close)) {
+      fail(
+        'ready_check_escalation_minutes',
+        'Escalation must fall between open and close, or be 0 to turn it off.',
+      );
+    } else if (chase !== null && !(chase + close < open)) {
+      fail(
+        'ready_check_chase_minutes',
+        'The chase falls before the check opens: chase + close must be less than open.',
+      );
+    }
+  }
+
+  if (touched(VOICE_RULE_FIELDS) && !values.event_voice_channel_id) {
+    const triggers: [keyof typeof VOICE_CHANNEL_MESSAGES, boolean][] = [
+      ['start_cull_enabled', values.start_cull_enabled],
+      ['voice_presence_confirms', values.voice_presence_confirms],
+      ['post_cull_fill_mode', values.post_cull_fill_mode === 'voice_arrival'],
+    ];
+    const hit = triggers.find(([, on]) => on);
+    if (hit) fail(hit[0], VOICE_CHANNEL_MESSAGES[hit[0]]);
+  }
+}
+
 /** Name and description shared by every event-family form. */
 export const eventIdentitySchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -555,6 +783,7 @@ export const createEventInputSchema = eventIdentitySchema
   })
   .merge(discordConfigSchema)
   .merge(dotaLobbyConfigSchema)
+  .merge(readyCheckConfigSchema)
   .merge(signupOpenSchema);
 
 export type CreateEventInput = z.infer<typeof createEventInputSchema>;
@@ -575,7 +804,8 @@ export const createSeriesEventInputSchema = createEventInputSchema
     event_ends_at: true,
   })
   .merge(discordConfigSchema)
-  .merge(dotaLobbyConfigSchema);
+  .merge(dotaLobbyConfigSchema)
+  .merge(readyCheckConfigSchema);
 
 export type CreateSeriesEventInput = z.output<
   typeof createSeriesEventInputSchema
@@ -591,6 +821,7 @@ export const editEventFormSchema = eventIdentitySchema
   .merge(discordConfigSchema)
   .merge(dotaLobbyConfigSchema)
   .merge(DraftSettingsFormSchema)
+  .merge(readyCheckConfigSchema)
   .merge(signupOpenSchema)
   .superRefine((values, ctx) => {
     refineLobbyPassword(values, ctx);

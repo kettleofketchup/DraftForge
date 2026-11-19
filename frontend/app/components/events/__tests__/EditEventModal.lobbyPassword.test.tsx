@@ -93,7 +93,7 @@ const event: EventType = {
   require_steam_id: false,
   require_profile_complete: false,
   roll_call_enabled: false,
-  roll_call_mode: 'none',
+  roll_call_mode: 'manual',
   signup_open_mode: 'manual',
   signups_open_hours_before: 72,
   allow_active_mmr: true,

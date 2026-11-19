@@ -5,6 +5,7 @@ import { I18nextProvider } from 'react-i18next';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { TooltipProvider } from '~/components/ui/tooltip';
 import { createI18nInstance } from '~/i18n/config';
+import { READY_CHECK_TEST_IDS as IDS } from '../form/testIds';
 
 const mutateAsync = vi.fn().mockResolvedValue({});
 vi.mock('~/hooks/useEvent', () => ({
@@ -126,5 +127,56 @@ describe('EditOrgDefaultsModal draft settings', () => {
     });
     expect(data).not.toHaveProperty('draft_grace_time_s');
     expect(data).not.toHaveProperty('hero_reserve_time_s');
+  });
+});
+
+describe('EditOrgDefaultsModal ready check', () => {
+  beforeEach(() => mutateAsync.mockClear());
+
+  it('moves auto-confirm into the Ready check tab and saves its keys', async () => {
+    render(
+      <EditOrgDefaultsModal organizationId={1} open onOpenChange={() => {}} />,
+      { wrapper: Wrapper },
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId('draft-settings-team-grace-s')).toHaveValue(20),
+    );
+    expect(screen.getByTestId('org-defaults-tab-ready')).toBeInTheDocument();
+    expect(
+      screen.queryByTestId('org-defaults-auto-confirm-checkbox'),
+    ).toBeNull();
+    fireEvent.click(screen.getByTestId(IDS.autoConfirm));
+    fireEvent.click(screen.getByTestId('form-dialog-submit'));
+
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalled());
+    expect(mutateAsync.mock.calls[0][0].data).toMatchObject({
+      auto_confirm: true,
+      roll_call_enabled: false,
+      roll_call_mode: 'manual',
+      ready_check_open_minutes: 120,
+      ready_check_chase_minutes: 30,
+      event_voice_channel_id: '',
+    });
+  });
+
+  it('turns auto-confirm off when the toggle is turned on', async () => {
+    render(
+      <EditOrgDefaultsModal organizationId={1} open onOpenChange={() => {}} />,
+      { wrapper: Wrapper },
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId('draft-settings-team-grace-s')).toHaveValue(20),
+    );
+    fireEvent.click(screen.getByTestId(IDS.autoConfirm));
+    fireEvent.click(screen.getByTestId(IDS.toggle));
+    expect(screen.getByTestId(IDS.autoConfirm)).toBeDisabled();
+    fireEvent.click(screen.getByTestId('form-dialog-submit'));
+
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalled());
+    expect(mutateAsync.mock.calls[0][0].data).toMatchObject({
+      auto_confirm: false,
+      roll_call_enabled: true,
+      roll_call_mode: 'automatic',
+    });
   });
 });

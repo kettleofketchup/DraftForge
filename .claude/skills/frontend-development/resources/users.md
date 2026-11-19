@@ -20,8 +20,8 @@ error links to the section below that explains the fix.
 `DisplayName(user)` returns the first of:
 
 1. the org server nickname, on a page that belongs to an org
-2. the site nickname (interim: it leaves the chain when the site nickname is removed)
-3. the Discord global name (`discordNickname`)
+2. the Discord global name (`discordNickname`)
+3. the site nickname (for users without a Discord name)
 4. the username
 5. `User <pk>`, or `?` with no pk
 
@@ -107,7 +107,7 @@ skips those.
 ## Deliberate single-field displays
 
 Some UI shows one specific field on purpose: a labelled "Username:" row, an
-`@handle`, a Discord picker showing Discord's own fields, a meta image that
+`@handle` beside the display name, a meta image that
 needs a URL string (`AvatarUrl(user)`). Keep the field and say why, on the line:
 
 ```tsx

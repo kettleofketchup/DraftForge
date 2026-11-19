@@ -11,14 +11,14 @@ except ImportError as _import_error:  # pragma: no cover
 
 
 class BackfillSignupOpenPolicyMigrationTest(MigratorTestCase):
-    """events 0027: upcoming events with a legacy signups_open_at become
+    """events 0031: upcoming events with a legacy signups_open_at become
     scheduled, so the row never says manual with a scheduled time."""
 
     migrate_from = [
         ("app", "0106_draftoptions_hero_grace_time_ms_and_more"),
-        ("events", "0026_signup_open_policy"),
+        ("events", "0030_signup_open_policy"),
     ]
-    migrate_to = ("events", "0027_backfill_signup_open_policy")
+    migrate_to = ("events", "0031_backfill_signup_open_policy")
 
     def prepare(self) -> None:
         Organization = self.old_state.apps.get_model("app", "Organization")

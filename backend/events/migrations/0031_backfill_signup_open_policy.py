@@ -21,7 +21,7 @@ def backfill_scheduled_policy(
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("events", "0026_signup_open_policy"),
+        ("events", "0030_signup_open_policy"),
     ]
 
     operations = [

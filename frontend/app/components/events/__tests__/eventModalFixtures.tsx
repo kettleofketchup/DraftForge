@@ -7,7 +7,7 @@ import type {
 } from '~/components/api/api';
 import { TooltipProvider } from '~/components/ui/tooltip';
 import { createI18nInstance } from '~/i18n/config';
-import type { EventType } from '../schemas';
+import { READY_CHECK_CONFIG_DEFAULTS, type EventType } from '../schemas';
 
 // FormDialog renders a Radix ScrollArea, which jsdom cannot satisfy.
 class ResizeObserverStub {
@@ -43,6 +43,7 @@ export function Wrapper({ children }: { children: React.ReactNode }) {
 }
 
 export const config = {
+  ...READY_CHECK_CONFIG_DEFAULTS,
   organization: 1,
   tournament_name: 'Night Cup',
   tournament_league: null,
@@ -68,7 +69,7 @@ export const config = {
   require_steam_id: false,
   require_profile_complete: false,
   roll_call_enabled: false,
-  roll_call_mode: 'manual',
+  roll_call_mode: 'manual' as const,
   signup_open_mode: 'manual' as const,
   signups_open_hours_before: 72,
   allow_active_mmr: true,

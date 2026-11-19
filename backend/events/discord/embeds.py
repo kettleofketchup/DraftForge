@@ -52,7 +52,7 @@ def _event_url(event: "EmbedEvent") -> str:
     return f"{SITE_URL}/events/{event.pk}" if SITE_URL else ""
 
 
-DECLINED_STATUSES = {"cancelled", "rejected"}
+DECLINED_STATUSES = {"cancelled", "rejected", "dropped"}
 CONFIRMED_STATUSES = {"confirmed", "approved"}
 
 

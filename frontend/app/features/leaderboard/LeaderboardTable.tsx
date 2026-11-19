@@ -5,15 +5,16 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "~/components/ui/table";
-import { UserPopover } from "~/components/user/UserPopover";
+} from '~/components/ui/table';
+import { UserPopover } from '~/components/user/UserPopover';
+import { DisplayName } from '~/components/user/avatar';
 import {
   formatWinRate,
   toneClass,
   winRateTone,
-} from "~/features/league-stats/format";
-import { cn } from "~/lib/utils";
-import type { LeaderboardEntry, SortField, SortOrder } from "./types";
+} from '~/features/league-stats/format';
+import { cn } from '~/lib/utils';
+import type { LeaderboardEntry, SortField, SortOrder } from './types';
 
 interface LeaderboardTableProps {
   entries: LeaderboardEntry[];
@@ -44,7 +45,7 @@ export function LeaderboardTable({
       <div className="flex items-center gap-1">
         {children}
         {sortBy === field && (
-          <span className="text-xs">{order === "desc" ? "▼" : "▲"}</span>
+          <span className="text-xs">{order === 'desc' ? '▼' : '▲'}</span>
         )}
       </div>
     </TableHead>
@@ -77,24 +78,24 @@ export function LeaderboardTable({
                   avatar={entry.avatar}
                 >
                   <span className="cursor-pointer font-medium hover:underline">
-                    {entry.username}
+                    {DisplayName(entry)}
                   </span>
                 </UserPopover>
               </TableCell>
               <TableCell>
                 <div className="flex items-baseline gap-1">
-                  <span className="font-bold">{entry.league_mmr ?? "—"}</span>
+                  <span className="font-bold">{entry.league_mmr ?? '—'}</span>
                   <span
                     className={cn(
-                      "text-xs",
+                      'text-xs',
                       entry.mmr_adjustment > 0
-                        ? "text-green-500"
+                        ? 'text-green-500'
                         : entry.mmr_adjustment < 0
-                          ? "text-red-500"
-                          : "text-muted-foreground"
+                          ? 'text-red-500'
+                          : 'text-muted-foreground',
                     )}
                   >
-                    ({entry.mmr_adjustment > 0 ? "+" : ""}
+                    ({entry.mmr_adjustment > 0 ? '+' : ''}
                     {entry.mmr_adjustment})
                   </span>
                 </div>

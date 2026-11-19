@@ -2,10 +2,11 @@ import type { FormEvent, JSX } from 'react';
 import React from 'react';
 import { toast } from 'sonner';
 import { updateOrgUser } from '~/components/api/api';
+import { DisplayName } from '~/components/user/avatar';
 import type { UserClassType, UserType } from '~/components/user/types';
 import { User } from '~/components/user/user';
-import { useUserCacheStore } from '~/store/userCacheStore';
 import { getLogger } from '~/lib/logger';
+import { useUserCacheStore } from '~/store/userCacheStore';
 import { steamAccountIdConflictFromError } from './steamAccountIdConflict';
 const log = getLogger('handleSaveHook');
 
@@ -85,13 +86,13 @@ export const handleSave = async (
   };
   if (!user.pk) {
     toast.promise(newUser.dbCreate(), {
-      loading: `Creating User ${user.username}.`,
+      loading: `Creating User ${DisplayName(user)}.`,
       success: (data: UserType) => {
         setStatusMsg('User created successfully!');
         setUser(data);
         resetForm();
         onSuccess?.();
-        return `${user.username} has been Created`;
+        return `${DisplayName(user)} has been Created`;
       },
       error: (err) => {
         const val = err.response.data;
@@ -110,20 +111,24 @@ export const handleSave = async (
       ? updateOrgUser(organizationId!, orgUserPk!, form as UserType)
       : newUser.dbUpdate(form as UserType);
     toast.promise(updatePromise, {
-      loading: `Updating User ${user.username}.`,
+      loading: `Updating User ${DisplayName(user)}.`,
       success: (data) => {
         setStatusMsg('User updated successfully!');
         setUser(data);
         // Update entity cache so all contexts (org, league, tournament) reflect the change
         if (data.pk) {
-          useUserCacheStore.getState().upsert(
-            [data],
-            isOrgUpdate && organizationId ? { orgId: organizationId } : undefined,
-          );
+          useUserCacheStore
+            .getState()
+            .upsert(
+              [data],
+              isOrgUpdate && organizationId
+                ? { orgId: organizationId }
+                : undefined,
+            );
         }
         resetForm();
         onSuccess?.();
-        return `${user.username} has been updated`;
+        return `${DisplayName(user)} has been updated`;
       },
       error: (err) => {
         log.error(`Failed to update user ${user.username}`, err);
@@ -132,7 +137,7 @@ export const handleSave = async (
         setIsSaving(false);
         return (
           steamAccountIdConflictFromError(errData) ??
-          `Failed to update user ${user.username}.`
+          `Failed to update user ${DisplayName(user)}.`
         );
       },
     });

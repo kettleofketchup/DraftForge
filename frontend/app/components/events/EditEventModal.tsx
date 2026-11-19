@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import { z } from 'zod';
@@ -27,8 +27,10 @@ import {
   EventLobbyFields,
   EventTournamentFields,
   OneOffScheduleFields,
+  readyCheckResetValues,
   TimezoneField,
 } from './form';
+import { ReadyCheckConfigSection } from './ReadyCheckConfigSection';
 import type { EditEventFormInput, EventType } from './schemas';
 import {
   DISCORD_CONFIG_DEFAULTS,
@@ -36,6 +38,8 @@ import {
   editEventFormSchema,
   EventState,
   localToUTC,
+  READY_CHECK_CONFIG_DEFAULTS,
+  refineReadyCheck,
   SIGNUP_OPEN_DEFAULTS,
   utcToLocalInput,
 } from './schemas';
@@ -80,6 +84,15 @@ export function EditEventModal({
   const mutation = useUpdateEventMutation(event?.id ?? 0);
   const { data: savedPassword } = useEventLobbyPassword(event?.id, open);
   const regenerate = useRegenerateEventLobbyPassword(event?.id);
+  const schema = useMemo(
+    () =>
+      editEventFormSchema.superRefine((values, ctx) =>
+        refineReadyCheck(values, ctx, {
+          baseline: readyCheckResetValues(event),
+        }),
+      ),
+    [event],
+  );
 
   // 3-generic useForm to align TFieldValues=z.input and TTransformedValues=z.output
   // — zodResolver returns Resolver<z.input<S>, _, z.output<S>> under zod 4.
@@ -89,7 +102,7 @@ export function EditEventModal({
     unknown,
     EditEventFormInput
   >({
-    resolver: zodResolver(editEventFormSchema),
+    resolver: zodResolver(schema),
     defaultValues: {
       ...EVENT_TEMPLATE_DEFAULTS,
       scheduled_at: '',
@@ -98,6 +111,7 @@ export function EditEventModal({
       tournament_league: null, // overridden by useEffect when event loads
       ...DISCORD_CONFIG_DEFAULTS,
       ...DOTA_LOBBY_CONFIG_DEFAULTS,
+      ...READY_CHECK_CONFIG_DEFAULTS,
       ...draftSettingsToFormInput(null),
       ...SIGNUP_OPEN_DEFAULTS,
     },
@@ -137,6 +151,7 @@ export function EditEventModal({
             : 24,
         ...signupOpenFrom(event),
         ...dotaLobbyResetValues(event, { savedFromMode: true }),
+        ...readyCheckResetValues(event),
       });
     }
   }, [event, open]);
@@ -317,6 +332,16 @@ export function EditEventModal({
               watch={form.watch}
               isRepeater={event?.event_repeater != null}
               organizationId={event?.organization ?? 0}
+            />
+          ),
+        },
+        {
+          value: 'ready',
+          content: (
+            <ReadyCheckConfigSection
+              control={form.control}
+              setValue={form.setValue}
+              organizationId={event?.organization ?? null}
             />
           ),
         },

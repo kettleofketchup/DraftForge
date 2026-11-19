@@ -37,17 +37,23 @@ import {
   EventLobbyFields,
   EventTournamentFields,
   OneOffScheduleFields,
+  readyCheckResetValues,
   SeriesScheduleFields,
   TimezoneField,
 } from './form';
+import { ReadyCheckConfigSection } from './ReadyCheckConfigSection';
 import {
   createEventInputSchema,
   DISCORD_CONFIG_DEFAULTS,
   DOTA_LOBBY_CONFIG_DEFAULTS,
   Frequency,
   localToUTC,
+  READY_CHECK_CONFIG_DEFAULTS,
+  READY_CHECK_PREFILL_KEYS,
   refineEventEnd,
+  refineReadyCheck,
   SIGNUP_OPEN_DEFAULTS,
+  type ReadyCheckFields,
 } from './schemas';
 import { signupOpenFrom } from './signupOpen';
 import { SERIES_IMMEDIATE_HELP, SignupOpenSection } from './SignupOpenSection';
@@ -62,6 +68,7 @@ const createEventFormSchema = createEventInputSchema
   .superRefine((values, ctx) => {
     refineLobbyPassword(values, ctx);
     if (!values.is_recurring) refineEventEnd(values, ctx);
+    refineReadyCheck(values, ctx);
   });
 type CreateEventFormOutput = z.output<typeof createEventFormSchema>;
 
@@ -115,6 +122,7 @@ export function CreateEventModal({
       discord_notify_new_events: true,
       ...DISCORD_CONFIG_DEFAULTS,
       ...DOTA_LOBBY_CONFIG_DEFAULTS,
+      ...READY_CHECK_CONFIG_DEFAULTS,
       ...SIGNUP_OPEN_DEFAULTS,
       is_recurring: false,
       frequency: Frequency.WEEKLY,
@@ -154,6 +162,11 @@ export function CreateEventModal({
         // off and a random password.
         ...DOTA_LOBBY_CONFIG_DEFAULTS,
         ...eventFieldsToDraftSettingsFormInput(orgDefaults),
+        ...readyCheckResetValues(
+          Object.fromEntries(
+            READY_CHECK_PREFILL_KEYS.map((key) => [key, orgDefaults[key]]),
+          ) as Partial<ReadyCheckFields>,
+        ),
       });
       setDefaultsApplied(true);
     }
@@ -391,6 +404,16 @@ export function CreateEventModal({
               control={form.control}
               watch={form.watch}
               isRepeater={isRecurring}
+              organizationId={organizationId}
+            />
+          ),
+        },
+        {
+          value: 'ready',
+          content: (
+            <ReadyCheckConfigSection
+              control={form.control}
+              setValue={form.setValue}
               organizationId={organizationId}
             />
           ),

@@ -9,18 +9,12 @@ import { SIGNUP_RULES_DEFAULTS, type signupRulesSchema } from '../schemas';
 
 type Values = z.input<typeof signupRulesSchema>;
 
-function Harness({
-  modes,
-  onValues,
-}: {
-  modes?: readonly string[];
-  onValues?: (v: Values) => void;
-}) {
+function Harness({ onValues }: { onValues?: (v: Values) => void }) {
   const form = useForm<Values>({ defaultValues: { ...SIGNUP_RULES_DEFAULTS } });
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit((v) => onValues?.(v))}>
-        <SignupRulesSection control={form.control} modes={modes} />
+        <SignupRulesSection control={form.control} />
         <button type="submit">go</button>
       </form>
     </Form>
@@ -28,44 +22,31 @@ function Harness({
 }
 
 describe('SignupRulesSection', () => {
-  it('renders the roster and self sign-up controls', () => {
+  it('renders the self sign-up control', () => {
     render(<Harness />);
-    expect(
-      screen.getByLabelText('Players join the roster only after confirming'),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        'Approved players wait for roll-call confirmation before they are added to the tournament.',
-      ),
-    ).toBeInTheDocument();
     expect(
       screen.getByLabelText('Members can sign themselves up'),
     ).toBeInTheDocument();
+    expect(
+      screen.getByText('When off, only organizers can add players.'),
+    ).toBeInTheDocument();
   });
 
-  it('hides the roll-call mode select with the default single mode', () => {
+  it('leaves the roster rule to the ready check section', () => {
     render(<Harness />);
+    expect(
+      screen.queryByTestId('signup-rules-roll_call_enabled'),
+    ).not.toBeInTheDocument();
     expect(screen.queryByTestId('roll-call-mode-select')).toBeNull();
   });
 
-  it('shows the roll-call mode select when more than one mode is offered', () => {
-    render(<Harness modes={['manual', 'auto']} />);
-    expect(screen.getByTestId('roll-call-mode-select')).toBeInTheDocument();
-  });
-
-  it('writes both flags to the form', async () => {
+  it('writes the flag to the form', async () => {
     let submitted: Values | undefined;
     render(<Harness onValues={(v) => (submitted = v)} />);
-    fireEvent.click(
-      screen.getByLabelText('Players join the roster only after confirming'),
-    );
     fireEvent.click(screen.getByLabelText('Members can sign themselves up'));
     fireEvent.click(screen.getByText('go'));
     await screen.findByText('go');
     await new Promise((r) => setTimeout(r, 0));
-    expect(submitted).toMatchObject({
-      roll_call_enabled: true,
-      allow_user_signups: false,
-    });
+    expect(submitted).toMatchObject({ allow_user_signups: false });
   });
 });

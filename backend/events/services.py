@@ -19,6 +19,7 @@ from events.capacity import has_free_seat, lock_event, seat_holding_statuses
 from events.constants import (
     EVENT_REOPEN_TRANSITIONS,
     EVENT_RESTART_TRANSITIONS,
+    Commitment,
     EventState,
     RepeatFrequency,
     SignupOpenMode,
@@ -48,6 +49,10 @@ from events.models import (
     EventSignup,
     EventTeam,
     TournamentTemplateMixin,
+)
+from events.ready_check_constants import (
+    DROPPED_SIGNUP_MESSAGE,
+    REMOVED_SIGNUP_STATUSES,
 )
 from events.reopen import ReopenNotPermitted, reopen_event
 from events.roster import (
@@ -152,6 +157,16 @@ def resolve_or_create_org_user(
     return org_user
 
 
+def _first_fields_carry(existing: EventSignup | None) -> dict[str, Any]:
+    if existing is None:
+        return {}
+    return {
+        "first_signed_up_at": existing.first_signed_up_at,
+        "first_commitment": existing.first_commitment,
+        "first_rsvp_class": existing.first_rsvp_class,
+    }
+
+
 def _decide_signup_status(event: Event, unmet: list[str]) -> SignupStatus:
     """Status for a signup taking a seat. Auto-approve events approve (or
     confirm) eligible players and hold the rest for staff; manual-approval
@@ -209,6 +224,7 @@ def _create_signup(
     re-warm it with stale data.
     """
     existing = EventSignup.objects.filter(event=event, user=user).first()
+    carry = _first_fields_carry(existing)
     if existing:
         logger.info(
             "signup_existing_found",
@@ -237,6 +253,8 @@ def _create_signup(
                 user_id=user.pk,
                 event_id=event.pk,
             )
+        elif existing.status == SignupStatus.DROPPED:
+            raise ValueError(DROPPED_SIGNUP_MESSAGE)
         else:
             raise ValueError("User has already signed up for this event.")
 
@@ -259,6 +277,7 @@ def _create_signup(
             status=SignupStatus.WAITLISTED,
             waitlist_position=max_pos + 1,
             unmet_requirements=unmet,
+            **carry,
         )
         invalidate_after_commit(event)
         log.info(
@@ -279,6 +298,7 @@ def _create_signup(
         signup_type=signup_type,
         status=status,
         unmet_requirements=unmet,
+        **carry,
     )
     _roster_add_if_joins(signup)
     invalidate_after_commit(event)
@@ -333,6 +353,7 @@ def create_tentative_signup(event: Event, user: CustomUser) -> EventSignup:
     Behavior:
       - Self-serve admission applies (events.admission).
       - If existing TENTATIVE signup -> raise ValueError (already tentative).
+      - If existing DROPPED signup -> raise ValueError; the row is kept.
       - If existing active signup (RSVP/APPROVED/CONFIRMED/PENDING/WAITLISTED)
         -> cancel it, delete the row, then create a fresh TENTATIVE.
       - If existing CANCELLED/REJECTED row -> delete it, create fresh TENTATIVE.
@@ -343,17 +364,20 @@ def create_tentative_signup(event: Event, user: CustomUser) -> EventSignup:
     ensure_self_serve(event, user)
 
     existing = EventSignup.objects.filter(event=event, user=user).first()
+    carry = _first_fields_carry(existing)
     notify_scheduled_by_cancel = False
     if existing:
         if existing.status == SignupStatus.TENTATIVE:
             raise ValueError("Already marked as tentative")
+        if existing.status == SignupStatus.DROPPED:
+            raise ValueError(DROPPED_SIGNUP_MESSAGE)
         if existing.status not in (SignupStatus.CANCELLED, SignupStatus.REJECTED):
             cancel_signup(existing)
             notify_scheduled_by_cancel = True
         EventSignup.objects.filter(pk=existing.pk).delete()
 
     signup = EventSignup.objects.create(
-        event=event, user=user, status=SignupStatus.TENTATIVE
+        event=event, user=user, status=SignupStatus.TENTATIVE, **carry
     )
     # invalidate_after_commit is on_commit-aware internally; do NOT wrap.
     invalidate_after_commit(signup, event)
@@ -373,7 +397,7 @@ def decline_signup(event: Event, user: CustomUser) -> EventSignup:
     """
     existing = EventSignup.objects.filter(event=event, user=user).first()
     if existing:
-        if existing.status in (SignupStatus.CANCELLED, SignupStatus.REJECTED):
+        if existing.status in REMOVED_SIGNUP_STATUSES:
             raise ValueError("Already declined")
         return cancel_signup(existing)
 
@@ -594,7 +618,7 @@ def approve_signup(signup: EventSignup, mmr_override: int | None = None) -> Even
 @transaction.atomic
 def reject_signup(signup: EventSignup) -> EventSignup:
     """Reject a signup."""
-    if signup.status in [SignupStatus.REJECTED, SignupStatus.CANCELLED]:
+    if signup.status in REMOVED_SIGNUP_STATUSES:
         raise ValueError(f"Cannot reject signup in '{signup.status}' status.")
     prior_status = signup.status
     signup.status = SignupStatus.REJECTED
@@ -623,7 +647,7 @@ def confirm_signup(signup: EventSignup) -> EventSignup:
 @transaction.atomic
 def cancel_signup(signup: EventSignup) -> EventSignup:
     """Cancel a signup."""
-    if signup.status in [SignupStatus.CANCELLED, SignupStatus.REJECTED]:
+    if signup.status in REMOVED_SIGNUP_STATUSES:
         raise ValueError(f"Cannot cancel signup in '{signup.status}' status.")
     prior_status = signup.status
     signup.status = SignupStatus.CANCELLED
@@ -710,11 +734,7 @@ def unconfirm_signup(signup: EventSignup) -> EventSignup:
 @transaction.atomic
 def demote_to_waitlist(signup: EventSignup) -> EventSignup:
     """Move an active signup to the end of the waitlist."""
-    if signup.status in [
-        SignupStatus.CANCELLED,
-        SignupStatus.REJECTED,
-        SignupStatus.WAITLISTED,
-    ]:
+    if signup.status in (*REMOVED_SIGNUP_STATUSES, SignupStatus.WAITLISTED):
         raise ValueError(f"Cannot demote signup in '{signup.status}' status.")
     max_pos = (
         EventSignup.objects.filter(
@@ -750,11 +770,13 @@ def reinstate_signup(signup: EventSignup) -> EventSignup:
             )
         signup.status = SignupStatus.APPROVED
         signup.waitlist_position = None
+        signup.commitment = Commitment.MAIN
         signup.unmet_requirements = []
         signup.save(
             update_fields=[
                 "status",
                 "waitlist_position",
+                "commitment",
                 "unmet_requirements",
                 "updated_at",
             ]
@@ -783,11 +805,13 @@ def reinstate_signup(signup: EventSignup) -> EventSignup:
         signup.status = _decide_signup_status(locked, unmet)
         signup.waitlist_position = None
         _roster_add_if_joins(signup)
+    signup.commitment = Commitment.MAIN
     signup.unmet_requirements = unmet
     signup.save(
         update_fields=[
             "status",
             "waitlist_position",
+            "commitment",
             "unmet_requirements",
             "updated_at",
         ]
@@ -1021,7 +1045,8 @@ def sync_event_roster(
     Creates the tournament if missing (#200). Adds every signup whose status
     joins the roster; removes signed-up users whose status left it, except
     members, captains and deputies of a team in the tournament, who are kept
-    and reported. Users on the roster without a signup are left alone.
+    and reported. DROPPED players always leave. Users on the roster without a
+    signup are left alone.
     Idempotent. M2M writes are not tracked by cacheops, so the tournament,
     the event and every touched user are invalidated on commit.
     """
@@ -1136,6 +1161,7 @@ def teardown_event(event: Event) -> None:
 
 # Signup statuses that put a player in the event's tournament
 # (approve_signup / confirm_signup call add_user_to_tournament).
+# An allow-list, so DROPPED is excluded on purpose.
 REGISTERED_SIGNUP_STATUSES = (SignupStatus.APPROVED, SignupStatus.CONFIRMED)
 
 

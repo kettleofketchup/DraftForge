@@ -6,7 +6,7 @@ import {
 } from '@headlessui/react';
 import React, { useCallback, useEffect, useState } from 'react';
 import { Input } from '~/components/ui/input';
-import { Label } from '~/components/ui/label';
+import { DisplayName } from '~/components/user/avatar';
 import { UserAvatar } from '~/components/user/UserAvatar';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '../../store/userStore';
@@ -69,7 +69,7 @@ const DiscordUserDropdown: React.FC<Props> = ({
             .toLowerCase()
             .includes(query?.toLowerCase());
 
-          const nickname = (person as any).user?.nick
+          const nickname = person.nick
             ?.toLowerCase()
             .includes(query?.toLowerCase());
 
@@ -97,57 +97,6 @@ const DiscordUserDropdown: React.FC<Props> = ({
   );
 
   const filteredUserComboOption = (user: GuildMember) => {
-    const getNickname = () => {
-      if (!user || !user.nick) {
-        return <></>;
-      }
-      return (
-        <div className="flex">
-          <Label
-            htmlFor={`global-nick-${user.user.id}`}
-            className="text-xs text-gray-500 m-0 pl-1 w-10"
-          >
-            Nick:
-          </Label>
-          <p id={`global-nick-${user.user.id}`}>{user.nick} </p>
-        </div>
-      );
-    };
-
-    const getUsername = () => {
-      if (!user || !user.user.username) {
-        return <></>;
-      }
-      return (
-        <div className="flex">
-          <Label
-            htmlFor={`global-username-${user.user.id}`}
-            className="text-xs text-gray-500 m-0 pl-1 w-20"
-          >
-            Username:
-          </Label>
-          <p id={`global-username-${user.user.id}`}>{user.user.username} </p>
-        </div>
-      );
-    };
-
-    const getGlobalName = () => {
-      if (!user || !user.user.global_name) {
-        return <></>;
-      }
-
-      return (
-        <div className="flex">
-          <Label
-            htmlFor={`global-name-${user.user.id}`}
-            className="text-xs text-gray-500 m-0 pl-1 w-20"
-          >
-            Global:
-          </Label>
-          <p id={`global-name-${user.user.id}`}>{user.user.global_name} </p>
-        </div>
-      );
-    };
     const userAddedBadge = () => {
       if (!isUserAlreadyAdded(user)) return <></>;
       return (
@@ -170,14 +119,15 @@ const DiscordUserDropdown: React.FC<Props> = ({
       >
         <div className="flex items-center w-full">
           <UserAvatar user={user} size="md" />
-          <div className="flex w-full flex-col ">
-            <div className="flex">
-              {getGlobalName()}
+          <div className="flex w-full flex-col pl-2">
+            <div className="flex items-center">
+              <span className="font-medium">{DisplayName(user)}</span>
               {userAddedBadge()}
             </div>
-
-            <div className={`rounded-lg flex`}>{getNickname()}</div>
-            <div className={`rounded-lg flex`}>{getUsername()}</div>
+            <span className="text-xs text-muted-foreground">
+              {/* eslint-disable-next-line draftforge/use-display-name -- the Discord @handle beside the display name */}
+              @{user.user.username}
+            </span>
           </div>
 
           {/* TODO add a quickadd button*/}

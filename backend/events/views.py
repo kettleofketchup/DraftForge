@@ -1189,6 +1189,8 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
         event_id = self.request.query_params.get("event")
         if event_id:
             qs = qs.filter(event_id=event_id)
+        if self.action == "list":
+            qs = qs.annotate_line_rank()
         return qs
 
     @action(detail=True, methods=["post"])

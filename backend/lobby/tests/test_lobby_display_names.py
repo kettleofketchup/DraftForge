@@ -73,7 +73,7 @@ class LobbyDisplayNamesTest(TestCase):
         other.save()
         resp = self.client.get(f"/api/games/{self.game.pk}/lobby/")
         names = {row["user_id"]: row["name"] for row in resp.data["players"]}
-        self.assertEqual(names[dragon.pk], "SiteDragon")
+        self.assertEqual(names[dragon.pk], "Gwaihir")
         self.assertEqual(names[other.pk], "Windlord")
         self.assertEqual(names[roster[1].pk], roster[1].username)
 

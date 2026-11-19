@@ -54,3 +54,27 @@ export function eventFieldTestIds(
     },
   };
 }
+
+export const READY_CHECK_TEST_IDS = {
+  section: 'ready-check-section',
+  toggle: 'ready-check-toggle',
+  settingsTrigger: 'ready-check-settings-trigger',
+  mode: 'ready-check-mode',
+  scope: 'ready-check-scope',
+  open: 'ready-check-open-minutes',
+  escalation: 'ready-check-escalation-minutes',
+  close: 'ready-check-close-minutes',
+  chase: 'ready-check-chase-minutes',
+  chaseOff: 'ready-check-chase-off',
+  minCompletion: 'ready-check-min-completion-pct',
+  lowCompletionAction: 'ready-check-low-completion-action',
+  notifyOnSignup: 'ready-check-notify-on-signup',
+  dropNotice: 'ready-check-drop-notice',
+  voiceTrigger: 'ready-check-voice-trigger',
+  voiceChannel: 'ready-check-voice-channel',
+  voiceConfirms: 'ready-check-voice-confirms',
+  cullEnabled: 'ready-check-cull-enabled',
+  cullMinutes: 'ready-check-cull-minutes',
+  fillMode: 'ready-check-fill-mode',
+  autoConfirm: 'ready-check-auto-confirm',
+} as const;

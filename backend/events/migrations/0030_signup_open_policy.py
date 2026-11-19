@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("events", "0025_eventsignup_unmet_requirements"),
+        ("events", "0029_backfill_ready_check_open_minutes"),
     ]
 
     operations = [

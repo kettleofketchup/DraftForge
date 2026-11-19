@@ -62,6 +62,8 @@ For Dota 2 the configuration includes the hosted-lobby settings (off, manual or 
 
 Admins configure default settings per organization. When creating new events, the form pre-fills from these defaults — no need to re-enter Discord channels, tournament config, or approval settings each time.
 
+Ready check settings (Mandatory RSVP Confirmation, its timings and the start cull) can be saved as defaults too. The create form copies them, including `roll_call_enabled` and `roll_call_mode`, but never `auto_confirm`. See [Mandatory RSVP Confirmation](events/roll-call.md#mandatory-rsvp-confirmation).
+
 ### Extra Sessions on a Series
 
 From a series page (`/event-series/{id}`) org staff can add an **extra session attached to the series** — one event scheduled outside the series' recurrence, at a time they pick. It is fully part of the series: it carries `event_repeater`, so it inherits the series' tournament template, signup rules and Discord config. Subscriber reminders, the Discord *Notify Me for Future Events* button and every other reminder work on it exactly as they do on a generated occurrence. The UI labels the button *Add one-off event* and badges the result **One-off**.
@@ -112,6 +114,8 @@ Players RSVP from the event page (web) or via the Discord signup post. The signu
 - **Manual approval** — admin reviews and approves each signup
 - **Waitlist** — when max players is reached, new signups are waitlisted with position tracking
 - **Re-RSVP** — cancelled signups can re-register
+
+Each signup keeps a place in line and its original sign-up, and the signup ledger will keep a durable record of its changes: see [Signup Ledger & Line Position](events/signup-ledger.md).
 
 #### Web vs Discord parity
 
