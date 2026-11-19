@@ -1,5 +1,5 @@
 from datetime import timedelta
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from django.test import TestCase, TransactionTestCase
 from django.utils import timezone as tz
@@ -518,3 +518,53 @@ class EventPatchTournamentLeagueCacheTest(TransactionTestCase):
         get_resp = self.client.get(f"/api/events/{self.event.pk}/")
         self.assertEqual(get_resp.status_code, 200)
         self.assertEqual(get_resp.json()["tournament_league"], self.league_a2.pk)
+
+
+class TransitionRefreshesSignupPostTest(EventTestCase):
+    def setUp(self) -> None:
+        self.client = APIClient()
+        self.client.force_authenticate(self.admin)
+
+    def _post_with_state(self, state: EventState, action: str) -> MagicMock:
+        Event.objects.filter(pk=self.event.pk).update(state=state)
+        with (
+            patch("events.views.notify_signup_changed") as notify,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            resp = self.client.post(f"/api/events/{self.event.pk}/{action}/")
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.content)
+        return notify
+
+    def _assert_notified_once(self, notify: MagicMock) -> None:
+        notify.assert_called_once()
+        self.assertEqual(notify.call_args.args[0].pk, self.event.pk)
+
+    def test_start_roll_call_refreshes_post(self) -> None:
+        notify = self._post_with_state(EventState.SIGNUPS_OPEN, "start_roll_call")
+        self._assert_notified_once(notify)
+
+    def test_reopen_signups_refreshes_post(self) -> None:
+        notify = self._post_with_state(EventState.ROLL_CALL, "reopen_signups")
+        self._assert_notified_once(notify)
+
+    def test_start_tournament_refreshes_post(self) -> None:
+        notify = self._post_with_state(EventState.ROLL_CALL, "start_tournament")
+        self._assert_notified_once(notify)
+
+    def test_complete_refreshes_post(self) -> None:
+        notify = self._post_with_state(EventState.IN_PROGRESS, "complete")
+        self._assert_notified_once(notify)
+
+    def test_cancel_refreshes_post(self) -> None:
+        notify = self._post_with_state(EventState.SIGNUPS_OPEN, "cancel")
+        self._assert_notified_once(notify)
+
+    def test_rejected_transition_does_not_refresh_post(self) -> None:
+        Event.objects.filter(pk=self.event.pk).update(state=EventState.UPCOMING)
+        with (
+            patch("events.views.notify_signup_changed") as notify,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            resp = self.client.post(f"/api/events/{self.event.pk}/start_roll_call/")
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        notify.assert_not_called()
