@@ -324,7 +324,7 @@ def _response(status_code: int, body: Any = None) -> MagicMock:
     return resp
 
 
-POST_TARGET = "app.internal_client.requests.post"
+POST_TARGET = "app.internal_client.transport.requests.post"
 
 
 class InternalClientTests(SimpleTestCase):

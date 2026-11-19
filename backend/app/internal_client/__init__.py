@@ -7,824 +7,148 @@ Config:
     INTERNAL_API_URL: defaults to http://backend:8000/api/internal (Docker).
                       Set to https://dota.kettle.sh/api/internal for remote.
     INTERNAL_SERVICE_TOKEN: shared secret for X-Internal-Token header.
+    Both live on ``transport`` (override ``transport.INTERNAL_API_URL``, not a
+    package attribute).
+
+Modules:
+    transport     URLs, auth headers, error logging, post/patch/get/api_get
+    discord       message-log leases, audit logs, Discord events/messages, sync state
+    events        event state, event reads, repeaters, due scheduled events
+    steam         league sync state, matches, league stats, MMR
+    users         avatars, batched avatar refresh, Discord name sync
+    tournaments   tournament/game reads, hero-draft creation
+    ops_notices   emit/resolve operations notices
+
+Call sites use the re-exports below (``internal_client.get_event(...)``). Tests that
+stub HTTP patch ``app.internal_client.transport.post`` (or ``get``/``patch``); tests
+that stub a client function patch it here and, for calls made inside its own module,
+on that module too.
 """
 
-import os
-from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any
-from uuid import UUID
-
-import requests
-from pydantic import BaseModel
-from pydantic_core import to_jsonable_python
-
-from telemetry.logging import get_logger
-
-if TYPE_CHECKING:
-    from app.schemas import (
-        AutoHeroDraftGameSchema,
-        TournamentParticipantSchema,
-        TournamentTaskSchema,
-    )
-    from discordbot.schemas import (
-        DiscordEventStateSchema,
-        MessageLogSchema,
-        SyncDiscordStateSchema,
-    )
-    from events.schemas import (
-        EventSignupSchema,
-        EventTaskSchema,
-        RepeaterSubscriberSchema,
-        ScheduledEventDueSchema,
-    )
-
-logger = get_logger(__name__)
-log = get_logger("app.internal_client")
-
-INTERNAL_API_URL = os.environ.get(
-    "INTERNAL_API_URL",
-    "http://backend:8000/api/internal",
+from app.internal_client import transport
+from app.internal_client.discord import (
+    check_message_log_exists,
+    claim_discord_message_log,
+    clear_event_signup_state,
+    create_event_dm,
+    create_event_log,
+    create_message_log,
+    create_or_update_announcement,
+    create_or_update_signup_message,
+    create_tournament_log,
+    finalize_discord_message_log,
+    get_discord_event_state,
+    get_fired_message_sources,
+    get_first_message_log,
+    get_or_create_discord_event,
+    get_sync_discord_state,
+    search_message_logs,
+    sweep_discord_leases,
+    update_discord_event,
+    update_event_dm,
+    update_scheduled_event,
+    update_tournament_log,
 )
-# Base API URL for reads — same host, public API paths
-API_BASE_URL = os.environ.get(
-    "API_BASE_URL",
-    "http://backend:8000/api",
+from app.internal_client.events import (
+    auto_close_event,
+    generate_repeater_events,
+    get_active_repeaters,
+    get_due_scheduled_events,
+    get_event,
+    get_event_for_task,
+    get_event_signups,
+    get_events,
+    get_events_list,
+    get_repeater_subscribers,
+    transition_event_state,
 )
-TIMEOUT = 30
-
-
-def _headers() -> dict[str, str]:
-    return {
-        "X-Internal-Token": os.environ.get("INTERNAL_SERVICE_TOKEN", ""),
-        "Content-Type": "application/json",
-    }
-
-
-_LOG_BASE: dict[str, object] = {
-    "system": "internal_client",
-    "subsystem": "http",
-    "tags": ["internal_api", "outbound"],
-    "tags_csv": "internal_api,outbound",
-}
-
-
-def _log_http_error(
-    method: str, path: str, status_code: int, body_excerpt: str
-) -> None:
-    # 4xx: server is healthy, request was rejected as expected business logic
-    # (validation, "not yet parsed", duplicate-locked, etc.). 5xx: actual server
-    # bug. Splitting severity keeps dashboards / alerts honest.
-    log_fn = log.warning if 400 <= status_code < 500 else log.error
-    log_fn(
-        "internal_http_error",
-        http_method=method,
-        http_path=path,
-        http_status_code=status_code,
-        body_excerpt=body_excerpt,
-        **_LOG_BASE,
-    )
-
-
-def _log_network_error(method: str, path: str, exc: BaseException) -> None:
-    log.error(
-        "internal_http_network_error",
-        http_method=method,
-        http_path=path,
-        error_class=type(exc).__name__,
-        error_message=str(exc),
-        exc_info=True,
-        **_LOG_BASE,
-    )
-
-
-def _post(path: str, data: dict) -> requests.Response | None:
-    """POST to an internal endpoint. Returns response or None on network error."""
-    url = f"{INTERNAL_API_URL}{path}"
-    try:
-        resp = requests.post(url, json=data, headers=_headers(), timeout=TIMEOUT)
-        if not resp.ok:
-            _log_http_error("POST", path, resp.status_code, resp.text[:200])
-        return resp
-    except requests.RequestException as exc:
-        _log_network_error("POST", path, exc)
-        return None
-
-
-def _patch(path: str, data: dict) -> requests.Response | None:
-    """PATCH an internal endpoint. Returns response or None on network error."""
-    url = f"{INTERNAL_API_URL}{path}"
-    try:
-        resp = requests.patch(url, json=data, headers=_headers(), timeout=TIMEOUT)
-        if not resp.ok:
-            _log_http_error("PATCH", path, resp.status_code, resp.text[:200])
-        return resp
-    except requests.RequestException as exc:
-        _log_network_error("PATCH", path, exc)
-        return None
-
-
-def _get(path: str, params: dict | None = None) -> requests.Response | None:
-    """GET from an internal endpoint. Returns response or None on network error."""
-    url = f"{INTERNAL_API_URL}{path}"
-    try:
-        resp = requests.get(url, params=params, headers=_headers(), timeout=TIMEOUT)
-        if not resp.ok:
-            _log_http_error("GET", path, resp.status_code, resp.text[:200])
-        return resp
-    except requests.RequestException as exc:
-        _log_network_error("GET", path, exc)
-        return None
-
-
-# ---- Discord writes ----
-
-
-def create_message_log(**data: Any) -> requests.Response | None:
-    """Create DiscordMessageLog entry."""
-    return _post("/discord/message-log/", data)
-
-
-def claim_discord_message_log(
-    *,
-    source: str,
-    source_id: int,
-    channel_id: str,
-    embed_data: dict,
-    fired_by_user_id: int | None = None,
-    tournament_log_id: int | None = None,
-) -> int | None:
-    """Acquire a pre-send lease for (source, source_id).
-
-    Returns the new DiscordMessageLog PK on success, or None if a row
-    already exists in pending or successful state for this (source, source_id).
-    Workers MUST call this BEFORE the Discord HTTP send so the partial
-    unique constraint can serialize concurrent claim attempts.
-    """
-    payload: dict[str, Any] = {
-        "source": source,
-        "source_id": source_id,
-        "channel_id": channel_id,
-        "embed_data": embed_data,
-    }
-    if fired_by_user_id is not None:
-        payload["fired_by_user_id"] = fired_by_user_id
-    if tournament_log_id is not None:
-        payload["tournament_log_id"] = tournament_log_id
-
-    resp = _post("/discord/message-log/claim/", payload)
-    if resp is None:
-        return None  # network error — already logged
-    if resp.status_code == 409:
-        return None  # lease already held by another worker
-    if not resp.ok:
-        return None
-    return resp.json().get("id")
-
-
-def finalize_discord_message_log(
-    log_id: int,
-    *,
-    success: bool,
-    discord_message_id: str | None = None,
-    status_code: int | None = None,
-    response_data: dict | None = None,
-) -> requests.Response | None:
-    """Update the lease row to its final state after the Discord HTTP send.
-
-    Silently no-ops on 410 Gone — that means sweep_stale_discord_leases
-    reaped the row before finalize landed (rare, only on slow workers).
-    """
-    payload: dict[str, Any] = {"success": success}
-    if discord_message_id is not None:
-        payload["discord_message_id"] = discord_message_id
-    if status_code is not None:
-        payload["status_code"] = status_code
-    if response_data is not None:
-        payload["response_data"] = response_data
-
-    return _post(f"/discord/message-log/{log_id}/finalize/", payload)
-
-
-def create_event_log(**data: Any) -> requests.Response | None:
-    """Create DiscordEventLog audit entry."""
-    return _post("/discord/event-log/", data)
-
-
-def create_tournament_log(**data: Any) -> requests.Response | None:
-    """Create DiscordTournamentLog entry."""
-    return _post("/discord/tournament-log/", data)
-
-
-def update_tournament_log(pk: int, **data: Any) -> requests.Response | None:
-    """Update DiscordTournamentLog entry (recipient_count, message, success)."""
-    return _patch(f"/discord/tournament-log/{pk}/", data)
-
-
-def get_or_create_discord_event(**data: Any) -> requests.Response | None:
-    """Get or create DiscordEvent for an event."""
-    return _post("/discord/events/get-or-create/", data)
-
-
-def update_discord_event(pk: int, **data: Any) -> requests.Response | None:
-    """Update DiscordEvent fields (scheduled_event_id, etc.)."""
-    return _patch(f"/discord/events/{pk}/", data)
-
-
-def create_or_update_signup_message(**data: Any) -> requests.Response | None:
-    """Create/update DiscordEventMsgSignup record."""
-    return _post("/discord/signup-message/", data)
-
-
-def clear_event_signup_state(event_id: int) -> requests.Response | None:
-    """Reset signup dedup state for an event (auto-recovery + manual repost).
-
-    Flips DiscordEventMsgSignup.has_posted=False AND DiscordMessageLog.success=False
-    for the event_announcement source. The next sync_discord_events run (within
-    60s) will treat the event as having no signup post and recreate it.
-    """
-    return _post("/discord/signup-message/clear/", {"event_id": event_id})
-
-
-def create_or_update_announcement(**data: Any) -> requests.Response | None:
-    """Create/update DiscordEventMsgAnnouncement record."""
-    return _post("/discord/announcement/", data)
-
-
-def update_scheduled_event(pk: int, **data: Any) -> requests.Response | None:
-    """Update ScheduledEvent fields (discord_message_id, next_post_at)."""
-    return _patch(f"/discord/scheduled-events/{pk}/", data)
-
-
-def create_event_dm(**data: Any) -> requests.Response | None:
-    """Create DiscordEventDM record (crash-safe: create before send)."""
-    return _post("/discord/event-dm/", data)
-
-
-def update_event_dm(pk: int, **data: Any) -> requests.Response | None:
-    """Update DiscordEventDM delivery status after DM sent."""
-    return _patch(f"/discord/event-dm/{pk}/", data)
-
-
-# ---- Event writes ----
-
-
-def transition_event_state(event_pk: int, new_state: str) -> requests.Response | None:
-    """Transition event to a new state."""
-    return _post(f"/events/{event_pk}/transition/", {"state": new_state})
-
-
-def auto_close_event(event_pk: int) -> dict | None:
-    resp = _post(f"/events/{event_pk}/auto-close/", {})
-    if resp is not None and resp.ok:
-        return resp.json()
-    return None
-
-
-# ---- Reads via public API (internal token accepted globally) ----
-
-
-def _api_get(path: str, params: dict | None = None) -> requests.Response | None:
-    """GET from the public API (not /internal/). Uses same auth token."""
-    url = f"{API_BASE_URL}{path}"
-    try:
-        resp = requests.get(url, params=params, headers=_headers(), timeout=TIMEOUT)
-        if not resp.ok:
-            _log_http_error("GET", f"(public){path}", resp.status_code, resp.text[:200])
-        return resp
-    except requests.RequestException as exc:
-        _log_network_error("GET", f"(public){path}", exc)
-        return None
-
-
-def get_event(pk: int) -> requests.Response | None:
-    """Get event data by PK via public API."""
-    return _api_get(f"/events/{pk}/")
-
-
-def get_event_signups(event_id: int) -> list["EventSignupSchema"]:
-    """Get signup list for an event via public API.
-
-    Returns list of EventSignupData (Pydantic), or empty list on error.
-    """
-    from events.schemas import EventSignupSchema
-
-    resp = _api_get("/events/signups/", params={"event": event_id})
-    if resp and resp.ok:
-        return [EventSignupSchema.model_validate(s) for s in resp.json()]
-    return []
-
-
-def get_events_list(**params: Any) -> list[dict[str, Any]]:
-    """Get events list via public API with query params.
-
-    Returns list of dicts (slim serializer output).
-    Example: get_events_list(states="upcoming,signups_open", scheduled_before="2026-01-01T00:00:00Z")
-    """
-    resp = _api_get("/events/", params=params)
-    if resp and resp.ok:
-        return resp.json()
-    return []
-
-
-def get_active_repeaters() -> list[dict[str, Any]]:
-    """Get all active repeaters via internal API."""
-    resp = _get("/repeaters/active/")
-    if resp and resp.ok:
-        return resp.json()
-    return []
-
-
-def generate_repeater_events(repeater_pk: int) -> int:
-    """Trigger event generation for a specific repeater. Returns created count."""
-    resp = _post(f"/repeaters/{repeater_pk}/generate/", {})
-    if resp and resp.ok:
-        return resp.json().get("created_count", 0)
-    return 0
-
-
-def get_event_for_task(pk: int) -> "EventTaskSchema | None":
-    """Get full event data + org Discord config for celery tasks.
-
-    Returns EventTaskData (Pydantic) with typed attribute access,
-    or None if event not found / API error.
-    """
-    from events.schemas import EventTaskSchema
-
-    resp = _get(f"/events/{pk}/full/")
-    if resp and resp.ok:
-        return EventTaskSchema.model_validate(resp.json())
-    return None
-
-
-def get_events(params: dict[str, Any] | None = None) -> requests.Response | None:
-    """List events with filters via public API."""
-    return _api_get("/events/", params=params)
-
-
-def check_message_log_exists(source: str, source_id: int) -> bool:
-    """Check if a successful DiscordMessageLog exists for idempotency."""
-    resp = _get("/discord/check-log/", {"source": source, "source_id": source_id})
-    if resp and resp.ok:
-        return resp.json().get("exists", False)
-    return False
-
-
-def search_message_logs(**params: Any) -> list["MessageLogSchema"]:
-    """Search DiscordMessageLog entries. Returns list of MessageLogEntry."""
-    from discordbot.schemas import MessageLogSchema
-
-    resp = _get("/discord/message-logs/", params)
-    if resp and resp.ok:
-        return [MessageLogSchema.model_validate(e) for e in resp.json()]
-    return []
-
-
-def get_fired_message_sources(event_id: int) -> set[str]:
-    """Get set of fired log sources for an event (for sync_discord_events)."""
-    logs = search_message_logs(
-        source_id=event_id,
-        success="true",
-        limit=100,
-    )
-    return {log.source for log in logs}
-
-
-def get_first_message_log(source: str, source_id: int) -> "MessageLogSchema | None":
-    """Get the most recent successful message log for a source+source_id."""
-    logs = search_message_logs(
-        source=source, source_id=source_id, success="true", limit=1
-    )
-    return logs[0] if logs else None
-
-
-def get_sync_discord_state() -> "SyncDiscordStateSchema | None":
-    """Get bulk Discord sync state. Returns SyncDiscordState or None."""
-    from discordbot.schemas import SyncDiscordStateSchema
-
-    resp = _get("/discord/sync-state/")
-    if resp and resp.ok:
-        return SyncDiscordStateSchema.model_validate(resp.json())
-    return None
-
-
-def get_discord_event_state(event_id: int) -> "DiscordEventStateSchema | None":
-    """Get Discord event state. Returns DiscordEventState or None."""
-    from discordbot.schemas import DiscordEventStateSchema
-
-    resp = _get(f"/discord/event-state/{event_id}/")
-    if resp and resp.ok:
-        return DiscordEventStateSchema.model_validate(resp.json())
-    return None
-
-
-def get_repeater_subscribers(repeater_id: int) -> list["RepeaterSubscriberSchema"]:
-    """Get subscribers for a repeater. Returns list of RepeaterSubscriber."""
-    from events.schemas import RepeaterSubscriberSchema
-
-    resp = _get(f"/repeaters/{repeater_id}/subscribers/")
-    if resp and resp.ok:
-        return [RepeaterSubscriberSchema.model_validate(s) for s in resp.json()]
-    return []
-
-
-def get_due_scheduled_events() -> list["ScheduledEventDueSchema"]:
-    """Get ScheduledEvents due for posting. Returns list of ScheduledEventDue."""
-    from events.schemas import ScheduledEventDueSchema
-
-    resp = _get("/scheduled-events/due/")
-    if resp and resp.ok:
-        return [ScheduledEventDueSchema.model_validate(e) for e in resp.json()]
-    return []
-
-
-# ---- Steam sync ----
-
-
-def get_steam_sync_state(league_id: int) -> dict[str, Any] | None:
-    """Get LeagueSyncState for a league (creates if missing)."""
-    resp = _get(f"/steam/sync-state/{league_id}/")
-    if resp and resp.ok:
-        return resp.json()
-    return None
-
-
-def get_tracked_steam_league_ids() -> list[int] | None:
-    """Return list of League.steam_league_id values currently configured.
-
-    Returns None on transport error so the caller can distinguish that
-    from a legitimate empty list (no League has steam_league_id set).
-    """
-    resp = _get("/steam/tracked-leagues/")
-    if resp and resp.ok:
-        return resp.json().get("steam_league_ids", [])
-    return None
-
-
-def update_steam_sync_state(league_id: int, **fields: Any) -> bool:
-    """Update sync state fields. Returns True on success."""
-    resp = _patch(f"/steam/sync-state/{league_id}/", fields)
-    return resp is not None and resp.ok
-
-
-def store_steam_match(match_data: dict) -> tuple[dict | None, int | None]:
-    """Store a match + player stats.
-
-    Returns (payload, status_code):
-      - (dict, 2xx)  on success
-      - (None, 422)  when Steam hasn't parsed the match yet
-                     (response: {"error": "match_unparsed", ...})
-      - (None, 4xx/5xx) for other server-side errors
-      - (None, None) when the internal API was unreachable
-    """
-    resp = _post("/steam/store-match/", match_data)
-    if resp is None:
-        return None, None
-    if resp.ok:
-        return resp.json(), resp.status_code
-    return None, resp.status_code
-
-
-def update_league_stats(league_id: int) -> int | None:
-    """Trigger league stats recalculation. Returns updated_count or None."""
-    resp = _post(f"/steam/update-league-stats/{league_id}/", {})
-    if resp and resp.ok:
-        return resp.json().get("updated_count")
-    return None
-
-
-def recalculate_user_mmr(user_id: int) -> dict[str, Any] | None:
-    """Recalculate a user's league MMR. Returns response dict or None."""
-    resp = _post(f"/steam/recalculate-mmr/{user_id}/", {})
-    if resp and resp.ok:
-        return resp.json()
-    return None
-
-
-def batch_upsert_matches(data: dict[str, Any]) -> requests.Response | None:
-    """Batch create/update Match + PlayerMatchStats records."""
-    return _post("/steam/matches/", data)
-
-
-def update_sync_state(pk: int, **data: Any) -> requests.Response | None:
-    """Update LeagueSyncState after sync."""
-    return _patch(f"/steam/sync-state/{pk}/", data)
-
-
-# ---- User reads ----
-
-
-def get_users_for_avatar_check(
-    has_avatar: bool | None = None, limit: int = 100, offset: int = 0
-) -> list[dict[str, Any]]:
-    """Get users with Discord IDs for avatar validation.
-
-    Returns list of dicts with pk, discord_id, avatar, username.
-    """
-    params: dict[str, Any] = {"limit": limit, "offset": offset}
-    if has_avatar is not None:
-        params["has_avatar"] = "true" if has_avatar else "false"
-    resp = _get("/users/avatar-check/", params=params)
-    if resp and resp.ok:
-        return resp.json()
-    return []
-
-
-# ---- User writes ----
-
-
-def update_user_avatar(pk: int, avatar: str | None) -> requests.Response | None:
-    """Update CustomUser avatar hash."""
-    return _patch(f"/users/{pk}/avatar/", {"avatar": avatar})
-
-
-# ---- Tournament reads ----
-
-
-def get_tournament_for_task(pk: int) -> "TournamentTaskSchema | None":
-    """Get tournament config for Celery tasks. Returns TournamentTaskData or None."""
-    from app.schemas import TournamentTaskSchema
-
-    resp = _get(f"/tournaments/{pk}/full/")
-    if resp and resp.ok:
-        return TournamentTaskSchema.model_validate(resp.json())
-    return None
-
-
-def get_tournament_participants(
-    tournament_id: int,
-) -> list["TournamentParticipantSchema"]:
-    """Get participants with Discord IDs. Returns list of TournamentParticipant."""
-    from app.schemas import TournamentParticipantSchema
-
-    resp = _get(f"/tournaments/{tournament_id}/participants/")
-    if resp and resp.ok:
-        return [TournamentParticipantSchema.model_validate(p) for p in resp.json()]
-    return []
-
-
-def get_match_participants(game_id: int) -> list["TournamentParticipantSchema"]:
-    """Get match players with Discord IDs. Returns list of TournamentParticipant."""
-    from app.schemas import TournamentParticipantSchema
-
-    resp = _get(f"/games/{game_id}/participants/")
-    if resp and resp.ok:
-        return [TournamentParticipantSchema.model_validate(p) for p in resp.json()]
-    return []
-
-
-def get_auto_herodraft_games() -> list["AutoHeroDraftGameSchema"]:
-    """Games ready for an auto-created hero draft. Returns list of AutoHeroDraftGame."""
-    from app.schemas import AutoHeroDraftGameSchema
-
-    resp = _get("/tournaments/auto-herodraft-games/")
-    if resp and resp.ok:
-        return [AutoHeroDraftGameSchema.model_validate(g) for g in resp.json()]
-    return []
-
-
-# ---- Tournament writes ----
-
-
-def create_herodraft_for_game(game_id: int) -> requests.Response | None:
-    """Atomically create a HeroDraft for a game. Returns response or None."""
-    return _post(f"/games/{game_id}/create-herodraft/", {})
-
-
-# ---- Batched avatar refresh (used by app/tasks/avatar_refresh.py) ----
-
-
-def list_discord_linked_users() -> list[dict[str, Any]]:
-    """Return every Discord-linked user as a flat list, or [] on failure.
-
-    Each entry: {pk, discord_id, avatar, username}.
-
-    A genuinely empty list and a network failure both return [] — the
-    caller's "nothing to do" branch handles both. The underlying _get
-    has already logged the network failure with the full path/status,
-    so we don't double-log here.
-    """
-    resp = _get("/users/discord-linked/")
-    if resp is None or not resp.ok:
-        return []
-    try:
-        return resp.json()
-    except ValueError:
-        logger.error(
-            "discord_linked_users_invalid_json",
-            system="internal_client",
-            subsystem="http",
-            body_excerpt=resp.text[:200],
-        )
-        return []
-
-
-def list_discord_guild_ids() -> list[str]:
-    """Return distinct Org discord_server_ids, or [] on failure.
-
-    See list_discord_linked_users for the empty-vs-failure semantics.
-    """
-    resp = _get("/orgs/discord-guild-ids/")
-    if resp is None or not resp.ok:
-        return []
-    try:
-        return resp.json().get("guild_ids", [])
-    except ValueError:
-        logger.error(
-            "discord_guild_ids_invalid_json",
-            system="internal_client",
-            subsystem="http",
-            body_excerpt=resp.text[:200],
-        )
-        return []
-
-
-def bulk_update_user_avatars(updates: list[dict[str, Any]]) -> int:
-    """Bulk-update avatar hashes. `updates`: list of {pk, avatar}.
-
-    Returns updated count (0 on empty or network failure).
-    """
-    if not updates:
-        return 0
-    resp = _post("/users/avatars/bulk-update/", {"updates": updates})
-    if resp is None or not resp.ok:
-        return 0
-    try:
-        return int(resp.json().get("updated", 0))
-    except (ValueError, TypeError):
-        return 0
-
-
-# ---- Discord name sync (used by app/tasks/discord_name_sync.py) ----
-
-
-def list_discord_name_sync_targets(
-    *, scope: str = "active", org_id: int | None = None, lock: bool = True
-) -> list[dict]:
-    params: dict[str, object] = {"scope": scope}
-    if org_id is not None:
-        params["org_id"] = org_id
-    if lock:
-        params["lock"] = 1
-    resp = _get("/orgs/discord-name-sync-targets/", params=params)
-    if resp is None or not resp.ok:
-        return []
-    try:
-        return resp.json()
-    except ValueError:
-        logger.error(
-            "discord_name_sync_targets_invalid_json",
-            system="internal_client",
-            subsystem="http",
-            body_excerpt=resp.text[:200],
-        )
-        return []
-
-
-def bulk_update_member_names(
-    guild_id: str,
-    org_ids: list[int],
-    members: list[dict],
-    *,
-    complete: bool,
-    fetched_at: float | None,
-) -> dict | None:
-    resp = _post(
-        "/discord/member-names/bulk-update/",
-        {
-            "guild_id": guild_id,
-            "org_ids": org_ids,
-            "complete": complete,
-            "fetched_at": fetched_at,
-            "members": members,
-        },
-    )
-    if resp is None or not resp.ok:
-        return None
-    try:
-        return resp.json()
-    except ValueError:
-        logger.error(
-            "discord_member_names_bulk_update_invalid_json",
-            system="internal_client",
-            subsystem="http",
-            body_excerpt=resp.text[:200],
-        )
-        return None
-
-
-# ---- Discord lease sweeper (used by discordbot/tasks.py) ----
-
-
-def sweep_discord_leases(
-    pending_threshold_minutes: int = 5, failed_threshold_hours: int = 1
-) -> dict[str, int]:
-    """Reap stuck DiscordMessageLog rows.
-
-    Renamed from `sweep_stale_discord_leases` so callers can `import` it
-    without colliding with the celery task of the same name in
-    `discordbot/tasks.py`.
-
-    Returns {pending_swept, failed_swept, total} on success, or
-    {pending_swept: 0, failed_swept: 0, total: 0} on failure (so callers
-    can treat the return value as truthy/falsy without crashing).
-    """
-    resp = _post(
-        "/discord/sweep-stale-leases/",
-        {
-            "pending_threshold_minutes": pending_threshold_minutes,
-            "failed_threshold_hours": failed_threshold_hours,
-        },
-    )
-    if resp is None or not resp.ok:
-        return {"pending_swept": 0, "failed_swept": 0, "total": 0}
-    try:
-        return resp.json()
-    except ValueError:
-        logger.error(
-            "sweep_stale_leases_invalid_json",
-            system="internal_client",
-            subsystem="http",
-            body_excerpt=resp.text[:200],
-        )
-        return {"pending_swept": 0, "failed_swept": 0, "total": 0}
-
-
-# ---- Operations notices ----
-
-
-class OpsNoticeTransientError(Exception):
-    """Network error or 5xx (including database_error/event_conflict); retry with
-    the same emit_id. Replay only matches the latest emit on a notice, so a retry
-    that lands after another emit to that notice counts as a new occurrence."""
-
-
-_OPS_NOTICES_PATH = "/ops-notices/"
-
-
-def _ops_notice_post(path: str, body: dict[str, Any]) -> dict[str, Any] | None:
-    resp = _post(path, body)
-    if resp is None or resp.status_code >= 500:
-        raise OpsNoticeTransientError(path)
-    if not resp.ok:
-        return None
-    try:
-        return resp.json()
-    except ValueError:
-        log.error("ops_notice_invalid_json", http_path=path, **_LOG_BASE)
-        return None
-
-
-def emit_ops_notice(
-    key: str,
-    payload: BaseModel | Mapping[str, Any],
-    *,
-    organization_id: int,
-    event_id: int | None = None,
-    event_name: str | None = None,
-    event_repeater_id: int | None = None,
-    subject_user_id: int | None = None,
-    actor_id: int | None = None,
-    dedupe_key: str | None = None,
-    severity: str | None = None,
-    emit_id: UUID | None = None,
-) -> int | None:
-    optional: dict[str, Any] = {
-        "event_id": event_id,
-        "event_name": event_name,
-        "event_repeater_id": event_repeater_id,
-        "subject_user_id": subject_user_id,
-        "actor_id": actor_id,
-        "dedupe_key": dedupe_key,
-        "severity": severity,
-        "emit_id": str(emit_id) if emit_id is not None else None,
-    }
-    body: dict[str, Any] = {
-        "key": key,
-        "payload": to_jsonable_python(
-            payload if isinstance(payload, BaseModel) else dict(payload)
-        ),
-        "organization_id": organization_id,
-        **{name: value for name, value in optional.items() if value is not None},
-    }
-    data = _ops_notice_post(_OPS_NOTICES_PATH, body)
-    return data["id"] if data is not None else None
-
-
-def resolve_ops_notice(
-    key: str,
-    dedupe_key: str,
-    *,
-    organization_id: int,
-    event_id: int | None = None,
-    reason: str,
-) -> bool:
-    body: dict[str, Any] = {
-        "key": key,
-        "dedupe_key": dedupe_key,
-        "organization_id": organization_id,
-        "reason": reason,
-    }
-    if event_id is not None:
-        body["event_id"] = event_id
-    data = _ops_notice_post(f"{_OPS_NOTICES_PATH}resolve/", body)
-    return bool(data["resolved"]) if data is not None else False
+from app.internal_client.ops_notices import (
+    OpsNoticeTransientError,
+    emit_ops_notice,
+    resolve_ops_notice,
+)
+from app.internal_client.steam import (
+    batch_upsert_matches,
+    get_steam_sync_state,
+    get_tracked_steam_league_ids,
+    recalculate_user_mmr,
+    store_steam_match,
+    update_league_stats,
+    update_steam_sync_state,
+    update_sync_state,
+)
+from app.internal_client.tournaments import (
+    create_herodraft_for_game,
+    get_auto_herodraft_games,
+    get_match_participants,
+    get_tournament_for_task,
+    get_tournament_participants,
+)
+from app.internal_client.users import (
+    bulk_update_member_names,
+    bulk_update_user_avatars,
+    get_users_for_avatar_check,
+    list_discord_guild_ids,
+    list_discord_linked_users,
+    list_discord_name_sync_targets,
+    update_user_avatar,
+)
+
+__all__ = [
+    "OpsNoticeTransientError",
+    "auto_close_event",
+    "batch_upsert_matches",
+    "bulk_update_member_names",
+    "bulk_update_user_avatars",
+    "check_message_log_exists",
+    "claim_discord_message_log",
+    "clear_event_signup_state",
+    "create_event_dm",
+    "create_event_log",
+    "create_herodraft_for_game",
+    "create_message_log",
+    "create_or_update_announcement",
+    "create_or_update_signup_message",
+    "create_tournament_log",
+    "emit_ops_notice",
+    "finalize_discord_message_log",
+    "generate_repeater_events",
+    "get_active_repeaters",
+    "get_auto_herodraft_games",
+    "get_discord_event_state",
+    "get_due_scheduled_events",
+    "get_event",
+    "get_event_for_task",
+    "get_event_signups",
+    "get_events",
+    "get_events_list",
+    "get_fired_message_sources",
+    "get_first_message_log",
+    "get_match_participants",
+    "get_or_create_discord_event",
+    "get_repeater_subscribers",
+    "get_steam_sync_state",
+    "get_sync_discord_state",
+    "get_tournament_for_task",
+    "get_tournament_participants",
+    "get_tracked_steam_league_ids",
+    "get_users_for_avatar_check",
+    "list_discord_guild_ids",
+    "list_discord_linked_users",
+    "list_discord_name_sync_targets",
+    "recalculate_user_mmr",
+    "resolve_ops_notice",
+    "search_message_logs",
+    "store_steam_match",
+    "sweep_discord_leases",
+    "transition_event_state",
+    "transport",
+    "update_discord_event",
+    "update_event_dm",
+    "update_league_stats",
+    "update_scheduled_event",
+    "update_steam_sync_state",
+    "update_sync_state",
+    "update_tournament_log",
+    "update_user_avatar",
+]
