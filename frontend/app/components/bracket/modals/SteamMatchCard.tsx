@@ -1,9 +1,8 @@
-import { Avatar, AvatarFallback, AvatarImage } from '~/components/ui/avatar';
 import { Button } from '~/components/ui/button';
-import { User } from 'lucide-react';
-import { cn } from '~/lib/utils';
+import { UserAvatar } from '~/components/user/UserAvatar';
 import { UserPopover } from '~/components/user/UserPopover';
 import { DisplayName } from '~/components/user/avatar';
+import { cn } from '~/lib/utils';
 
 export interface CaptainInfo {
   steam_id: number;
@@ -46,19 +45,20 @@ interface SteamMatchCardProps {
 function PlayerDisplay({ player }: { player: MatchedPlayer }) {
   const content = (
     <div className="flex items-center gap-2 py-1 cursor-pointer">
-      <Avatar className={cn("h-6 w-6", player.is_captain && "ring-2 ring-yellow-500")}>
-        <AvatarImage src={player.avatar || undefined} />
-        <AvatarFallback>
-          <User className="h-3 w-3" />
-        </AvatarFallback>
-      </Avatar>
-      <span className={cn(
-        "text-xs truncate max-w-[100px]",
-        player.is_captain ? "text-yellow-500 font-medium" : "text-foreground",
-        player.user_id && "hover:underline"
-      )}>
+      <UserAvatar
+        user={player}
+        size="sm"
+        border={player.is_captain ? 'captain' : 'none'}
+      />
+      <span
+        className={cn(
+          'text-xs truncate max-w-[100px]',
+          player.is_captain ? 'text-yellow-500 font-medium' : 'text-foreground',
+          player.user_id && 'hover:underline',
+        )}
+      >
         {player.username ? DisplayName(player) : `Steam ${player.steam_id}`}
-        {player.is_captain && " (C)"}
+        {player.is_captain && ' (C)'}
       </span>
     </div>
   );
@@ -101,7 +101,7 @@ export function SteamMatchCard({
     <div
       className={cn(
         'border rounded-lg p-4',
-        isCurrentlyLinked && 'ring-2 ring-primary'
+        isCurrentlyLinked && 'ring-2 ring-primary',
       )}
       data-testid="match-card"
     >
@@ -125,28 +125,32 @@ export function SteamMatchCard({
           <p className="text-xs text-green-500 font-medium mb-1">Radiant</p>
           <div className="space-y-0.5">
             {(match.matched_players ?? [])
-              .filter(p => p.is_radiant)
-              .map(player => (
+              .filter((p) => p.is_radiant)
+              .map((player) => (
                 <PlayerDisplay key={player.steam_id} player={player} />
               ))}
-            {(match.matched_players ?? []).filter(p => p.is_radiant).length === 0 && (
+            {(match.matched_players ?? []).filter((p) => p.is_radiant)
+              .length === 0 && (
               <span className="text-xs text-muted-foreground">No matches</span>
             )}
           </div>
         </div>
 
-        <span className="text-lg font-bold text-muted-foreground self-center">VS</span>
+        <span className="text-lg font-bold text-muted-foreground self-center">
+          VS
+        </span>
 
         {/* Dire side */}
         <div className="flex-1">
           <p className="text-xs text-red-500 font-medium mb-1">Dire</p>
           <div className="space-y-0.5">
             {(match.matched_players ?? [])
-              .filter(p => !p.is_radiant)
-              .map(player => (
+              .filter((p) => !p.is_radiant)
+              .map((player) => (
                 <PlayerDisplay key={player.steam_id} player={player} />
               ))}
-            {(match.matched_players ?? []).filter(p => !p.is_radiant).length === 0 && (
+            {(match.matched_players ?? []).filter((p) => !p.is_radiant)
+              .length === 0 && (
               <span className="text-xs text-muted-foreground">No matches</span>
             )}
           </div>

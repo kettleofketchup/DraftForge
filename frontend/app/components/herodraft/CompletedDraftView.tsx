@@ -1,13 +1,13 @@
 // frontend/app/components/herodraft/CompletedDraftView.tsx
-import { useMemo } from 'react';
-import { Avatar, AvatarFallback, AvatarImage } from '~/components/ui/avatar';
-import { PrimaryButton } from '~/components/ui/buttons';
-import { cn } from '~/lib/utils';
-import { getHeroIcon, getHeroName } from '~/lib/dota/heroes';
-import { DisplayName } from '~/components/user/avatar';
 import { History } from 'lucide-react';
-import type { HeroDraft, DraftTeam, HeroDraftRound } from './types';
+import { useMemo } from 'react';
+import { PrimaryButton } from '~/components/ui/buttons';
 import { FastTooltip } from '~/components/ui/tooltip';
+import { DisplayName } from '~/components/user/avatar';
+import { UserAvatar } from '~/components/user/UserAvatar';
+import { getHeroIcon, getHeroName } from '~/lib/dota/heroes';
+import { cn } from '~/lib/utils';
+import type { DraftTeam, HeroDraft, HeroDraftRound } from './types';
 
 interface CompletedDraftViewProps {
   draft: HeroDraft;
@@ -23,7 +23,6 @@ interface TeamPicksProps {
 function TeamPicks({ team, picks, side }: TeamPicksProps) {
   const captain = team.captain;
   const displayName = captain ? DisplayName(captain) : team.team_name;
-  const initials = displayName.substring(0, 2).toUpperCase();
 
   const sideColors = {
     radiant: {
@@ -48,18 +47,32 @@ function TeamPicks({ team, picks, side }: TeamPicksProps) {
         'flex flex-col items-center p-4 md:p-6 rounded-lg',
         colors.bg,
         'border',
-        colors.border
+        colors.border,
       )}
       data-testid={`completed-draft-${side}`}
     >
       {/* Team header */}
       <div className="flex flex-col items-center mb-4 md:mb-6">
-        <Avatar className="h-16 w-16 md:h-20 md:w-20 mb-2 ring-2 ring-offset-2 ring-offset-gray-900" style={{ ['--tw-ring-color' as string]: side === 'radiant' ? 'rgb(34 197 94)' : 'rgb(239 68 68)' }}>
-          <AvatarImage src={captain?.avatarUrl ?? captain?.avatar ?? undefined} />
-          <AvatarFallback className="text-lg md:text-xl font-bold">{initials}</AvatarFallback>
-        </Avatar>
-        <h3 className="text-lg md:text-xl font-bold text-white">{displayName}</h3>
-        <span className={cn('text-sm font-medium', colors.text)}>{colors.label}</span>
+        <div
+          className="mb-2 flex rounded-full ring-2 ring-offset-2 ring-offset-gray-900"
+          style={{
+            ['--tw-ring-color' as string]:
+              side === 'radiant' ? 'rgb(34 197 94)' : 'rgb(239 68 68)',
+          }}
+        >
+          <UserAvatar
+            user={captain ?? undefined}
+            fallbackName={team.team_name}
+            size="xl"
+            className="h-16 w-16 md:h-20 md:w-20"
+          />
+        </div>
+        <h3 className="text-lg md:text-xl font-bold text-white">
+          {displayName}
+        </h3>
+        <span className={cn('text-sm font-medium', colors.text)}>
+          {colors.label}
+        </span>
       </div>
 
       {/* Hero picks - 5 heroes in a row */}
@@ -70,14 +83,20 @@ function TeamPicks({ team, picks, side }: TeamPicksProps) {
           const heroIcon = heroId ? getHeroIcon(heroId) : undefined;
 
           return (
-            <FastTooltip key={round.id} content={heroName} className="text-sm font-medium">
+            <FastTooltip
+              key={round.id}
+              content={heroName}
+              className="text-sm font-medium"
+            >
               <div
                 className={cn(
                   'size-12 sm:size-14 md:size-16 lg:size-20',
                   'rounded-full bg-gradient-to-b from-slate-600 to-slate-800',
                   'border-2 shadow-lg shadow-black/50',
                   'p-0.5',
-                  side === 'radiant' ? 'border-green-500/70' : 'border-red-500/70'
+                  side === 'radiant'
+                    ? 'border-green-500/70'
+                    : 'border-red-500/70',
                 )}
                 data-testid={`completed-draft-${side}-pick-${index}`}
               >
@@ -101,7 +120,10 @@ function TeamPicks({ team, picks, side }: TeamPicksProps) {
   );
 }
 
-export function CompletedDraftView({ draft, onViewFullDraft }: CompletedDraftViewProps) {
+export function CompletedDraftView({
+  draft,
+  onViewFullDraft,
+}: CompletedDraftViewProps) {
   // Find radiant and dire teams
   const { radiantTeam, direTeam, radiantPicks, direPicks } = useMemo(() => {
     const radiant = draft.draft_teams.find((t) => t.is_radiant === true);
@@ -126,15 +148,23 @@ export function CompletedDraftView({ draft, onViewFullDraft }: CompletedDraftVie
 
   if (!radiantTeam || !direTeam) {
     return (
-      <div className="flex-1 flex items-center justify-center" data-testid="completed-draft-error">
+      <div
+        className="flex-1 flex items-center justify-center"
+        data-testid="completed-draft-error"
+      >
         <p className="text-muted-foreground">Draft data incomplete</p>
       </div>
     );
   }
 
   return (
-    <div className="flex-1 flex flex-col items-center justify-center p-4 md:p-8" data-testid="completed-draft-view">
-      <h2 className="text-2xl md:text-3xl font-bold text-white mb-6 md:mb-8">Draft Complete</h2>
+    <div
+      className="flex-1 flex flex-col items-center justify-center p-4 md:p-8"
+      data-testid="completed-draft-view"
+    >
+      <h2 className="text-2xl md:text-3xl font-bold text-white mb-6 md:mb-8">
+        Draft Complete
+      </h2>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8 w-full max-w-4xl">
         {/* Radiant on left */}

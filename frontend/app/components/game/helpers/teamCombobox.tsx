@@ -18,6 +18,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '~/components/ui/popover';
+import { DisplayName } from '~/components/user/avatar';
 import type { TeamType } from '~/index';
 import { cn } from '~/lib/utils';
 interface Props {
@@ -46,7 +47,7 @@ export const TeamComboBox: React.FC<Props> = ({
     let team: any;
     teams.forEach((value: TeamType) => {
       comboBox.push({
-        label: value.captain?.username || '',
+        label: value.captain ? DisplayName(value.captain) : '',
         value: value.pk || 0,
       });
     });
