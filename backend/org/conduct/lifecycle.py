@@ -68,3 +68,33 @@ def reopen_event_outcomes(event: Event) -> tuple[int, int]:
         kept=kept,
     )
     return deleted, kept
+
+
+@transaction.atomic
+def teardown_event_outcomes(
+    event: Event, *, actor: CustomUser | None, now: datetime
+) -> tuple[int, int]:
+    locked = lock_event(event)
+    rows = AttendanceOutcome.objects.nocache().filter(event_id=locked.pk)
+    deleted, _ = rows.filter(finalized_at__isnull=True).delete()
+    voided = rows.filter(finalized_at__isnull=False, voided_at__isnull=True).update(
+        voided_at=now, updated_at=now
+    )
+    if actor is not None and (deleted or voided):
+        OrgLog.objects.create(
+            organization_id=locked.organization_id,
+            actor=actor,
+            action="void_attendance",
+            details={"event_id": locked.pk, "deleted": deleted, "voided": voided},
+        )
+    log.info(
+        "conduct_event_deleted",
+        system="org",
+        subsystem="conduct",
+        org_id=locked.organization_id,
+        event_id=locked.pk,
+        actor_id=actor.pk if actor is not None else None,
+        deleted=deleted,
+        voided=voided,
+    )
+    return deleted, voided

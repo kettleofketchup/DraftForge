@@ -274,7 +274,7 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
             EventState.ROLL_CALL,
         ]
         for event in list(instance.events.filter(state__in=active_states)):
-            teardown_event(event)
+            teardown_event(event, actor=self.request.user)
         instance.delete()
 
     def get_queryset(self) -> QuerySet[EventRepeater]:
@@ -1008,7 +1008,7 @@ class EventViewSet(viewsets.ModelViewSet):
 
     def perform_destroy(self, instance: Event) -> None:
         """Clean up tournament and Discord messages before deleting event."""
-        teardown_event(instance)
+        teardown_event(instance, actor=self.request.user)
 
     @action(detail=True, methods=["post"])
     def cancel(self, request: Request, pk: str | None = None) -> Response:

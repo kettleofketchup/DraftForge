@@ -72,7 +72,7 @@ from events.schemas import DotaModalConfig
 from events.signup_schedule import SIGNUP_OPEN_POLICY_FIELDS, apply_signup_open_policy
 from lobby.passwords import PasswordMode, generate_password
 from org.conduct.capture import capture_late_cancel
-from org.conduct.lifecycle import void_event_outcomes
+from org.conduct.lifecycle import teardown_event_outcomes, void_event_outcomes
 from org.models import OrgUser
 from org.models_profiles import PlayerDotaProfile
 from telemetry.logging import get_logger
@@ -1164,7 +1164,7 @@ def cancel_event(event: Event, *, actor: CustomUser | None) -> Event:
     return event
 
 
-def teardown_event(event: Event) -> None:
+def teardown_event(event: Event, *, actor: CustomUser | None = None) -> None:
     """Delete an event and everything Discord/tournament-related it owns.
 
     Dispatches deletion of the live Discord scheduled event (nothing else in the
@@ -1178,6 +1178,7 @@ def teardown_event(event: Event) -> None:
     from events.tasks import delete_discord_scheduled_event
 
     with transaction.atomic():
+        teardown_event_outcomes(event, actor=actor, now=timezone.now())
         invalidate_after_commit(event)
         if event.tournament:
             tournament = event.tournament
