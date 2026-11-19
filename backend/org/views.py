@@ -30,6 +30,7 @@ from app.models import (
 from app.permissions_org import IsOrgStaff
 from events.models import Event
 from league.models import LeagueUser
+from org.conduct.services import reassign_member as reassign_conduct_member
 from org.contributions.services import (
     dedupe_event_staff,
     reassign_member,
@@ -238,6 +239,7 @@ class ClaimRequestViewSet(viewsets.ModelViewSet):
                     existing.mmr = org_user.mmr
                     existing.save()
                 reassign_member(org_user, existing)
+                reassign_conduct_member(org_user, existing)
                 org_user.delete()
             else:
                 org_user.user = claimer

@@ -208,3 +208,45 @@ def set_outcomes(
         finalized=locked.conduct_finalized_at is not None,
     )
     return result
+
+
+@transaction.atomic
+def reassign_member(drop: OrgUser, keep: OrgUser) -> int:
+    if drop.organization_id != keep.organization_id:
+        raise ValueError("cannot reassign conduct across organizations")
+    if drop.pk == keep.pk:
+        return 0
+    rows = AttendanceOutcome.objects.nocache()
+    keep_rows = {
+        event_id: source
+        for event_id, source in rows.filter(
+            org_user=keep, event__isnull=False
+        ).values_list("event_id", "source")
+    }
+    discard_drop: list[int] = []
+    discard_keep: list[int] = []
+    for pk, event_id, source in rows.filter(org_user=drop).values_list(
+        "pk", "event_id", "source"
+    ):
+        if event_id is None or event_id not in keep_rows:
+            continue
+        drop_staff = source == OutcomeSource.STAFF
+        keep_staff = keep_rows[event_id] == OutcomeSource.STAFF
+        if drop_staff and not keep_staff:
+            discard_keep.append(event_id)
+        else:
+            discard_drop.append(pk)
+    rows.filter(org_user=keep, event_id__in=discard_keep).delete()
+    rows.filter(pk__in=discard_drop).delete()
+    moved = rows.filter(org_user=drop).update(org_user=keep, updated_at=timezone.now())
+    log.info(
+        "conduct_member_reassigned",
+        system="org",
+        subsystem="conduct",
+        org_id=keep.organization_id,
+        drop_org_user_id=drop.pk,
+        keep_org_user_id=keep.pk,
+        moved=moved,
+        discarded=len(discard_drop) + len(discard_keep),
+    )
+    return moved

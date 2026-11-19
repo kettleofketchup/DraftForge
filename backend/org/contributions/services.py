@@ -22,8 +22,10 @@ from org.contributions.kinds import (
 from org.contributions.periods import local_day_start_utc, local_noon_utc
 from org.contributions.points import points_for
 from org.models import (
+    AttendanceOutcome,
     ContributionEntry,
     ContributionPointValue,
+    OrgConductSettings,
     OrgFeature,
     OrgUser,
     PromoSend,
@@ -513,6 +515,10 @@ def repoint_user_attribution(drop: CustomUser, keep: CustomUser) -> int:
         + PromoTemplate.objects.nocache()
         .filter(created_by=drop)
         .update(created_by=keep)
+        + AttendanceOutcome.objects.nocache().filter(set_by=drop).update(set_by=keep)
+        + OrgConductSettings.objects.nocache()
+        .filter(updated_by=drop)
+        .update(updated_by=keep)
     )
 
 

@@ -1,11 +1,13 @@
 import logging
+from argparse import ArgumentParser
+from typing import Any
 
 import requests
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
 from app.models import CustomUser, PositionsModel
-from org.models import ContributionEntry, PromoSend
+from org.models import AttendanceOutcome, ContributionEntry, PromoSend
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +17,7 @@ PROD_API_URL = "https://dota.kettle.sh/api/users/"
 class Command(BaseCommand):
     help = "Sync users from production (dota.kettle.sh) to local database"
 
-    def add_arguments(self, parser):
+    def add_arguments(self, parser: ArgumentParser) -> None:
         parser.add_argument(
             "--dry-run",
             action="store_true",
@@ -28,7 +30,7 @@ class Command(BaseCommand):
             help=f"Production API URL (default: {PROD_API_URL})",
         )
 
-    def handle(self, *args, **options):
+    def handle(self, *args: Any, **options: Any) -> None:
         dry_run = options.get("dry_run", False)
         api_url = options.get("url", PROD_API_URL)
 
@@ -61,6 +63,7 @@ class Command(BaseCommand):
             # Delete all existing users and positions
             existing_count = CustomUser.objects.count()
             self.stdout.write(f"Deleting {existing_count} existing users...")
+            AttendanceOutcome.objects.nocache().all().delete()
             ContributionEntry.objects.nocache().all().delete()
             PromoSend.objects.all().delete()
             CustomUser.objects.all().delete()

@@ -21,6 +21,7 @@ from social_django.models import UserSocialAuth
 
 from app.cache_utils import invalidate_after_commit, invalidate_obj
 from app.models import CustomUser
+from org.conduct.services import reassign_member as reassign_conduct_member
 from org.contributions.services import (
     dedupe_event_staff,
     reassign_member,
@@ -107,6 +108,7 @@ def merge_discord_accounts(keep: CustomUser, drop: CustomUser) -> CustomUser:
                     keep_ou.save(update_fields=["guild_nickname"])
                     invalidate_after_commit(keep)
                 reassign_member(drop_ou, keep_ou)
+                reassign_conduct_member(drop_ou, keep_ou)
                 drop_ou.delete()
         repoint_user_attribution(drop, keep)
         demote_colliding_earning_sends(keep, drop)
