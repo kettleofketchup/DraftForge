@@ -51,9 +51,11 @@ export const signupOpenSchema = z.object({
   signup_open_mode: z.enum(SIGNUP_OPEN_MODES),
   signups_open_hours_before: z
     .number()
-    .int()
-    .min(0)
-    .max(MAX_SIGNUPS_OPEN_HOURS_BEFORE),
+    .int({ error: 'Enter a whole number of days' })
+    .min(0, { error: "Days can't be negative" })
+    .max(MAX_SIGNUPS_OPEN_HOURS_BEFORE, {
+      error: `Must be ${MAX_SIGNUPS_OPEN_HOURS_BEFORE / 24} days or fewer`,
+    }),
 });
 
 export const SIGNUP_OPEN_DEFAULTS: z.input<typeof signupOpenSchema> = {

@@ -98,6 +98,26 @@ describe('SignupOpenSection', () => {
     await waitFor(() => expect(submitted?.signups_open_hours_before).toBe(0));
   });
 
+  it('states the days limit in days, not hours', async () => {
+    render(
+      <Harness
+        validate
+        initial={{
+          signup_open_mode: 'scheduled',
+          signups_open_hours_before: 72,
+        }}
+      />,
+    );
+    fireEvent.change(screen.getByTestId('signup-open-days-input'), {
+      target: { value: '99' },
+    });
+    fireEvent.submit(screen.getByText('go').closest('form')!);
+    expect(
+      await screen.findByText('Must be 60 days or fewer'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/1440/)).not.toBeInTheDocument();
+  });
+
   it('renders the help text', () => {
     render(<Harness helpText="Series note" />);
     expect(screen.getByText('Series note')).toBeInTheDocument();
