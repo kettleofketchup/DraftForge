@@ -292,6 +292,12 @@ body {
     transparent,
     color-mix(in oklab, var(--accent) 10%, transparent)
   );
+  /* Brand primary gradient, violet-500 to blue-500 (same as brandGradient) */
+  --brand-gradient: linear-gradient(
+    to right,
+    oklch(0.606 0.25 292.717),
+    oklch(0.623 0.214 259.815)
+  );
   --brand-success-bg: linear-gradient(
     135deg,
     rgba(5, 150, 105, 0.28) 0%,

@@ -452,11 +452,6 @@
       "count": 8
     }
   },
-  "app/components/ui/tabs.tsx": {
-    "shadcn/no-raw-colors": {
-      "count": 6
-    }
-  },
   "app/components/user/DiscordUserDropdown.tsx": {
     "draftforge/no-raw-color-strings": {
       "count": 2
