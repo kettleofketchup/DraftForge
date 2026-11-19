@@ -10,6 +10,7 @@ from cacheops import invalidate_model
 from cacheops.conf import settings as cacheops_settings
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db import connection, reset_queries, transaction
+from django.db.models import QuerySet
 from django.test import (
     SimpleTestCase,
     TestCase,
@@ -52,6 +53,8 @@ from app.serializers import (
 )
 from app.services import team_management
 from app.services.team_audit import log_snapshot_fields
+from app.services.team_references import team_usage
+from app.services.team_signals import TeamRosterChange, team_roster_changed
 from app.tests.test_draft_state_queries import make_fixture
 from app.tests.test_team_management import TeamManagementFixture
 from events.models import EventTeam
@@ -1042,3 +1045,99 @@ class TeamHistoryTests(TeamApiFixture, TestCase):
             return len(ctx.captured_queries)
 
         self.assertEqual(count(1), count(6))
+
+
+class LegacyDeleteTests(TeamApiFixture, TestCase):
+    def delete(self, user: CustomUser | None = None) -> Any:
+        client = self.client_for(self.site_staff if user is None else user)
+        return client.delete(f"/api/teams/{self.team.pk}/")
+
+    def deleted_rows(self) -> QuerySet[TeamLog]:
+        return TeamLog.objects.filter(
+            team_snapshot_id=self.team.pk, action=TeamLogAction.TEAM_DELETED
+        )
+
+    def test_referenced_team_refused(self) -> None:
+        game = Game.objects.create(tournament=self.tournament, radiant_team=self.team)
+        resp = self.delete()
+        self.assertEqual(resp.status_code, 409, resp.content)
+        body = resp.json()
+        self.assertEqual(body["code"], "team_in_use")
+        self.assertIn("1 game", body["detail"])
+        self.assertEqual(body["usage"], team_usage([self.team]))
+        self.assertIsInstance(body["usage"][0]["count"], int)
+        self.assertIsInstance(body["usage"][0]["teams"][0]["pk"], int)
+        self.assertTrue(Team.objects.nocache().filter(pk=self.team.pk).exists())
+        self.assertTrue(Game.objects.nocache().filter(pk=game.pk).exists())
+        self.assertFalse(self.deleted_rows().exists())
+
+    def test_unreferenced_team_deleted_and_audited(self) -> None:
+        pk = self.team.pk
+        resp = self.delete()
+        self.assertEqual(resp.status_code, 204, resp.content)
+        self.assertFalse(Team.objects.nocache().filter(pk=pk).exists())
+        rows = list(TeamLog.objects.filter(team_snapshot_id=pk))
+        self.assertEqual(len(rows), 1)
+        row = rows[0]
+        self.assertEqual(row.action, TeamLogAction.TEAM_DELETED)
+        self.assertEqual(row.via, TeamLogVia.WEB)
+        self.assertEqual(row.actor, self.site_staff)
+        self.assertIsNone(row.team_id)
+        self.assertEqual(row.team_name, "Rostered")
+        self.assertEqual(row.tournament_id, self.tournament.pk)
+        self.assertEqual(
+            row.details["before"]["member_ids"],
+            sorted([self.c.pk, self.d.pk, self.m1.pk, self.m2.pk]),
+        )
+        self.assertEqual(row.details["before"]["captain_id"], self.c.pk)
+
+    def test_delete_sends_roster_changed(self) -> None:
+        pk = self.team.pk
+        changes: list[TeamRosterChange] = []
+
+        def receiver(sender: type[Team], change: TeamRosterChange, **_: Any) -> None:
+            changes.append(change)
+
+        team_roster_changed.connect(receiver, sender=Team, weak=False)
+        self.addCleanup(team_roster_changed.disconnect, receiver, sender=Team)
+        with self.captureOnCommitCallbacks(execute=True):
+            resp = self.delete()
+        self.assertEqual(resp.status_code, 204, resp.content)
+        self.assertEqual(len(changes), 1)
+        self.assertEqual(changes[0].action, TeamLogAction.TEAM_DELETED)
+        self.assertEqual(changes[0].team_id, pk)
+        self.assertEqual(changes[0].tournament_id, self.tournament.pk)
+        self.assertEqual(changes[0].actor_id, self.site_staff.pk)
+        row = self.deleted_rows().get()
+        self.assertEqual(changes[0].log_id, row.pk)
+
+    def test_refused_delete_sends_nothing(self) -> None:
+        Game.objects.create(tournament=self.tournament, dire_team=self.team)
+        changes: list[TeamRosterChange] = []
+
+        def receiver(sender: type[Team], change: TeamRosterChange, **_: Any) -> None:
+            changes.append(change)
+
+        team_roster_changed.connect(receiver, sender=Team, weak=False)
+        self.addCleanup(team_roster_changed.disconnect, receiver, sender=Team)
+        with self.captureOnCommitCallbacks(execute=True):
+            self.assertEqual(self.delete().status_code, 409)
+        self.assertEqual(changes, [])
+
+    def test_history_after_guarded_delete(self) -> None:
+        self.assertEqual(self.delete().status_code, 204)
+        resp = self.client_for(self.org_staff).get(action_url(self.team.pk, "history"))
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertEqual(resp.json()["results"][0]["action"], "team_deleted")
+
+    def test_delete_denial_body_unchanged(self) -> None:
+        resp = self.delete(self.outsider)
+        self.assertEqual(resp.status_code, 403, resp.content)
+        self.assertNotIn("code", resp.json())
+        self.assertIn("detail", resp.json())
+        self.assertTrue(Team.objects.nocache().filter(pk=self.team.pk).exists())
+        self.assertFalse(self.deleted_rows().exists())
+
+    def test_unknown_team_404(self) -> None:
+        resp = self.client_for(self.site_staff).delete("/api/teams/999999/")
+        self.assertEqual(resp.status_code, 404)

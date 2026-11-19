@@ -58,6 +58,7 @@ from app.services.team_management import (
     set_deputy,
     sub_in,
 )
+from app.services.team_references import TeamUsage, team_references, team_usage
 from app.services.team_signals import (
     change_from_log,
     owning_team_audit,
@@ -689,6 +690,14 @@ def _scope_q(tournament_id: int | None, organization_id: int | None) -> Q:
     return by_tournament & by_org
 
 
+def _team_in_use_detail(name: str, usage: list[TeamUsage]) -> str:
+    parts = [
+        f"{u['count']} {u['label'] if u['count'] == 1 else u['label_plural']}"
+        for u in usage
+    ]
+    return f"{name} is still used by {', '.join(parts)} and cannot be deleted."
+
+
 @permission_classes((IsStaff,))
 class TeamView(viewsets.ModelViewSet):
     serializer_class = TeamSerializer
@@ -942,6 +951,55 @@ class TeamView(viewsets.ModelViewSet):
 
     def patch(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         return self.partial_update(request, *args, **kwargs)
+
+    def destroy(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        """Legacy DELETE: refuses teams other rows still use, audits the rest."""
+        instance = self.get_object()
+        with transaction.atomic(), owning_team_audit():
+            team = (
+                Team.objects.nocache()
+                .select_for_update()
+                .select_related("tournament__league")
+                .get(pk=instance.pk)
+            )
+            if team_references([team]):
+                usage = team_usage([team])
+                return Response(
+                    {
+                        "code": "team_in_use",
+                        "detail": _team_in_use_detail(team.name, usage),
+                        "usage": usage,
+                    },
+                    status=status.HTTP_409_CONFLICT,
+                )
+            before = roster_snapshot(team)
+            row = write_team_log(
+                team,
+                snapshot=log_snapshot_fields(team),
+                action=TeamLogAction.TEAM_DELETED,
+                via=TeamLogVia.WEB,
+                actor=request.user,
+                details={"before": before},
+            )
+            user_ids = {
+                *before["member_ids"],
+                *before["dropin_ids"],
+                *before["left_ids"],
+                *(
+                    pk
+                    for pk in (before["captain_id"], before["deputy_captain_id"])
+                    if pk is not None
+                ),
+            }
+            to_invalidate: list[Any] = list(
+                CustomUser.objects.nocache().filter(pk__in=user_ids)
+            )
+            if team.tournament is not None:
+                to_invalidate.append(team.tournament)
+            invalidate_after_commit(*to_invalidate)
+            send_roster_changed_on_commit(change_from_log(row))
+            team.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     # Serializer source name -> roster_snapshot key, for rows on a deleted team.
     _SNAPSHOT_KEYS: ClassVar[dict[str, str]] = {
