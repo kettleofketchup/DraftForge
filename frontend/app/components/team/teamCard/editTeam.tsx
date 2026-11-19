@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { PrimaryButton } from '~/components/ui/buttons';
 import { DialogClose } from '~/components/ui/dialog';
 import { Input } from '~/components/ui/input';
+import { DisplayName } from '~/components/user/avatar';
 import { getLogger } from '~/lib/logger';
 
 const log = getLogger('editForm');
@@ -58,12 +59,12 @@ export const TeamEditForm: React.FC<Props> = ({ user, form, setForm }) => {
     setErrorMessage({}); // Clear old errors
     if (!user.pk) {
       toast.promise(user.dbCreate(), {
-        loading: `Creating User ${user.username}.`,
+        loading: `Creating User ${DisplayName(user)}.`,
         success: () => {
           setIsSaving(true);
           setStatusMsg('User created successfully!');
           addUser(user as UserType);
-          return `${user.username} has been Created`;
+          return `${DisplayName(user)} has been Created`;
         },
         error: (err) => {
           const val = err.response.data;
@@ -75,17 +76,17 @@ export const TeamEditForm: React.FC<Props> = ({ user, form, setForm }) => {
       setIsSaving(false);
     } else {
       toast.promise(user.dbUpdate(form as UserType), {
-        loading: `Updating User ${user.username}.`,
+        loading: `Updating User ${DisplayName(user)}.`,
         success: (data) => {
           setIsSaving(true);
           setStatusMsg('User updated successfully!');
           updateUserStore(user as UserType); // Update Zustand store with the current instance
-          return `${user.username} has been updated`;
+          return `${DisplayName(user)} has been updated`;
         },
         error: (err) => {
           log.error(`Failed to update user ${user.username}`, err);
           setErrorMessage(err.response.data);
-          return `Failed to update user ${user.username}.`;
+          return `Failed to update user ${DisplayName(user)}.`;
         },
       });
       setIsSaving(false);

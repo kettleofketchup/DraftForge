@@ -107,7 +107,7 @@ skips those.
 ## Deliberate single-field displays
 
 Some UI shows one specific field on purpose: a labelled "Username:" row, an
-`@handle`, a Discord picker showing Discord's own fields, a meta image that
+`@handle` beside the display name, a meta image that
 needs a URL string (`AvatarUrl(user)`). Keep the field and say why, on the line:
 
 ```tsx

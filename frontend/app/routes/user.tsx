@@ -1,9 +1,9 @@
-import { UserProfilePage } from '~/pages/user/UserProfilePage';
+import { fetchUser } from '~/components/api/api';
 import { AvatarUrl } from '~/components/user/UserAvatar';
 import { generateMeta } from '~/lib/seo';
-import { fetchUser } from '~/components/api/api';
-import type { Route } from './+types/user';
 import type { UserSSR } from '~/lib/ssr-types';
+import { UserProfilePage } from '~/pages/user/UserProfilePage';
+import type { Route } from './+types/user';
 
 export async function loader({ params }: Route.LoaderArgs) {
   const { fetchSSR } = await import('~/lib/ssr.server');
@@ -31,6 +31,7 @@ export function meta({ data }: Route.MetaArgs) {
     return generateMeta({
       title: displayName,
       description: `${displayName} — Dota 2 player profile on DraftForge`,
+      // eslint-disable-next-line draftforge/no-direct-name-resolver -- meta tags need the avatar URL string, not a component
       image: AvatarUrl(user),
       url: `/user/${user.pk}`,
     });

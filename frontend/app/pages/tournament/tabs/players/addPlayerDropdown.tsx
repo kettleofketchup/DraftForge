@@ -4,6 +4,7 @@ import {
   ComboboxOption,
   ComboboxOptions,
 } from '@headlessui/react';
+import { DisplayName } from '~/components/user/avatar';
 import type { UserClassType, UserType } from '~/components/user/types';
 import { User } from '~/components/user/user';
 import { UserAvatar } from '~/components/user/UserAvatar';
@@ -45,7 +46,8 @@ export const AddPlayerDropdown: React.FC<Props> = ({
           (person) =>
             !addedUsers?.some((added) => added?.pk === person?.pk) &&
             (person?.username?.toLowerCase().includes(query.toLowerCase()) ||
-              person?.nickname?.toLowerCase().includes(query.toLowerCase())),
+              person?.nickname?.toLowerCase().includes(query.toLowerCase()) ||
+              DisplayName(person).toLowerCase().includes(query.toLowerCase())),
         );
 
   const handleSearchUserSelect = async (userName: UserType | string | null) => {
@@ -117,12 +119,14 @@ export const AddPlayerDropdown: React.FC<Props> = ({
                   <div className="flex items-center gap-2">
                     <UserAvatar user={user} size="md" />
                     <span>
-                      {user?.username}{' '}
-                      {user?.nickname && (
-                        <span className="text-sm text-gray-500">
-                          ({user?.nickname})
-                        </span>
-                      )}
+                      {DisplayName(user)}{' '}
+                      {user?.username &&
+                        DisplayName(user) !== user.username && (
+                          <span className="text-sm text-gray-500">
+                            {/* eslint-disable-next-line draftforge/use-display-name -- secondary @handle tells same-named users apart */}
+                            (@{user.username})
+                          </span>
+                        )}
                     </span>
 
                     <div className="flex-1" />
