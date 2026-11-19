@@ -11,6 +11,7 @@ Draft:
           - backend/app/**/snake_draft*
           - backend/app/**/hero_draft*
           - backend/app/views/draft*
+          - backend/draft/**
 
 Tournament:
   - changed-files:
