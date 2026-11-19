@@ -54,7 +54,7 @@ export const ManagedTeamSchema = z.object({
   left_members: z.array(RosterUserSchema),
   captain: RosterUserSchema.nullable(),
   deputy_captain: RosterUserSchema.nullable(),
-  draft_order: z.number(),
+  draft_order: z.number().nullable(),
   current_points: z.number(),
   total_mmr: z.number(),
   placement: z.number().nullable(),
