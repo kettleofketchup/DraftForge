@@ -49,6 +49,9 @@ export const SOURCE_LABELS: Record<Source, string> = {
 
 export const WALK_IN_LABEL = 'Walk-in';
 
+export const DEFERRED_NOTE =
+  'Deferred by conduct: promoted after members without the flag';
+
 export const REASON_MIN_LENGTH = 3;
 export const REASON_MAX_LENGTH = 500;
 

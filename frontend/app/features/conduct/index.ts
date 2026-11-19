@@ -1,4 +1,9 @@
 export * from './api';
+export { ConductBadge } from './ConductBadge';
+export {
+  ConductForecastCard,
+  type ConductForecastCardProps,
+} from './ConductForecastCard';
 export {
   DEFAULT_CONDUCT_LEADERBOARD_COLUMNS,
   makeConductLeaderboardColumns,
