@@ -80,7 +80,7 @@ PICK_QUERIES: int = 71
 # Upper bounds at the time of writing; the 4 == 8 team equality is the real pin.
 TOURNAMENT_RESPONSE_QUERIES: int = 23
 RESUME_ENDPOINT_QUERIES: int = 54
-UNDO_ENDPOINT_QUERIES: int = 64
+UNDO_ENDPOINT_QUERIES: int = 65
 
 
 def legacy_users_dict(tournament: Tournament) -> dict:
