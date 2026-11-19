@@ -13,6 +13,7 @@ from django.core.cache import cache
 from django.db import transaction
 from django.db.models import BooleanField, Case, Count, Q, QuerySet, Value, When
 from django.http import (
+    Http404,
     HttpRequest,
     HttpResponse,
     HttpResponseBadRequest,
@@ -24,6 +25,7 @@ from rest_framework import generics, status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.generics import get_object_or_404
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import (
     AllowAny,
     BasePermission,
@@ -110,6 +112,7 @@ from .models import (
     Organization,
     ProfileClaimRequest,
     Team,
+    TeamLog,
     TeamLogAction,
     TeamLogVia,
     Tournament,
@@ -124,6 +127,7 @@ from .permissions_org import (
     IsLeagueAdmin,
     IsOrgAdmin,
     IsOrgOwner,
+    can_edit_tournament,
     can_manage_game,
     can_view_league_members,
     can_view_league_members_from_payload,
@@ -646,6 +650,45 @@ class TeamServiceCall(Protocol):
     ) -> TeamChange: ...
 
 
+class TeamLogPagination(PageNumberPagination):
+    page_size = 25
+    page_size_query_param = "page_size"
+    max_page_size = 100
+
+
+def _can_read_scope(
+    user: CustomUser, tournament_id: int | None, organization_id: int | None
+) -> bool:
+    if tournament_id is not None:
+        tournament = (
+            Tournament.objects.nocache()
+            .select_related("league")
+            .filter(pk=tournament_id)
+            .first()
+        )
+        if tournament is not None:
+            return can_edit_tournament(user, tournament)
+    if organization_id is not None:
+        organization = Organization.objects.nocache().filter(pk=organization_id).first()
+        if organization is not None:
+            return has_org_staff_access(user, organization)
+    return bool(user.is_superuser or user.is_staff)
+
+
+def _scope_q(tournament_id: int | None, organization_id: int | None) -> Q:
+    by_tournament = (
+        Q(tournament_id__isnull=True)
+        if tournament_id is None
+        else Q(tournament_id=tournament_id)
+    )
+    by_org = (
+        Q(organization_id__isnull=True)
+        if organization_id is None
+        else Q(organization_id=organization_id)
+    )
+    return by_tournament & by_org
+
+
 @permission_classes((IsStaff,))
 class TeamView(viewsets.ModelViewSet):
     serializer_class = TeamSerializer
@@ -840,6 +883,48 @@ class TeamView(viewsets.ModelViewSet):
                 team, data["standin_id"], data["replacing_id"], **kw
             ),
         )
+
+    @action(detail=True, methods=["get"], pagination_class=TeamLogPagination)
+    def history(self, request: Request, pk: str | None = None) -> Response:
+        try:
+            team_pk = int(pk or "")
+        except ValueError:
+            raise Http404 from None
+        rows = TeamLog.objects.filter(team_snapshot_id=team_pk, event_team__isnull=True)
+        scopes: set[tuple[int | None, int | None]] = set(
+            rows.values_list("tournament_id", "organization_id").distinct()
+        )
+        team = (
+            Team.objects.nocache()
+            .select_related("tournament__league")
+            .filter(pk=team_pk)
+            .first()
+        )
+        if team is None:
+            if not scopes:
+                raise Http404
+            log.debug(
+                "team_history_orphan_access",
+                system="tournament",
+                subsystem="teams",
+                team_id=team_pk,
+            )
+        else:
+            snapshot = log_snapshot_fields(team)
+            scopes.add((snapshot["tournament_id"], snapshot["organization_id"]))
+        readable = [scope for scope in scopes if _can_read_scope(request.user, *scope)]
+        if not readable:
+            raise not_permitted()
+        visible = Q()
+        for scope in readable:
+            visible |= _scope_q(*scope)
+        queryset = with_user_profiles(
+            with_user_profiles(rows.filter(visible), "actor", dota=True),
+            "target_user",
+            dota=True,
+        ).order_by("-created_at", "-pk")
+        page = self.paginate_queryset(queryset)
+        return self.get_paginated_response(self.get_serializer(page, many=True).data)
 
     def patch(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         return self.partial_update(request, *args, **kwargs)

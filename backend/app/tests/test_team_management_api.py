@@ -32,6 +32,7 @@ from app.models import (
     Organization,
     Team,
     TeamLog,
+    TeamLogAction,
     TeamLogVia,
     Tournament,
 )
@@ -49,8 +50,10 @@ from app.serializers import (
     UserSerializer,
 )
 from app.services import team_management
+from app.services.team_audit import log_snapshot_fields
 from app.tests.test_draft_state_queries import make_fixture
 from app.tests.test_team_management import TeamManagementFixture
+from events.models import EventTeam
 from events.overrides import REASON_MAX_LENGTH, OverrideReasonRequired
 from user.tests.test_cacheops_integration import _redis_reachable
 
@@ -782,3 +785,201 @@ class CachedPermissionTests(TeamApiFixture, TransactionTestCase):
         self.assertEqual(resp.status_code, 403)
         self.assertEqual(resp.json()["code"], "not_permitted")
         self.assertEqual(self.log_count(), before)
+
+
+class TeamHistoryTests(TeamApiFixture, TestCase):
+    def history(
+        self,
+        user: CustomUser | None = None,
+        team_pk: int | str | None = None,
+        query: str = "",
+    ) -> Any:
+        client = self.client_for(self.site_staff if user is None else user)
+        pk = self.team.pk if team_pk is None else team_pk
+        return client.get(f"/api/teams/{pk}/history/{query}")
+
+    def rename_to(self, name: str) -> None:
+        resp = self.post("rename", {"name": name, "reason": f"to {name}"})
+        self.assertEqual(resp.status_code, 200, resp.content)
+
+    def actions(self, resp: Any) -> list[str]:
+        self.assertEqual(resp.status_code, 200, resp.content)
+        return [row["action"] for row in resp.json()["results"]]
+
+    def org_staff_of(self, tournament: Tournament) -> CustomUser:
+        user = self.make_user(f"history_staff_{tournament.pk}")
+        tournament.league.organization.staff.add(user)
+        return user
+
+    def test_url_name_reverses(self) -> None:
+        self.assertEqual(
+            reverse("teams-history", args=[self.team.pk]),
+            action_url(self.team.pk, "history"),
+        )
+
+    def test_permission_matrix(self) -> None:
+        self.rename_to("Matrix")
+        roles: list[tuple[str, CustomUser | None, int]] = [
+            ("site_staff", self.site_staff, 200),
+            ("org_staff", self.org_staff, 200),
+            ("league_staff", self.league_staff, 200),
+            ("league_admin", self.league_admin, 200),
+            ("captain", self.c, 403),
+            ("outsider", self.outsider, 403),
+        ]
+        for role, user, expected in roles:
+            with self.subTest(role=role):
+                resp = self.history(user)
+                self.assertEqual(resp.status_code, expected, resp.content)
+                if expected == 403:
+                    self.assertEqual(resp.json()["code"], "not_permitted")
+        resp = APIClient().get(action_url(self.team.pk, "history"))
+        self.assertEqual(resp.status_code, 401)
+        self.assertIn("WWW-Authenticate", resp)
+
+    def test_newest_first_and_paginated(self) -> None:
+        for name in ("First", "Second", "Third"):
+            self.rename_to(name)
+        resp = self.history(query="?page_size=2")
+        self.assertEqual(resp.status_code, 200, resp.content)
+        data = resp.json()
+        self.assertEqual(data["count"], 3)
+        self.assertEqual(len(data["results"]), 2)
+        self.assertIsNotNone(data["next"])
+        latest = data["results"][0]
+        self.assertEqual(latest["team_name"], "Third")
+        self.assertEqual(latest["reason"], "to Third")
+        self.assertEqual(latest["actor"]["pk"], self.site_staff.pk)
+        self.assertEqual(latest["team_id"], self.team.pk)
+
+    def test_default_page_size_is_25(self) -> None:
+        self.bulk_logs(30)
+        data = self.history().json()
+        self.assertEqual(data["count"], 30)
+        self.assertEqual(len(data["results"]), 25)
+
+    def bulk_logs(self, n: int) -> None:
+        snapshot = log_snapshot_fields(self.team)
+        TeamLog.objects.bulk_create(
+            TeamLog(
+                **snapshot,
+                team=self.team,
+                action=TeamLogAction.RENAME,
+                via=TeamLogVia.WEB,
+                actor=self.actor,
+            )
+            for _ in range(n)
+        )
+
+    def test_page_edges(self) -> None:
+        self.bulk_logs(101)
+        resp = self.history(query="?page_size=1000")
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertEqual(resp.json()["count"], 101)
+        self.assertEqual(len(resp.json()["results"]), 100)
+        self.assertEqual(self.history(query="?page=99").status_code, 404)
+
+    def test_non_numeric_pk_404(self) -> None:
+        self.assertEqual(self.history(team_pk="abc").status_code, 404)
+
+    def test_unknown_team_404(self) -> None:
+        self.assertEqual(self.history(team_pk=999999).status_code, 404)
+
+    def test_event_team_rows_excluded(self) -> None:
+        self.rename_to("Visible")
+        event_team = EventTeam.objects.create(
+            event=self.event, name="Event Side", captain=self.c
+        )
+        TeamLog.objects.create(
+            **log_snapshot_fields(self.team),
+            event_team=event_team,
+            action=TeamLogAction.RENAME,
+            via=TeamLogVia.WEB,
+            reason="event team row",
+        )
+        resp = self.history()
+        self.assertEqual(self.actions(resp), ["rename"])
+        self.assertEqual(resp.json()["results"][0]["reason"], "to Visible")
+
+    def test_survives_deletion(self) -> None:
+        self.rename_to("Doomed")
+        Team.objects.filter(pk=self.team.pk).delete()
+        for user in (self.site_staff, self.org_staff, self.league_admin):
+            with self.subTest(user=user.username):
+                self.assertEqual(self.actions(self.history(user)), ["rename"])
+        resp = self.history(self.outsider)
+        self.assertEqual(resp.status_code, 403)
+        self.assertEqual(resp.json()["code"], "not_permitted")
+
+    def test_orphan_org_scope(self) -> None:
+        self.rename_to("Orphan")
+        Team.objects.filter(pk=self.team.pk).delete()
+        Tournament.objects.filter(pk=self.tournament.pk).delete()
+        self.assertEqual(self.actions(self.history(self.org_staff)), ["rename"])
+        self.assertEqual(self.actions(self.history(self.site_staff)), ["rename"])
+        for user in (self.outsider, self.league_admin):
+            with self.subTest(user=user.username):
+                resp = self.history(user)
+                self.assertEqual(resp.status_code, 403)
+                self.assertEqual(resp.json()["code"], "not_permitted")
+
+    def test_orphan_without_org_is_site_staff_only(self) -> None:
+        self.bulk_logs(1)
+        TeamLog.objects.filter(team_snapshot_id=self.team.pk).update(
+            tournament_id=None, organization_id=None, team=None
+        )
+        Team.objects.filter(pk=self.team.pk).delete()
+        self.assertEqual(self.actions(self.history()), ["rename"])
+        self.assertEqual(self.history(self.org_staff).status_code, 403)
+
+    def test_tournamentless_live_team(self) -> None:
+        loose = Team.objects.create(tournament=None, name="Loose", captain=self.m1)
+        resp = self.history(team_pk=loose.pk)
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertEqual(resp.json()["count"], 0)
+        for user in (self.outsider, self.org_staff):
+            with self.subTest(user=user.username):
+                resp = self.history(user, team_pk=loose.pk)
+                self.assertEqual(resp.status_code, 403)
+                self.assertEqual(resp.json()["code"], "not_permitted")
+
+    def test_live_team_without_rows_is_empty_page(self) -> None:
+        resp = self.history(self.league_admin)
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertEqual(resp.json()["count"], 0)
+
+    def test_cross_org_move(self) -> None:
+        self.rename_to("Before Move")
+        elsewhere = self.other_org_tournament()
+        resp = self.client_for(self.site_staff).patch(
+            f"/api/teams/{self.team.pk}/",
+            {"tournament_id": elsewhere.pk},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.rename_to("After Move")
+        new_staff = self.org_staff_of(elsewhere)
+        self.assertEqual(
+            self.actions(self.history(new_staff)), ["rename", "legacy_patch"]
+        )
+        old = self.history(self.org_staff)
+        self.assertEqual(self.actions(old), ["rename"])
+        self.assertEqual(old.json()["results"][0]["team_name"], "Before Move")
+        self.assertEqual(
+            self.actions(self.history()), ["rename", "legacy_patch", "rename"]
+        )
+
+    def test_queries_flat(self) -> None:
+        def count(n: int) -> int:
+            TeamLog.objects.all().delete()
+            self.bulk_logs(n)
+            TeamLog.objects.filter(team_snapshot_id=self.team.pk).update(
+                target_user=self.m1
+            )
+            client = self.client_for(self.league_admin)
+            url = action_url(self.team.pk, "history")
+            with CaptureQueriesContext(connection) as ctx:
+                self.assertEqual(client.get(url).status_code, 200)
+            return len(ctx.captured_queries)
+
+        self.assertEqual(count(1), count(6))
