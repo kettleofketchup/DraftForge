@@ -541,10 +541,16 @@ class LeadershipActionTests(TeamApiFixture, TestCase):
         self.assertEqual(resp.json()["code"], "name_unchanged")
 
     def test_missing_reason_400(self) -> None:
-        resp = self.post("set-captain", {"user_id": self.m1.pk})
-        self.assertEqual(resp.status_code, 400)
-        self.assertIn("reason", resp.json())
-        self.assertEqual(self.log_count(), 0)
+        for case in ACTION_CASES:
+            with self.subTest(action=case.url), transaction.atomic():
+                body = case.prepare(self)
+                del body["reason"]
+                before = self.log_count()
+                resp = self.post(case.url, body)
+                self.assertEqual(resp.status_code, 400, resp.content)
+                self.assertEqual(resp.json(), {"reason": ["This field is required."]})
+                self.assertEqual(self.log_count(), before)
+                transaction.set_rollback(True)
 
     def test_service_refusal_coded(self) -> None:
         resp = self.post("set-deputy", {"user_id": self.outsider.pk, "reason": "x"})
@@ -949,6 +955,13 @@ class TeamHistoryTests(TeamApiFixture, TestCase):
     def test_unknown_team_404(self) -> None:
         self.assertEqual(self.history(team_pk=999999).status_code, 404)
 
+    def test_unknown_team_403_for_non_staff(self) -> None:
+        for user in (self.outsider, self.league_admin):
+            with self.subTest(user=user.username):
+                resp = self.history(user, team_pk=999999)
+                self.assertEqual(resp.status_code, 403, resp.content)
+                self.assertEqual(resp.json()["code"], "not_permitted")
+
     def test_event_team_rows_excluded(self) -> None:
         self.rename_to("Visible")
         event_team = EventTeam.objects.create(
@@ -1188,3 +1201,47 @@ class LegacyDeleteTests(TeamApiFixture, TestCase):
         self.assertEqual(events[0]["subsystem"], "teams")
         self.assertEqual(events[0]["team_id"], self.team.pk)
         self.assertEqual(events[0]["references"], team_references([self.team]))
+
+
+class TeamUsageTests(TeamApiFixture, TestCase):
+    def usage(self, user: CustomUser | None = None) -> Any:
+        client = self.client_for(self.site_staff if user is None else user)
+        return client.get(action_url(self.team.pk, "usage"))
+
+    def test_url_name_reverses(self) -> None:
+        self.assertEqual(
+            reverse("teams-usage", args=[self.team.pk]),
+            action_url(self.team.pk, "usage"),
+        )
+
+    def test_unused_team(self) -> None:
+        resp = self.usage()
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertEqual(resp.json(), {"in_use": False, "detail": None, "usage": []})
+
+    def test_used_team_matches_delete_refusal(self) -> None:
+        Game.objects.create(tournament=self.tournament, radiant_team=self.team)
+        resp = self.usage()
+        self.assertEqual(resp.status_code, 200, resp.content)
+        body = resp.json()
+        self.assertIs(body["in_use"], True)
+        self.assertIn("1 game", body["detail"])
+        self.assertEqual(body["usage"], team_usage([self.team]))
+        refusal = self.client_for(self.site_staff).delete(f"/api/teams/{self.team.pk}/")
+        self.assertEqual(refusal.json()["detail"], body["detail"])
+
+    def test_writes_nothing(self) -> None:
+        before = TeamLog.objects.count()
+        self.assertEqual(self.usage().status_code, 200)
+        self.assertEqual(TeamLog.objects.count(), before)
+        self.assertTrue(Team.objects.nocache().filter(pk=self.team.pk).exists())
+
+    def test_permissions(self) -> None:
+        self.assertEqual(self.usage(self.league_admin).status_code, 200)
+        for user in (self.c, self.outsider):
+            with self.subTest(user=user.username):
+                resp = self.usage(user)
+                self.assertEqual(resp.status_code, 403, resp.content)
+                self.assertEqual(resp.json()["code"], "not_permitted")
+        resp = APIClient().get(action_url(self.team.pk, "usage"))
+        self.assertEqual(resp.status_code, 401)

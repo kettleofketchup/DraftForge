@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 import {
   createTeam,
   deleteTeam,
+  fetchTeamUsage,
   fetchTournament,
   updateTeam,
 } from '~/components/api/api';
@@ -12,7 +13,7 @@ import type { TeamType, TournamentType } from '~/components/tournament/types';
 import { SubmitButton } from '~/components/ui/buttons';
 import { ConfirmDialog } from '~/components/ui/dialogs';
 import type { UserType } from '~/components/user/types';
-import { deleteTeamsInOrder, teamInUseMessage } from '~/lib/deleteTeams';
+import { deleteTeamsInOrder, deleteTeamsMessage } from '~/lib/deleteTeams';
 import { hydrateTournament } from '~/lib/hydrateTournament';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
@@ -49,16 +50,13 @@ export const CreateTeamsButton: React.FC<CreateTeamsButtonProps> = ({
     const existing = (tournament.teams ?? []).filter(
       (team): team is TeamType & { pk: number } => !!team.pk,
     );
-    const result = await deleteTeamsInOrder(existing, deleteTeam);
-    if (result.ok) return true;
-    log.error('Team regeneration stopped: delete refused', {
-      error: result.error,
-      deleted: result.deleted,
+    const result = await deleteTeamsInOrder(existing, {
+      checkUsage: fetchTeamUsage,
+      remove: deleteTeam,
     });
-    toast.error(
-      teamInUseMessage(result.error) ??
-        'Failed to delete the existing teams. No teams were created.',
-    );
+    if (result.ok) return true;
+    log.error('Team regeneration stopped before creating teams', result);
+    toast.error(deleteTeamsMessage(result));
     await refreshTournament();
     return false;
   };
