@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { buildSignupPatchSchema } from '../EventSignupModal/schema';
 
 const baseEvent = {
@@ -41,7 +41,13 @@ describe('buildSignupPatchSchema', () => {
     const ok = schema.safeParse({
       unverified_friend_id: '12345',
       rank_status: 'active',
-      positions: { carry: 1, mid: 2, offlane: 0, soft_support: 0, hard_support: 0 },
+      positions: {
+        carry: 1,
+        mid: 2,
+        offlane: 0,
+        soft_support: 0,
+        hard_support: 0,
+      },
       rank_medal_medal: 'Legend',
       rank_medal_star: '3',
     });
@@ -99,7 +105,13 @@ describe('buildSignupPatchSchema', () => {
   it('still requires rank_status when profile has default never with no battle_cup_tier', () => {
     const profile = {
       unverified_friend_id: '12345',
-      positions: { pos_1: true, pos_2: false, pos_3: false, pos_4: false, pos_5: false },
+      positions: {
+        pos_1: true,
+        pos_2: false,
+        pos_3: false,
+        pos_4: false,
+        pos_5: false,
+      },
       rank_status: 'never',
       rank_medal: null,
       mmr: null,
@@ -118,7 +130,13 @@ describe('buildSignupPatchSchema', () => {
   it('treats rank_status as optional when profile has never WITH battle_cup_tier', () => {
     const profile = {
       unverified_friend_id: '12345',
-      positions: { pos_1: true, pos_2: false, pos_3: false, pos_4: false, pos_5: false },
+      positions: {
+        pos_1: true,
+        pos_2: false,
+        pos_3: false,
+        pos_4: false,
+        pos_5: false,
+      },
       rank_status: 'never',
       rank_medal: null,
       mmr: null,
@@ -137,13 +155,67 @@ describe('buildSignupPatchSchema', () => {
   it('treats positions as optional when user already has priorities on their main profile', () => {
     // userPositions has carry=3 — user has picked a position; the modal
     // shouldn't force them to re-enter it just to RSVP.
-    const userPositions = { carry: 3, mid: 0, offlane: 0, soft_support: 0, hard_support: 0 };
-    const schema = buildSignupPatchSchema(baseEvent as never, emptyProfile, userPositions);
+    const userPositions = {
+      carry: 3,
+      mid: 0,
+      offlane: 0,
+      soft_support: 0,
+      hard_support: 0,
+    };
+    const schema = buildSignupPatchSchema(baseEvent as never, emptyProfile, {
+      userPositions,
+    });
     const result = schema.safeParse({
       unverified_friend_id: '12345',
       rank_status: 'active',
       rank_medal_medal: 'Immortal',
     });
     expect(result.success).toBe(true);
+  });
+
+  it('trims the friend id and rejects non-digits', () => {
+    const schema = buildSignupPatchSchema(baseEvent as never, emptyProfile);
+    const base = {
+      rank_status: 'never',
+      positions: completePositions,
+    };
+    const padded = schema.safeParse({
+      ...base,
+      unverified_friend_id: ' 12345 ',
+    });
+    expect(padded.success).toBe(true);
+    if (padded.success) {
+      expect(
+        (padded.data as Record<string, unknown>).unverified_friend_id,
+      ).toBe('12345');
+    }
+    const bad = schema.safeParse({ ...base, unverified_friend_id: '12a' });
+    expect(bad.success).toBe(false);
+    if (!bad.success) {
+      expect(bad.error.issues.map((i) => i.path.join('.'))).toContain(
+        'unverified_friend_id',
+      );
+    }
+  });
+
+  it('rejects a whitespace-only friend id when required', () => {
+    const schema = buildSignupPatchSchema(baseEvent as never, emptyProfile);
+    const result = schema.safeParse({
+      rank_status: 'never',
+      positions: completePositions,
+      unverified_friend_id: '   ',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('does not require friend id when steam_account_id is set', () => {
+    const schema = buildSignupPatchSchema(baseEvent as never, emptyProfile, {
+      steamAccountId: 12345,
+    });
+    const parsed = schema.safeParse({});
+    const paths = parsed.success
+      ? []
+      : parsed.error.issues.map((i) => i.path.join('.'));
+    expect(paths).not.toContain('unverified_friend_id');
   });
 });

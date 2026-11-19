@@ -23,11 +23,13 @@ from events.discord._shared import (
     _log_signup,
     _steam_friend_id_prefill,
 )
+from events.eligibility import validate_friend_id
 from events.models import Event
 from events.schemas import (
     DotaModalConfig,
     SignupInputPatch,
     dota_require_screenshot,
+    signed_up_text,
 )
 from org.models_profiles import PlayerDotaProfile
 from telemetry.logging import get_logger
@@ -49,7 +51,7 @@ def _check_dota_profile_complete(org_user: OrgUser, event: Event | None = None) 
         has_positions = any(
             [profile.pos_1, profile.pos_2, profile.pos_3, profile.pos_4, profile.pos_5]
         )
-        has_rank = (
+        has_rank = profile.is_rank_declared and (
             (profile.rank_status == "active" and profile.rank_medal)
             or (profile.rank_status == "previous" and profile.rank_medal)
             or (profile.rank_status == "never" and profile.battle_cup_tier is not None)
@@ -84,22 +86,25 @@ class DotaHandler:
         return {"unverified_friend_id": _steam_friend_id_prefill(org_user)}
 
     def modal_config(self, event: Event) -> DotaModalConfig:
-        return DotaModalConfig(
-            require_steam_id=event.require_steam_id,
-            require_rank_screenshot=event.discord_require_rank_screenshot,
-            require_battlecup_screenshot=event.discord_require_battlecup_screenshot,
-            min_mmr=event.min_mmr,
-            allow_active_mmr=event.allow_active_mmr,
-            allow_previous_rank=event.allow_previous_rank,
-            allow_battlecup_rating=event.allow_battlecup_rating,
-        )
+        return DotaModalConfig.from_event(event)
 
     def apply_modal_submit(
         self, event: Event, org_user: OrgUser, user: CustomUser, values: dict
     ) -> dict:
         from events.services import apply_signup_input
 
-        friend_id = values.get("unverified_friend_id", "").strip()
+        try:
+            friend_id = validate_friend_id(
+                values.get("unverified_friend_id", ""), org_user
+            )
+        except DjangoValidationError as exc:
+            log.info(
+                "signup_input_rejected",
+                system="discord",
+                subsystem="interaction",
+                reason=exc.code,
+            )
+            return {"action": "error", "message": exc.messages[0]}
 
         # NOTE: positions are collected in the follow-up PositionConfirmButton
         # flow, not in this modal.
@@ -363,7 +368,8 @@ class DotaHandler:
             return {
                 "success": True,
                 "signed_up": True,
-                "message": f"Screenshot saved! You're signed up. Status: **{result['status']}**",
+                "message": "Screenshot saved! "
+                + signed_up_text(result["status"], result.get("unmet_labels")),
             }
         except ValueError as e:
             log.warning(
@@ -451,11 +457,7 @@ class DotaHandler:
         profile, _ = PlayerDotaProfile.objects.get_or_create(org_user=org_user)
         rank_status = profile.rank_status or "never"
         require_screenshot = dota_require_screenshot(
-            rank_status,
-            DotaModalConfig(
-                require_rank_screenshot=event.discord_require_rank_screenshot,
-                require_battlecup_screenshot=event.discord_require_battlecup_screenshot,
-            ),
+            rank_status, DotaModalConfig.from_event(event)
         )
         return {
             "rank_status": rank_status,

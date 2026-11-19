@@ -121,6 +121,7 @@ from org.views_profiles import (
     update_my_dota_profile,
     update_user_dota_profile,
 )
+from org.views_settings import org_settings_view
 from steam.views_internal import (
     recalculate_mmr,
     steam_sync_state,
@@ -324,6 +325,11 @@ urlpatterns = [
         "api/organizations/<int:org_id>/features/",
         org_features,
         name="org-features",
+    ),
+    path(
+        "api/organizations/<int:org_id>/settings/",
+        org_settings_view,
+        name="org-settings",
     ),
     path(
         "api/organizations/<int:org_id>/promoters/",

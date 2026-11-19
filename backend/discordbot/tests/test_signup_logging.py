@@ -89,6 +89,7 @@ class SignupButtonHappyPathTests(TransactionTestCase):
             pos_1=True,
             rank_status="active",
             rank_medal="Archon 3",
+            rank_declared_at=timezone.now(),
         )
 
     def tearDown(self):
@@ -98,18 +99,29 @@ class SignupButtonHappyPathTests(TransactionTestCase):
         button = SignupButton(self.event.pk)
         interaction = _mock_interaction(self.event.pk)
 
-        with _patch_signup_button_inproc(), \
-             capture_logs() as logs, \
-             patch("discordbot.components.base.respond_to_signup_user", new=AsyncMock()):
+        with (
+            _patch_signup_button_inproc(),
+            capture_logs() as logs,
+            patch("discordbot.components.base.respond_to_signup_user", new=AsyncMock()),
+        ):
             asyncio.run(button.callback(interaction))
 
         # 1. DB-state assertion - this is what catches the silent-signup bug
         self.assertEqual(
-            EventSignup.objects.filter(event=self.event, user=self.user).count(), 1,
+            EventSignup.objects.filter(event=self.event, user=self.user).count(),
+            1,
             "Expected exactly one EventSignup row after direct signup",
         )
         signup = EventSignup.objects.get(event=self.event, user=self.user)
-        self.assertIn(signup.status, [SignupStatus.RSVP, SignupStatus.APPROVED, SignupStatus.CONFIRMED, SignupStatus.PENDING_APPROVAL])
+        self.assertIn(
+            signup.status,
+            [
+                SignupStatus.RSVP,
+                SignupStatus.APPROVED,
+                SignupStatus.CONFIRMED,
+                SignupStatus.PENDING_APPROVAL,
+            ],
+        )
 
         # 2. Log-chain assertion - required events present, with correlation
         events = [log["event"] for log in logs]
@@ -147,7 +159,11 @@ class FullSignupPipelineTests(TransactionTestCase):
         self.user = CustomUser.objects.create(username="testuser", discordId="67890")
         org_user = resolve_or_create_org_user(self.user, self.org)
         PlayerDotaProfile.objects.create(
-            org_user=org_user, pos_1=True, rank_status="active", rank_medal="Archon 3",
+            org_user=org_user,
+            pos_1=True,
+            rank_status="active",
+            rank_medal="Archon 3",
+            rank_declared_at=timezone.now(),
         )
 
     def tearDown(self):
@@ -157,15 +173,18 @@ class FullSignupPipelineTests(TransactionTestCase):
         button = SignupButton(self.event.pk)
         interaction = _mock_interaction(self.event.pk)
 
-        with _patch_signup_button_inproc(), \
-             capture_logs() as logs, \
-             patch("events.tasks.send_signup_update.delay") as mock_delay, \
-             patch("discordbot.components.base.respond_to_signup_user", new=AsyncMock()):
+        with (
+            _patch_signup_button_inproc(),
+            capture_logs() as logs,
+            patch("events.tasks.send_signup_update.delay") as mock_delay,
+            patch("discordbot.components.base.respond_to_signup_user", new=AsyncMock()),
+        ):
             asyncio.run(button.callback(interaction))
 
         # DB-state - the canonical assertion
         self.assertEqual(
-            EventSignup.objects.filter(event=self.event, user=self.user).count(), 1,
+            EventSignup.objects.filter(event=self.event, user=self.user).count(),
+            1,
         )
         signup = EventSignup.objects.get(event=self.event, user=self.user)
 
@@ -183,12 +202,26 @@ class FullSignupPipelineTests(TransactionTestCase):
             self.assertIn(event, events, f"missing: {event}; got: {events}")
 
         # Ordering invariants
-        self.assertLess(events.index("interaction_started"), events.index("handler_invoked"))
-        self.assertLess(events.index("handler_invoked"), events.index("process_rsvp_started"))
-        self.assertLess(events.index("process_rsvp_started"), events.index("signup_post_commit_hooks_scheduled"))
-        self.assertLess(events.index("signup_post_commit_hooks_scheduled"), events.index("embed_update_queued"))
-        self.assertLess(events.index("embed_update_queued"), events.index("signup_created"))
-        self.assertLess(events.index("signup_created"), events.index("interaction_finished"))
+        self.assertLess(
+            events.index("interaction_started"), events.index("handler_invoked")
+        )
+        self.assertLess(
+            events.index("handler_invoked"), events.index("process_rsvp_started")
+        )
+        self.assertLess(
+            events.index("process_rsvp_started"),
+            events.index("signup_post_commit_hooks_scheduled"),
+        )
+        self.assertLess(
+            events.index("signup_post_commit_hooks_scheduled"),
+            events.index("embed_update_queued"),
+        )
+        self.assertLess(
+            events.index("embed_update_queued"), events.index("signup_created")
+        )
+        self.assertLess(
+            events.index("signup_created"), events.index("interaction_finished")
+        )
 
         # signup_id correlation - cross-check user_id and status
         signup_created = next(log for log in logs if log["event"] == "signup_created")
@@ -227,9 +260,13 @@ class CeleryHopTests(TransactionTestCase):
     def test_celery_task_rebinds_interaction_id_from_kwargs(self):
         from events.tasks import send_signup_update
 
-        with capture_logs() as logs, \
-             patch("events.tasks.get_event_for_task", return_value=None):
-            send_signup_update.apply(args=[self.event.pk], kwargs={"interaction_id": "abc123"})
+        with (
+            capture_logs() as logs,
+            patch("events.tasks.get_event_for_task", return_value=None),
+        ):
+            send_signup_update.apply(
+                args=[self.event.pk], kwargs={"interaction_id": "abc123"}
+            )
 
         started = [log for log in logs if log["event"] == "celery_task_started"]
         self.assertEqual(len(started), 1)
@@ -245,9 +282,14 @@ class CeleryHopTests(TransactionTestCase):
     def test_celery_task_body_failure_emits_celery_task_failed(self):
         from events.tasks import send_signup_update
 
-        with capture_logs() as logs, \
-             patch("events.tasks.get_event_for_task", side_effect=RuntimeError("discord 500")), \
-             self.assertRaises(RuntimeError):
+        with (
+            capture_logs() as logs,
+            patch(
+                "events.tasks.get_event_for_task",
+                side_effect=RuntimeError("discord 500"),
+            ),
+            self.assertRaises(RuntimeError),
+        ):
             send_signup_update.apply(
                 args=[self.event.pk],
                 kwargs={"interaction_id": "abc123"},
@@ -267,7 +309,8 @@ class DispatchSkippedBranchTests(TransactionTestCase):
         clear_contextvars()
         self.org = Organization.objects.create(name="Test Org")
         self.event = Event.objects.create(
-            organization=self.org, name="No Announce",
+            organization=self.org,
+            name="No Announce",
             scheduled_at=timezone.now(),
             game_type=GameType.DOTA2,
             state=EventState.SIGNUPS_OPEN,
@@ -280,8 +323,10 @@ class DispatchSkippedBranchTests(TransactionTestCase):
     def test_logs_skipped_when_discord_announcement_disabled(self):
         from events.discord.dispatch import notify_signup_changed
 
-        with capture_logs() as logs, \
-             patch("events.tasks.send_signup_update.delay") as mock_delay:
+        with (
+            capture_logs() as logs,
+            patch("events.tasks.send_signup_update.delay") as mock_delay,
+        ):
             notify_signup_changed(self.event)
 
         skipped = [log for log in logs if log["event"] == "embed_update_skipped"]
@@ -305,7 +350,8 @@ class SignupsClosedFailurePathTests(TransactionTestCase):
         # Use UPCOMING (signups not yet open) since handler checks
         # `event.state != EventState.SIGNUPS_OPEN`.
         self.event = Event.objects.create(
-            organization=self.org, name="Closed",
+            organization=self.org,
+            name="Closed",
             scheduled_at=timezone.now(),
             game_type=GameType.DOTA2,
             state=EventState.UPCOMING,
@@ -319,9 +365,11 @@ class SignupsClosedFailurePathTests(TransactionTestCase):
         button = SignupButton(self.event.pk)
         interaction = _mock_interaction(self.event.pk)
 
-        with _patch_signup_button_inproc(), \
-             capture_logs() as logs, \
-             patch("discordbot.components.base.respond_to_signup_user", new=AsyncMock()):
+        with (
+            _patch_signup_button_inproc(),
+            capture_logs() as logs,
+            patch("discordbot.components.base.respond_to_signup_user", new=AsyncMock()),
+        ):
             asyncio.run(button.callback(interaction))
 
         self.assertEqual(EventSignup.objects.filter(event=self.event).count(), 0)
@@ -337,7 +385,8 @@ class GetOrgUserNullPathTests(TransactionTestCase):
         clear_contextvars()
         self.org = Organization.objects.create(name="Test Org")
         self.event = Event.objects.create(
-            organization=self.org, name="Open Event",
+            organization=self.org,
+            name="Open Event",
             scheduled_at=timezone.now(),
             game_type=GameType.DOTA2,
             state=EventState.SIGNUPS_OPEN,
@@ -351,10 +400,12 @@ class GetOrgUserNullPathTests(TransactionTestCase):
         button = SignupButton(self.event.pk)
         interaction = _mock_interaction(self.event.pk)
 
-        with _patch_signup_button_inproc(), \
-             capture_logs() as logs, \
-             patch("events.discord.handlers._get_org_user", return_value=(None, None)), \
-             patch("discordbot.components.base.respond_to_signup_user", new=AsyncMock()):
+        with (
+            _patch_signup_button_inproc(),
+            capture_logs() as logs,
+            patch("events.discord.handlers._get_org_user", return_value=(None, None)),
+            patch("discordbot.components.base.respond_to_signup_user", new=AsyncMock()),
+        ):
             asyncio.run(button.callback(interaction))
 
         finished = next(log for log in logs if log["event"] == "interaction_finished")
@@ -370,17 +421,24 @@ class RollbackPathTests(TransactionTestCase):
         clear_contextvars()
         self.org = Organization.objects.create(name="Test Org")
         self.event = Event.objects.create(
-            organization=self.org, name="Rollback Test",
+            organization=self.org,
+            name="Rollback Test",
             scheduled_at=timezone.now(),
             game_type=GameType.DOTA2,
             state=EventState.SIGNUPS_OPEN,
             discord_announcement=True,
             discord_announcement_channel_id="9999999",
         )
-        self.user = CustomUser.objects.create(username="rollback_user", discordId="67892")
+        self.user = CustomUser.objects.create(
+            username="rollback_user", discordId="67892"
+        )
         org_user = resolve_or_create_org_user(self.user, self.org)
         PlayerDotaProfile.objects.create(
-            org_user=org_user, pos_1=True, rank_status="active", rank_medal="Archon 3",
+            org_user=org_user,
+            pos_1=True,
+            rank_status="active",
+            rank_medal="Archon 3",
+            rank_declared_at=timezone.now(),
         )
 
     def tearDown(self):
@@ -388,10 +446,13 @@ class RollbackPathTests(TransactionTestCase):
 
     def test_rollback_skips_embed_update_queued(self):
         from django.db import transaction
+
         from events.services import process_rsvp
 
-        with capture_logs() as logs, \
-             patch("events.tasks.send_signup_update.delay") as mock_delay:
+        with (
+            capture_logs() as logs,
+            patch("events.tasks.send_signup_update.delay") as mock_delay,
+        ):
             try:
                 with transaction.atomic():
                     process_rsvp(self.event, self.user)
@@ -403,9 +464,13 @@ class RollbackPathTests(TransactionTestCase):
         self.assertIn("process_rsvp_started", events)
         self.assertIn("signup_post_commit_hooks_scheduled", events)
         self.assertNotIn("embed_update_queued", events)
-        self.assertNotIn("signup_created", events)  # New: deferred to on_commit, suppressed on rollback
+        self.assertNotIn(
+            "signup_created", events
+        )  # New: deferred to on_commit, suppressed on rollback
         mock_delay.assert_not_called()
-        self.assertEqual(EventSignup.objects.filter(event=self.event, user=self.user).count(), 0)
+        self.assertEqual(
+            EventSignup.objects.filter(event=self.event, user=self.user).count(), 0
+        )
 
 
 class ConcurrentCMTests(TransactionTestCase):
@@ -433,6 +498,7 @@ class ConcurrentCMTests(TransactionTestCase):
             captured = {}
             async with discord_log_context(interaction, custom_id=custom_id):
                 from structlog.contextvars import get_contextvars
+
                 captured = dict(get_contextvars())
             return captured
 
@@ -456,7 +522,8 @@ class DMContextEdgeCaseTests(TransactionTestCase):
         clear_contextvars()
         self.org = Organization.objects.create(name="Test Org")
         self.event = Event.objects.create(
-            organization=self.org, name="DM Test",
+            organization=self.org,
+            name="DM Test",
             scheduled_at=timezone.now(),
             game_type=GameType.DOTA2,
             state=EventState.SIGNUPS_OPEN,
@@ -465,7 +532,11 @@ class DMContextEdgeCaseTests(TransactionTestCase):
         self.user = CustomUser.objects.create(username="dmuser", discordId="67891")
         org_user = resolve_or_create_org_user(self.user, self.org)
         PlayerDotaProfile.objects.create(
-            org_user=org_user, pos_1=True, rank_status="active", rank_medal="Archon 3",
+            org_user=org_user,
+            pos_1=True,
+            rank_status="active",
+            rank_medal="Archon 3",
+            rank_declared_at=timezone.now(),
         )
 
     def tearDown(self):
@@ -477,9 +548,11 @@ class DMContextEdgeCaseTests(TransactionTestCase):
         interaction.guild_id = None
         interaction.channel_id = None
 
-        with _patch_signup_button_inproc(), \
-             capture_logs() as logs, \
-             patch("discordbot.components.base.respond_to_signup_user", new=AsyncMock()):
+        with (
+            _patch_signup_button_inproc(),
+            capture_logs() as logs,
+            patch("discordbot.components.base.respond_to_signup_user", new=AsyncMock()),
+        ):
             asyncio.run(button.callback(interaction))
 
         finished = next(log for log in logs if log["event"] == "interaction_finished")

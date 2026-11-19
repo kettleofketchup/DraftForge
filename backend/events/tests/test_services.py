@@ -1,6 +1,5 @@
 from datetime import timedelta
 
-from django.test import TestCase
 from django.utils import timezone as tz
 
 from events.constants import EventState, SignupStatus, SignupType
@@ -200,6 +199,7 @@ class SignupProcessingTests(EventTestCase):
         PlayerDotaProfile.objects.create(
             org_user=org_user,
             rank_status="active",
+            rank_declared_at=tz.now(),
             rank_medal="Legend 3",
             pos_1=True,
         )
@@ -224,6 +224,7 @@ class SignupProcessingTests(EventTestCase):
         PlayerDotaProfile.objects.create(
             org_user=org_user,
             rank_status="active",
+            rank_declared_at=tz.now(),
             rank_medal="Legend 3",
             rank_screenshot="https://i.imgur.com/example.png",
             pos_1=True,
@@ -246,6 +247,7 @@ class SignupProcessingTests(EventTestCase):
         PlayerDotaProfile.objects.create(
             org_user=org_user,
             rank_status="active",
+            rank_declared_at=tz.now(),
             rank_medal="Legend 3",
             pos_1=True,
         )

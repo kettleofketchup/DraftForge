@@ -4,12 +4,15 @@ Organization Views
 Handles org admin functionality including claim request management.
 """
 
+from typing import Any
+
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Q, QuerySet
 from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.request import Request
 from rest_framework.response import Response
 
 from app.cache_utils import invalidate_after_commit
@@ -51,7 +54,7 @@ class ClaimRequestViewSet(viewsets.ModelViewSet):
     serializer_class = ProfileClaimRequestSerializer
     permission_classes = [IsAuthenticated, IsOrgStaff]
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet[ProfileClaimRequest]:
         """Filter to requests for organizations the user is staff of."""
         user = self.request.user
 
@@ -65,7 +68,7 @@ class ClaimRequestViewSet(viewsets.ModelViewSet):
         org_ids = admin_org_ids | staff_org_ids
         return ProfileClaimRequest.objects.filter(organization_id__in=org_ids)
 
-    def list(self, request, *args, **kwargs):
+    def list(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         """List claim requests, optionally filtered by status."""
         queryset = self.get_queryset()
 
@@ -83,7 +86,7 @@ class ClaimRequestViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
     @action(detail=True, methods=["post"])
-    def approve(self, request, pk=None):
+    def approve(self, request: Request, pk: str | None = None) -> Response:
         """
         Approve a claim request and perform the profile merge.
 
@@ -156,7 +159,7 @@ class ClaimRequestViewSet(viewsets.ModelViewSet):
         )
 
     @action(detail=True, methods=["post"])
-    def reject(self, request, pk=None):
+    def reject(self, request: Request, pk: str | None = None) -> Response:
         """Reject a claim request."""
         claim_request = self.get_object()
 

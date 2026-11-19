@@ -39,6 +39,8 @@ import {
   eventTemplateSchema,
   Frequency,
 } from './schemas';
+import { signupRulesFrom } from './signupRules';
+import { SignupRulesSection } from './SignupRulesSection';
 
 const editRepeaterSchema = eventIdentitySchema
   .merge(eventTemplateSchema)
@@ -122,6 +124,7 @@ export function EditRepeaterModal({
         timezone: repeater.timezone,
         discord_notify_new_events: repeater.discord_notify_new_events,
         ...discordResetValues(repeater),
+        ...signupRulesFrom(repeater),
         ...dotaLobbyResetValues(repeater, { savedFromMode: true }),
       });
     }
@@ -214,6 +217,7 @@ export function EditRepeaterModal({
                 control={form.control}
                 triggerTestId={ids.timezone}
               />
+              <SignupRulesSection control={form.control} />
             </>
           ),
         },

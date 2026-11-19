@@ -38,7 +38,7 @@ from discordbot.internal_client.signup_actions import (
 )
 from discordbot.log_context import discord_log_context
 from discordbot.signup_responses import respond_to_signup_user
-from events.schemas import STALE_MODAL_MESSAGE
+from events.schemas import STALE_MODAL_MESSAGE, signed_up_text
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
@@ -204,7 +204,7 @@ class SignupButton(ui.Button):
             if result["action"] == "signed_up":
                 await respond_to_signup_user(
                     interaction,
-                    content=f"✅ You're signed up! Status: **{result['status']}**",
+                    content=f"✅ {signed_up_text(result['status'], result.get('unmet_labels'))}",
                 )
             elif result["action"] == "needs_modal":
                 from discordbot.components.registry import get_component_provider
