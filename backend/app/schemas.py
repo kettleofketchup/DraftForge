@@ -51,7 +51,7 @@ class TournamentUserSchema(BaseModel):
     def display_name(self) -> str:
         return (
             first_name(
-                self.guildNickname, self.nickname, self.discordNickname, self.username
+                self.guildNickname, self.discordNickname, self.nickname, self.username
             )
             or f"User {self.pk}"
         )
@@ -115,8 +115,10 @@ TournamentParticipant = TournamentParticipantSchema
 GameWithoutHeroDraft = GameWithoutHeroDraftSchema
 
 # Backward compat -- use events.schemas for new code
-from events.schemas import DotaProfileSchema  # noqa: F401, E402
-from events.schemas import OrgProxy  # noqa: F401, E402
+from events.schemas import (  # noqa: F401, E402
+    DotaProfileSchema,
+    OrgProxy,
+)
 from events.schemas import EventSignupSchema as EventSignupData  # noqa: F401, E402
 from events.schemas import EventTaskSchema as EventTaskData  # noqa: F401, E402
 from events.schemas import EventTemplateSchema as EventTemplateData  # noqa: F401, E402
