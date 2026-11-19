@@ -35,6 +35,7 @@ from app.steam_accounts import (
     steam_account_id_holder,
 )
 from discordbot.services.member_names import normalise_name
+from events.eligibility import refresh_unmet_requirements
 from league.models import LeagueUser
 from org.models import OrgUser
 from org.serializers import OrgUserSerializer
@@ -817,6 +818,7 @@ def update_org_user(request: Request, org_id: int, org_user_id: int) -> Response
             org_user.save(update_fields=org_updated)
         if user_updated:
             user.save()  # Full save triggers steamid sync
+        refresh_unmet_requirements(org_user)
 
         # Invalidate all cached views affected by this change
         league_users = LeagueUser.objects.filter(org_user=org_user).select_related(

@@ -2,11 +2,12 @@
 
 populate_org_features_data creates the orgs, leagues, users, memberships and
 past tournaments, then runs the reset. reset_org_features_data, behind
-POST /api/tests/org-features/reset/, rebuilds everything the specs change:
-ledger rows, promo sends, point values, events, templates, feature switches,
-role membership, org memberships (non-seeded OrgUsers are deleted), the seeded
-tournaments (non-seeded ones in the features leagues are deleted) and org name
-and timezone. org_features_test_data is the lookup the specs read.
+POST /api/tests/org-features/reset/, rebuilds everything the specs change: ledger
+rows, promo sends, point values, events, templates, org settings (deleted, so
+the next read gets the defaults), feature switches, role membership, org
+memberships (non-seeded OrgUsers are deleted), the seeded tournaments (non-seeded
+ones in the features leagues are deleted) and org name and timezone.
+org_features_test_data is the lookup the specs read.
 """
 
 from datetime import timedelta
@@ -22,7 +23,13 @@ from events.models import Event
 from org.contributions.kinds import ContributionKind
 from org.contributions.services import award_entry, sync_event_staff_entries
 from org.features import FeatureKey, set_org_feature
-from org.models import ContributionEntry, ContributionPointValue, OrgUser, PromoSend
+from org.models import (
+    ContributionEntry,
+    ContributionPointValue,
+    OrgSettings,
+    OrgUser,
+    PromoSend,
+)
 from org.models_promotion import PromoTemplate
 from tests.data.models import TestLeague, TestOrganization, TestUser
 from tests.data.org_features import (
@@ -238,6 +245,7 @@ def _rebuild() -> list[Organization]:
         pk__in=[pk for pk, _, _, _ in ORG_FEATURES_TOURNAMENTS]
     ).delete()
     PromoTemplate.objects.nocache().filter(organization__in=org_pks).delete()
+    OrgSettings.objects.nocache().filter(organization__in=org_pks).delete()
 
     _ensure_tournaments()
     _reset_roles(orgs, users)
@@ -273,6 +281,7 @@ def reset_org_features_data() -> dict[str, Any]:
         ContributionEntry,
         PromoSend,
         PromoTemplate,
+        OrgSettings,
         OrgUser,
         Tournament,
     ):

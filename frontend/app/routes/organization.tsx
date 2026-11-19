@@ -43,9 +43,14 @@ import {
   ClaimsTab,
   DeleteOrganizationDangerZone,
   EditOrganizationModal,
+  OrgSettingsTab,
   useOrganization,
 } from '~/components/organization';
 import { buildOrgPageNavOptions } from '~/components/organization/orgPageNavOptions';
+import {
+  useOrgSettingsTabAccess,
+  useSettingsTabRedirect,
+} from '~/components/organization/tabs/orgSettings/useOrgSettingsTabAccess';
 import { Badge } from '~/components/ui/badge';
 import {
   AddDiscordBotButton,
@@ -439,6 +444,10 @@ export default function OrganizationDetailPage() {
     }
   }, [featureAccess.settled, canUsePromotion, activeTab, setActiveTab]);
 
+  const settingsAccess = useOrgSettingsTabAccess(organization ?? undefined);
+  useSettingsTabRedirect(activeTab, setActiveTab, settingsAccess);
+  const canViewSettings = settingsAccess.canView;
+
   const isOwner = useIsOrganizationOwner(organization);
   const isOrgAdmin = useIsOrganizationAdmin(organization);
   const isOrgStaff = useIsOrganizationStaff(organization);
@@ -497,6 +506,7 @@ export default function OrganizationDetailPage() {
         canViewContributions,
         canUsePromotion,
         canViewClaims,
+        canViewSettings,
       }),
     [
       leagues.length,
@@ -506,6 +516,7 @@ export default function OrganizationDetailPage() {
       canViewContributions,
       canUsePromotion,
       canViewClaims,
+      canViewSettings,
     ],
   );
 
@@ -642,6 +653,12 @@ export default function OrganizationDetailPage() {
               <TabsTrigger value="claims" data-testid="org-tab-claims">
                 <ClipboardList className="w-4 h-4 mr-2" />
                 Claims
+              </TabsTrigger>
+            )}
+            {canViewSettings && (
+              <TabsTrigger value="settings" data-testid="org-tab-settings">
+                <Settings className="w-4 h-4 mr-2" />
+                Settings
               </TabsTrigger>
             )}
           </TabsList>
@@ -845,6 +862,12 @@ export default function OrganizationDetailPage() {
           {canViewClaims && pk && (
             <TabsContent value="claims">
               <ClaimsTab organizationId={pk} />
+            </TabsContent>
+          )}
+
+          {canViewSettings && pk && (
+            <TabsContent value="settings">
+              <OrgSettingsTab organization={organization} />
             </TabsContent>
           )}
         </Tabs>

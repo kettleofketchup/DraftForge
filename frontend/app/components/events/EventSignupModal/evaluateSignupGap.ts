@@ -1,6 +1,6 @@
-import { type EventType } from '../schemas';
 import { GAME_TYPE } from '~/components/game/constants';
 import type { DotaProfileData } from '~/components/user';
+import { type EventType } from '../schemas';
 
 function hasAnyPosition(profile: DotaProfileData | null | undefined): boolean {
   if (!profile?.positions) return false;
@@ -63,6 +63,16 @@ export function isRankSectionComplete(
   }
 }
 
+export type SteamGateOptions = { steamAccountId?: number | null };
+
+/** A profile friend ID or a linked Steam account satisfies "Require Friend ID". */
+export function hasFriendId(
+  profile: DotaProfileData | null | undefined,
+  opts: SteamGateOptions = {},
+): boolean {
+  return !!(profile?.unverified_friend_id?.trim() || opts.steamAccountId);
+}
+
 /**
  * Returns 'complete' if the profile satisfies all event requirements (skip-the-form
  * fast path), or a list of missing-section keys otherwise. The caller opens the
@@ -74,28 +84,38 @@ export function isRankSectionComplete(
 export function evaluateSignupGap(
   event: EventType,
   profile: DotaProfileData | null | undefined,
+  opts: SteamGateOptions = {},
 ): 'complete' | string[] {
   const missing: string[] = [];
 
-  if (event.require_steam_id && !profile?.unverified_friend_id) missing.push('friend_id');
+  if (event.require_steam_id && !hasFriendId(profile, opts))
+    missing.push('friend_id');
 
   if (event.game_type === GAME_TYPE.DOTA2) {
     if (!isRankSectionComplete(event, profile)) missing.push('rank_status');
     if (!hasAnyPosition(profile)) missing.push('positions');
-    if (profile?.rank_status === 'active' || profile?.rank_status === 'previous') {
+    if (
+      profile?.rank_status === 'active' ||
+      profile?.rank_status === 'previous'
+    ) {
       if (!profile.rank_medal) missing.push('rank_medal');
     }
     if (profile?.rank_status === 'never' && profile.battle_cup_tier == null) {
       missing.push('battle_cup_tier');
     }
-    if (event.discord_require_rank_screenshot &&
-        (profile?.rank_status === 'active' || profile?.rank_status === 'previous') &&
-        !profile.rank_screenshot) {
+    if (
+      event.discord_require_rank_screenshot &&
+      (profile?.rank_status === 'active' ||
+        profile?.rank_status === 'previous') &&
+      !profile.rank_screenshot
+    ) {
       missing.push('rank_screenshot');
     }
-    if (event.discord_require_battlecup_screenshot &&
-        profile?.rank_status === 'never' &&
-        !profile.battlecup_screenshot) {
+    if (
+      event.discord_require_battlecup_screenshot &&
+      profile?.rank_status === 'never' &&
+      !profile.battlecup_screenshot
+    ) {
       missing.push('battlecup_screenshot');
     }
   }

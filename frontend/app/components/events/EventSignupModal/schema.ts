@@ -1,8 +1,12 @@
 import { z } from 'zod';
-import { type EventType } from '../schemas';
 import { GAME_TYPE } from '~/components/game/constants';
 import type { DotaProfileData } from '~/components/user';
-import { isRankSectionComplete } from './evaluateSignupGap';
+import { type EventType } from '../schemas';
+import {
+  hasFriendId,
+  isRankSectionComplete,
+  type SteamGateOptions,
+} from './evaluateSignupGap';
 
 const SCREENSHOT_URL_RE = /^https?:\/\/.+\.(png|jpe?g|webp)(\?.*)?$/i;
 
@@ -15,25 +19,38 @@ const SCREENSHOT_URL_RE = /^https?:\/\/.+\.(png|jpe?g|webp)(\?.*)?$/i;
  * into `rank_medal` at submit time. Including them here so the resolver doesn't
  * strip them; superRefine validates the joint state.
  */
-type UserPositions = {
-  carry?: number;
-  mid?: number;
-  offlane?: number;
-  soft_support?: number;
-  hard_support?: number;
-} | null | undefined;
+type UserPositions =
+  | {
+      carry?: number;
+      mid?: number;
+      offlane?: number;
+      soft_support?: number;
+      hard_support?: number;
+    }
+  | null
+  | undefined;
+
+export type SignupSchemaOptions = SteamGateOptions & {
+  userPositions?: UserPositions;
+};
 
 export function buildSignupPatchSchema(
   event: EventType,
   profile: DotaProfileData | null | undefined,
-  userPositions?: UserPositions,
+  opts: SignupSchemaOptions = {},
 ) {
+  const { userPositions } = opts;
   const fields: Record<string, z.ZodType> = {};
 
-  if (event.require_steam_id && !profile?.unverified_friend_id) {
-    fields.unverified_friend_id = z.string().min(1).max(20);
+  const friendId = z
+    .string()
+    .trim()
+    .max(20)
+    .regex(/^[0-9]*$/, 'Friend ID must be digits only');
+  if (event.require_steam_id && !hasFriendId(profile, opts)) {
+    fields.unverified_friend_id = friendId.min(1);
   } else {
-    fields.unverified_friend_id = z.string().max(20).optional();
+    fields.unverified_friend_id = friendId.optional();
   }
 
   if (event.game_type === GAME_TYPE.DOTA2) {
@@ -78,7 +95,8 @@ export function buildSignupPatchSchema(
     const hasPos = hasPosFromUser || hasPosFromProfile;
     if (!hasPos) {
       fields.positions = positionDict.refine(
-        (p) => p.carry + p.mid + p.offlane + p.soft_support + p.hard_support > 0,
+        (p) =>
+          p.carry + p.mid + p.offlane + p.soft_support + p.hard_support > 0,
         { message: 'Pick at least one position' },
       );
     } else {
@@ -91,22 +109,39 @@ export function buildSignupPatchSchema(
     fields.battle_cup_tier = z.number().int().min(1).max(8).optional();
 
     fields.rank_screenshot = z.string().regex(SCREENSHOT_URL_RE).optional();
-    fields.battlecup_screenshot = z.string().regex(SCREENSHOT_URL_RE).optional();
+    fields.battlecup_screenshot = z
+      .string()
+      .regex(SCREENSHOT_URL_RE)
+      .optional();
   }
 
   return z.object(fields).superRefine((data, ctx) => {
     // Active/previous: medal+star must be picked together. Immortal medal needs no star.
     if (data.rank_status === 'active' || data.rank_status === 'previous') {
-      const medal = (data as Record<string, unknown>).rank_medal_medal as string | undefined;
-      const star = (data as Record<string, unknown>).rank_medal_star as string | undefined;
+      const medal = (data as Record<string, unknown>).rank_medal_medal as
+        | string
+        | undefined;
+      const star = (data as Record<string, unknown>).rank_medal_star as
+        | string
+        | undefined;
       const isImmortal = medal === 'Immortal';
       if (!medal) {
-        ctx.addIssue({ code: 'custom', message: 'Pick a medal', path: ['rank_medal_medal'] });
+        ctx.addIssue({
+          code: 'custom',
+          message: 'Pick a medal',
+          path: ['rank_medal_medal'],
+        });
       } else if (!isImmortal && !star) {
-        ctx.addIssue({ code: 'custom', message: 'Pick a star', path: ['rank_medal_star'] });
+        ctx.addIssue({
+          code: 'custom',
+          message: 'Pick a star',
+          path: ['rank_medal_star'],
+        });
       }
     }
   });
 }
 
-export type SignupInputPatch = z.infer<ReturnType<typeof buildSignupPatchSchema>>;
+export type SignupInputPatch = z.infer<
+  ReturnType<typeof buildSignupPatchSchema>
+>;

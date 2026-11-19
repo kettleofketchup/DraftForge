@@ -7,21 +7,22 @@
  *   - rank_status="never" reveals Battle Cup Tier (not Medal/Star)
  *   - Screenshot-required event surfaces URL field
  *   - Tentative path uses same modal with different submit label
- *   - Friend ID universal across game types (Deadlock event)
+ *   - Linked Steam account satisfies Friend ID (Deadlock event fast path)
  *   - Upgrade tentative -> rsvp re-runs gap evaluation
  *   - Mobile viewport renders Sheet variant with sticky submit
  *
  * Notes
  *   - Fast-path / upgrade tests use `E2E Signup Event` because event_player_1's
  *     populate profile (active rank, Legend 3, positions, no Friend ID required)
- *     satisfies that event's requirements. The screenshot/Deadlock events require
- *     unverified_friend_id which is not seeded — so fast-path against them would
- *     always open the modal regardless of intent.
- *   - Modal-presence tests use the screenshot/Deadlock events plus the
- *     no-profile player to guarantee the modal opens.
+ *     satisfies that event's requirements.
+ *   - A linked Steam account meets the friend-ID gate (#574), so the Deadlock
+ *     event (friend ID is its only gate) takes the fast path for
+ *     event_player_no_profile.
+ *   - Modal-presence tests use the screenshot event, whose Dota rank and
+ *     position gates the no-profile player cannot meet, so the modal opens.
  */
 
-import { expect, type BrowserContext } from '@playwright/test';
+import { expect, type BrowserContext, type Page } from '@playwright/test';
 import {
   getEventsTestData,
   loginEventPlayer,
@@ -50,6 +51,21 @@ async function getEventByName(
   const id = found.pk ?? found.id;
   if (id == null) throw new Error(`Event '${name}' has no pk/id field`);
   return id;
+}
+
+// event_player_no_profile has no game profile but a linked Steam account
+// (steam_id_64 76561198900199999 in backend/tests/data/users.py).
+const NO_PROFILE_STEAM_ACCOUNT_ID = 939934271;
+
+async function cancelRsvp(page: Page): Promise<void> {
+  await page.getByTestId('event-cancel-rsvp-btn').click();
+  await page
+    .getByRole('alertdialog')
+    .getByRole('button', { name: 'Cancel RSVP' })
+    .click();
+  await expect(page.getByTestId('event-signup-btn')).toBeVisible({
+    timeout: 10000,
+  });
 }
 
 let eventInfo: EventInfo;
@@ -97,7 +113,11 @@ test.describe('Event Signup Form (@cicd)', () => {
     await page.getByTestId('event-signup-btn').click();
     const modal = page.getByTestId('event-signup-modal');
     await expect(modal).toBeVisible();
-    await expect(modal.getByTestId('signup-friend-id')).toBeVisible();
+    // A linked Steam account satisfies the friend-ID gate (#574): the section
+    // shows the account ID as a prefilled summary instead of an empty field.
+    await expect(
+      modal.getByTestId('signup-prefilled-summary-friend-id'),
+    ).toContainText(String(NO_PROFILE_STEAM_ACCOUNT_ID));
     await expect(modal.getByTestId('signup-rank-status')).toBeVisible();
     await expect(modal.getByTestId('position-choices')).toBeVisible();
   });
@@ -160,20 +180,25 @@ test.describe('Event Signup Form (@cicd)', () => {
     );
   });
 
-  test('Friend ID universal across game types (Deadlock event)', async ({
+  test('linked Steam account satisfies Friend ID on a Deadlock event', async ({
     page,
     context,
   }) => {
+    // Friend ID is the Deadlock event's only gate, and the linked Steam
+    // account meets it (#574), so the signup takes the fast path.
     await loginEventPlayerNoProfile(context);
     const eventId = await getEventByName(context, 'Test Deadlock Event');
     await page.goto(`/events/${eventId}`);
-    await page.getByTestId('event-signup-btn').click();
-    const modal = page.getByTestId('event-signup-modal');
-    await expect(modal).toBeVisible();
-    await expect(modal.getByTestId('signup-friend-id')).toBeVisible();
-    // Non-Dota game: rank-status / positions sections must not render.
-    await expect(modal.getByTestId('signup-rank-status')).toHaveCount(0);
-    await expect(modal.getByTestId('position-choices')).toHaveCount(0);
+    const signupBtn = page.getByTestId('event-signup-btn');
+    const cancelBtn = page.getByTestId('event-cancel-rsvp-btn');
+    // resetEventsData only clears the E2E Signup Event, so cancel an RSVP
+    // left on this event by an earlier run.
+    await expect(signupBtn.or(cancelBtn)).toBeVisible({ timeout: 10000 });
+    if (await cancelBtn.isVisible()) await cancelRsvp(page);
+    await signupBtn.click();
+    await expect(page.getByTestId('event-signup-modal')).toHaveCount(0);
+    await expect(cancelBtn).toBeVisible({ timeout: 10000 });
+    await cancelRsvp(page);
   });
 
   test('upgrade tentative to rsvp re-runs gap evaluation', async ({
