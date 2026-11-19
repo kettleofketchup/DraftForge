@@ -66,6 +66,13 @@ import { Kbd } from '~/components/ui/kbd';
 import { UserStrip } from '~/components/user';
 import { DisplayName } from '~/components/user/avatar';
 import {
+  canRecordAttendance,
+  ConductBadge,
+  useForecast,
+  type ForecastMember,
+} from '~/features/conduct';
+import { useOrgFeatureAccess } from '~/features/org-features';
+import {
   useEvent,
   useEventActionMutation,
   useEventSignupUsers,
@@ -94,6 +101,14 @@ export default function RollCallPage() {
     event?.organization ?? undefined,
   );
   const isAdmin = event?.user_can_manage ?? false;
+  const eventOrgAccess = useOrgFeatureAccess(eventOrg ?? undefined);
+  const conductForecast = useForecast(
+    event?.organization ?? 0,
+    eventOrgAccess,
+    event?.id ?? 0,
+    canRecordAttendance(event, eventOrg),
+  );
+  const conductMembers = conductForecast.data?.members;
 
   const [showStartConfirm, setShowStartConfirm] = useState(false);
   const [isNavigating, setIsNavigating] = useState(false);
@@ -285,6 +300,7 @@ export default function RollCallPage() {
       userMap={userMap}
       isAdmin={isAdmin}
       leaguePk={event.tournament_league ?? null}
+      conductMember={conductMembers?.[String(signup.user)]}
       pending={pendingIds.has(signup.id)}
       focused={isAdmin && signup.id === activeId}
       onSelect={setFocusedId}
@@ -644,6 +660,7 @@ const SignupStrip = memo(function SignupStrip({
   userMap,
   isAdmin,
   leaguePk,
+  conductMember,
   pending,
   focused,
   onSelect,
@@ -657,6 +674,7 @@ const SignupStrip = memo(function SignupStrip({
   userMap: Map<number, import('~/store/userCacheTypes').UserEntry>;
   isAdmin: boolean;
   leaguePk: number | null;
+  conductMember?: ForecastMember;
   pending: boolean;
   focused: boolean;
   onSelect: (id: number) => void;
@@ -682,6 +700,7 @@ const SignupStrip = memo(function SignupStrip({
         />
       )}
       <EventStateBadge state={signup.status} />
+      <ConductBadge member={conductMember} />
     </span>
   );
 

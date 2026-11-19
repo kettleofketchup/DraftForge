@@ -54,6 +54,7 @@ import {
   signupIdOf,
 } from '~/components/events/signupOptimistic';
 import type { UserType } from '~/components/user/types';
+import { invalidateAllConduct } from '~/features/org-features';
 import { useOrgStore } from '~/store/orgStore';
 import { useUserCacheStore } from '~/store/userCacheStore';
 import { useUserStore } from '~/store/userStore';
@@ -111,6 +112,7 @@ export function useSignupMutation(eventId: number) {
         });
       }
       useOrgStore.getState().clearOrgUsers();
+      invalidateAllConduct(queryClient);
     },
   });
 }
@@ -134,6 +136,7 @@ export function useEventActionMutation(eventId: number) {
         // The events list filters by state — a regression from roll_call → signups_open
         // changes which lists this event appears in.
         queryClient.invalidateQueries({ queryKey: ['events'] });
+        invalidateAllConduct(queryClient);
       },
     }),
     startTournament: useMutation({
@@ -145,6 +148,7 @@ export function useEventActionMutation(eventId: number) {
       onSuccess: (data) => {
         queryClient.setQueryData(['event', eventId], data);
         queryClient.invalidateQueries({ queryKey: ['events'] });
+        invalidateAllConduct(queryClient);
       },
     }),
     deleteEvent: useMutation({
@@ -159,6 +163,7 @@ export function useEventActionMutation(eventId: number) {
       onSuccess: (data) => {
         queryClient.setQueryData(['event', eventId], data);
         queryClient.invalidateQueries({ queryKey: ['events'] });
+        invalidateAllConduct(queryClient);
       },
     }),
     completeEvent: useMutation({
@@ -169,6 +174,7 @@ export function useEventActionMutation(eventId: number) {
         queryClient.invalidateQueries({
           queryKey: ['org-contributions', data.organization],
         });
+        invalidateAllConduct(queryClient);
       },
     }),
     setEventStaff: useMutation({
@@ -179,6 +185,7 @@ export function useEventActionMutation(eventId: number) {
         queryClient.invalidateQueries({
           queryKey: ['org-contributions', data.organization],
         });
+        invalidateAllConduct(queryClient);
       },
     }),
   };
@@ -284,6 +291,7 @@ export function useSignupActionMutations(eventId: number) {
       queryClient.setQueryData<EventSignupType[]>(signupsKey, (old) =>
         old ? replaceSignup(old, updated) : old,
       );
+      invalidateAllConduct(queryClient);
     },
     onSettled: () => {
       // This mutation still counts itself, so 1 means it is the last one.

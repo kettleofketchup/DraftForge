@@ -12,6 +12,7 @@ export {
   type AttendanceTableProps,
   type AttendanceTableRow,
 } from './AttendanceTable';
+export { canRecordAttendance } from './canRecordAttendance';
 export { ConductBadge } from './ConductBadge';
 export {
   ConductForecastCard,

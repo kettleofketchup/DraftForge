@@ -125,6 +125,14 @@ import { AddUserModal } from '~/components/user/AddUserModal';
 import { DisplayName } from '~/components/user/avatar';
 import type { UserType } from '~/components/user/types';
 import {
+  AttendancePanel,
+  canRecordAttendance,
+  ConductBadge,
+  ConductForecastCard,
+  useForecast,
+  type ForecastMember,
+} from '~/features/conduct';
+import {
   removeFeatureQueries,
   useOrgFeatureAccess,
 } from '~/features/org-features';
@@ -150,6 +158,18 @@ import { isUserEntry } from '~/store/userCacheTypes';
 import { useUserStore } from '~/store/userStore';
 
 const log = getLogger('EventPage');
+
+const FORECAST_STATES: ReadonlySet<string> = new Set([
+  EventState.UPCOMING,
+  EventState.SIGNUPS_OPEN,
+  EventState.ROLL_CALL,
+]);
+const ATTENDANCE_STATES: ReadonlySet<string> = new Set([
+  EventState.ROLL_CALL,
+  EventState.IN_PROGRESS,
+  EventState.COMPLETED,
+  EventState.CANCELLED,
+]);
 
 export default function EventPage() {
   const { eventId, tab } = useParams<{ eventId: string; tab?: string }>();
@@ -185,6 +205,14 @@ export default function EventPage() {
   const showCompletePointsNote =
     eventOrgAccess.canViewContributions ||
     eventOrgAccess.canManageContributions;
+  const conductEnabled = canRecordAttendance(event, eventOrg);
+  const conductForecast = useForecast(
+    event?.organization ?? 0,
+    eventOrgAccess,
+    event?.id ?? 0,
+    conductEnabled,
+  );
+  const conductMembers = conductForecast.data?.members;
 
   // Set the current game type in the game type store for context-aware components
   const setCurrentGameType = useGameTypeStore((s) => s.setCurrentGameType);
@@ -640,6 +668,27 @@ export default function EventPage() {
 
           <TabsContent value="details">
             {isAdmin && <OpsNoticesCard eventId={event.id} />}
+            {conductEnabled && FORECAST_STATES.has(event.state) && (
+              <div className="mb-4">
+                <ConductForecastCard
+                  orgId={event.organization}
+                  eventId={event.id}
+                  access={eventOrgAccess}
+                  enabled={conductEnabled}
+                />
+              </div>
+            )}
+            {conductEnabled && ATTENDANCE_STATES.has(event.state) && (
+              <div className="mb-4">
+                <AttendancePanel
+                  orgId={event.organization}
+                  eventId={event.id}
+                  eventState={event.state}
+                  access={eventOrgAccess}
+                  enabled={conductEnabled}
+                />
+              </div>
+            )}
             <DetailsTab
               event={event}
               signedIn={!!currentUser?.pk}
@@ -665,6 +714,7 @@ export default function EventPage() {
               isAdmin={isAdmin}
               signupActions={signupActions}
               gameType={event.game_type}
+              conductMembers={conductMembers}
               eventId={event.id}
               orgId={event.organization}
               hasDiscordServer={!!eventOrg?.discord_server_id}
@@ -678,6 +728,7 @@ export default function EventPage() {
               isAdmin={isAdmin}
               signupActions={signupActions}
               gameType={event.game_type}
+              conductMembers={conductMembers}
               state={event.state}
             />
           </TabsContent>
@@ -688,6 +739,7 @@ export default function EventPage() {
               isAdmin={isAdmin}
               signupActions={signupActions}
               gameType={event.game_type}
+              conductMembers={conductMembers}
               state={event.state}
             />
           </TabsContent>
@@ -698,6 +750,7 @@ export default function EventPage() {
               isAdmin={isAdmin}
               signupActions={signupActions}
               gameType={event.game_type}
+              conductMembers={conductMembers}
               state={event.state}
             />
           </TabsContent>
@@ -906,8 +959,10 @@ function SignupsTab({
   hasDiscordServer,
   state,
   autoApprove = true,
+  conductMembers,
 }: {
   signups: EventSignupType[];
+  conductMembers?: Record<string, ForecastMember>;
   autoApprove?: boolean;
   isAdmin: boolean;
   signupActions: ReturnType<typeof useSignupActionMutations>;
@@ -1176,6 +1231,7 @@ function SignupsTab({
                 #{position}
               </span>
               <EventStateBadge state={signup.status} />
+              <ConductBadge member={conductMembers?.[String(signup.user)]} />
               {holdReason && (
                 <span
                   className="text-xs text-muted-foreground"
