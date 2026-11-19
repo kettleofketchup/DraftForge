@@ -1,12 +1,20 @@
 from collections.abc import Mapping
+from datetime import datetime
 from decimal import Decimal
-from typing import Any, TypedDict, cast
+from typing import Any, Final, Literal, NotRequired, TypedDict, cast
 
 from rest_framework import serializers
 
-from org.conduct.constants import SETTINGS_RANGES
+from org.conduct.constants import COUNTED, SETTINGS_RANGES
+from org.conduct.scoring import MemberScore, recency_weight
 from org.conduct.services import EDITABLE_SETTINGS_FIELDS
-from org.models_conduct import OrgConductSettings
+from org.contributions.serializers import MemberSummary, member_summary
+from org.models import OrgUser
+from org.models_conduct import AttendanceOutcome, OrgConductSettings
+
+DEFAULT_HISTORY_LIMIT: Final[int] = 50
+MAX_HISTORY_LIMIT: Final[int] = 200
+RATE_DIGITS: Final[int] = 3
 
 SettingValue = float | int | bool
 
@@ -110,3 +118,127 @@ class ConductSettingsUpdateSerializer(serializers.Serializer):
                 }
             )
         return attrs
+
+
+class LeaderboardRow(TypedDict):
+    member: MemberSummary
+    show_rate: float
+    counted_events: int
+    rank: int
+
+
+class NewMemberRow(TypedDict):
+    member: MemberSummary
+    counted_events: int
+
+
+class OwnRow(TypedDict):
+    member: MemberSummary
+    show_rate: float
+    counted_events: int
+    status: Literal["new", "scored"]
+    rank: int | None
+
+
+class SetBy(TypedDict):
+    user_pk: int
+    username: str
+
+
+class HistoryItem(TypedDict):
+    event_id: int | None
+    event_name: str
+    event_starts_at: str
+    outcome: str
+    source: str
+    committed: bool
+    finalized: bool
+    voided: bool
+    weight: float
+    reason: NotRequired[str]
+    set_by: NotRequired[SetBy | None]
+
+
+def rate(value: float) -> float:
+    return round(value, RATE_DIGITS)
+
+
+def leaderboard_row(org_user: OrgUser, score: MemberScore, rank: int) -> LeaderboardRow:
+    return LeaderboardRow(
+        member=member_summary(org_user),
+        show_rate=rate(score.show_rate),
+        counted_events=score.counted_events,
+        rank=rank,
+    )
+
+
+def new_member_row(org_user: OrgUser, score: MemberScore) -> NewMemberRow:
+    return NewMemberRow(
+        member=member_summary(org_user), counted_events=score.counted_events
+    )
+
+
+def own_row(org_user: OrgUser, score: MemberScore, rank: int | None) -> OwnRow:
+    return OwnRow(
+        member=member_summary(org_user),
+        show_rate=rate(score.show_rate),
+        counted_events=score.counted_events,
+        status=score.status,
+        rank=rank,
+    )
+
+
+def is_counted(row: AttendanceOutcome) -> bool:
+    return (
+        row.finalized_at is not None
+        and row.voided_at is None
+        and row.committed
+        and row.outcome in COUNTED
+    )
+
+
+def history_item(
+    row: AttendanceOutcome,
+    *,
+    now: datetime,
+    cutoff: datetime,
+    half_life_days: int,
+    with_reason: bool,
+) -> HistoryItem:
+    weight = (
+        recency_weight(row.event_starts_at, now, half_life_days)
+        if is_counted(row) and row.event_starts_at >= cutoff
+        else 0.0
+    )
+    item = HistoryItem(
+        event_id=row.event_id,
+        event_name=row.event_name,
+        event_starts_at=serializers.DateTimeField().to_representation(
+            row.event_starts_at
+        ),
+        outcome=row.outcome,
+        source=row.source,
+        committed=row.committed,
+        finalized=row.finalized_at is not None,
+        voided=row.voided_at is not None,
+        weight=rate(weight),
+    )
+    if with_reason:
+        set_by = row.set_by
+        item["reason"] = row.reason
+        item["set_by"] = (
+            SetBy(user_pk=set_by.pk, username=set_by.username)
+            if set_by is not None
+            else None
+        )
+    return item
+
+
+class HistoryQuerySerializer(serializers.Serializer):
+    limit = serializers.IntegerField(
+        required=False,
+        default=DEFAULT_HISTORY_LIMIT,
+        min_value=1,
+        max_value=MAX_HISTORY_LIMIT,
+    )
+    offset = serializers.IntegerField(required=False, default=0, min_value=0)
