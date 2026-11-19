@@ -829,6 +829,18 @@ class CaptainDraftFollowUpTests(TeamManagementFixture, TestCase):
         self.assertNotIn(self.c.pk, pool)
         self.assertEqual(set(pool), {self.p1.pk, self.p2.pk})
 
+    def test_standin_not_in_pool(self) -> None:
+        draft = self.make_draft(TeamDraftState.DRAFTING)
+        DraftRound.objects.create(draft=draft, captain=self.c, pick_number=1)
+
+        add_standin(self.team, self.p1, actor=None, via=TeamLogVia.WEB, reason="r")
+
+        fresh = Draft.objects.nocache().get(pk=draft.pk)
+        remaining = set(fresh.users_remaining.values_list("pk", flat=True))
+        self.assertEqual(remaining, {self.p2.pk})
+        state = tournament_state_queryset(fresh=True).get(pk=self.tournament.pk)
+        self.assertEqual(set(_users_remaining_pks(state.draft)), {self.p2.pk})
+
     def test_presence_reset_and_pending_emits(self) -> None:
         draft = self.make_draft(TeamDraftState.PENDING)
         Team.objects.filter(pk=self.team.pk).update(

@@ -1640,6 +1640,7 @@ class Draft(models.Model):
             .exclude(id__in=excluded_ids)
             .exclude(id__in=self.tournament.draft_locked_user_ids())
             .exclude(teams_as_member__tournament=self.tournament)
+            .exclude(teams_as_dropin__tournament=self.tournament)
             .distinct()
         )
 
