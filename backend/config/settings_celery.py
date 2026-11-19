@@ -18,7 +18,7 @@ DEBUG = False
 ALLOWED_HOSTS = []
 
 
-def _env_bool(key, default=False):
+def _env_bool(key: str, default: bool = False) -> bool:
     value = os.environ.get(key)
     if value is None:
         return default

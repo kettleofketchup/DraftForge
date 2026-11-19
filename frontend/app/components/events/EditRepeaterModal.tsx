@@ -18,7 +18,6 @@ import {
 import { useUpdateEventRepeaterMutation } from '~/hooks/useEvent';
 import { useRepeaterLobbyPassword } from '~/hooks/useLobbyPassword';
 import { DiscordConfigSection } from './DiscordConfigSection';
-import { ReadyCheckConfigSection } from './ReadyCheckConfigSection';
 import {
   discordResetValues,
   dotaLobbyResetValues,
@@ -32,6 +31,7 @@ import {
   SeriesScheduleFields,
   TimezoneField,
 } from './form';
+import { ReadyCheckConfigSection } from './ReadyCheckConfigSection';
 import {
   DISCORD_CONFIG_DEFAULTS,
   discordConfigSchema,
@@ -44,6 +44,8 @@ import {
   readyCheckConfigSchema,
   refineReadyCheck,
 } from './schemas';
+import { signupRulesFrom } from './signupRules';
+import { SignupRulesSection } from './SignupRulesSection';
 
 const editRepeaterSchema = eventIdentitySchema
   .merge(eventTemplateSchema)
@@ -138,6 +140,7 @@ export function EditRepeaterModal({
         timezone: repeater.timezone,
         discord_notify_new_events: repeater.discord_notify_new_events,
         ...discordResetValues(repeater),
+        ...signupRulesFrom(repeater),
         ...dotaLobbyResetValues(repeater, { savedFromMode: true }),
         ...readyCheckResetValues(repeater),
       });
@@ -231,6 +234,7 @@ export function EditRepeaterModal({
                 control={form.control}
                 triggerTestId={ids.timezone}
               />
+              <SignupRulesSection control={form.control} />
             </>
           ),
         },

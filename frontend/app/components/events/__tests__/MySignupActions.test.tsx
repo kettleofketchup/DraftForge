@@ -15,6 +15,7 @@ function renderActions(
   const props = {
     mySignup,
     signupsOpen: true,
+    allowUserSignups: true,
     signupDisabled: false,
     cancelPending: false,
     onSignup: vi.fn(),
@@ -68,6 +69,7 @@ describe('MySignupActions', () => {
       <MySignupActions
         mySignup={signup('approved')}
         signupsOpen={false}
+        allowUserSignups
         signupDisabled={false}
         cancelPending={false}
         onSignup={vi.fn()}
@@ -75,5 +77,25 @@ describe('MySignupActions', () => {
       />,
     );
     expect(container.textContent).toBe('');
+  });
+
+  it('tells members organizers manage sign-ups when self-serve is off', () => {
+    renderActions(undefined, { allowUserSignups: false });
+    expect(screen.getByTestId('event-signups-managed')).toBeTruthy();
+    expect(screen.queryByTestId('event-signup-btn')).toBeNull();
+  });
+
+  it('keeps Cancel but hides upgrade for a tentative signup when self-serve is off', () => {
+    renderActions(signup('tentative'), { allowUserSignups: false });
+    expect(screen.queryByTestId('event-upgrade-rsvp-btn')).toBeNull();
+    expect(screen.getByTestId('event-cancel-tentative-btn')).toBeTruthy();
+  });
+
+  it('shows the pending-approval note next to Cancel RSVP', () => {
+    renderActions(signup('pending_approval'));
+    expect(screen.getByTestId('event-my-signup-pending').textContent).toBe(
+      'Pending approval',
+    );
+    expect(screen.getByTestId('event-cancel-rsvp-btn')).toBeTruthy();
   });
 });

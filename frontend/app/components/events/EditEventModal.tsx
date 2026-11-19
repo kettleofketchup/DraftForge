@@ -17,7 +17,6 @@ import {
 } from '~/hooks/useLobbyPassword';
 import { ApprovalConfigSection } from './ApprovalConfigSection';
 import { DiscordConfigSection } from './DiscordConfigSection';
-import { ReadyCheckConfigSection } from './ReadyCheckConfigSection';
 import {
   discordResetValues,
   dotaLobbyResetValues,
@@ -31,6 +30,7 @@ import {
   readyCheckResetValues,
   TimezoneField,
 } from './form';
+import { ReadyCheckConfigSection } from './ReadyCheckConfigSection';
 import type { EditEventFormInput, EventType } from './schemas';
 import {
   DISCORD_CONFIG_DEFAULTS,
@@ -41,6 +41,8 @@ import {
   refineReadyCheck,
   utcToLocalInput,
 } from './schemas';
+import { signupRulesFrom } from './signupRules';
+import { SignupRulesSection } from './SignupRulesSection';
 
 const ids = eventFieldTestIds('edit-event', {
   scheduled: 'event-scheduled-input',
@@ -120,6 +122,7 @@ export function EditEventModal({
         number_of_teams: event.number_of_teams || null,
         tournament_league: event.tournament_league,
         ...discordResetValues(event),
+        ...signupRulesFrom(event),
         // Single events have no subscriber list — force signup_reminder off
         // for them so the superRefine in eventSchema doesn't reject.
         // Repeater-occurrence events keep the persisted value.
@@ -273,7 +276,13 @@ export function EditEventModal({
         {
           value: 'approval',
           content: (
-            <ApprovalConfigSection control={form.control} watch={form.watch} />
+            <div className="space-y-6">
+              <ApprovalConfigSection
+                control={form.control}
+                watch={form.watch}
+              />
+              <SignupRulesSection control={form.control} />
+            </div>
           ),
         },
         {

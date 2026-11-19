@@ -7,12 +7,14 @@ import {
 import { EventStateBadge } from './EventStateBadge';
 import type { EventSignupType } from './schemas';
 import { SignupStatus } from './schemas';
+import { describeUnmet } from './unmetRequirements';
 
 export type SignupIntent = 'rsvp' | 'tentative';
 
 export interface MySignupActionsProps {
   mySignup: EventSignupType | undefined;
   signupsOpen: boolean;
+  allowUserSignups: boolean;
   signupDisabled: boolean;
   cancelPending: boolean;
   onSignup: (intent: SignupIntent) => void;
@@ -22,6 +24,7 @@ export interface MySignupActionsProps {
 export function MySignupActions({
   mySignup,
   signupsOpen,
+  allowUserSignups,
   signupDisabled,
   cancelPending,
   onSignup,
@@ -39,7 +42,29 @@ export function MySignupActions({
     );
   }
 
-  if (!signupsOpen) return null;
+  const pendingNotice = mySignup?.status === SignupStatus.PENDING_APPROVAL && (
+    <span
+      className="text-sm text-muted-foreground"
+      data-testid="event-my-signup-pending"
+    >
+      {mySignup.unmet_requirements?.length
+        ? `Pending approval: ${describeUnmet(mySignup.unmet_requirements)}`
+        : 'Pending approval'}
+    </span>
+  );
+
+  if (!signupsOpen) return pendingNotice || null;
+
+  if (!mySignup && !allowUserSignups) {
+    return (
+      <span
+        className="text-sm text-muted-foreground"
+        data-testid="event-signups-managed"
+      >
+        Sign-ups are managed by organizers.
+      </span>
+    );
+  }
 
   if (!mySignup) {
     return (
@@ -69,15 +94,17 @@ export function MySignupActions({
   if (mySignup.status === SignupStatus.TENTATIVE) {
     return (
       <>
-        <PrimaryButton
-          size="sm"
-          onClick={() => onSignup('rsvp')}
-          disabled={signupDisabled}
-          data-testid="event-upgrade-rsvp-btn"
-        >
-          <CheckCircle2 className="h-4 w-4 mr-1.5" />
-          Sign Up
-        </PrimaryButton>
+        {allowUserSignups && (
+          <PrimaryButton
+            size="sm"
+            onClick={() => onSignup('rsvp')}
+            disabled={signupDisabled}
+            data-testid="event-upgrade-rsvp-btn"
+          >
+            <CheckCircle2 className="h-4 w-4 mr-1.5" />
+            Sign Up
+          </PrimaryButton>
+        )}
         <DestructiveButton
           size="sm"
           onClick={onCancel}
@@ -93,15 +120,18 @@ export function MySignupActions({
   }
 
   return (
-    <DestructiveButton
-      size="sm"
-      onClick={onCancel}
-      loading={cancelPending}
-      depth={false}
-      data-testid="event-cancel-rsvp-btn"
-    >
-      <XCircle className="h-4 w-4 mr-1.5" />
-      Cancel RSVP
-    </DestructiveButton>
+    <>
+      {pendingNotice}
+      <DestructiveButton
+        size="sm"
+        onClick={onCancel}
+        loading={cancelPending}
+        depth={false}
+        data-testid="event-cancel-rsvp-btn"
+      >
+        <XCircle className="h-4 w-4 mr-1.5" />
+        Cancel RSVP
+      </DestructiveButton>
+    </>
   );
 }

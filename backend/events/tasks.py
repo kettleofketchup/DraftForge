@@ -1,6 +1,8 @@
 import time
+from collections.abc import Callable
 from datetime import datetime, timedelta
 from datetime import timezone as tz
+from typing import TYPE_CHECKING, Any
 
 import requests as req
 from celery import shared_task
@@ -55,6 +57,9 @@ from events.discord.embeds import (
 from events.utils import starts_in_future
 from telemetry.logging import get_logger
 
+if TYPE_CHECKING:
+    from discordbot.schemas import DiscordEventStateSchema
+
 logger = get_logger(__name__)
 log = get_logger(__name__)
 
@@ -76,7 +81,7 @@ def _bind_celery_context(
 
 
 def _celery_bookend_fields(
-    task_name: str, event_id: int, interaction_id: str | None, **extra
+    task_name: str, event_id: int, interaction_id: str | None, **extra: Any
 ) -> dict:
     """Build kwargs dict for bookend log lines, dropping None values from interaction_id and extras."""
     fields = {
@@ -93,8 +98,12 @@ def _celery_bookend_fields(
 
 
 def _run_with_bookends(
-    task_name: str, event_id: int, interaction_id: str | None, work, **extra
-):
+    task_name: str,
+    event_id: int,
+    interaction_id: str | None,
+    work: Callable[[], str],
+    **extra: Any,
+) -> str:
     """Wrap a task body with celery_task_started/finished/failed bookend logs.
 
     `work` is a zero-arg callable returning the task's return value. Extra
@@ -150,7 +159,9 @@ def _discord_error_message(data: object, status_code: int) -> str:
     return f"{message}: {'; '.join(details)}" if details else message
 
 
-def _build_signup_message_link(guild_id, channel_id, post_result):
+def _build_signup_message_link(
+    guild_id: str, channel_id: str, post_result: dict[str, Any]
+) -> str | None:
     """Construct a discord.com message permalink from a sync_send_embed result."""
     if not guild_id:
         return None
@@ -162,7 +173,12 @@ def _build_signup_message_link(guild_id, channel_id, post_result):
     return f"https://discord.com/channels/{guild_id}/{channel_id}/{msg_id}"
 
 
-def _update_signup_msg(event_id, discord_event_pk, channel_id, post_result):
+def _update_signup_msg(
+    event_id: int,
+    discord_event_pk: int | None,
+    channel_id: str,
+    post_result: dict[str, Any],
+) -> str | None:
     """Update signup message record via internal API after Discord post.
 
     Returns the resolved message_id (or None if the post had no id).
@@ -202,7 +218,7 @@ def _update_signup_msg(event_id, discord_event_pk, channel_id, post_result):
 
 
 @shared_task
-def generate_upcoming_events():
+def generate_upcoming_events() -> str:
     """Generate upcoming events for all active repeaters. Runs hourly.
 
     Calls internal API — no direct ORM access.
@@ -285,7 +301,7 @@ def cleanup_stale_events() -> str:
 
 
 @shared_task
-def open_scheduled_signups():
+def open_scheduled_signups() -> str:
     """Open signups for events where signups_open_at has passed. Runs every minute.
 
     State transition via internal HTTP API (no direct DB writes).
@@ -323,7 +339,7 @@ def open_scheduled_signups():
 
 
 @shared_task
-def sync_discord_events():
+def sync_discord_events() -> str:
     """Reconciliation task: ensure Discord matches the DB for all active events.
 
     Runs every 5 minutes via celery beat. All reads via internal HTTP API.
@@ -456,7 +472,7 @@ def sync_discord_events():
 
 
 @shared_task(acks_late=True, reject_on_worker_lost=True)
-def send_event_announcement(event_id, interaction_id=None):
+def send_event_announcement(event_id: int, interaction_id: str | None = None) -> str:
     """Create event signup post + announcement.
 
     1. Signup post: full embed + buttons in the signups channel (forum thread
@@ -477,7 +493,7 @@ def send_event_announcement(event_id, interaction_id=None):
     )
 
 
-def _send_event_announcement_impl(event_id):
+def _send_event_announcement_impl(event_id: int) -> str:
     event = get_event_for_task(event_id)
     if not event:
         return f"Failed: event {event_id} not found"
@@ -589,7 +605,7 @@ def _send_event_announcement_impl(event_id):
 
 
 @shared_task(acks_late=True, reject_on_worker_lost=True)
-def send_attendance_reminder(event_id):
+def send_attendance_reminder(event_id: int) -> str:
     """Post the attendance-confirmation embed to the announcement channel.
 
     Idempotency is provided by sync_send_embed_with_components's internal
@@ -639,7 +655,7 @@ def send_attendance_reminder(event_id):
 
 
 @shared_task(acks_late=True, reject_on_worker_lost=True)
-def send_profile_reminder(event_id):
+def send_profile_reminder(event_id: int) -> str:
     """Post the profile-completion reminder embed to the announcement channel.
 
     Idempotency via sync_send_embed_with_components's lease pattern.
@@ -687,7 +703,7 @@ def send_profile_reminder(event_id):
 
 
 @shared_task
-def send_signup_update(event_id, interaction_id=None):
+def send_signup_update(event_id: int, interaction_id: str | None = None) -> str:
     """Edit the original announcement embed with updated signup lists.
 
     Tries DiscordEvent.signup_message first, falls back to
@@ -701,7 +717,9 @@ def send_signup_update(event_id, interaction_id=None):
     )
 
 
-def _resolve_signup_edit_channel(discord_state, fields: dict) -> str | None:
+def _resolve_signup_edit_channel(
+    discord_state: "DiscordEventStateSchema", fields: dict
+) -> str | None:
     """Pick the Discord channel ID to PATCH for a signup-embed edit.
 
     Forum posts live inside an auto-created thread whose ID Discord treats
@@ -735,7 +753,7 @@ def _resolve_signup_edit_channel(discord_state, fields: dict) -> str | None:
     return discord_state.signup_thread_id or discord_state.signup_channel_id
 
 
-def _send_signup_update_impl(event_id, interaction_id):
+def _send_signup_update_impl(event_id: int, interaction_id: str | None) -> str:
     fields = _celery_bookend_fields("send_signup_update", event_id, interaction_id)
 
     event = get_event_for_task(event_id)
@@ -833,7 +851,9 @@ def _send_signup_update_impl(event_id, interaction_id):
 
 
 @shared_task
-def send_new_event_notification(event_id, interaction_id=None):
+def send_new_event_notification(
+    event_id: int, interaction_id: str | None = None
+) -> str:
     """Notify Discord channel about a new event from a repeater."""
     return _run_with_bookends(
         "send_new_event_notification",
@@ -874,7 +894,9 @@ def _send_new_event_notification_impl(event_id: int) -> str:
 
 
 @shared_task
-def create_discord_scheduled_event(event_id, interaction_id=None):
+def create_discord_scheduled_event(
+    event_id: int, interaction_id: str | None = None
+) -> str:
     """Create a Discord scheduled event via the API.
 
     Stores the scheduled_event_id on the DiscordEvent model and creates
@@ -888,7 +910,7 @@ def create_discord_scheduled_event(event_id, interaction_id=None):
     )
 
 
-def _create_discord_scheduled_event_impl(event_id):
+def _create_discord_scheduled_event_impl(event_id: int) -> str:
     event = get_event_for_task(event_id)
     if not event:
         return f"Failed: event {event_id} not found"
@@ -1063,7 +1085,7 @@ def delete_discord_scheduled_event(guild_id: str, scheduled_event_id: str) -> st
 
 
 @shared_task
-def sync_discord_event_signups(event_id, interaction_id=None):
+def sync_discord_event_signups(event_id: int, interaction_id: str | None = None) -> str:
     """Sync signup count to Discord scheduled event description."""
     return _run_with_bookends(
         "sync_discord_event_signups",
@@ -1073,7 +1095,7 @@ def sync_discord_event_signups(event_id, interaction_id=None):
     )
 
 
-def _sync_discord_event_signups_impl(event_id):
+def _sync_discord_event_signups_impl(event_id: int) -> str:
     event = get_event_for_task(event_id)
     if not event:
         return f"Failed: event {event_id} not found"
@@ -1117,7 +1139,9 @@ def _sync_discord_event_signups_impl(event_id):
 
 
 @shared_task
-def mark_interested_discord_event(event_id, user_id, interaction_id=None):
+def mark_interested_discord_event(
+    event_id: int, user_id: int, interaction_id: str | None = None
+) -> str:
     """Mark a user as 'interested' on the Discord scheduled event."""
     return _run_with_bookends(
         "mark_interested_discord_event",
@@ -1128,7 +1152,7 @@ def mark_interested_discord_event(event_id, user_id, interaction_id=None):
     )
 
 
-def _mark_interested_discord_event_impl(event_id, user_id):
+def _mark_interested_discord_event_impl(event_id: int, user_id: int) -> str:
     event = get_event_for_task(event_id)
     if not event:
         return f"Failed: event {event_id} not found"
@@ -1169,7 +1193,9 @@ def _mark_interested_discord_event_impl(event_id, user_id):
 
 
 @shared_task
-def fire_event_reminder(event_id, reminder_type, fired_by_user_id=None):
+def fire_event_reminder(
+    event_id: int, reminder_type: str, fired_by_user_id: int | None = None
+) -> str:
     """Manually fire a specific reminder for a specific event.
 
     Bypasses time threshold checks but respects idempotency via message log.
@@ -1237,7 +1263,7 @@ def fire_event_reminder(event_id, reminder_type, fired_by_user_id=None):
 
 
 @shared_task(acks_late=True, reject_on_worker_lost=True)
-def check_event_reminders():
+def check_event_reminders() -> str:
     """Beat-scheduled every 30s. Delegates to the registry-driven fire path.
 
     All reminder dispatch logic lives in events.scheduling.fire — the
@@ -1260,7 +1286,7 @@ def check_event_reminders():
 
 
 @shared_task(acks_late=True, reject_on_worker_lost=True)
-def send_subscriber_notifications(event_id):
+def send_subscriber_notifications(event_id: int) -> str:
     """Send signup reminder DMs to repeater subscribers who haven't signed up.
 
     Wraps the entire subscriber-DM loop in a lease so concurrent dispatches

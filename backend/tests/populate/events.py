@@ -176,6 +176,7 @@ def populate_events_data(force=False):
             org_user=ou,
             defaults={
                 "rank_status": profile_data.get("rank_status", "never"),
+                "rank_declared_at": tz.now(),
                 "rank_medal": profile_data.get("rank_medal", ""),
                 "mmr": profile_data.get("mmr"),
                 "battle_cup_tier": profile_data.get("battle_cup_tier"),
@@ -212,9 +213,7 @@ def populate_events_data(force=False):
     if event_league_staff:
         if event_league_staff not in league.staff.all():
             league.staff.add(event_league_staff)
-            print(
-                f"    Added {event_league_staff.username} as staff of {league.name}"
-            )
+            print(f"    Added {event_league_staff.username} as staff of {league.name}")
         invalidate_obj(league)
 
     # 5. Create a sample EventRepeater + Event for E2E tests
@@ -561,7 +560,7 @@ def populate_events_data(force=False):
     # Add captains as team members
     team_a.members.add(site_admin)
     team_b.members.add(CustomUser.objects.get(pk=EVENTS_USERS[0].pk))
-    print(f"    Created Draft Test Tournament (pk=100) with 10 players, 2 captains")
+    print("    Created Draft Test Tournament (pk=100) with 10 players, 2 captains")
 
     # 6. Create org event defaults
     OrgEventDefaults.objects.update_or_create(

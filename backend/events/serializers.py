@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Any
 
 import nh3
@@ -11,10 +12,12 @@ from app.models import CustomUser, League, Organization
 from app.permissions_org import (
     can_view_org_members,
     check_lobby_steam_league_id,
+    has_event_staff_access,
     request_user,
 )
 from app.serializers import TournamentUserSerializer, _serialize_users_with_mmr
 from app.user_cache import serialize_users_core
+from events.capacity import seat_holding_statuses
 from events.mmr_suggestions import suggest_mmr
 from events.models import (
     Event,
@@ -273,7 +276,7 @@ class EventRepeaterSerializer(
             **READY_CHECK_FIELD_KWARGS,
         }
 
-    def validate_description(self, value):
+    def validate_description(self, value: str | None) -> str | None:
         return nh3.clean(value) if value else value
 
     def validate(self, data: dict[str, Any]) -> dict[str, Any]:
@@ -548,7 +551,7 @@ class EventSerializer(
         instance.save(update_fields=[*validated_data, "updated_at"])
         return instance
 
-    def validate_description(self, value):
+    def validate_description(self, value: str | None) -> str | None:
         return nh3.clean(value) if value else value
 
     def validate_organization(self, value: Organization) -> Organization:
@@ -631,7 +634,7 @@ class EventSerializer(
                 {"ends_at": "End time must be after the start time."}
             )
 
-    def _validate_lobby_password(self, data):
+    def _validate_lobby_password(self, data: dict[str, Any]) -> None:
         """Fixed needs a valid password; random keeps or generates one.
 
         Switching to random (or a random event without a password) leaves the
@@ -731,6 +734,8 @@ class EventSignupSerializer(serializers.ModelSerializer):
     suggested_mmr = serializers.SerializerMethodField()
     suggested_mmr_range = serializers.SerializerMethodField()
     suggested_mmr_range_source = serializers.SerializerMethodField()
+    holds_seat = serializers.SerializerMethodField()
+    unmet_requirements = serializers.SerializerMethodField()
 
     class Meta:
         model = EventSignup
@@ -752,6 +757,8 @@ class EventSignupSerializer(serializers.ModelSerializer):
             "signup_type",
             "status",
             "waitlist_position",
+            "holds_seat",
+            "unmet_requirements",
             "created_at",
             "updated_at",
         ]
@@ -852,6 +859,25 @@ class EventSignupSerializer(serializers.ModelSerializer):
                 data.pop(key, None)
         return data
 
+    def get_holds_seat(self, signup: EventSignup) -> bool:
+        return signup.status in seat_holding_statuses(signup.event)
+
+    def get_unmet_requirements(self, signup: EventSignup) -> list[str]:
+        """Visible to the signup owner and event staff only."""
+        request = self.context.get("request")
+        if request is None:
+            return []
+        user = request.user
+        if not user.is_authenticated:
+            return []
+        if user.pk != signup.user_id:
+            cache: dict[int, bool] = self.context.setdefault("_event_staff", {})
+            if signup.event_id not in cache:
+                cache[signup.event_id] = has_event_staff_access(user, signup.event)
+            if not cache[signup.event_id]:
+                return []
+        return list(signup.unmet_requirements or [])
+
     def get_dota_profile(self, obj: EventSignup) -> dict[str, Any] | None:
         """Return DotaProfile data if the user has one for this event's org."""
         profile = self._dota_profile(obj)
@@ -910,16 +936,16 @@ class EventSignupSerializer(serializers.ModelSerializer):
         org_user = self._org_user(obj)
         return org_user.pk if org_user else None
 
-    def get_suggested_mmr(self, obj):
+    def get_suggested_mmr(self, obj: EventSignup) -> int:
         return self._mmr_suggestion(obj)["default"]
 
-    def get_suggested_mmr_range(self, obj):
+    def get_suggested_mmr_range(self, obj: EventSignup) -> list[int]:
         return self._mmr_suggestion(obj)["range"]
 
-    def get_suggested_mmr_range_source(self, obj):
+    def get_suggested_mmr_range_source(self, obj: EventSignup) -> str:
         return self._mmr_suggestion(obj)["range_source"]
 
-    def _mmr_suggestion(self, obj):
+    def _mmr_suggestion(self, obj: EventSignup) -> dict[str, Any]:
         """Memoize the suggest_mmr result per signup instance."""
         if hasattr(obj, "_mmr_suggestion_cache"):
             return obj._mmr_suggestion_cache
@@ -1094,7 +1120,7 @@ class OneOffEventCreateSerializer(LobbySteamLeagueMixin, serializers.ModelSerial
             },
         }
 
-    def validate_scheduled_at(self, value):
+    def validate_scheduled_at(self, value: datetime) -> datetime:
         if value <= timezone.now():
             raise serializers.ValidationError("Scheduled time must be in the future.")
         repeater = self.context["repeater"]
@@ -1104,7 +1130,7 @@ class OneOffEventCreateSerializer(LobbySteamLeagueMixin, serializers.ModelSerial
             )
         return value
 
-    def validate_tournament_league(self, value):
+    def validate_tournament_league(self, value: League | None) -> League | None:
         repeater = self.context["repeater"]
         if value is not None and value.organization_id != repeater.organization_id:
             raise serializers.ValidationError(
@@ -1148,7 +1174,7 @@ class OneOffEventCreateSerializer(LobbySteamLeagueMixin, serializers.ModelSerial
             overrides.pop("dota_lobby_password", None)
         return data
 
-    def to_internal_value(self, data):
+    def to_internal_value(self, data: Any) -> dict[str, Any]:
         validated = super().to_internal_value(data)
         # Source overrides from the COERCED values, never the raw body:
         # tournament_league is a ForeignKey and setattr() rejects a bare pk.

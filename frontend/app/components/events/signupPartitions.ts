@@ -23,6 +23,7 @@ export function canRestoreSignup(status: string): boolean {
   return restorableStatuses.has(status);
 }
 
+/** Seat-holding is the server's call (holds_seat); removed rows go by status. */
 export function partitionSignups(signups: EventSignupType[]): SignupPartitions {
   const parts: SignupPartitions = {
     active: [],
@@ -36,7 +37,7 @@ export function partitionSignups(signups: EventSignupType[]): SignupPartitions {
       parts.tentative.push(signup);
     else if (signup.status === SignupStatus.WAITLISTED)
       parts.waitlisted.push(signup);
-    else parts.active.push(signup);
+    else if (signup.holds_seat ?? false) parts.active.push(signup);
   }
   return parts;
 }

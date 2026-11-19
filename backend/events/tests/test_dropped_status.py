@@ -8,6 +8,7 @@ from django.utils import timezone as tz
 from rest_framework.test import APIClient
 
 from app.models import CustomUser, PositionsModel
+from events.capacity import count_seats
 from events.constants import EventState, SignupStatus
 from events.discord._shared import _existing_active_signup
 from events.discord.embeds import build_announcement_embeds, build_announcement_v2
@@ -15,7 +16,6 @@ from events.discord.handlers import handle_signup_button
 from events.models import Event, EventSignup, ReadyCheck, ReadyCheckEntry
 from events.ready_check_constants import DROPPED_SIGNUP_MESSAGE, ReadyCheckEntryState
 from events.services import (
-    _get_active_signup_count,
     cancel_signup,
     create_tentative_signup,
     decline_signup,
@@ -55,11 +55,11 @@ class DroppedStatusTests(EventTestCase):
     def _dropped(self) -> EventSignup:
         return self._signup(self.player, SignupStatus.DROPPED)
 
-    def test_active_count_excludes_dropped(self) -> None:
+    def test_seat_count_excludes_dropped(self) -> None:
         self._signup(self._player("approved_player"), SignupStatus.APPROVED)
         self._dropped()
 
-        self.assertEqual(_get_active_signup_count(self.dropped_event), 1)
+        self.assertEqual(count_seats(self.dropped_event), 1)
 
     def test_signup_count_annotation_excludes_dropped(self) -> None:
         self._signup(self._player("approved_player"), SignupStatus.APPROVED)
@@ -180,7 +180,9 @@ class DroppedStatusTests(EventTestCase):
 
 
 def _row(name: str, status: str) -> SimpleNamespace:
-    return SimpleNamespace(display_name=name, status=status, waitlist_position=None)
+    return SimpleNamespace(
+        display_name=name, status=status, waitlist_position=None, holds_seat=None
+    )
 
 
 class DroppedEmbedTests(EventTestCase):

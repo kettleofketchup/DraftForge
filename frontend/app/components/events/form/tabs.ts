@@ -59,6 +59,7 @@ const APPROVAL_FIELDS = new Set<string>([
   'require_steam_id',
   'require_mmr_verified',
   'require_profile_complete',
+  'allow_user_signups',
 ]);
 
 export const READY_CHECK_FIELDS = new Set<string>(

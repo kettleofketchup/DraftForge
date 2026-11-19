@@ -22,7 +22,6 @@ import {
 import { useRepeaterLobbyPassword } from '~/hooks/useLobbyPassword';
 import { ApprovalConfigSection } from './ApprovalConfigSection';
 import { DiscordConfigSection } from './DiscordConfigSection';
-import { ReadyCheckConfigSection } from './ReadyCheckConfigSection';
 import {
   discordResetValues,
   dotaLobbyResetValues,
@@ -36,12 +35,15 @@ import {
   TimezoneField,
   type EventFormDialogHandle,
 } from './form';
+import { ReadyCheckConfigSection } from './ReadyCheckConfigSection';
 import {
   createSeriesEventInputSchema,
   localToUTC,
   refineReadyCheck,
   type CreateSeriesEventInput,
 } from './schemas';
+import { signupRulesFrom } from './signupRules';
+import { SignupRulesSection } from './SignupRulesSection';
 
 const ids = eventFieldTestIds('one-off');
 
@@ -112,6 +114,7 @@ export function CreateSeriesEventModal({
       // A one-off has a repeater, so the subscriber reminder is valid here —
       // unlike CreateEventModal's repeater-less branch, which forces it off.
       ...discordResetValues(repeater),
+      ...signupRulesFrom(repeater),
       ...dotaLobbyResetValues(repeater, { savedFromMode: false }),
       ...readyCheckResetValues(repeater),
     });
@@ -262,7 +265,13 @@ export function CreateSeriesEventModal({
         {
           value: 'approval',
           content: (
-            <ApprovalConfigSection control={form.control} watch={form.watch} />
+            <div className="space-y-6">
+              <ApprovalConfigSection
+                control={form.control}
+                watch={form.watch}
+              />
+              <SignupRulesSection control={form.control} />
+            </div>
           ),
         },
         {

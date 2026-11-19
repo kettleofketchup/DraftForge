@@ -6,8 +6,20 @@ import {
   partitionSignups,
 } from '../signupPartitions';
 
-function signup(id: number, status: string): EventSignupType {
-  return { id, status } as unknown as EventSignupType;
+const SEAT_HOLDING = new Set([
+  'rsvp',
+  'pending_approval',
+  'approved',
+  'confirmed',
+]);
+
+function signup(
+  id: number,
+  status: string,
+  holds_seat: boolean | undefined = SEAT_HOLDING.has(status),
+): EventSignupType {
+  const base = { id, status } as unknown as EventSignupType;
+  return holds_seat === undefined ? base : { ...base, holds_seat };
 }
 
 describe('partitionSignups', () => {
@@ -37,6 +49,15 @@ describe('partitionSignups', () => {
       signup(2, 'waitlisted'),
     ]);
     expect(parts.active).toEqual([]);
+  });
+
+  it('lets holds_seat, not the status, decide active', () => {
+    expect(partitionSignups([signup(1, 'rsvp', false)]).active).toEqual([]);
+  });
+
+  it('treats a row without holds_seat as not active', () => {
+    const bare = { id: 1, status: 'approved' } as unknown as EventSignupType;
+    expect(partitionSignups([bare]).active).toEqual([]);
   });
 
   it('returns empty groups for no signups', () => {

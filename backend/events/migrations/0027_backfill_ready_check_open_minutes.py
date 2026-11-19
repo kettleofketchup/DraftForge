@@ -23,7 +23,7 @@ def backfill(apps: Apps, schema_editor: BaseDatabaseSchemaEditor) -> None:
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("events", "0025_ready_check_settings"),
+        ("events", "0026_ready_check_settings"),
     ]
 
     operations = [

@@ -1,4 +1,6 @@
+import itertools
 from datetime import timedelta
+from typing import ClassVar
 
 from django.test import TestCase
 from django.utils import timezone as tz
@@ -6,10 +8,16 @@ from django.utils import timezone as tz
 from app.models import CustomUser, League, Organization, PositionsModel
 from events.constants import EventState
 from events.models import Event
+from org.models import OrgUser
+
+_helper_ids = itertools.count(1)
 
 
 class EventTestCase(TestCase):
     """Shared setUp for all events tests."""
+
+    org: ClassVar[Organization]
+    admin: ClassVar[CustomUser]
 
     @classmethod
     def setUpTestData(cls):
@@ -75,3 +83,28 @@ class EventTestCase(TestCase):
             require_mmr_verified=True,
             require_profile_complete=True,
         )
+
+    def make_event(self, **overrides: object) -> Event:
+        fields: dict[str, object] = {
+            "organization": self.org,
+            "name": f"Helper Event {next(_helper_ids)}",
+            "scheduled_at": tz.now() + timedelta(days=7),
+            "state": EventState.SIGNUPS_OPEN,
+            "created_by": self.admin,
+            "auto_approve": True,
+            "require_steam_id": False,
+            "require_mmr_verified": False,
+            "require_profile_complete": False,
+        }
+        fields.update(overrides)
+        return Event.objects.create(**fields)
+
+    def make_user(self, *, steamid: int | None = None) -> CustomUser:
+        user = CustomUser.objects.create_user(
+            username=f"helper_user_{next(_helper_ids)}", password="testpass"
+        )
+        if steamid is not None:
+            user.steamid = steamid
+            user.save()
+        OrgUser.objects.get_or_create(user=user, organization=self.org)
+        return user

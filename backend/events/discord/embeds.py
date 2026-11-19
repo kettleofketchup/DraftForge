@@ -4,13 +4,34 @@ Embed builders for Discord event notifications.
 Pure functions that construct embed dicts for the Discord API.
 """
 
+from collections.abc import Sequence
+from datetime import datetime
+from typing import TYPE_CHECKING, Any, Protocol
+
 from django.conf import settings
 
 from app.constants import LOGO_URL
 from app.internal_client import get_event_signups
+from events.constants import SEAT_HOLDING_STATUSES
 from telemetry.logging import get_logger
 
+if TYPE_CHECKING:
+    from events.models import Event
+    from events.schemas import EventTaskSchema
+
+    EmbedEvent = Event | EventTaskSchema
+
 logger = get_logger(__name__)
+
+
+class _Listed(Protocol):
+    display_name: str
+    status: str
+
+
+class _SeatListed(_Listed, Protocol):
+    holds_seat: bool | None
+
 
 SITE_URL = getattr(settings, "SITE_URL", "") or "https://localhost"
 
@@ -22,28 +43,37 @@ COLOR_PROFILE = 0xEB459E  # Fuchsia
 COLOR_NEW_EVENT = 0x00B0F4  # Cyan
 
 
-def _discord_timestamp(dt, style="F"):
+def _discord_timestamp(dt: datetime, style: str = "F") -> str:
     """Format a datetime as a Discord timestamp. Style: F=full, R=relative, t=time, d=date."""
     return f"<t:{int(dt.timestamp())}:{style}>"
 
 
-def _event_url(event):
+def _event_url(event: "EmbedEvent") -> str:
     return f"{SITE_URL}/events/{event.pk}" if SITE_URL else ""
 
 
-INACTIVE_STATUSES = {"cancelled", "rejected", "waitlisted", "tentative", "dropped"}
 DECLINED_STATUSES = {"cancelled", "rejected", "dropped"}
 CONFIRMED_STATUSES = {"confirmed", "approved"}
 
 
-def _signup_counts(event):
+def _holds_seat(signup: _SeatListed) -> bool:
+    if signup.holds_seat is not None:
+        return signup.holds_seat
+    return signup.status in SEAT_HOLDING_STATUSES
+
+
+def _seated(signups: Sequence[_SeatListed]) -> list[_SeatListed]:
+    return [s for s in signups if _holds_seat(s)]
+
+
+def _signup_counts(event: "EmbedEvent") -> tuple[int, int]:
     signups = get_event_signups(event.pk)
-    active = [s for s in signups if s.status not in INACTIVE_STATUSES]
+    active = _seated(signups)
     confirmed = [s for s in signups if s.status == "confirmed"]
     return len(active), len(confirmed)
 
 
-def _user_list(signups, max_items=40):
+def _user_list(signups: Sequence[_Listed], max_items: int = 40) -> str:
     """Build a newline-separated list of user display names from signups."""
     lines = []
     for s in signups[:max_items]:
@@ -54,7 +84,9 @@ def _user_list(signups, max_items=40):
     return "\n".join(lines) if lines else "*None yet*"
 
 
-def _user_list_quoted(signups, max_items=40, numbered=True):
+def _user_list_quoted(
+    signups: Sequence[_Listed], max_items: int = 40, numbered: bool = True
+) -> str:
     """Build a blockquoted numbered list of user display names from signups."""
     lines = []
     for i, s in enumerate(signups[:max_items], 1):
@@ -75,13 +107,20 @@ EMBED_FIELD_VALUE_LIMIT = 1024  # Discord per-field char limit
 class _IconStrip:
     """Wraps a signup object with an icon prefix prepended to display_name."""
 
-    def __init__(self, s, icon):
+    def __init__(self, s: _Listed, icon: str) -> None:
         self._s = s
         self.display_name = f"{icon} {s.display_name}"
         self.status = s.status
 
 
-def build_user_list_fields(signups, *, name, inline=True, max_items=40, numbered=False):
+def build_user_list_fields(
+    signups: Sequence[_Listed],
+    *,
+    name: str,
+    inline: bool = True,
+    max_items: int = 40,
+    numbered: bool = False,
+) -> list[dict[str, Any]]:
     """Build one or more embed fields for a signup list.
 
     Returns a list of {name, value, inline} dicts. Splits into a 'cont.' field
@@ -131,7 +170,7 @@ def build_user_list_fields(signups, *, name, inline=True, max_items=40, numbered
     return fields
 
 
-def build_announcement_embeds(event):
+def build_announcement_embeds(event: "EmbedEvent") -> list[dict[str, Any]]:
     """Build two embeds for event announcement: info + participants.
 
     Returns a list of embed dicts (for the Discord API 'embeds' array).
@@ -178,7 +217,7 @@ def build_announcement_embeds(event):
     # Embed 2: Participants (fetched via public API)
     all_signups = get_event_signups(event.pk)
 
-    active = [s for s in all_signups if s.status not in INACTIVE_STATUSES]
+    active = _seated(all_signups)
     count = len(active)
     max_display = str(event.max_players) if event.max_players else "\u221e"
 
@@ -220,7 +259,7 @@ def build_announcement_embeds(event):
     return [info_embed, participants_embed]
 
 
-def build_announcement_embed(event):
+def build_announcement_embed(event: "EmbedEvent") -> dict[str, Any]:
     """Backward-compatible single embed (returns first embed only).
 
     Use build_announcement_embeds() for the full two-embed layout.
@@ -233,7 +272,7 @@ def build_announcement_embed(event):
     return combined
 
 
-def build_announcement_v2(event):
+def build_announcement_v2(event: "EmbedEvent") -> dict[str, Any]:
     """Build embed + components payload for event announcement.
 
     Returns dict with 'embed' (single embed dict) and 'components' (action rows).
@@ -290,14 +329,14 @@ def build_announcement_v2(event):
     all_signups = get_event_signups(event.pk)
 
     # Signed Up
-    active = [s for s in all_signups if s.status not in INACTIVE_STATUSES]
+    active = _seated(all_signups)
     count = len(active)
     max_display = str(event.max_players) if event.max_players else "\u221e"
 
     class _PendingStrip:
         """Wraps signup with blockquote + pending suffix for non-confirmed."""
 
-        def __init__(self, s, idx):
+        def __init__(self, s: _Listed, idx: int) -> None:
             self.status = s.status
             if s.status in CONFIRMED_STATUSES:
                 self.display_name = f"> {idx}. {s.display_name}"
@@ -388,7 +427,9 @@ def build_announcement_v2(event):
     return result
 
 
-def build_announcement_notice(event, signup_link=None):
+def build_announcement_notice(
+    event: "EmbedEvent", signup_link: str | None = None
+) -> dict[str, Any]:
     """Build a lightweight announcement embed that links to the signup post.
 
     Posted to the announcement channel to notify users about a new event.
@@ -441,7 +482,7 @@ def build_announcement_notice(event, signup_link=None):
     return result
 
 
-def build_signup_update_embed(event):
+def build_signup_update_embed(event: "EmbedEvent") -> dict[str, Any]:
     active, confirmed = _signup_counts(event)
     max_display = str(event.max_players) if event.max_players else "\u221e"
     return {
@@ -455,7 +496,7 @@ def build_signup_update_embed(event):
     }
 
 
-def build_new_event_embed(event):
+def build_new_event_embed(event: "EmbedEvent") -> dict[str, Any]:
     from zoneinfo import ZoneInfo
 
     desc = f"A new event has been created for **{event.organization.name}**!"
@@ -481,8 +522,13 @@ def build_new_event_embed(event):
 
 
 def _build_reminder_embed(
-    event, title, description, color, extra_fields=None, include_buttons=False
-):
+    event: "EmbedEvent",
+    title: str,
+    description: str,
+    color: int,
+    extra_fields: list[dict[str, Any]] | None = None,
+    include_buttons: bool = False,
+) -> dict[str, Any]:
     """Shared layout for all reminder embeds — matches announcement style.
 
     Includes: branding (org name + logo), event time, signup count, event page
@@ -581,7 +627,7 @@ def _build_reminder_embed(
     return result
 
 
-def build_signup_reminder_embed(event):
+def build_signup_reminder_embed(event: "EmbedEvent") -> dict[str, Any]:
     active, _confirmed = _signup_counts(event)
     max_display = str(event.max_players) if event.max_players else "\u221e"
     desc = event.description or ""
@@ -598,7 +644,7 @@ def build_signup_reminder_embed(event):
     )
 
 
-def build_attendance_reminder_embed(event):
+def build_attendance_reminder_embed(event: "EmbedEvent") -> dict[str, Any]:
     return _build_reminder_embed(
         event,
         title=f"\u270b {event.name} \u2014 Confirm Attendance",
@@ -608,7 +654,7 @@ def build_attendance_reminder_embed(event):
     )
 
 
-def build_profile_reminder_embed(event):
+def build_profile_reminder_embed(event: "EmbedEvent") -> dict[str, Any]:
     requirements = []
     if getattr(event, "require_steam_id", False):
         requirements.append("Steam ID")
@@ -626,7 +672,7 @@ def build_profile_reminder_embed(event):
     )
 
 
-def build_subscriber_dm_embed(event):
+def build_subscriber_dm_embed(event: "EmbedEvent") -> dict[str, Any]:
     """Build DM embed for subscriber pre-event notification.
 
     Works with both Django model instances and Pydantic EventTaskData.
