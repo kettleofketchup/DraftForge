@@ -42,6 +42,7 @@ from .models import (
     Organization,
     PositionsModel,
     Team,
+    TeamLog,
     Tournament,
 )
 
@@ -1347,6 +1348,69 @@ class TeamSerializer(serializers.ModelSerializer):
         )
 
 
+def _leadership_problem_rows(team: Team) -> list[dict[str, str]]:
+    # members.all() so tournament payloads reuse the teams__members prefetch.
+    member_pks = {user.pk for user in team.members.all()}
+    problems = Team.leadership_problems(
+        member_pks, team.captain_id, team.deputy_captain_id
+    )
+    return [
+        {"field": field, "code": str(problem), "message": problem.message}
+        for field, problem in problems.items()
+    ]
+
+
+class ManagedTeamSerializer(TeamSerializer):
+    """Read-only team detail for staff management; never used for writes."""
+
+    left_members = serializers.SerializerMethodField()
+    leadership_problems = serializers.SerializerMethodField()
+
+    def get_left_members(self, team: Team) -> ReturnList:
+        return _serialize_users_with_mmr(team.left_members.all(), team.tournament)
+
+    def get_leadership_problems(self, team: Team) -> list[dict[str, str]]:
+        return _leadership_problem_rows(team)
+
+    class Meta(TeamSerializer.Meta):
+        fields = (*TeamSerializer.Meta.fields, "leadership_problems")
+
+
+class TournamentTeamSerializer(TeamSerializerSlim):
+    leadership_problems = serializers.SerializerMethodField()
+
+    def get_leadership_problems(self, team: Team) -> list[dict[str, str]]:
+        return _leadership_problem_rows(team)
+
+    class Meta(TeamSerializerSlim.Meta):
+        fields = (*TeamSerializerSlim.Meta.fields, "leadership_problems")
+
+
+class TeamLogSerializer(serializers.ModelSerializer):
+    actor = TournamentUserSerializer(read_only=True, allow_null=True)
+    target = TournamentUserSerializer(
+        source="target_user", read_only=True, allow_null=True
+    )
+    team_id = serializers.IntegerField(source="team_snapshot_id", read_only=True)
+
+    class Meta:
+        model = TeamLog
+        fields = (
+            "id",
+            "action",
+            "via",
+            "actor",
+            "target",
+            "reason",
+            "override_rules",
+            "details",
+            "team_name",
+            "team_id",
+            "created_at",
+        )
+        read_only_fields = fields
+
+
 class TeamActionRequestSerializer(OverrideRequestSerializer):
     reason = serializers.CharField(
         required=False,
@@ -1392,7 +1456,7 @@ class TeamRenameRequestSerializer(TeamActionRequestSerializer):
 
 
 class TournamentSerializer(serializers.ModelSerializer):
-    teams = TeamSerializerSlim(many=True, read_only=True)
+    teams = TournamentTeamSerializer(many=True, read_only=True)
     users = serializers.SerializerMethodField()
     draft = DraftSerializerSlim(many=False, read_only=True)
     draft_options = DraftOptionsSerializer(required=False)
