@@ -1,6 +1,8 @@
 export { LockedFeaturesPanel } from './LockedFeaturesPanel';
 export {
+  conductKeys,
   contributionsKeys,
+  invalidateAllConduct,
   orgFeaturesKey,
   promotionKeys,
   removeFeatureQueries,

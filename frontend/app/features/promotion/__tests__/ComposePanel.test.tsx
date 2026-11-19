@@ -31,6 +31,10 @@ const access: OrgFeatureAccess = {
   canViewContributions: true,
   canViewContributors: false,
   canManageContributions: false,
+  canViewConduct: false,
+  canViewOwnConduct: false,
+  canViewConductDetails: false,
+  canManageConduct: false,
 };
 
 const event: PromoEvent = {

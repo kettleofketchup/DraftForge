@@ -19,6 +19,12 @@ describe('unmet requirement labels', () => {
     );
   });
 
+  it('describeUnmet labels the conduct threshold code', () => {
+    expect(describeUnmet(['conduct_below_threshold'])).toBe(
+      'Attendance record below org threshold',
+    );
+  });
+
   it('describeUnmet tolerates a missing field and unknown codes', () => {
     expect(describeUnmet(undefined)).toBe('');
     expect(describeUnmet([])).toBe('');

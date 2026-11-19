@@ -36,6 +36,10 @@ const access: OrgFeatureAccess = {
   canViewContributions: true,
   canViewContributors: true,
   canManageContributions: false,
+  canViewConduct: false,
+  canViewOwnConduct: false,
+  canViewConductDetails: false,
+  canManageConduct: false,
 };
 
 function row(

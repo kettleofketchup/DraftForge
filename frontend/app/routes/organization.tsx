@@ -504,6 +504,7 @@ export default function OrganizationDetailPage() {
         userCountDisplay,
         canViewMembers,
         canViewContributions,
+        canViewConduct: false,
         canUsePromotion,
         canViewClaims,
         canViewSettings,

@@ -9,7 +9,9 @@ import {
 import type { UserType } from '~/components/user/types';
 import { useUserStore } from '~/store/userStore';
 import {
+  conductKeys,
   contributionsKeys,
+  invalidateAllConduct,
   orgFeaturesKey,
   promotionKeys,
   removeFeatureQueries,
@@ -23,13 +25,17 @@ function setViewer(pk: number | null) {
 }
 
 const allTrue = {
-  features: ['contributions', 'promotion'],
+  features: ['conduct', 'contributions', 'promotion'],
   can_use_promotion: true,
   can_manage_promotion_templates: true,
   can_manage_promoters: true,
   can_view_contributions: true,
   can_view_contributors: true,
   can_manage_contributions: true,
+  can_view_conduct: true,
+  can_view_own_conduct: true,
+  can_view_conduct_details: true,
+  can_manage_conduct: true,
 };
 
 function org(viewerPk: number | null): OrganizationType {
@@ -49,6 +55,10 @@ const allFalseFlags = {
   canViewContributions: false,
   canViewContributors: false,
   canManageContributions: false,
+  canViewConduct: false,
+  canViewOwnConduct: false,
+  canViewConductDetails: false,
+  canManageConduct: false,
 };
 
 describe('OrganizationSchema feature fields', () => {
@@ -61,12 +71,17 @@ describe('OrganizationSchema feature fields', () => {
     expect(parsed.can_view_contributions).toBe(false);
     expect(parsed.can_view_contributors).toBe(false);
     expect(parsed.can_manage_contributions).toBe(false);
+    expect(parsed.can_view_conduct).toBe(false);
+    expect(parsed.can_view_own_conduct).toBe(false);
+    expect(parsed.can_view_conduct_details).toBe(false);
+    expect(parsed.can_manage_conduct).toBe(false);
   });
 
   it('keeps flags the backend sent', () => {
     const parsed = OrganizationSchema.parse({ name: 'Org', ...allTrue });
-    expect(parsed.features).toEqual(['contributions', 'promotion']);
+    expect(parsed.features).toEqual(['conduct', 'contributions', 'promotion']);
     expect(parsed.can_manage_contributions).toBe(true);
+    expect(parsed.can_manage_conduct).toBe(true);
   });
 });
 
@@ -105,6 +120,10 @@ describe('useOrgFeatureAccess', () => {
       canViewContributions: true,
       canViewContributors: true,
       canManageContributions: true,
+      canViewConduct: true,
+      canViewOwnConduct: true,
+      canViewConductDetails: true,
+      canManageConduct: true,
     });
   });
 
@@ -144,6 +163,8 @@ describe('removeFeatureQueries', () => {
     qc.setQueryData(promotionKeys.templates(7, 5), ['t']);
     qc.setQueryData(promotionKeys.events(7, 5), ['ev']);
     qc.setQueryData(promotionKeys.candidates(7, 5, 3, { n: 3 }), ['c']);
+    qc.setQueryData(conductKeys.leaderboard(7, 5), ['cl']);
+    qc.setQueryData(conductKeys.forecast(7, 5, 3), ['cf']);
     qc.setQueryData(['organization', 7], { pk: 7 });
     qc.setQueryData(orgFeaturesKey(7), ['f']);
     qc.setQueryData(contributionsKeys.leaderboard(8, 5, 'all'), ['other']);
@@ -183,5 +204,40 @@ describe('removeFeatureQueries', () => {
     ]) {
       expect(key.slice(0, pAll.length)).toEqual(pAll);
     }
+  });
+
+  it('nests every conduct key under its all() prefix', () => {
+    const all = conductKeys.all(7, 5);
+    expect(all).toEqual(['org-conduct', 7, 5]);
+    for (const key of [
+      conductKeys.leaderboard(7, 5),
+      conductKeys.member(7, 5, 11, { limit: 20, offset: 0 }),
+      conductKeys.settings(7, 5),
+      conductKeys.attendance(7, 5, 3),
+      conductKeys.forecast(7, 5, 3),
+    ]) {
+      expect(key.slice(0, all.length)).toEqual(all);
+    }
+  });
+});
+
+describe('invalidateAllConduct', () => {
+  it('invalidates conduct queries for every org and nothing else', async () => {
+    const qc = new QueryClient();
+    qc.setQueryData(conductKeys.leaderboard(7, 5), ['a']);
+    qc.setQueryData(conductKeys.settings(8, 5), ['b']);
+    qc.setQueryData(contributionsKeys.pointValues(7, 5), ['c']);
+
+    await invalidateAllConduct(qc);
+
+    expect(qc.getQueryState(conductKeys.leaderboard(7, 5))?.isInvalidated).toBe(
+      true,
+    );
+    expect(qc.getQueryState(conductKeys.settings(8, 5))?.isInvalidated).toBe(
+      true,
+    );
+    expect(
+      qc.getQueryState(contributionsKeys.pointValues(7, 5))?.isInvalidated,
+    ).toBe(false);
   });
 });

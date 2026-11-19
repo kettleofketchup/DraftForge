@@ -83,6 +83,10 @@ const base: OrgFeatureAccess = {
   canViewContributions: true,
   canViewContributors: true,
   canManageContributions: false,
+  canViewConduct: false,
+  canViewOwnConduct: false,
+  canViewConductDetails: false,
+  canManageConduct: false,
 };
 const admin: OrgFeatureAccess = { ...base, canManageContributions: true };
 

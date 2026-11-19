@@ -6,6 +6,7 @@ export interface OrgPageNavInput {
   userCountDisplay: number | string;
   canViewMembers: boolean;
   canViewContributions: boolean;
+  canViewConduct: boolean;
   canUsePromotion: boolean;
   canViewClaims: boolean;
   canViewSettings: boolean;
@@ -24,6 +25,9 @@ export function buildOrgPageNavOptions(
   }
   if (input.canViewContributions) {
     opts.push({ value: 'contributions', label: 'Contributions' });
+  }
+  if (input.canViewConduct) {
+    opts.push({ value: 'conduct', label: 'Conduct' });
   }
   if (input.canUsePromotion) {
     opts.push({ value: 'promotion', label: 'Promotion' });

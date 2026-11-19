@@ -10,6 +10,7 @@ const base: OrgPageNavInput = {
   userCountDisplay: 4,
   canViewMembers: false,
   canViewContributions: false,
+  canViewConduct: false,
   canUsePromotion: false,
   canViewClaims: false,
   canViewSettings: false,
@@ -39,12 +40,25 @@ describe('buildOrgPageNavOptions', () => {
     expect(values(base)).not.toContain('settings');
   });
 
+  it('adds conduct after contributions when allowed', () => {
+    expect(
+      values({ ...base, canViewContributions: true, canViewConduct: true }),
+    ).toEqual(['leagues', 'events', 'contributions', 'conduct']);
+  });
+
+  it('omits conduct when not allowed', () => {
+    expect(values({ ...base, canViewContributions: true })).not.toContain(
+      'conduct',
+    );
+  });
+
   it('keeps the tab order of the desktop tab list', () => {
     expect(
       values({
         ...base,
         canViewMembers: true,
         canViewContributions: true,
+        canViewConduct: true,
         canUsePromotion: true,
         canViewClaims: true,
         canViewSettings: true,
@@ -54,6 +68,7 @@ describe('buildOrgPageNavOptions', () => {
       'events',
       'users',
       'contributions',
+      'conduct',
       'promotion',
       'claims',
       'settings',
