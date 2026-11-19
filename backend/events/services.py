@@ -72,6 +72,7 @@ from events.schemas import DotaModalConfig
 from events.signup_schedule import SIGNUP_OPEN_POLICY_FIELDS, apply_signup_open_policy
 from lobby.passwords import PasswordMode, generate_password
 from org.conduct.capture import capture_late_cancel
+from org.conduct.lifecycle import void_event_outcomes
 from org.models import OrgUser
 from org.models_profiles import PlayerDotaProfile
 from telemetry.logging import get_logger
@@ -1127,6 +1128,40 @@ def ensure_tournament_with_signups(
     roster. Defaults to the start rule: confirmed only from roll call (#378),
     approved and confirmed when starting straight from signups."""
     return sync_event_roster(event, phase or start_phase(event)).tournament
+
+
+@transaction.atomic
+def cancel_event(event: Event, *, actor: CustomUser | None) -> Event:
+    # Function-local: events.tasks imports events.services.
+    from discordbot.models import DiscordEvent
+    from events.tasks import delete_discord_scheduled_event
+
+    if event.tournament:
+        tournament = event.tournament
+        event.tournament = None
+        event.save(update_fields=["tournament", "updated_at"])
+        tournament.delete()
+    event.transition_state(EventState.CANCELLED)
+    try:
+        discord_event = event.discord_event
+    except DiscordEvent.DoesNotExist:
+        discord_event = None
+    if discord_event is not None and discord_event.scheduled_event_id:
+        # Clearing the id stops the 60s sync_discord_events resurrecting it.
+        delete_discord_scheduled_event.delay(
+            discord_event.guild_id, discord_event.scheduled_event_id
+        )
+        discord_event.scheduled_event_id = None
+        discord_event.save(update_fields=["scheduled_event_id"])
+        log.info(
+            "event_cancel_discord_scheduled_event_deleted",
+            system="events",
+            subsystem="services",
+            event_id=event.pk,
+            guild_id=discord_event.guild_id,
+        )
+    void_event_outcomes(event, now=timezone.now(), actor=actor)
+    return event
 
 
 def teardown_event(event: Event) -> None:

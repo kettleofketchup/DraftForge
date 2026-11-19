@@ -71,6 +71,7 @@ from events.serializers import (
 from events.services import (
     apply_signup_input,
     approve_signup,
+    cancel_event,
     cancel_signup,
     changed_draft_option_fields,
     confirm_signup,
@@ -1014,37 +1015,8 @@ class EventViewSet(viewsets.ModelViewSet):
         event = self.get_object()
         if not has_event_staff_access(request.user, event):
             return Response(status=status.HTTP_403_FORBIDDEN)
-        # Function-local: events.tasks imports events.services, which imports this module.
-        from discordbot.models import DiscordEvent
-        from events.tasks import delete_discord_scheduled_event
-
         try:
-            with transaction.atomic():
-                # Delete linked tournament before cancelling
-                if event.tournament:
-                    tournament = event.tournament
-                    event.tournament = None
-                    event.save(update_fields=["tournament", "updated_at"])
-                    tournament.delete()
-                event.transition_state(EventState.CANCELLED)
-                try:
-                    discord_event = event.discord_event
-                except DiscordEvent.DoesNotExist:
-                    discord_event = None
-                if discord_event is not None and discord_event.scheduled_event_id:
-                    # Clearing the id stops the 60s sync_discord_events resurrecting it.
-                    delete_discord_scheduled_event.delay(
-                        discord_event.guild_id, discord_event.scheduled_event_id
-                    )
-                    discord_event.scheduled_event_id = None
-                    discord_event.save(update_fields=["scheduled_event_id"])
-                    logger.info(
-                        "event_cancel_discord_scheduled_event_deleted",
-                        system="events",
-                        subsystem="views",
-                        event_id=event.pk,
-                        guild_id=discord_event.guild_id,
-                    )
+            cancel_event(event, actor=request.user)
             qs = with_event_staff(with_signup_counts(Event.objects.filter(pk=event.pk)))
             data = EventSerializer(qs.first()).data
             _attach_user_can_manage(data, request.user)

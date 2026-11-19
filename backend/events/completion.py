@@ -10,6 +10,7 @@ from app.cache_utils import invalidate_after_commit
 from app.models import CustomUser, OrgLog
 from events.constants import EVENT_STATE_TRANSITIONS, EventState
 from events.models import Event
+from org.conduct.lifecycle import void_event_outcomes
 from org.contributions.services import SyncResult, sync_event_staff_entries
 from telemetry.logging import get_logger
 
@@ -93,6 +94,11 @@ def close_event(
                 contributions_awarded_at=now
             )
             event.contributions_awarded_at = now
+
+        if new_state == EventState.CANCELLED:
+            void_event_outcomes(
+                event, now=now, actor=actor if source == "admin" else None
+            )
 
         if source == "admin" and new_state == EventState.COMPLETED:
             OrgLog.objects.create(
