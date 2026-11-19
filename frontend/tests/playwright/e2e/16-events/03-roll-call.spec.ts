@@ -272,6 +272,7 @@ test.describe.serial('Roll Call Flow (@cicd)', () => {
     const secondId = await awaiting.nth(1).getAttribute('data-rollcall-row');
 
     await page.keyboard.press('1');
+    await expect(page.getByTestId('rollcall-confirm-summary')).toBeVisible();
     await page.keyboard.press('Enter');
     await expect(
       page.getByTestId(`rollcall-cancel-btn-${firstId}`),
