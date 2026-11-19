@@ -20,7 +20,7 @@ class PlaceholderSpec(TypedDict):
 PLACEHOLDERS: tuple[PlaceholderSpec, ...] = (
     {
         "key": "player",
-        "description": "Recipient's server nickname, site nickname, Discord name, or username",
+        "description": "Recipient's server nickname, Discord name, site nickname, or username",
     },
     {"key": "promoter", "description": "Your name"},
     {"key": "event", "description": "Event name"},

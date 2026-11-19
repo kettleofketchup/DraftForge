@@ -166,7 +166,7 @@ class PlayerNameTest(TestCase):
         spec = next(p for p in PLACEHOLDERS if p["key"] == "player")
         self.assertEqual(
             spec["description"],
-            "Recipient's server nickname, site nickname, Discord name, or username",
+            "Recipient's server nickname, Discord name, site nickname, or username",
         )
 
 
