@@ -251,6 +251,22 @@ body {
   --color-role-staff: var(--role-staff);
   --color-rank-ranked: var(--rank-ranked);
   --color-rank-unranked: var(--rank-unranked);
+  --color-tier-herald: var(--tier-herald);
+  --color-tier-guardian: var(--tier-guardian);
+  --color-tier-crusader: var(--tier-crusader);
+  --color-tier-archon: var(--tier-archon);
+  --color-tier-legend: var(--tier-legend);
+  --color-tier-ancient: var(--tier-ancient);
+  --color-tier-divine: var(--tier-divine);
+  --color-tier-immortal: var(--tier-immortal);
+  --color-attr-str: var(--attr-str);
+  --color-attr-agi: var(--attr-agi);
+  --color-attr-int: var(--attr-int);
+  --color-attr-all: var(--attr-all);
+  --color-bracket-losers: var(--bracket-losers);
+  --color-bracket-grand-finals: var(--bracket-grand-finals);
+  --color-bracket-swiss: var(--bracket-swiss);
+  --color-signup-tentative: var(--signup-tentative);
   --color-medal-gold: var(--medal-gold);
   --color-medal-silver: var(--medal-silver);
   --color-medal-bronze: var(--medal-bronze);
@@ -505,6 +521,30 @@ body {
   /* Dota rank status */
   --rank-ranked: oklch(0.879 0.169 91.6);
   --rank-unranked: oklch(0.809 0.105 251.8);
+
+  /* Dota rank medals */
+  --tier-herald: oklch(0.871 0.006 286.3);
+  --tier-guardian: oklch(0.879 0.169 91.6);
+  --tier-crusader: oklch(0.897 0.196 126.7);
+  --tier-archon: oklch(0.828 0.111 230.3);
+  --tier-legend: oklch(0.811 0.111 293.6);
+  --tier-ancient: oklch(0.808 0.114 19.6);
+  --tier-divine: oklch(0.865 0.127 207.1);
+  --tier-immortal: oklch(0.945 0.129 101.5);
+
+  /* Hero attributes */
+  --attr-str: oklch(0.637 0.237 25.3);
+  --attr-agi: oklch(0.723 0.219 149.6);
+  --attr-int: oklch(0.623 0.214 259.8);
+  --attr-all: oklch(0.795 0.184 86);
+
+  /* Bracket sections (surfaces) */
+  --bracket-losers: oklch(0.396 0.141 25.7);
+  --bracket-grand-finals: oklch(0.381 0.176 305);
+  --bracket-swiss: oklch(0.379 0.146 265.5);
+
+  /* Signup status without a generic token */
+  --signup-tentative: oklch(0.811 0.111 293.6);
 
   /* Placings and trophies */
   --medal-gold: oklch(0.795 0.184 86);

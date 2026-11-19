@@ -137,6 +137,10 @@ behind an accent. Use opacity modifiers for tints (`bg-radiant-surface/60`,
 | Positions | `pos-carry`, `pos-mid`, `pos-offlane`, `pos-soft-support`, `pos-hard-support`, each with `-surface` | Position badges, tooltips and the position SVG icons (`fill-pos-*`) | `rose`/`cyan`/`emerald`/`violet`/`indigo` `-200`/`-800`/`-900`, icon hex fills |
 | Site roles | `role-owner`, `role-admin`, `role-staff` | Owner/Admin/Staff badges and icons | `yellow-500` crown, `red-600`/`700` admin, `blue-600`/`700` staff |
 | Rank status | `rank-ranked`, `rank-unranked` | Dota rank-status badges (active/previous vs never ranked) | `amber-300` / `blue-300` outline badges |
+| Dota rank medals | `tier-herald`, `tier-guardian`, `tier-crusader`, `tier-archon`, `tier-legend`, `tier-ancient`, `tier-divine`, `tier-immortal` | Medal badges: `bg-tier-x/15 text-tier-x border-tier-x/30` | `zinc`/`amber`/`lime`/`sky`/`violet`/`red`/`cyan`/`yellow` medal maps |
+| Hero attributes | `attr-str`, `attr-agi`, `attr-int`, `attr-all` | Attribute headers and tints in the hero grid | `red`/`green`/`blue`/`yellow` `-900/40` |
+| Bracket sections | `bracket-losers`, `bracket-grand-finals`, `bracket-swiss` | Section and header tints for non-winners brackets (surfaces) | `red`/`purple`/`blue` `-900`/`-950` tints |
+| Signup status | `signup-tentative` | The Tentative badge; other statuses use `info`/`warning`/`primary`/`success`/`error` | `violet-300`/`-500` |
 | Placings | `medal-gold`, `medal-silver`, `medal-bronze` | 1st/2nd/3rd, trophies | `yellow-500`, `gray-400`, `amber-700` |
 | Presence | `online`, `offline`, `live` | Online dots, draft connection state, live match badges | `green-500` / `gray-400`/`500` / `red-500` dots |
 | Match stats | `stat-gold`, `stat-xp` | GPM and XPM numbers | `yellow-400`, `blue-400` |
