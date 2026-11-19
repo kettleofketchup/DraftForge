@@ -37,9 +37,17 @@ import {
   Users,
   XCircle,
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { EventStateBadge, MmrApprovalModal } from '~/components/events';
+import {
+  isApprovableSignup,
+  moveRollCallFocus,
+  resolveRollCallFocus,
+  rollCallFocusAfterAction,
+  rollCallRowActions,
+  splitRollCallRows,
+} from '~/components/events/rollCallNavigation';
 import type { EventSignupType } from '~/components/events/schemas';
 import { EventState, SignupStatus } from '~/components/events/schemas';
 import { canRestoreSignup } from '~/components/events/signupPartitions';
@@ -54,6 +62,7 @@ import {
 } from '~/components/ui/buttons';
 import { ConfirmDialog } from '~/components/ui/dialogs';
 import { EntityBreadcrumb } from '~/components/ui/entity-breadcrumb';
+import { Kbd } from '~/components/ui/kbd';
 import { UserStrip } from '~/components/user';
 import { DisplayName } from '~/components/user/avatar';
 import {
@@ -64,6 +73,7 @@ import {
   useSignupActionMutations,
 } from '~/hooks/useEvent';
 import { useResolvedUsers } from '~/hooks/useResolvedUsers';
+import { cn } from '~/lib/utils';
 
 export default function RollCallPage() {
   const { eventId } = useParams<{ eventId: string }>();
@@ -103,24 +113,39 @@ export default function RollCallPage() {
     [resolvedUsers],
   );
 
+  const rows = useMemo(() => splitRollCallRows(signups), [signups]);
+  const [focusedId, setFocusedId] = useState<number | null>(null);
+  const activeId = resolveRollCallFocus(rows, focusedId);
+  const scrollOnFocus = useRef(false);
+
+  const advanceFrom = useCallback(
+    (signup: EventSignupType) => {
+      setFocusedId(rollCallFocusAfterAction(rows, signup.id));
+    },
+    [rows],
+  );
+
   // Restore is non-destructive — fire the mutation directly. The backend
   // moves REJECTED/CANCELLED back to APPROVED during ROLL_CALL.
   const handleRestore = useCallback(
     (signup: EventSignupType) => {
+      advanceFrom(signup);
       signupActions.reinstate.mutate(signup.id, {
         onSuccess: () => toast.success(`Restored ${DisplayName(signup)}`),
         onError: () => toast.error('Failed to restore signup'),
       });
     },
-    [signupActions.reinstate],
+    [signupActions.reinstate, advanceFrom],
   );
 
-  // Hotkeys: 1 / 2 act on the first signup awaiting confirmation. They mirror
-  // the buttons (and their <Kbd> hints) shown next to that first row.
-  const firstAwaiting = useMemo(
-    () => signups.find((s) => s.status === SignupStatus.APPROVED) ?? null,
-    [signups],
-  );
+  const minPlayers = event?.min_players;
+  const canStart =
+    isAdmin &&
+    (!minPlayers || rows.confirmed.length >= minPlayers) &&
+    !actions.startTournament.isPending;
+
+  // ↑/↓ (or j/k) select a row; 1 runs its primary action, 2 removes it;
+  // S opens Start Tournament. Dialogs keep their own Enter/Backspace keys.
   useEffect(() => {
     if (!isAdmin) return;
     const handler = (e: KeyboardEvent) => {
@@ -134,7 +159,6 @@ export default function RollCallPage() {
         target?.isContentEditable
       )
         return;
-      // Ignore while another dialog is open — those have their own Enter/Backspace bindings.
       if (
         approvalSignup ||
         confirmSignup ||
@@ -143,26 +167,68 @@ export default function RollCallPage() {
         showStartConfirm
       )
         return;
-      if (!firstAwaiting) return;
-      if (e.key === '1') {
+
+      const move = (next: number | null) => {
         e.preventDefault();
-        setConfirmSignup(firstAwaiting);
-      } else if (e.key === '2') {
+        scrollOnFocus.current = true;
+        setFocusedId(next);
+      };
+      const active = rows.ordered.find((s) => s.id === activeId) ?? null;
+
+      switch (e.key) {
+        case 'ArrowDown':
+        case 'j':
+          return move(moveRollCallFocus(rows, activeId, 1));
+        case 'ArrowUp':
+        case 'k':
+          return move(moveRollCallFocus(rows, activeId, -1));
+        case 'Home':
+          return move(rows.ordered[0]?.id ?? null);
+        case 'End':
+          return move(rows.ordered.at(-1)?.id ?? null);
+        case 's':
+        case 'S':
+          if (!canStart) return;
+          e.preventDefault();
+          setShowStartConfirm(true);
+          return;
+      }
+
+      if (!active) return;
+      const { primary, remove } = rollCallRowActions(active.status);
+      if (e.key === '1' && primary) {
         e.preventDefault();
-        setRejectSignup(firstAwaiting);
+        if (primary === 'confirm') setConfirmSignup(active);
+        else if (primary === 'approve') setApprovalSignup(active);
+        else handleRestore(active);
+      } else if (e.key === '2' && remove) {
+        e.preventDefault();
+        if (remove === 'reject') setRejectSignup(active);
+        else setCancelSignup(active);
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [
     isAdmin,
-    firstAwaiting,
+    rows,
+    activeId,
+    canStart,
+    handleRestore,
     approvalSignup,
     confirmSignup,
     rejectSignup,
     cancelSignup,
     showStartConfirm,
   ]);
+
+  useEffect(() => {
+    if (!scrollOnFocus.current || activeId === null) return;
+    scrollOnFocus.current = false;
+    document
+      .querySelector(`[data-rollcall-row="${activeId}"]`)
+      ?.scrollIntoView({ block: 'nearest' });
+  }, [activeId]);
 
   if (isLoading) {
     return (
@@ -201,16 +267,26 @@ export default function RollCallPage() {
     );
   }
 
-  const confirmed = signups.filter((s) => s.status === 'confirmed');
-  const approved = signups.filter((s) => s.status === 'approved');
-  const others = signups.filter(
-    (s) => !['confirmed', 'approved'].includes(s.status),
-  );
-
+  const { confirmed, awaiting: approved, others } = rows;
   const totalReady = confirmed.length;
-  const minPlayers = event.min_players;
-  const maxPlayers = event.max_players;
-  const hasEnough = !minPlayers || totalReady >= minPlayers;
+
+  const renderStrip = (signup: EventSignupType) => (
+    <SignupStrip
+      key={signup.id}
+      signup={signup}
+      userMap={userMap}
+      isAdmin={isAdmin}
+      leaguePk={event.tournament_league ?? null}
+      signupActions={signupActions}
+      focused={isAdmin && signup.id === activeId}
+      onSelect={setFocusedId}
+      onRequestApproval={setApprovalSignup}
+      onRequestConfirm={setConfirmSignup}
+      onRequestReject={setRejectSignup}
+      onRequestCancel={setCancelSignup}
+      onRequestRestore={handleRestore}
+    />
+  );
 
   return (
     <div className="container mx-auto py-6 px-4 space-y-6">
@@ -274,7 +350,7 @@ export default function RollCallPage() {
             {isAdmin && (
               <PrimaryButton
                 size="sm"
-                disabled={!hasEnough || actions.startTournament.isPending}
+                disabled={!canStart}
                 onClick={() => setShowStartConfirm(true)}
                 data-testid="rollcall-start-btn"
               >
@@ -289,6 +365,29 @@ export default function RollCallPage() {
           </div>
         </div>
 
+        {isAdmin && signups.length > 0 && (
+          <p
+            data-testid="rollcall-keyboard-legend"
+            className="hidden sm:flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground"
+          >
+            <span>
+              <Kbd>↑</Kbd> <Kbd>↓</Kbd> select
+            </span>
+            <span>
+              <Kbd>1</Kbd> confirm / approve / restore
+            </span>
+            <span>
+              <Kbd>2</Kbd> remove
+            </span>
+            <span>
+              <Kbd>↵</Kbd> accept dialog
+            </span>
+            <span>
+              <Kbd>S</Kbd> start tournament
+            </span>
+          </p>
+        )}
+
         {/* Confirmed players */}
         {confirmed.length > 0 && (
           <div>
@@ -298,24 +397,7 @@ export default function RollCallPage() {
             >
               Confirmed ({confirmed.length})
             </h3>
-            <div className="space-y-1.5">
-              {confirmed.map((signup) => (
-                <SignupStrip
-                  key={signup.id}
-                  signup={signup}
-                  userMap={userMap}
-                  isAdmin={isAdmin}
-                  gameType={event.game_type}
-                  leaguePk={event.tournament_league ?? null}
-                  signupActions={signupActions}
-                  onRequestApproval={setApprovalSignup}
-                  onRequestConfirm={setConfirmSignup}
-                  onRequestReject={setRejectSignup}
-                  onRequestCancel={setCancelSignup}
-                  onRequestRestore={handleRestore}
-                />
-              ))}
-            </div>
+            <div className="space-y-1.5">{confirmed.map(renderStrip)}</div>
           </div>
         )}
 
@@ -328,25 +410,7 @@ export default function RollCallPage() {
             >
               Awaiting Confirmation ({approved.length})
             </h3>
-            <div className="space-y-1.5">
-              {approved.map((signup, idx) => (
-                <SignupStrip
-                  key={signup.id}
-                  signup={signup}
-                  userMap={userMap}
-                  isAdmin={isAdmin}
-                  gameType={event.game_type}
-                  leaguePk={event.tournament_league ?? null}
-                  signupActions={signupActions}
-                  onRequestApproval={setApprovalSignup}
-                  onRequestConfirm={setConfirmSignup}
-                  onRequestReject={setRejectSignup}
-                  onRequestCancel={setCancelSignup}
-                  onRequestRestore={handleRestore}
-                  showAwaitingHotkeys={idx === 0 && isAdmin}
-                />
-              ))}
-            </div>
+            <div className="space-y-1.5">{approved.map(renderStrip)}</div>
           </div>
         )}
 
@@ -356,24 +420,7 @@ export default function RollCallPage() {
             <h3 className="text-sm font-semibold text-muted-foreground mb-2 uppercase tracking-wider">
               Other ({others.length})
             </h3>
-            <div className="space-y-1.5">
-              {others.map((signup) => (
-                <SignupStrip
-                  key={signup.id}
-                  signup={signup}
-                  userMap={userMap}
-                  isAdmin={isAdmin}
-                  gameType={event.game_type}
-                  leaguePk={event.tournament_league ?? null}
-                  signupActions={signupActions}
-                  onRequestApproval={setApprovalSignup}
-                  onRequestConfirm={setConfirmSignup}
-                  onRequestReject={setRejectSignup}
-                  onRequestCancel={setCancelSignup}
-                  onRequestRestore={handleRestore}
-                />
-              ))}
-            </div>
+            <div className="space-y-1.5">{others.map(renderStrip)}</div>
           </div>
         )}
 
@@ -393,6 +440,7 @@ export default function RollCallPage() {
           if (!open) setApprovalSignup(null);
         }}
         onApprove={(signupId, mmr) => {
+          if (approvalSignup) advanceFrom(approvalSignup);
           signupActions.approve.mutate(
             { id: signupId, mmr },
             {
@@ -442,6 +490,7 @@ export default function RollCallPage() {
         isLoading={signupActions.confirm.isPending}
         onConfirm={() => {
           if (!confirmSignup) return;
+          advanceFrom(confirmSignup);
           signupActions.confirm.mutate(confirmSignup.id, {
             onSuccess: () => setConfirmSignup(null),
           });
@@ -488,6 +537,7 @@ export default function RollCallPage() {
         isLoading={signupActions.reject.isPending}
         onConfirm={() => {
           if (!rejectSignup) return;
+          advanceFrom(rejectSignup);
           signupActions.reject.mutate(rejectSignup.id, {
             onSuccess: () => setRejectSignup(null),
             onError: () => toast.error('Failed to reject signup'),
@@ -534,6 +584,7 @@ export default function RollCallPage() {
         isLoading={signupActions.cancel.isPending}
         onConfirm={() => {
           if (!cancelSignup) return;
+          advanceFrom(cancelSignup);
           signupActions.cancel.mutate(cancelSignup.id, {
             onSuccess: () => setCancelSignup(null),
             onError: () => toast.error('Failed to remove player'),
@@ -579,54 +630,44 @@ function SignupStrip({
   signup,
   userMap,
   isAdmin,
-  gameType,
   leaguePk,
   signupActions,
+  focused,
+  onSelect,
   onRequestApproval,
   onRequestConfirm,
   onRequestReject,
   onRequestCancel,
   onRequestRestore,
-  showAwaitingHotkeys = false,
 }: {
   signup: EventSignupType;
   userMap: Map<number, import('~/store/userCacheTypes').UserEntry>;
   isAdmin: boolean;
-  gameType: number;
   leaguePk: number | null;
   signupActions: ReturnType<typeof useSignupActionMutations>;
+  focused: boolean;
+  onSelect: (id: number) => void;
   onRequestApproval: (signup: EventSignupType) => void;
   onRequestConfirm: (signup: EventSignupType) => void;
   onRequestReject: (signup: EventSignupType) => void;
   onRequestCancel: (signup: EventSignupType) => void;
   onRequestRestore: (signup: EventSignupType) => void;
-  showAwaitingHotkeys?: boolean;
 }) {
   const user = userMap.get(signup.user);
-
-  const isApprovable =
-    signup.status === SignupStatus.RSVP ||
-    signup.status === SignupStatus.PENDING_APPROVAL ||
-    signup.status === SignupStatus.WAITLISTED;
-
-  const handleApprove = () => {
-    // All games have an MMR concept — always open the approval modal so the
-    // admin can confirm/edit the prior approved MMR. Game-specific UI inside
-    // the modal (medal/range helper for Dota) gates itself via useGameType.
-    onRequestApproval(signup);
-  };
-
+  const isApprovable = isApprovableSignup(signup.status);
   const canRestore = canRestoreSignup(signup.status);
+  const primaryKey = focused ? '1' : undefined;
+  const removeKey = focused ? '2' : undefined;
 
   const actionSlot = isAdmin ? (
     <div className="flex gap-1">
-      {signup.status === 'approved' && (
+      {signup.status === SignupStatus.APPROVED && (
         <>
           <SecondaryButton
             color="green"
             size="sm"
             data-testid="rollcall-confirm-btn"
-            hotkey={showAwaitingHotkeys ? '1' : undefined}
+            hotkey={primaryKey}
             onClick={() => onRequestConfirm(signup)}
             disabled={signupActions.confirm.isPending}
           >
@@ -636,7 +677,7 @@ function SignupStrip({
           <DestructiveButton
             size="sm"
             data-testid="rollcall-reject-btn"
-            hotkey={showAwaitingHotkeys ? '2' : undefined}
+            hotkey={removeKey}
             onClick={() => onRequestReject(signup)}
             disabled={signupActions.reject.isPending}
           >
@@ -645,10 +686,11 @@ function SignupStrip({
           </DestructiveButton>
         </>
       )}
-      {signup.status === 'confirmed' && (
+      {signup.status === SignupStatus.CONFIRMED && (
         <DestructiveButton
           size="sm"
           data-testid={`rollcall-cancel-btn-${signup.id}`}
+          hotkey={removeKey}
           onClick={() => onRequestCancel(signup)}
           disabled={signupActions.cancel.isPending}
         >
@@ -658,11 +700,13 @@ function SignupStrip({
       )}
       {isApprovable && (
         <>
+          {/* Always open the MMR modal so the admin can confirm/edit the prior approved MMR. */}
           <SecondaryButton
             color="green"
             size="sm"
             data-testid="rollcall-approve-btn"
-            onClick={handleApprove}
+            hotkey={primaryKey}
+            onClick={() => onRequestApproval(signup)}
             disabled={signupActions.approve.isPending}
           >
             <CheckCircle2 className="h-3.5 w-3.5" />
@@ -671,6 +715,7 @@ function SignupStrip({
           <DestructiveButton
             size="sm"
             data-testid="rollcall-reject-btn"
+            hotkey={removeKey}
             onClick={() => onRequestReject(signup)}
             disabled={signupActions.reject.isPending}
           >
@@ -683,6 +728,7 @@ function SignupStrip({
         <SecondaryButton
           size="sm"
           data-testid="rollcall-restore-btn"
+          hotkey={primaryKey}
           onClick={() => onRequestRestore(signup)}
           disabled={signupActions.reinstate.isPending}
         >
@@ -693,32 +739,44 @@ function SignupStrip({
     </div>
   ) : undefined;
 
-  if (user) {
-    return (
-      <UserStrip
-        user={user}
-        compact
-        showPositions
-        organizationId={signup.organization ?? undefined}
-        statsLeagueId={leaguePk}
-        statsBreakpoint="wide"
-        contextSlot={<EventStateBadge state={signup.status} />}
-        actionSlot={actionSlot}
-      />
-    );
-  }
-
-  // Fallback for signups not yet in cache
   return (
-    <div className="flex items-center gap-3 rounded-lg p-2 border border-border/50 bg-muted/25">
-      <div className="w-9 h-9 rounded-full bg-muted shrink-0 flex items-center justify-center text-xs text-muted-foreground">
-        {(signup.username ?? '?')[0]?.toUpperCase()}
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium truncate">{DisplayName(signup)}</p>
-      </div>
-      <EventStateBadge state={signup.status} />
-      {actionSlot}
+    <div
+      data-rollcall-row={signup.id}
+      data-testid={`rollcall-row-${signup.id}`}
+      data-focused={focused || undefined}
+      aria-current={focused || undefined}
+      onPointerDown={isAdmin ? () => onSelect(signup.id) : undefined}
+      className={cn(
+        'rounded-lg transition-shadow',
+        focused && 'ring-2 ring-primary ring-offset-2 ring-offset-background',
+      )}
+    >
+      {user ? (
+        <UserStrip
+          user={user}
+          compact
+          showPositions
+          organizationId={signup.organization ?? undefined}
+          statsLeagueId={leaguePk}
+          statsBreakpoint="wide"
+          contextSlot={<EventStateBadge state={signup.status} />}
+          actionSlot={actionSlot}
+        />
+      ) : (
+        // Fallback for signups not yet in cache
+        <div className="flex items-center gap-3 rounded-lg p-2 border border-border/50 bg-muted/25">
+          <div className="w-9 h-9 rounded-full bg-muted shrink-0 flex items-center justify-center text-xs text-muted-foreground">
+            {(signup.username ?? '?')[0]?.toUpperCase()}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium truncate">
+              {DisplayName(signup)}
+            </p>
+          </div>
+          <EventStateBadge state={signup.status} />
+          {actionSlot}
+        </div>
+      )}
     </div>
   );
 }

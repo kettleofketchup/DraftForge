@@ -27,6 +27,10 @@ LOG_BASE: dict[str, object] = {
 }
 
 
+class InternalAPIUnavailable(RuntimeError):
+    """A read the caller cannot safely treat as empty failed."""
+
+
 def headers() -> dict[str, str]:
     return {
         "X-Internal-Token": os.environ.get("INTERNAL_SERVICE_TOKEN", ""),

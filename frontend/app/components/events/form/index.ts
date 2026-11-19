@@ -10,7 +10,6 @@ export * from './fields/SeriesScheduleFields';
 export * from './fields/TeamSizeFields';
 export * from './fields/TimezoneField';
 export * from './fields/TournamentNameField';
-export * from './FormTabsList';
 export * from './sections/EventLobbyFields';
 export * from './sections/EventTournamentFields';
 export * from './tabs';

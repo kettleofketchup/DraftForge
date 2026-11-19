@@ -42,7 +42,11 @@ import {
   READY_CHECK_CONFIG_DEFAULTS,
   readyCheckConfigSchema,
   refineReadyCheck,
+  SIGNUP_OPEN_DEFAULTS,
+  signupOpenSchema,
 } from './schemas';
+import { signupOpenFrom } from './signupOpen';
+import { SignupOpenSection } from './SignupOpenSection';
 import { signupRulesFrom } from './signupRules';
 import { SignupRulesSection } from './SignupRulesSection';
 
@@ -65,7 +69,8 @@ const orgDefaultsSchema = z
   })
   .merge(discordConfigSchema)
   .merge(DraftSettingsFormSchema)
-  .merge(readyCheckConfigSchema);
+  .merge(readyCheckConfigSchema)
+  .merge(signupOpenSchema);
 
 type OrgDefaultsInput = z.infer<typeof orgDefaultsSchema>;
 
@@ -121,6 +126,7 @@ export function EditOrgDefaultsModal({
       ...DISCORD_CONFIG_DEFAULTS,
       ...draftSettingsToFormInput(null),
       ...READY_CHECK_CONFIG_DEFAULTS,
+      ...SIGNUP_OPEN_DEFAULTS,
     },
   });
 
@@ -172,6 +178,7 @@ export function EditOrgDefaultsModal({
         ...signupRulesFrom(defaults),
         ...eventFieldsToDraftSettingsFormInput(defaults),
         ...readyCheckResetValues(defaults),
+        ...signupOpenFrom(defaults),
       });
     }
   }, [defaults, open]);
@@ -291,6 +298,7 @@ export function EditOrgDefaultsModal({
                   ))}
                 </div>
               </div>
+              <SignupOpenSection control={form.control} />
               <SignupRulesSection control={form.control} />
             </>
           ),

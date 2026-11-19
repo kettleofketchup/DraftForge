@@ -19,14 +19,43 @@ export type EventFormTabValue =
 
 export const EVENT_TAB_META: Record<
   EventFormTabValue,
-  { label: string; icon?: LucideIcon | typeof DiscordIcon }
+  {
+    label: string;
+    icon?: LucideIcon | typeof DiscordIcon;
+    /** Search terms for settings the dialog can't read off a closed tab. */
+    keywords: string[];
+  }
 > = {
-  event: { label: 'Event', icon: CalendarDays },
-  tournament: { label: 'Tournament', icon: Trophy },
-  lobby: { label: 'Lobby', icon: Gamepad2 },
-  approval: { label: 'Approval', icon: ShieldCheck },
-  ready: { label: 'Ready check', icon: ListChecks },
-  discord: { label: 'Discord', icon: DiscordIcon },
+  event: {
+    label: 'Event',
+    icon: CalendarDays,
+    keywords: ['name', 'description', 'schedule', 'date', 'time', 'timezone'],
+  },
+  tournament: {
+    label: 'Tournament',
+    icon: Trophy,
+    keywords: ['bracket', 'draft', 'teams', 'league', 'timer', 'captains'],
+  },
+  lobby: {
+    label: 'Lobby',
+    icon: Gamepad2,
+    keywords: ['game mode', 'password', 'region', 'steam league', 'dota'],
+  },
+  approval: {
+    label: 'Approval',
+    icon: ShieldCheck,
+    keywords: ['mmr', 'rank', 'screenshot', 'roll call', 'signup', 'steam'],
+  },
+  ready: {
+    label: 'Ready check',
+    icon: ListChecks,
+    keywords: ['ready', 'rsvp', 'confirmation', 'cull', 'voice', 'roll call'],
+  },
+  discord: {
+    label: 'Discord',
+    icon: DiscordIcon,
+    keywords: ['channel', 'role', 'announcement', 'reminder', 'notify', 'ping'],
+  },
 };
 
 export const READY_CHECK_FIELDS = new Set<string>(

@@ -2,11 +2,11 @@
 process.env.TZ = 'Europe/Berlin';
 
 import {
+  act,
   fireEvent,
   render,
   screen,
   waitFor,
-  within,
 } from '@testing-library/react';
 import { I18nextProvider } from 'react-i18next';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -40,6 +40,16 @@ vi.mock('sonner', () => ({
 }));
 
 import { EditEventModal } from '../EditEventModal';
+
+Element.prototype.scrollIntoView ??= vi.fn();
+
+const searchHits = (prefix: string) =>
+  screen.queryAllByTestId(`${prefix}-search-hit`).map((el) => {
+    const [label, section] = [...el.querySelectorAll('span')].map(
+      (s) => s.textContent,
+    );
+    return { el, label, section };
+  });
 
 // FormDialog renders a Radix ScrollArea, which jsdom cannot satisfy.
 class ResizeObserverStub {
@@ -100,6 +110,8 @@ const event: EventType = {
   require_profile_complete: false,
   roll_call_enabled: false,
   roll_call_mode: 'manual',
+  signup_open_mode: 'manual',
+  signups_open_hours_before: 72,
   allow_active_mmr: true,
   allow_previous_rank: true,
   allow_battlecup_rating: true,
@@ -371,15 +383,17 @@ describe('EditEventModal tabs and payload parity', () => {
     );
   });
 
-  it('finds signup rules under the Approval section and jumps to them', () => {
+  it('finds signup rules under the Approval section and jumps to them', async () => {
     renderModal(event);
-    fireEvent.change(screen.getByTestId('edit-event-settings-search'), {
+    fireEvent.change(screen.getByTestId('edit-event-search'), {
       target: { value: 'sign themselves' },
     });
-    const result = within(
-      screen.getByTestId('edit-event-search-group-approval'),
-    ).getByTestId('edit-event-search-result-allow_user_signups');
-    fireEvent.click(result);
+    const result = searchHits('edit-event').find(
+      (h) => h.label === 'Members can sign themselves up',
+    );
+    expect(result?.section).toBe('Approval');
+    fireEvent.click(result!.el);
+    await act(() => new Promise((r) => requestAnimationFrame(r)));
     expect(screen.getByTestId('edit-event-tab-approval')).toHaveAttribute(
       'data-state',
       'active',

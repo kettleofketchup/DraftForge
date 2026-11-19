@@ -13,6 +13,7 @@ import {
   localToUTC,
   READY_CHECK_CONFIG_DEFAULTS,
   refineEventEnd,
+  SIGNUP_OPEN_DEFAULTS,
   utcToLocalInput,
 } from '~/components/events/schemas';
 
@@ -141,6 +142,7 @@ describe('createSeriesEventInputSchema', () => {
       timezone: 'America/New_York',
       ...DISCORD_CONFIG_DEFAULTS,
       ...DOTA_LOBBY_CONFIG_DEFAULTS,
+      ...SIGNUP_OPEN_DEFAULTS,
     });
     expect(result.success).toBe(true);
   });
@@ -228,6 +230,7 @@ const DISCORD_KEYS = [
   'require_profile_complete',
   'allow_user_signups',
 ];
+const SIGNUP_OPEN_KEYS = ['signup_open_mode', 'signups_open_hours_before'];
 const LOBBY_KEYS = [
   'dota_lobby_mode',
   'dota_lobby_launch',
@@ -249,13 +252,12 @@ describe('event form schema key sets', () => {
         ...DISCORD_KEYS,
         ...LOBBY_KEYS,
         ...READY_CHECK_KEYS,
+        ...SIGNUP_OPEN_KEYS,
         ...[
           'scheduled_at',
           'organization',
           'tournament_league',
           'discord_notify_new_events',
-          'signup_mode',
-          'signup_days_before',
           'is_recurring',
           'frequency',
           'day_of_week',
@@ -276,7 +278,8 @@ describe('event form schema key sets', () => {
         ...DISCORD_KEYS,
         ...LOBBY_KEYS,
         ...READY_CHECK_KEYS,
-        ...['scheduled_at', 'tournament_league', 'open_signups'],
+        ...SIGNUP_OPEN_KEYS,
+        ...['scheduled_at', 'tournament_league'],
       ].sort(),
     );
   });
@@ -288,6 +291,7 @@ describe('event form schema key sets', () => {
         ...DISCORD_KEYS,
         ...LOBBY_KEYS,
         ...READY_CHECK_KEYS,
+        ...SIGNUP_OPEN_KEYS,
         ...[
           'scheduled_at',
           'event_ends_at',

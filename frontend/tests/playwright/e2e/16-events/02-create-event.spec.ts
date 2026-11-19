@@ -20,18 +20,10 @@ import {
 } from '../../fixtures';
 import { API_URL } from '../../fixtures/base-url';
 
-/**
- * Fields are split across sections; inactive panels are hidden. Wide screens
- * show a sidebar of sections, narrow ones a section picker.
- */
+/** Fields are split across sections; inactive panels are hidden. */
 async function openTab(page: Page, tab: 'event' | 'tournament' | 'lobby') {
   const trigger = page.getByTestId(`event-modal-tab-${tab}`);
-  if (await trigger.isVisible()) {
-    await trigger.click();
-  } else {
-    await page.getByTestId('event-modal-section-picker').click();
-    await page.getByTestId(`event-modal-section-option-${tab}`).click();
-  }
+  await trigger.click();
   await expect(trigger).toHaveAttribute('data-state', 'active');
 }
 
@@ -116,22 +108,22 @@ test.describe('Events - Create Event (@cicd)', () => {
 
     await page.getByTestId('event-modal-tab-event').focus();
     await page.keyboard.press('/');
-    const search = page.getByTestId('event-modal-settings-search');
+    const search = page.getByTestId('event-modal-search');
     await expect(search).toBeFocused();
-    await search.fill('people per team');
+    await search.fill('team size');
+    // A registry keyword: "team size" is in neither the label nor the description.
     await expect(
-      page.getByTestId('event-modal-search-group-tournament'),
-    ).not.toHaveAttribute('data-empty');
-    await expect(
-      page.getByTestId('event-modal-search-group-discord'),
-    ).toHaveAttribute('data-empty', '');
+      page.getByTestId('event-modal-search-hit').filter({
+        has: page.locator('span', { hasText: /^People Per Team$/ }),
+      }),
+    ).toContainText('Tournament');
+    await expect(page.getByTestId('event-modal-tab-discord')).toHaveCount(0);
     await page.keyboard.press('Enter');
 
     await expect(
       page.getByTestId('event-modal-tab-tournament'),
     ).toHaveAttribute('data-state', 'active');
     await expect(page.getByTestId('event-people-per-team-input')).toBeFocused();
-    await expect(search).toHaveValue('');
     // Enter picked the result; it must not have submitted the form.
     await expect(page.getByTestId('create-event-modal')).toBeVisible();
   });

@@ -39,6 +39,7 @@ class ResizeObserverStub {
 }
 globalThis.ResizeObserver ??=
   ResizeObserverStub as unknown as typeof ResizeObserver;
+Element.prototype.scrollIntoView ??= vi.fn();
 
 const schema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -151,9 +152,20 @@ const pick = (value: string) =>
 const panelOf = (testId: string) =>
   screen.getByTestId(testId).closest('[role="tabpanel"]');
 
-const search = () => screen.getByTestId('test-settings-search');
+const search = () => screen.getByTestId('test-search');
 const type = (q: string) =>
   fireEvent.change(search(), { target: { value: q } });
+const hits = () => screen.queryAllByTestId('test-search-hit');
+const hit = (label: string) => {
+  const found = hits().find(
+    (h) => h.querySelector('span')?.textContent === label,
+  );
+  if (!found) throw new Error(`no search hit "${label}"`);
+  return found;
+};
+const invalid = (value: string) =>
+  screen.getByTestId(`test-tab-${value}`).hasAttribute('data-invalid');
+const frame = () => act(() => new Promise((r) => requestAnimationFrame(r)));
 const isActive = (value: string) =>
   screen.getByTestId(`test-tab-${value}`).getAttribute('data-state') ===
   'active';
@@ -197,13 +209,6 @@ describe('EventFormDialog sections', () => {
     expect(isActive('event')).toBe(true);
     expect(screen.queryByTestId('panel-discord')).toBeNull();
   });
-
-  it('offers a section picker for small screens', () => {
-    render(<Harness />);
-    expect(screen.getByTestId('test-section-picker')).toHaveTextContent(
-      'Event',
-    );
-  });
 });
 
 describe('EventFormDialog validation', () => {
@@ -211,14 +216,11 @@ describe('EventFormDialog validation', () => {
 
   it('switches to the section of the first invalid field and marks it', async () => {
     render(<Harness values={{ ...valid, people_per_team: 0 }} />);
-    expect(screen.queryByTestId('test-tab-tournament-error')).toBeNull();
+    expect(invalid('tournament')).toBe(false);
     fireEvent.click(screen.getByTestId('form-dialog-submit'));
     await waitFor(() => expect(isActive('tournament')).toBe(true));
-    expect(screen.getByTestId('test-tab-tournament-error')).toBeInTheDocument();
-    expect(screen.queryByTestId('test-tab-event-error')).toBeNull();
-    expect(screen.getByRole('tab', { name: /tournament.*error/i })).toBe(
-      screen.getByTestId('test-tab-tournament'),
-    );
+    expect(invalid('tournament')).toBe(true);
+    expect(invalid('event')).toBe(false);
     expect(toastError).toHaveBeenCalledWith(
       'Please fix the highlighted fields',
       { description: 'At least one' },
@@ -228,26 +230,18 @@ describe('EventFormDialog validation', () => {
   it('marks every section with an error, not only the first', async () => {
     render(<Harness values={{ ...valid, name: '', people_per_team: 0 }} />);
     fireEvent.click(screen.getByTestId('form-dialog-submit'));
-    await waitFor(() =>
-      expect(screen.getByTestId('test-tab-event-error')).toBeInTheDocument(),
-    );
-    expect(screen.getByTestId('test-tab-tournament-error')).toBeInTheDocument();
+    await waitFor(() => expect(invalid('event')).toBe(true));
+    expect(invalid('tournament')).toBe(true);
   });
 
   it('clears the marker once the field is fixed', async () => {
     render(<Harness values={{ ...valid, people_per_team: 0 }} />);
     fireEvent.click(screen.getByTestId('form-dialog-submit'));
-    await waitFor(() =>
-      expect(
-        screen.getByTestId('test-tab-tournament-error'),
-      ).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(invalid('tournament')).toBe(true));
     fireEvent.change(screen.getByTestId('input-people_per_team'), {
       target: { value: '4' },
     });
-    await waitFor(() =>
-      expect(screen.queryByTestId('test-tab-tournament-error')).toBeNull(),
-    );
+    await waitFor(() => expect(invalid('tournament')).toBe(false));
   });
 
   it('routes an error to the section the field renders in', async () => {
@@ -263,8 +257,8 @@ describe('EventFormDialog validation', () => {
     pick('approval');
     fireEvent.click(screen.getByTestId('form-dialog-submit'));
     await waitFor(() => expect(isActive('event')).toBe(true));
-    expect(screen.getByTestId('test-tab-event-error')).toBeInTheDocument();
-    expect(screen.queryByTestId('test-tab-approval-error')).toBeNull();
+    expect(invalid('event')).toBe(true);
+    expect(invalid('approval')).toBe(false);
   });
 
   it('falls back to the first section when the mapped one is absent', async () => {
@@ -279,65 +273,45 @@ describe('EventFormDialog validation', () => {
 describe('EventFormDialog search', () => {
   afterEach(() => vi.useRealTimers());
 
-  it('groups matches by section and dims sections without matches', () => {
-    render(<Harness />);
-    type('team');
-    const tournament = screen.getByTestId('test-search-group-tournament');
-    expect(tournament).not.toHaveAttribute('data-empty');
-    expect(
-      screen.getByTestId('test-search-result-people_per_team'),
-    ).toHaveTextContent('People Per Team');
-    expect(screen.getByTestId('test-search-group-event')).toHaveAttribute(
-      'data-empty',
-    );
-    expect(screen.queryByRole('tablist')).toBeNull();
-  });
-
-  it('matches descriptions and fields of a lazy section not opened yet', () => {
+  it('matches field descriptions and fields of a lazy section not opened yet', () => {
     render(<Harness />);
     type('each side');
-    expect(
-      screen.getByTestId('test-search-result-people_per_team'),
-    ).toBeInTheDocument();
+    expect(hit('People Per Team')).toBeInTheDocument();
     type('announcement');
-    expect(
-      screen.getByTestId('test-search-result-discord_announcement'),
-    ).toBeInTheDocument();
+    expect(hit('Pre-day announcement')).toBeInTheDocument();
   });
 
-  it('says so when nothing matches', () => {
+  it('matches registry keywords for rendered fields', () => {
     render(<Harness />);
-    type('zzzz');
-    expect(screen.getByTestId('test-search-empty')).toHaveTextContent('zzzz');
+    type('team size');
+    expect(hit('People Per Team')).toBeInTheDocument();
   });
 
-  it('jumps to a picked field: switches section, highlights, focuses, clears', () => {
-    vi.useFakeTimers();
+  it('jumps to a picked field: switches section, highlights the row, focuses', async () => {
     render(<Harness />);
     type('people');
-    fireEvent.click(screen.getByTestId('test-search-result-people_per_team'));
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    fireEvent.click(hit('People Per Team'));
+    await frame();
     expect(isActive('tournament')).toBe(true);
     const input = screen.getByTestId('input-people_per_team');
     const row = input.closest('[data-field]');
     expect(row).toHaveAttribute('data-search-hit');
     expect(input).toHaveFocus();
-    expect(search()).toHaveValue('');
-    expect(screen.getByRole('tablist')).toBeInTheDocument();
     act(() => vi.advanceTimersByTime(2500));
     expect(row).not.toHaveAttribute('data-search-hit');
   });
 
-  it('opens a lazy section when its result is picked', () => {
+  it('opens a lazy section when its registry result is picked', async () => {
     render(<Harness />);
     type('announcement');
-    fireEvent.click(
-      screen.getByTestId('test-search-result-discord_announcement'),
-    );
+    fireEvent.click(hit('Pre-day announcement'));
+    await frame();
     expect(isActive('discord')).toBe(true);
     expect(panelOf('panel-discord')).not.toHaveAttribute('hidden');
   });
 
-  it('opens a collapsed container to reach a field it declares', () => {
+  it('opens a collapsed container to reach a field it declares', async () => {
     const tabs: EventFormTab[] = [
       {
         value: 'event',
@@ -358,14 +332,16 @@ describe('EventFormDialog search', () => {
     render(<Harness tabs={tabs} />);
     expect(screen.queryByTestId('input-people_per_team')).toBeNull();
     type('people');
-    fireEvent.click(screen.getByTestId('test-search-result-people_per_team'));
+    fireEvent.click(hit('People Per Team'));
+    await frame();
+    await frame();
     expect(isActive('tournament')).toBe(true);
     const input = screen.getByTestId('input-people_per_team');
     expect(input.closest('[data-field]')).toHaveAttribute('data-search-hit');
     expect(input).toHaveFocus();
   });
 
-  it('highlights a disabled container when it cannot be opened', () => {
+  it('highlights a disabled container when it cannot be opened', async () => {
     const tabs: EventFormTab[] = [
       {
         value: 'event',
@@ -389,18 +365,19 @@ describe('EventFormDialog search', () => {
     ];
     render(<Harness tabs={tabs} />);
     type('people');
-    fireEvent.click(screen.getByTestId('test-search-result-people_per_team'));
+    fireEvent.click(hit('People Per Team'));
+    await frame();
     expect(isActive('tournament')).toBe(true);
     expect(screen.getByTestId('locked')).toHaveAttribute('data-search-hit');
     expect(screen.queryByTestId('input-people_per_team')).toBeNull();
   });
 
-  it('moves through results with the arrow keys and picks with Enter', () => {
+  it('moves through results with the arrow keys and picks with Enter', async () => {
     render(<Harness />);
     type('e');
     const input = search();
     const options = screen.getAllByRole('option');
-    expect(options.length).toBeGreaterThan(1);
+    expect(options.length).toBeGreaterThan(2);
     expect(input).toHaveAttribute('aria-activedescendant', options[0].id);
     fireEvent.keyDown(input, { key: 'ArrowDown' });
     expect(input).toHaveAttribute('aria-activedescendant', options[1].id);
@@ -411,35 +388,30 @@ describe('EventFormDialog search', () => {
       options[options.length - 1].id,
     );
     fireEvent.keyDown(input, { key: 'Home' });
-    fireEvent.keyDown(input, { key: 'ArrowDown' });
-    const second = options[1].getAttribute('data-testid');
+    expect(input).toHaveAttribute('aria-activedescendant', options[0].id);
+    const index = options.findIndex(
+      (o) => o.querySelector('span')?.textContent === 'People Per Team',
+    );
+    expect(index).toBeGreaterThan(0);
+    for (let i = 0; i < index; i++)
+      fireEvent.keyDown(input, { key: 'ArrowDown' });
     fireEvent.keyDown(input, { key: 'Enter' });
-    expect(second).toBe('test-search-result-people_per_team');
+    await frame();
     expect(isActive('tournament')).toBe(true);
-  });
-
-  it('clear button restores the section list', () => {
-    render(<Harness />);
-    type('people');
-    fireEvent.click(screen.getByRole('button', { name: /clear search/i }));
-    expect(search()).toHaveValue('');
-    expect(screen.getByRole('tablist')).toBeInTheDocument();
   });
 
   it('does not put the cursor in search when the dialog opens', () => {
     render(<Harness />);
     expect(search()).not.toHaveFocus();
-    expect(screen.getByRole('dialog')).toHaveFocus();
   });
 
-  it('focuses search on "/" outside a text field and on Ctrl/Cmd+K', () => {
+  it('focuses search on "/" outside a text field and on Ctrl/Cmd+K anywhere', () => {
     render(<Harness />);
     const name = screen.getByTestId('input-name');
     name.focus();
     fireEvent.keyDown(name, { key: '/' });
     expect(name).toHaveFocus();
-    name.blur();
-    fireEvent.keyDown(document.body, { key: '/' });
+    fireEvent.keyDown(screen.getByTestId('test-tab-event'), { key: '/' });
     expect(search()).toHaveFocus();
     name.focus();
     fireEvent.keyDown(name, { key: 'k', ctrlKey: true });

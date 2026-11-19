@@ -36,11 +36,18 @@ import {
   DISCORD_CONFIG_DEFAULTS,
   DOTA_LOBBY_CONFIG_DEFAULTS,
   editEventFormSchema,
+  EventState,
   localToUTC,
   READY_CHECK_CONFIG_DEFAULTS,
   refineReadyCheck,
+  SIGNUP_OPEN_DEFAULTS,
   utcToLocalInput,
 } from './schemas';
+import { signupOpenFrom } from './signupOpen';
+import {
+  SERIES_EVENT_POLICY_HELP,
+  SignupOpenSection,
+} from './SignupOpenSection';
 import { signupRulesFrom } from './signupRules';
 import { SignupRulesSection } from './SignupRulesSection';
 
@@ -52,6 +59,15 @@ const ids = eventFieldTestIds('edit-event', {
     itemPrefix: 'league-option-',
   },
 });
+
+function formatOpenAt(iso: string | null, timeZone: string): string {
+  if (!iso) return 'Not scheduled';
+  try {
+    return `${new Date(iso).toLocaleString(undefined, { timeZone })} (${timeZone})`;
+  } catch {
+    return new Date(iso).toLocaleString();
+  }
+}
 
 interface EditEventModalProps {
   event: EventType | null;
@@ -97,6 +113,7 @@ export function EditEventModal({
       ...DOTA_LOBBY_CONFIG_DEFAULTS,
       ...READY_CHECK_CONFIG_DEFAULTS,
       ...draftSettingsToFormInput(null),
+      ...SIGNUP_OPEN_DEFAULTS,
     },
   });
 
@@ -132,6 +149,7 @@ export function EditEventModal({
           event.event_repeater != null
             ? event.discord_signup_reminder_hours
             : 24,
+        ...signupOpenFrom(event),
         ...dotaLobbyResetValues(event, { savedFromMode: true }),
         ...readyCheckResetValues(event),
       });
@@ -161,6 +179,10 @@ export function EditEventModal({
     }
   }
 
+  const policyEditable = event?.state === EventState.UPCOMING;
+  const followsSeries =
+    event?.event_repeater != null && !event?.is_off_schedule;
+
   async function onSubmit(data: EditEventFormInput) {
     if (isSubmitting || !event) return;
     setIsSubmitting(true);
@@ -178,6 +200,8 @@ export function EditEventModal({
         hero_timer_enabled,
         hero_grace_time_s,
         hero_reserve_time_s,
+        signup_open_mode,
+        signups_open_hours_before,
         ...rest
       } = data;
       const payload = {
@@ -191,6 +215,7 @@ export function EditEventModal({
           hero_grace_time_s,
           hero_reserve_time_s,
         }),
+        ...(policyEditable && { signup_open_mode, signups_open_hours_before }),
         ...lobbyPasswordPayload({
           game_type: data.game_type,
           dota_lobby_password_mode,
@@ -244,6 +269,21 @@ export function EditEventModal({
                 control={form.control}
                 triggerTestId={ids.timezone}
               />
+
+              <SignupOpenSection
+                control={form.control}
+                disabled={!policyEditable}
+                helpText={followsSeries ? SERIES_EVENT_POLICY_HELP : undefined}
+              />
+              <p className="text-sm text-muted-foreground">
+                Signups open:{' '}
+                <span className="text-foreground" data-testid="signup-open-at">
+                  {formatOpenAt(
+                    event?.signups_open_at ?? null,
+                    event?.timezone ?? 'UTC',
+                  )}
+                </span>
+              </p>
             </>
           ),
         },
@@ -265,9 +305,7 @@ export function EditEventModal({
               watch={form.watch}
               scope="event"
               saved={savedPassword}
-              followsSeries={
-                event?.event_repeater != null && !event?.is_off_schedule
-              }
+              followsSeries={followsSeries}
               onRegenerate={onRegenerate}
               regenerating={regenerate.isPending}
             />

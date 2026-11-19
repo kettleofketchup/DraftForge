@@ -1,11 +1,5 @@
 // @vitest-environment jsdom
-import {
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-  within,
-} from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { I18nextProvider } from 'react-i18next';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EventRepeaterType } from '~/components/api/api';
@@ -29,6 +23,14 @@ vi.mock('sonner', () => ({
 }));
 
 import { EditRepeaterModal } from '../EditRepeaterModal';
+
+const searchHits = (prefix: string) =>
+  screen.queryAllByTestId(`${prefix}-search-hit`).map((el) => {
+    const [label, section] = [...el.querySelectorAll('span')].map(
+      (s) => s.textContent,
+    );
+    return { el, label, section };
+  });
 
 // FormDialog renders a Radix ScrollArea, which jsdom cannot satisfy.
 class ResizeObserverStub {
@@ -102,6 +104,8 @@ const repeater = {
   post_cull_fill_mode: 'line_order',
   event_voice_channel_id: '',
   voice_presence_confirms: false,
+  signup_open_mode: 'manual' as const,
+  signups_open_hours_before: 72,
   allow_active_mmr: true,
   allow_previous_rank: true,
   allow_battlecup_rating: true,
@@ -154,14 +158,15 @@ describe('EditRepeaterModal tabs', () => {
       <EditRepeaterModal repeater={repeater} open onOpenChange={() => {}} />,
       { wrapper: Wrapper },
     );
-    fireEvent.change(screen.getByTestId('edit-series-settings-search'), {
+    fireEvent.change(screen.getByTestId('edit-series-search'), {
       target: { value: 'closes' },
     });
-    expect(
-      within(screen.getByTestId('edit-series-search-group-ready')).getByTestId(
-        'edit-series-search-result-ready_check_close_minutes',
-      ),
-    ).toBeInTheDocument();
+    expect(searchHits('edit-series')).toContainEqual(
+      expect.objectContaining({
+        label: 'Closes (minutes)',
+        section: 'Ready check',
+      }),
+    );
   });
 
   it('finds the signup rule under the Event section, where this form renders it', () => {
@@ -169,17 +174,12 @@ describe('EditRepeaterModal tabs', () => {
       <EditRepeaterModal repeater={repeater} open onOpenChange={() => {}} />,
       { wrapper: Wrapper },
     );
-    fireEvent.change(screen.getByTestId('edit-series-settings-search'), {
+    fireEvent.change(screen.getByTestId('edit-series-search'), {
       target: { value: 'sign themselves' },
     });
-    expect(
-      within(screen.getByTestId('edit-series-search-group-event')).getByTestId(
-        'edit-series-search-result-allow_user_signups',
-      ),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByTestId('edit-series-search-group-approval'),
-    ).toBeNull();
+    const sections = searchHits('edit-series').map((h) => h.section);
+    expect(sections).toContain('Event');
+    expect(sections).not.toContain('Approval');
   });
 });
 
@@ -306,5 +306,37 @@ describe('EditRepeaterModal draft settings', () => {
     });
     expect(body).not.toHaveProperty('draft_grace_time_s');
     expect(body).not.toHaveProperty('hero_reserve_time_s');
+  });
+});
+
+describe('EditRepeaterModal signup open policy', () => {
+  beforeEach(() => {
+    mutateAsync.mockClear();
+    savedPassword.current = undefined;
+  });
+
+  it('shows stored hours as days and submits them back unchanged', async () => {
+    render(
+      <EditRepeaterModal
+        repeater={{
+          ...repeater,
+          signup_open_mode: 'scheduled',
+          signups_open_hours_before: 72,
+        }}
+        open
+        onOpenChange={() => {}}
+      />,
+      { wrapper: Wrapper },
+    );
+    expect(screen.getByTestId('signup-open-days-input')).toHaveValue(3);
+    expect(
+      screen.getByText(/recalculates open times for upcoming events/i),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('form-dialog-submit'));
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalled());
+    expect(mutateAsync.mock.calls[0][0]).toMatchObject({
+      signup_open_mode: 'scheduled',
+      signups_open_hours_before: 72,
+    });
   });
 });
