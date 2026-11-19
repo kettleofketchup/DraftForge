@@ -250,8 +250,9 @@ class BackfillCommandTests(LineBackfillBase):
         with connection.cursor() as cursor:
             cursor.execute(
                 "INSERT INTO events_eventsignup "
-                "(event_id, user_id, signup_type, status, created_at, updated_at) "
-                "VALUES (%s, %s, %s, %s, %s, %s)",
+                "(event_id, user_id, signup_type, status, unmet_requirements, "
+                "created_at, updated_at) "
+                "VALUES (%s, %s, %s, %s, '[]', %s, %s)",
                 [self.event.pk, self.players[2].pk, "user", "tentative", now, now],
             )
         old = EventSignup.objects.nocache().get(event=self.event, user=self.players[2])
