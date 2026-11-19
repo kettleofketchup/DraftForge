@@ -12,9 +12,9 @@ import type { TournamentWritePayload } from '~/components/api/tournamentAPI';
 import { DiscordIcon } from '~/components/events/DiscordConfigSection';
 import { BracketTypeField } from '~/components/events/form/fields/BracketTypeField';
 import { TimezoneField } from '~/components/events/form/fields/TimezoneField';
-import { FormTabsList } from '~/components/events/form/FormTabsList';
 import { LobbyConfigSection } from '~/components/events/LobbyConfigSection';
 import type { LeagueType } from '~/components/league/schemas';
+import { FormTabsList } from '~/components/patterns/FormTabsList';
 import { DraftSettingsSection } from '~/components/teamdraft/DraftSettingsSection';
 import {
   draftSettingsFormToPatch,
