@@ -1,0 +1,1 @@
+- Team draft now uses the shared domain-color tokens for turns, picks and the pick clock. The current pick, current captain and "your turn" highlights are yellow, matching hero draft, instead of green; "picked" and double-pick hints use the pick green; the clock running out shows in the error color, pauses in the warning color, and connection dots use the online/offline colors.

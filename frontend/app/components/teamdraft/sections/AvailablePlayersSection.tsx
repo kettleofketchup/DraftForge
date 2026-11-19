@@ -1,30 +1,39 @@
-import { memo, useMemo, useState } from 'react';
 import { Search } from 'lucide-react';
+import { memo, useMemo, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
+import { GAME_TYPE } from '~/components/game/constants';
+import type { TeamType } from '~/components/tournament/types';
 import { Button } from '~/components/ui/button';
+import { brandGlowLift, brandGradient } from '~/components/ui/buttons/styles';
 import { Card } from '~/components/ui/card';
 import { Input } from '~/components/ui/input';
 import { ScrollArea } from '~/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
-import { type LeagueStatsFilter, matchesLeagueFilter } from '~/features/league-stats/filters';
-import { useLeaguePlayerSummaries } from '~/features/league-stats/queries';
-import { cn } from '~/lib/utils';
-import { brandGradient, brandGlowLift } from '~/components/ui/buttons/styles';
-import { GAME_TYPE } from '~/components/game/constants';
-import { useUserStore } from '~/store/userStore';
-import { useUserCacheStore } from '~/store/userCacheStore';
-import { selectPositions } from '~/store/selectPositions';
-import type { PositionsType } from '~/store/userCacheTypes';
 import { DisplayName } from '~/components/user/avatar';
 import { UserStrip } from '~/components/user/UserStrip';
-import { ChoosePlayerButton } from '../buttons/choosePlayerButtons';
-import type { TeamType } from '~/components/tournament/types';
+import {
+  type LeagueStatsFilter,
+  matchesLeagueFilter,
+} from '~/features/league-stats/filters';
+import { useLeaguePlayerSummaries } from '~/features/league-stats/queries';
 import type { UserType } from '~/index';
+import { cn } from '~/lib/utils';
+import { selectPositions } from '~/store/selectPositions';
+import { useUserCacheStore } from '~/store/userCacheStore';
+import type { PositionsType } from '~/store/userCacheTypes';
+import { useUserStore } from '~/store/userStore';
+import { ChoosePlayerButton } from '../buttons/choosePlayerButtons';
 
 const MAX_TEAM_SIZE = 5;
 
 // Filter types
-type PositionFilter = 'all' | 'carry' | 'mid' | 'offlane' | 'soft_support' | 'hard_support';
+type PositionFilter =
+  | 'all'
+  | 'carry'
+  | 'mid'
+  | 'offlane'
+  | 'soft_support'
+  | 'hard_support';
 type PickOrderFilter = 'all' | 'double_pick' | 'maintains_first';
 
 const POSITION_LABELS: Record<PositionFilter, string> = {
@@ -50,13 +59,24 @@ const LEAGUE_STATS_LABELS: Record<LeagueStatsFilter, string> = {
 };
 
 // Granular selectors
-const selectUsersRemaining = (state: ReturnType<typeof useUserStore.getState>) => state.draft?.users_remaining;
-const selectDraftStyle = (state: ReturnType<typeof useUserStore.getState>) => state.draft?.draft_style;
-const selectTeams = (state: ReturnType<typeof useUserStore.getState>) => state.tournament?.teams;
-const selectCurDraftRoundCaptainPk = (state: ReturnType<typeof useUserStore.getState>) => state.curDraftRound?.captain?.pk;
-const selectCurDraftRoundChoice = (state: ReturnType<typeof useUserStore.getState>) => state.curDraftRound?.choice;
-const selectOrganizationPk = (state: ReturnType<typeof useUserStore.getState>) => state.tournament?.organization_pk;
-const selectLeaguePk = (state: ReturnType<typeof useUserStore.getState>) => state.tournament?.league_pk ?? null;
+const selectUsersRemaining = (
+  state: ReturnType<typeof useUserStore.getState>,
+) => state.draft?.users_remaining;
+const selectDraftStyle = (state: ReturnType<typeof useUserStore.getState>) =>
+  state.draft?.draft_style;
+const selectTeams = (state: ReturnType<typeof useUserStore.getState>) =>
+  state.tournament?.teams;
+const selectCurDraftRoundCaptainPk = (
+  state: ReturnType<typeof useUserStore.getState>,
+) => state.curDraftRound?.captain?.pk;
+const selectCurDraftRoundChoice = (
+  state: ReturnType<typeof useUserStore.getState>,
+) => state.curDraftRound?.choice;
+const selectOrganizationPk = (
+  state: ReturnType<typeof useUserStore.getState>,
+) => state.tournament?.organization_pk;
+const selectLeaguePk = (state: ReturnType<typeof useUserStore.getState>) =>
+  state.tournament?.league_pk ?? null;
 
 // Helper to get ordinal suffix
 const getOrdinal = (n: number): string => {
@@ -82,7 +102,11 @@ const isTeamMaxed = (team: TeamType): boolean => {
 
 // Context slot for shuffle draft projections
 const ShuffleProjectionSlot: React.FC<{
-  projected: { newTeamMmr: number; newPickOrder: number; isDoublePick: boolean };
+  projected: {
+    newTeamMmr: number;
+    newPickOrder: number;
+    isDoublePick: boolean;
+  };
 }> = ({ projected }) => (
   <div className="hidden sm:block">
     <div className="text-muted-foreground">
@@ -91,8 +115,8 @@ const ShuffleProjectionSlot: React.FC<{
     <div
       className={cn(
         projected.isDoublePick
-          ? 'text-green-400 font-medium'
-          : 'text-muted-foreground'
+          ? 'text-pick font-medium'
+          : 'text-muted-foreground',
       )}
     >
       {getOrdinal(projected.newPickOrder)}
@@ -102,29 +126,43 @@ const ShuffleProjectionSlot: React.FC<{
 );
 
 // Memoized player strip for the available players list
-const AvailablePlayerStrip = memo(({
-  user,
-  isShuffle,
-  projected,
-  organizationId,
-  statsLeagueId,
-}: {
-  user: UserType;
-  isShuffle: boolean;
-  projected: { newTeamMmr: number; newPickOrder: number; isDoublePick: boolean } | null;
-  organizationId?: number;
-  statsLeagueId: number | null;
-}) => (
-  <UserStrip
-    user={user}
-    organizationId={organizationId}
-    statsLeagueId={statsLeagueId}
-    className={projected?.isDoublePick ? 'bg-green-950/30 border-green-500/50' : undefined}
-    contextSlot={isShuffle && projected ? <ShuffleProjectionSlot projected={projected} /> : undefined}
-    actionSlot={<ChoosePlayerButton user={user} />}
-    data-testid="available-player"
-  />
-));
+const AvailablePlayerStrip = memo(
+  ({
+    user,
+    isShuffle,
+    projected,
+    organizationId,
+    statsLeagueId,
+  }: {
+    user: UserType;
+    isShuffle: boolean;
+    projected: {
+      newTeamMmr: number;
+      newPickOrder: number;
+      isDoublePick: boolean;
+    } | null;
+    organizationId?: number;
+    statsLeagueId: number | null;
+  }) => (
+    <UserStrip
+      user={user}
+      organizationId={organizationId}
+      statsLeagueId={statsLeagueId}
+      className={
+        projected?.isDoublePick
+          ? 'bg-pick-surface/30 border-pick/50'
+          : undefined
+      }
+      contextSlot={
+        isShuffle && projected ? (
+          <ShuffleProjectionSlot projected={projected} />
+        ) : undefined
+      }
+      actionSlot={<ChoosePlayerButton user={user} />}
+      data-testid="available-player"
+    />
+  ),
+);
 AvailablePlayerStrip.displayName = 'AvailablePlayerStrip';
 
 export const AvailablePlayersSection = memo(() => {
@@ -159,8 +197,10 @@ export const AvailablePlayersSection = memo(() => {
   // Filter states
   const [searchQuery, setSearchQuery] = useState('');
   const [positionFilter, setPositionFilter] = useState<PositionFilter>('all');
-  const [pickOrderFilter, setPickOrderFilter] = useState<PickOrderFilter>('all');
-  const [leagueStatsFilter, setLeagueStatsFilter] = useState<LeagueStatsFilter>('all');
+  const [pickOrderFilter, setPickOrderFilter] =
+    useState<PickOrderFilter>('all');
+  const [leagueStatsFilter, setLeagueStatsFilter] =
+    useState<LeagueStatsFilter>('all');
 
   const isShuffle = draftStyle === 'shuffle';
 
@@ -189,11 +229,15 @@ export const AvailablePlayersSection = memo(() => {
     if (!currentTeam) return false;
     const currentTeamMmr = getTeamMmr(currentTeam);
     const newTeamMmr = currentTeamMmr + userMmr;
-    const otherActiveTeams = (teams || [])
-      .filter((t) => t.pk !== currentTeam.pk && !isTeamMaxed(t));
+    const otherActiveTeams = (teams || []).filter(
+      (t) => t.pk !== currentTeam.pk && !isTeamMaxed(t),
+    );
     if (otherActiveTeams.length === 0) return true;
-    const lowestOtherMmr = Math.min(...otherActiveTeams.map((t) => getTeamMmr(t)));
-    const wouldBeMaxed = (currentTeam.members?.length || 0) + 1 >= MAX_TEAM_SIZE;
+    const lowestOtherMmr = Math.min(
+      ...otherActiveTeams.map((t) => getTeamMmr(t)),
+    );
+    const wouldBeMaxed =
+      (currentTeam.members?.length || 0) + 1 >= MAX_TEAM_SIZE;
     return !wouldBeMaxed && newTeamMmr < lowestOtherMmr;
   };
 
@@ -202,10 +246,13 @@ export const AvailablePlayersSection = memo(() => {
     if (!currentTeam) return false;
     const currentTeamMmr = getTeamMmr(currentTeam);
     const newTeamMmr = currentTeamMmr + userMmr;
-    const otherActiveTeams = (teams || [])
-      .filter((t) => t.pk !== currentTeam.pk && !isTeamMaxed(t));
+    const otherActiveTeams = (teams || []).filter(
+      (t) => t.pk !== currentTeam.pk && !isTeamMaxed(t),
+    );
     if (otherActiveTeams.length === 0) return true;
-    const lowestOtherMmr = Math.min(...otherActiveTeams.map((t) => getTeamMmr(t)));
+    const lowestOtherMmr = Math.min(
+      ...otherActiveTeams.map((t) => getTeamMmr(t)),
+    );
     return newTeamMmr <= lowestOtherMmr;
   };
 
@@ -216,9 +263,10 @@ export const AvailablePlayersSection = memo(() => {
     // Search filter
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
-      players = players.filter((user) =>
-        (user.username || '').toLowerCase().includes(query) ||
-        (user.nickname || '').toLowerCase().includes(query)
+      players = players.filter(
+        (user) =>
+          (user.username || '').toLowerCase().includes(query) ||
+          (user.nickname || '').toLowerCase().includes(query),
       );
     }
 
@@ -226,7 +274,8 @@ export const AvailablePlayersSection = memo(() => {
     if (positionFilter !== 'all') {
       players = players.filter((user) => {
         const positions =
-          (user.pk != null ? positionsByPk[user.pk] : undefined) ?? user.positions;
+          (user.pk != null ? positionsByPk[user.pk] : undefined) ??
+          user.positions;
         if (!positions) return false;
         return (positions[positionFilter] || 0) > 0;
       });
@@ -237,7 +286,8 @@ export const AvailablePlayersSection = memo(() => {
       players = players.filter((user) => {
         const mmr = user.mmr || 0;
         if (pickOrderFilter === 'double_pick') return wouldDoublePick(mmr);
-        if (pickOrderFilter === 'maintains_first') return wouldMaintainFirst(mmr);
+        if (pickOrderFilter === 'maintains_first')
+          return wouldMaintainFirst(mmr);
         return true;
       });
     }
@@ -247,14 +297,27 @@ export const AvailablePlayersSection = memo(() => {
       players = players.filter((user) =>
         matchesLeagueFilter(
           leagueStatsFilter,
-          user.pk != null ? leagueSummaries.players[String(user.pk)] : undefined,
+          user.pk != null
+            ? leagueSummaries.players[String(user.pk)]
+            : undefined,
           leagueSummaries.min_games,
         ),
       );
     }
 
     return players;
-  }, [availablePlayers, searchQuery, positionFilter, pickOrderFilter, leagueStatsFilter, leagueSummaries, isShuffle, currentTeam, teams, positionsByPk]);
+  }, [
+    availablePlayers,
+    searchQuery,
+    positionFilter,
+    pickOrderFilter,
+    leagueStatsFilter,
+    leagueSummaries,
+    isShuffle,
+    currentTeam,
+    teams,
+    positionsByPk,
+  ]);
 
   // Split players into columns (newspaper style)
   const { col1, col2, col3, leftCol, rightCol } = useMemo(() => {
@@ -282,8 +345,9 @@ export const AvailablePlayersSection = memo(() => {
     const currentTeamMmr = getTeamMmr(currentTeam);
     const newTeamMmr = currentTeamMmr + userMmr;
 
-    const otherActiveTeams = (teams || [])
-      .filter((t) => t.pk !== currentTeam.pk && !isTeamMaxed(t));
+    const otherActiveTeams = (teams || []).filter(
+      (t) => t.pk !== currentTeam.pk && !isTeamMaxed(t),
+    );
 
     if (otherActiveTeams.length === 0) {
       return { newTeamMmr, newPickOrder: 1, isDoublePick: true };
@@ -293,7 +357,8 @@ export const AvailablePlayersSection = memo(() => {
     const allMmrs = [...otherMmrs, newTeamMmr].sort((a, b) => a - b);
     const newPickOrder = allMmrs.indexOf(newTeamMmr) + 1;
 
-    const wouldBeMaxedAfterPick = (currentTeam.members?.length || 0) + 1 >= MAX_TEAM_SIZE;
+    const wouldBeMaxedAfterPick =
+      (currentTeam.members?.length || 0) + 1 >= MAX_TEAM_SIZE;
     const lowestOtherMmr = Math.min(...otherMmrs);
     const isDoublePick = !wouldBeMaxedAfterPick && newTeamMmr < lowestOtherMmr;
 
@@ -305,7 +370,7 @@ export const AvailablePlayersSection = memo(() => {
     return (
       <div className="flex-1 min-h-[180px] md:min-h-[250px] flex flex-col">
         <Card className="h-full flex items-center justify-center">
-          <p className="text-lg font-semibold text-green-400">
+          <p className="text-lg font-semibold text-pick">
             Picked: {DisplayName(curDraftRoundChoice)}
           </p>
         </Card>
@@ -314,7 +379,10 @@ export const AvailablePlayersSection = memo(() => {
   }
 
   return (
-    <div data-testid="available-players-section" className="flex-1 min-h-[180px] md:min-h-[250px] flex flex-col">
+    <div
+      data-testid="available-players-section"
+      className="flex-1 min-h-[180px] md:min-h-[250px] flex flex-col"
+    >
       {/* Search + Filter Tabs */}
       <div className="shrink-0 space-y-2 mb-3">
         {/* Search Bar */}
@@ -331,10 +399,30 @@ export const AvailablePlayersSection = memo(() => {
         {/* Filter Tabs */}
         <Tabs defaultValue="positions" className="w-full">
           <TabsList className="grid w-full grid-cols-3 h-8">
-            <TabsTrigger value="positions" className="text-xs">Positions</TabsTrigger>
-            {isShuffle && <TabsTrigger value="pickorder" className="text-xs">Pick Order</TabsTrigger>}
-            {!isShuffle && <TabsTrigger value="pickorder" disabled className="text-xs opacity-50">Pick Order</TabsTrigger>}
-            <TabsTrigger value="league" disabled={leaguePk == null} className="text-xs">League</TabsTrigger>
+            <TabsTrigger value="positions" className="text-xs">
+              Positions
+            </TabsTrigger>
+            {isShuffle && (
+              <TabsTrigger value="pickorder" className="text-xs">
+                Pick Order
+              </TabsTrigger>
+            )}
+            {!isShuffle && (
+              <TabsTrigger
+                value="pickorder"
+                disabled
+                className="text-xs opacity-50"
+              >
+                Pick Order
+              </TabsTrigger>
+            )}
+            <TabsTrigger
+              value="league"
+              disabled={leaguePk == null}
+              className="text-xs"
+            >
+              League
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="positions" className="mt-2">
@@ -346,8 +434,9 @@ export const AvailablePlayersSection = memo(() => {
                   variant={positionFilter === pos ? 'default' : 'outline'}
                   onClick={() => setPositionFilter(pos)}
                   className={cn(
-                    "text-xs px-2 py-0.5 h-6",
-                    positionFilter === pos && `${brandGradient} ${brandGlowLift} [text-shadow:_0_1px_2px_rgba(0,0,0,0.5)]`
+                    'text-xs px-2 py-0.5 h-6',
+                    positionFilter === pos &&
+                      `${brandGradient} ${brandGlowLift} [text-shadow:_0_1px_2px_rgba(0,0,0,0.5)]`,
                   )}
                 >
                   {POSITION_LABELS[pos]}
@@ -358,49 +447,60 @@ export const AvailablePlayersSection = memo(() => {
 
           <TabsContent value="pickorder" className="mt-2">
             <div className="flex flex-wrap gap-1">
-              {(Object.keys(PICK_ORDER_LABELS) as PickOrderFilter[]).map((filter) => (
-                <Button
-                  key={filter}
-                  size="sm"
-                  variant={pickOrderFilter === filter ? 'default' : 'outline'}
-                  onClick={() => setPickOrderFilter(filter)}
-                  className={cn(
-                    "text-xs px-2 py-0.5 h-6",
-                    pickOrderFilter === filter && `${brandGradient} ${brandGlowLift} [text-shadow:_0_1px_2px_rgba(0,0,0,0.5)]`
-                  )}
-                  disabled
-                >
-                  {PICK_ORDER_LABELS[filter]}
-                </Button>
-              ))}
+              {(Object.keys(PICK_ORDER_LABELS) as PickOrderFilter[]).map(
+                (filter) => (
+                  <Button
+                    key={filter}
+                    size="sm"
+                    variant={pickOrderFilter === filter ? 'default' : 'outline'}
+                    onClick={() => setPickOrderFilter(filter)}
+                    className={cn(
+                      'text-xs px-2 py-0.5 h-6',
+                      pickOrderFilter === filter &&
+                        `${brandGradient} ${brandGlowLift} [text-shadow:_0_1px_2px_rgba(0,0,0,0.5)]`,
+                    )}
+                    disabled
+                  >
+                    {PICK_ORDER_LABELS[filter]}
+                  </Button>
+                ),
+              )}
             </div>
           </TabsContent>
 
           <TabsContent value="league" className="mt-2">
             <div className="flex flex-wrap gap-1">
-              {(Object.keys(LEAGUE_STATS_LABELS) as LeagueStatsFilter[]).map((filter) => (
-                <Button
-                  key={filter}
-                  size="sm"
-                  variant={leagueStatsFilter === filter ? 'default' : 'outline'}
-                  onClick={() => setLeagueStatsFilter(filter)}
-                  className={cn(
-                    "text-xs px-2 py-0.5 h-6",
-                    leagueStatsFilter === filter && `${brandGradient} ${brandGlowLift} [text-shadow:_0_1px_2px_rgba(0,0,0,0.5)]`
-                  )}
-                  aria-pressed={leagueStatsFilter === filter}
-                >
-                  {LEAGUE_STATS_LABELS[filter]}
-                </Button>
-              ))}
+              {(Object.keys(LEAGUE_STATS_LABELS) as LeagueStatsFilter[]).map(
+                (filter) => (
+                  <Button
+                    key={filter}
+                    size="sm"
+                    variant={
+                      leagueStatsFilter === filter ? 'default' : 'outline'
+                    }
+                    onClick={() => setLeagueStatsFilter(filter)}
+                    className={cn(
+                      'text-xs px-2 py-0.5 h-6',
+                      leagueStatsFilter === filter &&
+                        `${brandGradient} ${brandGlowLift} [text-shadow:_0_1px_2px_rgba(0,0,0,0.5)]`,
+                    )}
+                    aria-pressed={leagueStatsFilter === filter}
+                  >
+                    {LEAGUE_STATS_LABELS[filter]}
+                  </Button>
+                ),
+              )}
             </div>
           </TabsContent>
         </Tabs>
 
-        <div data-testid="available-players-count" className="text-[13px] text-muted-foreground">
+        <div
+          data-testid="available-players-count"
+          className="text-[13px] text-muted-foreground"
+        >
           {filteredPlayers.length}/{availablePlayers.length} players
           {filteredPlayers.length < availablePlayers.length && (
-            <span className="text-yellow-500/80 ml-1">
+            <span className="text-warning/80 ml-1">
               ({availablePlayers.length - filteredPlayers.length} hidden)
             </span>
           )}
