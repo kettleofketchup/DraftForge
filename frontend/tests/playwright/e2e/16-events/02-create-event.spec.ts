@@ -52,7 +52,6 @@ test.describe('Events - Create Event (@cicd)', () => {
   test('org page shows events tab with create button', async ({ page }) => {
     await visitAndWaitForHydration(page, `/organizations/${eventInfo.orgPk}`);
 
-    // Click the Events tab
     await page.getByTestId('org-tab-events').click();
 
     // Use data-testid per the project's testing skill: getByRole with text
@@ -143,7 +142,6 @@ test.describe('Events - Create Event (@cicd)', () => {
     await page.getByTestId('org-tab-events').click();
     await page.getByTestId('create-event-btn').click();
 
-    // Check the recurring checkbox
     await page.getByTestId('event-recurring-checkbox').check();
 
     // Title should change
@@ -188,7 +186,6 @@ test.describe('Events - Create Event (@cicd)', () => {
     await openTab(page, 'event');
     await page.getByTestId('event-scheduled-input').fill(dateStr);
 
-    // Submit
     await page.getByTestId('form-dialog-submit').click();
 
     // Modal should close and event should appear in list
@@ -290,7 +287,6 @@ test.describe('Events - Create Event (@cicd)', () => {
 
     await openTab(page, 'tournament');
 
-    // Open the combobox trigger
     const trigger = page.getByTestId('event-league-select');
     await trigger.click();
 
@@ -421,7 +417,6 @@ test.describe('Events - Create Event (@cicd)', () => {
     const today = new Date().toISOString().slice(0, 10);
     await page.getByTestId('event-starts-input').fill(today);
 
-    // Submit
     await page.getByTestId('form-dialog-submit').click();
 
     // Modal should close with success
