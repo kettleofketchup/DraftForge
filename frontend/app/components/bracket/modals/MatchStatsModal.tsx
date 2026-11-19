@@ -8,7 +8,6 @@ import { provisionalWinnerSlot } from '~/components/lobby/provisional';
 import { useOrganization } from '~/components/organization';
 import { AdminOnlyButton } from '~/components/reusable/adminButton';
 import type { TeamType } from '~/components/tournament/types';
-import { Avatar, AvatarFallback } from '~/components/ui/avatar';
 import { Badge } from '~/components/ui/badge';
 import { PrimaryButton, SecondaryButton } from '~/components/ui/buttons';
 import {
@@ -518,7 +517,6 @@ function TeamCard({ team, score, isWinner, label }: TeamCardProps) {
   }
 
   const displayName = team.captain ? DisplayName(team.captain) : team.name;
-  const initials = displayName.substring(0, 2).toUpperCase();
 
   return (
     <div
@@ -527,17 +525,12 @@ function TeamCard({ team, score, isWinner, label }: TeamCardProps) {
         isWinner ? 'bg-green-500/10 ring-2 ring-green-500' : 'bg-muted/50',
       )}
     >
-      {team.captain ? (
-        <UserAvatar
-          user={team.captain}
-          size="lg"
-          className="sm:h-12 sm:w-12 mb-2"
-        />
-      ) : (
-        <Avatar className="h-10 w-10 sm:h-12 sm:w-12 mx-auto mb-2">
-          <AvatarFallback>{initials}</AvatarFallback>
-        </Avatar>
-      )}
+      <UserAvatar
+        user={team.captain}
+        fallbackName={team.name}
+        size="lg"
+        className="sm:h-12 sm:w-12 mb-2"
+      />
       <p
         className={cn(
           'font-medium text-sm sm:text-base truncate',
