@@ -8,10 +8,11 @@ from unittest.mock import patch
 from django.db import connection, transaction
 from django.test import SimpleTestCase, override_settings
 from django.test.utils import CaptureQueriesContext
+from django.urls import reverse
 from django.utils import timezone as tz
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, GameType
+from app.models import CustomUser, GameType, Tournament
 from discordbot.models import DiscordMessageLog
 from events.admission import ensure_self_serve
 from events.constants import EventState, SignupStatus
@@ -21,6 +22,7 @@ from events.eligibility import Unmet, refresh_unmet_requirements
 from events.models import Event, EventSignup
 from events.services import (
     _promote_from_waitlist,
+    cancel_signup,
     create_tentative_signup,
     process_rsvp,
     staff_add_signup,
@@ -482,3 +484,98 @@ class QueryBudgetTest(ConductTestCase):
             lambda: [self._signups(event) for event in events],
             gates_built=1,
         )
+
+
+class BackOfLineTest(ConductTestCase):
+    def setUp(self) -> None:
+        self.unlock()
+
+    def enable(self, **toggles: bool) -> OrgConductSettings:
+        return OrgConductSettings.objects.create(organization=self.org, **toggles)
+
+    def flagged_member(self) -> CustomUser:
+        user = self.make_user()
+        now = tz.now()
+        for days in range(1, 5):
+            self.outcome(
+                user, outcome=Outcome.NO_SHOW, starts_at=now - timedelta(days=days)
+            )
+        return user
+
+    def full_event_with_line(
+        self, *, max_players: int = 1, **overrides: object
+    ) -> tuple[Event, list[EventSignup], EventSignup, EventSignup]:
+        event = self.make_event(max_players=max_players, **overrides)
+        seated = [process_rsvp(event, self.make_user()) for _ in range(max_players)]
+        flagged = process_rsvp(event, self.flagged_member())
+        clean = process_rsvp(event, self.make_user())
+        for signup in (flagged, clean):
+            self.assertEqual(signup.status, SignupStatus.WAITLISTED)
+        return event, seated, flagged, clean
+
+    def reload(self, signup: EventSignup) -> EventSignup:
+        return EventSignup.objects.nocache().get(pk=signup.pk)
+
+    def test_flagged_promoted_after_unflagged(self) -> None:
+        self.enable(back_of_line_enabled=True)
+        _event, seated, flagged, clean = self.full_event_with_line()
+
+        cancel_signup(seated[0])
+
+        self.assertEqual(self.reload(clean).status, SignupStatus.APPROVED)
+        self.assertEqual(self.reload(flagged).status, SignupStatus.WAITLISTED)
+
+    def test_flagged_seated_when_seat_free(self) -> None:
+        self.enable(back_of_line_enabled=True)
+        event = self.make_event(max_players=2)
+
+        signup = process_rsvp(event, self.flagged_member())
+
+        self.assertEqual(signup.status, SignupStatus.APPROVED)
+        self.assertIsNone(signup.waitlist_position)
+
+    def test_public_line_rank_unchanged(self) -> None:
+        self.enable(back_of_line_enabled=True)
+        event, _seated, flagged, clean = self.full_event_with_line()
+        client = APIClient()
+        client.force_authenticate(self.make_user())
+
+        resp = client.get(reverse("event-signup-list"), {"event": event.pk})
+
+        self.assertEqual(resp.status_code, 200, resp.content)
+        ranks = {row["id"]: row["line_rank"] for row in resp.json()}
+        self.assertLess(ranks[flagged.pk], ranks[clean.pk])
+
+    def test_disabled_uses_plain_order(self) -> None:
+        _event, seated, flagged, clean = self.full_event_with_line()
+
+        cancel_signup(seated[0])
+
+        self.assertEqual(self.reload(flagged).status, SignupStatus.APPROVED)
+        self.assertEqual(self.reload(clean).status, SignupStatus.WAITLISTED)
+
+    def test_deferred_path_promotion_side_effects(self) -> None:
+        self.enable(back_of_line_enabled=True, require_approval_enabled=True)
+        tournament = Tournament.objects.create(
+            name="Back Of Line Roster", date_played=tz.now(), state="future"
+        )
+        _event, seated, flagged, clean = self.full_event_with_line(
+            max_players=2, tournament=tournament
+        )
+
+        cancel_signup(seated[0])
+        clean = self.reload(clean)
+        self.assertEqual(clean.status, SignupStatus.APPROVED)
+        self.assertEqual(self.reload(flagged).status, SignupStatus.WAITLISTED)
+
+        cancel_signup(seated[1])
+        flagged = self.reload(flagged)
+
+        self.assertEqual(flagged.status, SignupStatus.PENDING_APPROVAL)
+        self.assertEqual(flagged.unmet_requirements, [CODE])
+        self.assertIsNone(flagged.waitlist_position)
+        self.assertEqual(clean.unmet_requirements, [])
+        self.assertIsNone(clean.waitlist_position)
+        roster = set(tournament.users.values_list("pk", flat=True))
+        self.assertIn(clean.user_id, roster)
+        self.assertNotIn(flagged.user_id, roster)

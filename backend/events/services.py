@@ -72,6 +72,7 @@ from events.schemas import DotaModalConfig
 from events.signup_schedule import SIGNUP_OPEN_POLICY_FIELDS, apply_signup_open_policy
 from lobby.passwords import PasswordMode, generate_password
 from org.conduct.capture import capture_late_cancel
+from org.conduct.enforcement import defer_back_of_line, tiers_for
 from org.conduct.gate import ConductGate, conduct_gate
 from org.conduct.lifecycle import teardown_event_outcomes, void_event_outcomes
 from org.models import OrgUser
@@ -706,39 +707,59 @@ def _sync_signup_steam_account(event: Event, user: CustomUser) -> None:
         invalidate_after_commit(event.tournament)
 
 
+def _promote_one(
+    locked: Event, signup: EventSignup, *, gate: ConductGate
+) -> EventSignup:
+    signup.waitlist_position = None
+    _sync_signup_steam_account(locked, signup.user)
+    unmet = unmet_codes(locked, signup.user, gate=gate)
+    signup.unmet_requirements = unmet
+    signup.status = _decide_signup_status(locked, unmet)
+    _roster_add_if_joins(signup)
+    signup.save(
+        update_fields=[
+            "status",
+            "waitlist_position",
+            "unmet_requirements",
+            "updated_at",
+        ]
+    )
+    invalidate_after_commit(signup)
+    return signup
+
+
 def _promote_from_waitlist(
     event: Event, *, gate: ConductGate | None = None
 ) -> list[EventSignup]:
-    """Promote waitlisted signups, in waitlist order, into every free seat."""
+    """Promote waitlisted signups into every free seat, in waitlist order
+    (members flagged for back of line go after everyone else)."""
     locked = lock_event(event)
     if gate is None:
         gate = conduct_gate(locked.organization_id)
     promoted: list[EventSignup] = []
-    while has_free_seat(locked):
-        next_waitlisted = (
+    if gate.back_of_line:
+        candidates = list(
             EventSignup.objects.nocache()
             .filter(event=locked, status=SignupStatus.WAITLISTED)
+            .select_related("user")
             .order_by("waitlist_position")
-            .first()
         )
-        if next_waitlisted is None:
-            break
-        next_waitlisted.waitlist_position = None
-        _sync_signup_steam_account(locked, next_waitlisted.user)
-        unmet = unmet_codes(locked, next_waitlisted.user, gate=gate)
-        next_waitlisted.unmet_requirements = unmet
-        next_waitlisted.status = _decide_signup_status(locked, unmet)
-        _roster_add_if_joins(next_waitlisted)
-        next_waitlisted.save(
-            update_fields=[
-                "status",
-                "waitlist_position",
-                "unmet_requirements",
-                "updated_at",
-            ]
-        )
-        invalidate_after_commit(next_waitlisted)
-        promoted.append(next_waitlisted)
+        tiers = tiers_for(gate, [s.user for s in candidates])
+        for candidate in defer_back_of_line(candidates, tiers):
+            if not has_free_seat(locked):
+                break
+            promoted.append(_promote_one(locked, candidate, gate=gate))
+    else:
+        while has_free_seat(locked):
+            next_waitlisted = (
+                EventSignup.objects.nocache()
+                .filter(event=locked, status=SignupStatus.WAITLISTED)
+                .order_by("waitlist_position")
+                .first()
+            )
+            if next_waitlisted is None:
+                break
+            promoted.append(_promote_one(locked, next_waitlisted, gate=gate))
     if promoted:
         invalidate_after_commit(locked)
     return promoted
