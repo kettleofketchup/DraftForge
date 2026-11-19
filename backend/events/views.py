@@ -44,8 +44,9 @@ from app.permissions_org import (
 from events.admission import ensure_self_serve
 from events.capacity import with_signup_counts
 from events.completion import close_event
-from events.constants import EventState
+from events.constants import Commitment, EventState
 from events.discord import notify_create_discord_event, notify_signup_changed
+from events.eligibility import evaluate_signup, has_registered_steam_id, recheck_signup
 from events.models import (
     Event,
     EventRepeater,
@@ -552,6 +553,27 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
 _CONCURRENTLY_WRITTEN_EVENT_FIELDS = ["state", "contributions_awarded_at", "host"]
 
 
+_SIGNUP_INTENT_COMMITMENT: dict[str, Commitment] = {
+    "rsvp": Commitment.MAIN,
+    "tentative": Commitment.MAYBE,
+}
+
+
+def _signup_refusal(
+    event: Event, user: CustomUser, intent: object, error: str
+) -> Response:
+    commitment = (
+        _SIGNUP_INTENT_COMMITMENT.get(intent, Commitment.MAIN)
+        if isinstance(intent, str)
+        else Commitment.MAIN
+    )
+    result = evaluate_signup(event, user, intent=commitment)
+    return Response(
+        {"error": error, "reasons": result.as_dicts()},
+        status=status.HTTP_400_BAD_REQUEST,
+    )
+
+
 def _parse_datetime_param(params: QueryDict, name: str) -> datetime | None:
     raw = params.get(name)
     if not raw:
@@ -857,17 +879,16 @@ class EventViewSet(viewsets.ModelViewSet):
         Replaces the older /rsvp/ and /tentative/ actions (deleted in Task 29).
         """
         event = self.get_object()
+        body = request.data or {}
+        intent = body.get("intent")
         try:
             ensure_self_serve(event, request.user)
         except ValueError as exc:
-            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+            return _signup_refusal(event, request.user, intent, str(exc))
 
-        body = request.data or {}
-        intent = body.get("intent")
-        if intent not in ("rsvp", "tentative"):
-            return Response(
-                {"error": "intent must be 'rsvp' or 'tentative'"},
-                status=status.HTTP_400_BAD_REQUEST,
+        if intent not in _SIGNUP_INTENT_COMMITMENT:
+            return _signup_refusal(
+                event, request.user, intent, "intent must be 'rsvp' or 'tentative'"
             )
 
         try:
@@ -875,7 +896,7 @@ class EventViewSet(viewsets.ModelViewSet):
         except PydanticValidationError as exc:
             first = exc.errors()[0] if exc.errors() else {}
             msg = first.get("msg") or str(exc)
-            return Response({"error": msg}, status=status.HTTP_400_BAD_REQUEST)
+            return _signup_refusal(event, request.user, intent, msg)
 
         org_user = resolve_or_create_org_user(request.user, event.organization)
 
@@ -888,13 +909,46 @@ class EventViewSet(viewsets.ModelViewSet):
                     signup = create_tentative_signup(event, request.user)
         except DjangoValidationError as exc:
             msg = exc.messages[0] if hasattr(exc, "messages") else str(exc)
-            return Response({"error": msg}, status=status.HTTP_400_BAD_REQUEST)
+            return _signup_refusal(event, request.user, intent, msg)
         except ValueError as exc:
-            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+            return _signup_refusal(event, request.user, intent, str(exc))
 
         return Response(
             EventSignupSerializer(signup, context={"request": request}).data,
             status=status.HTTP_201_CREATED,
+        )
+
+    @action(
+        detail=True,
+        methods=["get"],
+        permission_classes=[permissions.IsAuthenticated],
+    )
+    def eligibility(self, request: Request, pk: str | None = None) -> Response:
+        """GET /api/events/<pk>/eligibility/?intent=main|maybe for the request
+        user. Never creates an OrgUser."""
+        event = self.get_object()
+        intent = request.query_params.get("intent", Commitment.MAIN)
+        if intent not in Commitment.values:
+            return Response(
+                {"error": "intent must be 'main' or 'maybe'"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        result = evaluate_signup(event, request.user, intent=intent)
+        org_user = (
+            OrgUser.objects.filter(
+                user=request.user, organization_id=event.organization_id
+            ).first()
+            if event.organization_id
+            else None
+        )
+        return Response(
+            {
+                "admissible": result.admissible,
+                "reasons": result.as_dicts(),
+                "has_registered_steam_id": has_registered_steam_id(
+                    request.user, org_user
+                ),
+            }
         )
 
     @action(detail=True, methods=["post"], url_path="admin-signup")
@@ -1234,6 +1288,17 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
 
         return Response(
             EventSignupSerializer(result, context={"request": request}).data
+        )
+
+    @action(detail=True, methods=["post"])
+    def recheck(self, request: Request, pk: str | None = None) -> Response:
+        signup = self.get_object()
+        if not has_event_staff_access(request.user, signup.event):
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        with transaction.atomic():
+            recheck_signup(signup)
+        return Response(
+            EventSignupSerializer(signup, context={"request": request}).data
         )
 
     @action(detail=True, methods=["post"])

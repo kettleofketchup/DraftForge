@@ -7,6 +7,7 @@ from rest_framework.test import APIClient
 from app.models import CustomUser, GameType, Organization
 from events.models import Event, EventState
 from events.tests.base import EventTestCase
+from org.models import OrgUser
 
 
 class SignupEndpointAuthTests(TestCase):
@@ -331,3 +332,74 @@ class SignupEndpointSteamGateTests(EventTestCase):
         self.assertEqual(resp.status_code, 201, resp.content)
         self.assertEqual(resp.json()["status"], "pending_approval")
         self.assertEqual(resp.json()["unmet_requirements"], ["dota_rank_undeclared"])
+
+
+class SignupRefusalReasonsTests(EventTestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.api = APIClient()
+
+    def test_400_includes_error_and_reasons(self) -> None:
+        ev = self.make_event(require_steam_id=True, state=EventState.CANCELLED)
+        self.api.force_authenticate(self.make_user())
+        resp = self.api.post(
+            f"/api/events/{ev.pk}/signup/", {"intent": "rsvp"}, format="json"
+        )
+        self.assertEqual(resp.status_code, 400, resp.content)
+        body = resp.json()
+        self.assertIn("not accepting signups", body["error"])
+        self.assertEqual([r["code"] for r in body["reasons"]], ["steam_id_missing"])
+        self.assertEqual(body["reasons"][0]["severity"], "needs_approval")
+
+    def test_400_on_eligible_user_has_empty_reasons(self) -> None:
+        ev = self.make_event()
+        self.api.force_authenticate(self.make_user())
+        resp = self.api.post(
+            f"/api/events/{ev.pk}/signup/", {"intent": "bogus"}, format="json"
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.json()["reasons"], [])
+        self.assertIn("intent", resp.json()["error"])
+
+
+class EventEligibilityEndpointTests(EventTestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.api = APIClient()
+
+    def _get(self, event: Event, query: str = "") -> object:
+        return self.api.get(f"/api/events/{event.pk}/eligibility/{query}")
+
+    def test_requires_authentication(self) -> None:
+        self.assertEqual(self._get(self.make_event()).status_code, 403)
+
+    def test_reports_reasons_for_request_user(self) -> None:
+        ev = self.make_event(require_steam_id=True, min_mmr=3000)
+        self.api.force_authenticate(self.make_user())
+        resp = self._get(ev, "?intent=maybe")
+        self.assertEqual(resp.status_code, 200, resp.content)
+        body = resp.json()
+        self.assertTrue(body["admissible"])
+        self.assertFalse(body["has_registered_steam_id"])
+        self.assertEqual(
+            [r["code"] for r in body["reasons"]],
+            ["steam_id_missing", "dota_rank_undeclared"],
+        )
+
+    def test_user_without_org_user_is_not_enrolled(self) -> None:
+        ev = self.make_event()
+        user = CustomUser.objects.create_user(username="no_org_member", password="x")
+        user.steamid = 76561198000777777
+        user.save()
+        self.api.force_authenticate(user)
+        resp = self._get(ev)
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertEqual(
+            resp.json(),
+            {"admissible": True, "reasons": [], "has_registered_steam_id": True},
+        )
+        self.assertFalse(OrgUser.objects.filter(user=user).exists())
+
+    def test_rejects_unknown_intent(self) -> None:
+        self.api.force_authenticate(self.make_user())
+        self.assertEqual(self._get(self.make_event(), "?intent=rsvp").status_code, 400)

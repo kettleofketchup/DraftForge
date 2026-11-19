@@ -814,6 +814,7 @@ class EventSignupSerializer(serializers.ModelSerializer):
     suggested_mmr_range_source = serializers.SerializerMethodField()
     holds_seat = serializers.SerializerMethodField()
     unmet_requirements = serializers.SerializerMethodField()
+    eligibility_reasons = serializers.SerializerMethodField()
     line_rank = serializers.SerializerMethodField()
 
     class Meta:
@@ -838,6 +839,7 @@ class EventSignupSerializer(serializers.ModelSerializer):
             "waitlist_position",
             "holds_seat",
             "unmet_requirements",
+            "eligibility_reasons",
             "created_at",
             "updated_at",
             "signed_up_at",
@@ -972,21 +974,30 @@ class EventSignupSerializer(serializers.ModelSerializer):
     def get_holds_seat(self, signup: EventSignup) -> bool:
         return signup.status in seat_holding_statuses(signup.event)
 
-    def get_unmet_requirements(self, signup: EventSignup) -> list[str]:
-        """Visible to the signup owner and event staff only."""
+    def _viewer_sees_eligibility(self, signup: EventSignup) -> bool:
+        """The signup owner and event staff only."""
         request = self.context.get("request")
         if request is None:
-            return []
+            return False
         user = request.user
         if not user.is_authenticated:
+            return False
+        if user.pk == signup.user_id:
+            return True
+        cache: dict[int, bool] = self.context.setdefault("_event_staff", {})
+        if signup.event_id not in cache:
+            cache[signup.event_id] = has_event_staff_access(user, signup.event)
+        return cache[signup.event_id]
+
+    def get_unmet_requirements(self, signup: EventSignup) -> list[str]:
+        if not self._viewer_sees_eligibility(signup):
             return []
-        if user.pk != signup.user_id:
-            cache: dict[int, bool] = self.context.setdefault("_event_staff", {})
-            if signup.event_id not in cache:
-                cache[signup.event_id] = has_event_staff_access(user, signup.event)
-            if not cache[signup.event_id]:
-                return []
         return list(signup.unmet_requirements or [])
+
+    def get_eligibility_reasons(self, signup: EventSignup) -> list[dict[str, Any]]:
+        if not self._viewer_sees_eligibility(signup):
+            return []
+        return list(signup.eligibility_reasons or [])
 
     def get_dota_profile(self, obj: EventSignup) -> dict[str, Any] | None:
         """Return DotaProfile data if the user has one for this event's org."""

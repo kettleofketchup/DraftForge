@@ -645,8 +645,15 @@ class EventSignup(models.Model):
         max_length=20, choices=SignupStatus.choices, default=SignupStatus.RSVP
     )
     waitlist_position = models.IntegerField(null=True, blank=True)
-    # events.eligibility.Unmet codes from the last requirements check.
+    # events.eligibility.ReasonCode codes from the last requirements check.
     unmet_requirements = models.JSONField(default=list, blank=True)
+    # Reason.as_dict() for each code in unmet_requirements.
+    eligibility_reasons = models.JSONField(
+        default=list,
+        blank=True,
+        db_default=models.Value([], output_field=models.JSONField()),
+    )
+    eligibility_checked_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     signed_up_at = models.DateTimeField(db_default=Now())
