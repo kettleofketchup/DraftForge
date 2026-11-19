@@ -41,6 +41,8 @@ interface UserAvatarProps {
   className?: string;
   /** Alt text override */
   alt?: string;
+  /** Name for the initials and alt text when there is no user (e.g. a team without a captain) */
+  fallbackName?: string;
   /** Test ID for testing */
   'data-testid'?: string;
 }
@@ -148,6 +150,7 @@ function arePropsEqual(
     prevProps.border !== nextProps.border ||
     prevProps.className !== nextProps.className ||
     prevProps.alt !== nextProps.alt ||
+    prevProps.fallbackName !== nextProps.fallbackName ||
     prevProps['data-testid'] !== nextProps['data-testid']
   ) {
     return false;
@@ -207,6 +210,7 @@ export const UserAvatar = memo(function UserAvatar({
   border = 'none',
   className,
   alt,
+  fallbackName,
   'data-testid': testId,
 }: UserAvatarProps) {
   const pk = userRefPk(user);
@@ -226,13 +230,13 @@ export const UserAvatar = memo(function UserAvatar({
     () =>
       user && typeof user === 'object'
         ? resolveDisplayName(user as UserRef, { orgId, cached: cached ?? null })
-        : '?',
-    [user, cached, orgId],
+        : fallbackName?.trim() || '?',
+    [user, cached, orgId, fallbackName],
   );
 
   const altText = useMemo(
-    () => alt || (user ? displayName : 'User avatar'),
-    [alt, user, displayName],
+    () => alt || (user || fallbackName ? displayName : 'User avatar'),
+    [alt, user, fallbackName, displayName],
   );
 
   const initials = useMemo(
